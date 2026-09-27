@@ -1,0 +1,4 @@
+/build/
+/shell/build/
+*.user
+.DS_Store

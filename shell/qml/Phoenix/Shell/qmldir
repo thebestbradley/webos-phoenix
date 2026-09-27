@@ -1,0 +1,15 @@
+module Phoenix.Shell
+singleton Theme 1.0 Theme.qml
+Shell 1.0 Shell.qml
+AppIcon 1.0 AppIcon.qml
+Card 1.0 Card.qml
+CardView 1.0 CardView.qml
+GestureArea 1.0 GestureArea.qml
+JustType 1.0 JustType.qml
+Launcher 1.0 Launcher.qml
+LockScreen 1.0 LockScreen.qml
+Notifications 1.0 Notifications.qml
+QuickLaunch 1.0 QuickLaunch.qml
+StatusBar 1.0 StatusBar.qml
+SystemMenu 1.0 SystemMenu.qml
+Wallpaper 1.0 Wallpaper.qml

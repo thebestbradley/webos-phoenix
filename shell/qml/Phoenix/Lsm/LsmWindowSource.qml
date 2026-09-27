@@ -1,0 +1,186 @@
+// Copyright (c) 2026 webOS Phoenix contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Window source backed by webOS OSE's luna-surfacemanager: card-type app
+// surfaces become Phoenix cards, launch points become launcher icons.
+// Implements the same interface as Phoenix.Sim.SimWindowSource.
+//
+// STATUS: experimental. Written against luna-surfacemanager 2.0.0-423
+// (webOS OSE, Qt 6.8); it has not yet run on a device. See docs/ROADMAP.md.
+
+import QtQuick
+import WebOSCoreCompositor 1.0
+import WebOSCompositorBase 1.0
+import WebOSServices 1.0
+
+Item {
+    id: source
+    visible: false
+
+    property ListModel apps: ListModel {}
+    property ListModel cards: ListModel {}
+    property ListModel notifications: ListModel {}
+
+    // The shell connects to this to maximize a newly mapped card.
+    signal cardFocusRequested(string uid)
+
+    property var _hosts: ({})       // uid -> SurfaceHost
+    property var _surfaces: []      // [{ uid, item }]
+    property int _nextUid: 1
+    property string _pendingAfterUid: ""
+
+    // ---- Apps ------------------------------------------------------------------
+
+    LaunchPointsModel {
+        id: launchPoints
+        appId: LS.appId
+    }
+
+    // Copy launch points into a plain ListModel the shell can read with get().
+    Instantiator {
+        id: launchPointCopies
+        model: launchPoints
+        delegate: QtObject {
+            required property string id
+            required property string title
+            required property string icon
+        }
+        onObjectAdded: rebuildApps.restart()
+        onObjectRemoved: rebuildApps.restart()
+    }
+
+    Timer {
+        id: rebuildApps
+        interval: 0
+        onTriggered: {
+            source.apps.clear();
+            for (var i = 0; i < launchPointCopies.count; ++i) {
+                var lp = launchPointCopies.objectAt(i);
+                if (!lp)
+                    continue;
+                source.apps.append({
+                    appId: lp.id, title: lp.title, icon: lp.icon,
+                    color: "#666666", glyph: lp.title.charAt(0),
+                    tab: 0, quickLaunch: i < 4 ? i + 1 : 0
+                });
+            }
+        }
+    }
+
+    // ---- Surfaces ------------------------------------------------------------------
+
+    function isCard(item) {
+        return item && !item.isProxy() && !item.isPartOfGroup()
+               && item.type === "_WEBOS_WINDOW_TYPE_CARD"
+               && item.displayAffinity === compositorWindow.displayId;
+    }
+
+    function uidOf(item) {
+        for (var i = 0; i < _surfaces.length; ++i)
+            if (_surfaces[i].item === item)
+                return _surfaces[i].uid;
+        return "";
+    }
+
+    function cardIndex(uid) {
+        for (var i = 0; i < cards.count; ++i)
+            if (cards.get(i).uid === uid)
+                return i;
+        return -1;
+    }
+
+    function addSurface(item) {
+        if (!isCard(item) || uidOf(item) !== "")
+            return;
+        var uid = "s" + (_nextUid++);
+        _surfaces.push({ uid: uid, item: item });
+        _hosts[uid] = hostComponent.createObject(source, { surface: item });
+        item.state = Qt.WindowFullScreen;
+        var at = _pendingAfterUid !== "" ? cardIndex(_pendingAfterUid) + 1 : cards.count;
+        if (at <= 0 || at > cards.count)
+            at = cards.count;
+        cards.insert(at, { uid: uid, appId: item.appId, title: item.title || item.appId });
+        _pendingAfterUid = "";
+        cardFocusRequested(uid);
+    }
+
+    function removeSurface(item) {
+        var uid = uidOf(item);
+        if (uid === "")
+            return;
+        _surfaces = _surfaces.filter(function(s) { return s.uid !== uid; });
+        var i = cardIndex(uid);
+        if (i >= 0)
+            cards.remove(i);
+        var host = _hosts[uid];
+        delete _hosts[uid];
+        if (host) {
+            if (item.parent === host)
+                item.parent = null;
+            host.destroy();
+        }
+    }
+
+    Connections {
+        target: compositor
+        function onSurfaceMapped(item) { source.addSurface(item); }
+        function onSurfaceUnmapped(item) { source.removeSurface(item); }
+        function onSurfaceDestroyed(item) { source.removeSurface(item); }
+    }
+
+    Component {
+        id: hostComponent
+        SurfaceHost {}
+    }
+
+    // ---- Window source interface ------------------------------------------------------
+
+    function windowFor(uid) {
+        return _hosts[uid] || null;
+    }
+
+    function runningUid(appId) {
+        for (var i = 0; i < cards.count; ++i)
+            if (cards.get(i).appId === appId)
+                return cards.get(i).uid;
+        return "";
+    }
+
+    // Launching is asynchronous: the card appears when the surface maps and
+    // cardFocusRequested() fires. Returns the uid only if already running.
+    function launch(appId, afterUid) {
+        var running = runningUid(appId);
+        if (running !== "")
+            return running;
+        _pendingAfterUid = afterUid || "";
+        LS.adhoc.call("luna://com.webos.applicationManager", "/launch",
+                      JSON.stringify({ id: appId, params: {} }));
+        return "";
+    }
+
+    function close(uid) {
+        for (var i = 0; i < _surfaces.length; ++i)
+            if (_surfaces[i].uid === uid) {
+                _surfaces[i].item.close();
+                return;
+            }
+    }
+
+    // TODO(M1): deliver the webOS back key to the focused surface. This
+    // needs a small C++ hook in the compositor extension; QML cannot
+    // synthesize key events for a client surface.
+    function back(uid) {
+        console.warn("Phoenix: back gesture not yet delivered to apps");
+        return false;
+    }
+
+    function notify(appId, title, body) {
+        notifications.append({ id: "n" + Date.now(), appId: appId, title: title, body: body || "",
+                               color: "#666666", glyph: "!" });
+    }
+
+    function dismissNotification(index) {
+        if (index >= 0 && index < notifications.count)
+            notifications.remove(index);
+    }
+}

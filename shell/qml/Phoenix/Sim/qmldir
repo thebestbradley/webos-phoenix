@@ -1,0 +1,4 @@
+module Phoenix.Sim
+SimWindowSource 1.0 SimWindowSource.qml
+SimSystemStatus 1.0 SimSystemStatus.qml
+MockApp 1.0 MockApp.qml

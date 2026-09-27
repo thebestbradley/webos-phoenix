@@ -1,0 +1,4 @@
+module Phoenix.Lsm
+LsmWindowSource 1.0 LsmWindowSource.qml
+LsmSystemStatus 1.0 LsmSystemStatus.qml
+SurfaceHost 1.0 SurfaceHost.qml

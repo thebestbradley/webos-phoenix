@@ -1,0 +1,6 @@
+# Phoenix override of the webOS OSE compositor views.
+# luna-surfacemanager prepends WEBOS_COMPOSITOR_IMPORT_PATH, so this module
+# shadows the default (empty) WebOSCompositor module and replaces ViewsRoot.
+# See luna-surfacemanager/base/qml/WebOSCompositor/README.
+module WebOSCompositor
+ViewsRoot 1.0 views/PhoenixViewsRoot.qml

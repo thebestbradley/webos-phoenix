@@ -1,0 +1,91 @@
+# Roadmap
+
+Goal: the full legacy webOS phone and tablet experience, pixel for pixel and
+feature for feature, on webOS OSE. Once that works, modernize it.
+
+The checklist of legacy features is in
+[spec/feature-inventory.md](spec/feature-inventory.md), and the measurements
+are in [spec/legacy-ui-spec.md](spec/legacy-ui-spec.md).
+
+## M0: shell in a simulator (done in this repo's first PR)
+
+- [x] Legacy measurements, timings and artwork extracted from Open webOS `luna-sysmgr`
+- [x] Card view: swipe, flick to close, tap to maximize, shuffle after close
+- [x] Status bar with original indicator art, system menu
+- [x] Quick launch bar and tabbed launcher (Apps / Downloads / Settings)
+- [x] Notification banner, notification bar and dashboard
+- [x] Lock screen with bitmap clock and padlock drag
+- [x] Gesture area: up, back, tap
+- [x] Just Type (basic app search)
+- [x] Desktop simulator for macOS/Linux, screenshot mode, behaviour tests, CI
+- [x] `meta-phoenix` layer and OSE compositor adapter (untested on device)
+
+## Source material still to mine
+
+The spec so far comes from `openwebos/luna-sysmgr`, which is the webOS 3.x
+(TouchPad-era) system manager with tablet mode on by default. Several
+phone-era (2.x) details are therefore marked *(inferred)* in `Theme.qml`.
+These Open webOS repositories are also public and should fill the gaps:
+
+- [ ] `openwebos/luna-systemui`: system UI web components (status bar menus, dashboards, notifications)
+- [ ] `openwebos/luna-applauncher`: launcher and Just Type web app
+- [ ] `openwebos/core-apps`: the original Enyo core apps (useful for M4)
+- [ ] Reference photos/screenshots of real Pre / Pre 2 / Pre 3 / Veer / TouchPad for pixel comparison
+
+## M1: running on webOS OSE
+
+Targets: `qemux86-64` (emulator) and Raspberry Pi 4 with the official
+7" touchscreen, both supported by OSE today.
+
+- [ ] Build `webos-phoenix-image` and boot it in QEMU; fix adapter issues
+- [ ] Positive space: apps sized to the area between status bar and gesture area
+- [ ] Back gesture delivered to apps (C++ compositor extension)
+- [ ] Status bar fed by OSE Luna services (battery, Wi-Fi, Bluetooth, time)
+- [ ] Notifications from OSE's notification service into banner and dashboard
+- [ ] Portrait output and rotation
+- [ ] Pixel comparison against reference screenshots of real devices
+
+## M2: legacy UI parity
+
+- [ ] Card stacks (grouping cards by dragging, CardGroup behaviour)
+- [ ] Card reordering (press and hold, drag)
+- [ ] Launch zoom from icon to card, loading card pulse
+- [ ] Wave launcher (slow swipe up and hold)
+- [ ] Launcher editing: reorder, move between pages, delete
+- [ ] Advanced gestures: long swipe to switch apps while maximized
+- [ ] App menu (tap the app name in the status bar)
+- [ ] PIN and password lock (`images/pin/` art)
+- [ ] Exhibition / dock mode (clock, slideshow while charging)
+- [ ] Phone and tablet virtual keyboards (`images/keyboard-*` art)
+- [ ] Full Just Type: actions, search providers, contacts, messages
+- [ ] Remaining items in the feature inventory
+
+## M3: phones and tablets
+
+- [ ] PinePhone / PinePhone Pro (mainline Linux, `meta-pine64`)
+- [ ] Android phones through Halium, following LuneOS's `meta-smartphone` approach
+- [ ] Telephony and SMS (oFono or ModemManager), cellular indicators
+- [ ] Sensors: accelerometer, proximity, ambient light
+- [ ] Power management: screen timeout, suspend, wake on notification
+
+## M4: core apps
+
+Rebuilt as web apps on OSE's runtime (Enact/React TypeScript), styled after the
+originals: Phone, Messaging, Email, Calendar, Contacts (with Synergy-style
+account merging), Web, Camera, Photos, Music, Maps, Memos, Tasks, Clock,
+Calculator, Settings panes, and an app catalog.
+
+## M5: modernize
+
+Once parity is reached: high-DPI artwork redraws, dark/light themes, modern
+notification actions, Wayland app compatibility (Linux mobile apps),
+accessibility, and whatever else the community agrees fits webOS.
+
+## Related projects
+
+- **LuneOS** (webos-ports) has kept a community webOS running on phones since
+  2014, with its own card shell (luna-next) and Halium device support. Its
+  device and telephony work is the best reference for M3. Its shell is
+  licensed differently from Phoenix (check each repository before reusing
+  code).
+- **webOS OSE** (webosose.org) is the base platform.

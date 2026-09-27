@@ -1,0 +1,41 @@
+name: shell
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt 6
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qt6-base-dev qt6-declarative-dev qt6-declarative-dev-tools \
+            qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtqml-workerscript \
+            qml6-module-qttest qml6-module-qt5compat-graphicaleffects \
+            xvfb xauth libgl1-mesa-dri fonts-dejavu-core
+
+      - name: Build simulator
+        run: |
+          cmake -S shell -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j
+
+      - name: Behaviour tests
+        run: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import shell/qml -input shell/tests
+
+      - name: Screenshots
+        run: |
+          mkdir -p screenshots/phone screenshots/tablet
+          for s in locked cards maximized launcher dashboard justtype systemmenu; do
+            xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --scene $s --screenshot screenshots/phone/$s.png
+            xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --tablet --scene $s --screenshot screenshots/tablet/$s.png
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots
