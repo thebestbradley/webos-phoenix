@@ -215,7 +215,7 @@ html:has(> body.phone-app), body.phone-app {
     background: radial-gradient(ellipse at 50% 25%, #3a3d41 0%, #16171a 55%, #000 100%);
 }
 
-.incall, .incoming {
+.incall {
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -320,43 +320,34 @@ html:has(> body.phone-app), body.phone-app {
 .incall-end { flex: 2; }
 .incall-hide { flex: 1; }
 
-/* ---- Incoming call ----------------------------------------------------------------------- */
+/* ---- Incoming call: the popup alert ---------------------------------------------------------- */
 
-.incoming-label {
-    flex: none;
-    padding-top: 18px;
-    text-align: center;
-    font-size: 14px;
+/* A popup alert window: drawn on the system's dark background (the shell's
+   negative space on phones, popup-bg.png at the top right on tablets). */
+.incoming-alert {
+    height: 100vh;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 8px 8px 6px;
+    color: #fff;
+    background: transparent;
+}
+.incoming-alert-who { display: flex; align-items: center; gap: 10px; min-height: 0; }
+.incoming-alert-glyph { width: 56px; height: 56px; flex: none; }
+.incoming-alert-text { min-width: 0; }
+.incoming-alert-label {
+    font-size: 12px;
     font-weight: bold;
     letter-spacing: 2px;
     text-transform: uppercase;
     color: #9cc7ef;
 }
-.incoming-who {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 0 16px;
-    text-align: center;
-    min-height: 0;
-}
-.incoming-glyph { width: 100px; height: 100px; margin-bottom: 4px; }
-.incoming-glyph img { width: 100px; height: 100px; display: block; }
-
-.incoming-popup {
-    /* the webOS incoming-call popup (dialpad popup-bg.png) */
-    flex: none;
-    display: flex;
-    gap: 8px;
-    margin: 0 4px 4px;
-    padding: 6px;
-    border-style: solid;
-    border-width: 20px;
-    border-image: url(../../shared/phoenix-ui/assets/enyo/telephony/popup-bg.png) 20 fill;
-}
-.incoming-popup .pui-button { flex: 1; margin: -14px 0; }
+.incoming-alert-name { font-size: 20px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.incoming-alert-number { font-size: 14px; color: #ccc; }
+.incoming-alert-buttons { display: flex; gap: 8px; }
+.incoming-alert-buttons .pui-button { flex: 1; margin: 0; }
 
 /* ---- Tablet: dial pad left, log or favourites right -------------------------------------------- */
 
@@ -379,9 +370,8 @@ html:has(> body.phone-app), body.phone-app {
 .phone-root.wide .phone-right { height: 100%; min-width: 0; }
 .phone-toolbar.wide { left: 360px; }
 
-.phone-root.call-screen .incall, .phone-root.call-screen .incoming { max-width: 400px; }
+.phone-root.call-screen .incall { max-width: 400px; }
 @media (min-width: 700px) {
     .incall-who { flex: none; padding: 60px 16px 30px; }
-    .incall, .incoming { justify-content: center; }
-    .incoming-who { flex: none; padding: 40px 16px; }
+    .incall { justify-content: center; }
 }

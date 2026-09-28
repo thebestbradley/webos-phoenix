@@ -277,6 +277,10 @@ Item {
             // title, body, params?}; tapping it launches the app with params.
             var target = payload.appId && appInfo(payload.appId) ? payload.appId : appId;
             notify(target, payload.title || "", payload.body || "", payload.params);
+        } else if (type === "activate") {
+            // PalmSystem.activate: the app brings its card to the front.
+            if (cardIndex(uid) >= 0)
+                cardFocusRequested(uid);
         } else if (type === "fullScreen") {
             // PalmSystem.enableFullScreenMode: the card, maximized, gets the
             // whole screen.
@@ -604,8 +608,9 @@ Item {
             uid = launch(phoneAppId, "");
         if (uid === "" || !_windows[uid] || !_windows[uid].runScript)
             return;
+        // Phone raises its incoming-call popup alert itself; its card only
+        // comes up when the call is answered (PalmSystem.activate).
         _runWhenLoaded(_windows[uid], "window.__phoenixRuntime && __phoenixRuntime.simulateIncomingCall()", fresh);
-        cardFocusRequested(uid);
     }
 
     // A text arrives. Any running page can play the telephony service; the

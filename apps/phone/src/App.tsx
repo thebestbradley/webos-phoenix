@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Phone: dial pad, call log and favourites, switched with the command-menu
-// buttons at the bottom as in the webOS phone app; the in-call and
-// incoming-call screens take over the card while a call is up.
+// buttons at the bottom as in the webOS phone app; the in-call screen takes
+// over the card while a call is up. An incoming call is a popup alert
+// (views/IncomingAlert), not the card.
 //
 // Tablet (1024 wide): the dial pad stays on the left and the log or the
 // favourites fill the right, as the TouchPad's "Phone & Video Calls" did.
@@ -20,7 +21,7 @@ import { Dialer } from "./views/Dialer";
 import { CallLog } from "./views/CallLog";
 import { Favorites } from "./views/Favorites";
 import { InCall } from "./views/InCall";
-import { Incoming } from "./views/Incoming";
+import { IncomingAlert, isIncomingAlert, useIncomingAlert } from "./views/IncomingAlert";
 
 type Tab = "dial" | "log" | "favorites";
 
@@ -61,6 +62,7 @@ function Phone() {
     const [error, setError] = useState<string | null>(null);
     const lastDialed = useLastDialed();
     useCallBookkeeping(status.calls, people);
+    useIncomingAlert(status.calls, people);
 
     useEffect(() => {
         if (params.number) {
@@ -92,8 +94,6 @@ function Phone() {
         { value: "favorites" as Tab, label: "Favorites" },
     ], [wide]);
 
-    if (ringing)
-        return <div className="phone-root call-screen"><Incoming call={ringing} people={people} waiting={!!primaryCall(status.calls)} /></div>;
     if (current)
         return <div className="phone-root call-screen"><InCall key={current.id} status={status} call={current} people={people} /></div>;
 
@@ -129,6 +129,8 @@ function Phone() {
 }
 
 export function App() {
+    if (isIncomingAlert())
+        return <IncomingAlert />;
     return (
         <BackProvider>
             <Phone />

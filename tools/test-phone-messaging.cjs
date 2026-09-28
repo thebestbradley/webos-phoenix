@@ -134,25 +134,44 @@ async function main() {
         check(/Lena Okafor/.test(await phone.textContent("[data-testid='call-row']")), "the call is in the call log");
 
         // ---- Incoming call: answer -------------------------------------------------------------------
+        // Phone opens a popup alert for it (the shell shows it under what
+        // the user is doing); its card is not the incoming-call screen.
+        let alertPage = context.waitForEvent("page");
         await phone.evaluate(() => window.__phoenixRuntime.simulateIncomingCall({ number: "(408) 555-0142" }));
-        await phone.waitForSelector("[data-testid='incoming']");
-        check((await phone.textContent("[data-testid='incoming-name']")) === "Ada Palmer", "incoming call shows the caller");
+        let alert = await alertPage;
+        watch(alert, "alert");
+        const alertUrl = alert.url();
+        check(/alert=incoming/.test(alertUrl) && /phoenixWindow=popupalert/.test(alertUrl) && /phoenixHeight=150/.test(alertUrl),
+            "an incoming call opens a 150 px popup alert");
+        check(/phoenixName=incoming-known/.test(alertUrl), "named incoming-known for a contact (notificationPolicy.conf)");
+        await alert.setViewportSize({ width: viewport.width, height: 150 });
+        await alert.waitForSelector("[data-testid='incoming-alert']");
+        check((await alert.textContent("[data-testid='incoming-name']")) === "Ada Palmer", "the alert shows the caller");
+        check((await phone.locator("[data-testid='incall']").count()) === 0, "the Phone card is not taken over");
         await phone.waitForTimeout(200);
         check(host.some((m) => m.type === "banner" && /Incoming call: Ada Palmer/.test(m.payload.message)),
             "incoming call banner for the shell");
-        await shot(phone, "phone-incoming");
-        await phone.click("[data-testid='answer']");
+        await shot(alert, "phone-incoming-alert");
+        let closed = alert.waitForEvent("close", { timeout: 5000 }).then(() => true, () => false);
+        await alert.click("[data-testid='answer']");
+        check(await closed, "answering closes the alert");
         await phone.waitForSelector("[data-testid='incall'][data-state='active']");
-        check(true, "answer");
+        check(true, "answer: the call is up on the Phone card");
+        check(host.some((m) => m.page === "phone" && m.type === "activate"), "and the Phone card comes to the front (PalmSystem.activate)");
         await phone.evaluate(() => window.__phoenixRuntime.simulateRemoteHangup());
         await phone.waitForSelector("[data-testid='incall']", { state: "detached", timeout: 4000 });
         check(true, "the caller hangs up");
 
         // ---- Incoming call: ignore -> missed ----------------------------------------------------------
+        alertPage = context.waitForEvent("page");
         await phone.evaluate(() => window.__phoenixRuntime.simulateIncomingCall({ number: "(510) 555-0177" }));
-        await phone.waitForSelector("[data-testid='incoming']");
-        await phone.click("[data-testid='ignore']");
-        await phone.waitForSelector("[data-testid='incoming']", { state: "detached" });
+        alert = await alertPage;
+        watch(alert, "alert");
+        check(/phoenixName=incoming-unknown/.test(alert.url()), "named incoming-unknown for a number not in contacts");
+        await alert.waitForSelector("[data-testid='ignore']");
+        closed = alert.waitForEvent("close", { timeout: 5000 }).then(() => true, () => false);
+        await alert.click("[data-testid='ignore']");
+        check(await closed, "ignoring closes the alert");
         await phone.click("[data-testid='log-filter'] [data-value='missed']");
         await phone.waitForFunction(() => /\(510\) 555-0177/.test(document.querySelector("[data-testid='call-row']")?.textContent || ""));
         check(true, "an ignored call is listed under Missed");
