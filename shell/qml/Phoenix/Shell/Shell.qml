@@ -79,6 +79,64 @@ FocusScope {
     function lock() { lockScreen.locked = true; systemMenu.open = false; }
     function unlock() { lockScreen.locked = false; }
 
+    // ---- The dock's state (OverlayWindowManager's dock state machine,
+    // :340-395, and SystemUiController's show / hide calls) --------------
+    // Hidden when a card is added or maximizes, when Just Type opens, and
+    // on phones when the dashboard opens; shown as a card starts to
+    // minimize, when the launcher opens, and when Just Type or the
+    // dashboard closes in card view - never over Just Type (slotShowDock).
+    property bool dockShown: true
+    function _showDock() {
+        if (!justType.open)
+            dockShown = true;
+    }
+    Connections {
+        target: cards
+        function onMaximizeProgressChanged() {
+            if (cards.maximizeProgress > 0 && !cards.minimizing)
+                shell.dockShown = false;
+        }
+        function onMinimizingChanged() {
+            if (cards.minimizing)
+                shell._showDock();
+        }
+    }
+    Connections {
+        target: shell.source ? shell.source.cards : null
+        function onRowsInserted() { shell.dockShown = false; }
+    }
+    Connections {
+        target: justType
+        function onOpenChanged() {
+            if (justType.open)
+                shell.dockShown = false;
+            else if (!cards.maximized)
+                shell._showDock();
+        }
+    }
+    Connections {
+        target: launcher
+        function onOpenChanged() {
+            if (launcher.open)
+                shell._showDock();
+            else if (cards.maximizeProgress > 0 && !cards.minimizing)
+                shell.dockShown = false;
+        }
+    }
+    Connections {
+        target: notes
+        // SystemUiController::setDashboardOpened (:896-925): phones' dashboard
+        // owns the negative space.
+        function onDashboardOpenChanged() {
+            if (Theme.tablet)
+                return;
+            if (notes.dashboardOpen)
+                shell.dockShown = false;
+            else if (!cards.maximized && !launcher.open)
+                shell._showDock();
+        }
+    }
+
     // The gesture area's swipe up, Key_CoreNavi_Launcher (SystemUiController
     // .cpp:445-495, sysUiNoHomeButtonMode): the dashboard and menu close,
     // then Just Type hides, or the launcher closes, or the app minimizes, or
@@ -427,10 +485,18 @@ FocusScope {
 
             QuickLaunch {
                 id: quickLaunch
+                objectName: "quickLaunch"
                 anchors.left: parent.left
                 anchors.right: parent.right
-                y: parent.height - notes.negativeSpace - height + height * cards.maximizeProgress
-                visible: cards.maximizeProgress < 1
+                // Its own show / hide, not the maximize's: a 350 ms OutCubic
+                // slide and a 200 ms OutCubic fade (slotAnimateShowDock /
+                // HideDock, OverlayWindowManager.cpp:282-292, 1480-1540).
+                property real shownProgress: shell.dockShown ? 1 : 0
+                Behavior on shownProgress { NumberAnimation { duration: Theme.quickLaunchDuration; easing.type: Easing.OutCubic } }
+                opacity: shell.dockShown ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: Theme.searchPillFadeDuration; easing.type: Easing.OutCubic } }
+                y: parent.height - notes.negativeSpace - height * shownProgress
+                visible: shownProgress > 0 || opacity > 0
                 apps: shell.source ? shell.source.apps : null
                 launcherOpen: launcher.open
                 backdrop: sceneBackdrop

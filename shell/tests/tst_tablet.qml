@@ -68,6 +68,21 @@ Item {
             tryCompare(shell, "launcherOpen", false, 2000);
         }
 
+        // Q1: the launcher button in a 128 px cell at the right; the apps
+        // in 128 px cells spread over the rest (QuickLaunchBar).
+        function test_dockLayout() {
+            var dock = findChild(shell, "quickLaunch");
+            var n = dock.pinned.length;
+            verify(n > 0);
+            compare(dock.height, 100);
+            compare(dock.slotCentre(n), dock.width - 64);
+            var gap = Math.floor((dock.width - 128 - n * 128) / n);
+            for (var i = 0; i < n; ++i)
+                compare(dock.slotCentre(i), i * (128 + gap) + 64);
+            compare(dock.slotAt(dock.width - 10), n);
+            compare(dock.slotAt(10), 0);
+        }
+
         // S7: the clock at the right end; the bar's fill fades in while an
         // app is up and out in card view.
         function test_statusBar() {

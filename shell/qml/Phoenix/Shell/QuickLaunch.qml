@@ -3,8 +3,13 @@
 //
 // Quick launch bar: the glass shelf along the bottom of card view with the
 // favourite apps and the launcher button (images/launcher3/quicklaunch-*).
-// Up to five items including the launcher button (layoutsettings.cpp:87);
-// the launcher button sits at the right end (inferred from device photos).
+// Up to five items including the launcher button (layoutsettings.cpp:87).
+//
+// Tablets lay it out as QuickLaunchBar did (quicklaunchbar.cpp:320-345,
+// 662-735): the launcher button centred in a 128 px icon cell at the right
+// end, its top 20 px down; the apps spread over the rest, each in a 128 px
+// cell followed by an equal share of what is left. Phones (the 2.x dock is
+// not in the open source) share the width equally, the button last.
 
 import QtQuick
 
@@ -37,12 +42,19 @@ Item {
         source: ql.backdrop
     }
 
-    BorderImage {
+    // quicklaunch-bg.png (10 x 105) tiled from the bar's top left, cut at
+    // its height (QuickLaunchBar::paintBackground, :283-290).
+    Item {
         anchors.fill: parent
-        source: Theme.asset("launcher3/quicklaunch-bg.png")
-        border { left: 4; right: 4; top: 30; bottom: 4 }
-        horizontalTileMode: BorderImage.Stretch
-        verticalTileMode: BorderImage.Stretch
+        clip: true
+        Image {
+            width: parent.width
+            height: Theme.px(sourceSize.height)
+            source: Theme.asset("launcher3/quicklaunch-bg.png")
+            fillMode: Image.Tile
+            horizontalAlignment: Image.AlignLeft
+            verticalAlignment: Image.AlignTop
+        }
     }
 
     // The dock's apps, in order (LauncherLayout.js dock), at most
@@ -77,10 +89,30 @@ Item {
 
     readonly property real slotWidth: width / (pinned.length + 1)
     readonly property int iconSize: Theme.quickLaunchIconSize
+    // Tablets: the item area, left of the button's cell, and the space
+    // after each 128 px cell in it (rearrangeIcons, :671).
+    readonly property real cellWidth: Theme.quickLaunchCellWidth
+    readonly property real interSpace: pinned.length === 0 ? 0
+        : Math.max(0, Math.floor((width - cellWidth - pinned.length * cellWidth) / pinned.length))
 
-    // Dock slot for a drop at x (0 .. pinned.length).
+    // Centre of item i's cell; i === pinned.length is the launcher button.
+    function slotCentre(i) {
+        if (!Theme.tablet)
+            return slotWidth * i + slotWidth / 2;
+        if (i >= pinned.length)
+            return width - cellWidth / 2;
+        return i * (cellWidth + interSpace) + cellWidth / 2;
+    }
+
+    // Dock slot for a drop at x (0 .. pinned.length): the nearest centre.
     function slotAt(x) {
-        return Math.max(0, Math.min(pinned.length, Math.floor(x / slotWidth)));
+        if (!Theme.tablet)
+            return Math.max(0, Math.min(pinned.length, Math.floor(x / slotWidth)));
+        var best = 0;
+        for (var i = 1; i <= pinned.length; ++i)
+            if (Math.abs(x - slotCentre(i)) < Math.abs(x - slotCentre(best)))
+                best = i;
+        return best;
     }
 
     Repeater {
@@ -88,7 +120,7 @@ Item {
         delegate: AppIcon {
             required property var modelData
             required property int index
-            x: ql.slotWidth * index + (ql.slotWidth - width) / 2
+            x: ql.slotCentre(index) - width / 2
             y: Theme.quickLaunchIconY
             size: ql.iconSize
             showLabel: false
@@ -106,7 +138,7 @@ Item {
     // half active (quicklaunchbar.cpp:65-67).
     Item {
         id: launcherButton
-        x: ql.slotWidth * ql.pinned.length + (ql.slotWidth - width) / 2
+        x: ql.slotCentre(ql.pinned.length) - width / 2
         y: Theme.quickLaunchIconY
         width: ql.iconSize
         height: ql.iconSize

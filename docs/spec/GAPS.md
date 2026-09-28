@@ -42,8 +42,8 @@ Nearly all the art is already in `shell/assets/openwebos/`.
 
 | # | Original | Phoenix | P · effort |
 |---|---|---|---|
-| Q1 | Launcher button fixed in a 128 px cell at the right; apps spread over the rest; `quicklaunch-bg.png` tiled into a 100 px bar (`quicklaunchbar.cpp:283-345,662-722`) | Equal slots including the button; stretched art; phone height 68 inferred | P2 · S |
-| Q2 | Own show/hide: 350 ms OutCubic slide + 200 ms fade; hides on card added, maximize and Just Type (`OverlayWindowManager.cpp:282-292,372-378,1480-1540`) | Slaved to maximize progress; not hidden for Just Type | P2 · S |
+| Q1 | Launcher button fixed in a 128 px cell at the right; apps spread over the rest; `quicklaunch-bg.png` tiled into a 100 px bar (`quicklaunchbar.cpp:283-345,662-722`) | **Done** on tablets: the button centred in the right 128 px cell, its top 20 px down; the apps in 128 px cells each followed by an equal share of the rest; the art tiled from the top left and cut at the bar's height (phones too). Phones keep equal slots: the 2.x dock is not in the open source | — |
+| Q2 | Own show/hide: 350 ms OutCubic slide + 200 ms fade; hides on card added, maximize and Just Type (`OverlayWindowManager.cpp:282-292,372-378,1480-1540`) | **Done**: its own state — hidden when a card is added or maximizes, Just Type opens, or (phones) the dashboard opens; shown as a card starts minimizing, the launcher opens, or Just Type / the dashboard closes in card view, never over Just Type; 350 ms OutCubic slide and 200 ms OutCubic fade | — |
 | Q3 | The "wave" of webOS 1.x–2.x: swipe up and hold, the dock follows the finger | **Not in the reference.** Open webOS 3.0.5 only keeps the state: `OverlayWindowManager.cpp:1005-1009` sets `m_dockHasMetFinger` and `m_dockWasShownBeforeDrag` and grabs the mouse, but nothing reads them and `m_inDrag` is never set; the wave launcher itself was closed source. Nothing to port; building it would mean designing it from videos, so it waits on a decision | — |
 | Q4 | Dragging dock icons (opacity 0.5, raised 15 px) (`quicklaunchbar.cpp:68,1366`) | **Done** (ce78209), proxy at 0.9 opacity, 1.15 scale | P1 · L |
 

@@ -229,6 +229,7 @@ QtObject {
     readonly property int quickLaunchIconSize: px(tablet ? 64 : 48)
     readonly property int quickLaunchIconY: px(tablet ? 20 : 14)
     readonly property int quickLaunchMaxItems: 5                     // layoutsettings.cpp:87
+    readonly property int quickLaunchCellWidth: px(128)              // icongeometrysettings.cpp:178 absoluteGeomSizePx
     readonly property int launcherIconSize: px(64)                   // images/launcher3/launcher-icon-64.png
     readonly property int launcherTabHeight: px(50)                  // images/launcher3/tab-bg.png
     // layoutsettings.cpp:67-74: 16 px bold in both states, white / #C8C8C8.

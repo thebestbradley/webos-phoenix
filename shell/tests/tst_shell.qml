@@ -572,6 +572,31 @@ Item {
             verify(!shell.launcherOpen);
         }
 
+        // The dock's own show / hide (OverlayWindowManager dock states).
+        function test_dockShowHide() {
+            var dock = findChild(shell, "quickLaunch");
+            shell.dockShown = true;
+            tryCompare(dock, "shownProgress", 1, 1500);
+            // A card added: it hides, sliding and fading.
+            windows.launch("org.webosphoenix.email", "");
+            verify(!shell.dockShown);
+            tryCompare(dock, "opacity", 0, 1000);
+            tryCompare(dock, "shownProgress", 0, 1500);
+            // Maximized, then minimizing: it comes back as the card goes.
+            shell.cardView.maximize();
+            tryVerify(function() { return shell.maximized; }, 2000);
+            verify(!shell.dockShown);
+            shell.gestureUp();
+            verify(shell.dockShown);
+            tryCompare(dock, "shownProgress", 1, 1500);
+            // Just Type hides it and, closed in card view, brings it back.
+            tryCompare(shell.cardView, "maximizeProgress", 0, 2000);
+            shell.startJustType("m");
+            verify(!shell.dockShown);
+            shell.gestureBack();
+            verify(shell.dockShown);
+        }
+
         // The Home button (SystemUiController.cpp:527-583): one thing per
         // press; a double press from an app reaches the launcher.
         function test_homeKey() {

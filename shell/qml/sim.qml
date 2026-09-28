@@ -206,6 +206,9 @@ Item {
         var last = "";
         for (var i = 0; i < ids.length; ++i)
             last = windows.launch(ids[i], "");
+        // As after minimizing the last of them: the dock is back (adding the
+        // cards hid it). Scenes that maximize hide it again.
+        shell.dockShown = true;
         shell.cardView.position = 1;
         if (scene === "stacks" || scene === "reorder") {
             // Two extra Messaging windows stack with the first.
