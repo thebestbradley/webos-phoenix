@@ -93,6 +93,17 @@ headless Chromium, follows the windows headless apps open, and fails if an app
 marked as working in `tools/app-expectations.json` stops starting cleanly.
 Screenshots go to `build/app-tests/`.
 
+## On a device
+
+`tools/install-rootfs.py DESTDIR` installs the same filesystem for an image:
+apps under `/usr/palm/applications` (where webOS OSE's application manager
+still looks for system apps), frameworks under `/usr/palm/frameworks`, the
+runtime under `/usr/share/phoenix/runtime`, and each app's db8 kinds and
+permissions under `/etc/palm/db`. Overlays are applied and app pages get the
+runtime `<script>` tag. The `phoenix-apps` recipe in `meta-phoenix` runs it,
+and `webos-phoenix-image` includes it. Built apps (`dist/`) must be built
+before the recipe runs.
+
 ## Status of the original apps
 
 See `tools/app-expectations.json` for the current list. Calculator, Clock and

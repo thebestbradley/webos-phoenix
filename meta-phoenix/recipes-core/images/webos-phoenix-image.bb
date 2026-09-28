@@ -5,4 +5,4 @@ require recipes-core/images/webos-image.bb
 
 DESCRIPTION = "webOS OSE image with the Phoenix mobile shell"
 
-IMAGE_INSTALL:append = " phoenix-shell"
+IMAGE_INSTALL:append = " phoenix-shell phoenix-apps"
