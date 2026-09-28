@@ -61,9 +61,8 @@ Item {
         NumberAnimation { duration: card.layoutAnimationDuration; easing.type: Easing.OutCubic }
     }
 
-    // Fades out as it is thrown off the top of the screen.
-    opacity: (reordering ? 0.8 : 1)
-             * (flickOffset < 0 ? Math.max(0, 1 + flickOffset / (height * 0.9)) : 1)
+    // Thrown off the top of the screen at full opacity (closeWindow).
+    opacity: reordering ? 0.8 : 1
 
     // Drop shadow: images/card-shadow-tile.png as a 9-tile, 20px outside
     // the card and 5px lower (CardDropShadowEffect.cpp). Sizes are in window

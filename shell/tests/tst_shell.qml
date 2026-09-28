@@ -101,8 +101,27 @@ Item {
             var last = windows.launch("org.webosphoenix.memos", "");
             shell.cardView.position = 2;
             shell.cardView.close(last);
-            compare(windows.cards.count, 2);
+            // The stack slides over while the card is still flying off.
+            compare(shell.cardView.groupCount, 2);
             tryCompare(shell.cardView, "position", 1, 2000);
+            tryCompare(windows.cards, "count", 2, 2000);
+        }
+
+        function test_closeFliesOffTheTopWhileTheRestSlide() {
+            windows.launch("org.webosphoenix.email", "");
+            var mid = windows.launch("org.webosphoenix.calendar", "");
+            windows.launch("org.webosphoenix.memos", "");
+            shell.cardView.position = 1;
+            wait(400);
+            var card = shell.cardView.cardItem(mid);
+            shell.cardView.close(mid);
+            // Out of the layout at once; the window goes when it is off the top.
+            compare(shell.cardView.groupCount, 2);
+            compare(windows.cards.count, 3);
+            wait(150);
+            verify(card.flickOffset < 0);
+            compare(card.opacity, 1);
+            tryCompare(windows.cards, "count", 2, 1000);
         }
 
         function test_closeMiddleKeepsPosition() {

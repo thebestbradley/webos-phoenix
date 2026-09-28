@@ -52,11 +52,15 @@ Item {
     Connections {
         target: view.source ? view.source.cards : null
         function onRowsInserted() { view.revision++; }
-        function onRowsRemoved() { view.revision++; }
+        function onRowsRemoved() { view._forgetClosed(); view.revision++; }
         function onRowsMoved() { view.revision++; }
         function onDataChanged() { view.revision++; }
-        function onModelReset() { view.revision++; }
+        function onModelReset() { view._forgetClosed(); view.revision++; }
     }
+
+    // Cards on their way off the top: uid -> where they were. They are out
+    // of the layout already, so the rest close the gap while they fly.
+    property var closing: ({})
 
     // [{ id, uids: [..], start }] in screen order.
     readonly property var groups: {
@@ -65,6 +69,8 @@ Item {
         var n = source ? source.cards.count : 0;
         for (var i = 0; i < n; ++i) {
             var c = source.cards.get(i);
+            if (closing[c.uid])
+                continue;
             if (list.length === 0 || list[list.length - 1].id !== c.groupId)
                 list.push({ id: c.groupId, uids: [], start: i });
             list[list.length - 1].uids.push(c.uid);
@@ -223,25 +229,62 @@ Item {
         cardMaximized(uid);
     }
 
+    // CardWindowManager::closeWindow: in card view the card is thrown off
+    // the top, 300 ms OutCubic, while the others slide into place
+    // (removeCardFromGroup -> slideAllGroups) at the same time. It does not
+    // fade. The window closes once it is off.
     function close(uid) {
+        if (closing[uid])
+            return;
         var g = groupIndexOf(uid);
         if (g < 0)
             return;
+        var place = layout.cards[uid];
+        var card = cardItem(uid);
+        var fly = card && place && maximizeProgress === 0;
         var group = groups[g];
         var k = group.uids.indexOf(uid);
         var stackSurvives = group.uids.length > 1;
         // The neighbouring card in the stack takes focus.
         if (stackSurvives && focusOf(group) === uid)
             setFocus(group.uids[k > 0 ? k - 1 : 1]);
-        animateLayout(Theme.cardShuffleReorderDuration);
+        animateLayout(fly ? Theme.cardDeleteDuration : Theme.cardShuffleReorderDuration);
         var wasLastGroup = g === groupCount - 1;
-        source.close(uid);
+        var c = Object.assign({}, closing);
+        c[uid] = place || { cx: width / 2, cy: cardOriginY, scale: activeScale, rot: 0, z: 0, focused: false };
+        closing = c;
         if (!stackSurvives) {
             if (wasLastGroup && position > 0)
                 slideTo(groupCount - 1);
             else if (g < position)
                 position = Math.max(0, position - 1);
         }
+        if (fly)
+            flickAnimation.createObject(card, { target: card, closing: true,
+                                                to: -(place.cy + card.height * place.scale / 2) }).start();
+        else
+            _finishClose(uid);
+    }
+
+    // A card closed from elsewhere (the app, the source) while flying off.
+    function _forgetClosed() {
+        var c = {};
+        for (var i = 0; source && i < source.cards.count; ++i) {
+            var uid = source.cards.get(i).uid;
+            if (closing[uid])
+                c[uid] = closing[uid];
+        }
+        if (Object.keys(closing).length !== Object.keys(c).length)
+            closing = c;
+    }
+
+    function _finishClose(uid) {
+        if (!closing[uid])
+            return;
+        var c = Object.assign({}, closing);
+        delete c[uid];
+        closing = c;
+        source.close(uid);
         if (count === 0)
             maximizeProgress = 0;
         cardClosed(uid);
@@ -385,7 +428,7 @@ Item {
             required property int index
             required property var model
 
-            readonly property var place: view.layout.cards[uid] || null
+            readonly property var place: view.closing[uid] || view.layout.cards[uid] || null
             readonly property bool lifted: view.reorderUid === uid
 
             uid: model.uid
@@ -401,7 +444,7 @@ Item {
             interactive: view.maximized && place !== null && place.focused
             dimmed: place === null || !place.focused
             reordering: lifted
-            layoutAnimationDuration: lifted ? 0 : view.layoutAnimationDuration
+            layoutAnimationDuration: lifted || view.closing[uid] ? 0 : view.layoutAnimationDuration
             z: lifted ? 3000 : place ? place.z : 0
             visible: centerX + width * cardScale / 2 > -view.width
                      && centerX - width * cardScale / 2 < view.width * 2
@@ -597,7 +640,7 @@ Item {
                     if (!cancelled && isAngry(c))
                         view.slingshot(c);
                     else
-                        view.animateFlick(c, !cancelled && shouldClose(c.flickOffset, f.vy, c.height * c.cardScale));
+                        view.animateFlick(c, !cancelled && shouldClose(c, f.vy));
                 }
             } else if (f.axis === "" && !cancelled && fingerCount() === 0) {
                 tap(f.uid, f.lastX);
@@ -628,14 +671,15 @@ Item {
         }
 
         // CardWindowManager.cpp:1700-1708: far enough, fast enough, and faster
-        // the shorter the drag. Dragging more than half the card off also
-        // closes it (the original closes once the card centre leaves the top).
-        function shouldClose(dy, vy, cardHeight) {
-            var u = Theme.u;
+        // the shorter the drag; or let go with the card's centre above the
+        // top of the screen (:1588-1591, 1712-1714).
+        function shouldClose(c, vy) {
+            var u = Theme.u, dy = c.flickOffset;
             var flicked = dy < -Theme.cardCloseMinDistance
                           && vy < -Theme.cardCloseMinVelocity
                           && vy < 550 * u * u / dy;
-            return flicked || -dy > cardHeight / 2;
+            var p = view.layout.cards[c.uid];
+            return flicked || (p !== undefined && p.cy + dy < 0);
         }
     }
 
@@ -646,13 +690,16 @@ Item {
     signal angryCardClosed(string uid)
     function slingshot(card) {
         angryCardClosed(card.uid);
-        flickAnimation.createObject(view, { target: card, closing: true, to: -view.height }).start();
+        view.close(card.uid);
     }
 
     // Throw a flicked card off the top and close it, or spring it back. One
     // animation per card, so several can go at once.
     function animateFlick(card, close) {
-        flickAnimation.createObject(view, { target: card, closing: close, to: close ? -view.height : 0 }).start();
+        if (close)
+            view.close(card.uid);
+        else
+            flickAnimation.createObject(card, { target: card, closing: false, to: 0 }).start();
     }
 
     Component {
@@ -664,7 +711,7 @@ Item {
             easing.type: closing ? Theme.cardDeleteEasing : Theme.cardEasing
             onFinished: {
                 if (closing && target)
-                    view.close(target.uid);
+                    view._finishClose(target.uid);
                 destroy();
             }
         }
