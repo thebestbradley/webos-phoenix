@@ -90,9 +90,11 @@ QtObject {
 
     // ---- Positive space / gesture area -------------------------------------
 
-    // Settings.cpp:207-208 (phone default 24, luna.conf tablet 28)
-    readonly property int positiveSpaceTopPadding: px(tablet ? 28 : 24)
-    readonly property int positiveSpaceBottomPadding: px(tablet ? 28 : 24)
+    // 28 on every device: conf/luna.conf:122-123, the base every device's
+    // conf overrides, sets both (Settings.cpp:207-208's 24 is only the
+    // compiled-in default).
+    readonly property int positiveSpaceTopPadding: px(28)
+    readonly property int positiveSpaceBottomPadding: px(28)
 
     // Phones had a physical gesture area below the screen. Modern phones do
     // not, so Phoenix reserves a thin on-screen strip that behaves the same
@@ -178,7 +180,7 @@ QtObject {
 
     // ---- Notifications -------------------------------------------------------
 
-    readonly property int bannerHeight: px(28)                       // positiveSpaceBottomPadding
+    readonly property int bannerHeight: positiveSpaceBottomPadding   // BannerMessageHandler.cpp:201
     readonly property int bannerFontSize: px(16)                     // BannerMessageHandler.cpp:67
     readonly property int bannerSlideDuration: 1000                  // BannerMessageHandler.cpp:122-130
     readonly property int bannerShowTime: 5000                       // BannerMessageHandler.cpp:69
