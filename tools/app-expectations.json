@@ -26,5 +26,9 @@
     "com.palm.app.email": {
         "status": "broken",
         "note": "not yet verified in the simulator"
+    },
+    "org.webosphoenix.settings": {
+        "status": "works",
+        "note": "Phoenix Settings (React, apps/settings); its launch points org.webosphoenix.settings.* share this entry"
     }
 }
