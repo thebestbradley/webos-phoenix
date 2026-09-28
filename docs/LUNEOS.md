@@ -458,14 +458,41 @@ Phoenix's own layer adds and overrides what it needs. That needs no
 agreement from LuneOS and gives them no say over Phoenix. The layers, and
 what each would give us:
 
-| Layer | Licence | What it contains | Use it? |
+| Layer | Licence file | What it contains | Use it? |
 | --- | --- | --- | --- |
-| `meta-smartphone` (shr-distribution) | MIT | Per-vendor device layers (`meta-google`, `meta-xiaomi`, `meta-oneplus`, `meta-furilabs`, `meta-hp`, ...), `meta-android` (Halium: the LXC Android container, libhybris, the generic `halium-arm64` machine), `meta-mainline`, `meta-qualcomm-modems`. Kernels, boot images, firmware packaging | **Yes.** This is the hardest part to redo: years of per-phone kernel and boot work. It is distro-neutral (it predates LuneOS) |
-| `meta-webos-ports/meta-luneui` | MIT recipes | luna-service2, nyx-lib, pmloglib, luna-sysmgr-common: the webOS basics | Yes, or take the same recipes from OSE's `meta-webosose` |
-| `meta-webos-ports/meta-luneos` | MIT recipes; the software they build varies (section 6) | The LuneOS distro: device services (telephonyd, battery, displaymanager, haptics, nyx forks, camera), the Chromium 151 web runtime, and the LuneOS apps and cardshell | **Pick recipes, not the distro.** Phoenix's own `phoenix` distro config and image choose the services and leave out cardshell, the LuneOS apps and Mojo |
-| `meta-luneos-backports-6.1`, `meta-luneos-holdbacks-5.3` | MIT | Newer or older versions of a few packages that the current Yocto release needs | Only as the recipes above require |
-| `meta-pine64-luneos`, `meta-rpi-luneos` | MIT *(unverified per layer)* | PinePhone, PinePhone Pro, PineTab2 and Raspberry Pi | When those devices are targets |
+| `meta-smartphone` (shr-distribution) | MIT in `meta-android` and `meta-mainline`; **none** in the vendor layers (`meta-google`, `meta-xiaomi`, `meta-oneplus`, `meta-furilabs`, `meta-hp`, ...) or `meta-qualcomm-modems` | Per-vendor device layers, `meta-android` (Halium: the LXC Android container, libhybris, the generic `halium-arm64` machine), `meta-mainline`, `meta-qualcomm-modems`. Kernels, boot images, firmware packaging | **Yes.** This is the hardest part to redo: years of per-phone kernel and boot work. It is distro-neutral (it predates LuneOS) |
+| `meta-webos-ports/meta-luneos` | MIT (`COPYING.MIT`) for the recipes; the software they build varies (section 6) | The LuneOS distro: device services (telephonyd, battery, displaymanager, haptics, nyx forks, camera), the Chromium 151 web runtime, and the LuneOS apps and cardshell | **Pick recipes, not the distro.** Phoenix's own `phoenix` distro config and image choose the services and leave out cardshell, the LuneOS apps and Mojo |
+| `meta-webos-ports/meta-luneui` | None | luna-service2, nyx-lib, pmloglib, luna-sysmgr-common: the webOS basics | Yes, or take the same recipes from OSE's `meta-webosose` (Apache-2.0) |
+| `meta-luneos-backports-6.1`, `meta-luneos-holdbacks-5.3` | None | Newer or older versions of a few packages that the current Yocto release needs | Only as the recipes above require |
+| `meta-pine64-luneos` | Apache-2.0 (`LICENSE-2.0.txt`) | PinePhone, PinePhone Pro, PineTab2 | When those devices are targets |
+| `meta-rpi-luneos` | *not checked* | Raspberry Pi | When the Pi is a target |
 | `meta-qt6` 6.12, oe-core, meta-openembedded (wrynose) | MIT | Not LuneOS's; the same upstream layers any build uses | Yes, at the versions they pin, so the device layers build |
+
+**Permission.** Three different things, with different answers:
+
+1. **Building with the layers as they are**, fetched from their git
+   repositories at pinned commits and changed only through Phoenix's own
+   layer (`.bbappend` files and our own recipes, which are our code): no
+   permission needed. We do not copy or redistribute their recipe files;
+   our build just reads them, as every Yocto user does.
+2. **Copying or modifying their recipe files inside Phoenix's repository:**
+   fine for the layers with a licence file (MIT or Apache-2.0, keep the
+   notice). For the layers with none, the default is "all rights
+   reserved", so ask for a licence file first. That is a one-line issue on
+   each repository (asking them to add `COPYING.MIT`, as their other layers
+   have), not a partnership, and it matches OpenEmbedded's convention that
+   layers are MIT.
+3. **Distributing the images we build:** the recipe licences do not matter
+   here; the licences of the software in the image do. Yocto records them
+   per package. GPL packages (kernels, oFono, libhybris parts) need their
+   source offered with the image (Yocto's archiver class does this). And
+   some device recipes are **proprietary**: vendor firmware
+   (`firmware-xiaomi-*`, `firmware-hp-tenderloin`, `firmware-lg-hammerhead`,
+   `LICENSE = "Proprietary"`) and the Halium `android-system-image`
+   (`Apache-2.0 & Proprietary`). Those images should not be published as
+   downloads without checking each blob's redistribution terms; the usual
+   answer is to extract the blobs from the user's own device at install
+   time, or to publish only images without them.
 
 The cost of this route: when LuneOS changes a recipe we use, we follow or
 override it; and if LuneOS stops, the device layers we depend on become

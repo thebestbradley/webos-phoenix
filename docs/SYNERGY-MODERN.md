@@ -283,6 +283,19 @@ WhatsApp message into the right person's thread (2.5).
 | **Email as a message** | Mail transports (IMAP/JMAP) | Device | – | – | Not merged into Messaging by default (2.6) |
 | **Google Messages, iMessage, Instagram, Facebook Messenger, LinkedIn, X** | Only reverse-engineered bridges (mautrix-gmessages, -meta, -twitter, -linkedin) or none (iMessage, SYNERGY.md 2.12) | Server | Varies | Against the networks' terms | Only as Matrix rooms, at the user's risk |
 
+### 2.2a Which networks Phoenix can use
+
+The short list, from the detail in 2.2. "Native" means Phoenix ships the
+transport on the phone and signs in the user directly.
+
+| Group | Networks | How |
+| --- | --- | --- |
+| **Native: open or officially allowed** | SMS/MMS; Matrix; XMPP; Telegram (own `api_id`, TDLib) [T1]; Fediverse direct messages and Bluesky DMs (3.1); Delta Chat and other chat-over-email (IMAP) *(not yet researched in detail)*; IRC | Phoenix transports, no server needed beyond the network's own |
+| **Native through an official work API** *(each needs checking before code)* | Slack (official Web API with a user token; the workspace may have to approve the app); Microsoft Teams chats (Microsoft Graph, the same Entra app as 1.3); Google Chat (Chat API with user sign-in; Workspace accounts); Zulip, Mattermost, Rocket.Chat (open REST APIs) | Phoenix transports, one app registration per service |
+| **Official, but only for a messaging provider in the EU** | WhatsApp, through Meta's DMA interoperability offer [W1][W2]; Messenger is also covered by the DMA *(whether Meta has opened it is unverified)* | Not a phone client: the provider runs a service. See 2.2 and open question 11 |
+| **Only through the user's own bridge (against the network's terms)** | WhatsApp, Signal, Discord, Messenger, Instagram, Google Messages, LinkedIn, X | A Matrix bridge the user runs or pays for; Phoenix shows it as a Matrix room with the network's label |
+| **Not possible** | iMessage; carrier RCS [R1]; WeChat, LINE, Viber, Snapchat *(no third-party client APIs, not researched further)* | – |
+
 ### 2.3 Architecture options
 
 **A. A native transport per network on the device.** What webOS did with
@@ -397,18 +410,39 @@ Photobucket, Snapfish and Facebook (PHOTO), YouTube (VIDEO.UPLOAD), Box,
 Dropbox and Google Docs (DOCUMENTS), EAS global address lookup
 (REMOTECONTACTS) (capabilities in the mock templates file).
 
-### 3.1 Social: Mastodon and Bluesky
+### 3.1 Social: the Fediverse and Bluesky
 
-The 2011 Facebook contact sync is not coming back from anyone. What still
-fits Synergy is **enrichment and notifications**, not a full social client:
+The 2011 Facebook contact sync is not coming back from anyone. What fits
+Synergy today is the open social web: the **Fediverse** (ActivityPub
+servers such as Mastodon, Pixelfed, Lemmy, PeerTube, Misskey, GoToSocial,
+Akkoma and Friendica) and **Bluesky** (AT Protocol). Both let any client
+sign in, and neither can ban a client for existing.
 
-| | Mastodon / ActivityPub | Bluesky / AT Protocol |
+**One Fediverse account type.** The user types their handle
+(`anna@example.social`); Phoenix finds the server, reads its NodeInfo
+document (`/.well-known/nodeinfo`, which names the server software), and
+picks the API:
+
+- Mastodon's client API, which many other servers also implement
+  (Pixelfed, GoToSocial, Akkoma/Pleroma, Friendica, Sharkey *(coverage per
+  server unverified)*).
+- The server's own API where it has no Mastodon API (Lemmy, PeerTube,
+  Misskey) *(later, by demand)*.
+
+What the account feeds, per Synergy capability:
+
+| Capability | Fediverse | Bluesky |
 | --- | --- | --- |
-| Sign-in | OAuth per instance: the app registers itself with each instance (`POST /api/v1/apps`, always a confidential client with its own secret [MA1]), then authorization code | OAuth for AT Protocol (since September 2024; public clients supported; granular scopes since June 2025) [B1]; the client ID is the URL of a client metadata JSON document the project must host. App passwords still work but are legacy [B1] |
-| Contacts enrichment | Accounts the user follows, matched to persons by profile links and verified `rel=me` fields | Follows, matched by handle (which is often a domain) |
-| Notifications | Web Push subscription per token (`/api/v1/push/subscription`) [MA1], which can point straight at a UnifiedPush endpoint | App-level polling of `listNotifications`; no third-party push *(unverified)* |
-| Messages | Mentions with `direct` visibility (not private in a strict sense) | `chat.bsky.*` DMs through the user's PDS proxy *(unverified API details)* |
-| Proposal | A `SOCIAL` capability: avatar and profile link on the person, notifications on the dashboard | Same; DMs as an IM transport later |
+| Sign-in | OAuth per server: the app registers itself with each server (`POST /api/v1/apps`, always a confidential client with its own secret [MA1]), then authorization code | OAuth for AT Protocol (since September 2024; public clients supported; granular scopes since June 2025) [B1]; the client ID is the URL of a client metadata JSON document the project must host. App passwords still work but are legacy [B1] |
+| `CONTACTS` (enrichment) | Accounts the user follows, matched to people by profile links and verified `rel=me` fields: avatar, profile link, latest post on the contact card | Follows, matched by handle (which is often a domain) |
+| Notifications | Web Push subscription per token (`/api/v1/push/subscription`) [MA1], which can point straight at a UnifiedPush endpoint (4.8) | App-level polling of `listNotifications`; no third-party push *(unverified)* |
+| `MESSAGING` | Mentions with `direct` visibility, shown in the person's thread with a "not private" label (the server admin can read them) | `chat.bsky.*` DMs through the user's PDS proxy *(unverified API details)* |
+| `PHOTO` | Pixelfed albums and the user's own media into Photos (3.2) | The user's own posts' images |
+| Sharing | "Share to" from Photos, Camera and the browser posts to the account | Same |
+
+A full timeline reader is an app, not Synergy: the catalog (APP-STORE.md)
+can list web clients such as the server's own PWA, and Phoenix need not
+write one.
 
 ### 3.2 Photos
 
@@ -698,7 +732,7 @@ their scope here only adds to what is written there.
 | **6b. Telegram (optional)** | TDLib build for OSE, transport, `api_id` | L | 4a | Large C++ build; Telegram's client terms [T1] |
 | **7a. Photos** | `PHOTO` in Photos: Immich, Nextcloud/WebDAV, OneDrive; Google Photos picker | M | 0 | Storage and bandwidth on phones |
 | **7b. Files and cloud drives** | `DOCUMENTS` roots in Files, open and save back in the document viewers: WebDAV, OneDrive, Dropbox, Drive `drive.file`, Box, S3 (native); the long tail through optional rclone (3.3) | M | 0, 1c | One registration per provider; Google's secret-on-device flow |
-| **7c. Social** | `SOCIAL`: Mastodon and Bluesky enrichment and notifications | M | 5 for push | Bluesky OAuth still evolving |
+| **7c. Social** | One Fediverse account (NodeInfo detection, Mastodon API first) and Bluesky: contacts enrichment, notifications, DMs, Pixelfed photos, share targets (3.1) | M | 5 for push | Server differences behind the Mastodon API; Bluesky OAuth still evolving |
 | **7d. Directory** | `REMOTECONTACTS` for Graph, Just Type remote contacts | S | 2a | – |
 
 Suggested order after phase 0: 1b, 1c, 2a, 3a, 2b, 4a, 4b, 5, then the
@@ -750,6 +784,13 @@ mail and has the device code fallback.
 10. **Priorities.** Which accounts matter most to the people who will use
     Phoenix first (e.g. Google vs Microsoft vs Nextcloud; WhatsApp via
     bridge vs Signal)?
+11. **WhatsApp through the DMA.** Meta's interoperability offer is for
+    messaging *providers*, not for apps that sign in to WhatsApp. Phoenix
+    could reach it in two ways: rely on a Matrix provider that interconnects
+    (none confirmed yet), or become a provider itself as part of a Phoenix
+    cloud (run a messaging service with WhatsApp-grade end-to-end
+    encryption, sign Meta's agreement, EEA users only). Worth asking Meta
+    and Element before deciding.
 
 ## 8. Another route: what LuneOS does
 
