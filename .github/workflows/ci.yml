@@ -38,6 +38,8 @@ jobs:
       - name: Web apps (React + TypeScript) - typecheck, unit tests, build
         working-directory: apps
         run: |
+          # Every platform's native packages in the lock, or npm ci fails on Macs.
+          node ../tools/check-lockfile.cjs
           npm ci
           npm run typecheck
           npm test
