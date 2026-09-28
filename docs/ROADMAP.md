@@ -7,10 +7,13 @@ The checklist of legacy features is in
 [spec/feature-inventory.md](spec/feature-inventory.md), and the measurements
 are in [spec/legacy-ui-spec.md](spec/legacy-ui-spec.md).
 
-Two plans go with this roadmap: [HARDWARE.md](HARDWARE.md) (which devices to
-target and how their hardware is driven, for M1 and M3) and
+Four plans go with this roadmap: [HARDWARE.md](HARDWARE.md) (which devices to
+target and how their hardware is driven, for M1 and M3),
 [APP-GAPS.md](APP-GAPS.md) (every app a modern phone ships and which ones
-Phoenix still needs, for M4).
+Phoenix still needs, for M4), [APP-STORE.md](APP-STORE.md) (installable web
+apps as webOS apps, legacy `.ipk` apps and the catalog, for M4) and
+[ANDROID.md](ANDROID.md) (Android apps through Waydroid as webOS cards, for
+M5).
 
 ## M0: shell in a simulator (done in this repo's first PR)
 
@@ -94,7 +97,9 @@ Rebuilt as web apps on OSE's runtime (Enact/React TypeScript), styled after the
 originals: Phone, Messaging, Email, Calendar, Contacts (with Synergy-style
 account merging), Web, Camera, Photos, Music, Maps, Memos, Tasks, Clock,
 Calculator, Settings panes, and an app catalog. The full list of missing
-apps, with priorities and a build order, is in [APP-GAPS.md](APP-GAPS.md).
+apps, with priorities and a build order, is in [APP-GAPS.md](APP-GAPS.md);
+the catalog's plan (PWAs, App Museum II, a signed static index written by a
+PHP + MySQL service) is in [APP-STORE.md](APP-STORE.md).
 
 - [x] App scaffolding: `apps/` npm workspace (React + TypeScript + Vite),
       `@phoenix/ui` (webOS 2.x look from the Enyo 1.0 artwork) and
@@ -175,7 +180,9 @@ apps, with priorities and a build order, is in [APP-GAPS.md](APP-GAPS.md).
 
 Once parity is reached: high-DPI artwork redraws, dark/light themes, modern
 notification actions, Wayland app compatibility (Linux mobile apps),
-accessibility, and whatever else the community agrees fits webOS.
+Android apps through Waydroid (plan in [ANDROID.md](ANDROID.md); its spike
+can start on the emulator image after M1), accessibility, and whatever else
+the community agrees fits webOS.
 
 ## Related projects
 
