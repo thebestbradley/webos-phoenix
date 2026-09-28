@@ -17,7 +17,7 @@
 //   setCardGroup(uid, groupId), newGroupId()
 //   cardFocusRequested(uid)  signal: show this card maximized (e.g. a new
 //                            child window opened by an app)
-//   notifications ListModel  id, appId, title, body, color, glyph
+//   notifications ListModel  id, appId, title, body, color, glyph, icon
 //   cardCloseRequested(uid)  signal: a window asked to close (window.close())
 //
 // Optional (the shell has a built-in fallback without them):
@@ -509,11 +509,11 @@ Item {
     }
 
     function notify(appId, titleText, body) {
-        var info = appInfo(appId) || { color: "#666666", glyph: "!" };
+        var info = appInfo(appId) || { color: "#666666", glyph: "!", icon: "" };
         notifications.append({
             id: "n" + Date.now() + "_" + notifications.count,
             appId: appId, title: titleText, body: body,
-            color: info.color, glyph: info.glyph
+            color: info.color, glyph: info.glyph, icon: info.icon || ""
         });
     }
 

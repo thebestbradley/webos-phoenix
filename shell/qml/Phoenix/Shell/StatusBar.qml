@@ -15,6 +15,9 @@ Item {
     property string title: system ? system.carrier : ""
     property bool appTitle: false
     property bool systemMenuOpen: false
+    // Width of the system indicators at the right (tablet notification
+    // icons go just left of them).
+    readonly property real systemGroupWidth: indicators.width + Theme.px(6)
 
     signal systemMenuRequested
     signal appMenuRequested

@@ -159,6 +159,31 @@ Item {
             tryCompare(pill, "opacity", 0, 1000);
         }
 
+        // Phones: notifications take space from the bottom of the app, never
+        // cover it (SystemUiController::changeNegativeSpace).
+        function test_notificationShrinksTheAppInsteadOfCoveringIt() {
+            windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximizeProgress = 1;
+            var notes = shell.notifications;
+            var fullHeight = shell.cardView.windowHeight;
+            compare(notes.negativeSpace, 0);
+            windows.notify("org.webosphoenix.messaging", "Palm Pre", "It's good to be back.");
+            tryCompare(notes, "negativeSpace", Theme.bannerHeight, 2000);
+            compare(shell.cardView.windowHeight, fullHeight - Theme.bannerHeight);
+            // The dashboard grows upward and the app moves up with it.
+            notes.dashboardOpen = true;
+            tryCompare(notes, "negativeSpace", notes.dashboardHeight, 2000);
+            verify(notes.dashboardHeight > Theme.bannerHeight);
+            compare(shell.cardView.windowHeight, fullHeight - notes.dashboardHeight);
+            verify(notes.dashboardHeight <= shell.height * Theme.maximumNegativeSpaceRatio);
+            // Nothing left: the app gets its space back.
+            notes.dashboardOpen = false;
+            windows.dismissNotification(0);
+            notes.bannerActive = false;
+            tryCompare(notes, "negativeSpace", 0, 2000);
+            compare(shell.cardView.windowHeight, fullHeight);
+        }
+
         function test_tapCardMaximizes() {
             windows.launch("org.webosphoenix.email", "");
             wait(50);

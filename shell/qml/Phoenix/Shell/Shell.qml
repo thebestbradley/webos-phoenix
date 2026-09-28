@@ -154,7 +154,8 @@ FocusScope {
         anchors.fill: parent
         source: shell.source
         topInset: Theme.statusBarHeight
-        bottomInset: gesture.height
+        // The app's positive space ends where the notifications' negative space begins.
+        bottomInset: gesture.height + notes.negativeSpace
     }
 
     SearchPill {
@@ -169,7 +170,7 @@ FocusScope {
         id: quickLaunch
         anchors.left: parent.left
         anchors.right: parent.right
-        y: parent.height - gesture.height - notes.barHeight - height
+        y: parent.height - gesture.height - notes.negativeSpace - height
            + (height + gesture.height) * cards.maximizeProgress
         visible: cards.maximizeProgress < 1
         apps: shell.source ? shell.source.apps : null
@@ -203,23 +204,12 @@ FocusScope {
         id: screenCorners
         anchors.fill: parent
         anchors.topMargin: Theme.statusBarHeight
-        anchors.bottomMargin: gesture.height
+        anchors.bottomMargin: gesture.height + notes.negativeSpace
         visible: !Theme.tablet && cards.maximized
         Image { anchors.left: parent.left; anchors.top: parent.top; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-top-left.png") }
         Image { anchors.right: parent.right; anchors.top: parent.top; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-top-right.png") }
         Image { anchors.left: parent.left; anchors.bottom: parent.bottom; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-bottom-left.png") }
         Image { anchors.right: parent.right; anchors.bottom: parent.bottom; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-bottom-right.png") }
-    }
-
-    Notifications {
-        id: notes
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: statusBar.bottom
-        anchors.bottom: gesture.top
-        model: shell.source ? shell.source.notifications : null
-        onDismissRequested: (index) => shell.source.dismissNotification(index)
-        onActivated: (appId) => shell.launch(appId)
     }
 
     LockScreen {
@@ -240,6 +230,20 @@ FocusScope {
         title: appTitle ? cards.currentTitle : (shell.system ? shell.system.carrier : "")
         systemMenuOpen: systemMenu.open
         onSystemMenuRequested: systemMenu.open = !systemMenu.open
+    }
+
+    Notifications {
+        id: notes
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: statusBar.bottom
+        anchors.bottom: gesture.top
+        model: shell.source ? shell.source.notifications : null
+        onDismissRequested: (index) => shell.source.dismissNotification(index)
+        onActivated: (appId) => shell.launch(appId)
+        visible: !shell.locked
+        screenHeight: shell.height
+        statusBarRightInset: statusBar.systemGroupWidth
     }
 
     SystemMenu {

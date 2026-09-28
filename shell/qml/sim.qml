@@ -5,7 +5,7 @@
 //
 // Context properties set by phoenix-sim:
 //   simScene       "locked" | "cards" | "stacks" | "reorder" | "maximized" | "launcher" |
-//                  "dashboard" | "justtype" | "systemmenu" | "empty"
+//                  "banner" | "notified" | "dashboard" | "justtype" | "systemmenu" | "empty"
 //   simFormFactor  "auto" | "phone" | "tablet"
 //   simLaunch      app ids to launch (--launch)
 //   simOpen        a web address to open in the browser (--open)
@@ -122,7 +122,13 @@ Item {
             shell.openSystemMenu();
         } else if (scene === "launcher") {
             shell.gestureUp();
-        } else if (scene === "dashboard" || scene === "locked") {
+        } else if (scene === "banner") {
+            // An app is open; a notification comes in and the app makes room.
+            shell.cardView.maximizeProgress = 1;
+            windows.notify(windows.appIdByTitle("Messaging"), "Palm Pre", "It's good to be back.");
+        } else if (scene === "dashboard" || scene === "notified" || scene === "locked") {
+            if (scene !== "locked")
+                shell.cardView.maximizeProgress = 1;
             windows.notify(windows.appIdByTitle("Messaging"), "Palm Pre", "It's good to be back.");
             windows.notify(windows.appIdByTitle("Email"), "3 new emails", "webOS Phoenix build passed");
             windows.notify(windows.appIdByTitle("Calendar"), "Launch party", "Tomorrow, 9:41 AM");

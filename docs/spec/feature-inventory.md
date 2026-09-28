@@ -57,8 +57,8 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 ## 4. Notifications [spec §4]
 
 - [ ] Banner notifications: scrolling ticker with icon, queueing (5 s alone, 2 s when queued), sounds. `Src/lunaui/notifications/BannerMessageHandler.cpp`
-- [ ] Phone: bottom notification bar with dashboard icons; tap to open dashboards upward. `Src/lunaui/notifications/DashboardWindowManager.cpp`; `SystemUiController.cpp:82,1361-1470`
-- [ ] Tablet: notification drop-down (320 px) from the status bar. `uiComponents/DashboardMenu/DashboardMenu.qml`; `DashboardWindowManager.cpp:142-170`
+- [x] Phone: bottom notification bar with dashboard icons; tap to open dashboards upward. The bar and dashboard are negative space: the app shrinks and moves up (400 ms OutCubic), never covered. `Src/lunaui/notifications/DashboardWindowManager.cpp`; `SystemUiController.cpp:82,1361-1470`
+- [x] Tablet: notification drop-down (320 px) from the status bar. `uiComponents/DashboardMenu/DashboardMenu.qml`; `DashboardWindowManager.cpp:142-170`
 - [ ] Dashboards (persistent app mini-windows, 52 px rows) with swipe-to-dismiss, persistent (non-dismissable) variant, and scrolling after 5.5 rows. `Src/lunaui/notifications/DashboardWindowContainer.cpp`
 - [ ] Popup alerts (incoming call, alarm, calendar reminder, system alerts) filtered by the policy file. `Src/lunaui/notifications/AlertWindow.cpp`; `conf/notificationPolicy.conf`; `NotificationPolicy.cpp`
 - [ ] Transient alerts. `DashboardWindowManager.cpp:183-190`
