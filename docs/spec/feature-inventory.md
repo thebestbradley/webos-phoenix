@@ -213,21 +213,27 @@ All of these need reimplementation or an alternative for Phoenix.
 ## Store and first use
 - [ ] **HP App Catalog** (`com.palm.app.enyo-findapps`, older `com.palm.app.findapps`), plus the payment app. `conf/luna.conf:157`; `Src/lunaui/launcher/operationalsettings.cpp:194`
 - [ ] **First Use / setup wizard** (`com.palm.app.firstuse`). `Src/base/application/ApplicationManager.cpp:2381`
-- [ ] **Software Manager** (`com.palm.app.swmanager`) and **System Updates** (`com.palm.app.updates`). `conf/default-launcher-page-layout.json`
+- [ ] **Software Manager** (`com.palm.app.swmanager`) and **System Updates** (`com.palm.app.updates`). `conf/default-launcher-page-layout.json`. *Phoenix: Settings > Updates is a stub (version + check button); no OTA yet.*
 - [ ] **Backup** (`com.palm.app.backup`). `conf/default-launcher-page-layout.json`
 
 ## Settings apps (launcher "Settings" page, `conf/default-launcher-page-layout.json:29-51`)
-- [ ] Wi-Fi (`com.palm.app.wifi`)
-- [ ] Bluetooth (`com.palm.app.bluetooth`)
+
+Phoenix rebuilds these as one React app, `apps/settings` (`org.webosphoenix.settings`), with one launcher
+icon and card per pane (launch points). Checked items work in the simulator against simulated OSE services;
+none has run on a device yet. See `docs/APP-RUNTIME.md`.
+
+- [x] Wi-Fi (`com.palm.app.wifi`): on/off, network list, join with password, join other network, forget
+- [x] Bluetooth (`com.palm.app.bluetooth`): on/off, search, pair, forget (no per-profile connect yet)
 - [ ] VPN (`com.palm.app.vpn`)
-- [ ] Date & Time (`com.palm.app.dateandtime`)
-- [ ] Device Info (`com.palm.app.deviceinfo`)
+- [x] Date & Time (`com.palm.app.dateandtime`): 12/24 hour, network time and time zone, zone picker, manual date/time
+- [x] Device Info (`com.palm.app.deviceinfo`): device, software, battery, storage, memory, licenses, reset options
 - [ ] Exhibition preferences (`com.palm.app.exhibitionpreferences`)
 - [ ] Just Type / search preferences (`com.palm.app.searchpreferences`)
 - [ ] Location Services (`com.palm.app.location`)
-- [ ] Language picker (`com.palm.app.languagepicker`)
-- [ ] Screen & Lock (`com.palm.app.screenlock`)
-- [ ] Sounds & Ringtones (`com.palm.app.soundsandalerts`)
+- [x] Language picker (`com.palm.app.languagepicker`): Language & Region (UI and format locales); apps do not localize yet
+- [x] Screen & Lock (`com.palm.app.screenlock`): brightness, timeout, rotation lock, wallpaper, notifications when locked, PIN/password (the lock screen does not ask for it yet)
+- [x] Sounds & Ringtones (`com.palm.app.soundsandalerts`): volumes, mute, ringtone (no sound files yet), touch sounds
 - [ ] Text Assist (`com.palm.app.textassist`)
 - [ ] Certificate Manager (`com.palm.app.certificate`). `ApplicationManagerService.cpp:3822`
 - [ ] Phone preferences / Network settings / Power (phone-era prefs apps). Not referenced in this repo.
+- [x] Airplane Mode pane (Phoenix addition; on webOS it lived only in the system menu)

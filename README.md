@@ -15,7 +15,15 @@ measurements wherever the license allows.
 | ![](docs/screenshots/locked.png) | ![](docs/screenshots/cards.png) | ![](docs/screenshots/stacks.png) | ![](docs/screenshots/reorder.png) | ![](docs/screenshots/maximized.png) | ![](docs/screenshots/launcher.png) | ![](docs/screenshots/dashboard.png) | ![](docs/screenshots/justtype.png) | ![](docs/screenshots/systemmenu.png) |
 
 *Simulator at the Pre's native 320×480. Status bar, lock clock, quick launch,
-launcher tabs and menus use the original Open webOS art; apps are placeholders.*
+launcher tabs and menus use the original Open webOS art.*
+
+| Settings tab | Wi-Fi | Settings cards | System menu and Settings |
+| --- | --- | --- | --- |
+| ![](docs/screenshots/settings-launcher.png) | ![](docs/screenshots/settings-wifi.png) | ![](docs/screenshots/settings-cards.png) | ![](docs/screenshots/settings-systemmenu.png) |
+
+*Phoenix Settings, a new React app drawn with the Enyo 1.0 artwork, running in
+the simulator against simulated webOS OSE services. Turning Wi-Fi on in the
+system menu updates the Settings card behind it.*
 
 ## Status
 
@@ -39,6 +47,8 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `shell/qml/Phoenix/Sim` | Mock apps and device status for the desktop simulator |
 | `shell/qml/Phoenix/Lsm`, `shell/qml/WebOSCompositor` | Adapter that plugs the shell into webOS OSE's `luna-surfacemanager` |
 | `shell/sim` | `phoenix-sim`, the desktop runner (also takes screenshots) |
+| `apps/` | New Phoenix web apps in React + TypeScript (Settings), with the shared `@phoenix/ui` components and `@phoenix/luna` service client |
+| `runtime/` | The webOS web app runtime for the simulator and browsers (`PalmSystem`, simulated Luna services) |
 | `shell/tests` | Behaviour tests (`qmltestrunner`) |
 | `shell/assets/openwebos` | Original Open webOS system UI artwork (Apache-2.0) |
 | `meta-phoenix` | OpenEmbedded layer that adds Phoenix to a webOS OSE image |
@@ -49,7 +59,9 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Requires Qt 6.4 or newer with Qt Quick and Qt5Compat. Qt WebEngine is
 needed to run the web apps (the original webOS apps and new Phoenix apps);
-without it the simulator shows placeholder apps only.
+without it the simulator shows placeholder apps only. Node.js 20 or newer
+builds the Phoenix apps (Settings); `cmake --build` runs `npm ci` and
+`npm run build` in `apps/` for you, and warns if npm is missing.
 
 First fetch the original Open webOS apps and frameworks (git submodules):
 
@@ -60,7 +72,7 @@ git submodule update --init
 **macOS**
 
 ```sh
-brew install qt cmake
+brew install qt cmake node
 cmake -S shell -B build -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
 cmake --build build
 ./build/phoenix-sim            # Pre (320x480)
@@ -75,6 +87,7 @@ sudo apt install qt6-base-dev qt6-declarative-dev qml6-module-qtquick \
   qml6-module-qtquick-window qml6-module-qtqml-workerscript \
   qml6-module-qt5compat-graphicaleffects qml6-module-qttest \
   qt6-webengine-dev qml6-module-qtwebengine
+sudo snap install node --classic   # Node.js 20+; Ubuntu's nodejs package is too old
 cmake -S shell -B build && cmake --build build
 ./build/phoenix-sim
 ```
@@ -86,7 +99,8 @@ the bottom is the gesture area. Keys: **Esc** back, **Home**/**F1** swipe up,
 The **+** button in each placeholder app opens a second window, which joins
 that app's card stack.
 
-`--launch com.palm.app.notes` opens an app at start-up (repeatable).
+`--launch com.palm.app.notes` opens an app at start-up (repeatable);
+`--launch org.webosphoenix.settings.wifi` opens a Settings pane.
 
 `--scene locked|cards|stacks|reorder|maximized|launcher|dashboard|justtype|systemmenu` opens
 a demo state; add `--screenshot out.png` to save a PNG and exit.
@@ -95,6 +109,8 @@ Tests:
 
 ```sh
 QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -input shell/tests
+(cd apps && npm test && npm run typecheck)
+node tools/test-apps.cjs && node tools/test-settings.cjs   # needs Playwright
 ```
 
 ## Build a webOS OSE image (experimental)

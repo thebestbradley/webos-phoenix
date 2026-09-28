@@ -83,6 +83,19 @@ originals: Phone, Messaging, Email, Calendar, Contacts (with Synergy-style
 account merging), Web, Camera, Photos, Music, Maps, Memos, Tasks, Clock,
 Calculator, Settings panes, and an app catalog.
 
+- [x] App scaffolding: `apps/` npm workspace (React + TypeScript + Vite),
+      `@phoenix/ui` (webOS 2.x look from the Enyo 1.0 artwork) and
+      `@phoenix/luna` (typed Luna service client); built by CMake and CI
+- [x] Settings (`apps/settings`): Wi-Fi, Bluetooth, Airplane Mode, Screen & Lock,
+      Sounds & Ringtones, Date & Time, Language & Region, Device Info, Updates (stub),
+      one launcher icon per pane; coded against OSE's services, simulated in
+      `runtime/phoenix-runtime.js`, and in step with the status bar and system menu
+- [ ] Settings on a device: check each OSE call on real hardware; a Phoenix
+      service for the device passcode (OSE has no `setDevicePasscode`),
+      brightness and screen timeout
+- [ ] Lock screen asks for the PIN / password set in Screen & Lock
+- [ ] Localization: apps follow `localeInfo`
+
 ## M5: modernize
 
 Once parity is reached: high-DPI artwork redraws, dark/light themes, modern
