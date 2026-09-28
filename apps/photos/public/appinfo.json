@@ -6,6 +6,7 @@
     "main": "index.html",
     "title": "Photos",
     "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
     "iconColor": "#e0a23a",
     "uiRevision": 2,
     "//requiredPermissions": "OSE access control groups for the services the app calls (the groups in each service's sysbus api.json).",

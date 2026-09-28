@@ -124,7 +124,7 @@ Item {
             width: parent.width
             height: Theme.px(26)
             source: Theme.asset("statusBar/appname-background.png")
-            border { left: Theme.statusBarTitleCapLeft; right: Theme.statusBarTitleCapRight; top: 0; bottom: 0 }
+            border { left: Theme.artBorder(Theme.statusBarTitleCapLeft, source); right: Theme.artBorder(Theme.statusBarTitleCapRight, source); top: 0; bottom: 0 }
         }
         Text {
             id: label
@@ -171,8 +171,8 @@ Item {
         visible: Theme.tablet && opacity > 0
         x: newTitle.width + Theme.statusBarArrowSpacing
         anchors.verticalCenter: parent.verticalCenter
-        width: Theme.px(sourceSize.width)
-        height: Theme.px(sourceSize.height)
+        width: Theme.artPx(sourceSize.width, source)
+        height: Theme.artPx(sourceSize.height, source)
         source: Theme.asset("statusBar/menu-arrow.png")
         opacity: bar._arrowProgress
     }
@@ -181,8 +181,8 @@ Item {
         visible: Theme.tablet && opacity > 0
         x: titleArrow.x + titleArrow.width + Theme.px(7)             // ARROW_SPACING, StatusBar.h:33
         anchors.verticalCenter: parent.verticalCenter
-        width: Theme.px(sourceSize.width)
-        height: Theme.px(sourceSize.height)
+        width: Theme.artPx(sourceSize.width, source)
+        height: Theme.artPx(sourceSize.height, source)
         source: Theme.asset("statusBar/status-bar-separator.png")
         opacity: bar._arrowProgress
     }
@@ -226,7 +226,7 @@ Item {
         width: indicators.width + Theme.px(12)
         source: Theme.tablet || !bar.systemMenuOpen ? Theme.asset("statusBar/status-bar-menu-dropdown-tab.png")
                                                     : Theme.asset("statusBar/status-bar-menu-dropdown-tab-pressed.png")
-        border { left: Theme.tablet ? 11 : 0; right: Theme.tablet ? 11 : 0; top: 0; bottom: 0 }
+        border { left: Theme.artBorder(Theme.tablet ? 11 : 0, source); right: Theme.artBorder(Theme.tablet ? 11 : 0, source); top: 0; bottom: 0 }
         opacity: bar.systemMenuOpen ? 1 : 0
         Behavior on opacity {
             enabled: Theme.tablet
@@ -288,7 +288,7 @@ Item {
                     : bar.system.charging && step === 12 ? Theme.asset("statusBar/battery-charged.png")
                     : bar.system.charging ? Theme.asset("statusBar/battery-charging-" + step + ".png")
                     : Theme.asset("statusBar/battery-" + Math.min(step, 11) + ".png")
-            width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
+            width: Theme.artPx(sourceSize.width, source); height: Theme.artPx(sourceSize.height, source)
         }
         // Tablet: the clock, rightmost (the system group's first item).
         Text {
@@ -335,8 +335,8 @@ Item {
         opacity: progress
         Image {
             id: img
-            width: Theme.px(sourceSize.width)
-            height: Theme.px(sourceSize.height)
+            width: Theme.artPx(sourceSize.width, source)
+            height: Theme.artPx(sourceSize.height, source)
         }
     }
 }

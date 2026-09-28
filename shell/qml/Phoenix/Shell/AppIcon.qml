@@ -12,6 +12,9 @@ Item {
 
     property string title
     property url source: ""
+    // A bigger picture of the same icon, if the app names one (appinfo.json
+    // "splashicon"); Theme.appIcon also finds icon-256x256.png beside it.
+    property url largeSource: ""
     property color color: "#666666"
     property string glyph: ""
     property bool showLabel: true
@@ -43,9 +46,16 @@ Item {
         }
 
         Image {
+            objectName: "iconImage"
             anchors.fill: parent
             visible: icon.source != ""
-            source: icon.source
+            // The icon, or a bigger one the app ships once the icon would
+            // be magnified (Theme.appIcon); that one is decoded at the
+            // drawn size, smoothly scaled down.
+            readonly property url best: icon.source != "" ? Theme.appIcon(icon.source, icon.size, icon.largeSource) : ""
+            readonly property bool larger: best != icon.source
+            source: best
+            sourceSize: larger ? Qt.size(icon.size, icon.size) : Qt.size(-1, -1)
             smooth: true
         }
 

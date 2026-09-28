@@ -6,6 +6,7 @@
     "main": "index.html",
     "title": "Voice Memos",
     "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
     "iconColor": "#b8322a",
     "uiRevision": 2,
     "keywords": ["Voice Recorder", "Dictation", "Recording", "Audio", "Transcribe"],

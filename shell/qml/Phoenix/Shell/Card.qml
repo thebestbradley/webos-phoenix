@@ -32,6 +32,8 @@ Item {
     readonly property bool loading: window !== null && window.ready === false
     // The app's launcher icon, for the loading card.
     property url icon: ""
+    // Its bigger icon (appinfo.json "splashicon"), if any.
+    property url largeIcon: ""
     // Cards that have lost focus are darkened (CardWindow.cpp:211-213).
     property bool dimmed: false
 
@@ -127,7 +129,7 @@ Item {
         scale: Theme.u
         transformOrigin: Item.TopLeft
         source: Theme.asset("card-shadow-tile.png")
-        border { left: 43; top: 43; right: 43; bottom: 43 }
+        border { left: Theme.artBorder(43, source); top: Theme.artBorder(43, source); right: Theme.artBorder(43, source); bottom: Theme.artBorder(43, source) }
         horizontalTileMode: BorderImage.Stretch
         verticalTileMode: BorderImage.Stretch
     }
@@ -154,6 +156,7 @@ Item {
                 z: 1
                 active: card.loading
                 icon: card.icon
+                largeIcon: card.largeIcon
             }
         }
 

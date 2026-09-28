@@ -9,7 +9,7 @@ qt_add_qml_module(phoenix-native
     VERSION 1.0
     PLUGIN_TARGET phoenix-native
     OUTPUT_DIRECTORY ${PHOENIX_QML_BUILD_DIR}/Phoenix/Native
-    SOURCES keyinjector.h keyinjector.cpp fonttools.h fonttools.cpp
+    SOURCES keyinjector.h keyinjector.cpp fonttools.h fonttools.cpp hidpi.h hidpi.cpp
 )
 target_link_libraries(phoenix-native PRIVATE Qt6::Quick Qt6::Gui)
 

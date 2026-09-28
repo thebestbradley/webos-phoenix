@@ -809,7 +809,7 @@ FocusScope {
                     width: Math.min(parent.width - Theme.px(20), Theme.px(320))
                     height: dialogColumn.height + Theme.px(40)
                     source: Theme.asset("menu-dropdown-bg.png")
-                    border { left: 30; right: 30; top: 30; bottom: 30 }
+                    border { left: Theme.artBorder(30, source); right: Theme.artBorder(30, source); top: Theme.artBorder(30, source); bottom: Theme.artBorder(30, source) }
                     MouseArea { anchors.fill: parent }
                     BackdropBlur {
                         anchors.fill: parent
@@ -822,7 +822,7 @@ FocusScope {
                         visible: false
                         anchors.fill: parent
                         source: Theme.asset("menu-dropdown-bg.png")
-                        border { left: 30; right: 30; top: 30; bottom: 30 }
+                        border { left: Theme.artBorder(30, source); right: Theme.artBorder(30, source); top: Theme.artBorder(30, source); bottom: Theme.artBorder(30, source) }
                     }
                     Column {
                         id: dialogColumn

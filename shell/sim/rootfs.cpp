@@ -85,6 +85,14 @@ Rootfs::Rootfs(const QString &repoDir)
         // The shell loads icons itself, from the file on disk.
         const QString icon = app.value(QStringLiteral("icon")).toString(QStringLiteral("icon.png"));
         entry[QStringLiteral("icon")] = QUrl::fromLocalFile(appDir + QLatin1Char('/') + icon).toString();
+        // A bigger picture of the icon, for dense screens and the loading
+        // card: "splashicon" (luna-sysmgr ApplicationDescription.cpp:242-246;
+        // icon-256x256.png in the core apps), or OSE's "largeIcon".
+        QString large = app.value(QStringLiteral("splashicon")).toString();
+        if (large.isEmpty())
+            large = app.value(QStringLiteral("largeIcon")).toString();
+        entry[QStringLiteral("largeIcon")] = large.isEmpty() || !QFileInfo::exists(appDir + QLatin1Char('/') + large)
+            ? QString() : QUrl::fromLocalFile(appDir + QLatin1Char('/') + large).toString();
         m_apps.append(entry);
         QVariantMap record;
         record[QStringLiteral("id")] = id;
@@ -111,6 +119,9 @@ Rootfs::Rootfs(const QString &repoDir)
             point[QStringLiteral("main")] = main + QStringLiteral("?launchParams=") + QString::fromLatin1(QUrl::toPercentEncoding(QString::fromUtf8(params)));
             point[QStringLiteral("tab")] = lp.value(QStringLiteral("launcherTab")).toInt(tab);
             point[QStringLiteral("icon")] = QUrl::fromLocalFile(appDir + QLatin1Char('/') + lp.value(QStringLiteral("icon")).toString(icon)).toString();
+            // Its own icon's bigger siblings are found beside it (HiDpi::icon).
+            if (lp.contains(QStringLiteral("icon")))
+                point[QStringLiteral("largeIcon")] = QString();
             point[QStringLiteral("noWindow")] = false;
             point[QStringLiteral("quickLaunch")] = lp.value(QStringLiteral("quickLaunch")).toInt(0);
             m_apps.append(point);

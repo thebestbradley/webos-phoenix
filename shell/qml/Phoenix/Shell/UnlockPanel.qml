@@ -65,7 +65,7 @@ FocusScope {
     BorderImage {
         anchors.fill: parent
         source: Theme.asset("popup-bg.png")
-        border { left: 35; top: 40; right: 35; bottom: 40 }
+        border { left: Theme.artBorder(35, source); top: Theme.artBorder(40, source); right: Theme.artBorder(35, source); bottom: Theme.artBorder(40, source) }
     }
 
     // Taps between the controls stay on the panel.
@@ -111,7 +111,7 @@ FocusScope {
             visible: !panel.isPINEntry
             anchors.fill: parent
             source: Theme.asset("pin/password-lock-field.png")
-            border { left: 30; top: 10; right: 30; bottom: 10 }
+            border { left: Theme.artBorder(30, source); top: Theme.artBorder(10, source); right: Theme.artBorder(30, source); bottom: Theme.artBorder(10, source) }
         }
 
         TextInput {
@@ -247,7 +247,7 @@ FocusScope {
             anchors.fill: parent
             visible: pinButton.isPressed
             source: Theme.asset("pin/pin-key-highlight.png")
-            border { left: 10; top: 10; right: 10; bottom: 10 }
+            border { left: Theme.artBorder(10, source); top: Theme.artBorder(10, source); right: Theme.artBorder(10, source); bottom: Theme.artBorder(10, source) }
         }
         Text {
             visible: pinButton.caption !== "" && pinButton.imgSource === ""
@@ -289,7 +289,7 @@ FocusScope {
             source: Theme.asset(actionButton.affirmative
                                 ? (actionButton.isPressed ? "pin/button-green-press.png" : "pin/button-green.png")
                                 : (actionButton.isPressed ? "pin/button-black-press.png" : "pin/button-black.png"))
-            border { left: 10; top: 10; right: 10; bottom: 10 }
+            border { left: Theme.artBorder(10, source); top: Theme.artBorder(10, source); right: Theme.artBorder(10, source); bottom: Theme.artBorder(10, source) }
             opacity: actionButton.active ? 1.0 : actionButton.inactiveOpacity
         }
         Text {

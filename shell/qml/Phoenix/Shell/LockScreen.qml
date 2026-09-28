@@ -136,13 +136,13 @@ Item {
     Image {
         y: Theme.statusBarHeight
         width: parent.width
-        height: Theme.px(sourceSize.height)
+        height: Theme.artPx(sourceSize.height, source)
         source: Theme.asset("screen-lock-wallpaper-mask-top.png")
     }
     Image {
         anchors.bottom: parent.bottom
         width: parent.width
-        height: Theme.px(sourceSize.height)
+        height: Theme.artPx(sourceSize.height, source)
         source: Theme.asset("screen-lock-wallpaper-mask-bottom.png")
     }
 
@@ -210,7 +210,7 @@ Item {
         height: contentHeight + 2 * Theme.px(20)
         y: lock.incomingCall ? Theme.statusBarHeight - Theme.px(10) : (lock.height - height) / 2
         source: Theme.asset("popup-bg.png")
-        border { left: 20; right: 20; top: 20; bottom: 20 }
+        border { left: Theme.artBorder(20, source); right: Theme.artBorder(20, source); top: Theme.artBorder(20, source); bottom: Theme.artBorder(20, source) }
         MouseArea { anchors.fill: parent }
         Item {
             id: alertHost
@@ -240,7 +240,7 @@ Item {
         height: contentHeight + 2 * Theme.lockAlertsShadow + Theme.lockDashboardTopPadding + Theme.lockDashboardBottomPadding
         y: (lock.height - contentHeight) / 2 - Theme.lockAlertsShadow - Theme.lockDashboardTopPadding
         source: Theme.asset("popup-bg.png")
-        border { left: Theme.lockAlertsBorder; right: Theme.lockAlertsBorder; top: Theme.lockAlertsBorder; bottom: Theme.lockAlertsBorder }
+        border { left: Theme.artBorder(Theme.lockAlertsBorder, source); right: Theme.artBorder(Theme.lockAlertsBorder, source); top: Theme.artBorder(Theme.lockAlertsBorder, source); bottom: Theme.artBorder(Theme.lockAlertsBorder, source) }
 
         Item {
             id: dashboardRows
@@ -294,7 +294,7 @@ Item {
                 visible: lockDashboard.count === Theme.lockDashboardMaxItems
                 anchors.bottom: parent.bottom
                 width: parent.width
-                height: Theme.px(sourceSize.height)
+                height: Theme.artPx(sourceSize.height, source)
                 source: Theme.asset("dashboard-scroll-fade.png")
             }
         }
@@ -316,7 +316,7 @@ Item {
         height: Theme.bannerHeight + 2 * inset
         y: (lock.height - height) / 2
         source: Theme.asset("popup-bg.png")
-        border { left: Theme.lockAlertsBorder; right: Theme.lockAlertsBorder; top: Theme.lockAlertsBorder; bottom: Theme.lockAlertsBorder }
+        border { left: Theme.artBorder(Theme.lockAlertsBorder, source); right: Theme.artBorder(Theme.lockAlertsBorder, source); top: Theme.artBorder(Theme.lockAlertsBorder, source); bottom: Theme.artBorder(Theme.lockAlertsBorder, source) }
 
         Row {
             x: lockBanner.inset + Theme.px(5)

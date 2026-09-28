@@ -287,6 +287,12 @@ Each app's `dist/` is a complete webOS app (`appinfo.json`, `index.html`,
 icons, relative asset paths), so `runtime/rootfs.json`'s `applicationDirs`
 entry for `apps` picks it up. `dist/` and `node_modules/` are not committed.
 
+Icons: `icon.png` is 64 px; ship `icon-256x256.png` too and name it as
+`"splashicon"`, as the Open webOS apps did, and the shell draws it on dense
+screens and on the loading card (a launch point's `icons/name.png` gets
+`icons/name-256x256.png`). The apps' `tools/render-icon*.cjs` write both
+(docs/spec/hidpi-art.md).
+
 ### Launcher metadata and launch points
 
 `appinfo.json` may have a `phoenix` object, read by `shell/sim/rootfs.cpp` and

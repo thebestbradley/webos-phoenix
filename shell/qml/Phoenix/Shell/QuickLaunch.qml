@@ -49,7 +49,7 @@ Item {
         clip: true
         Image {
             width: parent.width
-            height: Theme.px(sourceSize.height)
+            height: Theme.artPx(sourceSize.height, source)
             source: Theme.asset("launcher3/quicklaunch-bg.png")
             fillMode: Image.Tile
             horizontalAlignment: Image.AlignLeft
@@ -82,7 +82,7 @@ Item {
         for (var i = 0; i < ids.length; ++i) {
             var a = entry(ids[i]);
             if (a)
-                list.push({ appId: a.appId, title: a.title, color: a.color, glyph: a.glyph, icon: a.icon });
+                list.push({ appId: a.appId, title: a.title, color: a.color, glyph: a.glyph, icon: a.icon, largeIcon: a.largeIcon || "" });
         }
         return list;
     }
@@ -131,6 +131,7 @@ Item {
             color: modelData.color
             glyph: modelData.glyph
             source: modelData.icon
+            largeSource: modelData.largeIcon || ""
         }
     }
 

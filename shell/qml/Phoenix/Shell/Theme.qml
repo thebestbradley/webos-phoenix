@@ -15,6 +15,7 @@
 
 pragma Singleton
 import QtQuick
+import Phoenix.Native
 
 QtObject {
     id: theme
@@ -379,8 +380,41 @@ QtObject {
 
     // ---- Assets ------------------------------------------------------------
 
-    // Original Open webOS artwork, shipped in shell/assets/openwebos.
-    function asset(path) {
+    // Original Open webOS artwork, shipped in shell/assets/openwebos, drawn
+    // at this density: the best of name@1.5x / @2x / @3x / @4x.png beside it
+    // for u (HiDpi.variant), or the 1x file itself, always when u is 1. The
+    // variant's sourceSize is k times the art's, so size an image from it
+    // with artPx(), and give a BorderImage artBorder() borders. See
+    // docs/spec/hidpi-art.md.
+    function assetUrl(path) {
         return Qt.resolvedUrl("../../../assets/openwebos/" + path)
+    }
+    function asset(path) {
+        return HiDpi.variant(assetUrl(path), u)
+    }
+    // Any art file at `scale` device pixels per art pixel (the keyboards,
+    // whose art is not in legacy pixels).
+    function variant(url, scale) {
+        return HiDpi.variant(url, scale)
+    }
+    // How many times the 1x art's pixels a file returned by asset() has.
+    function artScale(url) {
+        return HiDpi.variantScale(url)
+    }
+    // px() of a length in the art's pixels, measured on a file that may be a
+    // variant: Theme.artPx(sourceSize.width, source).
+    function artPx(v, url) {
+        return px(v / HiDpi.variantScale(url))
+    }
+    // A BorderImage border given in the 1x art's pixels, for its source
+    // (Qt scales @2x / @3x borders itself; see HiDpi.borderScale).
+    function artBorder(v, url) {
+        return Math.round(v * HiDpi.borderScale(url))
+    }
+    // An app icon's file for drawing it `pixels` device pixels wide: the
+    // icon, or a bigger one the app ships (`large`: appinfo.json's
+    // splashicon; icon-256x256.png beside it) once the icon is too small.
+    function appIcon(url, pixels, large) {
+        return HiDpi.icon(url, pixels, large || "")
     }
 }

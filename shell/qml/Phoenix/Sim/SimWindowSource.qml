@@ -115,7 +115,7 @@ Item {
             // their own: own icon, title, card and launch params.
             apps.append({ appId: a.id, title: a.title, color: "#555c66", glyph: a.title.charAt(0),
                           tab: a.tab !== undefined ? a.tab : 0, quickLaunch: a.quickLaunch || webQuickLaunch[a.title] || 0,
-                          icon: a.icon, web: true, main: a.main, noWindow: !!a.noWindow,
+                          icon: a.icon, largeIcon: a.largeIcon || "", web: true, main: a.main, noWindow: !!a.noWindow,
                           orientation: a.requestedWindowOrientation || "",
                           webAppId: a.appId || a.id, params: a.params || "", dir: a.dir || "",
                           removable: false });
@@ -125,7 +125,7 @@ Item {
             if (titles[p.title])
                 continue;
             apps.append({ appId: p.appId, title: p.title, color: p.color, glyph: p.glyph, tab: p.tab,
-                          quickLaunch: p.quickLaunch, icon: p.icon, web: false, main: "", noWindow: false,
+                          quickLaunch: p.quickLaunch, icon: p.icon, largeIcon: "", web: false, main: "", noWindow: false,
                           orientation: "",
                           webAppId: "", params: "", dir: "",
                           // Stand-ins for apps still to come can be deleted, as

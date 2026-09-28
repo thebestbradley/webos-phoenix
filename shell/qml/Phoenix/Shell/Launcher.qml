@@ -77,7 +77,7 @@ Item {
         width: parent.width
         height: Theme.launcherTabHeight
         source: Theme.asset("launcher3/tab-bg.png")
-        border { left: 4; right: 4; top: 4; bottom: 4 }
+        border { left: Theme.artBorder(4, source); right: Theme.artBorder(4, source); top: Theme.artBorder(4, source); bottom: Theme.artBorder(4, source) }
         horizontalTileMode: BorderImage.Stretch
 
         Row {
@@ -94,7 +94,7 @@ Item {
                         anchors.fill: parent
                         visible: pages.currentIndex === index
                         source: Theme.asset("launcher3/tab-selected-bg.png")
-                        border { left: 4; right: 4; top: 4; bottom: 4 }
+                        border { left: Theme.artBorder(4, source); right: Theme.artBorder(4, source); top: Theme.artBorder(4, source); bottom: Theme.artBorder(4, source) }
                     }
                     Text {
                         anchors.centerIn: parent
@@ -209,6 +209,7 @@ Item {
                     var e = entry(ids[i]);
                     m.insert(i, { appId: ids[i], title: e ? e.title : ids[i], color: e ? String(e.color) : "#666666",
                                   glyph: e ? e.glyph : "", icon: e ? String(e.icon || "") : "",
+                                  largeIcon: e ? String(e.largeIcon || "") : "",
                                   removable: e ? !!e.removable : false });
                 }
             }
@@ -292,6 +293,7 @@ Item {
                     required property string color
                     required property string glyph
                     required property string icon
+                    required property string largeIcon
                     required property bool removable
                     width: Theme.tablet ? Theme.launcherCellSize : launcher.cellWidth
                     height: launcher.cellHeight
@@ -320,6 +322,7 @@ Item {
                         color: cell.color
                         glyph: cell.glyph
                         source: cell.icon
+                        largeSource: cell.largeIcon
                         interactive: false
                         feedback: launcher.feedbackId === cell.appId
                     }
