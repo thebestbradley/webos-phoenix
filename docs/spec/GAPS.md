@@ -30,7 +30,7 @@ Nearly all the art is already in `shell/assets/openwebos/`.
 | # | Original | Phoenix | P · effort |
 |---|---|---|---|
 | L1 | Full screen, slides from the bottom, 350 ms InOutQuint, no fade; launcher z 0 < Just Type 10 < dock 20 < feedback 40; dock background cross-fades to `quicklaunch-bg-solid.png`; cards hidden once up (`OverlayWindowManager.cpp:101-104,275-297,1451-1477,1674`) | **Done** (79b37b3): slide and z-order. Not yet: solid dock background, hiding cards | P1 · S |
-| L2 | Opaque tiled `launcher-bg.png`; `launcher-scrollfade-top.png` under the tabs (`dimensionslauncher.cpp:98,1290,1592`) | `#4F545A` 90% + tile 35% (that colour is the status bar's while the launcher shows) | P1 · S |
+| L2 | Opaque tiled `launcher-bg.png`; `launcher-scrollfade-top.png` under the tabs (`dimensionslauncher.cpp:98,1290,1592`) | **Done**: opaque tiled `launcher-bg.png`; no top scroll fade yet | P1 · S |
 | L3 | Cell 128×128, icon 64 at (0,−11), label box 100×40, Prelude 14 bold; tablet 7 per row, margins 27/20 (`launcher3/*.conf`) | 3 / 5 columns, 112 px cells, 13/16 px labels not bold | P1 · S |
 | L4 | Tabs 50 px, 16 px bold both states, `#FFFFFF` / `#C8C8C8`, max 150 wide (`layoutsettings.cpp:67-74`) | 15/18 px, bold only when selected, `#a0a0a0` | P2 · S |
 | L5 | Saved order seeded from `conf/default-launcher-page-layout.json` | **Done** (ce78209): saved order; new apps alphabetical | P2 · S |

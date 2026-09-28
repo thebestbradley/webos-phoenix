@@ -26,6 +26,21 @@ Item {
     enabled: shown
     Behavior on opacity { NumberAnimation { duration: Theme.searchPillFadeDuration; easing.type: Easing.OutCubic } }
 
+    // The scene behind the pill, blurred faintly within its shape.
+    property Item backdrop: null
+    BackdropBlur {
+        anchors.fill: parent
+        source: pill.backdrop
+        mask: pillShape
+    }
+    BorderImage {
+        id: pillShape
+        visible: false
+        anchors.fill: parent
+        source: Theme.asset("launcher3/search-field-bg-launcher.png")
+        border { left: 40; right: 40; top: 0; bottom: 0 }
+    }
+
     // Three-tiled background, 40 px caps (OverlayWindowManager.cpp:1152-1155).
     BorderImage {
         anchors.fill: parent

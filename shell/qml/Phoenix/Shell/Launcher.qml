@@ -48,15 +48,11 @@ Item {
 
     transform: Translate { y: launcher.hidden * (launcher.height + Theme.statusBarHeight) }
 
-    Rectangle {
-        anchors.fill: parent
-        color: Theme.launcherScrim
-    }
+    // Opaque tiled background (dimensionslauncher.cpp:1290, 1592).
     Image {
         anchors.fill: parent
         source: Theme.asset("launcher3/launcher-bg.png")
         fillMode: Image.Tile
-        opacity: 0.35
     }
 
     // Swallow touches so they don't reach the cards underneath.

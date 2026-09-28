@@ -160,18 +160,46 @@ FocusScope {
 
     // ---- Layers, bottom to top ----------------------------------------------------
 
-    Wallpaper {
+    // The scene behind the overlays (wallpaper, cards, launcher): what the
+    // translucent surfaces above blur (BackdropBlur).
+    readonly property alias backdrop: sceneBackdrop
+    Item {
+        id: sceneBackdrop
         anchors.fill: parent
-        source: shell.wallpaper
-    }
 
-    CardView {
-        id: cards
-        anchors.fill: parent
-        source: shell.source
-        topInset: Theme.statusBarHeight
-        // The app's positive space ends where the notifications' negative space begins.
-        bottomInset: gesture.height + notes.negativeSpace
+        Wallpaper {
+            anchors.fill: parent
+            source: shell.wallpaper
+        }
+
+        CardView {
+            id: cards
+            anchors.fill: parent
+            source: shell.source
+            topInset: Theme.statusBarHeight
+            // The app's positive space ends where the notifications' negative space begins.
+            bottomInset: gesture.height + notes.negativeSpace
+        }
+
+        Launcher {
+            id: launcher
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.topMargin: Theme.statusBarHeight
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: gesture.height + notes.negativeSpace
+            dockHeight: quickLaunch.height
+            apps: shell.source ? shell.source.apps : null
+            layout: shell.launcherLayout
+            draggedId: iconDrag.appId
+            onLaunchRequested: (appId) => shell.launch(appId)
+            onCloseRequested: launcher.open = false
+            onDeleteRequested: (appId) => deleteDialog.ask(appId)
+            onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, launcher.mapToItem(shell, x, y))
+            onDragMoved: (x, y) => iconDrag.move(launcher.mapToItem(shell, x, y))
+            onDragEnded: (x, y) => iconDrag.drop(launcher.mapToItem(shell, x, y))
+        }
     }
 
     SearchPill {
@@ -180,25 +208,7 @@ FocusScope {
         y: Theme.statusBarHeight + Theme.searchPillTopOffset
         shown: !locked && cards.maximizeProgress === 0 && !launcher.open && !justType.open
         onTapped: shell.startJustType("")
-    }
-
-    Launcher {
-        id: launcher
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: statusBar.bottom
-        anchors.bottom: gesture.top
-        anchors.bottomMargin: notes.negativeSpace
-        dockHeight: quickLaunch.height
-        apps: shell.source ? shell.source.apps : null
-        layout: shell.launcherLayout
-        draggedId: iconDrag.appId
-        onLaunchRequested: (appId) => shell.launch(appId)
-        onCloseRequested: launcher.open = false
-        onDeleteRequested: (appId) => deleteDialog.ask(appId)
-        onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, launcher.mapToItem(shell, x, y))
-        onDragMoved: (x, y) => iconDrag.move(launcher.mapToItem(shell, x, y))
-        onDragEnded: (x, y) => iconDrag.drop(launcher.mapToItem(shell, x, y))
+        backdrop: sceneBackdrop
     }
 
     QuickLaunch {
@@ -210,6 +220,7 @@ FocusScope {
         visible: cards.maximizeProgress < 1
         apps: shell.source ? shell.source.apps : null
         launcherOpen: launcher.open
+        backdrop: sceneBackdrop
         dock: shell.launcherLayout ? shell.launcherLayout.dock : []
         draggedId: iconDrag.appId
         onLaunchRequested: (appId) => shell.launch(appId)
@@ -367,6 +378,19 @@ FocusScope {
             source: Theme.asset("menu-dropdown-bg.png")
             border { left: 30; right: 30; top: 30; bottom: 30 }
             MouseArea { anchors.fill: parent }
+            BackdropBlur {
+                anchors.fill: parent
+                z: -1
+                source: sceneBackdrop
+                mask: dialogShape
+            }
+            BorderImage {
+                id: dialogShape
+                visible: false
+                anchors.fill: parent
+                source: Theme.asset("menu-dropdown-bg.png")
+                border { left: 30; right: 30; top: 30; bottom: 30 }
+            }
             Column {
                 id: dialogColumn
                 x: Theme.px(20)
@@ -486,6 +510,7 @@ FocusScope {
         onDismissRequested: (index) => shell.source.dismissNotification(index)
         onActivated: (appId, params) => shell.launch(appId, params ? JSON.parse(params) : null)
         source: shell.source
+        backdrop: sceneBackdrop
         visible: !shell.locked
         screenHeight: shell.height
         statusBarRightInset: statusBar.systemGroupWidth
@@ -493,6 +518,7 @@ FocusScope {
 
     SystemMenu {
         id: systemMenu
+        backdrop: sceneBackdrop
         anchors.fill: parent
         system: shell.system
         onCloseRequested: systemMenu.open = false

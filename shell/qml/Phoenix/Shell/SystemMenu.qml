@@ -13,6 +13,9 @@ Item {
     property bool open: false
     signal closeRequested
 
+    // The scene behind, for the blur under the menu.
+    property Item backdrop: null
+
     visible: opacity > 0
     opacity: open ? 1 : 0
     Behavior on opacity { NumberAnimation { duration: 150 } }
@@ -34,6 +37,21 @@ Item {
         border { left: 30; right: 30; top: 30; bottom: 30 }
 
         MouseArea { anchors.fill: parent }  // swallow taps
+
+        // The scene behind the menu, blurred faintly within its shape.
+        BackdropBlur {
+            anchors.fill: parent
+            z: -1
+            source: menu.backdrop
+            mask: panelShape
+        }
+        BorderImage {
+            id: panelShape
+            visible: false
+            anchors.fill: parent
+            source: Theme.asset("menu-dropdown-bg.png")
+            border { left: 30; right: 30; top: 30; bottom: 30 }
+        }
 
         Column {
             id: column

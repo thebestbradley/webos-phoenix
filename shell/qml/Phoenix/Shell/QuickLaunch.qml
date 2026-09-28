@@ -19,6 +19,14 @@ Item {
 
     height: Theme.quickLaunchHeight
 
+    // The scene behind the glass, blurred faintly under it.
+    property Item backdrop: null
+
+    BackdropBlur {
+        anchors.fill: parent
+        source: ql.backdrop
+    }
+
     BorderImage {
         anchors.fill: parent
         source: Theme.asset("launcher3/quicklaunch-bg.png")

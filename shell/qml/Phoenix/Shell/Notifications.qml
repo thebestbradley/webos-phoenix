@@ -34,6 +34,8 @@ Item {
     // The window source: its alerts (popup alert windows) and windowFor(key)
     // for alert and dashboard windows.
     property var source
+    // The scene behind, for the blur under the tablet panels.
+    property Item backdrop: null
     property bool dashboardOpen: false
     // Tablet: where the status bar's system indicators begin (from the right).
     property real statusBarRightInset: 0
@@ -286,6 +288,20 @@ Item {
         border { left: 20; right: 20; top: 20; bottom: 20 }
         z: 2
         MouseArea { anchors.fill: parent }
+        // The scene behind, blurred faintly within the panel's shape.
+        BackdropBlur {
+            anchors.fill: parent
+            z: -1
+            source: root.backdrop
+            mask: alertShape
+        }
+        BorderImage {
+            id: alertShape
+            visible: false
+            anchors.fill: parent
+            source: Theme.asset("popup-bg.png")
+            border { left: 20; right: 20; top: 20; bottom: 20 }
+        }
         Item {
             id: tabletAlertHost
             anchors.fill: parent
@@ -335,6 +351,20 @@ Item {
                          root.screenHeight * Theme.maximumNegativeSpaceRatio)
         source: Theme.asset("menu-dropdown-bg.png")
         border { left: 30; right: 30; top: 30; bottom: 30 }
+        // The scene behind, blurred faintly within the panel's shape.
+        BackdropBlur {
+            anchors.fill: parent
+            z: -1
+            source: root.backdrop
+            mask: dropDownShape
+        }
+        BorderImage {
+            id: dropDownShape
+            visible: false
+            anchors.fill: parent
+            source: Theme.asset("menu-dropdown-bg.png")
+            border { left: 30; right: 30; top: 30; bottom: 30 }
+        }
         Loader {
             anchors.fill: parent
             anchors.margins: Theme.px(10)

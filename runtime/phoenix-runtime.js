@@ -1885,6 +1885,26 @@
         global.addEventListener("load", fixAll);
     })();
 
+    // A faint blur behind the original apps' translucent popups and menus
+    // (Enyo's Heritage and Onyx popup, menu and app menu art), for legibility;
+    // they stay see-through. A Phoenix addition, like the shell's
+    // BackdropBlur. The radius keeps the blur inside the art's rounded corners.
+    (function () {
+        var doc = global.document;
+        if (!doc || !doc.createElement) return;
+        function add() {
+            if (doc.getElementById("phoenix-backdrop-blur") || !doc.head) return;
+            var st = doc.createElement("style");
+            st.id = "phoenix-backdrop-blur";
+            st.textContent = ".enyo-popup {" +
+                " -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); border-radius: 12px; }" +
+                " .enyo-popup.enyo-appmenu { border-radius: 0 0 12px 12px; }";
+            doc.head.appendChild(st);
+        }
+        if (doc.readyState === "loading") doc.addEventListener("DOMContentLoaded", add);
+        else add();
+    })();
+
     // Back gesture: the shell calls this; Mojo/Enyo 1.0 apps treat Escape
     // (and keyIdentifier U+1200001 on devices) as "back".
     runtime.back = function () {

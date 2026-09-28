@@ -145,6 +145,8 @@ QtObject {
     readonly property int bannerShowTimeQueued: 2000                 // BannerMessageHandler.cpp:70
     readonly property int dashboardItemHeight: px(52)                // DashboardWindowContainer.cpp:48
     readonly property real maximumNegativeSpaceRatio: 0.55           // Settings.cpp MaximumNegativeSpaceHeightRatio
+    // BackdropBlur: a faint blur behind translucent surfaces (Phoenix addition).
+    readonly property int backdropBlurRadius: 12
     readonly property int alertFadeDuration: 400                     // DashboardWindowManager.cpp:559,589
     readonly property int positiveSpaceDuration: 400                 // conf/lunaAnimations.conf:73-74, curve 6 OutCubic
     readonly property real dashboardDismissRatio: 0.25               // DashboardWindowContainer.cpp:350-363
@@ -157,7 +159,6 @@ QtObject {
     readonly property color black: "#000000"
     readonly property color text: "#ffffff"
     readonly property color textDim: "#a0a0a0"
-    readonly property color launcherScrim: "#e64f545a"               // SystemUiController.cpp:69-70 (#4F545A); alpha inferred
     readonly property color highlight: "#3a8bd9"                     // (inferred)
 
     // ---- Animation (conf/lunaAnimations.conf [Cards]) -----------------------
