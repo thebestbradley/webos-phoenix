@@ -7,6 +7,11 @@ The checklist of legacy features is in
 [spec/feature-inventory.md](spec/feature-inventory.md), and the measurements
 are in [spec/legacy-ui-spec.md](spec/legacy-ui-spec.md).
 
+Two plans go with this roadmap: [HARDWARE.md](HARDWARE.md) (which devices to
+target and how their hardware is driven, for M1 and M3) and
+[APP-GAPS.md](APP-GAPS.md) (every app a modern phone ships and which ones
+Phoenix still needs, for M4).
+
 ## M0: shell in a simulator (done in this repo's first PR)
 
 - [x] Legacy measurements, timings and artwork extracted from Open webOS `luna-sysmgr`
@@ -74,6 +79,9 @@ Targets: `qemux86-64` (emulator) and Raspberry Pi 4 with the official
 
 ## M3: phones and tablets
 
+Device tiers, the driver plan and the phased timeline are in
+[HARDWARE.md](HARDWARE.md).
+
 - [ ] PinePhone / PinePhone Pro (mainline Linux, `meta-pine64`)
 - [ ] Android phones through Halium, following LuneOS's `meta-smartphone` approach
 - [ ] Telephony and SMS (oFono or ModemManager), cellular indicators
@@ -85,7 +93,8 @@ Targets: `qemux86-64` (emulator) and Raspberry Pi 4 with the official
 Rebuilt as web apps on OSE's runtime (Enact/React TypeScript), styled after the
 originals: Phone, Messaging, Email, Calendar, Contacts (with Synergy-style
 account merging), Web, Camera, Photos, Music, Maps, Memos, Tasks, Clock,
-Calculator, Settings panes, and an app catalog.
+Calculator, Settings panes, and an app catalog. The full list of missing
+apps, with priorities and a build order, is in [APP-GAPS.md](APP-GAPS.md).
 
 - [x] App scaffolding: `apps/` npm workspace (React + TypeScript + Vite),
       `@phoenix/ui` (webOS 2.x look from the Enyo 1.0 artwork) and
