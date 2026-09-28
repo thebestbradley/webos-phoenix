@@ -20,7 +20,10 @@
 //   notifications ListModel  id, appId, title, body, color, glyph, icon, params (launch
 //                            params for the app when tapped, as JSON, or ""),
 //                            windowKey (a dashboard window: windowFor(windowKey)
-//                            is the app's own dashboard, "" otherwise)
+//                            is the app's own dashboard, "" otherwise),
+//                            clickableWhenLocked (the dashboard takes taps
+//                            on the lock screen: its {clickableWhenLocked:
+//                            true} window attribute)
 //   alerts        ListModel  key, appId, height (legacy px): popup alert
 //                            windows (windowFor(key)), front first
 //   bannerRequested(appId, text, icon, params)  signal: a transient banner
@@ -358,7 +361,8 @@ Item {
             notifications.append({
                 id: key, appId: appId, title: info.title, body: "",
                 color: info.color, glyph: info.glyph, icon: _iconUrl(_param(url, "phoenixIcon"), appId),
-                params: "", windowKey: key
+                params: "", windowKey: key,
+                clickableWhenLocked: _param(url, "phoenixClickableWhenLocked") === "1"
             });
         }
     }
@@ -725,7 +729,7 @@ Item {
             appId: appId, title: titleText, body: body,
             color: info.color, glyph: info.glyph, icon: info.icon || "",
             params: params && typeof params === "object" ? JSON.stringify(params) : "",
-            windowKey: ""
+            windowKey: "", clickableWhenLocked: false
         });
     }
 

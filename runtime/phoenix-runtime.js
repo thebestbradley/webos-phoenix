@@ -235,9 +235,10 @@
     // name, "height=150, attributes={\"window\":\"popupalert\", ...}")
     // (enyo.windows.openPopup/openDashboard) and LunaSysMgr read the type
     // from the attributes. Browsers do not pass window features on, so the
-    // runtime puts the type, height, icon and window name in the new
-    // window's URL fragment (#phoenixWindow=popupalert&phoenixHeight=150),
-    // where the simulator's window source reads them.
+    // runtime puts the type, height, icon, window name and clickableWhenLocked
+    // (a dashboard that takes taps on the lock screen) in the new window's
+    // URL fragment (#phoenixWindow=popupalert&phoenixHeight=150), where the
+    // simulator's window source reads them.
     if (typeof global.open === "function") {
         var nativeOpen = global.open;
         global.open = function (url, name, features) {
@@ -249,7 +250,8 @@
                 url += (url.indexOf("#") < 0 ? "#" : "&") + "phoenixWindow=" + encodeURIComponent(attrs.window)
                      + (h ? "&phoenixHeight=" + h[1] : "")
                      + (attrs.icon ? "&phoenixIcon=" + encodeURIComponent(attrs.icon) : "")
-                     + (name ? "&phoenixName=" + encodeURIComponent(name) : "");
+                     + (name ? "&phoenixName=" + encodeURIComponent(name) : "")
+                     + (attrs.clickableWhenLocked ? "&phoenixClickableWhenLocked=1" : "");
             }
             return nativeOpen.call(global, url, name, features);
         };
@@ -2037,6 +2039,7 @@
                 rotationLocked: !!p.rotationLock,
                 timeFormat: p.timeFormat === "HH24" ? "HH24" : "HH12",
                 muted: !!s.audio.muted,
+                showAlertsWhenLocked: p.showAlertsWhenLocked !== false,
                 wallpaperFile: (p.wallpaper && p.wallpaper.wallpaperFile) || ""
             };
         }
@@ -2477,7 +2480,7 @@
         };
         sys["/setPreferences"] = function (p, reply, ctx) {
             baseSetPreferences(p, reply, ctx);
-            if ("rotationLock" in p || "wallpaper" in p || "timeFormat" in p) {
+            if ("rotationLock" in p || "wallpaper" in p || "timeFormat" in p || "showAlertsWhenLocked" in p) {
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
                 changed();
             }

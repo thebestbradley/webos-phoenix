@@ -509,6 +509,13 @@ FocusScope {
         incomingCall: notes.incomingCall
         alertShown: notes.alertShown
         alertHeight: notes.alertHeight
+        notifications: notes.model
+        bannerActive: notes.bannerActive
+        bannerText: notes.bannerText
+        bannerColor: notes.bannerColor
+        bannerGlyph: notes.bannerGlyph
+        bannerIcon: notes.bannerIcon
+        bannerOpacity: notes.bannerOpacity
         onUnlockRequested: shell.unlock()
     }
 

@@ -92,6 +92,8 @@ Item {
     // activateCurrentMessage); without params a tap opens the dashboard.
     property string bannerAppId: ""
     property string bannerParams: ""
+    // The banner fades to 0.25 as it leaves; the lock screen's copy follows.
+    readonly property real bannerOpacity: bannerContent.opacity
 
     Connections {
         target: root.model
@@ -167,7 +169,7 @@ Item {
     }
 
     // Everything but the lock screen's alert; the lock screen shows no
-    // banners, dashboard or negative space (LockWindow draws its own).
+    // negative space and draws its own banner and dashboard (LockScreen).
     Item {
         id: normalLayer
         anchors.fill: parent
@@ -447,63 +449,24 @@ Item {
                 width: list.width
                 height: Theme.dashboardItemHeight
 
-                Item {
+                DashboardItem {
                     id: content
                     width: parent.width
                     height: parent.height
                     opacity: 1 - Math.abs(x) / width
+                    source: root.source
+                    windowKey: item.windowKey
+                    title: item.title
+                    body: item.body
+                    color: item.color
+                    glyph: item.glyph
+                    icon: item.icon
 
-                    // A dashboard window: the app's own page fills the row.
-                    Item {
-                        id: dashHost
-                        anchors.fill: parent
-                        visible: item.windowKey !== ""
-                        z: 1
-                        Component.onCompleted: {
-                            var w = item.windowKey && root.source ? root.source.windowFor(item.windowKey) : null;
-                            if (!w)
-                                return;
-                            w.parent = dashHost;
-                            w.x = 0;
-                            w.y = 0;
-                            w.width = Qt.binding(function() { return dashHost.width; });
-                            w.height = Qt.binding(function() { return dashHost.height; });
-                            w.visible = true;
-                        }
-                    }
-
-                    AppIcon {
-                        id: dIcon
-                        x: Theme.px(10)
-                        anchors.verticalCenter: parent.verticalCenter
-                        size: Theme.px(32)
-                        showLabel: false
-                        color: item.color
-                        glyph: item.glyph
-                        source: item.icon
-                    }
-                    Column {
-                        anchors.left: dIcon.right
-                        anchors.leftMargin: Theme.px(10)
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        Text {
-                            width: parent.width
-                            elide: Text.ElideRight
-                            text: item.title
-                            color: Theme.text
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.px(16)
-                            font.bold: true
-                        }
-                        Text {
-                            width: parent.width
-                            elide: Text.ElideRight
-                            text: item.body
-                            color: Theme.textDim
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.px(14)
-                        }
+                    // The lock screen showed the window while locked; it
+                    // comes back here (LockScreen's dashboard).
+                    Connections {
+                        target: root
+                        function onLockedChanged() { if (!root.locked) content.claim(); }
                     }
 
                     // Swipe more than a quarter of the width to dismiss

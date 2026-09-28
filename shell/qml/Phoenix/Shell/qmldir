@@ -6,6 +6,7 @@ BackdropBlur 1.0 BackdropBlur.qml
 Card 1.0 Card.qml
 CardView 1.0 CardView.qml
 CardLoading 1.0 CardLoading.qml
+DashboardItem 1.0 DashboardItem.qml
 GestureArea 1.0 GestureArea.qml
 JustType 1.0 JustType.qml
 Launcher 1.0 Launcher.qml

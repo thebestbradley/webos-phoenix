@@ -23,6 +23,9 @@ QtObject {
     property bool muted: false
     // The clock's format (system preference timeFormat "HH24").
     property bool twentyFourHour: false
+    // Settings > Screen & Lock "Show notifications when locked"
+    // (system preference showAlertsWhenLocked).
+    property bool showAlertsWhenLocked: true
     property real brightness: 0.7
     // Fixed time for reproducible screenshots; null = live clock.
     property var fixedTime: null
@@ -32,7 +35,8 @@ QtObject {
 
     // Apply a "systemStatus" report from the web runtime: wifiEnabled,
     // wifiConnected, wifiBars, bluetoothOn, airplaneMode, brightness
-    // (0-100), rotationLocked, muted. Missing keys are left alone.
+    // (0-100), rotationLocked, muted, timeFormat, showAlertsWhenLocked.
+    // Missing keys are left alone.
     function applyAppStatus(s) {
         applyingAppStatus = true;
         if (s.wifiEnabled !== undefined)
@@ -49,6 +53,8 @@ QtObject {
             muted = !!s.muted;
         if (s.timeFormat !== undefined)
             twentyFourHour = s.timeFormat === "HH24";
+        if (s.showAlertsWhenLocked !== undefined)
+            showAlertsWhenLocked = !!s.showAlertsWhenLocked;
         applyingAppStatus = false;
     }
 

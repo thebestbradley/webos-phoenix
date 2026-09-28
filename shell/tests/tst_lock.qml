@@ -167,4 +167,127 @@ Item {
             compare(lockService.calls.filter(function (u) { return /match/.test(u); }).length, 0);
         }
     }
+
+    // ---- Dashboard and banner on the lock screen ------------------------------
+
+    ListModel { id: notes }
+    QtObject { id: prefs; property bool showAlertsWhenLocked: true }
+    // A dashboard window: counts the taps that reach it.
+    Rectangle {
+        id: dashWindow
+        property int taps: 0
+        color: "#333333"
+        MouseArea { anchors.fill: parent; onClicked: dashWindow.taps++ }
+    }
+    QtObject {
+        id: windows
+        function windowFor(key) { return key === "w1" ? dashWindow : null; }
+    }
+
+    LockScreen {
+        id: lock2
+        anchors.fill: parent
+        source: windows
+        system: prefs
+        notifications: notes
+        visible: false
+    }
+
+    TestCase {
+        name: "LockAlerts"
+        when: windowShown
+
+        function add(title, windowKey, clickable) {
+            notes.append({ appId: "a", title: title, body: "", color: "#666666", glyph: "", icon: "",
+                           params: "", windowKey: windowKey || "", clickableWhenLocked: !!clickable });
+        }
+
+        function init() {
+            // Over the first lock screen (declared after it).
+            lock2.visible = true;
+            lock2.locked = true;
+            lock2.alertShown = false;
+            lock2.bannerActive = false;
+            prefs.showAlertsWhenLocked = true;
+            notes.clear();
+            dashWindow.taps = 0;
+        }
+        function cleanup() {
+            notes.clear();
+            lock2.visible = false;
+        }
+
+        function items() {
+            var out = [];
+            var col = findChild(lock2, "lockDashboard");
+            (function walk(o) {
+                for (var i = 0; i < o.children.length; ++i) {
+                    if (o.children[i].objectName === "lockDashboardItem")
+                        out.push(o.children[i]);
+                    walk(o.children[i]);
+                }
+            })(col);
+            return out;
+        }
+
+        function test_dashboardNewestFirst() {
+            add("One"); add("Two"); add("Three");
+            var dash = findChild(lock2, "lockDashboard");
+            tryCompare(dash, "opacity", 1, 1000);
+            var rows = items();
+            compare(rows.length, 3);
+            compare(rows[0].title, "Three");
+            compare(rows[2].title, "One");
+            // Three 52 px rows, two 2 px dividers.
+            compare(dash.contentHeight, 3 * 52 + 2 * 2);
+            // Centred.
+            fuzzyCompare(dash.y + dash.height / 2, lock2.height / 2 + (-1 + 3) / 2, 1);
+        }
+
+        function test_dashboardShowsFiveAndAHalf() {
+            for (var i = 0; i < 8; ++i)
+                add("N" + i);
+            var dash = findChild(lock2, "lockDashboard");
+            compare(dash.count, 6);
+            compare(items().length, 6);
+            compare(dash.contentHeight, 5.5 * 52 + 5 * 2);
+        }
+
+        function test_hiddenWhenTurnedOff() {
+            add("One");
+            prefs.showAlertsWhenLocked = false;
+            tryCompare(findChild(lock2, "lockDashboard"), "opacity", 0, 1000);
+            prefs.showAlertsWhenLocked = true;
+            tryCompare(findChild(lock2, "lockDashboard"), "opacity", 1, 1000);
+            // Not over a popup alert.
+            lock2.alertShown = true;
+            tryCompare(findChild(lock2, "lockDashboard"), "opacity", 0, 1000);
+        }
+
+        function test_bannerReplacesTheDashboard() {
+            add("One");
+            lock2.bannerText = "New message";
+            lock2.bannerActive = true;
+            tryCompare(findChild(lock2, "lockBanner"), "opacity", 1, 1000);
+            tryCompare(findChild(lock2, "lockDashboard"), "opacity", 0, 1000);
+            compare(findChild(lock2, "lockBannerText").text, "New message");
+            lock2.bannerActive = false;
+            tryCompare(findChild(lock2, "lockBanner"), "opacity", 0, 1000);
+            tryCompare(findChild(lock2, "lockDashboard"), "opacity", 1, 1000);
+        }
+
+        function test_tapsOnlyWhenClickableWhenLocked() {
+            add("Dash", "w1", false);
+            var dash = findChild(lock2, "lockDashboard");
+            tryCompare(dash, "opacity", 1, 1000);
+            compare(dashWindow.parent.parent, items()[0]);
+            mouseClick(dashWindow);
+            compare(dashWindow.taps, 0);
+            notes.clear();
+            add("Dash", "w1", true);
+            tryCompare(dashWindow.parent.parent, "objectName", "lockDashboardItem");
+            mouseClick(dashWindow);
+            compare(dashWindow.taps, 1);
+        }
+    }
 }

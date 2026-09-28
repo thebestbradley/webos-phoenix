@@ -36,6 +36,24 @@ Item {
     property bool alertShown: false
     property real alertHeight: 0
     readonly property alias alertHost: alertHost
+    // The dashboard and the banner (Notifications' model and banner): with
+    // "Show notifications when locked" on (showAlertsWhenLocked), the
+    // lock screen shows the banner while one plays and the dashboard
+    // otherwise; neither over a popup alert or the unlock panel
+    // (LockWindow::changeState, slotBannerActivated/Deactivated,
+    // :836-946, 1024-1045).
+    property var notifications: null
+    property bool bannerActive: false
+    property string bannerText: ""
+    property color bannerColor: "#666666"
+    property string bannerGlyph: ""
+    property url bannerIcon: ""
+    property real bannerOpacity: 1
+    readonly property bool showAlertsWhenLocked: !system || system.showAlertsWhenLocked !== false
+    readonly property bool _alertsShown: locked && showAlertsWhenLocked && !alertShown && !unlockPanel.shown
+    readonly property bool bannerShown: _alertsShown && bannerActive
+    readonly property bool dashboardShown: _alertsShown && !bannerActive && notifications !== null && notifications.count > 0
+
     onIncomingCallChanged: {
         if (incomingCall) {
             unlockPanel.shown = false;
@@ -198,6 +216,132 @@ Item {
             id: alertHost
             anchors.fill: parent
             anchors.margins: Theme.px(20)
+        }
+    }
+
+    // ---- Dashboard (LockWindow DashboardAlerts, :2597-2743) ---------------------
+    // Centred, 320 px wide: the newest first, each 52 px row with a divider
+    // under all but the last; at most 6, the sixth cut in half under
+    // dashboard-scroll-fade.png. A tap reaches a dashboard window only when
+    // it asked for {clickableWhenLocked: true}, and not while the help
+    // saucer shows (:1862-1883; DashboardWindowContainer.cpp:1069).
+    BorderImage {
+        id: lockDashboard
+        objectName: "lockDashboard"
+        readonly property int count: lock.notifications ? Math.min(lock.notifications.count, Theme.lockDashboardMaxItems) : 0
+        readonly property real dividerHeight: Theme.px(2)            // menu-divider.png
+        readonly property real contentHeight: count * Theme.dashboardItemHeight + Math.max(0, count - 1) * dividerHeight
+            - (count === Theme.lockDashboardMaxItems ? Theme.dashboardItemHeight / 2 : 0)
+        visible: opacity > 0
+        opacity: lock.dashboardShown ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: Theme.lockFadeDuration } }
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: Theme.lockAlertsWidth + 2 * Theme.lockAlertsShadow
+        height: contentHeight + 2 * Theme.lockAlertsShadow + Theme.lockDashboardTopPadding + Theme.lockDashboardBottomPadding
+        y: (lock.height - contentHeight) / 2 - Theme.lockAlertsShadow - Theme.lockDashboardTopPadding
+        source: Theme.asset("popup-bg.png")
+        border { left: Theme.lockAlertsBorder; right: Theme.lockAlertsBorder; top: Theme.lockAlertsBorder; bottom: Theme.lockAlertsBorder }
+
+        Item {
+            id: dashboardRows
+            x: Theme.lockAlertsShadow
+            y: Theme.lockAlertsShadow + Theme.lockDashboardTopPadding
+            width: Theme.lockAlertsWidth
+            height: lockDashboard.contentHeight
+            clip: true
+
+            Column {
+                width: parent.width
+                Repeater {
+                    // Only while the lock screen shows: a dashboard window is
+                    // one live page, and the notification area has it
+                    // otherwise.
+                    model: lock.visible ? lockDashboard.count : 0
+                    delegate: Column {
+                        id: row
+                        required property int index
+                        readonly property var entry: lock.notifications.get(lock.notifications.count - 1 - index)
+                        width: dashboardRows.width
+                        DashboardItem {
+                            objectName: "lockDashboardItem"
+                            width: parent.width
+                            source: lock.source
+                            windowKey: row.entry.windowKey
+                            title: row.entry.title
+                            body: row.entry.body
+                            color: row.entry.color
+                            glyph: row.entry.glyph
+                            icon: row.entry.icon
+                            // Taps reach the window only when it allows them.
+                            MouseArea {
+                                anchors.fill: parent
+                                z: 2
+                                enabled: !(row.entry.clickableWhenLocked && row.entry.windowKey !== "" && !lock.helpShown)
+                            }
+                        }
+                        Image {
+                            visible: row.index < lockDashboard.count - 1
+                            width: parent.width
+                            height: lockDashboard.dividerHeight
+                            source: Theme.asset("menu-divider.png")
+                            fillMode: Image.Stretch
+                        }
+                    }
+                }
+            }
+
+            Image {
+                visible: lockDashboard.count === Theme.lockDashboardMaxItems
+                anchors.bottom: parent.bottom
+                width: parent.width
+                height: Theme.px(sourceSize.height)
+                source: Theme.asset("dashboard-scroll-fade.png")
+            }
+        }
+    }
+
+    // ---- Banner (LockWindow BannerAlerts, :2745-2811) -----------------------------
+    // Centred, 320 px by the banner's 28 px, 10 px padding inside the
+    // popup-bg.png shadow; the message sits still, icon and text 5 px in
+    // (BannerMessageView::NoScroll; BannerMessageHandler.cpp:410-430).
+    BorderImage {
+        id: lockBanner
+        objectName: "lockBanner"
+        visible: opacity > 0
+        opacity: lock.bannerShown ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: Theme.lockFadeDuration } }
+        anchors.horizontalCenter: parent.horizontalCenter
+        readonly property real inset: Theme.lockAlertsShadow + Theme.lockBannerPadding
+        width: Theme.lockAlertsWidth + 2 * inset
+        height: Theme.bannerHeight + 2 * inset
+        y: (lock.height - height) / 2
+        source: Theme.asset("popup-bg.png")
+        border { left: Theme.lockAlertsBorder; right: Theme.lockAlertsBorder; top: Theme.lockAlertsBorder; bottom: Theme.lockAlertsBorder }
+
+        Row {
+            x: lockBanner.inset + Theme.px(5)
+            y: lockBanner.inset + (Theme.bannerHeight - height) / 2
+            width: Theme.lockAlertsWidth - Theme.px(5)
+            spacing: Theme.px(5)
+            opacity: lock.bannerOpacity
+            AppIcon {
+                id: lockBannerIcon
+                size: Theme.px(22)
+                showLabel: false
+                color: lock.bannerColor
+                glyph: lock.bannerGlyph
+                source: lock.bannerIcon
+            }
+            Text {
+                objectName: "lockBannerText"
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - lockBannerIcon.width - parent.spacing
+                elide: Text.ElideRight
+                text: lock.bannerText
+                color: Theme.text
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.bannerFontSize
+            }
         }
     }
 

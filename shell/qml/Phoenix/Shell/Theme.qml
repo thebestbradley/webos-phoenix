@@ -188,6 +188,16 @@ QtObject {
     // BackdropBlur: a faint blur behind translucent surfaces (Phoenix addition).
     readonly property int backdropBlurRadius: 12
     readonly property int lockFadeDuration: 200                      // conf/lunaAnimations.conf:108
+    // The lock screen's dashboard and banner (LockWindow.cpp:84-102,
+    // 2611-2615): 320 px wide on popup-bg.png, whose 10 px shadow and 9 px
+    // corners make its 19 px border; at most 6 dashboard rows, 5.5 showing.
+    readonly property int lockAlertsWidth: px(320)                   // LockWindow.cpp:84 kMaxWidth
+    readonly property int lockAlertsShadow: px(10)                   // LockWindow.cpp:101 kShadowWidth
+    readonly property int lockAlertsBorder: 19                       // :461-464, popup-bg.png source px
+    readonly property int lockBannerPadding: px(10)                  // LockWindow.cpp:2747 kPadding
+    readonly property int lockDashboardMaxItems: 6                   // LockWindow.cpp:2611-2613
+    readonly property int lockDashboardTopPadding: px(1)             // LockWindow.cpp:2615
+    readonly property int lockDashboardBottomPadding: px(3)          // LockWindow.cpp:2614
     readonly property int alertFadeDuration: 400                     // DashboardWindowManager.cpp:559,589
     readonly property int positiveSpaceDuration: 400                 // conf/lunaAnimations.conf:73-74, curve 6 OutCubic
     readonly property real dashboardDismissRatio: 0.25               // DashboardWindowContainer.cpp:350-363
