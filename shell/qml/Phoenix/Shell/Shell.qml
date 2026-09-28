@@ -568,7 +568,10 @@ FocusScope {
         backdrop: sceneBackdrop
         anchors.fill: parent
         system: shell.system
+        // The positive space, plus 10 (SystemMenu.cpp:945-953).
+        availableHeight: shell.height - Theme.statusBarHeight - gesture.height - notes.negativeSpace + Theme.px(10)
         onCloseRequested: systemMenu.open = false
+        onLaunchRequested: (appId, params) => shell.launch(appId, params)
     }
 
     // Tablet: a flick up from the bottom edge does what the phone's gesture

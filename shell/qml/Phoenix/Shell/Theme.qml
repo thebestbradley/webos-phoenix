@@ -88,6 +88,59 @@ QtObject {
     // Phones: solid black (StatusBar.cpp:767). Tablet: tiled art over #515558 (StatusBar.cpp:47).
     readonly property color statusBarFill: tablet ? "#515558" : "#000000"
 
+    // ---- System menu (uiComponents/SystemMenu, Src/lunaui/status-bar/SystemMenu.cpp)
+
+    // The same on phones and tablets: 300 wide, at most 410 tall
+    // (SystemMenu.qml:6,16), its right edge 11 px past the screen's so the
+    // art's shadow falls off it (SystemMenu.qml:11 edgeOffset;
+    // MenuWindowManager.cpp:117-122), under the status bar.
+    readonly property int systemMenuWidth: px(300)
+    readonly property int systemMenuMaxHeight: px(410)
+    readonly property int systemMenuEdgeOffset: px(11)
+    // The list sits 7 px in from the art's sides and 14 px up from its
+    // bottom (SystemMenu.qml:113-116); dividers are 7 px narrower than the
+    // list (:9 dividerWidthOffset, MenuDivider.qml:4).
+    readonly property int systemMenuSideMargin: px(7)
+    readonly property int systemMenuBottomMargin: px(14)
+    readonly property int systemMenuDividerInset: px(7)
+    readonly property int systemMenuRowHeight: px(42)                // MenuListEntry.qml:6
+    // Text starts 14 px in; rows inside a drawer 16 px further (SystemMenu.qml:7-8).
+    readonly property int systemMenuIndent: px(14)
+    readonly property int systemMenuSubIndent: px(16)
+    // Prelude 18 for rows, 16 for list entries, 13 caps for a drawer's
+    // state, 10 caps under a list entry (DateElement.qml:17, WifiEntry.qml:24,
+    // WiFiElement.qml:161-163, WifiEntry.qml:34-36).
+    readonly property int systemMenuFontSize: px(18)
+    readonly property int systemMenuEntryFontSize: px(16)
+    readonly property int systemMenuStateFontSize: px(13)
+    readonly property int systemMenuStatusFontSize: px(10)
+    readonly property color systemMenuText: "#FFFFFF"                // AirplaneModeElement.qml:21
+    readonly property color systemMenuTextDim: "#AAAAAA"             // DateElement.qml:15, BatteryElement.qml:19
+    // Opening and closing fade: 200 ms, curve 0 = Linear
+    // (conf/lunaAnimations.conf:124-125, StatusBarItemGroup.cpp:252-306).
+    readonly property int systemMenuFadeDuration: 200
+    // Drawers open and close over 350 ms OutCubic (Drawer.qml:98-103); a
+    // list changing size in an open drawer animates over 200 ms (:77).
+    readonly property int systemMenuDrawerDuration: 350
+    readonly property int systemMenuDrawerResizeDuration: 200
+    // The menu closes 250 ms after a toggle (SystemMenu.qml:247,263,280),
+    // 300 ms after a preferences or radio-off row, 350 ms after a Bluetooth
+    // or VPN entry, 1 s after the Wi-Fi network picked connects
+    // (WiFiElement.qml:93,202,227; BluetoothElement.qml:67,202,272).
+    readonly property int systemMenuToggleCloseDelay: 250
+    readonly property int systemMenuRowCloseDelay: 300
+    readonly property int systemMenuEntryCloseDelay: 350
+    readonly property int systemMenuWifiConnectCloseDelay: 1000
+    readonly property int systemMenuDateInterval: 30000              // SystemMenu.cpp:63 kDateTimerInterval
+    // The display never goes below 10%: the slider's 0..1 is 10..100%
+    // (SystemMenu.cpp:61 MINIMUM_BRIGHTNESS, :873-882).
+    readonly property real minimumBrightness: 0.10
+    // Scroll fades show over 70 ms (SystemMenu.qml:309,332).
+    readonly property int systemMenuScrollFadeDuration: 70
+    // AnimatedSpinner: spinner.png turned in 60 steps a second (SystemMenu.cpp:1006-1012).
+    readonly property int spinnerFrames: 60
+    readonly property int spinnerDuration: 1000
+
     // ---- Positive space / gesture area -------------------------------------
 
     // 28 on every device: conf/luna.conf:122-123, the base every device's

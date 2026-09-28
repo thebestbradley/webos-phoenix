@@ -652,7 +652,16 @@ Item {
     // params: launch params for a web app (optional; launch points carry their own).
     // joinUid's stack: the new card goes to its front instead of a stack
     // of its own.
+    // A launch point whose params match wins, as for apps launching apps
+    // (the system menu's "Wi-Fi Preferences" opens the Wi-Fi card).
     function launch(appId, afterUid, params, joinStack) {
+        if (params && Object.keys(params).length > 0) {
+            var target = _launchTarget(appId, params);
+            if (target !== appId) {
+                appId = target;
+                params = null;
+            }
+        }
         var existing = runningUid(appId);
         if (existing !== "") {
             // Running already: new params go to the page (webOSRelaunch).
