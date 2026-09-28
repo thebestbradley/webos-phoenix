@@ -43,7 +43,7 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | App | Status | Legacy webOS | Priority | Approach |
 | --- | --- | --- | --- | --- |
 | Calculator | Open webOS | Calculator | P1 | Have. Works on phone and tablet |
-| **Clock and alarms** | Open webOS, **alarms do not ring** | Clock with alarms, timer, stopwatch; alarm popup | P0 | The app works, but nothing fires the alarms it stores (see [APP-RUNTIME.md](APP-RUNTIME.md#status-of-the-original-apps)). Back the legacy activity/alarm calls with OSE's `com.webos.service.activitymanager` and `com.webos.service.alarm`, which must wake the device from suspend (RTC wake). Add the full-screen alarm popup to the shell. Check timer and stopwatch against the phone layout |
+| **Clock and alarms** | Open webOS, **alarms ring** | Clock with alarms, timer, stopwatch; alarm popup | P0 | Done in the simulator: the Clock's alarm activities fire through the runtime's activity manager, the Clock is relaunched in place and rings as a popup alert (`tools/test-alarm.cjs`). On a device the activities must still map to OSE's `com.webos.service.activitymanager` / `com.webos.service.alarm` and wake the device from suspend |
 | **Flashlight** | Missing | None built in (homebrew apps) | P1 | A system menu toggle plus a tiny app, on a torch service over the kernel LED class (LuneOS has a nyx `led_torch` module) |
 | **QR / barcode scanner** | Missing | None built in | P1 | Also needed for Wi-Fi QR codes, TOTP setup and pairing. Camera through `getUserMedia`, decoding with [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp) compiled to WebAssembly (`zxing-wasm`). Chromium's `BarcodeDetector` is not available on Linux, so do not rely on it. Build it as a component Camera can reuse |
 | Weather | Missing | None built in (third-party apps from the App Catalog) | P1 | [Open-Meteo](https://open-meteo.com/) (free, no API key, CC BY 4.0 data) with location from `com.webos.service.location`. A dashboard/lock-screen widget later. Web app, no service |
@@ -91,7 +91,7 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 
 | App | Status | Legacy webOS | Priority | Approach |
 | --- | --- | --- | --- | --- |
-| Lock screen PIN / password | Partly (Settings sets it, lock screen does not ask) | PIN and password lock | P0 | Shell work (M2) and a passcode service (OSE has none) |
+| Lock screen PIN / password | **Done** (the lock screen asks for the PIN or password) | PIN and password lock | P0 | The lock screen asks through the ported UnlockPanel and checks with `com.palm.systemmanager` `matchDevicePasscode` (GAPS K1). On a device a passcode service is still needed (OSE has none) |
 | **Password manager** | Missing | None built in (third-party SplashID and others) | P1 | Offline-first KeePass (`.kdbx`) vault using [kdbxweb](https://github.com/keeweb/kdbxweb) (MIT), with the file synced through WebDAV; Bitwarden/Vaultwarden support as a second option. System-wide autofill needs a hook in the web runtime and keyboard: design it together with the IME work |
 | **Authenticator (TOTP)** | Missing | None built in | P1 | RFC 6238 TOTP/HOTP, `otpauth://` QR import through the shared scanner, import from Aegis and andOTP exports, encrypted with the device PIN. Small web app; could share storage with the password manager |
 | **VPN** | Missing | VPN settings pane (`com.palm.app.vpn`) | P1 | Settings pane for WireGuard and OpenVPN over ConnMan's `connman-vpnd`; needs VPN methods in `webos-connman-adapter` or a Phoenix service |
