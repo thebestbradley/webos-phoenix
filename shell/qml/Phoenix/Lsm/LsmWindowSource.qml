@@ -204,6 +204,32 @@ Item {
             }
     }
 
+    // One reply from a service on the bus: lunaCall(uri, params, callback);
+    // callback(null) when the call cannot be made. The lock screen asks
+    // com.palm.systemmanager for the device lock through this.
+    Service {
+        id: lunaBus
+        appId: LS.appId
+        property var pending: ({})
+        onResponse: (method, payload, token) => {
+            var cb = pending[token];
+            if (!cb)
+                return;
+            delete pending[token];
+            var r = null;
+            try { r = JSON.parse(payload); } catch (e) { /* not JSON */ }
+            cb(r);
+        }
+    }
+    function lunaCall(uri, params, callback) {
+        var m = /^(?:palm|luna):\/\/([^\/]+)(\/.*)$/.exec(uri);
+        var token = m ? lunaBus.call("luna://" + m[1], m[2], JSON.stringify(params || {})) : 0;
+        if (token > 0)
+            lunaBus.pending[token] = callback;
+        else
+            callback(null);
+    }
+
     // The back gesture is the webOS Back key, delivered to the card's
     // surface, which forwards it to the app by its native scan code
     // (WebOSSurfaceItem::processKeyEvent). webOS reads evdev 412 as Back;

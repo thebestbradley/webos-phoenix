@@ -35,6 +35,7 @@ FocusScope {
     property alias cardView: cards
     property alias notifications: notes
     property alias searchPill: searchPill
+    property alias lockScreen: lockScreen
 
     focus: true
 
@@ -480,6 +481,7 @@ FocusScope {
         id: lockScreen
         anchors.fill: parent
         system: shell.system
+        source: shell.source
         wallpaper: shell.wallpaper
         onUnlockRequested: shell.unlock()
     }

@@ -44,6 +44,8 @@
 //                            resolved to a local file
 //   pushSystemStatus(changes)     tell the web pages what the user changed
 //                            in the system menu (only the changed keys)
+//   lunaCall(uri, params, cb)     one reply from a (simulated) service;
+//                            cb(null) when no runtime page is up
 //   simulateIncomingCall()   ring the Phone app (phoenix-sim F4)
 //   simulateIncomingSms()    deliver a text to Messaging (phoenix-sim F5)
 //   openUrl(url)             open a web page in the browser (phoenix-sim --open)
@@ -267,6 +269,11 @@ Item {
             // title, body, params?}; tapping it launches the app with params.
             var target = payload.appId && appInfo(payload.appId) ? payload.appId : appId;
             notify(target, payload.title || "", payload.body || "", payload.params);
+        } else if (type === "lunaReply") {
+            var cb = _lunaCallbacks[payload.id];
+            delete _lunaCallbacks[payload.id];
+            if (cb)
+                cb(payload.reply);
         } else if (type === "systemStatus") {
             // The pages are in step with the shell again.
             _pendingStatus = null;
@@ -370,6 +377,28 @@ Item {
     function _statusScript(changes) {
         return "window.__phoenixRuntime && __phoenixRuntime.applyHostStatus && __phoenixRuntime.applyHostStatus("
                + JSON.stringify(changes) + ")";
+    }
+
+    // ---- Luna calls from the shell ---------------------------------------------
+    // lunaCall(uri, params, callback): one reply, from the simulated services
+    // in a runtime page (the always-running system UI page when there is one),
+    // so the shell and the apps see the same state. callback(null) when no
+    // page is running. The device source calls the bus directly.
+    property var _lunaCallbacks: ({})
+    property int _nextLunaCall: 1
+    function lunaCall(uri, params, callback) {
+        var page = _headless["com.palm.systemui"] || _webPages()[0];
+        if (!page) {
+            callback(null);
+            return;
+        }
+        var id = _nextLunaCall++;
+        _lunaCallbacks[id] = callback;
+        page.runScript("(function () { var id = " + id + ", done = false;"
+            + " function back(r) { if (done) return; done = true; phoenixHost.postToHost('lunaReply', { id: id, reply: r }); }"
+            + " if (!window.__phoenixRuntime) return back(null);"
+            + " __phoenixRuntime.dispatch(" + JSON.stringify(uri) + ", " + JSON.stringify(params || {}) + ", back,"
+            + " { cancelled: function () { return done; }, onCancel: null }); })()");
     }
 
     function _webPages() {

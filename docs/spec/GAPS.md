@@ -96,7 +96,7 @@ tablet drop-down: **done** (7090c64).
 
 | # | Original | Phoenix | P · effort |
 |---|---|---|---|
-| K1 | PIN / password panel ("Device Locked", 3×4 pad, `pin/*` art, 200 ms fade, last-try and new-PIN states); locks on display off / timeout | None; a PIN set in Settings is never asked for; the device build starts unlocked | P0 · M |
+| K1 | PIN / password panel ("Device Locked", 3×4 pad, `pin/*` art, 200 ms fade, last-try and new-PIN states); locks on display off / timeout | **Done** for the panel: luna-sysmgr's UnlockPanel ported (PIN pad, password field, Cancel/Done, "PIN Incorrect" / "Try Again", 200 ms fade), checked by `com.palm.systemmanager matchDevicePasscode`. Not yet: last-try and erase dialogs (no retry policy), new-PIN setup, locking on display off / timeout, and a device lock service on OSE | P0 · M |
 | K2 | Incoming call on the lock screen: `screen-lock-incoming-call-*`, "Drag up to answer" | None | P0 · M |
 | K3 | Dashboards, banners and popups shown on the lock screen (`LockWindow.cpp:2595-2860`) | Hidden while locked | P1 · M |
 | K4 | Padlock follows the finger in 2D; unlock at distance > 146 px and above rest; help hides past the radius; snaps home instantly | Y only; 200 ms return | P2 · S |

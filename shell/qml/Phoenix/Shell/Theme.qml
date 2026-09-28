@@ -151,6 +151,7 @@ QtObject {
     readonly property real maximumNegativeSpaceRatio: 0.55           // Settings.cpp MaximumNegativeSpaceHeightRatio
     // BackdropBlur: a faint blur behind translucent surfaces (Phoenix addition).
     readonly property int backdropBlurRadius: 12
+    readonly property int lockFadeDuration: 200                      // conf/lunaAnimations.conf:108
     readonly property int alertFadeDuration: 400                     // DashboardWindowManager.cpp:559,589
     readonly property int positiveSpaceDuration: 400                 // conf/lunaAnimations.conf:73-74, curve 6 OutCubic
     readonly property real dashboardDismissRatio: 0.25               // DashboardWindowContainer.cpp:350-363

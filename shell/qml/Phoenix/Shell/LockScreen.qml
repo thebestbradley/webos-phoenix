@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Lock screen: the large bitmap clock (images/screen-lock-clock-*.png), the
-// date, and the padlock you drag up into the ring to unlock.
+// date, and the padlock you drag up into the ring to unlock. With a PIN or
+// password set, the unlock panel asks for it first (LockWindow.cpp
+// StatePinEntry); the device lock service checks it, so the shell never
+// holds the passcode.
 
 import QtQuick
 
@@ -10,9 +13,63 @@ Item {
     id: lock
 
     property var system
+    // The window source: its lunaCall reaches the device lock service
+    // (com.palm.systemmanager getDeviceLockMode / matchDevicePasscode, the
+    // legacy webOS API Settings sets the passcode with).
+    property var source
     property url wallpaper: ""
     property bool locked: true
+    // Asking for the PIN or password.
+    readonly property bool pinEntry: unlockPanel.shown
+    readonly property alias unlockPanel: unlockPanel
     signal unlockRequested
+
+    onLockedChanged: if (locked) unlockPanel.shown = false
+
+    function _call(method, params, callback) {
+        if (!source || !source.lunaCall) {
+            callback(null);
+            return;
+        }
+        source.lunaCall("palm://com.palm.systemmanager/" + method, params, callback);
+    }
+
+    // The padlock reached the ring: unlock, or ask for the passcode first
+    // (LockWindow.cpp:1259-1271).
+    function requestUnlock() {
+        _call("getDeviceLockMode", {}, function (r) {
+            if (!lock.locked)
+                return;
+            // No lock service, no passcode can have been set.
+            var mode = r && r.returnValue !== false ? r.lockMode : "none";
+            if (!r || r.returnValue === false)
+                console.warn("Phoenix: device lock service unavailable; unlocking");
+            if (mode !== "pin" && mode !== "password") {
+                lock.unlockRequested();
+                return;
+            }
+            var pin = mode === "pin";
+            unlockPanel.setupDialog(pin, qsTr("Device Locked"), pin ? qsTr("Enter PIN") : qsTr("Enter Password"), false, 0);
+            unlockPanel.shown = true;
+            unlockPanel.forceActiveFocus();
+        });
+    }
+
+    // LockWindow::slotPasswordSubmitted.
+    function _submit(passcode, isPin) {
+        _call("matchDevicePasscode", { passCode: passcode }, function (r) {
+            if (!lock.locked || !unlockPanel.shown)
+                return;
+            if (r && r.returnValue !== false && r.succeeded) {
+                unlockPanel.shown = false;
+                lock.unlockRequested();
+                return;
+            }
+            unlockPanel.queueUpTitle(qsTr("Device Locked"), isPin ? qsTr("Enter PIN") : qsTr("Enter Password"));
+            unlockPanel.setupDialog(isPin, isPin ? qsTr("PIN Incorrect") : qsTr("Password Incorrect"),
+                                    qsTr("Try Again"), false, 0);
+        });
+    }
 
     visible: opacity > 0
     opacity: locked ? 1 : 0
@@ -115,6 +172,8 @@ Item {
 
     Image {
         id: padlock
+        // Not over the unlock panel (LockWindow.cpp:1053).
+        visible: !unlockPanel.shown
         width: Theme.lockPadlockSize
         height: Theme.lockPadlockSize
         source: drag.active ? Theme.asset("screen-lock-padlock-on.png") : Theme.asset("screen-lock-padlock-off.png")
@@ -138,7 +197,7 @@ Item {
             drag.maximumY: padlock.homeY
             onReleased: {
                 if (padlock.homeY - padlock.y > padlock.unlockDistance)
-                    lock.unlockRequested();
+                    lock.requestUnlock();
                 padlockReturn.start();
             }
         }
@@ -150,5 +209,20 @@ Item {
             duration: 200
             easing.type: Easing.OutCubic
         }
+    }
+
+    // ---- PIN / password (uiComponents/UnlockPanel) -----------------------------
+
+    UnlockPanel {
+        id: unlockPanel
+        objectName: "unlockPanel"
+        property bool shown: false
+        anchors.centerIn: parent
+        opacity: shown ? 1 : 0
+        visible: shown || opacity > 0
+        enabled: shown
+        Behavior on opacity { NumberAnimation { duration: Theme.lockFadeDuration } }
+        onEntryCanceled: shown = false
+        onPasswordSubmitted: (password, isPIN) => lock._submit(password, isPIN)
     }
 }

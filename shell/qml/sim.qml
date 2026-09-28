@@ -5,7 +5,7 @@
 //
 // Context properties set by phoenix-sim:
 //   simScene       "locked" | "cards" | "stacks" | "reorder" | "maximized" | "launcher" |
-//                  "launcheredit" | "lowbattery" | "banner" | "notified" | "dashboard" | "justtype" | "systemmenu" | "empty"
+//                  "launcheredit" | "pin" | "lowbattery" | "banner" | "notified" | "dashboard" | "justtype" | "systemmenu" | "empty"
 //   simFormFactor  "auto" | "phone" | "tablet"
 //   simDensity     device pixels per legacy pixel (--scale, default 1)
 //   simLaunch      app ids to launch (--launch)
@@ -122,7 +122,7 @@ Item {
         var scene = typeof simScene !== "undefined" && simScene !== "" ? simScene : "locked";
         if (scene === "empty")
             return shell.unlock();
-        if (scene !== "locked")
+        if (scene !== "locked" && scene !== "pin")
             shell.unlock();
         // Real apps where the simulator has them (Memos, Calculator), placeholders otherwise.
         var ids = ["Messaging", "Memos", "Calculator", "Web"].map(windows.appIdByTitle);
@@ -171,6 +171,12 @@ Item {
             windows.notify(windows.appIdByTitle("Calendar"), "Launch party", "Tomorrow, 9:41 AM");
             if (scene === "dashboard")
                 shell.notifications.dashboardOpen = true;
+        } else if (scene === "pin") {
+            // The PIN panel as it asks for the passcode (nothing is set: the
+            // scene only shows it).
+            var panel = shell.lockScreen.unlockPanel;
+            panel.setupDialog(true, qsTr("Device Locked"), qsTr("Enter PIN"), false, 0);
+            panel.shown = true;
         } else if (scene === "justtype") {
             shell.startJustType("m");
         }
