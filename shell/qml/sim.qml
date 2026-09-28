@@ -7,6 +7,7 @@
 //   simScene       "locked" | "cards" | "stacks" | "reorder" | "maximized" | "launcher" |
 //                  "launcheredit" | "lowbattery" | "banner" | "notified" | "dashboard" | "justtype" | "systemmenu" | "empty"
 //   simFormFactor  "auto" | "phone" | "tablet"
+//   simDensity     device pixels per legacy pixel (--scale, default 1)
 //   simLaunch      app ids to launch (--launch)
 //   simOpen        a web address to open in the browser (--open)
 
@@ -21,6 +22,7 @@ Item {
         id: shell
         anchors.fill: parent
         formFactor: typeof simFormFactor !== "undefined" ? simFormFactor : "auto"
+        density: typeof simDensity !== "undefined" ? simDensity : 1
         source: SimWindowSource { id: windows }
         system: SimSystemStatus {
             id: status

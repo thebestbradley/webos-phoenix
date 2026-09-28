@@ -3,7 +3,7 @@
 //
 // phoenix-sim: runs the Phoenix shell in a desktop window with mock apps.
 //
-//   phoenix-sim [--size WxH] [--tablet|--phone] [--scene NAME]
+//   phoenix-sim [--size WxH] [--scale N] [--tablet|--phone] [--scene NAME]
 //               [--screenshot FILE [--delay MS]]
 //
 // Keys: Esc = back gesture, Home/F1 = up gesture, F2 = demo notification,
@@ -48,6 +48,7 @@ int main(int argc, char *argv[])
     parser.setApplicationDescription(QStringLiteral("webOS Phoenix shell simulator"));
     parser.addHelpOption();
     QCommandLineOption sizeOpt(QStringLiteral("size"), QStringLiteral("Window size in pixels (default 320x480, tablet 1024x768)."), QStringLiteral("WxH"));
+    QCommandLineOption scaleOpt(QStringLiteral("scale"), QStringLiteral("Device pixels per legacy pixel, like a denser screen (default 1; the Pre 3 was 1.5 at 480x800)."), QStringLiteral("N"), QStringLiteral("1"));
     QCommandLineOption tabletOpt(QStringLiteral("tablet"), QStringLiteral("Use the tablet (TouchPad) layout."));
     QCommandLineOption phoneOpt(QStringLiteral("phone"), QStringLiteral("Force the phone layout."));
     QCommandLineOption sceneOpt(QStringLiteral("scene"), QStringLiteral("Demo scene: locked, cards, stacks, reorder, maximized, launcher, launcheredit, lowbattery, banner, notified, dashboard, justtype, systemmenu, empty."), QStringLiteral("name"));
@@ -57,7 +58,7 @@ int main(int argc, char *argv[])
     QCommandLineOption repoOpt(QStringLiteral("repo-dir"), QStringLiteral("Checkout root holding runtime/rootfs.json and the web apps."), QStringLiteral("dir"));
     QCommandLineOption launchOpt(QStringLiteral("launch"), QStringLiteral("Launch this app id after start-up (repeatable)."), QStringLiteral("appId"));
     QCommandLineOption openOpt(QStringLiteral("open"), QStringLiteral("Open this web address in the browser after start-up."), QStringLiteral("url"));
-    parser.addOptions({ sizeOpt, tabletOpt, phoneOpt, sceneOpt, shotOpt, delayOpt, qmlOpt, repoOpt, launchOpt, openOpt });
+    parser.addOptions({ sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, shotOpt, delayOpt, qmlOpt, repoOpt, launchOpt, openOpt });
     parser.process(app);
 
     const bool tablet = parser.isSet(tabletOpt);
@@ -69,6 +70,15 @@ int main(int argc, char *argv[])
             return 2;
         }
         size = QSize(wh[0].toInt(), wh[1].toInt());
+    }
+
+    // A desktop window is 1.0: Qt already scales it for the monitor
+    // (Retina), so the shell draws legacy pixels at the monitor's density.
+    bool scaleOk = false;
+    const double scale = parser.value(scaleOpt).toDouble(&scaleOk);
+    if (!scaleOk || scale < 0.5 || scale > 6) {
+        qCritical("--scale must be a number from 0.5 to 6");
+        return 2;
     }
 
     QString qmlDir = parser.value(qmlOpt);
@@ -113,6 +123,7 @@ int main(int argc, char *argv[])
     SimSettings settings;
     view.rootContext()->setContextProperty(QStringLiteral("simSettings"), &settings);
     view.rootContext()->setContextProperty(QStringLiteral("simScene"), parser.value(sceneOpt));
+    view.rootContext()->setContextProperty(QStringLiteral("simDensity"), scale);
     view.rootContext()->setContextProperty(QStringLiteral("simFormFactor"),
         tablet ? QStringLiteral("tablet") : parser.isSet(phoneOpt) ? QStringLiteral("phone") : QStringLiteral("auto"));
     view.setResizeMode(QQuickView::SizeRootObjectToView);

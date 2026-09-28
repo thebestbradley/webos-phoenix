@@ -121,7 +121,7 @@ tablet drop-down: **done** (7090c64).
 
 | # | Original | Phoenix | P · effort |
 |---|---|---|---|
-| R1 | UI rotates, 300 ms InOutCubic, rotation lock, per-app orientation | None. **Bug:** a phone turned landscape switches to the tablet UI (`formFactor: "auto"`) | P1 · M |
+| R1 | UI rotates, 300 ms InOutCubic, rotation lock, per-app orientation | None. (The landscape-phone bug is fixed: `auto` now picks the tablet layout by canvas size, not orientation.) | P1 · M |
 | R2 | Full-screen apps get the whole screen; bar and notifications hidden | Always inset | P1 · M |
 | R3 | 24 px phone corners always at the positive-space corners, in card view too | Only while maximized | P2 · S |
 | R4 | Emergency mode window | None | P2 · M |

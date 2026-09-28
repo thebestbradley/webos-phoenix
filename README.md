@@ -118,7 +118,7 @@ brew install qt cmake node
 cmake -S shell -B build -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
 cmake --build build
 ./build/phoenix-sim            # Pre (320x480)
-./build/phoenix-sim --size 480x800 --scene cards   # Pre 3
+./build/phoenix-sim --size 480x800 --scale 1.5 --scene cards   # Pre 3
 ./build/phoenix-sim --tablet   # TouchPad (1024x768)
 ```
 

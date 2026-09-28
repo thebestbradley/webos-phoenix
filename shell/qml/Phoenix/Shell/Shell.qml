@@ -14,10 +14,19 @@ FocusScope {
     property var source
     property var system
     property url wallpaper: ""
-    // "auto" picks tablet for landscape outputs.
+    // "auto" picks the tablet layout when the screen's shorter side is at
+    // least Theme.tabletMinSide legacy pixels (TouchPad 768; Pre 3 320), so a
+    // phone turned sideways stays a phone.
     property string formFactor: "auto"
+    // Device pixels per legacy pixel, as webOS scaled for screen density:
+    // 1.0 on the Pre and TouchPad, 1.5 on the Pre 3. 0 derives it from the
+    // output's pixel density (Theme.densityFor). The size of the output
+    // does not change it: a larger screen shows more, not larger, UI.
+    property real density: 0
 
-    readonly property bool tablet: formFactor === "tablet" || (formFactor === "auto" && width > height)
+    readonly property real effectiveDensity: density > 0 ? density : Theme.densityFor(Screen.pixelDensity * 25.4)
+    readonly property bool tablet: formFactor === "tablet"
+        || (formFactor === "auto" && Theme.tabletLayoutFor(width, height, effectiveDensity))
     readonly property bool locked: lockScreen.locked
     readonly property bool maximized: cards.maximized
     readonly property bool launcherOpen: launcher.open
@@ -29,13 +38,8 @@ FocusScope {
 
     focus: true
 
-    // Scale legacy pixels to this output: 320px-wide phone, 768px-tall tablet.
     Binding { target: Theme; property: "tablet"; value: shell.tablet }
-    Binding {
-        target: Theme; property: "u"
-        value: shell.tablet ? Math.min(shell.width, shell.height) / Theme.tabletRefHeight
-                            : Math.min(shell.width, shell.height) / Theme.phoneRefWidth
-    }
+    Binding { target: Theme; property: "u"; value: shell.effectiveDensity }
 
     // ---- Navigation -----------------------------------------------------------
 

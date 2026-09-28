@@ -47,6 +47,30 @@ Item {
             fuzzyCompare(cv.baseActiveScale, (cv.windowHeight - 48) * 0.659 / cv.windowHeight, 0.0001);
         }
 
+        function test_scaleFollowsDensityNotSize() {
+            // Pre, Pre 3, TouchPad, a ~460 ppi phone; desktops and virtual
+            // machines (no size reported) stay 1.0.
+            compare(Theme.densityFor(186), 1.0);
+            compare(Theme.densityFor(260), 1.5);
+            compare(Theme.densityFor(132), 1.0);
+            compare(Theme.densityFor(460), 2.5);
+            compare(Theme.densityFor(0), 1.0);
+            compare(Theme.densityFor(NaN), 1.0);
+
+            // Pre 3: a 320x533 canvas, a phone.
+            verify(!Theme.tabletLayoutFor(480, 800, 1.5));
+            // A bigger window shows more at the same scale; big enough, it
+            // is a tablet.
+            verify(Theme.tabletLayoutFor(900, 1400, 1));
+            verify(Theme.tabletLayoutFor(1024, 768, 1));
+            // A phone on its side stays a phone.
+            verify(!Theme.tabletLayoutFor(480, 320, 1));
+            verify(!Theme.tabletLayoutFor(2400, 1080, 2.5));
+            // The live shell: forced phone, density from the output.
+            verify(!shell.tablet);
+            compare(Theme.u, shell.effectiveDensity);
+        }
+
         function test_launchInsertsNextToCurrentCard() {
             var a = windows.launch("org.webosphoenix.email", "");
             var b = windows.launch("org.webosphoenix.calendar", a);

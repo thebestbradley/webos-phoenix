@@ -21,17 +21,34 @@ QtObject {
 
     // ---- Form factor ------------------------------------------------------
 
-    // Set once by Shell.qml from the output size.
+    // Set by Shell.qml.
     property bool tablet: false
-    // Device pixels per legacy pixel. 1.0 on a Pre, 1.5 on a Pre 3,
-    // ~3.375 on a 1080px-wide modern phone.
+    // Device pixels per legacy pixel: the output's density, not its size.
+    // 1.0 on a Pre (320x480) and TouchPad (1024x768), 1.5 on a Pre 3
+    // (480x800, a 320x533 canvas), 2.5 on a ~460 ppi modern phone. Layouts
+    // fill whatever canvas that leaves, as they did across webOS devices.
     property real u: 1.0
 
     function px(v) { return Math.round(v * u) }
 
-    // Reference canvases the scale factor is derived from.
-    readonly property int phoneRefWidth: 320     // Pre, Pre 2, Pixi
-    readonly property int tabletRefHeight: 768   // TouchPad (landscape)
+    // The density for a screen of `ppi` pixels per inch: legacy pixels are
+    // sized like the Pre's (186 ppi at 1.0) and the Pre 3's (260 ppi at 1.5),
+    // about 1/180 inch, in steps of 0.25 so the art scales by even amounts.
+    // Never below 1.0: the TouchPad (132 ppi) and desktop monitors, and
+    // outputs that report no size (virtual machines), use 1.0.
+    readonly property real legacyPixelsPerInch: 180
+    function densityFor(ppi) {
+        if (!(ppi > 0)) return 1.0;
+        return Math.max(1.0, Math.round(ppi / legacyPixelsPerInch * 4) / 4);
+    }
+
+    // Outputs whose shorter side is at least this many legacy pixels get the
+    // tablet layout (TouchPad 768; the largest webOS phone canvas, the
+    // Pre 3's, was 320 wide).
+    readonly property int tabletMinSide: 600
+    function tabletLayoutFor(width, height, density) {
+        return Math.min(width, height) / density >= tabletMinSide;
+    }
 
     // ---- Typography -------------------------------------------------------
 
