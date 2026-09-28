@@ -30,6 +30,7 @@
 //                            true} window attribute)
 //   alerts        ListModel  key, appId, height (legacy px): popup alert
 //                            windows (windowFor(key)), front first
+//   closeAlert(key)          (optional) close a popup alert window (Home)
 //   bannerRequested(appId, text, icon, params)  signal: a transient banner
 //                            (params: its launch params, JSON, or "")
 //   cardCloseRequested(uid)  signal: a window asked to close (window.close())
@@ -388,6 +389,12 @@ Item {
                 clickableWhenLocked: _param(url, "phoenixClickableWhenLocked") === "1"
             });
         }
+    }
+
+    // The Home button closes the front popup alert
+    // (DashboardWindowManager::slotCloseAlert: the window is closed).
+    function closeAlert(key) {
+        _closeSystemWindow(key);
     }
 
     // The page closed its alert or dashboard (window.close()), or the user

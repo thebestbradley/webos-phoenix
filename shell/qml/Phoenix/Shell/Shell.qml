@@ -79,6 +79,10 @@ FocusScope {
     function lock() { lockScreen.locked = true; systemMenu.open = false; }
     function unlock() { lockScreen.locked = false; }
 
+    // The gesture area's swipe up, Key_CoreNavi_Launcher (SystemUiController
+    // .cpp:445-495, sysUiNoHomeButtonMode): the dashboard and menu close,
+    // then Just Type hides, or the launcher closes, or the app minimizes, or
+    // the launcher opens.
     function gestureUp() {
         if (locked)
             return;
@@ -86,10 +90,39 @@ FocusScope {
         notes.dashboardOpen = false;
         if (justType.open)
             justType.open = false;
+        else if (launcher.open)
+            launcher.open = false;
         else if (cards.maximizeProgress > 0 && !cards.minimizing)
             cards.minimize();
         else
+            launcher.open = true;
+    }
+
+    // The Home button, Key_CoreNavi_Home (:527-583): one thing per press -
+    // the dashboard, the popup alert (closed, as signalCloseAlert did), the
+    // menu, the launcher, Just Type - then the app minimizes; with nothing
+    // left it toggles the launcher. A double press reaches the launcher: the
+    // second arrives while the card is still minimizing (the original saw
+    // it as the release's auto-repeat flag).
+    function homeKey() {
+        if (locked)
+            return;
+        if (notes.dashboardOpen) {
+            notes.dashboardOpen = false;
+        } else if (notes.alertShown) {
+            if (source && typeof source.closeAlert === "function")
+                source.closeAlert(notes.alertKey);
+        } else if (systemMenu.open) {
+            systemMenu.open = false;
+        } else if (launcher.open) {
+            launcher.open = false;
+        } else if (justType.open) {
+            justType.open = false;
+        } else if (cards.maximizeProgress > 0 && !cards.minimizing) {
+            cards.minimize();
+        } else {
             launcher.open = !launcher.open;
+        }
     }
 
     // Key_CoreNavi_SwipeDown (SystemUiController.cpp:498-525): in card view,
@@ -170,7 +203,9 @@ FocusScope {
         }
         if (event.key === Qt.Key_Escape || event.key === Qt.Key_Back) {
             gestureBack(); event.accepted = true;
-        } else if (event.key === Qt.Key_Home || event.key === Qt.Key_F1) {
+        } else if (event.key === Qt.Key_Home) {
+            homeKey(); event.accepted = true;
+        } else if (event.key === Qt.Key_F1) {
             gestureUp(); event.accepted = true;
         } else if (event.key === Qt.Key_F2 && source) {
             source.notify("org.webosphoenix.messaging", "Palm Pre", "It's good to be back.");

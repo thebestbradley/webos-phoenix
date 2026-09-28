@@ -135,7 +135,7 @@ cmake -S shell -B build && cmake --build build
 ```
 
 Controls: drag with the mouse as you would with a finger. The black strip at
-the bottom is the gesture area. Keys: **Esc** back, **Home**/**F1** swipe up,
+the bottom is the gesture area. Keys: **Esc** back, **F1** swipe up, **Home** the Home button,
 **F2** demo notification, **F3** lock/unlock, **F4** incoming call (rings
 the Phone app), **F5** incoming text message (for Messaging), **F6** low
 battery, **F7** plug a charger in or out, **Ctrl+Left** / **Ctrl+Right**

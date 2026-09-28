@@ -572,6 +572,33 @@ Item {
             verify(!shell.launcherOpen);
         }
 
+        // The Home button (SystemUiController.cpp:527-583): one thing per
+        // press; a double press from an app reaches the launcher.
+        function test_homeKey() {
+            var notes = shell.notifications;
+            windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximize();
+            tryVerify(function() { return shell.maximized; }, 2000);
+            windows.alerts.append({ key: "home-alert", appId: "org.webosphoenix.email", height: 150 });
+            windows.notify("org.webosphoenix.messaging", "Palm Pre", "Hi");
+            notes.bannerActive = false;
+            notes.dashboardOpen = true;
+            shell.homeKey();
+            verify(!notes.dashboardOpen);
+            compare(windows.alerts.count, 1);
+            shell.homeKey();
+            compare(windows.alerts.count, 0);
+            verify(shell.maximized);
+            // Double press: minimize, then (still minimizing) the launcher.
+            shell.homeKey();
+            verify(shell.cardView.minimizing);
+            shell.homeKey();
+            verify(shell.launcherOpen);
+            shell.homeKey();
+            verify(!shell.launcherOpen);
+            notes.bannerActive = false;
+        }
+
         // SystemUiController::updateStatusBarTitle / StatusBarTitle.
         function test_statusBarTitle() {
             var bar = findChild(shell, "statusBar");

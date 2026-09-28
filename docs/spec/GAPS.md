@@ -114,7 +114,7 @@ tablet drop-down: **done** (7090c64).
 | G4 | Forward / Menu swipe | Emitted, not connected | P2 · S |
 | G5 | Advanced gestures (switch apps while maximized) | None | P2 · M |
 | G6 | Back order: dashboard → menu → launcher | **Done**: dashboard, status bar menu, Just Type (its page's own back), launcher (hiding it ends edit mode), then the app (`SystemUiController.cpp:424-443`) | — |
-| G7 | Home: close alert, hide Just Type, double press → launcher; Home + Power screenshot | Home = up gesture | P2 · S |
+| G7 | Home: close alert, hide Just Type, double press → launcher; Home + Power screenshot | **Done** except the screenshot: the Home key (sim: Home) closes one thing per press — dashboard, popup alert, menu, launcher, Just Type — then minimizes the app, else toggles the launcher; a double press reaches the launcher (`SystemUiController.cpp:527-583`). The swipe up follows `Key_CoreNavi_Launcher` (:445-495). Not yet: Home + Power screenshot | P2 · S |
 | G8 | Light bar animations, meta key, tap reticle | Generic glow | P2 · S |
 
 ## 10. Rotation, full screen, emergency, dock mode
