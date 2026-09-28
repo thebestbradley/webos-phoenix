@@ -27,10 +27,16 @@ Excluded on purpose:
 
 Git submodules of the Open webOS repositories (`openwebos/core-apps`,
 `app-services`, `foundation-frameworks`, `loadable-frameworks`, `mojoloader`,
-`underscore`, `luna-applauncher`, `luna-systemui`) and `enyojs/enyo-1.0`, all
-Apache-2.0 and unmodified. Their app icons (Email, Calendar, Memos, ...) are
+`underscore`, `luna-applauncher`, `luna-systemui`), HP's Isis browser
+(`isis-project/isis-browser`) and `enyojs/enyo-1.0`, all Apache-2.0 and
+unmodified. Their app icons (Email, Calendar, Memos, ...) are
 part of that release and are shown in the launcher. Fixes go in
 `compat/rootfs/`, not in the submodules.
+
+The simulated `com.palm.universalsearch` (in `runtime/phoenix-runtime.js`)
+carries the default web search engines from `openwebos/luna-universalsearchmgr`
+(`files/UniversalSearchList.json`, Apache-2.0), with their addresses moved to
+https; their icons are luna-applauncher's.
 
 The apps' user-visible strings mention "HP webOS", "HP TouchPad" and "Palm
 Profile". `tools/debrand-overlays.py` writes overlay copies of the few

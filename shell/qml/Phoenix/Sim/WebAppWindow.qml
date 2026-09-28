@@ -38,6 +38,11 @@ Item {
         return true;
     }
 
+    // Give the page the keyboard.
+    function focusPage() {
+        view.forceActiveFocus();
+    }
+
     // Run a snippet in the page (the shell talking to the runtime).
     function runScript(js) {
         view.runJavaScript(js);
@@ -52,6 +57,91 @@ Item {
     // Let a window opened by another page load into this view.
     function adopt(request) {
         request.openIn(view);
+    }
+
+    // ---- Pages inside the page (enyo.WebView) ------------------------------------
+    // The runtime's BrowserAdapter stand-in (see "BrowserAdapter" in
+    // runtime/phoenix-runtime.js) asks for a Chromium view over each
+    // <object type="application/x-palm-browser">, as BrowserServer drew into
+    // the plugin on webOS. The views sit above the page, at the object's
+    // rectangle, and report back what the plugin reported.
+
+    property var _webViews: ({})
+
+    function _webViewEvent(id, name, args) {
+        view.runJavaScript("window.__phoenixRuntime && __phoenixRuntime.webViewEvent && __phoenixRuntime.webViewEvent("
+                           + JSON.stringify(id) + "," + JSON.stringify(name) + "," + JSON.stringify(args || []) + ")");
+    }
+
+    function _webView(p) {
+        var v = _webViews[p.id];
+        if (p.op === "create") {
+            if (!v)
+                _webViews[p.id] = nativeView.createObject(win, { viewId: p.id, visible: false });
+            return;
+        }
+        if (!v)
+            return;
+        switch (p.op) {
+        case "geometry":
+            v.x = p.x * win.zoom;
+            v.y = p.y * win.zoom;
+            v.width = p.width * win.zoom;
+            v.height = p.height * win.zoom;
+            v.visible = p.visible;
+            break;
+        case "open": v.url = p.url; break;
+        case "html": v.loadHtml(p.html, p.url); break;
+        case "back": v.goBack(); break;
+        case "forward": v.goForward(); break;
+        case "reload": v.reload(); break;
+        case "stop": v.stop(); break;
+        case "find": v.findText(p.text); break;
+        case "destroy":
+            delete _webViews[p.id];
+            v.destroy();
+            break;
+        }
+    }
+
+    Component {
+        id: nativeView
+        WebEngineView {
+            id: page
+            property string viewId
+            z: 1
+            profile: phoenixWebProfile
+            zoomFactor: win.zoom
+            settings.javascriptCanOpenWindows: true
+            settings.playbackRequiresUserGesture: false
+
+            function report() {
+                win._webViewEvent(viewId, "urlTitleChanged", [page.url.toString(), page.title, page.canGoBack, page.canGoForward]);
+            }
+            onUrlChanged: report()
+            onTitleChanged: report()
+            onLoadProgressChanged: win._webViewEvent(viewId, "loadProgressChanged", [loadProgress])
+            onLoadingChanged: (info) => {
+                switch (info.status) {
+                case WebEngineView.LoadStartedStatus:
+                    win._webViewEvent(viewId, "loadStarted", []);
+                    break;
+                case WebEngineView.LoadSucceededStatus:
+                    report();
+                    win._webViewEvent(viewId, "loadStopped", []);
+                    win._webViewEvent(viewId, "documentLoadFinished", []);
+                    break;
+                case WebEngineView.LoadFailedStatus:
+                    win._webViewEvent(viewId, "mainDocumentLoadFailed", ["", info.errorCode, info.url.toString(), info.errorString]);
+                    win._webViewEvent(viewId, "loadStopped", []);
+                    break;
+                default:
+                    win._webViewEvent(viewId, "loadStopped", []);
+                }
+            }
+            // Links that open a new window stay in this view.
+            onNewWindowRequested: (request) => { page.url = request.requestedUrl; }
+        }
     }
 
     WebEngineView {
@@ -73,7 +163,10 @@ Item {
             if (message.indexOf("__phoenix__") === 0) {
                 try {
                     const m = JSON.parse(message.substring(11));
-                    win.hostMessage(m.type, m.payload);
+                    if (m.type === "webView")
+                        win._webView(m.payload);
+                    else
+                        win.hostMessage(m.type, m.payload);
                 } catch (e) {
                     console.warn("phoenix-sim: bad host message", message);
                 }

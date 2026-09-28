@@ -33,23 +33,26 @@ def load_rootfs():
     mounts = sorted(cfg["mounts"].items(), key=lambda kv: -len(kv[0]))
     overlays = [os.path.join(REPO, o) for o in cfg.get("overlays", [])]
     apps = {}
-    for rel in cfg["applicationDirs"]:
-        base = os.path.join(REPO, rel)
-        if not os.path.isdir(base):
-            continue
-        for name in sorted(os.listdir(base)):
-            app_dir = os.path.join(base, name)
-            if not os.path.isfile(os.path.join(app_dir, "appinfo.json")):
-                app_dir = os.path.join(app_dir, "dist")
-            info_path = os.path.join(app_dir, "appinfo.json")
-            if os.path.isfile(info_path):
-                try:
-                    with open(info_path, encoding="utf-8-sig") as f:
-                        info = json.load(f)
-                except ValueError as e:
-                    print("warning: bad %s: %s" % (info_path, e), file=sys.stderr)
-                    continue
-                apps.setdefault(info.get("id", name), (app_dir, info))
+    # systemApps (Just Type, the system UI) are single app directories that
+    # never appear in the launcher.
+    candidates = [(os.path.join(REPO, rel, name), name, False)
+                  for rel in cfg["applicationDirs"] if os.path.isdir(os.path.join(REPO, rel))
+                  for name in sorted(os.listdir(os.path.join(REPO, rel)))]
+    candidates += [(os.path.join(REPO, rel), os.path.basename(rel), True) for rel in cfg.get("systemApps", [])]
+    for app_dir, name, system in candidates:
+        if not os.path.isfile(os.path.join(app_dir, "appinfo.json")):
+            app_dir = os.path.join(app_dir, "dist")
+        info_path = os.path.join(app_dir, "appinfo.json")
+        if os.path.isfile(info_path):
+            try:
+                with open(info_path, encoding="utf-8-sig") as f:
+                    info = json.load(f)
+            except ValueError as e:
+                print("warning: bad %s: %s" % (info_path, e), file=sys.stderr)
+                continue
+            if system:
+                info = dict(info, phoenix=dict(info.get("phoenix") or {}, hidden=True))
+            apps.setdefault(info.get("id", name), (app_dir, info))
     return mounts, overlays, apps
 
 
@@ -121,9 +124,32 @@ def app_list():
     return out
 
 
+def launch_points():
+    """The launch point records the simulated applicationManager returns
+    (phoenix-runtime.js reads them from /usr/share/phoenix/apps.json;
+    shell/sim/rootfs.cpp serves the same)."""
+    out = []
+    for a in app_list():
+        app_id = a.get("appId", a["id"])
+        rec = {
+            "id": app_id,
+            "launchPointId": a["id"] if "appId" in a else app_id + "_default",
+            "title": a["title"],
+            "icon": a["icon"],
+            "params": a.get("params", {}),
+            "hidden": a.get("hidden", False),
+        }
+        if "appId" not in a:
+            rec["universalSearch"] = APPS[app_id][1].get("universalSearch")
+        out.append(rec)
+    return out
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?", 1)[0].split("#", 1)[0]
+        if path == "/usr/share/phoenix/apps.json":
+            return self.send(200, "application/json", json.dumps(launch_points()).encode())
         if path == "/apps.json":
             return self.send(200, "application/json", json.dumps(app_list(), indent=2).encode())
         if path == "/":

@@ -51,5 +51,13 @@
     "org.webosphoenix.music": {
         "status": "works",
         "note": "Phoenix Music (React, apps/music); tools/test-media.cjs drives it"
+    },
+    "com.palm.launcher": {
+        "status": "works",
+        "note": "Just Type (luna-applauncher), shown by the shell over the cards. No remote (GAL) contact search or search suggestions offline"
+    },
+    "com.palm.app.browser": {
+        "status": "works",
+        "note": "Pages show in a native Chromium view in phoenix-sim; elsewhere in an iframe (sites that refuse framing stay blank). No downloads, printing or page thumbnails. Phone: the address field has its own toolbar row"
     }
 }

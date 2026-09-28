@@ -43,72 +43,103 @@ Rootfs::Rootfs(const QString &repoDir)
         return a.first.size() > b.first.size();
     });
 
+    // systemApps are always hidden from the launcher (Just Type, the system UI).
+    auto addApp = [&](QString appDir, const QString &name, bool system) {
+        // Built apps (e.g. React) keep their installable output in dist/.
+        if (!QFileInfo::exists(appDir + QStringLiteral("/appinfo.json")))
+            appDir += QStringLiteral("/dist");
+        QFile info(appDir + QStringLiteral("/appinfo.json"));
+        if (!info.open(QIODevice::ReadOnly))
+            return;
+        QByteArray json = info.readAll();
+        if (json.startsWith("\xEF\xBB\xBF"))   // UTF-8 BOM
+            json.remove(0, 3);
+        const QJsonObject app = QJsonDocument::fromJson(json).object();
+        const QString id = app.value(QStringLiteral("id")).toString(name);
+        if (m_appDirs.contains(id))
+            return;
+        m_appDirs.insert(id, appDir);
+        const QString root = QString::fromLatin1(kAppsPrefix) + id + QLatin1Char('/');
+        const QString main = urlFor(root + app.value(QStringLiteral("main")).toString(QStringLiteral("index.html")));
+        // Phoenix launcher metadata (see docs/APP-RUNTIME.md): launcherTab
+        // (0 Apps, 1 Downloads, 2 Settings), hidden, quickLaunch (slot
+        // 1-4), launchPoints.
+        const QJsonObject phoenix = app.value(QStringLiteral("phoenix")).toObject();
+        const int tab = phoenix.value(QStringLiteral("launcherTab")).toInt(0);
+        QVariantMap entry;
+        entry[QStringLiteral("id")] = id;
+        entry[QStringLiteral("appId")] = id;
+        entry[QStringLiteral("title")] = app.value(QStringLiteral("title")).toString(id);
+        entry[QStringLiteral("type")] = app.value(QStringLiteral("type")).toString(QStringLiteral("web"));
+        entry[QStringLiteral("noWindow")] = app.value(QStringLiteral("noWindow")).toBool();
+        entry[QStringLiteral("main")] = main;
+        entry[QStringLiteral("params")] = QString();
+        // -1 keeps an app out of the launcher.
+        entry[QStringLiteral("tab")] = system || phoenix.value(QStringLiteral("hidden")).toBool() ? -1 : tab;
+        entry[QStringLiteral("quickLaunch")] = phoenix.value(QStringLiteral("quickLaunch")).toInt(0);
+        // The app's files on disk, for device paths the shell resolves itself (wallpapers).
+        entry[QStringLiteral("dir")] = QUrl::fromLocalFile(appDir + QLatin1Char('/')).toString();
+        // The shell loads icons itself, from the file on disk.
+        const QString icon = app.value(QStringLiteral("icon")).toString(QStringLiteral("icon.png"));
+        entry[QStringLiteral("icon")] = QUrl::fromLocalFile(appDir + QLatin1Char('/') + icon).toString();
+        m_apps.append(entry);
+        QVariantMap record;
+        record[QStringLiteral("id")] = id;
+        record[QStringLiteral("launchPointId")] = id + QStringLiteral("_default");
+        record[QStringLiteral("title")] = entry.value(QStringLiteral("title"));
+        record[QStringLiteral("icon")] = root + icon;
+        record[QStringLiteral("params")] = QVariantMap();
+        record[QStringLiteral("hidden")] = entry.value(QStringLiteral("tab")).toInt() < 0;
+        record[QStringLiteral("universalSearch")] = app.value(QStringLiteral("universalSearch")).toVariant();
+        m_launchPoints.append(record);
+
+        // Launch points: more launcher icons for the same app, each
+        // starting it with its own launch params (its own card).
+        for (const auto &lpValue : phoenix.value(QStringLiteral("launchPoints")).toArray()) {
+            const QJsonObject lp = lpValue.toObject();
+            const QString lpId = lp.value(QStringLiteral("id")).toString();
+            if (lpId.isEmpty())
+                continue;
+            const QByteArray params = QJsonDocument(lp.value(QStringLiteral("params")).toObject()).toJson(QJsonDocument::Compact);
+            QVariantMap point = entry;
+            point[QStringLiteral("id")] = lpId;
+            point[QStringLiteral("title")] = lp.value(QStringLiteral("title")).toString(entry.value(QStringLiteral("title")).toString());
+            point[QStringLiteral("params")] = QString::fromUtf8(params);
+            point[QStringLiteral("main")] = main + QStringLiteral("?launchParams=") + QString::fromLatin1(QUrl::toPercentEncoding(QString::fromUtf8(params)));
+            point[QStringLiteral("tab")] = lp.value(QStringLiteral("launcherTab")).toInt(tab);
+            point[QStringLiteral("icon")] = QUrl::fromLocalFile(appDir + QLatin1Char('/') + lp.value(QStringLiteral("icon")).toString(icon)).toString();
+            point[QStringLiteral("noWindow")] = false;
+            point[QStringLiteral("quickLaunch")] = lp.value(QStringLiteral("quickLaunch")).toInt(0);
+            m_apps.append(point);
+            QVariantMap pointRecord;
+            pointRecord[QStringLiteral("id")] = id;
+            pointRecord[QStringLiteral("launchPointId")] = lpId;
+            pointRecord[QStringLiteral("title")] = point.value(QStringLiteral("title"));
+            pointRecord[QStringLiteral("icon")] = root + lp.value(QStringLiteral("icon")).toString(icon);
+            pointRecord[QStringLiteral("params")] = lp.value(QStringLiteral("params")).toObject().toVariantMap();
+            pointRecord[QStringLiteral("hidden")] = false;
+            m_launchPoints.append(pointRecord);
+        }
+    };
     for (const auto &dirValue : cfg.value(QStringLiteral("applicationDirs")).toArray()) {
         QDir base(QDir(repoDir).filePath(dirValue.toString()));
         const auto entries = base.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-        for (const QString &name : entries) {
-            // Built apps (e.g. React) keep their installable output in dist/.
-            QString appDir = base.filePath(name);
-            if (!QFileInfo::exists(appDir + QStringLiteral("/appinfo.json")))
-                appDir += QStringLiteral("/dist");
-            QFile info(appDir + QStringLiteral("/appinfo.json"));
-            if (!info.open(QIODevice::ReadOnly))
-                continue;
-            QByteArray json = info.readAll();
-            if (json.startsWith("\xEF\xBB\xBF"))   // UTF-8 BOM
-                json.remove(0, 3);
-            const QJsonObject app = QJsonDocument::fromJson(json).object();
-            const QString id = app.value(QStringLiteral("id")).toString(name);
-            if (m_appDirs.contains(id))
-                continue;
-            m_appDirs.insert(id, appDir);
-            const QString root = QString::fromLatin1(kAppsPrefix) + id + QLatin1Char('/');
-            const QString main = urlFor(root + app.value(QStringLiteral("main")).toString(QStringLiteral("index.html")));
-            // Phoenix launcher metadata (see docs/APP-RUNTIME.md): launcherTab
-            // (0 Apps, 1 Downloads, 2 Settings), hidden, quickLaunch (slot
-            // 1-4), launchPoints.
-            const QJsonObject phoenix = app.value(QStringLiteral("phoenix")).toObject();
-            const int tab = phoenix.value(QStringLiteral("launcherTab")).toInt(0);
-            QVariantMap entry;
-            entry[QStringLiteral("id")] = id;
-            entry[QStringLiteral("appId")] = id;
-            entry[QStringLiteral("title")] = app.value(QStringLiteral("title")).toString(id);
-            entry[QStringLiteral("type")] = app.value(QStringLiteral("type")).toString(QStringLiteral("web"));
-            entry[QStringLiteral("noWindow")] = app.value(QStringLiteral("noWindow")).toBool();
-            entry[QStringLiteral("main")] = main;
-            entry[QStringLiteral("params")] = QString();
-            // -1 keeps an app out of the launcher.
-            entry[QStringLiteral("tab")] = phoenix.value(QStringLiteral("hidden")).toBool() ? -1 : tab;
-            entry[QStringLiteral("quickLaunch")] = phoenix.value(QStringLiteral("quickLaunch")).toInt(0);
-            // The app's files on disk, for device paths the shell resolves itself (wallpapers).
-            entry[QStringLiteral("dir")] = QUrl::fromLocalFile(appDir + QLatin1Char('/')).toString();
-            // The shell loads icons itself, from the file on disk.
-            const QString icon = app.value(QStringLiteral("icon")).toString(QStringLiteral("icon.png"));
-            entry[QStringLiteral("icon")] = QUrl::fromLocalFile(appDir + QLatin1Char('/') + icon).toString();
-            m_apps.append(entry);
-
-            // Launch points: more launcher icons for the same app, each
-            // starting it with its own launch params (its own card).
-            for (const auto &lpValue : phoenix.value(QStringLiteral("launchPoints")).toArray()) {
-                const QJsonObject lp = lpValue.toObject();
-                const QString lpId = lp.value(QStringLiteral("id")).toString();
-                if (lpId.isEmpty())
-                    continue;
-                const QByteArray params = QJsonDocument(lp.value(QStringLiteral("params")).toObject()).toJson(QJsonDocument::Compact);
-                QVariantMap point = entry;
-                point[QStringLiteral("id")] = lpId;
-                point[QStringLiteral("title")] = lp.value(QStringLiteral("title")).toString(entry.value(QStringLiteral("title")).toString());
-                point[QStringLiteral("params")] = QString::fromUtf8(params);
-                point[QStringLiteral("main")] = main + QStringLiteral("?launchParams=") + QString::fromLatin1(QUrl::toPercentEncoding(QString::fromUtf8(params)));
-                point[QStringLiteral("tab")] = lp.value(QStringLiteral("launcherTab")).toInt(tab);
-                point[QStringLiteral("icon")] = QUrl::fromLocalFile(appDir + QLatin1Char('/') + lp.value(QStringLiteral("icon")).toString(icon)).toString();
-                point[QStringLiteral("noWindow")] = false;
-                point[QStringLiteral("quickLaunch")] = lp.value(QStringLiteral("quickLaunch")).toInt(0);
-                m_apps.append(point);
-            }
-        }
+        for (const QString &name : entries)
+            addApp(base.filePath(name), name, false);
+    }
+    for (const auto &dirValue : cfg.value(QStringLiteral("systemApps")).toArray()) {
+        const QString dir = QDir(repoDir).filePath(dirValue.toString());
+        addApp(dir, QFileInfo(dir).fileName(), true);
     }
     m_valid = true;
+}
+
+QByteArray Rootfs::launchPointsJson() const
+{
+    QJsonArray all;
+    for (const QVariantMap &lp : m_launchPoints)
+        all.append(QJsonObject::fromVariantMap(lp));
+    return QJsonDocument(all).toJson(QJsonDocument::Compact);
 }
 
 QString Rootfs::urlFor(const QString &devicePath)
@@ -161,6 +192,13 @@ void RootfsSchemeHandler::registerScheme()
 void RootfsSchemeHandler::requestStarted(QWebEngineUrlRequestJob *job)
 {
     const QString devicePath = job->requestUrl().path();
+    if (devicePath == QLatin1String("/usr/share/phoenix/apps.json")) {
+        auto *buffer = new QBuffer(job);
+        buffer->setData(m_rootfs->launchPointsJson());
+        buffer->open(QIODevice::ReadOnly);
+        job->reply("application/json;charset=utf-8", buffer);
+        return;
+    }
     const QString file = m_rootfs->resolve(devicePath);
     QFile f(file);
     if (file.isEmpty() || !QFileInfo(file).isFile() || !f.open(QIODevice::ReadOnly)) {

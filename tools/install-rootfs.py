@@ -40,22 +40,22 @@ def load_config():
 def find_apps(cfg):
     apps = []
     seen = set()
-    for rel in cfg["applicationDirs"]:
-        base = os.path.join(REPO, rel)
-        if not os.path.isdir(base):
+    # systemApps (Just Type, the system UI) are single app directories.
+    candidates = [(os.path.join(REPO, rel, name), name)
+                  for rel in cfg["applicationDirs"] if os.path.isdir(os.path.join(REPO, rel))
+                  for name in sorted(os.listdir(os.path.join(REPO, rel)))]
+    candidates += [(os.path.join(REPO, rel), os.path.basename(rel)) for rel in cfg.get("systemApps", [])]
+    for app_dir, name in candidates:
+        if not os.path.isfile(os.path.join(app_dir, "appinfo.json")):
+            app_dir = os.path.join(app_dir, "dist")
+        info = os.path.join(app_dir, "appinfo.json")
+        if not os.path.isfile(info):
             continue
-        for name in sorted(os.listdir(base)):
-            app_dir = os.path.join(base, name)
-            if not os.path.isfile(os.path.join(app_dir, "appinfo.json")):
-                app_dir = os.path.join(app_dir, "dist")
-            info = os.path.join(app_dir, "appinfo.json")
-            if not os.path.isfile(info):
-                continue
-            with open(info, encoding="utf-8-sig") as f:
-                app_id = json.load(f).get("id", name)
-            if app_id not in seen:
-                seen.add(app_id)
-                apps.append((app_id, app_dir))
+        with open(info, encoding="utf-8-sig") as f:
+            app_id = json.load(f).get("id", name)
+        if app_id not in seen:
+            seen.add(app_id)
+            apps.append((app_id, app_dir))
     return apps
 
 

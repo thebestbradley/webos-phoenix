@@ -1,0 +1,38 @@
+/* Phoenix compat: Just Type on a phone.
+ *
+ * The TouchPad layout centres four fixed-width tabs between two empty
+ * spacer tabs, which leaves no room at 320 px: drop the spacers and let
+ * the four tabs share the width. The search field (570 px) and result
+ * groups (708 px) take the card's width instead.
+ */
+@media (max-width: 480px) {
+	.enyo-radiogroup > .enyo-radiobutton.enyo-button-disabled {
+		display: none;
+	}
+	.enyo-radiogroup {
+		display: -webkit-box;
+		display: flex;
+	}
+	.enyo-radiogroup > .enyo-radiobutton {
+		-webkit-box-flex: 1;
+		flex: 1 1 0;
+		min-width: 0;
+		padding-left: 0;
+		padding-right: 0;
+		font-size: 11px;
+		border-left-width: 4px;
+		border-right-width: 4px;
+	}
+	.enyo-input, .enyo-input.enyo-input-focus {
+		width: auto;
+		margin: 13px 8px;
+	}
+	.enyo-group, .enyo-group.labeled {
+		width: auto;
+		margin: 8px;
+	}
+	.dbcontent-display1, .dbcontent-display2, .dbcontent-display3 {
+		width: auto;
+		max-width: 100%;
+	}
+}

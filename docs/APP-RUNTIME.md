@@ -12,6 +12,7 @@ in the simulator, in a desktop browser, and on a device.
 | `third_party/enyo-1.0` | The Enyo 1.0 framework they are written in | Apache-2.0 |
 | `third_party/foundation-frameworks`, `loadable-frameworks`, `mojoloader`, `underscore` | Shared libraries loaded with MojoLoader (Calendar, Contacts, ...) | Apache-2.0 |
 | `third_party/app-services` | The apps' background services (accounts, contacts, calendar reminders, email) | Apache-2.0 |
+| `third_party/isis/isis-browser` | The browser ("Web"), from HP's Isis project | Apache-2.0 |
 | `third_party/luna-applauncher`, `luna-systemui` | Original Just Type and system alert UIs | Apache-2.0 |
 | `apps/` | New Phoenix apps | Apache-2.0 |
 
@@ -36,6 +37,8 @@ the Open webOS desktop build (`openwebos/build-desktop`):
 - `mounts`: device path prefix → repository directory
 - `applicationDirs`: directories whose children are apps (`appinfo.json`, or
   `dist/appinfo.json` for built apps), served at `/usr/palm/applications/<id>/`
+- `systemApps`: single app directories for system UI (Just Type,
+  `com.palm.launcher`), also served there but never shown in the launcher
 - `overlays`: directories laid out like the device (`compat/rootfs/usr/...`)
   whose files win over everything else. Fixes and missing files for the
   original apps go here, so `third_party` stays pristine.
@@ -449,3 +452,51 @@ one: `QTWEBENGINE_CHROMIUM_FLAGS=--use-fake-device-for-media-stream`.
 camera, opens the shot in Photos, swipes the viewer, sets a wallpaper, deletes
 the photo, and plays, pauses, seeks and skips a song, with screenshots in
 `build/media-tests/`.
+
+## Just Type
+
+Typing in card view opens the original Just Type, `com.palm.launcher` from
+`openwebos/luna-applauncher`: the TouchPad's universal search, with its
+Launch, Contacts, Content, web search and Quick Actions sections. The shell
+shows it over the cards (`JustType.qml`); in the simulator it is one page
+that stays loaded (`SimWindowSource.justTypeWindow()`), and gets each search
+as it is typed. What it finds comes from:
+
+- the application manager's `listLaunchPoints` and `searchApps`, answered
+  from the installed apps (`/usr/share/phoenix/apps.json`, which phoenix-sim
+  and `tools/serve-rootfs.py` generate);
+- contacts, through the contacts library and db8;
+- `com.palm.universalsearch`, simulated after
+  `openwebos/luna-universalsearchmgr`: the web search engines from its
+  `UniversalSearchList.json`, and the actions ("New Memo") and content
+  searches ("Calendar Events") that apps declare in the `universalSearch`
+  field of their `appinfo.json`.
+
+`tools/test-justtype.cjs` uses it end to end. On a device, the compositor
+still has to show `com.palm.launcher`'s window this way (see the roadmap).
+
+## The browser and enyo.WebView
+
+The browser is HP's Enyo browser from the Isis project
+(`isis-project/isis-browser`), unmodified. Its page view, like Email's
+message view, is `enyo.WebView`, which on webOS was the BrowserAdapter
+plugin (`<object type="application/x-palm-browser">`) showing pages that
+BrowserServer rendered with WebKit. The runtime gives those objects the
+plugin's scripting API (`openURL`, `goBack`, `reloadPage`, ...) and its
+callbacks (`urlTitleChanged`, `loadProgressChanged`, ...), with one of two
+engines behind them:
+
+- **phoenix-sim**: a native Chromium view per object, laid over its
+  rectangle inside the card (`WebAppWindow.qml`) and hidden while an Enyo
+  menu or dialog is open. Any site works, as in a real browser.
+  `phoenix-sim --open <url>` opens a page in it.
+- **A desktop browser** (`tools/serve-rootfs.py`, the Playwright tests): an
+  `<iframe>`, so only sites that allow framing show, and only same-origin
+  pages report their titles.
+
+Links for other apps (`mailto:`, `tel:`, `sms:`) go to them through
+`/usr/palm/command-resource-handlers.json` (a compat file), as the
+application manager's `open` does on webOS. `tools/test-browser.cjs` browses
+with it end to end. On a device, OSE's WebAppMgr has no BrowserAdapter, so
+the browser needs a native view there too (see the roadmap).
+

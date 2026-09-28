@@ -113,7 +113,8 @@ Controls: drag with the mouse as you would with a finger. The black strip at
 the bottom is the gesture area. Keys: **Esc** back, **Home**/**F1** swipe up,
 **F2** demo notification, **F3** lock/unlock, **F4** incoming call (rings
 the Phone app), **F5** incoming text message (for Messaging), type in card
-view for Just Type.
+view for Just Type. `./build/phoenix-sim --open https://example.com` opens a
+page in the browser.
 
 The **+** button in each placeholder app opens a second window, which joins
 that app's card stack.

@@ -25,3 +25,6 @@
 [submodule "third_party/app-services"]
 	path = third_party/app-services
 	url = https://github.com/openwebos/app-services.git
+[submodule "third_party/isis/isis-browser"]
+	path = third_party/isis/isis-browser
+	url = https://github.com/isis-project/isis-browser.git

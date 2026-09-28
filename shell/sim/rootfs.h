@@ -36,6 +36,11 @@ public:
     // dir and icon (file URLs, for the shell).
     QVariantList apps() const { return m_apps; }
 
+    // The same apps for the simulated applicationManager in web pages
+    // (served as /usr/share/phoenix/apps.json): the launch point records
+    // listLaunchPoints returns, with device paths.
+    QByteArray launchPointsJson() const;
+
     static QString scheme() { return QStringLiteral("phoenix"); }
     static QString urlFor(const QString &devicePath);
 
@@ -47,6 +52,7 @@ private:
     QList<QPair<QString, QString>> m_mounts;   // longest prefix first
     QHash<QString, QString> m_appDirs;         // app id -> directory
     QVariantList m_apps;
+    QList<QVariantMap> m_launchPoints;
 };
 
 #ifdef PHOENIX_HAVE_WEBENGINE

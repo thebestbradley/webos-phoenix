@@ -189,6 +189,8 @@
         copiedToClipboard: function () {},
         pastedFromClipboard: function () {},
         printFrame: function () { global.print && global.print(); },
+        // The TouchPad launcher's glow on a tapped icon (Just Type).
+        applyLaunchFeedback: function () {},
         simulateMouseClick: function () {},
         useSimulatedMouseClicks: function () {},
         runTextIndexer: function (text) { return text; },
@@ -423,7 +425,16 @@
         function select(o, fields) {
             if (!fields) return o;
             var r = { _id: o._id, _kind: o._kind, _rev: o._rev };
-            fields.forEach(function (f) { r[f] = getPath(o, f); });
+            // Like db8, a dotted field ("from.name") keeps its nesting.
+            fields.forEach(function (f) {
+                var v = getPath(o, f), parts = f.split("."), at = r;
+                if (v === undefined) return;
+                for (var i = 0; i < parts.length - 1; i++) {
+                    if (typeof at[parts[i]] !== "object" || at[parts[i]] === null) at[parts[i]] = {};
+                    at = at[parts[i]];
+                }
+                at[parts[parts.length - 1]] = v;
+            });
             return r;
         }
 
@@ -684,26 +695,374 @@
 
     // ---- Application manager -------------------------------------------------------------
 
+    // Installed apps and launch points, as the shell knows them (phoenix-sim
+    // and tools/serve-rootfs.py serve the list): {id, launchPointId, title,
+    // icon, params, hidden, universalSearch}.
+    var launchPointCache = null;
+    function launchPoints() {
+        if (!launchPointCache) {
+            try { launchPointCache = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/apps.json") || "[]"); }
+            catch (e) { launchPointCache = []; }
+        }
+        return launchPointCache;
+    }
+    function visibleLaunchPoints() {
+        return launchPoints().filter(function (lp) { return !lp.hidden; });
+    }
+
+    var resourceHandlers = null;
+    function resourceHandler(target) {
+        if (!resourceHandlers) {
+            try { resourceHandlers = JSON.parse(PalmSystem.getResource("/usr/palm/command-resource-handlers.json") || "{}").redirects || []; }
+            catch (e) { resourceHandlers = []; }
+        }
+        for (var i = 0; i < resourceHandlers.length; i++)
+            if (new RegExp(resourceHandlers[i].url, "i").test(target)) return resourceHandlers[i].appId;
+        return /^https?:/i.test(target) ? "com.palm.app.browser" : null;
+    }
+
     register(["com.palm.applicationManager", "com.webos.applicationManager"], {
         "/launch": function (p, reply) {
             host.postToHost("launch", { id: p.id, params: p.params || {} });
             reply(ok({ processId: String(Date.now()) }));
         },
+        // As on webOS: {id, params} launches the app; {target} goes to the
+        // app that handles it (command-resource-handlers.json: mailto: to
+        // Email...), web pages to the browser. Other targets go to the shell.
         "/open": function (p, reply) {
-            host.postToHost("open", { target: p.target, id: p.id, params: p.params || {} });
-            reply(ok());
+            var handler = p.id || (p.target && resourceHandler(p.target));
+            if (handler)
+                host.postToHost("launch", { id: handler, params: p.id ? (p.params || {}) : { target: p.target } });
+            else
+                host.postToHost("open", { target: p.target, params: p.params || {} });
+            reply(ok({ processId: String(Date.now()) }));
         },
         "/running": function (p, reply) { reply(ok({ running: [] })); },
-        "/listApps": function (p, reply) { reply(ok({ apps: store.get("apps", []) })); },
-        "/listLaunchPoints": function (p, reply) { reply(ok({ launchPoints: store.get("apps", []) })); },
+        "/listApps": function (p, reply) {
+            reply(ok({ apps: launchPoints().filter(function (lp) { return /_default$/.test(lp.launchPointId); }) }));
+        },
+        "/listLaunchPoints": function (p, reply) { reply(ok({ launchPoints: visibleLaunchPoints() })); },
+        // Launch points whose title has a word starting with the keyword
+        // (as luna-sysmgr's search did); Just Type shows them as "Launch".
+        "/searchApps": function (p, reply) {
+            var k = String(p.keyword || "").toLowerCase();
+            var hits = !k ? [] : visibleLaunchPoints().filter(function (lp) {
+                return (" " + String(lp.title).toLowerCase()).indexOf(" " + k) >= 0;
+            });
+            reply(ok({ apps: hits.map(function (lp) { return { launchPoint: lp.launchPointId }; }) }));
+        },
+        // Nothing is installed or removed at run time in the simulator.
+        "/launchPointChanges": function (p, reply) { reply(ok({ subscribed: !!p.subscribe })); },
         "/getAppInfo": function (p, reply) {
-            var app = store.get("apps", []).filter(function (a) { return a.id === p.appId || a.id === p.id; })[0];
+            var app = launchPoints().filter(function (a) {
+                return /_default$/.test(a.launchPointId) && (a.id === p.appId || a.id === p.id);
+            })[0];
             reply(app ? ok({ appInfo: app }) : fail(-1, "app not found"));
         },
         "/addLaunchPoint": function (p, reply) { reply(ok({ launchPointId: "lp" + Date.now() })); },
         "/getHandlerForMimeType": function (p, reply) { reply(fail(-1, "no handler")); },
         "/listAllHandlersForMime": function (p, reply) { reply(ok({ resources: [] })); }
     });
+
+    // ---- Just Type (com.palm.universalsearch) ---------------------------------------------
+    // Modelled on openwebos/luna-universalsearchmgr: web search engines from
+    // its UniversalSearchList.json, and the "action" (New Memo, New Event...)
+    // and "dbsearch" (content search) providers the installed apps declare
+    // in their appinfo.json "universalSearch" field. Preferences persist.
+
+    var US_ICONS = "/usr/lib/luna/system/luna-applauncher/images/";
+    var US_ENGINES = [
+        { id: "google", displayName: "Google", url: "https://www.google.com/search?q=#{searchTerms}",
+          suggestURL: "https://suggestqueries.google.com/complete/search?client=firefox&q=#{searchTerms}" },
+        { id: "wikipedia", displayName: "Wikipedia", url: "https://en.wikipedia.org/wiki/Special:Search?search=#{searchTerms}",
+          suggestURL: "https://en.wikipedia.org/w/api.php?action=opensearch&search=#{searchTerms}&limit=8&namespace=0&format=json" },
+        { id: "amazon", displayName: "Amazon", url: "https://www.amazon.com/s/?k=#{searchTerms}", enabled: false },
+        { id: "imdb", displayName: "IMDb", url: "https://www.imdb.com/find?q=#{searchTerms}", enabled: false },
+        { id: "cnn", displayName: "CNN", url: "https://www.cnn.com/search?q=#{searchTerms}", enabled: false }
+    ];
+    var US_DEFAULT_PREFS = { defaultSearchEngine: "google", defaultSearch: "true", ContactSearch: "true", AppSearch: "true", GAL: "false" };
+    var usWatchers = [];
+
+    function usState() { return store.get("universalsearch", { prefs: {}, enabled: {} }); }
+    function usSave(st) {
+        store.set("universalsearch", st);
+        usWatchers = usWatchers.filter(function (w) { return w(); });
+    }
+    function usPrefs() {
+        var p = {}, saved = usState().prefs, k;
+        for (k in US_DEFAULT_PREFS) p[k] = US_DEFAULT_PREFS[k];
+        for (k in saved) p[k] = saved[k];
+        return p;
+    }
+    function usEnabled(id, dflt) {
+        var e = usState().enabled;
+        return id in e ? e[id] : dflt !== false;
+    }
+    function usProviders(kind) {
+        var out = [];
+        launchPoints().forEach(function (lp) {
+            var item = lp.universalSearch && lp.universalSearch[kind];
+            if (!item || !/_default$/.test(lp.launchPointId)) return;
+            var x = {}, k;
+            for (k in item) x[k] = item[k];
+            x.id = lp.id;
+            x.iconFilePath = x.iconFilePath || lp.icon;
+            x.enabled = usEnabled(kind + ":" + lp.id, true);
+            if (kind === "dbsearch" && !x.url) x.url = lp.id;
+            out.push(x);
+        });
+        return out;
+    }
+    function usList() {
+        return ok({
+            UniversalSearchList: US_ENGINES.map(function (e) {
+                var x = { category: "search", type: "web", iconFilePath: US_ICONS + "search-icon-" + e.id + ".png" }, k;
+                for (k in e) x[k] = e[k];
+                x.enabled = usEnabled("search:" + e.id, e.enabled);
+                return x;
+            }),
+            ActionList: usProviders("action"),
+            DBSearchItemList: usProviders("dbsearch"),
+            defaultSearchEngine: usPrefs().defaultSearchEngine
+        });
+    }
+    function usSubscribe(p, reply, ctx, build) {
+        reply(build());
+        if (p.subscribe) usWatchers.push(function () { if (ctx.cancelled()) return false; reply(build()); return true; });
+    }
+
+    register(["com.palm.universalsearch"], {
+        "/getUniversalSearchList": function (p, reply, ctx) { usSubscribe(p, reply, ctx, usList); },
+        "/getAllSearchPreference": function (p, reply, ctx) {
+            usSubscribe(p, reply, ctx, function () { return ok({ SearchPreference: usPrefs() }); });
+        },
+        "/getSearchPreference": function (p, reply) {
+            var r = ok({}), all = usPrefs();
+            r[p.key] = all[p.key];
+            reply(r);
+        },
+        "/setSearchPreference": function (p, reply) {
+            var st = usState();
+            st.prefs[p.key] = String(p.value);
+            usSave(st);
+            reply(ok());
+        },
+        // {id, category: "search" | "action" | "dbsearch", enabled}
+        "/updateSearchItem": function (p, reply) {
+            var st = usState();
+            st.enabled[(p.category || "search") + ":" + p.id] = !!p.enabled;
+            usSave(st);
+            reply(ok());
+        },
+        "*": function (p, reply) { reply(ok()); }
+    });
+
+    // ---- BrowserAdapter (Enyo's WebView) ------------------------------------------------
+    // enyo.WebView renders <object type="application/x-palm-browser">: the
+    // BrowserAdapter plugin (isis-project/BrowserAdapter), which showed pages
+    // that BrowserServer rendered with WebKit. The browser (isis-browser),
+    // Email's message view and the account sign-in pages call its scripting
+    // API on the node and get callbacks on node.eventListener (see
+    // BasicWebView.js). Here the object gets that API and one of two engines:
+    //   - in phoenix-sim (phoenix:// pages) a Chromium view that the shell
+    //     lays over the object's rectangle (WebAppWindow.qml), driven by
+    //     "webView" host messages; its events come back through
+    //     __phoenixRuntime.webViewEvent;
+    //   - elsewhere an <iframe> inside the object, which shows sites that
+    //     allow framing (and can only report same-origin titles).
+
+    var WEBVIEW_TYPE = "application/x-palm-browser";
+    var nativeWebViews = global.location && global.location.protocol === "phoenix:";
+    var webViews = {};      // id -> adapter
+    var nextWebView = 1;
+
+    function WebViewAdapter(node) {
+        this.node = node;
+        this.id = "wv" + (nextWebView++);
+        this.url = "";
+        this.title = "";
+        this.back = [];         // iframe engine history
+        this.forward = [];
+        this.rect = "";
+        this.hidden = true;
+        webViews[this.id] = this;
+    }
+    WebViewAdapter.prototype = {
+        listener: function (name) {
+            var l = this.node.eventListener;
+            if (l && typeof l[name] === "function")
+                l[name].apply(l, Array.prototype.slice.call(arguments, 1));
+        },
+        post: function (op, extra) {
+            var p = { id: this.id, op: op }, k;
+            for (k in extra || {}) p[k] = extra[k];
+            host.postToHost("webView", p);
+        },
+        connect: function () {
+            var self = this;
+            if (this.connected) return;
+            this.connected = true;
+            if (nativeWebViews) {
+                this.post("create", {});
+                this.track();
+            } else {
+                var frame = this.frame = global.document.createElement("iframe");
+                frame.style.cssText = "border:0;width:100%;height:100%;display:block;background:white";
+                frame.addEventListener("load", function () { self.frameLoaded(); });
+                this.node.appendChild(frame);
+            }
+            setTimeout(function () { self.listener("serverConnected"); }, 0);
+        },
+        // Keep the native view on the object's rectangle, and out of the way
+        // while the object is hidden or an Enyo popup (menu, dialog) is open.
+        track: function () {
+            var self = this;
+            if (this.destroyed) return;
+            var n = this.node, r = n.getBoundingClientRect();
+            var popup = Array.prototype.some.call(global.document.querySelectorAll(".enyo-popup"), function (e) {
+                return e.offsetParent !== null && e.getBoundingClientRect().height > 0;
+            });
+            var hidden = !n.isConnected || n.offsetParent === null || r.width === 0 || r.height === 0 || popup;
+            var rect = [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)].join(",");
+            if (rect !== this.rect || hidden !== this.hidden) {
+                this.rect = rect;
+                this.hidden = hidden;
+                this.post("geometry", { x: r.left, y: r.top, width: r.width, height: r.height, visible: !hidden });
+            }
+            if (!n.isConnected && this.connected) return this.destroy();
+            global.requestAnimationFrame(function () { self.track(); });
+        },
+        destroy: function () {
+            if (this.destroyed) return;
+            this.destroyed = true;
+            if (nativeWebViews) this.post("destroy", {});
+            delete webViews[this.id];
+        },
+        // Iframe engine.
+        frameNavigate: function (url, fromHistory) {
+            if (!fromHistory && this.url) { this.back.push(this.url); this.forward = []; }
+            this.url = url;
+            this.navigated = true;
+            this.listener("loadStarted");
+            this.listener("loadProgressChanged", 10);
+            this.frame.src = url;
+            this.frameReport();
+        },
+        frameLoaded: function () {
+            // The new iframe's about:blank is not a page the app asked for.
+            if (!this.navigated) return;
+            var doc = null;
+            try { doc = this.frame.contentDocument; } catch (e) { doc = null; }
+            if (doc && doc.location && doc.location.href !== "about:blank") {
+                this.url = doc.location.href;
+                this.title = doc.title || "";
+            } else {
+                this.title = "";
+            }
+            this.frameReport();
+            this.listener("loadProgressChanged", 100);
+            this.listener("loadStopped");
+            this.listener("documentLoadFinished");
+        },
+        frameReport: function () {
+            this.listener("urlTitleChanged", this.url, this.title || this.url, this.back.length > 0, this.forward.length > 0);
+        },
+        // The plugin's scripting API (the methods BasicWebView and the apps call).
+        api: {
+            setPageIdentifier: function (id) { this.pageIdentifier = id; },
+            connectBrowserServer: function () { this.connect(); },
+            disconnectBrowserServer: function () { this.destroy(); },
+            openURL: function (url) {
+                if (!url) return;
+                // "example.com" is a web address; "/usr/..." a local file.
+                if (!/^[a-z][a-z0-9+.-]*:/i.test(url) && url.charAt(0) !== "/") url = "http://" + url;
+                if (nativeWebViews) { this.url = url; this.post("open", { url: url }); }
+                else if (this.frame) this.frameNavigate(url);
+            },
+            setHTML: function (url, body) {
+                if (nativeWebViews) this.post("html", { url: url || "", html: body || "" });
+                else if (this.frame) { this.navigated = true; this.url = url || ""; this.frame.srcdoc = body || ""; }
+            },
+            goBack: function () {
+                if (nativeWebViews) return this.post("back", {});
+                if (this.back.length) { this.forward.push(this.url); this.frameNavigate(this.back.pop(), true); }
+            },
+            goForward: function () {
+                if (nativeWebViews) return this.post("forward", {});
+                if (this.forward.length) { this.back.push(this.url); this.frameNavigate(this.forward.pop(), true); }
+            },
+            reloadPage: function () {
+                if (nativeWebViews) return this.post("reload", {});
+                if (this.url) this.frameNavigate(this.url, true);
+            },
+            stopLoad: function () {
+                if (nativeWebViews) return this.post("stop", {});
+                this.listener("loadStopped");
+            },
+            findInPage: function (text) { if (nativeWebViews) this.post("find", { text: text || "" }); },
+            clearHistory: function () { this.back = []; this.forward = []; },
+            setVisibleSize: function () {},
+            pageFocused: function () {},
+            interrogateClicks: function () {},
+            setShowClickedLink: function () {},
+            setBlockPopups: function () {},
+            setAcceptCookies: function () {},
+            setEnableJavaScript: function () {},
+            setMinFontSize: function () {},
+            setHeaderHeight: function () {},
+            ignoreMetaTags: function () {},
+            addUrlRedirect: function () {},
+            setNetworkInterface: function () {},
+            setDNSServers: function () {},
+            handleFlick: function () {},
+            clearCache: function () {},
+            clearCookies: function () {},
+            cut: function () {}, copy: function () {}, paste: function () {}, selectAll: function () {},
+            insertStringAtCursor: function () {},
+            selectPopupMenuItem: function () {},
+            sendDialogResponse: function () {},
+            inspectUrlAtPoint: function () {},
+            getImageInfoAtPoint: function () {},
+            saveImageAtPoint: function () {},
+            saveViewToFile: function () {},
+            generateIconFromFile: function () {},
+            resizeImage: function () {},
+            deleteImage: function () {},
+            printFrame: function () {}
+        }
+    };
+
+    var adapters = typeof WeakMap === "function" ? new WeakMap() : null;
+    function adapterFor(node) {
+        var a = adapters.get(node);
+        if (!a) { a = new WebViewAdapter(node); adapters.set(node, a); }
+        return a;
+    }
+    // The methods exist as soon as Enyo renders the object (BasicWebView
+    // checks node.openURL right away), only on BrowserAdapter objects.
+    if (adapters && global.HTMLObjectElement) {
+        Object.keys(WebViewAdapter.prototype.api).forEach(function (name) {
+            if (name in global.HTMLObjectElement.prototype) return;
+            Object.defineProperty(global.HTMLObjectElement.prototype, name, {
+                configurable: true,
+                get: function () {
+                    if (String(this.getAttribute("type")).toLowerCase() !== WEBVIEW_TYPE) return undefined;
+                    var a = adapterFor(this);
+                    return function () { return a.api[name].apply(a, arguments); };
+                }
+            });
+        });
+    }
+
+    // Native view events from phoenix-sim: name is a BrowserAdapter callback
+    // (urlTitleChanged, loadStarted, loadProgressChanged, loadStopped,
+    // documentLoadFinished, mainDocumentLoadFailed).
+    runtime.webViewEvent = function (id, name, args) {
+        var a = webViews[id];
+        if (!a) return;
+        if (name === "urlTitleChanged") { a.url = args[0]; a.title = args[1]; }
+        a.listener.apply(a, [name].concat(args || []));
+    };
 
     // ---- Connectivity, power, accounts and friends -------------------------------------
 

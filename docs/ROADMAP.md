@@ -18,7 +18,8 @@ are in [spec/legacy-ui-spec.md](spec/legacy-ui-spec.md).
 - [x] Notification banner, notification bar and dashboard
 - [x] Lock screen with bitmap clock and padlock drag
 - [x] Gesture area: up, back, tap
-- [x] Just Type (basic app search)
+- [x] Just Type: the original luna-applauncher app (apps, contacts, content, web search, quick actions)
+- [x] Browser: the original Isis browser, with native page views in the simulator
 - [x] Desktop simulator for macOS/Linux, screenshot mode, behaviour tests, CI
 - [x] `meta-phoenix` layer and OSE compositor adapter (untested on device)
 
@@ -30,8 +31,8 @@ phone-era (2.x) details are therefore marked *(inferred)* in `Theme.qml`.
 These Open webOS repositories are also public and should fill the gaps:
 
 - [ ] `openwebos/luna-systemui`: system UI web components (status bar menus, dashboards, notifications)
-- [ ] `openwebos/luna-applauncher`: launcher and Just Type web app
-- [ ] `openwebos/core-apps`: the original Enyo core apps (useful for M4)
+- [x] `openwebos/luna-applauncher`: launcher and Just Type web app
+- [x] `openwebos/core-apps`: the original Enyo core apps (useful for M4)
 - [ ] Reference photos/screenshots of real Pre / Pre 2 / Pre 3 / Veer / TouchPad for pixel comparison
 
 ## Build infrastructure
@@ -52,6 +53,9 @@ Targets: `qemux86-64` (emulator) and Raspberry Pi 4 with the official
 - [ ] Back gesture delivered to apps (C++ compositor extension)
 - [ ] Status bar fed by OSE Luna services (battery, Wi-Fi, Bluetooth, time)
 - [ ] Notifications from OSE's notification service into banner and dashboard
+- [ ] Just Type on the device: show `com.palm.launcher`'s window over the cards
+- [ ] Browser on the device: a native page view for enyo.WebView under WebAppMgr
+      (OSE has no BrowserAdapter), e.g. a compositor-side view like the simulator's
 - [ ] Portrait output and rotation
 - [ ] Pixel comparison against reference screenshots of real devices
 
@@ -65,7 +69,7 @@ Targets: `qemux86-64` (emulator) and Raspberry Pi 4 with the official
 - [ ] PIN and password lock (`images/pin/` art)
 - [ ] Exhibition / dock mode (clock, slideshow while charging)
 - [ ] Phone and tablet virtual keyboards (`images/keyboard-*` art)
-- [ ] Full Just Type: actions, search providers, contacts, messages
+- [ ] Just Type: search suggestions, remote (GAL) contacts, its preferences screen
 - [ ] Remaining items in the feature inventory
 
 ## M3: phones and tablets

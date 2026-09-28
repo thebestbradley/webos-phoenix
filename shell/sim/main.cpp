@@ -54,7 +54,8 @@ int main(int argc, char *argv[])
     QCommandLineOption qmlOpt(QStringLiteral("qml-dir"), QStringLiteral("Directory containing sim.qml and the Phoenix modules."), QStringLiteral("dir"));
     QCommandLineOption repoOpt(QStringLiteral("repo-dir"), QStringLiteral("Checkout root holding runtime/rootfs.json and the web apps."), QStringLiteral("dir"));
     QCommandLineOption launchOpt(QStringLiteral("launch"), QStringLiteral("Launch this app id after start-up (repeatable)."), QStringLiteral("appId"));
-    parser.addOptions({ sizeOpt, tabletOpt, phoneOpt, sceneOpt, shotOpt, delayOpt, qmlOpt, repoOpt, launchOpt });
+    QCommandLineOption openOpt(QStringLiteral("open"), QStringLiteral("Open this web address in the browser after start-up."), QStringLiteral("url"));
+    parser.addOptions({ sizeOpt, tabletOpt, phoneOpt, sceneOpt, shotOpt, delayOpt, qmlOpt, repoOpt, launchOpt, openOpt });
     parser.process(app);
 
     const bool tablet = parser.isSet(tabletOpt);
@@ -104,6 +105,7 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simWebEngine"), webEngine);
     view.rootContext()->setContextProperty(QStringLiteral("simWebApps"), webApps);
     view.rootContext()->setContextProperty(QStringLiteral("simLaunch"), parser.values(launchOpt));
+    view.rootContext()->setContextProperty(QStringLiteral("simOpen"), parser.value(openOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simScene"), parser.value(sceneOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simFormFactor"),
         tablet ? QStringLiteral("tablet") : parser.isSet(phoneOpt) ? QStringLiteral("phone") : QStringLiteral("auto"));

@@ -7,6 +7,8 @@
 //   simScene       "locked" | "cards" | "stacks" | "reorder" | "maximized" | "launcher" |
 //                  "dashboard" | "justtype" | "systemmenu" | "empty"
 //   simFormFactor  "auto" | "phone" | "tablet"
+//   simLaunch      app ids to launch (--launch)
+//   simOpen        a web address to open in the browser (--open)
 
 import QtQuick
 import Phoenix.Shell
@@ -69,12 +71,16 @@ Item {
     // Build a demo scene, as if the user had been using the phone for a bit.
     Component.onCompleted: {
         // --launch <appId>: open these apps, in card view, then stop.
-        if (typeof simLaunch !== "undefined" && simLaunch.length > 0) {
+        // --open <url>: open a web page in the browser, as a link would.
+        var opening = typeof simOpen !== "undefined" && simOpen !== "";
+        if (opening || (typeof simLaunch !== "undefined" && simLaunch.length > 0)) {
             shell.unlock();
             // After the window source has built its app list.
             Qt.callLater(function() {
-                for (var j = 0; j < simLaunch.length; ++j)
+                for (var j = 0; simLaunch && j < simLaunch.length; ++j)
                     shell.launch(simLaunch[j]);
+                if (opening)
+                    windows.openUrl(simOpen);
             });
             return;
         }

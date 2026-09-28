@@ -18,8 +18,11 @@ Version 2.0.
 This product includes, as git submodules under third_party/, the Open webOS
 core applications, application services, frameworks (foundation-frameworks,
 loadable-frameworks, mojoloader, underscore), luna-applauncher and
-luna-systemui (https://github.com/openwebos), and the Enyo 1.0 framework
-(https://github.com/enyojs/enyo-1.0):
+luna-systemui (https://github.com/openwebos), the Isis browser
+(https://github.com/isis-project/isis-browser) and the Enyo 1.0 framework
+(https://github.com/enyojs/enyo-1.0). runtime/phoenix-runtime.js includes
+the default search engine list of luna-universalsearchmgr
+(https://github.com/openwebos/luna-universalsearchmgr):
     Copyright (c) 2009-2013 Hewlett-Packard Development Company, L.P.
     Copyright (c) 2010-2013 LG Electronics, Inc.
     Licensed under the Apache License, Version 2.0.

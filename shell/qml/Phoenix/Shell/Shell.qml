@@ -100,6 +100,7 @@ FocusScope {
         ignoreUnknownSignals: true
         function onCardFocusRequested(uid) { Qt.callLater(cards.focusLaunched, uid); }
         function onCardCloseRequested(uid) { cards.close(uid); }
+        function onJustTypeDismissed() { justType.open = false; }
     }
 
     // Desktop / hardware keyboard shortcuts.
@@ -182,6 +183,7 @@ FocusScope {
         id: justType
         anchors.fill: parent
         apps: shell.source ? shell.source.apps : null
+        source: shell.source
         onLaunchRequested: (appId) => shell.launch(appId)
         onCloseRequested: { justType.open = false; shell.forceActiveFocus(); }
     }

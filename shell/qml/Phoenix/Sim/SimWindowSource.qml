@@ -20,6 +20,12 @@
 //   notifications ListModel  id, appId, title, body, color, glyph
 //   cardCloseRequested(uid)  signal: a window asked to close (window.close())
 //
+// Optional (the shell has a built-in fallback without them):
+//   justTypeWindow() -> Item  the Just Type search surface, or null
+//   justTypeStart(text)      show it with this text typed
+//   justTypeStop()           it was dismissed; clear it
+//   justTypeDismissed        signal: it launched something; close it
+//
 // Simulator only (sim.qml wires these to SimSystemStatus and the shell):
 //   systemStatusReported(status)  signal: a web page reported the device
 //                            state (radios, brightness, ...; see hostStatus()
@@ -29,6 +35,7 @@
 //                            in the system menu (only the changed keys)
 //   simulateIncomingCall()   ring the Phone app (phoenix-sim F4)
 //   simulateIncomingSms()    deliver a text to Messaging (phoenix-sim F5)
+//   openUrl(url)             open a web page in the browser (phoenix-sim --open)
 //
 // Web apps (the original webOS apps, Settings, ...) come from the virtual
 // webOS filesystem when phoenix-sim was built with Qt WebEngine; they
@@ -205,6 +212,8 @@ Item {
     }
 
     function _hostMessage(appId, uid, type, payload) {
+        if (appId === justTypeAppId && (type === "launch" || type === "open"))
+            Qt.callLater(source.justTypeDismissed);
         if (type === "launch" && payload.id) {
             // A launch point whose params match wins (e.g. {id: settings,
             // params: {page: "wifi"}} opens the Wi-Fi card).
@@ -326,6 +335,52 @@ Item {
                 return a.dir + m[2];
         }
         return "";
+    }
+
+    // Open a web page in the browser, as a tapped link does (phoenix-sim --open).
+    function openUrl(url) {
+        _hostMessage("", "", "launch", { id: "com.palm.app.browser", params: { target: url } });
+    }
+
+    // ---- Just Type ------------------------------------------------------------------
+    // The original Just Type, com.palm.launcher from openwebos/luna-applauncher,
+    // runs in one page that stays loaded; the shell shows it over the cards
+    // while the user types (see JustType.qml).
+
+    readonly property string justTypeAppId: "com.palm.launcher"
+    property Item _justType: null
+    property bool _justTypeLoaded: false
+    signal justTypeDismissed
+
+    function justTypeWindow() {
+        if (_justType)
+            return _justType;
+        var info = appInfo(justTypeAppId);
+        if (!info || !info.web)
+            return null;
+        _justType = _webWindow(justTypeAppId, info.main, "");
+        if (_justType.loaded)
+            _justType.loaded.connect(function() { source._justTypeLoaded = true; });
+        return _justType;
+    }
+
+    function _justTypeScript(js) {
+        return "(function(){var jt=window.enyo&&enyo.$.justTypeApp&&enyo.$.justTypeApp.$.justType;"
+               + "if(jt){" + js + "}})()";
+    }
+
+    function justTypeStart(text) {
+        var win = justTypeWindow();
+        if (!win)
+            return;
+        var js = _justTypeScript("jt.forceFocus();jt.$.searchField.setValue(" + JSON.stringify(text)
+                                 + ");jt.onValueChange(null,null," + JSON.stringify(text) + ");");
+        _runWhenLoaded(win, js, !_justTypeLoaded);
+    }
+
+    function justTypeStop() {
+        if (_justType && _justTypeLoaded)
+            _justType.runScript(_justTypeScript("jt.justTypeDeactivated();"));
     }
 
     // ---- Simulator: incoming call and text -----------------------------------------
