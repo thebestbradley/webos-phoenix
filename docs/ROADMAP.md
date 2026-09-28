@@ -202,5 +202,5 @@ accessibility, and whatever else the community agrees fits webOS.
   2014, with its own card shell (luna-next) and Halium device support. Its
   device and telephony work is the best reference for M3. Its shell is
   licensed differently from Phoenix (check each repository before reusing
-  code).
+  code). Full comparison and what to reuse: [LUNEOS.md](LUNEOS.md).
 - **webOS OSE** (webosose.org) is the base platform.
