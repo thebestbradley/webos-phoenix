@@ -10,6 +10,13 @@ This product includes artwork from Open webOS luna-sysmgr
 Design values in shell/qml/Phoenix/Shell/Theme.qml were taken from the same
 project's source and configuration files.
 
+The virtual keyboards (shell/qml/Phoenix/Shell/VirtualKeyboard.qml and
+KeyboardKeymap.js: key layouts, extended characters, key geometry and
+behaviour) are ported from Open webOS keyboard-efigs
+(https://github.com/openwebos/keyboard-efigs):
+    Copyright (c) 2010-2013 LG Electronics, Inc.
+    Licensed under the Apache License, Version 2.0.
+
 The compositor adapter follows the extension interface of webOS OSE
 luna-surfacemanager (https://github.com/webosose/luna-surfacemanager),
 Copyright (c) LG Electronics, Inc., licensed under the Apache License,

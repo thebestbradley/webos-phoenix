@@ -86,17 +86,19 @@ jobs:
           node tools/test-dav-sync.cjs --tablet --out app-tests/dav-tablet
           node tools/test-orientation.cjs --out app-tests/orientation-phone
           node tools/test-orientation.cjs --tablet --out app-tests/orientation-tablet
+          node tools/test-keyboard.cjs --out app-tests/keyboard-phone
+          node tools/test-keyboard.cjs --tablet --out app-tests/keyboard-tablet
 
       - name: Screenshots
         run: |
           mkdir -p screenshots/phone screenshots/tablet
-          for s in locked cards stacks reorder maximized launcher launcheredit lowbattery banner notified dashboard justtype systemmenu; do
+          for s in locked cards stacks reorder maximized launcher launcheredit lowbattery banner notified dashboard justtype keyboard systemmenu; do
             xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --scene $s --screenshot screenshots/phone/$s.png
             xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --tablet --scene $s --screenshot screenshots/tablet/$s.png
           done
           # Turned: the phone on its side, the TouchPad upright.
           mkdir -p screenshots/phone-landscape screenshots/tablet-portrait
-          for s in locked cards heldcard maximized launcher dashboard; do
+          for s in locked cards heldcard maximized launcher dashboard keyboard; do
             xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --scene $s --orientation left --screenshot screenshots/phone-landscape/$s.png
             xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --tablet --scene $s --orientation right --screenshot screenshots/tablet-portrait/$s.png
           done

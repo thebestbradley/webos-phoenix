@@ -73,7 +73,7 @@ Targets: `qemux86-64` (emulator) and Raspberry Pi 4 with the official
 - [x] App menu (tap the app name in the status bar)
 - [ ] PIN and password lock (`images/pin/` art)
 - [ ] Exhibition / dock mode (clock, slideshow while charging)
-- [ ] Phone and tablet virtual keyboards (`images/keyboard-*` art)
+- [x] Phone and tablet virtual keyboards (`images/keyboard-*` art; in the simulator, OSE's keyboard on devices: GAPS V1)
 - [ ] Just Type: search suggestions, remote (GAL) contacts, its preferences screen
 - [ ] Remaining items in the feature inventory
 

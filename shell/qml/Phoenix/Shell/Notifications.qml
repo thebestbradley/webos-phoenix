@@ -76,13 +76,31 @@ Item {
     // The front alert is the phone's incoming call (AlertWindow::
     // isIncomingCallAlert): the lock screen offers "Drag up to answer".
     readonly property bool incomingCall: alertShown && Policy.isIncomingCall(alerts.get(0).appId, alerts.get(0).name || "")
-    readonly property real negativeSpaceTarget: overlay || locked ? 0
-        : alertShown ? alertHeight
-        : fullScreen ? 0
+    // The virtual keyboard's height while it is up (the shell sets it):
+    // it takes the negative space, the app's positive space ending where it
+    // begins, full screen or not (InputWindowManager::slotShowIME ->
+    // SystemUiController::changeNegativeSpace(uiHeight - keyboardHeight,
+    // true), SystemUiController.cpp:1361-1470). On the devices that had it
+    // the dashboard never owned the negative space (:82); on the phone,
+    // which keeps the Pre's notification area, the keyboard takes it over
+    // while it is up and a popup alert (a call) still comes first. Over the
+    // lock screen only the keyboard (its password panel) takes any.
+    property real keyboardHeight: 0
+    // A change of the keyboard's height (rotation, the tablet's sizes)
+    // applies at once (slotKeyboardHeightChanged: changeNegativeSpace(...,
+    // immediate)); showing and hiding it animates.
+    property bool spaceImmediate: false
+    readonly property real negativeSpaceTarget: locked ? keyboardHeight
+        : alertShown && !overlay ? alertHeight
+        : keyboardHeight > 0 ? keyboardHeight
+        : overlay || fullScreen ? 0
         : dashboardOpen ? dashboardHeight
         : hasContent ? Theme.bannerHeight : 0
     property real negativeSpace: negativeSpaceTarget
-    Behavior on negativeSpace { NumberAnimation { duration: Theme.positiveSpaceDuration; easing.type: Easing.OutCubic } }
+    Behavior on negativeSpace {
+        enabled: !root.spaceImmediate
+        NumberAnimation { duration: Theme.positiveSpaceDuration; easing.type: Easing.OutCubic }
+    }
 
     // ---- Banner --------------------------------------------------------------
 

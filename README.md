@@ -17,6 +17,13 @@ measurements wherever the license allows.
 *Simulator at the Pre's native 320×480. Status bar, lock clock, quick launch,
 launcher tabs and menus use the original Open webOS art.*
 
+| Keyboard | Keyboard, sideways | TouchPad keyboard |
+| --- | --- | --- |
+| ![](docs/screenshots/keyboard.png) | ![](docs/screenshots/keyboard-landscape.png) | ![](docs/screenshots/tablet-keyboard.png) |
+
+*The Open webOS phone and tablet keyboards (keyboard-efigs) on Just Type's
+field: the app above shrinks into what is left of the screen.*
+
 | Settings tab | Wi-Fi | Settings cards | System menu and Settings |
 | --- | --- | --- | --- |
 | ![](docs/screenshots/settings-launcher.png) | ![](docs/screenshots/settings-wifi.png) | ![](docs/screenshots/settings-cards.png) | ![](docs/screenshots/settings-systemmenu.png) |
@@ -141,7 +148,9 @@ the Phone app), **F5** incoming text message (for Messaging), **F6** low
 battery, **F7** plug a charger in or out, **Ctrl+Left** / **Ctrl+Right**
 turn the device a quarter turn counter-clockwise / clockwise, type in card
 view for Just Type. `./build/phoenix-sim --open https://example.com` opens a
-page in the browser.
+page in the browser. A text field taking the focus brings up the virtual
+keyboard (the Open webOS phone and TouchPad keyboards); click its keys, or
+keep typing on the desktop keyboard.
 
 The window shows the device as it is held: turned on its side it becomes a
 landscape window, and the UI follows 200 ms later with the original
@@ -157,8 +166,8 @@ that app's card stack.
 `--launch com.palm.app.notes` opens an app at start-up (repeatable);
 `--launch org.webosphoenix.settings.wifi` opens a Settings pane.
 
-`--scene locked|cards|stacks|reorder|maximized|heldcard|launcher|dashboard|justtype|systemmenu` opens
-a demo state (`heldcard`: a card that keeps the upright orientation, drawn
+`--scene locked|cards|stacks|reorder|maximized|heldcard|launcher|dashboard|justtype|keyboard|systemmenu` opens
+a demo state (`keyboard`: Just Type with the virtual keyboard up; `heldcard`: a card that keeps the upright orientation, drawn
 turned in card view with `--orientation left`); add `--screenshot out.png`
 to save a PNG and exit.
 
@@ -173,6 +182,7 @@ node tools/test-media.cjs                                   # Camera, Photos, Mu
 node tools/test-files.cjs                                   # Files
 node tools/test-tasks.cjs                                   # Tasks and reminders
 node tools/test-alarm.cjs                                   # a Clock alarm rings as a popup alert
+node tools/test-keyboard.cjs                                # web fields and the virtual keyboard
 node tools/test-voicememos.cjs                              # Voice Memos
 node tools/test-orientation.cjs                             # apps asking for and following an orientation
 ```

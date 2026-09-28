@@ -307,6 +307,11 @@ Item {
             var fi = cardIndex(uid);
             if (fi >= 0)
                 cards.setProperty(fi, "fullScreen", !!payload.on);
+        } else if (type === "inputFocus") {
+            // An editable element of the page got or lost the focus, or the
+            // app showed or hid the keyboard itself (runtime: "Virtual
+            // keyboard"). Just Type's page is "justtype".
+            inputFocusChanged(appId === justTypeAppId && uid === "" ? "justtype" : uid, !!payload.focused, payload.state || null);
         } else if (type === "lunaReply") {
             var cb = _lunaCallbacks[payload.id];
             delete _lunaCallbacks[payload.id];
@@ -327,6 +332,45 @@ Item {
     }
 
     signal systemStatusReported(var status)
+
+    // ---- The virtual keyboard's input clients (the shell's IMEController) ------------
+
+    // A page's editable element got (focused) or lost the input focus;
+    // state is its PalmIME::EditorState ({type, actions, flags, enterKeyLabel}).
+    signal inputFocusChanged(string uid, bool focused, var state)
+
+    // What the keyboard's keys go to for a window: its page's view, which
+    // passes them on to the focused element as real key events.
+    function inputTarget(uid) {
+        var w = uid === "justtype" ? _justType : _windows[uid];
+        if (!w)
+            return null;
+        return w.view !== undefined ? w.view : w;
+    }
+
+    // The keyboard's hide key: the page's element loses the focus.
+    function removeInputFocus(uid) {
+        var w = uid === "justtype" ? _justType : _windows[uid];
+        if (w && w.runScript)
+            w.runScript("window.__phoenixRuntime && __phoenixRuntime.imeRemoveFocus && __phoenixRuntime.imeRemoveFocus()");
+    }
+
+    // The keyboard came up or went (Mojo.keyboardShown in the app).
+    function keyboardShown(uid, shown) {
+        var w = _windows[uid];
+        if (w && w.runScript)
+            w.runScript("window.__phoenixRuntime && __phoenixRuntime.keyboardShown && __phoenixRuntime.keyboardShown(" + (shown ? "true" : "false") + ")");
+    }
+
+    // Keyboard sounds (com.palm.audio/systemsounds/playFeedback: "key",
+    // "space", "backspace", "return"; SoundPlayerPool::playFeedback). No
+    // system sounds ship yet (GAPS A1): the simulator counts them.
+    property int feedbackCount: 0
+    property string lastFeedback: ""
+    function playFeedback(name) {
+        lastFeedback = name;
+        feedbackCount++;
+    }
 
     // The orientations a window can ask for; anything else is "free".
     function _windowOrientation(o) {
@@ -471,7 +515,7 @@ Item {
     // State only the shell knows (the lock screen, how the UI and the device
     // are turned), which every page gets as it loads; unlike the rest it is
     // not the pages' to overrule.
-    readonly property var _shellOwned: ["deviceLocked", "orientation"]
+    readonly property var _shellOwned: ["deviceLocked", "orientation", "ime"]
     property var _shellStatus: ({})
 
     function pushSystemStatus(changes) {

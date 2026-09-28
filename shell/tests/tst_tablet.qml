@@ -34,7 +34,7 @@ Item {
             while (windows.cards.count > 0)
                 windows.close(windows.cards.get(0).uid);
             shell.cardView.maximizeProgress = 0;
-            shell.keyboardOpen = false;
+            shell.platformKeyboardHeight = 0;
             // A failed test must not leave its notifications to the next.
             shell.notifications.dashboardOpen = false;
             while (windows.notifications.count > 0)
@@ -135,7 +135,8 @@ Item {
             wait(500);
             verify(shell.maximized);
             // With the keyboard up it must go at least 60 px.
-            shell.keyboardOpen = true;
+            shell.platformKeyboardHeight = Theme.px(340);
+            verify(shell.keyboardOpen);
             flickUp(50);
             wait(500);
             verify(shell.maximized);

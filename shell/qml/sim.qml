@@ -5,7 +5,8 @@
 //
 // Context properties set by phoenix-sim:
 //   simScene       "locked" | "cards" | "stacks" | "reorder" | "maximized" | "heldcard" | "launcher" |
-//                  "launcheredit" | "pin" | "lowbattery" | "banner" | "notified" | "dashboard" | "justtype" | "systemmenu" | "empty"
+//                  "launcheredit" | "pin" | "lowbattery" | "banner" | "notified" | "dashboard" | "justtype" | "keyboard" |
+//                  "systemmenu" | "empty"
 //   simFormFactor  "auto" | "phone" | "tablet"
 //   simDensity     device pixels per legacy pixel (--scale, default 1)
 //   simLaunch      app ids to launch (--launch)
@@ -45,6 +46,9 @@ Item {
             anchors.fill: parent
             formFactor: typeof simFormFactor !== "undefined" ? simFormFactor : "auto"
             density: typeof simDensity !== "undefined" ? simDensity : 1
+            // The phones and the TouchPad of luna-sysmgr's day had one
+            // ([VirtualKeyboard] VirtualKeyboardEnabled).
+            virtualKeyboard: true
             source: SimWindowSource { id: windows }
             system: SimSystemStatus {
                 id: status
@@ -124,6 +128,8 @@ Item {
     Connections {
         target: shell
         function onLockedChanged() { windows.pushSystemStatus({ deviceLocked: shell.locked }); }
+        // The keyboard is up (com.palm.systemmanager getSystemStatus ime.visible).
+        function onKeyboardOpenChanged() { windows.pushSystemStatus({ ime: { visible: shell.keyboardOpen } }); }
     }
 
     function statusChanged(name) {
@@ -264,6 +270,9 @@ Item {
             panel.shown = true;
         } else if (scene === "justtype") {
             shell.startJustType("m");
+        } else if (scene === "keyboard") {
+            // Just Type, its field focused: the keyboard comes up.
+            shell.startJustType("");
         }
     }
 

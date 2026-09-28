@@ -30,4 +30,17 @@ public:
     // `nativeScanCode` is the XKB keycode (evdev code + 8). Returns whether
     // the item accepted the press.
     Q_INVOKABLE bool sendKey(QQuickItem *item, int key, quint32 nativeScanCode);
+
+    // The virtual keyboard's keystrokes, as LunaSysMgr's IME sent them
+    // (SysmgrIMEModel::sendKeyEvent, SysmgrIMEDataInterface.cpp:167-190):
+    // a press and a release of `key` with `modifiers` and the character it
+    // types, to whatever has the keyboard focus in the window of `client`
+    // (the focused text field, or the web view whose page has an editable
+    // element focused). `client` gets the active focus first if it has not.
+    // Returns whether the press was accepted.
+    Q_INVOKABLE bool sendImeKey(QQuickItem *client, int key, int modifiers);
+
+    // Text the keyboard enters in one go (".com", "http://":
+    // IMEController::commitText), as an input method commit.
+    Q_INVOKABLE bool commitText(QQuickItem *client, const QString &text);
 };

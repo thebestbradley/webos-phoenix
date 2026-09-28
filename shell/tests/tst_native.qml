@@ -45,4 +45,42 @@ Item {
             verify(!KeyInjector.sendKey(null, Qt.Key_Back, 420));
         }
     }
+
+    TextInput {
+        id: field
+        y: 100
+        width: 200
+        height: 20
+    }
+
+    // The virtual keyboard's keystrokes (SysmgrIMEModel::sendKeyEvent).
+    TestCase {
+        name: "ImeKeys"
+        when: windowShown
+
+        function test_typesIntoTheFocusedField() {
+            field.text = "";
+            verify(KeyInjector.sendImeKey(field, Qt.Key_A, Qt.NoModifier));
+            verify(field.activeFocus);
+            compare(field.text, "a");
+            // Shift: the upper case letter.
+            KeyInjector.sendImeKey(field, Qt.Key_B, Qt.ShiftModifier);
+            // Other characters come with their case (é, 0xe9).
+            KeyInjector.sendImeKey(field, 0xe9, Qt.NoModifier);
+            compare(field.text, "aBé");
+            KeyInjector.sendImeKey(field, Qt.Key_Backspace, Qt.NoModifier);
+            compare(field.text, "aB");
+            KeyInjector.sendImeKey(field, Qt.Key_Left, Qt.NoModifier);
+            KeyInjector.sendImeKey(field, Qt.Key_Period, Qt.NoModifier);
+            compare(field.text, "a.B");
+        }
+
+        function test_commitsText() {
+            field.text = "x";
+            field.cursorPosition = 1;
+            verify(KeyInjector.commitText(field, ".com"));
+            compare(field.text, "x.com");
+            verify(!KeyInjector.commitText(null, ".com"));
+        }
+    }
 }

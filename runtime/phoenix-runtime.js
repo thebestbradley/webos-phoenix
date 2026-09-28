@@ -187,9 +187,11 @@
         enableFullScreenMode: function (on) { host.postToHost("fullScreen", { appId: PalmSystem.appIdentifier, on: !!on }); },
         allowResizeOnPositiveSpaceChange: function () {},
         receivePageUpDownInLandscape: function () {},
-        setManualKeyboardEnabled: function () {},
-        keyboardShow: function () {},
-        keyboardHide: function () {},
+        // The virtual keyboard under the app's control (Enyo's enyo.keyboard manual
+        // mode): see "Virtual keyboard" below.
+        setManualKeyboardEnabled: function (on) { runtime.imeSetManual(on); },
+        keyboardShow: function (type) { runtime.imeManualShow(type); },
+        keyboardHide: function () { runtime.imeManualHide(); },
         editorFocused: function () {},
         paste: function () {},
         copiedToClipboard: function () {},
@@ -1969,6 +1971,106 @@
         try { global.dispatchEvent(new Event("resize")); } catch (e) { /* ignore */ }
     };
 
+    // ---- Virtual keyboard ----------------------------------------------------------------
+    //
+    // On webOS the web runtime was the keyboard's input client: WebKit told
+    // LunaSysMgr's IMEController when an editable element got or lost the
+    // focus, with the field's type (PalmIME::EditorState; luna-sysmgr
+    // Src/ime/IMEController.cpp:125-140), the keyboard then showed, typed
+    // into the element with key events, and hid when it lost the focus. The
+    // shell hears the same here as "inputFocus" host messages
+    // ({ focused, state: { type, actions, flags, enterKeyLabel } }) and types
+    // with real key events into the page's view. Enyo's manual mode
+    // (enyo.keyboard.setManualMode / show / hide over
+    // PalmSystem.setManualKeyboardEnabled / keyboardShow / keyboardHide)
+    // stops following the focus and shows or hides it on request. The shell
+    // tells the app when the keyboard shows or hides, as LunaSysMgr's
+    // CardWindow did (View_KeyboardShown -> Mojo.keyboardShown(bool), which
+    // Enyo turns into its "keyboardShown" event, palm/system/keyboard.js).
+
+    // PalmIME::FieldType (luna-webkit-api palmimedefines.h:33-44), from the
+    // element's type as WebKit named it.
+    var fieldTypes = { password: 1, search: 2, range: 3, email: 4, number: 5, tel: 6, url: 7, color: 8 };
+    var textInputs = ["", "text", "password", "search", "email", "number", "tel", "url"];
+
+    function editable(el) {
+        if (!el || el.disabled || el.readOnly)
+            return false;
+        var tag = (el.tagName || "").toLowerCase();
+        if (tag === "textarea")
+            return true;
+        if (tag === "input")
+            return textInputs.indexOf((el.getAttribute("type") || "").toLowerCase()) >= 0;
+        return !!el.isContentEditable;
+    }
+
+    function editorState(el) {
+        var type = 0;
+        if (el && (el.tagName || "").toLowerCase() === "input")
+            type = fieldTypes[(el.getAttribute("type") || "").toLowerCase()] || 0;
+        return { type: type, actions: 0, flags: 0, enterKeyLabel: "" };
+    }
+
+    var ime = { manual: false, reported: null };
+
+    function reportInput(focused, state) {
+        var key = focused ? JSON.stringify(state) : "";
+        if (ime.reported === key)
+            return;
+        ime.reported = key;
+        host.postToHost("inputFocus", { appId: PalmSystem.appIdentifier, focused: !!focused, state: state || null });
+    }
+
+    function followFocus() {
+        if (ime.manual)
+            return;
+        var doc = global.document;
+        var el = doc && doc.activeElement;
+        if (editable(el))
+            reportInput(true, editorState(el));
+        else
+            reportInput(false);
+    }
+
+    if (global.document) {
+        global.document.addEventListener("focusin", followFocus, true);
+        // After the focus has moved on (focusout fires first).
+        global.document.addEventListener("focusout", function () { setTimeout(followFocus, 0); }, true);
+    }
+
+    runtime.imeSetManual = function (on) {
+        ime.manual = !!on;
+        if (!ime.manual)
+            followFocus();
+    };
+    runtime.imeManualShow = function (type) {
+        if (ime.manual)
+            reportInput(true, { type: Number(type) || 0, actions: 0, flags: 0, enterKeyLabel: "" });
+    };
+    runtime.imeManualHide = function () {
+        if (ime.manual)
+            reportInput(false);
+    };
+
+    // The keyboard's hide key: the element loses the focus
+    // (IMEController::hideIME -> InputClient::removeInputFocus).
+    runtime.imeRemoveFocus = function () {
+        var el = global.document && global.document.activeElement;
+        if (el && el.blur && el !== global.document.body)
+            el.blur();
+        if (ime.manual)
+            reportInput(false);
+    };
+
+    // The keyboard was shown (before the window shrinks) or hidden (after it
+    // grew back).
+    runtime.keyboardShown = function (shown) {
+        var mojo = global.Mojo;
+        if (mojo && typeof mojo.keyboardShown === "function") {
+            try { mojo.keyboardShown(!!shown); } catch (e) { console.error("[phoenix-runtime] keyboardShown failed", e); }
+        }
+    };
+
     // ================================================================================
     // Settings services (simulated webOS OSE APIs used by apps/settings)
     // ================================================================================
@@ -2587,11 +2689,11 @@
             },
             // How the UI and the device are turned, as the shell last said
             // ({ orientation: { ui, device } }); subscribe to follow them.
-            // No virtual keyboard in the simulator: ime.visible is false.
+            // ime.visible: the virtual keyboard is up, as the shell last said.
             "/getSystemStatus": function (p, reply, ctx) {
                 watch(p, reply, ctx, function () {
                     var o = store.get("orientation", null) || {};
-                    return ok({ ime: { visible: false }, orientation: { ui: o.ui || "up", device: o.device || "up" } });
+                    return ok({ ime: { visible: !!store.get("imeVisible", false) }, orientation: { ui: o.ui || "up", device: o.device || "up" } });
                 });
             },
             "/getDeviceLockMode": function (p, reply) {
@@ -2652,6 +2754,11 @@
             // How the UI and the device are turned (getSystemStatus).
             if (st.orientation && JSON.stringify(st.orientation) !== JSON.stringify(store.get("orientation", null))) {
                 store.set("orientation", { ui: st.orientation.ui, device: st.orientation.device });
+                changed();
+            }
+            // The virtual keyboard is up ({ ime: { visible } }, getSystemStatus).
+            if (st.ime && !!st.ime.visible !== !!store.get("imeVisible", false)) {
+                store.set("imeVisible", !!st.ime.visible);
                 changed();
             }
             suppressHost = true;
