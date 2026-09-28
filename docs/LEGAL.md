@@ -72,6 +72,11 @@ data use "Phoenix Account".
   launcher icon is drawn by `apps/files/tools/render-icon.cjs`, the list icons
   and glyphs are simple SVG drawn for Phoenix, and the rest is the Enyo 1.0
   art above.
+- Tasks (`apps/tasks`) is a new app after the idea of the webOS 1.x Tasks
+  app, which Palm never open-sourced; nothing was taken from it. Its db8
+  kinds are defined by Phoenix. The launcher icon is drawn by
+  `apps/tasks/tools/render-icon.cjs` (original); the rest is the Enyo 1.0
+  art above.
 - npm dependencies (React, Vite, ...) are MIT-licensed; the Settings app lists
   the ones it bundles under Device Info > Open source licenses.
 

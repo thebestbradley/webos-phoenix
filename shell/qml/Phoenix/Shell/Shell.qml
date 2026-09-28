@@ -37,12 +37,13 @@ FocusScope {
 
     // ---- Navigation -----------------------------------------------------------
 
-    function launch(appId) {
+    // params (optional): launch params, e.g. from a tapped notification.
+    function launch(appId, params) {
         if (!source)
             return;
         launcher.open = false;
         justType.open = false;
-        var uid = source.launch(appId, cards.currentUid);
+        var uid = source.launch(appId, cards.currentUid, params || null);
         if (uid !== "")
             Qt.callLater(cards.focusLaunched, uid);
     }
@@ -219,7 +220,7 @@ FocusScope {
         anchors.bottom: gesture.top
         model: shell.source ? shell.source.notifications : null
         onDismissRequested: (index) => shell.source.dismissNotification(index)
-        onActivated: (appId) => shell.launch(appId)
+        onActivated: (appId, params) => shell.launch(appId, params ? JSON.parse(params) : null)
     }
 
     LockScreen {

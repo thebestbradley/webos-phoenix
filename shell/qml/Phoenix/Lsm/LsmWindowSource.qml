@@ -171,14 +171,16 @@ Item {
 
     // Launching is asynchronous: the card appears when the surface maps and
     // cardFocusRequested() fires. Returns the uid only if already running.
-    function launch(appId, afterUid) {
+    // params: launch params (a tapped notification's); SAM relaunches a
+    // running app with them.
+    function launch(appId, afterUid, params) {
         var running = runningUid(appId);
-        if (running !== "")
+        if (running !== "" && !params)
             return running;
         _pendingAfterUid = afterUid || "";
         LS.adhoc.call("luna://com.webos.applicationManager", "/launch",
-                      JSON.stringify({ id: appId, params: {} }));
-        return "";
+                      JSON.stringify({ id: appId, params: params || {} }));
+        return running;
     }
 
     function moveCard(from, to) {
@@ -208,9 +210,9 @@ Item {
         return false;
     }
 
-    function notify(appId, title, body) {
+    function notify(appId, title, body, params) {
         notifications.append({ id: "n" + Date.now(), appId: appId, title: title, body: body || "",
-                               color: "#666666", glyph: "!" });
+                               color: "#666666", glyph: "!", params: params ? JSON.stringify(params) : "" });
     }
 
     function dismissNotification(index) {

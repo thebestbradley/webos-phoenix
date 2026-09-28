@@ -63,5 +63,9 @@
     "org.webosphoenix.files": {
         "status": "works",
         "note": "Phoenix Files (React, apps/files); tools/test-files.cjs drives it"
+    },
+    "org.webosphoenix.tasks": {
+        "status": "works",
+        "note": "Phoenix Tasks (React, apps/tasks); tools/test-tasks.cjs drives it"
     }
 }

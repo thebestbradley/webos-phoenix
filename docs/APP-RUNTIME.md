@@ -1,7 +1,7 @@
 # Web app runtime
 
 Phoenix runs web apps: the original Open webOS apps (Enyo 1.0, 2011–2012)
-and new Phoenix apps (Settings, Camera, Photos, Music, ...). This page explains how they run
+and new Phoenix apps (Settings, Camera, Photos, Music, Tasks, ...). This page explains how they run
 in the simulator, in a desktop browser, and on a device.
 
 ## Where the apps come from
@@ -96,8 +96,10 @@ The Settings app's services (Wi-Fi, Bluetooth, settings service, audio, ...)
 are simulated in their own clearly marked block at the end of the runtime;
 see [Settings](#settings) below. The media services (media indexer, camera,
 media files) follow in another; see [Camera, Photos and Music](#camera-photos-and-music).
-The last block is the file manager service and the legacy app installer used
-by Files; see [Files](#files).
+Next is the file manager service and the legacy app installer used by
+Files; see [Files](#files). The last block is the activity manager
+(`com.palm.activitymanager`) and `com.palm.power` timeouts, which fire
+scheduled activities such as Tasks' reminders; see [Tasks](#tasks).
 
 ## Running apps
 
@@ -176,8 +178,10 @@ All seven start cleanly and are usable on phone and tablet
 
 - **Servers**: no mail, contacts or calendar sync; new accounts cannot be
   signed in (nothing to validate credentials against).
-- **Background services**: alarms and calendar reminders are stored but never
-  fire (no activity manager); no dashboards or banners from them.
+- **Background services**: calendar reminders are stored but never fire (the
+  reminders service is not simulated). The simulated activity manager now
+  fires scheduled activities, so the Clock's alarms launch Clock with their
+  ring params, but that is not yet checked end to end; no alarm popups.
 - **Contacts**: no automatic linking of similar contacts, photos, or vCard
   import/export.
 - The Contacts and Accounts sources listed in `depends.js` but missing from the
@@ -194,7 +198,7 @@ texts.
 
 Camera, Photos and Music start cleanly too, and `node tools/test-media.cjs
 [--tablet]` drives them. So does Files, driven by `node tools/test-files.cjs
-[--tablet]`.
+[--tablet]`, and Tasks, driven by `node tools/test-tasks.cjs [--tablet]`.
 
 ## Phoenix apps (React + TypeScript)
 
@@ -202,13 +206,14 @@ New Phoenix apps live in `apps/`, an npm workspace:
 
 | Path | What |
 | --- | --- |
-| `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
+| `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers), `tasks.ts` Tasks (`com.palm.task:1`, `com.palm.tasklist:1`, reminder activities, `postNotification`); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
 | `apps/shared/phoenix-ui` (`@phoenix/ui`) | React components with the webOS 1.x/2.x look, drawn with the Enyo 1.0 "Heritage" artwork (copied into `assets/enyo`, see its `PROVENANCE.md`): `PageHeader`, `Group`, `Row`, `Divider`, `ToggleButton`, `Slider` (also as a progress/seek bar), `ListSelector`, `Picker`, `PopupMenu`, `Button`, `Drawer`, `DividerDrawer`, `Dialog`, `Spinner`, `TextField`; for Phone and Messaging the webOS dial pad (`Dialpad`, `DialButton`, `BackspaceButton`, from Enyo's `lib/telephony` art), the command menu (`ToolBar`, `RadioToolGroup`, `ToolButton`), `Avatar` and number / time formatting (`formatDuration` takes milliseconds); for the media apps `Toolbar`, `IconToolButton`, `GroupedToolButtons`, `Glyph` and `formatSeconds`; for Files `CheckBox` (Heritage `checkbox.png`) and file glyphs (copy, cut, paste, new folder, ...); `BackProvider`/`useBack` for the back gesture |
 | `apps/settings` | Settings (see below) |
 | `apps/phone`, `apps/messaging` | Phone and Messaging (see below) |
 | `apps/camera`, `apps/photos`, `apps/music` | Camera, Photos, Music (see [below](#camera-photos-and-music)); `@phoenix/luna`'s `media.ts` wraps their services |
 | `apps/media-samples` | Generated demo photos and songs, mounted at `/media/internal/samples` |
 | `apps/files` | Files (see [below](#files)); `apps/files/service` is its Node.js Luna service for the device |
+| `apps/tasks` | Tasks (see [below](#tasks)) |
 
 Build (Node.js 20 or newer):
 
@@ -577,3 +582,91 @@ makes and renames a folder, copies and pastes a file twice, edits and saves
 text, makes a new file, goes back, shows info, deletes a folder, views
 pictures, installs the `.ipk`, opens a song with Music and opens a read-only
 system file, with screenshots in `build/files-tests/`.
+
+## Tasks
+
+`apps/tasks` (`org.webosphoenix.tasks`, Apps tab) brings back the Tasks app
+of webOS 1.x: to-do lists, one of them synced per account through Synergy
+(Exchange's tasks, for one). Palm never open-sourced it, so it is new, in
+the webOS 2.x/3.x style of the other Phoenix apps:
+
+- **Lists**: Today, Upcoming and Overdue gather tasks from every list (with
+  the number of open tasks; Overdue's in red); below them the lists, Inbox
+  first. A list is added from the command menu, and renamed or deleted
+  (with its tasks) from the header menu; the Inbox cannot be deleted. Lists
+  that sync with an account are grouped under its name.
+- **Tasks**: open tasks first, by due date, then priority (`!!!`, `!!`,
+  `!`); overdue dates in red, a bell for a pending reminder. Tick a task to
+  complete it (struck through, moved to the bottom); the check button in
+  the command menu (or the header menu) hides completed tasks, and that is
+  remembered. "Add a task" at the top adds one at once, due today in Today
+  and tomorrow in Upcoming.
+- **Editor**: summary, notes, list, priority, completed, the due date (all
+  day, or at a time) and the reminder, with the Heritage date and time
+  pickers. It saves on Done or the back gesture, as Mojo scenes did; Delete
+  asks first.
+- **Tablet**: the lists on the left, the tasks or the editor on the right.
+  **Phone**: one at a time; the back gesture goes back.
+
+Launch params: `{taskId, fromReminder?}` opens a task, `{text}` starts a new
+one (Just Type's "New Task" passes the typed text URI-encoded), and
+`{reminder: taskId}` is a reminder coming due (see below).
+
+### Data and services
+
+| What | Service and methods | Source |
+| --- | --- | --- |
+| Lists | db8 `com.palm.tasklist:1`: `name`, `accountId` (`""` on this device), `sortOrder`, `isDefault` (the Inbox) | Phoenix. Open webOS released no task kinds: only the TASKS capability and Exchange's `com.palm.task.eas:1` sub-kind in the account templates (`third_party/app-services/account-templates`) |
+| Tasks | db8 `com.palm.task:1`: `summary`, `notes`, `due` (ms; local midnight with `allDay`), `allDay`, `completed`, `completedTime`, `priority` (iCalendar: 0 none, 1 high, 5 medium, 9 low), `listId`, `accountId`, `remind` (ms), `uid`, `createdTime`, `modifiedTime` | Phoenix, shaped after an iCalendar VTODO (SUMMARY, DESCRIPTION, DUE as DATE or DATE-TIME, STATUS/COMPLETED, PRIORITY, VALARM, UID, CREATED, LAST-MODIFIED) for a later CalDAV sync; an account's synced tasks would go in its own sub-kind, like `com.palm.task.eas:1` |
+| Reminders | `com.palm.activitymanager` `create {activity: {name: "org.webosphoenix.tasks.remind.<taskId>", type: {foreground, persist}, schedule: {start: "YYYY-MM-DD HH:MM:SSZ"}, callback: {method: "palm://com.palm.applicationManager/launch", params: {id, params: {reminder: taskId}}}}, start, replace}`; `complete {activityName}` when the task is done, deleted, changed or has fired | the Clock app's alarms (`core-apps/com.palm.app.clock/utility/activitymanager.js`); the UTC schedule format of the calendar reminders service (`app-services/com.palm.service.calendar.reminders/utils.js`) |
+| Notification | `phoenixHost.postToHost("notification", {appId, title, body, params: {taskId, fromReminder: true}})`, else `PalmSystem.addBannerMessage` | as the runtime does for texts (see [Phone and Messaging](#phone-and-messaging)) |
+| Just Type | `universalSearch` in `appinfo.json`: the action "New Task" (`launchParam: "text"`) and the content search "Tasks" (db8 `?` search on `summary`, `launchParam: "taskId"`) | `core-apps/com.palm.app.calendar/appinfo.json` |
+
+The kinds and their db8 permissions (Just Type may read tasks; any caller
+may extend them with a sub-kind) are in `public/configuration/db`, which
+`tools/install-rootfs.py` installs to `/etc/palm/db`.
+
+### Reminders
+
+1. Saving a task with a reminder time ahead of now (and not completed)
+   creates or replaces its activity; anything else completes it.
+2. When the time comes, the activity manager calls the callback, adding
+   `$activity {activityId, name}` to the app's launch params (Calendar reads
+   them from there too): the Tasks app gets `{reminder: taskId, $activity}`,
+   as a relaunch (`webOSRelaunch`) if it is running.
+3. The app completes the activity and, unless the task is gone or done,
+   posts a notification: the task's summary and "Due ..." (or its first
+   line of notes). It does not change what it shows.
+4. The shell shows a banner and a dashboard item. Tapping it launches the
+   app with the notification's `params`; the shell's notification model has
+   no action buttons, so the task opens with a reminder bar offering
+   **Snooze 10 min** (a new reminder ten minutes on) and **Done** (complete).
+
+### In the simulator
+
+The runtime's last block simulates the activity manager: `create`
+(`replace`, error 17 for a name in use), `complete` (with `restart`,
+`schedule`, `callback`), `cancel`, `stop`, `getDetails`, `list`, and the
+older `com.palm.power` `timeout/set {key, at | in, uri, params}` and
+`timeout/clear` on the same schedule. Schedule times are UTC unless
+`local: true`. Activities are kept in the shared store (`activities`), so
+every page sees them and any page can fire one: the target app's own page
+at once (a relaunch in place), other pages a second later (the shell then
+launches or relaunches the app; `SimWindowSource` does not bring up the
+card of a launch whose params carry `$activity`). A page claims an activity
+in the store before firing it, so it fires once; one that came due while no
+page ran fires when the next page starts. Activities without a schedule are
+kept but never fire. Tests move the clock on with
+`__phoenixRuntime.activities.fireDue(at)`; `activities.list()` shows what is
+scheduled.
+
+In phoenix-sim, notifications carry their `params` (JSON) in
+`SimWindowSource.notifications`, and tapping one in the dashboard launches
+the app with them (`Shell.launch(appId, params)`).
+
+`node tools/test-tasks.cjs [--tablet]` makes a list, adds tasks (quickly and
+in the editor), completes and hides them, checks Today, Upcoming and
+Overdue, edits a task, sets a reminder and fires it, opens it from the
+notification and snoozes and completes it, renames and deletes, and uses
+Just Type's task search and "New Task", with screenshots in
+`build/tasks-tests/`.

@@ -8,6 +8,6 @@ export default defineConfig({
     test: {
         environment: "jsdom",
         include: ["shared/*/src/**/*.test.{ts,tsx}", "settings/src/**/*.test.{ts,tsx}",
-                  "{phone,messaging,camera,photos,music,files}/src/**/*.test.{ts,tsx}", "files/service/**/*.test.ts"],
+                  "{phone,messaging,camera,photos,music,files,tasks}/src/**/*.test.{ts,tsx}", "files/service/**/*.test.ts"],
     },
 });

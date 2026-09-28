@@ -5,17 +5,18 @@
 //   1. a new notification scrolls in as a one-line banner at the bottom,
 //   2. then collapses into a small icon in the notification bar,
 //   3. tapping the bar opens the dashboard, where each item can be tapped
-//      or swiped sideways to dismiss it.
+//      or swiped sideways to dismiss it. Tapping launches the app with
+//      the notification's params (e.g. the task a reminder is for).
 
 import QtQuick
 
 Item {
     id: root
 
-    property var model            // ListModel: appId, title, body, color, glyph
+    property var model            // ListModel: appId, title, body, color, glyph, params (JSON or "")
     property bool dashboardOpen: false
     signal dismissRequested(int index)
-    signal activated(string appId)
+    signal activated(string appId, string params)
 
     readonly property bool hasNotifications: model && model.count > 0
     // Height the bar currently occupies at the bottom of the screen.
@@ -165,6 +166,7 @@ Item {
                 required property string body
                 required property color color
                 required property string glyph
+                required property string params
                 width: list.width
                 height: Theme.dashboardItemHeight
 
@@ -218,7 +220,7 @@ Item {
                                 content.x = 0;
                         }
                         onClicked: {
-                            root.activated(item.appId);
+                            root.activated(item.appId, item.params);
                             root.dismissRequested(item.index);
                         }
                     }

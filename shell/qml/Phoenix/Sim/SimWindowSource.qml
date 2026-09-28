@@ -17,7 +17,8 @@
 //   setCardGroup(uid, groupId), newGroupId()
 //   cardFocusRequested(uid)  signal: show this card maximized (e.g. a new
 //                            child window opened by an app)
-//   notifications ListModel  id, appId, title, body, color, glyph
+//   notifications ListModel  id, appId, title, body, color, glyph, params (launch
+//                            params for the app when tapped, as JSON, or "")
 //   cardCloseRequested(uid)  signal: a window asked to close (window.close())
 //
 // Optional (the shell has a built-in fallback without them):
@@ -218,25 +219,30 @@ Item {
             // A launch point whose params match wins (e.g. {id: settings,
             // params: {page: "wifi"}} opens the Wi-Fi card).
             var params = payload.params || {};
+            // A scheduled activity (an alarm, a reminder) launches in the
+            // background: the app decides what to show, e.g. a notification.
+            var background = !!params.$activity;
             var target = _launchTarget(payload.id, params);
             var running = runningUid(target);
             if (running !== "") {
                 if (target === payload.id && Object.keys(params).length > 0 && _windows[running] && _windows[running].relaunch)
                     _windows[running].relaunch(params);
-                cardFocusRequested(running);
+                if (!background)
+                    cardFocusRequested(running);
                 return;
             }
             var launched = launch(target, uid, target === payload.id ? params : null);
-            if (launched !== "")
+            if (launched !== "" && !background)
                 cardFocusRequested(launched);
         } else if (type === "banner") {
             var info = appInfo(appId);
             notify(appId, info ? info.title : appId, payload.message || "");
         } else if (type === "notification") {
             // A notification for another app (e.g. a text the telephony
-            // service received for Messaging): {appId, title, body}.
+            // service received for Messaging, a Tasks reminder): {appId,
+            // title, body, params?}; tapping it launches the app with params.
             var target = payload.appId && appInfo(payload.appId) ? payload.appId : appId;
-            notify(target, payload.title || "", payload.body || "");
+            notify(target, payload.title || "", payload.body || "", payload.params);
         } else if (type === "systemStatus") {
             // The pages are in step with the shell again.
             _pendingStatus = null;
@@ -446,8 +452,12 @@ Item {
     // params: launch params for a web app (optional; launch points carry their own).
     function launch(appId, afterUid, params) {
         var existing = runningUid(appId);
-        if (existing !== "")
+        if (existing !== "") {
+            // Running already: new params go to the page (webOSRelaunch).
+            if (params && Object.keys(params).length > 0 && _windows[existing] && _windows[existing].relaunch)
+                _windows[existing].relaunch(params);
             return existing;
+        }
         var info = appInfo(appId);
         if (!info)
             return "";
@@ -508,12 +518,14 @@ Item {
         return win ? win.back() : false;
     }
 
-    function notify(appId, titleText, body) {
+    // params: launch params for the app when the notification is tapped.
+    function notify(appId, titleText, body, params) {
         var info = appInfo(appId) || { color: "#666666", glyph: "!" };
         notifications.append({
             id: "n" + Date.now() + "_" + notifications.count,
             appId: appId, title: titleText, body: body,
-            color: info.color, glyph: info.glyph
+            color: info.color, glyph: info.glyph,
+            params: params && typeof params === "object" ? JSON.stringify(params) : ""
         });
     }
 

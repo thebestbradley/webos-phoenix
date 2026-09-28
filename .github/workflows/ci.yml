@@ -69,6 +69,8 @@ jobs:
           node tools/test-browser.cjs --tablet --out app-tests/browser-tablet
           node tools/test-files.cjs --out app-tests/files-phone
           node tools/test-files.cjs --tablet --out app-tests/files-tablet
+          node tools/test-tasks.cjs --out app-tests/tasks-phone
+          node tools/test-tasks.cjs --tablet --out app-tests/tasks-tablet
 
       - name: Screenshots
         run: |
