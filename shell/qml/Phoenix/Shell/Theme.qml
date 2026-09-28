@@ -78,6 +78,10 @@ QtObject {
     // not, so Phoenix reserves a thin on-screen strip that behaves the same
     // (swipe up = card view, swipe left = back). 0 disables it.
     property int gestureAreaHeight: tablet ? 0 : px(20)
+    // Tablet bottom-edge flick (G1): where it starts, and how far it goes.
+    readonly property int bezelEdgeHeight: px(8)                     // Phoenix: stands in for the bezel
+    readonly property int bezelFlickMinimum: 30                       // Phoenix: as GestureArea's swipe
+    readonly property int bezelFlickMinimumWithKeyboard: 60           // SystemUiController.cpp:72
 
     // ---- Card view (Src/lunaui/cards/CardWindowManager.cpp:53-56) ---------
 

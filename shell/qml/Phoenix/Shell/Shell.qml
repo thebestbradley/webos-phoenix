@@ -524,6 +524,33 @@ FocusScope {
         onCloseRequested: systemMenu.open = false
     }
 
+    // Tablet: a flick up from the bottom edge does what the phone's gesture
+    // area swipe-up does (SystemUiController::handleScreenEdgeFlickGesture,
+    // SystemUiController.cpp:2041-2121); with the keyboard up it must travel
+    // at least 60 px (kFlickMinimumYLengthWithKeyboardUp, :72). The TouchPad's
+    // panel reported the flick from its bezel; here a thin strip along the
+    // bottom edge starts it.
+    property bool keyboardOpen: false
+    MouseArea {
+        id: bezel
+        objectName: "bezelSwipe"
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: Theme.bezelEdgeHeight
+        enabled: shell.tablet && !shell.locked
+        preventStealing: true
+        property real sx
+        property real sy
+        onPressed: (m) => { sx = m.x; sy = m.y; }
+        onReleased: (m) => {
+            var dy = sy - m.y;
+            var min = shell.keyboardOpen ? Theme.px(Theme.bezelFlickMinimumWithKeyboard) : Theme.px(Theme.bezelFlickMinimum);
+            if (dy >= min && dy > Math.abs(m.x - sx))
+                shell.gestureUp();
+        }
+    }
+
     GestureArea {
         id: gesture
         anchors.left: parent.left
