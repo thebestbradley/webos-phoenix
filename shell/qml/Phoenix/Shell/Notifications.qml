@@ -21,13 +21,16 @@
 // Tablets (TouchPad): the banner and the notification icons live in the
 // status bar, and the dashboard is a 320 px drop-down under it, over the
 // apps (DashboardWindowManager.cpp:62-63, 1234-1260).
+//
+// Tapping a notification launches its app with the notification's params
+// (e.g. the task a reminder is for).
 
 import QtQuick
 
 Item {
     id: root
 
-    property var model            // ListModel: appId, title, body, color, glyph, icon
+    property var model            // ListModel: appId, title, body, color, glyph, icon, params (JSON or "")
     property bool dashboardOpen: false
     // Tablet: where the status bar's system indicators begin (from the right).
     property real statusBarRightInset: 0
@@ -35,7 +38,7 @@ Item {
     property real screenHeight: height
 
     signal dismissRequested(int index)
-    signal activated(string appId)
+    signal activated(string appId, string params)
 
     readonly property bool overlay: Theme.tablet
     readonly property bool hasNotifications: model && model.count > 0
@@ -278,6 +281,7 @@ Item {
                 required property color color
                 required property string glyph
                 required property string icon
+                required property string params
                 width: list.width
                 height: Theme.dashboardItemHeight
 
@@ -334,7 +338,7 @@ Item {
                                 content.x = 0;
                         }
                         onClicked: {
-                            root.activated(item.appId);
+                            root.activated(item.appId, item.params);
                             root.dismissRequested(item.index);
                         }
                     }

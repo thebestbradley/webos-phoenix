@@ -50,6 +50,14 @@ Photos. The demo photos and chiptunes are generated.*
 Preware file manager), designed anew in the webOS 2.x style, against a
 simulated filesystem service.*
 
+| Tasks | Editor | Reminder | Tablet |
+| --- | --- | --- | --- |
+| ![](docs/screenshots/tasks-list.png) | ![](docs/screenshots/tasks-editor.png) | ![](docs/screenshots/tasks-reminder.png) | ![](docs/screenshots/tasks-tablet.png) |
+
+*Tasks, after the webOS 1.x app: lists, due dates, priorities, Today /
+Upcoming / Overdue, and reminders scheduled with the activity manager that
+reach the shell as notifications (tap one to snooze it or mark it done).*
+
 ## Status
 
 **Milestone 0: the shell runs in a desktop simulator.** You can use the card
@@ -72,7 +80,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `shell/qml/Phoenix/Sim` | Mock apps and device status for the desktop simulator |
 | `shell/qml/Phoenix/Lsm`, `shell/qml/WebOSCompositor` | Adapter that plugs the shell into webOS OSE's `luna-surfacemanager` |
 | `shell/sim` | `phoenix-sim`, the desktop runner (also takes screenshots) |
-| `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files), with the shared `@phoenix/ui` components and `@phoenix/luna` service client, generated demo media (`apps/media-samples`), and the Files app's Node.js Luna service (`apps/files/service`) |
+| `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Tasks), with the shared `@phoenix/ui` components and `@phoenix/luna` service client, generated demo media (`apps/media-samples`), and the Files app's Node.js Luna service (`apps/files/service`) |
 | `runtime/` | The webOS web app runtime for the simulator and browsers (`PalmSystem`, simulated Luna services) |
 | `shell/tests` | Behaviour tests (`qmltestrunner`) |
 | `shell/assets/openwebos` | Original Open webOS system UI artwork (Apache-2.0) |
@@ -142,6 +150,7 @@ node tools/test-apps.cjs && node tools/test-settings.cjs   # needs Playwright
 node tools/test-phone-messaging.cjs                        # calls and texts
 node tools/test-media.cjs                                   # Camera, Photos, Music
 node tools/test-files.cjs                                   # Files
+node tools/test-tasks.cjs                                   # Tasks and reminders
 ```
 
 ## Build a webOS OSE image (experimental)

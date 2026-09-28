@@ -1,0 +1,14 @@
+[
+    {
+        "type": "db.kind",
+        "object": "com.palm.tasklist:1",
+        "caller": "org.webosphoenix.tasks",
+        "operations": { "create": "allow", "read": "allow", "update": "allow", "delete": "allow" }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.tasklist:1",
+        "caller": "*",
+        "operations": { "extend": "allow" }
+    }
+]

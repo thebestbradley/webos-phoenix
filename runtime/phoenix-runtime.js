@@ -4082,4 +4082,235 @@
             errors: E
         };
     })();
+
+    // ================================================================================
+    // Activity manager and alarms (com.palm.activitymanager, com.palm.power timeout;
+    // Tasks reminders, apps/tasks)
+    // ================================================================================
+    //
+    // Legacy webOS apps scheduled alarms as activities with a schedule whose
+    // callback runs when the time comes; the Clock app's alarms
+    // (com.palm.app.clock utility/activitymanager.js), Calendar's midnight
+    // icon update (app/AppIcon.js) and the calendar reminders service
+    // (app-services com.palm.service.calendar.reminders) all do:
+    //
+    //   create {activity: {name, description, type, schedule: {start, local?},
+    //           callback: {method, params}}, start, replace}  -> {activityId}
+    //   complete {activityId | activityName, restart?, schedule?, callback?}
+    //   cancel / stop {activityId | activityName}
+    //   getDetails {activityId | activityName}  -> {activity}
+    //   list  -> {activities}
+    //
+    // schedule.start is "YYYY-MM-DD HH:MM:SS", in UTC (with or without a
+    // trailing Z) unless "local": true. When it comes, the callback is
+    // called with $activity {activityId, name} added to its params; for
+    // an application manager launch, inside the app's launch params (where
+    // Calendar reads params.$activity.activityId). A fired activity stays
+    // until it is completed or replaced, and is not fired again. Activities
+    // without a schedule are kept but never fire here (they wait on
+    // triggers the simulator does not have).
+    //
+    // The older alarm API, com.palm.power timeout/set {key, at: "MM/DD/YYYY
+    // HH:MM:SS" (UTC) | in: "HH:MM:SS", uri, params} and timeout/clear {key},
+    // goes on the same schedule (as activity "timeout:" + key).
+    //
+    // Activities live in the shared store ("activities"), so every app page
+    // sees them and any page may fire one: the page of the app a launch is
+    // for fires it at once (as OSE's webOSRelaunch, the card is not brought
+    // up: the app decides what to show), other pages a second later (the
+    // shell then starts or relaunches the app without focusing its card).
+    // One page claims each activity in the store before firing it. What is
+    // due while no page runs fires when the next page starts.
+    //
+    // For tests: __phoenixRuntime.activities.fireDue(at) fires everything
+    // due by `at` (ms) at once, as if the clock had moved on; list() shows
+    // what is scheduled.
+    (function activityManagerService() {
+        var KEY = "activities";
+        var GRACE_MS = 1000;          // other pages wait this long for the app's own page
+        var MAX_WAIT_MS = 60000;      // re-check at least this often (clock changes)
+        var timer = null;
+
+        function load() { return store.get(KEY, { nextId: 1, byName: {} }); }
+        function save(st) { store.set(KEY, st); }
+
+        // "2026-09-28 14:05:00Z" (UTC), or local time with local: true.
+        function parseStart(schedule) {
+            var m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?(Z)?$/.exec(String(schedule && schedule.start || ""));
+            if (!m) return null;
+            var f = [+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)];
+            return schedule.local && !m[7] ? new Date(f[0], f[1], f[2], f[3], f[4], f[5]).getTime()
+                                          : Date.UTC(f[0], f[1], f[2], f[3], f[4], f[5]);
+        }
+
+        function find(st, p) {
+            if (p.activityName && st.byName[p.activityName]) return st.byName[p.activityName];
+            for (var n in st.byName)
+                if (st.byName[n].activityId === p.activityId) return st.byName[n];
+            return null;
+        }
+
+        function details(a) {
+            return { activityId: a.activityId, name: a.name, description: a.description || "", type: a.type || {},
+                     schedule: a.schedule, callback: a.callback, creator: a.creator,
+                     state: a.fired ? "running" : a.due !== null ? "waiting" : "queued" };
+        }
+
+        function create(p, reply) {
+            var a = p.activity;
+            if (!a || !a.name) { reply(fail(-1, "activity.name is required")); return; }
+            var st = load();
+            var old = st.byName[a.name];
+            if (old && !p.replace) { reply(fail(17, "Activity with that name already exists")); return; }
+            var due = a.schedule ? parseStart(a.schedule) : null;
+            if (a.schedule && a.schedule.start && due === null) { reply(fail(22, "Invalid schedule start: " + a.schedule.start)); return; }
+            var entry = {
+                activityId: st.nextId++, name: a.name, description: a.description, type: a.type,
+                schedule: a.schedule || null, callback: a.callback || null, creator: PalmSystem.appIdentifier,
+                due: p.start === false ? null : due, fired: false
+            };
+            st.byName[a.name] = entry;
+            save(st);
+            reply(ok({ activityId: entry.activityId }));
+            arm();
+        }
+
+        function complete(p, reply) {
+            var st = load(), a = find(st, p);
+            if (!a) { reply(fail(2, "Activity not found")); return; }
+            if (p.restart) {
+                if (p.schedule) a.schedule = p.schedule;
+                if (p.callback) a.callback = p.callback;
+                a.due = a.schedule ? parseStart(a.schedule) : null;
+                a.fired = false;
+            } else {
+                delete st.byName[a.name];
+            }
+            save(st);
+            reply(ok({ activityId: a.activityId }));
+            arm();
+        }
+
+        function cancel(p, reply) {
+            var st = load(), a = find(st, p);
+            if (!a) { reply(fail(2, "Activity not found")); return; }
+            delete st.byName[a.name];
+            save(st);
+            reply(ok({ activityId: a.activityId }));
+            arm();
+        }
+
+        function isAppLaunch(method) {
+            return /^(?:palm|luna):\/\/com\.(?:palm|webos)\.applicationManager\/(?:launch|open)\/?$/.test(String(method || ""));
+        }
+
+        function forThisPage(a) {
+            return !!a.callback && isAppLaunch(a.callback.method) && a.callback.params &&
+                a.callback.params.id === PalmSystem.appIdentifier;
+        }
+
+        function fire(a) {
+            if (!a.callback || !a.callback.method) return;
+            var act = { activityId: a.activityId, name: a.name };
+            var params = clone(a.callback.params || {});
+            if (isAppLaunch(a.callback.method) && params.id) {
+                params.params = params.params || {};
+                params.params.$activity = act;
+                if (params.id === PalmSystem.appIdentifier && runtime.relaunch) {
+                    runtime.relaunch(params.params);
+                    return;
+                }
+            } else {
+                params.$activity = act;
+            }
+            dispatch(a.callback.method, params, function () {}, { cancelled: function () { return true; }, onCancel: null });
+        }
+
+        // Fire what is due (for this page: see above). `at` forces the time.
+        function check(at) {
+            var now = at === undefined ? Date.now() : at;
+            var st = load(), due = [];
+            for (var n in st.byName) {
+                var a = st.byName[n];
+                if (a.fired || a.due === null || a.due === undefined || a.due > now) continue;
+                if (at === undefined && !forThisPage(a) && now < a.due + GRACE_MS) continue;
+                a.fired = true;
+                due.push(a);
+            }
+            if (due.length) save(st);
+            due.sort(function (x, y) { return x.due - y.due; }).forEach(fire);
+            arm();
+            return due.length;
+        }
+
+        function arm() {
+            if (timer) clearTimeout(timer);
+            timer = null;
+            var st = load(), next = Infinity;
+            for (var n in st.byName) {
+                var a = st.byName[n];
+                if (a.fired || a.due === null || a.due === undefined) continue;
+                next = Math.min(next, forThisPage(a) ? a.due : a.due + GRACE_MS);
+            }
+            if (next === Infinity) return;
+            timer = setTimeout(function () { timer = null; check(); },
+                               Math.max(0, Math.min(MAX_WAIT_MS, next - Date.now())));
+        }
+
+        register(["com.palm.activitymanager"], {
+            "/create": create,
+            "/complete": complete,
+            "/cancel": cancel,
+            "/stop": cancel,
+            "/getDetails": function (p, reply) {
+                var a = find(load(), p);
+                reply(a ? ok({ activity: details(a) }) : fail(2, "Activity not found"));
+            },
+            "/list": function (p, reply) {
+                var st = load(), out = [];
+                for (var n in st.byName) out.push(details(st.byName[n]));
+                reply(ok({ activities: out }));
+            },
+            // adopt, release, monitor, focus, ...: nothing to do here.
+            "*": function (p, reply) { reply(ok({ activityId: p.activityId || 0 })); }
+        });
+
+        // com.palm.power timeout/set and timeout/clear (the pre-activity alarm API).
+        var power = runtime.services["com.palm.power"];
+        if (power) {
+            power["/timeout/set"] = function (p, reply) {
+                if (!p.key || !p.uri) { reply(fail(-1, "key and uri are required")); return; }
+                var start, m;
+                if (p.at && (m = /^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})$/.exec(p.at)))
+                    start = m[3] + "-" + m[1] + "-" + m[2] + " " + m[4] + ":" + m[5] + ":" + m[6] + "Z";
+                else if (p["in"] && (m = /^(\d{2}):(\d{2}):(\d{2})$/.exec(p["in"])))
+                    start = new Date(Date.now() + ((+m[1] * 60 + +m[2]) * 60 + +m[3]) * 1000).toISOString().replace("T", " ").replace(/\.\d+Z$/, "Z");
+                else { reply(fail(-1, "at or in is required")); return; }
+                create({ start: true, replace: true, activity: { name: "timeout:" + p.key, description: "com.palm.power timeout",
+                    schedule: { start: start }, callback: { method: p.uri, params: p.params || {} } } }, function (r) {
+                    reply(r.returnValue ? ok({ key: p.key }) : r);
+                });
+            };
+            power["/timeout/clear"] = function (p, reply) {
+                cancel({ activityName: "timeout:" + p.key }, function () { reply(ok({ key: p.key })); });
+            };
+        }
+
+        global.addEventListener && global.addEventListener("storage", function (e) {
+            if (e.key === "phoenix:" + KEY) arm();
+        });
+        // What came due while no page was running.
+        setTimeout(function () { check(); }, 0);
+
+        runtime.activities = {
+            /** Fire every activity due by `at` (ms) now, from this page. Returns how many. */
+            fireDue: function (at) { return check(at === undefined ? Date.now() : at); },
+            list: function () {
+                var st = load(), out = [];
+                for (var n in st.byName) out.push(details(st.byName[n]));
+                return out;
+            },
+            parseStart: parseStart
+        };
+    })();
 })(this);

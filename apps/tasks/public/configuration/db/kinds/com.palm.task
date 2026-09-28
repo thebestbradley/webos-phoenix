@@ -1,0 +1,64 @@
+{
+    "id": "com.palm.task:1",
+    "owner": "org.webosphoenix.tasks",
+    "sync": true,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "summary": { "type": "string", "description": "What to do (VTODO SUMMARY)" },
+            "notes": { "type": "string", "optional": true, "description": "Notes (VTODO DESCRIPTION)" },
+            "due": { "type": ["integer", "null"], "optional": true, "description": "When it is due, ms; local midnight when allDay (VTODO DUE)" },
+            "allDay": { "type": "boolean", "optional": true, "description": "Due on a day, not at a time (DUE;VALUE=DATE)" },
+            "completed": { "type": "boolean", "description": "Done (VTODO STATUS:COMPLETED)" },
+            "completedTime": { "type": ["integer", "null"], "optional": true, "description": "When it was done, ms (VTODO COMPLETED)" },
+            "priority": { "type": "integer", "description": "0 undefined, 1 highest ... 9 lowest (VTODO PRIORITY)" },
+            "listId": { "type": "string", "description": "_id of its com.palm.tasklist:1" },
+            "accountId": { "type": "string", "description": "_id of the com.palm.account:1 it syncs with; empty on this device" },
+            "remind": { "type": ["integer", "null"], "optional": true, "description": "When to remind, ms (VALARM TRIGGER;VALUE=DATE-TIME)" },
+            "uid": { "type": "string", "optional": true, "description": "VTODO UID" },
+            "createdTime": { "type": "integer", "optional": true, "description": "VTODO CREATED, ms" },
+            "modifiedTime": { "type": "integer", "optional": true, "description": "VTODO LAST-MODIFIED, ms" }
+        }
+    },
+    "indexes": [
+        {
+            "name": "bylist",
+            "props": [
+                { "name": "listId" },
+                { "name": "completed" },
+                { "name": "due", "default": null }
+            ]
+        },
+        {
+            "name": "bydue",
+            "props": [
+                { "name": "completed" },
+                { "name": "due", "default": null }
+            ]
+        },
+        {
+            "name": "byremind",
+            "props": [
+                { "name": "remind", "default": null }
+            ]
+        },
+        {
+            "name": "byaccount",
+            "props": [
+                { "name": "accountId" }
+            ]
+        },
+        {
+            "name": "UI_Typedown_UniversalSearch",
+            "props": [
+                { "name": "summary", "tokenize": "default", "collate": "primary" }
+            ]
+        },
+        {
+            "name": "summary",
+            "props": [
+                { "name": "summary", "collate": "primary" }
+            ]
+        }
+    ]
+}

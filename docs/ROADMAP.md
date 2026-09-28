@@ -123,6 +123,15 @@ apps, with priorities and a build order, is in [APP-GAPS.md](APP-GAPS.md).
       with", .ipk install), on the Phoenix service `org.webosphoenix.filemanager`
       (simulated in the runtime; a Node.js service for the device in
       `apps/files/service`)
+- [x] Tasks (`apps/tasks`): lists, due dates and times, priorities, notes,
+      Today / Upcoming / Overdue, hide completed; reminders scheduled with
+      `com.palm.activitymanager` (simulated in the runtime, which now fires
+      scheduled activities and `com.palm.power` timeouts) reach the shell as
+      notifications; Just Type "New Task" and task search
+- [ ] Tasks: CalDAV (VTODO) sync per account, Synergy-style, into account
+      sub-kinds of `com.palm.task:1`; on a device, check that OSE's activity
+      manager starts the app in the background for a reminder without
+      raising its card
 - [ ] Files on a device: run the service under OSE's `run-js-service` and check
       its ACG files; route .ipk installs to OSE's `com.webos.appInstallService`
       (legacy `com.palm.appinstaller` is simulator only)
@@ -134,6 +143,8 @@ apps, with priorities and a build order, is in [APP-GAPS.md](APP-GAPS.md).
       service for the device passcode (OSE has no `setDevicePasscode`),
       brightness and screen timeout
 - [ ] Lock screen asks for the PIN / password set in Screen & Lock
+- [ ] Notification actions (e.g. Snooze / Done on a reminder) in the shell's
+      notification model; tapping a notification already opens what it is about
 - [ ] Localization: apps follow `localeInfo`
 
 ## M5: modernize

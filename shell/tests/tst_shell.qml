@@ -262,5 +262,30 @@ Item {
             verify(!shell.launcherOpen);
             shell.unlock();
         }
+
+        function test_tappedNotificationLaunchesWithItsParams() {
+            windows.notify("org.webosphoenix.email", "Call Ada", "Due Today", { taskId: "t1" });
+            windows.notify("org.webosphoenix.email", "Plain", "No params");
+            compare(windows.notifications.get(0).params, '{"taskId":"t1"}');
+            compare(windows.notifications.get(1).params, "");
+            shell.notifications.activated("org.webosphoenix.email", windows.notifications.get(0).params);
+            compare(windows.cards.count, 1);
+            compare(windows.cards.get(0).appId, "org.webosphoenix.email");
+            // Like any launch it maximizes the card; settle before the next test.
+            tryVerify(function() { return shell.maximized; }, 2000);
+            shell.gestureUp();
+            tryCompare(shell.cardView, "maximizeProgress", 0, 2000);
+        }
+
+        SignalSpy { id: focusSpy; target: windows; signalName: "cardFocusRequested" }
+
+        function test_activityLaunchStaysInTheBackground() {
+            focusSpy.clear();
+            windows._hostMessage("org.webosphoenix.calendar", "", "launch",
+                                 { id: "org.webosphoenix.email", params: { reminder: "t1", $activity: { activityId: 1 } } });
+            compare(windows.cards.count, 1);
+            compare(focusSpy.count, 0);
+            compare(shell.cardView.maximizeProgress, 0);
+        }
     }
 }

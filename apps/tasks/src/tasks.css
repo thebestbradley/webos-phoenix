@@ -1,0 +1,169 @@
+/*
+ * Copyright (c) 2026 webOS Phoenix contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Tasks: Heritage lists under the page header with the command menu at the
+ * bottom; tablet cards put the lists in a column on the left. Completed
+ * tasks are struck through, overdue dates are red.
+ */
+
+body.pui-app { overflow: hidden; }
+#root { height: 100%; }
+
+.tk-app { position: fixed; inset: 0; display: flex; }
+.tk-loading { flex: 1; display: flex; justify-content: center; padding: 80px 0; }
+.tk-lists, .tk-main, .tk-editor { --pui-gutter: 0px; position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tk-lists > .pui-header, .tk-main > .pui-header, .tk-editor > .pui-header { margin-bottom: 0; }
+.tk-scroll { position: relative; flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0 8px 66px; }
+
+/* Tablet: the lists in a column, the tasks beside them. */
+.tk-app.wide .tk-lists {
+    flex: none;
+    width: 300px;
+    background: linear-gradient(90deg, #d6d6d4, #cacac8);
+    border-right: 1px solid #8f8f8d;
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.5);
+}
+
+/* ---- Lists ------------------------------------------------------------------------ */
+
+.tk-list-row.current { background: rgba(31, 117, 191, 0.16); }
+.tk-list-row .pui-row-value { min-width: 24px; text-align: right; color: #7a7a78; }
+.tk-list-row.late .pui-row-value { color: #c0392b; font-weight: bold; }
+
+/* ---- Header menu ------------------------------------------------------------------ */
+
+.tk-menu-button, .tk-header-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    margin: -4px -6px -4px 0;
+    padding: 0 6px;
+    font: inherit;
+    font-size: 16px;
+    font-weight: bold;
+    color: #555;
+    background: none;
+    border: 0;
+    border-radius: 6px;
+    cursor: pointer;
+    outline: none;
+}
+.tk-menu-button { width: 36px; padding: 0; }
+.tk-menu-button .pui-glyph { filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.8)); }
+.tk-header-button { color: var(--pui-label); text-shadow: 0 1px 0 #fff; }
+.tk-menu-button:active, .tk-header-button:active { background: rgba(0, 0, 0, 0.12); }
+
+/* ---- Add a task ------------------------------------------------------------------- */
+
+.tk-quick {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 44px;
+    padding: 0 12px;
+    background: linear-gradient(#f4f4f2, #e6e6e4);
+    border-top: 1px solid #fff;
+    border-bottom: 1px solid #a8a8a6;
+}
+.tk-quick-plus { font-size: 22px; font-weight: bold; color: var(--pui-label); }
+.tk-quick input {
+    flex: 1;
+    min-width: 0;
+    height: 32px;
+    font: inherit;
+    font-size: 17px;
+    color: var(--pui-text);
+    background: none;
+    border: 0;
+    outline: none;
+}
+
+/* ---- Tasks ------------------------------------------------------------------------ */
+
+.tk-list { margin-top: 6px; }
+.tk-list .pui-row { min-height: 50px; padding-top: 6px; padding-bottom: 6px; }
+.tk-task .pui-row-icon { width: 33px; margin-right: 10px; }
+.tk-task .pui-row-title { font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-task.completed .tk-summary-text { text-decoration: line-through; color: #8a8a88; }
+.tk-task.completed .tk-prio { opacity: 0.4; }
+.tk-prio { margin-right: 6px; font-weight: bold; }
+.tk-prio.p3 { color: #c0392b; }
+.tk-prio.p2 { color: #d9822b; }
+.tk-prio.p1 { color: #2d6c94; }
+.tk-sub { display: flex; gap: 8px; overflow: hidden; white-space: nowrap; font-size: 13px; }
+.tk-sub > span { flex: none; }
+.tk-sub > .tk-notes-mark { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tk-due.late { color: #c0392b; font-weight: bold; }
+.tk-bell { font-size: 12px; }
+.tk-empty { padding: 36px 20px; text-align: center; color: var(--pui-text-dim); font-size: 16px; }
+
+/* ---- Editor ----------------------------------------------------------------------- */
+
+.tk-editor { background: var(--pui-bg); }
+.tk-editor-body { padding-top: 8px; }
+.tk-field {
+    border-style: solid;
+    border-width: 14px;
+    border-image: url(../../shared/phoenix-ui/assets/enyo/wifi/bg_field.png) 14 fill;
+    margin: 0 0 6px;
+}
+.tk-summary, .tk-notes {
+    display: block;
+    width: 100%;
+    margin: -8px 0;
+    padding: 0;
+    font: inherit;
+    color: var(--pui-text);
+    background: none;
+    border: 0;
+    outline: none;
+    resize: none;
+    -webkit-user-select: text;
+    user-select: text;
+}
+.tk-summary { height: 30px; font-size: 19px; }
+.tk-notes { font-size: 15px; line-height: 1.4; }
+.tk-picker-row { display: flex; justify-content: center; align-items: flex-end; gap: 2px; margin: 4px 0 10px; flex-wrap: wrap; }
+.tk-hint { margin: -4px 12px 10px; font-size: 13px; text-align: center; color: #b05a00; }
+.tk-delete { width: 100%; margin-top: 14px; }
+
+.tk-reminder-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 8px;
+    padding: 6px 8px;
+    background: linear-gradient(#fdf3cf, #f3df98);
+    border: 1px solid #c8a94a;
+    border-radius: 10px;
+}
+.tk-reminder-text { flex: 1 0 100%; font-weight: bold; color: #6d5410; }
+.tk-reminder-bar .pui-button { flex: 1; width: auto; min-width: 0; padding: 0 10px; margin: 0; font-size: 15px; }
+.tk-app.wide .tk-reminder-text { flex-basis: auto; }
+.tk-app.wide .tk-reminder-bar .pui-button { flex: none; }
+
+/* ---- Messages ----------------------------------------------------------------------- */
+
+.tk-dialog-buttons { display: flex; flex-direction: column; gap: 6px; }
+.tk-dialog-buttons .pui-button { width: 100%; }
+.tk-toast {
+    position: absolute;
+    left: 50%;
+    bottom: 66px;
+    z-index: 20;
+    max-width: calc(100% - 24px);
+    transform: translateX(-50%);
+    padding: 8px 14px;
+    font-size: 14px;
+    text-align: center;
+    color: #fff;
+    background: rgba(20, 20, 20, 0.85);
+    border-radius: 16px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    animation: pui-fade 0.15s ease-out;
+    pointer-events: none;
+}
