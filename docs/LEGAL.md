@@ -72,8 +72,37 @@ data use "Phoenix Account".
   launcher icon is drawn by `apps/files/tools/render-icon.cjs`, the list icons
   and glyphs are simple SVG drawn for Phoenix, and the rest is the Enyo 1.0
   art above.
+- Voice Memos (`apps/voicememos`) is a new app in the style of the webOS 2.x
+  Voice Memos (which was never open-sourced; no code or artwork from it). The
+  launcher icon is drawn by `apps/voicememos/tools/render-icon.cjs`. The two
+  demo memos (`apps/voicememos/public/samples`) are synthetic speech made by
+  `apps/voicememos/tools/make-samples.cjs` with eSpeak NG from scripts we
+  wrote; dedicated to the public domain (CC0 1.0). eSpeak NG itself
+  (GPL-3.0) is only a tool used to make them and is not shipped.
 - npm dependencies (React, Vite, ...) are MIT-licensed; the Settings app lists
   the ones it bundles under Device Info > Open source licenses.
+
+## Speech recognition (whisper.cpp)
+
+Voice Memos' transcription service (`apps/voicememos/service`) runs
+**whisper.cpp** (<https://github.com/ggml-org/whisper.cpp>) as a separate
+program, `whisper-cli`; no whisper.cpp code is in this repository.
+whisper.cpp and ggml are MIT-licensed. The `meta-phoenix` recipe stub
+(`recipes-support/whisper-cpp`) would build it from source and ship its
+`LICENSE` with the package, as the MIT license asks.
+
+The models are OpenAI's **Whisper** weights, released under the MIT license
+(<https://github.com/openai/whisper>, including the model card), converted to
+ggml's format by the whisper.cpp authors and published at
+<https://huggingface.co/ggerganov/whisper.cpp>. The default,
+`ggml-base.en.bin`, is not in this repository; an image that includes it
+should carry OpenAI's MIT notice with it. Other models (for instance
+fine-tuned ones found elsewhere) may have other licenses: check before
+shipping one.
+
+`ffmpeg`, which the service uses to convert audio that is not WAV, is LGPL
+or GPL depending on how it is built and is only called as a program. The app
+records WAV, so it is optional.
 
 ## Fonts
 

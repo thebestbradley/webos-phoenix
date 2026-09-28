@@ -50,6 +50,15 @@ Photos. The demo photos and chiptunes are generated.*
 Preware file manager), designed anew in the webOS 2.x style, against a
 simulated filesystem service.*
 
+| Voice Memos | Recording | Transcript | Share |
+| --- | --- | --- | --- |
+| ![](docs/screenshots/voicememos-list.png) | ![](docs/screenshots/voicememos-recording.png) | ![](docs/screenshots/voicememos-transcript.png) | ![](docs/screenshots/voicememos-share.png) |
+
+*Voice Memos in the webOS 2.x style: record with a level meter, play,
+transcribe and search. On a device it transcribes with whisper.cpp; the
+simulator records with Chromium's fake microphone and knows only the demo
+memos' scripts.*
+
 ## Status
 
 **Milestone 0: the shell runs in a desktop simulator.** You can use the card
@@ -72,7 +81,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `shell/qml/Phoenix/Sim` | Mock apps and device status for the desktop simulator |
 | `shell/qml/Phoenix/Lsm`, `shell/qml/WebOSCompositor` | Adapter that plugs the shell into webOS OSE's `luna-surfacemanager` |
 | `shell/sim` | `phoenix-sim`, the desktop runner (also takes screenshots) |
-| `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files), with the shared `@phoenix/ui` components and `@phoenix/luna` service client, generated demo media (`apps/media-samples`), and the Files app's Node.js Luna service (`apps/files/service`) |
+| `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Voice Memos), with the shared `@phoenix/ui` components and `@phoenix/luna` service client, generated demo media (`apps/media-samples`), and the Node.js Luna services of Files (`apps/files/service`) and Voice Memos (`apps/voicememos/service`, speech to text with whisper.cpp) |
 | `runtime/` | The webOS web app runtime for the simulator and browsers (`PalmSystem`, simulated Luna services) |
 | `shell/tests` | Behaviour tests (`qmltestrunner`) |
 | `shell/assets/openwebos` | Original Open webOS system UI artwork (Apache-2.0) |
@@ -142,6 +151,7 @@ node tools/test-apps.cjs && node tools/test-settings.cjs   # needs Playwright
 node tools/test-phone-messaging.cjs                        # calls and texts
 node tools/test-media.cjs                                   # Camera, Photos, Music
 node tools/test-files.cjs                                   # Files
+node tools/test-voicememos.cjs                              # Voice Memos
 ```
 
 ## Build a webOS OSE image (experimental)

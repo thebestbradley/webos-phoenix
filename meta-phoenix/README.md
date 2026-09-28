@@ -5,7 +5,9 @@ OpenEmbedded layer that adds the Phoenix shell to a webOS OSE build.
 | Recipe | What it does |
 | --- | --- |
 | `phoenix-shell` | Installs the QML shell and Open webOS artwork to `/usr/share/phoenix`, plus `/etc/surface-manager.d/product.env` pointing luna-surfacemanager at it. |
-| `webos-phoenix-image` | `webos-image` + `phoenix-shell`. |
+| `phoenix-apps` | The original Open webOS apps and frameworks, the Phoenix web apps, their Node.js Luna services (Files' `org.webosphoenix.filemanager`, Voice Memos' `org.webosphoenix.transcriber`) and the web app runtime, installed by `tools/install-rootfs.py`. |
+| `webos-phoenix-image` | `webos-image` + `phoenix-shell` + `phoenix-apps`. |
+| `whisper-cpp` | **Stub, never built and not in the image.** How whisper.cpp's `whisper-cli` and the `ggml-base.en.bin` model (`whisper-cpp-model-base-en`, to `/usr/share/whisper`) would be packaged for Voice Memos' transcription service. Without them the service answers "not installed". See the recipe's header. |
 
 Depends on `meta-webos` and `meta-qt6` (scarthgap, Qt 6.8), as pinned by
 webOS OSE's `build-webos/weboslayers.py`. Use `scripts/setup-build.sh` from

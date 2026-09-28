@@ -1,0 +1,6 @@
+{
+    "transcriber.operation": [
+        "org.webosphoenix.transcriber/transcribe",
+        "org.webosphoenix.transcriber/getStatus"
+    ]
+}

@@ -96,8 +96,9 @@ The Settings app's services (Wi-Fi, Bluetooth, settings service, audio, ...)
 are simulated in their own clearly marked block at the end of the runtime;
 see [Settings](#settings) below. The media services (media indexer, camera,
 media files) follow in another; see [Camera, Photos and Music](#camera-photos-and-music).
-The last block is the file manager service and the legacy app installer used
-by Files; see [Files](#files).
+Then comes the file manager service and the legacy app installer used by
+Files; see [Files](#files). The last block is the speech-to-text service of
+Voice Memos; see [Voice Memos](#voice-memos).
 
 ## Running apps
 
@@ -161,7 +162,7 @@ apps under `/usr/palm/applications` (where webOS OSE's application manager
 still looks for system apps), frameworks under `/usr/palm/frameworks`, the
 runtime under `/usr/share/phoenix/runtime`, and each app's db8 kinds and
 permissions under `/etc/palm/db`. An app's Node.js Luna service
-(`apps/<app>/service`, e.g. Files') goes to `/usr/palm/services/<service id>`,
+(`apps/<app>/service`, e.g. Files' or Voice Memos') goes to `/usr/palm/services/<service id>`,
 where `run-js-service` starts it, and its `sysbus/` role, permission, groups,
 manifest and service files to `/usr/share/luna-service2/*.d`. Overlays are
 applied and app pages get the runtime `<script>` tag. The `phoenix-apps` recipe in `meta-phoenix` runs it,
@@ -194,6 +195,7 @@ texts.
 
 Camera, Photos and Music start cleanly too, and `node tools/test-media.cjs
 [--tablet]` drives them. So does Files, driven by `node tools/test-files.cjs
+[--tablet]`, and Voice Memos, driven by `node tools/test-voicememos.cjs
 [--tablet]`.
 
 ## Phoenix apps (React + TypeScript)
@@ -202,13 +204,14 @@ New Phoenix apps live in `apps/`, an npm workspace:
 
 | Path | What |
 | --- | --- |
-| `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
+| `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers), `transcriber.ts` Voice Memos (`transcriber.transcribe()` with progress, `TRANSCRIBE_ERRORS`); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
 | `apps/shared/phoenix-ui` (`@phoenix/ui`) | React components with the webOS 1.x/2.x look, drawn with the Enyo 1.0 "Heritage" artwork (copied into `assets/enyo`, see its `PROVENANCE.md`): `PageHeader`, `Group`, `Row`, `Divider`, `ToggleButton`, `Slider` (also as a progress/seek bar), `ListSelector`, `Picker`, `PopupMenu`, `Button`, `Drawer`, `DividerDrawer`, `Dialog`, `Spinner`, `TextField`; for Phone and Messaging the webOS dial pad (`Dialpad`, `DialButton`, `BackspaceButton`, from Enyo's `lib/telephony` art), the command menu (`ToolBar`, `RadioToolGroup`, `ToolButton`), `Avatar` and number / time formatting (`formatDuration` takes milliseconds); for the media apps `Toolbar`, `IconToolButton`, `GroupedToolButtons`, `Glyph` and `formatSeconds`; for Files `CheckBox` (Heritage `checkbox.png`) and file glyphs (copy, cut, paste, new folder, ...); `BackProvider`/`useBack` for the back gesture |
 | `apps/settings` | Settings (see below) |
 | `apps/phone`, `apps/messaging` | Phone and Messaging (see below) |
 | `apps/camera`, `apps/photos`, `apps/music` | Camera, Photos, Music (see [below](#camera-photos-and-music)); `@phoenix/luna`'s `media.ts` wraps their services |
 | `apps/media-samples` | Generated demo photos and songs, mounted at `/media/internal/samples` |
 | `apps/files` | Files (see [below](#files)); `apps/files/service` is its Node.js Luna service for the device |
+| `apps/voicememos` | Voice Memos (see [below](#voice-memos)); `apps/voicememos/service` is its speech-to-text Luna service (whisper.cpp) for the device |
 
 Build (Node.js 20 or newer):
 
@@ -577,3 +580,107 @@ makes and renames a folder, copies and pastes a file twice, edits and saves
 text, makes a new file, goes back, shows info, deletes a folder, views
 pictures, installs the `.ipk`, opens a song with Music and opens a read-only
 system file, with screenshots in `build/files-tests/`.
+
+## Voice Memos
+
+`apps/voicememos` (`org.webosphoenix.voicememos`, Apps tab) rebuilds the
+Voice Memos app of webOS 2.x (Pre 2, Pre 3), which Palm never open-sourced,
+with the `@phoenix/ui` kit:
+
+- **List**: the memos newest first under day dividers, each with its title,
+  time and length (and a line of its transcript), a search field that finds
+  memos by title and transcript, and the big red record button in the
+  command menu (the Camera's capture button art).
+- **Record**: a dark sheet with the elapsed time, a 20-segment level meter,
+  Pause / Resume, Stop (saves) and Discard. The back gesture stops and saves.
+  Without a microphone, or when access is refused, it says so.
+- **A memo** opens in place: play / pause and a scrubber with the times, the
+  transcript (tap a sentence to play from there), and Transcribe, Share
+  (Email with the file attached, Messaging, or "Open in" an app that plays
+  WAV, i.e. Music), Rename (the title; the file keeps its name) and Delete
+  (the file, its index entry and the memo, after a confirmation).
+- **Preferences** (header menu, kept in the app's localStorage):
+  "Transcribe automatically" transcribes each new memo when it is saved; the
+  language for the transcriber (English by default; the default model,
+  `base.en`, only knows English).
+- **Just Type** (`universalSearch` in `appinfo.json`, after Calendar's): the
+  action "New Voice Memo" starts recording, titled with the typed text
+  (launch params `{newMemo}`), and the content search "Voice Memos" finds
+  memos by title and transcript and opens them (`{memoId}`).
+- On first start the app installs two demo memos (`public/samples`, spoken by
+  eSpeak NG from scripts in `tools/make-samples.cjs`, CC0) into
+  `/media/internal/voicememos`. They have no transcript until you tap
+  Transcribe.
+
+Recordings are made with `getUserMedia` and `MediaRecorder` (WebM/Opus),
+then decoded and resampled with Web Audio and saved as 16 kHz mono 16-bit
+WAV: what whisper.cpp reads without converting, and a format every player
+and the media indexer know. Files are named `memo-YYYYMMDD-HHMMSS.wav`.
+
+### Services
+
+| What | Service and methods | Source |
+| --- | --- | --- |
+| Save and delete the audio | `org.webosphoenix.service.mediafiles` `write` / `remove`, then mediaindexer `requestMediaScan {path}` / `requestDelete {uri}`: the Camera's way, so Files and the media indexer see the memos | see [Camera, Photos and Music](#camera-photos-and-music) |
+| The memos | db8 `org.webosphoenix.voicememo:1` (`title`, `path`, `duration` s, `size`, `created` ISO date, `mimeType`, `transcript: {text, segments, language, engine, placeholder, time}`, `searchText` = title and transcript, lower-case). The kind and its permissions (Just Type, `com.palm.launcher`, may read) are in `public/configuration/db` | Phoenix |
+| Speech to text | `org.webosphoenix.transcriber` `transcribe {path, language?, subscribe?}`: with subscribe, `{state: "queued" \| "converting" \| "transcribing", progress}` replies, then `{state: "done", progress: 100, text, segments: [{start, end, text}] (seconds), language, engine}`; `getStatus` -> `{engine, installed, model, modelInstalled, converter}`. Errors (`TRANSCRIBE_ERRORS`): -1 bad parameters, 1 no such file, 2 engine not installed, 3 model not installed, 4 needs converting and there is no ffmpeg, 5 failed | Phoenix; `apps/voicememos/service` on a device, simulated in the runtime |
+| Share | `com.webos.applicationManager` `launch` Email `{attachments: [{fullPath, mimeType}], summary}` or Messaging `{attachment}`; `listAllHandlersForMime {mime: "audio/wav"}` and `launch {id, params: {target}}` for "Open in" | as Photos |
+
+### On a device
+
+The service is Node.js (`apps/voicememos/service`: `transcriber.js` does the
+work, `service.js` registers it with `webos-service` and stops `whisper-cli`
+when a subscriber cancels). For each file it:
+
+1. uses a 16 kHz WAV as it is, and converts anything else with `ffmpeg` to
+   one (without ffmpeg, recent `whisper-cli` builds still read MP3, Ogg and
+   FLAC themselves);
+2. runs `whisper-cli -m MODEL -f WAV -l LANG -oj -of TMP -pp` and turns
+   `TMP.json`'s `transcription` (offsets in ms) into segments, passing on
+   the `progress = N%` lines from stderr as progress replies.
+
+One file is transcribed at a time; the others wait in a queue. The model is
+`/usr/share/whisper/ggml-base.en.bin` unless `PHOENIX_WHISPER_MODEL` or
+`/etc/phoenix/transcriber.json` (`{"whisper", "model", "ffmpeg", "threads"}`)
+says otherwise; `whisper-cli` is found on the PATH (or as `whisper-cpp`, or
+the old `main` in `/usr/share/whisper`). When the program or the model is
+missing, `transcribe` fails at once with errorCode 2 or 3 and an errorText
+that says what to install, which the app shows under the memo.
+`meta-phoenix/recipes-support/whisper-cpp` is a recipe stub (not built yet)
+for `whisper-cli` and the model. The unit tests
+(`apps/voicememos/service/transcriber.test.ts`) run it against stand-ins for
+`whisper-cli` and `ffmpeg`, and against the real whisper.cpp when
+`PHOENIX_TEST_WHISPER_CLI` and `PHOENIX_TEST_WHISPER_MODEL` are set.
+
+### In the simulator
+
+The runtime's block "Voice memos" answers `org.webosphoenix.transcriber`
+without whisper.cpp, and never makes up a transcript of someone's
+recording:
+
+- the **demo memos** get their known scripts (from the app's
+  `samples/samples.json`), recognised by the file's size and FNV-1a hash,
+  whatever the memo has been renamed to, after a short show of progress;
+- **any other recording** gets the text "(transcription runs on the device
+  with whisper.cpp)" with `placeholder: true`. The app shows it in grey
+  italics and does not search it.
+- Where the browser has the **Web Speech API** (`getStatus` says `live`),
+  the simulator-only method `listen {language, subscribe}` passes on what it
+  hears while recording, and a later Transcribe uses that text for the memo
+  instead of the placeholder. In Chrome that recognition runs on Google's
+  servers. Qt WebEngine (phoenix-sim) has no Web Speech API, and headless
+  Chromium has one that hears nothing (no speech service), so there the
+  placeholder stands.
+
+The same block makes `mediafiles/remove` also drop the file from the file
+manager's virtual filesystem, so a deleted memo (or a picture deleted in
+Photos) disappears from Files too.
+
+`node tools/test-voicememos.cjs [--tablet]` checks the demo memos in the list,
+records with Chromium's fake microphone (level meter, time, pause and
+resume, stop; the WAV in Files and the media indexer), plays and scrubs,
+transcribes the demo memo (its known text) and a recording (the
+placeholder), searches in the app and through Just Type's content search,
+renames, shares by Email, deletes, "transcribe automatically", and the
+`{memoId}` and `{newMemo}` launch params, with screenshots in
+`build/voicememos-tests/`.

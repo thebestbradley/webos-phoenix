@@ -114,6 +114,15 @@ Calculator, Settings panes, and an app catalog.
       with", .ipk install), on the Phoenix service `org.webosphoenix.filemanager`
       (simulated in the runtime; a Node.js service for the device in
       `apps/files/service`)
+- [x] Voice Memos (`apps/voicememos`): record with a level meter, pause and
+      resume, the memo list with playback and a scrubber, rename, share, delete,
+      and transcription on the Phoenix service `org.webosphoenix.transcriber`
+      (whisper.cpp on the device, `apps/voicememos/service`; the simulator knows
+      only the demo memos' scripts), searchable in the app and in Just Type
+- [ ] Voice Memos on a device: build whisper.cpp and its model
+      (`meta-phoenix/recipes-support/whisper-cpp` is a stub), measure base.en
+      against tiny.en on the target, run the service under `run-js-service`, and
+      the same media file service the Camera needs
 - [ ] Files on a device: run the service under OSE's `run-js-service` and check
       its ACG files; route .ipk installs to OSE's `com.webos.appInstallService`
       (legacy `com.palm.appinstaller` is simulator only)

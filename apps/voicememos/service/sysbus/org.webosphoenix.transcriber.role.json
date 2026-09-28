@@ -1,0 +1,12 @@
+{
+    "appId": "org.webosphoenix.transcriber",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": ["org.webosphoenix.transcriber"],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.transcriber",
+            "outbound": []
+        }
+    ]
+}

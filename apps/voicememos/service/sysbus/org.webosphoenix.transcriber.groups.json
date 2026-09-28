@@ -1,0 +1,4 @@
+{
+    "allowedNames": ["org.webosphoenix.transcriber"],
+    "transcriber.operation": ["oem"]
+}

@@ -209,6 +209,7 @@ others need reimplementation or an alternative for Phoenix.
 - [x] **Calculator** (`com.palm.calculator`; Open webOS `com.palm.app.calculator`). `Src/base/application/ApplicationDescription.cpp:1119`. Runs as the original Open webOS app (`third_party/core-apps`), phone and tablet; see `docs/APP-RUNTIME.md`.
 - [x] **Clock / alarms** (`com.palm.app.clock`). `conf/notificationPolicy.conf:26`. Runs as the original Open webOS app (`third_party/core-apps`), phone and tablet; see `docs/APP-RUNTIME.md`.
 - [ ] Alarm "ring" popup (needs the activity manager to fire alarms).
+- [x] **Voice Memos** (webOS 2.x, Pre 2 / Pre 3). Not referenced in this repo (**inferred**). Phoenix: `apps/voicememos` (`org.webosphoenix.voicememos`): record with a level meter, pause / resume, list, playback with a scrubber, rename, share, delete, and transcription (whisper.cpp on the device through `org.webosphoenix.transcriber`), searchable in the app and in Just Type. See `docs/APP-RUNTIME.md#voice-memos`
 - [ ] **Tasks**. Not referenced in this repo.
 - [ ] **PDF View / Doc View** (pre-QuickOffice phone apps). Not referenced in this repo.
 - [ ] **Help** (`com.palm.app.help`). `conf/default-launcher-page-layout.json`

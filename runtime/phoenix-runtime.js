@@ -3981,4 +3981,191 @@
             errors: E
         };
     })();
+
+    // ================================================================================
+    // Voice memos (org.webosphoenix.transcriber; apps/voicememos)
+    // ================================================================================
+    //
+    // Voice Memos records with getUserMedia and MediaRecorder and saves 16 kHz
+    // WAV files under /media/internal/voicememos through the media block's
+    // org.webosphoenix.service.mediafiles, like the Camera; its memos (title,
+    // path, duration, transcript) are db8 objects of org.webosphoenix.voicememo:1.
+    // This block simulates the speech-to-text service it calls. On a device
+    // that is the Node.js service in apps/voicememos/service, which runs
+    // whisper.cpp; the requests, replies and error codes are the same
+    // (TRANSCRIBE_ERRORS in apps/shared/luna/src/transcriber.ts):
+    //
+    //   transcribe {path, language?, subscribe?}
+    //       -> with subscribe: {subscribed, state: "queued" | "transcribing",
+    //          progress} while it works; then (or without subscribe, only)
+    //          {state: "done", progress: 100, text, segments: [{start, end,
+    //          text}], language, engine}
+    //   getStatus {} -> {engine: "simulator", installed: true, live}
+    //   listen {language?, subscribe}   simulator only: live captions from the
+    //       browser's Web Speech API while recording, when the browser has
+    //       one ({live: true} in getStatus): {text, final: true} per phrase
+    //       until cancelled, or an error (ENGINE_NOT_INSTALLED) when it
+    //       cannot run (no network, no permission)
+    //
+    // The simulator cannot run whisper.cpp, and it never makes up a
+    // transcript: only the demo memos the app ships
+    // (apps/voicememos/public/samples, listed with their scripts in
+    // samples.json) get their known text, recognised by size and FNV-1a hash
+    // of the file's bytes, whatever the memo is called. Any other recording
+    // gets the placeholder "(transcription runs on the device with
+    // whisper.cpp)" with placeholder: true, which the app shows but does not
+    // store as searchable text.
+    (function voiceMemoServices() {
+        var APP_ID = "org.webosphoenix.voicememos";
+        var SAMPLES = "/usr/palm/applications/" + APP_ID + "/samples/samples.json";
+        var PLACEHOLDER = "(transcription runs on the device with whisper.cpp)";
+        var E = { BAD_PARAMS: -1, NOT_FOUND: 1, ENGINE_NOT_INSTALLED: 2, MODEL_NOT_INSTALLED: 3, UNSUPPORTED_FORMAT: 4, FAILED: 5 };
+
+        var samples = null;
+        function demoMemos() {
+            if (samples === null) {
+                try { samples = JSON.parse(PalmSystem.getResource(SAMPLES) || "{}").memos || []; }
+                catch (e) { samples = []; }
+            }
+            return samples;
+        }
+
+        // 32-bit FNV-1a, as apps/voicememos/tools/make-samples.cjs writes it.
+        function fnv1a(bytes) {
+            var h = 0x811c9dc5;
+            for (var i = 0; i < bytes.length; ++i) {
+                h ^= bytes[i];
+                h = Math.imul(h, 0x01000193) >>> 0;
+            }
+            return ("0000000" + h.toString(16)).slice(-8);
+        }
+
+        function demoFor(bytes) {
+            var hash = null;
+            return demoMemos().filter(function (m) {
+                if (m.file_size !== bytes.length) return false;
+                if (hash === null) hash = fnv1a(bytes);
+                return m.fnv1a === hash;
+            })[0] || null;
+        }
+
+        // The file's bytes from the simulated filesystem (files the apps
+        // stored, the rootfs), or null when there is none.
+        function readBytes(path) {
+            return new Promise(function (resolve) {
+                dispatch("luna://org.webosphoenix.filemanager/read", { path: path, encoding: "base64" }, function (r) {
+                    if (!r.returnValue) return resolve(null);
+                    try {
+                        var bin = global.atob(r.data), b = new Uint8Array(bin.length);
+                        for (var i = 0; i < bin.length; ++i) b[i] = bin.charCodeAt(i);
+                        resolve(b);
+                    } catch (e) {
+                        resolve(null);
+                    }
+                }, { cancelled: function () { return false; }, onCancel: null });
+            });
+        }
+
+        function speechRecognition() {
+            return global.SpeechRecognition || global.webkitSpeechRecognition || null;
+        }
+
+        register(["org.webosphoenix.transcriber"], {
+            "/transcribe": function (p, reply, ctx) {
+                if (typeof p.path !== "string" || p.path.charAt(0) !== "/")
+                    return reply(fail(E.BAD_PARAMS, "path must be an absolute path"));
+                var language = p.language || "en";
+                var progress = function (state, n) {
+                    if (p.subscribe && !ctx.cancelled()) reply(ok({ subscribed: true, state: state, progress: n }));
+                };
+                progress("queued", 0);
+                readBytes(p.path).then(function (bytes) {
+                    if (ctx.cancelled()) return;
+                    if (!bytes) return reply(fail(E.NOT_FOUND, "No such file: " + p.path));
+                    var demo = demoFor(bytes);
+                    if (!demo) {
+                        return setTimeout(function () {
+                            reply(ok({ state: "done", progress: 100, text: PLACEHOLDER, segments: [], language: language,
+                                       engine: "simulator", placeholder: true }));
+                        }, 150);
+                    }
+                    // The demo memo: its script, after a short show of progress.
+                    [20, 45, 70, 90].forEach(function (n, i) {
+                        setTimeout(function () { progress("transcribing", n); }, 150 * (i + 1));
+                    });
+                    setTimeout(function () {
+                        if (ctx.cancelled() && p.subscribe) return;
+                        reply(ok({ state: "done", progress: 100, text: demo.text, segments: demo.segments || [],
+                                   language: demo.language || "en", engine: "simulator" }));
+                    }, 750);
+                });
+            },
+            "/getStatus": function (p, reply) {
+                reply(ok({ engine: "simulator", installed: true, live: !!speechRecognition() }));
+            },
+            "/listen": function (p, reply, ctx) {
+                var SR = speechRecognition();
+                if (!SR) return reply(fail(E.ENGINE_NOT_INSTALLED, "This browser has no speech recognition"));
+                var rec, stopped = false;
+                try {
+                    rec = new SR();
+                    rec.lang = p.language === "en" || !p.language ? "en-US" : p.language;
+                    rec.continuous = true;
+                    rec.interimResults = false;
+                } catch (e) {
+                    return reply(fail(E.ENGINE_NOT_INSTALLED, "Speech recognition is not available"));
+                }
+                rec.onresult = function (ev) {
+                    if (stopped || ctx.cancelled()) return;
+                    for (var i = ev.resultIndex; i < ev.results.length; ++i) {
+                        var r = ev.results[i];
+                        if (r.isFinal && r[0] && r[0].transcript.trim())
+                            reply(ok({ subscribed: true, text: r[0].transcript.trim(), final: true }));
+                    }
+                };
+                rec.onerror = function (ev) {
+                    if (stopped || ctx.cancelled()) return;
+                    stopped = true;
+                    reply(fail(E.ENGINE_NOT_INSTALLED, "Speech recognition is not available (" + (ev && ev.error || "error") + ")"));
+                };
+                // Chromium ends a continuous session after a while of silence:
+                // go on listening, unless it ended at once (it cannot run).
+                var since = Date.now();
+                rec.onend = function () {
+                    if (stopped || ctx.cancelled()) return;
+                    if (Date.now() - since < 1000) { stopped = true; return; }
+                    since = Date.now();
+                    try { rec.start(); } catch (e) { stopped = true; }
+                };
+                ctx.onCancel = function () {
+                    stopped = true;
+                    try { rec.stop(); } catch (e) { /* ignore */ }
+                };
+                try {
+                    rec.start();
+                    reply(ok({ subscribed: true, listening: true }));
+                } catch (e) {
+                    stopped = true;
+                    reply(fail(E.ENGINE_NOT_INSTALLED, "Speech recognition is not available"));
+                }
+            }
+        });
+
+        // A file deleted through mediafiles/remove (a memo, or a picture
+        // deleted in Photos) leaves the file manager's view too: its
+        // virtual filesystem only learns about new media files by itself.
+        var mf = runtime.services["org.webosphoenix.service.mediafiles"];
+        if (mf && mf["/remove"] && runtime.services["org.webosphoenix.filemanager"]) {
+            var baseRemove = mf["/remove"];
+            mf["/remove"] = function (p, reply, ctx) {
+                baseRemove(p, function (r) {
+                    if (!r.returnValue) return reply(r);
+                    dispatch("luna://org.webosphoenix.filemanager/remove", { path: p.path }, function () { reply(r); },
+                             { cancelled: function () { return false; }, onCancel: null });
+                }, ctx);
+            };
+        }
+
+        runtime.voiceMemos = { placeholder: PLACEHOLDER, errors: E };
+    })();
 })(this);

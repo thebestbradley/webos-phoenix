@@ -1,0 +1,58 @@
+{
+    "id": "org.webosphoenix.voicememos",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Voice Memos",
+    "icon": "icon.png",
+    "iconColor": "#b8322a",
+    "uiRevision": 2,
+    "keywords": ["Voice Recorder", "Dictation", "Recording", "Audio", "Transcribe"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launcherTab": 0
+    },
+    "//universalSearch": "Just Type (com.palm.universalsearch): the \"New Voice Memo\" action starts recording, titled with the typed text; the content search finds memos by title and transcript (searchText, see the kind) and opens them.",
+    "universalSearch": {
+        "action": {
+            "displayName": "New Voice Memo",
+            "launchParam": "newMemo",
+            "url": "org.webosphoenix.voicememos"
+        },
+        "dbsearch": {
+            "displayName": "Voice Memos",
+            "url": "org.webosphoenix.voicememos",
+            "launchParam": "memoId",
+            "launchParamDbField": "_id",
+            "displayFields": ["title", {
+                "name": "created",
+                "type": "timestamp"
+            }],
+            "dbQuery": {
+                "from": "org.webosphoenix.voicememo:1",
+                "where": [
+                    {
+                        "prop": "searchText",
+                        "op": "?",
+                        "val": "",
+                        "collate": "primary"
+                    }
+                ],
+                "orderBy": "created",
+                "desc": true,
+                "limit": 20
+            }
+        }
+    },
+    "//requiredPermissions": "OSE access control groups for the services the app calls (the groups in each service's sysbus api.json; transcriber.operation is apps/voicememos/service's).",
+    "requiredPermissions": [
+        "transcriber.operation",
+        "database.operation",
+        "application.launcher",
+        "application.operation",
+        "mediaindexer.operation",
+        "media.operation",
+        "audio.operation"
+    ]
+}
