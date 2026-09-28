@@ -77,3 +77,7 @@ endif()
 # Theme.asset() resolves the same way in the tree and on the device.
 install(DIRECTORY qml/ DESTINATION ${PHOENIX_DATA_DIR}/qml)
 install(DIRECTORY assets/ DESTINATION ${PHOENIX_DATA_DIR}/assets)
+# The Prelude stand-in, where the web apps find it too
+# (runtime/phoenix-runtime.js aliasPreludeFonts).
+install(DIRECTORY assets/fonts/open-sans/ DESTINATION ${CMAKE_INSTALL_DATADIR}/fonts/open-sans
+        FILES_MATCHING PATTERN "*.ttf")

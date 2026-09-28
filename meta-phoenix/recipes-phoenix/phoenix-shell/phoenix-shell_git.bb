@@ -38,6 +38,7 @@ do_install:append() {
 
 FILES:${PN} += " \
     ${datadir}/phoenix \
+    ${datadir}/fonts/open-sans \
     ${QT6_INSTALL_QMLDIR}/Phoenix \
     ${sysconfdir}/surface-manager.d/product.env \
 "

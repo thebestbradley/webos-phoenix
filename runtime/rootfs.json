@@ -35,7 +35,8 @@
         "/usr/share/phoenix/runtime/": "runtime/",
         "/usr/lib/luna/system/luna-applauncher/": "third_party/luna-applauncher/",
         "/usr/lib/luna/system/luna-systemui/": "third_party/luna-systemui/",
-        "/media/internal/samples/": "apps/media-samples/media/"
+        "/media/internal/samples/": "apps/media-samples/media/",
+        "/usr/share/fonts/open-sans/": "shell/assets/fonts/open-sans/"
     },
     "applicationDirs": [
         "third_party/core-apps",

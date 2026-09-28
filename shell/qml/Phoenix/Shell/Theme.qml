@@ -53,10 +53,20 @@ QtObject {
     // ---- Typography -------------------------------------------------------
 
     // Legacy webOS used Prelude (conf/luna.conf [Fonts]), which is not
-    // redistributable. We ask for it first so a user-installed copy is used,
-    // then fall back to open fonts. See docs/LEGAL.md.
-    readonly property string fontFamily: "Prelude"
-    readonly property var fontFallbacks: ["Prelude", "Helvetica Neue", "Open Sans", "DejaVu Sans"]
+    // redistributable. A user-installed Prelude is used; otherwise Open Sans,
+    // which Phoenix ships (assets/fonts/open-sans, Apache-2.0) and the web
+    // apps get in its place too (runtime aliasPreludeFonts). See
+    // docs/LEGAL.md.
+    readonly property bool preludeInstalled: Qt.fontFamilies().indexOf("Prelude") >= 0
+    readonly property string fontFamily: preludeInstalled ? "Prelude" : "Open Sans"
+    readonly property list<QtObject> bundledFonts: [
+        FontLoader { source: Qt.resolvedUrl("../../../assets/fonts/open-sans/OpenSans-Regular.ttf") },
+        FontLoader { source: Qt.resolvedUrl("../../../assets/fonts/open-sans/OpenSans-Bold.ttf") },
+        FontLoader { source: Qt.resolvedUrl("../../../assets/fonts/open-sans/OpenSans-Light.ttf") },
+        FontLoader { source: Qt.resolvedUrl("../../../assets/fonts/open-sans/OpenSans-Semibold.ttf") },
+        FontLoader { source: Qt.resolvedUrl("../../../assets/fonts/open-sans/OpenSans-Italic.ttf") },
+        FontLoader { source: Qt.resolvedUrl("../../../assets/fonts/open-sans/OpenSans-BoldItalic.ttf") }
+    ]
 
     // ---- Status bar (luna-sysmgr/images/statusBar/status-bar-background.png is 28px tall)
 

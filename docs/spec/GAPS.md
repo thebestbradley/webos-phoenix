@@ -134,7 +134,7 @@ tablet drop-down: **done** (7090c64).
 | V1 | Phone and tablet virtual keyboards (art shipped), 300 ms show/hide, key sounds, apps resized into positive space | None in the simulator; stock OSE keyboard on a device | P1 · L |
 | A1 | `appclose`, notification / alert, battery, charging, shutter, keyboard sounds; ringtones | None. No ringtones ship (`/media/internal/ringtones` is empty, `listRingtones` answers none), so the Clock's default alarm sound, `ringtones/Flurry.mp3`, is missing and alarms are silent | P1 · M |
 | A2 | Vibrate named effect for "vibrate" banners | None | P2 · S |
-| F1 | Prelude everywhere | `Theme.fontFallbacks` unused; no bundled Prelude substitute | P1 · S |
+| F1 | Prelude everywhere | **Done**: Prelude when installed, otherwise the bundled Open Sans (Apache-2.0), in the shell and, through the runtime's aliases for every Prelude name, in the original and Phoenix apps | P1 · S |
 | F2 | positiveSpace paddings 28 on every device; `cardMaximize` 300; status bar icon spacing 5 | Theme values off (24, 400, 4) | P2 · S |
 
 ## Recommended order

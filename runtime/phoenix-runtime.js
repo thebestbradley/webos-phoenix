@@ -1742,22 +1742,36 @@
     // It is not redistributable, and some app styles name it with no
     // fallback (Calculator: font-family: "Prelude Medium"), which leaves a
     // serif font. Alias those names to Prelude if it is installed, otherwise
-    // to the same sans-serif fallbacks the shell uses (Theme.qml).
+    // to Open Sans, which Phoenix ships at /usr/share/fonts/open-sans/ and
+    // the shell uses too (Theme.qml). "Open Sans" itself resolves to the same
+    // files for the Phoenix apps.
     (function aliasPreludeFonts() {
         if (!global.document || !global.document.fonts || typeof global.FontFace !== "function")
             return;
-        var regular = ["Prelude", "Prelude Medium", "Helvetica Neue", "Open Sans", "Liberation Sans", "Arial", "DejaVu Sans"];
-        var light = ["Prelude Light", "Helvetica Neue Light", "Open Sans Light", "Liberation Sans", "Arial", "DejaVu Sans"];
-        var bold = ["Prelude Bold", "Helvetica Neue Bold", "Open Sans Bold", "Liberation Sans Bold", "Arial Bold", "DejaVu Sans Bold"];
-        function src(names) { return names.map(function (n) { return "local(\"" + n + "\")"; }).join(", "); }
+        var dir = "/usr/share/fonts/open-sans/OpenSans-";
+        function src(locals, file) {
+            return locals.map(function (n) { return "local(\"" + n + "\")"; })
+                .concat(["url(\"" + dir + file + ".ttf\")"]).join(", ");
+        }
+        var faces = {
+            regular: src(["Prelude", "Prelude Medium"], "Regular"),
+            light: src(["Prelude Light"], "Light"),
+            bold: src(["Prelude Bold"], "Bold"),
+            italic: src(["Prelude Italic"], "Italic"),
+            boldItalic: src(["Prelude Bold Italic"], "BoldItalic")
+        };
         var families = {
-            "Prelude": regular, "Prelude Medium": regular, "Prelude-Medium": regular,
-            "Prelude Light": light, "Prelude-Light": light, "PreludeWGL-Light": light
+            "Prelude": faces.regular, "Prelude Medium": faces.regular, "Prelude-Medium": faces.regular,
+            "Prelude Light": faces.light, "Prelude-Light": faces.light, "PreludeWGL-Light": faces.light,
+            "Open Sans": faces.regular
         };
         Object.keys(families).forEach(function (family) {
             try {
-                global.document.fonts.add(new FontFace(family, src(families[family]), { weight: "100 599" }));
-                global.document.fonts.add(new FontFace(family, src(bold), { weight: "600 900" }));
+                var doc = global.document;
+                doc.fonts.add(new FontFace(family, families[family], { weight: "100 599" }));
+                doc.fonts.add(new FontFace(family, faces.bold, { weight: "600 900" }));
+                doc.fonts.add(new FontFace(family, faces.italic, { weight: "100 599", style: "italic" }));
+                doc.fonts.add(new FontFace(family, faces.boldItalic, { weight: "600 900", style: "italic" }));
             } catch (e) { /* ignore */ }
         });
     })();

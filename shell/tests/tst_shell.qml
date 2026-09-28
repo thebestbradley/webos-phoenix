@@ -377,6 +377,13 @@ Item {
             verify(/^\d+:\d\d$/.test(bar.clockText));
         }
 
+        // Prelude if installed, else the bundled Open Sans (not the system's
+        // default sans, which is much wider).
+        function test_fontIsPreludeOrTheBundledOpenSans() {
+            verify(Qt.fontFamilies().indexOf("Open Sans") >= 0);
+            compare(Theme.fontFamily, Theme.preludeInstalled ? "Prelude" : "Open Sans");
+        }
+
         function test_batteryStates() {
             compare(Theme.batteryState(0), 0);
             compare(Theme.batteryState(12), 0);

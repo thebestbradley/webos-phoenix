@@ -23,6 +23,13 @@ Excluded on purpose:
   open-source release, so we do not ship them.
 - The Open webOS `sounds/` directory, until its provenance has been checked.
 
+## Fonts (`shell/assets/fonts/`)
+
+Palm's Prelude is not redistributable. In its place Phoenix ships Open Sans
+1.11 (Regular, Bold, Light, Semibold, Italic, Bold Italic), Apache-2.0,
+copied unmodified from the `fonts-open-sans` package (see its
+`PROVENANCE.md`). The shell and the apps use Prelude when it is installed.
+
 ## Original apps and frameworks (`third_party/`)
 
 Git submodules of the Open webOS repositories (`openwebos/core-apps`,
