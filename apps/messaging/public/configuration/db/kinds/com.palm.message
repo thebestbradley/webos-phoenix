@@ -1,0 +1,60 @@
+{
+    "id": "com.palm.message:1",
+    "owner": "org.webosphoenix.messaging",
+    "sync": true,
+    "indexes": [
+        {
+            "name": "bytime",
+            "props": [
+                {
+                    "name": "localTimestamp"
+                }
+            ]
+        },
+        {
+            "name": "byfolder",
+            "props": [
+                {
+                    "name": "folder"
+                }
+            ]
+        },
+        {
+            "name": "bychat",
+            "props": [
+                {
+                    "name": "conversations",
+                    "default": null
+                },
+                {
+                    "name": "flags.visible",
+                    "default": true
+                },
+                {
+                    "name": "localTimestamp"
+                }
+            ]
+        },
+        {
+            "name": "conversationsbyfolder",
+            "props": [
+                {
+                    "name": "conversations"
+                },
+                {
+                    "name": "folder"
+                }
+            ]
+        }
+    ],
+    "revSets": [
+        {
+            "name": "readRevSet",
+            "props": [
+                {
+                    "name": "flags.read"
+                }
+            ]
+        }
+    ]
+}

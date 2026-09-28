@@ -7,7 +7,8 @@
 //               [--screenshot FILE [--delay MS]]
 //
 // Keys: Esc = back gesture, Home/F1 = up gesture, F2 = demo notification,
-//       F3 = lock/unlock. Type in card view for Just Type.
+//       F3 = lock/unlock, F4 = incoming call, F5 = incoming text message.
+//       Type in card view for Just Type.
 
 #include <QCommandLineParser>
 #include <QDir>

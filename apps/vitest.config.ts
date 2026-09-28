@@ -7,6 +7,7 @@ export default defineConfig({
     plugins: [react()],
     test: {
         environment: "jsdom",
-        include: ["shared/*/src/**/*.test.{ts,tsx}", "settings/src/**/*.test.{ts,tsx}"],
+        include: ["shared/*/src/**/*.test.{ts,tsx}", "settings/src/**/*.test.{ts,tsx}",
+                  "phone/src/**/*.test.{ts,tsx}", "messaging/src/**/*.test.{ts,tsx}"],
     },
 });

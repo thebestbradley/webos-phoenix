@@ -117,6 +117,10 @@ Open webOS release.
 Phoenix Settings (`org.webosphoenix.settings` and its launch points) starts
 cleanly on phone and tablet; `node tools/test-settings.cjs [--tablet]` also
 drives it (Wi-Fi, password, PIN, brightness, airplane mode, Bluetooth).
+Phoenix Phone and Messaging start cleanly too, and
+`node tools/test-phone-messaging.cjs [--tablet]` places, holds and ends a
+call, answers and ignores simulated incoming calls, and sends and receives
+texts.
 
 ## Phoenix apps (React + TypeScript)
 
@@ -124,9 +128,10 @@ New Phoenix apps live in `apps/`, an npm workspace:
 
 | Path | What |
 | --- | --- |
-| `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
-| `apps/shared/phoenix-ui` (`@phoenix/ui`) | React components with the webOS 1.x/2.x look, drawn with the Enyo 1.0 "Heritage" artwork (copied into `assets/enyo`, see its `PROVENANCE.md`): `PageHeader`, `Group`, `Row`, `Divider`, `ToggleButton`, `Slider`, `ListSelector`, `Picker`, `PopupMenu`, `Button`, `Drawer`, `DividerDrawer`, `Dialog`, `Spinner`, `TextField` |
+| `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging; `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
+| `apps/shared/phoenix-ui` (`@phoenix/ui`) | React components with the webOS 1.x/2.x look, drawn with the Enyo 1.0 "Heritage" artwork (copied into `assets/enyo`, see its `PROVENANCE.md`): `PageHeader`, `Group`, `Row`, `Divider`, `ToggleButton`, `Slider`, `ListSelector`, `Picker`, `PopupMenu`, `Button`, `Drawer`, `DividerDrawer`, `Dialog`, `Spinner`, `TextField`; for Phone and Messaging the webOS dial pad (`Dialpad`, `DialButton`, `BackspaceButton`, from Enyo's `lib/telephony` art), the command menu (`ToolBar`, `RadioToolGroup`, `ToolButton`), `Avatar`, `BackProvider`/`useBack` and number / time formatting |
 | `apps/settings` | Settings (see below) |
+| `apps/phone`, `apps/messaging` | Phone and Messaging (see below) |
 
 Build (Node.js 20 or newer):
 
@@ -165,6 +170,8 @@ entry for `apps` picks it up. `dist/` and `node_modules/` are not committed.
 
 - `launcherTab`: 0 Apps (default), 1 Downloads, 2 Settings
 - `hidden`: leave the app itself out of the launcher (its launch points stay)
+- `quickLaunch`: put the app in this quick launch slot (1-4); Phone is 1 and
+  Messaging 3 (Email 2 and Calendar 4 are set by title in `SimWindowSource`)
 - `launchPoints`: extra launcher icons for the same app. Each is its own
   card and starts the app with `params` as its launch params
   (`PalmSystem.launchParams`, `?launchParams=` on the page URL). A web app
@@ -232,3 +239,75 @@ Settings and the status bar stay in step:
 Without Qt WebEngine none of this runs and the system menu works on its own.
 On a device, `LsmSystemStatus` would subscribe to the same OSE services
 instead (Milestone 1).
+
+## Phone and Messaging
+
+`apps/phone` (`org.webosphoenix.phone`) and `apps/messaging`
+(`org.webosphoenix.messaging`) replace the Phone and Messaging placeholders
+and sit in quick launch slots 1 and 3. Palm never open-sourced the webOS
+phone and messaging apps, so these are new, drawn with the Enyo 1.0 art:
+the webOS dial pad and dial button (`lib/telephony/dialpad`), the Heritage
+command menu, the lock screen's incoming-call handset, the contacts
+framework's avatar.
+
+- **Phone**: dial pad (hold 0 for +, hold 1 for voicemail, an empty dial
+  button recalls the last number, the number is matched to a contact as you
+  type), call log (all / missed, by day, tap to call back, voicemail entry
+  on top), favourites and contacts from `com.palm.person:1`, the in-call
+  screen (timer, mute, speaker, keypad with touch tones, hold / resume, a
+  held second call to swap to, end), and the incoming call (Answer / Ignore,
+  "Hold & Answer" for a waiting call). Incoming and missed calls post a
+  banner (`PalmSystem.addBannerMessage`), which the shell shows as a banner
+  and dashboard item. Ended calls are logged as `com.palm.phonecall:1`.
+  Tablet: dial pad on the left, log or favourites on the right.
+- **Messaging**: Conversations / Buddies view menu, conversations newest
+  first with unread counts, the conversation as chat balloons with time
+  stamps and sending status, compose with a "To:" field that suggests
+  contacts by name or number, and a transport picker in which only SMS is
+  available (AIM, Google Talk, Yahoo!, Skype are listed as unavailable, as
+  is the Buddies view). Tablet: conversations on the left, the
+  conversation on the right.
+
+Launch params: Phone `{number}` fills in the dial pad; Messaging
+`{threadId}` opens a conversation, `{to, name}` starts a message.
+
+### Services
+
+webOS OSE has no telephony. LuneOS (webOS-ports) reimplemented the legacy
+webOS services on oFono, so the apps code against those, and the runtime
+simulates exactly these calls (block "Phone and Messaging services" at the
+end of `runtime/phoenix-runtime.js`):
+
+| What | Service and methods | Source |
+| --- | --- | --- |
+| Calls | `com.palm.telephony` `dial {number, blockId}`, `answer {id}`, `ignore {id}`, `hangup {id}`; `isTelephonyReady`, `powerQuery`, `platformQuery`, `networkStatusQuery` | `webOS-ports/webos-telephonyd` `src/telephonyservice.c`, `src/telephonyservice_call.c` |
+| Call state | `com.palm.telephony` `callStatusQuery {subscribe}` -> `{calls: [{id, state, number, name, direction, startTime, connectTime, endTime, disconnectReason}], muted, speaker}`, `hold`, `unhold`, `sendDtmf {tones}`, `muteSet {mute}`, `speakerSet {speaker}`, `voicemailQuery {subscribe}`: **Phoenix additions**. telephonyd leaves call state to oFono, which the LuneOS phone app reads directly (`qml/services/VoiceCallMgrWrapper.qml`); these follow oFono's VoiceCall states and its VoiceCallManager, CallVolume and MessageWaiting APIs | oFono `doc/voicecall-api.txt` and friends |
+| Contacts | db8 `com.palm.person:1` (`name`, `phoneNumbers[{value, type, normalizedValue}]`, `favorite`, `sortKey`) | `third_party/app-services/com.palm.service.contacts.linker/db/kinds/com.palm.person` |
+| Call log | db8 `com.palm.phonecall:1` (`type` incoming / outgoing / missed / ignored, `timestamp`, `duration`, `from`, `to[]`), written by the app | LuneOS phone app `qml/model/CallHistory.qml` |
+| Texts | db8 `com.palm.smsmessage:1` (extends `com.palm.message:1`: `folder` inbox / outbox, `status` pending / sending / successful / failed, `messageText`, `from`, `to[]`, `conversations[]`, `flags.read`), `com.palm.chatthread:1` (`displayName`, `summary`, `timestamp`, `unreadCount`, `personId`, `replyAddress`) | `webos-telephonyd` `files/db8/kinds`, `src/telephonyservice_sms.c`; `webOS-ports/org.webosports.messaging` `service/configuration/db/kinds` |
+| Sending | `org.webosports.service.messaging` `putMessage {message}` -> `{threadids}`: assigns the thread and stores the message; the telephony service then sends outbox messages with status pending (`sendSmsFromDb`) | `org.webosports.messaging` `service/javascript/assistants/PutMessage.js`, `utils/MessageAssigner.js`; `webos-telephonyd` `files/activities/com.palm.telephony/outgoing-sms.json` |
+
+The apps ship their db8 kinds in `public/configuration/db/kinds`, which
+`tools/install-rootfs.py` installs to `/etc/palm/db/kinds`.
+
+### In the simulator
+
+The simulated telephony keeps its calls in the runtime's store
+(`telephony:state`), so every page sees the same calls; a dialled call goes
+dialing -> alerting -> active in about two seconds, an unanswered incoming
+call is missed after 30 s, and dialling fails in airplane mode. db8 watches
+fire across windows, so Messaging updates when another page stores a text.
+First start seeds demo data: seven fictional contacts with 555 numbers
+(four favourites), a few calls and three conversations
+(`__phoenixRuntime.seedPhoneDemoData(true)` resets them).
+
+Helpers for tests and the shell:
+
+- `__phoenixRuntime.simulateIncomingCall({number?, name?})` rings the phone
+  (phoenix-sim **F4**: brings the Phone card up ringing)
+- `__phoenixRuntime.simulateRemoteHangup()`
+- `__phoenixRuntime.simulateIncomingSms({from?, text?})` stores a received
+  text and posts `phoenixHost.postToHost("notification", {appId, title,
+  body})` for Messaging, which `SimWindowSource` shows as a banner and
+  dashboard item for that app (phoenix-sim **F5**)
+

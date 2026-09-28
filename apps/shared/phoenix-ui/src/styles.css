@@ -484,6 +484,7 @@ body.pui-app, .pui-app {
     color: #fff;
 }
 .pui-menu-item .pui-menu-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.pui-menu-item.disabled, .pui-menu-item.disabled:active { color: #9a9a98; background: none; cursor: default; }
 .pui-menu-item.selected .pui-menu-label { font-weight: bold; }
 .pui-popup.picker .pui-menu-item.selected { background: #fff; }
 .pui-popup.picker .pui-menu-item.selected:active { background: linear-gradient(#2c8ce0, #1a5fa8); }

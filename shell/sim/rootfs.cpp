@@ -65,7 +65,8 @@ Rootfs::Rootfs(const QString &repoDir)
             const QString root = QString::fromLatin1(kAppsPrefix) + id + QLatin1Char('/');
             const QString main = urlFor(root + app.value(QStringLiteral("main")).toString(QStringLiteral("index.html")));
             // Phoenix launcher metadata (see docs/APP-RUNTIME.md): launcherTab
-            // (0 Apps, 1 Downloads, 2 Settings), hidden, launchPoints.
+            // (0 Apps, 1 Downloads, 2 Settings), hidden, quickLaunch (slot
+            // 1-4), launchPoints.
             const QJsonObject phoenix = app.value(QStringLiteral("phoenix")).toObject();
             const int tab = phoenix.value(QStringLiteral("launcherTab")).toInt(0);
             QVariantMap entry;
@@ -78,6 +79,7 @@ Rootfs::Rootfs(const QString &repoDir)
             entry[QStringLiteral("params")] = QString();
             // -1 keeps an app out of the launcher.
             entry[QStringLiteral("tab")] = phoenix.value(QStringLiteral("hidden")).toBool() ? -1 : tab;
+            entry[QStringLiteral("quickLaunch")] = phoenix.value(QStringLiteral("quickLaunch")).toInt(0);
             // The app's files on disk, for device paths the shell resolves itself (wallpapers).
             entry[QStringLiteral("dir")] = QUrl::fromLocalFile(appDir + QLatin1Char('/')).toString();
             // The shell loads icons itself, from the file on disk.
@@ -101,6 +103,7 @@ Rootfs::Rootfs(const QString &repoDir)
                 point[QStringLiteral("tab")] = lp.value(QStringLiteral("launcherTab")).toInt(tab);
                 point[QStringLiteral("icon")] = QUrl::fromLocalFile(appDir + QLatin1Char('/') + lp.value(QStringLiteral("icon")).toString(icon)).toString();
                 point[QStringLiteral("noWindow")] = false;
+                point[QStringLiteral("quickLaunch")] = lp.value(QStringLiteral("quickLaunch")).toInt(0);
                 m_apps.append(point);
             }
         }

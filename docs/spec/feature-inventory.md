@@ -183,8 +183,8 @@ where the ID appears; "not referenced" means I know of the app from legacy webOS
 All of these need reimplementation or an alternative for Phoenix.
 
 ## Communication
-- [ ] **Phone / Dialer** (`com.palm.app.phone`): launch-at-boot, keep-alive, incoming-call popups, active-call banner. `conf/luna.conf:99,102`; `conf/notificationPolicy.conf:20-28`
-- [ ] **Messaging** (SMS/MMS/IM, `com.palm.app.messaging`). `conf/luna.conf:99`; `conf/notificationPolicy.conf:35`
+- [ ] **Phone / Dialer** (`com.palm.app.phone`): launch-at-boot, keep-alive, incoming-call popups, active-call banner. `conf/luna.conf:99,102`; `conf/notificationPolicy.conf:20-28`. *Phoenix: `apps/phone` (`org.webosphoenix.phone`) has the dial pad, call log, favourites, in-call and incoming-call screens and an incoming-call banner, against simulated legacy telephony; still missing: launch-at-boot / keep-alive, the lock-screen answer, the active-call banner, conference calls, a real telephony service.*
+- [ ] **Messaging** (SMS/MMS/IM, `com.palm.app.messaging`). `conf/luna.conf:99`; `conf/notificationPolicy.conf:35`. *Phoenix: `apps/messaging` (`org.webosphoenix.messaging`) sends and receives SMS (simulated), with conversations, chat balloons and a contact picker; MMS and IM transports are not done (IM shown as unavailable).*
 - [ ] **Email** (`com.palm.app.email`, Enyo `com.palm.app.enyo-email` on the TouchPad). `conf/luna.conf:99`
 - [ ] **Contacts / Synergy** (`com.palm.app.contacts`, `com.palm.app.enyo-contacts`). `conf/default-launcher-page-layout.json`; `conf/luna.conf:65`
 - [ ] **Calendar** (`com.palm.app.calendar`, `com.palm.app.enyo-calendar`) and the **Agenda view** exhibition (`com.palm.app.agendaview`). `conf/luna.conf:99`; `Src/base/application/ApplicationManagerService.cpp:2524`

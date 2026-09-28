@@ -27,6 +27,8 @@
 //                            resolved to a local file
 //   pushSystemStatus(changes)     tell the web pages what the user changed
 //                            in the system menu (only the changed keys)
+//   simulateIncomingCall()   ring the Phone app (phoenix-sim F4)
+//   simulateIncomingSms()    deliver a text to Messaging (phoenix-sim F5)
 //
 // Web apps (the original webOS apps, Settings, ...) come from the virtual
 // webOS filesystem when phoenix-sim was built with Qt WebEngine; they
@@ -69,7 +71,8 @@ Item {
     signal cardFocusRequested(string uid)
     signal cardCloseRequested(string uid)
 
-    // Quick launch slots for web apps, by title.
+    // Quick launch slots for web apps: appinfo.json "phoenix.quickLaunch"
+    // (Phone 1, Messaging 3), else by title for the original apps.
     readonly property var webQuickLaunch: ({ "Email": 2, "Calendar": 4 })
 
     Component.onCompleted: {
@@ -81,7 +84,7 @@ Item {
             // Launch points (appinfo.json phoenix.launchPoints) are entries of
             // their own: own icon, title, card and launch params.
             apps.append({ appId: a.id, title: a.title, color: "#555c66", glyph: a.title.charAt(0),
-                          tab: a.tab !== undefined ? a.tab : 0, quickLaunch: webQuickLaunch[a.title] || 0,
+                          tab: a.tab !== undefined ? a.tab : 0, quickLaunch: a.quickLaunch || webQuickLaunch[a.title] || 0,
                           icon: a.icon, web: true, main: a.main, noWindow: !!a.noWindow,
                           webAppId: a.appId || a.id, params: a.params || "", dir: a.dir || "" });
         }
@@ -220,6 +223,11 @@ Item {
         } else if (type === "banner") {
             var info = appInfo(appId);
             notify(appId, info ? info.title : appId, payload.message || "");
+        } else if (type === "notification") {
+            // A notification for another app (e.g. a text the telephony
+            // service received for Messaging): {appId, title, body}.
+            var target = payload.appId && appInfo(payload.appId) ? payload.appId : appId;
+            notify(target, payload.title || "", payload.body || "");
         } else if (type === "systemStatus") {
             // The pages are in step with the shell again.
             _pendingStatus = null;
@@ -316,6 +324,64 @@ Item {
                 return a.dir + m[2];
         }
         return "";
+    }
+
+    // ---- Simulator: incoming call and text -----------------------------------------
+
+    readonly property string phoneAppId: "org.webosphoenix.phone"
+    readonly property string messagingAppId: "org.webosphoenix.messaging"
+
+    // Run js in win now, or once its page has loaded when just created.
+    function _runWhenLoaded(win, js, fresh) {
+        if (!fresh) {
+            win.runScript(js);
+            return;
+        }
+        var done = false;
+        win.loaded.connect(function() {
+            if (done)
+                return;
+            done = true;
+            win.runScript(js);
+        });
+    }
+
+    // A call comes in: the Phone card comes up ringing, as on webOS
+    // (__phoenixRuntime.simulateIncomingCall in runtime/phoenix-runtime.js).
+    function simulateIncomingCall() {
+        var info = appInfo(phoneAppId);
+        if (!info || !info.web) {
+            notify(phoneAppId, "Incoming call", "Priya Nair");
+            return;
+        }
+        var uid = runningUid(phoneAppId);
+        var fresh = uid === "";
+        if (fresh)
+            uid = launch(phoneAppId, "");
+        if (uid === "" || !_windows[uid] || !_windows[uid].runScript)
+            return;
+        _runWhenLoaded(_windows[uid], "window.__phoenixRuntime && __phoenixRuntime.simulateIncomingCall()", fresh);
+        cardFocusRequested(uid);
+    }
+
+    // A text arrives. Any running page can play the telephony service; the
+    // runtime then posts a "notification" for Messaging. With no web page
+    // running, Messaging starts in the background to receive it.
+    function simulateIncomingSms() {
+        var js = "window.__phoenixRuntime && __phoenixRuntime.simulateIncomingSms()";
+        var pages = _webPages();
+        if (pages.length > 0) {
+            pages[0].runScript(js);
+            return;
+        }
+        var info = appInfo(messagingAppId);
+        if (!info || !info.web) {
+            notify(messagingAppId, "Marcus Reyes", "Are we still on for lunch at noon?");
+            return;
+        }
+        var uid = launch(messagingAppId, "");
+        if (uid !== "" && _windows[uid] && _windows[uid].runScript)
+            _runWhenLoaded(_windows[uid], js, true);
     }
 
     // Launch or re-focus an app. A new app starts its own stack to the right

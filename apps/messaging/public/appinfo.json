@@ -1,0 +1,14 @@
+{
+    "id": "org.webosphoenix.messaging",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Messaging",
+    "icon": "icon.png",
+    "uiRevision": 2,
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): quickLaunch puts the app in that quick launch slot (1-4).",
+        "quickLaunch": 3
+    }
+}

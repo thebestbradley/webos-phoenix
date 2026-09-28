@@ -90,6 +90,15 @@ Calculator, Settings panes, and an app catalog.
       Sounds & Ringtones, Date & Time, Language & Region, Device Info, Updates (stub),
       one launcher icon per pane; coded against OSE's services, simulated in
       `runtime/phoenix-runtime.js`, and in step with the status bar and system menu
+- [x] Phone (`apps/phone`): dial pad, call log (all / missed), favourites from
+      `com.palm.person:1`, in-call screen (mute, speaker, keypad, hold, end),
+      incoming call with banner, voicemail entry (stub); Messaging (`apps/messaging`):
+      conversations, threaded chat, compose with a contact picker, SMS, IM transports
+      as stubs. Coded against the legacy `com.palm.telephony` and LuneOS messaging
+      APIs and db8 kinds, simulated in the runtime (F4 / F5 ring and text in phoenix-sim)
+- [ ] Phone and Messaging on a device: a telephony service for OSE (port LuneOS's
+      `webos-telephonyd` on oFono, plus call state), MMS, IM transports, active-call
+      banner in the shell
 - [ ] Settings on a device: check each OSE call on real hardware; a Phoenix
       service for the device passcode (OSE has no `setDevicePasscode`),
       brightness and screen timeout

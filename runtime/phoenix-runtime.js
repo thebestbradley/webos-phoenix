@@ -1364,4 +1364,433 @@
         host.postToHost("systemStatus", hostStatus());
     })();
 
+    // ================================================================================
+    // Phone and Messaging services (simulated legacy webOS APIs used by apps/phone
+    // and apps/messaging)
+    // ================================================================================
+    //
+    // webOS OSE has no telephony. The Phone and Messaging apps code against
+    // the legacy webOS services as LuneOS (webOS-ports) reimplemented them on
+    // oFono, and this block simulates exactly those calls:
+    //
+    //   com.palm.telephony                   webOS-ports/webos-telephonyd src/telephonyservice.c,
+    //                                        src/telephonyservice_call.c, src/telephonyservice_sms.c
+    //       dial {number, blockId}, answer {id}, ignore {id}, hangup {id},
+    //       isTelephonyReady, powerQuery, platformQuery, networkStatusQuery
+    //     Phoenix additions (telephonyd leaves call state to oFono, which the
+    //     LuneOS phone app reads directly; shaped after oFono's VoiceCall,
+    //     CallVolume and MessageWaiting D-Bus APIs, see apps/shared/luna/src/telephony.ts):
+    //       callStatusQuery {subscribe}, hold {id}, unhold {id}, sendDtmf {tones},
+    //       muteSet {mute}, speakerSet {speaker}, voicemailQuery {subscribe}
+    //   org.webosports.service.messaging     webOS-ports/org.webosports.messaging
+    //       putMessage {message} -> {threadids}   service/javascript/assistants/PutMessage.js,
+    //                                              utils/MessageAssigner.js (thread assignment)
+    //   db8 kinds com.palm.smsmessage:1 (extends com.palm.message:1), com.palm.chatthread:1,
+    //   com.palm.phonecall:1, com.palm.person:1 (contacts linker schema).
+    //
+    // Outgoing texts are "sent" as telephonyd does it: a message put in folder
+    // "outbox" with status "pending" goes to "sending", then "successful"
+    // (or "failed" in airplane mode). Received texts are stored like
+    // telephonyservice_sms.c stores them (folder inbox, status successful,
+    // from.addr, flags.read false) and assigned to a chat thread.
+    //
+    // Call state lives in the shared store ("telephony:state"), so the Phone
+    // card and any other page see the same calls; other windows' changes
+    // arrive as "storage" events. db8 watches also fire across windows here,
+    // so Messaging updates when a text arrives through another page.
+    //
+    // Simulator helpers (phoenix-sim F4 / F5, tools/test-phone-messaging.cjs):
+    //   __phoenixRuntime.simulateIncomingCall({number?, name?}) -> call id
+    //   __phoenixRuntime.simulateRemoteHangup()
+    //   __phoenixRuntime.simulateIncomingSms({from?, text?})
+    //   __phoenixRuntime.seedPhoneDemoData(force)   fictional contacts, calls, texts
+    // A received text is announced with the host message
+    //   phoenixHost.postToHost("notification", {appId, title, body})
+    // which the shell shows as a banner and dashboard item for that app.
+    (function phoneServices() {
+        var KEY = "telephony:state";
+        var PHONE_APP = "org.webosphoenix.phone";
+        var MESSAGING_APP = "org.webosphoenix.messaging";
+
+        function defaults() {
+            return { calls: [], muted: false, speaker: false, nextId: 1,
+                     voicemail: { number: "(408) 555-0100", waiting: true, count: 2 } };
+        }
+        function load() {
+            var s = store.get(KEY, null);
+            if (!s) return defaults();
+            var d = defaults();
+            for (var k in d) if (!(k in s)) s[k] = d[k];
+            return s;
+        }
+        var listeners = [];
+        function changed() { listeners.slice().forEach(function (fn) { fn(); }); }
+        function save(s) { store.set(KEY, s); changed(); }
+        function status(s) {
+            return ok({ calls: s.calls, muted: !!s.muted, speaker: !!s.speaker });
+        }
+        function listen(ctx, fn) {
+            listeners.push(fn);
+            var prev = ctx.onCancel;
+            ctx.onCancel = function () {
+                var i = listeners.indexOf(fn);
+                if (i >= 0) listeners.splice(i, 1);
+                if (prev) prev();
+            };
+        }
+        function offline() {
+            var st = store.get("settings:state", null);
+            return !!(st && st.offlineMode);
+        }
+        function find(s, id) {
+            for (var i = 0; i < s.calls.length; ++i) if (s.calls[i].id === id) return s.calls[i];
+            return null;
+        }
+        function live(c) { return c.state !== "disconnected"; }
+
+        // Ended calls stay in the list (state "disconnected") for a moment so
+        // every page sees how they ended, then go.
+        function end(s, c, reason) {
+            c.state = "disconnected";
+            c.disconnectReason = reason;
+            c.endTime = Date.now();
+            if (!s.calls.some(live)) { s.muted = false; s.speaker = false; }
+            setTimeout(function () {
+                var t = load();
+                var before = t.calls.length;
+                t.calls = t.calls.filter(function (x) { return live(x) || Date.now() - (x.endTime || 0) < 1500; });
+                if (t.calls.length !== before) save(t);
+            }, 2000);
+        }
+        // Move a call on if it is still in one of the given states.
+        function later(ms, id, from, fn) {
+            setTimeout(function () {
+                var s = load(), c = find(s, id);
+                if (c && from.indexOf(c.state) >= 0) { fn(s, c); save(s); }
+            }, ms);
+        }
+        function holdOthers(s, except) {
+            s.calls.forEach(function (x) { if (x.id !== except && x.state === "active") x.state = "held"; });
+        }
+        function withCall(p, reply, states, fn) {
+            var s = load(), c = find(s, p.id);
+            if (!c || !live(c)) return reply(fail(-1, "No call with id " + p.id));
+            if (states && states.indexOf(c.state) < 0) return reply(fail(-1, "Call " + p.id + " is " + c.state));
+            fn(s, c);
+            save(s);
+            reply(ok());
+        }
+
+        function incoming(opts) {
+            opts = opts || {};
+            var s = load();
+            var id = s.nextId++;
+            var busy = s.calls.some(function (x) { return live(x) && x.state !== "incoming"; });
+            s.calls.push({ id: id, state: busy ? "waiting" : "incoming", number: opts.number || "(415) 555-0123",
+                           name: opts.name || undefined, direction: "incoming", startTime: Date.now() });
+            save(s);
+            // Unanswered calls stop ringing after 30 s (missed).
+            later(opts.ringMs || 30000, id, ["incoming", "waiting"], function (t, c) { end(t, c, "remote"); });
+            return id;
+        }
+
+        var telephony = {
+            "/isTelephonyReady": function (p, reply) {
+                reply(ok({ extended: { radioConnected: !offline(), networkRegistered: !offline(), dataRegistered: false, simReady: true } }));
+            },
+            "/platformQuery": function (p, reply) {
+                reply(ok({ extended: { platformType: "gsm", imei: "000000000000000", version: "phoenix-sim" } }));
+            },
+            "/powerQuery": function (p, reply) { reply(ok({ extended: { powerState: offline() ? "off" : "on" } })); },
+            "/networkStatusQuery": function (p, reply) {
+                reply(ok({ extended: offline() ? { state: "noservice", registration: "notSearching" }
+                                             : { state: "service", registration: "home", networkName: "Phoenix", rat: "umts" } }));
+            },
+            "/signalStrengthQuery": function (p, reply) { reply(ok({ bars: offline() ? 0 : 4, maxBars: 5 })); },
+            "/callStatusQuery": function (p, reply, ctx) {
+                reply(status(load()));
+                if (p.subscribe) listen(ctx, function () { if (!ctx.cancelled()) reply(status(load())); });
+            },
+            "/dial": function (p, reply) {
+                var number = String(p.number || "").replace(/[^0-9+*#,pw]/gi, "");
+                if (!number) return reply(fail(-1, "Invalid number"));
+                if (offline()) return reply(fail(-1, "The phone is off (airplane mode)"));
+                var s = load();
+                holdOthers(s, -1);
+                var id = s.nextId++;
+                s.calls.push({ id: id, state: "dialing", number: String(p.number), direction: "outgoing", startTime: Date.now() });
+                save(s);
+                reply(ok());
+                later(700, id, ["dialing"], function (t, c) { c.state = "alerting"; });
+                later(2200, id, ["dialing", "alerting"], function (t, c) { c.state = "active"; c.connectTime = Date.now(); });
+            },
+            "/answer": function (p, reply) {
+                withCall(p, reply, ["incoming", "waiting"], function (s, c) {
+                    holdOthers(s, c.id);
+                    c.state = "active";
+                    c.connectTime = Date.now();
+                });
+            },
+            "/ignore": function (p, reply) {
+                withCall(p, reply, ["incoming", "waiting"], function (s, c) { c.ignored = true; end(s, c, "local"); });
+            },
+            "/hangup": function (p, reply) {
+                withCall(p, reply, null, function (s, c) { end(s, c, "local"); });
+            },
+            "/hold": function (p, reply) {
+                withCall(p, reply, ["active"], function (s, c) { c.state = "held"; });
+            },
+            "/unhold": function (p, reply) {
+                withCall(p, reply, ["held"], function (s, c) { holdOthers(s, c.id); c.state = "active"; });
+            },
+            "/sendDtmf": function (p, reply) {
+                var s = load();
+                if (!s.calls.some(function (x) { return x.state === "active"; })) return reply(fail(-1, "No active call"));
+                if (!/^[0-9*#abcd]+$/i.test(String(p.tones || ""))) return reply(fail(-1, "Invalid tones"));
+                reply(ok());
+            },
+            "/muteSet": function (p, reply) { var s = load(); s.muted = !!p.mute; save(s); reply(ok()); },
+            "/speakerSet": function (p, reply) { var s = load(); s.speaker = !!p.speaker; save(s); reply(ok()); },
+            "/voicemailQuery": function (p, reply, ctx) {
+                var v = function () { var m = load().voicemail; return ok({ number: m.number, waiting: m.waiting, count: m.count }); };
+                reply(v());
+                if (p.subscribe) listen(ctx, function () { if (!ctx.cancelled()) reply(v()); });
+            },
+            // telephonyd's activity callback for the outbox (outgoing-sms.json).
+            "/sendSmsFromDb": function (p, reply) { sendOutbox(); reply(ok()); }
+        };
+        register(["com.palm.telephony"], telephony);
+
+        try {
+            global.addEventListener("storage", function (e) { if (e.key === "phoenix:" + KEY) changed(); });
+        } catch (x) { /* no window events */ }
+
+        runtime.simulateIncomingCall = function (opts) { return incoming(opts); };
+        runtime.simulateRemoteHangup = function () {
+            var s = load();
+            var c = s.calls.filter(function (x) { return x.state === "active"; })[0] || s.calls.filter(live)[0];
+            if (!c) return false;
+            end(s, c, "remote");
+            save(s);
+            return true;
+        };
+
+        // ---- db8 helpers and cross-window watches ------------------------------------
+
+        var dbSvc = runtime.services["com.palm.db"];
+        function dbCall(method, params) {
+            var out;
+            dbSvc[method](params, function (r) { if (out === undefined) out = r; }, { cancelled: function () { return true; } });
+            return out || {};
+        }
+
+        // db8 watches in this page fire for changes other pages make, too.
+        var xWatchers = [];
+        function crossWindow(reply, ctx) {
+            var done = false;
+            xWatchers.push(function () {
+                if (done || ctx.cancelled()) return;
+                done = true;
+                reply(ok({ fired: true }));
+            });
+            return function (r) {
+                if (r && r.fired) { if (done) return; done = true; }
+                reply(r);
+            };
+        }
+        var baseFind = dbSvc["/find"], baseWatch = dbSvc["/watch"];
+        dbSvc["/find"] = function (p, reply, ctx) {
+            if (!p.watch) return baseFind(p, reply, ctx);
+            baseFind(p, crossWindow(reply, ctx), ctx);
+        };
+        dbSvc["/watch"] = function (p, reply, ctx) { baseWatch(p, crossWindow(reply, ctx), ctx); };
+        try {
+            global.addEventListener("storage", function (e) {
+                if (e.key !== "phoenix:db8:com.palm.db") return;
+                var w = xWatchers;
+                xWatchers = [];
+                w.forEach(function (fn) { fn(); });
+            });
+        } catch (x) { /* no window events */ }
+
+        // ---- Messaging: thread assignment (LuneOS MessageAssigner.js) ----------------
+
+        function digits(n) { return String(n || "").replace(/[^0-9]/g, "").split("").reverse().join(""); }
+        function sameNumber(a, b) {
+            var x = digits(a), y = digits(b);
+            if (!x || !y) return false;
+            var n = Math.min(7, x.length, y.length);
+            return x.slice(0, n) === y.slice(0, n) && (n >= 7 || x === y);
+        }
+        function personName(p) {
+            var n = ((p.name && p.name.givenName) || "") + " " + ((p.name && p.name.familyName) || "");
+            return n.trim() || p.nickname || "";
+        }
+        function personFor(addr) {
+            var people = dbCall("/find", { query: { from: "com.palm.person:1" } }).results || [];
+            for (var i = 0; i < people.length; ++i) {
+                var nums = people[i].phoneNumbers || [];
+                for (var j = 0; j < nums.length; ++j)
+                    if (sameNumber(nums[j].value, addr)) return people[i];
+            }
+            return null;
+        }
+
+        // Find or create msg's chat thread, update it (summary, timestamp,
+        // unread count) and store msg with conversations = [thread id].
+        function assign(msg) {
+            var incomingMsg = msg.folder === "inbox";
+            var addr = incomingMsg ? (msg.from && msg.from.addr) : (msg.to && msg.to[0] && msg.to[0].addr);
+            var person = addr ? personFor(addr) : null;
+            var thread = null;
+            if (msg.conversations && msg.conversations.length)
+                thread = (dbCall("/get", { ids: [msg.conversations[0]] }).results || [])[0] || null;
+            if (!thread) {
+                var threads = dbCall("/find", { query: { from: "com.palm.chatthread:1" } }).results || [];
+                for (var i = 0; i < threads.length && !thread; ++i) {
+                    var t = threads[i];
+                    if ((person && t.personId === person._id) || (!person && t.replyAddress && sameNumber(t.replyAddress, addr)))
+                        thread = t;
+                }
+            }
+            thread = thread || { _kind: "com.palm.chatthread:1", unreadCount: 0, flags: {} };
+            thread.displayName = (person && personName(person)) || thread.displayName ||
+                (!incomingMsg && msg.to[0].name) || addr;
+            if (person) thread.personId = person._id;
+            thread.normalizedAddress = digits(addr);
+            thread.replyAddress = addr;
+            thread.replyService = msg.serviceName || "sms";
+            thread.summary = msg.messageText;
+            thread.timestamp = msg.localTimestamp || Date.now();
+            thread.flags = thread.flags || {};
+            thread.flags.visible = true;
+            if (incomingMsg && !(msg.flags && msg.flags.read)) thread.unreadCount = (thread.unreadCount || 0) + 1;
+            var put = dbCall("/put", { objects: [thread] });
+            var threadId = put.results[0].id;
+            msg.conversations = [threadId];
+            var res = dbCall("/put", { objects: [msg] });
+            return { threadId: threadId, messageId: res.results[0].id };
+        }
+
+        // telephonyd: pending outbox texts -> sending -> successful / failed.
+        function sendOutbox() {
+            var pending = dbCall("/find", { query: { from: "com.palm.smsmessage:1", where: [
+                { prop: "folder", op: "=", val: "outbox" }, { prop: "status", op: "=", val: "pending" }] } }).results || [];
+            pending.forEach(function (m) {
+                dbCall("/merge", { objects: [{ _id: m._id, status: "sending" }] });
+                setTimeout(function () {
+                    dbCall("/merge", { objects: [{ _id: m._id, status: offline() ? "failed" : "successful" }] });
+                }, 600);
+            });
+        }
+
+        register(["org.webosports.service.messaging"], {
+            "/putMessage": function (p, reply) {
+                var msg = p.message;
+                if (!msg || !msg._kind || (!msg.to && !msg.from))
+                    return reply(fail(-1, "Requiring valid message argument with _kind member already set."));
+                msg = JSON.parse(JSON.stringify(msg));
+                var r = assign(msg);
+                reply(ok({ threadids: [r.threadId] }));
+                if (msg._kind === "com.palm.smsmessage:1" && msg.folder === "outbox" && msg.status === "pending")
+                    setTimeout(sendOutbox, 250);
+            }
+        });
+
+        runtime.simulateIncomingSms = function (opts) {
+            opts = opts || {};
+            var from = opts.from || "(650) 555-0187";
+            var text = opts.text || "Are we still on for lunch at noon?";
+            var now = Date.now();
+            var r = assign({
+                _kind: "com.palm.smsmessage:1", folder: "inbox", status: "successful", serviceName: "sms",
+                messageText: text, localTimestamp: now, timestamp: now, simId: 0,
+                from: { addr: from }, flags: { read: false, visible: true }
+            });
+            var person = personFor(from);
+            host.postToHost("notification", { appId: MESSAGING_APP, title: person ? personName(person) : from, body: text,
+                                              params: { threadId: r.threadId } });
+            return r.threadId;
+        };
+
+        // ---- Demo data (simulator only; fictional people, 555 numbers) ---------------
+
+        var SEED_VERSION = 1;
+        runtime.seedPhoneDemoData = function (force) {
+            if (!force && store.get("telephony:seeded", 0) === SEED_VERSION) return false;
+            [["com.palm.person:1", []], ["com.palm.message:1", []], ["com.palm.smsmessage:1", ["com.palm.message:1"]],
+             ["com.palm.chatthread:1", []], ["com.palm.phonecall:1", []]].forEach(function (k) {
+                dbCall("/putKind", { id: k[0], owner: "org.webosphoenix.simulator", extends: k[1] });
+            });
+            var people = [
+                ["Ada", "Palmer", true, [["(408) 555-0142", "type_mobile"]]],
+                ["Marcus", "Reyes", true, [["(650) 555-0187", "type_mobile"], ["(650) 555-0110", "type_work"]]],
+                ["Priya", "Nair", true, [["(415) 555-0123", "type_mobile"]]],
+                ["Lena", "Okafor", true, [["(212) 555-0164", "type_mobile"]]],
+                ["Jonah", "Whitfield", false, [["(408) 555-0199", "type_home"]]],
+                ["Sam", "Delgado", false, [["(303) 555-0135", "type_mobile"]]],
+                ["Theo", "Lindqvist", false, [["(206) 555-0171", "type_work"]]]
+            ].map(function (d, i) {
+                return { _id: "phoenix-demo-person-" + (i + 1), _kind: "com.palm.person:1",
+                         name: { givenName: d[0], familyName: d[1] }, nickname: "", favorite: d[2],
+                         sortKey: (d[1] + " " + d[0]).toUpperCase(),
+                         phoneNumbers: d[3].map(function (n, j) {
+                             return { value: n[0], type: n[1], normalizedValue: digits(n[0]), primary: j === 0 };
+                         }) };
+            });
+            dbCall("/put", { objects: people });
+
+            var now = Date.now(), min = 60000, hour = 60 * min, day = 24 * hour;
+            function addr(p, n) {
+                var o = { addr: n, service: "com.palm.telephony", normalizedAddr: digits(n) };
+                if (p) { o.name = personName(p); o.personId = p._id; o.personGivenName = p.name.givenName; o.personFamilyName = p.name.familyName; }
+                return o;
+            }
+            var calls = [
+                ["missed", people[2], "(415) 555-0123", 25 * min, 0],
+                ["outgoing", people[1], "(650) 555-0187", 2 * hour, 4 * min + 12000],
+                ["incoming", people[0], "(408) 555-0142", day + 3 * hour, 12 * min + 40000],
+                ["missed", null, "(510) 555-0118", day + 5 * hour, 0],
+                ["outgoing", people[3], "(212) 555-0164", 3 * day, 58000],
+                ["incoming", people[4], "(408) 555-0199", 4 * day + 2 * hour, 7 * min]
+            ].map(function (c, i) {
+                var t = now - c[3];
+                var party = addr(c[1], c[2]);
+                var rec = { _id: "phoenix-demo-call-" + (i + 1), _kind: "com.palm.phonecall:1", type: c[0], duration: c[4],
+                            timestamp: t, timestampInSecs: Math.floor(t / 1000) };
+                if (c[0] === "outgoing") { rec.from = { addr: "", service: "com.palm.telephony" }; rec.to = [party]; }
+                else { rec.from = party; rec.to = [{ addr: "", service: "com.palm.telephony" }]; }
+                return rec;
+            });
+            dbCall("/put", { objects: calls });
+
+            // Conversations: [person index, [minutes ago, incoming?, text]...]
+            [[0, [[3 * 24 * 60, true, "Did you see the Pre 3 is back?"], [3 * 24 * 60 - 2, false, "Running Phoenix on it right now"],
+                   [3 * 24 * 60 - 5, true, "Cards! I missed cards."]]],
+             [3, [[26 * 60, false, "Landing at 6. Dinner?"], [26 * 60 - 4, true, "Yes! The usual place"]]],
+             [1, [[95, true, "Can you send me the build notes?"], [90, false, "Sure, give me a minute"],
+                  [12, true, "Thanks, got them. The new dial pad looks great"]]]
+            ].forEach(function (conv) {
+                var p = people[conv[0]], number = p.phoneNumbers[0].value;
+                conv[1].forEach(function (m, i) {
+                    var t = now - m[0] * min;
+                    var last = i === conv[1].length - 1;
+                    assign(m[1] ? { _kind: "com.palm.smsmessage:1", folder: "inbox", status: "successful", serviceName: "sms",
+                                    messageText: m[2], localTimestamp: t, timestamp: t, from: { addr: number },
+                                    flags: { read: !(last && conv[0] === 1), visible: true } }
+                                : { _kind: "com.palm.smsmessage:1", folder: "outbox", status: "successful", serviceName: "sms",
+                                    messageText: m[2], localTimestamp: t, timestamp: t, to: [{ addr: number, name: personName(p) }],
+                                    flags: { read: true, visible: true } });
+                });
+            });
+            store.set("telephony:seeded", SEED_VERSION);
+            return true;
+        };
+        runtime.seedPhoneDemoData(false);
+
+        // Ids for the shell (sim.qml F4 / F5).
+        runtime.phoneAppId = PHONE_APP;
+        runtime.messagingAppId = MESSAGING_APP;
+    })();
+
 })(this);

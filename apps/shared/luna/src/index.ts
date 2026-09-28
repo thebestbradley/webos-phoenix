@@ -5,3 +5,7 @@ export { call, subscribe, setBridgeFactory, LunaError } from "./bridge";
 export type { ServiceBridge, BridgeFactory, Subscription, CallOptions, LunaUri, LunaParams, LunaResult } from "./bridge";
 export * from "./types";
 export * from "./services";
+export * from "./db8";
+export * from "./contacts";
+export * from "./telephony";
+export * from "./messaging";

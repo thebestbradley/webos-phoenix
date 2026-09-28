@@ -80,9 +80,10 @@ def app_list():
 
     appinfo.json may carry a "phoenix" object (Phoenix launcher metadata):
     launcherTab (0 Apps, 1 Downloads, 2 Settings), hidden (keep the app
-    itself out of the launcher) and launchPoints: extra launcher icons,
-    each {id, title, icon, params}, that start the app with those launch
-    params. shell/sim/rootfs.cpp reads the same fields.
+    itself out of the launcher), quickLaunch (quick launch slot 1-4) and
+    launchPoints: extra launcher icons, each {id, title, icon, params},
+    that start the app with those launch params. shell/sim/rootfs.cpp reads
+    the same fields.
     """
     out = []
     for app_id, (_, info) in sorted(APPS.items()):
@@ -98,6 +99,7 @@ def app_list():
             "icon": base + info.get("icon", "icon.png"),
             "tab": tab,
             "hidden": bool(phoenix.get("hidden", False)),
+            "quickLaunch": int(phoenix.get("quickLaunch", 0)),
         })
         for lp in phoenix.get("launchPoints", []):
             params = lp.get("params", {})
