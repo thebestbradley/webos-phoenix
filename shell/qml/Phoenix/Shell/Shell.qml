@@ -73,7 +73,7 @@ FocusScope {
         notes.dashboardOpen = false;
         if (justType.open)
             justType.open = false;
-        else if (cards.maximizeProgress > 0)
+        else if (cards.maximizeProgress > 0 && !cards.minimizing)
             cards.minimize();
         else
             launcher.open = !launcher.open;

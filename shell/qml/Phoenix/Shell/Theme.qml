@@ -175,10 +175,15 @@ QtObject {
     readonly property int cardMaximizeDuration: 300                  // curve 10 = OutQuart
     readonly property int cardMinimizeDuration: 300                  // minimize is a cardSlide
     readonly property int cardDeleteDuration: 300                    // curve 6 = OutCubic
+    // Loading card (CardLoading.cpp, lunaAnimations.conf:55-60, Settings.cpp:216).
+    readonly property int cardLoadingTimeBeforePulse: 900
+    readonly property int cardLoadingPulseDuration: 1000             // half up, half down
+    readonly property int cardLoadingPulsePause: 1000
+    readonly property int cardLoadingCrossFadeDuration: 300          // curve 0 = Linear
+    readonly property int splashIconSize: tablet ? 192 : 128         // luna.conf SplashIconSize; 192 on tablets
     readonly property int cardShuffleReorderDuration: 350            // curve 6 = OutCubic
     readonly property int cardGroupReorderDuration: 500              // conf/lunaAnimations.conf:43-46
     readonly property int cardDimmingDuration: 300
-    readonly property int cardLoadingPulseDuration: 1000
     readonly property int launcherReorderDuration: 300               // dynamicssettings.cpp:92-93 iconReorderIconMoveAnimTime, InQuad
     readonly property int launcherDuration: 350                      // conf/lunaAnimations.conf:83-84 (curve 15 InOutQuint)
     readonly property int quickLaunchDuration: 350                   // conf/lunaAnimations.conf:77-82

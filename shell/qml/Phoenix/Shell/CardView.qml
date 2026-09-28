@@ -34,6 +34,8 @@ Item {
     // 0 == card view, 1 == current card maximized.
     property real maximizeProgress: 0
     readonly property bool maximized: maximizeProgress === 1
+    // On its way back to card view: gestures treat it as there already.
+    readonly property bool minimizing: maximizeAnim.running && maximizeAnim.to === 0
 
     // Area a maximized window occupies.
     property real topInset: Theme.statusBarHeight
@@ -433,6 +435,10 @@ Item {
 
             uid: model.uid
             title: model.title
+            icon: {
+                var info = view.source && typeof view.source.appInfo === "function" ? view.source.appInfo(model.appId) : null;
+                return info && info.icon ? info.icon : "";
+            }
             width: view.windowWidth
             height: view.windowHeight
             window: view.source.windowFor(uid)

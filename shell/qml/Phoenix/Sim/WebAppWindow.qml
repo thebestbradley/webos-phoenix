@@ -32,6 +32,9 @@ Item {
     signal closeRequested
     // The page finished loading (the runtime and the app's scripts ran).
     signal loaded
+    // Until then the card shows the loading card (CardLoading).
+    property bool ready: false
+    onLoaded: ready = true
 
     readonly property alias view: view
 

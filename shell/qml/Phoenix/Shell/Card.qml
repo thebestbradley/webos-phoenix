@@ -28,6 +28,10 @@ Item {
     property bool rounded: true
     // Vertical offset while the user is flicking the card away.
     property real flickOffset: 0
+    // The app is still loading: CardLoading covers it.
+    readonly property bool loading: window !== null && window.ready === false
+    // The app's launcher icon, for the loading card.
+    property url icon: ""
     // Cards that have lost focus are darkened (CardWindow.cpp:211-213).
     property bool dimmed: false
 
@@ -88,6 +92,14 @@ Item {
         anchors.fill: parent
         clip: true
         enabled: card.interactive
+
+        // Over the app's window until it is ready.
+        CardLoading {
+            anchors.fill: parent
+            z: 1
+            active: card.loading
+            icon: card.icon
+        }
 
         layer.enabled: card.rounded && GraphicsInfo.api !== GraphicsInfo.Software
         layer.smooth: true
