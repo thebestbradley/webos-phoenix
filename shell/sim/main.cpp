@@ -4,10 +4,13 @@
 // phoenix-sim: runs the Phoenix shell in a desktop window with mock apps.
 //
 //   phoenix-sim [--size WxH] [--scale N] [--tablet|--phone] [--scene NAME]
+//               [--orientation up|left|down|right] [--turn ORIENTATION]
 //               [--screenshot FILE [--delay MS]]
 //
 // Keys: Esc = back gesture, Home/F1 = up gesture, F2 = demo notification,
-//       F3 = lock/unlock, F4 = incoming call, F5 = incoming text message.
+//       F3 = lock/unlock, F4 = incoming call, F5 = incoming text message,
+//       F6 = low battery, F7 = charger in/out, Ctrl+Left / Ctrl+Right =
+//       turn the device a quarter turn counter-clockwise / clockwise.
 //       Type in card view for Just Type.
 
 #include <QCommandLineParser>
@@ -54,15 +57,25 @@ int main(int argc, char *argv[])
     QCommandLineOption scaleOpt(QStringLiteral("scale"), QStringLiteral("Device pixels per legacy pixel, like a denser screen (default 1; the Pre 3 was 1.5 at 480x800)."), QStringLiteral("N"), QStringLiteral("1"));
     QCommandLineOption tabletOpt(QStringLiteral("tablet"), QStringLiteral("Use the tablet (TouchPad) layout."));
     QCommandLineOption phoneOpt(QStringLiteral("phone"), QStringLiteral("Force the phone layout."));
-    QCommandLineOption sceneOpt(QStringLiteral("scene"), QStringLiteral("Demo scene: locked, cards, stacks, reorder, maximized, launcher, launcheredit, pin, lowbattery, banner, notified, dashboard, justtype, systemmenu, empty."), QStringLiteral("name"));
+    QCommandLineOption sceneOpt(QStringLiteral("scene"), QStringLiteral("Demo scene: locked, cards, stacks, reorder, maximized, heldcard, launcher, launcheredit, pin, lowbattery, banner, notified, dashboard, justtype, systemmenu, empty."), QStringLiteral("name"));
     QCommandLineOption shotOpt(QStringLiteral("screenshot"), QStringLiteral("Save a screenshot to FILE and exit."), QStringLiteral("file"));
     QCommandLineOption delayOpt(QStringLiteral("delay"), QStringLiteral("Delay before the screenshot (default 1500 ms)."), QStringLiteral("ms"), QStringLiteral("1500"));
     QCommandLineOption qmlOpt(QStringLiteral("qml-dir"), QStringLiteral("Directory containing sim.qml and the Phoenix modules."), QStringLiteral("dir"));
     QCommandLineOption repoOpt(QStringLiteral("repo-dir"), QStringLiteral("Checkout root holding runtime/rootfs.json and the web apps."), QStringLiteral("dir"));
     QCommandLineOption launchOpt(QStringLiteral("launch"), QStringLiteral("Launch this app id after start-up (repeatable)."), QStringLiteral("appId"));
     QCommandLineOption openOpt(QStringLiteral("open"), QStringLiteral("Open this web address in the browser after start-up."), QStringLiteral("url"));
-    parser.addOptions({ sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, shotOpt, delayOpt, qmlOpt, repoOpt, launchOpt, openOpt });
+    QCommandLineOption orientationOpt(QStringLiteral("orientation"), QStringLiteral("How the device is held at start-up: up (default), left (turned counter-clockwise), down or right. The window shows it as held; --size is the screen upright."), QStringLiteral("orientation"), QStringLiteral("up"));
+    QCommandLineOption turnOpt(QStringLiteral("turn"), QStringLiteral("Turn the device to this orientation one second after start-up (the UI follows 200 ms later and turns for 300 ms)."), QStringLiteral("orientation"));
+    parser.addOptions({ sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, shotOpt, delayOpt, qmlOpt, repoOpt, launchOpt, openOpt, orientationOpt, turnOpt });
     parser.process(app);
+
+    const QStringList orientations = { QStringLiteral("up"), QStringLiteral("left"), QStringLiteral("down"), QStringLiteral("right") };
+    const QString orientation = parser.value(orientationOpt);
+    const QString turn = parser.value(turnOpt);
+    if (!orientations.contains(orientation) || (parser.isSet(turnOpt) && !orientations.contains(turn))) {
+        qCritical("--orientation and --turn take up, left, down or right");
+        return 2;
+    }
 
     const bool tablet = parser.isSet(tabletOpt);
     QSize size = tablet ? QSize(1024, 768) : QSize(320, 480);
@@ -74,6 +87,10 @@ int main(int argc, char *argv[])
         }
         size = QSize(wh[0].toInt(), wh[1].toInt());
     }
+    // The device's screen upright; on its side the window is turned too.
+    const QSize display = size;
+    if (orientation == QLatin1String("left") || orientation == QLatin1String("right"))
+        size.transpose();
 
     // A desktop window is 1.0: Qt already scales it for the monitor
     // (Retina), so the shell draws legacy pixels at the monitor's density.
@@ -132,6 +149,10 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simSettings"), &settings);
     view.rootContext()->setContextProperty(QStringLiteral("simScene"), parser.value(sceneOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simDensity"), scale);
+    view.rootContext()->setContextProperty(QStringLiteral("simDisplayWidth"), display.width());
+    view.rootContext()->setContextProperty(QStringLiteral("simDisplayHeight"), display.height());
+    view.rootContext()->setContextProperty(QStringLiteral("simOrientation"), orientation);
+    view.rootContext()->setContextProperty(QStringLiteral("simTurn"), turn);
     view.rootContext()->setContextProperty(QStringLiteral("simFormFactor"),
         tablet ? QStringLiteral("tablet") : parser.isSet(phoneOpt) ? QStringLiteral("phone") : QStringLiteral("auto"));
     view.setResizeMode(QQuickView::SizeRootObjectToView);

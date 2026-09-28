@@ -113,3 +113,45 @@ describe("simulated OSE services", () => {
         expect(os.core_os_name).toBeUndefined();
     });
 });
+
+describe("orientation", () => {
+    type Runtime = {
+        screenOrientationChanged(o: string): void;
+        applyHostStatus(s: object): void;
+        dispatch(uri: string, params: object, reply: (r: Record<string, unknown>) => void, ctx: object): void;
+    };
+    const rt = () => (window as unknown as { __phoenixRuntime: Runtime }).__phoenixRuntime;
+    const palm = () => (window as unknown as {
+        PalmSystem: { screenOrientation: string; windowOrientation: string; setWindowOrientation(o: string): void };
+    }).PalmSystem;
+
+    it("passes the app's orientation request to the shell", () => {
+        palm().setWindowOrientation("left");
+        expect(hostMessages.find((m) => m.type === "windowOrientation")?.payload).toMatchObject({ orientation: "left" });
+    });
+
+    it("tells the page how its window is turned, with a resize event", () => {
+        let resizes = 0;
+        const onResize = () => { resizes++; };
+        window.addEventListener("resize", onResize);
+        rt().screenOrientationChanged("down");
+        expect(palm().screenOrientation).toBe("down");
+        expect(palm().windowOrientation).toBe("down");
+        expect(resizes).toBe(1);
+        // Unchanged or unknown: nothing happens.
+        rt().screenOrientationChanged("down");
+        rt().screenOrientationChanged("sideways");
+        expect(resizes).toBe(1);
+        expect(palm().screenOrientation).toBe("down");
+        rt().screenOrientationChanged("up");
+        window.removeEventListener("resize", onResize);
+    });
+
+    it("reports the UI and device orientation in getSystemStatus", async () => {
+        const status = () => new Promise<Record<string, unknown>>((res) =>
+            rt().dispatch("luna://com.palm.systemmanager/getSystemStatus", {}, res, { cancelled: () => false, onCancel: null }));
+        expect(await status()).toMatchObject({ returnValue: true, orientation: { ui: "up", device: "up" } });
+        rt().applyHostStatus({ orientation: { ui: "left", device: "left" } });
+        expect(await status()).toMatchObject({ orientation: { ui: "left", device: "left" } });
+    });
+});

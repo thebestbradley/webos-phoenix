@@ -176,7 +176,13 @@
         deactivate: function () { activated = false; },
         hide: function () {},
         show: function () {},
-        setWindowOrientation: function (o) { PalmSystem.specifiedWindowOrientation = o; },
+        // "free", "up", "down", "left", "right" (also "landscape",
+        // "portrait"): the orientation the window keeps; the shell holds the
+        // UI there while the card is maximized (see screenOrientationChanged).
+        setWindowOrientation: function (o) {
+            PalmSystem.specifiedWindowOrientation = o;
+            host.postToHost("windowOrientation", { appId: PalmSystem.appIdentifier, orientation: String(o) });
+        },
         setWindowProperties: function () {},
         enableFullScreenMode: function (on) { host.postToHost("fullScreen", { appId: PalmSystem.appIdentifier, on: !!on }); },
         allowResizeOnPositiveSpaceChange: function () {},
@@ -1937,6 +1943,32 @@
         return true;
     };
 
+    // ---- Orientation ------------------------------------------------------------------
+    //
+    // An app asks for the orientation its window keeps with
+    // PalmSystem.setWindowOrientation (Enyo's enyo.setAllowedOrientation,
+    // Mojo's stageController.setWindowOrientation); "free" follows the
+    // device. The shell holds the UI in that orientation while the card is
+    // maximized, as LunaSysMgr did (CardWindow::onSetAppFixedOrientation).
+    // When the window turns, the shell resizes the page to the turned card
+    // and calls this: PalmSystem.screenOrientation and windowOrientation
+    // change, Mojo apps get Mojo.screenOrientationChanged(orientation) as
+    // WebAppMgr called it, and a resize event goes out so that Enyo
+    // (enyo.sendOrientationChange on window resize, palm/system/system.js:
+    // 58-64, 177) sends "windowRotated" also for a half turn, where the
+    // page's size does not change.
+    runtime.screenOrientationChanged = function (o) {
+        if (["up", "down", "left", "right"].indexOf(o) < 0 || PalmSystem.screenOrientation === o)
+            return;
+        PalmSystem.screenOrientation = o;
+        PalmSystem.windowOrientation = o;
+        var mojo = global.Mojo;
+        if (mojo && typeof mojo.screenOrientationChanged === "function") {
+            try { mojo.screenOrientationChanged(o); } catch (e) { console.error("[phoenix-runtime] screenOrientationChanged failed", e); }
+        }
+        try { global.dispatchEvent(new Event("resize")); } catch (e) { /* ignore */ }
+    };
+
     // ================================================================================
     // Settings services (simulated webOS OSE APIs used by apps/settings)
     // ================================================================================
@@ -1967,7 +1999,8 @@
     //       getInputVolume, setInputVolume (streamType pringtones/palerts/pmedia),
     //       playFeedback
     //   com.palm.systemmanager               legacy webOS 2.x (no OSE equivalent yet)
-    //       getDeviceLockMode, setDevicePasscode, matchDevicePasscode
+    //       getDeviceLockMode, setDevicePasscode, matchDevicePasscode,
+    //       getSystemStatus (luna-sysmgr SystemService.cpp:3860-3970)
     //
     // State lives in the shared store under "settings:state", so every app
     // window sees the same radios. Changes other windows make arrive as
@@ -2552,6 +2585,15 @@
             "/getLockStatus": function (p, reply, ctx) {
                 watch(p, reply, ctx, function () { return ok({ locked: !!store.get("deviceLocked", false) }); });
             },
+            // How the UI and the device are turned, as the shell last said
+            // ({ orientation: { ui, device } }); subscribe to follow them.
+            // No virtual keyboard in the simulator: ime.visible is false.
+            "/getSystemStatus": function (p, reply, ctx) {
+                watch(p, reply, ctx, function () {
+                    var o = store.get("orientation", null) || {};
+                    return ok({ ime: { visible: false }, orientation: { ui: o.ui || "up", device: o.device || "up" } });
+                });
+            },
             "/getDeviceLockMode": function (p, reply) {
                 var l = load().lock;
                 reply(ok({ lockMode: l.lockMode, policyState: "none", retriesLeft: 10 }));
@@ -2605,6 +2647,11 @@
             // The shell's lock screen (com.palm.systemmanager getLockStatus).
             if ("deviceLocked" in st && !!st.deviceLocked !== !!store.get("deviceLocked", false)) {
                 store.set("deviceLocked", !!st.deviceLocked);
+                changed();
+            }
+            // How the UI and the device are turned (getSystemStatus).
+            if (st.orientation && JSON.stringify(st.orientation) !== JSON.stringify(store.get("orientation", null))) {
+                store.set("orientation", { ui: st.orientation.ui, device: st.orientation.device });
                 changed();
             }
             suppressHost = true;

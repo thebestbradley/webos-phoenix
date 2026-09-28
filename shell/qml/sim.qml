@@ -4,12 +4,15 @@
 // Desktop simulator entry point (loaded by phoenix-sim).
 //
 // Context properties set by phoenix-sim:
-//   simScene       "locked" | "cards" | "stacks" | "reorder" | "maximized" | "launcher" |
+//   simScene       "locked" | "cards" | "stacks" | "reorder" | "maximized" | "heldcard" | "launcher" |
 //                  "launcheredit" | "pin" | "lowbattery" | "banner" | "notified" | "dashboard" | "justtype" | "systemmenu" | "empty"
 //   simFormFactor  "auto" | "phone" | "tablet"
 //   simDensity     device pixels per legacy pixel (--scale, default 1)
 //   simLaunch      app ids to launch (--launch)
 //   simOpen        a web address to open in the browser (--open)
+//   simDisplayWidth, simDisplayHeight  the device's screen upright (--size)
+//   simOrientation how the device is held at start-up (--orientation)
+//   simTurn        an orientation to turn the device to after a second (--turn)
 
 import QtQuick
 import Phoenix.Shell
@@ -18,17 +21,82 @@ import Phoenix.Sim
 Item {
     id: root
 
-    Shell {
-        id: shell
-        anchors.fill: parent
-        formFactor: typeof simFormFactor !== "undefined" ? simFormFactor : "auto"
-        density: typeof simDensity !== "undefined" ? simDensity : 1
-        source: SimWindowSource { id: windows }
-        system: SimSystemStatus {
-            id: status
-            // Fixed clock for reproducible screenshots.
-            fixedTime: typeof simScene !== "undefined" && simScene !== "" ? new Date(2009, 5, 6, 9, 41) : null
+    // ---- The simulated device ----------------------------------------------------
+    // The window shows the device as it is held: turned on its side it is a
+    // landscape window with the device's screen turned in it, so a UI that
+    // followed the turn reads upright, and one held by the rotation lock or
+    // an app reads sideways, as it would in the hand.
+
+    readonly property var orientations: ["up", "left", "down", "right"]   // counter-clockwise
+    readonly property int deviceAngle: 90 * Math.max(0, orientations.indexOf(status.deviceOrientation))
+    // The screen's shape upright (--size): its sides keep that shape
+    // whatever the window does while it turns.
+    readonly property bool displayPortrait: typeof simDisplayWidth === "undefined" || simDisplayWidth <= simDisplayHeight
+
+    Item {
+        id: device
+        anchors.centerIn: parent
+        width: root.displayPortrait ? Math.min(root.width, root.height) : Math.max(root.width, root.height)
+        height: root.displayPortrait ? Math.max(root.width, root.height) : Math.min(root.width, root.height)
+        rotation: -root.deviceAngle
+
+        Shell {
+            id: shell
+            anchors.fill: parent
+            formFactor: typeof simFormFactor !== "undefined" ? simFormFactor : "auto"
+            density: typeof simDensity !== "undefined" ? simDensity : 1
+            source: SimWindowSource { id: windows }
+            system: SimSystemStatus {
+                id: status
+                // Fixed clock for reproducible screenshots.
+                fixedTime: typeof simScene !== "undefined" && simScene !== "" ? new Date(2009, 5, 6, 9, 41) : null
+                deviceOrientation: typeof simOrientation !== "undefined" && simOrientation !== "" ? simOrientation : "up"
+            }
         }
+    }
+
+    // Turn the device a quarter turn (steps: 1 counter-clockwise, -1
+    // clockwise) or to an orientation; the window turns with it.
+    function turnDevice(to) {
+        var from = status.deviceOrientation;
+        if (typeof to === "number")
+            to = orientations[(orientations.indexOf(from) + to + 4) % 4];
+        if (orientations.indexOf(to) < 0 || to === from)
+            return;
+        var win = root.Window.window;
+        if (win && (orientations.indexOf(to) - orientations.indexOf(from)) % 2 !== 0) {
+            var w = win.width;
+            win.width = win.height;
+            win.height = w;
+        }
+        status.deviceOrientation = to;
+    }
+    Shortcut {
+        sequence: "Ctrl+Left"
+        context: Qt.ApplicationShortcut
+        onActivated: root.turnDevice(1)
+    }
+    Shortcut {
+        sequence: "Ctrl+Right"
+        context: Qt.ApplicationShortcut
+        onActivated: root.turnDevice(-1)
+    }
+    // --turn: a second after start-up, for screenshots of the turn.
+    Timer {
+        running: typeof simTurn !== "undefined" && simTurn !== ""
+        interval: 1000
+        onTriggered: root.turnDevice(simTurn)
+    }
+
+    // How the UI and the device are turned, for the apps
+    // (com.palm.systemmanager getSystemStatus).
+    function pushOrientation() {
+        windows.pushSystemStatus({ orientation: { ui: shell.uiOrientation, device: shell.deviceOrientation } });
+    }
+    Connections {
+        target: shell
+        function onUiOrientationChanged() { root.pushOrientation(); }
+        function onDeviceOrientationChanged() { root.pushOrientation(); }
     }
 
     // Device state shared with the web apps (Settings, ...). Their simulated
@@ -106,6 +174,7 @@ Item {
     // Build a demo scene, as if the user had been using the phone for a bit.
     Component.onCompleted: {
         windows.pushSystemStatus({ deviceLocked: shell.locked });
+        pushOrientation();
         if (typeof simSettings !== "undefined")
             windows.launcherLayoutJson = simSettings.value("launcher/layout");
         // --launch <appId>: open these apps, in card view, then stop.
@@ -156,6 +225,14 @@ Item {
             });
         } else if (scene === "maximized") {
             shell.cardView.maximizeProgress = 1;
+        } else if (scene === "heldcard") {
+            // Messaging keeps the upright orientation, as if it had called
+            // PalmSystem.setWindowOrientation("up"): with the device on its
+            // side it shows turned in card view (--orientation left). (Enyo
+            // apps ask for "free" once loaded, so not one of those.)
+            var held = windows.runningUid(ids[0]);
+            windows.cards.setProperty(windows.cardIndex(held), "orientation", "up");
+            shell.cardView.position = 0;
         } else if (scene === "systemmenu") {
             shell.openSystemMenu();
         } else if (scene === "launcher" || scene === "launcheredit") {

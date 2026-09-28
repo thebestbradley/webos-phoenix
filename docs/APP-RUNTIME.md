@@ -161,6 +161,35 @@ a small script, loaded by an overlay of the app's `depends.js` in
 - **Accounts** and the account pages inside the other apps: the Enyo
   accounts library's 500 px column uses the card width.
 
+## Orientation
+
+The shell turns its whole UI with the device (`UiRotation.qml`, after
+LunaSysMgr's `WindowServer`); the apps take part the way they did under
+WebAppMgr:
+
+- **Asking for an orientation.** `PalmSystem.setWindowOrientation(o)`
+  (Enyo 1.0's `enyo.setAllowedOrientation`, Mojo's
+  `stageController.setWindowOrientation`) with `"free"`, `"up"`, `"down"`,
+  `"left"`, `"right"`, `"landscape"` or `"portrait"` posts
+  `windowOrientation {orientation}` to the shell. Enyo asks for `"free"`
+  once loaded. appinfo.json's `requestedWindowOrientation` is the card's
+  orientation until the page asks. While the card is maximized the UI stays
+  in that orientation (the device's wait until it is minimized), and
+  maximizing it turns the UI there with a cross-fade; in card view a card
+  held another way than the UI is drawn turned.
+- **Being turned.** When the card's window turns, the shell resizes the
+  page to the turned card and calls
+  `__phoenixRuntime.screenOrientationChanged(o)`: `PalmSystem.screenOrientation`
+  and `windowOrientation` change, Mojo apps get
+  `Mojo.screenOrientationChanged(o)`, and a `resize` event goes out, so Enyo's
+  `windowRotated` (`enyo.ApplicationEvents` `onWindowRotated`) follows, also
+  for a half turn.
+- **Asking how things are turned.** `com.palm.systemmanager/getSystemStatus`
+  (subscribable) answers `{ime: {visible}, orientation: {ui, device}}` as the
+  shell last reported (`orientation` in `applyHostStatus`).
+
+`tools/test-orientation.cjs` checks all three with the original Calculator.
+
 ## On a device
 
 `tools/install-rootfs.py DESTDIR` installs the same filesystem for an image:

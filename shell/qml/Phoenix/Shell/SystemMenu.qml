@@ -284,6 +284,10 @@ Item {
                 return;
             _toggling = true;
             _instant = !!instant;
+            // An opening still under way would carry on to the open height:
+            // disabling the Behavior only affects changes from now on.
+            if (_instant)
+                bodyAnim.stop();
             isOpen = false;
             _instant = false;
             closed();
@@ -326,6 +330,7 @@ Item {
             Behavior on height {
                 enabled: !drawer._instant
                 NumberAnimation {
+                    id: bodyAnim
                     duration: drawer._toggling ? Theme.systemMenuDrawerDuration : Theme.systemMenuDrawerResizeDuration
                     easing.type: drawer._toggling ? Easing.OutCubic : Easing.Linear
                     onRunningChanged: if (!running) drawer._toggling = false

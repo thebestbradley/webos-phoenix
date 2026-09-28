@@ -22,11 +22,11 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [ ] In-app scene push/pop zoom transition. `Src/lunaui/cards/CardTransition.cpp`
 - [ ] Modal cards (320x480 child window over a dimmed parent), via `launchModalApp`/`dismissModalApp`. `CardWindow.cpp:1855-2125`; `Src/base/SystemService.cpp:247-248`
 - [ ] Full-screen apps that hide the status bar. `Src/base/SystemUiController.cpp:1389-1400`
-- [ ] Card rotation and orientation lock per app (fixed-orientation apps). `CardWindow.cpp:2536-`; `Src/lunaui/cards/CardHostWindow.cpp:180-240`
+- [x] Card rotation and orientation lock per app (fixed-orientation apps). `CardWindow.cpp:2536-`; `Src/lunaui/cards/CardHostWindow.cpp:180-240`
 - [x] Keyboard navigation of cards (←/→, Enter, Ctrl+Backspace). `CardWindowManager.cpp:1189-1212`
 - [ ] First-use "dismiss card" tutorial dialog. `CardWindowManager.cpp:1168-1187`; `uiComponents/DismissCardTutorial/dismissDialog.qml`
 - [ ] Card limit and low-memory launch blocking, with a low-memory alert dialog. `conf/luna.conf:63-65`; `Src/base/MemoryMonitor.cpp`; `uiComponents/MemoryAlert/alert.qml`
-- [ ] Card-view wallpaper, rotated for landscape. `Src/lunaui/WindowServerLuna.cpp:89-156,900-928`
+- [x] Card-view wallpaper, rotated for landscape. `Src/lunaui/WindowServerLuna.cpp:89-156,900-928`
 - [ ] Touch-to-Share "ghost card" throw animation and glow. `CardWindowManager.cpp:2915-2957`; `Src/base/visual/TouchToShareGlow.cpp`
 
 ## 2. Status bar [spec §2]
@@ -141,7 +141,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [ ] Ringtone, alert tone and notification tone preferences. `conf/defaultPreferences.txt`
 - [ ] Wallpaper preference, plus a separate dock wallpaper. `conf/defaultPreferences.txt`; `Src/base/settings/Preferences.cpp` (`dockwallpaper`)
 - [ ] Auto-brightness (ambient light sensor), brightness scales, display timeout and dimming. `Src/base/AmbientLightSensor.cpp`; `Src/base/DisplayManager.cpp:95-115`; `conf/luna.conf:49-53`
-- [ ] UI rotation driven by the accelerometer, with rotation lock. `Src/base/WindowServer.cpp:1900-1960`; `conf/luna.conf:121`
+- [x] UI rotation driven by the accelerometer, with rotation lock (simulator; the device's sensor is not wired yet). `Src/base/WindowServer.cpp:1900-1960`; `conf/luna.conf:121`
 - [ ] Haptics / vibration (`vibrate`, `vibrateNamedEffect`). `Src/base/HapticsController.cpp`; README.md:127-128
 - [ ] Headset, audio, media and ringer switch keys (`com.palm.keys/*`). README.md:96-99
 - [ ] Locale, region, time zone and network time preferences. `conf/defaultPreferences.txt`; `conf/locale.txt`; `conf/timezone.txt`

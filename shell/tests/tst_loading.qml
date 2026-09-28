@@ -32,14 +32,19 @@ Item {
 
         function test_coversTheAppUntilItIsReady() {
             verify(card.loading);
-            var loading = null;
-            // The CardLoading child of the content host.
-            for (var i = 0; i < card.children.length && !loading; ++i)
-                for (var j = 0; j < card.children[i].children.length; ++j)
-                    if (card.children[i].children[j].hasOwnProperty("active")) {
-                        loading = card.children[i].children[j];
-                        break;
-                    }
+            // The CardLoading inside the card, over the app's window.
+            function find(item) {
+                for (var i = 0; i < item.children.length; ++i) {
+                    var c = item.children[i];
+                    if (c.hasOwnProperty("active"))
+                        return c;
+                    var f = find(c);
+                    if (f)
+                        return f;
+                }
+                return null;
+            }
+            var loading = find(card);
             verify(loading);
             compare(loading.opacity, 1);
             verify(loading.visible);

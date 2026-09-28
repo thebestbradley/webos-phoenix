@@ -404,7 +404,9 @@ Item {
             notes.bannerActive = false;
             notes.dashboardOpen = true;
             tryCompare(notes, "negativeSpace", notes.dashboardHeight, 2000);
-            compare(notes.dashboardHeight, shell.height * Theme.maximumNegativeSpaceRatio);
+            // 55% of the UI's height (the gesture strip stands in for
+            // hardware below the screen, so it is not part of it).
+            compare(notes.dashboardHeight, shell.uiRoot.height * Theme.maximumNegativeSpaceRatio);
             // Scrolled to the newest: rows hidden above only.
             tryVerify(function() { return findChild(notes, "dashboardMaskTop").visible; }, 1000);
             verify(!findChild(notes, "dashboardMaskBottom").visible);
