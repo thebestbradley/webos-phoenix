@@ -32,6 +32,13 @@ Apache-2.0 and unmodified. Their app icons (Email, Calendar, Memos, ...) are
 part of that release and are shown in the launcher. Fixes go in
 `compat/rootfs/`, not in the submodules.
 
+The apps' user-visible strings mention "HP webOS", "HP TouchPad" and "Palm
+Profile". `tools/debrand-overlays.py` writes overlay copies of the few
+source files involved (Accounts, Calendar, Contacts, Email and Enyo's
+accounts library) with those strings replaced by neutral ones, and CI checks
+the overlays are current. The simulated profile account template and sample
+data use "Phoenix Account".
+
 ## Phoenix apps (`apps/`)
 
 - `apps/shared/phoenix-ui/assets/enyo/`: images copied unmodified from Enyo

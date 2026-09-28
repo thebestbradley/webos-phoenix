@@ -1,0 +1,35 @@
+/* Phoenix compat: Email on a phone.
+ *
+ * With mail/source/phoenix-compat.js the window shows folders, message
+ * list or message one at a time on a phone card (the SlidingPane's
+ * single-view layout, below 500 px). Each view is then as wide as the
+ * card, but the message view keeps its TouchPad flex and would shrink to
+ * nothing next to the other two, and MailApp.optimizeSpace() gives it
+ * min-width: 448px in portrait (room beside the folder list on a TouchPad),
+ * which pushes the message off a 320 px card. Make it exactly card-wide.
+ * Also used by the account wizard (accounts/wizard.html), whose 500 px
+ * column is narrowed the same way as the Enyo accounts library's.
+ */
+
+@media (max-width: 480px) {
+	[id$="_bodySliding"], [id$="_bodySliding_client"] {
+		min-width: 100% !important;
+		max-width: 100%;
+	}
+
+	/* Message header: a smaller sender name, so it fits beside the photo. */
+	.mail-body-from {
+		font-size: 26px;
+	}
+
+	/* Account wizard (accounts/accounts.css): a 500 px column. */
+	.box-center {
+		width: auto;
+		margin: 12px 8px 0 8px;
+	}
+
+	.accounts-toolbar-btn {
+		width: auto;
+		min-width: 150px;
+	}
+}

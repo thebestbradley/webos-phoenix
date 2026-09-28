@@ -26,6 +26,11 @@
         "/usr/palm/frameworks/calendar.io/version/1.0/": "third_party/loadable-frameworks/calendar.io/",
         "/usr/palm/frameworks/contacts/version/1.0/": "third_party/loadable-frameworks/contacts/",
         "/usr/palm/frameworks/globalization/version/1.0/": "third_party/loadable-frameworks/globalization/",
+        "/usr/palm/public/accounts/com.palm.palmprofile/": "third_party/app-services/account-templates/palmprofile/com.palm.palmprofile/",
+        "/usr/palm/public/accounts/com.palm.imap/": "third_party/app-services/mojomail/imap/files/usr/palm/public/accounts/com.palm.imap/",
+        "/usr/palm/public/accounts/com.palm.othermail/": "third_party/app-services/mojomail/imap/files/usr/palm/public/accounts/com.palm.othermail/",
+        "/usr/palm/public/accounts/com.palm.pop/": "third_party/app-services/mojomail/pop/files/usr/palm/public/accounts/com.palm.pop/",
+        "/usr/share/phoenix/runtime/": "runtime/",
         "/usr/share/phoenix/runtime/": "runtime/",
         "/media/internal/samples/": "apps/media-samples/media/"
     },

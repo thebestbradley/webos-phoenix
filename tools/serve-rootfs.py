@@ -19,6 +19,7 @@ import http.server
 import json
 import mimetypes
 import os
+import re
 import sys
 import urllib.parse
 
@@ -57,6 +58,9 @@ MOUNTS, OVERLAYS, APPS = load_rootfs()
 
 def resolve(path):
     """Device path -> file in this repository, or None."""
+    # Like QDir::cleanPath in phoenix-sim: apps build paths such as
+    # ".../com.palm.app.email//mail/index.html".
+    path = re.sub(r"/{2,}", "/", path)
     if ".." in path.split("/"):
         return None
     for overlay in OVERLAYS:
@@ -100,6 +104,7 @@ def app_list():
             "tab": tab,
             "hidden": bool(phoenix.get("hidden", False)),
             "quickLaunch": int(phoenix.get("quickLaunch", 0)),
+            "noWindow": bool(info.get("noWindow", False)),
         })
         for lp in phoenix.get("launchPoints", []):
             params = lp.get("params", {})

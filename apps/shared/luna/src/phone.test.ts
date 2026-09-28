@@ -29,6 +29,11 @@ beforeAll(() => {
     const src = readFileSync(resolve(__dirname, "../../../../runtime/phoenix-runtime.js"), "utf8");
     new Function(src).call(window);
     rt = w.__phoenixRuntime as Rt;
+    // The demo people are the runtime's sample contacts, which it reads with
+    // PalmSystem.getResource (a synchronous request jsdom cannot serve).
+    const sample = readFileSync(resolve(__dirname, "../../../../runtime/sample-data.js"), "utf8");
+    (w.PalmSystem as { getResource: (p: string) => string | undefined }).getResource =
+        (p: string) => (p.endsWith("/runtime/sample-data.js") ? sample : undefined);
 });
 
 beforeEach(() => {

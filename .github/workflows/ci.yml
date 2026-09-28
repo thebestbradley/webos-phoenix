@@ -45,6 +45,9 @@ jobs:
       - name: Behaviour tests
         run: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import shell/qml -input shell/tests
 
+      - name: Trademark overlays up to date
+        run: python3 tools/debrand-overlays.py --check
+
       - name: Web app tests (original webOS apps in headless Chromium)
         run: |
           npm install -g playwright@1

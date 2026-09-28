@@ -7,3 +7,12 @@ replaces (or supplies) that path for the simulator and the browser dev
 server. Use it for fixes and missing files in the original Open webOS apps,
 so the `third_party/` submodules stay unmodified. Say at the top of each file
 what it fixes and why.
+
+To add a stylesheet or script to an Enyo 1.0 app or library, overlay its
+`depends.js` with the original list plus the new file (`phoenix-compat.css`,
+`phoenix-phone.js`, ...), and change nothing else in it. Phone layouts are
+`@media (max-width: 480px)` rules in those stylesheets. Fixes for the Enyo
+libraries shared by several apps go under
+`usr/palm/frameworks/enyo/0.10/framework/lib/`. Problems common to all
+Enyo apps in current Chromium are fixed in `runtime/phoenix-runtime.js`
+instead.

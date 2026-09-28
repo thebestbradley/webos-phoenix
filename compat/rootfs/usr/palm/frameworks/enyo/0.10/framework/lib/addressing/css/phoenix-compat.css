@@ -1,0 +1,12 @@
+/* Phoenix compat: address atoms (the recipients in Email's To/Cc/Bcc).
+ *
+ * An atom is a -webkit-inline-box sized by its text; Enyo's HFlexLayout
+ * styles the text box "-webkit-box-flex:1; width:0px". The 2011 WebKit
+ * still sized the atom from the text, current Chromium sizes it from the
+ * 0 px width, so only the first letter shows. Let the text set the width
+ * again (the atom keeps max-width: 100% and its ellipsis).
+ */
+
+.enyo-contact-atom > .enyo-contact-atom-content {
+	width: auto !important;
+}
