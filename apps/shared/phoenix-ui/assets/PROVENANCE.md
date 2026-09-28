@@ -18,5 +18,8 @@ the generic avatar and the favourites star.
 `openwebos/screen-lock-incoming-call-*.png` are copies of
 `shell/assets/openwebos/` (from `openwebos/luna-sysmgr` `images/`, Apache-2.0).
 
+`openwebos/fullscreen-play-button.png` is copied unmodified from
+`shell/assets/openwebos` (`openwebos/luna-sysmgr` `images/`, Apache-2.0).
+
 No Palm or HP logos are included. See `docs/LEGAL.md` and `NOTICE` at the
 repository root.

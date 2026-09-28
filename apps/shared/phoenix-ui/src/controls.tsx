@@ -51,6 +51,8 @@ export interface SliderProps {
     disabled?: boolean;
     label?: string;
     testId?: string;
+    /** Progress look (Enyo ProgressSlider): a blue bar up to the knob, e.g. a seek bar. */
+    progress?: boolean;
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -58,7 +60,7 @@ function clamp(v: number, min: number, max: number) {
 }
 
 /** Horizontal slider with the blue ball knob (Enyo Slider, Heritage art). */
-export function Slider({ value, min = 0, max = 100, step = 1, onChange, onChangeComplete, disabled, label, testId }: SliderProps) {
+export function Slider({ value, min = 0, max = 100, step = 1, onChange, onChangeComplete, disabled, label, testId, progress }: SliderProps) {
     const track = useRef<HTMLDivElement>(null);
     const [drag, setDrag] = useState<number | null>(null);
     const shown = drag ?? value;
@@ -103,7 +105,7 @@ export function Slider({ value, min = 0, max = 100, step = 1, onChange, onChange
 
     return (
         <div
-            className={cx("pui-slider", drag !== null && "dragging", disabled && "disabled")}
+            className={cx("pui-slider", drag !== null && "dragging", disabled && "disabled", progress && "progress")}
             role="slider"
             aria-valuemin={min}
             aria-valuemax={max}
@@ -119,7 +121,9 @@ export function Slider({ value, min = 0, max = 100, step = 1, onChange, onChange
             onKeyDown={onKeyDown}
         >
             <div className="pui-slider-track" ref={track}>
-                <div className="pui-slider-rest" style={{ left: `${frac * 100}%` }} />
+                {progress
+                    ? <div className="pui-slider-fill" style={{ width: `calc(${frac * 100}% + 12px)` }} />
+                    : <div className="pui-slider-rest" style={{ left: `${frac * 100}%` }} />}
                 <div className="pui-slider-knob" style={{ left: `${frac * 100}%` }} />
             </div>
         </div>

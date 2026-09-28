@@ -9,7 +9,10 @@
     "shared/phoenix-ui",
     "settings",
     "phone",
-    "messaging"
+    "messaging",
+    "camera",
+    "photos",
+    "music"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

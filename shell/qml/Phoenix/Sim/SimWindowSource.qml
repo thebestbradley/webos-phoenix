@@ -235,7 +235,9 @@ Item {
             for (var k in payload)
                 st[k] = payload[k];
             if ("wallpaperFile" in payload)
-                st.wallpaperUrl = payload.wallpaperFile ? resolveDevicePath(payload.wallpaperFile) : "";
+                // A picture from /media (Photos) comes with its data: URL.
+                st.wallpaperUrl = payload.wallpaperFile
+                        ? (resolveDevicePath(payload.wallpaperFile) || payload.wallpaperUrl || "") : "";
             systemStatusReported(st);
         }
     }

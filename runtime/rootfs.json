@@ -26,7 +26,8 @@
         "/usr/palm/frameworks/calendar.io/version/1.0/": "third_party/loadable-frameworks/calendar.io/",
         "/usr/palm/frameworks/contacts/version/1.0/": "third_party/loadable-frameworks/contacts/",
         "/usr/palm/frameworks/globalization/version/1.0/": "third_party/loadable-frameworks/globalization/",
-        "/usr/share/phoenix/runtime/": "runtime/"
+        "/usr/share/phoenix/runtime/": "runtime/",
+        "/media/internal/samples/": "apps/media-samples/media/"
     },
     "applicationDirs": [
         "third_party/core-apps",

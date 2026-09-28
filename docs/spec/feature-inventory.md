@@ -194,9 +194,9 @@ All of these need reimplementation or an alternative for Phoenix.
 
 ## Web and media
 - [ ] **Web browser** (`com.palm.app.browser`). `conf/luna.conf:105`
-- [ ] **Camera** (`com.palm.app.camera`). `conf/luna.conf:99`
-- [ ] **Photos & Videos** (`com.palm.app.photos`, plus `com.palm.app.videoplayer`). `conf/luna-topaz.conf:22`; `ApplicationManagerService.cpp:3836`
-- [ ] **Music** (`com.palm.app.musicplayer`, `com.palm.app.streamingmusicplayer`). `conf/luna-topaz.conf:22`; `ApplicationManagerService.cpp:4495`
+- [x] **Camera** (`com.palm.app.camera`). `conf/luna.conf:99`. Phoenix: `apps/camera` (viewfinder, photo and video, flash, last shot opens Photos; no zoom, timer or geotags yet)
+- [x] **Photos & Videos** (`com.palm.app.photos`, plus `com.palm.app.videoplayer`). `conf/luna-topaz.conf:22`; `ApplicationManagerService.cpp:3836`. Phoenix: `apps/photos` (albums, grid, swipe viewer, share, delete, set as wallpaper, video playback; no slideshow, pinch zoom or online albums yet)
+- [x] **Music** (`com.palm.app.musicplayer`, `com.palm.app.streamingmusicplayer`). `conf/luna-topaz.conf:22`; `ApplicationManagerService.cpp:4495`. Phoenix: `apps/music` (artists, albums, songs, now playing, seek, volume, shuffle/repeat, banner; no playlists, genres or dashboard controls yet)
 - [ ] **YouTube** (`com.palm.app.youtube`), **Amazon MP3** (`com.palm.app.amazonmp3`), **Kindle** (`com.palm.app.kindle`), **Facebook** (`com.palm.app.enyo-facebook`). `conf/default-launcher-page-layout.json`
 - [ ] **Maps** (`com.palm.app.maps`; Bing/Google Maps). `conf/default-launcher-page-layout.json`
 

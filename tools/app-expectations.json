@@ -38,5 +38,17 @@
     "org.webosphoenix.messaging": {
         "status": "works",
         "note": "Phoenix Messaging (React, apps/messaging); tools/test-phone-messaging.cjs drives it"
+    },
+    "org.webosphoenix.camera": {
+        "status": "works",
+        "note": "Phoenix Camera (React, apps/camera); without a camera it shows its \"No camera found\" state. tools/test-media.cjs drives it with Chromium's fake camera"
+    },
+    "org.webosphoenix.photos": {
+        "status": "works",
+        "note": "Phoenix Photos (React, apps/photos); tools/test-media.cjs drives it"
+    },
+    "org.webosphoenix.music": {
+        "status": "works",
+        "note": "Phoenix Music (React, apps/music); tools/test-media.cjs drives it"
     }
 }

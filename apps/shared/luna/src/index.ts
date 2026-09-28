@@ -9,3 +9,4 @@ export * from "./db8";
 export * from "./contacts";
 export * from "./telephony";
 export * from "./messaging";
+export * from "./media";

@@ -1,0 +1,221 @@
+/*
+ * Copyright (c) 2026 webOS Phoenix contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Photos & Videos: dark albums and thumbnails, a black viewer (webOS 2.x).
+ */
+
+html, body.pui-app { background: #1a1a1a; color: #fff; }
+body.pui-app { overflow: hidden; }
+#root { height: 100%; }
+
+/* ---- Header --------------------------------------------------------------------- */
+
+.ph-header {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    height: 50px;
+    padding: 0 12px 0 8px;
+    background: linear-gradient(#4a4a4a, #262626 55%, #1c1c1c);
+    border-bottom: 1px solid #000;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 2px 5px rgba(0, 0, 0, 0.6);
+}
+.ph-header-icon { width: 32px; height: 32px; margin-right: 8px; flex: none; }
+.ph-header-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 20px;
+    font-weight: bold;
+    text-shadow: 0 -1px 0 #000;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ph-header-sub { flex: none; margin-left: 8px; font-size: 14px; color: #aaa; }
+
+.ph-scroll {
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background:
+        radial-gradient(ellipse at top, rgba(255, 255, 255, 0.06), transparent 60%),
+        #1a1a1a;
+}
+
+.ph-loading { display: flex; justify-content: center; padding: 60px 0; }
+.ph-empty { padding: 40px 24px; text-align: center; color: #999; font-size: 16px; line-height: 1.4; }
+
+/* ---- Albums --------------------------------------------------------------------------- */
+
+.ph-albums {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 6px 8px;
+    padding: 14px 10px 20px;
+}
+
+.ph-album {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 6px 0 8px;
+    color: #fff;
+    font: inherit;
+    background: none;
+    border: 0;
+    border-radius: 8px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.ph-album:active { background: rgba(255, 255, 255, 0.12); }
+
+/* A small pile of prints, the top one straight. */
+.ph-stack { position: relative; width: 112px; height: 100px; margin-bottom: 8px; }
+.ph-stack-photo {
+    position: absolute;
+    left: 10px;
+    top: 8px;
+    width: 92px;
+    height: 84px;
+    background: #444;
+    border: 3px solid #fff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+    overflow: hidden;
+}
+.ph-stack-photo.n1 { transform: rotate(-7deg) translate(-4px, 2px); }
+.ph-stack-photo.n2 { transform: rotate(6deg) translate(5px, 1px); }
+.ph-stack-photo.empty { background: linear-gradient(#3a3a3a, #262626); border-color: #777; border-style: dashed; }
+.ph-album-name { font-size: 16px; font-weight: bold; text-shadow: 0 1px 2px #000; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ph-album-count { font-size: 13px; color: #aaa; margin-top: 2px; }
+
+/* ---- Thumbnails ------------------------------------------------------------------------- */
+
+.ph-thumb { display: block; width: 100%; height: 100%; object-fit: cover; background: #333; }
+.ph-thumb.contain { object-fit: contain; background: none; }
+.ph-thumb.loading { background: #2a2a2a; }
+
+.ph-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+    gap: 3px;
+    padding: 3px;
+}
+.ph-cell {
+    position: relative;
+    aspect-ratio: 1;
+    padding: 0;
+    border: 0;
+    background: #222;
+    overflow: hidden;
+    cursor: pointer;
+}
+.ph-cell:active::after { content: ""; position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); box-shadow: inset 0 0 0 2px #5aa2e8; }
+.ph-cell-video {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 18px;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+}
+.ph-cell-video::before {
+    content: "";
+    position: absolute;
+    left: 5px;
+    bottom: 4px;
+    border-style: solid;
+    border-width: 5px 0 5px 8px;
+    border-color: transparent transparent transparent #fff;
+}
+
+@media (min-width: 600px) {
+    .ph-albums { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); padding: 24px 24px; gap: 14px 16px; }
+    .ph-stack { transform: scale(1.25); margin: 12px 0 18px; }
+    .ph-grid { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 4px; padding: 4px; }
+}
+
+/* ---- Viewer ---------------------------------------------------------------------------- */
+
+.ph-viewer { position: fixed; inset: 0; background: #000; overflow: hidden; }
+.ph-pager { position: absolute; inset: 0; touch-action: none; }
+.ph-track { position: absolute; inset: 0; will-change: transform; }
+.ph-track.settle { transition: transform 260ms cubic-bezier(0.2, 0.7, 0.3, 1); }
+.ph-page { position: absolute; top: 0; width: 100%; height: 100%; padding: 0 2px; }
+.ph-slide { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.ph-slide-media { max-width: 100%; max-height: 100%; object-fit: contain; -webkit-user-drag: none; user-select: none; }
+video.ph-slide-media { width: 100%; height: 100%; }
+
+.ph-play {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 100px;
+    height: 100px;
+    margin: -50px 0 0 -50px;
+    border: 0;
+    background: no-repeat 0 0;
+    cursor: pointer;
+}
+.ph-play:active { background-position: 0 -100px; }
+
+.ph-viewer-top {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    height: 44px;
+    padding: 0 10px 0 4px;
+    background: linear-gradient(rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.55));
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    transition: opacity 200ms, transform 200ms;
+}
+.ph-viewer-back {
+    width: 36px;
+    height: 36px;
+    flex: none;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    position: relative;
+}
+.ph-viewer-back::before {
+    content: "";
+    position: absolute;
+    left: 13px;
+    top: 11px;
+    width: 12px;
+    height: 12px;
+    border-left: 3px solid #fff;
+    border-bottom: 3px solid #fff;
+    transform: rotate(45deg);
+}
+.ph-viewer-title { flex: 1; min-width: 0; font-size: 16px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph-viewer-index { flex: none; margin-left: 8px; font-size: 14px; color: #ccc; }
+.ph-viewer-bottom { transition: opacity 200ms, transform 200ms; }
+.ph-viewer-top.hidden { opacity: 0; transform: translateY(-100%); pointer-events: none; }
+.ph-viewer-bottom.hidden { opacity: 0; transform: translateY(40px); pointer-events: none; }
+.ph-viewer-bottom.hidden * { pointer-events: none !important; }
+/* The command menu floats over the picture on a dark fade (the Heritage fade is for light cards). */
+.ph-viewer .pui-toolbar.fade { background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.75)); height: 70px; padding-top: 14px; }
+
+.ph-toast {
+    position: absolute;
+    left: 50%;
+    bottom: 80px;
+    z-index: 6;
+    transform: translateX(-50%);
+    padding: 10px 18px;
+    border-radius: 18px;
+    background: rgba(30, 30, 30, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+    font-size: 16px;
+    white-space: nowrap;
+    animation: pui-fade 200ms;
+}
