@@ -4,7 +4,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
-import { CheckBox, Dialog, Group, ListSelector, Row, Slider, ToggleButton } from "./index";
+import { AppMenu, CheckBox, Dialog, Group, ListSelector, Row, Slider, ToggleButton } from "./index";
 
 afterEach(cleanup);
 
@@ -104,5 +104,33 @@ describe("CheckBox", () => {
         expect(row).not.toHaveBeenCalled();
         rerender(<Row title="notes.txt" onClick={row}><CheckBox checked onChange={onChange} label="Select" /></Row>);
         expect(box.className).toContain("checked");
+    });
+});
+
+describe("AppMenu", () => {
+    const tapAppName = () => act(() => { document.dispatchEvent(new CustomEvent("phoenixAppMenu")); });
+
+    it("opens when the app name is tapped and runs the chosen item", () => {
+        const newItem = vi.fn();
+        render(<AppMenu items={[{ label: "New Folder", onSelect: newItem }, { label: "Sort", onSelect: () => {}, disabled: true }]} />);
+        expect(screen.queryByRole("menu")).toBeNull();
+        tapAppName();
+        expect(screen.getByRole("menu")).toBeTruthy();
+        fireEvent.click(screen.getByText("Sort"));
+        expect(screen.getByRole("menu")).toBeTruthy();
+        fireEvent.click(screen.getByText("New Folder"));
+        expect(newItem).toHaveBeenCalledOnce();
+        expect(screen.queryByRole("menu")).toBeNull();
+    });
+
+    it("closes on a second tap of the app name, or a tap outside", () => {
+        const { container } = render(<AppMenu items={[{ label: "Help", onSelect: () => {} }]} />);
+        tapAppName();
+        tapAppName();
+        expect(screen.queryByRole("menu")).toBeNull();
+        tapAppName();
+        fireEvent.click(document.querySelector(".pui-popup-scrim")!);
+        expect(screen.queryByRole("menu")).toBeNull();
+        expect(container).toBeTruthy();
     });
 });

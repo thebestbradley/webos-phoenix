@@ -2489,6 +2489,24 @@
         // The shell launched an app that is already running, with new launch
         // params: update PalmSystem.launchParams and fire OSE's
         // "webOSRelaunch" document event (detail = params), as WebAppMgr does.
+        // The user tapped the app's name in the status bar. LunaSysMgr
+        // relaunched the app with {"palm-command": "open-app-menu"}, which
+        // Enyo turns into enyo.appMenu.toggle() for its active window
+        // (enyo.windows.events.handleAppMenu); pages call it here, in the
+        // card's own window. Other apps get a "phoenixAppMenu" document event
+        // (@phoenix/ui AppMenu).
+        runtime.openAppMenu = function () {
+            if (global.enyo && global.enyo.appMenu) {
+                global.enyo.appMenu.toggle();
+                return true;
+            }
+            var e;
+            try { e = new CustomEvent("phoenixAppMenu"); }
+            catch (x) { e = global.document.createEvent("CustomEvent"); e.initCustomEvent("phoenixAppMenu", false, false, null); }
+            global.document.dispatchEvent(e);
+            return true;
+        };
+
         runtime.relaunch = function (params) {
             PalmSystem.launchParams = JSON.stringify(params || {});
             var e;

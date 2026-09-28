@@ -21,5 +21,10 @@ the generic avatar and the favourites star.
 `openwebos/fullscreen-play-button.png` is copied unmodified from
 `shell/assets/openwebos` (`openwebos/luna-sysmgr` `images/`, Apache-2.0).
 
+`enyo/appmenu.png`, `enyo/appmenu-divider.png` and
+`enyo/appmenu-highlight.png` are copied unmodified from Enyo 1.0's Onyx
+theme (`framework/source/palm/themes/Onyx/images/`, Apache-2.0), for the
+app menu (`AppMenu.css`, `AppMenuItem.css`).
+
 No Palm or HP logos are included. See `docs/LEGAL.md` and `NOTICE` at the
 repository root.

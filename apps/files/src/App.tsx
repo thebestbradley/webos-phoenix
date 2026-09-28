@@ -27,7 +27,7 @@ import {
 } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import {
-    BackProvider, CheckBox, cx, Glyph, IconToolButton, PageHeader, PopupMenu, Spinner, Toolbar, ToolSpacer, useBack, type Option,
+    AppMenu, BackProvider, CheckBox, cx, Glyph, IconToolButton, PageHeader, PopupMenu, Spinner, Toolbar, ToolSpacer, useBack, type Option,
 } from "@phoenix/ui";
 import { crumbs, folderTitle, HOME, loadPrefs, planPaste, savePrefs, shortDate, type Clipboard, type Prefs } from "./browse";
 import { DeleteDialog, InfoDialog, InstallDialog, NameDialog, OpenWithDialog } from "./Dialogs";
@@ -291,8 +291,16 @@ function Browser() {
         </nav>
     );
 
+    // The app menu: new items, then the folder menu's entries.
+    const appMenu = [
+        { label: "New Folder", onSelect: () => setSheet({ kind: "new-folder" }) },
+        { label: "New File", onSelect: () => setSheet({ kind: "new-file" }) },
+        ...mainMenu.map((o) => ({ label: o.label, disabled: o.disabled, onSelect: () => onMain(o.value) })),
+    ];
+
     return (
         <div className={cx("fm-app", wide && "wide")}>
+            <AppMenu items={appMenu} />
             {wide && favorites}
             <div className="fm-main">
                 {header}

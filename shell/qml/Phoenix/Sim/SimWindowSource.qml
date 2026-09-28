@@ -25,6 +25,7 @@
 //   justTypeStart(text)      show it with this text typed
 //   justTypeStop()           it was dismissed; clear it
 //   justTypeDismissed        signal: it launched something; close it
+//   appMenu(uid)             the user tapped the app name: open its app menu
 //
 // Simulator only (sim.qml wires these to SimSystemStatus and the shell):
 //   systemStatusReported(status)  signal: a web page reported the device
@@ -335,6 +336,15 @@ Item {
                 return a.dir + m[2];
         }
         return "";
+    }
+
+    // The app menu of the app in card uid (the status bar's app name).
+    function appMenu(uid) {
+        var win = _windows[uid];
+        if (win && win.runScript)
+            win.runScript("window.__phoenixRuntime && __phoenixRuntime.openAppMenu && __phoenixRuntime.openAppMenu()");
+        else if (win && win.appMenuRequested)
+            win.appMenuRequested();
     }
 
     // Open a web page in the browser, as a tapped link does (phoenix-sim --open).

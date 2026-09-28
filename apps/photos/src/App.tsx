@@ -12,9 +12,9 @@
 // open that picture in the viewer.
 
 import { useEffect, useMemo, useState } from "react";
-import { folderOf, mediaIndexer, type ImageItem, type MediaItem, type VideoItem } from "@phoenix/luna";
+import { apps, folderOf, mediaIndexer, type ImageItem, type MediaItem, type VideoItem } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
-import { BackProvider, Spinner, useBack } from "@phoenix/ui";
+import { AppMenu, BackProvider, Spinner, useBack } from "@phoenix/ui";
 import { countLabel, groupAlbums, isVideo, type Album } from "./albums";
 import { Thumb } from "./Thumb";
 import { Viewer } from "./Viewer";
@@ -135,6 +135,7 @@ function Photos() {
 
     return (
         <div className="ph-scroll">
+            <AppMenu items={[{ label: "Open Camera", onSelect: () => { apps.launch("org.webosphoenix.camera").catch(() => {}); } }]} />
             <Header title="Photos & Videos" />
             <div className="ph-albums" data-testid="albums">
                 {albums.map((a) => <AlbumTile key={a.id} album={a} onOpen={() => setAlbumId(a.id)} />)}

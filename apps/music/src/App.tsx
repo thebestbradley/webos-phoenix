@@ -10,7 +10,7 @@ import { createContext, useContext, useMemo, useState } from "react";
 import { mediaIndexer, type AudioItem } from "@phoenix/luna";
 import { useLuna, useMediaUrl } from "@phoenix/luna/react";
 import {
-    BackProvider, Divider, Glyph, GroupedToolButtons, Page, PageHeader, Row, Slider, Spinner, IconToolButton, Toolbar, ToolSpacer,
+    AppMenu, BackProvider, Divider, Glyph, GroupedToolButtons, Page, PageHeader, Row, Slider, Spinner, IconToolButton, Toolbar, ToolSpacer,
     formatSeconds, useBack,
 } from "@phoenix/ui";
 import { albums, artists, artistOf, artistSummary, songs, titleOf, type AlbumEntry, type ArtistEntry } from "./library";
@@ -222,6 +222,12 @@ function Library() {
     return (
         <ShowNowPlaying.Provider value={openNowPlaying}>
             <div className={"mu-library" + (player.current ? " with-mini" : "")}>
+                <AppMenu items={[
+                    { label: "Now Playing", disabled: !player.current, onSelect: openNowPlaying },
+                    { label: "Artists", onSelect: () => { setTab("artists"); setView(null); } },
+                    { label: "Albums", onSelect: () => { setTab("albums"); setView(null); } },
+                    { label: "Songs", onSelect: () => { setTab("songs"); setView(null); } },
+                ]} />
                 <div className="mu-scroll">{body}</div>
                 <MiniPlayer onOpen={openNowPlaying} />
             </div>

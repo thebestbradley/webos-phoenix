@@ -644,3 +644,44 @@ body.pui-app, .pui-app {
 @media (min-width: 600px) {
     .pui-page.narrow { --pui-gutter: max(8px, calc((100vw - 640px) / 2)); }
 }
+
+/* ---- App menu (Onyx AppMenu.css, AppMenuItem.css: the webOS 3.0 look) ------------ */
+
+.pui-appmenu {
+    position: fixed;
+    z-index: 120;
+    top: 0;
+    left: -10px;
+    min-width: 210px;
+    max-width: calc(100vw + 10px);
+    font-size: 18px;
+    color: white;
+    border-style: solid;
+    border-width: 12px 24px 20px 24px;
+    border-image: url(../assets/enyo/appmenu.png) 12 24 20 24 fill stretch;
+}
+
+.pui-appmenu-inner {
+    margin: -12px -14px 0 -13px;
+}
+
+.pui-appmenu-item {
+    padding: 10px 7px 10px 5px;
+    font-size: 18px;
+    border-bottom: 2px solid transparent;
+    border-image: url(../assets/enyo/appmenu-divider.png) 0 0 2 0 stretch;
+    cursor: default;
+}
+
+.pui-appmenu-item.last {
+    border-bottom: 0;
+}
+
+.pui-appmenu-item:active:not(.disabled) {
+    background-image: url(../assets/enyo/appmenu-highlight.png);
+    background-size: 40px 56px;
+}
+
+.pui-appmenu-item.disabled {
+    opacity: 0.4;
+}

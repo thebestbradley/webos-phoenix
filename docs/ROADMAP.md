@@ -65,7 +65,7 @@ Targets: `qemux86-64` (emulator) and Raspberry Pi 4 with the official
 - [ ] Wave launcher (slow swipe up and hold)
 - [ ] Launcher editing: reorder, move between pages, delete
 - [ ] Advanced gestures: long swipe to switch apps while maximized
-- [ ] App menu (tap the app name in the status bar)
+- [x] App menu (tap the app name in the status bar)
 - [ ] PIN and password lock (`images/pin/` art)
 - [ ] Exhibition / dock mode (clock, slideshow while charging)
 - [ ] Phone and tablet virtual keyboards (`images/keyboard-*` art)

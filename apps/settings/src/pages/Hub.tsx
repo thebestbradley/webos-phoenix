@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 
-import { Group, Page, PageHeader, Row } from "@phoenix/ui";
+import { AppMenu, Group, Page, PageHeader, Row } from "@phoenix/ui";
 import { PAGES, type PageId } from "./index";
 
 /** Every pane in one list (the app launched without a page). */
@@ -13,6 +13,10 @@ export function Hub({ onOpen }: { onOpen: (id: PageId) => void }) {
     ];
     return (
         <Page>
+            <AppMenu items={[
+                { label: "Device Info", onSelect: () => onOpen("deviceinfo") },
+                { label: "Updates", onSelect: () => onOpen("updates") },
+            ]} />
             <PageHeader title="Settings" icon="icon.png" />
             {groups.map((g) => (
                 <Group key={g.label} label={g.label}>

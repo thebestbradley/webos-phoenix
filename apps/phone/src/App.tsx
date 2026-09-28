@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { primaryCall, ringingCall, telephony, type Call } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
-import { BackProvider, RadioToolGroup, ToolBar, dialable, useBack } from "@phoenix/ui";
+import { AppMenu, BackProvider, RadioToolGroup, ToolBar, dialable, useBack } from "@phoenix/ui";
 import { callLog, otherParty, type PhoneCall } from "./lib/calllog";
 import { useCallBookkeeping, useCallStatus, usePeople, useVoicemail, useWide } from "./lib/hooks";
 import { Dialer } from "./views/Dialer";
@@ -108,6 +108,11 @@ function Phone() {
 
     return (
         <div className={`phone-root${wide ? " wide" : ""}`}>
+            <AppMenu items={[
+                { label: "Dial Pad", onSelect: () => setTab("dial") },
+                { label: "Call Log", onSelect: () => setTab("log") },
+                { label: "Favorites", onSelect: () => setTab("favorites") },
+            ]} />
             {wide ? (
                 <>
                     <div className="phone-left">{dialer}</div>

@@ -230,6 +230,10 @@ FocusScope {
         title: appTitle ? cards.currentTitle : (shell.system ? shell.system.carrier : "")
         systemMenuOpen: systemMenu.open
         onSystemMenuRequested: systemMenu.open = !systemMenu.open
+        onAppMenuRequested: {
+            if (cards.maximized && shell.source && typeof shell.source.appMenu === "function")
+                shell.source.appMenu(cards.currentUid);
+        }
     }
 
     Notifications {

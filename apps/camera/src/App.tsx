@@ -23,7 +23,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apps, CAMERA_DIR, cameraService, folderOf, mediaFiles, mediaIndexer, type ImageItem, type MediaItem, type VideoItem } from "@phoenix/luna";
 import { useLuna, useMediaUrl } from "@phoenix/luna/react";
-import { Glyph, GroupedToolButtons, Spinner } from "@phoenix/ui";
+import { AppMenu, Glyph, GroupedToolButtons, Spinner } from "@phoenix/ui";
 import { grabFrame, nextCapturePath, nextFlash, recorderType, recordingTime, type FlashMode } from "./capture";
 
 type Status = "starting" | "ready" | "none" | "denied";
@@ -242,6 +242,10 @@ export function App() {
 
     return (
         <div className={"cam" + (recording ? " recording" : "")}>
+            <AppMenu items={[
+                { label: "Photo", disabled: recording, onSelect: () => setMode("photo") },
+                { label: "Video", disabled: recording, onSelect: () => setMode("video") },
+            ]} />
             <div className="cam-view">
                 <video ref={videoEl} className="cam-video" muted playsInline autoPlay data-testid="viewfinder" />
                 {status === "starting" && <div className="cam-message"><Spinner large /></div>}

@@ -11,7 +11,7 @@
 
 import { useEffect, useState } from "react";
 import { useLaunchParams } from "@phoenix/luna/react";
-import { BackProvider, RadioToolGroup, ToolBar, ToolButton, useBack } from "@phoenix/ui";
+import { AppMenu, BackProvider, RadioToolGroup, ToolBar, ToolButton, useBack } from "@phoenix/ui";
 import { usePeople, useThreads, useWide } from "./lib/hooks";
 import type { Recipient } from "./lib/threads";
 import { ThreadList } from "./views/ThreadList";
@@ -69,9 +69,18 @@ function Messaging() {
         </div>
     );
 
+    const menu = (
+        <AppMenu items={[
+            { label: "New Message", onSelect: () => setView({ kind: "compose" }) },
+            { label: "Conversations", onSelect: () => { setTab("conversations"); setView({ kind: "list" }); } },
+            { label: "Buddies", onSelect: () => { setTab("buddies"); setView({ kind: "list" }); } },
+        ]} />
+    );
+
     if (wide) {
         return (
             <div className="msg-root wide">
+                {menu}
                 {list}
                 <div className="msg-detail">
                     {detail ?? (
@@ -81,7 +90,7 @@ function Messaging() {
             </div>
         );
     }
-    return <div className="msg-root">{detail ?? list}</div>;
+    return <div className="msg-root">{menu}{detail ?? list}</div>;
 }
 
 export function App() {

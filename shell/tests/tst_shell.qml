@@ -184,6 +184,23 @@ Item {
             compare(shell.cardView.windowHeight, fullHeight);
         }
 
+        function test_appNameOpensTheAppMenu() {
+            var uid = windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximizeProgress = 1;
+            var app = windows.windowFor(uid);
+            verify(!app.appMenuOpen);
+            // The app name, at the top left of the status bar.
+            mouseClick(shell, 30, Theme.statusBarHeight / 2);
+            verify(app.appMenuOpen);
+            // The back gesture closes it first.
+            shell.gestureBack();
+            verify(!app.appMenuOpen);
+            // In card view the name is not shown and nothing opens.
+            shell.cardView.maximizeProgress = 0;
+            mouseClick(shell, 30, Theme.statusBarHeight / 2);
+            verify(!app.appMenuOpen);
+        }
+
         function test_tapCardMaximizes() {
             windows.launch("org.webosphoenix.email", "");
             wait(50);
