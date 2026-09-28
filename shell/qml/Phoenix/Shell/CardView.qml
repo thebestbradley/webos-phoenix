@@ -1,20 +1,22 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// The webOS card view: running apps as a horizontal row of cards.
+// The webOS card view: running apps as cards, grouped into stacks.
 //
-//  * swipe sideways to move between cards
+//  * swipe sideways to move between stacks (and through long stacks)
 //  * tap a card to maximize it
-//  * flick a card up and off the screen to close the app
+//  * flick a card up and off the screen to close it
+//  * press and hold a card to lift it, then drag to reorder it within its
+//    stack, or into the left/right edge of the screen to move it out of its
+//    stack and into the neighbouring one
 //
-// Geometry follows Src/lunaui/cards/CardWindowManager.cpp: the focused card
-// is drawn at the active scale, its neighbours at the non-active scale, and
-// the row's centre sits cardOriginRatio of the way down the space below the
-// search pill allowance. Maximizing is a single 0..1 progress value, so the
-// neighbours are pushed off-screen by the growing card just as they were in
-// the original.
+// Geometry lives in CardLayout.js, ported from Src/lunaui/cards/CardGroup.cpp
+// and CardWindowManager.cpp. Stacks are runs of consecutive cards in
+// source.cards that share a groupId. Maximizing is one 0..1 progress value,
+// so the growing card pushes everything else off-screen as in the original.
 
 import QtQuick
+import "CardLayout.js" as CardLayout
 
 Item {
     id: view
@@ -23,11 +25,11 @@ Item {
     property var source
     readonly property int count: source ? source.cards.count : 0
 
-    // Fractional index of the card at the centre of the screen.
+    // Fractional index of the stack at the centre of the screen.
     property real position: 0
-    readonly property int currentIndex: Math.max(0, Math.min(count - 1, Math.round(position)))
-    readonly property string currentUid: count > 0 ? source.cards.get(currentIndex).uid : ""
-    readonly property string currentTitle: count > 0 ? source.cards.get(currentIndex).title : ""
+    // Per-stack fan scroll position and active card, keyed by groupId.
+    property var fanPositions: ({})
+    property var groupFocus: ({})
 
     // 0 == card view, 1 == current card maximized.
     property real maximizeProgress: 0
@@ -43,55 +45,149 @@ Item {
     signal cardMaximized(string uid)
     signal cardMinimized(string uid)
 
-    // ---- Layout -------------------------------------------------------------
+    // ---- Stacks -------------------------------------------------------------------
+
+    // Bumped whenever the card model changes so bindings re-read it.
+    property int revision: 0
+    Connections {
+        target: view.source ? view.source.cards : null
+        function onRowsInserted() { view.revision++; }
+        function onRowsRemoved() { view.revision++; }
+        function onRowsMoved() { view.revision++; }
+        function onDataChanged() { view.revision++; }
+        function onModelReset() { view.revision++; }
+    }
+
+    // [{ id, uids: [..], start }] in screen order.
+    readonly property var groups: {
+        revision;
+        var list = [];
+        var n = source ? source.cards.count : 0;
+        for (var i = 0; i < n; ++i) {
+            var c = source.cards.get(i);
+            if (list.length === 0 || list[list.length - 1].id !== c.groupId)
+                list.push({ id: c.groupId, uids: [], start: i });
+            list[list.length - 1].uids.push(c.uid);
+        }
+        return list;
+    }
+    readonly property int groupCount: groups.length
+    readonly property int currentGroup: groupCount > 0 ? Math.max(0, Math.min(groupCount - 1, Math.round(position))) : -1
+
+    function focusOf(group) {
+        var f = groupFocus[group.id];
+        return group.uids.indexOf(f) >= 0 ? f : group.uids[group.uids.length - 1];
+    }
+
+    readonly property string currentUid: currentGroup >= 0 ? focusOf(groups[currentGroup]) : ""
+    readonly property string currentTitle: {
+        revision;
+        var i = indexOf(currentUid);
+        return i >= 0 ? source.cards.get(i).title : "";
+    }
+
+    function groupIndexOf(uid) {
+        for (var g = 0; g < groups.length; ++g)
+            if (groups[g].uids.indexOf(uid) >= 0)
+                return g;
+        return -1;
+    }
+
+    function setFocus(uid) {
+        var g = groupIndexOf(uid);
+        if (g < 0)
+            return;
+        var f = Object.assign({}, groupFocus);
+        f[groups[g].id] = uid;
+        groupFocus = f;
+    }
+
+    // ---- Layout ---------------------------------------------------------------------
 
     function mix(a, b, t) { return a + (b - a) * t }
 
     // CardWindowManager.cpp:2782-2786
-    readonly property real baseActiveScale: Math.max(Theme.minimumCardScale,
+    readonly property real activeScale: Math.max(Theme.minimumCardScale,
         (windowHeight - Theme.searchPillAllowance) * Theme.activeCardRatio / windowHeight)
-    readonly property real baseNonActiveScale: Math.max(Theme.minimumCardScale,
+    readonly property real nonActiveScale: Math.max(Theme.minimumCardScale,
         (windowHeight - Theme.searchPillAllowance) * Theme.nonActiveCardRatio / windowHeight)
-    readonly property real activeScale: mix(baseActiveScale, 1.0, maximizeProgress)
-    readonly property real nonActiveScale: mix(baseNonActiveScale, 1.0, maximizeProgress)
-    // Centre-to-centre distance between neighbouring cards.
-    readonly property real spacing: windowWidth * (activeScale + nonActiveScale) / 2 + Theme.gapBetweenCards
+    // Kept under their old names for tests and callers.
+    readonly property real baseActiveScale: activeScale
+    readonly property real baseNonActiveScale: nonActiveScale
     // CardWindowManager.cpp:287 / :2795 -- kWindowOrigin
     readonly property real cardOriginY: topInset + Theme.searchPillAllowance
                                         + (windowHeight - Theme.searchPillAllowance) * Theme.cardOriginRatio
     readonly property real maximizedCenterY: topInset + windowHeight / 2
 
-    function scaleFor(index) {
-        var d = Math.min(1, Math.abs(index - position));
-        return mix(activeScale, nonActiveScale, d);
+    readonly property var layout: CardLayout.compute(groups, {
+        viewWidth: width,
+        cardWidth: windowWidth,
+        cardHeight: windowHeight,
+        u: Theme.u,
+        activeScale: activeScale,
+        nonActiveScale: nonActiveScale,
+        groupingFactor: Theme.cardGroupingXDistanceFactor,
+        rotFactor: Theme.cardGroupRotFactor,
+        gap: Theme.gapBetweenCards,
+        position: position,
+        fan: fanPositions,
+        focus: groupFocus,
+        maximize: maximizeProgress,
+        originY: cardOriginY,
+        maximizedCenterY: maximizedCenterY
+    })
+
+    // Screen distance between the current stack and the next (for drags).
+    function groupSpacing() {
+        var a = layout.anchors;
+        if (a.length < 2)
+            return width;
+        var g = Math.max(0, Math.min(a.length - 2, Math.floor(position)));
+        return Math.max(1, a[g + 1] - a[g]);
     }
 
-    // ---- Public API -----------------------------------------------------------
+    // Discrete layout changes (close, reorder) animate; drags don't.
+    property int layoutAnimationDuration: 0
+    function animateLayout(duration) {
+        layoutAnimationDuration = duration;
+        layoutAnimTimer.interval = duration;
+        layoutAnimTimer.restart();
+    }
+    Timer {
+        id: layoutAnimTimer
+        onTriggered: view.layoutAnimationDuration = 0
+    }
+
+    // ---- Public API -------------------------------------------------------------------
 
     function indexOf(uid) {
-        for (var i = 0; i < count; ++i)
+        var n = source ? source.cards.count : 0;
+        for (var i = 0; i < n; ++i)
             if (source.cards.get(i).uid === uid)
                 return i;
         return -1;
     }
 
-    function slideTo(index) {
+    function slideTo(groupIndex) {
         slideAnim.stop();
-        slideAnim.to = Math.max(0, Math.min(count - 1, index));
+        slideAnim.to = Math.max(0, Math.min(groupCount - 1, groupIndex));
         slideAnim.start();
     }
 
     function maximize(uid) {
-        var i = uid !== undefined ? indexOf(uid) : currentIndex;
-        if (i < 0)
+        if (uid === undefined)
+            uid = currentUid;
+        var g = groupIndexOf(uid);
+        if (g < 0)
             return;
-        if (Math.abs(position - i) > 0.001)
-            slideTo(i);
+        setFocus(uid);
+        if (Math.abs(position - g) > 0.001)
+            slideTo(g);
         maximizeAnim.stop();
         maximizeAnim.to = 1;
         maximizeAnim.duration = Theme.cardMaximizeDuration;
         maximizeAnim.start();
-        cardMaximized(source.cards.get(i).uid);
+        cardMaximized(uid);
     }
 
     function minimize() {
@@ -104,13 +200,22 @@ Item {
         cardMinimized(currentUid);
     }
 
+    // Jump straight to card view on a stack, without animating.
+    function jumpTo(groupIndex) {
+        slideAnim.stop();
+        maximizeAnim.stop();
+        maximizeProgress = 0;
+        position = Math.max(0, Math.min(groupCount - 1, groupIndex));
+    }
+
     // Show a freshly launched (or re-launched) card maximized.
     function focusLaunched(uid) {
-        var i = indexOf(uid);
-        if (i < 0)
+        var g = groupIndexOf(uid);
+        if (g < 0)
             return;
         slideAnim.stop();
-        position = i;
+        setFocus(uid);
+        position = g;
         maximizeAnim.stop();
         maximizeAnim.to = 1;
         maximizeAnim.duration = Theme.cardLaunchDuration;
@@ -119,24 +224,142 @@ Item {
     }
 
     function close(uid) {
-        var i = indexOf(uid);
-        if (i < 0)
+        var g = groupIndexOf(uid);
+        if (g < 0)
             return;
-        // Cards to the right of the closed one shuffle left (cardShuffleReorder).
-        shuffleTimer.restart();
-        view.shuffling = true;
-        var wasLast = i === count - 1;
+        var group = groups[g];
+        var k = group.uids.indexOf(uid);
+        var stackSurvives = group.uids.length > 1;
+        // The neighbouring card in the stack takes focus.
+        if (stackSurvives && focusOf(group) === uid)
+            setFocus(group.uids[k > 0 ? k - 1 : 1]);
+        animateLayout(Theme.cardShuffleReorderDuration);
+        var wasLastGroup = g === groupCount - 1;
         source.close(uid);
-        if (wasLast && position > 0)
-            slideTo(count - 1);
-        else if (i < position)
-            position = Math.max(0, position - 1);
+        if (!stackSurvives) {
+            if (wasLastGroup && position > 0)
+                slideTo(groupCount - 1);
+            else if (g < position)
+                position = Math.max(0, position - 1);
+        }
         if (count === 0)
             maximizeProgress = 0;
         cardClosed(uid);
     }
 
-    // ---- Animations -------------------------------------------------------------
+    // ---- Reorder (CardWindowManager.cpp:1876-2040) --------------------------------------
+
+    property string reorderUid: ""
+    property real reorderX: 0
+    property real reorderY: 0
+    property string reorderZone: "center"      // "left", "center", "right"
+
+    function reorderZoneAt(x) {
+        var slice = width / Theme.reorderMarginSlice;
+        return x < slice ? "left" : x > width - slice ? "right" : "center";
+    }
+
+    function enterReorder(uid, x, y) {
+        var g = groupIndexOf(uid);
+        if (g < 0)
+            return;
+        setFocus(uid);
+        slideTo(g);
+        reorderUid = uid;
+        reorderX = x;
+        reorderY = y;
+        reorderZone = reorderZoneAt(x);
+    }
+
+    function moveReorder(x, y) {
+        reorderX = x;
+        reorderY = y;
+        var zone = reorderZoneAt(x);
+        if (zone !== reorderZone) {
+            reorderZone = zone;
+            if (zone === "right")
+                moveReorderSlot(1);
+            else if (zone === "left")
+                moveReorderSlot(-1);
+        }
+        if (zone === "center")
+            moveReorderSlotCenter();
+    }
+
+    function exitReorder() {
+        if (reorderUid === "")
+            return;
+        var uid = reorderUid;
+        reorderUid = "";
+        reorderCycle.stop();
+        animateLayout(Theme.cardSlideDuration);
+        slideTo(groupIndexOf(uid));
+    }
+
+    // Shuffle inside the stack when the lifted card passes a neighbour
+    // (CardGroup::moveActiveCard).
+    function moveReorderSlotCenter() {
+        var g = groupIndexOf(reorderUid);
+        if (g < 0)
+            return;
+        var uids = groups[g].uids;
+        var k = uids.indexOf(reorderUid);
+        var target = k;
+        for (var i = 0; i < k; ++i)
+            if (reorderX < layout.cards[uids[i]].cx) { target = i; break; }
+        if (target === k)
+            for (i = uids.length - 1; i > k; --i)
+                if (reorderX > layout.cards[uids[i]].cx) { target = i; break; }
+        if (target !== k) {
+            animateLayout(Theme.cardShuffleReorderDuration);
+            source.moveCard(groups[g].start + k, groups[g].start + target);
+        }
+    }
+
+    // One step right (+1) or left (-1): through the stack, then out of it
+    // into a new stack, then into the neighbouring stack.
+    function moveReorderSlot(dir) {
+        var g = groupIndexOf(reorderUid);
+        if (g < 0)
+            return;
+        var group = groups[g];
+        var n = group.uids.length;
+        var k = group.uids.indexOf(reorderUid);
+        var atEdge = dir > 0 ? k === n - 1 : k === 0;
+        if (!atEdge) {
+            animateLayout(Theme.cardShuffleReorderDuration);
+            source.moveCard(group.start + k, group.start + k + dir);
+        } else if (n > 1) {
+            // Leave the stack: the card becomes its own stack on that side.
+            animateLayout(Theme.cardGroupReorderDuration);
+            source.setCardGroup(reorderUid, source.newGroupId());
+            position = g + (dir > 0 ? 1 : 0);
+        } else if (g + dir >= 0 && g + dir < groupCount) {
+            // A lone card joins the neighbouring stack at the near end.
+            animateLayout(Theme.cardGroupReorderDuration);
+            source.setCardGroup(reorderUid, groups[g + dir].id);
+            position = dir > 0 ? g : g - 1;
+        } else {
+            return;
+        }
+        setFocus(reorderUid);
+        reorderCycle.dir = dir;
+        reorderCycle.interval = view.layoutAnimationDuration;
+        reorderCycle.restart();
+    }
+
+    // Keep stepping while the card is held in an edge zone
+    // (ReorderState::animationsFinished).
+    Timer {
+        id: reorderCycle
+        property int dir: 0
+        onTriggered: {
+            if (view.reorderUid !== "" && view.reorderZone === (dir > 0 ? "right" : "left"))
+                view.moveReorderSlot(dir);
+        }
+    }
+
+    // ---- Animations -------------------------------------------------------------------
 
     NumberAnimation {
         id: slideAnim
@@ -151,14 +374,7 @@ Item {
         easing.type: Theme.cardEasing
     }
 
-    property bool shuffling: false
-    Timer {
-        id: shuffleTimer
-        interval: Theme.cardShuffleReorderDuration
-        onTriggered: view.shuffling = false
-    }
-
-    // ---- Cards ------------------------------------------------------------------
+    // ---- Cards --------------------------------------------------------------------------
 
     Repeater {
         id: cards
@@ -169,53 +385,85 @@ Item {
             required property int index
             required property var model
 
+            readonly property var place: view.layout.cards[uid] || null
+            readonly property bool lifted: view.reorderUid === uid
+
             uid: model.uid
             title: model.title
             width: view.windowWidth
             height: view.windowHeight
             window: view.source.windowFor(uid)
-            centerX: view.width / 2 + (index - view.position) * view.spacing
-            centerY: view.mix(view.cardOriginY, view.maximizedCenterY, view.maximizeProgress)
-            cardScale: view.scaleFor(index)
+            centerX: lifted ? view.reorderX : place ? place.cx : view.width / 2
+            centerY: lifted ? view.reorderY : place ? place.cy : view.cardOriginY
+            cardScale: lifted ? view.activeScale : place ? place.scale : view.activeScale
+            rotation: lifted || !place ? 0 : place.rot
             rounded: view.maximizeProgress < 1
-            interactive: view.maximized && index === view.currentIndex
-            dimmed: index !== view.currentIndex
-            shuffleAnimation: view.shuffling
-            z: index === view.currentIndex ? 2 : 1
+            interactive: view.maximized && place !== null && place.focused
+            dimmed: place === null || !place.focused
+            reordering: lifted
+            layoutAnimationDuration: lifted ? 0 : view.layoutAnimationDuration
+            z: lifted ? 3000 : place ? place.z : 0
             visible: centerX + width * cardScale / 2 > -view.width
                      && centerX - width * cardScale / 2 < view.width * 2
         }
     }
 
-    // ---- Touch handling in card view ------------------------------------------------
+    function cardItem(uid) {
+        for (var i = 0; i < cards.count; ++i) {
+            var c = cards.itemAt(i);
+            if (c && c.uid === uid)
+                return c;
+        }
+        return null;
+    }
+
+    // ---- Touch handling in card view ----------------------------------------------------
 
     MouseArea {
         id: touch
         anchors.fill: parent
         enabled: view.maximizeProgress === 0 && view.count > 0
-
+        pressAndHoldInterval: Theme.tapAndHoldInterval
 
         property real startX
         property real startY
         property real startPosition
-        property string axis: ""          // "", "h" or "v"
-        property int flickIndex: -1
+        property real startFan
+        property string axis: ""          // "", "h", "v" or "reorder"
+        property string pressedUid: ""
         property real lastX
         property real lastY
         property real lastTime
         property real velocityX
         property real velocityY
 
+        // Topmost card under the point.
         function cardAt(px, py) {
-            for (var i = 0; i < cards.count; ++i) {
-                var c = cards.itemAt(i);
-                if (!c)
-                    continue;
-                var w = c.width * c.cardScale, h = c.height * c.cardScale;
-                if (Math.abs(px - c.centerX) <= w / 2 && Math.abs(py - (c.centerY + c.flickOffset)) <= h / 2)
-                    return i;
+            var best = "", bestZ = -1;
+            for (var uid in view.layout.cards) {
+                var p = view.layout.cards[uid];
+                var c = view.cardItem(uid);
+                var w = view.windowWidth * p.scale, h = view.windowHeight * p.scale;
+                var dy = c ? c.flickOffset : 0;
+                if (Math.abs(px - p.cx) <= w / 2 && Math.abs(py - (p.cy + dy)) <= h / 2 && p.z > bestZ) {
+                    best = uid;
+                    bestZ = p.z;
+                }
             }
-            return -1;
+            return best;
+        }
+
+        function currentFan() {
+            var g = view.groups[view.currentGroup];
+            return g ? CardLayout.clampFanPosition(view.fanPositions[g.id] !== undefined ? view.fanPositions[g.id] : 1e9,
+                                                   g.uids.length) : 0;
+        }
+
+        function setCurrentFan(v) {
+            var g = view.groups[view.currentGroup];
+            var f = Object.assign({}, view.fanPositions);
+            f[g.id] = CardLayout.clampFanPosition(v, g.uids.length);
+            view.fanPositions = f;
         }
 
         onPressed: (mouse) => {
@@ -225,8 +473,22 @@ Item {
             lastTime = Date.now();
             velocityX = velocityY = 0;
             startPosition = view.position;
+            startFan = currentFan();
             axis = "";
-            flickIndex = cardAt(mouse.x, mouse.y);
+            pressedUid = cardAt(mouse.x, mouse.y);
+        }
+
+        onPressAndHold: (mouse) => {
+            if (axis !== "" || pressedUid === "")
+                return;
+            if (view.groupIndexOf(pressedUid) === view.currentGroup) {
+                axis = "reorder";
+                view.enterReorder(pressedUid, mouse.x, mouse.y);
+            } else {
+                // Held beside the stack: switch stacks (CardWindowManager.cpp:1655-1660).
+                view.slideTo(view.currentGroup + (mouse.x < view.width / 2 ? -1 : 1));
+                axis = "done";
+            }
         }
 
         onPositionChanged: (mouse) => {
@@ -235,52 +497,81 @@ Item {
             velocityY = (mouse.y - lastY) / dt;
             lastX = mouse.x; lastY = mouse.y; lastTime = now;
 
+            if (axis === "reorder") {
+                view.moveReorder(mouse.x, mouse.y);
+                return;
+            }
+
             var dx = mouse.x - startX, dy = mouse.y - startY;
             // Lock to an axis once outside the tap radius
-            // (CardWindowManager.cpp:1464-1476).
+            // (CardWindowManager.cpp:1464-1476). Vertical drags only move a
+            // card of the open stack.
             if (axis === "" && dx * dx + dy * dy > Theme.tapRadius * Theme.tapRadius) {
                 if (Math.abs(dx) > Theme.horizontalLockRatio * Math.abs(dy))
                     axis = "h";
-                else if (flickIndex >= 0)
+                else if (pressedUid !== "" && view.groupIndexOf(pressedUid) === view.currentGroup)
                     axis = "v";
+                else
+                    axis = "done";
             }
             if (axis === "h") {
-                var p = startPosition - dx / view.spacing;
+                // Scroll the fan of a long stack first, then the stacks
+                // (CardWindowManager.cpp:1482-1499).
+                var fanUnit = view.windowWidth * view.activeScale / 3;
+                var wantFan = startFan - dx / fanUnit;
+                setCurrentFan(wantFan);
+                var leftover = (wantFan - currentFan()) * fanUnit;
+                var p = startPosition + leftover / view.groupSpacing();
                 // Rubber-band past the ends.
+                var last = view.groupCount - 1;
                 if (p < 0) p = p / 3;
-                if (p > view.count - 1) p = (view.count - 1) + (p - (view.count - 1)) / 3;
+                if (p > last) p = last + (p - last) / 3;
                 view.position = p;
             } else if (axis === "v") {
-                var c = cards.itemAt(flickIndex);
+                var c = view.cardItem(pressedUid);
                 if (c)
                     c.flickOffset = dy < 0 ? dy : dy / 4;
             }
         }
 
         onReleased: (mouse) => {
-            if (axis === "h") {
-                // Carry momentum: a quick flick advances one card.
+            if (axis === "reorder") {
+                view.exitReorder();
+            } else if (axis === "h") {
+                // Carry momentum: a quick flick advances one stack.
                 var target = Math.round(view.position);
                 if (Math.abs(velocityX) > 0.5 && target === Math.round(startPosition))
                     target += velocityX < 0 ? 1 : -1;
                 view.slideTo(target);
             } else if (axis === "v") {
-                var c = cards.itemAt(flickIndex);
+                var c = view.cardItem(pressedUid);
                 if (c) {
                     if (shouldClose(c.flickOffset, velocityY, c.height * c.cardScale))
                         throwAway(c);
                     else
                         springBack.startFor(c);
                 }
-            } else if (flickIndex >= 0) {
-                view.maximize(view.source.cards.get(flickIndex).uid);
+            } else if (axis === "") {
+                tap(mouse.x);
             }
             axis = "";
         }
 
+        // Tap on the open stack maximizes the tapped card; a tap on or beside
+        // another stack switches to it (CardWindowManager.cpp:2151-2195).
+        function tap(x) {
+            var g = pressedUid !== "" ? view.groupIndexOf(pressedUid) : -1;
+            if (g === view.currentGroup)
+                view.maximize(pressedUid);
+            else if (g >= 0)
+                view.slideTo(g);
+            else
+                view.slideTo(view.currentGroup + (x < view.width / 2 ? -1 : 1));
+        }
+
         // CardWindowManager.cpp:1700-1708: far enough, fast enough, and faster
         // the shorter the drag. Dragging more than half the card off also
-        // closes it (inferred), which makes mouse use in the simulator work.
+        // closes it (the original closes once the card centre leaves the top).
         function shouldClose(dy, vy, cardHeight) {
             var u = Theme.u;
             var flicked = dy < -Theme.cardCloseMinDistance

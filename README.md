@@ -10,9 +10,9 @@ Pre 2, Pre 3, Veer and TouchPad: cards, gestures, the quick launch bar, stacked
 notifications, Just Type. It reuses the original Open webOS artwork and
 measurements wherever the license allows.
 
-| Lock screen | Card view | App | Launcher | Dashboard | Just Type | System menu |
-| --- | --- | --- | --- | --- | --- | --- |
-| ![](docs/screenshots/locked.png) | ![](docs/screenshots/cards.png) | ![](docs/screenshots/maximized.png) | ![](docs/screenshots/launcher.png) | ![](docs/screenshots/dashboard.png) | ![](docs/screenshots/justtype.png) | ![](docs/screenshots/systemmenu.png) |
+| Lock screen | Card view | Card stack | Reordering | App | Launcher | Dashboard | Just Type | System menu |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ![](docs/screenshots/locked.png) | ![](docs/screenshots/cards.png) | ![](docs/screenshots/stacks.png) | ![](docs/screenshots/reorder.png) | ![](docs/screenshots/maximized.png) | ![](docs/screenshots/launcher.png) | ![](docs/screenshots/dashboard.png) | ![](docs/screenshots/justtype.png) | ![](docs/screenshots/systemmenu.png) |
 
 *Simulator at the Pre's native 320×480. Status bar, lock clock, quick launch,
 launcher tabs and menus use the original Open webOS art; apps are placeholders.*
@@ -20,7 +20,9 @@ launcher tabs and menus use the original Open webOS art; apps are placeholders.*
 ## Status
 
 **Milestone 0: the shell runs in a desktop simulator.** You can use the card
-view (swipe between cards, flick up to close, tap to maximize), the gesture
+view (swipe between cards, flick up to close, tap to maximize), card stacks
+(an app's extra windows stack with it; press and hold a card to reorder it or
+drag it into another stack), the gesture
 area (swipe up for cards or the launcher, swipe left for back), the quick launch
 bar and launcher, notification banners and the dashboard, the lock screen, Just
 Type and the system menu. It runs on macOS and Linux.
@@ -72,7 +74,10 @@ Controls: drag with the mouse as you would with a finger. The black strip at
 the bottom is the gesture area. Keys: **Esc** back, **Home**/**F1** swipe up,
 **F2** demo notification, **F3** lock/unlock, type in card view for Just Type.
 
-`--scene locked|cards|maximized|launcher|dashboard|justtype|systemmenu` opens
+The **+** button in each placeholder app opens a second window, which joins
+that app's card stack.
+
+`--scene locked|cards|stacks|reorder|maximized|launcher|dashboard|justtype|systemmenu` opens
 a demo state; add `--screenshot out.png` to save a PNG and exit.
 
 Tests:

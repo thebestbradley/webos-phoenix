@@ -31,8 +31,13 @@ Item {
     // Cards that have lost focus are darkened (CardWindow.cpp:211-213).
     property bool dimmed: false
 
-    // Animate x/y changes (used when cards shuffle after a close).
-    property bool shuffleAnimation: false
+    // Lifted for reordering: translucent, no shadow (CardWindowManager.cpp:1888-1899).
+    property bool reordering: false
+
+    // When non-zero, layout changes (shuffles after a close or reorder)
+    // animate over this many milliseconds; otherwise the card tracks its
+    // layout directly, e.g. during drags.
+    property int layoutAnimationDuration: 0
 
     x: centerX - width / 2
     y: centerY - height / 2 + flickOffset
@@ -40,12 +45,25 @@ Item {
     transformOrigin: Item.Center
 
     Behavior on x {
-        enabled: card.shuffleAnimation
-        NumberAnimation { duration: Theme.cardShuffleReorderDuration; easing.type: Theme.cardEasing }
+        enabled: card.layoutAnimationDuration > 0
+        NumberAnimation { duration: card.layoutAnimationDuration; easing.type: Easing.OutCubic }
+    }
+    Behavior on y {
+        enabled: card.layoutAnimationDuration > 0
+        NumberAnimation { duration: card.layoutAnimationDuration; easing.type: Easing.OutCubic }
+    }
+    Behavior on scale {
+        enabled: card.layoutAnimationDuration > 0
+        NumberAnimation { duration: card.layoutAnimationDuration; easing.type: Easing.OutCubic }
+    }
+    Behavior on rotation {
+        enabled: card.layoutAnimationDuration > 0
+        NumberAnimation { duration: card.layoutAnimationDuration; easing.type: Easing.OutCubic }
     }
 
     // Fades out as it is thrown off the top of the screen.
-    opacity: flickOffset < 0 ? Math.max(0, 1 + flickOffset / (height * 0.9)) : 1
+    opacity: (reordering ? 0.8 : 1)
+             * (flickOffset < 0 ? Math.max(0, 1 + flickOffset / (height * 0.9)) : 1)
 
     // Drop shadow: images/card-shadow-tile.png as a 9-tile, 20px outside
     // the card and 5px lower (CardDropShadowEffect.cpp). Sizes are in window
@@ -53,7 +71,7 @@ Item {
     // BorderImage draws borders at source-pixel size; scale by Theme.u.
     BorderImage {
         id: shadow
-        visible: card.rounded
+        visible: card.rounded && !card.reordering
         width: (card.width + 2 * Theme.cardShadowOutset) / Theme.u
         height: (card.height + 2 * Theme.cardShadowOutset) / Theme.u
         x: -Theme.cardShadowOutset

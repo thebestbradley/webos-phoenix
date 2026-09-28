@@ -17,6 +17,9 @@ Rectangle {
     // Detail page title, or "" on the root page.
     property string detail: ""
 
+    // Ask the system for another card of this app (e.g. compose).
+    signal newCardRequested
+
     color: "#e9e9e9"
 
     // Returns true if the gesture was consumed.
@@ -47,6 +50,30 @@ Rectangle {
             font.bold: true
             style: Text.Raised
             styleColor: Qt.darker(app.accent, 1.6)
+        }
+
+        // "New" button: opens a second card that stacks with this one.
+        Rectangle {
+            anchors.right: parent.right
+            anchors.rightMargin: parent.height * 0.2
+            anchors.verticalCenter: parent.verticalCenter
+            width: parent.height * 0.7
+            height: width
+            radius: width / 4
+            color: newMouse.pressed ? Qt.darker(app.accent, 1.3) : Qt.lighter(app.accent, 1.15)
+            border.color: Qt.darker(app.accent, 1.4)
+            Text {
+                anchors.centerIn: parent
+                text: "+"
+                color: "white"
+                font.pixelSize: parent.height * 0.7
+                font.bold: true
+            }
+            MouseArea {
+                id: newMouse
+                anchors.fill: parent
+                onClicked: app.newCardRequested()
+            }
         }
     }
 

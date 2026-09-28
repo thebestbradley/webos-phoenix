@@ -94,8 +94,33 @@ FocusScope {
             cards.maximize();
     }
 
+    // Apps opening a second window (e.g. compose) ask for it to be shown.
+    Connections {
+        target: shell.source
+        ignoreUnknownSignals: true
+        function onCardFocusRequested(uid) { Qt.callLater(cards.focusLaunched, uid); }
+    }
+
     // Desktop / hardware keyboard shortcuts.
     Keys.onPressed: (event) => {
+        // Card view keys (CardWindowManager.cpp:1189-1212).
+        if (!locked && cards.maximizeProgress === 0 && !launcher.open && !justType.open) {
+            if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+                cards.slideTo(cards.currentGroup + (event.key === Qt.Key_Left ? -1 : 1));
+                event.accepted = true;
+                return;
+            }
+            if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && cards.count > 0) {
+                cards.maximize();
+                event.accepted = true;
+                return;
+            }
+            if (event.key === Qt.Key_Backspace && (event.modifiers & Qt.ControlModifier) && cards.count > 0) {
+                cards.close(cards.currentUid);
+                event.accepted = true;
+                return;
+            }
+        }
         if (event.key === Qt.Key_Escape || event.key === Qt.Key_Back) {
             gestureBack(); event.accepted = true;
         } else if (event.key === Qt.Key_Home || event.key === Qt.Key_F1) {

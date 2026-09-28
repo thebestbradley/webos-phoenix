@@ -27,7 +27,20 @@ Item {
     property var _hosts: ({})       // uid -> SurfaceHost
     property var _surfaces: []      // [{ uid, item }]
     property int _nextUid: 1
+    property int _nextGroup: 1
     property string _pendingAfterUid: ""
+
+    function newGroupId() {
+        return "g" + (_nextGroup++);
+    }
+
+    // Index just past the stack that holds card index i.
+    function _groupEnd(i) {
+        var gid = cards.get(i).groupId;
+        while (i < cards.count && cards.get(i).groupId === gid)
+            ++i;
+        return i;
+    }
 
     // ---- Apps ------------------------------------------------------------------
 
@@ -96,10 +109,20 @@ Item {
         _surfaces.push({ uid: uid, item: item });
         _hosts[uid] = hostComponent.createObject(source, { surface: item });
         item.state = Qt.WindowFullScreen;
-        var at = _pendingAfterUid !== "" ? cardIndex(_pendingAfterUid) + 1 : cards.count;
-        if (at <= 0 || at > cards.count)
-            at = cards.count;
-        cards.insert(at, { uid: uid, appId: item.appId, title: item.title || item.appId });
+        // A further window of an app that already has a card joins that
+        // card's stack; anything else starts a new stack to the right of the
+        // active one (CardWindowManager.cpp:556-599).
+        var sibling = cardIndex(runningUid(item.appId));
+        var at, groupId;
+        if (sibling >= 0) {
+            at = _groupEnd(sibling);
+            groupId = cards.get(sibling).groupId;
+        } else {
+            var after = cardIndex(_pendingAfterUid);
+            at = after >= 0 ? _groupEnd(after) : cards.count;
+            groupId = newGroupId();
+        }
+        cards.insert(at, { uid: uid, appId: item.appId, title: item.title || item.appId, groupId: groupId });
         _pendingAfterUid = "";
         cardFocusRequested(uid);
     }
@@ -156,6 +179,17 @@ Item {
         LS.adhoc.call("luna://com.webos.applicationManager", "/launch",
                       JSON.stringify({ id: appId, params: {} }));
         return "";
+    }
+
+    function moveCard(from, to) {
+        if (from !== to && from >= 0 && to >= 0 && from < cards.count && to < cards.count)
+            cards.move(from, to, 1);
+    }
+
+    function setCardGroup(uid, groupId) {
+        var i = cardIndex(uid);
+        if (i >= 0)
+            cards.setProperty(i, "groupId", groupId);
     }
 
     function close(uid) {

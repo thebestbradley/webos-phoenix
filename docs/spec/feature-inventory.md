@@ -6,23 +6,23 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 
 ## 1. Card view / multitasking [spec §1]
 
-- [ ] Cards for running apps, with maximized and minimized (card view) states. `Src/lunaui/cards/CardWindowManager.cpp:180-246`
-- [ ] Card **stacks** (groups): cards launched by the focused app stack with it, others open a new stack to the right. `CardWindowManager.cpp:556-599`
-- [ ] Fanned layout inside the active stack, with tilt and a slight drop; closed stacks sit left and right with a 7 px offset. `Src/lunaui/cards/CardGroup.cpp:699-771`
-- [ ] Horizontal drag and flick through cards and stacks, snapping to the nearest stack. `CardWindowManager.cpp:1452-1600,1677-1738`
-- [ ] Flick a card up to close it (velocity/distance rule), or drag it off the top. `CardWindowManager.cpp:63-65,1700-1716`
+- [x] Cards for running apps, with maximized and minimized (card view) states. `Src/lunaui/cards/CardWindowManager.cpp:180-246`
+- [x] Card **stacks** (groups): cards launched by the focused app stack with it, others open a new stack to the right. `CardWindowManager.cpp:556-599`
+- [x] Fanned layout inside the active stack, with tilt and a slight drop; closed stacks sit left and right with a 7 px offset. `Src/lunaui/cards/CardGroup.cpp:699-771`
+- [x] Horizontal drag and flick through cards and stacks, snapping to the nearest stack. `CardWindowManager.cpp:1452-1600,1677-1738`
+- [x] Flick a card up to close it (velocity/distance rule), or drag it off the top. `CardWindowManager.cpp:63-65,1700-1716`
 - [ ] "Angry card": drag a card off the bottom to force-close it (no keep-alive), with an upside-down sound easter egg. `CardWindowManager.cpp:1280-1283,2841-2894`
-- [ ] Tap a card to maximize it; tap a partly hidden card to scroll the fan instead. `CardWindowManager.cpp:2151-2195`; `CardGroup.cpp:402-470`
-- [ ] Tap left or right of the stack, or tap-and-hold off a card, to switch stacks. `CardWindowManager.cpp:1648-1661,2176-2188`
-- [ ] Tap-and-hold to reorder cards within a stack and move them between stacks (20% edge zones). `CardWindowManager.cpp:1835-2101`
-- [ ] Rounded card corners (shader) and drop shadow. `CardWindow.cpp:2485-2533`; `Src/base/visual/CardDropShadowEffect.cpp`
-- [ ] Dimming of cards that aren't active (0.8). `CardWindow.cpp:245-255`
+- [x] Tap a card to maximize it; tap a partly hidden card to scroll the fan instead. `CardWindowManager.cpp:2151-2195`; `CardGroup.cpp:402-470`
+- [x] Tap left or right of the stack, or tap-and-hold off a card, to switch stacks. `CardWindowManager.cpp:1648-1661,2176-2188`
+- [x] Tap-and-hold to reorder cards within a stack and move them between stacks (20% edge zones). `CardWindowManager.cpp:1835-2101`
+- [x] Rounded card corners (shader) and drop shadow. `CardWindow.cpp:2485-2533`; `Src/base/visual/CardDropShadowEffect.cpp`
+- [x] Dimming of cards that aren't active (0.8). `CardWindow.cpp:245-255`
 - [ ] Loading card: splash icon, pulsing glow and splash background while an app launches. `Src/lunaui/cards/CardLoading.cpp`
 - [ ] In-app scene push/pop zoom transition. `Src/lunaui/cards/CardTransition.cpp`
 - [ ] Modal cards (320x480 child window over a dimmed parent), via `launchModalApp`/`dismissModalApp`. `CardWindow.cpp:1855-2125`; `Src/base/SystemService.cpp:247-248`
 - [ ] Full-screen apps that hide the status bar. `Src/base/SystemUiController.cpp:1389-1400`
 - [ ] Card rotation and orientation lock per app (fixed-orientation apps). `CardWindow.cpp:2536-`; `Src/lunaui/cards/CardHostWindow.cpp:180-240`
-- [ ] Keyboard navigation of cards (←/→, Enter, Ctrl+Backspace). `CardWindowManager.cpp:1189-1212`
+- [x] Keyboard navigation of cards (←/→, Enter, Ctrl+Backspace). `CardWindowManager.cpp:1189-1212`
 - [ ] First-use "dismiss card" tutorial dialog. `CardWindowManager.cpp:1168-1187`; `uiComponents/DismissCardTutorial/dismissDialog.qml`
 - [ ] Card limit and low-memory launch blocking, with a low-memory alert dialog. `conf/luna.conf:63-65`; `Src/base/MemoryMonitor.cpp`; `uiComponents/MemoryAlert/alert.qml`
 - [ ] Card-view wallpaper, rotated for landscape. `Src/lunaui/WindowServerLuna.cpp:89-156,900-928`

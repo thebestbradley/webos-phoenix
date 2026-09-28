@@ -11,6 +11,8 @@ are in [spec/legacy-ui-spec.md](spec/legacy-ui-spec.md).
 
 - [x] Legacy measurements, timings and artwork extracted from Open webOS `luna-sysmgr`
 - [x] Card view: swipe, flick to close, tap to maximize, shuffle after close
+- [x] Card stacks: fanned open stack, collapsed neighbours, child windows join their app's stack
+- [x] Card reorder: press and hold, shuffle within a stack, move out of / into stacks via the edge zones
 - [x] Status bar with original indicator art, system menu
 - [x] Quick launch bar and tabbed launcher (Apps / Downloads / Settings)
 - [x] Notification banner, notification bar and dashboard
@@ -47,8 +49,6 @@ Targets: `qemux86-64` (emulator) and Raspberry Pi 4 with the official
 
 ## M2: legacy UI parity
 
-- [ ] Card stacks (grouping cards by dragging, CardGroup behaviour)
-- [ ] Card reordering (press and hold, drag)
 - [ ] Launch zoom from icon to card, loading card pulse
 - [ ] Wave launcher (slow swipe up and hold)
 - [ ] Launcher editing: reorder, move between pages, delete

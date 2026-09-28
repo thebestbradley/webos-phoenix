@@ -6,11 +6,17 @@
 //
 // Window source interface used by Phoenix.Shell:
 //   apps          ListModel  appId, title, color, glyph, tab, quickLaunch
-//   cards         ListModel  uid, appId, title       (running apps, in card order)
+//   cards         ListModel  uid, appId, title, groupId  (running windows in
+//                            screen order; consecutive cards with the same
+//                            groupId form a card stack)
 //   windowFor(uid) -> Item   the app surface to show inside the card
-//   launch(appId, afterUid) -> uid
+//   launch(appId, afterUid) -> uid   new apps start a stack right of afterUid's
 //   close(uid)
 //   back(uid)                deliver the back gesture to the app
+//   moveCard(from, to)       reorder (indices into cards)
+//   setCardGroup(uid, groupId), newGroupId()
+//   cardFocusRequested(uid)  signal: show this card maximized (e.g. a new
+//                            child window opened by an app)
 //   notifications ListModel  id, appId, title, body, color, glyph
 
 import QtQuick
@@ -44,8 +50,15 @@ Item {
     property ListModel cards: ListModel {}
     property ListModel notifications: ListModel {}
 
+    signal cardFocusRequested(string uid)
+
     property var _windows: ({})
     property int _nextUid: 1
+    property int _nextGroup: 1
+
+    function newGroupId() {
+        return "g" + (_nextGroup++);
+    }
 
     function appInfo(appId) {
         for (var i = 0; i < apps.count; ++i)
@@ -72,8 +85,31 @@ Item {
         return _windows[uid] || null;
     }
 
-    // Launch or re-focus an app. New cards are inserted to the right of
-    // `afterUid` (CardWindowManager inserts next to the active group).
+    // Index just past the stack that contains uid (or the end).
+    function _afterGroupOf(uid) {
+        var i = cardIndex(uid);
+        if (i < 0)
+            return cards.count;
+        var gid = cards.get(i).groupId;
+        while (i < cards.count && cards.get(i).groupId === gid)
+            ++i;
+        return i;
+    }
+
+    function _createWindow(appId, titleText, at, groupId) {
+        var info = appInfo(appId);
+        var uid = "w" + (_nextUid++);
+        var win = mockApp.createObject(source, {
+            appId: appId, title: titleText, accent: info.color, glyph: info.glyph
+        });
+        win.newCardRequested.connect(function() { source.openChild(uid); });
+        _windows[uid] = win;
+        cards.insert(at, { uid: uid, appId: appId, title: titleText, groupId: groupId });
+        return uid;
+    }
+
+    // Launch or re-focus an app. A new app starts its own stack to the right
+    // of the stack holding `afterUid` (CardWindowManager.cpp:556-599).
     function launch(appId, afterUid) {
         var existing = runningUid(appId);
         if (existing !== "")
@@ -81,16 +117,32 @@ Item {
         var info = appInfo(appId);
         if (!info)
             return "";
-        var uid = "w" + (_nextUid++);
-        var win = mockApp.createObject(source, {
-            appId: appId, title: info.title, accent: info.color, glyph: info.glyph
-        });
-        _windows[uid] = win;
-        var at = afterUid ? cardIndex(afterUid) + 1 : cards.count;
-        if (at <= 0 || at > cards.count)
-            at = cards.count;
-        cards.insert(at, { uid: uid, appId: appId, title: info.title });
+        var at = afterUid ? _afterGroupOf(afterUid) : cards.count;
+        return _createWindow(appId, info.title, at, newGroupId());
+    }
+
+    // A second window from the same app (e.g. an email compose card). It
+    // joins the front of its parent's stack and is shown maximized.
+    function openChild(parentUid) {
+        var i = cardIndex(parentUid);
+        if (i < 0)
+            return "";
+        var parent = cards.get(i);
+        var info = appInfo(parent.appId);
+        var uid = _createWindow(parent.appId, "New " + info.title, _afterGroupOf(parentUid), parent.groupId);
+        cardFocusRequested(uid);
         return uid;
+    }
+
+    function moveCard(from, to) {
+        if (from !== to && from >= 0 && to >= 0 && from < cards.count && to < cards.count)
+            cards.move(from, to, 1);
+    }
+
+    function setCardGroup(uid, groupId) {
+        var i = cardIndex(uid);
+        if (i >= 0)
+            cards.setProperty(i, "groupId", groupId);
     }
 
     function close(uid) {

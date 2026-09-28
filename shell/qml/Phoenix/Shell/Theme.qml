@@ -72,6 +72,13 @@ QtObject {
     readonly property int searchPillAllowance: px(48)                // CardWindowManager.cpp:780-786
     readonly property real cardOriginRatio: 0.40                     // CardWindowManager.cpp:56 kWindowOriginRatio
     readonly property int gapBetweenCards: px(tablet ? 30 : 10)       // Settings.cpp:214 / luna-topaz.conf
+    // Card stacks (CardGroup.cpp:699-771): how far apart fanned cards sit
+    // and how much they tilt (degrees = x / (activeScale * factor)).
+    readonly property real cardGroupingXDistanceFactor: tablet ? 0.35 : 1.0   // luna-topaz.conf / Settings.cpp:169
+    readonly property real cardGroupRotFactor: tablet ? 90 : 30               // luna-topaz.conf / conf/luna.conf
+    // Reorder: the outer fifth of the screen on each side is an edge zone.
+    readonly property int reorderMarginSlice: 5                               // CardWindowManager.cpp:68
+    readonly property int tapAndHoldInterval: 700                             // WebosTapAndHoldGestureRecognizer.cpp:52
     // Radius in window (buffer) coordinates, i.e. before the card is scaled.
     readonly property int cardCornerRadius: px(40)                   // CardWindow.cpp:2515-2529
     readonly property int cardShadowOutset: px(20)                   // CardDropShadowEffect.cpp:34-35
@@ -139,7 +146,8 @@ QtObject {
     readonly property int cardMaximizeDuration: 300                  // curve 10 = OutQuart
     readonly property int cardMinimizeDuration: 300                  // minimize is a cardSlide
     readonly property int cardDeleteDuration: 300                    // curve 6 = OutCubic
-    readonly property int cardShuffleReorderDuration: 350
+    readonly property int cardShuffleReorderDuration: 350            // curve 6 = OutCubic
+    readonly property int cardGroupReorderDuration: 500              // conf/lunaAnimations.conf:43-46
     readonly property int cardDimmingDuration: 300
     readonly property int cardLoadingPulseDuration: 1000
     readonly property int launcherFadeDuration: 350                  // conf/lunaAnimations.conf

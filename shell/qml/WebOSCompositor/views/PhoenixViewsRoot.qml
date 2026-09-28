@@ -43,11 +43,6 @@ FocusScope {
         Component.onCompleted: phoenix.unlock()
     }
 
-    Connections {
-        target: windows
-        function onCardFocusRequested(uid) { phoenix.cardView.focusLaunched(uid); }
-    }
-
     // Kept for controller compatibility; Phoenix owns card surfaces.
     FullscreenView {
         id: fullscreenViewId

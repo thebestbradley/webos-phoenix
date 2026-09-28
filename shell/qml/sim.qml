@@ -4,7 +4,7 @@
 // Desktop simulator entry point (loaded by phoenix-sim).
 //
 // Context properties set by phoenix-sim:
-//   simScene       "locked" | "cards" | "maximized" | "launcher" |
+//   simScene       "locked" | "cards" | "stacks" | "reorder" | "maximized" | "launcher" |
 //                  "dashboard" | "justtype" | "systemmenu" | "empty"
 //   simFormFactor  "auto" | "phone" | "tablet"
 
@@ -40,7 +40,23 @@ Item {
         for (var i = 0; i < ids.length; ++i)
             last = windows.launch(ids[i], "");
         shell.cardView.position = 1;
-        if (scene === "maximized") {
+        if (scene === "stacks" || scene === "reorder") {
+            // Two extra Messaging windows stack with the first.
+            var msg = windows.runningUid("org.webosphoenix.messaging");
+            windows.openChild(msg);
+            windows.openChild(msg);
+            // After the child windows' own focus requests have run.
+            Qt.callLater(function() {
+                var cv = shell.cardView;
+                cv.jumpTo(1);
+                if (scene === "reorder") {
+                    var uid = cv.currentUid;
+                    var p = cv.layout.cards[uid];
+                    cv.enterReorder(uid, p.cx, p.cy);
+                    cv.moveReorder(p.cx + 20, p.cy - 30);
+                }
+            });
+        } else if (scene === "maximized") {
             shell.cardView.maximizeProgress = 1;
         } else if (scene === "systemmenu") {
             shell.openSystemMenu();
