@@ -527,8 +527,17 @@ FocusScope {
         anchors.right: parent.right
         anchors.top: parent.top
         system: shell.system
-        appTitle: cards.maximized && !shell.locked
-        title: appTitle ? cards.currentTitle : (shell.system ? shell.system.carrier : "")
+        // SystemUiController::updateStatusBarTitle: Just Type, then the
+        // launcher ("Launcher", com.palm.launcher's title; not actionable),
+        // then the maximized app; else the carrier. Our Just Type has no
+        // app menu yet (the original's: Preferences, Help), so no arrow.
+        readonly property string _mode: shell.locked ? "" : justType.open ? "justtype"
+            : launcher.open ? "launcher" : cards.maximized ? "app" : ""
+        title: _mode === "justtype" ? qsTr("Just Type") : _mode === "launcher" ? qsTr("Launcher")
+             : _mode === "app" ? cards.currentTitle : (shell.system ? shell.system.carrier : "")
+        titleBorder: _mode !== ""
+        titleActionable: _mode === "app"
+        fillColor: _mode === "justtype" || _mode === "launcher" ? Theme.statusBarLauncherFill : Theme.statusBarFill
         systemMenuOpen: systemMenu.open
         lockScreen: shell.locked
         filled: cards.maximized || launcher.open || justType.open

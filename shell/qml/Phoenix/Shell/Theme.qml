@@ -84,6 +84,29 @@ QtObject {
         return batteryChargeLevels.length - 1;
     }
     readonly property int statusBarFontSize: px(14)                  // StatusBarTitle.cpp:36
+    // The title: 14 px bold, letters at 90% (StatusBarTitle.cpp:55-63,
+    // StatusBar.h:37); on phones, apps get appname-background.png with
+    // 13 / 20 px caps, the text 9 px in, else 7 px in (:28-34, 188-218);
+    // 2 px above centre (TEXT_BASELINE_OFFSET). A new title cross-fades
+    // over 300 ms (statusBarTitleChange*, lunaAnimations.conf:116-117).
+    readonly property int statusBarTitleSpacingPercent: 90
+    readonly property int statusBarTitleCapLeft: 13
+    readonly property int statusBarTitleCapRight: 20
+    readonly property int statusBarTitleBorderPadding: px(13 - 4)
+    readonly property int statusBarTitlePadding: px(7)
+    readonly property int statusBarTitleBaselineOffset: px(-2)
+    readonly property int statusBarTitleChangeDuration: 300
+    // Tablets: menu-arrow.png 5 px after the title while it opens a menu, fading
+    // over 500 ms InOutQuad (StatusBarItemGroup.cpp:137-158, 412-424,
+    // ITEM_SPACING 5; lunaAnimations.conf:120-121).
+    readonly property int statusBarArrowSpacing: px(5)
+    readonly property int statusBarArrowFadeDuration: 500
+    // Tablets: the fill under the art lerps over 300 ms between the default
+    // #515558 and the launcher's / Just Type's #4F545A
+    // (StatusBar.cpp:47, setBackgroundColor; SystemUiController.cpp:69-70;
+    // lunaAnimations.conf:114-115).
+    readonly property color statusBarLauncherFill: "#4F545A"
+    readonly property int statusBarColorChangeDuration: 300
     readonly property int statusBarClockFontSize: px(15)             // StatusBarClock.cpp:34
     // Phones: solid black (StatusBar.cpp:767). Tablet: tiled art over #515558 (StatusBar.cpp:47).
     readonly property color statusBarFill: tablet ? "#515558" : "#000000"

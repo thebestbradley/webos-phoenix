@@ -51,7 +51,7 @@ Nearly all the art is already in `shell/assets/openwebos/`.
 
 | # | Original | Phoenix | P · effort |
 |---|---|---|---|
-| O1 | Status bar shows the launcher / Just Type title on `#4F545A` (`SystemUiController.cpp:806-838`) | Carrier | P2 · S |
+| O1 | Status bar shows the launcher / Just Type title on `#4F545A` (`SystemUiController.cpp:806-838`) | **Done**: "Launcher" (not actionable) and "Just Type" on the title pill (phones), the tablet fill #4F545A (300 ms lerp). Not yet: Just Type's app menu (Preferences, Help), so its title has no arrow | — |
 | O2 | Just Type 150 ms OutCubic cross-fade, at overlay z 10 under the (hidden) dock | 150 ms linear fade, full-screen scrim over everything | P2 · S |
 | O3 | Search pill: 588 wide, 50 tall, 9 px below the bar, 18 px oblique 80% white, 200 ms fade | **Matches** | — |
 
@@ -63,7 +63,7 @@ Nearly all the art is already in `shell/assets/openwebos/`.
 | S2 | WAN type and dormancy, dual RSSI, roaming, VPN, BT connecting/connected, Wi-Fi connecting, TTY, HAC, call forward, rotation lock, mute, battery error (`StatusBarInfo.cpp:183-326`) | RSSI (flight-mode bars in airplane mode), BT on, Wi-Fi, battery, and now rotation lock, mute and airplane. Not yet, for want of the state: WAN type, roaming, VPN, BT connecting/connected, Wi-Fi connecting, TTY, HAC, call forward, battery error | P1 · M |
 | S3 | Battery image = first threshold ≥ level in {12,20,28,36,44,52,60,68,76,84,88,99,100}; `battery_full.mp3` (`StatusBarBattery.cpp:35,200-218`) | **Done**: the thresholds; the full state uses battery-11, or battery-charged while charging. Not the `battery_full.mp3` sound (A1) | P2 · S |
 | S4 | 12/24 h per locale, no leading zero in 12 h; lock screen bar shows the short date (`StatusBarClock.cpp:195-232`) | **Done**: 12 h without a leading zero, or 24 h from the system preference (also the lock-screen clock); the lock screen's bar shows the short date (K5) | P1 · S |
-| S5 | Title Prelude 14 bold always, 90% spacing, caps 13/20, `menu-arrow.png` slides in 500 ms InOutQuad, 300 ms title cross-fade | Bold only for apps, no arrow, no cross-fade | P2 · S |
+| S5 | Title Prelude 14 bold always, 90% spacing, caps 13/20, `menu-arrow.png` slides in 500 ms InOutQuad, 300 ms title cross-fade | **Done**: 14 px bold always with 90% percentage spacing (`FontTools`, Phoenix.Native), phones' pill with 13/20 caps and the text 9 px in (7 px without), 2 px above centre, 300 ms cross-fade; tablets: menu-arrow.png and the separator after the title, fading 500 ms InOutQuad (it fades; nothing slides). Phones use the pill's own arrow: 3.0.5's leftover phone path would draw a second | — |
 | S6 | App-tinted status bar, 300 ms lerp (tablet) | None | P2 · S |
 | S7 | Tablet: clock at the right of the system group; fill fades in when an app maximizes (`StatusBar.cpp:98-104,240-262`) | **Done**: the clock is the rightmost item; the #515558 fill fades in (300 ms) under the tiled art while an app, the launcher or Just Type is up, and out in card view. Not the per-app tint (S6) | P1 · S |
 | S8 | Menu tab highlight 3-slice fading 300 ms; icons slide in over 1000 ms | Instant | P2 · S |

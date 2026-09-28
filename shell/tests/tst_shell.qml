@@ -541,6 +541,44 @@ Item {
             verify(!plane.visible);
         }
 
+        // SystemUiController::updateStatusBarTitle / StatusBarTitle.
+        function test_statusBarTitle() {
+            var bar = findChild(shell, "statusBar");
+            var title = findChild(bar, "statusBarTitle");
+            var arrow = findChild(bar, "statusBarTitleArrow");
+            // The carrier: no pill, no arrow.
+            compare(bar.title, shell.system.carrier);
+            verify(!bar.titleBorder);
+            verify(!bar.titleActionable);
+            // An app: its title on the pill, the arrow fading in; the new
+            // title cross-fades in over 300 ms.
+            windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximizeProgress = 1;
+            compare(bar.title, "Email");
+            verify(bar.titleBorder);
+            verify(bar.titleActionable);
+            verify(title.opacity < 1);
+            tryCompare(title, "opacity", 1, 1000);
+            // Phones: the pill's own arrow; no second one.
+            tryCompare(bar, "_arrowProgress", 1, 1500);
+            verify(!arrow.visible);
+            // 14 px bold, letters at 90%.
+            var label = title.children[1];
+            compare(label.font.bold, true);
+            compare(label.font.pixelSize, Theme.px(14));
+            compare(label.font.letterSpacing, 90);
+            // The launcher: "Launcher", no menu.
+            shell.cardView.maximizeProgress = 0;
+            shell.gestureUp();
+            verify(shell.launcherOpen);
+            compare(bar.title, "Launcher");
+            verify(bar.titleBorder);
+            verify(!bar.titleActionable);
+            compare(bar.fillColor, Theme.statusBarLauncherFill);
+            shell.gestureUp();
+            compare(bar.title, shell.system.carrier);
+        }
+
         function test_clockFollowsTheTimeFormat() {
             var bar = findChild(shell, "statusBar");
             shell.system.fixedTime = new Date(2009, 5, 6, 9, 5);

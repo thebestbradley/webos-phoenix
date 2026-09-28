@@ -9,9 +9,9 @@ qt_add_qml_module(phoenix-native
     VERSION 1.0
     PLUGIN_TARGET phoenix-native
     OUTPUT_DIRECTORY ${PHOENIX_QML_BUILD_DIR}/Phoenix/Native
-    SOURCES keyinjector.h keyinjector.cpp
+    SOURCES keyinjector.h keyinjector.cpp fonttools.h fonttools.cpp
 )
-target_link_libraries(phoenix-native PRIVATE Qt6::Quick)
+target_link_libraries(phoenix-native PRIVATE Qt6::Quick Qt6::Gui)
 
 # A plugin library, so on the device it goes with Qt's own QML modules
 # (meta-phoenix passes QT6_INSTALL_QMLDIR), which are on every import path.

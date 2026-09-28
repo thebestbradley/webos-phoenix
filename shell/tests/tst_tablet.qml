@@ -72,6 +72,16 @@ Item {
             shell.cardView.maximize();
             tryVerify(function() { return shell.maximized; }, 2000);
             tryCompare(fill, "opacity", 1, 1000);
+            // No pill on tablets; the arrow and the separator after the title.
+            var bar = findChild(shell, "statusBar");
+            var title = findChild(bar, "statusBarTitle");
+            verify(!bar._shownBorder);
+            var arrow = findChild(bar, "statusBarTitleArrow");
+            tryCompare(arrow, "opacity", 1, 1500);
+            verify(arrow.visible);
+            fuzzyCompare(arrow.x, title.width + Theme.px(5), 0.5);
+            verify(findChild(bar, "statusBarTitleSeparator").visible);
+            compare(fill.color, Theme.statusBarFill);
             shell.cardView.minimize();
             tryCompare(fill, "opacity", 0, 1500);
         }

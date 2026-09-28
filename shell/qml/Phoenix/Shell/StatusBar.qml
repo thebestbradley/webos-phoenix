@@ -8,14 +8,22 @@
 // centre instead of the time, and neither menu.
 
 import QtQuick
+import Phoenix.Native
 
 Item {
     id: bar
 
     property var system
-    // Shown on the left: app title while an app is maximized, else carrier.
+    // Shown on the left: the maximized app's title, "Launcher" or "Just
+    // Type", else the carrier (SystemUiController::updateStatusBarTitle).
     property string title: system ? system.carrier : ""
-    property bool appTitle: false
+    // Phones: on appname-background.png (everything but the carrier).
+    property bool titleBorder: false
+    // Tapping the title opens a menu: the arrow shows.
+    property bool titleActionable: false
+    // Tablets: the fill under the art (the launcher's and Just Type's
+    // #4F545A, else the default), changing over 300 ms.
+    property color fillColor: Theme.statusBarFill
     property bool systemMenuOpen: false
     property bool lockScreen: false
     // Tablet: an app, the launcher or Just Type is up; the bar's fill fades
@@ -55,7 +63,8 @@ Item {
     Rectangle {
         objectName: "statusBarFill"
         anchors.fill: parent
-        color: Theme.statusBarFill
+        color: Theme.tablet ? bar.fillColor : Theme.statusBarFill
+        Behavior on color { ColorAnimation { duration: Theme.statusBarColorChangeDuration } }
         opacity: !Theme.tablet || bar.filled ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.statusBarFadeDuration } }
     }
@@ -67,30 +76,115 @@ Item {
         fillMode: Image.TileHorizontally
     }
 
-    // ---- Left: carrier / app name --------------------------------------------
+    // ---- Left: carrier / app name (StatusBarTitle, StatusBarItemGroup) -------------
 
-    BorderImage {
-        id: appNameBg
-        visible: bar.appTitle
-        anchors.verticalCenter: parent.verticalCenter
-        x: Theme.px(2)
-        width: titleText.implicitWidth + Theme.px(24)
-        height: Theme.px(26)
-        source: Theme.asset("statusBar/appname-background.png")
-        border { left: 12; right: 12; top: 0; bottom: 0 }
+    // Phones draw the title on appname-background.png for an app, the
+    // launcher and Just Type, not for the carrier; tablets never do
+    // (StatusBarTitle::setTitleString).
+    readonly property bool _border: !Theme.tablet && titleBorder
+    readonly property font _titleFont: FontTools.withPercentageSpacing(Qt.font({
+        family: Theme.fontFamily, pixelSize: Theme.statusBarFontSize, bold: true
+    }), Theme.statusBarTitleSpacingPercent)
+
+    // The title shown, and the one fading out (animateTitleTransition).
+    property string _shownTitle: title
+    property bool _shownBorder: _border
+    property string _oldTitle: ""
+    property bool _oldBorder: false
+    function _changeTitle() {
+        if (title === _shownTitle && _border === _shownBorder)
+            return;
+        _oldTitle = _shownTitle;
+        _oldBorder = _shownBorder;
+        _shownTitle = title;
+        _shownBorder = _border;
+        titleFade.restart();
+    }
+    onTitleChanged: _changeTitle()
+    on_BorderChanged: _changeTitle()
+    NumberAnimation {
+        id: titleFade
+        target: newTitle
+        property: "opacity"
+        from: 0
+        to: 1
+        duration: Theme.statusBarTitleChangeDuration
     }
 
-    Text {
-        id: titleText
+    component Title: Item {
+        id: t
+        property string text
+        property bool border
+        height: bar.height
+        width: border ? Theme.px(Theme.statusBarTitleCapLeft) + label.width + Theme.px(Theme.statusBarTitleCapRight)
+                      : Theme.statusBarTitlePadding + label.width
+        BorderImage {
+            visible: t.border
+            anchors.verticalCenter: parent.verticalCenter
+            width: parent.width
+            height: Theme.px(26)
+            source: Theme.asset("statusBar/appname-background.png")
+            border { left: Theme.statusBarTitleCapLeft; right: Theme.statusBarTitleCapRight; top: 0; bottom: 0 }
+        }
+        Text {
+            id: label
+            x: t.border ? Theme.statusBarTitleBorderPadding : Theme.statusBarTitlePadding
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.verticalCenterOffset: Theme.statusBarTitleBaselineOffset
+            // Elided to the 140 px title less its caps or padding
+            // (setTitleString, :131-135).
+            width: Math.min(implicitWidth, Theme.statusBarTitleMaxWidth
+                - (t.border ? Theme.px(Theme.statusBarTitleCapLeft + Theme.statusBarTitleCapRight - 4)
+                            : Theme.statusBarTitlePadding))
+            elide: Text.ElideRight
+            text: t.text
+            color: Theme.text
+            font: bar._titleFont
+        }
+    }
+
+    Title {
+        id: oldTitle
+        text: bar._oldTitle
+        border: bar._oldBorder
+        opacity: 1 - newTitle.opacity
+        visible: opacity > 0
+    }
+    Title {
+        id: newTitle
+        objectName: "statusBarTitle"
+        text: bar._shownTitle
+        border: bar._shownBorder
+    }
+
+    // Tablets: the arrow after the title while it opens a menu, and the
+    // group's separator at its right end (StatusBarItemGroup paint and
+    // layoutLeft). Phones need neither: appname-background.png has the
+    // arrow in its right cap. (luna-sysmgr 3.0.5's phone path would draw
+    // menu-arrow.png after the pill as well, a second arrow the shipped
+    // phones never showed.)
+    property real _arrowProgress: titleActionable && !lockScreen ? 1 : 0
+    Behavior on _arrowProgress { NumberAnimation { duration: Theme.statusBarArrowFadeDuration; easing.type: Easing.InOutQuad } }
+    Image {
+        id: titleArrow
+        objectName: "statusBarTitleArrow"
+        visible: Theme.tablet && opacity > 0
+        x: newTitle.width + Theme.statusBarArrowSpacing
         anchors.verticalCenter: parent.verticalCenter
-        x: bar.appTitle ? appNameBg.x + Theme.px(12) : Theme.px(8)
-        width: Math.min(implicitWidth, Theme.statusBarTitleMaxWidth)
-        elide: Text.ElideRight
-        text: bar.title
-        color: Theme.text
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.statusBarFontSize
-        font.bold: bar.appTitle
+        width: Theme.px(sourceSize.width)
+        height: Theme.px(sourceSize.height)
+        source: Theme.asset("statusBar/menu-arrow.png")
+        opacity: bar._arrowProgress
+    }
+    Image {
+        objectName: "statusBarTitleSeparator"
+        visible: Theme.tablet && opacity > 0
+        x: titleArrow.x + titleArrow.width + Theme.px(7)             // ARROW_SPACING, StatusBar.h:33
+        anchors.verticalCenter: parent.verticalCenter
+        width: Theme.px(sourceSize.width)
+        height: Theme.px(sourceSize.height)
+        source: Theme.asset("statusBar/status-bar-separator.png")
+        opacity: bar._arrowProgress
     }
 
     MouseArea {
@@ -98,7 +192,7 @@ Item {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: parent.width / 3
-        enabled: bar.appTitle && !bar.lockScreen
+        enabled: bar.titleActionable && !bar.lockScreen
         onClicked: bar.appMenuRequested()
     }
 
