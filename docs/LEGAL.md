@@ -23,6 +23,14 @@ Excluded on purpose:
   open-source release, so we do not ship them.
 - The Open webOS `sounds/` directory, until its provenance has been checked.
 
+The virtual keyboards draw `keyboard-phone/` and `keyboard-tablet/` from
+these images. Their code is a port of `openwebos/keyboard-efigs`
+(<https://github.com/openwebos/keyboard-efigs>, Apache-2.0, LG Electronics;
+attribution in `NOTICE`). Not used: the emoticon pictures the plugin loaded
+from `/usr/palm/emoticons/`, which were not in the open-source release (the
+emoticon keys show their text), and the XT9 prediction engine behind its
+candidate bar, which is licensed separately.
+
 ## Fonts (`shell/assets/fonts/`)
 
 Palm's Prelude is not redistributable. In its place Phoenix ships Open Sans

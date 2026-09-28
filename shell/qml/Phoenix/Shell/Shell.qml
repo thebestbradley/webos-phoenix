@@ -6,6 +6,7 @@
 // (windows and apps) and `system` (status: battery, radios, clock).
 
 import QtQuick
+import Phoenix.Native
 import "LauncherLayout.js" as LauncherLayout
 
 FocusScope {
@@ -311,8 +312,193 @@ FocusScope {
     }
     onSourceChanged: Qt.callLater(rebuildLauncherLayout)
 
-    // With the keyboard up the tablet's bezel flick must travel further.
-    property bool keyboardOpen: false
+    // ---- Virtual keyboard (IMEController, InputWindowManager) --------------------------
+    // [VirtualKeyboard] VirtualKeyboardEnabled: off in luna.conf (:116-117),
+    // on for the phones and tablets that had one (luna-topaz.conf:48-49,
+    // luna-pyramid.conf:99-100, ...). The simulator turns it on; a device
+    // leaves it off and reports OSE's own keyboard (platformKeyboardHeight).
+    property bool virtualKeyboard: false
+    // The height of a keyboard the platform draws (OSE's IME panel on a
+    // device, PhoenixViewsRoot): the shell makes room for it the same way.
+    property real platformKeyboardHeight: 0
+    // IMEController::isIMEOpened (or the platform's keyboard is up). With
+    // it the tablet's bezel flick must travel further.
+    readonly property bool keyboardOpen: _imeOpened || platformKeyboardHeight > 0
+    readonly property alias keyboard: ime
+    // What the keyboard types into: {kind: "item", item} for a text field of
+    // the shell's, {kind: "web", uid} for a web page's editable element
+    // (source.inputFocusChanged; uid "justtype" for Just Type's page), with
+    // its PalmIME::EditorState.
+    property var imeClient: null
+    property bool _imeOpened: false               // IMEController::m_imeOpened
+    property string _pendingVisibility: ""        // m_pendingVisibility: "show", "hide"
+    // The keyboard is on screen (it slides out with the negative space).
+    property bool _imeOwnsSpace: false
+    property string _keyboardShownUid: ""         // CardWindow::m_keyboardShownMessageSent
+    property var _webInput: null                  // {uid, state}: the page's focused field
+    readonly property Item _focusItem: Window.activeFocusItem
+    // The window that has the keyboard focus: Just Type's, else the
+    // maximized card's (CardWindow focus; a card in card view has none).
+    readonly property string _focusedWindowUid: justType.open ? "justtype" : (cards.maximized ? cards.currentUid : "")
+
+    function _isTextField(item) {
+        return item !== null && item !== undefined && item.inputMethodHints !== undefined
+            && item.cursorPosition !== undefined && !item.readOnly;
+    }
+    // PalmIME::EditorState for a text field of the shell's.
+    function _editorStateFor(item) {
+        var h = item.inputMethodHints, type = 0;
+        if (item.echoMode !== undefined && item.echoMode !== TextInput.Normal)
+            type = 1;                                           // FieldType_Password
+        else if (h & Qt.ImhEmailCharactersOnly)
+            type = 4;                                           // FieldType_Email
+        else if (h & Qt.ImhUrlCharactersOnly)
+            type = 7;                                           // FieldType_URL
+        else if (h & Qt.ImhDialableCharactersOnly)
+            type = 6;                                           // FieldType_Phone
+        else if (h & (Qt.ImhDigitsOnly | Qt.ImhFormattedNumbersOnly))
+            type = 5;                                           // FieldType_Number
+        return { type: type, actions: 0, flags: 0, enterKeyLabel: "" };
+    }
+
+    // Which client has the input focus now; IMEController::setClient /
+    // notifyInputFocusChange on a change.
+    function _updateImeClient() {
+        if (!virtualKeyboard)
+            return;
+        var c = null;
+        var panel = lockScreen.unlockPanel;
+        if (locked) {
+            // Only the lock screen's password panel (LockWindow).
+            if (panel.inputClient)
+                c = { kind: "item", item: panel, state: { type: 1, actions: 0, flags: 0, enterKeyLabel: "" } };
+        } else if (_isTextField(_focusItem)) {
+            c = { kind: "item", item: _focusItem, state: _editorStateFor(_focusItem) };
+        } else if (_webInput && _webInput.uid === _focusedWindowUid) {
+            c = { kind: "web", uid: _webInput.uid, state: _webInput.state };
+        }
+        var old = imeClient;
+        var same = old !== null && c !== null && old.kind === c.kind && old.item === c.item && old.uid === c.uid;
+        imeClient = c;
+        if (c)
+            _showIMEInternal(!same || JSON.stringify(old.state) !== JSON.stringify(c.state));
+        else if (old)
+            _hideIMEInternal();
+    }
+    on_FocusItemChanged: Qt.callLater(_updateImeClient)
+    on_FocusedWindowUidChanged: Qt.callLater(_updateImeClient)
+    Connections {
+        target: lockScreen.unlockPanel
+        function onInputClientChanged() { Qt.callLater(shell._updateImeClient); }
+    }
+    onVirtualKeyboardChanged: Qt.callLater(_updateImeClient)
+    Connections {
+        target: shell.source
+        ignoreUnknownSignals: true
+        // A page's editable element got or lost the focus (WebKit's IME
+        // client), or the app showed or hid the keyboard itself
+        // (PalmSystem.keyboardShow / keyboardHide in manual mode).
+        function onInputFocusChanged(uid, focused, state) {
+            if (focused)
+                shell._webInput = { uid: uid, state: state || {} };
+            else if (shell._webInput && shell._webInput.uid === uid)
+                shell._webInput = null;
+            Qt.callLater(shell._updateImeClient);
+        }
+    }
+
+    // IMEController::showIMEInternal: not while a finger is on the screen
+    // (then when it lifts); restartInput hands the field's state over.
+    function _showIMEInternal(restart) {
+        if (fingers.active) {
+            _pendingVisibility = "show";
+            return;
+        }
+        _pendingVisibility = "";
+        if (!_imeOpened) {
+            _imeOpened = true;
+            _slotShowIME();
+        }
+        if (imeClient && restart)
+            ime.editorState = imeClient.state;
+    }
+    function _hideIMEInternal() {
+        if (fingers.active) {
+            _pendingVisibility = "hide";
+            return;
+        }
+        _pendingVisibility = "";
+        if (_imeOpened) {
+            _imeOpened = false;
+            _slotHideIME();
+        }
+    }
+    // slotTouchesReleasedFromScreen
+    Connections {
+        target: fingers
+        function onActiveChanged() {
+            if (fingers.active)
+                return;
+            if (shell._pendingVisibility === "hide")
+                shell._hideIMEInternal();
+            else if (shell._pendingVisibility === "show")
+                shell._showIMEInternal(true);
+        }
+    }
+    // The hide key (IMEController::hideIME): the field loses the focus, and
+    // with it the keyboard.
+    function hideKeyboard() {
+        var c = imeClient;
+        // The lock screen's password panel keeps its focus.
+        if (!c || c.item === lockScreen.unlockPanel) {
+            _hideIMEInternal();
+            return;
+        }
+        if (c.kind === "item") {
+            c.item.focus = false;
+        } else {
+            if (source && typeof source.removeInputFocus === "function")
+                source.removeInputFocus(c.uid);
+            _webInput = null;
+        }
+        Qt.callLater(_updateImeClient);
+    }
+
+    // InputWindowManager::slotShowIME / slotHideIME: the keyboard's height
+    // becomes the negative space, animated, and the app in front hears of it
+    // (CardWindow::slotShowIME / slotHideIME -> Mojo.keyboardShown).
+    function _slotShowIME() {
+        ime.shown = true;
+        _imeOwnsSpace = true;
+        _setKeyboardSpace(ime.keyboardHeight, false);
+        var uid = cards.maximized ? cards.currentUid : "";
+        if (uid !== "" && source && typeof source.keyboardShown === "function") {
+            _keyboardShownUid = uid;
+            source.keyboardShown(uid, true);
+        }
+    }
+    function _slotHideIME() {
+        ime.shown = false;
+        _setKeyboardSpace(0, false);
+        if (_keyboardShownUid !== "" && source && typeof source.keyboardShown === "function")
+            source.keyboardShown(_keyboardShownUid, false);
+        _keyboardShownUid = "";
+    }
+    function _setKeyboardSpace(h, immediate) {
+        notes.spaceImmediate = immediate;
+        notes.keyboardHeight = h;
+        notes.spaceImmediate = false;
+    }
+    // slotKeyboardHeightChanged: at once.
+    Connections {
+        target: ime
+        function onKeyboardHeightChanged() {
+            if (shell._imeOpened)
+                shell._setKeyboardSpace(ime.keyboardHeight, true);
+        }
+    }
+    // The platform's keyboard (a device): its panel's height, as it slides.
+    onPlatformKeyboardHeightChanged: if (!_imeOpened) _setKeyboardSpace(platformKeyboardHeight, true)
 
     // The scene behind the overlays (wallpaper, cards, launcher): what the
     // translucent surfaces above blur (BackdropBlur).
@@ -383,6 +569,8 @@ FocusScope {
         var o = maximizedCardOrientation();
         if (!locked && o !== "free")
             uiRotation.setRotationMode(o, true);
+        // The lock screen takes the input focus: the keyboard goes.
+        Qt.callLater(_updateImeClient);
     }
 
     // Nothing is moving that a resize would upset (okToResizeUi:
@@ -804,6 +992,44 @@ FocusScope {
                 onLaunchRequested: (appId, params) => shell.launch(appId, params)
             }
 
+            // The virtual keyboard, above everything (InputWindowManager is the
+            // top window manager, WindowServerLuna.cpp:133-136, 171-172). It
+            // slides with the negative space (InputWindowManager::
+            // slotNegativeSpaceChanged, InputWindowManager.cpp:131-139).
+            VirtualKeyboard {
+                id: ime
+                objectName: "virtualKeyboard"
+                tablet: shell.tablet
+                pixelScale: Theme.keyboardScale
+                availableWidth: ui.width
+                availableHeight: ui.height
+                y: ui.height - notes.negativeSpace
+                visible: shell.virtualKeyboard && shell._imeOwnsSpace && notes.negativeSpace > 0 && !notes.alertShown
+                acceptingInput: shell._imeOpened
+                onKeyTyped: (key, modifiers) => {
+                    var t = shell._imeTarget();
+                    if (t)
+                        KeyInjector.sendImeKey(t, key, modifiers);
+                }
+                onTextCommitted: (text) => {
+                    var t = shell._imeTarget();
+                    if (t)
+                        KeyInjector.commitText(t, text);
+                }
+                onHideRequested: shell.hideKeyboard()
+                onFeedback: (name) => {
+                    if (shell.source && typeof shell.source.playFeedback === "function")
+                        shell.source.playFeedback(name);
+                }
+            }
+            Connections {
+                target: notes
+                function onNegativeSpaceChanged() {
+                    if (!shell._imeOpened && notes.negativeSpace === notes.negativeSpaceTarget)
+                        shell._imeOwnsSpace = false;
+                }
+            }
+
             // Tablet: a flick up from the bottom edge does what the phone's gesture
             // area swipe-up does (SystemUiController::handleScreenEdgeFlickGesture,
             // SystemUiController.cpp:2041-2121); with the keyboard up it must travel
@@ -843,6 +1069,17 @@ FocusScope {
             fingerDown: fingers.active
             okToResize: shell.okToResizeUi
         }
+    }
+
+    // What the keyboard's keys go to: the focused text field, or the web
+    // view whose page has the field (the window source's inputTarget).
+    function _imeTarget() {
+        var c = imeClient;
+        if (!c)
+            return null;
+        if (c.kind === "item")
+            return c.item;
+        return source && typeof source.inputTarget === "function" ? source.inputTarget(c.uid) : null;
     }
 
     GestureArea {

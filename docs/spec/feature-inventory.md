@@ -117,7 +117,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 
 ## 8. Input [spec §8]
 
-- [ ] Virtual keyboard (plugin) with show/hide, phone and tablet art. `Src/ime/*`; `images/keyboard-phone/`, `images/keyboard-tablet/`
+- [x] Virtual keyboard (plugin) with show/hide, phone and tablet art (simulator; GAPS V1). `Src/ime/*`; `images/keyboard-phone/`, `images/keyboard-tablet/`
 - [ ] Keyboard layouts and languages preference (QWERTY/AZERTY/QWERTZ). `Src/ime/VirtualKeyboardPreferences.cpp`
 - [ ] IME variants: pinyin and handwriting (persistent windows). `conf/persistentWindows.conf:28-31`
 - [ ] Hardware keyboard slider support (Pre, Veer): keyboard-open events, slider unlock timeouts. `Src/base/settings/DeviceInfo.cpp:212-275`; `Src/base/DisplayManager.cpp:110-113`

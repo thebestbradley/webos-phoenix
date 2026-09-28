@@ -429,6 +429,11 @@ Item {
         id: unlockPanel
         objectName: "unlockPanel"
         property bool shown: false
+        // A password (not a PIN) is typed on the virtual keyboard: faded in,
+        // the panel is its input client (UnlockPanel.qml onOpacityChanged ->
+        // requestFocusChange -> LockWindow::slotPinPanelFocusRequest,
+        // LockWindow.cpp:1540-1554).
+        readonly property bool inputClient: shown && !isPINEntry && opacity === 1
         anchors.centerIn: parent
         opacity: shown ? 1 : 0
         visible: shown || opacity > 0

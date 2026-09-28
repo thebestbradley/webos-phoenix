@@ -183,6 +183,15 @@ QtObject {
     readonly property int bezelFlickMinimum: 30                       // Phoenix: as GestureArea's swipe
     readonly property int bezelFlickMinimumWithKeyboard: 60           // SystemUiController.cpp:72
 
+    // ---- Virtual keyboard (openwebos/keyboard-efigs; VirtualKeyboard.qml) ----------
+    // The keyboards work in their own screens' pixels: the tablet's art is
+    // the TouchPad's (1024 wide: "native assets", TabletKeyboard.cpp:471),
+    // the phone's is for 480-wide phones of 250 dpi and more
+    // (PhoneKeyboard.cpp:100; ten 48 px keys a row, key-white.png), the
+    // Pre 3's 1.5 legacy density. Scene pixels per keyboard pixel:
+    readonly property real phoneKeyboardDensity: 1.5
+    readonly property real keyboardScale: tablet ? u : u / phoneKeyboardDensity
+
     // ---- Card view (Src/lunaui/cards/CardWindowManager.cpp:53-56) ---------
 
     // Ratios of the space below the 48px search-pill allowance; see
