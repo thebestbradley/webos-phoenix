@@ -34,6 +34,14 @@ Item {
     // 0 == card view, 1 == current card maximized.
     property real maximizeProgress: 0
     readonly property bool maximized: maximizeProgress === 1
+    // The card in front asked for the whole screen (enableFullScreenMode).
+    readonly property bool currentFullScreen: {
+        revision;
+        for (var i = 0; source && i < source.cards.count; ++i)
+            if (source.cards.get(i).uid === currentUid)
+                return source.cards.get(i).fullScreen === true;
+        return false;
+    }
     // On its way back to card view: gestures treat it as there already.
     readonly property bool minimizing: maximizeAnim.running && maximizeAnim.to === 0
 

@@ -29,6 +29,9 @@ FocusScope {
         || (formFactor === "auto" && Theme.tabletLayoutFor(width, height, effectiveDensity))
     readonly property bool locked: lockScreen.locked
     readonly property bool maximized: cards.maximized
+    // A maximized app in full-screen mode: no status bar or notification
+    // area (SystemUiController::isInFullScreenMode).
+    readonly property bool fullScreen: cards.maximized && cards.currentFullScreen
     readonly property bool launcherOpen: launcher.open
     readonly property bool justTypeOpen: justType.open
     property alias launcherEditMode: launcher.editMode
@@ -197,7 +200,7 @@ FocusScope {
             id: cards
             anchors.fill: parent
             source: shell.source
-            topInset: Theme.statusBarHeight
+            topInset: shell.fullScreen ? 0 : Theme.statusBarHeight
             // The app's positive space ends where the notifications' negative space begins.
             bottomInset: gesture.height + notes.negativeSpace
         }
@@ -509,6 +512,7 @@ FocusScope {
     StatusBar {
         id: statusBar
         objectName: "statusBar"
+        visible: !shell.fullScreen
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
@@ -525,6 +529,7 @@ FocusScope {
     }
 
     Notifications {
+        fullScreen: shell.fullScreen
         id: notes
         anchors.left: parent.left
         anchors.right: parent.right

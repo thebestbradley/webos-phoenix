@@ -384,6 +384,28 @@ Item {
             compare(Theme.fontFamily, Theme.preludeInstalled ? "Prelude" : "Open Sans");
         }
 
+        // PalmSystem.enableFullScreenMode: no status bar, no notification
+        // area; the card gets the whole screen while maximized.
+        function test_fullScreenApp() {
+            var uid = windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximizeProgress = 1;
+            var bar = findChild(shell, "statusBar");
+            var normal = shell.cardView.windowHeight;
+            windows._hostMessage("org.webosphoenix.email", uid, "fullScreen", { on: true });
+            verify(shell.fullScreen);
+            verify(!bar.visible);
+            compare(shell.cardView.windowHeight, normal + Theme.statusBarHeight);
+            windows.notify("org.webosphoenix.messaging", "Palm Pre", "Hi");
+            wait(500);
+            compare(shell.notifications.negativeSpace, 0);
+            // Back in card view the bar is back.
+            shell.cardView.maximizeProgress = 0;
+            verify(!shell.fullScreen);
+            verify(bar.visible);
+            windows.dismissNotification(0);
+            shell.notifications.bannerActive = false;
+        }
+
         function test_batteryStates() {
             compare(Theme.batteryState(0), 0);
             compare(Theme.batteryState(12), 0);

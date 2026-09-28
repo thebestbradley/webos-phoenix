@@ -192,7 +192,7 @@ Item {
             win.newCardRequested.connect(function() { source.openChild(uid); });
         }
         _windows[uid] = win;
-        cards.insert(at, { uid: uid, appId: appId, title: titleText, groupId: groupId });
+        cards.insert(at, { uid: uid, appId: appId, title: titleText, groupId: groupId, fullScreen: false });
         return uid;
     }
 
@@ -277,6 +277,12 @@ Item {
             // title, body, params?}; tapping it launches the app with params.
             var target = payload.appId && appInfo(payload.appId) ? payload.appId : appId;
             notify(target, payload.title || "", payload.body || "", payload.params);
+        } else if (type === "fullScreen") {
+            // PalmSystem.enableFullScreenMode: the card, maximized, gets the
+            // whole screen.
+            var fi = cardIndex(uid);
+            if (fi >= 0)
+                cards.setProperty(fi, "fullScreen", !!payload.on);
         } else if (type === "lunaReply") {
             var cb = _lunaCallbacks[payload.id];
             delete _lunaCallbacks[payload.id];

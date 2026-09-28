@@ -64,8 +64,13 @@ Item {
     readonly property string alertKey: alertShown ? alerts.get(0).key : ""
     readonly property real alertHeight: alertShown ? Theme.px(alerts.get(0).height) : 0
 
+    // A full-screen app has the whole screen: no bar, no banners, no
+    // dashboard; popup alerts (a call) still make room
+    // (SystemUiController::hideStatusBarAndNotificationArea).
+    property bool fullScreen: false
     readonly property real negativeSpaceTarget: overlay ? 0
         : alertShown ? alertHeight
+        : fullScreen ? 0
         : dashboardOpen ? dashboardHeight
         : hasContent ? Theme.bannerHeight : 0
     property real negativeSpace: negativeSpaceTarget
