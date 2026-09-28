@@ -7,11 +7,14 @@ The checklist of legacy features is in
 [spec/feature-inventory.md](spec/feature-inventory.md), and the measurements
 are in [spec/legacy-ui-spec.md](spec/legacy-ui-spec.md).
 
-Three plans go with this roadmap: [HARDWARE.md](HARDWARE.md) (which devices to
+Five plans go with this roadmap: [HARDWARE.md](HARDWARE.md) (which devices to
 target and how their hardware is driven, for M1 and M3),
 [APP-GAPS.md](APP-GAPS.md) (every app a modern phone ships and which ones
-Phoenix still needs, for M4) and [SYNERGY-MODERN.md](SYNERGY-MODERN.md)
-(accounts, sync and messaging against today's providers, for M4).
+Phoenix still needs, for M4), [SYNERGY-MODERN.md](SYNERGY-MODERN.md)
+(accounts, sync and messaging against today's providers, for M4),
+[AI-AND-MCP.md](AI-AND-MCP.md) (an MCP layer over every app and the OS, an
+on-device assistant, and bring-your-own-LLM settings, for M5) and
+[TERMINAL.md](TERMINAL.md) (a built-in terminal app and Developer Mode).
 
 ## M0: shell in a simulator (done in this repo's first PR)
 
@@ -182,6 +185,16 @@ apps, with priorities and a build order, is in [APP-GAPS.md](APP-GAPS.md).
 Once parity is reached: high-DPI artwork redraws, dark/light themes, modern
 notification actions, Wayland app compatibility (Linux mobile apps),
 accessibility, and whatever else the community agrees fits webOS.
+
+- [ ] MCP hub `org.webosphoenix.mcp`: OS tools, per-app tools from
+      `appinfo.json`, grants, confirmations and an audit log; stdio over
+      SSH, then Streamable HTTP with QR pairing ([AI-AND-MCP.md](AI-AND-MCP.md) P1-P4)
+- [ ] Assistant app and service on the hub; Settings > Assistant with
+      Anthropic, OpenAI, Google and OpenAI-compatible providers, a key
+      store, and llama.cpp on the device ([AI-AND-MCP.md](AI-AND-MCP.md) A1-A5)
+- [ ] Terminal (`apps/terminal`, xterm.js on the PTY service
+      `org.webosphoenix.pty`), Developer Mode with `sudo` and an SSH
+      server ([TERMINAL.md](TERMINAL.md) T1-T5)
 
 ## Related projects
 
