@@ -10,6 +10,7 @@ import wifiExcellent from "../assets/enyo/wifi/wifi-icon-excellent.png";
 import secure from "../assets/enyo/wifi/secure-icon.png";
 import joinPlus from "../assets/enyo/wifi/join-plus-icon.png";
 import checkmark from "../assets/enyo/checkmark.png";
+import fullscreenPlay from "../assets/openwebos/fullscreen-play-button.png";
 
 export const icons = {
     /** Wi-Fi signal strength, index 0..3 (lib/wifi/images). */
@@ -17,4 +18,6 @@ export const icons = {
     secure,
     joinPlus,
     checkmark,
+    /** Round play button over a video (luna-sysmgr fullscreen-play-button.png: 100x100, pressed below). */
+    fullscreenPlay,
 };

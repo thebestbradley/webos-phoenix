@@ -1,0 +1,135 @@
+/*
+ * Copyright (c) 2026 webOS Phoenix contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Command menu (Toolbar.css, ToolButton.css), grouped tool buttons
+ * (GroupedToolButton.css), progress slider (ProgressSlider.css,
+ * ProgressBar.css) and a dark theme for the media apps. Slices as in
+ * enyo-1.0/framework/source/palm/themes/Heritage/css.
+ */
+
+/* ---- Glyphs ---------------------------------------------------------------------- */
+
+.pui-glyph {
+    display: block;
+    flex: none;
+    filter: drop-shadow(0 -1px 0 rgba(0, 0, 0, 0.45));
+}
+
+/* ---- Toolbar (command menu) ------------------------------------------------------ */
+
+.pui-toolbar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 56px;
+    padding: 3px 6px;
+    pointer-events: none;
+}
+.pui-toolbar > * { pointer-events: auto; }
+.pui-toolbar.fade { background: url(../assets/enyo/bottom-fade.png) left bottom repeat-x; background-size: 8px 56px; }
+.pui-toolbar.dark {
+    background: linear-gradient(rgba(58, 58, 58, 0.94), rgba(16, 16, 16, 0.96));
+    border-top: 1px solid rgba(110, 110, 110, 0.8);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.pui-tool-spacer { flex: 1; pointer-events: none; }
+
+.pui-tool-button {
+    /* ToolButton.css: palm-menu-button.png 0 25 200 25 */
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 50px;
+    min-width: 50px;
+    margin: 0;
+    padding: 0;
+    color: #fff;
+    font: inherit;
+    font-size: 18px;
+    background: none;
+    border-style: solid;
+    border-width: 0 25px;
+    border-image: url(../assets/enyo/palm-menu-button.png) 0 25 200 25 fill stretch;
+    cursor: pointer;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+}
+.pui-tool-button .pui-glyph { margin: 0 -16px; }
+.pui-tool-button.captioned { padding: 0 2px; }
+.pui-tool-button.captioned .pui-glyph { margin: 0 6px 0 -12px; }
+.pui-tool-button:active { border-image-slice: 50 25 150 25 fill; }
+.pui-tool-button.depressed { border-image-slice: 100 25 100 25 fill; }
+.pui-tool-button.depressed:active { border-image-slice: 150 25 50 25 fill; }
+.pui-tool-button:disabled { opacity: 0.4; cursor: default; }
+.pui-tool-caption { white-space: nowrap; text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.5); }
+
+/* ---- Grouped tool buttons ----------------------------------------------------------- */
+
+.pui-grouped { display: inline-flex; flex: none; }
+.pui-grouped-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: content-box;
+    height: 50px;
+    min-width: 32px;
+    margin: 0;
+    color: #fff;
+    font: inherit;
+    font-size: 16px;
+    background: none;
+    border-style: solid;
+    cursor: pointer;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+}
+.pui-grouped-button.first { padding: 0 13px 0 0; border-width: 0 1px 0 23px; border-image: url(../assets/enyo/grouped-toolbutton.png) 0 1 950 23 fill; }
+.pui-grouped-button.middle { padding: 0 14px; border-width: 0 1px; border-image: url(../assets/enyo/grouped-toolbutton.png) 250 1 700 1 fill; }
+.pui-grouped-button.last { padding: 0 0 0 13px; border-width: 0 23px 0 1px; border-image: url(../assets/enyo/grouped-toolbutton.png) 500 23 450 1 fill; }
+.pui-grouped-button.single { padding: 0 14px; border-width: 0 23px; border-image: url(../assets/enyo/grouped-toolbutton.png) 750 23 200 23 fill; }
+.pui-grouped-button.first:active { border-image-slice: 50 1 900 23 fill; }
+.pui-grouped-button.middle:active { border-image-slice: 300 1 650 1 fill; }
+.pui-grouped-button.last:active { border-image-slice: 550 23 400 1 fill; }
+.pui-grouped-button.single:active { border-image-slice: 800 23 150 23 fill; }
+.pui-grouped-button.first.depressed { border-image-slice: 100 1 850 23 fill; }
+.pui-grouped-button.middle.depressed { border-image-slice: 350 1 600 1 fill; }
+.pui-grouped-button.last.depressed { border-image-slice: 600 23 350 1 fill; }
+.pui-grouped-button.single.depressed { border-image-slice: 850 23 100 23 fill; }
+.pui-grouped-button .pui-glyph + .pui-tool-caption { margin-left: 6px; }
+.pui-grouped-button.first .pui-glyph { margin-left: -8px; }
+.pui-grouped-button.last .pui-glyph { margin-right: -8px; }
+
+/* ---- Progress slider ----------------------------------------------------------------- */
+
+.pui-slider.progress .pui-slider-track {
+    height: 11px;
+    margin: 20px 25px 19px;
+    border-width: 0 6px;
+    border-image: url(../assets/enyo/progress-bar.png) 0 6 0 6 fill repeat;
+}
+.pui-slider-fill {
+    position: absolute;
+    left: -6px;
+    top: 0;
+    height: 11px;
+    min-width: 12px;
+    max-width: calc(100% + 12px);
+    border-style: solid;
+    border-width: 0 6px;
+    border-image: url(../assets/enyo/progress-bar-inner.png) 0 6 0 6 fill repeat;
+}
+
+/* ---- Dark cards (Camera, the photo viewer, Now Playing) ----------------------------------- */
+
+body.pui-app.pui-dark, .pui-app.pui-dark {
+    background-color: #000;
+    color: #fff;
+}
+html:has(> body.pui-app.pui-dark) { background-color: #000; }

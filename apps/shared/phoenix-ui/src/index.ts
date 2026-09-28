@@ -11,3 +11,6 @@ export type { ToggleButtonProps, SliderProps, ButtonProps, ButtonVariant, TextFi
 export { PopupMenu, ListSelector, Picker, Drawer, DividerDrawer, Dialog } from "./popups";
 export type { Option, PopupMenuProps, ListSelectorProps, PickerProps, DrawerProps, DialogProps } from "./popups";
 export { icons } from "./assets";
+export { Glyph, Toolbar, ToolSpacer, ToolButton, GroupedToolButtons, formatDuration } from "./media";
+export type { GlyphName, ToolbarProps, ToolButtonProps, GroupedToolButtonsProps } from "./media";
+export { BackProvider, useBack } from "./back";

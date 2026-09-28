@@ -11,6 +11,9 @@
  * (tablet) wide and the shell zooms them to the real screen.
  */
 
+/* Command menus, grouped buttons, glyphs (media apps). */
+@import "./media.css";
+
 :root {
     --pui-bg: #e4e4e2;              /* Heritage theme.css body */
     --pui-text: #282828;

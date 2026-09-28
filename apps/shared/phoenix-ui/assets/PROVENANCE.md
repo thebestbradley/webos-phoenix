@@ -9,5 +9,8 @@
   `framework/lib/palmstyle/images/`
 - `enyo/wifi/*.png` from `framework/lib/wifi/images/` (Palm's Wi-Fi list UI)
 
+`openwebos/fullscreen-play-button.png` is copied unmodified from
+`shell/assets/openwebos` (`openwebos/luna-sysmgr` `images/`, Apache-2.0).
+
 No Palm or HP logos are included. See `docs/LEGAL.md` and `NOTICE` at the
 repository root.
