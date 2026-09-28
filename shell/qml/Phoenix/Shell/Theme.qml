@@ -175,6 +175,11 @@ QtObject {
     readonly property real cardGroupRotFactor: tablet ? 90 : 30               // luna-topaz.conf / conf/luna.conf
     // Reorder: the outer fifth of the screen on each side is an edge zone.
     readonly property int reorderMarginSlice: 5                               // CardWindowManager.cpp:68
+    // A tapped icon shows launcher-touch-feedback.png (90 x 90) behind it
+    // until the launcher hides or 3 s pass (IconBase paint, icon.cpp:984-990;
+    // LauncherObject::setAppLaunchFeedback; dynamicssettings.cpp:108).
+    readonly property int launchFeedbackSize: px(90)
+    readonly property int launchFeedbackTimeout: 3000
     readonly property int tapAndHoldInterval: 700                             // WebosTapAndHoldGestureRecognizer.cpp:52
     // Radius in window (buffer) coordinates, i.e. before the card is scaled.
     readonly property int cardCornerRadius: px(40)                   // CardWindow.cpp:2515-2529
@@ -201,6 +206,11 @@ QtObject {
     readonly property int quickLaunchMaxItems: 5                     // layoutsettings.cpp:87
     readonly property int launcherIconSize: px(64)                   // images/launcher3/launcher-icon-64.png
     readonly property int launcherTabHeight: px(50)                  // images/launcher3/tab-bg.png
+    // layoutsettings.cpp:67-74: 16 px bold in both states, white / #C8C8C8.
+    readonly property int launcherTabFontSize: px(16)
+    readonly property color launcherTabSelectedColor: "#FFFFFF"
+    readonly property color launcherTabColor: "#C8C8C8"
+    readonly property int launcherTabMaxWidth: px(150)               // pagetabbar.cpp:85
     // Tablet: launcher3's grid (launcher_icon_layoutsettings.conf,
     // icongeometrysettings.cpp:180-207, launcher_icon_geom_settings.conf):
     // up to 7 icons a row, 128 px cells 12 px apart from 27 px in, rows 10

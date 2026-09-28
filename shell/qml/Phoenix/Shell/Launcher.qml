@@ -36,6 +36,18 @@ Item {
 
     onOpenChanged: if (!open) editMode = false
 
+    // The icon showing launch feedback, until the launcher has finished
+    // hiding or the timeout (LauncherObject::setAppLaunchFeedback /
+    // cancelLaunchFeedback, dimensionslauncher.cpp:2926-2995;
+    // slotLauncherFullyClosed, :3505).
+    property string feedbackId: ""
+    onHiddenChanged: if (hidden === 1) feedbackId = ""
+    Timer {
+        running: launcher.feedbackId !== ""
+        interval: Theme.launchFeedbackTimeout
+        onTriggered: launcher.feedbackId = ""
+    }
+
     readonly property var tabs: ["Apps", "Downloads", "Settings"]
 
     // Room left at the bottom for the dock, which sits on top of the launcher.
@@ -90,10 +102,12 @@ Item {
                         horizontalAlignment: Text.AlignHCenter
                         elide: Text.ElideRight
                         text: modelData
-                        color: pages.currentIndex === index ? Theme.text : Theme.textDim
+                        color: pages.currentIndex === index ? Theme.launcherTabSelectedColor : Theme.launcherTabColor
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.px(Theme.tablet ? 18 : launcher.editMode ? 12 : 15)
-                        font.bold: pages.currentIndex === index
+                        // Phones in edit mode: smaller, to leave Done its room
+                        // (the phone launcher is not in the open source).
+                        font.pixelSize: !Theme.tablet && launcher.editMode ? Theme.px(12) : Theme.launcherTabFontSize
+                        font.bold: true
                     }
                     Image {
                         visible: index > 0
@@ -222,8 +236,11 @@ Item {
         var row = Math.max(0, Math.floor((p.y - pageTopMargin) / cellHeight));
         return Math.min(row * launcher.columns + col, pageModels[pages.currentIndex].count - 1);
     }
-    // Tabs share the bar; in edit mode they leave room for Done.
-    readonly property real tabWidth: (tabBar.width - (editMode ? doneButton.width + Theme.px(12) : 0)) / tabs.length
+    // Tabs share the bar from its left, each at most 150 px
+    // (PageTabBar::newTabMaxSize, pagetabbar.cpp:85, 631-642); in edit mode
+    // they leave room for Done.
+    readonly property real tabWidth: Math.min(Theme.launcherTabMaxWidth,
+        (tabBar.width - (editMode ? doneButton.width + Theme.px(12) : 0)) / tabs.length)
 
     // Tab under a point (launcher coordinates), or -1.
     function tabAt(lx, ly) {
@@ -304,7 +321,7 @@ Item {
                         glyph: cell.glyph
                         source: cell.icon
                         interactive: false
-                        pressed: pageMouse.pressedId === cell.appId && pageMouse.pressed
+                        feedback: launcher.feedbackId === cell.appId
                     }
                     // Delete decorator at the icon's top left for apps that can
                     // be deleted (icongeometrysettings.cpp:190-197; the sprite's
@@ -382,6 +399,7 @@ Item {
                             launcher.deleteRequested(item.appId);
                         return;
                     }
+                    launcher.feedbackId = item.appId;
                     launcher.launchRequested(item.appId);
                 }
                 onCanceled: pressedId = ""

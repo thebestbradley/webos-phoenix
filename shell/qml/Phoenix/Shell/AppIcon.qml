@@ -18,7 +18,10 @@ Item {
     property int size: Theme.launcherIconSize
     // false: the icon only draws; its parent handles touches.
     property bool interactive: true
-    property bool pressed: mouse.pressed
+    // Launch feedback: launcher-touch-feedback.png behind the icon, centred
+    // on it (icongeometrysettings.cpp:193-195 give the icon and the
+    // feedback the same offset), from the tap until its app is up.
+    property bool feedback: false
 
     signal clicked
 
@@ -29,8 +32,15 @@ Item {
         id: tile
         width: icon.size
         height: icon.size
-        scale: icon.pressed ? 0.92 : 1
-        Behavior on scale { NumberAnimation { duration: 80 } }
+
+        Image {
+            objectName: "launchFeedback"
+            visible: icon.feedback
+            anchors.centerIn: parent
+            width: Theme.launchFeedbackSize
+            height: Theme.launchFeedbackSize
+            source: Theme.asset("launcher3/launcher-touch-feedback.png")
+        }
 
         Image {
             anchors.fill: parent

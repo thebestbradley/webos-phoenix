@@ -17,6 +17,16 @@ Item {
     signal launchRequested(string appId)
     signal launcherToggled
 
+    // The app just tapped shows launch feedback for up to 3 s
+    // (QuickLaunchBar::setAppLaunchFeedback, quicklaunchbar.cpp:633,
+    // 1661-1687).
+    property string feedbackId: ""
+    Timer {
+        running: ql.feedbackId !== ""
+        interval: Theme.launchFeedbackTimeout
+        onTriggered: ql.feedbackId = ""
+    }
+
     height: Theme.quickLaunchHeight
 
     // The scene behind the glass, blurred faintly under it.
@@ -84,7 +94,7 @@ Item {
             showLabel: false
             interactive: false
             opacity: ql.draggedId === modelData.appId ? 0 : 1
-            pressed: dockMouse.pressed && dockMouse.pressedSlot === index
+            feedback: ql.feedbackId === modelData.appId
             title: modelData.title
             color: modelData.color
             glyph: modelData.glyph
@@ -124,8 +134,10 @@ Item {
             var i = ql.slotAt(mouse.x);
             if (i >= ql.pinned.length)
                 ql.launcherToggled();
-            else
+            else {
+                ql.feedbackId = ql.pinned[i].appId;
                 ql.launchRequested(ql.pinned[i].appId);
+            }
         }
         onPressAndHold: (mouse) => {
             var i = ql.slotAt(mouse.x);

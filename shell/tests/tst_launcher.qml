@@ -134,6 +134,30 @@ Item {
             wait(Theme.launcherReorderDuration + 50);
         }
 
+        // A tap puts launcher-touch-feedback.png behind the icon; it goes
+        // when the launcher hides (LauncherObject::setAppLaunchFeedback).
+        function test_tapShowsLaunchFeedback() {
+            var id = shell.launcherLayout.pages[0][0];
+            var p = iconPoint(0);
+            mouseClick(shell, p.x, p.y);
+            compare(launcher.feedbackId, id);
+            var shown = findChild(launcher, function(o) {
+                return o.objectName === "launchFeedback" && o.visible;
+            });
+            verify(shown, "the feedback image shows");
+            compare(shown.width, Theme.px(90));
+            // Still there while the launcher hides; gone once it has.
+            verify(launcher.hidden < 1);
+            tryCompare(launcher, "feedbackId", "", 2000);
+            compare(launcher.hidden, 1);
+        }
+
+        // 16 px bold white / #C8C8C8 tabs, at most 150 px each.
+        function test_tabs() {
+            verify(launcher.tabWidth <= Theme.px(150));
+            compare(Theme.launcherTabFontSize, Theme.px(16));
+        }
+
         function test_holdEntersEditModeAndReorders() {
             var page = shell.launcherLayout.pages[0];
             verify(page.length >= 3);
