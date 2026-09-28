@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from "react";
 import type { LunaError, Subscription } from "./bridge";
+import { mediaUrl } from "./media";
 
 export interface LunaState<T> {
     value: T | undefined;
@@ -54,4 +55,16 @@ export function useLaunchParams<T extends object>(): T {
         return () => document.removeEventListener("webOSRelaunch", onRelaunch);
     }, []);
     return params;
+}
+
+/** A URL for a media file path (see mediaUrl()); undefined until it is known. */
+export function useMediaUrl(path: string | undefined): string | undefined {
+    const [url, setUrl] = useState<{ path: string; url: string }>();
+    useEffect(() => {
+        if (!path) return;
+        let live = true;
+        mediaUrl(path).then((u) => { if (live) setUrl({ path, url: u }); }, () => {});
+        return () => { live = false; };
+    }, [path]);
+    return url && url.path === path ? url.url : undefined;
 }

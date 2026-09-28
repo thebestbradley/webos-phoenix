@@ -1364,4 +1364,470 @@
         host.postToHost("systemStatus", hostStatus());
     })();
 
+    // ================================================================================
+    // Media services (simulated webOS OSE APIs used by apps/camera, apps/photos, apps/music)
+    // ================================================================================
+    //
+    // Sources (webosose repositories, master branch):
+    //
+    //   com.webos.service.mediaindexer   com.webos.service.mediaindexer src/indexerservice.cpp,
+    //                                    src/dbconnector/mediadb.cpp, src/mediaitem.cpp
+    //       getImageList / getAudioList / getVideoList {uri?, count?, subscribe?}
+    //           -> {imageList|audioList|videoList: {results, count}}; with subscribe
+    //              the first reply is {subscribed: true} and the list follows,
+    //              again whenever the index changes
+    //       getImageMetadata / getAudioMetadata / getVideoMetadata {uri} -> {metadata}
+    //       requestDelete {uri}         drop an item from the index
+    //       requestMediaScan {path}     rescan a storage device (com.webos.app.camera
+    //                                   calls it after taking a snapshot)
+    //       getDeviceList               the storage devices ("storage" plugin)
+    //     Item fields as in mediadb.cpp's select lists: uri, file_path, type, mime,
+    //     title, width, height, file_size, last_modified_date, dirty; audio adds
+    //     artist, album, genre, duration, thumbnail, track, ... Item uris are the
+    //     device uri + path: "storage:///media/internal/DCIM/100PHNX/CIMG0001.jpg".
+    //   com.webos.service.camera2        com.webos.service.camera src/services/camera/camera_service.cpp
+    //       getCameraList {subscribe?} -> {deviceList: [{id: "camera1"}]}, getInfo {id}
+    //       (the simulator lists the browser's video inputs)
+    //   legacy db8 kinds (webOS 2.x/3.x)  com.palm.media.image.file:1, com.palm.media.audio.file:1,
+    //       com.palm.media.video.file:1: the index is mirrored into the simulated
+    //       com.palm.db so legacy apps that query the old kinds see the same media
+    //   org.webosphoenix.service.mediafiles   Phoenix, simulator only so far: write
+    //       {path, data (base64), mimeType} and remove {path} under /media/internal.
+    //       A web page cannot write files on OSE; the camera's captures go through
+    //       this until a Phoenix service provides it on the device (Milestone 1).
+    //
+    // Files live in IndexedDB ("phoenix-media"), shared by every app page, and
+    // the index in the shared store under "media:index". The demo media
+    // (apps/media-samples, mounted at /media/internal/samples) is indexed from
+    // its index.json on first use. __phoenixRuntime.mediaFiles.url(path) gives
+    // a URL for any media path (a blob: URL for stored files); on a device an
+    // app uses "file://" + path.
+    //
+    // Wallpaper: Photos sets it with system service setPreferences {wallpaper}
+    // like Settings. For a /media/ file the runtime adds wallpaperUrl (a data:
+    // URL of the picture) to "systemStatus", because the shell cannot read
+    // IndexedDB.
+    (function mediaServices() {
+        var MEDIA_ROOT = "/media/internal";
+        var DEVICE_URI = "storage://" + MEDIA_ROOT;
+        var INDEX_KEY = "media:index";
+        var WALLPAPER_KEY = "media:wallpaper";
+        var SAMPLES_INDEX = MEDIA_ROOT + "/samples/index.json";
+        var LEGACY_KINDS = { image: "com.palm.media.image.file:1", audio: "com.palm.media.audio.file:1", video: "com.palm.media.video.file:1" };
+        var LIST_KEYS = { image: "imageList", audio: "audioList", video: "videoList" };
+        var MIME = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp",
+                     ogg: "audio/ogg", oga: "audio/ogg", mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav",
+                     webm: "video/webm", mp4: "video/mp4" };
+
+        function isMediaPath(p) {
+            return typeof p === "string" && p.indexOf(MEDIA_ROOT + "/") === 0 && p.split("/").indexOf("..") < 0;
+        }
+        function extOf(p) { var m = /\.([a-z0-9]+)$/i.exec(p || ""); return m ? m[1].toLowerCase() : ""; }
+        function typeOf(p) { var m = MIME[extOf(p)] || ""; return m ? m.split("/")[0] : ""; }
+        function titleOf(p) { return String(p).replace(/^.*\//, "").replace(/\.[^.]*$/, ""); }
+
+        // ---- Files (IndexedDB, or memory where there is none: jsdom, private mode) ----
+
+        var memFiles = {};
+        var dbPromise = null;
+        function idb() {
+            if (!dbPromise) {
+                dbPromise = new Promise(function (resolve) {
+                    try {
+                        if (!global.indexedDB) return resolve(null);
+                        var req = global.indexedDB.open("phoenix-media", 1);
+                        req.onupgradeneeded = function () { req.result.createObjectStore("files"); };
+                        req.onsuccess = function () { resolve(req.result); };
+                        req.onerror = function () { resolve(null); };
+                    } catch (e) {
+                        resolve(null);
+                    }
+                });
+            }
+            return dbPromise;
+        }
+        function tx(mode, fn) {
+            return idb().then(function (db) {
+                if (!db) return fn(null);
+                return new Promise(function (resolve, reject) {
+                    var t = db.transaction("files", mode), st = t.objectStore("files"), result;
+                    Promise.resolve(fn(st)).then(function (r) { result = r; }, function () { /* t.onerror */ });
+                    t.oncomplete = function () { resolve(result); };
+                    t.onerror = function () { reject(t.error); };
+                });
+            });
+        }
+        function reqP(r) { return new Promise(function (res, rej) { r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); }; }); }
+
+        var urlCache = {};
+        var files = runtime.mediaFiles = {
+            write: function (path, blob) {
+                delete urlCache[path];
+                return tx("readwrite", function (st) {
+                    if (!st) { memFiles[path] = blob; return; }
+                    return reqP(st.put(blob, path));
+                });
+            },
+            read: function (path) {
+                return tx("readonly", function (st) {
+                    if (!st) return memFiles[path] || null;
+                    return reqP(st.get(path)).then(function (b) { return b || null; });
+                });
+            },
+            remove: function (path) {
+                if (urlCache[path] && urlCache[path].indexOf("blob:") === 0) try { URL.revokeObjectURL(urlCache[path]); } catch (e) { /* ignore */ }
+                delete urlCache[path];
+                return tx("readwrite", function (st) {
+                    if (!st) { delete memFiles[path]; return; }
+                    return reqP(st.delete(path));
+                });
+            },
+            list: function (prefix) {
+                return tx("readonly", function (st) {
+                    if (!st) return Object.keys(memFiles).filter(function (k) { return k.indexOf(prefix) === 0; });
+                    return reqP(st.getAllKeys()).then(function (keys) {
+                        return keys.filter(function (k) { return String(k).indexOf(prefix) === 0; });
+                    });
+                });
+            },
+            /** A URL to show or play a media path: a blob: URL for stored files, else the path (rootfs). */
+            url: function (path) {
+                if (urlCache[path]) return Promise.resolve(urlCache[path]);
+                return files.read(path).then(function (blob) {
+                    var u = blob && global.URL && URL.createObjectURL ? URL.createObjectURL(blob) : path;
+                    urlCache[path] = u;
+                    return u;
+                }, function () { return path; });
+            }
+        };
+
+        // ---- The index ---------------------------------------------------------------
+
+        function readSamples() {
+            try {
+                var txt = PalmSystem.getResource(SAMPLES_INDEX);
+                return txt ? JSON.parse(txt) : null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function makeItem(type, rec) {
+            var item = { uri: "storage://" + rec.file_path, file_path: rec.file_path, type: type, dirty: false,
+                         mime: rec.mime || MIME[extOf(rec.file_path)] || "", title: rec.title || titleOf(rec.file_path),
+                         file_size: rec.file_size || 0, last_modified_date: rec.last_modified_date || new Date().toISOString() };
+            for (var k in rec) if (!(k in item)) item[k] = rec[k];
+            return item;
+        }
+
+        function loadIndex() {
+            var idx = store.get(INDEX_KEY, null);
+            if (idx) return idx;
+            idx = { image: [], audio: [], video: [] };
+            var s = readSamples();
+            if (s) {
+                (s.images || []).forEach(function (r) { idx.image.push(makeItem("image", r)); });
+                (s.audios || []).forEach(function (r) { idx.audio.push(makeItem("audio", r)); });
+                (s.videos || []).forEach(function (r) { idx.video.push(makeItem("video", r)); });
+            }
+            saveIndex(idx, true);
+            return idx;
+        }
+
+        var listWatchers = [];
+        function notify() { listWatchers.slice().forEach(function (w) { w(); }); }
+
+        function saveIndex(idx, quiet) {
+            store.set(INDEX_KEY, idx);
+            mirrorLegacy(idx);
+            if (!quiet) notify();
+        }
+
+        // Other app pages changed the index (a photo taken in Camera shows up in Photos).
+        try {
+            global.addEventListener("storage", function (e) {
+                if (e.key === "phoenix:" + INDEX_KEY) notify();
+            });
+        } catch (e) { /* ignore */ }
+
+        // ---- Legacy db8 kinds -------------------------------------------------------------
+
+        function legacyObject(item) {
+            var t = Date.parse(item.last_modified_date) || Date.now();
+            var o = { _kind: LEGACY_KINDS[item.type], path: item.file_path, size: item.file_size, mimeType: item.mime,
+                      createdTime: t, modifiedTime: t, title: item.title };
+            if (item.type === "image" || item.type === "video") {
+                o.width = item.width || 0;
+                o.height = item.height || 0;
+                o.albumPath = item.file_path.replace(/\/[^\/]*$/, "");
+            }
+            if (item.type === "audio") {
+                o.artist = item.artist || "";
+                o.album = item.album || "";
+                o.genre = item.genre || "";
+                o.duration = item.duration || 0;
+                o.track = { position: item.track || 0, total: item.total_tracks || 0 };
+                o.thumbnails = item.thumbnail ? [{ data: item.thumbnail, type: "embedded" }] : [];
+            }
+            return o;
+        }
+
+        function mirrorLegacy(idx) {
+            var db = runtime.services["com.palm.db"];
+            if (!db) return;
+            var noop = function () {};
+            var ctx = { cancelled: function () { return true; } };
+            Object.keys(LEGACY_KINDS).forEach(function (type) {
+                db["/del"]({ query: { from: LEGACY_KINDS[type] }, purge: true }, noop, ctx);
+                var objs = (idx[type] || []).map(legacyObject);
+                if (objs.length) db["/put"]({ objects: objs }, noop, ctx);
+            });
+        }
+
+        // ---- Scanning -----------------------------------------------------------------------
+
+        function probe(type, blob) {
+            if (type === "image" && global.createImageBitmap) {
+                return global.createImageBitmap(blob).then(function (bmp) {
+                    var r = { width: bmp.width, height: bmp.height };
+                    if (bmp.close) bmp.close();
+                    return r;
+                }, function () { return {}; });
+            }
+            if ((type === "video" || type === "audio") && global.document && global.URL && URL.createObjectURL) {
+                return new Promise(function (resolve) {
+                    var el = global.document.createElement(type);
+                    var u = URL.createObjectURL(blob);
+                    var done = function (r) { URL.revokeObjectURL(u); resolve(r); };
+                    el.preload = "metadata";
+                    el.onloadedmetadata = function () {
+                        var d = isFinite(el.duration) ? Math.round(el.duration * 10) / 10 : 0;
+                        done(type === "video" ? { duration: d, width: el.videoWidth, height: el.videoHeight } : { duration: d });
+                    };
+                    el.onerror = function () { done({}); };
+                    setTimeout(function () { done({}); }, 3000);
+                    el.src = u;
+                });
+            }
+            return Promise.resolve({});
+        }
+
+        function scan(path) {
+            return files.list(path).then(function (paths) {
+                var idx = loadIndex();
+                var known = {};
+                ["image", "audio", "video"].forEach(function (t) { idx[t].forEach(function (it) { known[it.file_path] = true; }); });
+                var fresh = paths.filter(function (p) { return !known[p] && typeOf(p); });
+                return Promise.all(fresh.map(function (p) {
+                    return files.read(p).then(function (blob) {
+                        var type = typeOf(p);
+                        return probe(type, blob).then(function (meta) {
+                            var rec = { file_path: p, file_size: blob ? blob.size : 0, mime: MIME[extOf(p)], last_modified_date: new Date().toISOString() };
+                            for (var k in meta) rec[k] = meta[k];
+                            return makeItem(type, rec);
+                        });
+                    });
+                })).then(function (items) {
+                    // Stored files that are gone leave the index (the samples are not stored).
+                    var stored = {};
+                    paths.forEach(function (p) { stored[p] = true; });
+                    var idx2 = loadIndex();
+                    var removed = 0;
+                    ["image", "audio", "video"].forEach(function (t) {
+                        idx2[t] = idx2[t].filter(function (it) {
+                            var gone = it.file_path.indexOf(path) === 0 && it.file_path.indexOf(MEDIA_ROOT + "/samples/") !== 0 && !stored[it.file_path];
+                            if (gone) removed++;
+                            return !gone;
+                        });
+                    });
+                    items.forEach(function (it) { idx2[it.type].push(it); });
+                    if (items.length || removed) saveIndex(idx2);
+                    return items.length;
+                });
+            });
+        }
+
+        // ---- com.webos.service.mediaindexer -------------------------------------------------
+
+        function listReply(type, p) {
+            var items = loadIndex()[type].filter(function (it) {
+                return !p.uri || it.uri.indexOf(p.uri) === 0;
+            });
+            if (p.count) items = items.slice(0, p.count);
+            var r = ok({});
+            r[LIST_KEYS[type]] = { results: items, count: items.length };
+            return r;
+        }
+
+        function listMethod(type) {
+            return function (p, reply, ctx) {
+                if (p.count !== undefined && (p.count < 0 || p.count > 500))
+                    return reply(fail(-1, "Invalid request count"));
+                if (p.subscribe) {
+                    reply(ok({ subscribed: true }));
+                    var w = function () { if (!ctx.cancelled()) reply(listReply(type, p)); };
+                    listWatchers.push(w);
+                    ctx.onCancel = function () { listWatchers = listWatchers.filter(function (x) { return x !== w; }); };
+                    setTimeout(w, 0);
+                } else {
+                    reply(listReply(type, p));
+                }
+            };
+        }
+
+        function metadataMethod(type) {
+            return function (p, reply) {
+                if (!p.uri) return reply(fail(-1, "client must specify uri"));
+                var it = loadIndex()[type].filter(function (x) { return x.uri === p.uri; })[0];
+                reply(it ? ok({ metadata: it }) : fail(-1, "Invalid uri"));
+            };
+        }
+
+        register(["com.webos.service.mediaindexer"], {
+            "/getImageList": listMethod("image"),
+            "/getAudioList": listMethod("audio"),
+            "/getVideoList": listMethod("video"),
+            "/getImageMetadata": metadataMethod("image"),
+            "/getAudioMetadata": metadataMethod("audio"),
+            "/getVideoMetadata": metadataMethod("video"),
+            "/getDeviceList": function (p, reply) {
+                reply(ok({ pluginList: [{ active: true, uri: "storage", deviceList: [
+                    { uri: DEVICE_URI, name: "Media", description: "Internal media storage", available: true,
+                      mountpoint: MEDIA_ROOT, imageCount: loadIndex().image.length,
+                      audioCount: loadIndex().audio.length, videoCount: loadIndex().video.length }
+                ] }] }));
+            },
+            "/requestDelete": function (p, reply) {
+                if (!p.uri) return reply(fail(-1, "client must specify uri"));
+                var idx = loadIndex(), n = 0;
+                ["image", "audio", "video"].forEach(function (t) {
+                    idx[t] = idx[t].filter(function (it) { if (it.uri === p.uri) { n++; return false; } return true; });
+                });
+                if (n) saveIndex(idx);
+                reply(ok());
+            },
+            "/requestMediaScan": function (p, reply) {
+                if (!p.path) return reply(fail(-1, "client must specify path"));
+                if (p.path.indexOf(MEDIA_ROOT) !== 0 && MEDIA_ROOT.indexOf(p.path) !== 0)
+                    return reply(fail(-1, "No device for path " + p.path));
+                scan(p.path.indexOf(MEDIA_ROOT) === 0 ? p.path : MEDIA_ROOT).then(function () { reply(ok()); },
+                    function (e) { reply(fail(-1, String(e && e.message || e))); });
+            }
+        });
+
+        // ---- org.webosphoenix.service.mediafiles (Phoenix, simulator only so far) ----------
+
+        function b64ToBlob(data, type) {
+            var bin = global.atob(data), bytes = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; ++i) bytes[i] = bin.charCodeAt(i);
+            return new Blob([bytes], { type: type || "" });
+        }
+
+        register(["org.webosphoenix.service.mediafiles"], {
+            "/write": function (p, reply) {
+                if (!isMediaPath(p.path)) return reply(fail(-1, "path must be under " + MEDIA_ROOT));
+                if (typeof p.data !== "string") return reply(fail(-1, "data (base64) is required"));
+                var blob;
+                try { blob = b64ToBlob(p.data, p.mimeType || MIME[extOf(p.path)]); }
+                catch (e) { return reply(fail(-1, "data is not base64")); }
+                files.write(p.path, blob).then(function () { reply(ok({ path: p.path, file_size: blob.size })); },
+                    function (e) { reply(fail(-1, "write failed: " + (e && e.message || e))); });
+            },
+            "/remove": function (p, reply) {
+                if (!isMediaPath(p.path)) return reply(fail(-1, "path must be under " + MEDIA_ROOT));
+                files.remove(p.path).then(function () { reply(ok()); },
+                    function (e) { reply(fail(-1, "remove failed: " + (e && e.message || e))); });
+            }
+        });
+
+        // ---- com.webos.service.camera2 ---------------------------------------------------
+
+        function videoInputs() {
+            var md = global.navigator && global.navigator.mediaDevices;
+            if (!md || !md.enumerateDevices) return Promise.resolve([]);
+            return md.enumerateDevices().then(function (ds) {
+                return ds.filter(function (d) { return d.kind === "videoinput"; });
+            }, function () { return []; });
+        }
+
+        register(["com.webos.service.camera2"], {
+            "/getCameraList": function (p, reply) {
+                videoInputs().then(function (list) {
+                    var r = ok({ deviceList: list.map(function (d, i) { return { id: "camera" + (i + 1) }; }) });
+                    if (p.subscribe) r.subscribed = true;
+                    reply(r);
+                });
+            },
+            "/getInfo": function (p, reply) {
+                videoInputs().then(function (list) {
+                    var n = parseInt(String(p.id || "").replace("camera", ""), 10);
+                    var d = list[n - 1];
+                    if (!d) return reply(fail(-1, "Invalid device id"));
+                    reply(ok({ info: { name: d.label || "Camera " + n, type: "camera", builtin: true,
+                        details: { video: { maxWidth: 1280, maxHeight: 720, frameRate: 30 } } } }));
+                });
+            }
+        });
+
+        // ---- Wallpaper from a media file ----------------------------------------------------
+
+        // XHR rather than fetch: phoenix-sim's phoenix:// scheme only serves XHR and elements.
+        function readUrl(path) {
+            return new Promise(function (resolve) {
+                try {
+                    var req = new XMLHttpRequest();
+                    req.open("GET", path, true);
+                    req.responseType = "blob";
+                    req.onload = function () { resolve(req.status >= 200 && req.status < 300 || req.status === 0 ? req.response : null); };
+                    req.onerror = function () { resolve(null); };
+                    req.send(null);
+                } catch (e) {
+                    resolve(null);
+                }
+            });
+        }
+
+        function wallpaperData(path) {
+            return files.read(path).then(function (blob) {
+                return blob || readUrl(path);
+            }).then(function (blob) {
+                if (!blob || !global.FileReader) return null;
+                return new Promise(function (resolve) {
+                    var fr = new FileReader();
+                    fr.onload = function () { resolve(fr.result); };
+                    fr.onerror = function () { resolve(null); };
+                    fr.readAsDataURL(blob);
+                });
+            }).then(null, function () { return null; });
+        }
+
+        var basePost = host.postToHost;
+        host.postToHost = function (type, payload) {
+            if (type === "systemStatus" && payload && isMediaPath(payload.wallpaperFile)) {
+                var c = store.get(WALLPAPER_KEY, null);
+                if (c && c.file === payload.wallpaperFile) payload.wallpaperUrl = c.url;
+            }
+            return basePost.call(host, type, payload);
+        };
+
+        var sysSvc = runtime.services["com.webos.service.systemservice"];
+        if (sysSvc) {
+            var baseSetPrefs = sysSvc["/setPreferences"];
+            sysSvc["/setPreferences"] = function (p, reply, ctx) {
+                var file = p.wallpaper && p.wallpaper.wallpaperFile;
+                if (!isMediaPath(file)) return baseSetPrefs(p, reply, ctx);
+                // Read the picture first so the systemStatus that setPreferences
+                // sends already carries it.
+                wallpaperData(file).then(function (url) {
+                    if (url) store.set(WALLPAPER_KEY, { file: file, url: url });
+                    baseSetPrefs(p, reply, ctx);
+                });
+            };
+        }
+
+        // A media wallpaper chosen earlier: tell the shell again, now with its picture.
+        var wp = prefs().wallpaper;
+        if (wp && isMediaPath(wp.wallpaperFile) && runtime.hostStatus)
+            host.postToHost("systemStatus", runtime.hostStatus());
+    })();
 })(this);
