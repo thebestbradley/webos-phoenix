@@ -139,6 +139,8 @@ QtObject {
     readonly property real lockHandleOffsetRatio: 0.10               // LockWindow.cpp:81 LOCK_BUTTON_OFFSET
     readonly property int lockUnlockDistance: px(146)                // LockWindow.cpp:89
     readonly property int lockHelpFontSize: px(20)                   // LockWindow.cpp:91
+    readonly property int lockHideHelpDelay: 1000                    // LockWindow.cpp:91 kHideHelpTimeoutInMS
+    readonly property int lockWindowFadeDuration: 150                // conf/lunaAnimations.conf:104 (curve 1, InQuad)
 
     // ---- Notifications -------------------------------------------------------
 

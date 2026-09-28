@@ -305,6 +305,18 @@ Item {
             verify(!shell.launcherOpen);
         }
 
+        function test_lockScreenStatusBar() {
+            shell.lock();
+            shell.openSystemMenu();
+            verify(!findChild(shell, "systemMenu") || !findChild(shell, "systemMenu").open);
+            var bar = findChild(shell, "statusBar");
+            verify(bar.lockScreen);
+            compare(bar.clockText, Qt.formatDate(bar.shownTime, Qt.locale().dateFormat(Locale.ShortFormat)));
+            shell.unlock();
+            verify(!bar.lockScreen);
+            verify(/^\d+:\d\d$/.test(bar.clockText));
+        }
+
         function test_lockedIgnoresGestures() {
             shell.lock();
             shell.gestureUp();

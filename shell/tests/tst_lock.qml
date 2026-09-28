@@ -56,6 +56,39 @@ Item {
             mouseClick(key);
         }
 
+        function dragPadlock(dx, dy) {
+            var pad = findChild(lock, "padlock");
+            var cx = pad.x + pad.width / 2, cy = pad.y + pad.height / 2;
+            mousePress(lock, cx, cy);
+            for (var i = 1; i <= 10; ++i)
+                mouseMove(lock, cx + dx * i / 10, cy + dy * i / 10);
+            var help = lock.helpShown;
+            // The padlock is under the finger, in both directions.
+            fuzzyCompare(pad.x + pad.width / 2, cx + dx, 1);
+            fuzzyCompare(pad.y + pad.height / 2, cy + dy, 1);
+            mouseRelease(lock, cx + dx, cy + dy);
+            return help;
+        }
+
+        function test_padlockUnlocksPastTheSaucer() {
+            lockService.lockMode = "none";
+            // Short of the 146 px radius: stays locked, help showing.
+            verify(dragPadlock(0, -120));
+            compare(unlocked.count, 0);
+            var pad = findChild(lock, "padlock");
+            // Home at once, not animated.
+            compare(pad.y, pad.homeY);
+            // Help hides a second after the release.
+            verify(lock.helpShown);
+            tryCompare(lock, "helpShown", false, 1500);
+            // Far to the side but not above where it rests: no.
+            dragPadlock(150, 10);
+            compare(unlocked.count, 0);
+            // Up and to the side, past the radius: unlocks; help hid on the way out.
+            verify(!dragPadlock(-110, -110));
+            compare(unlocked.count, 1);
+        }
+
         function test_noPasscodeUnlocksAtOnce() {
             lockService.lockMode = "none";
             lock.requestUnlock();

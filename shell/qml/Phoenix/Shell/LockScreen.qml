@@ -73,7 +73,8 @@ Item {
 
     visible: opacity > 0
     opacity: locked ? 1 : 0
-    Behavior on opacity { NumberAnimation { duration: 300 } }
+    // LockWindow::fadeWindow: 150 ms InQuad (lunaAnimations.conf:104-105).
+    Behavior on opacity { NumberAnimation { duration: Theme.lockWindowFadeDuration; easing.type: Easing.InQuad } }
 
     property date now: new Date()
     Timer {
@@ -92,19 +93,19 @@ Item {
         source: lock.wallpaper
     }
 
+    // At their own height, full width: the top one under the status bar
+    // (LockWindow.cpp:2559-2565).
     Image {
-        anchors.top: parent.top
+        y: Theme.statusBarHeight
         width: parent.width
-        height: parent.height * 0.4
+        height: Theme.px(sourceSize.height)
         source: Theme.asset("screen-lock-wallpaper-mask-top.png")
-        fillMode: Image.Stretch
     }
     Image {
         anchors.bottom: parent.bottom
         width: parent.width
-        height: parent.height * 0.4
+        height: Theme.px(sourceSize.height)
         source: Theme.asset("screen-lock-wallpaper-mask-bottom.png")
-        fillMode: Image.Stretch
     }
 
     // ---- Clock --------------------------------------------------------------
@@ -148,16 +149,25 @@ Item {
 
     // ---- Unlock target + padlock ----------------------------------------------
 
+    // The help saucer shows while the padlock is held, until it is dragged
+    // out past the radius; after a release it hides a second later
+    // (LockWindow::showHelp / startHideHelpTimer, kHideHelpTimeoutInMS).
+    property bool helpShown: false
+    Timer {
+        id: hideHelp
+        interval: Theme.lockHideHelpDelay
+        onTriggered: lock.helpShown = false
+    }
+
     Image {
         id: target
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: Theme.gestureAreaHeight
+        // Its bottom level with the padlock's (LockWindow.cpp:449, 454).
+        y: lock.height - lock.height * Theme.lockHandleOffsetRatio - height
         width: Theme.px(320)
         height: Theme.px(190)
         source: Theme.asset("screen-lock-target-scrim.png")
-        opacity: drag.active ? 1 : 0
-        Behavior on opacity { NumberAnimation { duration: 150 } }
+        visible: lock.helpShown && !unlockPanel.shown
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
@@ -172,42 +182,46 @@ Item {
 
     Image {
         id: padlock
+        objectName: "padlock"
         // Not over the unlock panel (LockWindow.cpp:1053).
         visible: !unlockPanel.shown
         width: Theme.lockPadlockSize
         height: Theme.lockPadlockSize
-        source: drag.active ? Theme.asset("screen-lock-padlock-on.png") : Theme.asset("screen-lock-padlock-off.png")
+        source: drag.pressed ? Theme.asset("screen-lock-padlock-on.png") : Theme.asset("screen-lock-padlock-off.png")
 
         readonly property real homeX: (lock.width - width) / 2
-        // Rests 10% of the screen height above the bottom (LockWindow.cpp:81).
+        // Rests 10% of the screen height above the bottom (LockWindow.cpp:81, 454).
         readonly property real homeY: lock.height - lock.height * Theme.lockHandleOffsetRatio - height
-        x: homeX
-        y: homeY
+        // Centred on the finger while held.
+        property point finger: Qt.point(homeX + width / 2, homeY + height / 2)
+        x: drag.pressed ? finger.x - width / 2 : homeX
+        y: drag.pressed ? finger.y - height / 2 : homeY
 
-        // Unlock once the padlock has been dragged this far up (LockWindow.cpp:89).
-        readonly property real unlockDistance: Theme.lockUnlockDistance
+        // Dragged out of the saucer (146 px, LockWindow.cpp:89) and above
+        // where it rests.
+        function outside(p) {
+            var dx = p.x - (homeX + width / 2), dy = p.y - (homeY + height / 2);
+            return dx * dx + dy * dy > Theme.lockUnlockDistance * Theme.lockUnlockDistance && dy < 0;
+        }
 
         MouseArea {
             id: drag
             anchors.fill: parent
-            readonly property bool active: pressed
-            drag.target: padlock
-            drag.axis: Drag.YAxis
-            drag.minimumY: 0
-            drag.maximumY: padlock.homeY
-            onReleased: {
-                if (padlock.homeY - padlock.y > padlock.unlockDistance)
-                    lock.requestUnlock();
-                padlockReturn.start();
+            preventStealing: true
+            onPressed: { hideHelp.stop(); lock.helpShown = true; }
+            onPositionChanged: (m) => {
+                var p = mapToItem(lock, m.x, m.y);
+                padlock.finger = p;
+                lock.helpShown = !padlock.outside(p);
             }
-        }
-
-        NumberAnimation on y {
-            id: padlockReturn
-            running: false
-            to: padlock.homeY
-            duration: 200
-            easing.type: Easing.OutCubic
+            // LockWindow::handlePenUpStateNormal: back home at once.
+            onReleased: (m) => {
+                var p = mapToItem(lock, m.x, m.y);
+                if (padlock.outside(p))
+                    lock.requestUnlock();
+                hideHelp.restart();
+            }
+            onCanceled: hideHelp.restart()
         }
     }
 

@@ -60,7 +60,8 @@ FocusScope {
         justType.start(text);
     }
 
-    function openSystemMenu() { systemMenu.open = true; }
+    // Not over the lock screen (LockWindow sits above the menus).
+    function openSystemMenu() { if (!locked) systemMenu.open = true; }
 
     function lock() { lockScreen.locked = true; systemMenu.open = false; }
     function unlock() { lockScreen.locked = false; }
@@ -488,6 +489,7 @@ FocusScope {
 
     StatusBar {
         id: statusBar
+        objectName: "statusBar"
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
@@ -495,7 +497,8 @@ FocusScope {
         appTitle: cards.maximized && !shell.locked
         title: appTitle ? cards.currentTitle : (shell.system ? shell.system.carrier : "")
         systemMenuOpen: systemMenu.open
-        onSystemMenuRequested: systemMenu.open = !systemMenu.open
+        lockScreen: shell.locked
+        onSystemMenuRequested: if (!shell.locked) systemMenu.open = !systemMenu.open
         onAppMenuRequested: {
             if (cards.maximized && shell.source && typeof shell.source.appMenu === "function")
                 shell.source.appMenu(cards.currentUid);
@@ -520,6 +523,7 @@ FocusScope {
 
     SystemMenu {
         id: systemMenu
+        objectName: "systemMenu"
         backdrop: sceneBackdrop
         anchors.fill: parent
         system: shell.system

@@ -3,7 +3,9 @@
 //
 // The 28px black status bar: carrier or app name on the left, clock in the
 // centre, radios and battery on the right. Tapping the right side opens the
-// system menu, tapping the app name opens the app menu.
+// system menu, tapping the app name opens the app menu. On the lock screen
+// it is LockWindow's own bar (StatusBar::TypeLockScreen): the date in the
+// centre instead of the time, and neither menu.
 
 import QtQuick
 
@@ -15,6 +17,7 @@ Item {
     property string title: system ? system.carrier : ""
     property bool appTitle: false
     property bool systemMenuOpen: false
+    property bool lockScreen: false
     // Width of the system indicators at the right (tablet notification
     // icons go just left of them).
     readonly property real systemGroupWidth: indicators.width + Theme.px(6)
@@ -33,6 +36,9 @@ Item {
     }
     readonly property date shownTime: system && system.fixedTime ? system.fixedTime : now
     readonly property string clockText: {
+        // StatusBarClock::setDisplayDate: the locale's short date.
+        if (lockScreen)
+            return Qt.formatDate(shownTime, Qt.locale().dateFormat(Locale.ShortFormat));
         var h = shownTime.getHours() % 12;
         return (h === 0 ? 12 : h) + ":" + pad(shownTime.getMinutes());
     }
@@ -80,7 +86,7 @@ Item {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: parent.width / 3
-        enabled: bar.appTitle
+        enabled: bar.appTitle && !bar.lockScreen
         onClicked: bar.appMenuRequested()
     }
 
@@ -151,6 +157,7 @@ Item {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: Math.max(indicators.width + Theme.px(12), parent.width / 3)
+        enabled: !bar.lockScreen
         onClicked: bar.systemMenuRequested()
     }
 }
