@@ -1,0 +1,222 @@
+/*
+ * Copyright (c) 2026 webOS Phoenix contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Dial pad, command-menu toolbar and avatars. Slices and sizes follow
+ * enyo-1.0/framework/lib/telephony/dialpad/dialpad.css and
+ * source/palm/themes/Heritage/css/{Toolbar,ToolButton,GroupedToolButton}.css.
+ */
+
+/* ---- Dial pad ------------------------------------------------------------------ */
+
+.pui-dialpad {
+    /* dialpad.css .dialpad-container: the key grid is 320x230 (4 rows of 55px from y=4). */
+    position: relative;
+    width: 320px;
+    height: 230px;
+    margin: 0 auto;
+    background: url(../assets/enyo/telephony/pin-grid.png) left top no-repeat;
+    flex: none;
+    touch-action: manipulation;
+}
+
+.pui-dialpad-key {
+    position: absolute;
+    height: 55px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: none;
+    color: #fff;
+    font: inherit;
+    cursor: pointer;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+}
+.pui-dialpad-key.col0 { left: 0; width: 105px; }
+.pui-dialpad-key.col1 { left: 106px; width: 106px; }
+.pui-dialpad-key.col2 { left: 213px; width: 107px; }
+.pui-dialpad-key.down, .pui-dialpad-key:active {
+    /* .dialpadbutton-*.enyo-button-down: pin-key-highlight.png 1 0 1 0 */
+    border-style: solid;
+    border-width: 1px 0;
+    border-image: url(../assets/enyo/telephony/pin-key-highlight.png) 1 0 1 0 fill stretch;
+}
+.pui-dialpad-key:focus-visible { box-shadow: inset 0 0 0 2px #2c8ce0; }
+
+.pui-dialpad-digit {
+    /* .keypad-digit */
+    font-size: 30px;
+    font-weight: bold;
+    line-height: 30px;
+    color: #fff;
+    text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.6);
+}
+.pui-dialpad-letters {
+    /* .keypad-letters: always 20px tall so digits line up */
+    height: 16px;
+    font-size: 13px;
+    line-height: 16px;
+    letter-spacing: 1px;
+    color: #c2c9cf;
+    display: flex;
+    align-items: center;
+}
+.pui-dialpad-letters img { width: 24px; height: 11px; }
+
+.pui-dial-button {
+    /* .dial-button: dial-button.png, three 66px bands: up, disabled, down */
+    display: block;
+    width: 320px;
+    height: 66px;
+    margin: 0 auto;
+    padding: 0;
+    border-style: solid;
+    border-width: 0 26px;
+    border-image: url(../assets/enyo/telephony/dial-button.png) 0 26 132 26 fill repeat;
+    background: none;
+    cursor: pointer;
+    outline: none;
+    flex: none;
+}
+.pui-dial-button:active { border-image: url(../assets/enyo/telephony/dial-button.png) 132 26 0 26 fill repeat; }
+.pui-dial-button:disabled { border-image: url(../assets/enyo/telephony/dial-button.png) 66 26 66 26 fill repeat; cursor: default; }
+
+.pui-backspace {
+    /* .backspace-button */
+    width: 36px;
+    height: 50px;
+    flex: none;
+    border: 0;
+    padding: 0;
+    background: url(../assets/enyo/telephony/dialpad-backspace.png) left top no-repeat;
+    cursor: pointer;
+    outline: none;
+}
+.pui-backspace:active { background-position: left bottom; }
+
+/* ---- Toolbar (command menu) ---------------------------------------------------------- */
+
+.pui-toolbar {
+    /* Toolbar.css: floats over the bottom of the card */
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 58px;
+    padding: 0 8px 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: url(../assets/enyo/bottom-fade.png) 0 31px repeat-x;
+    pointer-events: none;
+    z-index: 5;
+}
+.pui-toolbar > * { pointer-events: auto; }
+.pui-toolbar.dark { background: linear-gradient(rgba(0, 0, 0, 0), #000 40%); }
+.pui-toolbar .pui-spacer { flex: 1; pointer-events: none; }
+
+.pui-toolgroup {
+    display: flex;
+    min-width: 0;
+}
+
+.pui-grouped-toolbutton {
+    /* GroupedToolButton.css: grouped-toolbutton.png, 50px bands per state */
+    position: relative;
+    height: 50px;
+    line-height: 50px;
+    min-width: 32px;
+    padding: 0 12px;
+    border-style: solid;
+    background: none;
+    color: #fff;
+    font: inherit;
+    font-size: 17px;
+    text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.5);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    outline: none;
+    display: flex;
+    align-items: center;
+    justify-content: safe center;
+    gap: 6px;
+}
+.pui-grouped-toolbutton svg { flex: none; }
+.pui-grouped-toolbutton.first { padding-left: 2px; border-width: 0 1px 0 23px; border-image: url(../assets/enyo/grouped-toolbutton.png) 0 1 950 23 fill; }
+.pui-grouped-toolbutton.middle { border-width: 0 1px; border-image: url(../assets/enyo/grouped-toolbutton.png) 250 1 700 1 fill; }
+.pui-grouped-toolbutton.last { padding-right: 2px; border-width: 0 23px 0 1px; border-image: url(../assets/enyo/grouped-toolbutton.png) 500 23 450 1 fill; }
+.pui-grouped-toolbutton.single { padding: 0 2px; border-width: 0 23px; border-image: url(../assets/enyo/grouped-toolbutton.png) 750 23 200 23 fill; }
+
+.pui-grouped-toolbutton.first:active { border-image: url(../assets/enyo/grouped-toolbutton.png) 50 1 900 23 fill; }
+.pui-grouped-toolbutton.middle:active { border-image: url(../assets/enyo/grouped-toolbutton.png) 300 1 650 1 fill; }
+.pui-grouped-toolbutton.last:active { border-image: url(../assets/enyo/grouped-toolbutton.png) 550 23 400 1 fill; }
+.pui-grouped-toolbutton.single:active { border-image: url(../assets/enyo/grouped-toolbutton.png) 800 23 150 23 fill; }
+
+.pui-grouped-toolbutton.first.depressed { border-image: url(../assets/enyo/grouped-toolbutton.png) 100 1 850 23 fill; }
+.pui-grouped-toolbutton.middle.depressed { border-image: url(../assets/enyo/grouped-toolbutton.png) 350 1 600 1 fill; }
+.pui-grouped-toolbutton.last.depressed { border-image: url(../assets/enyo/grouped-toolbutton.png) 600 23 350 1 fill; }
+.pui-grouped-toolbutton.single.depressed { border-image: url(../assets/enyo/grouped-toolbutton.png) 850 23 100 23 fill; }
+
+.pui-grouped-toolbutton.first:disabled { border-image: url(../assets/enyo/grouped-toolbutton.png) 200 1 750 23 fill; color: #888; cursor: default; }
+.pui-grouped-toolbutton.middle:disabled { border-image: url(../assets/enyo/grouped-toolbutton.png) 450 1 500 1 fill; color: #888; cursor: default; }
+.pui-grouped-toolbutton.last:disabled { border-image: url(../assets/enyo/grouped-toolbutton.png) 700 23 250 1 fill; color: #888; cursor: default; }
+.pui-grouped-toolbutton.single:disabled { border-image: url(../assets/enyo/grouped-toolbutton.png) 950 23 0 23 fill; color: #888; cursor: default; }
+
+.pui-tool-badge {
+    /* The count bubble webOS put on the Missed / unread tabs. */
+    min-width: 20px;
+    height: 20px;
+    line-height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    background: linear-gradient(#e2574c, #b81f14);
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    font-size: 13px;
+    font-weight: bold;
+    text-align: center;
+}
+
+.pui-tool-button {
+    /* ToolButton.css: palm-menu-button.png 0 25 200 25, 50px bands up/down/depressed */
+    height: 50px;
+    min-width: 50px;
+    padding: 0;
+    border-style: solid;
+    border-width: 0 25px;
+    border-image: url(../assets/enyo/palm-menu-button.png) 0 25 200 25 fill;
+    background: none;
+    color: #fff;
+    font: inherit;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    outline: none;
+    text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.5);
+}
+.pui-tool-button > * { margin: 0 -16px; }
+.pui-tool-button:active { border-image: url(../assets/enyo/palm-menu-button.png) 50 25 150 25 fill; }
+.pui-tool-button.depressed { border-image: url(../assets/enyo/palm-menu-button.png) 100 25 100 25 fill; }
+.pui-tool-button.depressed:active { border-image: url(../assets/enyo/palm-menu-button.png) 150 25 50 25 fill; }
+.pui-tool-button:disabled { border-image: url(../assets/enyo/palm-menu-button.png) 200 25 0 25 fill; color: #999; cursor: default; }
+
+/* ---- Avatar ------------------------------------------------------------------------ */
+
+.pui-avatar {
+    display: inline-block;
+    flex: none;
+    border-radius: 5px;
+    overflow: hidden;
+    background: #d8d8d6;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+.pui-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }

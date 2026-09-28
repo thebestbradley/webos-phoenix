@@ -10,6 +10,8 @@ import { Checkmark, cx, Divider, Row } from "./layout";
 export interface Option<T> {
     label: ReactNode;
     value: T;
+    /** Shown greyed out and cannot be chosen. */
+    disabled?: boolean;
 }
 
 // ---- PopupMenu ----------------------------------------------------------------------
@@ -62,8 +64,9 @@ export function PopupMenu<T>({ options, value, anchor, onSelect, onClose, kind =
                             key={i}
                             role="option"
                             aria-selected={o.value === value}
-                            className={cx("pui-menu-item", o.value === value && "selected")}
-                            onClick={() => { onSelect(o.value); onClose(); }}
+                            aria-disabled={o.disabled || undefined}
+                            className={cx("pui-menu-item", o.value === value && "selected", o.disabled && "disabled")}
+                            onClick={o.disabled ? undefined : () => { onSelect(o.value); onClose(); }}
                         >
                             <span className="pui-menu-label">{o.label}</span>
                             {kind === "menu" && o.value === value && <Checkmark />}
