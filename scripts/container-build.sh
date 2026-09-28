@@ -6,7 +6,14 @@
 # sets up webOS OSE in /work and builds webos-phoenix-image, taking the
 # Phoenix shell from the mounted checkout so local edits are built.
 #
+# The checkout is never written to: the shell sources are synced into the
+# build volume first (externalsrc would otherwise write into the checkout's
+# .git to track changes).
+#
 #   container-build.sh [MACHINE] [TARGET]      defaults: qemux86-64 webos-phoenix-image
+#
+# BITBAKE_ARGS adds bitbake options, e.g. BITBAKE_ARGS=-g to only resolve
+# the dependency graph (a quick check that everything parses).
 
 set -eu
 
@@ -29,12 +36,17 @@ if [ ! -f "$BUILD_DIR/oe-init-build-env" ]; then
     "$SRC/scripts/setup-build.sh" "$BUILD_DIR" "$MACHINE"
 fi
 
-# Build the shell from this checkout rather than fetching it from GitHub.
+# Build the shell from a copy of this checkout rather than from GitHub.
+# rsync only touches changed files, so unchanged sources don't rebuild.
+LOCAL_SRC=/work/phoenix-src
+mkdir -p "$LOCAL_SRC"
+rsync -a --delete --exclude build/ "$SRC/shell/" "$LOCAL_SRC/shell/"
+rsync -a "$SRC/LICENSE" "$LOCAL_SRC/LICENSE"
+
 cat > "$BUILD_DIR/webos-local.conf" <<CONF
 # Written by scripts/container-build.sh
 INHERIT += "externalsrc"
-EXTERNALSRC:pn-phoenix-shell = "$SRC/shell"
-# Don't drop oe-workdir/oe-logs symlinks into the checkout.
+EXTERNALSRC:pn-phoenix-shell = "$LOCAL_SRC/shell"
 EXTERNALSRC_SYMLINKS = ""
 CONF
 
@@ -42,6 +54,7 @@ cd "$BUILD_DIR"
 # oe-init-build-env reads positional parameters; clear them first.
 set --
 . ./oe-init-build-env
-bitbake "$TARGET"
+# shellcheck disable=SC2086
+bitbake ${BITBAKE_ARGS:-} "$TARGET"
 echo
 echo "Done. Images: $BUILD_DIR/BUILD/deploy/images/$MACHINE/"
