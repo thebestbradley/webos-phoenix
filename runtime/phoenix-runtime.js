@@ -5094,4 +5094,122 @@
             sync: function (accountId) { return luna.call("palm://" + SERVICE + "/sync", { accountId: accountId }); }
         };
     })();
+
+    // ================================================================================
+    // Torch and location (org.webosports.service.torch, com.webos.service.location;
+    // apps/flashlight, apps/weather)
+    // ================================================================================
+    //
+    // org.webosports.service.torch is LuneOS's torchd
+    // (github.com/webOS-ports/org.webosports.service.torch, Apache-2.0), which
+    // Phoenix uses unchanged on a device: it opens nyx's NYX_DEVICE_LED
+    // "Torch" module (LuneOS nyx-modules src/led_torch), i.e. the camera
+    // flash LED through the kernel LED class (/sys/class/leds/*torch*/
+    // brightness, or qcom's current + switch nodes, or MediaTek's
+    // /dev/flashlight). Same requests and replies here:
+    //
+    //   getStatus {subscribe?} -> {available, on, brightness (0-100)}; with
+    //       subscribe, again after every change from any page
+    //   set {on} | {brightness: 0-100} -> the new status (brightness wins)
+    //   toggle {} -> the new status
+    //
+    // The simulated LED lives in the shared store, so every page sees one
+    // torch. __phoenixRuntime.torch.setAvailable(false) makes a device
+    // without one (a TouchPad): getStatus says available: false and set
+    // fails with torchd's "no torch on this device".
+    //
+    // com.webos.service.location getCurrentPosition answers with a fixed
+    // position (Sunnyvale, CA, where Palm was) or the one set with
+    // __phoenixRuntime.location.set({latitude, longitude} | null); null is
+    // "location is off" (an error reply, as when the user has turned
+    // location services off).
+    (function torchAndLocation() {
+        var TORCH_KEY = "torch";
+        function torchState() {
+            var st = store.get(TORCH_KEY, null) || {};
+            return { available: st.available !== false, brightness: Math.max(0, Math.min(100, st.brightness | 0)) };
+        }
+        function torchStatus(st) {
+            return ok({ available: st.available, on: st.available && st.brightness > 0, brightness: st.available ? st.brightness : 0 });
+        }
+        var torchWatchers = [];
+        function torchNotify() {
+            var st = torchState();
+            torchWatchers = torchWatchers.filter(function (w) { return !w.ctx.cancelled(); });
+            torchWatchers.forEach(function (w) { w.reply(torchStatus(st)); });
+        }
+        function torchSet(brightness) {
+            var st = torchState();
+            st.brightness = brightness;
+            store.set(TORCH_KEY, st);
+            torchNotify();
+            return st;
+        }
+        // A change made in another page (another app's card).
+        global.addEventListener && global.addEventListener("storage", function (e) {
+            if (e.key === "phoenix:" + TORCH_KEY) torchNotify();
+        });
+
+        register(["org.webosports.service.torch"], {
+            "/getStatus": function (p, reply, ctx) {
+                var r = torchStatus(torchState());
+                if (p.subscribe) {
+                    r.subscribed = true;
+                    torchWatchers.push({ reply: reply, ctx: ctx });
+                }
+                reply(r);
+            },
+            // torchd's cb_set: brightness wins over on; out of range is an error.
+            "/set": function (p, reply) {
+                var b = -1;
+                if (typeof p.brightness === "number") b = Math.round(p.brightness);
+                else if (typeof p.on === "boolean") b = p.on ? 100 : 0;
+                if (b < 0 || b > 100) return reply({ returnValue: false, errorText: "need \"on\": boolean, or \"brightness\": 0-100" });
+                if (!torchState().available) return reply({ returnValue: false, errorText: "no torch on this device" });
+                reply(torchStatus(torchSet(b)));
+            },
+            "/toggle": function (p, reply) {
+                var st = torchState();
+                if (!st.available) return reply({ returnValue: false, errorText: "no torch on this device" });
+                reply(torchStatus(torchSet(st.brightness > 0 ? 0 : 100)));
+            }
+        });
+
+        runtime.torch = {
+            state: function () {
+                var st = torchState();
+                return { available: st.available, on: st.available && st.brightness > 0, brightness: st.brightness };
+            },
+            setAvailable: function (available) {
+                var st = torchState();
+                st.available = !!available;
+                if (!available) st.brightness = 0;
+                store.set(TORCH_KEY, st);
+                torchNotify();
+            }
+        };
+
+        // ---- com.webos.service.location ------------------------------------------------
+
+        var LOCATION_KEY = "location";
+        var DEFAULT_POSITION = { latitude: 37.3688, longitude: -122.0363, altitude: 40, horizAccuracy: 50 };
+        function position() {
+            var p = store.get(LOCATION_KEY, undefined);
+            return p === undefined ? DEFAULT_POSITION : p;
+        }
+        register(["com.webos.service.location"], {
+            "/getCurrentPosition": function (p, reply) {
+                var pos = position();
+                if (!pos) return reply(fail(5, "Location services are off"));
+                reply(ok({ latitude: pos.latitude, longitude: pos.longitude, altitude: pos.altitude || 0,
+                           horizAccuracy: pos.horizAccuracy || 50, vertAccuracy: 0, speed: 0, direction: 0,
+                           timestamp: Date.now() }));
+            }
+        });
+        runtime.location = {
+            get: position,
+            /** {latitude, longitude, ...}, null (location off) or undefined (back to the default). */
+            set: function (pos) { store.set(LOCATION_KEY, pos === undefined ? DEFAULT_POSITION : pos); }
+        };
+    })();
 })(this);

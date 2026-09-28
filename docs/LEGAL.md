@@ -125,6 +125,29 @@ data use "Phoenix Account".
 - npm dependencies (React, Vite, ...) are MIT-licensed; the Settings app lists
   the ones it bundles under Device Info > Open source licenses.
 
+## QR Scanner, Weather and Flashlight
+
+- **zxing-wasm** (<https://github.com/Sec-ant/zxing-wasm>, MIT) is bundled
+  into QR Scanner: its JavaScript and the reader build of **zxing-cpp**
+  (<https://github.com/zxing-cpp/zxing-cpp>, Apache-2.0) compiled to
+  WebAssembly. Only the reader ships; the writer (which contains zint,
+  BSD-3-Clause) is used by the tests alone. The notices are in
+  `apps/scanner/public/THIRD-PARTY-NOTICES.txt`, installed with the app.
+- **Open-Meteo** forecast data is CC BY 4.0; Weather credits "Weather data
+  by Open-Meteo.com" with a link, as the licence asks. Open-Meteo's terms
+  (<https://open-meteo.com/en/terms>) allow the free API for
+  **non-commercial use only** (fewer than 10,000 calls a day). A company
+  shipping Phoenix commercially needs an Open-Meteo API subscription or its
+  own Open-Meteo server (AGPL-3.0, run as a separate service, not linked
+  with Phoenix); the forecast server is a Weather preference. The recorded
+  replies in `apps/weather/fixtures` (used by the tests) are Open-Meteo data
+  under CC BY 4.0, credited in each file.
+- **torchd** (`org.webosports.service.torch`) and LuneOS's nyx `led_torch`
+  module are Apache-2.0 (SPDX headers). Phoenix only calls torchd's API; the
+  simulator reimplements it, and the `meta-phoenix` stub would build it from
+  source. LuneOS's Torch app (GPL-3.0) was read for the API only; none of
+  its code or art is used.
+
 ## Speech recognition (whisper.cpp)
 
 Voice Memos' transcription service (`apps/voicememos/service`) runs

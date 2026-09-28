@@ -103,8 +103,9 @@ app installer used by Files (see [Files](#files)); the activity manager
 (`com.palm.activitymanager`) and `com.palm.power` timeouts, which fire
 scheduled activities such as Tasks' reminders (see [Tasks](#tasks)); the
 speech-to-text service of Voice Memos (see [Voice Memos](#voice-memos));
-and last the CardDAV and CalDAV account's transport (see
-[CardDAV and CalDAV](#carddav-and-caldav)).
+the CardDAV and CalDAV account's transport (see
+[CardDAV and CalDAV](#carddav-and-caldav)); and last the torch and the
+location service (see [Flashlight](#flashlight) and [Weather](#weather)).
 
 ## Running apps
 
@@ -264,6 +265,7 @@ New Phoenix apps live in `apps/`, an npm workspace:
 | `apps/tasks` | Tasks (see [below](#tasks)) |
 
 | `apps/voicememos` | Voice Memos (see [below](#voice-memos)); `apps/voicememos/service` is its speech-to-text Luna service (whisper.cpp) for the device |
+| `apps/flashlight`, `apps/scanner`, `apps/weather` | Flashlight, QR Scanner and Weather (see [below](#flashlight)); `@phoenix/luna`'s `torch.ts` and `location.ts` wrap `org.webosports.service.torch` and `com.webos.service.location` |
 
 | `apps/dav` | The CardDAV & CalDAV account (see [below](#carddav-and-caldav)): a hidden Enyo 1.0 app with the account's sign-in page, its db8 kinds and account template, and `apps/dav/service`, its Node.js Luna service and sync engine |
 
@@ -833,6 +835,162 @@ placeholder), searches in the app and through Just Type's content search,
 renames, shares by Email, deletes, "transcribe automatically", and the
 `{memoId}` and `{newMemo}` launch params, with screenshots in
 `build/voicememos-tests/`.
+
+## Flashlight
+
+`apps/flashlight` (`org.webosphoenix.flashlight`, Apps tab) is a dark card
+with one big button, after the webOS 2.x Camera (Palm never shipped a
+flashlight; people used homebrew ones):
+
+- **LED**: the camera flash LED as a steady torch, with a brightness slider
+  (5-100%). The app subscribes to the torch's status, so a change made by
+  another app (QR Scanner's light button) shows at once.
+- **Screen**: the whole card turns white; tap it to turn it off. It is the
+  only light on a device without a flash LED (the TouchPad), and the app
+  says so.
+- While lit, the screen does not time out (`PalmSystem.setWindowProperties
+  {blockScreenTimeout: true}`, as Mojo and Enyo apps asked).
+- Closing the card turns the LED off, unless "Leave LED On When Closed" is
+  ticked in the app menu (LuneOS's Torch app does the same).
+- Launch params `{on: true}` light it at once.
+
+There is **no system menu toggle**: the original webOS system menu
+(`luna-systemui`, the shell's `SystemMenu`) had none, so none was added.
+
+### Services
+
+| What | Service and methods | Source |
+| --- | --- | --- |
+| The torch | `org.webosports.service.torch` `getStatus {subscribe}` -> `{available, on, brightness}` (0-100); `set {on}` or `{brightness}` (brightness wins; out of range is an error); `toggle`. Errors have an `errorText` only ("no torch on this device") | LuneOS's torchd ([webOS-ports/org.webosports.service.torch](https://github.com/webOS-ports/org.webosports.service.torch), Apache-2.0), used unchanged |
+
+On a device torchd opens nyx's `NYX_DEVICE_LED` "Torch" module (LuneOS
+`nyx-modules` `src/led_torch`), which drives the **kernel LED class**: the
+flash LED's `/sys/class/leds/<name>/brightness` (a node named `*torch*`,
+else `*flash*`, or the one in `/etc/nyx.conf`), scaled to its
+`max_brightness`; on `LEDS_CLASS_FLASH` devices that is the torch current,
+and the strobe (`flash_brightness`, `flash_strobe`) is left alone.
+Qualcomm's `qpnp-flash-v2` also needs its `led:switch*` node set; MediaTek
+phones use `/dev/flashlight` ioctls; on Halium the hybris module asks
+Android's camera service (on or off only). OSE has neither torchd nor a
+torch module: `meta-phoenix/recipes-bsp/torchd` is a stub recipe for it
+(see [HARDWARE.md](HARDWARE.md#hardware-abstraction-plan)).
+
+### In the simulator
+
+The runtime's block "Torch and location" answers the same API with one
+simulated LED kept in the shared store (so every card sees the same
+torch). `__phoenixRuntime.torch.setAvailable(false)` makes a device without
+one. `node tools/test-flashlight.cjs [--tablet]` checks the LED on, off and
+dimmed, a change from another app, the screen timeout, the LED going off
+when the card closes (and staying on when asked), the screen light, a
+device without a torch and `{on: true}`, with screenshots in
+`build/flashlight-tests/`.
+
+## QR Scanner
+
+`apps/scanner` (`org.webosphoenix.scanner`, Apps tab) is a full-card
+viewfinder like the Camera's that reads a code as soon as one is in view
+and says what it is:
+
+| Code | Shown | Actions |
+| --- | --- | --- |
+| `http(s)://` | the host, then the whole address | Open in Browser (`applicationManager/open {target}`), Copy. Other schemes (`javascript:`, `file:`) are only text |
+| `WIFI:T:WPA;S:...;P:...;H:true;;` | network, security, password hidden until Show | Join Network: Settings with `{page: "wifi", join: {ssid, security, passKey, hidden}}`, which opens the join dialog filled in (the user taps Connect); Copy Password |
+| `BEGIN:VCARD`, `MECARD:` | name, numbers, emails, company | Add to Contacts: `com.palm.app.contacts` `{launchType: "newContact", contact}` with `com.palm.contact:1` fields |
+| `otpauth://totp/...` | issuer and account only | Add to Authenticator: `org.webosphoenix.authenticator` `{otpauth: "<uri>"}` when `getAppInfo` finds it installed; otherwise a note. The key is never shown or kept in the history |
+| `tel:`, `mailto:`, `MATMSG:`, `sms:`, `smsto:` | number or address (and message) | Call, Write Email, Send Text (`open` with `tel:`, `mailto:`, `sms:`), Copy |
+| `geo:`, EAN/UPC, anything else | coordinates, product number, text | Copy |
+
+- **History** (newest first, the same code once) opens any earlier result
+  again; on tablets it stays beside the viewfinder. It is kept in the app's
+  localStorage; the app menu turns it off (which clears it) or clears it.
+- The **light** button in the command menu lights the torch
+  (`org.webosports.service.torch`) when the device has one, and the app
+  puts it out when it closes.
+- **Scanning for other apps**: launched with `{returnTo: appId}`, it
+  relaunches that app with `{scanned: {text, format}}` after the first code
+  and closes, so an app (the Authenticator, Settings) need not have its own
+  scanner.
+
+Decoding is **zxing-wasm** (zxing-cpp compiled to WebAssembly, the reader
+build only), on the device: frames from `getUserMedia` (as the Camera gets
+them, after `com.webos.service.camera2 getCameraList`) are drawn at up to
+800 px wide into a canvas five times a second. The `.wasm` file is bundled
+with the app and loaded with XMLHttpRequest, which works for phoenix-sim's
+`phoenix://` pages and a device's `file://` app directory (zxing-wasm would
+otherwise fetch it from a CDN). Chromium's `BarcodeDetector` is not used:
+it is not available on Linux.
+
+`node tools/test-scanner.cjs [--tablet]` draws codes with zxing-wasm's
+writer into Y4M videos for Chromium's fake camera and checks each kind:
+Wi-Fi (join, copy), a web address (and a `javascript:` code that is not
+opened), a vCard, `otpauth://` with and without the authenticator
+installed (and that its secret is never shown or saved), EAN-13, the
+history, the torch button and `{returnTo}`, with screenshots in
+`build/scanner-tests/`. The same videos work in phoenix-sim:
+`QTWEBENGINE_CHROMIUM_FLAGS="--use-fake-device-for-media-stream
+--use-fake-ui-for-media-stream --use-file-for-fake-video-capture=code.y4m"`.
+
+## Weather
+
+`apps/weather` (`org.webosphoenix.weather`, Apps tab) shows forecasts
+from [Open-Meteo](https://open-meteo.com/) in the webOS 2.x style: no
+dashboard, banner or notification, only what the user opens.
+
+- **Now**: temperature, conditions, feels like, today's high and low on a
+  sky panel (blue by day, navy at night, grey under cloud); wind, humidity,
+  sunrise and sunset.
+- **Next 24 hours** in a strip (with the chance of rain from 20%), and **7
+  days** with a temperature bar across the week's range.
+- **Places**: Current Location (`com.webos.service.location
+  getCurrentPosition`, once per start; off in Preferences) and cities found
+  with Open-Meteo's geocoding search, in the user's order; Edit reorders
+  and removes them. Tablets show the places beside the forecast.
+- **Units** follow the system region (`com.webos.settingsservice`
+  `localeInfo.locales.FMT`: °F and mph for the US, °C and mph for the UK,
+  °C and km/h elsewhere) unless Preferences says Metric or Imperial; hours
+  follow the system clock (`timeFormat` HH12 / HH24). The forecast is
+  fetched in metric units and converted in the app.
+- **Offline**: the last forecast of each place is kept (localStorage) and
+  shown with the time it is from when the service can't be reached, also
+  after a restart; an error reply from the server (for example the daily
+  limit) is shown with its reason. A forecast is fetched again when it is
+  older than 30 minutes, or on Refresh.
+- The app menu has Preferences (units, Use My Location, the forecast
+  server) and About Weather Data (what is sent, below).
+
+### What is sent
+
+| Request | Sent to | Contents |
+| --- | --- | --- |
+| Forecast | `api.open-meteo.com/v1/forecast` (or the server in Preferences) | latitude and longitude **rounded to 2 decimals** (about 1 km), the variables, `timezone=auto`, `forecast_days=7`, `forecast_hours=25` |
+| City search | `geocoding-api.open-meteo.com/v1/search` | the typed name, `count=10`, the UI language |
+
+Nothing else: no API key, account, cookie or device identifier. As with
+any request, Open-Meteo sees the device's IP address; its terms say it keeps
+web server logs (which may contain coordinates) for 90 days and shares them
+with no one. The precise position from the location service never leaves
+the device. Places and forecasts stay in the app's localStorage.
+
+Open-Meteo's free API is for **non-commercial use** (fewer than 10,000
+calls a day; [terms](https://open-meteo.com/en/terms)), and its data is CC
+BY 4.0 (credited at the bottom of the forecast). A commercial product
+needs a paid plan or its own Open-Meteo server (see
+[LEGAL.md](LEGAL.md)).
+
+### In the simulator
+
+The runtime's block "Torch and location" answers `com.webos.service.location
+getCurrentPosition` with a fixed position (Sunnyvale, where Palm was), or
+one set with `__phoenixRuntime.location.set({latitude, longitude})`;
+`set(null)` is "location services are off" (an error reply). On a device
+the location service is OSE's (see [HARDWARE.md](HARDWARE.md), GPS).
+phoenix-sim fetches live forecasts from Open-Meteo (which sends CORS
+headers). `node tools/test-weather.cjs [--tablet]` answers Open-Meteo with
+recorded replies (`apps/weather/fixtures`) and checks the first start, what
+the requests contain, the cache, search and places, units and the clock,
+offline and error replies, Edit, and no location, with screenshots in
+`build/weather-tests/`.
 
 ## CardDAV and CalDAV
 

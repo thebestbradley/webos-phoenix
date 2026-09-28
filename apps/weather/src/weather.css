@@ -1,0 +1,146 @@
+/*
+ * Copyright (c) 2026 webOS Phoenix contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Weather: the Heritage page header and lists (like Tasks), with the
+ * conditions now on a sky panel (blue by day, navy by night, grey under
+ * cloud), the next hours in a strip and the week as rows with a
+ * temperature bar. Tablet cards put the places in a column on the left.
+ */
+
+body.pui-app { overflow: hidden; }
+#root { height: 100%; }
+
+.wx-app { position: fixed; inset: 0; display: flex; }
+.wx-pane-places, .wx-pane-forecast { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.wx-pane-places > .pui-header, .wx-pane-forecast > .pui-header { margin-bottom: 0; }
+.wx-scroll { position: relative; flex: 1; overflow-y: auto; overflow-x: hidden; padding: 6px 8px 66px; }
+.wx-app.wide .wx-pane-places {
+    flex: none;
+    width: 300px;
+    background: linear-gradient(90deg, #d6d6d4, #cacac8);
+    border-right: 1px solid #8f8f8d;
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.5);
+}
+.wx-app.wide .wx-forecast { max-width: 640px; margin: 0 auto; }
+.wx-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 60px 20px; color: var(--pui-text-dim); text-align: center; }
+
+/* ---- Now ------------------------------------------------------------------------------ */
+
+.wx-now {
+    margin: 2px 0 10px;
+    padding: 12px 16px 14px;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(0, 0, 0, 0.35);
+    border-radius: 10px;
+    background: linear-gradient(#5fa9e8, #2a6fb8);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.wx-now.cloudy, .wx-now.fog, .wx-now.drizzle, .wx-now.rain, .wx-now.showers, .wx-now.snow, .wx-now.snow-showers {
+    background: linear-gradient(#8e9bab, #56616f);
+}
+.wx-now.storm { background: linear-gradient(#5c6270, #2d313a); }
+.wx-now.night { background: linear-gradient(#253a66, #0d1630); }
+.wx-now-main { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.wx-now-icon { filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35)); }
+.wx-now-temp { font-size: 68px; line-height: 1; font-weight: 300; letter-spacing: -2px; }
+.wx-now-text { font-size: 22px; text-align: center; margin-top: 2px; }
+.wx-now-sub { font-size: 15px; text-align: center; opacity: 0.9; margin-top: 2px; }
+
+.wx-details {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    margin: 0 0 6px;
+    background: #f2f2f0;
+    border: 1px solid #b4b4b2;
+    border-radius: 8px;
+}
+.wx-details > div { display: flex; flex-direction: column; align-items: center; padding: 6px 2px; min-width: 0; }
+.wx-details > div + div { border-left: 1px solid #d6d6d4; }
+.wx-details span { font-size: 12px; color: var(--pui-text-dim); text-transform: uppercase; }
+.wx-details b { font-size: 15px; white-space: nowrap; }
+@media (max-width: 360px) { .wx-details b { font-size: 13px; } }
+
+/* ---- Hours ------------------------------------------------------------------------------- */
+
+.wx-hours {
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 6px 4px 8px;
+    margin: 0 0 6px;
+    background: #f2f2f0;
+    border: 1px solid #b4b4b2;
+    border-radius: 8px;
+    scrollbar-width: none;
+}
+.wx-hours::-webkit-scrollbar { display: none; }
+.wx-hour { flex: none; width: 58px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.wx-hour-time { font-size: 13px; color: var(--pui-text-dim); white-space: nowrap; }
+.wx-hour-temp { font-size: 17px; font-weight: bold; }
+.wx-hour-pop { font-size: 12px; color: #2f7fd1; min-height: 14px; }
+
+/* ---- Days --------------------------------------------------------------------------------- */
+
+.wx-day { display: flex; align-items: center; gap: 8px; min-height: 46px; }
+.wx-day-name { width: 54px; flex: none; font-weight: bold; }
+.wx-day-icon { flex: none; }
+.wx-day-pop { width: 36px; flex: none; font-size: 13px; color: #2f7fd1; }
+.wx-day-lo, .wx-day-hi { width: 38px; flex: none; text-align: right; }
+.wx-day-lo { color: var(--pui-text-dim); }
+.wx-day-bar { position: relative; flex: 1; height: 6px; background: #d2d2d0; border-radius: 3px; box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.2); }
+.wx-day-bar span {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #6fb4f0, #f5b800 60%, #e8783a);
+}
+
+.wx-footer { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 0 4px; font-size: 13px; color: var(--pui-text-dim); }
+.wx-footer > div { display: flex; align-items: center; gap: 6px; }
+.wx-notice {
+    margin: 2px 0 8px;
+    padding: 6px 10px;
+    color: #7a3b12;
+    font-size: 14px;
+    background: #fbeec9;
+    border: 1px solid #d9b46a;
+    border-radius: 8px;
+}
+.wx-footer a { color: var(--pui-label); text-decoration: none; }
+.wx-expired { color: #b0452f; }
+
+/* ---- Places -------------------------------------------------------------------------------- */
+
+.wx-search { display: flex; align-items: center; gap: 6px; }
+.wx-search > label { flex: 1; min-width: 0; }
+.wx-search .pui-field { margin: 0; }
+.wx-search-go { flex: none; width: auto; min-width: 84px; margin: 0; }
+.wx-place.current { background: rgba(31, 117, 191, 0.16); }
+.wx-place .pui-row-subtitle { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wx-place-now { display: flex; align-items: center; gap: 4px; }
+.wx-place-temp { font-size: 20px; min-width: 36px; text-align: right; }
+.wx-loc-glyph { color: #2f7fd1; }
+.wx-edit { display: flex; gap: 4px; }
+.wx-edit button {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    color: #555;
+    font-size: 12px;
+    background: linear-gradient(#fafafa, #d8d8d6);
+    border: 1px solid #9a9a98;
+    border-radius: 15px;
+    cursor: pointer;
+}
+.wx-edit button:disabled { opacity: 0.35; }
+.wx-edit .wx-remove { display: flex; align-items: center; justify-content: center; color: #fff; background: linear-gradient(#e0665a, #b0321f); border-color: #7d1f12; }
+
+/* ---- Dialogs ------------------------------------------------------------------------------ */
+
+.wx-prefs { margin: 0 0 8px; color: var(--pui-text); background: #f2f2f0; border: 1px solid #b4b4b2; border-radius: 8px; }
+.wx-prefs .pui-row { min-height: 48px; }
+.wx-about p { margin: 0 0 8px; font-size: 15px; line-height: 1.35; }

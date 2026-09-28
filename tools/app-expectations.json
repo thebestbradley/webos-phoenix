@@ -72,6 +72,18 @@
         "status": "works",
         "note": "Phoenix Voice Memos (React, apps/voicememos); tools/test-voicememos.cjs drives it with Chromium's fake microphone. The simulator transcribes only the demo memos (whisper.cpp runs on the device)"
     },
+    "org.webosphoenix.flashlight": {
+        "status": "works",
+        "note": "Phoenix Flashlight (React, apps/flashlight) on the simulated org.webosports.service.torch (LuneOS torchd's API); tools/test-flashlight.cjs drives it. The simulated LED lights nothing"
+    },
+    "org.webosphoenix.scanner": {
+        "status": "works",
+        "note": "Phoenix QR Scanner (React, apps/scanner, zxing-wasm); tools/test-scanner.cjs drives it with Chromium's fake camera playing generated codes. Here without a camera it says so"
+    },
+    "org.webosphoenix.weather": {
+        "status": "works",
+        "note": "Phoenix Weather (React, apps/weather) on Open-Meteo, location from the simulated com.webos.service.location; tools/test-weather.cjs drives it with recorded replies. Needs the network for live forecasts"
+    },
     "org.webosphoenix.dav": {
         "status": "works",
         "note": "Hidden: the CardDAV & CalDAV account's sign-in page and service (apps/dav); its main page only points to Accounts. tools/test-dav-sync.cjs drives it"

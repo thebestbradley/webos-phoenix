@@ -74,6 +74,32 @@ transcribe and search. On a device it transcribes with whisper.cpp; the
 simulator records with Chromium's fake microphone and knows only the demo
 memos' scripts.*
 
+| Flashlight | On | Tablet |
+| --- | --- | --- |
+| ![](docs/screenshots/flashlight-off.png) | ![](docs/screenshots/flashlight-on.png) | ![](docs/screenshots/flashlight-tablet.png) |
+
+*Flashlight: the flash LED with a brightness slider through LuneOS's torch
+service (`org.webosports.service.torch`, simulated here), or a white screen
+on devices without one.*
+
+| QR Scanner | Web address | Authenticator key | Tablet |
+| --- | --- | --- | --- |
+| ![](docs/screenshots/scanner-wifi.png) | ![](docs/screenshots/scanner-url.png) | ![](docs/screenshots/scanner-otpauth.png) | ![](docs/screenshots/scanner-tablet.png) |
+
+*QR Scanner reads QR codes and barcodes with zxing-wasm on the device and
+acts on them: join a Wi-Fi network in Settings, open a web address, add a
+contact, hand an `otpauth://` key to the authenticator, call, write, copy.
+The codes here are videos for Chromium's fake camera.*
+
+| Weather | Places | Offline | Tablet |
+| --- | --- | --- | --- |
+| ![](docs/screenshots/weather-current.png) | ![](docs/screenshots/weather-places.png) | ![](docs/screenshots/weather-offline.png) | ![](docs/screenshots/weather-tablet.png) |
+
+*Weather from Open-Meteo (no API key; data CC BY 4.0): now, 24 hours and
+7 days for the device's location and saved cities, in the region's units,
+with the last forecast kept for offline use. It sends only coordinates
+rounded to about a kilometre.*
+
 ## Status
 
 **Milestone 0: the shell runs in a desktop simulator.** You can use the card
@@ -96,7 +122,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `shell/qml/Phoenix/Sim` | Mock apps and device status for the desktop simulator |
 | `shell/qml/Phoenix/Lsm`, `shell/qml/WebOSCompositor` | Adapter that plugs the shell into webOS OSE's `luna-surfacemanager` |
 | `shell/sim` | `phoenix-sim`, the desktop runner (also takes screenshots) |
-| `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Tasks, Voice Memos), with the shared `@phoenix/ui` components and `@phoenix/luna` service client, generated demo media (`apps/media-samples`), the Node.js Luna services of Files (`apps/files/service`) and Voice Memos (`apps/voicememos/service`, speech to text with whisper.cpp), and the CardDAV & CalDAV Synergy account with its sync service (`apps/dav`, see [docs/SYNERGY.md](docs/SYNERGY.md)) |
+| `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Tasks, Voice Memos, Flashlight, QR Scanner, Weather), with the shared `@phoenix/ui` components and `@phoenix/luna` service client, generated demo media (`apps/media-samples`), the Node.js Luna services of Files (`apps/files/service`) and Voice Memos (`apps/voicememos/service`, speech to text with whisper.cpp), and the CardDAV & CalDAV Synergy account with its sync service (`apps/dav`, see [docs/SYNERGY.md](docs/SYNERGY.md)) |
 | `runtime/` | The webOS web app runtime for the simulator and browsers (`PalmSystem`, simulated Luna services) |
 | `shell/tests` | Behaviour tests (`qmltestrunner`) |
 | `shell/assets/openwebos` | Original Open webOS system UI artwork (Apache-2.0) |

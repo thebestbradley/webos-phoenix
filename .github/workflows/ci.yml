@@ -89,6 +89,12 @@ jobs:
           node tools/test-alarm.cjs --out app-tests/alarm
           node tools/test-voicememos.cjs --out app-tests/voicememos-phone
           node tools/test-voicememos.cjs --tablet --out app-tests/voicememos-tablet
+          node tools/test-flashlight.cjs --out app-tests/flashlight-phone
+          node tools/test-flashlight.cjs --tablet --out app-tests/flashlight-tablet
+          node tools/test-scanner.cjs --out app-tests/scanner-phone
+          node tools/test-scanner.cjs --tablet --out app-tests/scanner-tablet
+          node tools/test-weather.cjs --out app-tests/weather-phone
+          node tools/test-weather.cjs --tablet --out app-tests/weather-tablet
           node tools/test-dav-sync.cjs --out app-tests/dav-phone
           node tools/test-dav-sync.cjs --tablet --out app-tests/dav-tablet
           node tools/test-orientation.cjs --out app-tests/orientation-phone

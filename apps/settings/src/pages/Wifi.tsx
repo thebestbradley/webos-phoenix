@@ -5,10 +5,14 @@
 // Services: com.webos.service.wifi setstate / getstatus / findnetworks /
 // connect / deleteprofile; com.webos.service.connectionmanager getstatus
 // (airplane mode).
+//
+// Launch params {page: "wifi", join: {ssid, security?: "none" | "psk" |
+// "wep", passKey?, hidden?}} (QR Scanner's Wi-Fi codes) open the join
+// dialog filled in; the user still taps Connect.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { connection, LunaError, wifi, WIFI_ERROR_INVALID_KEY, type WifiNetworkInfo, type WifiStatus } from "@phoenix/luna";
-import { useLuna } from "@phoenix/luna/react";
+import { useLaunchParams, useLuna } from "@phoenix/luna/react";
 import {
     Button, Dialog, Divider, ErrorText, Group, icons, ListSelector, Note, Page, PageHeader, Row, Spinner, TextField, ToggleButton,
 } from "@phoenix/ui";
@@ -20,6 +24,16 @@ interface JoinTarget {
     security: Security;
     /** Typed SSID (Join Other Network). */
     other?: boolean;
+    /** Filled in from a launch (a scanned Wi-Fi code). */
+    passKey?: string;
+}
+
+/** The {join} launch param as a JoinTarget; null when it is not one. */
+export function joinFromParams(join: unknown): JoinTarget | null {
+    const j = join as { ssid?: unknown; security?: unknown; passKey?: unknown; hidden?: unknown } | null;
+    if (!j || typeof j !== "object" || typeof j.ssid !== "string" || !j.ssid) return null;
+    const security: Security = j.security === "none" || j.security === "wep" ? j.security : "psk";
+    return { ssid: j.ssid, security, other: j.hidden === true, passKey: typeof j.passKey === "string" ? j.passKey : undefined };
 }
 
 function securityOf(n: WifiNetworkInfo): Security {
@@ -43,6 +57,14 @@ export function WifiPage() {
     const [join, setJoin] = useState<JoinTarget | null>(null);
     const [details, setDetails] = useState<WifiNetworkInfo | null>(null);
     const [toggling, setToggling] = useState(false);
+    const launch = useLaunchParams<{ join?: unknown }>();
+    const handled = useRef<object | null>(null);
+    useEffect(() => {
+        if (handled.current === launch) return;
+        handled.current = launch;
+        const t = joinFromParams(launch.join);
+        if (t) setJoin(t);
+    }, [launch]);
 
     const connectedSsid = status?.networkInfo?.connectState === "ipConfigured" ? status.networkInfo.ssid : null;
 
@@ -189,7 +211,7 @@ function JoinDialog({ target, onCancel, onJoin }: {
         setShownFor(target);
         setSsid(target?.ssid ?? "");
         setSecurity(target?.security ?? "psk");
-        setPassword("");
+        setPassword(target?.passKey ?? "");
         setError(null);
         setBusy(false);
     }
