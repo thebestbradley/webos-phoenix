@@ -1,0 +1,626 @@
+/*
+ * Copyright (c) 2026 webOS Phoenix contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The classic webOS look (Enyo 1.0 "Heritage" theme = webOS 1.x/2.x Mojo
+ * apps), rebuilt for React. Image slices and measurements are those of
+ * enyo-1.0/framework/source/palm/themes/Heritage/css/*.css; the images are
+ * copies in ../assets/enyo (see PROVENANCE.md).
+ *
+ * Sizes are legacy pixels: pages are laid out at 320px (phone) or 1024px
+ * (tablet) wide and the shell zooms them to the real screen.
+ */
+
+:root {
+    --pui-bg: #e4e4e2;              /* Heritage theme.css body */
+    --pui-text: #282828;
+    --pui-text-dim: #7a7a78;
+    --pui-label: #1f75bf;           /* picker / field labels (PickerButton.css) */
+    --pui-divider: #2d6c94;         /* Divider.css caption */
+    --pui-font: Prelude, "Prelude Medium", "Helvetica Neue", Helvetica, "Open Sans", "DejaVu Sans", Arial, sans-serif;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+}
+
+html:has(> body.pui-app) {
+    background-color: var(--pui-bg);
+}
+
+body.pui-app, .pui-app {
+    background-color: var(--pui-bg);
+    color: var(--pui-text);
+    font-family: var(--pui-font);
+    font-size: 18px;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-font-smoothing: antialiased;
+}
+
+* { box-sizing: border-box; }
+
+/* ---- Page and header ------------------------------------------------------ */
+
+.pui-page {
+    /* Side gutter; wide (tablet) cards centre a readable column instead. */
+    --pui-gutter: 8px;
+    min-height: 100%;
+    padding: 0 var(--pui-gutter) 16px;
+}
+
+.pui-header {
+    /* Header.css: palm-page-header.png 35 24 13 24 */
+    border-style: solid;
+    border-width: 35px 24px 13px 24px;
+    border-image: url(../assets/enyo/palm-page-header.png) 35 24 13 24 fill repeat stretch;
+    min-height: 50px;
+    margin: 0 calc(-1 * var(--pui-gutter, 8px)) 6px;
+    color: #444;
+}
+
+.pui-header-inner {
+    display: flex;
+    align-items: center;
+    margin: -35px -24px -13px -24px;
+    padding: 13px 16px;
+    min-height: 50px;
+}
+
+.pui-header-icon {
+    width: 32px;
+    height: 32px;
+    margin-right: 10px;
+    flex: none;
+}
+
+.pui-header-title {
+    flex: 1;
+    font-size: 20px;
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-shadow: 0 1px 0 #fff;
+}
+
+.pui-header-extra { flex: none; margin-left: 8px; }
+
+/* ---- Groups and rows ----------------------------------------------------------- */
+
+.pui-group {
+    /* Group.css: group.png 14 */
+    border-style: solid;
+    border-width: 14px;
+    border-image: url(../assets/enyo/group.png) 14 fill;
+    margin: 8px 0;
+}
+
+.pui-group.labeled {
+    border-width: 36px 14px 14px 14px;
+    border-image: url(../assets/enyo/group-labeled.png) 36 14 14 14 fill;
+}
+
+.pui-group-label {
+    margin: -34px -12px 0;
+    padding: 2px 0 14px 12px;
+    height: 42px;
+    text-transform: uppercase;
+    font-size: 14px;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: #646454 0 1px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pui-group-inner {
+    margin: -12px;
+}
+
+.pui-group.labeled .pui-group-inner {
+    margin-top: -8px;
+}
+
+.pui-row {
+    /* Item.css */
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-height: 52px;
+    padding: 8px 12px;
+    border-top: 1px solid #fff;
+    border-bottom: 1px solid silver;
+    gap: 8px;
+}
+
+.pui-row:first-child { border-top: 0; }
+.pui-row:last-child { border-bottom: 0; }
+
+.pui-row.tappable { cursor: pointer; }
+.pui-row.tappable:active, .pui-row.held {
+    /* Item.css .enyo-held */
+    background: linear-gradient(#555, #888);
+    border-top-color: #555;
+    color: #fff;
+}
+.pui-group .pui-row.tappable:first-child:active { border-radius: 10px 10px 0 0; }
+.pui-group .pui-row.tappable:last-child:active { border-radius: 0 0 10px 10px; }
+.pui-group .pui-row.tappable:only-child:active { border-radius: 10px; }
+
+.pui-row.disabled { color: gray; pointer-events: none; }
+
+.pui-row-icon { flex: none; display: flex; align-items: center; }
+
+.pui-row-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.pui-row-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pui-row-subtitle {
+    font-size: 14px;
+    color: var(--pui-text-dim);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.pui-row.tappable:active .pui-row-subtitle { color: #ddd; }
+
+.pui-row-end { flex: none; display: flex; align-items: center; gap: 6px; }
+
+.pui-row-value {
+    color: var(--pui-label);
+    font-size: 16px;
+    white-space: nowrap;
+}
+.pui-row.tappable:active .pui-row-value { color: #fff; }
+
+.pui-row-arrow {
+    width: 13px;
+    height: 7px;
+    background: url(../assets/enyo/menu-arrow.png) no-repeat;
+}
+
+.pui-row-chevron {
+    width: 24px;
+    height: 24px;
+    background: url(../assets/enyo/menuitem-arrow.png) no-repeat 0 0;
+}
+.pui-row.tappable:active .pui-row-chevron { background-position: 0 -24px; }
+
+.pui-note {
+    font-size: 14px;
+    color: var(--pui-text-dim);
+    padding: 2px 12px 8px;
+    line-height: 1.35;
+}
+
+.pui-error {
+    font-size: 15px;
+    color: #c01e1e;
+    padding: 4px 12px 8px;
+}
+
+/* ---- Divider -------------------------------------------------------------------- */
+
+.pui-divider {
+    /* Divider.css */
+    display: flex;
+    align-items: center;
+    margin: 12px 0 6px;
+    height: 21px;
+}
+
+.pui-divider-line {
+    height: 7px;
+    background: url(../assets/enyo/enyo-divider.png) left top repeat-x;
+}
+.pui-divider-cap-left {
+    width: 12px;
+    flex: none;
+    height: 7px;
+    border-style: solid;
+    border-width: 0 0 0 6px;
+    border-image: url(../assets/enyo/enyo-divider-border.png) 0 6 0 6 fill repeat;
+    margin-left: 6px;
+}
+.pui-divider-cap-right {
+    flex: 1;
+    min-width: 4px;
+    height: 7px;
+    border-style: solid;
+    border-width: 0 6px 0 0;
+    border-image: url(../assets/enyo/enyo-divider-border.png) 0 6 0 6 fill repeat;
+    margin-right: 6px;
+}
+.pui-divider-caption {
+    flex: none;
+    max-width: 80%;
+    padding: 0 6px;
+    font-size: 16px;
+    font-weight: bold;
+    color: var(--pui-divider);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---- Toggle button ------------------------------------------------------------ */
+
+.pui-toggle {
+    /* ToggleButton.css: one 32px band of toggle-button.png per state */
+    display: inline-flex;
+    align-items: center;
+    min-width: 32px;
+    height: 30px;
+    line-height: 30px;
+    margin: 3px 0;
+    border-style: solid;
+    cursor: pointer;
+    background: none;
+    padding: 0;
+    font: inherit;
+    outline: none;
+}
+.pui-toggle.on {
+    border-width: 0 36px 0 15px;
+    border-image: url(../assets/enyo/toggle-button.png) 1 36 97 15 fill repeat;
+}
+.pui-toggle.off {
+    border-width: 0 15px 0 36px;
+    border-image: url(../assets/enyo/toggle-button.png) 33 15 65 36 fill repeat;
+}
+.pui-toggle.on:disabled {
+    border-image: url(../assets/enyo/toggle-button.png) 65 36 33 15 fill repeat;
+}
+.pui-toggle.off:disabled {
+    border-image: url(../assets/enyo/toggle-button.png) 97 15 1 36 fill repeat;
+}
+.pui-toggle:disabled { cursor: default; }
+.pui-toggle-label {
+    min-width: 30px;
+    text-align: center;
+    text-transform: uppercase;
+    color: #fff;
+    font-size: 15px;
+    font-weight: bold;
+    text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.35);
+}
+
+/* ---- Slider ----------------------------------------------------------------------- */
+
+.pui-slider {
+    /* Slider.css */
+    position: relative;
+    padding: 1px 0;
+    touch-action: none;
+    cursor: pointer;
+    outline: none;
+    flex: 1;
+}
+.pui-slider-track {
+    position: relative;
+    height: 7px;
+    margin: 22px 25px 21px;
+    border-style: solid;
+    border-width: 0 4px;
+    border-image: url(../assets/enyo/slider.png) 0 4 0 4 fill repeat;
+}
+/* The part right of the knob is greyed out, so the level reads at a glance. */
+.pui-slider-rest {
+    position: absolute;
+    right: -4px;
+    top: 0;
+    height: 7px;
+    border-radius: 0 4px 4px 0;
+    background: linear-gradient(#b9b9b7, #d6d6d4);
+    box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.25);
+}
+.pui-slider-knob {
+    position: absolute;
+    top: 50%;
+    width: 50px;
+    height: 50px;
+    margin: -25px 0 0 -25px;
+    background: url(../assets/enyo/slider-button.png) left top no-repeat;
+    z-index: 2;
+}
+.pui-slider.dragging .pui-slider-knob { background-position: 0 -50px; }
+.pui-slider.disabled { opacity: 0.5; pointer-events: none; }
+
+.pui-slider-row {
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+}
+.pui-slider-row .pui-slider-end {
+    flex: none;
+    font-size: 13px;
+    color: var(--pui-text-dim);
+    width: 28px;
+    text-align: center;
+}
+
+/* ---- Buttons ----------------------------------------------------------------------- */
+
+.pui-button {
+    /* Button.css: palm-button-*.png, 52px bands up / down / disabled */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 52px;
+    margin: 4px 0;
+    padding: 0;
+    border-style: solid;
+    border-width: 0 17px;
+    border-image: url(../assets/enyo/palm-button-medium.png) 0 17 104 17 fill repeat;
+    background: none;
+    color: #fff;
+    font: inherit;
+    font-size: 20px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    outline: none;
+    text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.3);
+}
+.pui-button:active { border-image: url(../assets/enyo/palm-button-medium.png) 52 17 52 17 fill repeat; }
+.pui-button:disabled { border-image: url(../assets/enyo/palm-button-medium.png) 104 17 0 17 fill repeat; cursor: default; }
+
+.pui-button.light { color: #332; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5); border-image: url(../assets/enyo/palm-button-light.png) 0 17 104 17 fill repeat; }
+.pui-button.light:active { border-image: url(../assets/enyo/palm-button-light.png) 52 17 52 17 fill repeat; }
+.pui-button.light:disabled { color: #777; border-image: url(../assets/enyo/palm-button-light.png) 104 17 0 17 fill repeat; }
+
+.pui-button.affirmative { border-image: url(../assets/enyo/palm-button-affirmative.png) 0 17 104 17 fill repeat; }
+.pui-button.affirmative:active { border-image: url(../assets/enyo/palm-button-affirmative.png) 52 17 52 17 fill repeat; }
+.pui-button.affirmative:disabled { border-image: url(../assets/enyo/palm-button-affirmative.png) 104 17 0 17 fill repeat; }
+
+.pui-button.negative { border-image: url(../assets/enyo/palm-button-negative.png) 0 17 104 17 fill repeat; }
+.pui-button.negative:active { border-image: url(../assets/enyo/palm-button-negative.png) 52 17 52 17 fill repeat; }
+.pui-button.negative:disabled { border-image: url(../assets/enyo/palm-button-negative.png) 104 17 0 17 fill repeat; }
+
+.pui-button.dark { border-image: url(../assets/enyo/palm-button-dark.png) 0 17 104 17 fill repeat; }
+.pui-button.dark:active { border-image: url(../assets/enyo/palm-button-dark.png) 52 17 52 17 fill repeat; }
+.pui-button.dark:disabled { border-image: url(../assets/enyo/palm-button-dark.png) 104 17 0 17 fill repeat; }
+
+.pui-button-row { display: flex; gap: 8px; }
+.pui-button-row .pui-button { flex: 1; }
+
+/* ---- Picker pill and popup menus --------------------------------------------------- */
+
+.pui-picker {
+    /* PickerButton.css: background-pill.png 19 */
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+}
+.pui-picker-label {
+    color: var(--pui-label);
+    font-size: 14px;
+    text-shadow: #fff 0 1px 0;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+}
+.pui-picker-button {
+    border-style: solid;
+    border-width: 19px;
+    border-image: url(../assets/enyo/background-pill.png) 19 fill;
+    background: none;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+    outline: none;
+}
+.pui-picker-button:active, .pui-picker-button.open { border-image: url(../assets/enyo/background-pill-downstate.png) 19 fill; }
+.pui-picker-caption {
+    display: block;
+    margin: -15px -8px -17px -11px;
+    line-height: 48px;
+    padding: 0 11px;
+    min-width: 24px;
+    text-align: center;
+    color: #000;
+    font-size: 18px;
+}
+
+.pui-popup-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+}
+
+.pui-popup {
+    /* Popup.css: popup-heritage.png 24 */
+    position: fixed;
+    z-index: 120;
+    border-style: solid;
+    border-width: 24px;
+    border-image: url(../assets/enyo/popup-heritage.png) 24 fill stretch;
+    min-width: 120px;
+    max-height: 70vh;
+    display: flex;
+    flex-direction: column;
+}
+.pui-popup-inner {
+    margin: -7px -16px;
+    overflow-y: auto;
+    max-height: calc(70vh - 34px);
+}
+.pui-popup.picker {
+    border-width: 19px;
+    border-image: url(../assets/enyo/popup-picker.png) 19 fill;
+}
+.pui-popup.picker .pui-popup-inner { margin: -12px -12px; }
+
+.pui-menu-item {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 14px;
+    gap: 10px;
+    border-bottom: 1px solid #d6d6d4;
+    cursor: pointer;
+    white-space: nowrap;
+    color: var(--pui-text);
+}
+.pui-popup.picker .pui-menu-item { color: #000; border-bottom-color: #ccc; }
+.pui-menu-item:last-child { border-bottom: 0; }
+.pui-menu-item:active, .pui-menu-item.focused {
+    background: linear-gradient(#2c8ce0, #1a5fa8);
+    color: #fff;
+}
+.pui-menu-item .pui-menu-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.pui-menu-item.selected .pui-menu-label { font-weight: bold; }
+.pui-popup.picker .pui-menu-item.selected { background: #fff; }
+.pui-popup.picker .pui-menu-item.selected:active { background: linear-gradient(#2c8ce0, #1a5fa8); }
+
+.pui-check {
+    width: 32px;
+    height: 25px;
+    flex: none;
+    background: url(../assets/enyo/checkmark.png) no-repeat center;
+}
+
+/* ---- Drawer ---------------------------------------------------------------------- */
+
+.pui-drawer {
+    overflow: hidden;
+    transition: height 0.2s ease-out;
+}
+
+.pui-drawer-divider {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+.pui-drawer-divider .pui-divider { flex: 1; }
+.pui-drawer-arrow {
+    width: 56px;
+    height: 33px;
+    flex: none;
+    background: url(../assets/enyo/palm-divider-arrow.png) center -66px;
+}
+.pui-drawer-arrow.open { background-position: center 0; }
+
+/* ---- Dialog ---------------------------------------------------------------------- */
+
+.pui-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    animation: pui-fade 0.15s ease-out;
+}
+
+.pui-dialog {
+    /* Mojo dialogs slide up from the bottom of the card. */
+    width: 100%;
+    max-width: 480px;
+    margin: 0 4px 4px;
+    border-style: solid;
+    border-width: 18px;
+    border-image: url(../assets/enyo/popup-heritage.png) 24 fill stretch;
+    color: var(--pui-text);
+    animation: pui-slide-up 0.2s ease-out;
+}
+.pui-dialog-inner {
+    margin: -2px;
+    padding: 2px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+}
+.pui-dialog-title {
+    font-size: 20px;
+    font-weight: bold;
+    text-align: center;
+    margin: 0 0 8px;
+}
+.pui-dialog-message {
+    font-size: 16px;
+    line-height: 1.35;
+    text-align: center;
+    margin: 0 4px 12px;
+    color: #555;
+}
+.pui-dialog .pui-note { text-align: center; }
+.pui-dialog .pui-error { text-align: center; }
+
+@keyframes pui-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pui-slide-up { from { transform: translateY(40px); opacity: 0.4; } to { transform: none; opacity: 1; } }
+
+/* ---- Text field ------------------------------------------------------------------ */
+
+.pui-field {
+    display: block;
+    width: 100%;
+    border-style: solid;
+    border-width: 14px;
+    border-color: transparent;
+    border-image: url(../assets/enyo/wifi/bg_field.png) 14 fill;
+    margin: 4px 0 8px;
+}
+.pui-field.focused { border-image: url(../assets/enyo/input-focus.png) 14 fill; }
+.pui-field input {
+    display: block;
+    width: 100%;
+    margin: -6px -4px;
+    padding: 0 4px;
+    height: 26px;
+    border: 0;
+    outline: none;
+    background: transparent;
+    font: inherit;
+    font-size: 18px;
+    color: #000;
+    -webkit-user-select: text;
+    user-select: text;
+}
+.pui-field input::placeholder { color: #999; }
+.pui-field-label { color: var(--pui-label); font-size: 14px; text-transform: uppercase; margin: 6px 0 0 4px; }
+
+/* ---- Spinner --------------------------------------------------------------------- */
+
+.pui-spinner {
+    /* Spinner.css: 12 frames stacked vertically */
+    display: inline-block;
+    width: 32px;
+    height: 32px;
+    flex: none;
+    background: url(../assets/enyo/spinner.png) 0 0 no-repeat;
+    animation: pui-spin-small 1s steps(12) infinite;
+}
+.pui-spinner.large {
+    width: 128px;
+    height: 128px;
+    background-image: url(../assets/enyo/spinner-large.png);
+    animation-name: pui-spin-large;
+}
+@keyframes pui-spin-small { from { background-position: 0 0; } to { background-position: 0 -384px; } }
+@keyframes pui-spin-large { from { background-position: 0 0; } to { background-position: 0 -1536px; } }
+
+/* ---- Radio list (used by ListSelector sheets and choice groups) --------------------- */
+
+.pui-choice.selected .pui-row-title { font-weight: bold; }
+
+/* ---- Tablet: a centred column, like the Pre apps on a wider card ------------------- */
+
+@media (min-width: 600px) {
+    .pui-page.narrow { --pui-gutter: max(8px, calc((100vw - 640px) / 2)); }
+}
