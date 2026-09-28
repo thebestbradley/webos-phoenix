@@ -10,13 +10,16 @@ account that is built (section 3). This page takes the plan further:
    across SMS, Matrix, XMPP and the closed networks, and the architecture we
    recommend for it.
 3. [Social, photos and files](#3-social-photos-and-files), the account
-   types webOS had beyond contacts, calendars and mail.
+   types webOS had beyond contacts, calendars and mail, including cloud
+   drives.
 4. [Architecture on Phoenix](#4-architecture-on-phoenix): templates and
    capabilities, a shared sync layer, linking, OAuth, secrets, power, push,
    and the one optional server component.
 5. [Roadmap](#5-roadmap) with effort, dependencies and risks,
    [legal and terms-of-service notes](#6-legal-and-terms-of-service), and
    [open questions](#7-open-questions) that need a decision.
+6. [Another route](#8-another-route-what-luneos-does): how LuneOS and
+   webos-synergy-revival do it, kept as an option.
 
 It does not repeat SYNERGY.md: the account contract (templates, callbacks,
 db8 kinds, sync state), the DAV engine, the OAuth helper's design (2.3), the
@@ -421,23 +424,56 @@ The legacy capability name is `PHOTO` (Facebook, Photobucket and Snapfish
 templates); Phoenix's Photos app would list albums from every account with a
 `PHOTO` provider, as it lists local albums today.
 
-### 3.3 Files
+### 3.3 Files and cloud drives
 
-| Service | API and sign-in | Notes |
-| --- | --- | --- |
-| **WebDAV / Nextcloud / ownCloud** | WebDAV, app password or Login Flow v2 [N1] | No registration. First target |
-| **Dropbox** | HTTP API, OAuth with PKCE as a public client and offline refresh tokens *(not rechecked for this page)* | App registration in the Dropbox console; production approval above 50 users *(unverified)* |
-| **OneDrive** | Microsoft Graph Files, same Entra registration as 1.3 | Free |
-| **Google Drive** | `drive.file` is non-sensitive and needs no verification, but only sees files the user opened or created with the app; full `drive` access is restricted, with the same yearly assessment as Gmail [S9][S2] | `drive.file` with Google's picker only |
+Cloud drives were part of Synergy: webOS 3 had Box, Dropbox and Google Docs
+templates with the `DOCUMENTS` capability, and QuickOffice browsed, opened
+and saved files through them. Phoenix brings this back as a first-class
+account type, not an afterthought: every drive account appears as a root in
+the Files app, as a source in the document and PDF viewers (open and save
+back), and, where the service holds photos, as an album source in Photos
+(3.2).
 
-The legacy capability name is `DOCUMENTS`. The Files app would show each
-enabled account as a root next to `/media/internal`, backed by the Files
-service (`org.webosphoenix.filemanager`). A pragmatic backend for all of
-these is **rclone** (MIT, one Go binary with a remote-control API), which
-already speaks WebDAV, Dropbox, OneDrive and Drive; the cost is a ~50 MB
-binary and the need to supply Phoenix's own client IDs rather than rclone's
-shared ones *(size unverified for ARM builds)*. Files stay on demand (no full
-sync) to spare storage and battery.
+| Service | API and sign-in | Registration | Priority |
+| --- | --- | --- | --- |
+| **WebDAV / Nextcloud / ownCloud** | WebDAV, app password or Login Flow v2 [N1] | None | First: also the base for a Phoenix-hosted cloud (below) |
+| **OneDrive** | Microsoft Graph Files, OAuth with PKCE as a public client, same Entra registration as 1.3 | Free | First wave |
+| **Dropbox** | HTTP API, OAuth with PKCE as a public client, offline refresh tokens [SR1] | App registration in the Dropbox console; production approval above 50 users *(unverified)* | First wave |
+| **Google Drive** | `drive.file` is non-sensitive and needs no verification, but only sees files the user opened or created with the app; full `drive` access is restricted, with the same yearly assessment as Gmail [S9][S2]. Google's installed-app flow also needs a client secret, which is not secret on a device [SR1] | Cloud project; `drive.file` with Google's picker only, unless the assessment is funded (open question 2) | First wave, limited |
+| **Box** | OAuth 2.0 with PKCE, secret optional [SR1] | Box developer app | Second wave |
+| **S3-compatible** (AWS S3, Backblaze B2, Wasabi, IDrive e2, MinIO, Storj) | AWS Signature V4 with keys the user pastes in [SR1] | None | Second wave: no registration, covers self-hosters and cheap storage |
+| **pCloud, Koofr, HiDrive, Yandex Disk** | OAuth 2.0; pCloud, Koofr, HiDrive and Yandex need a client secret [SR1] | One app per provider | By demand |
+| **kDrive** (Infomaniak) | Personal API token [SR1] | None | By demand |
+| **MEGA** | Email and password, end-to-end encryption done on the client [SR1] | None | By demand; the client-side crypto is real work |
+| **Proton Drive** | SRP login plus OpenPGP end-to-end encryption; no public third-party API *(unverified)* [SR1] | Not offered | Only through rclone's backend, if at all |
+| **iCloud Drive** | No third-party API (1.5) | – | No |
+
+**Backend.** Two ways to build the transports, to decide when phase 7b
+starts:
+
+- **rclone** (MIT, one Go binary with a remote-control API) already speaks
+  all of the above except iCloud Drive, with Proton Drive through a
+  reverse-engineered backend. Cost: a ~50 MB binary *(size unverified for
+  ARM builds)*, and Phoenix must supply its own client IDs rather than
+  rclone's shared ones.
+- **Native Node transports** on the shared sync layer (4.2), one small
+  module per REST API. More code, but each one is small (webos-synergy-revival
+  shows a Dropbox or OneDrive connector is a few hundred lines of Node on
+  webOS [SR1]), fits the account contract directly, and keeps the image
+  small.
+
+Recommendation: native transports for WebDAV, OneDrive, Dropbox, Google
+Drive, Box and S3 (the providers most people have); rclone as an optional
+package for the long tail. Files stay on demand (no full sync) to spare
+storage and battery; the Files service (`org.webosphoenix.filemanager`)
+caches what is opened and uploads saves back.
+
+**A Phoenix cloud.** If the project later offers its own paid cloud, like
+iCloud (see the decisions in [AI-AND-MCP.md](AI-AND-MCP.md)), it should be
+a hosted Nextcloud (or another WebDAV, CardDAV and CalDAV server) behind a
+Phoenix account template. Then it needs no new transport: files, contacts,
+calendars, photos and backup all use code Phoenix already ships, and users
+can move to a server of their own without losing anything.
 
 ## 4. Architecture on Phoenix
 
@@ -661,7 +697,7 @@ their scope here only adds to what is written there.
 | **6a. XMPP** | Client with XEP-0198, XEP-0357, OMEMO | M | 4a | OMEMO library choice (libsignal-based ones are GPL/AGPL) |
 | **6b. Telegram (optional)** | TDLib build for OSE, transport, `api_id` | L | 4a | Large C++ build; Telegram's client terms [T1] |
 | **7a. Photos** | `PHOTO` in Photos: Immich, Nextcloud/WebDAV, OneDrive; Google Photos picker | M | 0 | Storage and bandwidth on phones |
-| **7b. Files** | `DOCUMENTS` roots in Files: WebDAV, Dropbox, OneDrive, Drive `drive.file` (rclone or native) | M | 0 | rclone size on the image |
+| **7b. Files and cloud drives** | `DOCUMENTS` roots in Files, open and save back in the document viewers: WebDAV, OneDrive, Dropbox, Drive `drive.file`, Box, S3 (native); the long tail through optional rclone (3.3) | M | 0, 1c | One registration per provider; Google's secret-on-device flow |
 | **7c. Social** | `SOCIAL`: Mastodon and Bluesky enrichment and notifications | M | 5 for push | Bluesky OAuth still evolving |
 | **7d. Directory** | `REMOTECONTACTS` for Graph, Just Type remote contacts | S | 2a | – |
 
@@ -715,11 +751,63 @@ mail and has the device code fallback.
     Phoenix first (e.g. Google vs Microsoft vs Nextcloud; WhatsApp via
     bridge vs Signal)?
 
+## 8. Another route: what LuneOS does
+
+The owner's position (28 September 2026): **Phoenix builds its own Synergy.**
+The LuneOS approach below is recorded as a possible route, not the plan.
+
+LuneOS ships the Open webOS account framework and three pieces of Synergy
+([LUNEOS.md](LUNEOS.md#5-services)):
+
+- **Contacts and calendars:** `org.webosports.cdav`, a Node.js CardDAV and
+  CalDAV connector with Google (OAuth), iCloud and Yahoo templates. GPL-3.0.
+  Phoenix has its own Apache-2.0 DAV engine (SYNERGY.md section 3), so this
+  adds nothing.
+- **Mail:** the original `mojomail` IMAP, POP and SMTP transports (the same
+  code SYNERGY.md 2.6 plans to reuse).
+- **Instant messaging:** libpurple protocol plugins bridged into the
+  Messaging app by `imlibpurpleservice`, as Palm did for AIM, Google Talk
+  and others.
+
+Separately, **webos-synergy-revival** [SR1], by LuneOS's lead maintainer
+(last commit 25 August 2026), targets the HP TouchPad on webOS 3.0.5 and
+LuneOS. It has two halves:
+
+| Half | What it does | State [SR1] |
+| --- | --- | --- |
+| Cloud and file connectors | Dropbox, Box, OneDrive, Google Drive, pCloud, Yandex Disk, MEGA, Koofr, HiDrive, kDrive, S3, Flickr, as `DOCUMENTS` and `PHOTO.UPLOAD` accounts feeding QuickOffice and Photos | Ten verified on a device; S3 and Flickr code-complete; Proton Drive researched only |
+| IM connectors | libpurple plugins for Telegram, WhatsApp, Facebook Messenger, Discord, Microsoft Teams, Signal, Google Chat and Matrix, bridged into Messaging (and Phone for calls) | Varies per network |
+
+How it compares with this plan:
+
+| | libpurple route (LuneOS) | Matrix route (this page, 2.3 and 2.4) |
+| --- | --- | --- |
+| Where the closed networks are bridged | On the phone, one plugin per network | On a Matrix server with bridges, which the user or a provider runs |
+| Needs a server | No | Yes, for the closed networks |
+| Terms of service | The phone itself runs an unofficial client for WhatsApp (the whatsmeow library), Discord, Messenger and others; accounts can be banned [SG1][DC1] | Same risk, but the user chooses to run the bridge; Phoenix ships no unofficial client |
+| Battery | One long-lived connection per network | One Matrix connection for everything, with push (4.8) |
+| Maintenance | Each plugin breaks when its network changes; the plugins come from many upstream forks | The bridge projects carry that work |
+| Licences | libpurple and most plugins are GPL; they can ship **beside** Phoenix as separate packages, not inside its code | Bridges run on the server, not on the phone |
+
+**What Phoenix can take from it.** The repository has no licence file, so
+its code is "all rights reserved": we cannot copy it, and cannot package it
+without the author's permission. Facts are free to use: which providers
+work, which auth each needs (for example that Google's installed-app flow
+needs a client secret, and Proton Drive has no third-party API), and that a
+connector per REST API is small. Section 3.3 uses those facts.
+
+**If the owner ever wants it,** two options stay open without changing the
+plan: (a) ask the author to license the connectors (Apache-2.0 or MIT for
+the cloud half) and offer them as optional add-ons; (b) offer a libpurple
+IM package as an optional add-on for users who accept the terms risk,
+beside the Matrix default.
+
 ## Sources
 
 Dates are the page's own "updated" or publication date where it has one;
 otherwise the date we read it (2026-09-28).
 
+- [SR1] Herman van Hazendonk, webos-synergy-revival, README and per-connector notes (last commit 2026-08-25; no licence file) <https://github.com/Herrie82/webos-synergy-revival>
 - [S1] Google Workspace Admin Help, "Transition from less secure apps to OAuth", <https://support.google.com/a/answer/14114704> (read 2026-09-28); and Google Workspace Updates, 2023-09 announcement, <https://workspaceupdates.googleblog.com/2023/09/winding-down-google-sync-and-less-secure-apps-support.html>
 - [S2] Google for Developers, "Restricted scope verification", <https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification> (updated 2026-08-19)
 - [S3] Google Cloud Help, "Security assessment" <https://support.google.com/cloud/answer/13465431> and "Annual recertification" <https://support.google.com/cloud/answer/13463816> (read 2026-09-28)

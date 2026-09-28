@@ -446,9 +446,35 @@ in LuneOS, and LuneOS is not trying to build it.
 So Phoenix should be a shell and app suite that runs on LuneOS's platform,
 not a second platform.
 
+### The owner's position (28 September 2026)
+
+Phoenix stays an **independent project**: its plans (the assistant, the
+catalog, Android apps, a Phoenix cloud) may not match LuneOS's, so we do not
+join or depend on their roadmap. Outreach (step 1 below) is on hold.
+
+That does not rule out using their **build layers**. Yocto layers are
+consumed like libraries: a Phoenix build lists them at pinned commits, and
+Phoenix's own layer adds and overrides what it needs. That needs no
+agreement from LuneOS and gives them no say over Phoenix. The layers, and
+what each would give us:
+
+| Layer | Licence | What it contains | Use it? |
+| --- | --- | --- | --- |
+| `meta-smartphone` (shr-distribution) | MIT | Per-vendor device layers (`meta-google`, `meta-xiaomi`, `meta-oneplus`, `meta-furilabs`, `meta-hp`, ...), `meta-android` (Halium: the LXC Android container, libhybris, the generic `halium-arm64` machine), `meta-mainline`, `meta-qualcomm-modems`. Kernels, boot images, firmware packaging | **Yes.** This is the hardest part to redo: years of per-phone kernel and boot work. It is distro-neutral (it predates LuneOS) |
+| `meta-webos-ports/meta-luneui` | MIT recipes | luna-service2, nyx-lib, pmloglib, luna-sysmgr-common: the webOS basics | Yes, or take the same recipes from OSE's `meta-webosose` |
+| `meta-webos-ports/meta-luneos` | MIT recipes; the software they build varies (section 6) | The LuneOS distro: device services (telephonyd, battery, displaymanager, haptics, nyx forks, camera), the Chromium 151 web runtime, and the LuneOS apps and cardshell | **Pick recipes, not the distro.** Phoenix's own `phoenix` distro config and image choose the services and leave out cardshell, the LuneOS apps and Mojo |
+| `meta-luneos-backports-6.1`, `meta-luneos-holdbacks-5.3` | MIT | Newer or older versions of a few packages that the current Yocto release needs | Only as the recipes above require |
+| `meta-pine64-luneos`, `meta-rpi-luneos` | MIT *(unverified per layer)* | PinePhone, PinePhone Pro, PineTab2 and Raspberry Pi | When those devices are targets |
+| `meta-qt6` 6.12, oe-core, meta-openembedded (wrynose) | MIT | Not LuneOS's; the same upstream layers any build uses | Yes, at the versions they pin, so the device layers build |
+
+The cost of this route: when LuneOS changes a recipe we use, we follow or
+override it; and if LuneOS stops, the device layers we depend on become
+ours to maintain (step 8). The alternative, device support written from
+scratch on OSE's `build-webos`, costs that from day one.
+
 ### Next steps
 
-1. **Talk to them first.** Open an issue or discussion on
+1. **Talk to them first** *(on hold: see the owner's position above).* Open an issue or discussion on
    [luneos-testing](https://github.com/webOS-ports/luneos-testing) (or reach
    Herrie and Tofe on GitHub and `#webos-ports`) saying what Phoenix is and
    proposing: Phoenix as an alternative `WebOSCompositor` shell package in
