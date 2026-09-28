@@ -82,9 +82,9 @@ Item {
         id: label
         visible: icon.showLabel
         anchors.top: tile.bottom
-        anchors.topMargin: Theme.px(2)
+        anchors.topMargin: Theme.launcherLabelSpacing
         anchors.horizontalCenter: tile.horizontalCenter
-        width: icon.size * 1.4
+        width: Theme.tablet ? Theme.launcherLabelWidth : icon.size * 1.4
         horizontalAlignment: Text.AlignHCenter
         elide: Text.ElideRight
         maximumLineCount: 2
@@ -93,6 +93,7 @@ Item {
         color: Theme.text
         font.family: Theme.fontFamily
         font.pixelSize: Theme.launcherLabelFontSize
+        font.bold: Theme.launcherLabelBold
         style: Text.Raised
         styleColor: "#000000"
     }

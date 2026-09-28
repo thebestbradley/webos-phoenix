@@ -135,8 +135,22 @@ QtObject {
     readonly property int quickLaunchMaxItems: 5                     // layoutsettings.cpp:87
     readonly property int launcherIconSize: px(64)                   // images/launcher3/launcher-icon-64.png
     readonly property int launcherTabHeight: px(50)                  // images/launcher3/tab-bg.png
-    readonly property int launcherColumns: tablet ? 5 : 3
-    readonly property int launcherLabelFontSize: px(tablet ? 16 : 13)
+    // Tablet: launcher3's grid (launcher_icon_layoutsettings.conf,
+    // icongeometrysettings.cpp:180-207, launcher_icon_geom_settings.conf):
+    // up to 7 icons a row, 128 px cells 12 px apart from 27 px in, rows 10
+    // px apart; the 64 px icon 11 px above the cell's centre; the label 14 px
+    // bold in a 100 x 40 box 2 px under it. Phones keep 3 columns (the
+    // webOS 2 phone launcher was not released).
+    readonly property int launcherColumns: tablet ? 7 : 3
+    readonly property int launcherCellSize: px(128)
+    readonly property int launcherCellPitch: px(128 + 12)
+    readonly property int launcherRowPitch: px(128 + 10)
+    readonly property int launcherRowLeftMargin: px(27)
+    readonly property int launcherIconOffsetY: px(-11)
+    readonly property int launcherLabelWidth: px(100)
+    readonly property int launcherLabelSpacing: px(2)
+    readonly property int launcherLabelFontSize: px(tablet ? 14 : 13)
+    readonly property bool launcherLabelBold: tablet
 
     // ---- Lock screen ---------------------------------------------------------
 

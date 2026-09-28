@@ -203,8 +203,13 @@ Item {
         }
     }
 
-    readonly property real cellWidth: pages.width / Theme.launcherColumns
-    readonly property real cellHeight: Theme.launcherIconSize + Theme.px(48)
+    // As many columns as fit, up to launcherColumns.
+    readonly property int columns: Theme.tablet
+        ? Math.max(1, Math.min(Theme.launcherColumns, Math.floor((pages.width - Theme.launcherRowLeftMargin) / Theme.launcherCellPitch)))
+        : Theme.launcherColumns
+    readonly property real cellWidth: Theme.tablet ? Theme.launcherCellPitch : pages.width / columns
+    readonly property real cellHeight: Theme.tablet ? Theme.launcherRowPitch : Theme.launcherIconSize + Theme.px(48)
+    readonly property real rowLeft: Theme.tablet ? Theme.launcherRowLeftMargin : 0
     readonly property real pageTopMargin: Theme.px(16)
 
     // Grid index at a point in the current page (launcher coordinates), for drops.
@@ -213,9 +218,9 @@ Item {
         if (!page)
             return -1;
         var p = launcher.mapToItem(page.contentItem, lx, ly);
-        var col = Math.max(0, Math.min(Theme.launcherColumns - 1, Math.floor(p.x / cellWidth)));
+        var col = Math.max(0, Math.min(launcher.columns - 1, Math.floor((p.x - rowLeft) / cellWidth)));
         var row = Math.max(0, Math.floor((p.y - pageTopMargin) / cellHeight));
-        return Math.min(row * Theme.launcherColumns + col, pageModels[pages.currentIndex].count - 1);
+        return Math.min(row * launcher.columns + col, pageModels[pages.currentIndex].count - 1);
     }
     // Tabs share the bar; in edit mode they leave room for Done.
     readonly property real tabWidth: (tabBar.width - (editMode ? doneButton.width + Theme.px(12) : 0)) / tabs.length
@@ -258,7 +263,7 @@ Item {
             interactive: !launcher.dragging
             contentWidth: width
             contentHeight: launcher.pageTopMargin
-                           + Math.ceil((model ? model.count : 0) / Theme.launcherColumns) * launcher.cellHeight
+                           + Math.ceil((model ? model.count : 0) / launcher.columns) * launcher.cellHeight
 
             Repeater {
                 model: page.model
@@ -271,10 +276,10 @@ Item {
                     required property string glyph
                     required property string icon
                     required property bool removable
-                    width: launcher.cellWidth
+                    width: Theme.tablet ? Theme.launcherCellSize : launcher.cellWidth
                     height: launcher.cellHeight
-                    x: (index % Theme.launcherColumns) * launcher.cellWidth
-                    y: launcher.pageTopMargin + Math.floor(index / Theme.launcherColumns) * launcher.cellHeight
+                    x: launcher.rowLeft + (index % launcher.columns) * launcher.cellWidth
+                    y: launcher.pageTopMargin + Math.floor(index / launcher.columns) * launcher.cellHeight
                     Behavior on x { NumberAnimation { duration: Theme.launcherReorderDuration; easing.type: Easing.InQuad } }
                     Behavior on y { NumberAnimation { duration: Theme.launcherReorderDuration; easing.type: Easing.InQuad } }
                     // The dragged icon travels under the finger (the shell's drag proxy).
@@ -292,6 +297,8 @@ Item {
                     AppIcon {
                         id: iconItem
                         anchors.horizontalCenter: parent.horizontalCenter
+                        // Tablet: 11 px above the 128 px cell's centre.
+                        y: Theme.tablet ? Theme.launcherCellSize / 2 + Theme.launcherIconOffsetY - Theme.launcherIconSize / 2 : 0
                         title: cell.title
                         color: cell.color
                         glyph: cell.glyph
@@ -329,12 +336,12 @@ Item {
                 property string pressedId: ""
 
                 function cellAt(mx, my) {
-                    var col = Math.floor(mx / launcher.cellWidth);
+                    var col = Math.floor((mx - launcher.rowLeft) / launcher.cellWidth);
                     var row = Math.floor((my - launcher.pageTopMargin) / launcher.cellHeight);
-                    var i = row * Theme.launcherColumns + col;
-                    if (row < 0 || col < 0 || col >= Theme.launcherColumns || !page.model || i >= page.model.count)
+                    var i = row * launcher.columns + col;
+                    if (row < 0 || col < 0 || col >= launcher.columns || !page.model || i >= page.model.count)
                         return null;
-                    return { index: i, x: mx - col * launcher.cellWidth, y: my - launcher.pageTopMargin - row * launcher.cellHeight };
+                    return { index: i, x: mx - launcher.rowLeft - col * launcher.cellWidth, y: my - launcher.pageTopMargin - row * launcher.cellHeight };
                 }
 
                 onPressed: (mouse) => {
@@ -367,8 +374,11 @@ Item {
                     var item = page.model.get(c.index);
                     if (launcher.editMode) {
                         // The delete decorator, top left of the icon.
-                        var iconLeft = (launcher.cellWidth - Theme.launcherIconSize) / 2;
-                        if (item.removable && c.x < iconLeft + Theme.px(24) && c.x > iconLeft - Theme.px(12) && c.y < Theme.px(24))
+                        var cellW = Theme.tablet ? Theme.launcherCellSize : launcher.cellWidth;
+                        var iconLeft = (cellW - Theme.launcherIconSize) / 2;
+                        var iconTop = Theme.tablet ? Theme.launcherCellSize / 2 + Theme.launcherIconOffsetY - Theme.launcherIconSize / 2 : 0;
+                        if (item.removable && c.x < iconLeft + Theme.px(24) && c.x > iconLeft - Theme.px(12)
+                                && c.y < iconTop + Theme.px(24) && c.y > iconTop - Theme.px(12))
                             launcher.deleteRequested(item.appId);
                         return;
                     }
