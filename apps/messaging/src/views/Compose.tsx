@@ -11,10 +11,12 @@ import { Avatar, formatNumber } from "@phoenix/ui";
 import { suggestRecipients, typedRecipient, type Recipient } from "../lib/threads";
 import { ComposeBar } from "./ComposeBar";
 
-export function Compose({ people, onSent, initialTo }: {
+export function Compose({ people, onSent, initialTo, initialText }: {
     people: readonly Person[];
     onSent: (threadId: string) => void;
     initialTo?: Recipient | null;
+    /** Text to start with (launch param messageText, e.g. a location shared from Maps). */
+    initialText?: string;
 }) {
     const [to, setTo] = useState<Recipient | null>(initialTo ?? null);
     const [typed, setTyped] = useState("");
@@ -83,7 +85,7 @@ export function Compose({ people, onSent, initialTo }: {
                 )}
                 {error && <div className="compose-error" role="alert">{error}</div>}
             </div>
-            <ComposeBar onSend={send} autoFocus={!!to} />
+            <ComposeBar onSend={send} autoFocus={!!to} initialText={initialText} />
         </div>
     );
 }

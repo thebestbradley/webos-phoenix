@@ -4,7 +4,10 @@
         { "url": "^mailto:", "appId": "com.palm.app.email" },
         { "url": "^tel:", "appId": "org.webosphoenix.phone" },
         { "url": "^sms:", "appId": "org.webosphoenix.messaging" },
-        { "url": "^im:", "appId": "org.webosphoenix.messaging" }
+        { "url": "^im:", "appId": "org.webosphoenix.messaging" },
+        { "url": "^geo:", "appId": "org.webosphoenix.maps" },
+        { "url": "^maploc:", "appId": "org.webosphoenix.maps" },
+        { "url": "^mapto:", "appId": "org.webosphoenix.maps" }
     ],
     "commands": []
 }

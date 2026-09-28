@@ -7,7 +7,8 @@
 // left and the conversation opens on the right.
 //
 // Launch params: {threadId} opens a conversation; {to, name?} starts a
-// message to that number.
+// message to that number; {messageText} (webOS 2.x's name for it) starts a
+// message with that text, e.g. a location shared from Maps.
 
 import { useEffect, useState } from "react";
 import { useLaunchParams } from "@phoenix/luna/react";
@@ -20,10 +21,10 @@ import { Compose } from "./views/Compose";
 import { Buddies } from "./views/Buddies";
 import { Bubbles, Compose as ComposeIcon } from "./icons";
 
-type View = { kind: "list" } | { kind: "thread"; id: string } | { kind: "compose"; to?: Recipient | null };
+type View = { kind: "list" } | { kind: "thread"; id: string } | { kind: "compose"; to?: Recipient | null; text?: string };
 
 function Messaging() {
-    const params = useLaunchParams<{ threadId?: string; to?: string; name?: string }>();
+    const params = useLaunchParams<{ threadId?: string; to?: string; name?: string; messageText?: string }>();
     const people = usePeople();
     const threads = useThreads();
     const wide = useWide();
@@ -32,7 +33,8 @@ function Messaging() {
 
     useEffect(() => {
         if (params.threadId) setView({ kind: "thread", id: params.threadId });
-        else if (params.to) setView({ kind: "compose", to: { addr: params.to, name: params.name } });
+        else if (params.to || params.messageText)
+            setView({ kind: "compose", to: params.to ? { addr: params.to, name: params.name } : null, text: params.messageText });
     }, [params]);
 
     useBack(() => { setView({ kind: "list" }); return true; }, view.kind !== "list");
@@ -41,7 +43,7 @@ function Messaging() {
     const detail = view.kind === "thread"
         ? <Conversation key={view.id} threadId={view.id} people={people} />
         : view.kind === "compose"
-            ? <Compose key="compose" people={people} initialTo={view.to} onSent={(id) => setView({ kind: "thread", id })} />
+            ? <Compose key="compose" people={people} initialTo={view.to} initialText={view.text} onSent={(id) => setView({ kind: "thread", id })} />
             : null;
 
     const list = (

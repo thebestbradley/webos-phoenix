@@ -755,16 +755,23 @@
         return /^https?:/i.test(target) ? "com.palm.app.browser" : null;
     }
 
+    // Apps the original webOS apps launch by id that Phoenix replaces:
+    // Contacts' and Calendar's addresses open "com.palm.app.maps" (Google
+    // or Bing Maps then), which is Phoenix Maps now.
+    var APP_ALIASES = { "com.palm.app.maps": "org.webosphoenix.maps" };
+    function appId(id) { return APP_ALIASES[id] || id; }
+    runtime.appAliases = APP_ALIASES;
+
     register(["com.palm.applicationManager", "com.webos.applicationManager"], {
         "/launch": function (p, reply) {
-            host.postToHost("launch", { id: p.id, params: p.params || {} });
+            host.postToHost("launch", { id: appId(p.id), params: p.params || {} });
             reply(ok({ processId: String(Date.now()) }));
         },
         // As on webOS: {id, params} launches the app; {target} goes to the
         // app that handles it (command-resource-handlers.json: mailto: to
         // Email...), web pages to the browser. Other targets go to the shell.
         "/open": function (p, reply) {
-            var handler = p.id || (p.target && resourceHandler(p.target));
+            var handler = appId(p.id) || (p.target && resourceHandler(p.target));
             if (handler)
                 host.postToHost("launch", { id: handler, params: p.id ? (p.params || {}) : { target: p.target } });
             else
@@ -4528,6 +4535,176 @@
             },
             parseStart: parseStart
         };
+    })();
+
+    // ================================================================================
+    // Location and text to speech (com.webos.service.location,
+    // com.webos.service.tts; apps/maps)
+    // ================================================================================
+    //
+    // A minimal simulation of webOS OSE's location service, with its method
+    // and field names (https://www.webosose.org/docs/reference/ls2-api/
+    // com-webos-service-location/; webosose/location-service
+    // src/location_service.cpp):
+    //
+    //   getLocationUpdates {subscribe?, minimumInterval?, minimumDistance?,
+    //       Handler?: "gps" | "network" | "passive", responseTimeout?}
+    //       -> {latitude, longitude, altitude, direction, speed,
+    //           horizAccuracy, vertAccuracy, timestamp}; every move while
+    //           subscribed. errorCode 5 when both handlers are off.
+    //   getState {Handler, subscribe?} -> {state: 0 | 1}
+    //   setState {Handler, state: boolean}
+    //   getAllLocationHandlers -> {handlers: [{name, state}]}
+    //   getGpsStatus {subscribe?} -> {state: boolean}
+    //   mock/enable {name}, mock/disable {name}
+    //   mock/setLocation {name, location: {latitude, longitude, ...}}: moves
+    //       the simulated device (tests drive navigation with it).
+    //
+    // The device starts in downtown San Jose, inside the demo map region
+    // Maps ships with (apps/maps/public/regions/sample). The position lives
+    // in the shared store, so a move reaches every page's subscribers.
+    // getGeoCodeLocation and getReverseLocation (Google-backed on OSE) are
+    // not simulated: Maps geocodes with its own providers.
+    //
+    // (Another change may bring a fuller simulation of this service; this
+    // block keeps to OSE's API, so the two should merge without changes to
+    // callers.)
+    //
+    // com.webos.service.tts speak {text, language?, clear?} is simulated by
+    // remembering what was said (__phoenixRuntime.tts.spoken), so tests can
+    // check Maps' spoken directions; stop {} forgets the queue.
+    (function locationService() {
+        var KEY = "location";
+        var START = { latitude: 37.333700, longitude: -121.890700, altitude: 26, direction: -1, speed: -1,
+                      horizAccuracy: 12, vertAccuracy: 20 };
+        var listeners = [];
+
+        function load() {
+            return store.get(KEY, { gps: true, network: true, mock: false, fix: START, time: Date.now() });
+        }
+        function save(s) {
+            store.set(KEY, s);
+            changed();
+        }
+        function changed() {
+            listeners.slice().forEach(function (fn) { fn(); });
+        }
+        global.addEventListener && global.addEventListener("storage", function (e) {
+            if (e.key === "phoenix:" + KEY) changed();
+        });
+        function on(fn, ctx) {
+            listeners.push(fn);
+            var prev = ctx.onCancel;
+            ctx.onCancel = function () {
+                listeners = listeners.filter(function (l) { return l !== fn; });
+                if (prev) prev();
+            };
+        }
+        function fixReply(s) {
+            var r = ok({ timestamp: s.time || Date.now() });
+            for (var k in s.fix) r[k] = s.fix[k];
+            return r;
+        }
+        function handlerOn(s, name) {
+            if (name === "gps") return s.gps;
+            if (name === "network") return s.network;
+            return s.gps || s.network;
+        }
+
+        register(["com.webos.service.location"], {
+            "/getLocationUpdates": function (p, reply, ctx) {
+                var s = load();
+                if (!handlerOn(s, p.Handler)) {
+                    reply({ returnValue: false, errorCode: 5, errorText: "Location source offline" });
+                    return;
+                }
+                var first = fixReply(s);
+                if (p.subscribe) first.subscribed = true;
+                reply(first);
+                if (!p.subscribe) return;
+                var last = JSON.stringify(s.fix) + s.time;
+                on(function () {
+                    if (ctx.cancelled()) return;
+                    var n = load();
+                    if (!handlerOn(n, p.Handler)) {
+                        reply({ returnValue: false, errorCode: 5, errorText: "Location source offline", subscribed: true });
+                        return;
+                    }
+                    var key = JSON.stringify(n.fix) + n.time;
+                    if (key === last) return;
+                    last = key;
+                    var r = fixReply(n);
+                    r.subscribed = true;
+                    reply(r);
+                }, ctx);
+            },
+            "/getState": function (p, reply, ctx) {
+                var name = p.Handler;
+                if (name !== "gps" && name !== "network") return reply({ returnValue: false, errorCode: 10, errorText: "Invalid input" });
+                var state = function () { return load()[name] ? 1 : 0; };
+                var last = state();
+                reply(ok(p.subscribe ? { state: last, subscribed: true } : { state: last }));
+                if (!p.subscribe) return;
+                on(function () {
+                    if (ctx.cancelled() || state() === last) return;
+                    last = state();
+                    reply(ok({ state: last, subscribed: true }));
+                }, ctx);
+            },
+            "/setState": function (p, reply) {
+                if (p.Handler !== "gps" && p.Handler !== "network") return reply({ returnValue: false, errorCode: 10, errorText: "Invalid input" });
+                var s = load();
+                s[p.Handler] = !!p.state;
+                save(s);
+                reply(ok());
+            },
+            "/getAllLocationHandlers": function (p, reply) {
+                var s = load();
+                reply(ok({ handlers: [{ name: "gps", state: s.gps }, { name: "network", state: s.network }, { name: "passive", state: true }] }));
+            },
+            "/getGpsStatus": function (p, reply) { reply(ok({ state: load().gps })); },
+            "/getLocationHandlerDetails": function (p, reply) {
+                var gps = p.Handler === "gps";
+                reply(ok({ accuracy: gps ? 1 : 3, powerRequirement: gps ? 1 : 3, requiresNetwork: !gps, requiresCell: false, monetaryCost: false }));
+            },
+            "/mock/enable": function (p, reply) { var s = load(); s.mock = true; save(s); reply(ok()); },
+            "/mock/disable": function (p, reply) { var s = load(); s.mock = false; save(s); reply(ok()); },
+            "/mock/setLocation": function (p, reply) {
+                var loc = p.location || {};
+                if (typeof loc.latitude !== "number" || typeof loc.longitude !== "number" || Math.abs(loc.latitude) > 90 || Math.abs(loc.longitude) > 180)
+                    return reply({ returnValue: false, errorCode: 10, errorText: "Invalid input" });
+                var s = load();
+                var fix = {};
+                for (var k in START) fix[k] = loc[k] !== undefined ? loc[k] : (k === "latitude" || k === "longitude" ? 0 : START[k]);
+                s.fix = fix;
+                s.time = Date.now();
+                s.mock = true;
+                save(s);
+                reply(ok());
+            }
+        });
+
+        runtime.location = {
+            /** Move the simulated device (degrees; extra: direction, speed, horizAccuracy, ...). */
+            set: function (latitude, longitude, extra) {
+                var loc = { latitude: latitude, longitude: longitude };
+                for (var k in extra || {}) loc[k] = extra[k];
+                return callNow("luna://com.webos.service.location/mock/setLocation", { name: "gps", location: loc });
+            },
+            reset: function () { store.set(KEY, { gps: true, network: true, mock: false, fix: START, time: Date.now() }); changed(); }
+        };
+
+        var spoken = [];
+        register(["com.webos.service.tts"], {
+            "/speak": function (p, reply) {
+                if (typeof p.text !== "string" || !p.text) return reply(fail(-1, "text is required"));
+                spoken.push({ text: p.text, language: p.language || "en-US", time: Date.now() });
+                reply(ok({ msgID: "sim" + spoken.length }));
+            },
+            "/stop": function (p, reply) { reply(ok()); },
+            "/getStatus": function (p, reply) { reply(ok({ status: "idle" })); }
+        });
+        runtime.tts = { spoken: spoken };
     })();
 
     // ================================================================================

@@ -113,6 +113,13 @@ data use "Phoenix Account".
   wrote; dedicated to the public domain (CC0 1.0). eSpeak NG itself
   (GPL-3.0) is only a tool used to make them and is not shipped.
 
+- Maps (`apps/maps`) is a new app; the webOS Maps apps (Google Maps, Bing
+  Maps) were never open-sourced and nothing was taken from them. Its map
+  style (`apps/maps/src/lib/style.ts`), glyphs for the menus and the
+  launcher icon (`apps/maps/tools/render-icon.cjs`) are original. It bundles
+  MapLibre GL JS (BSD-3-Clause), Leaflet (BSD-2-Clause), PMTiles,
+  @mapbox/vector-tile and pbf (BSD-3-Clause). Map data: see
+  [Map data](#map-data-openstreetmap).
 - CardDAV & CalDAV (`apps/dav`) is original code. Its vCard and iCalendar
   mapping follows the field names and formats of the Open webOS contacts and
   calendar frameworks (`third_party/loadable-frameworks`, Apache-2.0), read
@@ -124,6 +131,38 @@ data use "Phoenix Account".
   Phoenix, not linked with it, and not distributed with it.
 - npm dependencies (React, Vite, ...) are MIT-licensed; the Settings app lists
   the ones it bundles under Device Info > Open source licenses.
+
+## Map data (OpenStreetMap)
+
+Maps shows, searches and routes on **OpenStreetMap** data, © OpenStreetMap
+contributors, available under the **Open Database License (ODbL) 1.0**
+(<https://www.openstreetmap.org/copyright>). The vector tiles follow the
+**OpenMapTiles** schema (© OpenMapTiles, CC-BY 4.0,
+<https://openmaptiles.org/>).
+
+- The demo region shipped with the app (`apps/maps/public/regions/sample`,
+  downtown San Jose, 15 tiles) was downloaded from **OpenFreeMap**
+  (<https://openfreemap.org/>) by `apps/maps/tools/fetch-sample-region.cjs`.
+  It is a Produced Work of the OpenStreetMap database; the ODbL asks that
+  it keep the attribution above, which the app shows and this file records.
+  Tests (`tools/test-maps.cjs`, `apps/maps/src/lib/offline.test.ts`) use
+  the same tiles.
+- The label glyphs (`apps/maps/public/fonts`) are **Noto Sans**, SIL Open
+  Font License 1.1, rendered to MapLibre's glyph format by OpenFreeMap.
+- Attribution on screen: the map always shows "© OpenStreetMap
+  contributors · © OpenMapTiles" (plus the tile provider), never hidden
+  behind a button, as the OSM Foundation's attribution guidelines and the
+  providers' terms ask; About Maps lists every source and service.
+- Online services by default: tiles from OpenFreeMap (MIT-licensed
+  software, free public instance, no key, commercial use allowed); search
+  from Photon by komoot (fair use); directions from Valhalla on the FOSSGIS
+  server (fair use, the app identifies itself with `X-Client-Id`). All are
+  configurable. Their data is OpenStreetMap's, under the ODbL. Maps never
+  uses tile.openstreetmap.org, whose tile usage policy does not allow apps'
+  heavy use or offline downloads. See [MAPS.md](MAPS.md).
+- A user's saved offline areas are copies of provider tiles on the device
+  for their own use; a user who shares such a copy must keep the ODbL
+  attribution.
 
 ## Speech recognition (whisper.cpp)
 

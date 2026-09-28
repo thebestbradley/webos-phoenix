@@ -1,0 +1,21 @@
+[
+    {
+        "type": "db.kind",
+        "object": "org.webosphoenix.maps.place:1",
+        "caller": "org.webosphoenix.maps",
+        "operations": {
+            "create": "allow",
+            "read": "allow",
+            "update": "allow",
+            "delete": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "org.webosphoenix.maps.place:1",
+        "caller": "com.palm.launcher",
+        "operations": {
+            "read": "allow"
+        }
+    }
+]

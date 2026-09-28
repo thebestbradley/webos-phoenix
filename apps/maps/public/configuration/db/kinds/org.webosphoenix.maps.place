@@ -1,0 +1,37 @@
+{
+    "id": "org.webosphoenix.maps.place:1",
+    "owner": "org.webosphoenix.maps",
+    "sync": true,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "name": { "type": "string", "description": "What the user calls the place" },
+            "detail": { "type": "string", "description": "Address or area, as shown under the name" },
+            "lon": { "type": "number", "description": "Longitude, WGS 84" },
+            "lat": { "type": "number", "description": "Latitude, WGS 84" },
+            "category": { "type": "string", "optional": true, "description": "Kind of place (cafe, museum, ...)" },
+            "created": { "type": "integer", "description": "When it was saved, ms" },
+            "searchText": { "type": "string", "description": "Name and detail, lower-case, for Just Type" }
+        }
+    },
+    "indexes": [
+        {
+            "name": "created",
+            "props": [
+                { "name": "created" }
+            ]
+        },
+        {
+            "name": "UI_Typedown_UniversalSearch",
+            "props": [
+                { "name": "searchText", "tokenize": "all", "collate": "primary" }
+            ]
+        },
+        {
+            "name": "searchText",
+            "props": [
+                { "name": "searchText", "collate": "primary" }
+            ]
+        }
+    ]
+}
