@@ -1,0 +1,12 @@
+{
+    "appId": "org.webosphoenix.service.dav",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": ["org.webosphoenix.service.dav"],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.service.dav",
+            "outbound": ["org.webosphoenix.service.dav", "com.palm.db", "com.palm.tempdb", "com.palm.activitymanager", "com.palm.service.accounts"]
+        }
+    ]
+}

@@ -85,6 +85,16 @@ data use "Phoenix Account".
   `apps/voicememos/tools/make-samples.cjs` with eSpeak NG from scripts we
   wrote; dedicated to the public domain (CC0 1.0). eSpeak NG itself
   (GPL-3.0) is only a tool used to make them and is not shipped.
+
+- CardDAV & CalDAV (`apps/dav`) is original code. Its vCard and iCalendar
+  mapping follows the field names and formats of the Open webOS contacts and
+  calendar frameworks (`third_party/loadable-frameworks`, Apache-2.0), read
+  for reference; no code was copied from them or from other sync projects.
+  Its account icons are drawn by Phoenix (`apps/dav/public/accounts/.../images`,
+  `apps/dav/icon.png`; CC0).
+- **Radicale** (GPL-3.0) is used only to test the DAV sync: tests and CI
+  install it with pip and run it as a separate program. It is not part of
+  Phoenix, not linked with it, and not distributed with it.
 - npm dependencies (React, Vite, ...) are MIT-licensed; the Settings app lists
   the ones it bundles under Device Info > Open source licenses.
 

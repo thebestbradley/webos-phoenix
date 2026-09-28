@@ -31,6 +31,7 @@
         "/usr/palm/public/accounts/com.palm.imap/": "third_party/app-services/mojomail/imap/files/usr/palm/public/accounts/com.palm.imap/",
         "/usr/palm/public/accounts/com.palm.othermail/": "third_party/app-services/mojomail/imap/files/usr/palm/public/accounts/com.palm.othermail/",
         "/usr/palm/public/accounts/com.palm.pop/": "third_party/app-services/mojomail/pop/files/usr/palm/public/accounts/com.palm.pop/",
+        "/usr/palm/public/accounts/com.webosphoenix.dav/": "apps/dav/public/accounts/com.webosphoenix.dav/",
         "/usr/share/phoenix/runtime/": "runtime/",
         "/usr/lib/luna/system/luna-applauncher/": "third_party/luna-applauncher/",
         "/usr/lib/luna/system/luna-systemui/": "third_party/luna-systemui/",

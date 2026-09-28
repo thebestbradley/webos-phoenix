@@ -4169,9 +4169,14 @@
                 schedule: a.schedule || null, callback: a.callback || null, creator: PalmSystem.appIdentifier,
                 due: p.start === false ? null : due, fired: false
             };
+            // With no schedule or trigger, a started activity runs now: its
+            // callback is called once, by the page that created it.
+            var now = p.start !== false && !a.schedule && !a.trigger && !!entry.callback;
+            if (now) entry.fired = true;
             st.byName[a.name] = entry;
             save(st);
             reply(ok({ activityId: entry.activityId }));
+            if (now) setTimeout(function () { fire(entry); }, 0);
             arm();
         }
 
@@ -4499,5 +4504,383 @@
         }
 
         runtime.voiceMemos = { placeholder: PLACEHOLDER, errors: E };
+    })();
+
+    // ================================================================================
+    // CardDAV and CalDAV (Synergy transport org.webosphoenix.service.dav; apps/dav)
+    // ================================================================================
+    //
+    // The CardDAV & CalDAV account (template com.webosphoenix.dav) syncs
+    // contacts and calendars with a real server. Nothing here reimplements it:
+    // this block runs the device's own service code, apps/dav/service
+    // (davservice.js and lib/, CommonJS modules without dependencies), in the
+    // page, loaded from /usr/palm/applications/org.webosphoenix.dav/service/,
+    // and gives it what run-js-service gives it on a device:
+    //
+    //   luna    calls on the simulated bus (db8, tempdb, accounts, activities)
+    //   request HTTP for the DAV client. A page served over HTTP
+    //           (tools/serve-rootfs.py, the tests) sends each request through
+    //           the server's proxy, POST /__phoenix/proxy {method, url,
+    //           headers, body} -> {status, headers, body}, since DAV servers
+    //           do not allow cross-origin requests. Elsewhere (phoenix-sim's
+    //           phoenix:// pages) it uses fetch directly, which only works
+    //           with servers that send CORS headers (docs/SYNERGY.md).
+    //
+    // It also adds to the blocks above what a Synergy transport needs from
+    // the system, only for accounts of templates listed in DAV_TEMPLATES:
+    //   - com.palm.service.accounts lists the template (read from
+    //     /usr/palm/public/accounts/com.webosphoenix.dav/), creates, modifies
+    //     and deletes its accounts, and calls the capability callbacks as
+    //     app-services' handlers do: onCreate then onEnabled(true) after
+    //     createAccount (notify-created.js), onEnabled(true/false) when
+    //     capabilities are switched (modify.js), onCredentialsChanged
+    //     (credentials.js), onEnabled(false) then onDelete before the account
+    //     and its data go (notify-deleted.js);
+    //   - "Sync now" (Contacts and Calendar) is an activity with no schedule,
+    //     which the activity manager above runs at once. Interval schedules
+    //     (the periodic sync) are not run: there is no background process in
+    //     the simulator;
+    //   - db8 learns the transport's kinds (com.palm.contact.dav:1 extends
+    //     com.palm.contact:1, ...).
+    //
+    // One sync at a time per account across all pages (a lock in the shared
+    // store). __phoenixRuntime.dav: sync(accountId) -> Promise, service() (the
+    // service's methods), templates().
+    (function davTransport() {
+        var SERVICE = "org.webosphoenix.service.dav";
+        var SERVICE_DIR = "/usr/palm/applications/org.webosphoenix.dav/service/";
+        var DAV_TEMPLATES = ["/usr/palm/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json"];
+        var ACCOUNT_KIND = "com.palm.account:1";
+        var LOCK_MS = 5 * 60 * 1000;
+
+        // ---- The service's modules -------------------------------------------------
+
+        var modules = {};
+        function normPath(p) {
+            var out = [];
+            p.split("/").forEach(function (s) {
+                if (s === "..") out.pop();
+                else if (s && s !== ".") out.push(s);
+            });
+            return out.join("/");
+        }
+        function loadModule(rel) {
+            rel = normPath(rel);
+            if (modules[rel]) return modules[rel].exports;
+            var text = PalmSystem.getResource(SERVICE_DIR + rel);
+            if (!text) throw new Error("DAV service module not found: " + SERVICE_DIR + rel);
+            var module = { exports: {} };
+            modules[rel] = module;
+            var dir = rel.indexOf("/") >= 0 ? rel.slice(0, rel.lastIndexOf("/") + 1) : "";
+            function req(name) {
+                if (name.charAt(0) !== ".") throw new Error("DAV service: no module " + name + " in the simulator");
+                return loadModule(dir + name + (/\.js$/.test(name) ? "" : ".js"));
+            }
+            new Function("module", "exports", "require", text + "\n//# sourceURL=" + SERVICE_DIR + rel)(module, module.exports, req);
+            return module.exports;
+        }
+
+        // ---- What run-js-service would give it --------------------------------------
+
+        var luna = {
+            call: function (uri, params) {
+                return new Promise(function (resolve) {
+                    var done = false;
+                    dispatch(uri, clone(params || {}), function (r) {
+                        if (done) return;
+                        done = true;
+                        setTimeout(function () { resolve(r); }, 0);
+                    }, { cancelled: function () { return done; }, onCancel: null });
+                });
+            }
+        };
+
+        function readHeaders(res) {
+            var h = {};
+            res.headers.forEach(function (v, k) { h[k.toLowerCase()] = v; });
+            return h;
+        }
+
+        function request(req) {
+            if (/^https?:$/.test(global.location.protocol)) {
+                return fetch("/__phoenix/proxy", {
+                    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req)
+                }).then(function (res) { return res.json(); }).then(function (r) {
+                    if (r.error) {
+                        var e = new Error(r.error);
+                        e.code = r.code;
+                        throw e;
+                    }
+                    return r;
+                });
+            }
+            return fetch(req.url, { method: req.method, headers: req.headers, body: req.body, credentials: "omit" })
+                .then(function (res) {
+                    return res.text().then(function (body) { return { status: res.status, headers: readHeaders(res), body: body }; });
+                }, function (e) {
+                    var err = new Error("Could not reach " + req.url + " (no answer, or cross-origin requests refused): " + e.message);
+                    err.code = "ECONNREFUSED";
+                    throw err;
+                });
+        }
+
+        var methods = null;
+        function service() {
+            if (!methods) {
+                var davservice = loadModule("davservice.js");
+                methods = davservice.createDavService({
+                    luna: luna,
+                    request: request,
+                    log: function (m) { console.info("[dav] " + m); }
+                });
+            }
+            return methods;
+        }
+
+        // ---- The service on the simulated bus ---------------------------------------------
+
+        function lockKey(accountId) { return "dav:syncLock:" + accountId; }
+
+        var serviceMethods = {};
+        ["checkCredentials", "onCreate", "onEnabled", "onCredentialsChanged", "onDelete", "accountSettings"].forEach(function (name) {
+            serviceMethods["/" + name] = function (p, reply) {
+                var m;
+                try { m = service(); } catch (e) { return reply(fail(-1, String(e.message || e))); }
+                m[name](p).then(reply, function (e) { reply(fail("UNKNOWN_ERROR", String(e && e.message || e))); });
+            };
+        });
+        serviceMethods["/sync"] = function (p, reply) {
+            var key = lockKey(p.accountId);
+            var held = store.get(key, 0);
+            if (held && Date.now() - held < LOCK_MS) return reply(ok({ alreadyRunning: true }));
+            store.set(key, Date.now());
+            var m;
+            try { m = service(); } catch (e) { store.set(key, 0); return reply(fail(-1, String(e.message || e))); }
+            m.sync(p).then(function (r) {
+                store.set(key, 0);
+                reply(r);
+            }, function (e) {
+                store.set(key, 0);
+                reply(fail("UNKNOWN_ERROR", String(e && e.message || e)));
+            });
+        };
+        register([SERVICE], serviceMethods);
+
+        // ---- db8 kinds ----------------------------------------------------------------------
+
+        (function installKinds() {
+            var VERSION = 1;
+            if (store.get("davKinds", 0) >= VERSION) return;
+            [["com.palm.contact.dav:1", ["com.palm.contact:1"]],
+             ["com.palm.calendar.dav:1", ["com.palm.calendar:1"]],
+             ["com.palm.calendarevent.dav:1", ["com.palm.calendarevent:1"]],
+             ["org.webosphoenix.dav.account:1", []],
+             ["org.webosphoenix.dav.collection:1", []],
+             ["org.webosphoenix.dav.item:1", []]].forEach(function (k) {
+                callNow("palm://com.palm.db/putKind", { id: k[0], owner: SERVICE, extends: k[1] });
+            });
+            callNow("palm://com.palm.tempdb/putKind", { id: "com.palm.account.syncstate:1", owner: "com.palm.service.accounts" });
+            store.set("davKinds", VERSION);
+        })();
+
+        // ---- Accounts: the template, its accounts and their callbacks ------------------------
+
+        var templateCache = null;
+        function templates() {
+            if (templateCache) return clone(templateCache);
+            var list = [];
+            DAV_TEMPLATES.forEach(function (file) {
+                var text = PalmSystem.getResource(file), t;
+                if (!text) return;
+                try { t = JSON.parse(text); } catch (e) { console.warn("[phoenix-runtime] bad account template " + file); return; }
+                var dir = file.slice(0, file.lastIndexOf("/") + 1);
+                var abs = function (icons) {
+                    Object.keys(icons || {}).forEach(function (k) { if (icons[k].charAt(0) !== "/") icons[k] = dir + icons[k]; });
+                };
+                (Array.isArray(t) ? t : [t]).forEach(function (x) {
+                    abs(x.icon);
+                    (x.capabilityProviders || []).forEach(function (cp) { abs(cp.icon); });
+                    list.push(x);
+                });
+            });
+            templateCache = list;
+            return clone(list);
+        }
+        function templateFor(id) { return templates().filter(function (t) { return t.templateId === id; })[0]; }
+        function isDav(templateId) { return !!templateFor(templateId); }
+
+        // Account.annotate (app-services models/account-model.js), as the block above.
+        function annotate(account) {
+            var template = templateFor(account.templateId);
+            if (!template) return null;
+            var result = template, subset = account.capabilityProviders || [];
+            for (var k in account) result[k] = account[k];
+            result.capabilityProviders = subset.map(function (c) {
+                var t = (template.capabilityProviders || []).filter(function (tc) { return tc.id === c.id; })[0] || {};
+                var out = {};
+                for (var k2 in c) out[k2] = c[k2];
+                for (k2 in t) out[k2] = t[k2];
+                return out;
+            });
+            return result;
+        }
+
+        function getAccount(id) { return (callNow("palm://com.palm.db/get", { ids: [id] }).results || [])[0]; }
+
+        function providersFor(template, requested) {
+            var seen = {};
+            return (requested || []).map(function (r) {
+                var t = (template.capabilityProviders || []).filter(function (c) { return c.id === r.id; })[0];
+                if (!t || seen[t.id]) return null;
+                seen[t.id] = true;
+                return { id: t.id, capability: t.capability };
+            }).filter(Boolean);
+        }
+
+        // Calls one callback per provider, one after another; failures are logged.
+        function notify(calls) {
+            return calls.reduce(function (p, c) {
+                return p.then(function () {
+                    return luna.call(c.address, c.params).then(function (r) {
+                        if (!r || r.returnValue === false) console.warn("[phoenix-runtime] " + c.address + " failed: " + JSON.stringify(r));
+                    });
+                });
+            }, Promise.resolve());
+        }
+
+        function callbacks(template, providerIds, prop, params) {
+            return (template.capabilityProviders || []).filter(function (cp) {
+                return providerIds.indexOf(cp.id) >= 0 && cp[prop];
+            }).map(function (cp) {
+                var p = clone(params);
+                if (prop === "onEnabled") p.capabilityProviderId = cp.id;
+                return { address: cp[prop], params: p };
+            });
+        }
+
+        // One call per distinct address (the providers share one service).
+        function unique(calls) {
+            var seen = {};
+            return calls.filter(function (c) {
+                if (seen[c.address]) return false;
+                seen[c.address] = true;
+                return true;
+            });
+        }
+
+        var accounts = runtime.services["com.palm.service.accounts"];
+        var original = {};
+        ["listAccountTemplates", "listAccounts", "listAccountsPublic", "getAccountInfo", "createAccount",
+         "modifyAccount", "deleteAccount"].forEach(function (m) { original[m] = accounts["/" + m]; });
+
+        accounts["/listAccountTemplates"] = function (p, reply, ctx) {
+            original.listAccountTemplates(p, function (r) {
+                if (!r.returnValue) return reply(r);
+                var caps = p.capability === undefined ? null : [].concat(p.capability);
+                var extra = templates().filter(function (t) {
+                    return !caps || (t.capabilityProviders || []).some(function (c) { return caps.indexOf(c.capability) >= 0; });
+                });
+                var all = (r.results || []).concat(extra);
+                all.sort(function (a, b) {
+                    return (a.loc_name || "").toLocaleUpperCase().localeCompare((b.loc_name || "").toLocaleUpperCase());
+                });
+                reply(ok({ results: all }));
+            }, ctx);
+        };
+
+        function listWithDav(name) {
+            return function (p, reply, ctx) {
+                original[name](p, function (r) {
+                    if (!r.returnValue) return reply(r);
+                    var where = [{ prop: "beingDeleted", op: "=", val: false }];
+                    if (p.templateId) where.push({ prop: "templateId", op: "=", val: p.templateId });
+                    else if (p.capability) where.push({ prop: "capabilityProviders.capability", op: "=", val: p.capability });
+                    var mine = (callNow("palm://com.palm.db/find", { query: { from: ACCOUNT_KIND, where: where } }).results || [])
+                        .filter(function (a) { return isDav(a.templateId); }).map(annotate).filter(Boolean);
+                    reply(ok({ results: (r.results || []).concat(mine) }));
+                }, ctx);
+            };
+        }
+        accounts["/listAccounts"] = listWithDav("listAccounts");
+        accounts["/listAccountsPublic"] = listWithDav("listAccountsPublic");
+
+        accounts["/getAccountInfo"] = function (p, reply, ctx) {
+            var a = getAccount(p.accountId);
+            if (a && isDav(a.templateId)) return reply(ok({ result: annotate(a) }));
+            original.getAccountInfo(p, reply, ctx);
+        };
+
+        // handlers/create.js and notify-created.js.
+        accounts["/createAccount"] = function (p, reply, ctx) {
+            var template = templateFor(p.templateId);
+            if (!template) return original.createAccount(p, reply, ctx);
+            if (!p.username) return reply(fail(-1, "missing username"));
+            var dup = callNow("palm://com.palm.db/find", { query: { from: ACCOUNT_KIND, where: [
+                { prop: "beingDeleted", op: "=", val: false }, { prop: "templateId", op: "=", val: p.templateId },
+                { prop: "username", op: "=", val: p.username }] } });
+            if ((dup.results || []).length)
+                return reply({ returnValue: false, errorCode: "DUPLICATE_ACCOUNT", errorText: "Unable to create a duplicate account" });
+            var account = { _kind: ACCOUNT_KIND, templateId: p.templateId, username: p.username, alias: p.alias,
+                            beingDeleted: false, capabilityProviders: providersFor(template, p.capabilityProviders) };
+            var put = callNow("palm://com.palm.db/put", { objects: [account] });
+            account._id = put.results[0].id;
+            account._rev = put.results[0].rev;
+            var creds = p.credentials || (p.password ? { common: { password: p.password } } : null);
+            if (creds) callNow("palm://com.palm.service.accounts/writeCredentials", { accountId: account._id, credentials: creds });
+            reply(ok({ result: account }));
+            var ids = account.capabilityProviders.map(function (c) { return c.id; });
+            setTimeout(function () {
+                notify(unique(callbacks(template, ids, "onCreate", { accountId: account._id, config: p.config })))
+                    .then(function () { return notify(callbacks(template, ids, "onEnabled", { accountId: account._id, enabled: true })); });
+            }, 500);
+        };
+
+        // handlers/modify.js: capabilities switched on and off, new credentials.
+        accounts["/modifyAccount"] = function (p, reply, ctx) {
+            var account = getAccount(p.accountId);
+            if (!account || !isDav(account.templateId)) return original.modifyAccount(p, reply, ctx);
+            var template = templateFor(account.templateId);
+            var changes = p.object || {};
+            var before = (account.capabilityProviders || []).map(function (c) { return c.id; });
+            var merge = { _id: account._id };
+            if (changes.username !== undefined) merge.username = changes.username;
+            if (changes.alias !== undefined) merge.alias = changes.alias;
+            if (changes.capabilityProviders) merge.capabilityProviders = providersFor(template, changes.capabilityProviders);
+            callNow("palm://com.palm.db/merge", { objects: [merge] });
+            if (changes.credentials)
+                callNow("palm://com.palm.service.accounts/writeCredentials", { accountId: account._id, credentials: changes.credentials });
+            reply(ok({}));
+            var calls = [];
+            if (merge.capabilityProviders) {
+                var after = merge.capabilityProviders.map(function (c) { return c.id; });
+                calls = calls.concat(callbacks(template, after.filter(function (id) { return before.indexOf(id) < 0; }),
+                                               "onEnabled", { accountId: account._id, enabled: true }));
+                calls = calls.concat(callbacks(template, before.filter(function (id) { return after.indexOf(id) < 0; }),
+                                               "onEnabled", { accountId: account._id, enabled: false }));
+            }
+            if (changes.credentials) {
+                var now = (getAccount(account._id).capabilityProviders || []).map(function (c) { return c.id; });
+                calls = calls.concat(unique(callbacks(template, now, "onCredentialsChanged", { accountId: account._id })));
+            }
+            notify(calls);
+        };
+
+        // handlers/delete.js and notify-deleted.js.
+        accounts["/deleteAccount"] = function (p, reply, ctx) {
+            var account = getAccount(p.accountId);
+            if (!account || account.beingDeleted || !isDav(account.templateId)) return original.deleteAccount(p, reply, ctx);
+            var template = templateFor(account.templateId);
+            var ids = (account.capabilityProviders || []).map(function (c) { return c.id; });
+            var all = (template.capabilityProviders || []).map(function (c) { return c.id; });
+            notify(callbacks(template, ids, "onEnabled", { accountId: account._id, enabled: false }))
+                .then(function () { return notify(unique(callbacks(template, all, "onDelete", { accountId: account._id }))); })
+                .then(function () { original.deleteAccount(p, reply, ctx); });
+        };
+
+        runtime.dav = {
+            service: service,
+            templates: templates,
+            sync: function (accountId) { return luna.call("palm://" + SERVICE + "/sync", { accountId: accountId }); }
+        };
     })();
 })(this);

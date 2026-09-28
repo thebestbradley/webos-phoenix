@@ -28,6 +28,13 @@ jobs:
           cache: npm
           cache-dependency-path: apps/package-lock.json
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Radicale (CardDAV / CalDAV server for the DAV sync tests)
+        run: python3 -m pip install radicale
+
       - name: Web apps (React + TypeScript) - typecheck, unit tests, build
         working-directory: apps
         run: |
@@ -35,8 +42,9 @@ jobs:
           npm run typecheck
           npm test
           npm run build
-          # The apps' device services (Node.js, not bundled): syntax only.
-          for f in files/service/*.js voicememos/service/*.js; do node --check "$f"; done
+          # The device services (Node.js, not bundled): syntax only. The DAV
+          # service's own tests ran above (vitest, against Radicale).
+          for f in files/service/*.js voicememos/service/*.js dav/service/*.js dav/service/lib/*.js; do node --check "$f"; done
 
       - name: Build simulator
         run: |
@@ -73,6 +81,8 @@ jobs:
           node tools/test-tasks.cjs --tablet --out app-tests/tasks-tablet
           node tools/test-voicememos.cjs --out app-tests/voicememos-phone
           node tools/test-voicememos.cjs --tablet --out app-tests/voicememos-tablet
+          node tools/test-dav-sync.cjs --out app-tests/dav-phone
+          node tools/test-dav-sync.cjs --tablet --out app-tests/dav-tablet
 
       - name: Screenshots
         run: |

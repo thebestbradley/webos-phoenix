@@ -1,0 +1,8 @@
+{
+  "name": "org.webosphoenix.service.dav",
+  "version": "0.1.0",
+  "private": true,
+  "description": "webOS Phoenix CardDAV and CalDAV Synergy transport (Luna): account validation, capability callbacks and two-way sync of contacts and calendars",
+  "license": "Apache-2.0",
+  "main": "service.js"
+}

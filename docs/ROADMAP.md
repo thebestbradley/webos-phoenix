@@ -109,6 +109,20 @@ apps, with priorities and a build order, is in [APP-GAPS.md](APP-GAPS.md).
       conversations, threaded chat, compose with a contact picker, SMS, IM transports
       as stubs. Coded against the legacy `com.palm.telephony` and LuneOS messaging
       APIs and db8 kinds, simulated in the runtime (F4 / F5 ring and text in phoenix-sim)
+- [x] Synergy, phase 1 (`apps/dav`, [SYNERGY.md](SYNERGY.md)): a CardDAV &
+      CalDAV account for the original Accounts, Contacts and Calendar apps:
+      sign-in with discovery, two-way sync of contacts and events (sync-collection
+      or ctag / etag, If-Match, server wins conflicts), recurring events with
+      edited occurrences, persons linked like the contacts linker does; a Node.js
+      Luna service for the device, run by the simulator's runtime, tested against
+      Radicale
+- [ ] Synergy on a device: `com.palm.service.accounts` and the contacts
+      linker on OSE (off `mojoservice`), a key store for credentials, the
+      activity manager for periodic sync; then run `org.webosphoenix.service.dav`
+- [ ] Synergy, next transports ([SYNERGY.md](SYNERGY.md) section 2): provider
+      templates for iCloud / Fastmail / Nextcloud, an OAuth 2.0 helper (PKCE,
+      loopback), Google People and Calendar, Microsoft Graph, XOAUTH2 in
+      mojomail, Tasks over CalDAV VTODO, JMAP, Matrix for IM
 - [ ] Phone and Messaging on a device: a telephony service for OSE (port LuneOS's
       `webos-telephonyd` on oFono, plus call state), MMS, IM transports, active-call
       banner in the shell

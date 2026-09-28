@@ -1,0 +1,66 @@
+{
+    "templateId": "com.webosphoenix.dav",
+    "loc_name": "CardDAV & CalDAV",
+    "icon": {
+        "loc_32x32": "images/dav-32x32.png",
+        "loc_48x48": "images/dav-48x48.png"
+    },
+    "loc_usernameLabel": "USER NAME",
+    "loc_passwordLabel": "APP PASSWORD",
+    "validator": {
+        "customUI": {
+            "appId": "org.webosphoenix.dav",
+            "name": "accounts/wizard.html"
+        },
+        "address": "palm://org.webosphoenix.service.dav/checkCredentials"
+    },
+    "readPermissions": [
+        "org.webosphoenix.service.dav",
+        "org.webosphoenix.dav"
+    ],
+    "writePermissions": [
+        "org.webosphoenix.dav",
+        "com.palm.app.contacts",
+        "com.palm.app.calendar"
+    ],
+    "capabilityProviders": [
+        {
+            "capability": "CONTACTS",
+            "id": "com.webosphoenix.dav.contacts",
+            "loc_name": "Contacts",
+            "icon": {
+                "loc_32x32": "images/dav-32x32.png",
+                "loc_48x48": "images/dav-48x48.png"
+            },
+            "dbkinds": {
+                "contact": "com.palm.contact.dav:1"
+            },
+            "implementation": "palm://org.webosphoenix.service.dav/",
+            "onCreate": "palm://org.webosphoenix.service.dav/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.dav/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.dav/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.dav/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.dav/sync"
+        },
+        {
+            "capability": "CALENDAR",
+            "id": "com.webosphoenix.dav.calendar",
+            "loc_name": "Calendar",
+            "icon": {
+                "loc_32x32": "images/dav-32x32.png",
+                "loc_48x48": "images/dav-48x48.png"
+            },
+            "dbkinds": {
+                "calendar": "com.palm.calendar.dav:1",
+                "calendarevent": "com.palm.calendarevent.dav:1"
+            },
+            "subKind": "com.palm.calendarevent.dav:1",
+            "implementation": "palm://org.webosphoenix.service.dav/",
+            "onCreate": "palm://org.webosphoenix.service.dav/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.dav/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.dav/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.dav/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.dav/sync"
+        }
+    ]
+}

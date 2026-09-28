@@ -11,15 +11,23 @@ and the simulated service bus.
     open http://127.0.0.1:8765/
 
 / lists the installed apps; /apps.json returns them as JSON.
+
+POST /__phoenix/proxy forwards one HTTP request for the simulated services
+that talk to servers (the CardDAV and CalDAV account): the page sends
+{method, url, headers, body} and gets {status, headers, body} back, without
+redirects followed. Browsers would refuse these cross-origin requests.
 """
 
 import argparse
 import html
+import http.client
 import http.server
 import json
 import mimetypes
 import os
 import re
+import socket
+import ssl
 import sys
 import urllib.parse
 
@@ -169,6 +177,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             ctype = "text/html; charset=utf-8"
         self.send(200, ctype, data)
 
+    def do_POST(self):
+        if self.path.split("?", 1)[0] != "/__phoenix/proxy":
+            return self.send(404, "text/plain", b"not found")
+        try:
+            req = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            reply = proxy(req)
+        except ValueError as e:
+            reply = {"error": "bad proxy request: %s" % e, "code": "BAD_REQUEST"}
+        self.send(200, "application/json", json.dumps(reply).encode())
+
     def send(self, code, ctype, body):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
@@ -180,6 +198,38 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         if self.server.verbose:
             sys.stderr.write("%s\n" % (fmt % args))
+
+
+def proxy(req):
+    """One HTTP request for the page: {method, url, headers, body} ->
+    {status, headers (lower-case names), body} or {error, code}."""
+    url = urllib.parse.urlsplit(req.get("url", ""))
+    if url.scheme not in ("http", "https") or not url.hostname:
+        return {"error": "unsupported URL: %s" % req.get("url"), "code": "BAD_SERVER"}
+    cls = http.client.HTTPSConnection if url.scheme == "https" else http.client.HTTPConnection
+    target = url.path or "/"
+    if url.query:
+        target += "?" + url.query
+    body = req.get("body")
+    try:
+        conn = cls(url.hostname, url.port, timeout=60)
+        conn.request(req.get("method", "GET"), target, body=body.encode("utf-8") if body is not None else None,
+                     headers=req.get("headers") or {})
+        res = conn.getresponse()
+        data = res.read().decode("utf-8", "replace")
+        headers = {k.lower(): v for k, v in res.getheaders()}
+        conn.close()
+        return {"status": res.status, "headers": headers, "body": data}
+    except (socket.gaierror,) as e:
+        return {"error": str(e), "code": "ENOTFOUND"}
+    except ConnectionRefusedError as e:
+        return {"error": str(e), "code": "ECONNREFUSED"}
+    except (socket.timeout, TimeoutError) as e:
+        return {"error": str(e), "code": "ETIMEDOUT"}
+    except ssl.SSLCertVerificationError as e:
+        return {"error": str(e), "code": "UNABLE_TO_VERIFY_LEAF_SIGNATURE"}
+    except (OSError, http.client.HTTPException) as e:
+        return {"error": str(e), "code": "ECONNRESET"}
 
 
 def inject_runtime(data):

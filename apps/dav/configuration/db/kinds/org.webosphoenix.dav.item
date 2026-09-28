@@ -1,0 +1,23 @@
+{
+    "id": "org.webosphoenix.dav.item:1",
+    "owner": "org.webosphoenix.service.dav",
+    "sync": false,
+    "indexes": [
+        {
+            "name": "accountId",
+            "props": [
+                {
+                    "name": "accountId"
+                }
+            ]
+        },
+        {
+            "name": "collectionId",
+            "props": [
+                {
+                    "name": "collectionId"
+                }
+            ]
+        }
+    ]
+}
