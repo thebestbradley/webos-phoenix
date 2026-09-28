@@ -258,7 +258,11 @@ Item {
                     cardFocusRequested(running);
                 return;
             }
-            var launched = launch(target, uid, target === payload.id ? params : null);
+            // Launched by the app in front: the new card joins its stack,
+            // e.g. the browser opened from a link in Email
+            // (CardWindowManager::prepareAddWindow, :561-567).
+            var joins = uid !== "" && uid === focusedUid && !background;
+            var launched = launch(target, uid, target === payload.id ? params : null, joins);
             if (launched !== "" && !background)
                 cardFocusRequested(launched);
         } else if (type === "banner") {
@@ -301,6 +305,10 @@ Item {
     // (DashboardWindowManager).
 
     property ListModel alerts: ListModel {}
+
+    // The card the user is in (maximized and focused), set by the shell;
+    // apps it launches stack on it.
+    property string focusedUid: ""
     signal bannerRequested(string appId, string text, url icon, string params)
 
     // A file URL for an icon an app names by device path.
@@ -617,7 +625,9 @@ Item {
     // Launch or re-focus an app. A new app starts its own stack to the right
     // of the stack holding `afterUid` (CardWindowManager.cpp:556-599).
     // params: launch params for a web app (optional; launch points carry their own).
-    function launch(appId, afterUid, params) {
+    // joinUid's stack: the new card goes to its front instead of a stack
+    // of its own.
+    function launch(appId, afterUid, params, joinStack) {
         var existing = runningUid(appId);
         if (existing !== "") {
             // Running already: new params go to the page (webOSRelaunch).
@@ -636,7 +646,8 @@ Item {
             return "";
         }
         var at = afterUid ? _afterGroupOf(afterUid) : cards.count;
-        return _createWindow(appId, info.title, at, newGroupId(), null, url);
+        var join = joinStack && afterUid ? cardIndex(afterUid) : -1;
+        return _createWindow(appId, info.title, at, join >= 0 ? cards.get(join).groupId : newGroupId(), null, url);
     }
 
     // A second window from the same app (e.g. an email compose card). It

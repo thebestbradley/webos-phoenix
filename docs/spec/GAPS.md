@@ -20,7 +20,7 @@ Nearly all the art is already in `shell/assets/openwebos/`.
 | C5 | Flick = average velocity 2.5–11 px/ms (`FlickGestureRecognizer.cpp:44-46,100-113`); fan momentum `pos += -vx/1000` (`CardGroup.cpp:617-626`); 3 fan positions per unscaled card width (`:594-602`) | Last-segment velocity > 0.5; no fan momentum; fan ~1.7× too fast | P2 · S |
 | C6 | First touch only, vertical drag only on the active stack, within the card's column (`:1443-1458,1500-1516`) | Any card, up to 5 fingers (a Phoenix addition, kept by request) | P2 · S |
 | C7 | Stacks of >4: tap far from the fan scrolls instead of maximizing; tap in the column on no card does nothing (`CardGroup.cpp:401-470`) | Always maximizes | P2 · S |
-| C8 | New window joins the focused stack when its `launchingAppId` is the focused app (browser from Email stacks on Email) (`:561-567`) | Only same-app windows stack | P1 · S |
+| C8 | New window joins the focused stack when its `launchingAppId` is the focused app (browser from Email stacks on Email) (`:561-567`) | **Done** in the simulator: an app launched by the card in front (maximized and focused) joins its stack at the front; the device source does not know the launching app yet | P1 · S |
 | C9 | Corners: elliptical factors (0.491 h, 0.478/0.473 v), smoothstep feather (`CardRoundedCornerShaderStage.h:64-127`) | 40 px circular mask that snaps square at the end of maximize | P2 · S |
 | C10 | Stack collapse driven by x offset (`CardGroup.cpp:727-736`) | Lerp on distance from position | P2 · S |
 | C11 | Scene transitions, modal cards, first-use tutorial, card limit / low-memory alert, Touch-to-Share ghost | None | P2 · S–M |

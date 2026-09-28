@@ -40,6 +40,14 @@ FocusScope {
     focus: true
 
     Binding { target: Theme; property: "tablet"; value: shell.tablet }
+    // Tell the window source which card is in front (apps it launches join
+    // its stack).
+    Binding {
+        target: shell.source
+        property: "focusedUid"
+        when: shell.source !== null && shell.source !== undefined && shell.source.focusedUid !== undefined
+        value: cards.maximized ? cards.currentUid : ""
+    }
     Binding { target: Theme; property: "u"; value: shell.effectiveDensity }
 
     // ---- Navigation -----------------------------------------------------------

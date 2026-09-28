@@ -70,6 +70,25 @@ Item {
             compare(uidsOf(2), w);
         }
 
+        // CardWindowManager.cpp:561-567: an app the card in front launches
+        // joins that card's stack; from anywhere else it gets a stack of its own.
+        function test_launchedByTheFrontCardJoinsItsStack() {
+            var s = makeStacks();
+            cv.maximize(s.c2);
+            tryVerify(function() { return cv.maximized; }, 2000);
+            compare(windows.focusedUid, s.c2);
+            windows._hostMessage("org.webosphoenix.messaging", s.c2, "launch", { id: "org.webosphoenix.browser" });
+            compare(cv.groupCount, 3);
+            var uids = uidsOf(1).split(",");
+            compare(uids.length, 4);
+            compare(windows.cards.get(windows.cardIndex(uids[3])).appId, "org.webosphoenix.browser");
+            // Not in front: a stack of its own.
+            cv.jumpTo(0);
+            compare(windows.focusedUid, "");
+            windows._hostMessage("org.webosphoenix.messaging", s.c1, "launch", { id: "org.webosphoenix.memos" });
+            compare(cv.groupCount, 4);
+        }
+
         function test_childIsFocusedAndMaximized() {
             var e = windows.launch("org.webosphoenix.email", "");
             var c = windows.openChild(e);
