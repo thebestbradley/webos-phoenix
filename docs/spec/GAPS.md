@@ -113,7 +113,7 @@ tablet drop-down: **done** (7090c64).
 | G3 | Swipe down in card view maximizes the active card (`SystemUiController.cpp:498-525`) | **Done**: a swipe down in the gesture area, unless the dashboard, a menu, the launcher or Just Type is open | P1 · S |
 | G4 | Forward / Menu swipe | Emitted, not connected | P2 · S |
 | G5 | Advanced gestures (switch apps while maximized) | None | P2 · M |
-| G6 | Back order: dashboard → menu → launcher | Menu before dashboard | P2 · S |
+| G6 | Back order: dashboard → menu → launcher | **Done**: dashboard, status bar menu, Just Type (its page's own back), launcher (hiding it ends edit mode), then the app (`SystemUiController.cpp:424-443`) | — |
 | G7 | Home: close alert, hide Just Type, double press → launcher; Home + Power screenshot | Home = up gesture | P2 · S |
 | G8 | Light bar animations, meta key, tap reticle | Generic glow | P2 · S |
 

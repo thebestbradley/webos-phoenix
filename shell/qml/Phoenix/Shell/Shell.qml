@@ -101,17 +101,20 @@ FocusScope {
             cards.maximize();
     }
 
+    // SystemUiController::handleEvent, Key_CoreNavi_Back (:424-443): the
+    // dashboard, then the status bar menu, then the launcher (whose hiding
+    // ends its edit mode, LauncherObject::slotSystemHidingLauncher), unless
+    // Just Type is up: the key goes to its page, which closes it. Otherwise
+    // the focused app gets it.
     function gestureBack() {
         if (locked)
             return;
-        if (systemMenu.open)
-            systemMenu.open = false;
-        else if (notes.dashboardOpen)
+        if (notes.dashboardOpen)
             notes.dashboardOpen = false;
+        else if (systemMenu.open)
+            systemMenu.open = false;
         else if (justType.open)
             justType.open = false;
-        else if (launcher.editMode)
-            launcher.editMode = false;
         else if (launcher.open)
             launcher.open = false;
         else if (cards.maximized)

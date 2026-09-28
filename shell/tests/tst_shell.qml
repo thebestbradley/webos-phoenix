@@ -551,6 +551,27 @@ Item {
             tryVerify(function() { return !plane.visible; }, 2500);
         }
 
+        // Back: the dashboard, then the menu, then the launcher
+        // (SystemUiController.cpp:424-443).
+        function test_backOrder() {
+            windows.notify("org.webosphoenix.messaging", "Palm Pre", "Hi");
+            shell.notifications.bannerActive = false;
+            shell.gestureUp();
+            verify(shell.launcherOpen);
+            shell.notifications.dashboardOpen = true;
+            var menu = findChild(shell, "systemMenu");
+            menu.open = true;
+            shell.gestureBack();
+            verify(!shell.notifications.dashboardOpen);
+            verify(menu.open);
+            verify(shell.launcherOpen);
+            shell.gestureBack();
+            verify(!menu.open);
+            verify(shell.launcherOpen);
+            shell.gestureBack();
+            verify(!shell.launcherOpen);
+        }
+
         // SystemUiController::updateStatusBarTitle / StatusBarTitle.
         function test_statusBarTitle() {
             var bar = findChild(shell, "statusBar");

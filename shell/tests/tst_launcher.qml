@@ -165,10 +165,11 @@ Item {
             holdAndDrag(iconPoint(0), iconPoint(2));
             verify(launcher.editMode, "press and hold enters edit mode");
             compare(shell.launcherLayout.pages[0].indexOf(first), 2);
-            // Done leaves edit mode (the back gesture too).
+            // Back hides the launcher, which ends edit mode
+            // (SystemUiController :438-441, slotSystemHidingLauncher).
             shell.gestureBack();
             verify(!launcher.editMode);
-            verify(shell.launcherOpen);
+            verify(!shell.launcherOpen);
         }
 
         function test_dragOntoATabMovesToThatPage() {
