@@ -90,6 +90,15 @@ Calculator, Settings panes, and an app catalog.
       Sounds & Ringtones, Date & Time, Language & Region, Device Info, Updates (stub),
       one launcher icon per pane; coded against OSE's services, simulated in
       `runtime/phoenix-runtime.js`, and in step with the status bar and system menu
+- [x] Camera, Photos and Music (`apps/camera`, `apps/photos`, `apps/music`):
+      viewfinder with photo/video capture, albums and a swipe viewer with share,
+      delete and set as wallpaper, library and now playing; coded against OSE's
+      media indexer, camera and audio services, simulated in the runtime, with
+      generated demo photos and songs (`apps/media-samples`)
+- [ ] Media on a device: configure the media indexer for `/media/internal`
+      (`STORAGE_DEVS`), a Phoenix service to write and delete media files, and
+      check capture through OSE's camera pipeline (`camera2` + uMediaServer
+      `takeCameraSnapshot`) against the page's getUserMedia
 - [ ] Settings on a device: check each OSE call on real hardware; a Phoenix
       service for the device passcode (OSE has no `setDevicePasscode`),
       brightness and screen timeout

@@ -1,7 +1,7 @@
 # Web app runtime
 
 Phoenix runs web apps: the original Open webOS apps (Enyo 1.0, 2011–2012)
-and new Phoenix apps (Settings, Phone, ...). This page explains how they run
+and new Phoenix apps (Settings, Camera, Photos, Music, ...). This page explains how they run
 in the simulator, in a desktop browser, and on a device.
 
 ## Where the apps come from
@@ -65,7 +65,8 @@ console message with the `__phoenix__` prefix.
 
 The Settings app's services (Wi-Fi, Bluetooth, settings service, audio, ...)
 are simulated in their own clearly marked block at the end of the runtime;
-see [Settings](#settings) below.
+see [Settings](#settings) below. The media services (media indexer, camera,
+media files) follow in another; see [Camera, Photos and Music](#camera-photos-and-music).
 
 ## Running apps
 
@@ -117,6 +118,8 @@ Open webOS release.
 Phoenix Settings (`org.webosphoenix.settings` and its launch points) starts
 cleanly on phone and tablet; `node tools/test-settings.cjs [--tablet]` also
 drives it (Wi-Fi, password, PIN, brightness, airplane mode, Bluetooth).
+Camera, Photos and Music start cleanly too, and `node tools/test-media.cjs
+[--tablet]` drives them.
 
 ## Phoenix apps (React + TypeScript)
 
@@ -125,8 +128,10 @@ New Phoenix apps live in `apps/`, an npm workspace:
 | Path | What |
 | --- | --- |
 | `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
-| `apps/shared/phoenix-ui` (`@phoenix/ui`) | React components with the webOS 1.x/2.x look, drawn with the Enyo 1.0 "Heritage" artwork (copied into `assets/enyo`, see its `PROVENANCE.md`): `PageHeader`, `Group`, `Row`, `Divider`, `ToggleButton`, `Slider`, `ListSelector`, `Picker`, `PopupMenu`, `Button`, `Drawer`, `DividerDrawer`, `Dialog`, `Spinner`, `TextField` |
+| `apps/shared/phoenix-ui` (`@phoenix/ui`) | React components with the webOS 1.x/2.x look, drawn with the Enyo 1.0 "Heritage" artwork (copied into `assets/enyo`, see its `PROVENANCE.md`): `PageHeader`, `Group`, `Row`, `Divider`, `ToggleButton`, `Slider` (also as a progress/seek bar), `ListSelector`, `Picker`, `PopupMenu`, `Button`, `Drawer`, `DividerDrawer`, `Dialog`, `Spinner`, `TextField`, and for the media apps `Toolbar` (command menu), `ToolButton`, `GroupedToolButtons`, `Glyph`; `BackProvider`/`useBack` for the back gesture |
 | `apps/settings` | Settings (see below) |
+| `apps/camera`, `apps/photos`, `apps/music` | Camera, Photos, Music (see [below](#camera-photos-and-music)); `@phoenix/luna`'s `media.ts` wraps their services |
+| `apps/media-samples` | Generated demo photos and songs, mounted at `/media/internal/samples` |
 
 Build (Node.js 20 or newer):
 
@@ -232,3 +237,75 @@ Settings and the status bar stay in step:
 Without Qt WebEngine none of this runs and the system menu works on its own.
 On a device, `LsmSystemStatus` would subscribe to the same OSE services
 instead (Milestone 1).
+
+## Camera, Photos and Music
+
+`apps/camera`, `apps/photos` and `apps/music` rebuild the webOS 2.x Camera,
+Photos & Videos and Music apps (Palm never open-sourced them) with the
+`@phoenix/ui` kit, which gained the Heritage command menu (`Toolbar`,
+`ToolButton`), grouped tool buttons, a progress `Slider` and white glyphs for
+them.
+
+- **Camera**: full-card viewfinder, flash (auto/on/off) at the top left, the
+  last shot at the bottom left (tap to open it in Photos), the shutter, and the
+  photo/video switch. Taking a picture closes and opens a shutter over the
+  viewfinder and flies the frame into the thumbnail; nothing makes a sound.
+  Without a camera, or when access is refused, it says so. Pictures and videos
+  go to `/media/internal/DCIM/100PHNX/CIMGnnnn.jpg|webm`.
+- **Photos**: albums are folders (Camera Roll, Sample Photos, ...), a
+  thumbnail grid per album, and a black full-screen viewer: swipe (or the arrow
+  keys) between pictures, tap for the title and the command menu: share (Email
+  with the picture attached, or Messaging), set as wallpaper, delete. Videos
+  play in the viewer. Launched with `{imageList: {results: [item]}}` or
+  `{target: path}` it opens that picture.
+- **Music**: Artists / Albums / Songs, album and artist pages, Now Playing
+  (cover with reflection, seek bar, volume, previous / play / next, shuffle,
+  repeat) and a mini player above the library.
+
+### Services
+
+| What | Service and methods | Source |
+| --- | --- | --- |
+| Find media | `com.webos.service.mediaindexer` `getImageList`, `getVideoList`, `getAudioList` `{uri, count, subscribe}` (first reply `{subscribed: true}`, then `{imageList: {results, count}}` and again on every change), `get*Metadata {uri}`, `getDeviceList` | `com.webos.service.mediaindexer` `src/indexerservice.cpp`, `src/dbconnector/mediadb.cpp` (reply shapes, item fields), `src/mediaitem.cpp` (field names) |
+| Index a new file | mediaindexer `requestMediaScan {path}`, as `com.webos.app.camera` does after a snapshot | same; `webosose/com.webos.app.camera` `src/actions/syncMedia.js` |
+| Forget a file | mediaindexer `requestDelete {uri}` | same |
+| Is there a camera | `com.webos.service.camera2` `getCameraList` (`deviceList: [{id: "camera1"}]`), `getInfo {id}` | `com.webos.service.camera` `src/services/camera/camera_service.cpp`, `json_parser.cpp` |
+| Viewfinder, capture, recording | the web runtime's `getUserMedia`, canvas JPEG and `MediaRecorder` (WebM) | Chromium (WebAppMgr) |
+| Save and delete files | `org.webosphoenix.service.mediafiles` `write {path, data (base64), mimeType}`, `remove {path}`, under `/media/internal` only | Phoenix; simulator only so far (a page cannot write files) |
+| Open the shot in Photos | `com.webos.applicationManager` `launch {id, params: {imageList: {results: [item], count: 1}}}` | `com.webos.app.camera` `src/actions/launchActions.js` |
+| Set as wallpaper | `com.webos.service.systemservice` `setPreferences {wallpaper: {wallpaperName, wallpaperFile}}`, the preference Settings' Screen & Lock sets. OSE dropped legacy webOS's `wallpaper/importWallpaper`, so the file is used as it is | `luna-sysservice` `Src/PrefsFactory.cpp` |
+| Play songs | HTML5 `<audio>`: WebAppMgr plays web media through uMediaServer (`com.webos.media`) | `webosose/umediaserver` |
+| Volume | `com.webos.service.audio` `getInputVolume` / `setInputVolume {streamType: "pmedia"}` | `audiod-pro` |
+| Legacy media kinds | the simulator mirrors the index into db8 as `com.palm.media.image.file:1`, `com.palm.media.audio.file:1`, `com.palm.media.video.file:1` (webOS 2.x/3.x), for legacy apps | legacy webOS media indexer |
+
+Item uris are the storage device's uri plus the path
+(`storage:///media/internal/DCIM/100PHNX/CIMG0001.jpg`); an app shows a file
+with `mediaUrl(path)` from `@phoenix/luna` (`file://` + path on a device, a
+`blob:` URL for simulator files). OSE's media indexer indexes the paths in its
+`STORAGE_DEVS` build setting (`/media/multimedia` by default); Phoenix uses
+`/media/internal`, as legacy webOS did, and `meta-phoenix` will have to set it.
+
+Music posts a `nowPlaying` host message (`{title, artist, album, playing}`)
+whenever the song or play state changes, and a banner
+(`PalmSystem.addBannerMessage`) when a new song starts while its card is in
+the background. The shell does not show a now-playing dashboard yet.
+
+### In the simulator
+
+The runtime's media block keeps files in IndexedDB (`phoenix-media`, shared by
+every app page) and the index in the shared store; a picture taken in Camera
+reaches Photos' subscription through a `storage` event. The demo media in
+`apps/media-samples/media` (generated by its `tools/make-samples.cjs`, CC0) is
+mounted at `/media/internal/samples` (`runtime/rootfs.json`) and indexed from
+its `index.json` on first use. For a wallpaper under `/media`, `systemStatus`
+also carries `wallpaperUrl`, a `data:` URL of the picture, since the shell
+cannot read IndexedDB.
+
+phoenix-sim grants web pages the camera and microphone and lets media start
+without a tap (as WebAppMgr does). Chromium's test camera stands in for a real
+one: `QTWEBENGINE_CHROMIUM_FLAGS=--use-fake-device-for-media-stream`.
+
+`node tools/test-media.cjs [--tablet]` takes a photo and a video with the fake
+camera, opens the shot in Photos, swipes the viewer, sets a wallpaper, deletes
+the photo, and plays, pauses, seeks and skips a song, with screenshots in
+`build/media-tests/`.

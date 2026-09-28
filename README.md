@@ -25,6 +25,15 @@ launcher tabs and menus use the original Open webOS art.*
 the simulator against simulated webOS OSE services. Turning Wi-Fi on in the
 system menu updates the Settings card behind it.*
 
+| Camera | Photos | Viewer | Music | Now Playing | Media cards |
+| --- | --- | --- | --- | --- | --- |
+| ![](docs/screenshots/media-camera.png) | ![](docs/screenshots/media-photos.png) | ![](docs/screenshots/media-viewer.png) | ![](docs/screenshots/media-music.png) | ![](docs/screenshots/media-nowplaying.png) | ![](docs/screenshots/media-cards.png) |
+
+*Camera, Photos and Music, new React apps in the webOS 2.x style, against the
+simulated media indexer, camera and audio services. The camera uses
+Chromium's test camera here; the wallpaper behind the cards was set from
+Photos. The demo photos and chiptunes are generated.*
+
 ## Status
 
 **Milestone 0: the shell runs in a desktop simulator.** You can use the card
@@ -47,7 +56,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `shell/qml/Phoenix/Sim` | Mock apps and device status for the desktop simulator |
 | `shell/qml/Phoenix/Lsm`, `shell/qml/WebOSCompositor` | Adapter that plugs the shell into webOS OSE's `luna-surfacemanager` |
 | `shell/sim` | `phoenix-sim`, the desktop runner (also takes screenshots) |
-| `apps/` | New Phoenix web apps in React + TypeScript (Settings), with the shared `@phoenix/ui` components and `@phoenix/luna` service client |
+| `apps/` | New Phoenix web apps in React + TypeScript (Settings, Camera, Photos, Music), with the shared `@phoenix/ui` components and `@phoenix/luna` service client, and generated demo media (`apps/media-samples`) |
 | `runtime/` | The webOS web app runtime for the simulator and browsers (`PalmSystem`, simulated Luna services) |
 | `shell/tests` | Behaviour tests (`qmltestrunner`) |
 | `shell/assets/openwebos` | Original Open webOS system UI artwork (Apache-2.0) |
@@ -111,6 +120,7 @@ Tests:
 QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -input shell/tests
 (cd apps && npm test && npm run typecheck)
 node tools/test-apps.cjs && node tools/test-settings.cjs   # needs Playwright
+node tools/test-media.cjs                                   # Camera, Photos, Music
 ```
 
 ## Build a webOS OSE image (experimental)
