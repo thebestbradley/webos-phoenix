@@ -23,10 +23,13 @@ PV = "0.1.0+git${SRCPV}"
 
 S = "${WORKDIR}/git/shell"
 
-inherit cmake
+inherit qt6-cmake
 
-# The shell is pure QML; only the desktop simulator needs a compiler.
-EXTRA_OECMAKE = "-DPHOENIX_BUILD_SIM=OFF -DPHOENIX_DATA_DIR=${datadir}/phoenix"
+# The shell is QML, plus one small compiled module (Phoenix.Native, e.g.
+# delivering the Back key to apps), installed with Qt's QML modules.
+DEPENDS = "qtbase qtdeclarative qtdeclarative-native"
+EXTRA_OECMAKE = "-DPHOENIX_BUILD_SIM=OFF -DPHOENIX_DATA_DIR=${datadir}/phoenix \
+                 -DPHOENIX_NATIVE_QML_DIR=${QT6_INSTALL_QMLDIR}"
 
 do_install:append() {
     install -d ${D}${sysconfdir}/surface-manager.d
@@ -35,6 +38,7 @@ do_install:append() {
 
 FILES:${PN} += " \
     ${datadir}/phoenix \
+    ${QT6_INSTALL_QMLDIR}/Phoenix \
     ${sysconfdir}/surface-manager.d/product.env \
 "
 

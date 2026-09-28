@@ -12,6 +12,8 @@ import QtQuick
 import WebOSCoreCompositor 1.0
 import WebOSCompositorBase 1.0
 import WebOSServices 1.0
+import WebOS.Global 1.0
+import Phoenix.Native
 
 Item {
     id: source
@@ -202,11 +204,16 @@ Item {
             }
     }
 
-    // TODO(M1): deliver the webOS back key to the focused surface. This
-    // needs a small C++ hook in the compositor extension; QML cannot
-    // synthesize key events for a client surface.
+    // The back gesture is the webOS Back key, delivered to the card's
+    // surface, which forwards it to the app by its native scan code
+    // (WebOSSurfaceItem::processKeyEvent). webOS reads evdev 412 as Back;
+    // on the wire that is XKB keycode 412 + 8. Web apps get it as keyCode
+    // 461, Enyo 1.0 and Mojo apps as their back event.
+    readonly property int backScanCode: 412 + 8
     function back(uid) {
-        console.warn("Phoenix: back gesture not yet delivered to apps");
+        for (var i = 0; i < _surfaces.length; ++i)
+            if (_surfaces[i].uid === uid)
+                return KeyInjector.sendKey(_surfaces[i].item, WebOS.Key_webOS_Back, backScanCode);
         return false;
     }
 

@@ -29,6 +29,9 @@
 #ifndef PHOENIX_QML_DIR
 #define PHOENIX_QML_DIR ""
 #endif
+#ifndef PHOENIX_QML_BUILD_DIR
+#define PHOENIX_QML_BUILD_DIR ""
+#endif
 #ifndef PHOENIX_REPO_DIR
 #define PHOENIX_REPO_DIR ""
 #endif
@@ -98,6 +101,11 @@ int main(int argc, char *argv[])
 
     QQuickView view;
     view.engine()->addImportPath(qmlDir);
+    // Compiled modules (Phoenix.Native): the build tree, or installed beside
+    // the QML.
+    const QString qmlBuildDir = QString::fromUtf8(PHOENIX_QML_BUILD_DIR);
+    if (!qmlBuildDir.isEmpty() && QDir(qmlBuildDir).exists())
+        view.engine()->addImportPath(qmlBuildDir);
 
     bool webEngine = false;
     QVariantList webApps;

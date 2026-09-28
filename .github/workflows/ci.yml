@@ -53,7 +53,7 @@ jobs:
           cmake --build build -j
 
       - name: Behaviour tests
-        run: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import shell/qml -input shell/tests
+        run: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import shell/qml -import build/qml -input shell/tests
 
       - name: Trademark overlays up to date
         run: python3 tools/debrand-overlays.py --check

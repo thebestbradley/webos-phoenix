@@ -109,7 +109,7 @@ tablet drop-down: **done** (7090c64).
 | # | Original | Phoenix | P · effort |
 |---|---|---|---|
 | G1 | Tablet bezel swipe up from the bottom edge (≥60 px with the keyboard up) (`SystemUiController.cpp:2041-2121`) | **Done**: a flick up from an 8 px strip along the bottom edge (60 px with `Shell.keyboardOpen`); the device build does not yet tell the shell when the keyboard is up | P0 · S |
-| G2 | Back goes to the app unless an overlay is up | Device adapter only logs a warning | P0 · M |
+| G2 | Back goes to the app unless an overlay is up | **Done**: the device build sends the webOS Back key (evdev 412) to the card's surface through `Phoenix.Native.KeyInjector`; not yet run on hardware | P0 · M |
 | G3 | Swipe down in card view maximizes the active card (`:499-526`) | None | P1 · S |
 | G4 | Forward / Menu swipe | Emitted, not connected | P2 · S |
 | G5 | Advanced gestures (switch apps while maximized) | None | P2 · M |

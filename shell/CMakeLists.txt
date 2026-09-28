@@ -13,8 +13,14 @@ option(PHOENIX_BUILD_SIM "Build the desktop simulator" ON)
 include(GNUInstallDirs)
 set(PHOENIX_DATA_DIR "${CMAKE_INSTALL_DATADIR}/phoenix" CACHE STRING "Install location of QML and assets")
 
+find_package(Qt6 6.4 REQUIRED COMPONENTS Gui Qml Quick)
+
+# Compiled QML modules (Phoenix.Native) are written here, beside the source
+# QML the simulator loads, and installed next to the QML on the device.
+set(PHOENIX_QML_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/qml")
+add_subdirectory(native)
+
 if(PHOENIX_BUILD_SIM)
-    find_package(Qt6 6.4 REQUIRED COMPONENTS Gui Qml Quick)
     # Qt WebEngine runs the web apps (original webOS apps, Settings, ...).
     # Without it the simulator still runs, with placeholder apps only.
     find_package(Qt6 6.4 QUIET COMPONENTS WebEngineQuick)
@@ -31,6 +37,7 @@ if(PHOENIX_BUILD_SIM)
     get_filename_component(PHOENIX_REPO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
     target_compile_definitions(phoenix-sim PRIVATE
         PHOENIX_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
+        PHOENIX_QML_BUILD_DIR="${PHOENIX_QML_BUILD_DIR}"
         PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
     install(TARGETS phoenix-sim RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()

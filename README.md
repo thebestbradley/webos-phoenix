@@ -154,7 +154,7 @@ a demo state; add `--screenshot out.png` to save a PNG and exit.
 Tests:
 
 ```sh
-QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -input shell/tests
+QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -input shell/tests
 (cd apps && npm test && npm run typecheck)
 node tools/test-apps.cjs && node tools/test-settings.cjs   # needs Playwright
 node tools/test-phone-messaging.cjs                        # calls and texts
