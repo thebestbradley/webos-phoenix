@@ -12,7 +12,7 @@ import { useState } from "react";
 import { SNOOZE_MINUTES, type Task, type TaskInput, type TaskList } from "@phoenix/luna";
 import { Button, Dialog, Group, ListSelector, PageHeader, Picker, Row, ToggleButton, useBack } from "@phoenix/ui";
 import {
-    daysInMonth, defaultRemind, fromParts, PRIORITY_OPTIONS, priorityChoice, startOfDay, toParts, type DateParts,
+    daysInMonth, defaultRemind, fromParts, PRIORITY_OPTIONS, priorityChoice, startOfDay, toParts, withDefaultTime, type DateParts,
 } from "./lib/views";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -86,8 +86,7 @@ export function Editor({ task, lists, fromReminder, onSave, onDelete, onSnooze, 
     const setDue = (on: boolean) => set(on ? { due: startOfDay(now), allDay: true } : { due: null, allDay: false });
     const setTimed = (on: boolean) => {
         if (!draft.due) return;
-        const d = toParts(draft.due);
-        set(on ? { allDay: false, due: fromParts({ ...d, h: new Date(now).getHours() + 1, mi: 0 }) }
+        set(on ? { allDay: false, due: withDefaultTime(draft.due, now) }
                : { allDay: true, due: startOfDay(draft.due) });
     };
 

@@ -160,6 +160,15 @@ export function fromParts(p: DateParts): number {
 }
 
 /**
+ * The due time when "Due time" is switched on: the next whole hour, on the
+ * task's own due day. After 11 PM that would be midnight of the next day,
+ * so it stops at 11 PM instead of moving the due date.
+ */
+export function withDefaultTime(due: number, now: number): number {
+    return fromParts({ ...toParts(due), h: Math.min(new Date(now).getHours() + 1, 23), mi: 0 });
+}
+
+/**
  * Text that Just Type passes along: its action launches with the typed
  * text URI-encoded (luna-applauncher app/LaunchAndSearch.js).
  */

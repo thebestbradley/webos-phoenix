@@ -4,7 +4,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { PRIORITY, type Task, type TaskList } from "@phoenix/luna";
 import {
-    addDays, countTasks, daysInMonth, defaultDue, defaultRemind, fromParts, isDueToday, isOverdue, isUpcoming, launchText, loadPrefs,
+    addDays, countTasks, daysInMonth, defaultDue, defaultRemind, fromParts, isDueToday, isOverdue, isUpcoming, launchText, loadPrefs, withDefaultTime,
     priorityChoice, priorityMarks, savePrefs, selectionTitle, startOfDay, toParts, visibleTasks,
 } from "./views";
 
@@ -113,5 +113,15 @@ describe("priorities, launch text, prefs", () => {
         expect(loadPrefs()).toEqual({ hideCompleted: false });
         savePrefs({ hideCompleted: true });
         expect(loadPrefs()).toEqual({ hideCompleted: true });
+    });
+});
+
+describe("withDefaultTime", () => {
+    const due = new Date(2026, 8, 30).getTime();
+    it("is the next whole hour on the due day", () => {
+        expect(withDefaultTime(due, new Date(2026, 8, 28, 14, 20).getTime())).toBe(new Date(2026, 8, 30, 15, 0).getTime());
+    });
+    it("stays on the due day after 11 PM instead of rolling to the next", () => {
+        expect(withDefaultTime(due, new Date(2026, 8, 28, 23, 5).getTime())).toBe(new Date(2026, 8, 30, 23, 0).getTime());
     });
 });
