@@ -1,30 +1,31 @@
 {
-    "//": "Which web apps must start cleanly in tools/test-apps.cjs. status: works | broken; phone/tablet override per form factor. note says what is missing.",
+    "//": "Which web apps must start cleanly in tools/test-apps.cjs. status: works | broken; phone/tablet override per form factor. note says what is limited. tools/smoke-apps.cjs exercises each app.",
     "com.palm.app.calculator": {
         "status": "works",
-        "note": "TouchPad layout; needs a phone layout"
+        "note": "Phone: the TouchPad calculator body fills the card (compat CSS)"
     },
     "com.palm.app.notes": {
-        "status": "works"
+        "status": "works",
+        "note": "Phone: one memo per row; the editor's back button shows its arrow only"
     },
     "com.palm.app.accounts": {
-        "status": "broken",
-        "note": "accounts service mock incomplete"
+        "status": "works",
+        "note": "Only the released templates exist (HP webOS profile, email). New accounts cannot be signed in: no servers to validate against"
     },
     "com.palm.app.calendar": {
-        "status": "broken",
-        "note": "not yet verified in the simulator"
+        "status": "works",
+        "note": "Local (profile) calendar only; no sync or reminders service. Phone: smaller headings and toolbar, one-letter weekdays in month view"
     },
     "com.palm.app.clock": {
         "status": "works",
-        "note": "TouchPad layout; needs a phone layout"
+        "note": "Phone: clock faces scaled to fit. Alarms are stored but never ring (no activity manager)"
     },
     "com.palm.app.contacts": {
-        "status": "broken",
-        "note": "accounts mock; two source files missing from the Open webOS release"
+        "status": "works",
+        "note": "Phone: list and details one at a time (back gesture returns). No automatic linking of similar contacts, no photos, no vCard import/export"
     },
     "com.palm.app.email": {
-        "status": "broken",
-        "note": "not yet verified in the simulator"
+        "status": "works",
+        "note": "Sample IMAP account; no mail server: sending moves the email to Sent, syncing finds nothing new. Phone: folders, list and message one at a time"
     }
 }

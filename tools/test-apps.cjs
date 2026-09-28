@@ -40,7 +40,11 @@ const port = 8700 + Math.floor(Math.random() * 90);
 const IGNORED = [
     /tellurium/i,                       // Palm's test harness config, never shipped
     /Failed to load resource/i,         // optional locale/resource probes
-    /enyo\.xhr\.request\(\) exception/i
+    /enyo\.xhr\.request\(\) exception/i,
+    // Logged with console.error by the original apps in normal operation:
+    /AppPrefs: Access to pref \w+ before prefs object is ready/,   // contacts framework, while its prefs load
+    /_handleNewEmailsFromAutoFinder got 0 items/,                  // Email dashboard, when there is no new mail
+    /Contact lookup failed: +No Accounts/                           // Email address lookup: no Exchange (GAL) account
 ];
 
 function ignorable(msg) { return IGNORED.some((re) => re.test(msg)); }
@@ -83,9 +87,13 @@ async function main() {
             let shown = page;
             context.on("page", (p) => { watch(p); shown = p; });
             await page.goto(base + app.main);
+            // Headless apps: the window they open is what the user sees. They
+            // set up their data first (Email takes a few seconds), so wait for it.
+            if (app.noWindow) {
+                for (let t = 0; t < 15000 && shown === page; t += 250) await page.waitForTimeout(250);
+                if (shown !== page) await shown.waitForLoadState().catch(() => {});
+            }
             await page.waitForTimeout(3000);
-            // Headless apps: the window they opened is what the user sees.
-            if (shown !== page) await shown.waitForLoadState().catch(() => {});
             const shot = path.join(outDir, app.id + ".png");
             await shown.screenshot({ path: shot }).catch(() => {});
             const rendered = await shown.evaluate(() => {
