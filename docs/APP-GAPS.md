@@ -120,7 +120,7 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | **Health / steps** | Missing | None | P2 | Needs a step counter: available from the Android sensor HAL through sensorfw on Halium devices; on mainline, iio-sensor-proxy has no raw acceleration or step data, so it needs a small IIO accelerometer service. Local-only storage in db8 |
 | Cell broadcast / emergency alerts | Missing | Carrier dependent | P1 | Legally required in some countries. ModemManager and oFono both support cell broadcast; show them as full-screen alerts in the shell |
 | eSIM management | Missing | None | P2 | `lpac` (LuneOS already packages it) behind a Settings pane |
-| Voice assistant | Missing | Voice Dial | P2 | Voice dial first, on-device speech recognition only |
+| Voice assistant | Missing | Voice Dial | P2 | Voice dial first, on-device speech recognition only; the assistant and its MCP layer are planned in [AI-AND-MCP.md](AI-AND-MCP.md) |
 | Print | Missing | Print Manager (HP printers) | P2 | CUPS with IPP Everywhere; OSE has no print service |
 
 ## Streaming services, honestly
