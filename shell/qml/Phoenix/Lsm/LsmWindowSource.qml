@@ -74,7 +74,7 @@ Item {
                 if (!lp)
                     continue;
                 source.apps.append({
-                    appId: lp.id, title: lp.title, icon: lp.icon,
+                    appId: lp.id, title: lp.title, icon: lp.icon, largeIcon: "",
                     color: "#666666", glyph: lp.title.charAt(0),
                     tab: 0, quickLaunch: i < 4 ? i + 1 : 0
                 });

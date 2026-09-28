@@ -101,7 +101,7 @@ Item {
         width: parent.width - Theme.px(16)
         height: Theme.px(36)
         source: Theme.asset("search-pill.png")
-        border { left: 36; right: 18; top: 0; bottom: 0 }
+        border { left: Theme.artBorder(36, source); right: Theme.artBorder(18, source); top: 0; bottom: 0 }
 
         TextInput {
             id: input

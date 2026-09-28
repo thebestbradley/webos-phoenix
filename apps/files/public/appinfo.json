@@ -6,6 +6,7 @@
     "main": "index.html",
     "title": "Files",
     "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
     "iconColor": "#d9a13a",
     "uiRevision": 2,
     "phoenix": {

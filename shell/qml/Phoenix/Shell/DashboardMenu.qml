@@ -98,7 +98,7 @@ Item {
         width: Theme.dashboardMenuWidth
         visible: height > 0
         source: Theme.asset("menu-dropdown-swipe-bg.png")
-        border { left: Theme.dashboardMenuSwipeCap; right: Theme.dashboardMenuSwipeCap }
+        border { left: Theme.artBorder(Theme.dashboardMenuSwipeCap, source); right: Theme.artBorder(Theme.dashboardMenuSwipeCap, source) }
     }
 
     // ---- One row: a dashboard window with its divider and shading ----------------
@@ -177,12 +177,12 @@ Item {
             width: Math.min(content.x, row.width)
             height: row.height + (row.divided ? menu.dividerHeight : 0)
             source: Theme.asset("menu-dropdown-swipe-bg.png")
-            border { left: Theme.dashboardMenuSwipeCap; right: Theme.dashboardMenuSwipeCap }
+            border { left: Theme.artBorder(Theme.dashboardMenuSwipeCap, source); right: Theme.artBorder(Theme.dashboardMenuSwipeCap, source) }
             horizontalTileMode: BorderImage.Stretch
             verticalTileMode: BorderImage.Stretch
             Image {
                 x: parent.width - width
-                width: Theme.px(sourceSize.width)
+                width: Theme.artPx(sourceSize.width, source)
                 height: parent.height
                 source: Theme.asset("menu-dropdown-swipe-highlight.png")
                 fillMode: Image.Stretch
@@ -321,7 +321,7 @@ Item {
         width: parent.width
         height: Math.max(Theme.px(40), Math.min(menu.height, menu.containerHeight + Theme.dashboardMenuBottomMargin))
         source: Theme.asset("menu-dropdown-bg.png")
-        border { left: 30; top: 10; right: 30; bottom: 30 }
+        border { left: Theme.artBorder(30, source); top: Theme.artBorder(10, source); right: Theme.artBorder(30, source); bottom: Theme.artBorder(30, source) }
 
         MouseArea { anchors.fill: parent }  // taps on the menu stay in it
 
@@ -337,7 +337,7 @@ Item {
             visible: false
             anchors.fill: parent
             source: Theme.asset("menu-dropdown-bg.png")
-            border { left: 30; top: 10; right: 30; bottom: 30 }
+            border { left: Theme.artBorder(30, source); top: Theme.artBorder(10, source); right: Theme.artBorder(30, source); bottom: Theme.artBorder(30, source) }
         }
     }
 
@@ -392,13 +392,13 @@ Item {
         Behavior on opacity { NumberAnimation { duration: Theme.systemMenuScrollFadeDuration } }
         BorderImage {
             width: parent.width
-            height: Theme.px(sourceSize.height)
+            height: Theme.artPx(sourceSize.height, source)
             source: Theme.asset("menu-dropdown-scrollfade-top.png")
-            border { left: 20; right: 20 }
+            border { left: Theme.artBorder(20, source); right: Theme.artBorder(20, source) }
         }
         Image {
             x: (parent.width - width) / 2
-            width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
+            width: Theme.artPx(sourceSize.width, source); height: Theme.artPx(sourceSize.height, source)
             source: Theme.asset("menu-arrow-up.png")
         }
     }
@@ -412,14 +412,14 @@ Item {
         Behavior on opacity { NumberAnimation { duration: Theme.systemMenuScrollFadeDuration } }
         BorderImage {
             width: parent.width
-            height: Theme.px(sourceSize.height)
+            height: Theme.artPx(sourceSize.height, source)
             source: Theme.asset("menu-dropdown-scrollfade-bottom.png")
-            border { left: 20; right: 20 }
+            border { left: Theme.artBorder(20, source); right: Theme.artBorder(20, source) }
         }
         Image {
             x: (parent.width - width) / 2
             y: Theme.px(10)
-            width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
+            width: Theme.artPx(sourceSize.width, source); height: Theme.artPx(sourceSize.height, source)
             source: Theme.asset("menu-arrow-down.png")
         }
     }

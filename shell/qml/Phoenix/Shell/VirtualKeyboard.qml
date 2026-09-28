@@ -92,7 +92,7 @@ Item {
 
     // ---- Art (sizes in pixels, as the plugin read them from the pixmaps) ---------
 
-    readonly property string _art: Theme.asset(tablet ? "keyboard-tablet/" : "keyboard-phone/")
+    readonly property string _art: Theme.assetUrl(tablet ? "keyboard-tablet/" : "keyboard-phone/")
     // keyboard-bg.png: 3x200 phone, 3x340 tablet.
     readonly property int _bgHeight: tablet ? 340 : 200
     // key-*.png: two states stacked, 48x96 phone, 93x140 tablet;
@@ -429,7 +429,8 @@ Item {
                         if (h * box.w > box.h * w) { w = Math.floor(box.h * s.w / s.h); h = box.h; }
                         else { h = Math.floor(box.w * s.h / s.w); w = box.w; }
                     }
-                    ops.push({ icon: _art + icon, x: box.x + Math.floor((box.w - w) / 2), y: box.y + Math.floor((box.h - h) / 2), w: w, h: h });
+                    // Its @2x / @3x art on a denser screen (Theme.variant).
+                    ops.push({ icon: String(Theme.variant(_art + icon, pixelScale)), x: box.x + Math.floor((box.w - w) / 2), y: box.y + Math.floor((box.h - h) / 2), w: w, h: h });
                 }
                 // The emoticon pictures are not in the Apache-2.0 art: their text.
                 if (!emoticonGraphic)

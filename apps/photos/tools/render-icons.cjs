@@ -108,15 +108,23 @@ const ICONS = {
       <path d="M11 28a21 21 0 0 1 42 0c-6-4-14-6-21-6s-15 2-21 6z" fill="url(#gloss)"/>`,
 };
 
+// icon.png at `scale` times its size: icon-256x256.png.
+const sized = (file, scale) => scale === 1 ? file : file.replace(/\.png$/, `-${SIZE * scale}x${SIZE * scale}.png`);
+
 (async () => {
     const browser = await chromium.launch();
-    const page = await browser.newPage({ viewport: { width: SIZE, height: SIZE }, deviceScaleFactor: 1 });
-    for (const [app, body] of Object.entries(ICONS)) {
-        await page.setContent(`<html><body style="margin:0;background:transparent">
-            <svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 64 64">${body}</svg></body></html>`);
-        const file = path.join(APPS, app, "public", "icon.png");
-        await page.locator("svg").screenshot({ path: file, omitBackground: true });
-        console.log("wrote", path.relative(process.cwd(), file));
+    // The 64 px icon, then the same drawing at 256 px: icon-256x256.png, the
+    // appinfo.json "splashicon" the shell draws on dense screens and on the
+    // loading card (docs/spec/hidpi-art.md).
+    for (const scale of [1, 4]) {
+        const page = await browser.newPage({ viewport: { width: SIZE, height: SIZE }, deviceScaleFactor: scale });
+        for (const [app, body] of Object.entries(ICONS)) {
+            await page.setContent(`<html><body style="margin:0;background:transparent">
+                <svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 64 64">${body}</svg></body></html>`);
+            const file = path.join(APPS, app, "public", "icon.png");
+            await page.locator("svg").screenshot({ path: sized(file, scale), omitBackground: true });
+            console.log("wrote", path.relative(process.cwd(), sized(file, scale)));
+        }
     }
     await browser.close();
 })().catch((e) => { console.error(e); process.exit(1); });

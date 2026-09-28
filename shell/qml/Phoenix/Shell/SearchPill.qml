@@ -38,14 +38,14 @@ Item {
         visible: false
         anchors.fill: parent
         source: Theme.asset("launcher3/search-field-bg-launcher.png")
-        border { left: 40; right: 40; top: 0; bottom: 0 }
+        border { left: Theme.artBorder(40, source); right: Theme.artBorder(40, source); top: 0; bottom: 0 }
     }
 
     // Three-tiled background, 40 px caps (OverlayWindowManager.cpp:1152-1155).
     BorderImage {
         anchors.fill: parent
         source: Theme.asset("launcher3/search-field-bg-launcher.png")
-        border { left: 40; right: 40; top: 0; bottom: 0 }
+        border { left: Theme.artBorder(40, source); right: Theme.artBorder(40, source); top: 0; bottom: 0 }
         horizontalTileMode: BorderImage.Stretch
     }
 

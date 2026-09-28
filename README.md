@@ -214,6 +214,7 @@ Apple's `container` tool; see [docs/BUILDING-MAC.md](docs/BUILDING-MAC.md). See
 - [Legacy UI spec](docs/spec/legacy-ui-spec.md): measurements and timings taken from the original source
 - [Feature inventory](docs/spec/feature-inventory.md): everything legacy webOS did, as a checklist
 - [Synergy](docs/SYNERGY.md) and [modern Synergy](docs/SYNERGY-MODERN.md): accounts, sync and merged messaging
+- [HiDPI art](docs/spec/hidpi-art.md): how the shell picks art and app icons for dense screens, and how to add variants
 - [Licensing and assets](docs/LEGAL.md)
 
 ## License

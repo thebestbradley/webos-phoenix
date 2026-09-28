@@ -10,6 +10,7 @@
 // cardLoading*). When the app is ready it cross-fades away over 300 ms.
 
 import QtQuick
+import Phoenix.Native
 
 Item {
     id: loading
@@ -17,6 +18,9 @@ Item {
     // The app is still loading.
     property bool active: false
     property url icon: ""
+    // Its bigger icon (appinfo.json "splashicon"), drawn in its place when
+    // the icon would be magnified (Theme.appIcon).
+    property url largeIcon: ""
 
     // Shown at once; cross-fades away (CardLoading::finish).
     visible: opacity > 0
@@ -47,8 +51,8 @@ Item {
         id: glow
         anchors.centerIn: parent
         source: Theme.asset("loading-glow.png")
-        width: Theme.px(sourceSize.width)
-        height: Theme.px(sourceSize.height)
+        width: Theme.artPx(sourceSize.width, source)
+        height: Theme.artPx(sourceSize.height, source)
         visible: icon.status === Image.Ready
         opacity: 0
 
@@ -68,9 +72,13 @@ Item {
     Image {
         id: icon
         anchors.centerIn: parent
-        source: loading.icon
         // The launcher icon, half as big again, no larger than the splash size.
-        readonly property real side: Math.min(Math.max(sourceSize.width, sourceSize.height) * 1.5, Theme.splashIconSize)
+        readonly property size iconSize: loading.icon != "" ? HiDpi.imageSize(loading.icon) : Qt.size(0, 0)
+        readonly property real side: Math.min(Math.max(iconSize.width, iconSize.height) * 1.5, Theme.splashIconSize)
+        readonly property url best: loading.icon != "" ? Theme.appIcon(loading.icon, Theme.px(side), loading.largeIcon) : ""
+        source: best
+        // A bigger icon is decoded at the drawn size, smoothly scaled down.
+        sourceSize: best != loading.icon ? Qt.size(Theme.px(side), Theme.px(side)) : Qt.size(-1, -1)
         width: Theme.px(side)
         height: Theme.px(side)
         fillMode: Image.PreserveAspectFit

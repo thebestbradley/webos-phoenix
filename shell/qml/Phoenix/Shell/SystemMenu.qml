@@ -138,7 +138,7 @@ Item {
             x: Theme.px(4)
             width: parent.width - Theme.px(8)
             height: parent.height
-            border { left: 19; right: 19 }
+            border { left: Theme.artBorder(19, source); right: Theme.artBorder(19, source) }
         }
         MouseArea {
             id: area
@@ -161,8 +161,8 @@ Item {
     component Icon: Image {
         x: parent.width - width - Theme.px(4 + 8)
         anchors.verticalCenter: parent.verticalCenter
-        width: Theme.px(sourceSize.width)
-        height: Theme.px(sourceSize.height)
+        width: Theme.artPx(sourceSize.width, source)
+        height: Theme.artPx(sourceSize.height, source)
     }
 
     // ---- Spinner: SystemMenu.cpp's AnimatedSpinner (:991-1073) ---------------------
@@ -228,8 +228,8 @@ Item {
             visible: le.bars >= 0
             x: parent.width - width - le.iconSpacing - le.rightMargin
             anchors.verticalCenter: parent.verticalCenter
-            width: le.bars >= 0 ? Theme.px(sourceSize.width) : 0
-            height: Theme.px(sourceSize.height)
+            width: le.bars >= 0 ? Theme.artPx(sourceSize.width, source) : 0
+            height: Theme.artPx(sourceSize.height, source)
             source: le.bars >= 0 ? Theme.asset("statusBar/wifi-" + le.bars + ".png") : ""
         }
         Image {
@@ -237,8 +237,8 @@ Item {
             visible: le.secured
             x: sig.x - width - le.iconSpacing
             anchors.verticalCenter: parent.verticalCenter
-            width: le.bars >= 0 ? Theme.px(sourceSize.width) : 0
-            height: Theme.px(sourceSize.height)
+            width: le.bars >= 0 ? Theme.artPx(sourceSize.width, source) : 0
+            height: Theme.artPx(sourceSize.height, source)
             source: Theme.asset("statusBar/system-menu-lock.png")
         }
         Image {
@@ -246,8 +246,8 @@ Item {
             visible: le.connected
             x: le.bars >= 0 ? lock.x - width - le.iconSpacing : parent.width - width - le.iconSpacing - le.rightMargin
             anchors.verticalCenter: parent.verticalCenter
-            width: Theme.px(sourceSize.width)
-            height: Theme.px(sourceSize.height)
+            width: Theme.artPx(sourceSize.width, source)
+            height: Theme.artPx(sourceSize.height, source)
             source: Theme.asset("statusBar/system-menu-popup-item-checkmark.png")
         }
     }
@@ -357,7 +357,7 @@ Item {
             width: parent.width
             height: Math.min(panel.height, mainMenu.height + Theme.systemMenuBottomMargin)
             source: Theme.asset("menu-dropdown-bg.png")
-            border { left: 30; top: 10; right: 30; bottom: 30 }
+            border { left: Theme.artBorder(30, source); top: Theme.artBorder(10, source); right: Theme.artBorder(30, source); bottom: Theme.artBorder(30, source) }
 
             MouseArea { anchors.fill: parent }  // swallow taps
 
@@ -373,7 +373,7 @@ Item {
                 visible: false
                 anchors.fill: parent
                 source: Theme.asset("menu-dropdown-bg.png")
-                border { left: 30; top: 10; right: 30; bottom: 30 }
+                border { left: Theme.artBorder(30, source); top: Theme.artBorder(10, source); right: Theme.artBorder(30, source); bottom: Theme.artBorder(30, source) }
             }
         }
 
@@ -444,14 +444,14 @@ Item {
                                 id: less
                                 x: brightnessContent.margin
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
+                                width: Theme.artPx(sourceSize.width, source); height: Theme.artPx(sourceSize.height, source)
                                 source: Theme.asset("statusBar/brightness-less.png")
                             }
                             Image {
                                 id: more
                                 x: parent.width - width - brightnessContent.margin
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
+                                width: Theme.artPx(sourceSize.width, source); height: Theme.artPx(sourceSize.height, source)
                                 source: Theme.asset("statusBar/brightness-more.png")
                             }
 
@@ -482,24 +482,24 @@ Item {
 
                                 BorderImage {
                                     width: parent.width
-                                    height: Theme.px(sourceSize.height)
+                                    height: Theme.artPx(sourceSize.height, source)
                                     anchors.verticalCenter: parent.verticalCenter
                                     source: Theme.asset("statusBar/slider-track.png")
-                                    border { left: 11; right: 11 }
+                                    border { left: Theme.artBorder(11, source); right: Theme.artBorder(11, source) }
                                 }
                                 BorderImage {
                                     width: Math.max((parent.width - handle.width / 2) * slider.value + handle.width / 2,
                                                     2 * slider.railBorderWidth)
-                                    height: Theme.px(sourceSize.height)
+                                    height: Theme.artPx(sourceSize.height, source)
                                     anchors.verticalCenter: parent.verticalCenter
                                     source: Theme.asset("statusBar/slider-track-progress.png")
-                                    border { left: 11; right: 11 }
+                                    border { left: Theme.artBorder(11, source); right: Theme.artBorder(11, source) }
                                 }
                                 Image {
                                     id: handle
                                     x: slider.railEdgeOffset + (slider.width - 2 * slider.railEdgeOffset) * slider.value - width / 2
                                     y: (slider.height - height) / 2
-                                    width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
+                                    width: Theme.artPx(sourceSize.width, source); height: Theme.artPx(sourceSize.height, source)
                                     source: Theme.asset("statusBar/slider-handle.png")
                                 }
 
@@ -901,13 +901,13 @@ Item {
             Behavior on opacity { NumberAnimation { duration: Theme.systemMenuScrollFadeDuration } }
             BorderImage {
                 width: parent.width
-                height: Theme.px(sourceSize.height)
+                height: Theme.artPx(sourceSize.height, source)
                 source: Theme.asset("menu-dropdown-scrollfade-top.png")
-                border { left: 20; right: 20 }
+                border { left: Theme.artBorder(20, source); right: Theme.artBorder(20, source) }
             }
             Image {
                 x: (parent.width - width) / 2
-                width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
+                width: Theme.artPx(sourceSize.width, source); height: Theme.artPx(sourceSize.height, source)
                 source: Theme.asset("menu-arrow-up.png")
             }
         }
@@ -921,14 +921,14 @@ Item {
             Behavior on opacity { NumberAnimation { duration: Theme.systemMenuScrollFadeDuration } }
             BorderImage {
                 width: parent.width
-                height: Theme.px(sourceSize.height)
+                height: Theme.artPx(sourceSize.height, source)
                 source: Theme.asset("menu-dropdown-scrollfade-bottom.png")
-                border { left: 20; right: 20 }
+                border { left: Theme.artBorder(20, source); right: Theme.artBorder(20, source) }
             }
             Image {
                 x: (parent.width - width) / 2
                 y: Theme.px(10)
-                width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
+                width: Theme.artPx(sourceSize.width, source); height: Theme.artPx(sourceSize.height, source)
                 source: Theme.asset("menu-arrow-down.png")
             }
         }

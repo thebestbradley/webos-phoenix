@@ -312,7 +312,7 @@ Item {
                     visible: phoneDashboard.item !== null && !phoneDashboard.item.atYBeginning
                     anchors.top: parent.top
                     width: parent.width
-                    height: Theme.px(sourceSize.height)
+                    height: Theme.artPx(sourceSize.height, source)
                     source: Theme.asset("dashboard-mask-top.png")
                     fillMode: Image.Stretch
                 }
@@ -321,7 +321,7 @@ Item {
                     visible: phoneDashboard.item !== null && !phoneDashboard.item.atYEnd
                     y: parent.height - Theme.dashboardBottomMaskOffset
                     width: parent.width
-                    height: Theme.px(sourceSize.height)
+                    height: Theme.artPx(sourceSize.height, source)
                     source: Theme.asset("dashboard-mask-bottom.png")
                     fillMode: Image.Stretch
                 }
@@ -366,7 +366,7 @@ Item {
             width: Theme.px(320) + 2 * Theme.px(20)
             height: root.alertHeight + 2 * Theme.px(20)
             source: Theme.asset("popup-bg.png")
-            border { left: 20; right: 20; top: 20; bottom: 20 }
+            border { left: Theme.artBorder(20, source); right: Theme.artBorder(20, source); top: Theme.artBorder(20, source); bottom: Theme.artBorder(20, source) }
             z: 2
             MouseArea { anchors.fill: parent }
             // The scene behind, blurred faintly within the panel's shape.
@@ -381,7 +381,7 @@ Item {
                 visible: false
                 anchors.fill: parent
                 source: Theme.asset("popup-bg.png")
-                border { left: 20; right: 20; top: 20; bottom: 20 }
+                border { left: Theme.artBorder(20, source); right: Theme.artBorder(20, source); top: Theme.artBorder(20, source); bottom: Theme.artBorder(20, source) }
             }
             Item {
                 id: tabletAlertHost
