@@ -113,8 +113,11 @@ animation.
 - **Positive space.** OSE apps assume they fill the screen. Phoenix has a status
   bar and gesture area, so apps must be told the smaller area. For now
   `SurfaceHost` scales the surface down to fit.
-- **Back gesture.** QML cannot inject key events into a client surface, so
-  back needs a small C++ compositor extension.
+- **Back gesture.** Done: the back gesture sends the webOS Back key to the
+  focused app through `Phoenix.Native`'s `KeyInjector`, with the native scan
+  code `WebOSSurfaceItem` forwards by. (QML can also send keys through
+  `QWaylandSeat.sendKeyEvent`, as LuneOS's shell does; see
+  [LUNEOS.md](LUNEOS.md).)
 - **System status.** `LsmSystemStatus` has placeholder values until it is
   wired to OSE Luna services.
 - **GraphicalEffects.** Rounded card corners use `Qt5Compat.GraphicalEffects`.
