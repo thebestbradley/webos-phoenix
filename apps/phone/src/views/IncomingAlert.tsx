@@ -8,10 +8,14 @@
 // with who is calling and Answer / Ignore. Answering brings the Phone card
 // up for the call. The window closes itself once the call stops ringing.
 //
+// On the lock screen the shell offers "Drag up to answer": unlocking while
+// the call rings answers it, as the webOS phone app did on the lock status
+// (com.palm.systemmanager getLockStatus).
+//
 // This is the same page as the app, opened with ?alert=incoming.
 
 import { useEffect, useRef, useState } from "react";
-import { matchNumber, phoneTypeLabel, ringingCall, primaryCall, telephony, type Call, type Person } from "@phoenix/luna";
+import { matchNumber, phoneTypeLabel, ringingCall, primaryCall, subscribe, telephony, type Call, type Person } from "@phoenix/luna";
 import { Button, formatNumber, phoneArt } from "@phoenix/ui";
 import { callerName, useCallStatus, usePeople } from "../lib/hooks";
 
@@ -21,6 +25,16 @@ export const INCOMING_ALERT_HEIGHT = 150;
 /** Is this page the incoming-call alert? */
 export function isIncomingAlert(): boolean {
     return new URLSearchParams(location.search).get("alert") === "incoming";
+}
+
+/**
+ * A popup alert draws on the system's own background (the negative space,
+ * or popup-bg.png on the lock screen and tablets): before the first frame,
+ * the page's own dark background goes.
+ */
+export function prepareAlertPage() {
+    document.documentElement.style.background = "transparent";
+    document.body.style.background = "transparent";
 }
 
 /**
@@ -60,6 +74,22 @@ export function IncomingAlert() {
         const t = setInterval(() => setPulse((p) => !p), 700);
         return () => clearInterval(t);
     }, []);
+    // Unlocked while it rings: answer. On the lock screen the alert shows
+    // only who is calling; the lock screen's handle answers.
+    const [locked, setLocked] = useState(false);
+    const ringingId = useRef<number | null>(null);
+    ringingId.current = call ? call.id : null;
+    useEffect(() => {
+        let wasLocked: boolean | null = null;
+        const sub = subscribe("luna://com.palm.systemmanager/getLockStatus", { subscribe: true }, (r) => {
+            const now = !!(r as { locked?: boolean }).locked;
+            if (wasLocked === true && !now && ringingId.current !== null)
+                telephony.answer(ringingId.current).catch(() => {});
+            wasLocked = now;
+            setLocked(now);
+        }, () => { /* no lock service: nothing to watch */ });
+        return () => sub.cancel();
+    }, []);
     // Close once the call stops ringing (answered, ignored or hung up).
     useEffect(() => {
         if (call) seen.current = true;
@@ -85,10 +115,10 @@ export function IncomingAlert() {
                     </div>
                 </div>
             </div>
-            <div className="incoming-alert-buttons">
+            {!locked && <div className="incoming-alert-buttons">
                 <Button variant="affirmative" data-testid="answer" onClick={answer}>{waiting ? "Hold & Answer" : "Answer"}</Button>
                 <Button variant="negative" data-testid="ignore" onClick={ignore}>Ignore</Button>
-            </div>
+            </div>}
         </div>
     );
 }

@@ -51,6 +51,13 @@ Item {
         function onRotationLockedChanged() { root.statusChanged("rotationLocked"); }
         function onMutedChanged() { root.statusChanged("muted"); }
     }
+    // The lock screen, for the apps (com.palm.systemmanager getLockStatus):
+    // the phone answers a ringing call when the user unlocks.
+    Connections {
+        target: shell
+        function onLockedChanged() { windows.pushSystemStatus({ deviceLocked: shell.locked }); }
+    }
+
     function statusChanged(name) {
         if (!status.applyingAppStatus)
             windows.pushSystemStatus(status.appStatusFor(name));
@@ -98,6 +105,7 @@ Item {
 
     // Build a demo scene, as if the user had been using the phone for a bit.
     Component.onCompleted: {
+        windows.pushSystemStatus({ deviceLocked: shell.locked });
         if (typeof simSettings !== "undefined")
             windows.launcherLayoutJson = simSettings.value("launcher/layout");
         // --launch <appId>: open these apps, in card view, then stop.

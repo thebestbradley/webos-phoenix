@@ -506,6 +506,9 @@ FocusScope {
         system: shell.system
         source: shell.source
         wallpaper: shell.wallpaper
+        incomingCall: notes.incomingCall
+        alertShown: notes.alertShown
+        alertHeight: notes.alertHeight
         onUnlockRequested: shell.unlock()
     }
 
@@ -530,6 +533,8 @@ FocusScope {
 
     Notifications {
         fullScreen: shell.fullScreen
+        locked: shell.locked
+        lockAlertHost: lockScreen.alertHost
         id: notes
         anchors.left: parent.left
         anchors.right: parent.right
@@ -544,7 +549,7 @@ FocusScope {
         }
         source: shell.source
         backdrop: sceneBackdrop
-        visible: !shell.locked
+        // Locked: only its lock-screen alert shows (Notifications.locked).
         screenHeight: shell.height
         statusBarRightInset: statusBar.systemGroupWidth
     }

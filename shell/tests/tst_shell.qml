@@ -406,6 +406,29 @@ Item {
             shell.notifications.bannerActive = false;
         }
 
+        // K2 / K3: while locked the front popup alert shows over the lock
+        // screen; an incoming call turns the padlock into "Drag up to answer".
+        function test_incomingCallOnTheLockScreen() {
+            shell.lock();
+            var notes = shell.notifications;
+            windows.alerts.append({ key: "call-test", appId: "org.webosphoenix.phone", name: "incoming-known", height: 150 });
+            verify(notes.incomingCall);
+            var alert = findChild(shell.lockScreen, "lockAlert");
+            tryCompare(alert, "opacity", 1, 2000);
+            verify(shell.lockScreen.incomingCall);
+            verify(shell.lockScreen.helpShown);
+            compare(notes.negativeSpace, 0);
+            // Other alerts show too, but keep the padlock.
+            windows.alerts.clear();
+            verify(!shell.lockScreen.incomingCall);
+            windows.alerts.append({ key: "alarm-test", appId: "com.palm.app.clock", name: "com.palm.app.clock.alarm.1", height: 110 });
+            tryCompare(alert, "opacity", 1, 2000);
+            verify(!notes.incomingCall);
+            windows.alerts.clear();
+            shell.unlock();
+            tryCompare(alert, "opacity", 0, 2000);
+        }
+
         function test_batteryStates() {
             compare(Theme.batteryState(0), 0);
             compare(Theme.batteryState(12), 0);

@@ -162,6 +162,28 @@ async function main() {
         await phone.waitForSelector("[data-testid='incall']", { state: "detached", timeout: 4000 });
         check(true, "the caller hangs up");
 
+        // ---- Incoming call on the lock screen: unlocking answers ---------------------------------------
+        // ("Drag up to answer": the shell unlocks; the alert hears it through
+        // com.palm.systemmanager getLockStatus.)
+        await phone.evaluate(() => window.__phoenixRuntime.applyHostStatus({ deviceLocked: true }));
+        alertPage = context.waitForEvent("page");
+        await phone.evaluate(() => window.__phoenixRuntime.simulateIncomingCall({ number: "(408) 555-0142" }));
+        alert = await alertPage;
+        watch(alert, "alert");
+        await alert.waitForSelector("[data-testid='incoming-alert']");
+        await alert.waitForTimeout(300);
+        check((await alert.locator("[data-testid='answer']").count()) === 0,
+            "on the lock screen the alert shows only the caller (the handle answers)");
+        await alert.setViewportSize({ width: viewport.width, height: 300 });
+        await shot(alert, "phone-incoming-alert-locked");
+        closed = alert.waitForEvent("close", { timeout: 5000 }).then(() => true, () => false);
+        await phone.evaluate(() => window.__phoenixRuntime.applyHostStatus({ deviceLocked: false }));
+        check(await closed, "unlocking during the call closes the alert");
+        await phone.waitForSelector("[data-testid='incall'][data-state='active']");
+        check(true, "and answers the call");
+        await phone.evaluate(() => window.__phoenixRuntime.simulateRemoteHangup());
+        await phone.waitForSelector("[data-testid='incall']", { state: "detached", timeout: 4000 });
+
         // ---- Incoming call: ignore -> missed ----------------------------------------------------------
         alertPage = context.waitForEvent("page");
         await phone.evaluate(() => window.__phoenixRuntime.simulateIncomingCall({ number: "(510) 555-0177" }));
@@ -179,7 +201,9 @@ async function main() {
         await phone.click("[data-testid='log-filter'] [data-value='all']");
         await phone.waitForTimeout(200);
         const rows = await phone.locator("[data-testid='call-row']").allTextContents();
-        check(/Ada Palmer/.test(rows[1]) && /Lena Okafor/.test(rows[2]), "answered and placed calls are logged in order");
+        // Newest first: the missed call, the two answered from Ada, the placed one.
+        check(/Ada Palmer/.test(rows[1]) && /Ada Palmer/.test(rows[2]) && /Lena Okafor/.test(rows[3]),
+            "answered and placed calls are logged in order");
         await shot(phone, "phone-calllog");
         await phone.click("[data-testid='phone-tabs'] [data-value='favorites']");
         await phone.waitForSelector("[data-testid='person-row']");

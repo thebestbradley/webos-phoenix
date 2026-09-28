@@ -97,8 +97,8 @@ tablet drop-down: **done** (7090c64).
 | # | Original | Phoenix | P · effort |
 |---|---|---|---|
 | K1 | PIN / password panel ("Device Locked", 3×4 pad, `pin/*` art, 200 ms fade, last-try and new-PIN states); locks on display off / timeout | **Done** for the panel: luna-sysmgr's UnlockPanel ported (PIN pad, password field, Cancel/Done, "PIN Incorrect" / "Try Again", 200 ms fade), checked by `com.palm.systemmanager matchDevicePasscode`. Not yet: last-try and erase dialogs (no retry policy), new-PIN setup, locking on display off / timeout, and a device lock service on OSE | P0 · M |
-| K2 | Incoming call on the lock screen: `screen-lock-incoming-call-*`, "Drag up to answer" | None | P0 · M |
-| K3 | Dashboards, banners and popups shown on the lock screen (`LockWindow.cpp:2595-2860`) | Hidden while locked | P1 · M |
+| K2 | Incoming call on the lock screen: `screen-lock-incoming-call-*`, "Drag up to answer" | **Done**: the handle becomes the incoming-call icon and the help stays on "Drag up to answer"; the call interrupts PIN entry; unlocking answers (the alert watches `com.palm.systemmanager getLockStatus`, as the phone app did) | P0 · M |
+| K3 | Dashboards, banners and popups shown on the lock screen (`LockWindow.cpp:2595-2860`) | Popup alerts: **done** (centred on popup-bg.png, 320 px wide; an incoming call gets the full height; under the handle). Not yet: the dashboard and banners while locked | P1 · M |
 | K4 | Padlock follows the finger in 2D; unlock at distance > 146 px and above rest; help hides past the radius; snaps home instantly | **Done**: follows the finger in 2D, unlocks past 146 px and above its rest, help hides past the radius and 1 s after release, snaps home | P2 · S |
 | K5 | Lock window above the status bar and menus, with its own bar (date in the centre, no system menu) | **Done**: the bar shows the short date in the centre, and neither the system nor the app menu opens while locked | P1 · S |
 | K6 | 150 ms InQuad fade; masks at native size | **Done**: 150 ms InQuad; masks at their own height, the top one under the bar | P2 · S |

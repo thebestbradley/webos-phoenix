@@ -441,7 +441,15 @@ Item {
         return out;
     }
 
+    // State only the shell knows (the lock screen), which every page gets as
+    // it loads; unlike the rest it is not the pages' to overrule.
+    readonly property var _shellOwned: ["deviceLocked"]
+    property var _shellStatus: ({})
+
     function pushSystemStatus(changes) {
+        for (var s in changes)
+            if (_shellOwned.indexOf(s) >= 0)
+                _shellStatus[s] = changes[s];
         var pages = _webPages();
         if (pages.length === 0) {
             var p = _pendingStatus || {};
@@ -460,6 +468,8 @@ Item {
             win.runScript(_statusScript(_pendingStatus));
             _pendingStatus = null;
         }
+        if (Object.keys(_shellStatus).length > 0)
+            win.runScript(_statusScript(_shellStatus));
     }
 
     // The launcher entry to start for a launch request: a launch point of

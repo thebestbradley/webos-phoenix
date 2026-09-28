@@ -2055,7 +2055,7 @@
         // Another window changed the shared state.
         try {
             global.addEventListener("storage", function (e) {
-                if (e.key === "phoenix:" + KEY || e.key === "phoenix:prefs") changed();
+                if (e.key === "phoenix:" + KEY || e.key === "phoenix:prefs" || e.key === "phoenix:deviceLocked") changed();
             });
         } catch (e) { /* ignore */ }
 
@@ -2543,6 +2543,12 @@
         }
         var stub = runtime.services["com.palm.systemmanager"] || { "*": function (p, reply) { reply(ok()); } };
         register(["com.palm.systemmanager"], {
+            // The lock screen is up, as the shell last said (SystemService
+            // getLockStatus); subscribe to hear it lock and unlock. The phone
+            // app answers a ringing call when the user unlocks.
+            "/getLockStatus": function (p, reply, ctx) {
+                watch(p, reply, ctx, function () { return ok({ locked: !!store.get("deviceLocked", false) }); });
+            },
             "/getDeviceLockMode": function (p, reply) {
                 var l = load().lock;
                 reply(ok({ lockMode: l.lockMode, policyState: "none", retriesLeft: 10 }));
@@ -2593,6 +2599,11 @@
             if ("bluetoothOn" in st) s.bluetooth.powered = !!st.bluetoothOn;
             if ("brightness" in st) s.settings.picture.backlight = Math.round(st.brightness);
             if ("muted" in st) s.audio.muted = !!st.muted;
+            // The shell's lock screen (com.palm.systemmanager getLockStatus).
+            if ("deviceLocked" in st && !!st.deviceLocked !== !!store.get("deviceLocked", false)) {
+                store.set("deviceLocked", !!st.deviceLocked);
+                changed();
+            }
             suppressHost = true;
             try {
                 if ("rotationLocked" in st && !!st.rotationLocked !== !!prefs().rotationLock)

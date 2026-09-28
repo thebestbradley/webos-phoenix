@@ -26,6 +26,26 @@ Item {
 
     onLockedChanged: if (locked) unlockPanel.shown = false
 
+    // The phone is ringing: the padlock is the incoming-call handle and the
+    // help reads "Drag up to answer", shown until the call stops; the call
+    // interrupts PIN entry (LockWindow::activatePopUpAlert, :799-803,
+    // 857-860, 1994). Unlocking answers it: the phone app hears the lock
+    // status change (com.palm.systemmanager getLockStatus).
+    property bool incomingCall: false
+    // The front popup alert (Notifications puts its window in alertHost).
+    property bool alertShown: false
+    property real alertHeight: 0
+    readonly property alias alertHost: alertHost
+    onIncomingCallChanged: {
+        if (incomingCall) {
+            unlockPanel.shown = false;
+            hideHelp.stop();
+            helpShown = true;
+        } else if (!drag.pressed) {
+            hideHelp.restart();
+        }
+    }
+
     function _call(method, params, callback) {
         if (!source || !source.lunaCall) {
             callback(null);
@@ -153,6 +173,34 @@ Item {
 
     // ---- Unlock target + padlock ----------------------------------------------
 
+    // ---- Popup alert (LockWindow PopUpAlert) ---------------------------------------
+    // Centred, 320 px wide less its 10 px padding, on popup-bg.png; an incoming
+    // call gets the whole height from under the bar to 84 px above the
+    // bottom (adjustAlertBounds, kAlertsFromBottom). Under the padlock.
+    BorderImage {
+        id: alertFrame
+        objectName: "lockAlert"
+        visible: opacity > 0
+        opacity: lock.locked && lock.alertShown && !unlockPanel.shown ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: Theme.alertFadeDuration } }
+        anchors.horizontalCenter: parent.horizontalCenter
+        readonly property real contentWidth: Math.min(Theme.px(320), lock.width) - 2 * Theme.px(10)
+        readonly property real contentHeight: lock.incomingCall
+            ? lock.height - Theme.statusBarHeight - Theme.px(84) - 2 * Theme.px(10)
+            : lock.alertHeight
+        width: contentWidth + 2 * Theme.px(20)
+        height: contentHeight + 2 * Theme.px(20)
+        y: lock.incomingCall ? Theme.statusBarHeight - Theme.px(10) : (lock.height - height) / 2
+        source: Theme.asset("popup-bg.png")
+        border { left: 20; right: 20; top: 20; bottom: 20 }
+        MouseArea { anchors.fill: parent }
+        Item {
+            id: alertHost
+            anchors.fill: parent
+            anchors.margins: Theme.px(20)
+        }
+    }
+
     // The help saucer shows while the padlock is held, until it is dragged
     // out past the radius; after a release it hides a second later
     // (LockWindow::showHelp / startHideHelpTimer, kHideHelpTimeoutInMS).
@@ -176,7 +224,7 @@ Item {
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
             y: Theme.px(40)
-            text: qsTr("Drag up to unlock")
+            text: lock.incomingCall ? qsTr("Drag up to answer") : qsTr("Drag up to unlock")
             color: Theme.text
             font.family: Theme.fontFamily
             font.pixelSize: Theme.lockHelpFontSize
@@ -191,7 +239,8 @@ Item {
         visible: !unlockPanel.shown
         width: Theme.lockPadlockSize
         height: Theme.lockPadlockSize
-        source: drag.pressed ? Theme.asset("screen-lock-padlock-on.png") : Theme.asset("screen-lock-padlock-off.png")
+        source: Theme.asset((lock.incomingCall ? "screen-lock-incoming-call-" : "screen-lock-padlock-")
+                            + (drag.pressed ? "on.png" : "off.png"))
 
         readonly property real homeX: (lock.width - width) / 2
         // Rests 10% of the screen height above the bottom (LockWindow.cpp:81, 454).
@@ -216,16 +265,17 @@ Item {
             onPositionChanged: (m) => {
                 var p = mapToItem(lock, m.x, m.y);
                 padlock.finger = p;
-                lock.helpShown = !padlock.outside(p);
+                lock.helpShown = lock.incomingCall || !padlock.outside(p);
             }
             // LockWindow::handlePenUpStateNormal: back home at once.
             onReleased: (m) => {
                 var p = mapToItem(lock, m.x, m.y);
                 if (padlock.outside(p))
                     lock.requestUnlock();
-                hideHelp.restart();
+                if (!lock.incomingCall)
+                    hideHelp.restart();
             }
-            onCanceled: hideHelp.restart()
+            onCanceled: if (!lock.incomingCall) hideHelp.restart()
         }
     }
 

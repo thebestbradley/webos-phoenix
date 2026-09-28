@@ -26,6 +26,7 @@
 // (e.g. the task a reminder is for).
 
 import QtQuick
+import "NotificationPolicy.js" as Policy
 
 Item {
     id: root
@@ -68,7 +69,12 @@ Item {
     // dashboard; popup alerts (a call) still make room
     // (SystemUiController::hideStatusBarAndNotificationArea).
     property bool fullScreen: false
-    readonly property real negativeSpaceTarget: overlay ? 0
+    // The lock screen is up: only the front popup alert shows, over it.
+    property bool locked: false
+    // The front alert is the phone's incoming call (AlertWindow::
+    // isIncomingCallAlert): the lock screen offers "Drag up to answer".
+    readonly property bool incomingCall: alertShown && Policy.isIncomingCall(alerts.get(0).appId, alerts.get(0).name || "")
+    readonly property real negativeSpaceTarget: overlay || locked ? 0
         : alertShown ? alertHeight
         : fullScreen ? 0
         : dashboardOpen ? dashboardHeight
@@ -145,136 +151,13 @@ Item {
         ScriptAction { script: root.bannerActive = false }
     }
 
-    // ---- Tap outside the open dashboard to close it -----------------------------
-
-    MouseArea {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.bottom: root.overlay ? parent.bottom : space.top
-        visible: root.dashboardOpen
-        onClicked: root.dashboardOpen = false
-    }
-
-    // ---- The notification area ----------------------------------------------------
-    // Phones: the negative space at the bottom, level with the app.
-    // Tablets: a strip in the status bar, left of the system indicators.
-
-    Rectangle {
-        id: space
-        color: root.overlay ? Theme.statusBarFill : Theme.black
-        clip: true
-        // Tablets: right of the centred clock.
-        x: root.overlay ? root.width / 2 + Theme.px(40) : 0
-        width: root.overlay ? root.width / 2 - Theme.px(40) - root.statusBarRightInset : root.width
-        y: root.overlay ? -Theme.statusBarHeight : root.height - height
-        height: root.overlay ? Theme.statusBarHeight : root.negativeSpace
-        visible: root.overlay ? root.bannerActive : height > 0
-
-        // The banner, in the bar's top 28 px while the space opens under it.
-        Item {
-            id: banner
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            height: Math.min(Theme.bannerHeight, parent.height)
-            clip: true
-            visible: root.bannerActive && !root.dashboardOpen
-
-            Image {
-                anchors.fill: parent
-                source: Theme.asset("overlay-banner-bg.png")
-                fillMode: Image.Stretch
-                visible: !root.overlay
-            }
-
-            Row {
-                id: bannerContent
-                objectName: "bannerContent"
-                x: root.overlay ? Theme.px(5) + (1 - root.bannerProgress) * banner.width : Theme.px(5)
-                y: (banner.height - height) / 2 + (root.overlay ? 0 : (1 - root.bannerProgress) * banner.height)
-                spacing: Theme.px(5)
-                AppIcon {
-                    size: Theme.px(22)
-                    showLabel: false
-                    color: root.bannerColor
-                    glyph: root.bannerGlyph
-                    source: root.bannerIcon
-                }
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: root.bannerText
-                    color: Theme.text
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.bannerFontSize
-                }
-            }
-        }
-
-        // Phones: the waiting notifications' icons, once the banner is gone.
-        Row {
-            id: phoneIcons
-            anchors.right: parent.right
-            anchors.rightMargin: Theme.px(8)
-            y: (Theme.bannerHeight - height) / 2
-            spacing: Theme.px(4)
-            visible: !root.overlay && !root.bannerActive && !root.dashboardOpen
-            Repeater {
-                model: root.overlay ? null : root.model
-                delegate: AppIcon {
-                    required property var model
-                    size: Theme.px(22)
-                    showLabel: false
-                    color: model.color
-                    glyph: model.glyph
-                    source: model.icon || ""
-                }
-            }
-        }
-
-        MouseArea {
-            objectName: "bannerTap"
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            height: Theme.bannerHeight
-            visible: (root.hasNotifications || root.bannerActive) && !root.dashboardOpen
-            onClicked: root.tapBanner()
-        }
-
-        // Phones: the dashboard fills the space as it grows (10 px top padding,
-        // DashboardWindowContainer.cpp:96-108).
-        Item {
-            anchors.fill: parent
-            visible: !root.overlay && root.dashboardOpen
-            Loader {
-                anchors.fill: parent
-                anchors.topMargin: Theme.px(10)
-                active: parent.visible
-                sourceComponent: dashboardList
-            }
-            Image {
-                anchors.top: parent.top
-                width: parent.width
-                source: Theme.asset("dashboard-mask-top.png")
-                fillMode: Image.Stretch
-            }
-        }
-    }
-
-    // ---- Popup alerts ---------------------------------------------------------------
-    // The front alert window (low battery, an alarm, an incoming call...):
-    // phones give it the negative space, full width, level with the app;
-    // tablets show it 320 px wide at the top right on popup-bg.png, 5 px in,
-    // fading in over 400 ms (DashboardWindowManager.cpp:516-560, 1341-1355;
-    // GraphicsItemContainer.cpp: 20 px margin).
-
     onAlertKeyChanged: Qt.callLater(attachAlert)
+    onLockedChanged: Qt.callLater(attachAlert)
     function attachAlert() {
         var w = alertKey !== "" && source ? source.windowFor(alertKey) : null;
         if (!w)
             return;
-        var host = overlay ? tabletAlertHost : phoneAlertHost;
+        var host = locked && lockAlertHost ? lockAlertHost : overlay ? tabletAlertHost : phoneAlertHost;
         w.parent = host;
         w.x = 0;
         w.y = 0;
@@ -283,124 +166,261 @@ Item {
         w.visible = true;
     }
 
-    Rectangle {
-        id: phoneAlert
-        visible: !root.overlay && root.alertShown
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        height: root.negativeSpace
-        color: Theme.black
-        clip: true
-        z: 2
-        MouseArea { anchors.fill: parent }
-        Item {
-            id: phoneAlertHost
+    // Everything but the lock screen's alert; the lock screen shows no
+    // banners, dashboard or negative space (LockWindow draws its own).
+    Item {
+        id: normalLayer
+        anchors.fill: parent
+        visible: !root.locked
+
+        // ---- Tap outside the open dashboard to close it -----------------------------
+
+        MouseArea {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            height: root.alertHeight
+            anchors.bottom: root.overlay ? parent.bottom : space.top
+            visible: root.dashboardOpen
+            onClicked: root.dashboardOpen = false
         }
-    }
 
-    BorderImage {
-        id: tabletAlert
-        visible: opacity > 0
-        opacity: root.overlay && root.alertShown ? 1 : 0
-        Behavior on opacity { NumberAnimation { duration: Theme.alertFadeDuration } }
-        anchors.right: parent.right
-        anchors.rightMargin: Theme.px(5)
-        y: Theme.px(5)
-        width: Theme.px(320) + 2 * Theme.px(20)
-        height: root.alertHeight + 2 * Theme.px(20)
-        source: Theme.asset("popup-bg.png")
-        border { left: 20; right: 20; top: 20; bottom: 20 }
-        z: 2
-        MouseArea { anchors.fill: parent }
-        // The scene behind, blurred faintly within the panel's shape.
-        BackdropBlur {
-            anchors.fill: parent
-            z: -1
-            source: root.backdrop
-            mask: alertShape
+        // ---- The notification area ----------------------------------------------------
+        // Phones: the negative space at the bottom, level with the app.
+        // Tablets: a strip in the status bar, left of the system indicators.
+
+        Rectangle {
+            id: space
+            color: root.overlay ? Theme.statusBarFill : Theme.black
+            clip: true
+            // Tablets: right of the centred clock.
+            x: root.overlay ? root.width / 2 + Theme.px(40) : 0
+            width: root.overlay ? root.width / 2 - Theme.px(40) - root.statusBarRightInset : root.width
+            y: root.overlay ? -Theme.statusBarHeight : root.height - height
+            height: root.overlay ? Theme.statusBarHeight : root.negativeSpace
+            visible: root.overlay ? root.bannerActive : height > 0
+
+            // The banner, in the bar's top 28 px while the space opens under it.
+            Item {
+                id: banner
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                height: Math.min(Theme.bannerHeight, parent.height)
+                clip: true
+                visible: root.bannerActive && !root.dashboardOpen
+
+                Image {
+                    anchors.fill: parent
+                    source: Theme.asset("overlay-banner-bg.png")
+                    fillMode: Image.Stretch
+                    visible: !root.overlay
+                }
+
+                Row {
+                    id: bannerContent
+                    objectName: "bannerContent"
+                    x: root.overlay ? Theme.px(5) + (1 - root.bannerProgress) * banner.width : Theme.px(5)
+                    y: (banner.height - height) / 2 + (root.overlay ? 0 : (1 - root.bannerProgress) * banner.height)
+                    spacing: Theme.px(5)
+                    AppIcon {
+                        size: Theme.px(22)
+                        showLabel: false
+                        color: root.bannerColor
+                        glyph: root.bannerGlyph
+                        source: root.bannerIcon
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.bannerText
+                        color: Theme.text
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.bannerFontSize
+                    }
+                }
+            }
+
+            // Phones: the waiting notifications' icons, once the banner is gone.
+            Row {
+                id: phoneIcons
+                anchors.right: parent.right
+                anchors.rightMargin: Theme.px(8)
+                y: (Theme.bannerHeight - height) / 2
+                spacing: Theme.px(4)
+                visible: !root.overlay && !root.bannerActive && !root.dashboardOpen
+                Repeater {
+                    model: root.overlay ? null : root.model
+                    delegate: AppIcon {
+                        required property var model
+                        size: Theme.px(22)
+                        showLabel: false
+                        color: model.color
+                        glyph: model.glyph
+                        source: model.icon || ""
+                    }
+                }
+            }
+
+            MouseArea {
+                objectName: "bannerTap"
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                height: Theme.bannerHeight
+                visible: (root.hasNotifications || root.bannerActive) && !root.dashboardOpen
+                onClicked: root.tapBanner()
+            }
+
+            // Phones: the dashboard fills the space as it grows (10 px top padding,
+            // DashboardWindowContainer.cpp:96-108).
+            Item {
+                anchors.fill: parent
+                visible: !root.overlay && root.dashboardOpen
+                Loader {
+                    anchors.fill: parent
+                    anchors.topMargin: Theme.px(10)
+                    active: parent.visible
+                    sourceComponent: dashboardList
+                }
+                Image {
+                    anchors.top: parent.top
+                    width: parent.width
+                    source: Theme.asset("dashboard-mask-top.png")
+                    fillMode: Image.Stretch
+                }
+            }
         }
+
+        // ---- Popup alerts ---------------------------------------------------------------
+        // The front alert window (low battery, an alarm, an incoming call...):
+        // phones give it the negative space, full width, level with the app;
+        // tablets show it 320 px wide at the top right on popup-bg.png, 5 px in,
+        // fading in over 400 ms (DashboardWindowManager.cpp:516-560, 1341-1355;
+        // GraphicsItemContainer.cpp: 20 px margin).
+
+        Rectangle {
+            id: phoneAlert
+            visible: !root.overlay && root.alertShown
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: root.negativeSpace
+            color: Theme.black
+            clip: true
+            z: 2
+            MouseArea { anchors.fill: parent }
+            Item {
+                id: phoneAlertHost
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                height: root.alertHeight
+            }
+        }
+
         BorderImage {
-            id: alertShape
-            visible: false
-            anchors.fill: parent
+            id: tabletAlert
+            visible: opacity > 0
+            opacity: root.overlay && root.alertShown ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.alertFadeDuration } }
+            anchors.right: parent.right
+            anchors.rightMargin: Theme.px(5)
+            y: Theme.px(5)
+            width: Theme.px(320) + 2 * Theme.px(20)
+            height: root.alertHeight + 2 * Theme.px(20)
             source: Theme.asset("popup-bg.png")
             border { left: 20; right: 20; top: 20; bottom: 20 }
+            z: 2
+            MouseArea { anchors.fill: parent }
+            // The scene behind, blurred faintly within the panel's shape.
+            BackdropBlur {
+                anchors.fill: parent
+                z: -1
+                source: root.backdrop
+                mask: alertShape
+            }
+            BorderImage {
+                id: alertShape
+                visible: false
+                anchors.fill: parent
+                source: Theme.asset("popup-bg.png")
+                border { left: 20; right: 20; top: 20; bottom: 20 }
+            }
+            Item {
+                id: tabletAlertHost
+                anchors.fill: parent
+                anchors.margins: Theme.px(20)
+            }
         }
-        Item {
-            id: tabletAlertHost
-            anchors.fill: parent
-            anchors.margins: Theme.px(20)
-        }
-    }
 
-    // Tablets: the notification icons in the status bar; they open the drop-down.
-    Row {
-        id: tabletIcons
-        visible: root.overlay && root.hasNotifications && !root.bannerActive
-        anchors.right: parent.right
-        anchors.rightMargin: root.statusBarRightInset + Theme.px(5)
-        y: -Theme.statusBarHeight + (Theme.statusBarHeight - height) / 2
-        spacing: Theme.px(5)                                        // StatusBar.h:31-32
-        Repeater {
-            model: root.overlay ? root.model : null
-            delegate: AppIcon {
-                required property var model
-                size: Theme.px(22)
-                showLabel: false
-                color: model.color
-                glyph: model.glyph
+        // Tablets: the notification icons in the status bar; they open the drop-down.
+        Row {
+            id: tabletIcons
+            visible: root.overlay && root.hasNotifications && !root.bannerActive
+            anchors.right: parent.right
+            anchors.rightMargin: root.statusBarRightInset + Theme.px(5)
+            y: -Theme.statusBarHeight + (Theme.statusBarHeight - height) / 2
+            spacing: Theme.px(5)                                        // StatusBar.h:31-32
+            Repeater {
+                model: root.overlay ? root.model : null
+                delegate: AppIcon {
+                    required property var model
+                    size: Theme.px(22)
+                    showLabel: false
+                    color: model.color
+                    glyph: model.glyph
+                }
+            }
+        }
+        MouseArea {
+            visible: tabletIcons.visible
+            x: tabletIcons.x - Theme.px(5)
+            y: -Theme.statusBarHeight
+            width: tabletIcons.width + Theme.px(10)
+            height: Theme.statusBarHeight
+            onClicked: root.dashboardOpen = !root.dashboardOpen
+        }
+
+        // Tablets: the 320 px drop-down under the status bar, top right.
+        BorderImage {
+            id: dropDown
+            visible: root.overlay && opacity > 0
+            opacity: root.overlay && root.dashboardOpen ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.searchPillFadeDuration } }
+            anchors.right: parent.right
+            anchors.rightMargin: root.statusBarRightInset
+            y: -Theme.px(2)
+            width: Theme.px(320)
+            height: Math.min(Theme.px(20) + (root.model ? root.model.count : 0) * Theme.dashboardItemHeight,
+                             root.screenHeight * Theme.maximumNegativeSpaceRatio)
+            source: Theme.asset("menu-dropdown-bg.png")
+            border { left: 30; right: 30; top: 30; bottom: 30 }
+            // The scene behind, blurred faintly within the panel's shape.
+            BackdropBlur {
+                anchors.fill: parent
+                z: -1
+                source: root.backdrop
+                mask: dropDownShape
+            }
+            BorderImage {
+                id: dropDownShape
+                visible: false
+                anchors.fill: parent
+                source: Theme.asset("menu-dropdown-bg.png")
+                border { left: 30; right: 30; top: 30; bottom: 30 }
+            }
+            Loader {
+                anchors.fill: parent
+                anchors.margins: Theme.px(10)
+                active: root.overlay && root.dashboardOpen
+                sourceComponent: dashboardList
             }
         }
     }
-    MouseArea {
-        visible: tabletIcons.visible
-        x: tabletIcons.x - Theme.px(5)
-        y: -Theme.statusBarHeight
-        width: tabletIcons.width + Theme.px(10)
-        height: Theme.statusBarHeight
-        onClicked: root.dashboardOpen = !root.dashboardOpen
-    }
 
-    // Tablets: the 320 px drop-down under the status bar, top right.
-    BorderImage {
-        id: dropDown
-        visible: root.overlay && opacity > 0
-        opacity: root.overlay && root.dashboardOpen ? 1 : 0
-        Behavior on opacity { NumberAnimation { duration: Theme.searchPillFadeDuration } }
-        anchors.right: parent.right
-        anchors.rightMargin: root.statusBarRightInset
-        y: -Theme.px(2)
-        width: Theme.px(320)
-        height: Math.min(Theme.px(20) + (root.model ? root.model.count : 0) * Theme.dashboardItemHeight,
-                         root.screenHeight * Theme.maximumNegativeSpaceRatio)
-        source: Theme.asset("menu-dropdown-bg.png")
-        border { left: 30; right: 30; top: 30; bottom: 30 }
-        // The scene behind, blurred faintly within the panel's shape.
-        BackdropBlur {
-            anchors.fill: parent
-            z: -1
-            source: root.backdrop
-            mask: dropDownShape
-        }
-        BorderImage {
-            id: dropDownShape
-            visible: false
-            anchors.fill: parent
-            source: Theme.asset("menu-dropdown-bg.png")
-            border { left: 30; right: 30; top: 30; bottom: 30 }
-        }
-        Loader {
-            anchors.fill: parent
-            anchors.margins: Theme.px(10)
-            active: root.overlay && root.dashboardOpen
-            sourceComponent: dashboardList
-        }
-    }
+    // ---- On the lock screen ------------------------------------------------------------
+    // The lock screen shows the front alert itself, between its wallpaper
+    // and its padlock (LockScreen.alertHost); the window moves there.
+    property Item lockAlertHost: null
 
     // ---- Dashboard items ------------------------------------------------------------
 

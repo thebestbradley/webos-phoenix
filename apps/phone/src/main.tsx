@@ -6,6 +6,10 @@ import { createRoot } from "react-dom/client";
 import "@phoenix/ui/styles.css";
 import "./phone.css";
 import { App } from "./App";
+import { isIncomingAlert, prepareAlertPage } from "./views/IncomingAlert";
+
+if (isIncomingAlert())
+    prepareAlertPage();
 
 createRoot(document.getElementById("root")!).render(
     <StrictMode>

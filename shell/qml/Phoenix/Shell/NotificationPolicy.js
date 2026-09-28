@@ -56,6 +56,12 @@ function popupAlertPriority(appId, name) {
     return DEFAULT_PRIORITY;
 }
 
+// AlertWindow::isIncomingCallAlert: the phone's windows named "incoming...".
+function isIncomingCall(appId, name) {
+    var c = _canonical(appId, name || "");
+    return c[0] === "com.palm.app.phone" && c[1].indexOf("incoming") === 0;
+}
+
 // Where a new alert goes in the queue (index 0 shows):
 // addAlertWindowBasedOnPriority. `queued` is [{appId, name}], in order.
 function insertIndex(queued, appId, name) {
