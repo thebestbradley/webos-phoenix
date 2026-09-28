@@ -210,6 +210,10 @@ others need reimplementation or an alternative for Phoenix.
 - [x] **Clock / alarms** (`com.palm.app.clock`). `conf/notificationPolicy.conf:26`. Runs as the original Open webOS app (`third_party/core-apps`), phone and tablet; see `docs/APP-RUNTIME.md`.
 - [ ] Alarm "ring" popup (the simulated activity manager now fires alarms and launches Clock with its ring params; not yet checked end to end).
 - [x] **Tasks** (webOS 1.x; lists synced per account through Synergy, e.g. Exchange's `com.palm.task.eas:1`). Phoenix: `apps/tasks` (`org.webosphoenix.tasks`): lists (Inbox, add, rename, delete), tasks with due date and time, priority, notes, complete (struck through), hide completed, Today / Upcoming / Overdue, reminders through `com.palm.activitymanager` with a notification (tap: Snooze 10 min / Done), Just Type "New Task" and task search; db8 kinds `com.palm.task:1`, `com.palm.tasklist:1`. No account sync yet. See `docs/APP-RUNTIME.md#tasks`
+
+- [ ] Alarm "ring" popup (needs the activity manager to fire alarms).
+- [x] **Voice Memos** (webOS 2.x, Pre 2 / Pre 3). Not referenced in this repo (**inferred**). Phoenix: `apps/voicememos` (`org.webosphoenix.voicememos`): record with a level meter, pause / resume, list, playback with a scrubber, rename, share, delete, and transcription (whisper.cpp on the device through `org.webosphoenix.transcriber`), searchable in the app and in Just Type. See `docs/APP-RUNTIME.md#voice-memos`
+- [ ] **Tasks**. Not referenced in this repo.
 - [ ] **PDF View / Doc View** (pre-QuickOffice phone apps). Not referenced in this repo.
 - [ ] **Help** (`com.palm.app.help`). `conf/default-launcher-page-layout.json`
 - [ ] **Print Manager** (`com.palm.app.printmanager`). `conf/default-launcher-page-layout.json`

@@ -1,0 +1,234 @@
+/*
+ * Copyright (c) 2026 webOS Phoenix contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Voice Memos: a light Heritage list of memos under day dividers, the
+ * record button in the command menu (the Camera's capture button art),
+ * an open memo on a darker inset panel, and the dark recording sheet with
+ * the level meter.
+ */
+
+body.pui-app { overflow: hidden; }
+#root { height: 100%; }
+
+.vm-app { position: fixed; inset: 0; display: flex; flex-direction: column; }
+.vm-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; }
+.vm-page { --pui-gutter: 8px; padding: 0 var(--pui-gutter) 72px; max-width: 640px; margin: 0 auto; }
+.vm-loading { display: flex; justify-content: center; padding: 60px 0; }
+.vm-empty { padding: 30px 20px; text-align: center; color: var(--pui-text-dim); font-size: 16px; }
+
+/* ---- Header menu and search ----------------------------------------------------------- */
+
+.vm-menu-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 32px;
+    margin: -4px -6px -4px 0;
+    padding: 0;
+    color: #555;
+    background: none;
+    border: 0;
+    border-radius: 6px;
+    cursor: pointer;
+    outline: none;
+}
+.vm-menu-button .pui-glyph { filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.8)); }
+.vm-menu-button:active { background: rgba(0, 0, 0, 0.12); }
+
+.vm-search { margin: 0 0 2px; }
+.vm-search .pui-field { margin: 0; }
+
+/* ---- The list ------------------------------------------------------------------------------ */
+
+.vm-list .pui-row { min-height: 56px; }
+.vm-memo:first-child .pui-row { border-top: 1px solid #fff; }
+.vm-memo-row .pui-row-title { font-weight: bold; }
+.vm-memo-row .pui-row-subtitle { font-size: 14px; color: var(--pui-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vm-memo-row .pui-row-value { color: var(--pui-text-dim); font-size: 15px; }
+.vm-snippet { font-style: italic; }
+.vm-memo-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    color: #fff;
+    background: radial-gradient(circle at 40% 30%, #e96a60, #b8322a 60%, #7d1812);
+    border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.vm-memo.open > .pui-row { background: linear-gradient(#cfd9e4, #bccad8); border-bottom-color: #9aa8b6; }
+.vm-memo.open .pui-row-title { color: #1b4f82; }
+
+.vm-detail {
+    padding: 10px 12px 12px;
+    background: #d6d6d4;
+    border-bottom: 1px solid silver;
+    box-shadow: inset 0 3px 4px -2px rgba(0, 0, 0, 0.3);
+}
+
+/* ---- Player -------------------------------------------------------------------------------- */
+
+.vm-player { display: flex; align-items: center; gap: 10px; }
+.vm-play {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    color: #fff;
+    background: linear-gradient(#5aa0e6, #1f66b1);
+    border: 1px solid #154b85;
+    border-radius: 50%;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+}
+.vm-play .pui-glyph { margin-left: 2px; }
+.vm-play.playing .pui-glyph { margin-left: 0; }
+.vm-play:active { background: linear-gradient(#1f66b1, #184f8b); }
+.vm-play:disabled { opacity: 0.5; }
+.vm-scrub { flex: 1; min-width: 0; }
+.vm-times { display: flex; justify-content: space-between; margin-top: -2px; font-size: 13px; color: #555; }
+
+/* ---- Transcript and actions -------------------------------------------------------------------- */
+
+.vm-progress { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; font-size: 15px; color: #444; }
+.vm-transcript {
+    margin: 10px 0 0;
+    padding: 8px 10px;
+    font-size: 16px;
+    line-height: 1.35;
+    color: #222;
+    background: #f7f7f5;
+    border: 1px solid #b4b4b2;
+    border-radius: 6px;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12);
+    -webkit-user-select: text;
+    user-select: text;
+}
+.vm-transcript.placeholder { font-style: italic; color: var(--pui-text-dim); }
+.vm-segment { cursor: pointer; border-radius: 3px; }
+.vm-segment:active { background: #cfe0f2; }
+.vm-detail .pui-error { margin: 8px 0 0; font-size: 15px; }
+
+/* Transcribe on its own line on a phone, all four in a row on a tablet. */
+.vm-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+.vm-action {
+    min-width: 0;
+    height: 32px;
+    padding: 0 4px;
+    font: inherit;
+    font-size: 14px;
+    font-weight: bold;
+    color: #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+    background: linear-gradient(#fdfdfd, #d9d9d7);
+    border: 1px solid #9a9a98;
+    border-radius: 16px;
+    box-shadow: inset 0 1px 0 #fff;
+    cursor: pointer;
+}
+.vm-action:first-child { grid-column: 1 / -1; }
+.vm-action:active { background: linear-gradient(#bdbdbb, #dcdcda); }
+.vm-action:disabled { opacity: 0.5; cursor: default; }
+.vm-action.negative { color: #fff; text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.4); background: linear-gradient(#e2645a, #b52a20); border-color: #8a1c14; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3); }
+.vm-action.negative:active { background: linear-gradient(#b52a20, #cf4a40); }
+
+/* ---- Command menu: the record button ------------------------------------------------------ */
+
+.vm-record {
+    /* ToolButton art (palm-menu-button.png), wide like the Camera's capture button */
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 104px;
+    height: 50px;
+    padding: 0;
+    background: none;
+    border-style: solid;
+    border-width: 0 25px;
+    border-image: url(../../shared/phoenix-ui/assets/enyo/palm-menu-button.png) 0 25 200 25 fill stretch;
+    cursor: pointer;
+}
+.vm-record:active { border-image-slice: 50 25 150 25 fill; }
+.vm-record-dot {
+    display: block;
+    width: 24px;
+    height: 24px;
+    margin: 0 -20px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, #ff7a70, #d2261f 60%, #8e110c);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+}
+
+/* ---- Recording sheet --------------------------------------------------------------------- */
+
+.vm-recording {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 20px 16px;
+    color: #fff;
+    background: radial-gradient(ellipse at 50% 30%, #3b3b3b, #0d0d0d 75%);
+    animation: vm-rise 0.2s ease-out;
+}
+@keyframes vm-rise { from { transform: translateY(12%); opacity: 0; } }
+.vm-rec-title { max-width: 100%; font-size: 20px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vm-rec-state { display: flex; align-items: center; gap: 6px; height: 20px; font-size: 15px; color: #bbb; text-transform: uppercase; letter-spacing: 0.06em; }
+.vm-rec-state.recording { color: #ff8a80; }
+.vm-rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #e0302a; animation: vm-blink 1s steps(2) infinite; }
+@keyframes vm-blink { 50% { opacity: 0.2; } }
+.vm-rec-time { font-size: 64px; font-weight: 200; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 2px 4px #000; }
+
+.vm-meter {
+    display: flex;
+    gap: 3px;
+    width: 100%;
+    max-width: 300px;
+    height: 22px;
+    padding: 4px;
+    background: #000;
+    border: 1px solid #555;
+    border-radius: 4px;
+    box-shadow: inset 0 1px 3px #000, 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+.vm-meter span { flex: 1; border-radius: 1px; opacity: 0.18; transition: opacity 0.06s linear; }
+.vm-meter span.on { opacity: 1; }
+.vm-meter .green { background: linear-gradient(#8ef08a, #2fae2a); }
+.vm-meter .yellow { background: linear-gradient(#ffe57a, #e0b41f); }
+.vm-meter .red { background: linear-gradient(#ff8a80, #d2261f); }
+
+.vm-rec-error { max-width: 280px; text-align: center; font-size: 16px; color: #ffb4ad; }
+.vm-rec-buttons { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 280px; margin-top: 14px; }
+.vm-rec-buttons .pui-button { width: 100%; }
+.vm-rec-discard { align-self: center; padding: 6px 16px; font: inherit; font-size: 15px; color: #aaa; background: none; border: 0; cursor: pointer; }
+.vm-rec-discard:active { color: #fff; }
+
+/* ---- Dialogs ----------------------------------------------------------------------------- */
+
+.vm-dialog-buttons { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.vm-dialog-buttons .pui-button { width: 100%; }
+.vm-prefs { margin: 0 0 8px; background: #f2f2f0; border: 1px solid #b4b4b2; border-radius: 8px; }
+.vm-prefs .pui-row { min-height: 48px; }
+.vm-prefs .pui-row-title { white-space: normal; line-height: 1.2; }
+
+@media (min-width: 600px) {
+    .vm-page { padding-top: 6px; }
+    .vm-actions { grid-template-columns: 1.5fr 1fr 1fr 1fr; }
+    .vm-action:first-child { grid-column: auto; }
+    .vm-rec-time { font-size: 88px; }
+    .vm-meter { max-width: 420px; height: 28px; }
+}

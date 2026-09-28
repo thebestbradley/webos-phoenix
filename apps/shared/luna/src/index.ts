@@ -12,3 +12,4 @@ export * from "./messaging";
 export * from "./media";
 export * from "./files";
 export * from "./tasks";
+export * from "./transcriber";

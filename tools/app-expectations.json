@@ -67,5 +67,9 @@
     "org.webosphoenix.tasks": {
         "status": "works",
         "note": "Phoenix Tasks (React, apps/tasks); tools/test-tasks.cjs drives it"
+    },
+    "org.webosphoenix.voicememos": {
+        "status": "works",
+        "note": "Phoenix Voice Memos (React, apps/voicememos); tools/test-voicememos.cjs drives it with Chromium's fake microphone. The simulator transcribes only the demo memos (whisper.cpp runs on the device)"
     }
 }

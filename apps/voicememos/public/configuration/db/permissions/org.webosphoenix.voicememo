@@ -1,0 +1,21 @@
+[
+    {
+        "type": "db.kind",
+        "object": "org.webosphoenix.voicememo:1",
+        "caller": "org.webosphoenix.voicememos",
+        "operations": {
+            "create": "allow",
+            "read": "allow",
+            "update": "allow",
+            "delete": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "org.webosphoenix.voicememo:1",
+        "caller": "com.palm.launcher",
+        "operations": {
+            "read": "allow"
+        }
+    }
+]
