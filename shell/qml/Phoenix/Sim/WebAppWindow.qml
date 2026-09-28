@@ -66,6 +66,8 @@ Item {
         settings.javascriptCanOpenWindows: true
         settings.javascriptCanAccessClipboard: true
         settings.showScrollBars: false
+        // Apps start and continue media themselves (Music's next song), as under WebAppMgr.
+        settings.playbackRequiresUserGesture: false
 
         onJavaScriptConsoleMessage: (level, message, lineNumber, sourceID) => {
             if (message.indexOf("__phoenix__") === 0) {
@@ -87,5 +89,13 @@ Item {
         }
         onNewWindowRequested: (request) => win.windowRequested(request)
         onWindowCloseRequested: win.closeRequested()
+        // Camera and microphone for the Camera app, as an app's
+        // requiredPermissions would grant them on a device. Nothing else.
+        onFeaturePermissionRequested: (securityOrigin, feature) => {
+            const media = feature === WebEngineView.MediaVideoCapture
+                || feature === WebEngineView.MediaAudioCapture
+                || feature === WebEngineView.MediaAudioVideoCapture;
+            view.grantFeaturePermission(securityOrigin, feature, media);
+        }
     }
 }
