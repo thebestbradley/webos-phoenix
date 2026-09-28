@@ -87,6 +87,18 @@ Item {
             compare(windows.cards.count, 1);
         }
 
+        function test_newCardRisesFromBelow() {
+            var uid = shell.launch("org.webosphoenix.email");
+            wait(60);
+            var card = shell.cardView.cardItem(uid);
+            // Full size, below its maximized place, coming up.
+            compare(card.cardScale, 1);
+            verify(card.centerY > shell.cardView.maximizedCenterY + 20);
+            tryVerify(function() { return shell.maximized; }, 2000);
+            compare(shell.cardView.risingUid, "");
+            fuzzyCompare(card.centerY, shell.cardView.maximizedCenterY, 0.5);
+        }
+
         function test_shellLaunchMaximizes() {
             shell.launch("org.webosphoenix.email");
             // maximized flips only when the animation lands exactly on 1.

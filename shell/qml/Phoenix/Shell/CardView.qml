@@ -199,6 +199,7 @@ Item {
     }
 
     function minimize() {
+        cancelRise();
         if (count === 0)
             return;
         maximizeAnim.stop();
@@ -210,6 +211,7 @@ Item {
 
     // Jump straight to card view on a stack, without animating.
     function jumpTo(groupIndex) {
+        cancelRise();
         slideAnim.stop();
         maximizeAnim.stop();
         maximizeProgress = 0;
@@ -225,10 +227,75 @@ Item {
         setFocus(uid);
         position = g;
         maximizeAnim.stop();
+        if (_newCards[uid]) {
+            delete _newCards[uid];
+            _prepareRise(uid);
+            return;
+        }
         maximizeAnim.to = 1;
         maximizeAnim.duration = Theme.cardLaunchDuration;
         maximizeAnim.start();
         cardMaximized(uid);
+    }
+
+    // ---- A new card rises (CardWindowManager::prepareAddWindow,
+    // setActiveCardOffScreen, PreparingState, maximizeActiveWindow) ----------
+    // It waits full size just below the screen, its stack in place, until
+    // the app is ready or cardAddMaxDuration (750 ms) has passed, then rises
+    // to maximized, 300 ms OutQuart (cardMaximize). A touch before that
+    // cancels to card view.
+    property string risingUid: ""
+    readonly property bool preparing: riseTimeout.running
+    property var _newCards: ({})
+    Connections {
+        target: cards
+        function onItemAdded(index, item) { view._newCards[item.uid] = true; }
+    }
+
+    function _prepareRise(uid) {
+        risingUid = uid;
+        maximizeProgress = 0;
+        var card = cardItem(uid);
+        if (!card || !card.loading)
+            _rise();
+        else
+            riseTimeout.restart();
+    }
+    function _rise() {
+        riseTimeout.stop();
+        if (risingUid === "" || maximizeProgress > 0)
+            return;
+        maximizeAnim.to = 1;
+        maximizeAnim.duration = Theme.cardMaximizeDuration;
+        maximizeAnim.start();
+        cardMaximized(risingUid);
+    }
+    function cancelRise() {
+        riseTimeout.stop();
+        risingUid = "";
+    }
+    Timer {
+        id: riseTimeout
+        interval: Theme.cardAddMaxDuration
+        onTriggered: view._rise()
+    }
+    // The app became ready before the timeout.
+    Connections {
+        target: view.risingUid !== "" ? view.cardItem(view.risingUid) : null
+        function onLoadingChanged() { if (view.preparing) view._rise(); }
+    }
+    onMaximizedChanged: if (maximized) risingUid = ""
+    // Any other way back to card view ends the rise.
+    Connections {
+        target: maximizeAnim
+        function onRunningChanged() {
+            if (!maximizeAnim.running && !view.maximized && !riseTimeout.running)
+                view.risingUid = "";
+        }
+    }
+    onMaximizeProgressChanged: {
+        if (maximizeProgress === 0 && risingUid !== "" && !riseTimeout.running && !maximizeAnim.running)
+            risingUid = "";
     }
 
     // CardWindowManager::closeWindow: in card view the card is thrown off
@@ -431,6 +498,8 @@ Item {
             required property var model
 
             readonly property var place: view.closing[uid] || view.layout.cards[uid] || null
+            // Rising from below the screen: full size, straight up.
+            readonly property bool rising: view.risingUid === uid
             readonly property bool lifted: view.reorderUid === uid
 
             uid: model.uid
@@ -442,16 +511,17 @@ Item {
             width: view.windowWidth
             height: view.windowHeight
             window: view.source.windowFor(uid)
-            centerX: lifted ? view.reorderX : place ? place.cx : view.width / 2
-            centerY: lifted ? view.reorderY : place ? place.cy : view.cardOriginY
-            cardScale: lifted ? view.activeScale : place ? place.scale : view.activeScale
-            rotation: lifted || !place ? 0 : place.rot
+            centerX: rising ? view.width / 2 : lifted ? view.reorderX : place ? place.cx : view.width / 2
+            centerY: rising ? view.mix(view.height + height / 2, view.maximizedCenterY, view.maximizeProgress)
+                   : lifted ? view.reorderY : place ? place.cy : view.cardOriginY
+            cardScale: rising ? 1 : lifted ? view.activeScale : place ? place.scale : view.activeScale
+            rotation: rising || lifted || !place ? 0 : place.rot
             rounded: view.maximizeProgress < 1
             interactive: view.maximized && place !== null && place.focused
             dimmed: place === null || !place.focused
             reordering: lifted
             layoutAnimationDuration: lifted || view.closing[uid] ? 0 : view.layoutAnimationDuration
-            z: lifted ? 3000 : place ? place.z : 0
+            z: lifted || rising ? 3000 : place ? place.z : 0
             visible: centerX + width * cardScale / 2 > -view.width
                      && centerX - width * cardScale / 2 < view.width * 2
         }
@@ -530,6 +600,12 @@ Item {
         }
 
         onPressed: (points) => {
+            // A touch while a new card waits to rise: back to card view
+            // (PreparingState::handleTouchBegin -> minimizeActiveWindow).
+            if (view.preparing) {
+                view.cancelRise();
+                return;
+            }
             var now = Date.now();
             for (var i = 0; i < points.length; ++i) {
                 var p = points[i];

@@ -45,14 +45,16 @@ FocusScope {
     // ---- Navigation -----------------------------------------------------------
 
     // params (optional): launch params, e.g. from a tapped notification.
+    // Returns the card's uid ("" for apps without a card).
     function launch(appId, params) {
         if (!source)
-            return;
+            return "";
         launcher.open = false;
         justType.open = false;
         var uid = source.launch(appId, cards.currentUid, params || null);
         if (uid !== "")
             Qt.callLater(cards.focusLaunched, uid);
+        return uid;
     }
 
     function startJustType(text) {

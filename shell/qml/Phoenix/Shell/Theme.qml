@@ -171,6 +171,7 @@ QtObject {
     // ---- Animation (conf/lunaAnimations.conf [Cards]) -----------------------
 
     readonly property int cardLaunchDuration: 400
+    readonly property int cardAddMaxDuration: 750                    // conf/lunaAnimations.conf:53
     readonly property int cardSlideDuration: 300                     // curve 10 = OutQuart
     readonly property int cardMaximizeDuration: 300                  // curve 10 = OutQuart
     readonly property int cardMinimizeDuration: 300                  // minimize is a cardSlide
