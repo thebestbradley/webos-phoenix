@@ -63,16 +63,46 @@ Rootfs::Rootfs(const QString &repoDir)
                 continue;
             m_appDirs.insert(id, appDir);
             const QString root = QString::fromLatin1(kAppsPrefix) + id + QLatin1Char('/');
+            const QString main = urlFor(root + app.value(QStringLiteral("main")).toString(QStringLiteral("index.html")));
+            // Phoenix launcher metadata (see docs/APP-RUNTIME.md): launcherTab
+            // (0 Apps, 1 Downloads, 2 Settings), hidden, launchPoints.
+            const QJsonObject phoenix = app.value(QStringLiteral("phoenix")).toObject();
+            const int tab = phoenix.value(QStringLiteral("launcherTab")).toInt(0);
             QVariantMap entry;
             entry[QStringLiteral("id")] = id;
+            entry[QStringLiteral("appId")] = id;
             entry[QStringLiteral("title")] = app.value(QStringLiteral("title")).toString(id);
             entry[QStringLiteral("type")] = app.value(QStringLiteral("type")).toString(QStringLiteral("web"));
             entry[QStringLiteral("noWindow")] = app.value(QStringLiteral("noWindow")).toBool();
-            entry[QStringLiteral("main")] = urlFor(root + app.value(QStringLiteral("main")).toString(QStringLiteral("index.html")));
+            entry[QStringLiteral("main")] = main;
+            entry[QStringLiteral("params")] = QString();
+            // -1 keeps an app out of the launcher.
+            entry[QStringLiteral("tab")] = phoenix.value(QStringLiteral("hidden")).toBool() ? -1 : tab;
+            // The app's files on disk, for device paths the shell resolves itself (wallpapers).
+            entry[QStringLiteral("dir")] = QUrl::fromLocalFile(appDir + QLatin1Char('/')).toString();
             // The shell loads icons itself, from the file on disk.
             const QString icon = app.value(QStringLiteral("icon")).toString(QStringLiteral("icon.png"));
             entry[QStringLiteral("icon")] = QUrl::fromLocalFile(appDir + QLatin1Char('/') + icon).toString();
             m_apps.append(entry);
+
+            // Launch points: more launcher icons for the same app, each
+            // starting it with its own launch params (its own card).
+            for (const auto &lpValue : phoenix.value(QStringLiteral("launchPoints")).toArray()) {
+                const QJsonObject lp = lpValue.toObject();
+                const QString lpId = lp.value(QStringLiteral("id")).toString();
+                if (lpId.isEmpty())
+                    continue;
+                const QByteArray params = QJsonDocument(lp.value(QStringLiteral("params")).toObject()).toJson(QJsonDocument::Compact);
+                QVariantMap point = entry;
+                point[QStringLiteral("id")] = lpId;
+                point[QStringLiteral("title")] = lp.value(QStringLiteral("title")).toString(entry.value(QStringLiteral("title")).toString());
+                point[QStringLiteral("params")] = QString::fromUtf8(params);
+                point[QStringLiteral("main")] = main + QStringLiteral("?launchParams=") + QString::fromLatin1(QUrl::toPercentEncoding(QString::fromUtf8(params)));
+                point[QStringLiteral("tab")] = lp.value(QStringLiteral("launcherTab")).toInt(tab);
+                point[QStringLiteral("icon")] = QUrl::fromLocalFile(appDir + QLatin1Char('/') + lp.value(QStringLiteral("icon")).toString(icon)).toString();
+                point[QStringLiteral("noWindow")] = false;
+                m_apps.append(point);
+            }
         }
     }
     m_valid = true;

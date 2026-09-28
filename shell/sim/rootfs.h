@@ -30,8 +30,10 @@ public:
     // Device path (e.g. /usr/palm/applications/<id>/index.html) -> file.
     QString resolve(const QString &devicePath) const;
 
-    // Installed apps as maps: id, title, type, noWindow, main (phoenix:// URL)
-    // and icon (file URL, for the shell).
+    // Launcher entries as maps: id, appId (the app; differs from id for a
+    // launch point), title, type, noWindow, main (phoenix:// URL, with
+    // ?launchParams= for launch points), params (JSON), tab (-1 = hidden),
+    // dir and icon (file URLs, for the shell).
     QVariantList apps() const { return m_apps; }
 
     static QString scheme() { return QStringLiteral("phoenix"); }

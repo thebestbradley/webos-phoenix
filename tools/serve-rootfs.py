@@ -20,6 +20,7 @@ import json
 import mimetypes
 import os
 import sys
+import urllib.parse
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNTIME_TAG = b'<script src="/usr/share/phoenix/runtime/phoenix-runtime.js"></script>'
@@ -75,16 +76,41 @@ def resolve(path):
 
 
 def app_list():
+    """Installed apps and their launch points, as the launcher sees them.
+
+    appinfo.json may carry a "phoenix" object (Phoenix launcher metadata):
+    launcherTab (0 Apps, 1 Downloads, 2 Settings), hidden (keep the app
+    itself out of the launcher) and launchPoints: extra launcher icons,
+    each {id, title, icon, params}, that start the app with those launch
+    params. shell/sim/rootfs.cpp reads the same fields.
+    """
     out = []
     for app_id, (_, info) in sorted(APPS.items()):
         base = "/usr/palm/applications/%s/" % app_id
+        main = base + info.get("main", "index.html")
+        phoenix = info.get("phoenix") or {}
+        tab = phoenix.get("launcherTab", 0)
         out.append({
             "id": app_id,
             "title": info.get("title", app_id),
             "type": info.get("type", "web"),
-            "main": base + info.get("main", "index.html"),
+            "main": main,
             "icon": base + info.get("icon", "icon.png"),
+            "tab": tab,
+            "hidden": bool(phoenix.get("hidden", False)),
         })
+        for lp in phoenix.get("launchPoints", []):
+            params = lp.get("params", {})
+            out.append({
+                "id": lp["id"],
+                "appId": app_id,
+                "title": lp.get("title", info.get("title", app_id)),
+                "type": info.get("type", "web"),
+                "main": main + "?launchParams=" + urllib.parse.quote(json.dumps(params, separators=(",", ":"))),
+                "icon": base + lp.get("icon", info.get("icon", "icon.png")),
+                "tab": lp.get("launcherTab", tab),
+                "params": params,
+            })
     return out
 
 
@@ -96,7 +122,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/":
             rows = "".join(
                 '<li><a href="%s"><img src="%s" width="32" height="32"> %s</a> <small>%s</small></li>'
-                % (a["main"], a["icon"], html.escape(a["title"]), a["id"]) for a in app_list())
+                % (html.escape(a["main"]), a["icon"], html.escape(a["title"]), a["id"]) for a in app_list())
             page = "<!doctype html><title>webOS Phoenix apps</title><ul>%s</ul>" % rows
             return self.send(200, "text/html; charset=utf-8", page.encode())
         f = resolve(path)
