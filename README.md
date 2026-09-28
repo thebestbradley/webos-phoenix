@@ -96,7 +96,9 @@ cd ../build-webos-phoenix && . ./oe-init-build-env
 bitbake webos-phoenix-image
 ```
 
-This pins webOS OSE `build-webos` and adds `meta-phoenix`. See
+This pins webOS OSE `build-webos` and adds `meta-phoenix`. On a Mac, use
+`scripts/mac-build.sh`, which runs the same build in a Linux container with
+Apple's `container` tool; see [docs/BUILDING-MAC.md](docs/BUILDING-MAC.md). See
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the shell is installed.
 
 ## Documentation

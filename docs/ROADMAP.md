@@ -34,6 +34,14 @@ These Open webOS repositories are also public and should fill the gaps:
 - [ ] `openwebos/core-apps`: the original Enyo core apps (useful for M4)
 - [ ] Reference photos/screenshots of real Pre / Pre 2 / Pre 3 / Veer / TouchPad for pixel comparison
 
+## Build infrastructure
+
+- [x] Linux build container, and `scripts/mac-build.sh` for Apple's `container` on macOS
+- [ ] Native ARM64 build host (Apple silicon without Rosetta, ARM Linux servers). OSE's
+      build currently needs an x86-64 host: `gcc-multilib`/`g++-multilib` for 32-bit
+      `pseudo` and Chromium's V8 snapshot tool. Target devices can already be ARM64.
+- [ ] Shared sstate/download cache so rebuilds and CI don't start from scratch
+
 ## M1: running on webOS OSE
 
 Targets: `qemux86-64` (emulator) and Raspberry Pi 4 with the official

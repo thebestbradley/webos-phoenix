@@ -1,0 +1,38 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Build environment for webOS OSE + meta-phoenix.
+#
+# webOS OSE supports Ubuntu 20.04/22.04 on amd64 only (build-webos
+# scripts/prerequisites.sh), and needs gcc-multilib, which does not exist for
+# arm64. On Apple silicon, build and run this image as linux/amd64; Apple's
+# `container` runs it under Rosetta. See docs/BUILDING-MAC.md.
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Package list from build-webos scripts/prerequisites.sh (v2.3.0), plus the
+# tools the Yocto scarthgap sanity checks and our scripts need.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential python3-distutils chrpath cpio diffstat file gawk git \
+        iputils-ping liblz4-tool locales python3 wget zstd \
+        gcc-multilib g++-multilib time \
+        bzip2 gzip tar zip xz-utils unzip \
+        ca-certificates curl lz4 python3-pip python3-pexpect python3-git \
+        python3-jinja2 python3-subunit socat texinfo debianutils \
+        sudo less vim-tiny tmux \
+    && locale-gen en_US.UTF-8 \
+    && git config --system --add safe.directory '*' \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+
+# BitBake refuses to run as root.
+RUN useradd --create-home --uid 1000 --shell /bin/bash builder \
+    && echo "builder ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/builder \
+    && mkdir -p /work && chown builder:builder /work
+
+USER builder
+WORKDIR /work
+CMD ["/bin/bash"]
