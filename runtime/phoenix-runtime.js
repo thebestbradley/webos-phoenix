@@ -663,6 +663,157 @@
         "*": function (p, reply) { reply(ok()); }
     });
 
+    // ---- Fonts (core apps) ------------------------------------------------------------
+    //
+    // The original apps and Enyo 1.0 ask for Palm's Prelude typeface under
+    // several names ("Prelude", "Prelude Medium", "PreludeWGL-Light", ...).
+    // It is not redistributable, and some app styles name it with no
+    // fallback (Calculator: font-family: "Prelude Medium"), which leaves a
+    // serif font. Alias those names to Prelude if it is installed, otherwise
+    // to the same sans-serif fallbacks the shell uses (Theme.qml).
+    (function aliasPreludeFonts() {
+        if (!global.document || !global.document.fonts || typeof global.FontFace !== "function")
+            return;
+        var regular = ["Prelude", "Prelude Medium", "Helvetica Neue", "Open Sans", "Liberation Sans", "Arial", "DejaVu Sans"];
+        var light = ["Prelude Light", "Helvetica Neue Light", "Open Sans Light", "Liberation Sans", "Arial", "DejaVu Sans"];
+        var bold = ["Prelude Bold", "Helvetica Neue Bold", "Open Sans Bold", "Liberation Sans Bold", "Arial Bold", "DejaVu Sans Bold"];
+        function src(names) { return names.map(function (n) { return "local(\"" + n + "\")"; }).join(", "); }
+        var families = {
+            "Prelude": regular, "Prelude Medium": regular, "Prelude-Medium": regular,
+            "Prelude Light": light, "Prelude-Light": light, "PreludeWGL-Light": light
+        };
+        Object.keys(families).forEach(function (family) {
+            try {
+                global.document.fonts.add(new FontFace(family, src(families[family]), { weight: "100 599" }));
+                global.document.fonts.add(new FontFace(family, src(bold), { weight: "600 900" }));
+            } catch (e) { /* ignore */ }
+        });
+    })();
+
+    // ---- Legacy WebKit APIs (core apps) ------------------------------------------------
+    //
+    // Enyo 1.0 cancels animation frames with webkitCancelRequestAnimationFrame
+    // and falls back to clearTimeout when it is missing. Chromium removed
+    // that name, and requestAnimationFrame ids share numbers with timer ids,
+    // so Enyo ends up cancelling unrelated timers: a Pane's fade between
+    // views stops half-way, leaving both views drawn and a transparent scrim
+    // that swallows every tap.
+    if (!global.webkitCancelRequestAnimationFrame && global.cancelAnimationFrame)
+        global.webkitCancelRequestAnimationFrame = global.cancelAnimationFrame.bind(global);
+    if (!global.webkitRequestAnimationFrame && global.requestAnimationFrame)
+        global.webkitRequestAnimationFrame = global.requestAnimationFrame.bind(global);
+
+    // ---- PalmSystem.simulateMouseClick (Enyo 1.0 focus) -------------------------------
+    //
+    // When PalmSystem exists, Enyo 1.0 takes the device's "focus at point"
+    // path: it cancels native mousedowns, focuses the tapped node itself on
+    // mouseup, then asks the system to replay the tap
+    // (simulateMouseClick down/up) and ignores events until that replay
+    // arrives. With a no-op, the next real tap is swallowed instead (a text
+    // field tapped after a button never gets focus). Replay the tap as
+    // mouse events at that point, asynchronously like the device does.
+    PalmSystem.simulateMouseClick = function (x, y, down) {
+        setTimeout(function () {
+            var doc = global.document;
+            var sx = x - (global.pageXOffset || 0), sy = y - (global.pageYOffset || 0);
+            var target = doc.elementFromPoint(sx, sy) || doc.body;
+            if (!target) return;
+            target.dispatchEvent(new MouseEvent(down ? "mousedown" : "mouseup", {
+                bubbles: true, cancelable: true, view: global,
+                clientX: sx, clientY: sy, screenX: sx, screenY: sy, button: 0, buttons: down ? 1 : 0
+            }));
+        }, 0);
+    };
+
+    // ---- Card activation (Mojo.stageActivated) ----------------------------------------
+    //
+    // LunaSysMgr tells a card's page when it is opened or brought to the
+    // front (Mojo.stageActivated) and when it is minimized or closed
+    // (Mojo.stageDeactivated); Enyo turns these into onWindowActivated /
+    // onWindowDeactivated. Email's window, for one, only handles its launch
+    // (opening the first folder) once activated. Do the same when a page
+    // has loaded and when it becomes visible or hidden. A headless app's
+    // main page ("noWindow" in appinfo.json) is not a card: never activated.
+    (function cardActivation() {
+        var m = /^(\/usr\/palm\/applications\/[^\/]+\/)(.*)$/.exec(global.location.pathname.replace(/\/{2,}/g, "/"));
+        if (!m) return;
+        var info = {};
+        try { info = JSON.parse((PalmSystem.getResource(m[1] + "appinfo.json") || "{}").replace(/^﻿/, "")); } catch (e) { info = {}; }
+        if (info.noWindow && !global.opener && m[2] === (info.main || "index.html"))
+            return;
+
+        function stage(activated) {
+            var mojo = global.Mojo;
+            var fn = mojo && (activated ? mojo.stageActivated : mojo.stageDeactivated);
+            if (typeof fn === "function") {
+                try { fn(); } catch (e) { console.error("[phoenix-runtime] stage " + (activated ? "activation" : "deactivation") + " failed", e); }
+            }
+        }
+
+        global.addEventListener("load", function () {
+            setTimeout(function () { if (global.document.visibilityState !== "hidden") stage(true); }, 0);
+        });
+        global.document.addEventListener("visibilitychange", function () {
+            stage(global.document.visibilityState !== "hidden");
+        });
+    })();
+
+    // ---- Legacy WebKit border images (core apps) ---------------------------------------
+    //
+    // Enyo 1.0 and the core apps draw most of their chrome (buttons, pickers,
+    // input frames, the Calculator body, ...) with -webkit-border-image and a
+    // border-width, but no border-style. The 2011 WebKit they were written
+    // for used the border width whenever a border image was set; current
+    // Chromium follows the spec and treats the border as "none" (zero
+    // width), so the artwork's edges disappear and buttons look flat.
+    // Restore the old behaviour: rules that set a border image get
+    // border-style: solid (the image replaces the solid line), and rules
+    // that clear it get border-style: none, unless the rule says otherwise.
+    (function fixLegacyBorderImages() {
+        var doc = global.document;
+        if (!doc || typeof MutationObserver !== "function")
+            return;
+        var done = typeof WeakSet === "function" ? new WeakSet() : null;
+
+        function fixRules(rules) {
+            for (var i = 0; rules && i < rules.length; ++i) {
+                var r = rules[i];
+                if (r.cssRules && !r.style) { fixRules(r.cssRules); continue; }
+                var s = r.style;
+                if (!s) continue;
+                var prop = s.getPropertyValue("-webkit-border-image") ? "-webkit-border-image" : "border-image-source";
+                var img = s.getPropertyValue(prop);
+                if (!img || s.getPropertyValue("border-top-style"))
+                    continue;
+                s.setProperty("border-style", img === "none" ? "none" : "solid", s.getPropertyPriority(prop));
+            }
+        }
+
+        function fixSheet(sheet) {
+            if (!sheet || (done && done.has(sheet))) return;
+            var rules;
+            try { rules = sheet.cssRules; } catch (e) { return; } // not loaded yet
+            if (!rules) return;
+            if (done) done.add(sheet);
+            fixRules(rules);
+        }
+
+        function fixAll() {
+            for (var i = 0; i < doc.styleSheets.length; ++i) fixSheet(doc.styleSheets[i]);
+        }
+
+        new MutationObserver(function (records) {
+            records.forEach(function (rec) {
+                Array.prototype.forEach.call(rec.addedNodes, function (n) {
+                    if (n.nodeName === "LINK") n.addEventListener("load", function () { fixSheet(n.sheet); });
+                    else if (n.nodeName === "STYLE") fixSheet(n.sheet);
+                });
+            });
+        }).observe(doc, { childList: true, subtree: true });
+        doc.addEventListener("DOMContentLoaded", fixAll);
+        global.addEventListener("load", fixAll);
+    })();
+
     // Back gesture: the shell calls this; Mojo/Enyo 1.0 apps treat Escape
     // (and keyIdentifier U+1200001 on devices) as "back".
     runtime.back = function () {
