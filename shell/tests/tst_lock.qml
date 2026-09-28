@@ -45,6 +45,9 @@ Item {
 
         function init() {
             lock.locked = true;
+            // A test may leave the panel asking for the passcode; locking
+            // again is no change, so close it here.
+            lock.unlockPanel.shown = false;
             unlocked.clear();
             lockService.calls = [];
             tryCompare(findChild(lock, "unlockPanel"), "opacity", 0, 1000);
