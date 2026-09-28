@@ -59,10 +59,10 @@ Nearly all the art is already in `shell/assets/openwebos/`.
 
 | # | Original | Phoenix | P · effort |
 |---|---|---|---|
-| S1 | Painted right to left from the battery: RSSI, WAN, BT, Wi-Fi, TTY, HAC, call forward, roaming, VPN, rotation lock, mute, airplane; spacing 5 (`StatusBarInfo.cpp:143-275`) | Airplane, RSSI, BT, Wi-Fi, battery; spacing 4 | P1 · S |
-| S2 | WAN type and dormancy, dual RSSI, roaming, VPN, BT connecting/connected, Wi-Fi connecting, TTY, HAC, call forward, rotation lock, mute, battery error (`StatusBarInfo.cpp:183-326`) | RSSI, BT on, Wi-Fi, battery only | P1 · M |
-| S3 | Battery image = first threshold ≥ level in {12,20,28,36,44,52,60,68,76,84,88,99,100}; `battery_full.mp3` (`StatusBarBattery.cpp:35,200-218`) | `round(pct/100*11)` | P2 · S |
-| S4 | 12/24 h per locale, no leading zero in 12 h; lock screen bar shows the short date (`StatusBarClock.cpp:195-232`) | 12 h, always the time | P1 · S |
+| S1 | Painted right to left from the battery: RSSI, WAN, BT, Wi-Fi, TTY, HAC, call forward, roaming, VPN, rotation lock, mute, airplane; spacing 5 (`StatusBarInfo.cpp:143-275`) | **Done**: the original order and spacing 5 | P1 · S |
+| S2 | WAN type and dormancy, dual RSSI, roaming, VPN, BT connecting/connected, Wi-Fi connecting, TTY, HAC, call forward, rotation lock, mute, battery error (`StatusBarInfo.cpp:183-326`) | RSSI (flight-mode bars in airplane mode), BT on, Wi-Fi, battery, and now rotation lock, mute and airplane. Not yet, for want of the state: WAN type, roaming, VPN, BT connecting/connected, Wi-Fi connecting, TTY, HAC, call forward, battery error | P1 · M |
+| S3 | Battery image = first threshold ≥ level in {12,20,28,36,44,52,60,68,76,84,88,99,100}; `battery_full.mp3` (`StatusBarBattery.cpp:35,200-218`) | **Done**: the thresholds; the full state uses battery-11, or battery-charged while charging. Not the `battery_full.mp3` sound (A1) | P2 · S |
+| S4 | 12/24 h per locale, no leading zero in 12 h; lock screen bar shows the short date (`StatusBarClock.cpp:195-232`) | **Done**: 12 h without a leading zero, or 24 h from the system preference (also the lock-screen clock); the lock screen's bar shows the short date (K5) | P1 · S |
 | S5 | Title Prelude 14 bold always, 90% spacing, caps 13/20, `menu-arrow.png` slides in 500 ms InOutQuad, 300 ms title cross-fade | Bold only for apps, no arrow, no cross-fade | P2 · S |
 | S6 | App-tinted status bar, 300 ms lerp (tablet) | None | P2 · S |
 | S7 | Tablet: clock at the right of the system group; fill fades in when an app maximizes (`StatusBar.cpp:98-104,240-262`) | Clock centred, fill always solid | P1 · S |

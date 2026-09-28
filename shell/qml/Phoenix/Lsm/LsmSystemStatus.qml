@@ -6,7 +6,8 @@
 //
 // STATUS: placeholder values. M1 wires these to OSE Luna services
 // (com.webos.service.connectionmanager, com.webos.service.bluetooth2,
-// com.webos.service.battery where the device provides it).
+// com.webos.service.battery where the device provides it, and the
+// settings service's time format for twentyFourHour).
 
 import QtQuick
 
@@ -20,6 +21,7 @@ QtObject {
     property bool bluetoothOn: false
     property bool rotationLocked: false
     property bool muted: false
+    property bool twentyFourHour: false
     property real brightness: 1.0
     property var fixedTime: null
 }

@@ -39,6 +39,9 @@ Item {
         // StatusBarClock::setDisplayDate: the locale's short date.
         if (lockScreen)
             return Qt.formatDate(shownTime, Qt.locale().dateFormat(Locale.ShortFormat));
+        // 12 h without a leading zero, or 24 h (StatusBarClock::tick).
+        if (system && system.twentyFourHour)
+            return pad(shownTime.getHours()) + ":" + pad(shownTime.getMinutes());
         var h = shownTime.getHours() % 12;
         return (h === 0 ? 12 : h) + ":" + pad(shownTime.getMinutes());
     }
@@ -121,19 +124,27 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Theme.statusBarIconSpacing
 
+        // StatusBarInfo paints right to left from the battery: RSSI, WAN,
+        // Bluetooth, Wi-Fi, TTY, HAC, call forward, roaming, VPN, rotation
+        // lock, mute, airplane (StatusBarInfo.cpp:143-275). This Row runs
+        // left to right, so the reverse. Not shown yet, for want of the
+        // state: WAN, TTY, HAC, call forward, roaming, VPN.
         Image {
-            visible: bar.system && bar.system.airplaneMode
-            source: Theme.asset("statusBar/rssi-flightmode.png")
+            objectName: "airplaneIcon"
+            visible: bar.system !== null && bar.system !== undefined && bar.system.airplaneMode
+            source: Theme.asset("statusBar/icon-airplane.png")
             width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
         }
         Image {
-            visible: bar.system && !bar.system.airplaneMode && bar.system.signalBars >= 0
-            source: bar.system ? Theme.asset("statusBar/rssi-" + Math.max(0, bar.system.signalBars) + ".png") : ""
+            objectName: "muteIcon"
+            visible: bar.system !== null && bar.system !== undefined && bar.system.muted
+            source: Theme.asset("statusBar/icon-mute.png")
             width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
         }
         Image {
-            visible: bar.system && bar.system.bluetoothOn
-            source: Theme.asset("statusBar/bluetooth-on.png")
+            objectName: "rotationLockIcon"
+            visible: bar.system !== null && bar.system !== undefined && bar.system.rotationLocked
+            source: Theme.asset("statusBar/icon-rotation-lock.png")
             width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
         }
         Image {
@@ -142,12 +153,27 @@ Item {
             width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
         }
         Image {
-            // battery-0..11: 12 steps (images/statusBar/)
-            readonly property int step: bar.system ? Math.round(bar.system.batteryPercent / 100 * 11) : 0
+            visible: bar.system && bar.system.bluetoothOn
+            source: Theme.asset("statusBar/bluetooth-on.png")
+            width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
+        }
+        // RSSI, or the flight-mode bars (StatusBar::RSSI_FLIGHT_MODE).
+        Image {
+            visible: bar.system && (bar.system.airplaneMode || bar.system.signalBars >= 0)
             source: !bar.system ? ""
-                    : bar.system.charging && bar.system.batteryPercent >= 100 ? Theme.asset("statusBar/battery-charged.png")
+                    : bar.system.airplaneMode ? Theme.asset("statusBar/rssi-flightmode.png")
+                    : Theme.asset("statusBar/rssi-" + Math.max(0, bar.system.signalBars) + ".png")
+            width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
+        }
+        Image {
+            objectName: "battery"
+            readonly property int step: bar.system ? Theme.batteryState(bar.system.batteryPercent) : 0
+            // States 0-11 are battery-N; the full one reuses battery-11, or
+            // battery-charged while charging (StatusBarBattery.cpp:150-172).
+            source: !bar.system ? ""
+                    : bar.system.charging && step === 12 ? Theme.asset("statusBar/battery-charged.png")
                     : bar.system.charging ? Theme.asset("statusBar/battery-charging-" + step + ".png")
-                    : Theme.asset("statusBar/battery-" + step + ".png")
+                    : Theme.asset("statusBar/battery-" + Math.min(step, 11) + ".png")
             width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
         }
     }

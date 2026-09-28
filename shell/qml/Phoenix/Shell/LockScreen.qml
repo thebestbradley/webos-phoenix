@@ -116,10 +116,14 @@ Item {
         // Centred 15% down the screen (LockWindow.cpp:427).
         y: Math.max(Theme.statusBarHeight, lock.height * Theme.lockClockCenterRatio - Theme.lockDigitHeight / 2)
 
+        // ClockWindow::tick: 12 h without a leading zero, or 24 h.
         readonly property string text: {
-            var h = lock.shownTime.getHours() % 12;
-            if (h === 0) h = 12;
             var m = lock.shownTime.getMinutes();
+            var h = lock.shownTime.getHours();
+            if (lock.system && lock.system.twentyFourHour)
+                return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
+            h = h % 12;
+            if (h === 0) h = 12;
             return h + ":" + (m < 10 ? "0" : "") + m;
         }
 

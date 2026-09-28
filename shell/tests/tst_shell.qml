@@ -348,6 +348,55 @@ Item {
             verify(/^\d+:\d\d$/.test(bar.clockText));
         }
 
+        function test_batteryStates() {
+            compare(Theme.batteryState(0), 0);
+            compare(Theme.batteryState(12), 0);
+            compare(Theme.batteryState(13), 1);
+            compare(Theme.batteryState(50), 5);
+            compare(Theme.batteryState(89), 11);
+            compare(Theme.batteryState(99), 11);
+            compare(Theme.batteryState(100), 12);
+            var img = findChild(shell, "battery");
+            shell.system.charging = false;
+            shell.system.batteryPercent = 100;
+            verify(/battery-11\.png$/.test(img.source));
+            shell.system.charging = true;
+            verify(/battery-charged\.png$/.test(img.source));
+            shell.system.batteryPercent = 50;
+            verify(/battery-charging-5\.png$/.test(img.source));
+            shell.system.batteryPercent = 100;
+        }
+
+        function test_statusIndicators() {
+            var sys = shell.system;
+            sys.rotationLocked = true;
+            sys.muted = true;
+            sys.airplaneMode = true;
+            verify(findChild(shell, "rotationLockIcon").visible);
+            verify(findChild(shell, "muteIcon").visible);
+            var plane = findChild(shell, "airplaneIcon");
+            verify(plane.visible);
+            // Leftmost of the indicators, as StatusBarInfo paints it last.
+            compare(plane.x, 0);
+            sys.rotationLocked = false;
+            sys.muted = false;
+            sys.airplaneMode = false;
+            verify(!plane.visible);
+        }
+
+        function test_clockFollowsTheTimeFormat() {
+            var bar = findChild(shell, "statusBar");
+            shell.system.fixedTime = new Date(2009, 5, 6, 9, 5);
+            compare(bar.clockText, "9:05");
+            shell.system.twentyFourHour = true;
+            compare(bar.clockText, "09:05");
+            shell.system.fixedTime = new Date(2009, 5, 6, 21, 41);
+            compare(bar.clockText, "21:41");
+            shell.system.twentyFourHour = false;
+            compare(bar.clockText, "9:41");
+            shell.system.fixedTime = null;
+        }
+
         function test_lockedIgnoresGestures() {
             shell.lock();
             shell.gestureUp();

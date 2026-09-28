@@ -21,6 +21,8 @@ QtObject {
     property bool bluetoothOn: false
     property bool rotationLocked: false
     property bool muted: false
+    // The clock's format (system preference timeFormat "HH24").
+    property bool twentyFourHour: false
     property real brightness: 0.7
     // Fixed time for reproducible screenshots; null = live clock.
     property var fixedTime: null
@@ -45,6 +47,8 @@ QtObject {
             rotationLocked = !!s.rotationLocked;
         if (s.muted !== undefined)
             muted = !!s.muted;
+        if (s.timeFormat !== undefined)
+            twentyFourHour = s.timeFormat === "HH24";
         applyingAppStatus = false;
     }
 

@@ -2021,6 +2021,7 @@
                 airplaneMode: !!s.offlineMode,
                 brightness: s.settings.picture.backlight,
                 rotationLocked: !!p.rotationLock,
+                timeFormat: p.timeFormat === "HH24" ? "HH24" : "HH12",
                 muted: !!s.audio.muted,
                 wallpaperFile: (p.wallpaper && p.wallpaper.wallpaperFile) || ""
             };
@@ -2462,7 +2463,7 @@
         };
         sys["/setPreferences"] = function (p, reply, ctx) {
             baseSetPreferences(p, reply, ctx);
-            if ("rotationLock" in p || "wallpaper" in p) {
+            if ("rotationLock" in p || "wallpaper" in p || "timeFormat" in p) {
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
                 changed();
             }

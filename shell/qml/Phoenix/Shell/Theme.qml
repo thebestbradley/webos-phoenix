@@ -62,7 +62,16 @@ QtObject {
 
     readonly property int statusBarHeight: px(28)
     readonly property int statusBarTitleMaxWidth: px(140)   // Src/base/settings/Settings.cpp:179
-    readonly property int statusBarIconSpacing: px(4)
+    readonly property int statusBarIconSpacing: px(5)                // StatusBarIcon.h:35 ICON_SPACING
+    // The battery state for a charge level: the first of these at or above
+    // it (StatusBarBattery.cpp:34, 200-212).
+    readonly property var batteryChargeLevels: [12, 20, 28, 36, 44, 52, 60, 68, 76, 84, 88, 99, 100]
+    function batteryState(percent) {
+        for (var i = 0; i < batteryChargeLevels.length; ++i)
+            if (percent <= batteryChargeLevels[i])
+                return i;
+        return batteryChargeLevels.length - 1;
+    }
     readonly property int statusBarFontSize: px(14)                  // StatusBarTitle.cpp:36
     readonly property int statusBarClockFontSize: px(15)             // StatusBarClock.cpp:34
     // Phones: solid black (StatusBar.cpp:767). Tablet: tiled art over #515558 (StatusBar.cpp:47).
