@@ -533,12 +533,20 @@ Item {
             verify(findChild(shell, "muteIcon").visible);
             var plane = findChild(shell, "airplaneIcon");
             verify(plane.visible);
+            // It slides in: narrow and faint at first, whole after a second
+            // (StatusBarIcon, statusBarItemSlide 1000 ms).
+            verify(plane.width < Theme.px(20));
+            tryCompare(plane, "progress", 1, 2500);
+            verify(plane.width > 0);
+            compare(plane.opacity, 1);
             // Leftmost of the indicators, as StatusBarInfo paints it last.
             compare(plane.x, 0);
             sys.rotationLocked = false;
             sys.muted = false;
             sys.airplaneMode = false;
-            verify(!plane.visible);
+            // And slides out.
+            verify(plane.visible);
+            tryVerify(function() { return !plane.visible; }, 2500);
         }
 
         // SystemUiController::updateStatusBarTitle / StatusBarTitle.

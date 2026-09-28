@@ -66,7 +66,7 @@ Nearly all the art is already in `shell/assets/openwebos/`.
 | S5 | Title Prelude 14 bold always, 90% spacing, caps 13/20, `menu-arrow.png` slides in 500 ms InOutQuad, 300 ms title cross-fade | **Done**: 14 px bold always with 90% percentage spacing (`FontTools`, Phoenix.Native), phones' pill with 13/20 caps and the text 9 px in (7 px without), 2 px above centre, 300 ms cross-fade; tablets: menu-arrow.png and the separator after the title, fading 500 ms InOutQuad (it fades; nothing slides). Phones use the pill's own arrow: 3.0.5's leftover phone path would draw a second | — |
 | S6 | App-tinted status bar, 300 ms lerp (tablet) | None | P2 · S |
 | S7 | Tablet: clock at the right of the system group; fill fades in when an app maximizes (`StatusBar.cpp:98-104,240-262`) | **Done**: the clock is the rightmost item; the #515558 fill fades in (300 ms) under the tiled art while an app, the launcher or Just Type is up, and out in card view. Not the per-app tint (S6) | P1 · S |
-| S8 | Menu tab highlight 3-slice fading 300 ms; icons slide in over 1000 ms | Instant | P2 · S |
+| S8 | Menu tab highlight 3-slice fading 300 ms; icons slide in over 1000 ms | **Done**: status icons slide in and out over 1000 ms (width InOutQuad over the first half, opacity linear; `StatusBarIcon.cpp:84-205`); the tablet tab is `status-bar-menu-dropdown-tab.png` in three slices with 11 px caps, fading over 200 ms (`statusBarMenuFade`; the 300 ms is the group's own show/hide). Not yet: the tablet system group's arrow and separator | — |
 
 ## 6. System menu
 

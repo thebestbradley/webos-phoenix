@@ -212,16 +212,26 @@ Item {
 
     // ---- Right: indicators ----------------------------------------------------------
 
-    Image {
+    // The tab behind the system group while its menu is open. Tablets:
+    // status-bar-menu-dropdown-tab.png in three slices with 11 px caps,
+    // fading in and out over 200 ms (StatusBarItemGroup::activate /
+    // deactivate and paint, :282-330, 381-396; statusBarMenuFade*,
+    // lunaAnimations.conf:124-125).
+    BorderImage {
         id: menuTab
+        objectName: "systemMenuTab"
         anchors.right: parent.right
         anchors.top: parent.top
         height: parent.height
         width: indicators.width + Theme.px(12)
-        source: bar.systemMenuOpen ? Theme.asset("statusBar/status-bar-menu-dropdown-tab-pressed.png")
-                                   : Theme.asset("statusBar/status-bar-menu-dropdown-tab.png")
-        fillMode: Image.Stretch
+        source: Theme.tablet || !bar.systemMenuOpen ? Theme.asset("statusBar/status-bar-menu-dropdown-tab.png")
+                                                    : Theme.asset("statusBar/status-bar-menu-dropdown-tab-pressed.png")
+        border { left: Theme.tablet ? 11 : 0; right: Theme.tablet ? 11 : 0; top: 0; bottom: 0 }
         opacity: bar.systemMenuOpen ? 1 : 0
+        Behavior on opacity {
+            enabled: Theme.tablet
+            NumberAnimation { duration: Theme.statusBarMenuFadeDuration }
+        }
     }
 
     Row {
@@ -236,41 +246,38 @@ Item {
         // lock, mute, airplane (StatusBarInfo.cpp:143-275). This Row runs
         // left to right, so the reverse. Not shown yet, for want of the
         // state: WAN, TTY, HAC, call forward, roaming, VPN.
-        Image {
+        Indicator {
             objectName: "airplaneIcon"
-            visible: bar.system !== null && bar.system !== undefined && bar.system.airplaneMode
+            shown: bar.system !== null && bar.system !== undefined && bar.system.airplaneMode
             source: Theme.asset("statusBar/icon-airplane.png")
-            width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
         }
-        Image {
+        Indicator {
             objectName: "muteIcon"
-            visible: bar.system !== null && bar.system !== undefined && bar.system.muted
+            shown: bar.system !== null && bar.system !== undefined && bar.system.muted
             source: Theme.asset("statusBar/icon-mute.png")
-            width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
         }
-        Image {
+        Indicator {
             objectName: "rotationLockIcon"
-            visible: bar.system !== null && bar.system !== undefined && bar.system.rotationLocked
+            shown: bar.system !== null && bar.system !== undefined && bar.system.rotationLocked
             source: Theme.asset("statusBar/icon-rotation-lock.png")
-            width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
         }
-        Image {
-            visible: bar.system && !bar.system.airplaneMode && bar.system.wifiBars >= 0
+        Indicator {
+            objectName: "wifiIcon"
+            shown: !!bar.system && !bar.system.airplaneMode && bar.system.wifiBars >= 0
             source: bar.system ? Theme.asset("statusBar/wifi-" + Math.max(0, bar.system.wifiBars) + ".png") : ""
-            width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
         }
-        Image {
-            visible: bar.system && bar.system.bluetoothOn
+        Indicator {
+            objectName: "bluetoothIcon"
+            shown: !!bar.system && bar.system.bluetoothOn
             source: Theme.asset("statusBar/bluetooth-on.png")
-            width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
         }
         // RSSI, or the flight-mode bars (StatusBar::RSSI_FLIGHT_MODE).
-        Image {
-            visible: bar.system && (bar.system.airplaneMode || bar.system.signalBars >= 0)
+        Indicator {
+            objectName: "rssiIcon"
+            shown: !!bar.system && (bar.system.airplaneMode || bar.system.signalBars >= 0)
             source: !bar.system ? ""
                     : bar.system.airplaneMode ? Theme.asset("statusBar/rssi-flightmode.png")
                     : Theme.asset("statusBar/rssi-" + Math.max(0, bar.system.signalBars) + ".png")
-            width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
         }
         Image {
             objectName: "battery"
@@ -302,5 +309,34 @@ Item {
         width: Math.max(indicators.width + Theme.px(12), parent.width / 3)
         enabled: !bar.lockScreen
         onClicked: bar.systemMenuRequested()
+    }
+
+    // A status icon that slides in and out: over 1000 ms its width opens
+    // InOutQuad in the first half while it fades in linearly, the right
+    // part of the image revealed last; hiding runs it backwards
+    // (StatusBarIcon::show / hide / animValueChanged / paint,
+    // StatusBarIcon.cpp:84-205; statusBarItemSlide*,
+    // lunaAnimations.conf:122-123).
+    component Indicator: Item {
+        id: ind
+        property bool shown: false
+        property alias source: img.source
+        property real progress: shown ? 1 : 0
+        Behavior on progress { NumberAnimation { duration: Theme.statusBarItemSlideDuration } }
+        readonly property real widthFactor: {
+            var t = Math.min(1, progress * 2);
+            return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        }
+        visible: shown || progress > 0
+        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+        width: img.width * widthFactor
+        height: img.height
+        clip: true
+        opacity: progress
+        Image {
+            id: img
+            width: Theme.px(sourceSize.width)
+            height: Theme.px(sourceSize.height)
+        }
     }
 }

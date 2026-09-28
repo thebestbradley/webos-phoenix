@@ -107,6 +107,8 @@ QtObject {
     // lunaAnimations.conf:114-115).
     readonly property color statusBarLauncherFill: "#4F545A"
     readonly property int statusBarColorChangeDuration: 300
+    readonly property int statusBarItemSlideDuration: 1000           // lunaAnimations.conf:122-123 (curve 3 InOutQuad on the width)
+    readonly property int statusBarMenuFadeDuration: 200             // lunaAnimations.conf:124-125 (linear)
     readonly property int statusBarClockFontSize: px(15)             // StatusBarClock.cpp:34
     // Phones: solid black (StatusBar.cpp:767). Tablet: tiled art over #515558 (StatusBar.cpp:47).
     readonly property color statusBarFill: tablet ? "#515558" : "#000000"
