@@ -30,7 +30,10 @@ import QtQuick
 Item {
     id: root
 
-    property var model            // ListModel: appId, title, body, color, glyph, icon, params (JSON or "")
+    property var model            // ListModel: appId, title, body, color, glyph, icon, params (JSON or ""), windowKey
+    // The window source: its alerts (popup alert windows) and windowFor(key)
+    // for alert and dashboard windows.
+    property var source
     property bool dashboardOpen: false
     // Tablet: where the status bar's system indicators begin (from the right).
     property real statusBarRightInset: 0
@@ -52,7 +55,15 @@ Item {
     readonly property real dashboardHeight: Math.min(
         Theme.px(10) + (model ? model.count : 0) * Theme.dashboardItemHeight + Theme.px(10),
         screenHeight * Theme.maximumNegativeSpaceRatio)
+    // The front popup alert, if any (phones: it takes the negative space;
+    // DashboardWindowManagerStates.cpp:76-110).
+    readonly property var alerts: source && source.alerts ? source.alerts : null
+    readonly property bool alertShown: alerts !== null && alerts.count > 0
+    readonly property string alertKey: alertShown ? alerts.get(0).key : ""
+    readonly property real alertHeight: alertShown ? Theme.px(alerts.get(0).height) : 0
+
     readonly property real negativeSpaceTarget: overlay ? 0
+        : alertShown ? alertHeight
         : dashboardOpen ? dashboardHeight
         : hasContent ? Theme.bannerHeight : 0
     property real negativeSpace: negativeSpaceTarget
@@ -69,17 +80,26 @@ Item {
         target: root.model
         function onRowsInserted(parent, first, last) {
             var n = root.model.get(last);
-            root.bannerText = n.title + (n.body ? ": " + n.body : "");
-            root.bannerColor = n.color;
-            root.bannerGlyph = n.glyph;
-            root.bannerIcon = n.icon || "";
-            root.bannerActive = true;
-            bannerAnim.restart();
+            // A dashboard window shows itself; its app sends its own banner.
+            if (n.windowKey)
+                return;
+            root.showBanner(n.title + (n.body ? ": " + n.body : ""), n.icon || "", n.color, n.glyph);
         }
         function onCountChanged() {
             if (root.model.count === 0)
                 root.dashboardOpen = false;
         }
+    }
+
+    // A banner, with or without a notification behind it
+    // (PalmSystem.addBannerMessage only scrolls a banner by).
+    function showBanner(text, icon, color, glyph) {
+        bannerText = text;
+        bannerIcon = icon || "";
+        bannerColor = color || "#666666";
+        bannerGlyph = glyph || "";
+        bannerActive = true;
+        bannerAnim.restart();
     }
 
     // Slide in from the right, stay, then fade to 0.25 while sliding back
@@ -211,6 +231,68 @@ Item {
         }
     }
 
+    // ---- Popup alerts ---------------------------------------------------------------
+    // The front alert window (low battery, an alarm, an incoming call...):
+    // phones give it the negative space, full width, level with the app;
+    // tablets show it 320 px wide at the top right on popup-bg.png, 5 px in,
+    // fading in over 400 ms (DashboardWindowManager.cpp:516-560, 1341-1355;
+    // GraphicsItemContainer.cpp: 20 px margin).
+
+    onAlertKeyChanged: Qt.callLater(attachAlert)
+    function attachAlert() {
+        var w = alertKey !== "" && source ? source.windowFor(alertKey) : null;
+        if (!w)
+            return;
+        var host = overlay ? tabletAlertHost : phoneAlertHost;
+        w.parent = host;
+        w.x = 0;
+        w.y = 0;
+        w.width = Qt.binding(function() { return host.width; });
+        w.height = Qt.binding(function() { return host.height; });
+        w.visible = true;
+    }
+
+    Rectangle {
+        id: phoneAlert
+        visible: !root.overlay && root.alertShown
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: root.negativeSpace
+        color: Theme.black
+        clip: true
+        z: 2
+        MouseArea { anchors.fill: parent }
+        Item {
+            id: phoneAlertHost
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: root.alertHeight
+        }
+    }
+
+    BorderImage {
+        id: tabletAlert
+        visible: opacity > 0
+        opacity: root.overlay && root.alertShown ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: Theme.alertFadeDuration } }
+        anchors.right: parent.right
+        anchors.rightMargin: Theme.px(5)
+        y: Theme.px(5)
+        width: Theme.px(320) + 2 * Theme.px(20)
+        height: root.alertHeight + 2 * Theme.px(20)
+        source: Theme.asset("popup-bg.png")
+        border { left: 20; right: 20; top: 20; bottom: 20 }
+        z: 2
+        MouseArea { anchors.fill: parent }
+        Item {
+            id: tabletAlertHost
+            anchors.fill: parent
+            anchors.margins: Theme.px(20)
+        }
+    }
+
     // Tablets: the notification icons in the status bar; they open the drop-down.
     Row {
         id: tabletIcons
@@ -282,6 +364,7 @@ Item {
                 required property string glyph
                 required property string icon
                 required property string params
+                required property string windowKey
                 width: list.width
                 height: Theme.dashboardItemHeight
 
@@ -290,6 +373,25 @@ Item {
                     width: parent.width
                     height: parent.height
                     opacity: 1 - Math.abs(x) / width
+
+                    // A dashboard window: the app's own page fills the row.
+                    Item {
+                        id: dashHost
+                        anchors.fill: parent
+                        visible: item.windowKey !== ""
+                        z: 1
+                        Component.onCompleted: {
+                            var w = item.windowKey && root.source ? root.source.windowFor(item.windowKey) : null;
+                            if (!w)
+                                return;
+                            w.parent = dashHost;
+                            w.x = 0;
+                            w.y = 0;
+                            w.width = Qt.binding(function() { return dashHost.width; });
+                            w.height = Qt.binding(function() { return dashHost.height; });
+                            w.visible = true;
+                        }
+                    }
 
                     AppIcon {
                         id: dIcon

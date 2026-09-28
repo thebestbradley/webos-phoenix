@@ -108,6 +108,13 @@ FocusScope {
         function onCardFocusRequested(uid) { Qt.callLater(cards.focusLaunched, uid); }
         function onCardCloseRequested(uid) { cards.close(uid); }
         function onJustTypeDismissed() { justType.open = false; }
+        function onBannerRequested(appId, text, icon) {
+            var a = null;
+            for (var i = 0; shell.source.apps && i < shell.source.apps.count; ++i)
+                if (shell.source.apps.get(i).appId === appId)
+                    a = shell.source.apps.get(i);
+            notes.showBanner(text, icon, a ? a.color : "#666666", a ? a.glyph : "");
+        }
     }
 
     // Desktop / hardware keyboard shortcuts.
@@ -474,6 +481,7 @@ FocusScope {
         model: shell.source ? shell.source.notifications : null
         onDismissRequested: (index) => shell.source.dismissNotification(index)
         onActivated: (appId, params) => shell.launch(appId, params ? JSON.parse(params) : null)
+        source: shell.source
         visible: !shell.locked
         screenHeight: shell.height
         statusBarRightInset: statusBar.systemGroupWidth

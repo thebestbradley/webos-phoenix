@@ -18,7 +18,12 @@
 //   cardFocusRequested(uid)  signal: show this card maximized (e.g. a new
 //                            child window opened by an app)
 //   notifications ListModel  id, appId, title, body, color, glyph, icon, params (launch
-//                            params for the app when tapped, as JSON, or "")
+//                            params for the app when tapped, as JSON, or ""),
+//                            windowKey (a dashboard window: windowFor(windowKey)
+//                            is the app's own dashboard, "" otherwise)
+//   alerts        ListModel  key, appId, height (legacy px): popup alert
+//                            windows (windowFor(key)), front first
+//   bannerRequested(appId, text, icon)  signal: a transient banner
 //   cardCloseRequested(uid)  signal: a window asked to close (window.close())
 //
 // Optional (the shell has a built-in fallback without them):
@@ -113,6 +118,7 @@ Item {
                           // downloaded apps could; the built-in ones cannot.
                           removable: true });
         }
+        Qt.callLater(_bootSystemApps);
     }
 
     function appIdByTitle(titleText) {
@@ -211,6 +217,14 @@ Item {
     // A page opened a window: it becomes a card in its app's stack, or the
     // app's first card if it has none yet (headless apps).
     function _openWindow(appId, request) {
+        // Popup alerts and dashboards (enyo.windows.openPopup / openDashboard;
+        // the runtime tags their URL with the window type).
+        var url = String(request.requestedUrl);
+        var type = /[#&]phoenixWindow=([a-z]+)/.exec(url);
+        if (type && (type[1] === "popupalert" || type[1] === "dashboard")) {
+            _openSystemWindow(appId, request, type[1], url);
+            return;
+        }
         var info = appInfo(appId);
         var existing = runningUid(appId);
         var uid;
@@ -244,8 +258,9 @@ Item {
             if (launched !== "" && !background)
                 cardFocusRequested(launched);
         } else if (type === "banner") {
-            var info = appInfo(appId);
-            notify(appId, info ? info.title : appId, payload.message || "");
+            // A banner only scrolls by; it leaves nothing in the dashboard
+            // (PalmSystem.addBannerMessage).
+            bannerRequested(appId, payload.message || "", _iconUrl(payload.icon, appId));
         } else if (type === "notification") {
             // A notification for another app (e.g. a text the telephony
             // service received for Messaging, a Tasks reminder): {appId,
@@ -267,6 +282,86 @@ Item {
     }
 
     signal systemStatusReported(var status)
+
+    // ---- Popup alerts, dashboards and banners -------------------------------------------
+    // Windows of type "popupalert" and "dashboard" are not cards: the shell
+    // shows alerts in the negative space (phones) or top right (tablets), and
+    // dashboards as rows of the dashboard, each the app's own page
+    // (DashboardWindowManager).
+
+    property ListModel alerts: ListModel {}
+    signal bannerRequested(string appId, string text, url icon)
+
+    // A file URL for an icon an app names by device path.
+    function _iconUrl(path, appId) {
+        if (path && typeof simRootfs !== "undefined" && simRootfs) {
+            var u = simRootfs.fileUrl(String(path));
+            if (u !== "")
+                return u;
+        }
+        var info = appInfo(appId);
+        return info && info.icon ? info.icon : "";
+    }
+
+    function _param(url, name) {
+        var m = new RegExp("[#&]" + name + "=([^&]*)").exec(url);
+        return m ? decodeURIComponent(m[1]) : "";
+    }
+
+    function _openSystemWindow(appId, request, type, url) {
+        var key = "s" + (_nextUid++);
+        var win = _webWindow(appId, "", "");
+        win.transparent = true;
+        win.adopt(request);
+        win.closeRequested.connect(function() { source._closeSystemWindow(key); });
+        _windows[key] = win;
+        if (type === "popupalert") {
+            alerts.append({ key: key, appId: appId, height: parseInt(_param(url, "phoenixHeight")) || 200 });
+        } else {
+            var info = appInfo(appId) || { title: appId, color: "#666666", glyph: "!", icon: "" };
+            notifications.append({
+                id: key, appId: appId, title: info.title, body: "",
+                color: info.color, glyph: info.glyph, icon: _iconUrl(_param(url, "phoenixIcon"), appId),
+                params: "", windowKey: key
+            });
+        }
+    }
+
+    // The page closed its alert or dashboard (window.close()), or the user
+    // dismissed the dashboard.
+    function _closeSystemWindow(key) {
+        var i;
+        for (i = alerts.count - 1; i >= 0; --i)
+            if (alerts.get(i).key === key)
+                alerts.remove(i);
+        for (i = notifications.count - 1; i >= 0; --i)
+            if (notifications.get(i).windowKey === key)
+                notifications.remove(i);
+        var win = _windows[key];
+        delete _windows[key];
+        if (win)
+            win.destroy();
+    }
+
+    // Start the system's own headless apps at boot, as LunaSysMgr started
+    // com.palm.systemui (WebAppMgrProxy.cpp:88-97).
+    readonly property var bootApps: ["com.palm.systemui"]
+    function _bootSystemApps() {
+        for (var i = 0; i < bootApps.length; ++i) {
+            var info = appInfo(bootApps[i]);
+            if (info && info.web && !_headless[bootApps[i]])
+                _headless[bootApps[i]] = _webWindow(bootApps[i], info.main, "");
+        }
+    }
+
+    // phoenix-sim: the battery and charger (runtime setPower in every page,
+    // so luna-systemui's powerd listeners hear it).
+    function simulatePower(changes) {
+        var js = "window.__phoenixRuntime && __phoenixRuntime.setPower && __phoenixRuntime.setPower(" + JSON.stringify(changes) + ")";
+        var pages = _webPages();
+        for (var i = 0; i < pages.length; ++i)
+            pages[i].runScript(js);
+    }
 
     // What the user changed while no web page was running, for the next
     // page that loads (pages share their state through the runtime's store).
@@ -557,12 +652,18 @@ Item {
             id: "n" + Date.now() + "_" + notifications.count,
             appId: appId, title: titleText, body: body,
             color: info.color, glyph: info.glyph, icon: info.icon || "",
-            params: params && typeof params === "object" ? JSON.stringify(params) : ""
+            params: params && typeof params === "object" ? JSON.stringify(params) : "",
+            windowKey: ""
         });
     }
 
     function dismissNotification(index) {
-        if (index >= 0 && index < notifications.count)
+        if (index < 0 || index >= notifications.count)
+            return;
+        var key = notifications.get(index).windowKey;
+        if (key)
+            _closeSystemWindow(key);
+        else
             notifications.remove(index);
     }
 

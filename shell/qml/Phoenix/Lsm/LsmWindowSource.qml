@@ -212,7 +212,8 @@ Item {
 
     function notify(appId, title, body, params) {
         notifications.append({ id: "n" + Date.now(), appId: appId, title: title, body: body || "",
-                               color: "#666666", glyph: "!", params: params ? JSON.stringify(params) : "" });
+                               color: "#666666", glyph: "!", icon: "", params: params ? JSON.stringify(params) : "",
+                               windowKey: "" });
     }
 
     function dismissNotification(index) {

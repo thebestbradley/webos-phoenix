@@ -233,6 +233,31 @@ Item {
             verify(!app.appMenuOpen);
         }
 
+        // A popup alert takes the negative space (phones), above the bar.
+        function test_popupAlertTakesTheNegativeSpace() {
+            windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximizeProgress = 1;
+            var notes = shell.notifications;
+            var fullHeight = shell.cardView.windowHeight;
+            windows.alerts.append({ key: "alert-test", appId: "org.webosphoenix.email", height: 150 });
+            tryCompare(notes, "negativeSpace", Theme.px(150), 2000);
+            compare(shell.cardView.windowHeight, fullHeight - Theme.px(150));
+            windows.alerts.clear();
+            notes.bannerActive = false;
+            tryCompare(notes, "negativeSpace", 0, 2000);
+        }
+
+        // PalmSystem.addBannerMessage: the banner scrolls by and leaves
+        // nothing in the dashboard.
+        function test_bannerMessageIsTransient() {
+            var notes = shell.notifications;
+            windows.bannerRequested("org.webosphoenix.email", "Charging Battery", "");
+            verify(notes.bannerActive);
+            compare(notes.bannerText, "Charging Battery");
+            compare(windows.notifications.count, 0);
+            notes.bannerActive = false;
+        }
+
         function test_tapCardMaximizes() {
             windows.launch("org.webosphoenix.email", "");
             wait(50);

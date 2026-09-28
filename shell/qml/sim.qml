@@ -5,7 +5,7 @@
 //
 // Context properties set by phoenix-sim:
 //   simScene       "locked" | "cards" | "stacks" | "reorder" | "maximized" | "launcher" |
-//                  "launcheredit" | "banner" | "notified" | "dashboard" | "justtype" | "systemmenu" | "empty"
+//                  "launcheredit" | "lowbattery" | "banner" | "notified" | "dashboard" | "justtype" | "systemmenu" | "empty"
 //   simFormFactor  "auto" | "phone" | "tablet"
 //   simLaunch      app ids to launch (--launch)
 //   simOpen        a web address to open in the browser (--open)
@@ -66,6 +66,22 @@ Item {
         sequence: "F5"
         context: Qt.ApplicationShortcut
         onActivated: windows.simulateIncomingSms()
+    }
+    // F6: the battery runs low (5% and under: luna-systemui's Low Battery
+    // alert). F7: plug a wall charger in or out ("Charging Battery").
+    property string charger: "none"
+    Shortcut {
+        sequence: "F6"
+        context: Qt.ApplicationShortcut
+        onActivated: windows.simulatePower({ percent: 4, charger: "none" })
+    }
+    Shortcut {
+        sequence: "F7"
+        context: Qt.ApplicationShortcut
+        onActivated: {
+            root.charger = root.charger === "none" ? "wall" : "none";
+            windows.simulatePower({ charger: root.charger, percent: root.charger === "none" ? 60 : 61 });
+        }
     }
 
     // The launcher layout (icon order, dock) survives restarts (simSettings,
@@ -136,6 +152,11 @@ Item {
             shell.gestureUp();
             if (scene === "launcheredit")
                 shell.launcherEditMode = true;
+        } else if (scene === "lowbattery") {
+            // An app is open; the battery drops to 4% and luna-systemui (booted
+            // by the window source) raises its Low Battery alert.
+            shell.cardView.maximizeProgress = 1;
+            lowBatteryTimer.start();
         } else if (scene === "banner") {
             // An app is open; a notification comes in and the app makes room.
             shell.cardView.maximizeProgress = 1;
@@ -151,5 +172,11 @@ Item {
         } else if (scene === "justtype") {
             shell.startJustType("m");
         }
+    }
+
+    Timer {
+        id: lowBatteryTimer
+        interval: 3000
+        onTriggered: windows.simulatePower({ percent: 4, charger: "none" })
     }
 }

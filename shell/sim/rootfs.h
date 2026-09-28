@@ -7,6 +7,7 @@
 #pragma once
 
 #include <QHash>
+#include <QObject>
 #include <QList>
 #include <QPair>
 #include <QString>
@@ -53,6 +54,22 @@ private:
     QHash<QString, QString> m_appDirs;         // app id -> directory
     QVariantList m_apps;
     QList<QVariantMap> m_launchPoints;
+};
+
+// The virtual filesystem for the shell's own QML (simRootfs): banner and
+// dashboard icons that apps name by their device path.
+class RootfsFiles : public QObject
+{
+    Q_OBJECT
+public:
+    explicit RootfsFiles(const Rootfs *rootfs, QObject *parent = nullptr)
+        : QObject(parent), m_rootfs(rootfs) {}
+
+    // A file URL for a device path (e.g. /usr/lib/luna/system/...png), or "".
+    Q_INVOKABLE QString fileUrl(const QString &devicePath) const;
+
+private:
+    const Rootfs *m_rootfs;
 };
 
 #ifdef PHOENIX_HAVE_WEBENGINE

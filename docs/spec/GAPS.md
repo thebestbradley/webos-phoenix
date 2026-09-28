@@ -82,8 +82,8 @@ Nearly all the art is already in `shell/assets/openwebos/`.
 |---|---|---|---|
 | N1 | Phone banner rises from the bottom of the 28 px bar (VerticalScroll, 1000 ms OutCubic), drops back fading to 0.25 (`BannerWindow.cpp:47`; `BannerMessageHandler.cpp:122-130,321-343`); tablet reveals from the right | Slides in from the right | P1 · S |
 | N2 | Tapping a banner launches its app; `notification.wav` / `alert.wav` capped at 5 s, or vibrate (`BannerWindow.cpp:122-129`; `BannerMessageHandler.cpp:691-772`) | Tap opens the dashboard; no sound | P1 · S |
-| N3 | Popup alert windows, queued by `notificationPolicy.conf` priority; phone: full width taking negative space; tablet: 320 wide top right, 400 ms fade, `popup-bg.png`. Incoming call, alarm "ring", reminders, system alerts | In progress (runtime tags popup windows) | P0 · L |
-| N4 | luna-systemui battery / charging banners and alerts, network denied, etc. | In progress: runs in headless tests, not yet booted by the shell | P1 · M |
+| N3 | Popup alert windows, queued by `notificationPolicy.conf` priority; phone: full width taking negative space; tablet: 320 wide top right, 400 ms fade, `popup-bg.png`. Incoming call, alarm "ring", reminders, system alerts | **Done** for popup alert windows and dashboard windows (phone negative space, tablet top right); not yet the priority queue, incoming call and alarm | P0 · L |
+| N4 | luna-systemui battery / charging banners and alerts, network denied, etc. | **Done**: booted at start; battery banners, Low Battery alert, Charging banner (F6 / F7 in phoenix-sim) | P1 · M |
 | N5 | Dismiss by ¼-width drag or a flick, 200 ms delete animation; persistent dashboards | ¼ drag, instant remove; no persistent flag | P2 · S |
 | N6 | Dashboards are app mini-windows, 52 px, 5.5 visible then scroll; bar icons right-aligned up to 28 px, no gaps | Synthesised rows; 22 px icons with gaps | P2 · M |
 | N7 | Active-call banner, volume HUD, transient alerts | None | P2 · M |

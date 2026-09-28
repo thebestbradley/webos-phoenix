@@ -142,6 +142,12 @@ QByteArray Rootfs::launchPointsJson() const
     return QJsonDocument(all).toJson(QJsonDocument::Compact);
 }
 
+QString RootfsFiles::fileUrl(const QString &devicePath) const
+{
+    const QString file = m_rootfs->resolve(devicePath);
+    return !file.isEmpty() && QFileInfo(file).isFile() ? QUrl::fromLocalFile(file).toString() : QString();
+}
+
 QString Rootfs::urlFor(const QString &devicePath)
 {
     return scheme() + QStringLiteral("://rootfs") + devicePath;

@@ -128,6 +128,7 @@ QtObject {
     readonly property int bannerShowTimeQueued: 2000                 // BannerMessageHandler.cpp:70
     readonly property int dashboardItemHeight: px(52)                // DashboardWindowContainer.cpp:48
     readonly property real maximumNegativeSpaceRatio: 0.55           // Settings.cpp MaximumNegativeSpaceHeightRatio
+    readonly property int alertFadeDuration: 400                     // DashboardWindowManager.cpp:559,589
     readonly property int positiveSpaceDuration: 400                 // conf/lunaAnimations.conf:73-74, curve 6 OutCubic
     readonly property real dashboardDismissRatio: 0.25               // DashboardWindowContainer.cpp:350-363
 

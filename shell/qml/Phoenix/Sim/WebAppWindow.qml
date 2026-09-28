@@ -21,6 +21,8 @@ Item {
     // Legacy pixels: the page is laid out at the original 320px phone /
     // 1024px tablet width and scaled up, like the rest of the shell.
     property real zoom: Theme.u
+    // Alerts and dashboards draw on the system's dark background, not white.
+    property bool transparent: false
 
     // A message from the page for the shell (see phoenixHost in the runtime).
     signal hostMessage(string type, var payload)
@@ -150,7 +152,7 @@ Item {
         profile: phoenixWebProfile
         url: win.url
         zoomFactor: win.zoom
-        backgroundColor: "white"
+        backgroundColor: win.transparent ? "transparent" : "white"
 
         settings.localContentCanAccessRemoteUrls: true
         settings.javascriptCanOpenWindows: true
