@@ -5,12 +5,16 @@
 // in samples/ (tools/make-samples.cjs) to /media/internal/voicememos and
 // stores them as memos, without transcripts; "Transcribe" makes those, on
 // a device with whisper.cpp and in the simulator from the known scripts
-// in samples.json. Once only: a memo deleted later stays deleted.
+// in samples.json. Once only: a memo deleted later stays deleted. A start
+// that was stopped part way through (the app closed) finishes the job next
+// time, installing only the demo memos not yet there.
 
 import { db, mediaFiles, mediaIndexer } from "@phoenix/luna";
 import { MEMO_DIR, MEMO_KIND, MEMO_MIME, searchTextOf, type Memo } from "./memos";
 
 const SEEDED_KEY = "org.webosphoenix.voicememos.seeded";
+// Set while the demo memos are being installed.
+const SEEDING_KEY = "org.webosphoenix.voicememos.seeding";
 
 export interface SampleMemo {
     file: string;
@@ -46,14 +50,22 @@ export function seedDemoMemos(): Promise<void> {
 }
 
 async function seed(): Promise<void> {
-    try { if (localStorage.getItem(SEEDED_KEY)) return; } catch { return; }
-    if ((await db.find<Memo>({ from: MEMO_KIND, limit: 1 })).length) {
+    let resuming: boolean;
+    try {
+        if (localStorage.getItem(SEEDED_KEY)) return;
+        resuming = !!localStorage.getItem(SEEDING_KEY);
+    } catch { return; }
+    const existing = await db.find<Memo>({ from: MEMO_KIND });
+    // Someone's own memos, from before this app installed demo ones.
+    if (existing.length && !resuming) {
         localStorage.setItem(SEEDED_KEY, "1");
         return;
     }
+    localStorage.setItem(SEEDING_KEY, "1");
+    const have = new Set(existing.map((m) => m.path));
     const { memos } = await get("samples/samples.json", "json") as { memos: SampleMemo[] };
     for (const s of memos) {
-        if (!s.path.startsWith(MEMO_DIR + "/")) continue;
+        if (!s.path.startsWith(MEMO_DIR + "/") || have.has(s.path)) continue;
         const blob = await get("samples/" + s.file, "blob") as Blob;
         await mediaFiles.write(s.path, new Blob([blob], { type: MEMO_MIME }));
         const memo: Omit<Memo, "_id"> = {
@@ -63,5 +75,6 @@ async function seed(): Promise<void> {
         await db.put([memo]);
     }
     localStorage.setItem(SEEDED_KEY, "1");
+    localStorage.removeItem(SEEDING_KEY);
     await mediaIndexer.scan(MEMO_DIR);
 }

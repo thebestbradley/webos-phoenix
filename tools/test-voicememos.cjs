@@ -99,8 +99,10 @@ async function main() {
         const findMemos = async () => (await luna("luna://com.palm.db/find", { query: { from: "org.webosphoenix.voicememo:1" } })).results;
         const seconds = (s) => { const [m, x] = s.trim().split(":").map(Number); return m * 60 + x; };
 
-        // Start from an empty device.
+        // Start from an empty device. The first start installs the demo
+        // memos; let it finish, or it would go on writing after the wipe.
         await page.goto(appUrl());
+        await page.waitForSelector(memoSel(SAMPLES[SAMPLES.length - 1].title), { timeout: 10000 });
         await page.evaluate(() => new Promise((res) => {
             localStorage.clear();
             const r = indexedDB.deleteDatabase("phoenix-media");
