@@ -37,7 +37,9 @@ Item {
 
     visible: opacity > 0
     opacity: open ? 1 : 0
-    Behavior on opacity { NumberAnimation { duration: 150 } }
+    // OverlayWindowManager.cpp:312-313: universalSearchCrossFade, 150 ms
+    // OutCubic (lunaAnimations.conf:87-88).
+    Behavior on opacity { NumberAnimation { duration: Theme.justTypeFadeDuration; easing.type: Easing.OutCubic } }
 
     function start(firstText) {
         _attachSurface();
@@ -72,7 +74,10 @@ Item {
         onActivated: jt.closeRequested()
     }
 
+    // The original Just Type page (com.palm.launcher) draws its own
+    // background; only the built-in stand-in needs one.
     Rectangle {
+        visible: !jt.surface
         anchors.fill: parent
         color: "#e6000000"
     }

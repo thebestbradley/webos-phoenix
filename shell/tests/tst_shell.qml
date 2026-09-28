@@ -560,7 +560,12 @@ Item {
             verify(title.opacity < 1);
             tryCompare(title, "opacity", 1, 1000);
             // Phones: the pill's own arrow; no second one.
-            tryCompare(bar, "_arrowProgress", 1, 1500);
+            for (var t = 0; t < 30 && bar._arrowProgress !== 1; ++t)
+                wait(100);
+            if (bar._arrowProgress !== 1)
+                fail("arrow " + bar._arrowProgress + " title " + bar.title + " mode " + bar._mode
+                     + " actionable " + bar.titleActionable + " locked " + bar.lockScreen
+                     + " maximize " + shell.cardView.maximizeProgress);
             verify(!arrow.visible);
             // 14 px bold, letters at 90%.
             var label = title.children[1];

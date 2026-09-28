@@ -52,7 +52,7 @@ Nearly all the art is already in `shell/assets/openwebos/`.
 | # | Original | Phoenix | P · effort |
 |---|---|---|---|
 | O1 | Status bar shows the launcher / Just Type title on `#4F545A` (`SystemUiController.cpp:806-838`) | **Done**: "Launcher" (not actionable) and "Just Type" on the title pill (phones), the tablet fill #4F545A (300 ms lerp). Not yet: Just Type's app menu (Preferences, Help), so its title has no arrow | — |
-| O2 | Just Type 150 ms OutCubic cross-fade, at overlay z 10 under the (hidden) dock | 150 ms linear fade, full-screen scrim over everything | P2 · S |
+| O2 | Just Type 150 ms OutCubic cross-fade, at overlay z 10 under the (hidden) dock | **Done**: 150 ms OutCubic (`OverlayWindowManager.cpp:312-313`); the original page draws its own background, so no scrim over it (the built-in stand-in keeps one). It stays above the dock until Q2 hides the dock for Just Type | — |
 | O3 | Search pill: 588 wide, 50 tall, 9 px below the bar, 18 px oblique 80% white, 200 ms fade | **Matches** | — |
 
 ## 5. Status bar
