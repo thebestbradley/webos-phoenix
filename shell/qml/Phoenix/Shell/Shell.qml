@@ -20,8 +20,10 @@ FocusScope {
     readonly property bool locked: lockScreen.locked
     readonly property bool maximized: cards.maximized
     readonly property bool launcherOpen: launcher.open
+    readonly property bool justTypeOpen: justType.open
     property alias cardView: cards
     property alias notifications: notes
+    property alias searchPill: searchPill
 
     focus: true
 
@@ -153,6 +155,14 @@ FocusScope {
         source: shell.source
         topInset: Theme.statusBarHeight
         bottomInset: gesture.height
+    }
+
+    SearchPill {
+        id: searchPill
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Theme.statusBarHeight + Theme.searchPillTopOffset
+        shown: !locked && cards.maximizeProgress === 0 && !launcher.open && !justType.open
+        onTapped: shell.startJustType("")
     }
 
     QuickLaunch {

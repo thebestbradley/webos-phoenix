@@ -103,6 +103,62 @@ Item {
             tryCompare(windows.cards, "count", 0, 2000);
         }
 
+        // Flick a card up with one finger at (x, y).
+        function flickUp(x, y) {
+            var cv = shell.cardView;
+            mousePress(cv, x, y);
+            for (var i = 1; i <= 10; ++i)
+                mouseMove(cv, x, y - i * 25, 5);
+            mouseRelease(cv, x, y - 250);
+        }
+
+        function test_flickUpClosesCardBesideTheCurrentOne() {
+            // The neighbouring card peeks in at the right edge; it can be
+            // flicked away without sliding to it first.
+            windows.launch("org.webosphoenix.email", "");
+            var right = windows.launch("org.webosphoenix.calendar", "");
+            wait(50);
+            var cv = shell.cardView;
+            compare(cv.currentGroup, 0);
+            var p = cv.layout.cards[right];
+            verify(p.cx - cv.windowWidth * p.scale / 2 < cv.width, "the next card shows at the edge");
+            flickUp(cv.width - 5, cv.cardOriginY);
+            tryCompare(windows.cards, "count", 1, 2000);
+            compare(windows.cards.get(0).appId, "org.webosphoenix.email");
+        }
+
+        function test_twoFingersCloseTwoCardsAtOnce() {
+            windows.launch("org.webosphoenix.email", "");
+            windows.launch("org.webosphoenix.calendar", "");
+            windows.launch("org.webosphoenix.memos", "");
+            shell.cardView.position = 1;
+            wait(50);
+            var cv = shell.cardView;
+            var y = cv.cardOriginY;
+            var t = touchEvent(cv);
+            t.press(0, cv, cv.width / 2, y).press(1, cv, cv.width - 5, y).commit();
+            for (var i = 1; i <= 10; ++i) {
+                t.move(0, cv, cv.width / 2, y - i * 25).move(1, cv, cv.width - 5, y - i * 25).commit();
+                wait(5);
+            }
+            t.release(0, cv, cv.width / 2, y - 250).release(1, cv, cv.width - 5, y - 250).commit();
+            tryCompare(windows.cards, "count", 1, 2000);
+            compare(windows.cards.get(0).appId, "org.webosphoenix.email");
+        }
+
+        function test_searchPillShowsInCardViewAndOpensJustType() {
+            var pill = shell.searchPill;
+            tryCompare(pill, "opacity", 1, 1000);
+            mouseClick(pill, pill.width / 2, pill.height / 2);
+            verify(shell.justTypeOpen);
+            tryCompare(pill, "opacity", 0, 1000);
+            shell.gestureBack();
+            verify(!shell.justTypeOpen);
+            shell.launch("org.webosphoenix.email");
+            tryVerify(function() { return shell.maximized; }, 2000);
+            tryCompare(pill, "opacity", 0, 1000);
+        }
+
         function test_tapCardMaximizes() {
             windows.launch("org.webosphoenix.email", "");
             wait(50);

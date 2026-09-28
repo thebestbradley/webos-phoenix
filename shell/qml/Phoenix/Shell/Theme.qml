@@ -70,6 +70,7 @@ QtObject {
     readonly property real nonActiveCardRatio: tablet ? 0.50 : 0.61  // conf/luna-topaz.conf / Settings.cpp:211
     readonly property real minimumCardScale: 0.26                    // CardWindowManager.cpp:60
     readonly property int searchPillAllowance: px(48)                // CardWindowManager.cpp:780-786
+    readonly property int searchPillTopOffset: px(9)                 // layoutsettings.cpp:93, below the status bar
     readonly property real cardOriginRatio: 0.40                     // CardWindowManager.cpp:56 kWindowOriginRatio
     readonly property int gapBetweenCards: px(tablet ? 30 : 10)       // Settings.cpp:214 / luna-topaz.conf
     // Card stacks (CardGroup.cpp:699-771): how far apart fanned cards sit
@@ -153,6 +154,7 @@ QtObject {
     readonly property int launcherFadeDuration: 350                  // conf/lunaAnimations.conf
     readonly property int quickLaunchDuration: 350                   // conf/lunaAnimations.conf:77-82
     readonly property int justTypeFadeDuration: 150                  // conf/lunaAnimations.conf:87-88
+    readonly property int searchPillFadeDuration: 200                // conf/lunaAnimations.conf:81 quickLaunchFadeDuration
 
     // lunaAnimations.conf curve numbers map to QEasingCurve types:
     // 6 = OutCubic, 10 = OutQuart.

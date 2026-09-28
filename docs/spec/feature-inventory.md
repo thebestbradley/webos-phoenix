@@ -11,6 +11,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Fanned layout inside the active stack, with tilt and a slight drop; closed stacks sit left and right with a 7 px offset. `Src/lunaui/cards/CardGroup.cpp:699-771`
 - [x] Horizontal drag and flick through cards and stacks, snapping to the nearest stack. `CardWindowManager.cpp:1452-1600,1677-1738`
 - [x] Flick a card up to close it (velocity/distance rule), or drag it off the top. `CardWindowManager.cpp:63-65,1700-1716`
+- [x] Close any card on screen, including the stacks at the sides, and several at once with several fingers.
 - [ ] "Angry card": drag a card off the bottom to force-close it (no keep-alive), with an upside-down sound easter egg. `CardWindowManager.cpp:1280-1283,2841-2894`
 - [x] Tap a card to maximize it; tap a partly hidden card to scroll the fan instead. `CardWindowManager.cpp:2151-2195`; `CardGroup.cpp:402-470`
 - [x] Tap left or right of the stack, or tap-and-hold off a card, to switch stacks. `CardWindowManager.cpp:1648-1661,2176-2188`
@@ -80,7 +81,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [ ] Launch feedback (touch highlight, 3 s timeout). `Src/lunaui/launcher/OverlayWindowManager.cpp:2018-2030`
 - [ ] Quick-launch bar (dock) of up to 5 apps, plus a launcher button; drag to reorder, drag in from the launcher. `elements/bars/quicklaunchbar.cpp`; `QuicklaunchLayout.cpp`
 - [ ] Quick-launch "wave" (swipe up and hold). `OverlayWindowManager.cpp:1000-1011`
-- [ ] Search pill in card view. `OverlayWindowManager.cpp:1150-1177`
+- [x] Search pill in card view. `OverlayWindowManager.cpp:1150-1177`
 - [ ] **Just Type** / universal search: typing in card view opens search (the `com.palm.launcher` web app); web search providers. `OverlayWindowManager.cpp:971-995`; `conf/defaultPreferences.txt` (`webSearchList`)
 - [ ] App blacklist (hidden system apps) and keyword → page mapping. `conf/launcher3/app_blacklist.conf`; `conf/launcher3/app-keywords-to-designator-map.txt`
 - [ ] Launch points (multiple per app, custom launch points added by apps). `Src/base/application/LaunchPoint.cpp`; README `addLaunchPoint`

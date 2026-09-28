@@ -418,24 +418,30 @@ Item {
     }
 
     // ---- Touch handling in card view ----------------------------------------------------
+    // Every finger can flick a card up and away, any card on screen,
+    // including the stacks peeking in at the sides, and several at once
+    // (CardWindowManager handles each touch point's flick on its own card).
+    // The first finger also pans between stacks, taps and holds to reorder.
 
-    MouseArea {
+    MultiPointTouchArea {
         id: touch
         anchors.fill: parent
         enabled: view.maximizeProgress === 0 && view.count > 0
-        pressAndHoldInterval: Theme.tapAndHoldInterval
+        mouseEnabled: true
+        maximumTouchPoints: 5
 
-        property real startX
-        property real startY
+        // pointId -> {startX, startY, lastX, lastY, lastTime, vx, vy, uid, axis}
+        // axis: "", "h" (pan), "v" (flicking uid), "reorder" or "done".
+        property var fingers: ({})
+        property int primary: -1          // the finger that pans, taps and reorders
         property real startPosition
         property real startFan
-        property string axis: ""          // "", "h", "v" or "reorder"
-        property string pressedUid: ""
-        property real lastX
-        property real lastY
-        property real lastTime
-        property real velocityX
-        property real velocityY
+
+        Timer {
+            id: holdTimer
+            interval: Theme.tapAndHoldInterval
+            onTriggered: touch.hold()
+        }
 
         // Topmost card under the point.
         function cardAt(px, py) {
@@ -453,6 +459,14 @@ Item {
             return best;
         }
 
+        // A card another finger is already flicking.
+        function owned(uid) {
+            for (var id in fingers)
+                if (fingers[id].uid === uid && fingers[id].axis === "v")
+                    return true;
+            return false;
+        }
+
         function currentFan() {
             var g = view.groups[view.currentGroup];
             return g ? CardLayout.clampFanPosition(view.fanPositions[g.id] !== undefined ? view.fanPositions[g.id] : 1e9,
@@ -466,103 +480,134 @@ Item {
             view.fanPositions = f;
         }
 
-        onPressed: (mouse) => {
-            slideAnim.stop();
-            startX = lastX = mouse.x;
-            startY = lastY = mouse.y;
-            lastTime = Date.now();
-            velocityX = velocityY = 0;
-            startPosition = view.position;
-            startFan = currentFan();
-            axis = "";
-            pressedUid = cardAt(mouse.x, mouse.y);
+        onPressed: (points) => {
+            var now = Date.now();
+            for (var i = 0; i < points.length; ++i) {
+                var p = points[i];
+                var uid = cardAt(p.x, p.y);
+                fingers[p.pointId] = { startX: p.x, startY: p.y, lastX: p.x, lastY: p.y, lastTime: now,
+                                       vx: 0, vy: 0, uid: owned(uid) ? "" : uid, axis: "" };
+                if (primary === -1) {
+                    primary = p.pointId;
+                    slideAnim.stop();
+                    startPosition = view.position;
+                    startFan = currentFan();
+                    holdTimer.restart();
+                }
+            }
         }
 
-        onPressAndHold: (mouse) => {
-            if (axis !== "" || pressedUid === "")
+        function hold() {
+            var f = fingers[primary];
+            if (!f || f.axis !== "" || f.uid === "")
                 return;
-            if (view.groupIndexOf(pressedUid) === view.currentGroup) {
-                axis = "reorder";
-                view.enterReorder(pressedUid, mouse.x, mouse.y);
+            if (view.groupIndexOf(f.uid) === view.currentGroup) {
+                f.axis = "reorder";
+                view.enterReorder(f.uid, f.lastX, f.lastY);
             } else {
                 // Held beside the stack: switch stacks (CardWindowManager.cpp:1655-1660).
-                view.slideTo(view.currentGroup + (mouse.x < view.width / 2 ? -1 : 1));
-                axis = "done";
+                view.slideTo(view.currentGroup + (f.lastX < view.width / 2 ? -1 : 1));
+                f.axis = "done";
             }
         }
 
-        onPositionChanged: (mouse) => {
-            var now = Date.now(), dt = Math.max(1, now - lastTime);
-            velocityX = (mouse.x - lastX) / dt;
-            velocityY = (mouse.y - lastY) / dt;
-            lastX = mouse.x; lastY = mouse.y; lastTime = now;
+        onUpdated: (points) => {
+            var now = Date.now();
+            for (var i = 0; i < points.length; ++i) {
+                var p = points[i], f = fingers[p.pointId];
+                if (!f)
+                    continue;
+                var dt = Math.max(1, now - f.lastTime);
+                f.vx = (p.x - f.lastX) / dt;
+                f.vy = (p.y - f.lastY) / dt;
+                f.lastX = p.x; f.lastY = p.y; f.lastTime = now;
+                move(p.pointId, f);
+            }
+        }
 
-            if (axis === "reorder") {
-                view.moveReorder(mouse.x, mouse.y);
+        function move(id, f) {
+            if (f.axis === "reorder") {
+                view.moveReorder(f.lastX, f.lastY);
                 return;
             }
-
-            var dx = mouse.x - startX, dy = mouse.y - startY;
+            var dx = f.lastX - f.startX, dy = f.lastY - f.startY;
             // Lock to an axis once outside the tap radius
-            // (CardWindowManager.cpp:1464-1476). Vertical drags only move a
-            // card of the open stack.
-            if (axis === "" && dx * dx + dy * dy > Theme.tapRadius * Theme.tapRadius) {
+            // (CardWindowManager.cpp:1464-1476). Only the first finger pans.
+            if (f.axis === "" && dx * dx + dy * dy > Theme.tapRadius * Theme.tapRadius) {
+                if (id === primary)
+                    holdTimer.stop();
                 if (Math.abs(dx) > Theme.horizontalLockRatio * Math.abs(dy))
-                    axis = "h";
-                else if (pressedUid !== "" && view.groupIndexOf(pressedUid) === view.currentGroup)
-                    axis = "v";
+                    f.axis = id === primary ? "h" : "done";
+                else if (f.uid !== "" && !owned(f.uid))
+                    f.axis = "v";
                 else
-                    axis = "done";
+                    f.axis = "done";
             }
-            if (axis === "h") {
+            if (f.axis === "h") {
                 // Scroll the fan of a long stack first, then the stacks
                 // (CardWindowManager.cpp:1482-1499).
                 var fanUnit = view.windowWidth * view.activeScale / 3;
                 var wantFan = startFan - dx / fanUnit;
                 setCurrentFan(wantFan);
                 var leftover = (wantFan - currentFan()) * fanUnit;
-                var p = startPosition + leftover / view.groupSpacing();
+                var pos = startPosition + leftover / view.groupSpacing();
                 // Rubber-band past the ends.
                 var last = view.groupCount - 1;
-                if (p < 0) p = p / 3;
-                if (p > last) p = last + (p - last) / 3;
-                view.position = p;
-            } else if (axis === "v") {
-                var c = view.cardItem(pressedUid);
+                if (pos < 0) pos = pos / 3;
+                if (pos > last) pos = last + (pos - last) / 3;
+                view.position = pos;
+            } else if (f.axis === "v") {
+                var c = view.cardItem(f.uid);
                 if (c)
                     c.flickOffset = dy < 0 ? dy : dy / 4;
             }
         }
 
-        onReleased: (mouse) => {
-            if (axis === "reorder") {
+        onReleased: (points) => {
+            for (var i = 0; i < points.length; ++i)
+                release(points[i].pointId, false);
+        }
+        onCanceled: (points) => {
+            for (var i = 0; i < points.length; ++i)
+                release(points[i].pointId, true);
+        }
+
+        function release(id, cancelled) {
+            var f = fingers[id];
+            delete fingers[id];
+            if (id === primary) {
+                primary = -1;
+                holdTimer.stop();
+            }
+            if (!f)
+                return;
+            if (f.axis === "reorder") {
                 view.exitReorder();
-            } else if (axis === "h") {
+            } else if (f.axis === "h") {
                 // Carry momentum: a quick flick advances one stack.
                 var target = Math.round(view.position);
-                if (Math.abs(velocityX) > 0.5 && target === Math.round(startPosition))
-                    target += velocityX < 0 ? 1 : -1;
+                if (!cancelled && Math.abs(f.vx) > 0.5 && target === Math.round(startPosition))
+                    target += f.vx < 0 ? 1 : -1;
                 view.slideTo(target);
-            } else if (axis === "v") {
-                var c = view.cardItem(pressedUid);
-                if (c) {
-                    if (shouldClose(c.flickOffset, velocityY, c.height * c.cardScale))
-                        throwAway(c);
-                    else
-                        springBack.startFor(c);
-                }
-            } else if (axis === "") {
-                tap(mouse.x);
+            } else if (f.axis === "v") {
+                var c = view.cardItem(f.uid);
+                if (c)
+                    view.animateFlick(c, !cancelled && shouldClose(c.flickOffset, f.vy, c.height * c.cardScale));
+            } else if (f.axis === "" && !cancelled && fingerCount() === 0) {
+                tap(f.uid, f.lastX);
             }
-            axis = "";
+        }
+
+        function fingerCount() {
+            return Object.keys(fingers).length;
         }
 
         // Tap on the open stack maximizes the tapped card; a tap on or beside
         // another stack switches to it (CardWindowManager.cpp:2151-2195).
-        function tap(x) {
-            var g = pressedUid !== "" ? view.groupIndexOf(pressedUid) : -1;
+        function tap(uid, x) {
+            var g = uid !== "" ? view.groupIndexOf(uid) : -1;
             if (g === view.currentGroup)
-                view.maximize(pressedUid);
+                view.maximize(uid);
             else if (g >= 0)
                 view.slideTo(g);
             else
@@ -579,29 +624,26 @@ Item {
                           && vy < 550 * u * u / dy;
             return flicked || -dy > cardHeight / 2;
         }
+    }
 
-        function throwAway(c) {
-            throwAnim.card = c;
-            throwAnim.to = -view.height;
-            throwAnim.start();
+    // Throw a flicked card off the top and close it, or spring it back. One
+    // animation per card, so several can go at once.
+    function animateFlick(card, close) {
+        flickAnimation.createObject(view, { target: card, closing: close, to: close ? -view.height : 0 }).start();
+    }
+
+    Component {
+        id: flickAnimation
+        NumberAnimation {
+            property bool closing
+            property: "flickOffset"
+            duration: closing ? Theme.cardDeleteDuration : Theme.cardSlideDuration
+            easing.type: closing ? Theme.cardDeleteEasing : Theme.cardEasing
+            onFinished: {
+                if (closing && target)
+                    view.close(target.uid);
+                destroy();
+            }
         }
-    }
-
-    NumberAnimation {
-        id: throwAnim
-        property Item card
-        target: card; property: "flickOffset"
-        duration: Theme.cardDeleteDuration
-        easing.type: Theme.cardDeleteEasing
-        onFinished: if (card) view.close(card.uid)
-    }
-
-    NumberAnimation {
-        id: springBack
-        property: "flickOffset"
-        to: 0
-        duration: Theme.cardSlideDuration
-        easing.type: Theme.cardEasing
-        function startFor(c) { target = c; start(); }
     }
 }
