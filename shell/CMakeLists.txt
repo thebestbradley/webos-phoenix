@@ -18,7 +18,7 @@ if(PHOENIX_BUILD_SIM)
     # Qt WebEngine runs the web apps (original webOS apps, Settings, ...).
     # Without it the simulator still runs, with placeholder apps only.
     find_package(Qt6 6.4 QUIET COMPONENTS WebEngineQuick)
-    add_executable(phoenix-sim sim/main.cpp sim/rootfs.cpp sim/rootfs.h)
+    add_executable(phoenix-sim sim/main.cpp sim/rootfs.cpp sim/rootfs.h sim/simsettings.h)
     target_link_libraries(phoenix-sim PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick)
     if(TARGET Qt6::WebEngineQuick)
         target_link_libraries(phoenix-sim PRIVATE Qt6::WebEngineQuick)

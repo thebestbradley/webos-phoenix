@@ -5,7 +5,7 @@
 //
 // Context properties set by phoenix-sim:
 //   simScene       "locked" | "cards" | "stacks" | "reorder" | "maximized" | "launcher" |
-//                  "banner" | "notified" | "dashboard" | "justtype" | "systemmenu" | "empty"
+//                  "launcheredit" | "banner" | "notified" | "dashboard" | "justtype" | "systemmenu" | "empty"
 //   simFormFactor  "auto" | "phone" | "tablet"
 //   simLaunch      app ids to launch (--launch)
 //   simOpen        a web address to open in the browser (--open)
@@ -68,8 +68,20 @@ Item {
         onActivated: windows.simulateIncomingSms()
     }
 
+    // The launcher layout (icon order, dock) survives restarts (simSettings,
+    // phoenix-sim's settings file).
+    Connections {
+        target: windows
+        function onLauncherLayoutJsonChanged() {
+            if (typeof simSettings !== "undefined" && windows.launcherLayoutJson !== "")
+                simSettings.setValue("launcher/layout", windows.launcherLayoutJson);
+        }
+    }
+
     // Build a demo scene, as if the user had been using the phone for a bit.
     Component.onCompleted: {
+        if (typeof simSettings !== "undefined")
+            windows.launcherLayoutJson = simSettings.value("launcher/layout");
         // --launch <appId>: open these apps, in card view, then stop.
         // --open <url>: open a web page in the browser, as a link would.
         var opening = typeof simOpen !== "undefined" && simOpen !== "";
@@ -120,8 +132,10 @@ Item {
             shell.cardView.maximizeProgress = 1;
         } else if (scene === "systemmenu") {
             shell.openSystemMenu();
-        } else if (scene === "launcher") {
+        } else if (scene === "launcher" || scene === "launcheredit") {
             shell.gestureUp();
+            if (scene === "launcheredit")
+                shell.launcherEditMode = true;
         } else if (scene === "banner") {
             // An app is open; a notification comes in and the app makes room.
             shell.cardView.maximizeProgress = 1;

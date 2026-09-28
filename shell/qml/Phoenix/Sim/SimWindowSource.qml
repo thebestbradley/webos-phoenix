@@ -26,6 +26,10 @@
 //   justTypeStop()           it was dismissed; clear it
 //   justTypeDismissed        signal: it launched something; close it
 //   appMenu(uid)             the user tapped the app name: open its app menu
+//   removeApp(appId)         the user deleted the app in the launcher
+//   savedLauncherLayout() -> string, saveLauncherLayout(json)
+//                            the launcher's icon order, kept across sessions
+//   apps also has removable: whether the launcher offers to delete the app
 //
 // Simulator only (sim.qml wires these to SimSystemStatus and the shell):
 //   systemStatusReported(status)  signal: a web page reported the device
@@ -94,7 +98,8 @@ Item {
             apps.append({ appId: a.id, title: a.title, color: "#555c66", glyph: a.title.charAt(0),
                           tab: a.tab !== undefined ? a.tab : 0, quickLaunch: a.quickLaunch || webQuickLaunch[a.title] || 0,
                           icon: a.icon, web: true, main: a.main, noWindow: !!a.noWindow,
-                          webAppId: a.appId || a.id, params: a.params || "", dir: a.dir || "" });
+                          webAppId: a.appId || a.id, params: a.params || "", dir: a.dir || "",
+                          removable: false });
         }
         for (i = 0; i < placeholders.count; ++i) {
             var p = placeholders.get(i);
@@ -102,7 +107,10 @@ Item {
                 continue;
             apps.append({ appId: p.appId, title: p.title, color: p.color, glyph: p.glyph, tab: p.tab,
                           quickLaunch: p.quickLaunch, icon: p.icon, web: false, main: "", noWindow: false,
-                          webAppId: "", params: "", dir: "" });
+                          webAppId: "", params: "", dir: "",
+                          // Stand-ins for apps still to come can be deleted, as
+                          // downloaded apps could; the built-in ones cannot.
+                          removable: true });
         }
     }
 
@@ -345,6 +353,20 @@ Item {
             win.runScript("window.__phoenixRuntime && __phoenixRuntime.openAppMenu && __phoenixRuntime.openAppMenu()");
         else if (win && win.appMenuRequested)
             win.appMenuRequested();
+    }
+
+    // ---- Launcher --------------------------------------------------------------------
+
+    // The launcher layout as JSON; sim.qml keeps it in the settings file.
+    property string launcherLayoutJson: ""
+    function savedLauncherLayout() { return launcherLayoutJson; }
+    function saveLauncherLayout(json) { launcherLayoutJson = json; }
+
+    // Deleting an app closes its windows (the launcher layout keeps it out).
+    function removeApp(appId) {
+        for (var i = cards.count - 1; i >= 0; --i)
+            if (cards.get(i).appId === appId)
+                close(cards.get(i).uid);
     }
 
     // Open a web page in the browser, as a tapped link does (phoenix-sim --open).

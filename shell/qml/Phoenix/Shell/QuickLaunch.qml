@@ -11,7 +11,7 @@ import QtQuick
 Item {
     id: ql
 
-    property var apps          // ListModel with a quickLaunch role (1..4, 0 = not pinned)
+    property var apps          // ListModel: appId, title, color, glyph, icon
     property bool launcherOpen: false
 
     signal launchRequested(string appId)
@@ -27,22 +27,43 @@ Item {
         verticalTileMode: BorderImage.Stretch
     }
 
-    // Pinned apps sorted by their quickLaunch slot.
+    // The dock's apps, in order (LauncherLayout.js dock), at most
+    // quickLaunchMaxItems - 1 beside the launcher button.
+    property var dock: []
+    // The icon being dragged ("" when none).
+    property string draggedId: ""
+
+    signal dragStarted(string appId, string from, real x, real y)
+    signal dragMoved(real x, real y)
+    signal dragEnded(real x, real y)
+
+    function entry(id) {
+        if (!apps)
+            return null;
+        for (var i = 0; i < apps.count; ++i)
+            if (apps.get(i).appId === id)
+                return apps.get(i);
+        return null;
+    }
+
     readonly property var pinned: {
         var list = [];
-        if (!apps)
-            return list;
-        for (var i = 0; i < apps.count; ++i) {
-            var a = apps.get(i);
-            if (a.quickLaunch > 0)
-                list.push({ slot: a.quickLaunch, appId: a.appId, title: a.title, color: a.color, glyph: a.glyph, icon: a.icon });
+        var ids = (dock || []).slice(0, Theme.quickLaunchMaxItems - 1);
+        for (var i = 0; i < ids.length; ++i) {
+            var a = entry(ids[i]);
+            if (a)
+                list.push({ appId: a.appId, title: a.title, color: a.color, glyph: a.glyph, icon: a.icon });
         }
-        list.sort(function(x, y) { return x.slot - y.slot; });
-        return list.slice(0, Theme.quickLaunchMaxItems - 1);
+        return list;
     }
 
     readonly property real slotWidth: width / (pinned.length + 1)
     readonly property int iconSize: Theme.quickLaunchIconSize
+
+    // Dock slot for a drop at x (0 .. pinned.length).
+    function slotAt(x) {
+        return Math.max(0, Math.min(pinned.length, Math.floor(x / slotWidth)));
+    }
 
     Repeater {
         model: ql.pinned
@@ -53,11 +74,13 @@ Item {
             y: Theme.quickLaunchIconY
             size: ql.iconSize
             showLabel: false
+            interactive: false
+            opacity: ql.draggedId === modelData.appId ? 0 : 1
+            pressed: dockMouse.pressed && dockMouse.pressedSlot === index
             title: modelData.title
             color: modelData.color
             glyph: modelData.glyph
             source: modelData.icon
-            onClicked: ql.launchRequested(modelData.appId)
         }
     }
 
@@ -74,15 +97,34 @@ Item {
         Image {
             width: parent.width
             height: parent.height * 2
-            y: (buttonMouse.pressed || ql.launcherOpen) ? -parent.height : 0
+            y: ((dockMouse.pressed && dockMouse.pressedSlot === ql.pinned.length) || ql.launcherOpen) ? -parent.height : 0
             source: Theme.asset("launcher3/quicklaunch-button-launcher.png")
             smooth: true
         }
+    }
 
-        MouseArea {
-            id: buttonMouse
-            anchors.fill: parent
-            onClicked: ql.launcherToggled()
+    // Tap launches; press and hold picks a dock app up, to move it along the
+    // dock or drag it off (quicklaunchbar.cpp).
+    MouseArea {
+        id: dockMouse
+        anchors.fill: parent
+        pressAndHoldInterval: Theme.tapAndHoldInterval
+        preventStealing: ql.draggedId !== ""
+        property int pressedSlot: -1
+        onPressed: (mouse) => { pressedSlot = ql.slotAt(mouse.x); }
+        onClicked: (mouse) => {
+            var i = ql.slotAt(mouse.x);
+            if (i >= ql.pinned.length)
+                ql.launcherToggled();
+            else
+                ql.launchRequested(ql.pinned[i].appId);
         }
+        onPressAndHold: (mouse) => {
+            var i = ql.slotAt(mouse.x);
+            if (i < ql.pinned.length)
+                ql.dragStarted(ql.pinned[i].appId, "dock", mouse.x, mouse.y);
+        }
+        onPositionChanged: (mouse) => { if (ql.draggedId !== "") ql.dragMoved(mouse.x, mouse.y); }
+        onReleased: (mouse) => { if (ql.draggedId !== "") ql.dragEnded(mouse.x, mouse.y); }
     }
 }

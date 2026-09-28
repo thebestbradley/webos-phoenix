@@ -19,6 +19,7 @@
 #include <QTimer>
 
 #include "rootfs.h"
+#include "simsettings.h"
 
 #ifdef PHOENIX_HAVE_WEBENGINE
 #include <QQuickWebEngineProfile>
@@ -41,6 +42,7 @@ int main(int argc, char *argv[])
 #endif
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("phoenix-sim"));
+    app.setOrganizationName(QStringLiteral("webos-phoenix"));
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("webOS Phoenix shell simulator"));
@@ -48,7 +50,7 @@ int main(int argc, char *argv[])
     QCommandLineOption sizeOpt(QStringLiteral("size"), QStringLiteral("Window size in pixels (default 320x480, tablet 1024x768)."), QStringLiteral("WxH"));
     QCommandLineOption tabletOpt(QStringLiteral("tablet"), QStringLiteral("Use the tablet (TouchPad) layout."));
     QCommandLineOption phoneOpt(QStringLiteral("phone"), QStringLiteral("Force the phone layout."));
-    QCommandLineOption sceneOpt(QStringLiteral("scene"), QStringLiteral("Demo scene: locked, cards, stacks, reorder, maximized, launcher, banner, notified, dashboard, justtype, systemmenu, empty."), QStringLiteral("name"));
+    QCommandLineOption sceneOpt(QStringLiteral("scene"), QStringLiteral("Demo scene: locked, cards, stacks, reorder, maximized, launcher, launcheredit, banner, notified, dashboard, justtype, systemmenu, empty."), QStringLiteral("name"));
     QCommandLineOption shotOpt(QStringLiteral("screenshot"), QStringLiteral("Save a screenshot to FILE and exit."), QStringLiteral("file"));
     QCommandLineOption delayOpt(QStringLiteral("delay"), QStringLiteral("Delay before the screenshot (default 1500 ms)."), QStringLiteral("ms"), QStringLiteral("1500"));
     QCommandLineOption qmlOpt(QStringLiteral("qml-dir"), QStringLiteral("Directory containing sim.qml and the Phoenix modules."), QStringLiteral("dir"));
@@ -106,6 +108,8 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simWebApps"), webApps);
     view.rootContext()->setContextProperty(QStringLiteral("simLaunch"), parser.values(launchOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simOpen"), parser.value(openOpt));
+    SimSettings settings;
+    view.rootContext()->setContextProperty(QStringLiteral("simSettings"), &settings);
     view.rootContext()->setContextProperty(QStringLiteral("simScene"), parser.value(sceneOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simFormFactor"),
         tablet ? QStringLiteral("tablet") : parser.isSet(phoneOpt) ? QStringLiteral("phone") : QStringLiteral("auto"));

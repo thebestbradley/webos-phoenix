@@ -16,6 +16,8 @@ Item {
     property string glyph: ""
     property bool showLabel: true
     property int size: Theme.launcherIconSize
+    // false: the icon only draws; its parent handles touches.
+    property bool interactive: true
     property bool pressed: mouse.pressed
 
     signal clicked
@@ -98,6 +100,7 @@ Item {
     MouseArea {
         id: mouse
         anchors.fill: tile
+        enabled: icon.interactive
         onClicked: icon.clicked()
     }
 }

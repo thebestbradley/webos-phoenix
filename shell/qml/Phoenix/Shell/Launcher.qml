@@ -18,8 +18,23 @@ Item {
     property var apps
     property bool open: false
 
+    // Icon order on each page (LauncherLayout.js).
+    property var layout: null
+    // Edit mode: icons on edit tiles, delete decorators, a Done button.
+    property bool editMode: false
+    // The icon being dragged ("" when none); the shell moves it.
+    property string draggedId: ""
+    readonly property bool dragging: draggedId !== ""
+
     signal launchRequested(string appId)
     signal closeRequested
+    signal deleteRequested(string appId)
+    // Press and hold picked an icon up; positions are in launcher coordinates.
+    signal dragStarted(string appId, string from, real x, real y)
+    signal dragMoved(real x, real y)
+    signal dragEnded(real x, real y)
+
+    onOpenChanged: if (!open) editMode = false
 
     readonly property var tabs: ["Apps", "Downloads", "Settings"]
 
@@ -64,7 +79,7 @@ Item {
                 delegate: Item {
                     required property string modelData
                     required property int index
-                    width: tabBar.width / launcher.tabs.length
+                    width: launcher.tabWidth
                     height: tabBar.height
 
                     BorderImage {
@@ -75,10 +90,13 @@ Item {
                     }
                     Text {
                         anchors.centerIn: parent
+                        width: parent.width - Theme.px(6)
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideRight
                         text: modelData
                         color: pages.currentIndex === index ? Theme.text : Theme.textDim
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.px(Theme.tablet ? 18 : 15)
+                        font.pixelSize: Theme.px(Theme.tablet ? 18 : launcher.editMode ? 12 : 15)
                         font.bold: pages.currentIndex === index
                     }
                     Image {
@@ -96,6 +114,40 @@ Item {
         }
     }
 
+    // Done: leaves edit mode. Right end of the tab bar (dimensionslauncher.cpp:
+    // 94-114, 1323-1331); a 98x34 sprite, normal at y 2, pressed at y 42.
+    Item {
+        id: doneButton
+        visible: launcher.editMode
+        anchors.right: tabBar.right
+        anchors.rightMargin: Theme.px(6)
+        anchors.verticalCenter: tabBar.verticalCenter
+        width: Theme.px(98)
+        height: Theme.px(34)
+        z: 2
+        clip: true
+        Image {
+            x: -Theme.px(1)
+            y: doneMouse.pressed ? -Theme.px(42) : -Theme.px(2)
+            width: Theme.px(100)
+            height: Theme.px(80)
+            source: Theme.asset("launcher3/edit-button-done.png")
+        }
+        Text {
+            anchors.centerIn: parent
+            text: qsTr("Done")
+            color: Theme.text
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.px(16)
+            font.bold: true
+        }
+        MouseArea {
+            id: doneMouse
+            anchors.fill: parent
+            onClicked: launcher.editMode = false
+        }
+    }
+
     Image {
         anchors.top: tabBar.bottom
         width: parent.width
@@ -105,6 +157,85 @@ Item {
     }
 
     // ---- Pages ------------------------------------------------------------------
+    // Each page keeps its icons in a ListModel that follows the layout with
+    // moves, so icons slide to their new places while one is dragged
+    // (iconreorderanimation.cpp).
+
+    property var pageModels: []
+    Component { id: pageModelComponent; ListModel {} }
+    Component.onCompleted: {
+        var ms = [];
+        for (var i = 0; i < tabs.length; ++i)
+            ms.push(pageModelComponent.createObject(launcher));
+        pageModels = ms;
+        syncPages();
+    }
+    onLayoutChanged: syncPages()
+    onAppsChanged: syncPages()
+
+    function entry(id) {
+        if (!apps)
+            return null;
+        for (var i = 0; i < apps.count; ++i)
+            if (apps.get(i).appId === id)
+                return apps.get(i);
+        return null;
+    }
+
+    function syncPages() {
+        if (!layout || pageModels.length === 0)
+            return;
+        for (var p = 0; p < pageModels.length; ++p) {
+            var m = pageModels[p], ids = layout.pages[p] || [];
+            for (var i = 0; i < ids.length; ++i) {
+                if (i < m.count && m.get(i).appId === ids[i])
+                    continue;
+                var j = -1;
+                for (var k = i + 1; k < m.count; ++k)
+                    if (m.get(k).appId === ids[i]) { j = k; break; }
+                if (j >= 0) {
+                    m.move(j, i, 1);
+                } else {
+                    var e = entry(ids[i]);
+                    m.insert(i, { appId: ids[i], title: e ? e.title : ids[i], color: e ? String(e.color) : "#666666",
+                                  glyph: e ? e.glyph : "", icon: e ? String(e.icon || "") : "",
+                                  removable: e ? !!e.removable : false });
+                }
+            }
+            while (m.count > ids.length)
+                m.remove(m.count - 1);
+        }
+    }
+
+    readonly property real cellWidth: pages.width / Theme.launcherColumns
+    readonly property real cellHeight: Theme.launcherIconSize + Theme.px(48)
+    readonly property real pageTopMargin: Theme.px(16)
+
+    // Grid index at a point in the current page (launcher coordinates), for drops.
+    function indexAt(lx, ly) {
+        var page = pages.currentItem;
+        if (!page)
+            return -1;
+        var p = launcher.mapToItem(page.contentItem, lx, ly);
+        var col = Math.max(0, Math.min(Theme.launcherColumns - 1, Math.floor(p.x / cellWidth)));
+        var row = Math.max(0, Math.floor((p.y - pageTopMargin) / cellHeight));
+        return Math.min(row * Theme.launcherColumns + col, pageModels[pages.currentIndex].count - 1);
+    }
+    // Tabs share the bar; in edit mode they leave room for Done.
+    readonly property real tabWidth: (tabBar.width - (editMode ? doneButton.width + Theme.px(12) : 0)) / tabs.length
+
+    // Tab under a point (launcher coordinates), or -1.
+    function tabAt(lx, ly) {
+        if (ly < 0 || ly > tabBar.height || lx >= tabWidth * tabs.length)
+            return -1;
+        return Math.max(0, Math.min(tabs.length - 1, Math.floor(lx / tabWidth)));
+    }
+    // The page area, in launcher coordinates.
+    function inPages(lx, ly) {
+        return ly >= pages.y && ly < pages.y + pages.height;
+    }
+    readonly property int currentPage: pages.currentIndex
+    function showPage(i) { pages.currentIndex = i; }
 
     ListView {
         id: pages
@@ -117,45 +248,137 @@ Item {
         highlightRangeMode: ListView.StrictlyEnforceRange
         highlightMoveDuration: Theme.cardSlideDuration
         boundsBehavior: Flickable.StopAtBounds
+        interactive: !launcher.dragging
         clip: true
         model: launcher.tabs.length
 
-        delegate: GridView {
-            id: grid
+        delegate: Flickable {
+            id: page
             required property int index
+            readonly property var model: launcher.pageModels[index] || null
             width: pages.width
             height: pages.height
             clip: true
-            topMargin: Theme.px(16)
-            readonly property int columns: Theme.launcherColumns
-            cellWidth: width / columns
-            cellHeight: Theme.launcherIconSize + Theme.px(48)
+            interactive: !launcher.dragging
+            contentWidth: width
+            contentHeight: launcher.pageTopMargin
+                           + Math.ceil((model ? model.count : 0) / Theme.launcherColumns) * launcher.cellHeight
 
-            model: {
-                var list = [];
-                if (!launcher.apps)
-                    return list;
-                for (var i = 0; i < launcher.apps.count; ++i) {
-                    var a = launcher.apps.get(i);
-                    if (a.tab === index)
-                        list.push({ appId: a.appId, title: a.title, color: a.color, glyph: a.glyph, icon: a.icon });
+            Repeater {
+                model: page.model
+                delegate: Item {
+                    id: cell
+                    required property int index
+                    required property string appId
+                    required property string title
+                    required property string color
+                    required property string glyph
+                    required property string icon
+                    required property bool removable
+                    width: launcher.cellWidth
+                    height: launcher.cellHeight
+                    x: (index % Theme.launcherColumns) * launcher.cellWidth
+                    y: launcher.pageTopMargin + Math.floor(index / Theme.launcherColumns) * launcher.cellHeight
+                    Behavior on x { NumberAnimation { duration: Theme.launcherReorderDuration; easing.type: Easing.InQuad } }
+                    Behavior on y { NumberAnimation { duration: Theme.launcherReorderDuration; easing.type: Easing.InQuad } }
+                    // The dragged icon travels under the finger (the shell's drag proxy).
+                    opacity: launcher.draggedId === appId ? 0 : 1
+
+                    // Edit mode: the icon sits on the edit tile (edit-icon-bg.png).
+                    Image {
+                        visible: launcher.editMode
+                        anchors.horizontalCenter: iconItem.horizontalCenter
+                        y: iconItem.y + (Theme.launcherIconSize - height) / 2
+                        width: Theme.launcherIconSize * 1.5
+                        height: width
+                        source: Theme.asset("launcher3/edit-icon-bg.png")
+                    }
+                    AppIcon {
+                        id: iconItem
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        title: cell.title
+                        color: cell.color
+                        glyph: cell.glyph
+                        source: cell.icon
+                        interactive: false
+                        pressed: pageMouse.pressedId === cell.appId && pageMouse.pressed
+                    }
+                    // Delete decorator at the icon's top left for apps that can
+                    // be deleted (icongeometrysettings.cpp:190-197; the sprite's
+                    // top half is the normal state).
+                    Item {
+                        visible: launcher.editMode && cell.removable
+                        x: iconItem.x - Theme.px(8)
+                        y: iconItem.y - Theme.px(8)
+                        width: Theme.px(28)
+                        height: width
+                        clip: true
+                        Image {
+                            width: parent.width
+                            height: parent.height * 2
+                            source: Theme.asset("launcher3/edit-button-delete.png")
+                        }
+                    }
                 }
-                list.sort(function(x, y) { return x.title.localeCompare(y.title); });
-                return list;
             }
 
-            delegate: Item {
-                required property var modelData
-                width: grid.cellWidth
-                height: grid.cellHeight
-                AppIcon {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    title: modelData.title
-                    color: modelData.color
-                    glyph: modelData.glyph
-                    source: modelData.icon
-                    onClicked: launcher.launchRequested(modelData.appId)
+            // One area for the whole page: tap launches, press and hold enters
+            // edit mode and picks the icon up (reorderablepage.cpp:450-540).
+            MouseArea {
+                id: pageMouse
+                width: page.contentWidth
+                height: Math.max(page.contentHeight, page.height)
+                pressAndHoldInterval: Theme.tapAndHoldInterval
+                preventStealing: launcher.dragging
+                property string pressedId: ""
+
+                function cellAt(mx, my) {
+                    var col = Math.floor(mx / launcher.cellWidth);
+                    var row = Math.floor((my - launcher.pageTopMargin) / launcher.cellHeight);
+                    var i = row * Theme.launcherColumns + col;
+                    if (row < 0 || col < 0 || col >= Theme.launcherColumns || !page.model || i >= page.model.count)
+                        return null;
+                    return { index: i, x: mx - col * launcher.cellWidth, y: my - launcher.pageTopMargin - row * launcher.cellHeight };
                 }
+
+                onPressed: (mouse) => {
+                    var c = cellAt(mouse.x, mouse.y);
+                    pressedId = c ? page.model.get(c.index).appId : "";
+                }
+                onPressAndHold: (mouse) => {
+                    if (pressedId === "")
+                        return;
+                    launcher.editMode = true;
+                    var sp = mapToItem(launcher, mouse.x, mouse.y);
+                    launcher.dragStarted(pressedId, "page", sp.x, sp.y);
+                }
+                onPositionChanged: (mouse) => {
+                    if (launcher.dragging) {
+                        var sp = mapToItem(launcher, mouse.x, mouse.y);
+                        launcher.dragMoved(sp.x, sp.y);
+                    }
+                }
+                onReleased: (mouse) => {
+                    if (launcher.dragging) {
+                        var sp = mapToItem(launcher, mouse.x, mouse.y);
+                        launcher.dragEnded(sp.x, sp.y);
+                    }
+                }
+                onClicked: (mouse) => {
+                    var c = cellAt(mouse.x, mouse.y);
+                    if (!c)
+                        return;
+                    var item = page.model.get(c.index);
+                    if (launcher.editMode) {
+                        // The delete decorator, top left of the icon.
+                        var iconLeft = (launcher.cellWidth - Theme.launcherIconSize) / 2;
+                        if (item.removable && c.x < iconLeft + Theme.px(24) && c.x > iconLeft - Theme.px(12) && c.y < Theme.px(24))
+                            launcher.deleteRequested(item.appId);
+                        return;
+                    }
+                    launcher.launchRequested(item.appId);
+                }
+                onCanceled: pressedId = ""
             }
         }
     }

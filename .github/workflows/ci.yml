@@ -73,7 +73,7 @@ jobs:
       - name: Screenshots
         run: |
           mkdir -p screenshots/phone screenshots/tablet
-          for s in locked cards stacks reorder maximized launcher banner notified dashboard justtype systemmenu; do
+          for s in locked cards stacks reorder maximized launcher launcheredit banner notified dashboard justtype systemmenu; do
             xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --scene $s --screenshot screenshots/phone/$s.png
             xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --tablet --scene $s --screenshot screenshots/tablet/$s.png
           done
