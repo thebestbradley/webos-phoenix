@@ -63,6 +63,15 @@ data use "Phoenix Account".
   the songs are chiptunes synthesized by the script and encoded as Ogg Opus.
   Dedicated to the public domain (CC0 1.0). Artist and album names are
   invented.
+- Files (`apps/files`, and its service `apps/files/service`) is a clean-room
+  design inspired by **Internalz Pro**, the most popular Preware file manager
+  for legacy webOS. Internalz Pro is closed source: only its feature set
+  (what a user could see it do) was used as a guide. No code, artwork, text
+  or layouts were taken from it. Nor was any code taken from
+  `webOS-ports/org.webosports.app.filemanager` (its service is GPL-2.0). The
+  launcher icon is drawn by `apps/files/tools/render-icon.cjs`, the list icons
+  and glyphs are simple SVG drawn for Phoenix, and the rest is the Enyo 1.0
+  art above.
 - npm dependencies (React, Vite, ...) are MIT-licensed; the Settings app lists
   the ones it bundles under Device Info > Open source licenses.
 
@@ -87,3 +96,6 @@ for webOS OSE").
 - LuneOS repositories use several licenses, including GPL-3.0 for some
   components. Don't copy their code into the Apache-2.0 parts of this
   repository. Reading them for reference is fine.
+- Closed-source homebrew (Preware apps such as Internalz Pro): reimplement the
+  behaviour from its visible features only, without its code or artwork, and
+  record it here (see Files above).

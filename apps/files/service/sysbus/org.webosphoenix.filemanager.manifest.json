@@ -1,0 +1,9 @@
+{
+    "id": "org.webosphoenix.filemanager",
+    "version": "0.1.0",
+    "roleFiles": ["/usr/share/luna-service2/roles.d/org.webosphoenix.filemanager.role.json"],
+    "serviceFiles": ["/usr/share/luna-service2/services.d/org.webosphoenix.filemanager.service"],
+    "apiPermissionFiles": ["/usr/share/luna-service2/api-permissions.d/org.webosphoenix.filemanager.api.json"],
+    "clientPermissionFiles": ["/usr/share/luna-service2/client-permissions.d/org.webosphoenix.filemanager.perm.json"],
+    "groupsFiles": ["/usr/share/luna-service2/groups.d/org.webosphoenix.filemanager.groups.json"]
+}

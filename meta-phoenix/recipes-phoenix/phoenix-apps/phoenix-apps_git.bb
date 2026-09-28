@@ -5,7 +5,9 @@ SUMMARY = "Original Open webOS apps and frameworks, and the Phoenix web app runt
 DESCRIPTION = "Installs the Open webOS core apps (Accounts, Calculator, \
 Calendar, Clock, Contacts, Email, Memos), Enyo 1.0, MojoLoader and the \
 foundation/loadable frameworks at their original device paths \
-(/usr/palm/applications, /usr/palm/frameworks), plus Phoenix web apps and \
+(/usr/palm/applications, /usr/palm/frameworks), plus Phoenix web apps, their \
+Node.js Luna services (/usr/palm/services, e.g. org.webosphoenix.filemanager \
+for Files, with luna-service2 role and permission files) and \
 phoenix-runtime.js, using tools/install-rootfs.py."
 HOMEPAGE = "https://github.com/thebestbradley/webos-phoenix"
 SECTION = "webos/apps"
@@ -33,9 +35,12 @@ do_install() {
 FILES:${PN} = " \
     ${prefix}/palm/applications \
     ${prefix}/palm/frameworks \
+    ${prefix}/palm/services \
     ${datadir}/phoenix/runtime \
+    ${datadir}/luna-service2 \
     ${sysconfdir}/palm/db \
 "
 
-# Web apps run in WebAppMgr; their data lives in db8.
-RDEPENDS:${PN} = "${VIRTUAL-RUNTIME_webappmanager} db8"
+# Web apps run in WebAppMgr; their data lives in db8. The apps' own Luna
+# services (Files) are JavaScript services: run-js-service and webos-service.
+RDEPENDS:${PN} = "${VIRTUAL-RUNTIME_webappmanager} db8 nodejs nodejs-module-webos-service"

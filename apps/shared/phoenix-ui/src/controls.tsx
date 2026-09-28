@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Controls: ToggleButton, Slider, Button, Spinner, TextField.
+// Controls: ToggleButton, Slider, Button, Spinner, TextField, CheckBox.
 
 import { useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { cx } from "./layout";
@@ -202,5 +202,32 @@ export function TextField({ value, onChange, onSubmit, label, placeholder, type 
                 />
             </div>
         </label>
+    );
+}
+
+// ---- CheckBox -------------------------------------------------------------------
+
+export interface CheckBoxProps {
+    checked: boolean;
+    onChange?: (checked: boolean) => void;
+    disabled?: boolean;
+    /** Accessible name. */
+    label?: string;
+    testId?: string;
+}
+
+/** The Heritage check box (Enyo CheckBox, checkbox.png), e.g. for multi-select lists. */
+export function CheckBox({ checked, onChange, disabled, label, testId }: CheckBoxProps) {
+    return (
+        <button
+            type="button"
+            className={cx("pui-checkbox", checked && "checked")}
+            role="checkbox"
+            aria-checked={checked}
+            aria-label={label}
+            disabled={disabled}
+            data-testid={testId}
+            onClick={(e) => { e.stopPropagation(); onChange?.(!checked); }}
+        />
     );
 }

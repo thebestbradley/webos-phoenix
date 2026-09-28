@@ -1,0 +1,22 @@
+{
+    "id": "org.webosphoenix.files",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Files",
+    "icon": "icon.png",
+    "iconColor": "#d9a13a",
+    "uiRevision": 2,
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launcherTab": 0
+    },
+    "//requiredPermissions": "OSE access control groups for the services the app calls (the groups in each service's sysbus api.json; filemanager.operation is apps/files/service's).",
+    "requiredPermissions": [
+        "filemanager.operation",
+        "application.launcher",
+        "application.operation",
+        "applicationinstall.management"
+    ]
+}

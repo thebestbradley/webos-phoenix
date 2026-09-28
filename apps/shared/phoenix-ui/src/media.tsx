@@ -33,6 +33,22 @@ const GLYPHS: Record<string, ReactNode> = {
     list: <path d="M4 6h4v4H4zm7 0h17v4H11zM4 14h4v4H4zm7 0h17v4H11zM4 22h4v4H4zm7 0h17v4H11z" />,
     back: <path d="M13 6L3 16l10 10v-6.5h16v-7H13z" />,
     "switch-camera": <path d="M11 8l-2 3H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h22a2 2 0 0 0 2-2V13a2 2 0 0 0-2-2h-4l-2-3zm1.5 11a4 4 0 0 1 6.9-2.8L21 15v4.5h-4.5l1.4-1.4a2 2 0 0 0-3.4 1zm7 1a4 4 0 0 1-6.9 2.8L11 24.5V20h4.5l-1.4 1.4a2 2 0 0 0 3.4-1z" />,
+    // File management (Files).
+    star: <path d="M16 3l3.9 8.2 9 1.1-6.6 6.2 1.7 8.9L16 23l-8 4.4 1.7-8.9-6.6-6.2 9-1.1z" />,
+    up: <path d="M16 4L5 15h7v13h8V15h7z" />,
+    plus: <path d="M13 5h6v8h8v6h-8v8h-6v-8H5v-6h8z" />,
+    "new-folder": <path fillRule="evenodd" d="M3 8a2 2 0 0 1 2-2h7l3 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm12 5v4h-4v3h4v4h3v-4h4v-3h-4v-4z" />,
+    "new-file": <path fillRule="evenodd" d="M7 3h12l7 7v17a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm7 11v4h-4v3h4v4h3v-4h4v-3h-4v-4z" />,
+    copy: <path fillRule="evenodd" d="M11 3h12l5 5v15a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm1 3v16h13V9h-4V6zM4 9h3v17h14v3H6a2 2 0 0 1-2-2z" />,
+    cut: <path fillRule="evenodd" d="M9 19a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8zM23 19a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8zM9.5 3h3.2L18 14.6l-1.7 3.8zm13 0h-3.2l-8 17.6 2.6 1.3 4.4-9.6z" />,
+    paste: <path fillRule="evenodd" d="M12 3h8v3h5a2 2 0 0 1 2 2v19a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5zm2 2v3h4V5zM8 9v17h16V9h-3v2H11V9z" />,
+    rename: <path d="M21.5 4.5l6 6L12 26l-8 2 2-8zM4 29h24v-1H4z" />,
+    info: <path fillRule="evenodd" d="M16 3a13 13 0 1 1 0 26 13 13 0 0 1 0-26zm-2 11v10h4V14zm2-6.5a2.3 2.3 0 1 0 0 4.6 2.3 2.3 0 0 0 0-4.6z" />,
+    menu: <path d="M5 7h22v4H5zm0 7h22v4H5zm0 7h22v4H5z" />,
+    check: <path d="M4 17l3-3 6 6L25 8l3 3-15 15z" />,
+    close: <path d="M7 4l9 9 9-9 3 3-9 9 9 9-3 3-9-9-9 9-3-3 9-9-9-9z" />,
+    save: <path fillRule="evenodd" d="M6 4h17l5 5v17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm3 2v7h13V6zm9 1h3v5h-3zM8 18v8h16v-8z" />,
+    sort: <path d="M9 4l6 7h-4v17H7V11H3zm14 24l-6-7h4V4h4v17h4z" />,
 };
 
 export type GlyphName = keyof typeof GLYPHS | string;

@@ -12,7 +12,8 @@
     "messaging",
     "camera",
     "photos",
-    "music"
+    "music",
+    "files"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

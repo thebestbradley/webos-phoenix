@@ -10,3 +10,4 @@ export * from "./contacts";
 export * from "./telephony";
 export * from "./messaging";
 export * from "./media";
+export * from "./files";

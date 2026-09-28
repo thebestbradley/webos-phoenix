@@ -1,0 +1,4 @@
+{
+    "allowedNames": ["org.webosphoenix.filemanager"],
+    "filemanager.operation": ["oem"]
+}

@@ -1,0 +1,12 @@
+{
+    "filemanager.operation": [
+        "org.webosphoenix.filemanager/list",
+        "org.webosphoenix.filemanager/stat",
+        "org.webosphoenix.filemanager/mkdir",
+        "org.webosphoenix.filemanager/copy",
+        "org.webosphoenix.filemanager/move",
+        "org.webosphoenix.filemanager/remove",
+        "org.webosphoenix.filemanager/read",
+        "org.webosphoenix.filemanager/write"
+    ]
+}

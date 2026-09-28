@@ -59,5 +59,9 @@
     "com.palm.app.browser": {
         "status": "works",
         "note": "Pages show in a native Chromium view in phoenix-sim; elsewhere in an iframe (sites that refuse framing stay blank). No downloads, printing or page thumbnails. Phone: the address field has its own toolbar row"
+    },
+    "org.webosphoenix.files": {
+        "status": "works",
+        "note": "Phoenix Files (React, apps/files); tools/test-files.cjs drives it"
     }
 }

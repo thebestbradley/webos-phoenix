@@ -4,7 +4,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
-import { Dialog, Group, ListSelector, Row, Slider, ToggleButton } from "./index";
+import { CheckBox, Dialog, Group, ListSelector, Row, Slider, ToggleButton } from "./index";
 
 afterEach(cleanup);
 
@@ -90,5 +90,19 @@ describe("Dialog", () => {
         expect(screen.getByRole("dialog").textContent).toContain("Enter password");
         act(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); });
         expect(onClose).toHaveBeenCalled();
+    });
+});
+
+describe("CheckBox", () => {
+    it("shows its state and toggles without tapping its row", () => {
+        const onChange = vi.fn(), row = vi.fn();
+        const { rerender } = render(<Row title="notes.txt" onClick={row}><CheckBox checked={false} onChange={onChange} label="Select" /></Row>);
+        const box = screen.getByRole("checkbox", { name: "Select" });
+        expect(box.getAttribute("aria-checked")).toBe("false");
+        fireEvent.click(box);
+        expect(onChange).toHaveBeenCalledWith(true);
+        expect(row).not.toHaveBeenCalled();
+        rerender(<Row title="notes.txt" onClick={row}><CheckBox checked onChange={onChange} label="Select" /></Row>);
+        expect(box.className).toContain("checked");
     });
 });

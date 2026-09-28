@@ -96,6 +96,8 @@ The Settings app's services (Wi-Fi, Bluetooth, settings service, audio, ...)
 are simulated in their own clearly marked block at the end of the runtime;
 see [Settings](#settings) below. The media services (media indexer, camera,
 media files) follow in another; see [Camera, Photos and Music](#camera-photos-and-music).
+The last block is the file manager service and the legacy app installer used
+by Files; see [Files](#files).
 
 ## Running apps
 
@@ -158,8 +160,11 @@ a small script, loaded by an overlay of the app's `depends.js` in
 apps under `/usr/palm/applications` (where webOS OSE's application manager
 still looks for system apps), frameworks under `/usr/palm/frameworks`, the
 runtime under `/usr/share/phoenix/runtime`, and each app's db8 kinds and
-permissions under `/etc/palm/db`. Overlays are applied and app pages get the
-runtime `<script>` tag. The `phoenix-apps` recipe in `meta-phoenix` runs it,
+permissions under `/etc/palm/db`. An app's Node.js Luna service
+(`apps/<app>/service`, e.g. Files') goes to `/usr/palm/services/<service id>`,
+where `run-js-service` starts it, and its `sysbus/` role, permission, groups,
+manifest and service files to `/usr/share/luna-service2/*.d`. Overlays are
+applied and app pages get the runtime `<script>` tag. The `phoenix-apps` recipe in `meta-phoenix` runs it,
 and `webos-phoenix-image` includes it. Built apps (`dist/`) must be built
 before the recipe runs.
 
@@ -188,7 +193,8 @@ call, answers and ignores simulated incoming calls, and sends and receives
 texts.
 
 Camera, Photos and Music start cleanly too, and `node tools/test-media.cjs
-[--tablet]` drives them.
+[--tablet]` drives them. So does Files, driven by `node tools/test-files.cjs
+[--tablet]`.
 
 ## Phoenix apps (React + TypeScript)
 
@@ -196,12 +202,13 @@ New Phoenix apps live in `apps/`, an npm workspace:
 
 | Path | What |
 | --- | --- |
-| `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music; `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
-| `apps/shared/phoenix-ui` (`@phoenix/ui`) | React components with the webOS 1.x/2.x look, drawn with the Enyo 1.0 "Heritage" artwork (copied into `assets/enyo`, see its `PROVENANCE.md`): `PageHeader`, `Group`, `Row`, `Divider`, `ToggleButton`, `Slider` (also as a progress/seek bar), `ListSelector`, `Picker`, `PopupMenu`, `Button`, `Drawer`, `DividerDrawer`, `Dialog`, `Spinner`, `TextField`; for Phone and Messaging the webOS dial pad (`Dialpad`, `DialButton`, `BackspaceButton`, from Enyo's `lib/telephony` art), the command menu (`ToolBar`, `RadioToolGroup`, `ToolButton`), `Avatar` and number / time formatting (`formatDuration` takes milliseconds); for the media apps `Toolbar`, `IconToolButton`, `GroupedToolButtons`, `Glyph` and `formatSeconds`; `BackProvider`/`useBack` for the back gesture |
+| `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
+| `apps/shared/phoenix-ui` (`@phoenix/ui`) | React components with the webOS 1.x/2.x look, drawn with the Enyo 1.0 "Heritage" artwork (copied into `assets/enyo`, see its `PROVENANCE.md`): `PageHeader`, `Group`, `Row`, `Divider`, `ToggleButton`, `Slider` (also as a progress/seek bar), `ListSelector`, `Picker`, `PopupMenu`, `Button`, `Drawer`, `DividerDrawer`, `Dialog`, `Spinner`, `TextField`; for Phone and Messaging the webOS dial pad (`Dialpad`, `DialButton`, `BackspaceButton`, from Enyo's `lib/telephony` art), the command menu (`ToolBar`, `RadioToolGroup`, `ToolButton`), `Avatar` and number / time formatting (`formatDuration` takes milliseconds); for the media apps `Toolbar`, `IconToolButton`, `GroupedToolButtons`, `Glyph` and `formatSeconds`; for Files `CheckBox` (Heritage `checkbox.png`) and file glyphs (copy, cut, paste, new folder, ...); `BackProvider`/`useBack` for the back gesture |
 | `apps/settings` | Settings (see below) |
 | `apps/phone`, `apps/messaging` | Phone and Messaging (see below) |
 | `apps/camera`, `apps/photos`, `apps/music` | Camera, Photos, Music (see [below](#camera-photos-and-music)); `@phoenix/luna`'s `media.ts` wraps their services |
 | `apps/media-samples` | Generated demo photos and songs, mounted at `/media/internal/samples` |
+| `apps/files` | Files (see [below](#files)); `apps/files/service` is its Node.js Luna service for the device |
 
 Build (Node.js 20 or newer):
 
@@ -500,3 +507,73 @@ application manager's `open` does on webOS. `tools/test-browser.cjs` browses
 with it end to end. On a device, OSE's WebAppMgr has no BrowserAdapter, so
 the browser needs a native view there too (see the roadmap).
 
+## Files
+
+`apps/files` (`org.webosphoenix.files`, Apps tab) is a file manager for the
+whole device. Palm shipped none; webOS users installed one from Preware, most
+often Internalz Pro. Files has Internalz Pro's feature set but is a new,
+clean-room design (see [LEGAL.md](LEGAL.md#phoenix-apps-apps)), drawn with
+the Enyo 1.0 art:
+
+- **Browse**: the folder's name in the page header, a path bar (tap a
+  segment to go there), the list with type icons, size and date; the up
+  button, and the back gesture through the folders visited. Starts in
+  `/media/internal`; launch params `{path}` open another folder.
+- **Header menu**: sort by name, size or date (folders first), show or hide
+  hidden files, add or remove the folder from the favourites, folder info.
+  Favourites (the star in the command menu; a column on tablets) start as
+  `/media/internal` and its Downloads, Documents, Pictures and Music.
+  Preferences are kept in the app's localStorage.
+- **Select**: hold an item, or the select button, and tick more; then copy,
+  cut, delete (with a confirmation), or from the menu rename, info, "Open
+  with" and select all. Paste (with the number of items) appears in the
+  command menu; pasting where a name is taken makes "name 2.txt".
+- **New folder, new file** (the new file opens in the editor), **info**
+  (type and MIME type, size, modified, permissions as `-rw-r--r-- (0644)`,
+  read-only, full path).
+- **Open**: pictures in a black image viewer (swipe or arrows for the
+  folder's other pictures), text and small unknown files in a text editor
+  that saves back (and asks before dropping changes; read-only files open
+  read-only), `.ipk` packages in an install sheet, anything else in "Open
+  with" (the apps that handle the MIME type, or open by type).
+
+### Services
+
+| What | Service and methods | Source |
+| --- | --- | --- |
+| Files and folders | `org.webosphoenix.filemanager` `list {path}` -> `{entries: [{name, path, type, size, mtime, mode, readOnly?}]}`, `stat {path}` -> `{entry}` (folders add `count`), `mkdir {path}`, `copy` / `move {from, to, overwrite?}` (folders recursively), `remove {path, recursive?}`, `read {path, encoding: "utf8" \| "base64", maxBytes?}` -> `{data, size}`, `write {path, data, encoding, overwrite?}`. Errors: `errorCode` 1 not found, 2 exists, 3 read-only, 4 not a folder, 5 is a folder, 6 not empty, 7 too large, 8 invalid (a folder into itself), -1 bad parameters | Phoenix; `apps/files/service` on a device, simulated in the runtime |
+| Install a package | `com.palm.appinstaller` `installNoVerify {target, subscribe}` -> `{ticket, status}`: `STARTING`, `IPKG_INSTALL`, then `SUCCESS` or `FAILED_*` | legacy webOS (as Preware-era file managers called it); OSE's installer is `com.webos.appInstallService`, not yet wired |
+| Open with | `com.webos.applicationManager` `listAllHandlersForMime {mime}` -> `{resources: [{appId}]}`, `launch {id, params: {target}}`, `open {target}` | legacy webOS / SAM |
+
+The device service is Node.js (`apps/files/service`: `filemanager.js` does
+the work with `fs`, `service.js` registers it with `webos-service`); it sees
+the whole filesystem but only changes files under `/media`, `/home`, `/tmp`,
+`/var/tmp`, `/mnt` and `/run/media`, and reports the rest `readOnly`. Its
+luna-service2 files are in `apps/files/service/sysbus` (`filemanager.operation`
+is the ACG group the app asks for). `tools/install-rootfs.py` installs it.
+
+### In the simulator
+
+The runtime's block "File manager" keeps a virtual filesystem in the shared
+store (`files:vfs`), so every page sees the same files. File contents are
+text or base64 in the store (what `write` stores, up to 1 MB), a reference to
+a rootfs file (the demo media, apps' `appinfo.json`, the runtime), or a file
+of the media block's IndexedDB store (Camera's pictures appear in
+`/media/internal/DCIM/...` when the folder is listed, and deleting them there
+deletes them for Photos too). The first start seeds `/media/internal`
+(Downloads with an example `.ipk`, Documents with a few text files,
+Pictures, Music and ringtones pointing at the demo media, the demo media
+itself under `samples`, a hidden `.thumbnails`) and read-only system folders:
+`/usr/palm/applications` with the installed apps (from `/apps.json`, else the
+known list), `/usr/share/phoenix/runtime`, `/etc`, `/var/log`; `/tmp` and
+`/home/root` are writable. `__phoenixRuntime.fileManager.reset()` seeds it
+again; `__phoenixRuntime.fileManager.url(path)` gives a URL to show a file
+(`fileUrl()` in `@phoenix/luna`). The app installer answers with success
+after half a second (nothing is installed), and the application manager
+names Photos for pictures and videos and Music for audio.
+
+`node tools/test-files.cjs [--tablet]` browses, shows hidden files, sorts,
+makes and renames a folder, copies and pastes a file twice, edits and saves
+text, makes a new file, goes back, shows info, deletes a folder, views
+pictures, installs the `.ipk`, opens a song with Music and opens a read-only
+system file, with screenshots in `build/files-tests/`.
