@@ -1,0 +1,30 @@
+{
+    "//": "Which web apps must start cleanly in tools/test-apps.cjs. status: works | broken; phone/tablet override per form factor. note says what is missing.",
+    "com.palm.app.calculator": {
+        "status": "works",
+        "note": "TouchPad layout; needs a phone layout"
+    },
+    "com.palm.app.notes": {
+        "status": "works"
+    },
+    "com.palm.app.accounts": {
+        "status": "broken",
+        "note": "accounts service mock incomplete"
+    },
+    "com.palm.app.calendar": {
+        "status": "broken",
+        "note": "not yet verified in the simulator"
+    },
+    "com.palm.app.clock": {
+        "status": "works",
+        "note": "TouchPad layout; needs a phone layout"
+    },
+    "com.palm.app.contacts": {
+        "status": "broken",
+        "note": "accounts mock; two source files missing from the Open webOS release"
+    },
+    "com.palm.app.email": {
+        "status": "broken",
+        "note": "not yet verified in the simulator"
+    }
+}

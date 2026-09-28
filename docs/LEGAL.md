@@ -23,6 +23,15 @@ Excluded on purpose:
   open-source release, so we do not ship them.
 - The Open webOS `sounds/` directory, until its provenance has been checked.
 
+## Original apps and frameworks (`third_party/`)
+
+Git submodules of the Open webOS repositories (`openwebos/core-apps`,
+`app-services`, `foundation-frameworks`, `loadable-frameworks`, `mojoloader`,
+`underscore`, `luna-applauncher`, `luna-systemui`) and `enyojs/enyo-1.0`, all
+Apache-2.0 and unmodified. Their app icons (Email, Calendar, Memos, ...) are
+part of that release and are shown in the launcher. Fixes go in
+`compat/rootfs/`, not in the submodules.
+
 ## Fonts
 
 Legacy webOS used **Prelude**, which was made for Palm and is not openly

@@ -29,26 +29,41 @@ Item {
 
     // Build a demo scene, as if the user had been using the phone for a bit.
     Component.onCompleted: {
+        // --launch <appId>: open these apps, in card view, then stop.
+        if (typeof simLaunch !== "undefined" && simLaunch.length > 0) {
+            shell.unlock();
+            // After the window source has built its app list.
+            Qt.callLater(function() {
+                for (var j = 0; j < simLaunch.length; ++j)
+                    shell.launch(simLaunch[j]);
+            });
+            return;
+        }
+        // After the window source has built its app list.
+        Qt.callLater(buildScene);
+    }
+
+    function buildScene() {
         var scene = typeof simScene !== "undefined" && simScene !== "" ? simScene : "locked";
         if (scene === "empty")
             return shell.unlock();
         if (scene !== "locked")
             shell.unlock();
-        var ids = ["org.webosphoenix.email", "org.webosphoenix.messaging", "org.webosphoenix.calendar",
-                   "org.webosphoenix.browser"];
+        // Real apps where the simulator has them (Memos, Calculator), placeholders otherwise.
+        var ids = ["Messaging", "Memos", "Calculator", "Web"].map(windows.appIdByTitle);
         var last = "";
         for (var i = 0; i < ids.length; ++i)
             last = windows.launch(ids[i], "");
         shell.cardView.position = 1;
         if (scene === "stacks" || scene === "reorder") {
             // Two extra Messaging windows stack with the first.
-            var msg = windows.runningUid("org.webosphoenix.messaging");
+            var msg = windows.runningUid(windows.appIdByTitle("Messaging"));
             windows.openChild(msg);
             windows.openChild(msg);
             // After the child windows' own focus requests have run.
             Qt.callLater(function() {
                 var cv = shell.cardView;
-                cv.jumpTo(1);
+                cv.jumpTo(cv.groupIndexOf(msg));
                 if (scene === "reorder") {
                     var uid = cv.currentUid;
                     var p = cv.layout.cards[uid];
@@ -63,9 +78,9 @@ Item {
         } else if (scene === "launcher") {
             shell.gestureUp();
         } else if (scene === "dashboard" || scene === "locked") {
-            windows.notify("org.webosphoenix.messaging", "Palm Pre", "It's good to be back.");
-            windows.notify("org.webosphoenix.email", "3 new emails", "webOS Phoenix build passed");
-            windows.notify("org.webosphoenix.calendar", "Launch party", "Tomorrow, 9:41 AM");
+            windows.notify(windows.appIdByTitle("Messaging"), "Palm Pre", "It's good to be back.");
+            windows.notify(windows.appIdByTitle("Email"), "3 new emails", "webOS Phoenix build passed");
+            windows.notify(windows.appIdByTitle("Calendar"), "Launch party", "Tomorrow, 9:41 AM");
             if (scene === "dashboard")
                 shell.notifications.dashboardOpen = true;
         } else if (scene === "justtype") {

@@ -1,0 +1,27 @@
+[submodule "third_party/enyo-1.0"]
+	path = third_party/enyo-1.0
+	url = https://github.com/enyojs/enyo-1.0.git
+[submodule "third_party/core-apps"]
+	path = third_party/core-apps
+	url = https://github.com/openwebos/core-apps.git
+[submodule "third_party/foundation-frameworks"]
+	path = third_party/foundation-frameworks
+	url = https://github.com/openwebos/foundation-frameworks.git
+[submodule "third_party/loadable-frameworks"]
+	path = third_party/loadable-frameworks
+	url = https://github.com/openwebos/loadable-frameworks.git
+[submodule "third_party/mojoloader"]
+	path = third_party/mojoloader
+	url = https://github.com/openwebos/mojoloader.git
+[submodule "third_party/underscore"]
+	path = third_party/underscore
+	url = https://github.com/openwebos/underscore.git
+[submodule "third_party/luna-applauncher"]
+	path = third_party/luna-applauncher
+	url = https://github.com/openwebos/luna-applauncher.git
+[submodule "third_party/luna-systemui"]
+	path = third_party/luna-systemui
+	url = https://github.com/openwebos/luna-systemui.git
+[submodule "third_party/app-services"]
+	path = third_party/app-services
+	url = https://github.com/openwebos/app-services.git

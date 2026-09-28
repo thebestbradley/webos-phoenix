@@ -15,5 +15,14 @@ luna-surfacemanager (https://github.com/webosose/luna-surfacemanager),
 Copyright (c) LG Electronics, Inc., licensed under the Apache License,
 Version 2.0.
 
+This product includes, as git submodules under third_party/, the Open webOS
+core applications, application services, frameworks (foundation-frameworks,
+loadable-frameworks, mojoloader, underscore), luna-applauncher and
+luna-systemui (https://github.com/openwebos), and the Enyo 1.0 framework
+(https://github.com/enyojs/enyo-1.0):
+    Copyright (c) 2009-2013 Hewlett-Packard Development Company, L.P.
+    Copyright (c) 2010-2013 LG Electronics, Inc.
+    Licensed under the Apache License, Version 2.0.
+
 "webOS" is a trademark of LG Electronics, Inc. This project is not
 affiliated with or endorsed by LG Electronics, HP or Palm.

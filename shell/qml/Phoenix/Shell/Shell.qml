@@ -99,6 +99,7 @@ FocusScope {
         target: shell.source
         ignoreUnknownSignals: true
         function onCardFocusRequested(uid) { Qt.callLater(cards.focusLaunched, uid); }
+        function onCardCloseRequested(uid) { cards.close(uid); }
     }
 
     // Desktop / hardware keyboard shortcuts.

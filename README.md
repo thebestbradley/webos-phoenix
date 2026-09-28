@@ -47,7 +47,15 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Run the simulator
 
-Requires Qt 6.4 or newer with Qt Quick and Qt5Compat.
+Requires Qt 6.4 or newer with Qt Quick and Qt5Compat. Qt WebEngine is
+needed to run the web apps (the original webOS apps and new Phoenix apps);
+without it the simulator shows placeholder apps only.
+
+First fetch the original Open webOS apps and frameworks (git submodules):
+
+```sh
+git submodule update --init
+```
 
 **macOS**
 
@@ -65,7 +73,8 @@ cmake --build build
 ```sh
 sudo apt install qt6-base-dev qt6-declarative-dev qml6-module-qtquick \
   qml6-module-qtquick-window qml6-module-qtqml-workerscript \
-  qml6-module-qt5compat-graphicaleffects qml6-module-qttest
+  qml6-module-qt5compat-graphicaleffects qml6-module-qttest \
+  qt6-webengine-dev qml6-module-qtwebengine
 cmake -S shell -B build && cmake --build build
 ./build/phoenix-sim
 ```
@@ -76,6 +85,8 @@ the bottom is the gesture area. Keys: **Esc** back, **Home**/**F1** swipe up,
 
 The **+** button in each placeholder app opens a second window, which joins
 that app's card stack.
+
+`--launch com.palm.app.notes` opens an app at start-up (repeatable).
 
 `--scene locked|cards|stacks|reorder|maximized|launcher|dashboard|justtype|systemmenu` opens
 a demo state; add `--screenshot out.png` to save a PNG and exit.
@@ -105,6 +116,7 @@ Apple's `container` tool; see [docs/BUILDING-MAC.md](docs/BUILDING-MAC.md). See
 
 - [Architecture](docs/ARCHITECTURE.md): how Phoenix sits on top of webOS OSE
 - [Roadmap](docs/ROADMAP.md): milestones from simulator to phones
+- [Web app runtime](docs/APP-RUNTIME.md): how the original webOS apps run
 - [Legacy UI spec](docs/spec/legacy-ui-spec.md): measurements and timings taken from the original source
 - [Feature inventory](docs/spec/feature-inventory.md): everything legacy webOS did, as a checklist
 - [Licensing and assets](docs/LEGAL.md)

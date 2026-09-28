@@ -1,0 +1,35 @@
+{
+    "//": [
+        "Virtual webOS filesystem: where each device path comes from in this repository.",
+        "Longest matching prefix wins. Paths follow the Open webOS layout",
+        "(openwebos/build-desktop build-webos-desktop.sh), so the original apps run unmodified.",
+        "Used by phoenix-sim's phoenix:// scheme and by tools/serve-rootfs.py; the",
+        "meta-phoenix recipes install the same files at the same device paths.",
+        "overlays: directories laid out like the device filesystem whose files win over everything else (patched or missing files for the original apps).",
+        "applicationDirs: each child with an appinfo.json is an app; a child whose built output is in dist/ (e.g. React apps) is used from there."
+    ],
+    "overlays": [
+        "compat/rootfs"
+    ],
+    "mounts": {
+        "/usr/palm/frameworks/enyo/0.10/framework/": "third_party/enyo-1.0/framework/",
+        "/usr/palm/frameworks/enyo/1.0/framework/": "third_party/enyo-1.0/framework/",
+        "/usr/palm/frameworks/mojoloader.js": "third_party/mojoloader/mojoloader.js",
+        "/usr/palm/frameworks/underscore/version/1.0/": "third_party/underscore/",
+        "/usr/palm/frameworks/foundations/version/1.0/": "third_party/foundation-frameworks/foundations/",
+        "/usr/palm/frameworks/foundations.crypto/version/1.0/": "third_party/foundation-frameworks/foundations.crypto/",
+        "/usr/palm/frameworks/foundations.io/version/1.0/": "third_party/foundation-frameworks/foundations.io/",
+        "/usr/palm/frameworks/foundations.json/version/1.0/": "third_party/foundation-frameworks/foundations.json/",
+        "/usr/palm/frameworks/foundations.mojo/version/1.0/": "third_party/foundation-frameworks/foundations.mojo/",
+        "/usr/palm/frameworks/foundations.xml/version/1.0/": "third_party/foundation-frameworks/foundations.xml/",
+        "/usr/palm/frameworks/calendar/version/1.0/": "third_party/loadable-frameworks/calendar/",
+        "/usr/palm/frameworks/calendar.io/version/1.0/": "third_party/loadable-frameworks/calendar.io/",
+        "/usr/palm/frameworks/contacts/version/1.0/": "third_party/loadable-frameworks/contacts/",
+        "/usr/palm/frameworks/globalization/version/1.0/": "third_party/loadable-frameworks/globalization/",
+        "/usr/share/phoenix/runtime/": "runtime/"
+    },
+    "applicationDirs": [
+        "third_party/core-apps",
+        "apps"
+    ]
+}

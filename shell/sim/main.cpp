@@ -17,12 +17,27 @@
 #include <QQuickView>
 #include <QTimer>
 
+#include "rootfs.h"
+
+#ifdef PHOENIX_HAVE_WEBENGINE
+#include <QQuickWebEngineProfile>
+#include <QtWebEngineQuick>
+#endif
+
 #ifndef PHOENIX_QML_DIR
 #define PHOENIX_QML_DIR ""
+#endif
+#ifndef PHOENIX_REPO_DIR
+#define PHOENIX_REPO_DIR ""
 #endif
 
 int main(int argc, char *argv[])
 {
+#ifdef PHOENIX_HAVE_WEBENGINE
+    // Both must happen before the application object exists.
+    RootfsSchemeHandler::registerScheme();
+    QtWebEngineQuick::initialize();
+#endif
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("phoenix-sim"));
 
@@ -36,7 +51,9 @@ int main(int argc, char *argv[])
     QCommandLineOption shotOpt(QStringLiteral("screenshot"), QStringLiteral("Save a screenshot to FILE and exit."), QStringLiteral("file"));
     QCommandLineOption delayOpt(QStringLiteral("delay"), QStringLiteral("Delay before the screenshot (default 1500 ms)."), QStringLiteral("ms"), QStringLiteral("1500"));
     QCommandLineOption qmlOpt(QStringLiteral("qml-dir"), QStringLiteral("Directory containing sim.qml and the Phoenix modules."), QStringLiteral("dir"));
-    parser.addOptions({ sizeOpt, tabletOpt, phoneOpt, sceneOpt, shotOpt, delayOpt, qmlOpt });
+    QCommandLineOption repoOpt(QStringLiteral("repo-dir"), QStringLiteral("Checkout root holding runtime/rootfs.json and the web apps."), QStringLiteral("dir"));
+    QCommandLineOption launchOpt(QStringLiteral("launch"), QStringLiteral("Launch this app id after start-up (repeatable)."), QStringLiteral("appId"));
+    parser.addOptions({ sizeOpt, tabletOpt, phoneOpt, sceneOpt, shotOpt, delayOpt, qmlOpt, repoOpt, launchOpt });
     parser.process(app);
 
     const bool tablet = parser.isSet(tabletOpt);
@@ -56,8 +73,36 @@ int main(int argc, char *argv[])
     if (qmlDir.isEmpty() || !QDir(qmlDir).exists(QStringLiteral("sim.qml")))
         qmlDir = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("../qml"));
 
+    QString repoDir = parser.value(repoOpt);
+    if (repoDir.isEmpty())
+        repoDir = QString::fromUtf8(PHOENIX_REPO_DIR);
+    if (repoDir.isEmpty())
+        repoDir = QDir(qmlDir).filePath(QStringLiteral("../.."));
+    Rootfs rootfs(repoDir);
+    if (!rootfs.isValid())
+        qWarning("phoenix-sim: web apps disabled: %s", qPrintable(rootfs.error()));
+
     QQuickView view;
     view.engine()->addImportPath(qmlDir);
+
+    bool webEngine = false;
+    QVariantList webApps;
+#ifdef PHOENIX_HAVE_WEBENGINE
+    if (rootfs.isValid()) {
+        // One persistent profile for all apps, like the single web runtime
+        // on a device. Data lives under the platform's app data directory.
+        auto *profile = new QQuickWebEngineProfile(&view);
+        profile->setStorageName(QStringLiteral("phoenix-sim"));
+        profile->setOffTheRecord(false);
+        profile->installUrlSchemeHandler(Rootfs::scheme().toLatin1(), new RootfsSchemeHandler(&rootfs, profile));
+        view.rootContext()->setContextProperty(QStringLiteral("phoenixWebProfile"), profile);
+        webEngine = true;
+        webApps = rootfs.apps();
+    }
+#endif
+    view.rootContext()->setContextProperty(QStringLiteral("simWebEngine"), webEngine);
+    view.rootContext()->setContextProperty(QStringLiteral("simWebApps"), webApps);
+    view.rootContext()->setContextProperty(QStringLiteral("simLaunch"), parser.values(launchOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simScene"), parser.value(sceneOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simFormFactor"),
         tablet ? QStringLiteral("tablet") : parser.isSet(phoneOpt) ? QStringLiteral("phone") : QStringLiteral("auto"));
