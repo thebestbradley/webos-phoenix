@@ -51,10 +51,16 @@ EXTERNALSRC_SYMLINKS = ""
 CONF
 
 cd "$BUILD_DIR"
-# oe-init-build-env reads positional parameters; clear them first.
+# oe-init-build-env reads positional parameters and unset variables.
 set --
+set +u
 . ./oe-init-build-env
+set -u
 # shellcheck disable=SC2086
 bitbake ${BITBAKE_ARGS:-} "$TARGET"
 echo
-echo "Done. Images: $BUILD_DIR/BUILD/deploy/images/$MACHINE/"
+if [ -z "${BITBAKE_ARGS:-}" ]; then
+    echo "Done. Images: $BUILD_DIR/BUILD/deploy/images/$MACHINE/"
+else
+    echo "Done (bitbake ${BITBAKE_ARGS})."
+fi

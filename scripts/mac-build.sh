@@ -6,6 +6,8 @@
 # (https://github.com/apple/container, macOS 26, Apple silicon).
 #
 #   scripts/mac-build.sh [MACHINE] [TARGET]    build (default qemux86-64 webos-phoenix-image)
+#   scripts/mac-build.sh --check               set up and resolve the whole image
+#                                              without compiling (~15-30 minutes)
 #   scripts/mac-build.sh --shell               open a shell in the build container
 #
 # The build tools run as x86-64 Linux under Rosetta, because webOS OSE only
@@ -56,8 +58,12 @@ fi
 
 # The checkout is mounted read-write at /src/webos-phoenix so the build uses
 # your local edits; everything the build writes goes to /work.
+EXTRA_ENV=""
 if [ "${1:-}" = "--shell" ]; then
     CMD="/bin/bash"
+elif [ "${1:-}" = "--check" ]; then
+    CMD="/src/webos-phoenix/scripts/container-build.sh qemux86-64 webos-phoenix-image"
+    EXTRA_ENV="--env BITBAKE_ARGS=-g"
 else
     CMD="/src/webos-phoenix/scripts/container-build.sh ${1:-qemux86-64} ${2:-webos-phoenix-image}"
 fi
@@ -65,7 +71,7 @@ fi
 echo "Starting build container: ${CPUS} CPUs, ${MEMORY} memory, volume ${VOLUME} (${VOLUME_SIZE})"
 # shellcheck disable=SC2086
 exec container run -it --rm --arch amd64 \
-    --cpus "$CPUS" --memory "$MEMORY" \
+    --cpus "$CPUS" --memory "$MEMORY" $EXTRA_ENV \
     --volume "$VOLUME:/work" \
     --volume "$REPO_DIR:/src/webos-phoenix" \
     --name webos-phoenix-build \

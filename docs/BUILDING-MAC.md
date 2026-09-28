@@ -36,6 +36,8 @@ on ARM64 is on the roadmap.
 From your checkout:
 
 ```sh
+scripts/mac-build.sh --check              # quick check first: fetch layers and resolve
+                                          # the whole image without compiling
 scripts/mac-build.sh                      # qemux86-64 emulator image
 scripts/mac-build.sh raspberrypi4-64      # 64-bit Raspberry Pi 4 image
 scripts/mac-build.sh --shell              # just open a shell in the build container
@@ -68,6 +70,10 @@ scripts/mac-build.sh --shell
 # inside the container:
 cp /work/build-webos-phoenix/BUILD/deploy/images/raspberrypi4-64/*.wic* /src/webos-phoenix/out/
 ```
+
+`--check` is worth running first. It sets everything up and has BitBake parse
+all of webOS OSE (about 3,400 recipes) and resolve `webos-phoenix-image`,
+which catches setup problems in minutes instead of hours into a build.
 
 ## Troubleshooting
 
