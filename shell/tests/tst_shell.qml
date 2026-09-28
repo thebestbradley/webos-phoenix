@@ -342,6 +342,82 @@ Item {
             notes.bannerActive = false;
         }
 
+        function dashboardRows() {
+            var out = [];
+            (function walk(o) {
+                for (var i = 0; i < o.children.length; ++i) {
+                    if (o.children[i].objectName === "dashboardSwipe")
+                        out.push(o.children[i]);
+                    walk(o.children[i]);
+                }
+            })(shell.notifications);
+            return out;
+        }
+
+        // Phones: a dismissed row slides off to the right over 200 ms; a
+        // short slow drag snaps back; a fast sideways flick dismisses
+        // (DashboardWindowContainer.cpp:340-360, 426-440, 700-708).
+        function test_dashboardDismiss() {
+            var notes = shell.notifications;
+            windows.notify("org.webosphoenix.messaging", "One", "");
+            windows.notify("org.webosphoenix.messaging", "Two", "");
+            windows.notify("org.webosphoenix.messaging", "Three", "");
+            notes.bannerActive = false;
+            notes.dashboardOpen = true;
+            tryCompare(notes, "negativeSpace", notes.dashboardHeight, 2000);
+            // Phones: the rows and the 10 px above them.
+            compare(notes.dashboardHeight, Theme.dashboardTopPadding + 3 * Theme.dashboardItemHeight);
+            var rows = dashboardRows();
+            compare(rows.length, 3);
+
+            // A tenth of the width, slowly: back to where it was.
+            var r = rows[0], y = r.height / 2;
+            mousePress(r, 20, y);
+            for (var i = 1; i <= 8; ++i) { wait(20); mouseMove(r, 20 + i * 4, y); }
+            mouseRelease(r, 52, y);
+            tryCompare(r.parent, "x", 0, 1500);
+            compare(windows.notifications.count, 3);
+
+            // Past a quarter, slowly: slides right, then goes.
+            mousePress(r, 20, y);
+            for (i = 1; i <= 10; ++i) { wait(30); mouseMove(r, 20 + i * 12, y); }
+            mouseRelease(r, 140, y);
+            tryCompare(windows.notifications, "count", 2, 1000);
+
+            // A quick short flick sideways.
+            rows = dashboardRows();
+            r = rows[0];
+            mousePress(r, 20, y);
+            mouseMove(r, 40, y, 5);
+            mouseMove(r, 60, y, 5);
+            mouseRelease(r, 60, y, Qt.LeftButton, Qt.NoModifier, 5);
+            tryCompare(windows.notifications, "count", 1, 1000);
+            notes.dashboardOpen = false;
+        }
+
+        // Phones: newest at the bottom; the scroll masks show only while
+        // rows are out of view (setMaskVisibility).
+        function test_dashboardMasks() {
+            var notes = shell.notifications;
+            for (var i = 0; i < 8; ++i)
+                windows.notify("org.webosphoenix.messaging", "N" + i, "");
+            notes.bannerActive = false;
+            notes.dashboardOpen = true;
+            tryCompare(notes, "negativeSpace", notes.dashboardHeight, 2000);
+            compare(notes.dashboardHeight, shell.height * Theme.maximumNegativeSpaceRatio);
+            // Scrolled to the newest: rows hidden above only.
+            tryVerify(function() { return findChild(notes, "dashboardMaskTop").visible; }, 1000);
+            verify(!findChild(notes, "dashboardMaskBottom").visible);
+            notes.dashboardOpen = false;
+            while (windows.notifications.count > 1)
+                windows.dismissNotification(0);
+            notes.dashboardOpen = true;
+            tryCompare(notes, "negativeSpace", notes.dashboardHeight, 2000);
+            verify(!findChild(notes, "dashboardMaskTop").visible);
+            verify(!findChild(notes, "dashboardMaskBottom").visible);
+            notes.dashboardOpen = false;
+        }
+
         function test_tapCardMaximizes() {
             windows.launch("org.webosphoenix.email", "");
             wait(50);

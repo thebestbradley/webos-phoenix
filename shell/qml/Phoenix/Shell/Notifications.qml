@@ -54,9 +54,11 @@ Item {
     readonly property bool hasContent: hasNotifications || bannerActive
 
     // Phones: the space taken from the bottom of the screen, animated. The
-    // shell ends the cards and the quick launch bar above it.
+    // shell ends the cards and the quick launch bar above it. The rows and
+    // the 10 px above them, no more than the positive space can give up
+    // (DashboardWindowContainer::calculateScrollProperties, :984-990).
     readonly property real dashboardHeight: Math.min(
-        Theme.px(10) + (model ? model.count : 0) * Theme.dashboardItemHeight + Theme.px(10),
+        Theme.dashboardTopPadding + (model ? model.count : 0) * Theme.dashboardItemHeight,
         screenHeight * Theme.maximumNegativeSpaceRatio)
     // The front popup alert, if any (phones: it takes the negative space;
     // DashboardWindowManagerStates.cpp:76-110).
@@ -273,20 +275,36 @@ Item {
             }
 
             // Phones: the dashboard fills the space as it grows (10 px top padding,
-            // DashboardWindowContainer.cpp:96-108).
+            // DashboardWindowContainer.cpp:96-108), newest at the bottom. The
+            // masks show while rows are scrolled out of view above or below
+            // (setMaskVisibility, :1019-1036; paint, :1303-1318).
             Item {
                 anchors.fill: parent
                 visible: !root.overlay && root.dashboardOpen
                 Loader {
+                    id: phoneDashboard
                     anchors.fill: parent
-                    anchors.topMargin: Theme.px(10)
+                    anchors.topMargin: Theme.dashboardTopPadding
                     active: parent.visible
                     sourceComponent: dashboardList
+                    onLoaded: item.positionViewAtEnd()
                 }
                 Image {
+                    objectName: "dashboardMaskTop"
+                    visible: phoneDashboard.item !== null && !phoneDashboard.item.atYBeginning
                     anchors.top: parent.top
                     width: parent.width
+                    height: Theme.px(sourceSize.height)
                     source: Theme.asset("dashboard-mask-top.png")
+                    fillMode: Image.Stretch
+                }
+                Image {
+                    objectName: "dashboardMaskBottom"
+                    visible: phoneDashboard.item !== null && !phoneDashboard.item.atYEnd
+                    y: parent.height - Theme.dashboardBottomMaskOffset
+                    width: parent.width
+                    height: Theme.px(sourceSize.height)
+                    source: Theme.asset("dashboard-mask-bottom.png")
                     fillMode: Image.Stretch
                 }
             }
@@ -469,26 +487,65 @@ Item {
                         function onLockedChanged() { if (!root.locked) content.claim(); }
                     }
 
-                    // Swipe more than a quarter of the width to dismiss
-                    // (DashboardWindowContainer.cpp:350-363).
+                    // Dragged more than a quarter of the width, or flicked
+                    // sideways, it slides off and is dismissed; otherwise it
+                    // snaps back (DashboardWindowContainer.cpp:340-360,
+                    // 426-440, 700-708).
                     MouseArea {
+                        id: swipe
+                        objectName: "dashboardSwipe"
                         anchors.fill: parent
                         drag.target: content
                         drag.axis: Drag.XAxis
-                        onReleased: {
-                            if (Math.abs(content.x) > content.width * Theme.dashboardDismissRatio)
-                                root.dismissRequested(item.index);
-                            else
-                                content.x = 0;
+                        enabled: !remove.running
+                        property point start
+                        property real startTime: 0
+                        onPressed: (m) => {
+                            snap.stop();
+                            start = mapToItem(root, m.x, m.y);
+                            startTime = Date.now();
+                        }
+                        onReleased: (m) => {
+                            var p = mapToItem(root, m.x, m.y);
+                            var ms = Date.now() - startTime;
+                            var vx = ms > 0 ? (p.x - start.x) / ms : 0, vy = ms > 0 ? (p.y - start.y) / ms : 0;
+                            var speed = Math.abs(vx) + Math.abs(vy);
+                            var flicked = speed >= Theme.flickMinVelocity && speed <= Theme.flickMaxVelocity
+                                && Math.abs(vx) > Math.abs(vy);
+                            if (flicked || Math.abs(content.x) > content.width * Theme.dashboardDismissRatio)
+                                remove.start();
+                            else if (content.x !== 0)
+                                snap.start();
                         }
                         onClicked: {
+                            if (content.x !== 0)
+                                return;
                             root.activated(item.appId, item.params);
                             root.dismissRequested(item.index);
                         }
                     }
+                    NumberAnimation {
+                        id: remove
+                        target: content
+                        property: "x"
+                        to: content.x + Theme.dashboardDeleteTravel * content.width
+                        duration: Theme.dashboardDeleteDuration
+                        onFinished: root.dismissRequested(item.index)
+                    }
+                    NumberAnimation {
+                        id: snap
+                        target: content
+                        property: "x"
+                        to: 0
+                        duration: Theme.dashboardSnapDuration
+                        easing.type: Easing.OutCubic
+                    }
                 }
 
+                // Tablets: menu-divider.png between the rows (paintInsideMenu,
+                // :1368-1371); phones have none.
                 Image {
+                    visible: root.overlay && item.index < list.count - 1
                     anchors.bottom: parent.bottom
                     width: parent.width
                     source: Theme.asset("menu-divider.png")

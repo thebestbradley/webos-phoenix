@@ -201,6 +201,18 @@ QtObject {
     readonly property int alertFadeDuration: 400                     // DashboardWindowManager.cpp:559,589
     readonly property int positiveSpaceDuration: 400                 // conf/lunaAnimations.conf:73-74, curve 6 OutCubic
     readonly property real dashboardDismissRatio: 0.25               // DashboardWindowContainer.cpp:350-363
+    readonly property int dashboardTopPadding: px(10)                // DashboardWindowContainer.cpp:107 (phones)
+    // Dismissed: slides a width and a half to the right (:700-708).
+    readonly property int dashboardDeleteDuration: 200               // AnimationSettings.cpp:117, curve 0 Linear
+    readonly property int dashboardSnapDuration: 500                 // conf/lunaAnimations.conf:69-70, curve 6 OutCubic
+    readonly property real dashboardDeleteTravel: 1.5                // DashboardWindowContainer.cpp:702
+    // Where the bottom scroll mask sits above the viewport's bottom (:106, 1317).
+    readonly property int dashboardBottomMaskOffset: px(10)
+    // A flick: the whole gesture's average velocity, |vx| + |vy|, in legacy
+    // px/ms (FlickGestureRecognizer.cpp:44-45, 95-104); sideways when
+    // |vx| > |vy| (DashboardWindowContainer.cpp:430).
+    readonly property real flickMinVelocity: 2.5 * u
+    readonly property real flickMaxVelocity: 11.0 * u
 
     // Phones round the corners of the app area with 24px overlays.
     readonly property int screenCornerSize: px(24)                   // MenuWindowManager.cpp:126-146
