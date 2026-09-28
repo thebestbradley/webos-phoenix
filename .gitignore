@@ -2,3 +2,4 @@
 /shell/build/
 *.user
 .DS_Store
+/.claude/
