@@ -55,6 +55,7 @@
 // replace the placeholder app with the same title.
 
 import QtQuick
+import "../Shell/NotificationPolicy.js" as Policy
 
 Item {
     id: source
@@ -323,7 +324,14 @@ Item {
         win.closeRequested.connect(function() { source._closeSystemWindow(key); });
         _windows[key] = win;
         if (type === "popupalert") {
-            alerts.append({ key: key, appId: appId, height: parseInt(_param(url, "phoenixHeight")) || 200 });
+            // Most urgent first: an incoming call goes in front of a
+            // low-battery alert (NotificationPolicy.js).
+            var name = _param(url, "phoenixName");
+            var queued = [];
+            for (var i = 0; i < alerts.count; ++i)
+                queued.push({ appId: alerts.get(i).appId, name: alerts.get(i).name });
+            alerts.insert(Policy.insertIndex(queued, appId, name),
+                          { key: key, appId: appId, name: name, height: parseInt(_param(url, "phoenixHeight")) || 200 });
         } else {
             var info = appInfo(appId) || { title: appId, color: "#666666", glyph: "!", icon: "" };
             notifications.append({

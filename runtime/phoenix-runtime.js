@@ -235,9 +235,9 @@
     // name, "height=150, attributes={\"window\":\"popupalert\", ...}")
     // (enyo.windows.openPopup/openDashboard) and LunaSysMgr read the type
     // from the attributes. Browsers do not pass window features on, so the
-    // runtime puts the type, height and icon in the new window's URL
-    // fragment (#phoenixWindow=popupalert&phoenixHeight=150), where the
-    // simulator's window source reads them.
+    // runtime puts the type, height, icon and window name in the new
+    // window's URL fragment (#phoenixWindow=popupalert&phoenixHeight=150),
+    // where the simulator's window source reads them.
     if (typeof global.open === "function") {
         var nativeOpen = global.open;
         global.open = function (url, name, features) {
@@ -248,7 +248,8 @@
                 var h = /height=(\d+)/.exec(f);
                 url += (url.indexOf("#") < 0 ? "#" : "&") + "phoenixWindow=" + encodeURIComponent(attrs.window)
                      + (h ? "&phoenixHeight=" + h[1] : "")
-                     + (attrs.icon ? "&phoenixIcon=" + encodeURIComponent(attrs.icon) : "");
+                     + (attrs.icon ? "&phoenixIcon=" + encodeURIComponent(attrs.icon) : "")
+                     + (name ? "&phoenixName=" + encodeURIComponent(name) : "");
             }
             return nativeOpen.call(global, url, name, features);
         };
@@ -2589,9 +2590,6 @@
         };
         runtime.hostStatus = function () { return hostStatus(); };
 
-        // The shell launched an app that is already running, with new launch
-        // params: update PalmSystem.launchParams and fire OSE's
-        // "webOSRelaunch" document event (detail = params), as WebAppMgr does.
         // The user tapped the app's name in the status bar. LunaSysMgr
         // relaunched the app with {"palm-command": "open-app-menu"}, which
         // Enyo turns into enyo.appMenu.toggle() for its active window
@@ -2610,8 +2608,18 @@
             return true;
         };
 
+        // The shell launched an app that is already running, with new launch
+        // params: update PalmSystem.launchParams, then tell the app. Enyo 1.0
+        // and Mojo apps are told through Mojo.relaunch(), as LunaSysMgr did
+        // (enyo-1.0 palm/system/windows/events.js: windowParamsChange,
+        // applicationRelaunch); OSE apps through the "webOSRelaunch" document
+        // event (detail = params), as WebAppMgr does.
         runtime.relaunch = function (params) {
             PalmSystem.launchParams = JSON.stringify(params || {});
+            if (global.Mojo && typeof global.Mojo.relaunch === "function") {
+                global.Mojo.relaunch();
+                return true;
+            }
             var e;
             try { e = new CustomEvent("webOSRelaunch", { detail: params || {} }); }
             catch (x) { e = global.document.createEvent("CustomEvent"); e.initCustomEvent("webOSRelaunch", false, false, params || {}); }

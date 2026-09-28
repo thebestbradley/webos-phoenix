@@ -82,7 +82,7 @@ Nearly all the art is already in `shell/assets/openwebos/`.
 |---|---|---|---|
 | N1 | Phone banner rises from the bottom of the 28 px bar (VerticalScroll, 1000 ms OutCubic), drops back fading to 0.25 (`BannerWindow.cpp:47`; `BannerMessageHandler.cpp:122-130,321-343`); tablet reveals from the right | Slides in from the right | P1 · S |
 | N2 | Tapping a banner launches its app; `notification.wav` / `alert.wav` capped at 5 s, or vibrate (`BannerWindow.cpp:122-129`; `BannerMessageHandler.cpp:691-772`) | Tap opens the dashboard; no sound | P1 · S |
-| N3 | Popup alert windows, queued by `notificationPolicy.conf` priority; phone: full width taking negative space; tablet: 320 wide top right, 400 ms fade, `popup-bg.png`. Incoming call, alarm "ring", reminders, system alerts | **Done** for popup alert windows and dashboard windows (phone negative space, tablet top right); not yet the priority queue, incoming call and alarm | P0 · L |
+| N3 | Popup alert windows, queued by `notificationPolicy.conf` priority; phone: full width taking negative space; tablet: 320 wide top right, 400 ms fade, `popup-bg.png`. Incoming call, alarm "ring", reminders, system alerts | **Done** for popup alert windows and dashboard windows (phone negative space, tablet top right), the priority queue (`NotificationPolicy.js`, the conf's order; Phoenix Phone counts as `com.palm.app.phone`, the Enyo Clock's alarm windows as `ring`) and the Clock's alarm (tools/test-alarm.cjs). Not yet: Phoenix Phone's incoming call as a popup alert (it takes over its card) | P0 · L |
 | N4 | luna-systemui battery / charging banners and alerts, network denied, etc. | **Done**: booted at start; battery banners, Low Battery alert, Charging banner (F6 / F7 in phoenix-sim) | P1 · M |
 | N5 | Dismiss by ¼-width drag or a flick, 200 ms delete animation; persistent dashboards | ¼ drag, instant remove; no persistent flag | P2 · S |
 | N6 | Dashboards are app mini-windows, 52 px, 5.5 visible then scroll; bar icons right-aligned up to 28 px, no gaps | Synthesised rows; 22 px icons with gaps | P2 · M |
@@ -132,7 +132,7 @@ tablet drop-down: **done** (7090c64).
 | # | Original | Phoenix | P · effort |
 |---|---|---|---|
 | V1 | Phone and tablet virtual keyboards (art shipped), 300 ms show/hide, key sounds, apps resized into positive space | None in the simulator; stock OSE keyboard on a device | P1 · L |
-| A1 | `appclose`, notification / alert, battery, charging, shutter, keyboard sounds | None | P1 · M |
+| A1 | `appclose`, notification / alert, battery, charging, shutter, keyboard sounds; ringtones | None. No ringtones ship (`/media/internal/ringtones` is empty, `listRingtones` answers none), so the Clock's default alarm sound, `ringtones/Flurry.mp3`, is missing and alarms are silent | P1 · M |
 | A2 | Vibrate named effect for "vibrate" banners | None | P2 · S |
 | F1 | Prelude everywhere | `Theme.fontFallbacks` unused; no bundled Prelude substitute | P1 · S |
 | F2 | positiveSpace paddings 28 on every device; `cardMaximize` 300; status bar icon spacing 5 | Theme values off (24, 400, 4) | P2 · S |

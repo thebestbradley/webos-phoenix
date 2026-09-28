@@ -161,6 +161,7 @@ node tools/test-phone-messaging.cjs                        # calls and texts
 node tools/test-media.cjs                                   # Camera, Photos, Music
 node tools/test-files.cjs                                   # Files
 node tools/test-tasks.cjs                                   # Tasks and reminders
+node tools/test-alarm.cjs                                   # a Clock alarm rings as a popup alert
 node tools/test-voicememos.cjs                              # Voice Memos
 ```
 
