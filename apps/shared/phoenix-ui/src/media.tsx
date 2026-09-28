@@ -49,6 +49,10 @@ const GLYPHS: Record<string, ReactNode> = {
     close: <path d="M7 4l9 9 9-9 3 3-9 9 9 9-3 3-9-9-9 9-3-3 9-9-9-9z" />,
     save: <path fillRule="evenodd" d="M6 4h17l5 5v17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm3 2v7h13V6zm9 1h3v5h-3zM8 18v8h16v-8z" />,
     sort: <path d="M9 4l6 7h-4v17H7V11H3zm14 24l-6-7h4V4h4v17h4z" />,
+    refresh: <path d="M16 5a11 11 0 0 1 9.5 5.5L28 8v9h-9l3.6-3.6A7.5 7.5 0 1 0 23.4 20h3.7A11 11 0 1 1 16 5z" />,
+    location: <path d="M16 3a9 9 0 0 1 9 9c0 6.5-9 17-9 17S7 18.5 7 12a9 9 0 0 1 9-9zm0 5.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" />,
+    qr: <path d="M4 4h10v10H4zm3 3v4h4V7zm11-3h10v10H18zm3 3v4h4V7zM4 18h10v10H4zm3 3v4h4v-4zm11-3h3v3h-3zm4 0h3v3h-3v4h3v3h-6v-3h3v-3h-4zm4 7h3v3h-3zm-8 0h3v3h-3z" />,
+    history: <path d="M17 4a12 12 0 1 1-11.3 16h3.3A9 9 0 1 0 8 13h4l-5.5 6L1 13h4A12 12 0 0 1 17 4zm-1.5 5h3v6.4l4.6 2.7-1.5 2.6-6.1-3.5z" />,
 };
 
 export type GlyphName = keyof typeof GLYPHS | string;

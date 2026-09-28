@@ -1,0 +1,23 @@
+{
+    "id": "org.webosphoenix.weather",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Weather",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "iconColor": "#2a6fb8",
+    "uiRevision": 2,
+    "keywords": ["Forecast", "Temperature", "Rain", "Conditions"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launcherTab": 0
+    },
+    "//requiredPermissions": "OSE access control groups for the services the app calls (location for Current Location, settings and system service for units and the clock). Forecasts come from Open-Meteo over HTTPS (docs/APP-RUNTIME.md, Weather).",
+    "requiredPermissions": [
+        "location.query",
+        "settings.read",
+        "time.query"
+    ]
+}

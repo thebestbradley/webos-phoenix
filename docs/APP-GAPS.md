@@ -11,7 +11,7 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
   (Accounts, Calculator, Calendar, Clock, Contacts, Email, Memos) or
   `third_party/isis` (the Isis browser)
 - **Phoenix**: a new app in `apps/` (Settings, Phone, Messaging, Camera,
-  Photos, Music, Files)
+  Photos, Music, Files, Flashlight, QR Scanner, Weather)
 - **In progress**: Tasks (with reminders), Voice Memos (with transcription)
 - **Missing**
 
@@ -44,9 +44,9 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | --- | --- | --- | --- | --- |
 | Calculator | Open webOS | Calculator | P1 | Have. Works on phone and tablet |
 | **Clock and alarms** | Open webOS, **alarms ring** | Clock with alarms, timer, stopwatch; alarm popup | P0 | Done in the simulator: the Clock's alarm activities fire through the runtime's activity manager, the Clock is relaunched in place and rings as a popup alert (`tools/test-alarm.cjs`). On a device the activities must still map to OSE's `com.webos.service.activitymanager` / `com.webos.service.alarm` and wake the device from suspend |
-| **Flashlight** | Missing | None built in (homebrew apps) | P1 | A system menu toggle plus a tiny app, on a torch service over the kernel LED class (LuneOS has a nyx `led_torch` module) |
-| **QR / barcode scanner** | Missing | None built in | P1 | Also needed for Wi-Fi QR codes, TOTP setup and pairing. Camera through `getUserMedia`, decoding with [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp) compiled to WebAssembly (`zxing-wasm`). Chromium's `BarcodeDetector` is not available on Linux, so do not rely on it. Build it as a component Camera can reuse |
-| Weather | Missing | None built in (third-party apps from the App Catalog) | P1 | [Open-Meteo](https://open-meteo.com/) (free, no API key, CC BY 4.0 data) with location from `com.webos.service.location`. A dashboard/lock-screen widget later. Web app, no service |
+| Flashlight | Phoenix | None built in (homebrew apps) | P1 | **Done in the simulator** (`apps/flashlight`, `tools/test-flashlight.cjs`): the flash LED with a brightness slider, or a white screen on devices without one; it goes off when the card closes. It uses LuneOS's torch service unchanged, `org.webosports.service.torch` (torchd on nyx's `led_torch` module, the kernel LED class; see [HARDWARE.md](HARDWARE.md#hardware-abstraction-plan)), simulated in the runtime. **Left:** build torchd and LuneOS's nyx torch module into the image (`meta-phoenix/recipes-bsp/torchd`, a stub) and try it on a phone. No system menu toggle: the original webOS system menu had none, so it was not added |
+| QR / barcode scanner | Phoenix | None built in | P1 | **Done in the simulator** (`apps/scanner`, `tools/test-scanner.cjs`): the camera through `getUserMedia` as in Camera, decoding with [zxing-wasm](https://github.com/Sec-ant/zxing-wasm) (MIT; zxing-cpp, Apache-2.0, as WebAssembly, bundled, never from a CDN). Acts on web addresses (browser), Wi-Fi codes (Settings > Wi-Fi join, filled in), vCard and MeCard (new contact in Contacts), `otpauth://` (hands `{otpauth}` to `org.webosphoenix.authenticator` when installed; the key is never shown or kept), `tel:`, `mailto:`, `sms:`, product codes and text (copy); a history on the device. Other apps can scan through it (`{returnTo}` launch param). **Left:** a device test with a real camera; Camera does not reuse it yet (it would share `apps/scanner/src/lib`) |
+| Weather | Phoenix | None built in (third-party apps from the App Catalog) | P1 | **Done in the simulator** (`apps/weather`, `tools/test-weather.cjs`): [Open-Meteo](https://open-meteo.com/) (no API key; CC BY 4.0 data, credited in the app), now, 24 hours and 7 days, saved places and Current Location from `com.webos.service.location` (simulated), units from the system region, an offline cache, no dashboard or notifications. Sends only coordinates rounded to ~1 km (and typed city names to search); see [APP-RUNTIME.md](APP-RUNTIME.md#weather). **Left:** Open-Meteo's free API is for non-commercial use only, so a commercial image needs a paid plan or its own server (the server is a preference); a dashboard/lock-screen widget if wanted later |
 
 ## Media
 
@@ -162,8 +162,9 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
    System Updates, and the app catalog with PWA install and App Museum
    `.ipk` install. Without these nobody can use the phone day to day.
 2. **Small, high-value apps** (M4, can start now in the simulator):
-   Flashlight, QR scanner (shared component), Emergency/medical ID,
-   Weather, PDF viewer, Video player, finishing Tasks and Voice Memos.
+   Emergency/medical ID, PDF viewer, Video player, finishing Tasks and
+   Voice Memos. (Flashlight, QR Scanner and Weather are done in the
+   simulator.)
 3. **Bigger everyday apps**: Maps and navigation, Podcasts, Authenticator,
    Password manager, Backup and restore, Notes sync, VPN pane.
 4. **Platform features**: magnification and accessibility settings, word

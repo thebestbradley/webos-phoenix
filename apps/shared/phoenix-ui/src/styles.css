@@ -459,7 +459,7 @@ body.pui-app, .pui-app {
 .pui-popup-scrim {
     position: fixed;
     inset: 0;
-    z-index: 100;
+    z-index: 300;   /* above dialogs: a ListSelector in a Dialog opens over it */
 }
 
 .pui-popup {
@@ -469,7 +469,7 @@ body.pui-app, .pui-app {
     -webkit-backdrop-filter: blur(6px);
     backdrop-filter: blur(6px);
     border-radius: 12px;
-    z-index: 120;
+    z-index: 320;
     border-style: solid;
     border-width: 24px;
     border-image: url(../assets/enyo/popup-heritage.png) 24 fill stretch;
@@ -656,7 +656,7 @@ body.pui-app, .pui-app {
     -webkit-backdrop-filter: blur(6px);
     backdrop-filter: blur(6px);
     border-radius: 0 0 12px 12px;
-    z-index: 120;
+    z-index: 320;
     top: 0;
     left: -10px;
     min-width: 210px;

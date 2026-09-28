@@ -1,0 +1,21 @@
+{
+    "id": "org.webosphoenix.flashlight",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Flashlight",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "iconColor": "#1c1c1c",
+    "uiRevision": 2,
+    "keywords": ["Torch", "Flash", "Light", "LED"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launcherTab": 0
+    },
+    "//requiredPermissions": "OSE access control groups for the services the app calls: torch.operation is LuneOS torchd's (org.webosports.service.torch api.json).",
+    "requiredPermissions": [
+        "torch.operation"
+    ]
+}

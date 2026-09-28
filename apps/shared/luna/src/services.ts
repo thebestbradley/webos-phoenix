@@ -206,4 +206,20 @@ export const apps = {
     launch(id: string, params: object = {}) {
         return call("luna://com.webos.applicationManager/launch", { id, params });
     },
+    /**
+     * open {target}: the app that handles a URL (web pages to the browser,
+     * mailto: to Email, tel: to Phone, ...: command-resource-handlers.json).
+     */
+    open(target: string) {
+        return call("luna://com.webos.applicationManager/open", { target });
+    },
+    /** getAppInfo {id}: whether an app is installed (false when it is not). */
+    async installed(id: string): Promise<boolean> {
+        try {
+            const r = await call("luna://com.webos.applicationManager/getAppInfo", { id });
+            return !!(r as { appInfo?: unknown }).appInfo;
+        } catch {
+            return false;
+        }
+    },
 };
