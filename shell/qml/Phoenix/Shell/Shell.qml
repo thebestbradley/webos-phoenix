@@ -116,12 +116,12 @@ FocusScope {
         function onCardFocusRequested(uid) { Qt.callLater(cards.focusLaunched, uid); }
         function onCardCloseRequested(uid) { cards.close(uid); }
         function onJustTypeDismissed() { justType.open = false; }
-        function onBannerRequested(appId, text, icon) {
+        function onBannerRequested(appId, text, icon, params) {
             var a = null;
             for (var i = 0; shell.source.apps && i < shell.source.apps.count; ++i)
                 if (shell.source.apps.get(i).appId === appId)
                     a = shell.source.apps.get(i);
-            notes.showBanner(text, icon, a ? a.color : "#666666", a ? a.glyph : "");
+            notes.showBanner(text, icon, a ? a.color : "#666666", a ? a.glyph : "", appId, params || "");
         }
     }
 
@@ -515,7 +515,11 @@ FocusScope {
         anchors.bottom: gesture.top
         model: shell.source ? shell.source.notifications : null
         onDismissRequested: (index) => shell.source.dismissNotification(index)
-        onActivated: (appId, params) => shell.launch(appId, params ? JSON.parse(params) : null)
+        onActivated: (appId, params) => {
+            var p = null;
+            try { p = params ? JSON.parse(params) : null; } catch (e) { p = null; }
+            shell.launch(appId, p);
+        }
         source: shell.source
         backdrop: sceneBackdrop
         visible: !shell.locked

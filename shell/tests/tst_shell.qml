@@ -22,6 +22,11 @@ Item {
         system: SimSystemStatus {}
     }
 
+    Component {
+        id: spyComponent
+        SignalSpy {}
+    }
+
     TestCase {
         name: "Shell"
         when: windowShown
@@ -306,10 +311,34 @@ Item {
         // nothing in the dashboard.
         function test_bannerMessageIsTransient() {
             var notes = shell.notifications;
-            windows.bannerRequested("org.webosphoenix.email", "Charging Battery", "");
+            windows.bannerRequested("org.webosphoenix.email", "Charging Battery", "", "");
             verify(notes.bannerActive);
             compare(notes.bannerText, "Charging Battery");
             compare(windows.notifications.count, 0);
+            notes.bannerActive = false;
+        }
+
+        // Phones: the banner scrolls up from the bottom of the bar; a tap
+        // launches its app with its params (BannerWindow::handleTap).
+        function test_bannerRisesAndTapLaunches() {
+            var notes = shell.notifications;
+            var content = findChild(notes, "bannerContent");
+            windows.bannerRequested("org.webosphoenix.email", "New mail", "", "{\"folder\":\"inbox\"}");
+            wait(100);
+            // Still below its place, coming up; not from the side.
+            verify(content.y > (Theme.bannerHeight - content.height) / 2);
+            compare(content.x, Theme.px(5));
+            tryCompare(notes, "bannerProgress", 1, 2000);
+            var spy = createTemporaryObject(spyComponent, root, { target: notes, signalName: "activated" });
+            notes.tapBanner();
+            compare(spy.count, 1);
+            compare(spy.signalArguments[0][0], "org.webosphoenix.email");
+            compare(JSON.parse(spy.signalArguments[0][1]).folder, "inbox");
+            // Without params a tap does nothing while the banner shows.
+            windows.bannerRequested("org.webosphoenix.email", "Charging Battery", "", "");
+            notes.tapBanner();
+            compare(spy.count, 1);
+            verify(!notes.dashboardOpen);
             notes.bannerActive = false;
         }
 

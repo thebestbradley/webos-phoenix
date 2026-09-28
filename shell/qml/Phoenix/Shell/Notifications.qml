@@ -77,6 +77,10 @@ Item {
     property color bannerColor: "#666666"
     property string bannerGlyph: ""
     property url bannerIcon: ""
+    // What tapping the banner launches (BannerMessageHandler::
+    // activateCurrentMessage); without params a tap opens the dashboard.
+    property string bannerAppId: ""
+    property string bannerParams: ""
 
     Connections {
         target: root.model
@@ -85,7 +89,7 @@ Item {
             // A dashboard window shows itself; its app sends its own banner.
             if (n.windowKey)
                 return;
-            root.showBanner(n.title + (n.body ? ": " + n.body : ""), n.icon || "", n.color, n.glyph);
+            root.showBanner(n.title + (n.body ? ": " + n.body : ""), n.icon || "", n.color, n.glyph, n.appId, n.params || "");
         }
         function onCountChanged() {
             if (root.model.count === 0)
@@ -95,24 +99,42 @@ Item {
 
     // A banner, with or without a notification behind it
     // (PalmSystem.addBannerMessage only scrolls a banner by).
-    function showBanner(text, icon, color, glyph) {
+    function showBanner(text, icon, color, glyph, appId, params) {
         bannerText = text;
         bannerIcon = icon || "";
         bannerColor = color || "#666666";
         bannerGlyph = glyph || "";
+        bannerAppId = appId || "";
+        bannerParams = params || "";
         bannerActive = true;
         bannerAnim.restart();
     }
 
-    // Slide in from the right, stay, then fade to 0.25 while sliding back
-    // (BannerMessageHandler.cpp:122-130, 611-676).
+    // BannerWindow::handleTap: while a banner shows, a tap activates it
+    // (its app with its launch params; nothing without params); otherwise
+    // it opens the dashboard.
+    function tapBanner() {
+        if (bannerActive) {
+            if (bannerAppId !== "" && bannerParams !== "")
+                activated(bannerAppId, bannerParams);
+        } else if (hasNotifications) {
+            dashboardOpen = true;
+        }
+    }
+
+    // Phones scroll the banner up from the bottom of the bar
+    // (BannerWindow: VerticalScroll), tablets in from the right
+    // (HorizontalScroll): over 1000 ms OutCubic; after its time it goes back
+    // the way it came, fading to 0.25 (BannerMessageHandler.cpp:111-131,
+    // 315-345, 611-625). progress is posAnimProgress: 0 out, 1 in place.
+    property real bannerProgress: 0
     SequentialAnimation {
         id: bannerAnim
         PropertyAction { target: bannerContent; property: "opacity"; value: 1 }
-        NumberAnimation { target: bannerContent; property: "x"; from: banner.width; to: Theme.px(5); duration: Theme.bannerSlideDuration; easing.type: Easing.OutCubic }
+        NumberAnimation { target: root; property: "bannerProgress"; from: 0; to: 1; duration: Theme.bannerSlideDuration; easing.type: Easing.OutCubic }
         PauseAnimation { duration: root.model && root.model.count > 1 ? Theme.bannerShowTimeQueued : Theme.bannerShowTime }
         ParallelAnimation {
-            NumberAnimation { target: bannerContent; property: "x"; to: banner.width; duration: Theme.bannerSlideDuration }
+            NumberAnimation { target: root; property: "bannerProgress"; to: 0; duration: Theme.bannerSlideDuration }
             NumberAnimation { target: bannerContent; property: "opacity"; to: 0.25; duration: Theme.bannerSlideDuration }
         }
         ScriptAction { script: root.bannerActive = false }
@@ -163,9 +185,10 @@ Item {
 
             Row {
                 id: bannerContent
-                x: banner.width
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: Theme.px(6)
+                objectName: "bannerContent"
+                x: root.overlay ? Theme.px(5) + (1 - root.bannerProgress) * banner.width : Theme.px(5)
+                y: (banner.height - height) / 2 + (root.overlay ? 0 : (1 - root.bannerProgress) * banner.height)
+                spacing: Theme.px(5)
                 AppIcon {
                     size: Theme.px(22)
                     showLabel: false
@@ -205,12 +228,13 @@ Item {
         }
 
         MouseArea {
+            objectName: "bannerTap"
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
             height: Theme.bannerHeight
-            visible: !root.overlay && root.hasNotifications && !root.dashboardOpen
-            onClicked: root.dashboardOpen = true
+            visible: (root.hasNotifications || root.bannerActive) && !root.dashboardOpen
+            onClicked: root.tapBanner()
         }
 
         // Phones: the dashboard fills the space as it grows (10 px top padding,

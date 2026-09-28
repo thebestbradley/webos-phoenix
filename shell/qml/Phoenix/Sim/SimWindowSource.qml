@@ -23,7 +23,8 @@
 //                            is the app's own dashboard, "" otherwise)
 //   alerts        ListModel  key, appId, height (legacy px): popup alert
 //                            windows (windowFor(key)), front first
-//   bannerRequested(appId, text, icon)  signal: a transient banner
+//   bannerRequested(appId, text, icon, params)  signal: a transient banner
+//                            (params: its launch params, JSON, or "")
 //   cardCloseRequested(uid)  signal: a window asked to close (window.close())
 //
 // Optional (the shell has a built-in fallback without them):
@@ -263,7 +264,9 @@ Item {
         } else if (type === "banner") {
             // A banner only scrolls by; it leaves nothing in the dashboard
             // (PalmSystem.addBannerMessage).
-            bannerRequested(appId, payload.message || "", _iconUrl(payload.icon, appId));
+            var bp = payload.params;
+            bannerRequested(appId, payload.message || "", _iconUrl(payload.icon, appId),
+                            bp === undefined || bp === null ? "" : typeof bp === "string" ? bp : JSON.stringify(bp));
         } else if (type === "notification") {
             // A notification for another app (e.g. a text the telephony
             // service received for Messaging, a Tasks reminder): {appId,
@@ -298,7 +301,7 @@ Item {
     // (DashboardWindowManager).
 
     property ListModel alerts: ListModel {}
-    signal bannerRequested(string appId, string text, url icon)
+    signal bannerRequested(string appId, string text, url icon, string params)
 
     // A file URL for an icon an app names by device path.
     function _iconUrl(path, appId) {

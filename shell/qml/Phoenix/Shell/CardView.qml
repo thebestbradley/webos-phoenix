@@ -335,16 +335,25 @@ Item {
             _finishClose(uid);
     }
 
-    // A card closed from elsewhere (the app, the source) while flying off.
+    // A card closed from elsewhere (the app, the source) while flying off
+    // or rising.
     function _forgetClosed() {
-        var c = {};
+        var c = {}, risingHere = false;
         for (var i = 0; source && i < source.cards.count; ++i) {
             var uid = source.cards.get(i).uid;
             if (closing[uid])
                 c[uid] = closing[uid];
+            if (uid === risingUid)
+                risingHere = true;
         }
         if (Object.keys(closing).length !== Object.keys(c).length)
             closing = c;
+        if (risingUid !== "" && !risingHere) {
+            cancelRise();
+            maximizeAnim.stop();
+            if (count === 0 || maximizeProgress < 1)
+                maximizeProgress = 0;
+        }
     }
 
     function _finishClose(uid) {
