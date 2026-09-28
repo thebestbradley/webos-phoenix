@@ -51,5 +51,9 @@
     "org.webosphoenix.music": {
         "status": "works",
         "note": "Phoenix Music (React, apps/music); tools/test-media.cjs drives it"
+    },
+    "org.webosphoenix.files": {
+        "status": "works",
+        "note": "Phoenix Files (React, apps/files); tools/test-files.cjs drives it"
     }
 }

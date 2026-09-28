@@ -9,6 +9,9 @@ Produces the same layout the simulator serves, for a device image:
     /usr/palm/frameworks/...         Enyo 1.0, MojoLoader, foundation frameworks
     /usr/share/phoenix/runtime/      phoenix-runtime.js
     /etc/palm/db/kinds, permissions  db8 kinds the apps declare
+    /usr/palm/services/<id>/         Node.js services apps carry in service/
+                                     (run by run-js-service), with their
+    /usr/share/luna-service2/...     roles, permissions and service files
 
 compat/rootfs overlays are applied on top, app pages get the runtime
 <script> tag (as tools/serve-rootfs.py and phoenix-sim add it), and
@@ -59,6 +62,50 @@ def find_apps(cfg):
     return apps
 
 
+# Luna service files (an app's service/sysbus/) by suffix -> luna-service2
+# directory, as OSE's webos_system_bus class installs them.
+SYSBUS_DIRS = [
+    (".role.json", "roles.d"),
+    (".api.json", "api-permissions.d"),
+    (".perm.json", "client-permissions.d"),
+    (".groups.json", "groups.d"),
+    (".manifest.json", "manifests.d"),
+    (".service", "services.d"),
+]
+
+
+def find_services(cfg):
+    """Node.js Luna services that apps carry in service/ (e.g. apps/files/service)."""
+    services = []
+    for rel in cfg["applicationDirs"]:
+        base = os.path.join(REPO, rel)
+        if not os.path.isdir(base):
+            continue
+        for name in sorted(os.listdir(base)):
+            svc_dir = os.path.join(base, name, "service")
+            pkg = os.path.join(svc_dir, "package.json")
+            if os.path.isfile(pkg):
+                with open(pkg, encoding="utf-8") as f:
+                    services.append((json.load(f)["name"], svc_dir))
+    return services
+
+
+def plan_service(svc_id, svc_dir, plan):
+    """/usr/palm/services/<id>/ (run-js-service) and its ls2 files under /usr/share/luna-service2."""
+    for fn in sorted(os.listdir(svc_dir)):
+        src = os.path.join(svc_dir, fn)
+        if fn == "sysbus" or fn in SKIP_NAMES or ".test." in fn:
+            continue
+        copy_tree(src, "/usr/palm/services/%s/%s" % (svc_id, fn), plan)
+    sysbus = os.path.join(svc_dir, "sysbus")
+    if os.path.isdir(sysbus):
+        for fn in sorted(os.listdir(sysbus)):
+            for suffix, sub in SYSBUS_DIRS:
+                if fn.endswith(suffix):
+                    plan.append((os.path.join(sysbus, fn), "/usr/share/luna-service2/%s/%s" % (sub, fn)))
+                    break
+
+
 def copy_tree(src, dst, plan):
     if os.path.isfile(src):
         plan.append((src, dst))
@@ -100,6 +147,8 @@ def main():
             d = os.path.join(app_dir, "configuration", "db", kind)
             if os.path.isdir(d):
                 copy_tree(d, "/etc/palm/db/" + kind, plan)
+    for svc_id, svc_dir in find_services(cfg):
+        plan_service(svc_id, svc_dir, plan)
     for overlay in cfg.get("overlays", []):
         base = os.path.join(REPO, overlay)
         for root, dirs, files in os.walk(base):

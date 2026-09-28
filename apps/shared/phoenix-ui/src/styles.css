@@ -291,6 +291,22 @@ body.pui-app, .pui-app {
     border-image: url(../assets/enyo/toggle-button.png) 97 15 1 36 fill repeat;
 }
 .pui-toggle:disabled { cursor: default; }
+
+/* CheckBox.css: checkbox.png, 33x28 per state (off, on, disabled, disabled on). */
+.pui-checkbox {
+    flex: none;
+    width: 33px;
+    height: 28px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: url(../assets/enyo/checkbox.png) 0 0 no-repeat;
+    cursor: pointer;
+    outline: none;
+}
+.pui-checkbox.checked { background-position: 0 -28px; }
+.pui-checkbox:disabled { background-position: 0 -56px; cursor: default; }
+.pui-checkbox.checked:disabled { background-position: 0 -84px; }
 .pui-toggle-label {
     min-width: 30px;
     text-align: center;

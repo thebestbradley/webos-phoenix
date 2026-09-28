@@ -212,6 +212,7 @@ others need reimplementation or an alternative for Phoenix.
 - [ ] **PDF View / Doc View** (pre-QuickOffice phone apps). Not referenced in this repo.
 - [ ] **Help** (`com.palm.app.help`). `conf/default-launcher-page-layout.json`
 - [ ] **Print Manager** (`com.palm.app.printmanager`). `conf/default-launcher-page-layout.json`
+- [x] **File manager** (not shipped by Palm; homebrew from Preware, above all Internalz Pro). Phoenix: `apps/files` (`org.webosphoenix.files`), a clean-room design with Internalz Pro's feature set: browse, sort, hidden files, favourites, multi-select, copy / cut / paste, delete, rename, new folder / file, info, image viewer, text editor, "Open with", .ipk install through `com.palm.appinstaller` (simulated); on the Phoenix service `org.webosphoenix.filemanager`. See `docs/APP-RUNTIME.md#files`
 
 ## Store and first use
 - [ ] **HP App Catalog** (`com.palm.app.enyo-findapps`, older `com.palm.app.findapps`), plus the payment app. `conf/luna.conf:157`; `Src/lunaui/launcher/operationalsettings.cpp:194`

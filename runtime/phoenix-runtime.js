@@ -3035,4 +3035,591 @@
         if (wp && isMediaPath(wp.wallpaperFile) && runtime.hostStatus)
             host.postToHost("systemStatus", runtime.hostStatus());
     })();
+
+    // ================================================================================
+    // File manager (org.webosphoenix.filemanager, com.palm.appinstaller; apps/files)
+    // ================================================================================
+    //
+    // The Files app browses and changes the whole filesystem through a Phoenix
+    // service; on a device that is the Node.js service in apps/files/service,
+    // with the same methods and replies. Every reply is webOS style
+    // (returnValue, errorCode, errorText); the codes are FILE_ERRORS in
+    // apps/shared/luna/src/files.ts:
+    //
+    //   list {path}                          -> {path, entries: [entry]}
+    //   stat {path}                          -> {entry} (folders add count)
+    //   mkdir {path}                         -> {path}
+    //   copy / move {from, to, overwrite?}   -> {path} (folders recursively)
+    //   remove {path, recursive?}            -> {path}
+    //   read {path, encoding?, maxBytes?}    -> {path, data, encoding, size}
+    //   write {path, data, encoding?, overwrite?} -> {path, size}
+    //   entry: {name, path, type: "file"|"directory", size, mtime (ms), mode, readOnly?}
+    //
+    // Here the filesystem is virtual: one map of path -> node in the shared
+    // store ("files:vfs"), so every app page sees the same files. File
+    // contents are kept in one of three ways:
+    //   inline  text or base64 in the node (what write stores; 1 MB at most)
+    //   ref     a file of the rootfs (runtime/rootfs.json), read over HTTP:
+    //           the demo media, apps' appinfo.json, the runtime itself
+    //   media   a file in the media block's IndexedDB store (runtime.mediaFiles,
+    //           e.g. the Camera's pictures), picked up whenever a folder is listed
+    // The first start seeds a /media/internal like a webOS phone's (Downloads,
+    // Documents, Pictures, Music, ringtones, the demo media) and read-only
+    // system folders (/usr/palm/applications with the installed apps, /etc).
+    //
+    // com.palm.appinstaller installNoVerify {target, subscribe} (legacy webOS,
+    // as Preware-era file managers installed .ipk files) reports STARTING,
+    // IPKG_INSTALL and SUCCESS; nothing is really installed in the simulator.
+    // The application manager learns listAllHandlersForMime and
+    // getHandlerForMimeType for "Open with" (Photos, Music).
+    //
+    // __phoenixRuntime.fileManager: url(path) (a URL to show a file), reset()
+    // (seed again), and the service methods for tests.
+    (function fileManagerService() {
+        var VFS_KEY = "files:vfs";
+        var SEED_VERSION = 1;
+        var MEDIA_ROOT = "/media/internal";
+        var INLINE_LIMIT = 1024 * 1024;
+        var READ_LIMIT = 16 * 1024 * 1024;
+        var E = { BAD_PARAMS: -1, NOT_FOUND: 1, EXISTS: 2, PERMISSION: 3, NOT_DIR: 4, IS_DIR: 5,
+                  NOT_EMPTY: 6, TOO_LARGE: 7, INVALID: 8, IO: 9 };
+        var MIME = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp",
+                     bmp: "image/bmp", svg: "image/svg+xml", ogg: "audio/ogg", oga: "audio/ogg", opus: "audio/ogg",
+                     mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", mp4: "video/mp4", webm: "video/webm",
+                     txt: "text/plain", md: "text/markdown", json: "application/json", html: "text/html",
+                     js: "text/javascript", css: "text/css", xml: "application/xml", pdf: "application/pdf",
+                     ipk: "application/vnd.webos.ipk", zip: "application/zip" };
+        // "Open with": apps that say they open these types.
+        var HANDLERS = [
+            { prefix: "image/", appId: "org.webosphoenix.photos", title: "Photos" },
+            { prefix: "video/", appId: "org.webosphoenix.photos", title: "Photos" },
+            { prefix: "audio/", appId: "org.webosphoenix.music", title: "Music" }
+        ];
+
+        function extOf(p) { var m = /[^.\/]\.([a-z0-9]+)$/i.exec(p || ""); return m ? m[1].toLowerCase() : ""; }
+        function mimeOf(p) { return MIME[extOf(p)] || "application/octet-stream"; }
+        function nameOf(p) { return p === "/" ? "" : p.replace(/^.*\//, ""); }
+        function parentOf(p) { var i = p.lastIndexOf("/"); return i <= 0 ? "/" : p.slice(0, i); }
+        function inside(p, dir) { return p === dir || p.indexOf(dir === "/" ? "/" : dir + "/") === 0; }
+
+        // An absolute, normalised path, or null.
+        function norm(p) {
+            if (typeof p !== "string" || p.charAt(0) !== "/" || p.indexOf("\0") >= 0) return null;
+            var out = [];
+            p.split("/").forEach(function (s) {
+                if (!s || s === ".") return;
+                if (s === "..") out.pop();
+                else out.push(s);
+            });
+            return "/" + out.join("/");
+        }
+
+        // ---- Bytes ---------------------------------------------------------------------
+
+        function utf8Bytes(s) {
+            if (global.TextEncoder) return new TextEncoder().encode(s);
+            var bin = unescape(encodeURIComponent(s)), b = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; ++i) b[i] = bin.charCodeAt(i);
+            return b;
+        }
+        function utf8Text(bytes) {
+            if (global.TextDecoder) return new TextDecoder("utf-8").decode(bytes);
+            var s = "";
+            for (var i = 0; i < bytes.length; ++i) s += String.fromCharCode(bytes[i]);
+            try { return decodeURIComponent(escape(s)); } catch (e) { return s; }
+        }
+        function toB64(bytes) {
+            var s = "";
+            for (var i = 0; i < bytes.length; i += 0x8000)
+                s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            return global.btoa(s);
+        }
+        function fromB64(data) {
+            var bin = global.atob(data), b = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; ++i) b[i] = bin.charCodeAt(i);
+            return b;
+        }
+        function blobBytes(blob) {
+            if (!blob) return Promise.resolve(null);
+            if (typeof blob.arrayBuffer === "function")
+                return blob.arrayBuffer().then(function (b) { return new Uint8Array(b); });
+            return new Promise(function (resolve, reject) {
+                var fr = new FileReader();
+                fr.onload = function () { resolve(new Uint8Array(fr.result)); };
+                fr.onerror = function () { reject(fr.error); };
+                fr.readAsArrayBuffer(blob);
+            });
+        }
+        // A rootfs file over HTTP (XHR: phoenix-sim's scheme serves XHR, not fetch).
+        function fetchRef(url, head) {
+            return new Promise(function (resolve) {
+                try {
+                    var req = new XMLHttpRequest();
+                    req.open(head ? "HEAD" : "GET", url, true);
+                    if (!head) req.responseType = "arraybuffer";
+                    req.onload = function () {
+                        var good = req.status >= 200 && req.status < 300 || req.status === 0;
+                        if (!good) return resolve(null);
+                        if (head) return resolve(parseInt(req.getResponseHeader("Content-Length"), 10));
+                        resolve(req.response ? new Uint8Array(req.response) : null);
+                    };
+                    req.onerror = function () { resolve(null); };
+                    req.send(null);
+                } catch (e) {
+                    resolve(null);
+                }
+            });
+        }
+
+        // ---- The virtual filesystem ---------------------------------------------------------
+
+        var T0 = Date.parse("2026-01-15T09:00:00Z");
+
+        function seed() {
+            var nodes = {};
+            function dir(p, ro, m) { nodes[p] = { t: "d", m: m || T0, mode: 493, ro: !!ro }; }
+            function text(p, s, m, ro) { nodes[p] = { t: "f", m: m || T0, mode: 420, ro: !!ro, data: s, enc: "utf8", size: utf8Bytes(s).length }; }
+            function ref(p, url, size, m, ro) { nodes[p] = { t: "f", m: m || T0, mode: 420, ro: !!ro, ref: url, size: size >= 0 ? size : -1 }; }
+            function when(iso) { return Date.parse(iso); }
+
+            ["/", "/etc", "/etc/palm", "/usr", "/usr/palm", "/usr/palm/applications", "/usr/palm/frameworks",
+             "/usr/share", "/usr/share/phoenix", "/usr/share/phoenix/runtime", "/var", "/var/log", "/media", "/home"
+            ].forEach(function (p) { dir(p, true); });
+            dir("/tmp", false);
+            dir("/home/root", false);
+
+            text("/etc/hostname", "webos-phoenix\n", T0, true);
+            text("/etc/hosts", "127.0.0.1\tlocalhost\n127.0.1.1\twebos-phoenix\n::1\t\tlocalhost ip6-localhost\n", T0, true);
+            text("/etc/os-release", "ID=webos-phoenix\nNAME=\"webOS Phoenix\"\nVERSION=\"0.1.0 (simulator)\"\n" +
+                 "PRETTY_NAME=\"webOS Phoenix 0.1.0\"\nID_LIKE=webos\nHOME_URL=\"https://github.com/thebestbradley/webos-phoenix\"\n", T0, true);
+            text("/etc/palm/device-info.json", JSON.stringify({ modelName: "Phoenix Simulator", platformVersion: "3.0.5" }, null, 2) + "\n", T0, true);
+            text("/var/log/messages", "Jan 15 09:00:01 webos-phoenix kernel: Booting webOS Phoenix (simulator)\n" +
+                 "Jan 15 09:00:03 webos-phoenix LunaSysMgr: Phoenix shell started\n", T0, true);
+            ref("/usr/share/phoenix/runtime/phoenix-runtime.js", "/usr/share/phoenix/runtime/phoenix-runtime.js", -1, T0, true);
+            ref("/usr/share/phoenix/runtime/sample-data.js", "/usr/share/phoenix/runtime/sample-data.js", -1, T0, true);
+            dir("/usr/palm/frameworks/enyo", true);
+            dir("/usr/palm/frameworks/enyo/1.0", true);
+            dir("/usr/palm/frameworks/enyo/1.0/framework", true);
+            ref("/usr/palm/frameworks/enyo/1.0/framework/enyo.js", "/usr/palm/frameworks/enyo/1.0/framework/enyo.js", -1, T0, true);
+
+            // Installed apps: the dev server's list, else the ones Phoenix ships.
+            var apps = [];
+            try {
+                var txt = PalmSystem.getResource("/apps.json");
+                if (txt) JSON.parse(txt).forEach(function (a) { if (!a.appId) apps.push({ id: a.id, icon: a.icon }); });
+            } catch (e) { apps = []; }
+            if (!apps.length) {
+                ["com.palm.app.accounts", "com.palm.app.calculator", "com.palm.app.calendar", "com.palm.app.clock",
+                 "com.palm.app.contacts", "com.palm.app.email", "com.palm.app.notes", "org.webosphoenix.camera",
+                 "org.webosphoenix.files", "org.webosphoenix.messaging", "org.webosphoenix.music", "org.webosphoenix.phone",
+                 "org.webosphoenix.photos", "org.webosphoenix.settings"].forEach(function (id) { apps.push({ id: id }); });
+            }
+            apps.forEach(function (a) {
+                var base = "/usr/palm/applications/" + a.id;
+                dir(base, true);
+                ref(base + "/appinfo.json", base + "/appinfo.json", -1, T0, true);
+                if (a.icon && a.icon.indexOf(base + "/") === 0 && a.icon.slice(base.length + 1).indexOf("/") < 0)
+                    ref(a.icon, a.icon, -1, T0, true);
+            });
+
+            // The user's storage (USB mass storage on a webOS phone).
+            dir(MEDIA_ROOT, false, when("2026-09-01T08:00:00Z"));
+            ["Downloads", "Documents", "Pictures", "Music", "ringtones", ".thumbnails"].forEach(function (d) {
+                dir(MEDIA_ROOT + "/" + d, false, when("2026-09-01T08:00:00Z"));
+            });
+            text(MEDIA_ROOT + "/Documents/Welcome.txt",
+                 "Welcome to webOS Phoenix!\n\n" +
+                 "This is your device's internal storage, /media/internal. Connect a real phone over USB " +
+                 "and it shows up as a drive; here in the simulator it lives in the browser.\n\n" +
+                 "Tap a file to open it, or hold it to select several. The menu at the top sorts the " +
+                 "list and shows hidden files.\n", when("2026-09-01T08:05:00Z"));
+            text(MEDIA_ROOT + "/Documents/Shopping list.txt",
+                 "- Coffee beans\n- Oat milk\n- Batteries (AA)\n- Birthday card for Sam\n", when("2026-09-20T17:42:00Z"));
+            text(MEDIA_ROOT + "/Documents/Trip notes.md",
+                 "# Harbor weekend\n\n* Ferry leaves 8:15\n* Pack the camera\n* Dinner at the pier\n", when("2026-09-12T20:10:00Z"));
+            text(MEDIA_ROOT + "/Downloads/release-notes.txt",
+                 "webOS Phoenix 0.1.0\n\nNew: Files, a file manager for the whole device.\n", when("2026-09-25T12:00:00Z"));
+            // A tiny stand-in package ("!<arch>" header, as .ipk files are ar archives).
+            var ipk = utf8Bytes("!<arch>\ndebian-binary   0           0     0     100644  4         `\n2.0\n");
+            nodes[MEDIA_ROOT + "/Downloads/org.example.hello_1.0.0_all.ipk"] = {
+                t: "f", m: when("2026-09-26T15:30:00Z"), mode: 420, enc: "base64", data: toB64(ipk), size: ipk.length
+            };
+
+            // The demo media (apps/media-samples, mounted at /media/internal/samples).
+            var samples = null;
+            try { samples = JSON.parse(PalmSystem.getResource(MEDIA_ROOT + "/samples/index.json") || "null"); } catch (e) { samples = null; }
+            var sm = when("2026-09-01T08:00:00Z");
+            dir(MEDIA_ROOT + "/samples", false, sm);
+            dir(MEDIA_ROOT + "/samples/photos", false, sm);
+            dir(MEDIA_ROOT + "/samples/music", false, sm);
+            dir(MEDIA_ROOT + "/samples/music/art", false, sm);
+            ref(MEDIA_ROOT + "/samples/index.json", MEDIA_ROOT + "/samples/index.json", -1, sm);
+            var images = (samples && samples.images) || [], audios = (samples && samples.audios) || [];
+            images.forEach(function (r) { ref(r.file_path, r.file_path, r.file_size, Date.parse(r.last_modified_date) || sm); });
+            audios.forEach(function (r) {
+                ref(r.file_path, r.file_path, r.file_size, Date.parse(r.last_modified_date) || sm);
+                if (r.thumbnail && !nodes[r.thumbnail]) ref(r.thumbnail, r.thumbnail, -1, sm);
+            });
+            // Pictures, Music and ringtones hold copies of some of them.
+            images.slice(0, 3).forEach(function (r) { ref(MEDIA_ROOT + "/Pictures/" + nameOf(r.file_path), r.file_path, r.file_size, Date.parse(r.last_modified_date) || sm); });
+            audios.forEach(function (r) { ref(MEDIA_ROOT + "/Music/" + nameOf(r.file_path), r.file_path, r.file_size, Date.parse(r.last_modified_date) || sm); });
+            if (audios[0]) ref(MEDIA_ROOT + "/ringtones/Arcade Ring.ogg", audios[0].file_path, audios[0].file_size, sm);
+
+            return { version: SEED_VERSION, nodes: nodes, mediaSeen: {} };
+        }
+
+        function load() {
+            var v = store.get(VFS_KEY, null);
+            if (!v || v.version !== SEED_VERSION || !v.nodes) {
+                v = seed();
+                store.set(VFS_KEY, v);
+            }
+            return v;
+        }
+        function save(v) {
+            try {
+                store.set(VFS_KEY, v);
+                return true;
+            } catch (e) {
+                return false;   // quota
+            }
+        }
+
+        function children(v, p) {
+            var pre = p === "/" ? "/" : p + "/";
+            return Object.keys(v.nodes).filter(function (k) {
+                return k !== "/" && k.indexOf(pre) === 0 && k.indexOf("/", pre.length) < 0;
+            });
+        }
+        function subtree(v, p) {
+            return Object.keys(v.nodes).filter(function (k) { return inside(k, p); });
+        }
+        function entry(v, p, withCount) {
+            var n = v.nodes[p];
+            var e = { name: nameOf(p), path: p, type: n.t === "d" ? "directory" : "file",
+                      size: n.t === "d" || !(n.size >= 0) ? 0 : n.size, mtime: n.m, mode: n.mode };
+            if (n.ro) e.readOnly = true;
+            if (withCount && n.t === "d") e.count = children(v, p).length;
+            return e;
+        }
+        function touch(v, p) { if (v.nodes[p]) v.nodes[p].m = Date.now(); }
+
+        // Refs whose size is not known yet (HEAD request, once).
+        function fillSizes(paths) {
+            var v = load();
+            var todo = paths.filter(function (p) { var n = v.nodes[p]; return n && n.ref && n.size === -1; });
+            if (!todo.length) return Promise.resolve();
+            return Promise.all(todo.map(function (p) {
+                return fetchRef(v.nodes[p].ref, true).then(function (n) { return [p, n]; });
+            })).then(function (sizes) {
+                var v2 = load();
+                sizes.forEach(function (s) { if (v2.nodes[s[0]]) v2.nodes[s[0]].size = s[1] >= 0 ? s[1] : -2; });
+                save(v2);
+            });
+        }
+
+        // Files other apps stored with the media block (Camera pictures): add
+        // the ones not seen before, with their folders.
+        function syncMedia() {
+            var mf = runtime.mediaFiles;
+            if (!mf) return Promise.resolve();
+            return mf.list(MEDIA_ROOT + "/").then(function (paths) {
+                var v = load();
+                var fresh = paths.filter(function (p) { return !v.mediaSeen[p]; });
+                if (!fresh.length) return;
+                return Promise.all(fresh.map(function (p) {
+                    return mf.read(p).then(function (b) { return [p, b ? b.size : 0]; }, function () { return [p, 0]; });
+                })).then(function (found) {
+                    var v2 = load();
+                    found.forEach(function (f) {
+                        var p = norm(f[0]);
+                        v2.mediaSeen[f[0]] = true;
+                        if (!p || v2.nodes[p]) return;
+                        for (var d = parentOf(p); !v2.nodes[d]; d = parentOf(d))
+                            v2.nodes[d] = { t: "d", m: Date.now(), mode: 493 };
+                        v2.nodes[p] = { t: "f", m: Date.now(), mode: 420, media: true, size: f[1] };
+                    });
+                    save(v2);
+                });
+            }, function () { /* no store */ });
+        }
+
+        // The bytes of a file node.
+        function bytesOf(n, p) {
+            if (n.data !== undefined) return Promise.resolve(n.enc === "base64" ? fromB64(n.data) : utf8Bytes(n.data));
+            if (n.ref) return fetchRef(n.ref, false);
+            if (n.media && runtime.mediaFiles) return runtime.mediaFiles.read(p).then(blobBytes);
+            return Promise.resolve(new Uint8Array(0));
+        }
+
+        function forgetMedia(p) {
+            if (p.indexOf(MEDIA_ROOT + "/") !== 0 || !runtime.services["com.webos.service.mediaindexer"]) return;
+            callNow("luna://com.webos.service.mediaindexer/requestDelete", { uri: "storage://" + p });
+        }
+
+        // ---- Checks shared by the methods ------------------------------------------------------
+
+        // A new child of an existing, writable folder: the error reply, or null.
+        function checkTarget(v, p, overwrite) {
+            var parent = v.nodes[parentOf(p)];
+            if (!parent) return fail(E.NOT_FOUND, "No such folder: " + parentOf(p));
+            if (parent.t !== "d") return fail(E.NOT_DIR, "Not a folder: " + parentOf(p));
+            if (parent.ro) return fail(E.PERMISSION, "Read-only folder: " + parentOf(p));
+            var n = v.nodes[p];
+            if (n && !overwrite) return fail(E.EXISTS, "Already exists: " + p);
+            if (n && n.ro) return fail(E.PERMISSION, "Read-only: " + p);
+            return null;
+        }
+        function checkRemovable(v, p) {
+            if (p === "/") return fail(E.PERMISSION, "Cannot remove /");
+            if (!v.nodes[p]) return fail(E.NOT_FOUND, "No such file or directory: " + p);
+            var parent = v.nodes[parentOf(p)];
+            if (parent && parent.ro) return fail(E.PERMISSION, "Read-only folder: " + parentOf(p));
+            var ro = subtree(v, p).filter(function (k) { return v.nodes[k].ro; })[0];
+            if (ro) return fail(E.PERMISSION, "Read-only: " + ro);
+            return null;
+        }
+        function dropTree(v, p) {
+            subtree(v, p).forEach(function (k) {
+                var n = v.nodes[k];
+                if (n.media && runtime.mediaFiles) runtime.mediaFiles.remove(k);
+                if (n.t === "f") forgetMedia(k);
+                delete v.nodes[k];
+            });
+        }
+
+        // Copy (or move) the tree at `from` to `to`. Media files are copied in
+        // the media store when they stay under /media/internal, else inline.
+        function transfer(from, to, move) {
+            var v = load();
+            var src = subtree(v, from).sort();
+            var jobs = src.map(function (k) {
+                var n = v.nodes[k], dest = to + k.slice(from.length);
+                var copy = {};
+                for (var f in n) copy[f] = n[f];
+                delete copy.ro;
+                if (!move) copy.m = Date.now();
+                if (!n.media) return Promise.resolve([dest, copy, k]);
+                return runtime.mediaFiles.read(k).then(function (blob) {
+                    if (dest.indexOf(MEDIA_ROOT + "/") === 0 && blob)
+                        return runtime.mediaFiles.write(dest, blob).then(function () { return [dest, copy, k]; });
+                    return blobBytes(blob).then(function (b) {
+                        delete copy.media;
+                        copy.data = toB64(b || new Uint8Array(0));
+                        copy.enc = "base64";
+                        return [dest, copy, k];
+                    });
+                });
+            });
+            return Promise.all(jobs).then(function (done) {
+                var v2 = load();
+                if (move) {
+                    src.forEach(function (k) {
+                        var n = v2.nodes[k];
+                        if (n && n.media && runtime.mediaFiles) runtime.mediaFiles.remove(k);
+                        if (n && n.t === "f") forgetMedia(k);
+                        delete v2.nodes[k];
+                    });
+                }
+                done.forEach(function (d) {
+                    v2.nodes[d[0]] = d[1];
+                    if (d[1].media) v2.mediaSeen[d[0]] = true;
+                });
+                touch(v2, parentOf(to));
+                if (move) touch(v2, parentOf(from));
+                if (!save(v2)) return fail(E.TOO_LARGE, "Not enough room to store the copy");
+                if (done.some(function (d) { return d[1].media; }) && runtime.services["com.webos.service.mediaindexer"])
+                    callNow("luna://com.webos.service.mediaindexer/requestMediaScan", { path: MEDIA_ROOT });
+                return ok({ path: to });
+            });
+        }
+
+        function copyOrMove(move) {
+            return function (p, reply) {
+                var from = norm(p.from), to = norm(p.to);
+                if (!from || !to) return reply(fail(E.BAD_PARAMS, "from and to must be absolute paths"));
+                var v = load();
+                if (!v.nodes[from]) return reply(fail(E.NOT_FOUND, "No such file or directory: " + from));
+                if (inside(to, from)) return reply(fail(E.INVALID, "Cannot " + (move ? "move" : "copy") + " a folder into itself"));
+                var bad = checkTarget(v, to, !!p.overwrite) || (move ? checkRemovable(v, from) : null);
+                if (bad) return reply(bad);
+                if (v.nodes[to]) {
+                    bad = checkRemovable(v, to);
+                    if (bad) return reply(bad);
+                    dropTree(v, to);
+                    save(v);
+                }
+                transfer(from, to, move).then(reply, ioError(reply));
+            };
+        }
+
+        function ioError(reply) {
+            return function (e) { reply(fail(E.IO, String(e && e.message || e))); };
+        }
+
+        // ---- org.webosphoenix.filemanager ------------------------------------------------------
+
+        var methods = {
+            "/list": function (p, reply) {
+                var path = norm(p.path);
+                if (!path) return reply(fail(E.BAD_PARAMS, "path must be an absolute path"));
+                syncMedia().then(function () {
+                    var v = load(), n = v.nodes[path];
+                    if (!n) return reply(fail(E.NOT_FOUND, "No such file or directory: " + path));
+                    if (n.t !== "d") return reply(fail(E.NOT_DIR, "Not a folder: " + path));
+                    var kids = children(v, path);
+                    fillSizes(kids).then(function () {
+                        var v2 = load();
+                        reply(ok({ path: path, entries: children(v2, path).map(function (k) { return entry(v2, k); }) }));
+                    });
+                }).then(null, ioError(reply));
+            },
+            "/stat": function (p, reply) {
+                var path = norm(p.path);
+                if (!path) return reply(fail(E.BAD_PARAMS, "path must be an absolute path"));
+                syncMedia().then(function () { return fillSizes([path]); }).then(function () {
+                    var v = load();
+                    if (!v.nodes[path]) return reply(fail(E.NOT_FOUND, "No such file or directory: " + path));
+                    reply(ok({ entry: entry(v, path, true) }));
+                }).then(null, ioError(reply));
+            },
+            "/mkdir": function (p, reply) {
+                var path = norm(p.path);
+                if (!path || path === "/") return reply(fail(E.BAD_PARAMS, "path must be an absolute path"));
+                var v = load();
+                var bad = checkTarget(v, path, false);
+                if (bad) return reply(bad);
+                v.nodes[path] = { t: "d", m: Date.now(), mode: 493 };
+                touch(v, parentOf(path));
+                save(v);
+                reply(ok({ path: path }));
+            },
+            "/copy": copyOrMove(false),
+            "/move": copyOrMove(true),
+            "/remove": function (p, reply) {
+                var path = norm(p.path);
+                if (!path) return reply(fail(E.BAD_PARAMS, "path must be an absolute path"));
+                syncMedia().then(function () {
+                    var v = load();
+                    var bad = checkRemovable(v, path);
+                    if (bad) return reply(bad);
+                    if (v.nodes[path].t === "d" && !p.recursive && children(v, path).length)
+                        return reply(fail(E.NOT_EMPTY, "Folder not empty: " + path));
+                    dropTree(v, path);
+                    touch(v, parentOf(path));
+                    save(v);
+                    reply(ok({ path: path }));
+                }).then(null, ioError(reply));
+            },
+            "/read": function (p, reply) {
+                var path = norm(p.path), enc = p.encoding || "utf8";
+                if (!path) return reply(fail(E.BAD_PARAMS, "path must be an absolute path"));
+                if (enc !== "utf8" && enc !== "base64") return reply(fail(E.BAD_PARAMS, "encoding must be utf8 or base64"));
+                var limit = p.maxBytes > 0 ? p.maxBytes : READ_LIMIT;
+                syncMedia().then(function () {
+                    var v = load(), n = v.nodes[path];
+                    if (!n) return reply(fail(E.NOT_FOUND, "No such file or directory: " + path));
+                    if (n.t === "d") return reply(fail(E.IS_DIR, "Is a folder: " + path));
+                    if (n.size > limit) return reply(fail(E.TOO_LARGE, "File is larger than " + limit + " bytes"));
+                    if (n.data !== undefined && n.enc === enc && enc === "utf8")
+                        return reply(ok({ path: path, data: n.data, encoding: enc, size: n.size }));
+                    bytesOf(n, path).then(function (b) {
+                        if (!b) return reply(fail(E.IO, "Cannot read " + path));
+                        if (b.length > limit) return reply(fail(E.TOO_LARGE, "File is larger than " + limit + " bytes"));
+                        reply(ok({ path: path, data: enc === "utf8" ? utf8Text(b) : toB64(b), encoding: enc, size: b.length }));
+                    }, ioError(reply));
+                }).then(null, ioError(reply));
+            },
+            "/write": function (p, reply) {
+                var path = norm(p.path), enc = p.encoding || "utf8";
+                if (!path) return reply(fail(E.BAD_PARAMS, "path must be an absolute path"));
+                if (typeof p.data !== "string") return reply(fail(E.BAD_PARAMS, "data is required"));
+                if (enc !== "utf8" && enc !== "base64") return reply(fail(E.BAD_PARAMS, "encoding must be utf8 or base64"));
+                var v = load();
+                var bad = checkTarget(v, path, p.overwrite !== false);
+                if (bad) return reply(bad);
+                var old = v.nodes[path];
+                if (old && old.t === "d") return reply(fail(E.IS_DIR, "Is a folder: " + path));
+                var size;
+                try { size = enc === "utf8" ? utf8Bytes(p.data).length : fromB64(p.data).length; }
+                catch (e) { return reply(fail(E.BAD_PARAMS, "data is not base64")); }
+                if (size > INLINE_LIMIT) return reply(fail(E.TOO_LARGE, "The simulator stores files up to 1 MB"));
+                if (old && old.media && runtime.mediaFiles) runtime.mediaFiles.remove(path);
+                v.nodes[path] = { t: "f", m: Date.now(), mode: old ? old.mode : 420, data: p.data, enc: enc, size: size };
+                touch(v, parentOf(path));
+                if (!save(v)) return reply(fail(E.TOO_LARGE, "Not enough room to store " + path));
+                reply(ok({ path: path, size: size }));
+            }
+        };
+        register(["org.webosphoenix.filemanager"], methods);
+
+        // ---- com.palm.appinstaller (legacy) ---------------------------------------------------
+
+        var ticket = 0;
+        function install(p, reply, ctx) {
+            var path = norm(String(p.target || "").replace(/^file:\/\//, ""));
+            if (!path) return reply(fail(E.BAD_PARAMS, "target is required"));
+            var n = load().nodes[path];
+            if (!n || n.t !== "f") return reply(fail(E.NOT_FOUND, "No such package: " + path));
+            var t = ++ticket;
+            var steps = extOf(path) === "ipk"
+                ? ["STARTING", "IPKG_INSTALL", "SUCCESS"]
+                : ["STARTING", "FAILED_IPKG_INSTALL"];
+            steps.forEach(function (status, i) {
+                setTimeout(function () {
+                    if (ctx.cancelled() && i) return;
+                    var r = ok({ ticket: t, status: status });
+                    if (/^FAILED/.test(status)) r.details = { reason: "Not an .ipk package" };
+                    if (status === "SUCCESS") {
+                        var log = store.get("files:installed", []);
+                        log.push({ target: path, time: Date.now() });
+                        store.set("files:installed", log);
+                    }
+                    reply(r);
+                }, i * 250);
+            });
+        }
+        register(["com.palm.appinstaller"], { "/installNoVerify": install, "/install": install });
+
+        // ---- Application manager: handlers by MIME type ---------------------------------------
+
+        function handlersFor(mime) {
+            return HANDLERS.filter(function (h) { return String(mime || "").indexOf(h.prefix) === 0; })
+                .map(function (h, i) { return { appId: h.appId, title: h.title, mime: mime, index: i }; });
+        }
+        var am = runtime.services["com.palm.applicationManager"];
+        if (am) {
+            am["/listAllHandlersForMime"] = function (p, reply) { reply(ok({ mime: p.mime, resources: handlersFor(p.mime) })); };
+            am["/getHandlerForMimeType"] = function (p, reply) {
+                var h = handlersFor(p.mimeType || p.mime)[0];
+                reply(h ? ok({ appId: h.appId, mimeType: p.mimeType || p.mime }) : fail(-1, "no handler"));
+            };
+        }
+
+        // ---- For the Files app and tests --------------------------------------------------------
+
+        var urls = {};
+        runtime.fileManager = {
+            /** A URL to show a file: its rootfs path, a blob: URL or a data: URL. */
+            url: function (path) {
+                var p = norm(path);
+                var n = p && load().nodes[p];
+                if (!n || n.t !== "f") return Promise.resolve(path);
+                if (n.ref) return Promise.resolve(n.ref);
+                if (n.media && runtime.mediaFiles) return runtime.mediaFiles.url(p);
+                var key = p + "@" + n.m + ":" + n.size;
+                if (urls[key]) return Promise.resolve(urls[key]);
+                return bytesOf(n, p).then(function (b) {
+                    var type = mimeOf(p);
+                    var u = global.URL && URL.createObjectURL ? URL.createObjectURL(new Blob([b], { type: type }))
+                                                              : "data:" + type + ";base64," + toB64(b);
+                    urls[key] = u;
+                    return u;
+                });
+            },
+            /** Throw the virtual filesystem away and seed it again. */
+            reset: function () { store.set(VFS_KEY, seed()); },
+            errors: E
+        };
+    })();
 })(this);

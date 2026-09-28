@@ -104,6 +104,15 @@ Calculator, Settings panes, and an app catalog.
       delete and set as wallpaper, library and now playing; coded against OSE's
       media indexer, camera and audio services, simulated in the runtime, with
       generated demo photos and songs (`apps/media-samples`)
+- [x] Files (`apps/files`): a file manager with Internalz Pro's feature set
+      (browse, sort, hidden files, favourites, multi-select, copy / cut / paste,
+      delete, rename, new folder / file, info, image viewer, text editor, "Open
+      with", .ipk install), on the Phoenix service `org.webosphoenix.filemanager`
+      (simulated in the runtime; a Node.js service for the device in
+      `apps/files/service`)
+- [ ] Files on a device: run the service under OSE's `run-js-service` and check
+      its ACG files; route .ipk installs to OSE's `com.webos.appInstallService`
+      (legacy `com.palm.appinstaller` is simulator only)
 - [ ] Media on a device: configure the media indexer for `/media/internal`
       (`STORAGE_DEVS`), a Phoenix service to write and delete media files, and
       check capture through OSE's camera pipeline (`camera2` + uMediaServer

@@ -35,6 +35,8 @@ jobs:
           npm run typecheck
           npm test
           npm run build
+          # The Files app's device service (Node.js, not bundled): syntax only.
+          for f in files/service/*.js; do node --check "$f"; done
 
       - name: Build simulator
         run: |
@@ -61,6 +63,8 @@ jobs:
           node tools/test-phone-messaging.cjs --tablet --out app-tests/phone-messaging-tablet
           node tools/test-media.cjs --out app-tests/media-phone
           node tools/test-media.cjs --tablet --out app-tests/media-tablet
+          node tools/test-files.cjs --out app-tests/files-phone
+          node tools/test-files.cjs --tablet --out app-tests/files-tablet
 
       - name: Screenshots
         run: |
