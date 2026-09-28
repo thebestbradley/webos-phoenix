@@ -7,6 +7,6 @@ export default defineConfig({
     plugins: [react()],
     test: {
         environment: "jsdom",
-        include: ["shared/*/src/**/*.test.{ts,tsx}", "settings/src/**/*.test.{ts,tsx}"],
+        include: ["shared/*/src/**/*.test.{ts,tsx}", "settings/src/**/*.test.{ts,tsx}", "{camera,photos,music}/src/**/*.test.{ts,tsx}"],
     },
 });
