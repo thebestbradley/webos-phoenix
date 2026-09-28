@@ -112,6 +112,38 @@ Item {
             mouseRelease(cv, x, y - 250);
         }
 
+        // The angry card: pulled down until its centre leaves the bottom of
+        // the screen, it is slung up off the top and closed.
+        function test_pullingACardOffTheBottomSlingshotsItClosed() {
+            windows.launch("org.webosphoenix.email", "");
+            wait(50);
+            var cv = shell.cardView;
+            var x = cv.width / 2, y = cv.cardOriginY;
+            var slung = false;
+            var watch = function() { slung = true; };
+            cv.angryCardClosed.connect(watch);
+            mousePress(cv, x, y);
+            for (var i = 1; i <= 12; ++i)
+                mouseMove(cv, x, y + i * 25, 10);
+            mouseRelease(cv, x, y + 300);
+            cv.angryCardClosed.disconnect(watch);
+            verify(slung, "released below the screen: angry close");
+            tryCompare(windows.cards, "count", 0, 2000);
+        }
+
+        function test_pullingACardDownALittleSpringsBack() {
+            windows.launch("org.webosphoenix.email", "");
+            wait(50);
+            var cv = shell.cardView;
+            var x = cv.width / 2, y = cv.cardOriginY;
+            mousePress(cv, x, y);
+            for (var i = 1; i <= 4; ++i)
+                mouseMove(cv, x, y + i * 15, 10);
+            mouseRelease(cv, x, y + 60);
+            wait(Theme.cardSlideDuration + 100);
+            compare(windows.cards.count, 1);
+        }
+
         function test_flickUpClosesCardBesideTheCurrentOne() {
             // The neighbouring card peeks in at the right edge; it can be
             // flicked away without sliding to it first.

@@ -12,7 +12,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Horizontal drag and flick through cards and stacks, snapping to the nearest stack. `CardWindowManager.cpp:1452-1600,1677-1738`
 - [x] Flick a card up to close it (velocity/distance rule), or drag it off the top. `CardWindowManager.cpp:63-65,1700-1716`
 - [x] Close any card on screen, including the stacks at the sides, and several at once with several fingers.
-- [ ] "Angry card": drag a card off the bottom to force-close it (no keep-alive), with an upside-down sound easter egg. `CardWindowManager.cpp:1280-1283,2841-2894`
+- [x] "Angry card": drag a card off the bottom to force-close it (no keep-alive); it is slung up off the top. Not yet: the upside-down Angry Birds sounds ("carddrag", "birdappclose"), which need sound files we can ship. `CardWindowManager.cpp:1280-1283,2841-2894`
 - [x] Tap a card to maximize it; tap a partly hidden card to scroll the fan instead. `CardWindowManager.cpp:2151-2195`; `CardGroup.cpp:402-470`
 - [x] Tap left or right of the stack, or tap-and-hold off a card, to switch stacks. `CardWindowManager.cpp:1648-1661,2176-2188`
 - [x] Tap-and-hold to reorder cards within a stack and move them between stacks (20% edge zones). `CardWindowManager.cpp:1835-2101`

@@ -557,9 +557,11 @@ Item {
                 if (pos > last) pos = last + (pos - last) / 3;
                 view.position = pos;
             } else if (f.axis === "v") {
+                // The card follows the finger both ways; pulled down it
+                // stretches toward the angry card (CardWindowManager.cpp:1523-1533).
                 var c = view.cardItem(f.uid);
                 if (c)
-                    c.flickOffset = dy < 0 ? dy : dy / 4;
+                    c.flickOffset = dy;
             }
         }
 
@@ -591,8 +593,12 @@ Item {
                 view.slideTo(target);
             } else if (f.axis === "v") {
                 var c = view.cardItem(f.uid);
-                if (c)
-                    view.animateFlick(c, !cancelled && shouldClose(c.flickOffset, f.vy, c.height * c.cardScale));
+                if (c) {
+                    if (!cancelled && isAngry(c))
+                        view.slingshot(c);
+                    else
+                        view.animateFlick(c, !cancelled && shouldClose(c.flickOffset, f.vy, c.height * c.cardScale));
+                }
             } else if (f.axis === "" && !cancelled && fingerCount() === 0) {
                 tap(f.uid, f.lastX);
             }
@@ -614,6 +620,13 @@ Item {
                 view.slideTo(view.currentGroup + (x < view.width / 2 ? -1 : 1));
         }
 
+        // The "angry card": let go with the card's centre below the bottom of
+        // the screen and it is force-closed (CardWindowManager.cpp:1714-1716).
+        function isAngry(c) {
+            var p = view.layout.cards[c.uid];
+            return p && p.cy + c.flickOffset > view.height;
+        }
+
         // CardWindowManager.cpp:1700-1708: far enough, fast enough, and faster
         // the shorter the drag. Dragging more than half the card off also
         // closes it (the original closes once the card centre leaves the top).
@@ -624,6 +637,16 @@ Item {
                           && vy < 550 * u * u / dy;
             return flicked || -dy > cardHeight / 2;
         }
+    }
+
+    // The angry card is slung from the bottom of the screen up and off the
+    // top (closeWindow always throws cards off the top: CardWindowManager.cpp
+    // 2866-2878), then closed without keep-alive. On the device, upside down,
+    // it played the "birdappclose" sound (:1280-1283, 2890-2891).
+    signal angryCardClosed(string uid)
+    function slingshot(card) {
+        angryCardClosed(card.uid);
+        flickAnimation.createObject(view, { target: card, closing: true, to: -view.height }).start();
     }
 
     // Throw a flicked card off the top and close it, or spring it back. One
