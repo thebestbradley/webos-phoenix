@@ -209,6 +209,8 @@ Apple's `container` tool; see [docs/BUILDING-MAC.md](docs/BUILDING-MAC.md). See
 - [Web app runtime](docs/APP-RUNTIME.md): how the original webOS apps run
 - [Hardware](docs/HARDWARE.md): target devices, drivers, installer and updates
 - [App gaps](docs/APP-GAPS.md): the apps a modern phone needs, and which Phoenix still lacks
+- [App store](docs/APP-STORE.md): PWAs as webOS apps, legacy `.ipk` apps, and the catalog
+- [Android apps](docs/ANDROID.md): Android apps as webOS cards through Waydroid
 - [Legacy UI spec](docs/spec/legacy-ui-spec.md): measurements and timings taken from the original source
 - [Feature inventory](docs/spec/feature-inventory.md): everything legacy webOS did, as a checklist
 - [Synergy](docs/SYNERGY.md) and [modern Synergy](docs/SYNERGY-MODERN.md): accounts, sync and merged messaging
