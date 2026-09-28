@@ -178,17 +178,19 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 
 # Apps (outside system UI)
 
-The core apps legacy webOS shipped. None of their code is in this repo, which only references their app IDs. Evidence gives
-where the ID appears; "not referenced" means I know of the app from legacy webOS (**inferred**) but this repo never names it.
-All of these need reimplementation or an alternative for Phoenix.
+The core apps legacy webOS shipped. Evidence gives where the ID appears in the legacy system UI; "not referenced" means I know
+of the app from legacy webOS (**inferred**) but it never names it. The seven apps Palm/HP released as Open webOS (Accounts,
+Calculator, Calendar, Clock, Contacts, Email, Memos) run unmodified from `third_party/core-apps` and are checked below; the
+others need reimplementation or an alternative for Phoenix.
 
 ## Communication
 - [ ] **Phone / Dialer** (`com.palm.app.phone`): launch-at-boot, keep-alive, incoming-call popups, active-call banner. `conf/luna.conf:99,102`; `conf/notificationPolicy.conf:20-28`
 - [ ] **Messaging** (SMS/MMS/IM, `com.palm.app.messaging`). `conf/luna.conf:99`; `conf/notificationPolicy.conf:35`
-- [ ] **Email** (`com.palm.app.email`, Enyo `com.palm.app.enyo-email` on the TouchPad). `conf/luna.conf:99`
-- [ ] **Contacts / Synergy** (`com.palm.app.contacts`, `com.palm.app.enyo-contacts`). `conf/default-launcher-page-layout.json`; `conf/luna.conf:65`
-- [ ] **Calendar** (`com.palm.app.calendar`, `com.palm.app.enyo-calendar`) and the **Agenda view** exhibition (`com.palm.app.agendaview`). `conf/luna.conf:99`; `Src/base/application/ApplicationManagerService.cpp:2524`
-- [ ] **Accounts** (Synergy account manager, `com.palm.app.accounts`). `conf/default-launcher-page-layout.json`
+- [x] **Email** (`com.palm.app.email`, Enyo `com.palm.app.enyo-email` on the TouchPad). `conf/luna.conf:99`. Runs as the original Open webOS app (`third_party/core-apps`), phone and tablet; see `docs/APP-RUNTIME.md`. No mail server yet (simulated transports).
+- [x] **Contacts / Synergy** (`com.palm.app.contacts`, `com.palm.app.enyo-contacts`). `conf/default-launcher-page-layout.json`; `conf/luna.conf:65`. Runs as the original Open webOS app (`third_party/core-apps`), phone and tablet; see `docs/APP-RUNTIME.md`.
+- [x] **Calendar** (`com.palm.app.calendar`, `com.palm.app.enyo-calendar`). `conf/luna.conf:99`. Runs as the original Open webOS app (`third_party/core-apps`), phone and tablet; see `docs/APP-RUNTIME.md`.
+- [ ] **Agenda view** exhibition (`com.palm.app.agendaview`). `Src/base/application/ApplicationManagerService.cpp:2524`
+- [x] **Accounts** (Synergy account manager, `com.palm.app.accounts`). `conf/default-launcher-page-layout.json`. Runs as the original Open webOS app (`third_party/core-apps`), phone and tablet; see `docs/APP-RUNTIME.md`.
 - [ ] **Voice Dial** (`com.palm.sysapp.voicedial`). In this repo: `sysapps/`
 - [ ] **SIM Toolkit** (`com.palm.app.stk`). `Src/base/SystemUiController.cpp:2014`
 
@@ -201,10 +203,11 @@ All of these need reimplementation or an alternative for Phoenix.
 - [ ] **Maps** (`com.palm.app.maps`; Bing/Google Maps). `conf/default-launcher-page-layout.json`
 
 ## Productivity
-- [ ] **Memos / Notes** (`com.palm.app.notes`). `conf/default-launcher-page-layout.json`
+- [x] **Memos / Notes** (`com.palm.app.notes`). `conf/default-launcher-page-layout.json`. Runs as the original Open webOS app (`third_party/core-apps`), phone and tablet; see `docs/APP-RUNTIME.md`.
 - [ ] **QuickOffice** viewer / editor (`com.quickoffice.webos`, `com.quickoffice.ar`). `conf/default-launcher-page-layout.json`
-- [ ] **Calculator** (`com.palm.calculator`). `Src/base/application/ApplicationDescription.cpp:1119`
-- [ ] **Clock / alarms** (`com.palm.app.clock`, alarm "ring" popup). `conf/notificationPolicy.conf:26`
+- [x] **Calculator** (`com.palm.calculator`; Open webOS `com.palm.app.calculator`). `Src/base/application/ApplicationDescription.cpp:1119`. Runs as the original Open webOS app (`third_party/core-apps`), phone and tablet; see `docs/APP-RUNTIME.md`.
+- [x] **Clock / alarms** (`com.palm.app.clock`). `conf/notificationPolicy.conf:26`. Runs as the original Open webOS app (`third_party/core-apps`), phone and tablet; see `docs/APP-RUNTIME.md`.
+- [ ] Alarm "ring" popup (needs the activity manager to fire alarms).
 - [ ] **Tasks**. Not referenced in this repo.
 - [ ] **PDF View / Doc View** (pre-QuickOffice phone apps). Not referenced in this repo.
 - [ ] **Help** (`com.palm.app.help`). `conf/default-launcher-page-layout.json`
