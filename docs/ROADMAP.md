@@ -7,10 +7,11 @@ The checklist of legacy features is in
 [spec/feature-inventory.md](spec/feature-inventory.md), and the measurements
 are in [spec/legacy-ui-spec.md](spec/legacy-ui-spec.md).
 
-Two plans go with this roadmap: [HARDWARE.md](HARDWARE.md) (which devices to
-target and how their hardware is driven, for M1 and M3) and
+Three plans go with this roadmap: [HARDWARE.md](HARDWARE.md) (which devices to
+target and how their hardware is driven, for M1 and M3),
 [APP-GAPS.md](APP-GAPS.md) (every app a modern phone ships and which ones
-Phoenix still needs, for M4).
+Phoenix still needs, for M4) and [SYNERGY-MODERN.md](SYNERGY-MODERN.md)
+(accounts, sync and messaging against today's providers, for M4).
 
 ## M0: shell in a simulator (done in this repo's first PR)
 
@@ -123,6 +124,11 @@ apps, with priorities and a build order, is in [APP-GAPS.md](APP-GAPS.md).
       templates for iCloud / Fastmail / Nextcloud, an OAuth 2.0 helper (PKCE,
       loopback), Google People and Calendar, Microsoft Graph, XOAUTH2 in
       mojomail, Tasks over CalDAV VTODO, JMAP, Matrix for IM
+- [ ] Modern Synergy ([SYNERGY-MODERN.md](SYNERGY-MODERN.md)): a shared sync
+      layer extracted from `apps/dav`, messaging Synergy (one thread per
+      person across SMS, Matrix, XMPP and user-run bridges), push through one
+      UnifiedPush connection plus an optional PHP/MySQL relay for Graph and
+      Google webhooks, and photos, files and social accounts
 - [ ] Phone and Messaging on a device: a telephony service for OSE (port LuneOS's
       `webos-telephonyd` on oFono, plus call state), MMS, IM transports, active-call
       banner in the shell

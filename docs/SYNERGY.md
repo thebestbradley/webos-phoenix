@@ -19,6 +19,12 @@ This page has three parts:
    account (`apps/dav`) that works in the simulator today and is written to
    run on a device.
 
+[SYNERGY-MODERN.md](SYNERGY-MODERN.md) continues section 2: where each
+provider stands today (checked September 2026, with sources), messaging
+Synergy across SMS, Matrix, XMPP and bridged networks, photos, files and
+social accounts, push and the power budget, an optional self-hostable relay,
+and a roadmap past phase 4.
+
 Only the account *framework* was open-sourced. The transports that made
 Synergy famous (Google, Exchange ActiveSync, Facebook, Yahoo, LinkedIn,
 Skype, AIM via libpurple) were never released. What survives of them is
@@ -298,9 +304,10 @@ service, `org.webosphoenix.service.oauth`, does it for every transport:
   identity platform accepts `http://localhost` redirects for public clients.
 - **Device authorization grant** (RFC 8628) as the fallback for devices
   where the browser card cannot be used: show a code, sign in on another
-  device. Google only allows a short list of scopes in its device flow (check
-  its current list; Gmail's scope is not on it); Microsoft allows the Graph
-  scopes used here.
+  device. Google's device flow allows only sign-in, two Drive scopes and
+  YouTube, so neither Calendar, Contacts nor Gmail can use it
+  ([SYNERGY-MODERN.md](SYNERGY-MODERN.md#12-google)); Microsoft allows the
+  Graph scopes used here.
 - **Tokens**: the refresh token goes into the key store (2.9) as the
   account's `"common"` credentials, the access token is cached in memory,
   refreshed before expiry, and a revoked refresh token turns into
@@ -525,7 +532,9 @@ and Google's verification (2.12).
   can withdraw them (Google has been restricting "less secure" access for
   years), which is one more reason for phase 2.
 - **Exchange ActiveSync** needs a patent licence from Microsoft; it is out of
-  scope.
+  scope. EWS, the other Exchange protocol, is switched off in Exchange
+  Online between October 2026 and April 2027
+  ([SYNERGY-MODERN.md](SYNERGY-MODERN.md#13-microsoft-365-outlookcom-and-the-end-of-ews)).
 
 ## 3. Phase 1: CardDAV and CalDAV
 
