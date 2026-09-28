@@ -279,6 +279,31 @@ QtObject {
     readonly property real flickMinVelocity: 2.5 * u
     readonly property real flickMaxVelocity: 11.0 * u
 
+    // ---- Tablet dashboard drop-down (uiComponents/DashboardMenu, MenuContainer)
+    // 320 px rows (DashboardWindowManager.cpp:63 kTabletNotificationContentWidth;
+    // MenuContainer.qml:65) 11 px in from the art's sides and 15 up from its
+    // foot (:48-51); its right edge 11 px past the notification area's
+    // (:9 edgeOffset; DashboardWindowManager.cpp:165, 1247-1257).
+    readonly property int dashboardMenuWidth: px(320)
+    readonly property int dashboardMenuSideMargin: px(11)
+    readonly property int dashboardMenuBottomMargin: px(15)
+    readonly property int dashboardMenuEdgeOffset: px(11)
+    // menu-divider.png, 2 px, above every row but the top one
+    // (DashboardWindowContainer.cpp:1245-1253 m_menuSeparatorHeight, 1357-1371).
+    readonly property int dashboardMenuDividerHeight: px(2)
+    // At most 5 1/2 rows and their dividers, then it scrolls
+    // (DashboardWindowContainer.cpp:47, 152-155; setMaximumHeight,
+    // DashboardWindowManager.cpp:167, MenuContainer.qml:17-19): 295 px.
+    readonly property real dashboardMenuMaxRows: 5.5
+    readonly property int dashboardMenuMaxContentHeight:
+        px(Math.floor(dashboardMenuMaxRows * 52) + (dashboardMenuMaxRows - 1) * 2)
+    // The bottom scroll fade sits 28 px above the list's foot, its arrow 10
+    // px into it (MenuContainer.qml:99, 111).
+    readonly property int dashboardMenuScrollFadeBottomOffset: px(28)
+    // The swipe shading's 5 px ends (paintInsideMenu's paintHoriz3Tile calls,
+    // DashboardWindowContainer.cpp:1382-1428).
+    readonly property int dashboardMenuSwipeCap: 5
+
     // Phones round the corners of the app area with 24px overlays.
     readonly property int screenCornerSize: px(24)                   // MenuWindowManager.cpp:126-146
 

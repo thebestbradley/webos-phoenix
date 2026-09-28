@@ -20,7 +20,7 @@
 //
 // Tablets (TouchPad): the banner and the notification icons live in the
 // status bar, and the dashboard is a 320 px drop-down under it, over the
-// apps (DashboardWindowManager.cpp:62-63, 1234-1260).
+// apps (DashboardWindowManager.cpp:62-63, 1234-1260): DashboardMenu.qml.
 //
 // Tapping a notification launches its app with the notification's params
 // (e.g. the task a reminder is for).
@@ -400,40 +400,20 @@ Item {
             onClicked: root.dashboardOpen = !root.dashboardOpen
         }
 
-        // Tablets: the 320 px drop-down under the status bar, top right.
-        BorderImage {
+        // Tablets: the drop-down under the status bar, its right edge 11 px
+        // past the notification area's (DashboardWindowManager.cpp:1244-1257,
+        // 390-396; DashboardMenu).
+        DashboardMenu {
             id: dropDown
-            visible: root.overlay && opacity > 0
-            opacity: root.overlay && root.dashboardOpen ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: Theme.searchPillFadeDuration } }
-            anchors.right: parent.right
-            anchors.rightMargin: root.statusBarRightInset
-            y: -Theme.px(2)
-            width: Theme.px(320)
-            height: Math.min(Theme.px(20) + (root.model ? root.model.count : 0) * Theme.dashboardItemHeight,
-                             root.screenHeight * Theme.maximumNegativeSpaceRatio)
-            source: Theme.asset("menu-dropdown-bg.png")
-            border { left: 30; right: 30; top: 30; bottom: 30 }
-            // The scene behind, blurred faintly within the panel's shape.
-            BackdropBlur {
-                anchors.fill: parent
-                z: -1
-                source: root.backdrop
-                mask: dropDownShape
-            }
-            BorderImage {
-                id: dropDownShape
-                visible: false
-                anchors.fill: parent
-                source: Theme.asset("menu-dropdown-bg.png")
-                border { left: 30; right: 30; top: 30; bottom: 30 }
-            }
-            Loader {
-                anchors.fill: parent
-                anchors.margins: Theme.px(10)
-                active: root.overlay && root.dashboardOpen
-                sourceComponent: dashboardList
-            }
+            x: parent.width - root.statusBarRightInset - width + Theme.dashboardMenuEdgeOffset
+            y: 0                                                // positiveSpace.y(), :1326-1338
+            open: root.overlay && root.dashboardOpen
+            model: root.overlay ? root.model : null
+            source: root.source
+            backdrop: root.backdrop
+            locked: root.locked
+            onActivated: (appId, params) => root.activated(appId, params)
+            onDismissRequested: (index) => root.dismissRequested(index)
         }
     }
 
@@ -442,7 +422,7 @@ Item {
     // and its padlock (LockScreen.alertHost); the window moves there.
     property Item lockAlertHost: null
 
-    // ---- Dashboard items ------------------------------------------------------------
+    // ---- Dashboard items (phones) ----------------------------------------------------
 
     Component {
         id: dashboardList
@@ -540,16 +520,6 @@ Item {
                         duration: Theme.dashboardSnapDuration
                         easing.type: Easing.OutCubic
                     }
-                }
-
-                // Tablets: menu-divider.png between the rows (paintInsideMenu,
-                // :1368-1371); phones have none.
-                Image {
-                    visible: root.overlay && item.index < list.count - 1
-                    anchors.bottom: parent.bottom
-                    width: parent.width
-                    source: Theme.asset("menu-divider.png")
-                    fillMode: Image.Stretch
                 }
             }
         }
