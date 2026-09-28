@@ -35,6 +35,37 @@ if(PHOENIX_BUILD_SIM)
     install(TARGETS phoenix-sim RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
+# Phoenix web apps (React + TypeScript in ../apps): `npm ci` when the lock
+# file changes, then `npm run build` on every build, writing apps/<name>/dist/
+# where phoenix-sim and tools/serve-rootfs.py pick them up. Needs Node.js 20+.
+# Off by default for device builds (meta-phoenix sets PHOENIX_BUILD_SIM=OFF).
+option(PHOENIX_BUILD_APPS "Build the web apps in apps/ with npm" ${PHOENIX_BUILD_SIM})
+if(PHOENIX_BUILD_APPS)
+    get_filename_component(PHOENIX_APPS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../apps" ABSOLUTE)
+    find_program(PHOENIX_NPM npm)
+    if(PHOENIX_NPM AND EXISTS "${PHOENIX_APPS_DIR}/package.json")
+        set(_npm_stamp "${CMAKE_CURRENT_BINARY_DIR}/phoenix-apps-npm-ci.stamp")
+        add_custom_command(
+            OUTPUT "${_npm_stamp}"
+            COMMAND "${PHOENIX_NPM}" ci --no-audit --no-fund
+            COMMAND "${CMAKE_COMMAND}" -E touch "${_npm_stamp}"
+            DEPENDS "${PHOENIX_APPS_DIR}/package.json" "${PHOENIX_APPS_DIR}/package-lock.json"
+            WORKING_DIRECTORY "${PHOENIX_APPS_DIR}"
+            COMMENT "Installing web app dependencies (npm ci in apps/)"
+            USES_TERMINAL VERBATIM)
+        add_custom_target(phoenix-apps ALL
+            COMMAND "${PHOENIX_NPM}" run build
+            DEPENDS "${_npm_stamp}"
+            WORKING_DIRECTORY "${PHOENIX_APPS_DIR}"
+            COMMENT "Building the web apps (npm run build in apps/)"
+            USES_TERMINAL VERBATIM)
+        message(STATUS "phoenix-apps: web apps will be built with ${PHOENIX_NPM}")
+    else()
+        message(WARNING "phoenix-apps: npm not found; the Phoenix web apps (Settings, ...) will not be "
+                        "built. Install Node.js 20+ or run `npm ci && npm run build` in apps/ yourself.")
+    endif()
+endif()
+
 # QML modules and the Open webOS artwork keep their relative layout, so
 # Theme.asset() resolves the same way in the tree and on the device.
 install(DIRECTORY qml/ DESTINATION ${PHOENIX_DATA_DIR}/qml)

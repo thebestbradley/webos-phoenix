@@ -22,9 +22,24 @@ jobs:
             qt6-webengine-dev qml6-module-qtwebengine qml6-module-qtwebchannel \
             xvfb xauth libgl1-mesa-dri fonts-dejavu-core
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/package-lock.json
+
+      - name: Web apps (React + TypeScript) - typecheck, unit tests, build
+        working-directory: apps
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+
       - name: Build simulator
         run: |
-          cmake -S shell -B build -DCMAKE_BUILD_TYPE=Release
+          # The apps were built above; skip the CMake npm step.
+          cmake -S shell -B build -DCMAKE_BUILD_TYPE=Release -DPHOENIX_BUILD_APPS=OFF
           cmake --build build -j
 
       - name: Behaviour tests
@@ -37,6 +52,8 @@ jobs:
           export NODE_PATH="$(npm root -g)"
           node tools/test-apps.cjs --out app-tests/phone
           node tools/test-apps.cjs --tablet --out app-tests/tablet
+          node tools/test-settings.cjs --out app-tests/settings-phone
+          node tools/test-settings.cjs --tablet --out app-tests/settings-tablet
 
       - name: Screenshots
         run: |
