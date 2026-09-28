@@ -1,0 +1,11 @@
+{
+    "accounts.transport": [
+        "org.webosphoenix.service.dav/checkCredentials",
+        "org.webosphoenix.service.dav/onCreate",
+        "org.webosphoenix.service.dav/onEnabled",
+        "org.webosphoenix.service.dav/onCredentialsChanged",
+        "org.webosphoenix.service.dav/onDelete",
+        "org.webosphoenix.service.dav/sync",
+        "org.webosphoenix.service.dav/accountSettings"
+    ]
+}

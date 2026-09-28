@@ -7,8 +7,9 @@ Calendar, Clock, Contacts, Email, Memos), Enyo 1.0, MojoLoader and the \
 foundation/loadable frameworks at their original device paths \
 (/usr/palm/applications, /usr/palm/frameworks), plus Phoenix web apps, their \
 Node.js Luna services (/usr/palm/services, e.g. org.webosphoenix.filemanager \
-for Files, with luna-service2 role and permission files) and \
-phoenix-runtime.js, using tools/install-rootfs.py."
+for Files and org.webosphoenix.service.dav for CardDAV & CalDAV accounts, with \
+luna-service2 role and permission files), account templates \
+(/usr/palm/public/accounts) and phoenix-runtime.js, using tools/install-rootfs.py."
 HOMEPAGE = "https://github.com/thebestbradley/webos-phoenix"
 SECTION = "webos/apps"
 LICENSE = "Apache-2.0"
@@ -36,11 +37,13 @@ FILES:${PN} = " \
     ${prefix}/palm/applications \
     ${prefix}/palm/frameworks \
     ${prefix}/palm/services \
+    ${prefix}/palm/public \
     ${datadir}/phoenix/runtime \
     ${datadir}/luna-service2 \
     ${sysconfdir}/palm/db \
 "
 
 # Web apps run in WebAppMgr; their data lives in db8. The apps' own Luna
-# services (Files) are JavaScript services: run-js-service and webos-service.
+# services (Files, CardDAV & CalDAV) are JavaScript services: run-js-service
+# and webos-service.
 RDEPENDS:${PN} = "${VIRTUAL-RUNTIME_webappmanager} db8 nodejs nodejs-module-webos-service"

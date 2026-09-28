@@ -106,12 +106,12 @@ def plan_service(svc_id, svc_dir, plan):
                     break
 
 
-def copy_tree(src, dst, plan):
+def copy_tree(src, dst, plan, skip_top=()):
     if os.path.isfile(src):
         plan.append((src, dst))
         return
     for root, dirs, files in os.walk(src):
-        dirs[:] = sorted(d for d in dirs if d not in SKIP_NAMES)
+        dirs[:] = sorted(d for d in dirs if d not in SKIP_NAMES and not (root == src and d in skip_top))
         for fn in sorted(files):
             if fn in SKIP_NAMES:
                 continue
@@ -141,7 +141,9 @@ def main():
             continue   # installed once, as 0.10, and symlinked below
         copy_tree(os.path.join(REPO, target), prefix.rstrip("/"), plan)
     for app_id, app_dir in find_apps(cfg):
-        copy_tree(app_dir, "/usr/palm/applications/" + app_id, plan)
+        # An app's service/ is installed on its own, below (apps/dav keeps
+        # its appinfo.json at the top, so its whole folder is the app).
+        copy_tree(app_dir, "/usr/palm/applications/" + app_id, plan, skip_top=("service",))
         # db8 kinds and permissions the app declares (as openwebos/build-desktop did).
         for kind in ("kinds", "permissions"):
             d = os.path.join(app_dir, "configuration", "db", kind)

@@ -1,0 +1,39 @@
+<!doctype html>
+<!-- Copyright (c) 2026 webOS Phoenix contributors
+     SPDX-License-Identifier: Apache-2.0
+
+     org.webosphoenix.dav is not in the launcher: it carries the CardDAV &
+     CalDAV account's sign-in page (accounts/wizard.html), its db8 kinds
+     (configuration/db), its account template (public/accounts) and its Luna
+     service (service/, installed on its own). Accounts are added and
+     managed in the Accounts app; this page only says so. -->
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <title>CardDAV &amp; CalDAV</title>
+    <style>
+        body { font-family: Prelude, "Helvetica Neue", Arial, sans-serif; background: #e5e5e5; color: #333; margin: 0; }
+        header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #f4f4f4; border-bottom: 1px solid #bbb; }
+        header h1 { font-size: 20px; font-weight: normal; margin: 0; }
+        main { padding: 8px 16px 16px; }
+        p, li { font-size: 15px; line-height: 1.4; }
+    </style>
+</head>
+<body>
+    <header>
+        <img src="icon.png" width="32" height="32" alt="">
+        <h1>CardDAV &amp; CalDAV</h1>
+    </header>
+    <main>
+        <p>Sync contacts and calendars with a standard server. Add the account in <b>Accounts</b>: tap <i>Add an Account</i>, then <i>CardDAV &amp; CalDAV</i>.</p>
+        <p>Servers that work this way:</p>
+        <ul>
+            <li>iCloud, Fastmail and other providers (with an app password)</li>
+            <li>Nextcloud and ownCloud</li>
+            <li>Radicale, Baïkal, SOGo and other self-hosted servers</li>
+        </ul>
+        <p>Contacts show in Contacts, events in Calendar. Changes go both ways.</p>
+    </main>
+</body>
+</html>

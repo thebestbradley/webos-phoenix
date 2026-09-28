@@ -67,7 +67,9 @@ service bus). `runtime/phoenix-runtime.js` runs before the app's own scripts:
   - **accounts** (`com.palm.service.accounts`): accounts in db8, the account
     templates released with Open webOS (HP webOS profile, IMAP/POP/email)
     read from `/usr/palm/public/accounts/`, credentials; the HP webOS
-    Account server returns the sample owner.
+    Account server returns the sample owner. Phoenix's CardDAV & CalDAV
+    template and its transport are added by the last block (see
+    [CardDAV and CalDAV](#carddav-and-caldav)).
   - **contacts linker** (`com.palm.service.contacts.linker`): runs the
     linker's own steps on the page's contacts framework (new contact,
     manual link/unlink); no automatic linking of similar contacts.
@@ -96,8 +98,9 @@ The Settings app's services (Wi-Fi, Bluetooth, settings service, audio, ...)
 are simulated in their own clearly marked block at the end of the runtime;
 see [Settings](#settings) below. The media services (media indexer, camera,
 media files) follow in another; see [Camera, Photos and Music](#camera-photos-and-music).
-The last block is the file manager service and the legacy app installer used
-by Files; see [Files](#files).
+Then come the file manager service and the legacy app installer used by
+Files; see [Files](#files). The last block runs the CardDAV and CalDAV
+account's transport; see [CardDAV and CalDAV](#carddav-and-caldav).
 
 ## Running apps
 
@@ -174,12 +177,13 @@ See `tools/app-expectations.json` for the current list.
 All seven start cleanly and are usable on phone and tablet
 (`tools/app-expectations.json` has per-app notes). What is still missing:
 
-- **Servers**: no mail, contacts or calendar sync; new accounts cannot be
-  signed in (nothing to validate credentials against).
+- **Servers**: contacts and calendars sync with a CardDAV & CalDAV account
+  (below); there is no mail server, so email accounts cannot be signed in.
 - **Background services**: alarms and calendar reminders are stored but never
   fire (no activity manager); no dashboards or banners from them.
-- **Contacts**: no automatic linking of similar contacts, photos, or vCard
-  import/export.
+- **Contacts**: contacts are linked into people only when a CardDAV sync
+  adds them (the linker's strongest rules); no photos for local contacts, no
+  vCard import/export.
 - The Contacts and Accounts sources listed in `depends.js` but missing from the
   Open webOS release (`Ringtones.js`, `NameDetails.js`, `FirstLaunch.js`) are
   empty stand-ins; nothing in the released apps uses them.
@@ -209,6 +213,7 @@ New Phoenix apps live in `apps/`, an npm workspace:
 | `apps/camera`, `apps/photos`, `apps/music` | Camera, Photos, Music (see [below](#camera-photos-and-music)); `@phoenix/luna`'s `media.ts` wraps their services |
 | `apps/media-samples` | Generated demo photos and songs, mounted at `/media/internal/samples` |
 | `apps/files` | Files (see [below](#files)); `apps/files/service` is its Node.js Luna service for the device |
+| `apps/dav` | The CardDAV & CalDAV account (see [below](#carddav-and-caldav)): a hidden Enyo 1.0 app with the account's sign-in page, its db8 kinds and account template, and `apps/dav/service`, its Node.js Luna service and sync engine |
 
 Build (Node.js 20 or newer):
 
@@ -577,3 +582,53 @@ makes and renames a folder, copies and pastes a file twice, edits and saves
 text, makes a new file, goes back, shows info, deletes a folder, views
 pictures, installs the `.ipk`, opens a song with Music and opens a read-only
 system file, with screenshots in `build/files-tests/`.
+
+## CardDAV and CalDAV
+
+A Synergy account that syncs contacts and calendars both ways with any
+CardDAV / CalDAV server (iCloud, Fastmail, Nextcloud, Radicale, ...). How
+legacy Synergy worked, the plan for Google, Microsoft, mail, SMS and Matrix,
+and the details of this first transport are in [SYNERGY.md](SYNERGY.md).
+
+- **Template** `com.webosphoenix.dav` (`apps/dav/public/accounts/`, installed at
+  `/usr/palm/public/accounts/com.webosphoenix.dav/`): CONTACTS and CALENDAR
+  providers on `org.webosphoenix.service.dav`, with the db8 kinds
+  `com.palm.contact.dav:1`, `com.palm.calendar.dav:1` and
+  `com.palm.calendarevent.dav:1`, which extend the kinds Contacts and Calendar
+  read.
+- **Sign-in** (`apps/dav/accounts/wizard.html`, the template's
+  `validator.customUI`): server, user name and app password, checked by
+  service discovery.
+- **Service** (`apps/dav/service`): `checkCredentials`, `onCreate`,
+  `onEnabled`, `onCredentialsChanged`, `onDelete`, `sync`. The sync engine in
+  `lib/` maps vCard and iCalendar to the legacy kinds, syncs with
+  sync-collection or ctag / etag, uploads with If-Match, and lets the server
+  win conflicts. It also keeps `com.palm.person:1` up to date for the
+  contacts it syncs.
+
+### In the simulator
+
+The block "CardDAV and CalDAV" at the end of `runtime/phoenix-runtime.js`
+loads the service's own modules into the page (from
+`/usr/palm/applications/org.webosphoenix.dav/service/`) and registers them on
+the simulated bus, so the simulator runs the device's code. It adds the
+template to the simulated accounts service and calls the transport as the
+real accounts service does (onCreate and onEnabled after createAccount,
+onEnabled on capability changes, onCredentialsChanged, onEnabled(false) and
+onDelete before deleteAccount), runs "Sync now" activities (Contacts and
+Calendar create them) at once, and registers the kinds. Scheduled
+activities do not run: sync happens when the account is created or enabled,
+and on "Sync now". One sync runs at a time per account across all pages.
+
+HTTP needs a way past the browser's same-origin rule: pages served over HTTP
+(`tools/serve-rootfs.py`, the tests) send requests through the server's
+`POST /__phoenix/proxy`; phoenix-sim's pages call the server directly, which
+only works with servers that send CORS headers (SYNERGY.md section 3.6 has a
+Radicale configuration). `__phoenixRuntime.dav.sync(accountId)` syncs from a
+test or the console.
+
+`node tools/test-dav-sync.cjs [--tablet]` starts Radicale (`pip install
+radicale`), adds the account in the original Accounts app, and checks sync
+both ways against db8, Contacts and Calendar; screenshots go to
+`build/dav-tests/`. The device service's tests (`apps/dav/service/*.test.ts`)
+run with `npm test`.

@@ -1,0 +1,4 @@
+{
+    "allowedNames": ["org.webosphoenix.service.dav"],
+    "accounts.transport": ["oem"]
+}

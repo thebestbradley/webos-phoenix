@@ -10,7 +10,7 @@
     },
     "com.palm.app.accounts": {
         "status": "works",
-        "note": "Only the released templates exist (HP webOS profile, email). New accounts cannot be signed in: no servers to validate against"
+        "note": "The released templates (HP webOS profile, email) and Phoenix CardDAV & CalDAV (apps/dav), which signs in and syncs against a real server (tools/test-dav-sync.cjs). Email accounts cannot be signed in: no mail servers to validate against"
     },
     "com.palm.app.calendar": {
         "status": "works",
@@ -63,5 +63,9 @@
     "org.webosphoenix.files": {
         "status": "works",
         "note": "Phoenix Files (React, apps/files); tools/test-files.cjs drives it"
+    },
+    "org.webosphoenix.dav": {
+        "status": "works",
+        "note": "Hidden: the CardDAV & CalDAV account's sign-in page and service (apps/dav); its main page only points to Accounts. tools/test-dav-sync.cjs drives it"
     }
 }
