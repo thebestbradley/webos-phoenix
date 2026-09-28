@@ -1,0 +1,49 @@
+/* Phoenix compat: Calculator styles for current Chromium and for phones.
+ *
+ * 1. The calculator body's frame (calc-bg.png, a rounded white rim around
+ *    the keys) and the readout are drawn with -webkit-border-image and a
+ *    border-width but no border-style. Old WebKit drew them anyway; current
+ *    Chromium treats the border as "none" (zero width), so the frame and
+ *    the gaps between keys disappear. Give them a solid style.
+ *
+ * 2. The app shows Calc.Small, a body fixed at 500x690 px in the middle of
+ *    the TouchPad screen. On a phone card that is cropped to the middle
+ *    keys. There the body fills the card instead, with the same artwork
+ *    drawn at a smaller scale. Key and readout font sizes follow on their
+ *    own: Calc.App.adjustHeights() derives them from the key size on every
+ *    resize.
+ */
+
+.calc-small-body, .calc-tiny-body, .calc-body, .calc-display {
+	border-style: solid;
+}
+
+/* 3. Key captions are sized to the key height (0.9x). Without Prelude, the
+ *    sans-serif fallback is wider and the two-letter memory captions (MC,
+ *    M+, M-, MR) spill over their keys, so draw that row smaller. */
+.calc-small-body > :nth-child(2) .calc-operator-key {
+	font-size: 70%;
+	line-height: 1.5;
+}
+
+@media (max-width: 480px), (max-height: 480px) {
+	.calc-small-body, .calc-tiny-body {
+		width: 100%;
+		height: 100%;
+		box-sizing: border-box;
+		border-width: 14px;
+	}
+
+	.calc-key, .calc-operator-key, .calc-command-key {
+		border-width: 10px;
+		margin: 3px 1px 0 1px;
+	}
+
+	.calc-display {
+		border-width: 0 12px 0 12px;
+	}
+
+	.calc-backspace-key, .calc-backspace-key.enyo-button-down {
+		margin-right: -12px;
+	}
+}

@@ -1,0 +1,100 @@
+/* Phoenix compat: Calendar on a phone.
+ *
+ * The Calendar window is laid out for the TouchPad: a 48 px date heading
+ * in day view (40 px in week view) next to a 100 px Agenda button, and a
+ * toolbar with New event, a Day/Week/Month switcher of 90 px buttons and
+ * Jump to... In a 320 px phone card the heading runs under the button and
+ * the toolbar is cut off at both ends. Here the headings and toolbar are
+ * scaled down; the views themselves already adapt to the card's size.
+ */
+
+@media (max-width: 480px) {
+	/* Day view heading and Agenda button. */
+	.calendar .day .header {
+		font-size: 21px;
+		padding: 8px 8px 8px 12px;
+		height: 42px;
+	}
+
+	.calendar .day .header .enyo-button {
+		width: auto !important;
+		height: auto;
+		font-size: 13px;
+		padding: 2px 8px;
+		margin-top: 2px;
+	}
+
+	.calendar .day .header .today {
+		margin-top: 8px;
+	}
+
+	/* The Agenda button also has the "today" class. */
+	.calendar .day .header .enyo-button.today {
+		margin-top: 0;
+	}
+
+	/* Event Details dialog: its view is 600 px tall. */
+	.calendar-detail-view {
+		height: -webkit-calc(100vh - 110px);
+		height: calc(100vh - 110px);
+	}
+
+	/* Week view heading and day names. */
+	.calendar .week-view .week-header .date {
+		font-size: 20px;
+	}
+
+	.calendar .week-view .days-header {
+		font-size: 10px;
+	}
+
+	/* Month view: full day names (SUNDAY...) do not fit a 45 px column;
+	   show their first letter, as phone calendars do. */
+	.calendar .month .header .date {
+		font-size: 30px;
+	}
+
+	.calendar .month .header .weeks > * {
+		font-size: 0;
+		text-align: center;
+	}
+
+	.calendar .month .header .weeks > *::first-letter {
+		font-size: 13px;
+	}
+
+	/* Event editor: the form has 15% side margins and 244 px buttons. */
+	.calendar .edit .content-container {
+		margin: 12px 6px 8px 6px;
+	}
+
+	.btn-cancel, .btn-done {
+		min-width: 0;
+	}
+
+	.calendar .edit .enyo-picker-button {
+		padding-left: 6px;
+		padding-right: 6px;
+		min-width: 0;
+	}
+
+	/* From/To: the time pickers go under the date pickers. */
+	.calendar .edit .horizontal-space {
+		-webkit-box-orient: vertical !important;
+		-webkit-box-align: start !important;
+	}
+
+	/* Toolbar: New event | Day Week Month | Jump to... */
+	.calendar .view-controls {
+		padding: 0 4px;
+	}
+
+	.calendar .view-controls .enyo-button {
+		font-size: 13px;
+		padding: 4px 6px;
+	}
+
+	.calendar .Rbutton .enyo-radiobutton {
+		min-width: 40px;
+	}
+}
