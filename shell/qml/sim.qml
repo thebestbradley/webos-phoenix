@@ -14,6 +14,8 @@
 //   simDisplayWidth, simDisplayHeight  the device's screen upright (--size)
 //   simOrientation how the device is held at start-up (--orientation)
 //   simTurn        an orientation to turn the device to after a second (--turn)
+//   simBootSounds  play the boot and shutdown sounds (not with --quiet,
+//                  --screenshot or the offscreen platform)
 
 import QtQuick
 import Phoenix.Shell
@@ -49,6 +51,7 @@ Item {
             // The phones and the TouchPad of luna-sysmgr's day had one
             // ([VirtualKeyboard] VirtualKeyboardEnabled).
             virtualKeyboard: true
+            bootSound: typeof simBootSounds !== "undefined" && simBootSounds
             source: SimWindowSource { id: windows }
             system: SimSystemStatus {
                 id: status
@@ -151,20 +154,54 @@ Item {
         onActivated: windows.simulateIncomingSms()
     }
     // F6: the battery runs low (5% and under: luna-systemui's Low Battery
-    // alert). F7: plug a wall charger in or out ("Charging Battery").
+    // alert, battery_low.mp3). F7: plug a wall charger in or out ("Charging
+    // Battery", charging.mp3). F8: charged to full (battery_full.mp3).
     property string charger: "none"
+    function power(changes) {
+        windows.simulatePower(changes);
+        if (changes.percent !== undefined)
+            status.batteryPercent = changes.percent;
+        if (changes.charger !== undefined)
+            status.charging = changes.charger !== "none";
+    }
     Shortcut {
         sequence: "F6"
         context: Qt.ApplicationShortcut
-        onActivated: windows.simulatePower({ percent: 4, charger: "none" })
+        onActivated: { root.charger = "none"; root.power({ percent: 4, charger: "none" }); }
     }
     Shortcut {
         sequence: "F7"
         context: Qt.ApplicationShortcut
         onActivated: {
             root.charger = root.charger === "none" ? "wall" : "none";
-            windows.simulatePower({ charger: root.charger, percent: root.charger === "none" ? 60 : 61 });
+            root.power({ charger: root.charger, percent: root.charger === "none" ? 60 : 61 });
         }
+    }
+    Shortcut {
+        sequence: "F8"
+        context: Qt.ApplicationShortcut
+        onActivated: { root.charger = "wall"; root.power({ charger: "wall", percent: 100 }); }
+    }
+
+    // Closing the window turns the device off: the screen goes dark and
+    // the shutdown sound plays before the simulator quits.
+    property bool shuttingDown: false
+    Connections {
+        target: root.Window.window
+        function onClosing(close) {
+            if (root.shuttingDown || !shell.bootSound)
+                return;
+            close.accepted = false;
+            root.shuttingDown = true;
+            device.visible = false;
+            shell.sounds.shutdown();
+            shutdownTimer.start();
+        }
+    }
+    Timer {
+        id: shutdownTimer
+        interval: 4200    // shutdown.mp3 is 4.1 s
+        onTriggered: Qt.quit()
     }
 
     // The launcher layout (icon order, dock) survives restarts (simSettings,

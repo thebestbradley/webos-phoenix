@@ -42,6 +42,16 @@ QtObject {
     // Ctrl+Right). The shell turns the UI to follow (UiRotation).
     property string deviceOrientation: "up"
     property bool muted: false
+    // System sounds (SystemSounds.qml), as the runtime reports them
+    // (Settings > Sounds & Ringtones): the master and stream volumes
+    // (0..100), "System Sounds", "Keyboard clicks" and the tones' paths.
+    property int volume: 60
+    property var streams: ({ pringtones: 80, palerts: 70, pfeedback: 50 })
+    property bool systemSounds: true
+    property bool tapSounds: true
+    property string ringtone: "/usr/palm/sounds/ringtone.mp3"
+    property string alerttone: "/usr/palm/sounds/alert.wav"
+    property string notificationtone: "/usr/palm/sounds/notification.wav"
     // The clock's format (system preference timeFormat "HH24").
     property bool twentyFourHour: false
     // Settings > Screen & Lock "Show notifications when locked"
@@ -200,8 +210,9 @@ QtObject {
 
     // Apply a "systemStatus" report from the web runtime: wifiEnabled,
     // wifiConnected, wifiBars, bluetoothOn, airplaneMode, brightness
-    // (0-100), rotationLocked, muted, timeFormat, showAlertsWhenLocked.
-    // Missing keys are left alone.
+    // (0-100), rotationLocked, muted, timeFormat, showAlertsWhenLocked,
+    // volume, streams, systemSounds, tapSounds, ringtone, alerttone,
+    // notificationtone. Missing keys are left alone.
     function applyAppStatus(s) {
         applyingAppStatus = true;
         if (s.wifiEnabled !== undefined)
@@ -222,6 +233,20 @@ QtObject {
             twentyFourHour = s.timeFormat === "HH24";
         if (s.showAlertsWhenLocked !== undefined)
             showAlertsWhenLocked = !!s.showAlertsWhenLocked;
+        if (s.volume !== undefined)
+            volume = s.volume;
+        if (s.streams !== undefined)
+            streams = s.streams;
+        if (s.systemSounds !== undefined)
+            systemSounds = !!s.systemSounds;
+        if (s.tapSounds !== undefined)
+            tapSounds = !!s.tapSounds;
+        if (s.ringtone !== undefined)
+            ringtone = s.ringtone;
+        if (s.alerttone !== undefined)
+            alerttone = s.alerttone;
+        if (s.notificationtone !== undefined)
+            notificationtone = s.notificationtone;
         applyingAppStatus = false;
     }
 

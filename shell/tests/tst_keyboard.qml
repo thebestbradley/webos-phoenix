@@ -182,24 +182,41 @@ Item {
             tryCompare(popup, "visible", false, 1000);
         }
 
+        // The keys' feedback sounds (SysmgrIMEDataInterface.cpp:199-205),
+        // played from the Phoenix mimics on the feedback stream.
         function test_keySounds() {
             showKeyboard();
-            var n = windows.feedbackCount;
+            var dir = "/usr/share/phoenix/sounds/feedback/";
+            var n = windows.soundCount;
             tapKey("a");
-            compare(windows.feedbackCount, n + 1);
-            compare(windows.lastFeedback, "key");
+            compare(windows.soundCount, n + 1);
+            compare(windows.lastSound.path, dir + "key.wav");
+            compare(windows.lastSound.stream, "feedback");
             tapKey("Space");
-            compare(windows.lastFeedback, "space");
+            compare(windows.lastSound.path, dir + "space.wav");
             tapKey("Backspace");
-            compare(windows.lastFeedback, "backspace");
+            compare(windows.lastSound.path, dir + "backspace.wav");
             tapKey("Enter");
-            compare(windows.lastFeedback, "return");
-            // VirtualKeyboardPreferences TapSounds off: silent.
-            kb.tapSounds = false;
-            n = windows.feedbackCount;
+            compare(windows.lastSound.path, dir + "return.wav");
+            // Keyboard clicks off (VirtualKeyboardPreferences TapSounds, the
+            // runtime's x_palm_virtualkeyboard_prefs): silent.
+            sys.tapSounds = false;
+            n = windows.soundCount;
             tapKey("a");
-            compare(windows.feedbackCount, n);
-            kb.tapSounds = true;
+            compare(windows.soundCount, n);
+            sys.tapSounds = true;
+            // "System Sounds" off: silent too (SoundPlayerPool::playFeedback).
+            sys.systemSounds = false;
+            tapKey("a");
+            compare(windows.soundCount, n);
+            sys.systemSounds = true;
+            // Muted: nothing plays.
+            sys.muted = true;
+            tapKey("a");
+            compare(windows.soundCount, n);
+            sys.muted = false;
+            tapKey("a");
+            compare(windows.soundCount, n + 1);
         }
 
         function test_emailField() {

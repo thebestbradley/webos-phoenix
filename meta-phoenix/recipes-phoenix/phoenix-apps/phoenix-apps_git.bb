@@ -10,7 +10,9 @@ Node.js Luna services (/usr/palm/services, e.g. org.webosphoenix.filemanager \
 for Files, org.webosphoenix.transcriber for Voice Memos and \
 org.webosphoenix.service.dav for CardDAV & CalDAV accounts, with \
 luna-service2 role and permission files), account templates \
-(/usr/palm/public/accounts) and phoenix-runtime.js, using tools/install-rootfs.py."
+(/usr/palm/public/accounts), phoenix-runtime.js and the system sounds \
+(/usr/palm/sounds from Open webOS, /usr/share/phoenix/sounds), using \
+tools/install-rootfs.py."
 HOMEPAGE = "https://github.com/thebestbradley/webos-phoenix"
 SECTION = "webos/apps"
 LICENSE = "Apache-2.0"
@@ -39,7 +41,9 @@ FILES:${PN} = " \
     ${prefix}/palm/frameworks \
     ${prefix}/palm/services \
     ${prefix}/palm/public \
+    ${prefix}/palm/sounds \
     ${datadir}/phoenix/runtime \
+    ${datadir}/phoenix/sounds \
     ${datadir}/luna-service2 \
     ${sysconfdir}/palm/db \
 "

@@ -202,13 +202,25 @@
         simulateMouseClick: function () {},
         useSimulatedMouseClicks: function () {},
         runTextIndexer: function (text) { return text; },
-        playSoundNotification: function () {},
+        // A sound for the app, without a banner (Email's new-mail sound):
+        // LunaSysMgr's BannerMessageHandler played it by the same rules as a
+        // banner's (PlaySound event). The shell picks the file and plays it.
+        playSoundNotification: function (soundClass, soundFile, duration, wakeupScreen) {
+            host.postToHost("sound", { appId: PalmSystem.appIdentifier, soundClass: soundClass ? String(soundClass) : "",
+                                       soundFile: soundFile ? String(soundFile) : "", duration: duration | 0,
+                                       wakeupScreen: !!wakeupScreen });
+        },
         setAlertSound: function () {},
         receiveKeyEvents: function () {},
 
-        addBannerMessage: function (msg, params, icon) {
+        // (message, launchParams, icon, soundClass, soundFile, duration,
+        // doNotSuppress): the banner's sound plays as it shows (luna-systemui's
+        // "Charging Battery" with charging.mp3).
+        addBannerMessage: function (msg, params, icon, soundClass, soundFile, duration) {
             var id = "b" + Date.now();
-            host.postToHost("banner", { id: id, appId: PalmSystem.appIdentifier, message: msg, params: params, icon: icon });
+            host.postToHost("banner", { id: id, appId: PalmSystem.appIdentifier, message: msg, params: params, icon: icon,
+                                        soundClass: soundClass ? String(soundClass) : "", soundFile: soundFile ? String(soundFile) : "",
+                                        duration: duration | 0 });
             return id;
         },
         removeBannerMessage: function (id) { host.postToHost("removeBanner", { id: id }); },
@@ -243,10 +255,12 @@
     // name, "height=150, attributes={\"window\":\"popupalert\", ...}")
     // (enyo.windows.openPopup/openDashboard) and LunaSysMgr read the type
     // from the attributes. Browsers do not pass window features on, so the
-    // runtime puts the type, height, icon, window name and clickableWhenLocked
-    // (a dashboard that takes taps on the lock screen) in the new window's
-    // URL fragment (#phoenixWindow=popupalert&phoenixHeight=150), where the
-    // simulator's window source reads them.
+    // runtime puts the type, height, icon, window name, clickableWhenLocked
+    // (a dashboard that takes taps on the lock screen) and a popup alert's
+    // sound and sound class (AlertWindow::setSoundParams: {"sound": path,
+    // "soundclass": "ringtones"}) in the new window's URL fragment
+    // (#phoenixWindow=popupalert&phoenixHeight=150), where the simulator's
+    // window source reads them.
     if (typeof global.open === "function") {
         var nativeOpen = global.open;
         global.open = function (url, name, features) {
@@ -259,7 +273,9 @@
                      + (h ? "&phoenixHeight=" + h[1] : "")
                      + (attrs.icon ? "&phoenixIcon=" + encodeURIComponent(attrs.icon) : "")
                      + (name ? "&phoenixName=" + encodeURIComponent(name) : "")
-                     + (attrs.clickableWhenLocked ? "&phoenixClickableWhenLocked=1" : "");
+                     + (attrs.clickableWhenLocked ? "&phoenixClickableWhenLocked=1" : "")
+                     + (attrs.sound ? "&phoenixSound=" + encodeURIComponent(attrs.sound) : "")
+                     + (attrs.soundclass ? "&phoenixSoundClass=" + encodeURIComponent(attrs.soundclass) : "");
             }
             return nativeOpen.call(global, url, name, features);
         };
@@ -660,7 +676,13 @@
         timeZone: { ZoneID: PalmSystem.TZ, City: "", Country: "" },
         useNetworkTime: true,
         wallpaper: { wallpaperName: "", wallpaperFile: "" },
-        ringtone: { name: "Pre", fullPath: "" },
+        // The tones LunaSysMgr fell back on (conf/defaultPreferences.txt; the
+        // Pre's own Pre.mp3 ringtone was not open-sourced, so the ringtone is
+        // Open webOS's ringtone.mp3, as luna-sysservice's examples add it).
+        ringtone: { name: "Ringtone", fullPath: "/usr/palm/sounds/ringtone.mp3" },
+        alerttone: { name: "alert.wav", fullPath: "/usr/palm/sounds/alert.wav" },
+        notificationtone: { name: "notification.wav", fullPath: "/usr/palm/sounds/notification.wav" },
+        // "System Sounds" (Preferences systemSounds): the feedback sounds.
         systemSounds: true,
         airplaneMode: false,
         rotationLock: false,
@@ -724,6 +746,7 @@
         },
         "/getPreferenceValues": function (p, reply) { reply(ok({ values: [] })); },
         "/deviceInfo/query": function (p, reply) { reply(ok(JSON.parse(PalmSystem.deviceInfo))); },
+        // (The Files block below lists the real ones.)
         "/ringtone/listRingtones": function (p, reply) { reply(ok({ ringtones: [] })); }
     });
 
@@ -2174,9 +2197,28 @@
                 rotationLocked: !!p.rotationLock,
                 timeFormat: p.timeFormat === "HH24" ? "HH24" : "HH12",
                 muted: !!s.audio.muted,
+                // What the shell's system sounds follow (SystemSounds.qml):
+                // volumes (master, then pringtones / palerts / pfeedback),
+                // "System Sounds", the keyboard's clicks and the tones.
+                volume: s.audio.volume,
+                streams: { pringtones: s.audio.streams.pringtones, palerts: s.audio.streams.palerts,
+                           pfeedback: s.audio.streams.pfeedback },
+                systemSounds: p.systemSounds !== false,
+                tapSounds: tapSounds(p),
+                ringtone: (p.ringtone && p.ringtone.fullPath) || "",
+                alerttone: (p.alerttone && p.alerttone.fullPath) || "",
+                notificationtone: (p.notificationtone && p.notificationtone.fullPath) || "",
                 showAlertsWhenLocked: p.showAlertsWhenLocked !== false,
                 wallpaperFile: (p.wallpaper && p.wallpaper.wallpaperFile) || ""
             };
+        }
+
+        // The keyboard's "Keyboard clicks": x_palm_virtualkeyboard_prefs
+        // (a JSON string, VirtualKeyboardPreferences.cpp:233, 325) TapSounds.
+        function tapSounds(p) {
+            var kb = p.x_palm_virtualkeyboard_prefs;
+            if (typeof kb === "string") { try { kb = JSON.parse(kb); } catch (e) { kb = null; } }
+            return !(kb && kb.TapSounds === false);
         }
 
         function changed() {
@@ -2536,9 +2578,110 @@
                 save(s);
                 reply(ok({ streamType: p.streamType, volume: s.audio.streams[p.streamType] }));
             },
-            "/playFeedback": function (p, reply) { reply(ok()); },
-            "/playSound": function (p, reply) { reply(ok({ playbackId: "sim" + Date.now() })); }
+            // playFeedback {name, sink?}: a named feedback sound (the
+            // keyboard's key clicks, "appclose"). Silent when "System
+            // Sounds" is off and no sink was named (SoundPlayerPool::
+            // playFeedback), or when no sound of that name ships.
+            "/playFeedback": playFeedback,
+            "/systemsounds/playFeedback": playFeedback,
+            // playSound {fileName, sink} (audiod-pro PlaybackManager), plus
+            // Phoenix's loop, duration (ms, stop after), volume (0..1, else
+            // the stream's) and fallback (played if the file cannot be).
+            "/playSound": function (p, reply) {
+                if (!p.fileName || !p.sink) return reply(fail(-1, "fileName and sink are required"));
+                reply(ok({ playbackId: sounds.play(p) }));
+            },
+            // controlPlayback {playbackId, requestType: "stop" | "pause" | "play"}
+            "/controlPlayback": function (p, reply) {
+                if (!sounds.control(p.playbackId, p.requestType)) return reply(fail(-1, "Invalid playbackId"));
+                reply(ok({ playbackId: p.playbackId }));
+            },
+            "/getPlaybackStatus": function (p, reply) {
+                var a = sounds.active[p.playbackId];
+                reply(ok({ playbackId: p.playbackId, state: a ? (a.audio.paused ? "paused" : "playing") : "stopped" }));
+            }
         });
+        // Enyo's sound service (PalmServices "palm://com.palm.audio/systemsounds/").
+        var legacyAudio = runtime.services["com.palm.audio"] || {};
+        register(["com.palm.audio"], {
+            "/systemsounds/playFeedback": playFeedback,
+            "*": legacyAudio["*"] || function (p, reply) { reply(ok()); }
+        });
+
+        // ---- The sound player (HTML audio; the simulator's audiod) -------------------
+        //
+        // __phoenixRuntime.sounds:
+        //   play({fileName, sink, loop?, duration?, volume?, fallback?, playbackId?}) -> playbackId
+        //   control(playbackId, "stop" | "pause" | "play") -> bool
+        //   log         what played: [{playbackId, fileName, sink, loop, duration, volume}]
+        //   active      playbackId -> {audio, ...} while playing
+        //   createAudio(url) -> an HTMLAudioElement (tests replace it)
+        // The shell plays its system sounds through one runtime page
+        // (SimWindowSource.playSound).
+        var FEEDBACK_DIR = "/usr/share/phoenix/sounds/feedback";
+        var FEEDBACK = ["key", "space", "backspace", "return", "appclose"];
+        var nextPlayback = 1;
+        var sounds = runtime.sounds = {
+            log: [],
+            active: {},
+            createAudio: function (url) { return new global.Audio(url); },
+            // A URL for a device path: a /media file of the Files store, else
+            // the rootfs path itself (served by phoenix-sim and serve-rootfs.py).
+            urlFor: function (path) {
+                return runtime.fileManager && /^\/media\//.test(path) ? runtime.fileManager.url(path) : Promise.resolve(path);
+            },
+            play: function (p) {
+                var id = p.playbackId ? String(p.playbackId) : "pb" + (nextPlayback++);
+                var st = load().audio;
+                var vol = typeof p.volume === "number" ? p.volume
+                    : st.muted ? 0 : (st.volume / 100) * ((st.streams[p.sink] === undefined ? 100 : st.streams[p.sink]) / 100);
+                var entry = { playbackId: id, fileName: String(p.fileName), sink: String(p.sink), loop: !!p.loop,
+                              duration: p.duration > 0 ? p.duration | 0 : -1, volume: Math.max(0, Math.min(1, vol)) };
+                sounds.log.push(entry);
+                if (sounds.log.length > 100) sounds.log.shift();
+                var rec = { entry: entry, audio: null, timer: null, stopped: false };
+                sounds.active[id] = rec;
+                var start = function (path, isFallback) {
+                    sounds.urlFor(path).then(function (url) {
+                        if (rec.stopped) return;
+                        var a;
+                        try { a = sounds.createAudio(url); } catch (e) { return sounds.control(id, "stop"); }
+                        rec.audio = a;
+                        a.loop = entry.loop;
+                        a.volume = entry.volume;
+                        a.addEventListener("ended", function () { if (!entry.loop) sounds.control(id, "stop"); });
+                        a.addEventListener("error", function () {
+                            // SoundPlayer::healthCheck: the fallback instead.
+                            if (!isFallback && p.fallback && !rec.stopped) start(String(p.fallback), true);
+                            else sounds.control(id, "stop");
+                        });
+                        var r = a.play && a.play();
+                        if (r && r.catch) r.catch(function () { /* no audio output, autoplay policy */ });
+                    });
+                };
+                if (entry.volume > 0) start(entry.fileName, false);
+                if (entry.duration > 0) rec.timer = setTimeout(function () { sounds.control(id, "stop"); }, entry.duration);
+                return id;
+            },
+            control: function (id, what) {
+                var rec = sounds.active[id];
+                if (!rec) return false;
+                if (what === "pause") { if (rec.audio) rec.audio.pause(); return true; }
+                if (what === "play") { if (rec.audio && rec.audio.play) rec.audio.play(); return true; }
+                rec.stopped = true;
+                if (rec.timer) clearTimeout(rec.timer);
+                if (rec.audio) { try { rec.audio.pause(); } catch (e) { /* ignore */ } }
+                delete sounds.active[id];
+                return true;
+            }
+        };
+        function playFeedback(p, reply) {
+            if (!p.name) return reply(fail(-1, "name is required"));
+            var silent = (!p.sink && prefs().systemSounds === false) || FEEDBACK.indexOf(p.name) < 0 || p.play === false;
+            if (!silent)
+                sounds.play({ fileName: FEEDBACK_DIR + "/" + p.name + ".wav", sink: p.sink || "pfeedback" });
+            reply(ok());
+        }
 
         // ---- com.webos.service.systemservice (additions to the mock above) ----------
 
@@ -2615,7 +2758,8 @@
         };
         sys["/setPreferences"] = function (p, reply, ctx) {
             baseSetPreferences(p, reply, ctx);
-            if ("rotationLock" in p || "wallpaper" in p || "timeFormat" in p || "showAlertsWhenLocked" in p) {
+            if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "systemSounds", "ringtone", "alerttone",
+                 "notificationtone", "x_palm_virtualkeyboard_prefs"].some(function (k) { return k in p; })) {
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
                 changed();
             }
@@ -2856,8 +3000,9 @@
     //   __phoenixRuntime.simulateIncomingSms({from?, text?})
     //   __phoenixRuntime.seedPhoneDemoData(force)   fictional contacts, calls, texts
     // A received text is announced with the host message
-    //   phoenixHost.postToHost("notification", {appId, title, body})
-    // which the shell shows as a banner and dashboard item for that app.
+    //   phoenixHost.postToHost("notification", {appId, title, body, params, soundClass})
+    // which the shell shows as a banner and dashboard item for that app, with
+    // the notification tone (soundClass "notifications").
     (function phoneServices() {
         var KEY = "telephony:state";
         var PHONE_APP = "org.webosphoenix.phone";
@@ -3160,7 +3305,7 @@
             });
             var person = personFor(from);
             host.postToHost("notification", { appId: MESSAGING_APP, title: person ? personName(person) : from, body: text,
-                                              params: { threadId: r.threadId } });
+                                              params: { threadId: r.threadId }, soundClass: "notifications" });
             return r.threadId;
         };
 
@@ -4291,6 +4436,24 @@
             /** Throw the virtual filesystem away and seed it again. */
             reset: function () { store.set(VFS_KEY, seed()); },
             errors: E
+        };
+
+        // ringtone/listRingtones: the system's ringtones (Open webOS's
+        // /usr/palm/sounds), then the user's (/media/internal/ringtones, the
+        // folder luna-sysservice's addRingtone copies into), as
+        // {name, fullPath}; the name is the file's without its extension.
+        var SYSTEM_RINGTONES = [
+            { name: "Ringtone", fullPath: "/usr/palm/sounds/ringtone.mp3", system: true },
+            { name: "Phone", fullPath: "/usr/palm/sounds/phone.wav", system: true }
+        ];
+        runtime.services["com.webos.service.systemservice"]["/ringtone/listRingtones"] = function (p, reply) {
+            var v = load(), dir = MEDIA_ROOT + "/ringtones";
+            var mine = children(v, dir).filter(function (k) {
+                return v.nodes[k].t === "f" && /^audio\//.test(mimeOf(k)) && nameOf(k).charAt(0) !== ".";
+            }).sort().map(function (k) {
+                return { name: nameOf(k).replace(/\.[^.]*$/, ""), fullPath: k };
+            });
+            reply(ok({ ringtones: SYSTEM_RINGTONES.concat(mine) }));
         };
     })();
 

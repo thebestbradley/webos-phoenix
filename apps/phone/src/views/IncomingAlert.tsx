@@ -22,6 +22,19 @@ import { callerName, useCallStatus, usePeople } from "../lib/hooks";
 /** Height of the alert, in legacy pixels. */
 export const INCOMING_ALERT_HEIGHT = 150;
 
+/**
+ * The alert window's attributes. It rings: sound class "ringtones", which
+ * the system loops until the alert closes (LunaSysMgr AlertWindow: the
+ * contact's ringtone if it has one, else the ringtone preference, else
+ * phone.wav). A second call while one is up (call waiting) does not ring
+ * over the call.
+ */
+export function incomingAlertAttributes(ringtone: string | undefined, waiting: boolean): Record<string, string> {
+    if (waiting) return { window: "popupalert", soundclass: "none" };
+    return ringtone ? { window: "popupalert", soundclass: "ringtones", sound: ringtone }
+                    : { window: "popupalert", soundclass: "ringtones" };
+}
+
 /** Is this page the incoming-call alert? */
 export function isIncomingAlert(): boolean {
     return new URLSearchParams(location.search).get("alert") === "incoming";
@@ -51,10 +64,13 @@ export function useIncomingAlert(calls: readonly Call[], people: readonly Person
         ringing.current.add(ring.id);
         if (opened.current.has(key)) return;
         opened.current.add(key);
-        const name = matchNumber(people, ring.number) ? "incoming-known" : "incoming-unknown";
+        const match = matchNumber(people, ring.number);
+        const name = match ? "incoming-known" : "incoming-unknown";
+        const waiting = !!primaryCall(calls);
+        const attributes = incomingAlertAttributes(match?.person.ringtone?.location || undefined, waiting);
         window.open("index.html?alert=incoming", name,
-                    `height=${INCOMING_ALERT_HEIGHT}, attributes={"window":"popupalert"}`);
-    }, [ring, people]);
+                    `height=${INCOMING_ALERT_HEIGHT}, attributes=${JSON.stringify(attributes)}`);
+    }, [ring, people, calls]);
     // Answered (here or in the alert): the card comes up for the call.
     const active = calls.find((c) => c.state === "active" && ringing.current.has(c.id));
     useEffect(() => {

@@ -31,6 +31,8 @@ export interface Person extends DbObject {
     favorite?: boolean;
     sortKey?: string;
     organization?: { name?: string };
+    /** The contact's own ringtone (com.palm.person ringtone). */
+    ringtone?: { location?: string; name?: string };
 }
 
 /** "Mary Spetzler", falling back to the nickname, organisation or first number. */

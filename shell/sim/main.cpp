@@ -66,7 +66,8 @@ int main(int argc, char *argv[])
     QCommandLineOption openOpt(QStringLiteral("open"), QStringLiteral("Open this web address in the browser after start-up."), QStringLiteral("url"));
     QCommandLineOption orientationOpt(QStringLiteral("orientation"), QStringLiteral("How the device is held at start-up: up (default), left (turned counter-clockwise), down or right. The window shows it as held; --size is the screen upright."), QStringLiteral("orientation"), QStringLiteral("up"));
     QCommandLineOption turnOpt(QStringLiteral("turn"), QStringLiteral("Turn the device to this orientation one second after start-up (the UI follows 200 ms later and turns for 300 ms)."), QStringLiteral("orientation"));
-    parser.addOptions({ sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, shotOpt, delayOpt, qmlOpt, repoOpt, launchOpt, openOpt, orientationOpt, turnOpt });
+    QCommandLineOption quietOpt(QStringLiteral("quiet"), QStringLiteral("No boot and shutdown sounds (they are off anyway with --screenshot and the offscreen platform)."));
+    parser.addOptions({ sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, shotOpt, delayOpt, qmlOpt, repoOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt });
     parser.process(app);
 
     const QStringList orientations = { QStringLiteral("up"), QStringLiteral("left"), QStringLiteral("down"), QStringLiteral("right") };
@@ -153,6 +154,12 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simDisplayHeight"), display.height());
     view.rootContext()->setContextProperty(QStringLiteral("simOrientation"), orientation);
     view.rootContext()->setContextProperty(QStringLiteral("simTurn"), turn);
+    // The boot and shutdown sounds, only when someone is there to hear them.
+    const QString platform = QGuiApplication::platformName();
+    view.rootContext()->setContextProperty(QStringLiteral("simBootSounds"),
+        !parser.isSet(quietOpt) && !parser.isSet(shotOpt) && platform != QLatin1String("offscreen") && platform != QLatin1String("minimal"));
+    // Qt.quit() (after the shutdown sound).
+    QObject::connect(view.engine(), &QQmlEngine::quit, &app, &QCoreApplication::quit, Qt::QueuedConnection);
     view.rootContext()->setContextProperty(QStringLiteral("simFormFactor"),
         tablet ? QStringLiteral("tablet") : parser.isSet(phoneOpt) ? QStringLiteral("phone") : QStringLiteral("auto"));
     view.setResizeMode(QQuickView::SizeRootObjectToView);

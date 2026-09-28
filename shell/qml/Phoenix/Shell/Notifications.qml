@@ -64,8 +64,10 @@ Item {
     // DashboardWindowManagerStates.cpp:76-110).
     readonly property var alerts: source && source.alerts ? source.alerts : null
     readonly property bool alertShown: alerts !== null && alerts.count > 0
-    readonly property string alertKey: alertShown ? alerts.get(0).key : ""
-    readonly property real alertHeight: alertShown ? Theme.px(alerts.get(0).height) : 0
+    // (Bound to the count itself, not alertShown: an alert inserted in front
+    // of the one showing changes the front without changing alertShown.)
+    readonly property string alertKey: alerts !== null && alerts.count > 0 ? alerts.get(0).key : ""
+    readonly property real alertHeight: alerts !== null && alerts.count > 0 ? Theme.px(alerts.get(0).height) : 0
 
     // A full-screen app has the whole screen: no bar, no banners, no
     // dashboard; popup alerts (a call) still make room
@@ -75,7 +77,8 @@ Item {
     property bool locked: false
     // The front alert is the phone's incoming call (AlertWindow::
     // isIncomingCallAlert): the lock screen offers "Drag up to answer".
-    readonly property bool incomingCall: alertShown && Policy.isIncomingCall(alerts.get(0).appId, alerts.get(0).name || "")
+    readonly property bool incomingCall: alerts !== null && alerts.count > 0
+                                         && Policy.isIncomingCall(alerts.get(0).appId, alerts.get(0).name || "")
     // The virtual keyboard's height while it is up (the shell sets it):
     // it takes the negative space, the app's positive space ending where it
     // begins, full screen or not (InputWindowManager::slotShowIME ->

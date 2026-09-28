@@ -16,7 +16,8 @@
 //  * the keyboard coming up or going reaches the app as Enyo's
 //    "keyboardShown" event (Mojo.keyboardShown), and
 //    com.palm.systemmanager/getSystemStatus reports ime.visible as the
-//    shell last said.
+//    shell last said;
+//  * a key click (playFeedback "key") plays its sound file.
 //
 //   node tools/test-keyboard.cjs [--tablet] [--out DIR]
 
@@ -171,6 +172,23 @@ async function main() {
         s = await status();
         check(s.ime.visible === true, "getSystemStatus: ime.visible as the shell said");
         await page.evaluate(() => __phoenixRuntime.applyHostStatus({ ime: { visible: false } }));
+
+        // The key clicks (shell/assets/sounds/phoenix/feedback, CC0 mimics):
+        // the shell plays them through a page's audiod; here the page plays
+        // one itself, and the file is served as a short WAV.
+        const click = await page.evaluate(() => new Promise((resolve) => {
+            const n = __phoenixRuntime.sounds.log.length;
+            __phoenixRuntime.dispatch("luna://com.webos.service.audio/playFeedback", { name: "key" }, () => {
+                const e = __phoenixRuntime.sounds.log[n] || {};
+                fetch(e.fileName || "/").then((r) => r.arrayBuffer().then((b) => {
+                    const tag = (from, to) => String.fromCharCode.apply(null, new Uint8Array(b.slice(from, to)));
+                    resolve({ file: e.fileName, sink: e.sink, status: r.status, riff: tag(0, 4) + tag(8, 12), bytes: b.byteLength });
+                }), () => resolve({ file: e.fileName, error: true }));
+            }, { cancelled: function () { return false; }, onCancel: null });
+        }));
+        check(click.file === "/usr/share/phoenix/sounds/feedback/key.wav" && click.sink === "pfeedback" && click.status === 200
+              && click.riff === "RIFFWAVE" && click.bytes < 10000,
+              "a key click plays on the feedback stream (" + JSON.stringify(click) + ")");
 
         check(errors.length === 0, "no page errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
         await browser.close();

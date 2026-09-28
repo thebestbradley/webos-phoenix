@@ -7,6 +7,16 @@ This product includes artwork from Open webOS luna-sysmgr
     Copyright (c) 2008-2013 LG Electronics, Inc.
     Licensed under the Apache License, Version 2.0.
 
+This product includes the system sounds of Open webOS luna-sysmgr
+(its sounds/ directory), unmodified, in shell/assets/sounds/openwebos/
+(installed as /usr/palm/sounds):
+    Copyright (c) 2008-2013 Hewlett-Packard Development Company, L.P.
+    Copyright (c) 2008-2013 LG Electronics, Inc.
+    Licensed under the Apache License, Version 2.0.
+The feedback sounds in shell/assets/sounds/phoenix/ (keyboard clicks,
+closing a card) are synthesized by tools/make-feedback-sounds.py and
+dedicated to the public domain (CC0 1.0).
+
 Design values in shell/qml/Phoenix/Shell/Theme.qml were taken from the same
 project's source and configuration files.
 
