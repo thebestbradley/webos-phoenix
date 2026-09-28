@@ -273,7 +273,7 @@ WhatsApp message into the right person's thread (2.5).
 | Transport | How Phoenix would speak it | Runs where | End-to-end encryption | Terms and legality | Verdict |
 | --- | --- | --- | --- | --- | --- |
 | **SMS / MMS** | oFono or ModemManager, `mmsd-tng` for MMS (HARDWARE.md, APP-RUNTIME.md) | Device | No | The SIM is the account | Core. Arrives with M3 hardware |
-| **RCS** | No open client exists. Carrier RCS needs GSMA accreditation per operator, and on most networks RCS is hosted by Google's Jibe, which offers no third-party client API [R1] | – | (Jibe: yes, to Google's clients) | Not available to us | No. Revisit only if an open RCS client or a Jibe API appears |
+| **RCS** | No open client exists. Carrier RCS needs provisioning per operator, and on most networks RCS is hosted by Google's Jibe, which offers no third-party client path [R1][RC1] | Device | Yes, with Universal Profile 3.0 (MLS) [RC3] | Legal; access is the problem, not the terms | **Required.** Our own client plus carrier agreements (2.2b) |
 | **Matrix** | Client-server API, sliding sync where the server has it (native in Synapse since 1.114) [X1]; E2EE with the Rust crypto library through its Node or Wasm bindings [X2] | Device (homeserver is the user's) | Yes (Olm/Megolm) | Open standard | **Core**, and the bridge point for closed networks (2.3) |
 | **XMPP** | Client protocol with stream management (XEP-0198), push (XEP-0357), OMEMO (XEP-0384); servers such as Prosody support all three [XM1] | Device | Yes (OMEMO) | Open standard | Yes, after Matrix. Smaller user base, but open and light on battery |
 | **Telegram** | TDLib, Telegram's own client library [T2], with a Phoenix `api_id` | Device | Only in secret chats | Third-party clients are allowed: own `api_id`, no "Telegram" in the name unless "Unofficial ...", no official logo, must support sponsored messages in channels, no use of data for AI training [T1] | Optional native transport (TDLib is a large C++ build), or through a Matrix bridge |
@@ -282,6 +282,59 @@ WhatsApp message into the right person's thread (2.5).
 | **Discord** | No client API; the bot API is for bots. User-account automation ("self-bots") is against Discord's terms and is banned [DC1]. `mautrix-discord` logs in as the user | Server | No | Against terms for user accounts | Only as a Matrix room, at the user's risk |
 | **Email as a message** | Mail transports (IMAP/JMAP) | Device | – | – | Not merged into Messaging by default (2.6) |
 | **Google Messages, iMessage, Instagram, Facebook Messenger, LinkedIn, X** | Only reverse-engineered bridges (mautrix-gmessages, -meta, -twitter, -linkedin) or none (iMessage, SYNERGY.md 2.12) | Server | Varies | Against the networks' terms | Only as Matrix rooms, at the user's risk |
+
+### 2.2b RCS
+
+RCS is a requirement: it is what Android's and iPhone's own messaging apps
+use with each other, and without it Phoenix users fall back to SMS and MMS
+in every conversation with them (no typing indicators, read receipts,
+full-size photos or reliable group chats, and from 2026 no end-to-end
+encryption either [RC3]). This section is why it is hard and how we get
+there.
+
+**What RCS needs on the phone.**
+
+1. A client for the GSMA Universal Profile. The specifications are public
+   GSMA documents: SIP registration to an IMS core, MSRP for chat and
+   files, and since Universal Profile 3.0 (March 2025) end-to-end
+   encryption with MLS (RFC 9420) [RC3]. Apple and Google began shipping
+   encrypted RCS between iPhone and Android in May 2026 [RC4].
+2. **Provisioning.** The carrier's auto-configuration server has to accept
+   the client and give it credentials. This is the real barrier, not the
+   protocol.
+
+**Who runs RCS.** In the US, AT&T and T-Mobile host RCS on Google's Jibe,
+and Verizon has moved to it too; many carriers elsewhere do the same [RC1].
+Google lets only Google Messages (and, by a separate deal, Samsung)
+provision on Jibe [RC1], and the provisioning checks the phone is a genuine
+Android device through Google's DroidGuard attestation [R1]. Apple is the
+exception that shows the other way in: iPhones do not use Jibe's client
+path; Apple requires carriers to provide standard RCS endpoints, as they do
+for MMS, and carriers configure them for iPhone [RC1]. No Linux phone OS
+(Ubuntu Touch, Sailfish, postmarketOS, LuneOS) has RCS today [R1][RC2].
+
+**Routes, in the order to pursue them:**
+
+| Route | What it takes | Verdict |
+| --- | --- | --- |
+| **A. Our own Universal Profile client** (`org.webosphoenix.rcs`, a transport like SMS in 2.5's threads) | IMS registration (SIP, IPsec or TLS), MSRP, file transfer over HTTP, group chat, MLS encryption. Build on open code where the licence fits *(candidates to evaluate: Orange's old RCS stack for Android, the doubango IMS stack; licences unverified)*. Test against an open IMS core in the lab | **Start early.** It is needed for every other route, and it is months of work. Without it, no carrier can say yes |
+| **B. Carrier by carrier, the Apple way** | Ask carriers to provision Phoenix as a device on their RCS service, as they do for iPhone. Comes with device certification on the network (which a shipping phone needs anyway) | The realistic path to production. Start with one carrier in one country, likely a smaller or MVNO carrier that runs its own RCS or can ask its host |
+| **C. Jibe** | A partnership with Google to provision a non-Android client, or regulation that forces it | Ask Google, but do not plan on it |
+| **D. Together with other open mobile OSes, and regulators** | Sailfish, Ubuntu Touch, postmarketOS, /e/OS and others share the problem; RCS is presented as an open standard, while access depends on Google [R1]. A joint request to the GSMA and, in the EU, to the Commission | Worth doing in parallel; slow |
+| **E. Google Messages in the Android layer** ([ANDROID.md](ANDROID.md)) | Needs Google Play services, passing Play Integrity, and access to the SIM's IMS from inside the container | **No.** Phoenix is not a certified Google device, and the container has no IMS access |
+| **F. A bridge through the user's Android phone** (`mautrix-gmessages`, pairing like Messages for Web) | The user keeps an Android phone running Google Messages | Only as a Matrix room for users who accept it (2.2a's bridge group); not a real answer |
+
+**Depends on VoLTE.** Carriers have switched off 3G, so calls on modern
+networks need VoLTE, which runs over the same IMS registration RCS uses.
+On Halium devices the vendor's IMS stack sits in the Android container and
+is reached through oFono's binder plugin; on mainline devices it does not
+exist yet *(per-device state unverified)*. [HARDWARE.md](HARDWARE.md)
+should gain a VoLTE row, and route A should share the IMS registration with
+it rather than build a second one.
+
+Until RCS arrives, SMS and MMS must be excellent: group MMS that works with
+iPhones and Android, full-size photos where the carrier allows, and clear
+labels on which transport a message used.
 
 ### 2.2a Which networks Phoenix can use
 
@@ -294,7 +347,8 @@ transport on the phone and signs in the user directly.
 | **Native through an official work API** *(each needs checking before code)* | Slack (official Web API with a user token; the workspace may have to approve the app); Microsoft Teams chats (Microsoft Graph, the same Entra app as 1.3); Google Chat (Chat API with user sign-in; Workspace accounts); Zulip, Mattermost, Rocket.Chat (open REST APIs) | Phoenix transports, one app registration per service |
 | **Official, but only for a messaging provider in the EU** | WhatsApp, through Meta's DMA interoperability offer [W1][W2]; Messenger is also covered by the DMA *(whether Meta has opened it is unverified)* | Not a phone client: the provider runs a service. See 2.2 and open question 11 |
 | **Only through the user's own bridge (against the network's terms)** | WhatsApp, Signal, Discord, Messenger, Instagram, Google Messages, LinkedIn, X | A Matrix bridge the user runs or pays for; Phoenix shows it as a Matrix room with the network's label |
-| **Not possible** | iMessage; carrier RCS [R1]; WeChat, LINE, Viber, Snapchat *(no third-party client APIs, not researched further)* | – |
+| **Needs carrier agreements (2.2b)** | RCS | Our own Universal Profile client, provisioned carrier by carrier |
+| **Not possible** | iMessage; WeChat, LINE, Viber, Snapchat *(no third-party client APIs, not researched further)* | – |
 
 ### 2.3 Architecture options
 
@@ -724,6 +778,7 @@ their scope here only adds to what is written there.
 | **2c. Gmail** | IMAP + app password now (S); OAuth with bring-your-own client ID (S); project-wide OAuth only if CASA is funded (open question 2) | S / S / M + money | mail transport (3a) | Google may withdraw app passwords |
 | **3a. Mail transport** | Decide mojomail on OSE vs a Node IMAP/SMTP transport; then JMAP | L | 0 | mojomail's MojoDB dependencies |
 | **3b. SMS/MMS on real telephony** | `webos-telephonyd` on oFono / ModemManager, `mmsd-tng` | L | M3 hardware | Modem quirks per device |
+| **3c. RCS** | Universal Profile client with MLS, shared IMS registration with VoLTE, lab IMS core; then carrier provisioning one carrier at a time (2.2b) | L, several months (+ carrier agreements) | 3b | Carriers may say no; Jibe is closed; MLS and IMS are large |
 | **4a. Messaging Synergy core** | Thread-per-person rules (2.5), transport picker, IM `serviceName`s, Buddies view | M | 0 | Linking mistakes are privacy bugs: conservative rules |
 | **4b. Matrix transport** | Sliding sync, Rust crypto, device verification UI, bridge labels | L | 4a, key store | Crypto bindings on ARM OSE (Node native addon vs Wasm) |
 | **5. Push and power** | Push service (UnifiedPush over Luna), ntfy, JMAP / Mastodon / Matrix push, WebDAV-Push client, power modes (4.7) | M | 4b for Matrix | Needs M3 hardware to measure |
@@ -791,6 +846,9 @@ mail and has the device code fallback.
     cloud (run a messaging service with WhatsApp-grade end-to-end
     encryption, sign Meta's agreement, EEA users only). Worth asking Meta
     and Element before deciding.
+12. **RCS.** Which carrier and country to approach first, and when (a
+    carrier will want a device, not a simulator)? Should the project start
+    the joint approach with other open mobile OSes (2.2b route D) now?
 
 ## 8. Another route: what LuneOS does
 
@@ -889,6 +947,10 @@ otherwise the date we read it (2026-09-28).
 - [T2] Telegram, "TDLib", <https://core.telegram.org/tdlib> (read 2026-09-28)
 - [DC1] Discord Support, "Automated user accounts (self-bots)", <https://support.discord.com/hc/en-us/articles/115002192352-Automated-User-Accounts-Self-Bots> (read 2026-09-28)
 - [R1] UBports Forum, "RCS implementation" <https://forums.ubports.com/topic/12483/rcs-implementation.> and Wikipedia, "Rich Communication Services" (read 2026-09-28) *(community sources; no official statement found)*
+- [RC1] Openmind Networks, "Google RCS messaging explained" <https://www.openmindnetworks.com/blog/google-rcs-messaging-explained/> and PhoneArena, "Verizon will be switching to Google Jibe for RCS support" <https://www.phonearena.com/news/verizon-will-be-switching-to-google-jibe-for-rcs-support-on-android_id154975> (read 2026-09-28) *(industry sources)*
+- [RC2] UBports forum thread (as [R1]) and community reports that no Linux phone OS supports RCS (read 2026-09-28) *(community sources)*
+- [RC3] 9to5Google, "RCS update adds end-to-end encryption, Google and Apple confirm support" (2025-03-14) <https://9to5google.com/2025/03/14/rcs-end-to-end-encryption-update/>
+- [RC4] EFF, "End-to-end encrypted RCS comes to Apple and Android chats" (2026-05) <https://www.eff.org/deeplinks/2026/05/victory-end-end-encrypted-rcs-comes-apple-and-android-chats>
 - [B1] Bluesky, "OAuth for AT Protocol" (2024-09-25) <https://docs.bsky.app/blog/oauth-atproto> and "OAuth client implementation" <https://docs.bsky.app/docs/advanced-guides/oauth-client> (read 2026-09-28)
 - [MA1] Mastodon documentation, "apps API methods" <https://docs.joinmastodon.org/methods/apps/> and "push API methods" <https://docs.joinmastodon.org/methods/push/> (read 2026-09-28)
 - [IM1] Immich, "v2.0.0 – Stable release" (2025-10-01), <https://github.com/immich-app/immich/discussions/22546>; API docs <https://api.immich.app/>
