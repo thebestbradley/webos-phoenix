@@ -34,9 +34,22 @@ Item {
     signal loaded
     // Until then the card shows the loading card (CardLoading).
     property bool ready: false
-    onLoaded: ready = true
+    onLoaded: { ready = true; _sendOrientation(); }
 
     readonly property alias view: view
+
+    // How the window is turned (the card sets it: Card.windowOrientation),
+    // as WebAppMgr told the page on an orientation change: the page is
+    // resized to the turned card and reads it from PalmSystem.screenOrientation;
+    // Mojo apps also get Mojo.screenOrientationChanged
+    // (see screenOrientationChanged in runtime/phoenix-runtime.js).
+    property string orientation: "up"
+    // Once the turn has settled (the card's bindings update one by one).
+    onOrientationChanged: Qt.callLater(_sendOrientation)
+    function _sendOrientation() {
+        view.runJavaScript("window.__phoenixRuntime && __phoenixRuntime.screenOrientationChanged && __phoenixRuntime.screenOrientationChanged("
+                           + JSON.stringify(orientation) + ")");
+    }
 
     function back() {
         view.runJavaScript("window.__phoenixRuntime && __phoenixRuntime.back()");

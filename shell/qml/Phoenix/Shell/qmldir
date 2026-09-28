@@ -11,6 +11,7 @@ GestureArea 1.0 GestureArea.qml
 JustType 1.0 JustType.qml
 Launcher 1.0 Launcher.qml
 LockScreen 1.0 LockScreen.qml
+UiRotation 1.0 UiRotation.qml
 UnlockPanel 1.0 UnlockPanel.qml
 Notifications 1.0 Notifications.qml
 QuickLaunch 1.0 QuickLaunch.qml

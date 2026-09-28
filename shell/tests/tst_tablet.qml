@@ -20,7 +20,7 @@ Item {
         formFactor: "tablet"
         density: 1
         source: SimWindowSource { id: windows }
-        system: SimSystemStatus {}
+        system: SimSystemStatus { id: sys }
     }
 
     TestCase {
@@ -28,6 +28,9 @@ Item {
         when: windowShown
 
         function init() {
+            sys.deviceOrientation = "up";
+            tryCompare(shell, "uiOrientation", "up", 3000);
+            tryVerify(function() { return !shell.rotator.rotating; }, 3000);
             while (windows.cards.count > 0)
                 windows.close(windows.cards.get(0).uid);
             shell.cardView.maximizeProgress = 0;
@@ -74,6 +77,40 @@ Item {
             tryCompare(fill, "opacity", 1, 1000);
             shell.cardView.minimize();
             tryCompare(fill, "opacity", 0, 1500);
+        }
+
+        // Turned to portrait (the TouchPad held with its home button down):
+        // still the tablet layout, laid out 768 wide; the bottom-edge flick
+        // comes from the UI's bottom edge, wherever that is on the screen
+        // (handleScreenEdgeFlickGesture, SystemUiController.cpp:2041-2070).
+        function test_portrait() {
+            sys.deviceOrientation = "right";
+            tryCompare(shell, "uiOrientation", "right", 1000);
+            tryVerify(function() { return !shell.rotator.rotating; }, 2000);
+            var ui = shell.uiRoot;
+            compare(ui.width, 768);
+            compare(ui.height, 1024);
+            verify(shell.tablet);
+            compare(findChild(shell, "statusBar").width, 768);
+            verify(findChild(shell, "tabletClock").visible);
+            windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximize();
+            tryVerify(function() { return shell.maximized; }, 2000);
+            // Up from the UI's bottom edge: on the screen, its right edge.
+            var from = ui.mapToItem(root, ui.width / 2, ui.height - 2);
+            verify(from.x > root.width - 10);
+            mousePress(root, from.x, from.y);
+            for (var d = 10; d <= 80; d += 10) {
+                var p = ui.mapToItem(root, ui.width / 2, ui.height - 2 - d);
+                mouseMove(root, p.x, p.y);
+            }
+            var to = ui.mapToItem(root, ui.width / 2, ui.height - 82);
+            mouseRelease(root, to.x, to.y);
+            tryCompare(shell.cardView, "maximizeProgress", 0, 2000);
+            // The launcher fits as many 140 px columns as the width takes.
+            shell.gestureUp();
+            tryCompare(shell, "launcherOpen", true, 2000);
+            compare(findChild(shell, "launcher").columns, 5);
         }
 
         function test_shortFlicksAndTheKeyboard() {

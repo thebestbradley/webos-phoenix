@@ -20,6 +20,10 @@ QtObject {
     property bool airplaneMode: false
     property bool bluetoothOn: false
     property bool rotationLocked: false
+    // How the simulated device is held: "up", "down", "left" (turned
+    // counter-clockwise) or "right" (phoenix-sim --orientation, Ctrl+Left /
+    // Ctrl+Right). The shell turns the UI to follow (UiRotation).
+    property string deviceOrientation: "up"
     property bool muted: false
     // The clock's format (system preference timeFormat "HH24").
     property bool twentyFourHour: false

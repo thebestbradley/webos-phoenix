@@ -182,78 +182,6 @@ FocusScope {
         }
     }
 
-    // ---- Layers, bottom to top ----------------------------------------------------
-
-    // The scene behind the overlays (wallpaper, cards, launcher): what the
-    // translucent surfaces above blur (BackdropBlur).
-    readonly property alias backdrop: sceneBackdrop
-    Item {
-        id: sceneBackdrop
-        anchors.fill: parent
-
-        Wallpaper {
-            anchors.fill: parent
-            source: shell.wallpaper
-        }
-
-        CardView {
-            id: cards
-            anchors.fill: parent
-            source: shell.source
-            topInset: shell.fullScreen ? 0 : Theme.statusBarHeight
-            // The app's positive space ends where the notifications' negative space begins.
-            bottomInset: gesture.height + notes.negativeSpace
-        }
-
-        Launcher {
-            id: launcher
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.topMargin: Theme.statusBarHeight
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: gesture.height + notes.negativeSpace
-            dockHeight: quickLaunch.height
-            apps: shell.source ? shell.source.apps : null
-            layout: shell.launcherLayout
-            draggedId: iconDrag.appId
-            onLaunchRequested: (appId) => shell.launch(appId)
-            onCloseRequested: launcher.open = false
-            onDeleteRequested: (appId) => deleteDialog.ask(appId)
-            onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, launcher.mapToItem(shell, x, y))
-            onDragMoved: (x, y) => iconDrag.move(launcher.mapToItem(shell, x, y))
-            onDragEnded: (x, y) => iconDrag.drop(launcher.mapToItem(shell, x, y))
-        }
-    }
-
-    SearchPill {
-        id: searchPill
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: Theme.statusBarHeight + Theme.searchPillTopOffset
-        shown: !locked && cards.maximizeProgress === 0 && !launcher.open && !justType.open
-        onTapped: shell.startJustType("")
-        backdrop: sceneBackdrop
-    }
-
-    QuickLaunch {
-        id: quickLaunch
-        anchors.left: parent.left
-        anchors.right: parent.right
-        y: parent.height - gesture.height - notes.negativeSpace - height
-           + (height + gesture.height) * cards.maximizeProgress
-        visible: cards.maximizeProgress < 1
-        apps: shell.source ? shell.source.apps : null
-        launcherOpen: launcher.open
-        backdrop: sceneBackdrop
-        dock: shell.launcherLayout ? shell.launcherLayout.dock : []
-        draggedId: iconDrag.appId
-        onLaunchRequested: (appId) => shell.launch(appId)
-        onLauncherToggled: launcher.open = !launcher.open
-        onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, quickLaunch.mapToItem(shell, x, y))
-        onDragMoved: (x, y) => iconDrag.move(quickLaunch.mapToItem(shell, x, y))
-        onDragEnded: (x, y) => iconDrag.drop(quickLaunch.mapToItem(shell, x, y))
-    }
-
     // ---- Launcher layout: icon order on the pages and in the dock --------------
     // Built from the apps, kept across sessions when the window source can
     // store it (savedLauncherLayout / saveLauncherLayout).
@@ -286,315 +214,518 @@ FocusScope {
         function onCountChanged() { Qt.callLater(shell.rebuildLauncherLayout); }
     }
     onSourceChanged: Qt.callLater(rebuildLauncherLayout)
-    Component.onCompleted: Qt.callLater(rebuildLauncherLayout)
 
-    // ---- Dragging an icon (launcher pages and dock) ----------------------------------
-    // Press and hold picks an icon up; it follows the finger above everything.
-    // Over the current page the others make room; on a tab it moves to that
-    // page; on the dock it joins it (swapping out the app in that slot when
-    // the dock is full); a dock icon dropped anywhere else leaves the dock.
+    // With the keyboard up the tablet's bezel flick must travel further.
+    property bool keyboardOpen: false
 
-    Item {
-        id: iconDrag
-        property string appId: ""
-        property string from: ""
-        property int lastIndex: -1
-        z: 1000
-        visible: appId !== ""
-        width: Theme.launcherIconSize
-        height: Theme.launcherIconSize
+    // The scene behind the overlays (wallpaper, cards, launcher): what the
+    // translucent surfaces above blur (BackdropBlur).
+    readonly property alias backdrop: sceneBackdrop
+    // The UI root, which turns with the device.
+    readonly property alias uiRoot: ui
+    readonly property alias rotator: uiRotation
 
-        function entry(id) {
-            for (var i = 0; shell.source && i < shell.source.apps.count; ++i)
-                if (shell.source.apps.get(i).appId === id)
-                    return shell.source.apps.get(i);
-            return null;
-        }
-        function place(p) {
-            x = p.x - width / 2;
-            y = p.y - height / 2;
-        }
-        function start(id, source, p) {
-            var e = entry(id);
-            if (!e)
-                return;
-            proxy.title = e.title;
-            proxy.color = e.color;
-            proxy.glyph = e.glyph;
-            proxy.source = e.icon || "";
-            from = source;
-            lastIndex = -1;
-            appId = id;
-            place(p);
-        }
-        function overDock(p) {
-            return quickLaunch.visible && p.y >= quickLaunch.y && p.y < quickLaunch.y + quickLaunch.height;
-        }
-        function move(p) {
-            if (appId === "")
-                return;
-            place(p);
-            if (!launcher.open || overDock(p))
-                return;
-            var lp = shell.mapToItem(launcher, p.x, p.y);
-            var tab = launcher.tabAt(lp.x, lp.y);
-            if (tab >= 0 && tab !== launcher.currentPage) {
-                shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, tab, -1));
-                launcher.showPage(tab);
-                lastIndex = -1;
-                return;
-            }
-            if (from === "page" && launcher.inPages(lp.x, lp.y)) {
-                var page = LauncherLayout.pageOf(shell.launcherLayout, appId);
-                var idx = launcher.indexAt(lp.x, lp.y);
-                if (page !== launcher.currentPage) {
-                    shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, launcher.currentPage, idx));
-                } else if (idx >= 0 && idx !== lastIndex
-                           && shell.launcherLayout.pages[page].indexOf(appId) !== idx) {
-                    shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, page, idx));
-                }
-                lastIndex = idx;
-            }
-        }
-        function drop(p) {
-            if (appId === "")
-                return;
-            var l = shell.launcherLayout;
-            if (overDock(p)) {
-                var q = shell.mapToItem(quickLaunch, p.x, p.y);
-                l = LauncherLayout.addToDock(l, appId, quickLaunch.slotAt(q.x), Theme.quickLaunchMaxItems - 1);
-            } else if (from === "dock") {
-                l = LauncherLayout.removeFromDock(l, appId);
-            }
-            shell.setLauncherLayout(l);
-            appId = "";
-        }
+    // ---- Rotation (UiRotation; WindowServer.cpp:1646-2090) ---------------------------
+    // The device's orientation comes from system.deviceOrientation ("up",
+    // "down", "left", "right", "faceup", "facedown"). The UI follows it
+    // unless the rotation lock or the maximized card holds it.
 
-        AppIcon {
-            id: proxy
-            anchors.centerIn: parent
-            size: Theme.launcherIconSize
-            showLabel: false
-            interactive: false
-            scale: 1.15
-            opacity: 0.9
-        }
+    // conf/luna.conf:121 DisplayUiRotates: phones and tablets alike
+    // (luna-tuna.conf:27-28 turns the phone UI).
+    property bool uiRotates: true
+    // How the UI is turned now, and the device orientation it went with.
+    readonly property string uiOrientation: uiRotation.uiOrientation
+    readonly property string deviceOrientation: uiRotation.orientation
+    // Preferences::rotationLock: the orientation the rotation lock holds,
+    // "" when rotation is free. The system menu's toggle
+    // (system.rotationLocked) locks the UI as it is turned now
+    // (SystemMenu::slotRotationLockTriggered, SystemMenu.cpp:857-866).
+    property string rotationLock: ""
+    Connections {
+        target: shell.system
+        ignoreUnknownSignals: true
+        function onRotationLockedChanged() { shell._followRotationLock(); }
+    }
+    function _followRotationLock() {
+        var on = !!(system && system.rotationLocked);
+        if (on && rotationLock === "")
+            rotationLock = uiRotation.uiOrientation;
+        else if (!on)
+            rotationLock = "";
     }
 
-    // Deleting an app asks first.
-    Item {
-        id: deleteDialog
-        property string appId: ""
+    // The card in front, from when it starts to maximize until it starts to
+    // minimize (CardWindowManager MaximizeState / MinimizeState onEntry ->
+    // SystemUiController::setMaximizedCardWindow, SystemUiController.cpp:1008-1054):
+    // the orientation its app asked for holds the UI.
+    readonly property string maximizedCardUid: (cards.maximized || cards.maximizing) && !cards.minimizing ? cards.currentUid : ""
+    function maximizedCardOrientation() {
+        return maximizedCardUid !== "" ? cards.orientationOf(maximizedCardUid) : "free";
+    }
+    property string _modeUid: ""
+    property string _modeOrientation: "free"
+    function _applyRotationMode() {
+        var uid = maximizedCardUid, o = maximizedCardOrientation();
+        if (uid === _modeUid && o === _modeOrientation)
+            return;
+        // A card being maximized cross-fades to its orientation; the app
+        // asking for another one while maximized turns the UI
+        // (CardWindow::onSetAppFixedOrientation, CardWindow.cpp:2569-2576).
+        var maximizing = uid !== "" && uid !== _modeUid;
+        _modeUid = uid;
+        _modeOrientation = o;
+        uiRotation.setRotationMode(uid === "" ? "free" : o, maximizing);
+    }
+    onMaximizedCardUidChanged: Qt.callLater(_applyRotationMode)
+    Connections {
+        target: shell.source ? shell.source.cards : null
+        function onDataChanged() { Qt.callLater(shell._applyRotationMode); }
+    }
+    // Unlocked over a card that is held the other way: back to its
+    // orientation (CardWindow::setMaximized, CardWindow.cpp:1756-1760).
+    onLockedChanged: {
+        var o = maximizedCardOrientation();
+        if (!locked && o !== "free")
+            uiRotation.setRotationMode(o, true);
+    }
+
+    // Nothing is moving that a resize would upset (okToResizeUi:
+    // CardWindowManager, OverlayWindowManager, DashboardWindowManager,
+    // LockWindow; WindowServerLuna.cpp:243-280).
+    readonly property bool okToResizeUi: !cards.animating
+        && (launcher.hidden === 0 || launcher.hidden === 1)
+        && (lockScreen.opacity === 0 || lockScreen.opacity === 1)
+        && notes.negativeSpace === notes.negativeSpaceTarget
+
+    Component.onCompleted: {
+        Qt.callLater(rebuildLauncherLayout);
+        // WindowServer::bootupFinished: straight to how the device is held.
+        Qt.callLater(function() {
+            shell._followRotationLock();
+            uiRotation.bootupFinished(shell.system && shell.system.deviceOrientation ? shell.system.deviceOrientation : "up");
+        });
+    }
+
+    // ---- Layers, bottom to top ----------------------------------------------------
+    // Behind everything: what shows around the turning snapshots.
+    Rectangle {
         anchors.fill: parent
-        visible: appId !== ""
-        z: 1001
-        function ask(id) { appId = id; }
-        function title() {
-            var e = iconDrag.entry(appId);
-            return e ? e.title : appId;
-        }
-        Rectangle { anchors.fill: parent; color: "#80000000" }
-        MouseArea { anchors.fill: parent; onClicked: deleteDialog.appId = "" }
-        BorderImage {
+        color: Theme.black
+    }
+
+    // The screen. The phone's gesture area sits below it, outside the
+    // part that turns: it was hardware under the glass (GestureArea).
+    Item {
+        id: display
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: gesture.top
+
+        // The UI root (WindowServer's m_uiRootItem): turned with the
+        // device, at the swapped size when on its side
+        // (SystemUiController::resizeAndRotateUi). Everything below lays
+        // itself out from its width and height.
+        Item {
+            id: ui
+            objectName: "uiRoot"
             anchors.centerIn: parent
-            width: Math.min(parent.width - Theme.px(20), Theme.px(320))
-            height: dialogColumn.height + Theme.px(40)
-            source: Theme.asset("menu-dropdown-bg.png")
-            border { left: 30; right: 30; top: 30; bottom: 30 }
-            MouseArea { anchors.fill: parent }
-            BackdropBlur {
+            width: uiRotation.uiWidth
+            height: uiRotation.uiHeight
+            rotation: uiRotation.uiAngle
+
+            // The scene behind the overlays (wallpaper, cards, launcher): what the
+            // translucent surfaces above blur (BackdropBlur).
+            Item {
+                id: sceneBackdrop
                 anchors.fill: parent
-                z: -1
-                source: sceneBackdrop
-                mask: dialogShape
+
+                Wallpaper {
+                    anchors.fill: parent
+                    source: shell.wallpaper
+                }
+
+                CardView {
+                    id: cards
+                    anchors.fill: parent
+                    source: shell.source
+                    topInset: shell.fullScreen ? 0 : Theme.statusBarHeight
+                    // The app's positive space ends where the notifications' negative space begins.
+                    bottomInset: notes.negativeSpace
+                    uiOrientation: uiRotation.uiOrientation
+                    uiPortrait: uiRotation.uiPortrait
+                }
+
+                Launcher {
+                    id: launcher
+                    objectName: "launcher"
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.topMargin: Theme.statusBarHeight
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: notes.negativeSpace
+                    dockHeight: quickLaunch.height
+                    apps: shell.source ? shell.source.apps : null
+                    layout: shell.launcherLayout
+                    draggedId: iconDrag.appId
+                    onLaunchRequested: (appId) => shell.launch(appId)
+                    onCloseRequested: launcher.open = false
+                    onDeleteRequested: (appId) => deleteDialog.ask(appId)
+                    onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, launcher.mapToItem(ui, x, y))
+                    onDragMoved: (x, y) => iconDrag.move(launcher.mapToItem(ui, x, y))
+                    onDragEnded: (x, y) => iconDrag.drop(launcher.mapToItem(ui, x, y))
+                }
             }
-            BorderImage {
-                id: dialogShape
-                visible: false
+
+            SearchPill {
+                id: searchPill
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: Theme.statusBarHeight + Theme.searchPillTopOffset
+                shown: !locked && cards.maximizeProgress === 0 && !launcher.open && !justType.open
+                onTapped: shell.startJustType("")
+                backdrop: sceneBackdrop
+            }
+
+            QuickLaunch {
+                id: quickLaunch
+                anchors.left: parent.left
+                anchors.right: parent.right
+                y: parent.height - notes.negativeSpace - height + height * cards.maximizeProgress
+                visible: cards.maximizeProgress < 1
+                apps: shell.source ? shell.source.apps : null
+                launcherOpen: launcher.open
+                backdrop: sceneBackdrop
+                dock: shell.launcherLayout ? shell.launcherLayout.dock : []
+                draggedId: iconDrag.appId
+                onLaunchRequested: (appId) => shell.launch(appId)
+                onLauncherToggled: launcher.open = !launcher.open
+                onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, quickLaunch.mapToItem(ui, x, y))
+                onDragMoved: (x, y) => iconDrag.move(quickLaunch.mapToItem(ui, x, y))
+                onDragEnded: (x, y) => iconDrag.drop(quickLaunch.mapToItem(ui, x, y))
+            }
+
+            // ---- Dragging an icon (launcher pages and dock) ----------------------------------
+            // Press and hold picks an icon up; it follows the finger above everything.
+            // Over the current page the others make room; on a tab it moves to that
+            // page; on the dock it joins it (swapping out the app in that slot when
+            // the dock is full); a dock icon dropped anywhere else leaves the dock.
+
+            Item {
+                id: iconDrag
+                property string appId: ""
+                property string from: ""
+                property int lastIndex: -1
+                z: 1000
+                visible: appId !== ""
+                width: Theme.launcherIconSize
+                height: Theme.launcherIconSize
+
+                function entry(id) {
+                    for (var i = 0; shell.source && i < shell.source.apps.count; ++i)
+                        if (shell.source.apps.get(i).appId === id)
+                            return shell.source.apps.get(i);
+                    return null;
+                }
+                function place(p) {
+                    x = p.x - width / 2;
+                    y = p.y - height / 2;
+                }
+                function start(id, source, p) {
+                    var e = entry(id);
+                    if (!e)
+                        return;
+                    proxy.title = e.title;
+                    proxy.color = e.color;
+                    proxy.glyph = e.glyph;
+                    proxy.source = e.icon || "";
+                    from = source;
+                    lastIndex = -1;
+                    appId = id;
+                    place(p);
+                }
+                function overDock(p) {
+                    return quickLaunch.visible && p.y >= quickLaunch.y && p.y < quickLaunch.y + quickLaunch.height;
+                }
+                function move(p) {
+                    if (appId === "")
+                        return;
+                    place(p);
+                    if (!launcher.open || overDock(p))
+                        return;
+                    var lp = ui.mapToItem(launcher, p.x, p.y);
+                    var tab = launcher.tabAt(lp.x, lp.y);
+                    if (tab >= 0 && tab !== launcher.currentPage) {
+                        shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, tab, -1));
+                        launcher.showPage(tab);
+                        lastIndex = -1;
+                        return;
+                    }
+                    if (from === "page" && launcher.inPages(lp.x, lp.y)) {
+                        var page = LauncherLayout.pageOf(shell.launcherLayout, appId);
+                        var idx = launcher.indexAt(lp.x, lp.y);
+                        if (page !== launcher.currentPage) {
+                            shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, launcher.currentPage, idx));
+                        } else if (idx >= 0 && idx !== lastIndex
+                                   && shell.launcherLayout.pages[page].indexOf(appId) !== idx) {
+                            shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, page, idx));
+                        }
+                        lastIndex = idx;
+                    }
+                }
+                function drop(p) {
+                    if (appId === "")
+                        return;
+                    var l = shell.launcherLayout;
+                    if (overDock(p)) {
+                        var q = ui.mapToItem(quickLaunch, p.x, p.y);
+                        l = LauncherLayout.addToDock(l, appId, quickLaunch.slotAt(q.x), Theme.quickLaunchMaxItems - 1);
+                    } else if (from === "dock") {
+                        l = LauncherLayout.removeFromDock(l, appId);
+                    }
+                    shell.setLauncherLayout(l);
+                    appId = "";
+                }
+
+                AppIcon {
+                    id: proxy
+                    anchors.centerIn: parent
+                    size: Theme.launcherIconSize
+                    showLabel: false
+                    interactive: false
+                    scale: 1.15
+                    opacity: 0.9
+                }
+            }
+
+            // Deleting an app asks first.
+            Item {
+                id: deleteDialog
+                property string appId: ""
                 anchors.fill: parent
-                source: Theme.asset("menu-dropdown-bg.png")
-                border { left: 30; right: 30; top: 30; bottom: 30 }
-            }
-            Column {
-                id: dialogColumn
-                x: Theme.px(20)
-                y: Theme.px(20)
-                width: parent.width - Theme.px(40)
-                spacing: Theme.px(12)
-                Text {
-                    width: parent.width
-                    wrapMode: Text.WordWrap
-                    text: qsTr("Delete %1?").arg(deleteDialog.title())
-                    color: Theme.text
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.px(18)
-                    font.bold: true
+                visible: appId !== ""
+                z: 1001
+                function ask(id) { appId = id; }
+                function title() {
+                    var e = iconDrag.entry(appId);
+                    return e ? e.title : appId;
                 }
-                Text {
-                    width: parent.width
-                    wrapMode: Text.WordWrap
-                    text: qsTr("The app and its data will be removed from this device.")
-                    color: Theme.textDim
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.px(15)
-                }
-                Row {
-                    spacing: Theme.px(10)
-                    Repeater {
-                        model: [qsTr("Delete"), qsTr("Cancel")]
-                        delegate: Rectangle {
-                            required property string modelData
-                            required property int index
-                            width: (dialogColumn.width - Theme.px(10)) / 2
-                            height: Theme.px(40)
-                            radius: Theme.px(8)
-                            color: index === 0 ? "#b53a2f" : "#555a60"
-                            border.color: "#20000000"
-                            Text {
-                                anchors.centerIn: parent
-                                text: parent.modelData
-                                color: "white"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.px(16)
-                                font.bold: true
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                objectName: "deleteDialogButton" + parent.index
-                                onClicked: {
-                                    var id = deleteDialog.appId;
-                                    deleteDialog.appId = "";
-                                    if (parent.index !== 0)
-                                        return;
-                                    shell.setLauncherLayout(LauncherLayout.remove(shell.launcherLayout, id));
-                                    if (shell.source && typeof shell.source.removeApp === "function")
-                                        shell.source.removeApp(id);
+                Rectangle { anchors.fill: parent; color: "#80000000" }
+                MouseArea { anchors.fill: parent; onClicked: deleteDialog.appId = "" }
+                BorderImage {
+                    anchors.centerIn: parent
+                    width: Math.min(parent.width - Theme.px(20), Theme.px(320))
+                    height: dialogColumn.height + Theme.px(40)
+                    source: Theme.asset("menu-dropdown-bg.png")
+                    border { left: 30; right: 30; top: 30; bottom: 30 }
+                    MouseArea { anchors.fill: parent }
+                    BackdropBlur {
+                        anchors.fill: parent
+                        z: -1
+                        source: sceneBackdrop
+                        mask: dialogShape
+                    }
+                    BorderImage {
+                        id: dialogShape
+                        visible: false
+                        anchors.fill: parent
+                        source: Theme.asset("menu-dropdown-bg.png")
+                        border { left: 30; right: 30; top: 30; bottom: 30 }
+                    }
+                    Column {
+                        id: dialogColumn
+                        x: Theme.px(20)
+                        y: Theme.px(20)
+                        width: parent.width - Theme.px(40)
+                        spacing: Theme.px(12)
+                        Text {
+                            width: parent.width
+                            wrapMode: Text.WordWrap
+                            text: qsTr("Delete %1?").arg(deleteDialog.title())
+                            color: Theme.text
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.px(18)
+                            font.bold: true
+                        }
+                        Text {
+                            width: parent.width
+                            wrapMode: Text.WordWrap
+                            text: qsTr("The app and its data will be removed from this device.")
+                            color: Theme.textDim
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.px(15)
+                        }
+                        Row {
+                            spacing: Theme.px(10)
+                            Repeater {
+                                model: [qsTr("Delete"), qsTr("Cancel")]
+                                delegate: Rectangle {
+                                    required property string modelData
+                                    required property int index
+                                    width: (dialogColumn.width - Theme.px(10)) / 2
+                                    height: Theme.px(40)
+                                    radius: Theme.px(8)
+                                    color: index === 0 ? "#b53a2f" : "#555a60"
+                                    border.color: "#20000000"
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: parent.modelData
+                                        color: "white"
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.px(16)
+                                        font.bold: true
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        objectName: "deleteDialogButton" + parent.index
+                                        onClicked: {
+                                            var id = deleteDialog.appId;
+                                            deleteDialog.appId = "";
+                                            if (parent.index !== 0)
+                                                return;
+                                            shell.setLauncherLayout(LauncherLayout.remove(shell.launcherLayout, id));
+                                            if (shell.source && typeof shell.source.removeApp === "function")
+                                                shell.source.removeApp(id);
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+
+            JustType {
+                id: justType
+                anchors.fill: parent
+                apps: shell.source ? shell.source.apps : null
+                source: shell.source
+                onLaunchRequested: (appId) => shell.launch(appId)
+                onCloseRequested: { justType.open = false; shell.forceActiveFocus(); }
+            }
+
+            // Phones round the corners of a maximized app (MenuWindowManager.cpp:126-146).
+            Item {
+                id: screenCorners
+                anchors.fill: parent
+                anchors.topMargin: Theme.statusBarHeight
+                anchors.bottomMargin: notes.negativeSpace
+                visible: !Theme.tablet && cards.maximized
+                Image { anchors.left: parent.left; anchors.top: parent.top; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-top-left.png") }
+                Image { anchors.right: parent.right; anchors.top: parent.top; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-top-right.png") }
+                Image { anchors.left: parent.left; anchors.bottom: parent.bottom; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-bottom-left.png") }
+                Image { anchors.right: parent.right; anchors.bottom: parent.bottom; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-bottom-right.png") }
+            }
+
+            LockScreen {
+                id: lockScreen
+                anchors.fill: parent
+                system: shell.system
+                source: shell.source
+                wallpaper: shell.wallpaper
+                incomingCall: notes.incomingCall
+                alertShown: notes.alertShown
+                alertHeight: notes.alertHeight
+                notifications: notes.model
+                bannerActive: notes.bannerActive
+                bannerText: notes.bannerText
+                bannerColor: notes.bannerColor
+                bannerGlyph: notes.bannerGlyph
+                bannerIcon: notes.bannerIcon
+                bannerOpacity: notes.bannerOpacity
+                onUnlockRequested: shell.unlock()
+            }
+
+            StatusBar {
+                id: statusBar
+                objectName: "statusBar"
+                visible: !shell.fullScreen
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                system: shell.system
+                appTitle: cards.maximized && !shell.locked
+                title: appTitle ? cards.currentTitle : (shell.system ? shell.system.carrier : "")
+                systemMenuOpen: systemMenu.open
+                lockScreen: shell.locked
+                filled: cards.maximized || launcher.open || justType.open
+                onSystemMenuRequested: if (!shell.locked) systemMenu.open = !systemMenu.open
+                onAppMenuRequested: {
+                    if (cards.maximized && shell.source && typeof shell.source.appMenu === "function")
+                        shell.source.appMenu(cards.currentUid);
+                }
+            }
+
+            Notifications {
+                fullScreen: shell.fullScreen
+                locked: shell.locked
+                lockAlertHost: lockScreen.alertHost
+                id: notes
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: statusBar.bottom
+                anchors.bottom: parent.bottom
+                model: shell.source ? shell.source.notifications : null
+                onDismissRequested: (index) => shell.source.dismissNotification(index)
+                onActivated: (appId, params) => {
+                    var p = null;
+                    try { p = params ? JSON.parse(params) : null; } catch (e) { p = null; }
+                    shell.launch(appId, p);
+                }
+                source: shell.source
+                backdrop: sceneBackdrop
+                // Locked: only its lock-screen alert shows (Notifications.locked).
+                screenHeight: ui.height
+                statusBarRightInset: statusBar.systemGroupWidth
+            }
+
+            SystemMenu {
+                id: systemMenu
+                objectName: "systemMenu"
+                backdrop: sceneBackdrop
+                anchors.fill: parent
+                system: shell.system
+                onCloseRequested: systemMenu.open = false
+            }
+
+            // Tablet: a flick up from the bottom edge does what the phone's gesture
+            // area swipe-up does (SystemUiController::handleScreenEdgeFlickGesture,
+            // SystemUiController.cpp:2041-2121); with the keyboard up it must travel
+            // at least 60 px (kFlickMinimumYLengthWithKeyboardUp, :72). The TouchPad's
+            // panel reported the flick from its bezel; here a thin strip along the
+            // bottom edge starts it.
+            MouseArea {
+                id: bezel
+                objectName: "bezelSwipe"
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: Theme.bezelEdgeHeight
+                enabled: shell.tablet && !shell.locked
+                preventStealing: true
+                property real sx
+                property real sy
+                onPressed: (m) => { sx = m.x; sy = m.y; }
+                onReleased: (m) => {
+                    var dy = sy - m.y;
+                    var min = shell.keyboardOpen ? Theme.px(Theme.bezelFlickMinimumWithKeyboard) : Theme.px(Theme.bezelFlickMinimum);
+                    if (dy >= min && dy > Math.abs(m.x - sx))
+                        shell.gestureUp();
+                }
+            }
         }
-    }
 
-    JustType {
-        id: justType
-        anchors.fill: parent
-        apps: shell.source ? shell.source.apps : null
-        source: shell.source
-        onLaunchRequested: (appId) => shell.launch(appId)
-        onCloseRequested: { justType.open = false; shell.forceActiveFocus(); }
-    }
-
-    // Phones round the corners of a maximized app (MenuWindowManager.cpp:126-146).
-    Item {
-        id: screenCorners
-        anchors.fill: parent
-        anchors.topMargin: Theme.statusBarHeight
-        anchors.bottomMargin: gesture.height + notes.negativeSpace
-        visible: !Theme.tablet && cards.maximized
-        Image { anchors.left: parent.left; anchors.top: parent.top; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-top-left.png") }
-        Image { anchors.right: parent.right; anchors.top: parent.top; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-top-right.png") }
-        Image { anchors.left: parent.left; anchors.bottom: parent.bottom; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-bottom-left.png") }
-        Image { anchors.right: parent.right; anchors.bottom: parent.bottom; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-bottom-right.png") }
-    }
-
-    LockScreen {
-        id: lockScreen
-        anchors.fill: parent
-        system: shell.system
-        source: shell.source
-        wallpaper: shell.wallpaper
-        incomingCall: notes.incomingCall
-        alertShown: notes.alertShown
-        alertHeight: notes.alertHeight
-        notifications: notes.model
-        bannerActive: notes.bannerActive
-        bannerText: notes.bannerText
-        bannerColor: notes.bannerColor
-        bannerGlyph: notes.bannerGlyph
-        bannerIcon: notes.bannerIcon
-        bannerOpacity: notes.bannerOpacity
-        onUnlockRequested: shell.unlock()
-    }
-
-    StatusBar {
-        id: statusBar
-        objectName: "statusBar"
-        visible: !shell.fullScreen
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        system: shell.system
-        appTitle: cards.maximized && !shell.locked
-        title: appTitle ? cards.currentTitle : (shell.system ? shell.system.carrier : "")
-        systemMenuOpen: systemMenu.open
-        lockScreen: shell.locked
-        filled: cards.maximized || launcher.open || justType.open
-        onSystemMenuRequested: if (!shell.locked) systemMenu.open = !systemMenu.open
-        onAppMenuRequested: {
-            if (cards.maximized && shell.source && typeof shell.source.appMenu === "function")
-                shell.source.appMenu(cards.currentUid);
-        }
-    }
-
-    Notifications {
-        fullScreen: shell.fullScreen
-        locked: shell.locked
-        lockAlertHost: lockScreen.alertHost
-        id: notes
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: statusBar.bottom
-        anchors.bottom: gesture.top
-        model: shell.source ? shell.source.notifications : null
-        onDismissRequested: (index) => shell.source.dismissNotification(index)
-        onActivated: (appId, params) => {
-            var p = null;
-            try { p = params ? JSON.parse(params) : null; } catch (e) { p = null; }
-            shell.launch(appId, p);
-        }
-        source: shell.source
-        backdrop: sceneBackdrop
-        // Locked: only its lock-screen alert shows (Notifications.locked).
-        screenHeight: shell.height
-        statusBarRightInset: statusBar.systemGroupWidth
-    }
-
-    SystemMenu {
-        id: systemMenu
-        objectName: "systemMenu"
-        backdrop: sceneBackdrop
-        anchors.fill: parent
-        system: shell.system
-        onCloseRequested: systemMenu.open = false
-    }
-
-    // Tablet: a flick up from the bottom edge does what the phone's gesture
-    // area swipe-up does (SystemUiController::handleScreenEdgeFlickGesture,
-    // SystemUiController.cpp:2041-2121); with the keyboard up it must travel
-    // at least 60 px (kFlickMinimumYLengthWithKeyboardUp, :72). The TouchPad's
-    // panel reported the flick from its bezel; here a thin strip along the
-    // bottom edge starts it.
-    property bool keyboardOpen: false
-    MouseArea {
-        id: bezel
-        objectName: "bezelSwipe"
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        height: Theme.bezelEdgeHeight
-        enabled: shell.tablet && !shell.locked
-        preventStealing: true
-        property real sx
-        property real sy
-        onPressed: (m) => { sx = m.x; sy = m.y; }
-        onReleased: (m) => {
-            var dy = sy - m.y;
-            var min = shell.keyboardOpen ? Theme.px(Theme.bezelFlickMinimumWithKeyboard) : Theme.px(Theme.bezelFlickMinimum);
-            if (dy >= min && dy > Math.abs(m.x - sx))
-                shell.gestureUp();
+        UiRotation {
+            id: uiRotation
+            objectName: "uiRotation"
+            anchors.fill: parent
+            ui: shell.uiRoot
+            uiRotates: shell.uiRotates
+            deviceOrientation: shell.system && shell.system.deviceOrientation !== undefined ? shell.system.deviceOrientation : "up"
+            rotationLock: shell.rotationLock
+            screenLocked: shell.locked
+            fingerDown: fingers.active
+            okToResize: shell.okToResizeUi
         }
     }
 
@@ -609,5 +740,16 @@ FocusScope {
         onDown: shell.gestureDown()
         onBack: shell.gestureBack()
         onTapped: shell.gestureTap()
+    }
+
+    // A finger on the screen holds a turn back (WindowServer::viewportEvent,
+    // WindowServer.cpp:755-761). Above everything, it only watches: the
+    // touch goes on to whatever is under it.
+    Item {
+        anchors.fill: parent
+        z: 10000
+        PointHandler {
+            id: fingers
+        }
     }
 }

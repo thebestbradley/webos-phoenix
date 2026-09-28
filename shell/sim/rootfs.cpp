@@ -72,6 +72,9 @@ Rootfs::Rootfs(const QString &repoDir)
         entry[QStringLiteral("title")] = app.value(QStringLiteral("title")).toString(id);
         entry[QStringLiteral("type")] = app.value(QStringLiteral("type")).toString(QStringLiteral("web"));
         entry[QStringLiteral("noWindow")] = app.value(QStringLiteral("noWindow")).toBool();
+        // The orientation the app's window starts in, until the page asks
+        // (luna-sysmgr ApplicationDescription.cpp:464-469).
+        entry[QStringLiteral("requestedWindowOrientation")] = app.value(QStringLiteral("requestedWindowOrientation")).toString();
         entry[QStringLiteral("main")] = main;
         entry[QStringLiteral("params")] = QString();
         // -1 keeps an app out of the launcher.

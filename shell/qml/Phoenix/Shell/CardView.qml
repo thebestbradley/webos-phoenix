@@ -44,6 +44,24 @@ Item {
     }
     // On its way back to card view: gestures treat it as there already.
     readonly property bool minimizing: maximizeAnim.running && maximizeAnim.to === 0
+    // On its way up to maximized (or waiting below the screen to rise).
+    readonly property bool maximizing: (maximizeAnim.running && maximizeAnim.to === 1) || preparing
+    // Cards are moving (CardWindowManager::okToResize: its animations,
+    // CardWindowManager.cpp:257-262): the UI does not turn meanwhile.
+    readonly property bool animating: slideAnim.running || maximizeAnim.running || layoutAnimTimer.running || preparing
+
+    // How the UI is turned (UiRotation.uiOrientation) and whether it is
+    // taller than wide: cards whose app asked for another orientation are
+    // drawn turned (CardWindow::refreshAdjustmentAngle).
+    property string uiOrientation: "up"
+    property bool uiPortrait: height > width
+    // The orientation the card's app asked for (PalmSystem.setWindowOrientation):
+    // "free", "up", "down", "left", "right", "landscape" or "portrait".
+    function orientationOf(uid) {
+        var i = indexOf(uid);
+        var o = i >= 0 ? source.cards.get(i).orientation : undefined;
+        return o === undefined || o === null || o === "" ? "free" : o;
+    }
 
     // Area a maximized window occupies.
     property real topInset: Theme.statusBarHeight
@@ -534,6 +552,9 @@ Item {
             cardScale: rising ? 1 : lifted ? view.activeScale : place ? place.scale : view.activeScale
             rotation: rising || lifted || !place ? 0 : place.rot
             rounded: view.maximizeProgress < 1
+            appOrientation: model.orientation !== undefined && model.orientation !== "" ? model.orientation : "free"
+            uiOrientation: view.uiOrientation
+            uiPortrait: view.uiPortrait
             interactive: view.maximized && place !== null && place.focused
             dimmed: place === null || !place.focused
             reordering: lifted

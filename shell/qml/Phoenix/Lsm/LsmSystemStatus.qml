@@ -21,6 +21,12 @@ QtObject {
     property bool airplaneMode: false
     property bool bluetoothOn: false
     property bool rotationLocked: false
+    // The accelerometer's orientation ("up", "down", "left", "right",
+    // "faceup", "facedown"), which the shell's UI follows (UiRotation).
+    // STATUS: placeholder, always "up". M1 feeds it from the device's
+    // orientation sensor (OSE's sensor service, or Qt Sensors'
+    // QOrientationSensor where the device provides one).
+    property string deviceOrientation: "up"
     property bool muted: false
     property bool twentyFourHour: false
     property bool showAlertsWhenLocked: true

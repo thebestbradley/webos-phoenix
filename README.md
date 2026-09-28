@@ -138,9 +138,18 @@ Controls: drag with the mouse as you would with a finger. The black strip at
 the bottom is the gesture area. Keys: **Esc** back, **Home**/**F1** swipe up,
 **F2** demo notification, **F3** lock/unlock, **F4** incoming call (rings
 the Phone app), **F5** incoming text message (for Messaging), **F6** low
-battery, **F7** plug a charger in or out, type in card
+battery, **F7** plug a charger in or out, **Ctrl+Left** / **Ctrl+Right**
+turn the device a quarter turn counter-clockwise / clockwise, type in card
 view for Just Type. `./build/phoenix-sim --open https://example.com` opens a
 page in the browser.
+
+The window shows the device as it is held: turned on its side it becomes a
+landscape window, and the UI follows 200 ms later with the original
+300 ms turn, unless the rotation lock (system menu) or the app in front
+holds it. `--orientation left|right|down` starts the device turned (`--size`
+stays the screen upright, e.g. `--size 320x480 --orientation left` is a
+480x320 window); `--turn left` turns it a second after start-up, for
+screenshots of the turn (`--delay 1450` catches it halfway).
 
 The **+** button in each placeholder app opens a second window, which joins
 that app's card stack.
@@ -148,8 +157,10 @@ that app's card stack.
 `--launch com.palm.app.notes` opens an app at start-up (repeatable);
 `--launch org.webosphoenix.settings.wifi` opens a Settings pane.
 
-`--scene locked|cards|stacks|reorder|maximized|launcher|dashboard|justtype|systemmenu` opens
-a demo state; add `--screenshot out.png` to save a PNG and exit.
+`--scene locked|cards|stacks|reorder|maximized|heldcard|launcher|dashboard|justtype|systemmenu` opens
+a demo state (`heldcard`: a card that keeps the upright orientation, drawn
+turned in card view with `--orientation left`); add `--screenshot out.png`
+to save a PNG and exit.
 
 Tests:
 
@@ -163,6 +174,7 @@ node tools/test-files.cjs                                   # Files
 node tools/test-tasks.cjs                                   # Tasks and reminders
 node tools/test-alarm.cjs                                   # a Clock alarm rings as a popup alert
 node tools/test-voicememos.cjs                              # Voice Memos
+node tools/test-orientation.cjs                             # apps asking for and following an orientation
 ```
 
 ## Build a webOS OSE image (experimental)

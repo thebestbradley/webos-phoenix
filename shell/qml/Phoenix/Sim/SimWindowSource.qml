@@ -8,7 +8,11 @@
 //   apps          ListModel  appId, title, color, glyph, tab, quickLaunch
 //   cards         ListModel  uid, appId, title, groupId  (running windows in
 //                            screen order; consecutive cards with the same
-//                            groupId form a card stack)
+//                            groupId form a card stack); optional:
+//                            fullScreen (enableFullScreenMode), orientation
+//                            (the app's PalmSystem.setWindowOrientation:
+//                            "free", "up", "down", "left", "right",
+//                            "landscape", "portrait"; missing = "free")
 //   windowFor(uid) -> Item   the app surface to show inside the card
 //   launch(appId, afterUid) -> uid   new apps start a stack right of afterUid's
 //   close(uid)
@@ -111,6 +115,7 @@ Item {
             apps.append({ appId: a.id, title: a.title, color: "#555c66", glyph: a.title.charAt(0),
                           tab: a.tab !== undefined ? a.tab : 0, quickLaunch: a.quickLaunch || webQuickLaunch[a.title] || 0,
                           icon: a.icon, web: true, main: a.main, noWindow: !!a.noWindow,
+                          orientation: a.requestedWindowOrientation || "",
                           webAppId: a.appId || a.id, params: a.params || "", dir: a.dir || "",
                           removable: false });
         }
@@ -120,6 +125,7 @@ Item {
                 continue;
             apps.append({ appId: p.appId, title: p.title, color: p.color, glyph: p.glyph, tab: p.tab,
                           quickLaunch: p.quickLaunch, icon: p.icon, web: false, main: "", noWindow: false,
+                          orientation: "",
                           webAppId: "", params: "", dir: "",
                           // Stand-ins for apps still to come can be deleted, as
                           // downloaded apps could; the built-in ones cannot.
@@ -195,7 +201,10 @@ Item {
             win.newCardRequested.connect(function() { source.openChild(uid); });
         }
         _windows[uid] = win;
-        cards.insert(at, { uid: uid, appId: appId, title: titleText, groupId: groupId, fullScreen: false });
+        // appinfo.json requestedWindowOrientation (ApplicationDescription.cpp:
+        // 464-469, handed to WebAppMgr) until the page asks for another.
+        cards.insert(at, { uid: uid, appId: appId, title: titleText, groupId: groupId, fullScreen: false,
+                           orientation: _windowOrientation(info.orientation) });
         return uid;
     }
 
@@ -284,6 +293,14 @@ Item {
             // PalmSystem.activate: the app brings its card to the front.
             if (cardIndex(uid) >= 0)
                 cardFocusRequested(uid);
+        } else if (type === "windowOrientation") {
+            // PalmSystem.setWindowOrientation (Enyo enyo.setAllowedOrientation,
+            // Mojo stageController.setWindowOrientation): the card keeps this
+            // orientation (ViewHost_Card_SetAppFixedOrientation / SetFreeOrientation,
+            // CardWindow::onSetAppFixedOrientation, CardWindow.cpp:2536-2583).
+            var oi = cardIndex(uid);
+            if (oi >= 0)
+                cards.setProperty(oi, "orientation", _windowOrientation(payload.orientation));
         } else if (type === "fullScreen") {
             // PalmSystem.enableFullScreenMode: the card, maximized, gets the
             // whole screen.
@@ -310,6 +327,12 @@ Item {
     }
 
     signal systemStatusReported(var status)
+
+    // The orientations a window can ask for; anything else is "free".
+    function _windowOrientation(o) {
+        o = String(o || "").toLowerCase();
+        return ["up", "down", "left", "right", "landscape", "portrait"].indexOf(o) >= 0 ? o : "free";
+    }
 
     // ---- Popup alerts, dashboards and banners -------------------------------------------
     // Windows of type "popupalert" and "dashboard" are not cards: the shell
@@ -445,9 +468,10 @@ Item {
         return out;
     }
 
-    // State only the shell knows (the lock screen), which every page gets as
-    // it loads; unlike the rest it is not the pages' to overrule.
-    readonly property var _shellOwned: ["deviceLocked"]
+    // State only the shell knows (the lock screen, how the UI and the device
+    // are turned), which every page gets as it loads; unlike the rest it is
+    // not the pages' to overrule.
+    readonly property var _shellOwned: ["deviceLocked", "orientation"]
     property var _shellStatus: ({})
 
     function pushSystemStatus(changes) {

@@ -35,6 +35,51 @@ Item {
     // Cards that have lost focus are darkened (CardWindow.cpp:211-213).
     property bool dimmed: false
 
+    // The orientation the app asked for (PalmSystem.setWindowOrientation):
+    // "free", "up", "down", "left", "right", "landscape" or "portrait";
+    // and how the UI is turned (UiRotation).
+    property string appOrientation: "free"
+    property string uiOrientation: "up"
+    property bool uiPortrait: height > width
+    // A card held in another orientation than the UI's is drawn turned by
+    // this much, its window keeping the app's orientation and size
+    // (CardWindow::refreshAdjustmentAngle, CardWindow.cpp:2586-2640; the
+    // paint rotation, :1556-1700; View_Resize with width and height
+    // swapped, :741-752).
+    readonly property int adjustmentAngle: {
+        if (appOrientation === "landscape")
+            return uiPortrait ? 90 : 0;
+        if (appOrientation === "portrait")
+            return uiPortrait ? 0 : 90;
+        var a = _angle(appOrientation), u = _angle(uiOrientation);
+        if (a < 0 || u < 0)
+            return 0;
+        var d = a - u;
+        if (d > 180)
+            d -= 360;
+        else if (d <= -180)
+            d += 360;
+        return d;
+    }
+    // How the app's window is turned: what the page is told
+    // (PalmSystem.screenOrientation).
+    readonly property string windowOrientation: {
+        if (_angle(appOrientation) >= 0)
+            return appOrientation;
+        var u = Math.max(0, _angle(uiOrientation));
+        var turned = (appOrientation === "landscape" && uiPortrait) || (appOrientation === "portrait" && !uiPortrait);
+        return ["up", "left", "down", "right"][((u + (turned ? 90 : 0)) % 360) / 90];
+    }
+    function _angle(o) {
+        switch (o) {
+        case "up": return 0;
+        case "left": return 90;
+        case "down": return 180;
+        case "right": return 270;
+        }
+        return -1;
+    }
+
     // Lifted for reordering: translucent, no shadow (CardWindowManager.cpp:1888-1899).
     property bool reordering: false
 
@@ -93,12 +138,23 @@ Item {
         clip: true
         enabled: card.interactive
 
-        // Over the app's window until it is ready.
-        CardLoading {
-            anchors.fill: parent
-            z: 1
-            active: card.loading
-            icon: card.icon
+        // The app's window, turned when the app keeps another orientation
+        // than the UI's.
+        Item {
+            id: appHost
+            readonly property bool sideways: card.adjustmentAngle === 90 || card.adjustmentAngle === -90
+            anchors.centerIn: parent
+            width: sideways ? parent.height : parent.width
+            height: sideways ? parent.width : parent.height
+            rotation: card.adjustmentAngle
+
+            // Over the app's window until it is ready.
+            CardLoading {
+                anchors.fill: parent
+                z: 1
+                active: card.loading
+                icon: card.icon
+            }
         }
 
         layer.enabled: card.rounded && GraphicsInfo.api !== GraphicsInfo.Software
@@ -132,11 +188,14 @@ Item {
     function attachWindow() {
         if (!window)
             return;
-        window.parent = contentHost;
+        window.parent = appHost;
         window.x = 0;
         window.y = 0;
-        window.width = Qt.binding(function() { return contentHost.width; });
-        window.height = Qt.binding(function() { return contentHost.height; });
+        window.width = Qt.binding(function() { return appHost.width; });
+        window.height = Qt.binding(function() { return appHost.height; });
+        // Windows that want to know how they are turned (web app windows).
+        if ("orientation" in window)
+            window.orientation = Qt.binding(function() { return card.windowOrientation; });
         window.visible = true;
     }
 }
