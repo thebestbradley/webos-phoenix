@@ -52,6 +52,20 @@ Item {
             windows.pushSystemStatus(status.appStatusFor(name));
     }
 
+    // Simulator only: F4 rings the phone, F5 delivers a text message
+    // (SimWindowSource.simulateIncomingCall / simulateIncomingSms). Shortcuts,
+    // so they work while a web app has keyboard focus.
+    Shortcut {
+        sequence: "F4"
+        context: Qt.ApplicationShortcut
+        onActivated: windows.simulateIncomingCall()
+    }
+    Shortcut {
+        sequence: "F5"
+        context: Qt.ApplicationShortcut
+        onActivated: windows.simulateIncomingSms()
+    }
+
     // Build a demo scene, as if the user had been using the phone for a bit.
     Component.onCompleted: {
         // --launch <appId>: open these apps, in card view, then stop.
