@@ -166,6 +166,19 @@ FocusScope {
         onTapped: shell.startJustType("")
     }
 
+    Launcher {
+        id: launcher
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: statusBar.bottom
+        anchors.bottom: gesture.top
+        anchors.bottomMargin: notes.negativeSpace
+        dockHeight: quickLaunch.height
+        apps: shell.source ? shell.source.apps : null
+        onLaunchRequested: (appId) => shell.launch(appId)
+        onCloseRequested: launcher.open = false
+    }
+
     QuickLaunch {
         id: quickLaunch
         anchors.left: parent.left
@@ -177,17 +190,6 @@ FocusScope {
         launcherOpen: launcher.open
         onLaunchRequested: (appId) => shell.launch(appId)
         onLauncherToggled: launcher.open = !launcher.open
-    }
-
-    Launcher {
-        id: launcher
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: statusBar.bottom
-        anchors.bottom: quickLaunch.top
-        apps: shell.source ? shell.source.apps : null
-        onLaunchRequested: (appId) => shell.launch(appId)
-        onCloseRequested: launcher.open = false
     }
 
     JustType {

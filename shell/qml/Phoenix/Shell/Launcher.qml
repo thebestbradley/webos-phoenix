@@ -4,6 +4,11 @@
 // The launcher: tabbed pages of app icons ("Apps", "Downloads", "Settings",
 // from conf/default-launcher-page-layout.json) over a dark translucent
 // backdrop, swiped sideways between pages.
+//
+// It slides up from below the screen, behind the quick launch dock
+// (OverlayWindowManager.cpp:102-104 Z_LAUNCHER_WIN 0 < Z_DOCK_WIN 20;
+// :1451-1485, :1919-1955), over 350 ms with curve 15 = InOutQuint
+// (conf/lunaAnimations.conf:83-84). The dock stays where it is, on top.
 
 import QtQuick
 
@@ -18,15 +23,15 @@ Item {
 
     readonly property var tabs: ["Apps", "Downloads", "Settings"]
 
-    visible: opacity > 0
-    opacity: open ? 1 : 0
-    Behavior on opacity { NumberAnimation { duration: Theme.launcherFadeDuration } }
+    // Room left at the bottom for the dock, which sits on top of the launcher.
+    property real dockHeight: 0
 
-    // Slide up slightly as it appears.
-    transform: Translate {
-        y: launcher.open ? 0 : Theme.px(40)
-        Behavior on y { NumberAnimation { duration: Theme.launcherFadeDuration; easing.type: Easing.OutCubic } }
-    }
+    // 0 = shown, 1 = below the screen.
+    property real hidden: open ? 0 : 1
+    Behavior on hidden { NumberAnimation { duration: Theme.launcherDuration; easing.type: Easing.InOutQuint } }
+    visible: hidden < 1
+
+    transform: Translate { y: launcher.hidden * (launcher.height + Theme.statusBarHeight) }
 
     Rectangle {
         anchors.fill: parent
@@ -105,6 +110,7 @@ Item {
         id: pages
         anchors.top: tabBar.bottom
         anchors.bottom: parent.bottom
+        anchors.bottomMargin: launcher.dockHeight
         width: parent.width
         orientation: ListView.Horizontal
         snapMode: ListView.SnapOneItem

@@ -153,7 +153,7 @@ QtObject {
     readonly property int cardGroupReorderDuration: 500              // conf/lunaAnimations.conf:43-46
     readonly property int cardDimmingDuration: 300
     readonly property int cardLoadingPulseDuration: 1000
-    readonly property int launcherFadeDuration: 350                  // conf/lunaAnimations.conf
+    readonly property int launcherDuration: 350                      // conf/lunaAnimations.conf:83-84 (curve 15 InOutQuint)
     readonly property int quickLaunchDuration: 350                   // conf/lunaAnimations.conf:77-82
     readonly property int justTypeFadeDuration: 150                  // conf/lunaAnimations.conf:87-88
     readonly property int searchPillFadeDuration: 200                // conf/lunaAnimations.conf:81 quickLaunchFadeDuration
