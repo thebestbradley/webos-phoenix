@@ -426,6 +426,21 @@ Item {
             shell.system.fixedTime = null;
         }
 
+        function test_swipeDownMaximizesTheActiveCard() {
+            windows.launch("org.webosphoenix.email", "");
+            shell.cardView.jumpTo(0);
+            shell.gestureDown();
+            tryVerify(function() { return shell.maximized; }, 2000);
+            // Not with the launcher over card view.
+            shell.cardView.jumpTo(0);
+            shell.gestureUp();
+            verify(shell.launcherOpen);
+            shell.gestureDown();
+            wait(400);
+            verify(!shell.maximized);
+            shell.gestureUp();
+        }
+
         function test_lockedIgnoresGestures() {
             shell.lock();
             shell.gestureUp();

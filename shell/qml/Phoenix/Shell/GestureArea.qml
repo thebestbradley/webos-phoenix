@@ -4,6 +4,7 @@
 // On-screen stand-in for the Pre's capacitive gesture area below the screen
 // (Src/base/CoreNaviManager.cpp):
 //   swipe up        -> card view (or launcher when already in card view)
+//   swipe down      -> the active card, maximized, from card view
 //   swipe left      -> back
 //   tap             -> toggle between the app and card view
 // A thin glowing bar hints where it is, like the Pre 2 / Pre 3 light bar.
@@ -14,6 +15,7 @@ Item {
     id: area
 
     signal up
+    signal down
     signal back
     signal forward
     signal tapped
@@ -50,6 +52,8 @@ Item {
             var dx = m.x - sx, dy = m.y - sy;
             if (-dy > area.threshold && -dy > Math.abs(dx)) {
                 area.flash(); area.up();
+            } else if (dy > area.threshold && dy > Math.abs(dx)) {
+                area.flash(); area.down();
             } else if (dx < -area.threshold) {
                 area.flash(); area.back();
             } else if (dx > area.threshold) {

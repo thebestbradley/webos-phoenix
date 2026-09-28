@@ -89,6 +89,15 @@ FocusScope {
             launcher.open = !launcher.open;
     }
 
+    // Key_CoreNavi_SwipeDown (SystemUiController.cpp:498-525): in card view,
+    // with nothing open over it, the active card comes up maximized.
+    function gestureDown() {
+        if (locked || notes.dashboardOpen || systemMenu.open || launcher.open || justType.open)
+            return;
+        if (cards.count > 0 && cards.maximizeProgress === 0)
+            cards.maximize();
+    }
+
     function gestureBack() {
         if (locked)
             return;
@@ -579,6 +588,7 @@ FocusScope {
         height: Theme.gestureAreaHeight
         visible: height > 0
         onUp: shell.gestureUp()
+        onDown: shell.gestureDown()
         onBack: shell.gestureBack()
         onTapped: shell.gestureTap()
     }
