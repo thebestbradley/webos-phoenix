@@ -25,6 +25,14 @@ launcher tabs and menus use the original Open webOS art.*
 the simulator against simulated webOS OSE services. Turning Wi-Fi on in the
 system menu updates the Settings card behind it.*
 
+| Dial pad | In call | Incoming call | Messaging | Conversation |
+| --- | --- | --- | --- | --- |
+| ![](docs/screenshots/phone-dialpad.png) | ![](docs/screenshots/phone-incall.png) | ![](docs/screenshots/phone-incoming.png) | ![](docs/screenshots/messaging.png) | ![](docs/screenshots/messaging-thread.png) |
+
+*Phoenix Phone and Messaging, drawn with the webOS dial pad and Enyo 1.0
+art, against simulated legacy webOS telephony and messaging services
+(F4 rings the phone, F5 delivers a text).*
+
 ## Status
 
 **Milestone 0: the shell runs in a desktop simulator.** You can use the card
@@ -47,7 +55,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `shell/qml/Phoenix/Sim` | Mock apps and device status for the desktop simulator |
 | `shell/qml/Phoenix/Lsm`, `shell/qml/WebOSCompositor` | Adapter that plugs the shell into webOS OSE's `luna-surfacemanager` |
 | `shell/sim` | `phoenix-sim`, the desktop runner (also takes screenshots) |
-| `apps/` | New Phoenix web apps in React + TypeScript (Settings), with the shared `@phoenix/ui` components and `@phoenix/luna` service client |
+| `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging), with the shared `@phoenix/ui` components and `@phoenix/luna` service client |
 | `runtime/` | The webOS web app runtime for the simulator and browsers (`PalmSystem`, simulated Luna services) |
 | `shell/tests` | Behaviour tests (`qmltestrunner`) |
 | `shell/assets/openwebos` | Original Open webOS system UI artwork (Apache-2.0) |
@@ -60,7 +68,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 Requires Qt 6.4 or newer with Qt Quick and Qt5Compat. Qt WebEngine is
 needed to run the web apps (the original webOS apps and new Phoenix apps);
 without it the simulator shows placeholder apps only. Node.js 20 or newer
-builds the Phoenix apps (Settings); `cmake --build` runs `npm ci` and
+builds the Phoenix apps (Settings, Phone, Messaging); `cmake --build` runs `npm ci` and
 `npm run build` in `apps/` for you, and warns if npm is missing.
 
 First fetch the original Open webOS apps and frameworks (git submodules):
@@ -94,7 +102,9 @@ cmake -S shell -B build && cmake --build build
 
 Controls: drag with the mouse as you would with a finger. The black strip at
 the bottom is the gesture area. Keys: **Esc** back, **Home**/**F1** swipe up,
-**F2** demo notification, **F3** lock/unlock, type in card view for Just Type.
+**F2** demo notification, **F3** lock/unlock, **F4** incoming call (rings
+the Phone app), **F5** incoming text message (for Messaging), type in card
+view for Just Type.
 
 The **+** button in each placeholder app opens a second window, which joins
 that app's card stack.
@@ -111,6 +121,7 @@ Tests:
 QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -input shell/tests
 (cd apps && npm test && npm run typecheck)
 node tools/test-apps.cjs && node tools/test-settings.cjs   # needs Playwright
+node tools/test-phone-messaging.cjs                        # calls and texts
 ```
 
 ## Build a webOS OSE image (experimental)
