@@ -1,0 +1,29 @@
+{
+  "name": "phoenix-apps",
+  "private": true,
+  "type": "module",
+  "description": "webOS Phoenix web apps (React + TypeScript) and their shared libraries",
+  "license": "Apache-2.0",
+  "workspaces": [
+    "shared/luna",
+    "shared/phoenix-ui",
+    "settings"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "vitest run",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "check": "npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^22.20.4",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^6.0.0",
+    "jsdom": "^27.0.0",
+    "typescript": "~5.9.3",
+    "vite": "^8.0.0",
+    "vitest": "^5.0.0"
+  }
+}

@@ -28,12 +28,25 @@ Item {
     signal windowRequested(var request)
     // The page asked to close its window (window.close()).
     signal closeRequested
+    // The page finished loading (the runtime and the app's scripts ran).
+    signal loaded
 
     readonly property alias view: view
 
     function back() {
         view.runJavaScript("window.__phoenixRuntime && __phoenixRuntime.back()");
         return true;
+    }
+
+    // Run a snippet in the page (the shell talking to the runtime).
+    function runScript(js) {
+        view.runJavaScript(js);
+    }
+
+    // Relaunch with new launch params (webOSRelaunch event in the page).
+    function relaunch(params) {
+        runScript("window.__phoenixRuntime && __phoenixRuntime.relaunch && __phoenixRuntime.relaunch("
+                  + JSON.stringify(params || {}) + ")");
     }
 
     // Let a window opened by another page load into this view.
@@ -68,6 +81,10 @@ Item {
                 console.warn("[" + win.appId + "] " + message + " (" + sourceID + ":" + lineNumber + ")");
         }
 
+        onLoadingChanged: (info) => {
+            if (info.status === WebEngineView.LoadSucceededStatus)
+                win.loaded();
+        }
         onNewWindowRequested: (request) => win.windowRequested(request)
         onWindowCloseRequested: win.closeRequested()
     }

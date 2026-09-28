@@ -67,7 +67,7 @@ async function main() {
     let failed = false;
     try {
         await waitForServer(base + "/apps.json", 10000);
-        const apps = (await (await fetch(base + "/apps.json")).json()).filter((a) => !only.length || only.includes(a.id));
+        const apps = (await (await fetch(base + "/apps.json")).json()).filter((a) => !only.length || only.includes(a.id) || only.includes(a.appId));
         const infos = {};
         const browser = await chromium.launch();
         const results = [];
@@ -95,7 +95,8 @@ async function main() {
             }).catch(() => false);
             const real = errors.filter((e) => !ignorable(e));
             const pass = rendered && real.length === 0;
-            const expect = expectations[app.id] || { status: "unknown" };
+            // Launch points (e.g. Settings > Wi-Fi) share their app's expectation.
+            const expect = expectations[app.id] || expectations[app.appId] || { status: "unknown" };
             const mustPass = expect.status === "works" || (tablet ? expect.tablet === "works" : expect.phone === "works");
             let verdict = pass ? "PASS" : "FAIL";
             if (!pass && mustPass) { failed = true; verdict = "FAIL (regression)"; }

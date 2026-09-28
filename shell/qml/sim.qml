@@ -27,6 +27,31 @@ Item {
         }
     }
 
+    // Device state shared with the web apps (Settings, ...). Their simulated
+    // services report changes as "systemStatus" host messages; the system
+    // menu's toggles go back to them. See docs/APP-RUNTIME.md.
+    Connections {
+        target: windows
+        function onSystemStatusReported(s) {
+            status.applyAppStatus(s);
+            if (s.wallpaperUrl !== undefined)
+                shell.wallpaper = s.wallpaperUrl;
+        }
+    }
+    Connections {
+        target: status
+        function onWifiBarsChanged() { root.statusChanged("wifiBars"); }
+        function onAirplaneModeChanged() { root.statusChanged("airplaneMode"); }
+        function onBluetoothOnChanged() { root.statusChanged("bluetoothOn"); }
+        function onBrightnessChanged() { root.statusChanged("brightness"); }
+        function onRotationLockedChanged() { root.statusChanged("rotationLocked"); }
+        function onMutedChanged() { root.statusChanged("muted"); }
+    }
+    function statusChanged(name) {
+        if (!status.applyingAppStatus)
+            windows.pushSystemStatus(status.appStatusFor(name));
+    }
+
     // Build a demo scene, as if the user had been using the phone for a bit.
     Component.onCompleted: {
         // --launch <appId>: open these apps, in card view, then stop.

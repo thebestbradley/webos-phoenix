@@ -81,6 +81,11 @@ The shell never talks to the compositor directly. It depends on two objects:
 This split lets the whole UI be developed, screenshot-tested and unit-tested
 on a laptop, then run unchanged on a device.
 
+In the simulator the web apps' simulated services own this state: Settings
+reports changes through `SimWindowSource.systemStatusReported`, and system
+menu changes go back through `pushSystemStatus()` (wired in `sim.qml`; see
+[APP-RUNTIME.md](APP-RUNTIME.md#the-shell-in-the-simulator)).
+
 ### Legacy pixels
 
 All measurements in `Theme.qml` are in *legacy pixels*, the pixel grid of the

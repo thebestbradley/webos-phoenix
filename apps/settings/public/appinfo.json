@@ -1,0 +1,26 @@
+{
+    "id": "org.webosphoenix.settings",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Settings",
+    "icon": "icon.png",
+    "uiRevision": 2,
+    "phoenix": {
+        "//": "Phoenix launcher metadata: launcherTab 0 = Apps, 1 = Downloads, 2 = Settings. hidden keeps the app itself out of the launcher; each launch point is its own icon and card, and starts the app with its params.",
+        "launcherTab": 2,
+        "hidden": true,
+        "launchPoints": [
+            { "id": "org.webosphoenix.settings.wifi", "title": "Wi-Fi", "icon": "icons/wifi.png", "params": { "page": "wifi" } },
+            { "id": "org.webosphoenix.settings.bluetooth", "title": "Bluetooth", "icon": "icons/bluetooth.png", "params": { "page": "bluetooth" } },
+            { "id": "org.webosphoenix.settings.airplane", "title": "Airplane Mode", "icon": "icons/airplane.png", "params": { "page": "airplane" } },
+            { "id": "org.webosphoenix.settings.screen", "title": "Screen & Lock", "icon": "icons/screen.png", "params": { "page": "screen" } },
+            { "id": "org.webosphoenix.settings.sounds", "title": "Sounds & Ringtones", "icon": "icons/sounds.png", "params": { "page": "sounds" } },
+            { "id": "org.webosphoenix.settings.datetime", "title": "Date & Time", "icon": "icons/datetime.png", "params": { "page": "datetime" } },
+            { "id": "org.webosphoenix.settings.language", "title": "Language & Region", "icon": "icons/language.png", "params": { "page": "language" } },
+            { "id": "org.webosphoenix.settings.deviceinfo", "title": "Device Info", "icon": "icons/deviceinfo.png", "params": { "page": "deviceinfo" } },
+            { "id": "org.webosphoenix.settings.updates", "title": "Updates", "icon": "icons/updates.png", "params": { "page": "updates" } }
+        ]
+    }
+}
