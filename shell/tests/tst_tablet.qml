@@ -32,6 +32,10 @@ Item {
                 windows.close(windows.cards.get(0).uid);
             shell.cardView.maximizeProgress = 0;
             shell.keyboardOpen = false;
+            // A failed test must not leave its notifications to the next.
+            shell.notifications.dashboardOpen = false;
+            while (windows.notifications.count > 0)
+                windows.dismissNotification(0);
             shell.unlock();
             if (shell.launcherOpen)
                 shell.gestureUp();
@@ -233,7 +237,8 @@ Item {
             mouseRelease(root, p.x + 60, p.y);
             verify(!menu.dragging);
             tryCompare(top, "swipeX", 0, 1500);
-            verify(!shade.visible);
+            // The row itself may still be a frame from home.
+            tryVerify(function() { return !shade.visible; }, 1000);
             compare(windows.notifications.count, 3);
 
             // Leftwards it stays in place.

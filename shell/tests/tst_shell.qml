@@ -553,7 +553,8 @@ Item {
             // An app: its title on the pill, the arrow fading in; the new
             // title cross-fades in over 300 ms.
             windows.launch("org.webosphoenix.email", "");
-            shell.cardView.maximizeProgress = 1;
+            shell.cardView.maximize();
+            tryVerify(function() { return shell.maximized; }, 2000);
             compare(bar.title, "Email");
             verify(bar.titleBorder);
             verify(bar.titleActionable);
