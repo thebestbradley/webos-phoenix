@@ -1,0 +1,387 @@
+/*
+ * Copyright (c) 2026 webOS Phoenix contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The Phone app is dark, like the webOS 1.x/2.x phone app: a black dial
+ * pad (Enyo lib/telephony art), dark lists and in-call screens, and the
+ * Heritage command menu at the bottom.
+ */
+
+html:has(> body.phone-app), body.phone-app {
+    background: #000;
+    color: #fff;
+    overflow: hidden;
+}
+
+.phone-root {
+    position: relative;
+    height: 100vh;
+    overflow: hidden;
+    background: #000;
+}
+
+.phone-main { height: 100%; }
+
+/* ---- Dial pad view ---------------------------------------------------------------- */
+
+.dialer {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: #000;
+}
+
+.dialer-display {
+    flex: none;
+    height: 96px;
+    padding: 10px 12px 0 16px;
+    background: linear-gradient(#303234, #121314 70%, #0b0b0b);
+    border-bottom: 1px solid #000;
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+    display: flex;
+    flex-direction: column;
+}
+
+.dialer-contact {
+    height: 22px;
+    font-size: 15px;
+    color: #9cc7ef;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.dialer-error { color: #ff6b5e; }
+
+.dialer-number-row {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    min-height: 0;
+}
+.dialer-number {
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+    font-size: 32px;
+    line-height: 50px;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    direction: ltr;
+    color: #fff;
+    text-shadow: 0 -1px 0 #000;
+    padding-left: 36px;         /* balances the backspace key */
+}
+.dialer-number.mid { font-size: 27px; padding-left: 20px; }
+.dialer-number.long { font-size: 22px; padding-left: 8px; }
+.dialer-number.empty { font-size: 18px; color: #6f7377; padding-left: 0; }
+.dialer-number-row .pui-backspace { margin-top: 0; }
+
+.dialer .pui-dialpad { background-color: #111; }
+
+.dialer-dial {
+    flex: none;
+    background: #000;
+    padding-bottom: 60px;       /* the command menu floats below */
+}
+
+/* ---- Lists (call log, favourites) ---------------------------------------------------------- */
+
+.phone-list-view {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: #111;
+}
+
+.phone-header {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 58px;
+    padding: 0 8px 0 14px;
+    background: linear-gradient(#4b4d50, #2a2b2d 55%, #1d1e1f);
+    border-bottom: 1px solid #000;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06), 0 2px 6px rgba(0, 0, 0, 0.6);
+    z-index: 2;
+}
+.phone-header-title {
+    flex: 1;
+    font-size: 20px;
+    font-weight: bold;
+    text-shadow: 0 -1px 0 #000;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.phone-header .pui-toolgroup.small .pui-grouped-toolbutton { font-size: 15px; min-width: 40px; }
+
+.phone-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 64px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.phone-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 56px;
+    padding: 6px 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    border-bottom: 1px solid #000;
+    cursor: pointer;
+    outline: none;
+}
+.phone-row:active, .phone-row:focus-visible {
+    background: linear-gradient(#2c8ce0, #1a5fa8);
+}
+.phone-row.disabled { opacity: 0.5; cursor: default; }
+.phone-row-body { flex: 1; min-width: 0; }
+.phone-row-title {
+    font-size: 18px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.phone-row-sub {
+    font-size: 14px;
+    color: #8e9296;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.phone-row:active .phone-row-sub { color: #dde8f4; }
+.phone-row-when { flex: none; font-size: 14px; color: #8e9296; }
+.phone-row.missed .phone-row-title { color: #ff6b5e; }
+
+.call-kind {
+    width: 26px;
+    height: 26px;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #7fb2e3;
+}
+.call-kind.outgoing { color: #8ccf5b; }
+.call-kind.missed, .call-kind.ignored { color: #ff6b5e; }
+.call-kind.voicemail { color: #fff; }
+
+.phone-count {
+    flex: none;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: linear-gradient(#e2574c, #b81f14);
+}
+
+.fav-star { color: #6aa9e6; flex: none; display: flex; }
+
+.phone-divider {
+    display: flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 12px;
+    background: linear-gradient(#26282a, #1a1b1c);
+    border-top: 1px solid #000;
+    border-bottom: 1px solid #000;
+    font-size: 14px;
+    font-weight: bold;
+    color: #aebdca;
+    text-shadow: 0 -1px 0 #000;
+}
+
+.phone-empty {
+    padding: 40px 24px;
+    text-align: center;
+    color: #7a7e82;
+    font-size: 16px;
+    line-height: 1.4;
+}
+
+.phone-toolbar .pui-toolgroup { flex: 1; max-width: 420px; }
+.phone-toolbar .pui-grouped-toolbutton { flex: 1; padding-left: 4px; padding-right: 4px; }
+
+/* ---- In call -------------------------------------------------------------------------- */
+
+.phone-root.call-screen {
+    background: radial-gradient(ellipse at 50% 25%, #3a3d41 0%, #16171a 55%, #000 100%);
+}
+
+.incall, .incoming {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    max-width: 440px;
+    margin: 0 auto;
+}
+
+.incall-held-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 8px 0;
+    padding: 8px 12px;
+    border: 1px solid #000;
+    border-radius: 8px;
+    background: linear-gradient(#3b3d40, #232427);
+    color: #ddd;
+    font: inherit;
+    font-size: 14px;
+    cursor: pointer;
+}
+.incall-held-bar .swap { margin-left: auto; color: #9cc7ef; }
+
+.incall-who {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px 4px;
+    min-height: 0;
+    text-align: center;
+}
+.incall-avatar { margin-bottom: 10px; border-radius: 10px; }
+.incall-name {
+    font-size: 26px;
+    font-weight: bold;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-shadow: 0 -1px 0 #000;
+}
+.incall-number { font-size: 15px; color: #a3a8ad; margin-top: 2px; }
+.incall-status {
+    margin-top: 8px;
+    font-size: 20px;
+    color: #fff;
+    min-height: 26px;
+    letter-spacing: 1px;
+}
+.incall-status.dialing, .incall-status.alerting { color: #9cc7ef; }
+.incall-status.held { color: #f0b54a; }
+.incall-status.disconnected { color: #ff6b5e; }
+
+.call-controls {
+    flex: none;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    margin: 0 12px 10px;
+    border: 1px solid #000;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+.call-control {
+    height: 64px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    border: 0;
+    border-right: 1px solid #000;
+    border-bottom: 1px solid #000;
+    background: linear-gradient(#45484c, #2a2c2f 50%, #1f2022);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font: inherit;
+    font-size: 14px;
+    cursor: pointer;
+    outline: none;
+}
+.call-control:nth-child(2n) { border-right: 0; }
+.call-control:nth-child(n+3) { border-bottom: 0; }
+.call-control:active, .call-control.on {
+    /* the dial pad's pressed-key highlight */
+    background: url(../../shared/phoenix-ui/assets/enyo/telephony/pin-key-highlight.png) center / 100% 100% no-repeat, #1d4f86;
+}
+.call-control:disabled { color: #6c6f73; cursor: default; }
+
+.incall .pui-dialpad { margin-bottom: 6px; background-color: rgba(0, 0, 0, 0.5); }
+
+.incall-actions {
+    flex: none;
+    display: flex;
+    gap: 8px;
+    padding: 0 8px 8px;
+}
+.incall-actions .pui-button { gap: 8px; }
+.incall-end { flex: 2; }
+.incall-hide { flex: 1; }
+
+/* ---- Incoming call ----------------------------------------------------------------------- */
+
+.incoming-label {
+    flex: none;
+    padding-top: 18px;
+    text-align: center;
+    font-size: 14px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #9cc7ef;
+}
+.incoming-who {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0 16px;
+    text-align: center;
+    min-height: 0;
+}
+.incoming-glyph { width: 100px; height: 100px; margin-bottom: 4px; }
+.incoming-glyph img { width: 100px; height: 100px; display: block; }
+
+.incoming-popup {
+    /* the webOS incoming-call popup (dialpad popup-bg.png) */
+    flex: none;
+    display: flex;
+    gap: 8px;
+    margin: 0 4px 4px;
+    padding: 6px;
+    border-style: solid;
+    border-width: 20px;
+    border-image: url(../../shared/phoenix-ui/assets/enyo/telephony/popup-bg.png) 20 fill;
+}
+.incoming-popup .pui-button { flex: 1; margin: -14px 0; }
+
+/* ---- Tablet: dial pad left, log or favourites right -------------------------------------------- */
+
+.phone-root.wide {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+}
+.phone-root.wide .phone-left {
+    height: 100%;
+    background: linear-gradient(#1a1b1d, #000);
+    border-right: 1px solid #000;
+    box-shadow: 1px 0 0 rgba(255, 255, 255, 0.08);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.phone-root.wide .dialer { height: auto; padding: 0 20px; background: none; }
+.phone-root.wide .dialer-display { border-radius: 10px 10px 0 0; }
+.phone-root.wide .dialer-dial { padding-bottom: 0; background: none; }
+.phone-root.wide .phone-right { height: 100%; min-width: 0; }
+.phone-toolbar.wide { left: 360px; }
+
+.phone-root.call-screen .incall, .phone-root.call-screen .incoming { max-width: 400px; }
+@media (min-width: 700px) {
+    .incall-who { flex: none; padding: 60px 16px 30px; }
+    .incall, .incoming { justify-content: center; }
+    .incoming-who { flex: none; padding: 40px 16px; }
+}

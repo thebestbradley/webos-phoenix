@@ -54,6 +54,8 @@ jobs:
           node tools/test-apps.cjs --tablet --out app-tests/tablet
           node tools/test-settings.cjs --out app-tests/settings-phone
           node tools/test-settings.cjs --tablet --out app-tests/settings-tablet
+          node tools/test-phone-messaging.cjs --out app-tests/phone-messaging-phone
+          node tools/test-phone-messaging.cjs --tablet --out app-tests/phone-messaging-tablet
 
       - name: Screenshots
         run: |

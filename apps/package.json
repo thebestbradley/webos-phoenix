@@ -7,7 +7,9 @@
   "workspaces": [
     "shared/luna",
     "shared/phoenix-ui",
-    "settings"
+    "settings",
+    "phone",
+    "messaging"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

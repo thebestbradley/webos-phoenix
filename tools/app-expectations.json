@@ -30,5 +30,13 @@
     "org.webosphoenix.settings": {
         "status": "works",
         "note": "Phoenix Settings (React, apps/settings); its launch points org.webosphoenix.settings.* share this entry"
+    },
+    "org.webosphoenix.phone": {
+        "status": "works",
+        "note": "Phoenix Phone (React, apps/phone); tools/test-phone-messaging.cjs drives it"
+    },
+    "org.webosphoenix.messaging": {
+        "status": "works",
+        "note": "Phoenix Messaging (React, apps/messaging); tools/test-phone-messaging.cjs drives it"
     }
 }
