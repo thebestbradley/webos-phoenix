@@ -1,5 +1,13 @@
 # AI and MCP
 
+> **Decisions (28 September 2026, from the project owner).** The assistant
+> is **on by default**, like on any modern phone, with settings to turn it
+> off or limit it. Where the device can run one, a local model answers
+> first. Beyond bring-your-own keys, the project may run its own **paid
+> Phoenix AI service**, alongside iCloud-style Phoenix cloud services, so
+> Settings > Assistant must allow a first-party provider next to the others.
+> Which third-party providers come first is still open.
+
 A plan for three things:
 
 1. an **MCP layer**, so that an AI client can use every app and the OS

@@ -1,5 +1,11 @@
 # Android apps
 
+> **Decision (28 September 2026, from the project owner).** Android apps come
+> **early, before the phones are finished**, not after: people expect their
+> apps, and having them at launch is what makes Phoenix worth trying. PWAs
+> stay the lead, since this is a web operating system, but Android support
+> moves ahead of Milestone 5 on the emulator image and first devices.
+
 How Phoenix could run Android apps, so that the apps nobody will ever
 write for webOS (a bank's, a bus company's, a messenger's) are still there,
 and how each Android app would look and behave like a webOS app: its own

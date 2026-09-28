@@ -1,5 +1,14 @@
 # App store: web apps, legacy apps and the catalog
 
+> **Decisions (28 September 2026, from the project owner).** The web is the
+> platform, so the catalog leads with **a curated list of popular websites
+> that already ship a PWA**, each presented as an app you install from the
+> catalog, instead of the usual "visit the site and add it to the home
+> screen" (which still works). Next to it: an **Android catalog** (see
+> [ANDROID.md](ANDROID.md)), and the **App Museum / Preware archives as
+> add-on catalogs** a user can switch on. The catalog's name and where the
+> PHP backend is hosted are still open.
+
 How people will find, install and update apps on Phoenix: installable web
 apps (PWAs) as first-class cards, the original webOS `.ipk` apps from the
 community archives, and a catalog app with a backend behind it.
