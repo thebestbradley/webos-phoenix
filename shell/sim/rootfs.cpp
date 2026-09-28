@@ -181,6 +181,10 @@ void RootfsSchemeHandler::requestStarted(QWebEngineUrlRequestJob *job)
         mime = "text/html";
     }
 
+    // The sources are UTF-8; without a charset Chromium reads scripts as Latin-1.
+    if (mime.startsWith("text/") || mime.endsWith("javascript") || mime.endsWith("json") || mime.endsWith("+xml"))
+        mime += ";charset=utf-8";
+
     auto *buffer = new QBuffer(job);
     buffer->setData(data);
     buffer->open(QIODevice::ReadOnly);

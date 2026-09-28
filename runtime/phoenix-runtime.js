@@ -370,7 +370,7 @@
                     case ">=": return x >= t;
                     case "%": return typeof x === "string" && x.toLowerCase().indexOf(String(t).toLowerCase()) === 0;
                     // Search indexes are tokenized: a word starting with the text.
-                    case "?": return typeof x === "string" && (" " + x.toLowerCase()).split(/[^0-9a-zÀ-￿]+/)
+                    case "?": return typeof x === "string" && (" " + x.toLowerCase()).split(/[^0-9a-z\u00c0-\uffff]+/)
                         .some(function (w) { return w && w.indexOf(String(t).toLowerCase()) === 0; }) ||
                         (typeof x === "string" && x.toLowerCase().indexOf(String(t).toLowerCase()) === 0);
                     default: return false;
@@ -772,7 +772,7 @@
         am["/getAppBasePath"] = function (p, reply) {
             var base = "/usr/palm/applications/" + p.appId + "/";
             var info = null;
-            try { info = JSON.parse(PalmSystem.getResource(base + "appinfo.json").replace(/^﻿/, "")); } catch (e) { info = null; }
+            try { info = JSON.parse(PalmSystem.getResource(base + "appinfo.json").replace(/^\ufeff/, "")); } catch (e) { info = null; }
             reply(info ? ok({ basePath: base + (info.main || "index.html"), appId: p.appId })
                        : fail(-1, "app not found: " + p.appId));
         };
@@ -1367,7 +1367,7 @@
         var m = /^(\/usr\/palm\/applications\/[^\/]+\/)(.*)$/.exec(global.location.pathname.replace(/\/{2,}/g, "/"));
         if (!m) return;
         var info = {};
-        try { info = JSON.parse((PalmSystem.getResource(m[1] + "appinfo.json") || "{}").replace(/^﻿/, "")); } catch (e) { info = {}; }
+        try { info = JSON.parse((PalmSystem.getResource(m[1] + "appinfo.json") || "{}").replace(/^\ufeff/, "")); } catch (e) { info = {}; }
         if (info.noWindow && !global.opener && m[2] === (info.main || "index.html"))
             return;
 
