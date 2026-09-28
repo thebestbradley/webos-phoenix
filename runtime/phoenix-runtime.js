@@ -230,6 +230,29 @@
     };
 
     global.PalmSystem = PalmSystem;
+
+    // Window types. Enyo opens alerts and dashboards with window.open(url,
+    // name, "height=150, attributes={\"window\":\"popupalert\", ...}")
+    // (enyo.windows.openPopup/openDashboard) and LunaSysMgr read the type
+    // from the attributes. Browsers do not pass window features on, so the
+    // runtime puts the type, height and icon in the new window's URL
+    // fragment (#phoenixWindow=popupalert&phoenixHeight=150), where the
+    // simulator's window source reads them.
+    if (typeof global.open === "function") {
+        var nativeOpen = global.open;
+        global.open = function (url, name, features) {
+            var f = String(features || ""), attrs = {};
+            var m = /attributes=(\{.*\})/.exec(f);
+            if (m) { try { attrs = JSON.parse(m[1]); } catch (e) { attrs = {}; } }
+            if (attrs.window && attrs.window !== "card" && typeof url === "string") {
+                var h = /height=(\d+)/.exec(f);
+                url += (url.indexOf("#") < 0 ? "#" : "&") + "phoenixWindow=" + encodeURIComponent(attrs.window)
+                     + (h ? "&phoenixHeight=" + h[1] : "")
+                     + (attrs.icon ? "&phoenixIcon=" + encodeURIComponent(attrs.icon) : "");
+            }
+            return nativeOpen.call(global, url, name, features);
+        };
+    }
     global.palmGetResource = function (path) { return PalmSystem.getResource(path); };
 
     // ---- Service bus -------------------------------------------------------------------
@@ -1077,9 +1100,69 @@
         }
     });
 
+    // ---- System signals and power ------------------------------------------------------
+    // luna-systemui and the apps listen to the system's signals with
+    // com.palm.bus/signal/addmatch {category, method}, e.g. powerd's
+    // /com/palm/power batteryStatus and USBDockStatus. The simulator keeps a
+    // battery (shared by the pages through the store) that phoenix-sim can
+    // change (SimWindowSource.simulatePower), and signals it the way powerd
+    // did (powerd's batteryStatus / USBDockStatus payloads).
+
+    var signalWatchers = [];
+    function signal(category, method, payload) {
+        signalWatchers = signalWatchers.filter(function (w) { return !w.ctx.cancelled(); });
+        signalWatchers.forEach(function (w) {
+            if (w.category === category && (!w.method || w.method === method)) {
+                var r = {}, k;
+                for (k in payload) r[k] = payload[k];
+                w.reply(r);
+            }
+        });
+    }
+    runtime.signal = signal;
+
+    register(["com.palm.bus"], {
+        "/signal/addmatch": function (p, reply, ctx) {
+            reply(ok({ subscribed: !!p.subscribe }));
+            if (p.subscribe)
+                signalWatchers.push({ category: p.category, method: p.method, reply: reply, ctx: ctx });
+        },
+        "*": function (p, reply) { reply(ok()); }
+    });
+
+    // charger: "none", "wall" (a wall charger on the USB port) or "pc"; as
+    // on the Pre, both charge over USB (luna-systemui PowerdService.js).
+    function powerState() { return store.get("power", { percent: 76, charger: "none" }); }
+    function batteryPayload(st) {
+        return { percent: st.percent, percent_ui: st.percent, temperature_C: 28,
+                 current_mA: st.charger !== "none" ? 800 : -250, capacity_mAh: 1150, voltage_mV: 3900 };
+    }
+    function chargerPayload(st) {
+        var on = st.charger !== "none";
+        return { Charging: on, Connected: on, USBConnected: on, USBName: on ? st.charger : "",
+                 DockConnected: false, DockPower: false, type: st.charger };
+    }
+    // {percent, charger}: change the battery and tell the listeners.
+    runtime.setPower = function (changes) {
+        var st = powerState(), k;
+        for (k in changes) st[k] = changes[k];
+        store.set("power", st);
+        signal("/com/palm/power", "USBDockStatus", chargerPayload(st));
+        signal("/com/palm/power", "batteryStatus", batteryPayload(st));
+        return st;
+    };
+
     register(["com.palm.power"], {
-        "/com/palm/power/batteryStatusQuery": function (p, reply) { reply(ok({ percent: 76, percent_ui: 76, charging: false })); },
-        "/com/palm/power/chargerStatusQuery": function (p, reply) { reply(ok({ Charging: false, Connected: false })); },
+        "/com/palm/power/batteryStatusQuery": function (p, reply) {
+            var st = powerState();
+            reply(ok(batteryPayload(st)));
+            signal("/com/palm/power", "batteryStatus", batteryPayload(st));
+        },
+        "/com/palm/power/chargerStatusQuery": function (p, reply) {
+            var st = powerState();
+            reply(ok(chargerPayload(st)));
+            signal("/com/palm/power", "USBDockStatus", chargerPayload(st));
+        },
         "/timeout/set": function (p, reply) { reply(ok()); },
         "/timeout/clear": function (p, reply) { reply(ok()); },
         "/com/palm/power/activityStart": function (p, reply) { reply(ok()); },
@@ -1099,7 +1182,7 @@
 
     // Services that apps poke but whose absence should not break them.
     register(["com.palm.keys", "com.palm.audio", "com.palm.vibrate", "com.palm.lunabus",
-              "com.palm.bus", "com.palm.preferences", "com.palm.systemmanager",
+              "com.palm.preferences", "com.palm.systemmanager",
               "com.palm.location", "com.palm.telephony", "com.palm.messaging",
               "com.palm.applicationManager.private", "com.palm.mediaindexer"], {
         "*": function (p, reply) { reply(ok()); }

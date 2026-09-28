@@ -6,7 +6,7 @@
         "Used by phoenix-sim's phoenix:// scheme and by tools/serve-rootfs.py; the",
         "meta-phoenix recipes install the same files at the same device paths.",
         "overlays: directories laid out like the device filesystem whose files win over everything else (patched or missing files for the original apps).",
-        "systemApps: single app directories for system UI apps (Just Type), never shown in the launcher.",
+        "systemApps: single app directories for system UI apps (Just Type, the system alerts), never shown in the launcher.",
         "applicationDirs: each child with an appinfo.json is an app; a child whose built output is in dist/ (e.g. React apps) is used from there."
     ],
     "overlays": [
@@ -33,6 +33,7 @@
         "/usr/palm/public/accounts/com.palm.pop/": "third_party/app-services/mojomail/pop/files/usr/palm/public/accounts/com.palm.pop/",
         "/usr/share/phoenix/runtime/": "runtime/",
         "/usr/lib/luna/system/luna-applauncher/": "third_party/luna-applauncher/",
+        "/usr/lib/luna/system/luna-systemui/": "third_party/luna-systemui/",
         "/media/internal/samples/": "apps/media-samples/media/"
     },
     "applicationDirs": [
@@ -41,6 +42,7 @@
         "apps"
     ],
     "systemApps": [
-        "third_party/luna-applauncher"
+        "third_party/luna-applauncher",
+        "third_party/luna-systemui"
     ]
 }
