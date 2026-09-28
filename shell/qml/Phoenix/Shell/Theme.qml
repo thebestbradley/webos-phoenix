@@ -72,6 +72,7 @@ QtObject {
 
     readonly property int statusBarHeight: px(28)
     readonly property int statusBarTitleMaxWidth: px(140)   // Src/base/settings/Settings.cpp:179
+    readonly property int statusBarFadeDuration: 300                 // conf/lunaAnimations.conf:112-113 (linear)
     readonly property int statusBarIconSpacing: px(5)                // StatusBarIcon.h:35 ICON_SPACING
     // The battery state for a charge level: the first of these at or above
     // it (StatusBarBattery.cpp:34, 200-212).

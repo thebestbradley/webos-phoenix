@@ -524,6 +524,7 @@ FocusScope {
         title: appTitle ? cards.currentTitle : (shell.system ? shell.system.carrier : "")
         systemMenuOpen: systemMenu.open
         lockScreen: shell.locked
+        filled: cards.maximized || launcher.open || justType.open
         onSystemMenuRequested: if (!shell.locked) systemMenu.open = !systemMenu.open
         onAppMenuRequested: {
             if (cards.maximized && shell.source && typeof shell.source.appMenu === "function")

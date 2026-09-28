@@ -65,7 +65,7 @@ Nearly all the art is already in `shell/assets/openwebos/`.
 | S4 | 12/24 h per locale, no leading zero in 12 h; lock screen bar shows the short date (`StatusBarClock.cpp:195-232`) | **Done**: 12 h without a leading zero, or 24 h from the system preference (also the lock-screen clock); the lock screen's bar shows the short date (K5) | P1 · S |
 | S5 | Title Prelude 14 bold always, 90% spacing, caps 13/20, `menu-arrow.png` slides in 500 ms InOutQuad, 300 ms title cross-fade | Bold only for apps, no arrow, no cross-fade | P2 · S |
 | S6 | App-tinted status bar, 300 ms lerp (tablet) | None | P2 · S |
-| S7 | Tablet: clock at the right of the system group; fill fades in when an app maximizes (`StatusBar.cpp:98-104,240-262`) | Clock centred, fill always solid | P1 · S |
+| S7 | Tablet: clock at the right of the system group; fill fades in when an app maximizes (`StatusBar.cpp:98-104,240-262`) | **Done**: the clock is the rightmost item; the #515558 fill fades in (300 ms) under the tiled art while an app, the launcher or Just Type is up, and out in card view. Not the per-app tint (S6) | P1 · S |
 | S8 | Menu tab highlight 3-slice fading 300 ms; icons slide in over 1000 ms | Instant | P2 · S |
 
 ## 6. System menu

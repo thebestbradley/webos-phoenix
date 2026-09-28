@@ -18,6 +18,9 @@ Item {
     property bool appTitle: false
     property bool systemMenuOpen: false
     property bool lockScreen: false
+    // Tablet: an app, the launcher or Just Type is up; the bar's fill fades
+    // in under its tiled art (StatusBar::fadeBar, setMaximizedAppTitle).
+    property bool filled: false
     // Width of the system indicators at the right (tablet notification
     // icons go just left of them).
     readonly property real systemGroupWidth: indicators.width + Theme.px(6)
@@ -46,9 +49,15 @@ Item {
         return (h === 0 ? 12 : h) + ":" + pad(shownTime.getMinutes());
     }
 
+    // Phones: solid black. Tablets: #515558 under the tiled art, faded in
+    // over 300 ms while an app, the launcher or Just Type is up
+    // (lunaAnimations.conf statusBarFade*), the wallpaper through it otherwise.
     Rectangle {
+        objectName: "statusBarFill"
         anchors.fill: parent
         color: Theme.statusBarFill
+        opacity: !Theme.tablet || bar.filled ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: Theme.statusBarFadeDuration } }
     }
     // Tablet only: tiled bar art over the fill (StatusBar.cpp:227,240-262).
     Image {
@@ -95,7 +104,11 @@ Item {
 
     // ---- Centre: clock -----------------------------------------------------------
 
+    // Tablets put the time at the right end of the system group instead
+    // (StatusBar.cpp:98-104); their lock screen keeps the date centred.
     Text {
+        objectName: "centreClock"
+        visible: !Theme.tablet || bar.lockScreen
         anchors.centerIn: parent
         text: bar.clockText
         color: Theme.text
@@ -175,6 +188,16 @@ Item {
                     : bar.system.charging ? Theme.asset("statusBar/battery-charging-" + step + ".png")
                     : Theme.asset("statusBar/battery-" + Math.min(step, 11) + ".png")
             width: Theme.px(sourceSize.width); height: Theme.px(sourceSize.height)
+        }
+        // Tablet: the clock, rightmost (the system group's first item).
+        Text {
+            objectName: "tabletClock"
+            visible: Theme.tablet && !bar.lockScreen
+            anchors.verticalCenter: parent.verticalCenter
+            text: bar.clockText
+            color: Theme.text
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.statusBarClockFontSize
         }
     }
 

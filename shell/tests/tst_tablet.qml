@@ -61,6 +61,21 @@ Item {
             tryCompare(shell, "launcherOpen", false, 2000);
         }
 
+        // S7: the clock at the right end; the bar's fill fades in while an
+        // app is up and out in card view.
+        function test_statusBar() {
+            verify(findChild(shell, "tabletClock").visible);
+            verify(!findChild(shell, "centreClock").visible);
+            var fill = findChild(shell, "statusBarFill");
+            tryCompare(fill, "opacity", 0, 1000);
+            windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximize();
+            tryVerify(function() { return shell.maximized; }, 2000);
+            tryCompare(fill, "opacity", 1, 1000);
+            shell.cardView.minimize();
+            tryCompare(fill, "opacity", 0, 1500);
+        }
+
         function test_shortFlicksAndTheKeyboard() {
             windows.launch("org.webosphoenix.email", "");
             shell.cardView.maximize();
