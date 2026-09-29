@@ -18,6 +18,8 @@ Rectangle {
     property string detail: ""
     // The app menu (tap the app name in the status bar).
     property bool appMenuOpen: false
+    // Loaded (web app windows report this; tests hold it back for a slow app).
+    property bool ready: true
 
     // Ask the system for another card of this app (e.g. compose).
     signal newCardRequested

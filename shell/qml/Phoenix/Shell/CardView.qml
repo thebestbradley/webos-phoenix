@@ -254,40 +254,58 @@ Item {
         if (g < 0)
             return;
         slideAnim.stop();
+        if (_newCards[uid]) {
+            delete _newCards[uid];
+            _prepareRise(uid, g);
+            return;
+        }
         setFocus(uid);
         position = g;
         maximizeAnim.stop();
-        if (_newCards[uid]) {
-            delete _newCards[uid];
-            _prepareRise(uid);
-            return;
-        }
         maximizeAnim.to = 1;
         maximizeAnim.duration = Theme.cardLaunchDuration;
         maximizeAnim.start();
         cardMaximized(uid);
     }
 
-    // ---- A new card rises (CardWindowManager::prepareAddWindow,
-    // setActiveCardOffScreen, PreparingState, maximizeActiveWindow) ----------
-    // It waits full size just below the screen, its stack in place, until
-    // the app is ready or cardAddMaxDuration (750 ms) has passed, then rises
-    // to maximized, 300 ms OutQuart (cardMaximize). A touch before that
-    // cancels to card view.
+    // ---- A new card rises (CardWindowManager::prepareAddWindowSibling,
+    // setActiveCardOffScreen, PreparingState, LoadingState,
+    // addWindowTimedOutNormal, maximizeActiveWindow) --------------------------
+    // The card in front zooms out to card view while the stacks slide so the
+    // new card's stack is centred (slideAllGroups, 300 ms); the new card
+    // waits full size just below the screen, in its launcher's stack when
+    // the app in front opened it. When the app is ready it rises to
+    // maximized, 300 ms OutQuart (cardMaximize). If it is not ready after
+    // cardAddMaxDuration (750 ms), it slides into its place in the stack
+    // showing its loading screen instead, and maximizes once the app is
+    // ready. A touch before that stays in card view.
     property string risingUid: ""
-    readonly property bool preparing: riseTimeout.running
+    // The card waiting in card view for its app (LoadingState).
+    property string loadingUid: ""
+    readonly property bool preparing: riseTimeout.running || _risePending
+    property bool _risePending: false
+    property bool _inPrepare: false
     property var _newCards: ({})
     Connections {
         target: cards
         function onItemAdded(index, item) { view._newCards[item.uid] = true; }
     }
 
-    function _prepareRise(uid) {
-        // Progress first: dropping it from a maximized card would otherwise
-        // end the rise before it starts (onMaximizeProgressChanged below),
-        // leaving a window opened from the card in front in card view.
-        maximizeProgress = 0;
+    function _prepareRise(uid, g) {
+        riseTimeout.stop();
+        _risePending = false;
+        loadingUid = "";
+        maximizeAnim.stop();
+        _inPrepare = true;
+        // Below the screen first, before any animation is on, so the new
+        // card does not glide there.
         risingUid = uid;
+        if (maximizeProgress > 0 || Math.abs(position - g) > 0.001)
+            animateLayout(Theme.cardSlideDuration);
+        setFocus(uid);
+        position = g;
+        maximizeProgress = 0;
+        _inPrepare = false;
         var card = cardItem(uid);
         if (!card || !card.loading)
             _rise();
@@ -296,38 +314,71 @@ Item {
     }
     function _rise() {
         riseTimeout.stop();
-        if (risingUid === "" || maximizeProgress > 0)
+        if (risingUid === "" || (maximizeAnim.running && maximizeAnim.to === 1))
             return;
+        // After the zoom out: the cards' layout animation would drag the rise.
+        if (layoutAnimTimer.running) {
+            _risePending = true;
+            return;
+        }
+        _risePending = false;
         maximizeAnim.to = 1;
         maximizeAnim.duration = Theme.cardMaximizeDuration;
         maximizeAnim.start();
         cardMaximized(risingUid);
     }
+    // Not ready in time: into its place in the stack, loading.
+    function _slideInLoading() {
+        if (risingUid === "")
+            return;
+        _risePending = false;
+        loadingUid = risingUid;
+        animateLayout(Theme.cardSlideDuration);
+        risingUid = "";
+    }
     function cancelRise() {
         riseTimeout.stop();
+        _risePending = false;
         risingUid = "";
+        loadingUid = "";
     }
     Timer {
         id: riseTimeout
         interval: Theme.cardAddMaxDuration
-        onTriggered: view._rise()
+        onTriggered: view._slideInLoading()
     }
-    // The app became ready before the timeout.
+    Connections {
+        target: layoutAnimTimer
+        function onRunningChanged() { if (!layoutAnimTimer.running && view._risePending) view._rise(); }
+    }
+    // The app became ready: rise from below, or maximize from card view.
     Connections {
         target: view.risingUid !== "" ? view.cardItem(view.risingUid) : null
-        function onLoadingChanged() { if (view.preparing) view._rise(); }
+        function onLoadingChanged() { if (riseTimeout.running) view._rise(); }
     }
-    onMaximizedChanged: if (maximized) risingUid = ""
+    Connections {
+        target: view.loadingUid !== "" ? view.cardItem(view.loadingUid) : null
+        function onLoadingChanged() {
+            var uid = view.loadingUid;
+            var card = view.cardItem(uid);
+            if (!card || card.loading)
+                return;
+            view.loadingUid = "";
+            if (view.maximizeProgress === 0 && view.currentUid === uid)
+                view.maximize(uid);
+        }
+    }
+    onMaximizedChanged: if (maximized) { risingUid = ""; loadingUid = ""; }
     // Any other way back to card view ends the rise.
     Connections {
         target: maximizeAnim
         function onRunningChanged() {
-            if (!maximizeAnim.running && !view.maximized && !riseTimeout.running)
+            if (!maximizeAnim.running && !view.maximized && !view.preparing)
                 view.risingUid = "";
         }
     }
     onMaximizeProgressChanged: {
-        if (maximizeProgress === 0 && risingUid !== "" && !riseTimeout.running && !maximizeAnim.running)
+        if (maximizeProgress === 0 && risingUid !== "" && !preparing && !_inPrepare && !maximizeAnim.running)
             risingUid = "";
     }
 
@@ -372,14 +423,18 @@ Item {
     // A card closed from elsewhere (the app, the source) while flying off
     // or rising.
     function _forgetClosed() {
-        var c = {}, risingHere = false;
+        var c = {}, risingHere = false, loadingHere = false;
         for (var i = 0; source && i < source.cards.count; ++i) {
             var uid = source.cards.get(i).uid;
             if (closing[uid])
                 c[uid] = closing[uid];
             if (uid === risingUid)
                 risingHere = true;
+            if (uid === loadingUid)
+                loadingHere = true;
         }
+        if (loadingUid !== "" && !loadingHere)
+            loadingUid = "";
         if (Object.keys(closing).length !== Object.keys(c).length)
             closing = c;
         if (risingUid !== "" && !risingHere) {
@@ -656,6 +711,9 @@ Item {
                 view.cancelRise();
                 return;
             }
+            // Waiting in card view for its app: it stays there
+            // (LoadingState::handleTouchBegin).
+            view.loadingUid = "";
             var now = Date.now();
             for (var i = 0; i < points.length; ++i) {
                 var p = points[i];

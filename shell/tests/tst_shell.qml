@@ -104,6 +104,46 @@ Item {
             fuzzyCompare(card.centerY, shell.cardView.maximizedCenterY, 0.5);
         }
 
+        // Launching from a maximized app: that card zooms out to card view
+        // while the new one waits below, then rises (prepareAddWindowSibling:
+        // slideAllGroups, then maximizeActiveWindow).
+        function test_launchFromAppZoomsOutThenRises() {
+            var a = shell.launch("org.webosphoenix.email");
+            tryVerify(function() { return shell.maximized; }, 2000);
+            var old = shell.cardView.cardItem(a);
+            var b = shell.launch("org.webosphoenix.calendar");
+            wait(80);
+            // Part way down to card view, not snapped there.
+            verify(old.scale < 0.99 && old.scale > shell.cardView.activeScale + 0.01,
+                   "the card in front zooms out (scale " + old.scale + ")");
+            var card = shell.cardView.cardItem(b);
+            verify(card.centerY > shell.cardView.maximizedCenterY + 20, "the new card waits below");
+            tryVerify(function() { return shell.maximized && shell.cardView.currentUid === b; }, 3000);
+            fuzzyCompare(card.centerY, shell.cardView.maximizedCenterY, 0.5);
+        }
+
+        // An app not ready after cardAddMaxDuration slides into its stack in
+        // card view with its loading screen, and maximizes once it is ready
+        // (addWindowTimedOutNormal, LoadingState).
+        function test_slowAppLoadsInCardViewThenMaximizes() {
+            var a = shell.launch("org.webosphoenix.email");
+            tryVerify(function() { return shell.maximized; }, 2000);
+            var b = shell.launch("org.webosphoenix.calendar");
+            windows.windowFor(b).ready = false;
+            var card = shell.cardView.cardItem(b);
+            wait(Theme.cardAddMaxDuration + Theme.cardSlideDuration + 200);
+            verify(!shell.maximized);
+            compare(shell.cardView.risingUid, "");
+            compare(shell.cardView.loadingUid, b);
+            compare(shell.cardView.currentUid, b);
+            verify(card.loading);
+            fuzzyCompare(card.cardScale, shell.cardView.activeScale, 0.001);
+            fuzzyCompare(card.scale, shell.cardView.activeScale, 0.01);
+            fuzzyCompare(card.centerY, shell.cardView.cardOriginY, 1);
+            windows.windowFor(b).ready = true;
+            tryVerify(function() { return shell.maximized && shell.cardView.currentUid === b; }, 2000);
+        }
+
         function test_shellLaunchMaximizes() {
             shell.launch("org.webosphoenix.email");
             // maximized flips only when the animation lands exactly on 1.
