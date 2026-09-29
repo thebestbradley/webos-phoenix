@@ -35,7 +35,11 @@ modern revamp in style and features that brings webOS back
 1.0 ships with the app sources people need (web apps and the catalog, App
 Museum II, Preware, Android apps) and installs like a Linux distro on as
 much hardware as possible, so the community grows and manufacturers take
-notice ([HARDWARE.md](HARDWARE.md#install-it-like-a-linux-distro)).
+notice ([HARDWARE.md](HARDWARE.md#install-it-like-a-linux-distro)). Also
+in 1.0: dictation, predictive text, swipe typing, emoji and cursor control
+on the keyboard; the Edit menu and a long-press Cut / Copy / Paste menu
+(today only stubs); a Siri-like voice assistant without AI models. The MCP
+layer and the AI agent are 2.0 ([ROADMAP.md](ROADMAP.md#10-release)).
 
 ## Decisions for the owner
 

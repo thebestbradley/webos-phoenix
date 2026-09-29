@@ -239,6 +239,19 @@ and come towards the end of 1.0.
 - [ ] As many devices as possible at Supported or Community level
       ([HARDWARE.md](HARDWARE.md#device-tiers))
 
+Also in 1.0 (owner, 29 September 2026), rows in [spec/GAPS.md](spec/GAPS.md):
+
+- [ ] Keyboard: dictation (V2), predictive text and swipe typing (V3),
+      emoji (V6), cursor control by holding the space bar or the gesture
+      bar (V4), and the shell's keyboard as the device's input method (V5)
+- [ ] Editing: the Edit submenu (Select All, Cut, Copy, Paste) in every
+      app menu, and the same on a long press in a text field (E1)
+- [ ] The Phoenix Assistant, a voice assistant like Siri: push-to-talk,
+      on-device speech recognition, commands for the phone's own features
+      and spoken answers, in the classic style
+      ([AI-AND-MCP.md](AI-AND-MCP.md#10-and-20)). The MCP layer, the AI
+      agent and bring-your-own LLM are 2.0
+
 ## M5: modernize
 
 Once parity is reached, within the 1.x rule above (classic look, as if Palm
@@ -248,12 +261,6 @@ apps), accessibility, and whatever
 else the community agrees fits webOS. New visual styles such as dark and
 light themes go to 2.0.
 
-- [ ] MCP hub `org.webosphoenix.mcp`: OS tools, per-app tools from
-      `appinfo.json`, grants, confirmations and an audit log; stdio over
-      SSH, then Streamable HTTP with QR pairing ([AI-AND-MCP.md](AI-AND-MCP.md) P1-P4)
-- [ ] Assistant app and service on the hub; Settings > Assistant with
-      Anthropic, OpenAI, Google and OpenAI-compatible providers, a key
-      store, and llama.cpp on the device ([AI-AND-MCP.md](AI-AND-MCP.md) A1-A5)
 - [x] Terminal (`apps/terminal`, xterm.js on the PTY service
       `org.webosphoenix.pty`): the app, the service, the simulator's and the
       dev server's real shells ([TERMINAL.md](TERMINAL.md) T1-T2; T3 written,
@@ -268,6 +275,12 @@ supported alongside it.
 - [ ] A new visual style and themes (dark and light), designed from the
       webOS ideas rather than the 2011 art
 - [ ] Chromium-based browser replacing Isis
+- [ ] MCP hub `org.webosphoenix.mcp`: OS tools, per-app tools from
+      `appinfo.json`, grants, confirmations and an audit log; stdio over
+      SSH, then Streamable HTTP with QR pairing ([AI-AND-MCP.md](AI-AND-MCP.md) P1-P4)
+- [ ] The assistant grown into an AI agent on the hub; Settings > Assistant
+      with Anthropic, OpenAI, Google and OpenAI-compatible providers, a key
+      store, and llama.cpp on the device ([AI-AND-MCP.md](AI-AND-MCP.md) A1-A5)
 - [ ] One device, every screen (below)
 
 ### One device, every screen

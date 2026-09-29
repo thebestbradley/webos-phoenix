@@ -113,7 +113,7 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | --- | --- | --- | --- | --- |
 | Virtual keyboard | OSE's TV keyboard | Hardware slider keyboards on phones; virtual keyboard on the TouchPad and Pre 3 | P0 | webOS-style phone and tablet layouts on OSE's Maliit-based IME (M2) |
 | Word prediction and correction | Missing | Text Assist (auto-correct, custom words) | P1 | [Presage](https://presage.sourceforge.io/) or a small n-gram model per language; Text Assist settings pane |
-| **Swipe typing** | Missing | None | P2 | No mature open-source Maliit swipe engine exists. [FlorisBoard](https://github.com/florisboard/florisboard)'s glide typing (Apache-2.0, Kotlin) is a candidate to port; check that its licence and dictionaries fit |
+| **Swipe typing** | Missing | None | P1 (1.0, owner 29 September 2026; with prediction, dictation and emoji: [spec/GAPS.md](spec/GAPS.md) V2-V6) | No mature open-source Maliit swipe engine exists. [FlorisBoard](https://github.com/florisboard/florisboard)'s glide typing (Apache-2.0, Kotlin) is a candidate to port; check that its licence and dictionaries fit |
 
 ## Health and other
 

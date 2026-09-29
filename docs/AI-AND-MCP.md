@@ -8,7 +8,31 @@
 > Settings > Assistant must allow a first-party provider next to the others.
 > Which third-party providers come first is still open.
 
-A plan for three things:
+## 1.0 and 2.0
+
+> **Decision (29 September 2026, from the project owner).** A digital
+> assistant like Siri is part of **1.0**. The MCP layer and the frontier
+> AI work (the agent, local LLMs, bring-your-own LLM, a Phoenix AI service)
+> are **2.0**.
+
+The **Phoenix Assistant in 1.0** is a voice assistant in the classic style,
+with no language model and no MCP:
+
+| Part | 1.0 |
+| --- | --- |
+| **Asking** | Push-to-talk from the gesture area (press and hold while the keyboard is down; see [spec/GAPS.md](spec/GAPS.md) V4 for the keyboard-up case), a mic button in Just Type, a headset button. A wake word stays for later |
+| **Hearing** | On-device speech recognition with the transcriber Voice Memos already uses (`org.webosphoenix.transcriber`, whisper.cpp); nothing leaves the phone |
+| **Understanding** | Intents: a fixed grammar per command in each supported language ("call Mum", "text Sam I'm late", "set a timer for 10 minutes", "wake me at 7", "turn off Wi-Fi", "open Maps", "navigate home", "play <artist>", "remind me to ...", "what's the weather", "what's 15% of 80"). Apps add their own through `appinfo.json`, the same way they add Just Type Quick Actions |
+| **Doing** | The same Luna calls Just Type's actions and the apps already make: Phone, Messaging, Clock, Settings, Maps, Music, Tasks, Weather, Contacts. Anything that sends or deletes is read back first ("Send 'I'm late' to Sam?") |
+| **Answering** | A popup alert or dashboard in the webOS style with the answer, spoken by the text-to-speech service; for anything it cannot do, "Search the web for ...", as Just Type does |
+
+**In 2.0** the same assistant grows into the agent this document plans:
+the MCP hub behind it, language models (local or a provider) for open
+questions and multi-step tasks, memory, Settings > Assistant with
+providers. The 1.0 intents stay as the fast, offline path (the "short
+command" row of Routing).
+
+A plan for three things (2.0, except where the table above says 1.0):
 
 1. an **MCP layer**, so that an AI client can use every app and the OS
    through the Model Context Protocol;
@@ -784,7 +808,10 @@ the device work waits for the M1 shell on OSE.
    phoenix-mcp`, Developer Mode only) enough for you, or do you want the
    LAN HTTP server with QR pairing early?
 4. **The gesture**: press and hold in the gesture area, or something else
-   (a double tap, a long press on the power key)?
+   (a double tap, a long press on the power key)? *Proposed (29 September
+   2026): hold in the gesture area asks the assistant while the keyboard is
+   down; while it is up, hold and slide moves the text cursor
+   ([spec/GAPS.md](spec/GAPS.md) V4).*
 5. **Wake word**: wanted at all? It needs our own trained model and costs
    battery.
 6. **Memory**: is "the assistant proposes, you confirm" right, or do you
