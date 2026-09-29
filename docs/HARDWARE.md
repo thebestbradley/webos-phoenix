@@ -415,7 +415,10 @@ Verizon Pixels) cannot be unlocked and are out.
   3. a Raspberry Pi 4 image for the official 7" touchscreen (M1),
   4. a browser demo: the web apps already run in a browser with
      `runtime/phoenix-runtime.js`; the QML shell could follow with Qt for
-     WebAssembly (*untested*).
+     WebAssembly (*untested*). Added to an iPad's Home Screen it is also a
+     touch development device ([ROADMAP.md](ROADMAP.md#development-devices)),
+  5. a native iPad app through TestFlight, and an ARM64 image for UTM on
+     Apple silicon Macs (same section).
 
 ## Timeline
 

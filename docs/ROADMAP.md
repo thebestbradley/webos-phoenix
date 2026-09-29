@@ -81,6 +81,30 @@ These Open webOS repositories are also public and should fill the gaps:
       `pseudo` and Chromium's V8 snapshot tool. Target devices can already be ARM64.
 - [ ] Shared sstate/download cache so rebuilds and CI don't start from scratch
 
+## Development devices
+
+Ways to try Phoenix on a touch screen before a phone runs it (owner,
+29 September 2026). Sidecar from a Mac works today but turns touches into a
+mouse pointer, shows the Mac's menu bar and only reaches as far as the Mac.
+
+- [ ] **iPad, in the browser**: the QML shell built with Qt for WebAssembly,
+      app cards as iframes over the shell's canvas (CSS transforms follow
+      the card layout), the few native pieces (KeyInjector, DeviceConfig,
+      the PTY service) replaced with web versions, served as static files
+      and added to the Home Screen so it runs full screen with real
+      multi-touch, no Mac needed. Doubles as the public browser demo
+      ([HARDWARE.md](HARDWARE.md#community-and-adoption)). Safari is the
+      engine, so Chromium-only behaviour needs checking
+- [ ] **iPad, as a native app**: Qt 6 for iOS, signed with the owner's
+      developer account and shared through TestFlight. Qt WebEngine does not
+      exist on iOS, so cards use WKWebView (Qt WebView): the live page while
+      maximized, a snapshot while the card is scaled, stacked or thrown
+- [ ] **ARM64 virtual machine image** (`qemuarm64`-style, UEFI) for UTM on
+      Apple silicon Macs: runs OSE and Phoenix at near-native speed through
+      Apple's virtualization, the real OS rather than the simulator. On an
+      iPad, UTM can only emulate (no hypervisor access), which is far too
+      slow for OSE and Chromium, and touch reaches the guest as a pointer
+
 ## M1: running on webOS OSE
 
 Targets: `qemux86-64` (emulator) and Raspberry Pi 4 with the official
