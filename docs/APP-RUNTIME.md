@@ -103,8 +103,11 @@ app installer used by Files (see [Files](#files)); the activity manager
 (`com.palm.activitymanager`) and `com.palm.power` timeouts, which fire
 scheduled activities such as Tasks' reminders (see [Tasks](#tasks)); the
 speech-to-text service of Voice Memos (see [Voice Memos](#voice-memos));
-and last the CardDAV and CalDAV account's transport (see
-[CardDAV and CalDAV](#carddav-and-caldav)).
+the CardDAV and CalDAV account's transport (see
+[CardDAV and CalDAV](#carddav-and-caldav)); and last First Use, emergency
+information, location and help (see [First Use](#first-use),
+[Emergency information](#emergency-information),
+[Location](#location) and [Help](#help)).
 
 ## Running apps
 
@@ -241,10 +244,11 @@ texts.
 
 Camera, Photos and Music start cleanly too, and `node tools/test-media.cjs
 [--tablet]` drives them. So does Files, driven by `node tools/test-files.cjs
-[--tablet]`, and Tasks, driven by `node tools/test-tasks.cjs [--tablet]`.
-
-[--tablet]`, and Voice Memos, driven by `node tools/test-voicememos.cjs
-[--tablet]`.
+[--tablet]`, Tasks, driven by `node tools/test-tasks.cjs [--tablet]`, and
+Voice Memos, driven by `node tools/test-voicememos.cjs [--tablet]`. First
+Use, Help, emergency information and Location Services have
+`tools/test-firstuse.cjs`, `tools/test-help.cjs`, `tools/test-emergency.cjs`
+and `tools/test-location.cjs` (each with `--tablet`).
 
 ## Phoenix apps (React + TypeScript)
 
@@ -254,7 +258,7 @@ New Phoenix apps live in `apps/`, an npm workspace:
 | --- | --- |
 | `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers), `tasks.ts` Tasks (`com.palm.task:1`, `com.palm.tasklist:1`, reminder activities, `postNotification`); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
 
-| `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers), `transcriber.ts` Voice Memos (`transcriber.transcribe()` with progress, `TRANSCRIBE_ERRORS`); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
+| `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers), `transcriber.ts` Voice Memos (`transcriber.transcribe()` with progress, `TRANSCRIBE_ERRORS`), `location.ts` the location service and per-app permissions (`location`, `locationPermissions`, `LOCATION_ERRORS`), `setup.ts` First Use, the medical ID, accessibility and the emergency numbers (`firstUse`, `emergencyInfo`, `accessibility`, `isEmergencyNumber`); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
 | `apps/shared/phoenix-ui` (`@phoenix/ui`) | React components with the webOS 1.x/2.x look, drawn with the Enyo 1.0 "Heritage" artwork (copied into `assets/enyo`, see its `PROVENANCE.md`): `PageHeader`, `Group`, `Row`, `Divider`, `ToggleButton`, `Slider` (also as a progress/seek bar), `ListSelector`, `Picker`, `PopupMenu`, `Button`, `Drawer`, `DividerDrawer`, `Dialog`, `Spinner`, `TextField`; for Phone and Messaging the webOS dial pad (`Dialpad`, `DialButton`, `BackspaceButton`, from Enyo's `lib/telephony` art), the command menu (`ToolBar`, `RadioToolGroup`, `ToolButton`), `Avatar` and number / time formatting (`formatDuration` takes milliseconds); for the media apps `Toolbar`, `IconToolButton`, `GroupedToolButtons`, `Glyph` and `formatSeconds`; for Files `CheckBox` (Heritage `checkbox.png`) and file glyphs (copy, cut, paste, new folder, ...); `BackProvider`/`useBack` for the back gesture |
 | `apps/settings` | Settings (see below) |
 | `apps/phone`, `apps/messaging` | Phone and Messaging (see below) |
@@ -264,6 +268,9 @@ New Phoenix apps live in `apps/`, an npm workspace:
 | `apps/tasks` | Tasks (see [below](#tasks)) |
 
 | `apps/voicememos` | Voice Memos (see [below](#voice-memos)); `apps/voicememos/service` is its speech-to-text Luna service (whisper.cpp) for the device |
+
+| `apps/firstuse` | First Use (see [below](#first-use)) |
+| `apps/help` | Help (see [below](#help)); its topics are Markdown files in `apps/help/topics` |
 
 | `apps/dav` | The CardDAV & CalDAV account (see [below](#carddav-and-caldav)): a hidden Enyo 1.0 app with the account's sign-in page, its db8 kinds and account template, and `apps/dav/service`, its Node.js Luna service and sync engine |
 
@@ -329,7 +336,8 @@ params match a launch point opens that launch point's card.
 
 `apps/settings` is one app with one launch point per pane, like the separate
 preference apps of webOS 2.x: Wi-Fi, Bluetooth, Airplane Mode, Screen & Lock,
-Sounds & Ringtones, Date & Time, Language & Region, Device Info, Updates.
+Sounds & Ringtones, Date & Time, Language & Region, Accessibility, Location
+Services, Emergency Info, Device Info, Updates.
 Launched without a page it lists them all. The launcher icons are drawn by
 `apps/settings/tools/render-icons.cjs` and the wallpapers by
 `tools/make-wallpapers.py` (CC0); Palm's were never open-sourced.
@@ -350,7 +358,10 @@ same request and reply shapes:
 | Sounds | `com.webos.service.audio` `master/getVolume`, `master/setVolume`, `master/muteVolume`, `getInputVolume` / `setInputVolume` (`streamType` `pringtones`, `palerts`, `pmedia`), `playFeedback`; system service `ringtone`, `systemSounds` | `audiod-pro` `src/modules/masterVolumeManager`, `audioPolicyManager`, `systemSoundsManager` |
 | Date & Time | system service `get/setPreferences` (`timeFormat`, `useNetworkTime`, `useNetworkTimeZone`, `timeZone`), `getPreferenceValues {key: "timeZone"}`, `time/getSystemTime`, `time/setSystemTime {utc}` | `luna-sysservice` `Src/TimePrefsHandler.cpp` |
 | Language & Region | `com.webos.settingsservice` `get/setSystemSettings {keys: ["localeInfo"]}` (`locales.UI`, `locales.FMT`) | `settingsservice` |
-| Device Info | system service `deviceInfo/query`, `osInfo/query`; `com.palm.power` `batteryStatusQuery` (legacy); settings service `resetSystemSettings`; `org.webosphoenix.service.reset/eraseUserData` (Phoenix, simulator only so far) | `luna-sysservice` `Src/DeviceInfoService.cpp`, `OsInfoService.cpp` |
+| Device Info | system service `deviceInfo/query`, `osInfo/query`; `com.palm.power` `batteryStatusQuery` (legacy); settings service `resetSystemSettings`; `org.webosphoenix.service.reset/eraseUserData` (Phoenix, simulator only so far); "Help and tips" and "Run setup again" launch Help and First Use (`{rerun: true}`) | `luna-sysservice` `Src/DeviceInfoService.cpp`, `OsInfoService.cpp` |
+| Accessibility | system service `get/setPreferences` `accessibility {reduceMotion, highContrast, monoAudio, captions}` (Phoenix key) | `luna-sysservice` `Src/PrefsFactory.cpp` (stores any key) |
+| Location Services | `com.webos.service.location` `getAllLocationHandlers`, `setState {Handler, state}`, `getCurrentPosition`, `getReverseLocation`; `org.webosphoenix.service.location` `getPermissions`, `setPermission`, `removePermission` (Phoenix) | see [Location](#location) |
+| Emergency Info | system service `get/setPreferences` `emergencyInfo` (Phoenix key); contacts from db8 `com.palm.person:1` | see [Emergency information](#emergency-information) |
 
 The simulated services keep their state in the runtime's store (shared by
 every app window, persistent across restarts) and have a few simulated
@@ -365,7 +376,7 @@ Settings and the status bar stay in step:
    wallpaper changes, and when a page starts, the runtime posts
    `systemStatus` (`wifiEnabled`, `wifiConnected`, `wifiBars`, `bluetoothOn`,
    `airplaneMode`, `brightness` 0-100, `rotationLocked`, `muted`,
-   `wallpaperFile`).
+   `reduceMotion`, `wallpaperFile`).
 2. `SimWindowSource` turns the wallpaper's device path into a file URL and
    emits `systemStatusReported(status)`; `sim.qml` applies it with
    `SimSystemStatus.applyAppStatus()` and sets the shell wallpaper.
@@ -883,3 +894,131 @@ radicale`), adds the account in the original Accounts app, and checks sync
 both ways against db8, Contacts and Calendar; screenshots go to
 `build/dav-tests/`. The device service's tests (`apps/dav/service/*.test.ts`)
 run with `npm test`.
+
+## First Use
+
+`apps/firstuse` (`org.webosphoenix.firstuse`, hidden from the launcher)
+rebuilds the webOS First Use app, which Palm never open-sourced. On webOS,
+`LunaSysMgr.upstart` started LunaSysMgr in its minimal UI with
+`-u minimal -a com.palm.app.firstuse` until `/var/luna/preferences/ran-first-use`
+existed (`WindowManagerMinimal`: a status bar and the app full screen; no
+launcher, lock screen or system menu), and `com.palm.systemmanager/getBootStatus`
+answered `firstUse: true` meanwhile. Phoenix does the same:
+
+- **Steps**: Welcome (language: `com.webos.settingsservice` `localeInfo`),
+  Wi-Fi (join, with a password dialog), Date & Time (time zone, network
+  time, 24-hour clock), Accounts (Synergy explained, the accounts there are,
+  "Add an account" opens the Accounts app; what syncs today, per
+  [SYNERGY-MODERN.md](SYNERGY-MODERN.md)), Passcode (none, simple PIN or
+  password, through `com.palm.systemmanager setDevicePasscode`), Privacy
+  (Location Services and network location; the assistant of
+  [AI-AND-MCP.md](AI-AND-MCP.md) is marked "coming later"), Cards & Gestures
+  (the tutorial), All Set (Help and tips, Emergency Info). Every step but the
+  first and last has Skip; Back and the back gesture go back a step; "Skip
+  setup" on the first page ends it at once after asking.
+- **The tutorial** plays each gesture on a small drawn phone (a tablet on
+  tablets): swipe up for card view, tap a card, flick a card away, swipe
+  left for back (phones only), swipe up again for the launcher, Just Type.
+  CSS animations, new: Palm's tutorial was not released.
+- **Done or skipped**: the app sets the system preference
+  `firstUseComplete` and closes its window.
+
+The shell (`Shell.startFirstUse()`) launches the app as the only card,
+maximized: no dock, launcher, search pill, Just Type, system menu or lock
+screen; swipe up shows card view only when First Use has opened another app
+(Accounts, Help), and First Use's card cannot be flicked away
+(`CardView.pinnedUid`). When the card closes, `Shell.firstUse` ends and the
+normal shell is back. phoenix-sim runs it at start-up until it has been done
+once (its settings file keeps `firstuse/done`, set when a page reports
+`firstUseComplete`), unless `--scene` or `--launch` is given;
+`phoenix-sim --first-use` or `--scene firstuse` runs it anyway. The shell
+tells the pages (`applyHostStatus {firstUse}`), so `getBootStatus` answers
+as LunaSysMgr's did. Settings > Device Info > "Run setup again" launches it
+as an ordinary card with `{rerun: true}`.
+
+On a device, the shell has to read `firstUseComplete` from the system
+service at boot (not wired in `LsmSystemStatus` yet).
+
+## Help
+
+`apps/help` (`org.webosphoenix.help`, Apps tab) has short topics on the
+gestures, cards, the launcher, notifications, Just Type, the system menu,
+the lock screen, each Phoenix app, and the settings added here. Each topic
+is a Markdown file in `apps/help/topics` with a front matter block (`title`,
+`category`, `order`, `summary`, `keywords`, `app`); the app renders the
+small part of Markdown they use (headings, lists, bold, italic, code, tips,
+links; `topic:ID` links to another topic, `app:ID` opens an app) as React
+elements, never as HTML. Search matches every word of the query against
+title, keywords and text. Launch params: `{topic}`, `{search}`.
+
+Just Type finds topics through a `dbsearch` in the app's `appinfo.json`:
+the build writes `dist/help-index.json` (title, summary and search text of
+each topic, and a version), which is put into db8 kind
+`org.webosphoenix.helptopic:1` when it changed: by the simulator's runtime
+when Just Type, the system UI or Help starts, and by Help itself on a
+device (Just Type only finds help once Help has run there; a boot-time
+indexer is still to do).
+
+## Emergency information
+
+**Settings > Emergency Info** keeps a medical ID: name, date of birth,
+blood type, organ donor, medical conditions, allergies, medications,
+notes, emergency contacts picked from `com.palm.person:1` (with a
+relation), and "Show when locked". It is the system preference
+`emergencyInfo` (`@phoenix/luna` `emergencyInfo`), so it can be read with
+the device locked.
+
+**The lock screen**: the PIN pad gets an **Emergency Call** button (on the
+webOS phones the PIN screen came from the phone app; the TouchPad's
+UnlockPanel, the only one released, had none). It opens Phone's restricted
+mode as the shell's **emergency window** (`EmergencyWindow.qml`, after
+luna-sysmgr's `EmergencyWindowManager`: one window, over the lock screen,
+350 ms linear fade, Home or swipe up closes it). The window source makes it
+with `openSystemWindow(appId, params, "emergency")`; phoenix-sim loads
+Phone's page with `{emergency: true}`.
+
+**Phone's restricted mode** (`apps/phone/src/views/Emergency.tsx`) dials
+only emergency numbers (`isEmergencyNumber`: 112, 911, 000, 08, 110, 118,
+119, 999 as 3GPP TS 22.101 lists them, plus the region's own) and the
+Medical ID's emergency contacts; no contacts, call log, favourites or
+voicemail. The empty dial button fills in the region's main number (911 in
+North America, else 112) rather than calling it. Medical ID shows the
+owner's details and calls their contacts. The calls go in the call log.
+Cancel or the back gesture closes the window.
+
+`node tools/test-emergency.cjs [--tablet]` fills in the medical ID, uses
+restricted mode (a refused number, 911, the Medical ID, an emergency
+contact) and Settings > Accessibility.
+
+## Location
+
+The simulator answers webOS OSE's `com.webos.service.location` (also as
+the legacy `com.palm.location`), for Settings and for any app (Weather,
+Maps):
+
+| What | Service and methods | Source |
+| --- | --- | --- |
+| Handlers | `getAllLocationHandlers {subscribe}` -> `{handlers: [{name: "gps" \| "network", state}]}`, `getState {Handler}`, `setState {Handler, state}` (errorCode 10 without the capital-H `Handler`). Location Services "off" is both handlers off | LuneOS's findings on devices (`luneos-components` `LunaService.qml`, `luna-next-cardshell` `NewDeviceMenu.qml`) |
+| Position | `getCurrentPosition {Handler?}` -> `{errorCode: 0, latitude, longitude, altitude, horizAccuracy, vertAccuracy, direction, velocity, timestamp}` (seconds); `getLocationUpdates` / `startTracking {subscribe, minimumInterval}`. errorCodes as the legacy API: 1 timeout, 2 position unavailable, 5 location off, 6 permission denied | same; legacy `com.palm.location` |
+| Place | `getReverseLocation {latitude, longitude}` -> `{address, locality, region, country, countryCode}` | Phoenix (a list of cities in the simulator) |
+| Permissions | `org.webosphoenix.service.location` `getPermissions {subscribe}` -> `{permissions: [{appId, title, allowed, time, lastUsed}]}`, `setPermission {appId, allowed}`, `removePermission {appId}` | Phoenix: OSE has no per-app location permission |
+| Asking | the first request of an app with no answer posts `registerForLocationServiceNotifications {appId}` to `com.palm.systemmanager subscribeToSystemUI`; luna-systemui opens its own LocationAlert, whose buttons call `com.palm.location` `acceptLocationRequest` / `rejectLocationRequest` / `ignoreLocationRequest` | `luna-systemui` `data/SystemManagerService.js`, `app/SystemManagerAlerts/SystemManagerAlerts.js` |
+
+The simulated device is at 950 W. Maude Ave., Sunnyvale (Palm's old
+headquarters); a GPS fix is within 8 m, a network fix within 150 m (and
+needs Wi-Fi). The alert's "Allow Once" is remembered like "Always Allow"
+(change it in Settings). With no system UI to ask (a desktop browser) an app is
+allowed and listed in Settings. The system apps (Just Type, the system UI,
+Settings, First Use) never ask. `navigator.geolocation` is answered from
+the same service and permission. `@phoenix/luna`'s `location` and
+`locationPermissions` wrap all of it. For tests:
+`__phoenixRuntime.location.setPosition({latitude, longitude})`, `.answer(appId, "allow" | "deny")`,
+`.reset()`.
+
+`node tools/test-location.cjs [--tablet]` uses Settings > Location
+Services, asks from other apps (with and without luna-systemui's alert)
+and checks `navigator.geolocation`.
+
+On a device, the per-app permission is a Phoenix service still to write,
+in front of OSE's location service.
+

@@ -15,7 +15,9 @@
     "music",
     "files",
     "tasks",
-    "voicememos"
+    "voicememos",
+    "help",
+    "firstuse"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

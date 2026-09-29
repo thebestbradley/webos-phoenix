@@ -9,7 +9,9 @@
 // Tablet (1024 wide): the dial pad stays on the left and the log or the
 // favourites fill the right, as the TouchPad's "Phone & Video Calls" did.
 //
-// Launch params: {number: "..."} fills in the dial pad (tel: links).
+// Launch params: {number: "..."} fills in the dial pad (tel: links);
+// {emergency: true} is the restricted mode the lock screen opens
+// (views/Emergency).
 
 import { useEffect, useMemo, useState } from "react";
 import { primaryCall, ringingCall, telephony, type Call } from "@phoenix/luna";
@@ -22,6 +24,7 @@ import { CallLog } from "./views/CallLog";
 import { Favorites } from "./views/Favorites";
 import { InCall } from "./views/InCall";
 import { IncomingAlert, isIncomingAlert, useIncomingAlert } from "./views/IncomingAlert";
+import { EmergencyPhone, useEmergencyMode } from "./views/Emergency";
 
 type Tab = "dial" | "log" | "favorites";
 
@@ -128,12 +131,17 @@ function Phone() {
     );
 }
 
+function Root() {
+    const emergency = useEmergencyMode();
+    return emergency ? <EmergencyPhone /> : <Phone />;
+}
+
 export function App() {
     if (isIncomingAlert())
         return <IncomingAlert />;
     return (
         <BackProvider>
-            <Phone />
+            <Root />
         </BackProvider>
     );
 }

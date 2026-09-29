@@ -311,6 +311,21 @@
             reply(fail(-1, String(e && e.message || e)));
         }
     }
+    // Calls made but not yet dispatched. A page that calls a service and
+    // closes its window at once (Enyo's alerts: call, then close()) would
+    // lose the call with its timer; on a device it was already on the bus.
+    var unsent = {}, nextUnsent = 1;
+    try {
+        global.addEventListener("pagehide", function () {
+            Object.keys(unsent).forEach(function (k) {
+                var u = unsent[k];
+                if (!u) return;
+                clearTimeout(u.timer);
+                u.run();
+            });
+        });
+    } catch (e) { /* ignore */ }
+
     runtime.dispatch = dispatch;
 
     global.PalmServiceBridge = function () {
@@ -322,13 +337,16 @@
             var params = {};
             try { params = json ? JSON.parse(json) : {}; } catch (e) { params = {}; }
             // Responses are always asynchronous, as on a device.
-            setTimeout(function () {
+            var id = nextUnsent++;
+            var run = function () {
+                delete unsent[id];
                 dispatch(url, params, function (response) {
                     if (cancelled || !bridge.onservicecallback)
                         return;
                     bridge.onservicecallback(JSON.stringify(response));
                 }, ctx);
-            }, 0);
+            };
+            unsent[id] = { run: run, timer: setTimeout(run, 0) };
             return 1;
         };
         this.cancel = function () {
@@ -2175,6 +2193,8 @@
                 timeFormat: p.timeFormat === "HH24" ? "HH24" : "HH12",
                 muted: !!s.audio.muted,
                 showAlertsWhenLocked: p.showAlertsWhenLocked !== false,
+                // Settings > Accessibility: the shell's animations.
+                reduceMotion: !!(p.accessibility && p.accessibility.reduceMotion),
                 wallpaperFile: (p.wallpaper && p.wallpaper.wallpaperFile) || ""
             };
         }
@@ -2615,7 +2635,7 @@
         };
         sys["/setPreferences"] = function (p, reply, ctx) {
             baseSetPreferences(p, reply, ctx);
-            if ("rotationLock" in p || "wallpaper" in p || "timeFormat" in p || "showAlertsWhenLocked" in p) {
+            if ("rotationLock" in p || "wallpaper" in p || "timeFormat" in p || "showAlertsWhenLocked" in p || "accessibility" in p) {
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
                 changed();
             }
@@ -5093,5 +5113,540 @@
             templates: templates,
             sync: function (accountId) { return luna.call("palm://" + SERVICE + "/sync", { accountId: accountId }); }
         };
+    })();
+    // ================================================================================
+    // First use, emergency information, location and help (apps/firstuse,
+    // apps/settings, apps/phone, apps/help)
+    // ================================================================================
+    //
+    // System preferences (com.webos.service.systemservice get/setPreferences;
+    // luna-sysservice's PrefsFactory stores any key):
+    //   firstUseComplete   First Use has run (or was skipped). The shell starts
+    //                      First Use at boot until it is set.
+    //   emergencyInfo      the medical ID Settings > Emergency Info keeps and
+    //                      the lock screen's emergency window shows: {name,
+    //                      birthDate, bloodType, conditions, allergies,
+    //                      medications, notes, organDonor, contacts: [{personId,
+    //                      name, number, relation}], showWhenLocked}
+    //   accessibility      Settings > Accessibility: {reduceMotion,
+    //                      highContrast, monoAudio, captions}
+    //
+    // com.palm.systemmanager (legacy webOS, luna-sysmgr SystemService.cpp):
+    //   getBootStatus {subscribe}  -> {finished, firstUse}: firstUse while the
+    //                      shell runs First Use (its minimal UI), as the
+    //                      shell last said (applyHostStatus {firstUse})
+    //   subscribeToSystemUI {subscribe}  events for luna-systemui, which it
+    //                      turns into popup alerts (data/SystemManagerService.js):
+    //                      here only "registerForLocationServiceNotifications"
+    //                      {appId}, its location permission alert
+    //
+    // com.webos.service.location (webOS OSE; also answered as the legacy
+    // com.palm.location). Method and field names follow the OSE service as
+    // LuneOS found it on devices (luneos-components' LunaService mock:
+    // "Handler" with a capital H, the gps and network handlers) and the
+    // legacy com.palm.location API:
+    //   getAllLocationHandlers {subscribe}  -> {handlers: [{name, state}]}
+    //   getState {Handler, subscribe}  -> {state}
+    //   setState {Handler, state}      (errorCode 10 "Invalid input" without Handler)
+    //   getCurrentPosition {Handler?, maximumAge?, responseTime?}
+    //       -> {errorCode: 0, latitude, longitude, altitude, horizAccuracy,
+    //           vertAccuracy, direction, velocity, speed, timestamp (s)}
+    //   getLocationUpdates / startTracking {subscribe, minimumInterval (ms)}
+    //   getReverseLocation {latitude, longitude} -> {address, locality, region,
+    //       country, countryCode} (from a small built-in list of cities)
+    //   errorCodes (the legacy API's): 1 timeout, 2 position unavailable,
+    //       5 location services off, 6 permission denied
+    //   Legacy luna-systemui's LocationAlert answers with com.palm.location
+    //   acceptLocationRequest / acceptAlwaysLocationRequest /
+    //   rejectLocationRequest / ignoreLocationRequest {appId | url}.
+    //
+    // org.webosphoenix.service.location (Phoenix): which apps may have the
+    // position. OSE has no per-app location permission; on a device this
+    // is a Phoenix service in front of com.webos.service.location.
+    //   getPermissions {subscribe}  -> {permissions: [{appId, title, allowed, time, lastUsed}]}
+    //   setPermission {appId, allowed}, removePermission {appId}
+    //
+    // An app with no answer yet asks the user through luna-systemui's own
+    // location alert (above); with no system UI running (a desktop browser)
+    // the simulator allows it and lists it in Settings. The system apps
+    // (Just Type, the system UI, Settings, First Use) never ask.
+    //
+    // navigator.geolocation is answered from the same simulated service, so
+    // web apps using the W3C API get the same position and permission.
+    //
+    // Help (apps/help): the Help app's topics are put into db8
+    // (org.webosphoenix.helptopic:1, from its help-index.json) when Just Type,
+    // the system UI or Help starts, so Just Type's content search finds them.
+    (function systemSetup() {
+        var sys = runtime.services["com.webos.service.systemservice"];
+        var sm = runtime.services["com.palm.systemmanager"];
+        var setPrefs = sys["/setPreferences"];
+
+        defaultPrefs.firstUseComplete = false;
+        defaultPrefs.emergencyInfo = {};
+        defaultPrefs.accessibility = { reduceMotion: false, highContrast: false, monoAudio: false, captions: false };
+
+        var nobody = { cancelled: function () { return false; } };
+        function setPreferences(p) { setPrefs(p, function () {}, nobody); }
+
+        // Every page's subscribers, re-run when this page or another changes the store.
+        var watchers = [];
+        var notifying = false, again = false;
+        function changed() {
+            // Watchers may change the store themselves: run again after, not inside.
+            if (notifying) { again = true; return; }
+            notifying = true;
+            try {
+                do {
+                    again = false;
+                    var list = watchers;
+                    watchers = [];
+                    var keep = list.filter(function (w) { return w(); });
+                    watchers = keep.concat(watchers);
+                } while (again);
+            } finally {
+                notifying = false;
+            }
+        }
+        function watch(p, reply, ctx, compute) {
+            var last = JSON.stringify(compute());
+            var first = JSON.parse(last);
+            if (p.subscribe) first.subscribed = true;
+            reply(first);
+            if (!p.subscribe) return;
+            watchers.push(function () {
+                if (ctx.cancelled()) return false;
+                var now = JSON.stringify(compute());
+                if (now !== last) {
+                    last = now;
+                    var r = JSON.parse(now);
+                    r.subscribed = true;
+                    reply(r);
+                }
+                return true;
+            });
+        }
+        var WATCHED = ["phoenix:shell:firstUse", "phoenix:location:state", "phoenix:location:permissions",
+                       "phoenix:systemui:events", "phoenix:location:ignored", "phoenix:settings:state"];
+        try {
+            global.addEventListener("storage", function (e) {
+                if (WATCHED.indexOf(e.key) >= 0) changed();
+            });
+        } catch (e) { /* ignore */ }
+
+        // ---- Accessibility: high contrast on every page -------------------------------
+
+        function applyContrast() {
+            var a = prefs().accessibility || {};
+            var root = global.document && global.document.documentElement;
+            if (!root || !root.classList) return true;
+            root.classList.toggle("phoenix-high-contrast", !!a.highContrast);
+            return true;
+        }
+        applyContrast();
+        watchers.push(applyContrast);
+        try {
+            global.addEventListener("storage", function (e) { if (e.key === "phoenix:prefs") applyContrast(); });
+        } catch (e) { /* ignore */ }
+        var setPrefsNow = sys["/setPreferences"];
+        sys["/setPreferences"] = function (p, reply, ctx) {
+            setPrefsNow(p, reply, ctx);
+            if ("accessibility" in p) applyContrast();
+        };
+
+        // ---- First use (getBootStatus) ------------------------------------------
+
+        sm["/getBootStatus"] = function (p, reply, ctx) {
+            watch(p, reply, ctx, function () { return ok({ finished: true, firstUse: !!store.get("shell:firstUse", false) }); });
+        };
+        var baseApply = runtime.applyHostStatus;
+        runtime.applyHostStatus = function (st) {
+            if (st && "firstUse" in st && !!st.firstUse !== !!store.get("shell:firstUse", false)) {
+                store.set("shell:firstUse", !!st.firstUse);
+                changed();
+            }
+            baseApply(st);
+        };
+
+        // ---- System UI events (subscribeToSystemUI) ---------------------------------
+
+        var LISTENING = "systemui:listening";
+        function systemUiListening() {
+            return Date.now() - store.get(LISTENING, 0) < 30000;
+        }
+        function postSystemUi(event, message) {
+            var q = store.get("systemui:events", []).filter(function (e) { return Date.now() - e.time < 60000; });
+            q.push({ id: Date.now() + "-" + Math.random().toString(36).slice(2, 7), time: Date.now(), event: event, message: message });
+            store.set("systemui:events", q);
+            changed();
+        }
+        sm["/subscribeToSystemUI"] = function (p, reply, ctx) {
+            reply(ok({ subscribed: !!p.subscribe }));
+            if (!p.subscribe) return;
+            var since = Date.now(), seen = {};
+            var beat = function () { store.set(LISTENING, Date.now()); };
+            beat();
+            var timer = setInterval(beat, 10000);
+            try {
+                global.addEventListener("beforeunload", function () { store.set(LISTENING, 0); });
+            } catch (e) { /* ignore */ }
+            watchers.push(function () {
+                if (ctx.cancelled()) {
+                    clearInterval(timer);
+                    return false;
+                }
+                store.get("systemui:events", []).forEach(function (e) {
+                    if (e.time < since - 1000 || seen[e.id]) return;
+                    seen[e.id] = true;
+                    reply(ok({ event: e.event, message: e.message }));
+                });
+                return true;
+            });
+        };
+
+        // ---- Location ---------------------------------------------------------------
+
+        // Palm's old headquarters, 950 W. Maude Ave., Sunnyvale.
+        var HOME = { latitude: 37.38880, longitude: -122.03010, altitude: 32 };
+        var CITIES = [
+            ["Sunnyvale", "CA", "United States", "US", 37.3688, -122.0363],
+            ["San Francisco", "CA", "United States", "US", 37.7749, -122.4194],
+            ["New York", "NY", "United States", "US", 40.7128, -74.0060],
+            ["Seattle", "WA", "United States", "US", 47.6062, -122.3321],
+            ["London", "England", "United Kingdom", "GB", 51.5074, -0.1278],
+            ["Amsterdam", "North Holland", "Netherlands", "NL", 52.3676, 4.9041],
+            ["Berlin", "Berlin", "Germany", "DE", 52.5200, 13.4050],
+            ["Paris", "Ile-de-France", "France", "FR", 48.8566, 2.3522],
+            ["Seoul", "Seoul", "South Korea", "KR", 37.5665, 126.9780],
+            ["Tokyo", "Tokyo", "Japan", "JP", 35.6762, 139.6503],
+            ["Sydney", "NSW", "Australia", "AU", -33.8688, 151.2093]
+        ];
+        var TRUSTED = ["com.palm.launcher", "com.palm.systemui", "org.webosphoenix.settings", "org.webosphoenix.firstuse"];
+        var LOC_ERR = { timeout: 1, unavailable: 2, off: 5, denied: 6 };
+
+        function locState() {
+            var s = store.get("location:state", null) || {};
+            return {
+                gps: s.gps !== false,
+                network: s.network !== false,
+                position: s.position || HOME
+            };
+        }
+        function saveLocState(s) {
+            store.set("location:state", s);
+            changed();
+        }
+        function handlers() {
+            var s = locState();
+            return [{ name: "gps", state: s.gps }, { name: "network", state: s.network }];
+        }
+        // Network positioning needs Wi-Fi (or a cell network, which the
+        // simulator does not have).
+        function networkUsable() {
+            var st = store.get("settings:state", null);
+            return !st || (!st.offlineMode && !!(st.wifi && st.wifi.enabled));
+        }
+        // The fix from the handlers that are on; null when none can give one.
+        function fix(want) {
+            var s = locState();
+            var gps = s.gps && want !== "network";
+            var net = s.network && want !== "gps" && networkUsable();
+            if (!gps && !net) return null;
+            var p = s.position, t = Date.now();
+            // A few metres of wander, as a real fix has.
+            var jitter = gps ? 0.00004 : 0;
+            return {
+                errorCode: 0,
+                latitude: +(p.latitude + (Math.random() - 0.5) * jitter).toFixed(6),
+                longitude: +(p.longitude + (Math.random() - 0.5) * jitter).toFixed(6),
+                altitude: gps ? p.altitude || 0 : -1,
+                horizAccuracy: gps ? 8 : 150,
+                vertAccuracy: gps ? 12 : -1,
+                direction: -1,
+                velocity: -1,
+                speed: -1,
+                heading: -1,
+                handler: gps ? "gps" : "network",
+                timestamp: Math.floor(t / 1000)
+            };
+        }
+        function locationOff() {
+            var s = locState();
+            return !s.gps && !s.network;
+        }
+
+        function permissions() { return store.get("location:permissions", {}); }
+        function savePermissions(all) {
+            store.set("location:permissions", all);
+            changed();
+        }
+        function appTitle(appId) {
+            var lp = launchPoints().filter(function (a) { return a.id === appId && /_default$/.test(a.launchPointId); })[0]
+                || launchPoints().filter(function (a) { return a.id === appId; })[0];
+            return lp ? lp.title : appId;
+        }
+        function setPermission(appId, allowed) {
+            var all = permissions();
+            var cur = all[appId] || {};
+            all[appId] = { appId: appId, title: cur.title || appTitle(appId), allowed: !!allowed,
+                           time: Date.now(), lastUsed: cur.lastUsed || 0 };
+            savePermissions(all);
+        }
+        function used(appId) {
+            var all = permissions();
+            if (!all[appId]) return;
+            all[appId].lastUsed = Date.now();
+            savePermissions(all);
+        }
+
+        // Is appId allowed? cb(true | false); asks the user when it has to.
+        function checkPermission(appId, ctx, cb) {
+            if (TRUSTED.indexOf(appId) >= 0) return cb(true);
+            var p = permissions()[appId];
+            if (p) return cb(!!p.allowed);
+            if (!systemUiListening()) {
+                console.info("[phoenix-runtime] no system UI to ask about location for " + appId + "; allowing");
+                setPermission(appId, true);
+                return cb(true);
+            }
+            var asked = Date.now();
+            postSystemUi("registerForLocationServiceNotifications", { appId: appId });
+            var done = false;
+            var finish = function (v) {
+                if (done) return;
+                done = true;
+                clearInterval(poll);
+                cb(v);
+            };
+            var check = function () {
+                if (done) return false;
+                if (ctx.cancelled()) { finish(false); return false; }
+                var now = permissions()[appId];
+                if (now) { finish(!!now.allowed); return false; }
+                var ignored = store.get("location:ignored", {})[appId] || 0;
+                if (ignored >= asked) { finish(false); return false; }
+                if (Date.now() - asked > 60000) { finish(false); return false; }
+                return true;
+            };
+            // Answers from another page come as storage events; poll too, in case.
+            watchers.push(check);
+            var poll = setInterval(check, 300);
+        }
+
+        function positionReply(p, reply, ctx, appId) {
+            if (locationOff())
+                return reply(fail(LOC_ERR.off, "Location services are off"));
+            checkPermission(appId, ctx, function (allowed) {
+                if (!allowed) return reply(fail(LOC_ERR.denied, "Permission denied"));
+                var f = fix(p.Handler || p.handlerType || p.handler);
+                if (!f) return reply(fail(LOC_ERR.unavailable, "Position unavailable"));
+                used(appId);
+                // GPS takes a moment to answer; network lookups are quicker.
+                setTimeout(function () { reply(ok(f)); }, f.handler === "gps" ? 250 : 80);
+            });
+        }
+
+        function tracking(p, reply, ctx) {
+            var appId = appIdFromLocation();
+            if (!p.subscribe) return positionReply(p, reply, ctx, appId);
+            checkPermission(appId, ctx, function (allowed) {
+                if (!allowed) return reply(fail(LOC_ERR.denied, "Permission denied"));
+                reply(ok({ subscribed: true }));
+                var every = Math.max(1000, +p.minimumInterval || 1000);
+                var lastErr = null;
+                var tick = function () {
+                    if (ctx.cancelled()) {
+                        clearInterval(timer);
+                        return;
+                    }
+                    var f = locationOff() ? null : fix(p.Handler || p.handlerType || p.handler);
+                    var err = locationOff() ? LOC_ERR.off : f ? null : LOC_ERR.unavailable;
+                    if (err) {
+                        if (err !== lastErr) {
+                            var r = fail(err, err === LOC_ERR.off ? "Location services are off" : "Position unavailable");
+                            r.subscribed = true;
+                            reply(r);
+                        }
+                        lastErr = err;
+                        return;
+                    }
+                    lastErr = null;
+                    var out = ok(f);
+                    out.subscribed = true;
+                    reply(out);
+                };
+                var timer = setInterval(tick, every);
+                setTimeout(tick, 100);
+                used(appId);
+            });
+        }
+
+        function distanceKm(a, b, c, d) {
+            var r = Math.PI / 180, x = (d - b) * r * Math.cos((a + c) / 2 * r), y = (c - a) * r;
+            return Math.sqrt(x * x + y * y) * 6371;
+        }
+        function reverse(lat, lon) {
+            var best = null, bestD = Infinity;
+            CITIES.forEach(function (c) {
+                var dd = distanceKm(lat, lon, c[4], c[5]);
+                if (dd < bestD) { bestD = dd; best = c; }
+            });
+            if (!best || bestD > 60) return null;
+            return { locality: best[0], region: best[1], country: best[2], countryCode: best[3],
+                     address: best[0] + ", " + best[1] + ", " + best[2] };
+        }
+
+        function handlerName(p) { return p.Handler; }
+        var location = {
+            "/getAllLocationHandlers": function (p, reply, ctx) {
+                watch(p, reply, ctx, function () { return ok({ handlers: handlers() }); });
+            },
+            "/getLocationHandlers": function (p, reply, ctx) {
+                watch(p, reply, ctx, function () { return ok({ handlers: handlers().map(function (h) { return h.name; }) }); });
+            },
+            "/getState": function (p, reply, ctx) {
+                var h = handlerName(p);
+                if (h !== "gps" && h !== "network") return reply(fail(10, "Invalid input"));
+                watch(p, reply, ctx, function () { return ok({ state: locState()[h] }); });
+            },
+            "/setState": function (p, reply) {
+                var h = handlerName(p);
+                if ((h !== "gps" && h !== "network") || typeof p.state !== "boolean") return reply(fail(10, "Invalid input"));
+                var s = store.get("location:state", null) || {};
+                s[h] = p.state;
+                saveLocState(s);
+                reply(ok());
+            },
+            "/getCurrentPosition": function (p, reply, ctx) { positionReply(p, reply, ctx, appIdFromLocation()); },
+            "/getLocationUpdates": tracking,
+            "/startTracking": tracking,
+            "/getReverseLocation": function (p, reply) {
+                if (typeof p.latitude !== "number" || typeof p.longitude !== "number") return reply(fail(10, "Invalid input"));
+                var a = reverse(p.latitude, p.longitude);
+                reply(a ? ok(a) : fail(LOC_ERR.unavailable, "No address known for this position"));
+            },
+            // luna-systemui's LocationAlert (SystemManagerAlerts.js).
+            "/acceptLocationRequest": function (p, reply) { setPermission(p.appId || p.url, true); reply(ok()); },
+            "/acceptAlwaysLocationRequest": function (p, reply) { setPermission(p.appId || p.url, true); reply(ok()); },
+            "/rejectLocationRequest": function (p, reply) { setPermission(p.appId || p.url, false); reply(ok()); },
+            "/ignoreLocationRequest": function (p, reply) {
+                var ig = store.get("location:ignored", {});
+                ig[p.appId || p.url] = Date.now();
+                store.set("location:ignored", ig);
+                changed();
+                reply(ok());
+            },
+            "*": function (p, reply) { reply(ok()); }
+        };
+        register(["com.webos.service.location", "com.palm.location"], location);
+
+        register(["org.webosphoenix.service.location"], {
+            "/getPermissions": function (p, reply, ctx) {
+                watch(p, reply, ctx, function () {
+                    var all = permissions();
+                    // A title the answering page could not look up (the alert answers as its window closes).
+                    return ok({ permissions: Object.keys(all).sort().map(function (k) {
+                        var p = all[k];
+                        if (!p.title || p.title === p.appId) p.title = appTitle(p.appId);
+                        return p;
+                    }) });
+                });
+            },
+            "/setPermission": function (p, reply) {
+                if (!p.appId || typeof p.allowed !== "boolean") return reply(fail(-1, "appId and allowed are required"));
+                setPermission(p.appId, p.allowed);
+                reply(ok());
+            },
+            "/removePermission": function (p, reply) {
+                var all = permissions();
+                delete all[p.appId];
+                savePermissions(all);
+                reply(ok());
+            }
+        });
+
+        // For tests and the console.
+        runtime.location = {
+            setPosition: function (pos) {
+                var s = store.get("location:state", null) || {};
+                s.position = { latitude: pos.latitude, longitude: pos.longitude, altitude: pos.altitude || 0 };
+                saveLocState(s);
+            },
+            permissions: permissions,
+            answer: function (appId, allow) { setPermission(appId, allow === true || allow === "allow"); },
+            reset: function () {
+                store.set("location:state", {});
+                store.set("location:permissions", {});
+                changed();
+            }
+        };
+
+        // ---- navigator.geolocation (W3C) over the simulated service -----------------
+
+        (function geolocation() {
+            var nav = global.navigator;
+            if (!nav) return;
+            var watches = {}, nextWatch = 1;
+            function toPosition(f) {
+                return {
+                    coords: {
+                        latitude: f.latitude, longitude: f.longitude,
+                        altitude: f.altitude >= 0 ? f.altitude : null,
+                        accuracy: f.horizAccuracy,
+                        altitudeAccuracy: f.vertAccuracy >= 0 ? f.vertAccuracy : null,
+                        heading: null, speed: null
+                    },
+                    timestamp: f.timestamp * 1000
+                };
+            }
+            function toError(r) {
+                var code = r.errorCode === LOC_ERR.denied ? 1 : r.errorCode === LOC_ERR.timeout ? 3 : 2;
+                return { code: code, message: r.errorText || "", PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 };
+            }
+            var geo = {
+                getCurrentPosition: function (success, error) {
+                    dispatch("luna://com.webos.service.location/getCurrentPosition", {}, function (r) {
+                        if (r.returnValue) success(toPosition(r));
+                        else if (error) error(toError(r));
+                    }, { cancelled: function () { return false; }, onCancel: null });
+                },
+                watchPosition: function (success, error) {
+                    var id = nextWatch++, stopped = false;
+                    watches[id] = function () { stopped = true; };
+                    dispatch("luna://com.webos.service.location/getLocationUpdates", { subscribe: true }, function (r) {
+                        if (r.returnValue && typeof r.latitude === "number") success(toPosition(r));
+                        else if (!r.returnValue && error) error(toError(r));
+                    }, { cancelled: function () { return stopped; }, onCancel: null });
+                    return id;
+                },
+                clearWatch: function (id) {
+                    if (watches[id]) watches[id]();
+                    delete watches[id];
+                }
+            };
+            try {
+                Object.defineProperty(nav, "geolocation", { configurable: true, get: function () { return geo; } });
+            } catch (e) { /* read-only in this browser */ }
+        })();
+
+        // ---- Help topics for Just Type ------------------------------------------------
+
+        (function helpIndex() {
+            var INDEXERS = ["com.palm.launcher", "com.palm.systemui", "org.webosphoenix.help"];
+            if (INDEXERS.indexOf(appIdFromLocation()) < 0) return;
+            var KIND = "org.webosphoenix.helptopic:1";
+            var idx = null;
+            try { idx = JSON.parse(PalmSystem.getResource("/usr/palm/applications/org.webosphoenix.help/help-index.json") || "null"); }
+            catch (e) { idx = null; }
+            if (!idx || !idx.topics || store.get("helpIndexVersion", "") === idx.version) return;
+            callNow("palm://com.palm.db/putKind", { id: KIND, owner: "org.webosphoenix.help",
+                                                    indexes: [{ name: "searchText", props: [{ name: "searchText", tokenize: "all", collate: "primary" }] }] });
+            callNow("palm://com.palm.db/del", { query: { from: KIND }, purge: true });
+            callNow("palm://com.palm.db/put", { objects: idx.topics.map(function (t) {
+                return { _kind: KIND, _id: "help-" + t.id, topicId: t.id, title: t.title, summary: t.summary,
+                         category: t.category, searchText: t.searchText, version: idx.version };
+            }) });
+            store.set("helpIndexVersion", idx.version);
+        })();
     })();
 })(this);

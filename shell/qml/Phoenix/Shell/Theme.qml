@@ -32,6 +32,12 @@ QtObject {
 
     function px(v) { return Math.round(v * u) }
 
+    // Settings > Accessibility > Reduce motion (set by Shell.qml from
+    // system.reduceMotion): cards, the launcher and the lock screen appear
+    // and go without animating. A Phoenix addition.
+    property bool reduceMotion: false
+    function motion(ms) { return reduceMotion ? 1 : ms }
+
     // The density for a screen of `ppi` pixels per inch: legacy pixels are
     // sized like the Pre's (186 ppi at 1.0) and the Pre 3's (260 ppi at 1.5),
     // about 1/180 inch, in steps of 0.25 so the art scales by even amounts.
@@ -275,7 +281,7 @@ QtObject {
     readonly property int lockUnlockDistance: px(146)                // LockWindow.cpp:89
     readonly property int lockHelpFontSize: px(20)                   // LockWindow.cpp:91
     readonly property int lockHideHelpDelay: 1000                    // LockWindow.cpp:91 kHideHelpTimeoutInMS
-    readonly property int lockWindowFadeDuration: 150                // conf/lunaAnimations.conf:104 (curve 1, InQuad)
+    readonly property int lockWindowFadeDuration: motion(150)                // conf/lunaAnimations.conf:104 (curve 1, InQuad)
 
     // ---- Notifications -------------------------------------------------------
 
@@ -288,7 +294,7 @@ QtObject {
     readonly property real maximumNegativeSpaceRatio: 0.55           // Settings.cpp MaximumNegativeSpaceHeightRatio
     // BackdropBlur: a faint blur behind translucent surfaces (Phoenix addition).
     readonly property int backdropBlurRadius: 12
-    readonly property int lockFadeDuration: 200                      // conf/lunaAnimations.conf:108
+    readonly property int lockFadeDuration: motion(200)                      // conf/lunaAnimations.conf:108
     // The lock screen's dashboard and banner (LockWindow.cpp:84-102,
     // 2611-2615): 320 px wide on popup-bg.png, whose 10 px shadow and 9 px
     // corners make its 19 px border; at most 6 dashboard rows, 5.5 showing.
@@ -352,26 +358,27 @@ QtObject {
 
     // ---- Animation (conf/lunaAnimations.conf [Cards]) -----------------------
 
-    readonly property int cardLaunchDuration: 400
-    readonly property int cardAddMaxDuration: 750                    // conf/lunaAnimations.conf:53
-    readonly property int cardSlideDuration: 300                     // curve 10 = OutQuart
-    readonly property int cardMaximizeDuration: 300                  // curve 10 = OutQuart
-    readonly property int cardMinimizeDuration: 300                  // minimize is a cardSlide
-    readonly property int cardDeleteDuration: 300                    // curve 6 = OutCubic
+    readonly property int cardLaunchDuration: motion(400)
+    readonly property int cardAddMaxDuration: motion(750)                    // conf/lunaAnimations.conf:53
+    readonly property int cardSlideDuration: motion(300)                     // curve 10 = OutQuart
+    readonly property int cardMaximizeDuration: motion(300)                  // curve 10 = OutQuart
+    readonly property int cardMinimizeDuration: motion(300)                  // minimize is a cardSlide
+    readonly property int cardDeleteDuration: motion(300)                    // curve 6 = OutCubic
     // Loading card (CardLoading.cpp, lunaAnimations.conf:55-60, Settings.cpp:216).
     readonly property int cardLoadingTimeBeforePulse: 900
     readonly property int cardLoadingPulseDuration: 1000             // half up, half down
     readonly property int cardLoadingPulsePause: 1000
     readonly property int cardLoadingCrossFadeDuration: 300          // curve 0 = Linear
     readonly property int splashIconSize: tablet ? 192 : 128         // luna.conf SplashIconSize; 192 on tablets
-    readonly property int cardShuffleReorderDuration: 350            // curve 6 = OutCubic
-    readonly property int cardGroupReorderDuration: 500              // conf/lunaAnimations.conf:43-46
-    readonly property int cardDimmingDuration: 300
+    readonly property int cardShuffleReorderDuration: motion(350)            // curve 6 = OutCubic
+    readonly property int cardGroupReorderDuration: motion(500)              // conf/lunaAnimations.conf:43-46
+    readonly property int cardDimmingDuration: motion(300)
     readonly property int launcherReorderDuration: 300               // dynamicssettings.cpp:92-93 iconReorderIconMoveAnimTime, InQuad
-    readonly property int launcherDuration: 350                      // conf/lunaAnimations.conf:83-84 (curve 15 InOutQuint)
-    readonly property int quickLaunchDuration: 350                   // conf/lunaAnimations.conf:77-82
-    readonly property int justTypeFadeDuration: 150                  // conf/lunaAnimations.conf:87-88
-    readonly property int searchPillFadeDuration: 200                // conf/lunaAnimations.conf:81 quickLaunchFadeDuration
+    readonly property int launcherDuration: motion(350)                      // conf/lunaAnimations.conf:83-84 (curve 15 InOutQuint)
+    readonly property int quickLaunchDuration: motion(350)                   // conf/lunaAnimations.conf:77-82
+    readonly property int justTypeFadeDuration: motion(150)                  // conf/lunaAnimations.conf:87-88
+    readonly property int searchPillFadeDuration: motion(200)                // conf/lunaAnimations.conf:81 quickLaunchFadeDuration
+    readonly property int emergencyFadeDuration: motion(350)                 // EmergencyWindowManager.cpp:49 kFadeAnimDuration (linear)
 
     // lunaAnimations.conf curve numbers map to QEasingCurve types:
     // 6 = OutCubic, 10 = OutQuart.

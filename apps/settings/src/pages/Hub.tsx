@@ -8,7 +8,8 @@ import { PAGES, type PageId } from "./index";
 export function Hub({ onOpen }: { onOpen: (id: PageId) => void }) {
     const groups: { label: string; ids: PageId[] }[] = [
         { label: "Connections", ids: ["wifi", "bluetooth", "airplane"] },
-        { label: "Device", ids: ["screen", "sounds", "datetime", "language"] },
+        { label: "Device", ids: ["screen", "sounds", "datetime", "language", "accessibility"] },
+        { label: "Privacy & Safety", ids: ["location", "emergency"] },
         { label: "About", ids: ["deviceinfo", "updates"] },
     ];
     return (

@@ -136,3 +136,63 @@ div.license-text { font-family: var(--pui-font); font-size: 13px; }
 }
 
 .dim-row { color: var(--pui-text-dim); }
+
+/* Emergency Info ------------------------------------------------------------------------ */
+
+.emergency-field { display: block; padding-top: 6px; padding-bottom: 6px; }
+.emergency-field-label { color: var(--pui-label); font-size: 13px; text-transform: uppercase; margin-bottom: 2px; }
+.emergency-input {
+    display: block;
+    width: 100%;
+    border: 0;
+    outline: none;
+    background: transparent;
+    font: inherit;
+    font-size: 18px;
+    color: #000;
+    resize: none;
+    padding: 2px 0;
+    -webkit-user-select: text;
+    user-select: text;
+}
+.emergency-input::placeholder { color: #9a9a98; }
+.emergency-contact { position: relative; }
+.emergency-contact .pui-row { padding-right: 44px; }
+.emergency-remove {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    width: 30px;
+    height: 30px;
+    margin-top: -15px;
+    border: 0;
+    border-radius: 15px;
+    background: #c43a2f;
+    cursor: pointer;
+}
+.emergency-remove::before {
+    content: "";
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    top: 13px;
+    height: 4px;
+    border-radius: 2px;
+    background: #fff;
+}
+.emergency-picker { max-height: 50vh; overflow-y: auto; margin: 4px 0 8px; }
+.emergency-pick {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 10px 8px;
+    border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    background: transparent;
+    color: #fff;
+    font: inherit;
+    font-size: 18px;
+    cursor: pointer;
+}
+.emergency-pick:active { background: rgba(255, 255, 255, 0.15); }
+.emergency-pick-type { color: #9ab; font-size: 14px; margin-left: 6px; }

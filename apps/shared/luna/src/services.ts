@@ -123,9 +123,16 @@ export const settings = {
 // ---- com.webos.service.systemservice (luna-sysservice) --------------------------------
 
 export const system = {
-    /** getPreferences {keys, subscribe} */
+    /**
+     * getPreferences {keys, subscribe}. Later replies carry only the keys
+     * that changed; cb always gets all of them, the changes merged in.
+     */
     watchPreferences(keys: (keyof SystemPreferences)[], cb: (p: SystemPreferences) => void, onError?: OnError): Subscription {
-        return subscribe("luna://com.webos.service.systemservice/getPreferences", { keys }, cb, onError);
+        let all: SystemPreferences = {};
+        return subscribe("luna://com.webos.service.systemservice/getPreferences", { keys }, (r) => {
+            all = { ...all, ...r };
+            cb(all);
+        }, onError);
     },
     /** setPreferences {key: value, ...} */
     setPreferences(p: SystemPreferences) {

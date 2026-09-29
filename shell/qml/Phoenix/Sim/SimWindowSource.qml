@@ -58,6 +58,16 @@
 //   simulateIncomingCall()   ring the Phone app (phoenix-sim F4)
 //   simulateIncomingSms()    deliver a text to Messaging (phoenix-sim F5)
 //   openUrl(url)             open a web page in the browser (phoenix-sim --open)
+//   preferencesReported(prefs)  signal: a page set system preferences
+//                            (com.webos.service.systemservice setPreferences),
+//                            e.g. firstUseComplete when First Use is done
+//
+// Optional, for the emergency window (Shell.openEmergency):
+//   openSystemWindow(appId, params, kind) -> key   an app window that is no
+//                            card: windowFor(key), back(key); "" if the
+//                            app cannot be opened
+//   closeSystemWindow(key)
+//   systemWindowClosed(key)  signal: the page closed its window
 //
 // Web apps (the original webOS apps, Settings, ...) come from the virtual
 // webOS filesystem when phoenix-sim was built with Qt WebEngine; they
@@ -214,7 +224,8 @@ Item {
     property var _headless: ({})     // appId -> hidden main page of a noWindow app
     property Component _webComponent: null
 
-    function _webWindow(appId, url, uid) {
+    // system: the window is a system window (openSystemWindow), not a card.
+    function _webWindow(appId, url, uid, system) {
         if (!_webComponent)
             _webComponent = Qt.createComponent("WebAppWindow.qml");
         var win = _webComponent.createObject(source, { appId: appId, url: url });
@@ -226,7 +237,9 @@ Item {
         if (win.loaded)
             win.loaded.connect(function() { source._pageLoaded(win); });
         win.windowRequested.connect(function(request) { source._openWindow(appId, request); });
-        if (uid !== "")
+        if (system)
+            win.closeRequested.connect(function() { source.closeSystemWindow(uid); });
+        else if (uid !== "")
             win.closeRequested.connect(function() { source.cardCloseRequested(uid); });
         return win;
     }
@@ -318,6 +331,8 @@ Item {
             delete _lunaCallbacks[payload.id];
             if (cb)
                 cb(payload.reply);
+        } else if (type === "preferences") {
+            preferencesReported(payload);
         } else if (type === "systemStatus") {
             // The pages are in step with the shell again.
             _pendingStatus = null;
@@ -333,6 +348,42 @@ Item {
     }
 
     signal systemStatusReported(var status)
+    signal preferencesReported(var prefs)
+
+    // ---- System windows: the emergency window ---------------------------------------
+    // An app page shown by the shell outside the cards: Phone's restricted
+    // mode over the lock screen (EmergencyWindowManager's Type_Emergency
+    // window). Its key works as a window uid (windowFor, back, the keyboard).
+
+    property ListModel systemWindows: ListModel {}
+    signal systemWindowClosed(string key)
+
+    function openSystemWindow(appId, params, kind) {
+        var info = appInfo(appId);
+        if (!info)
+            return "";
+        var key = (kind || "system") + (_nextUid++);
+        var win = info.web ? _webWindow(appId, mainUrl(appId, params), key, true)
+                           : mockApp.createObject(source, { appId: appId, title: info.title, accent: info.color, glyph: info.glyph });
+        _windows[key] = win;
+        systemWindows.append({ key: key, appId: appId, kind: kind || "system" });
+        return key;
+    }
+
+    function closeSystemWindow(key) {
+        var i;
+        for (i = systemWindows.count - 1; i >= 0; --i)
+            if (systemWindows.get(i).key === key)
+                break;
+        if (i < 0)
+            return;
+        systemWindows.remove(i);
+        var win = _windows[key];
+        delete _windows[key];
+        if (win)
+            win.destroy();
+        systemWindowClosed(key);
+    }
 
     // ---- The virtual keyboard's input clients (the shell's IMEController) ------------
 
@@ -522,7 +573,7 @@ Item {
     // State only the shell knows (the lock screen, how the UI and the device
     // are turned), which every page gets as it loads; unlike the rest it is
     // not the pages' to overrule.
-    readonly property var _shellOwned: ["deviceLocked", "orientation", "ime"]
+    readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse"]
     property var _shellStatus: ({})
 
     function pushSystemStatus(changes) {

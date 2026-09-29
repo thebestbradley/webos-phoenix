@@ -692,3 +692,17 @@ body.pui-app, .pui-app {
 .pui-appmenu-item.disabled {
     opacity: 0.4;
 }
+
+/* ---- High contrast (Settings > Accessibility; the runtime sets the class) -------- */
+
+html.phoenix-high-contrast {
+    --pui-bg: #f4f4f2;
+    --pui-text: #000;
+    --pui-text-dim: #2e2e2c;
+    --pui-label: #0a4a86;
+    --pui-divider: #0b3d60;
+}
+html.phoenix-high-contrast .pui-row { border-bottom-color: #555; }
+html.phoenix-high-contrast .pui-row-value { color: #0a4a86; font-weight: bold; }
+html.phoenix-high-contrast .pui-note, html.phoenix-high-contrast .pui-row-subtitle { color: #2e2e2c; }
+html.phoenix-high-contrast :focus-visible { outline: 3px solid #000; outline-offset: 1px; }

@@ -21,3 +21,4 @@ StatusBar 1.0 StatusBar.qml
 SystemMenu 1.0 SystemMenu.qml
 Wallpaper 1.0 Wallpaper.qml
 VirtualKeyboard 1.0 VirtualKeyboard.qml
+EmergencyWindow 1.0 EmergencyWindow.qml

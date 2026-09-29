@@ -95,11 +95,19 @@ jobs:
           node tools/test-orientation.cjs --tablet --out app-tests/orientation-tablet
           node tools/test-keyboard.cjs --out app-tests/keyboard-phone
           node tools/test-keyboard.cjs --tablet --out app-tests/keyboard-tablet
+          node tools/test-firstuse.cjs --out app-tests/firstuse-phone
+          node tools/test-firstuse.cjs --tablet --out app-tests/firstuse-tablet
+          node tools/test-help.cjs --out app-tests/help-phone
+          node tools/test-help.cjs --tablet --out app-tests/help-tablet
+          node tools/test-emergency.cjs --out app-tests/emergency-phone
+          node tools/test-emergency.cjs --tablet --out app-tests/emergency-tablet
+          node tools/test-location.cjs --out app-tests/location-phone
+          node tools/test-location.cjs --tablet --out app-tests/location-tablet
 
       - name: Screenshots
         run: |
           mkdir -p screenshots/phone screenshots/tablet
-          for s in locked cards stacks reorder maximized launcher launcheredit lowbattery banner notified dashboard justtype keyboard systemmenu; do
+          for s in locked cards stacks reorder maximized launcher launcheredit lowbattery banner notified dashboard justtype keyboard systemmenu pin emergency firstuse; do
             xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --scene $s --screenshot screenshots/phone/$s.png
             xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --tablet --scene $s --screenshot screenshots/tablet/$s.png
           done

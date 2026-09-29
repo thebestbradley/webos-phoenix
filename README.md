@@ -74,6 +74,21 @@ transcribe and search. On a device it transcribes with whisper.cpp; the
 simulator records with Chromium's fake microphone and knows only the demo
 memos' scripts.*
 
+| First Use | Tutorial | Help | Emergency Call | Restricted Phone | Medical ID | Location Services |
+| --- | --- | --- | --- | --- | --- | --- |
+| ![](docs/screenshots/firstuse-welcome.png) | ![](docs/screenshots/firstuse-tutorial.png) | ![](docs/screenshots/help-topic.png) | ![](docs/screenshots/lock-emergency.png) | ![](docs/screenshots/emergency-dialpad.png) | ![](docs/screenshots/emergency-medical-id.png) | ![](docs/screenshots/location-settings.png) |
+
+| First Use, TouchPad | Emergency Call, TouchPad | Help, TouchPad |
+| --- | --- | --- |
+| ![](docs/screenshots/tablet-firstuse.png) | ![](docs/screenshots/tablet-emergency.png) | ![](docs/screenshots/tablet-help.png) |
+
+*First Use runs at the first start, as on webOS, and ends with a cards and
+gestures tutorial. Help's topics are Markdown files, found by Just Type.
+The PIN pad's Emergency Call opens Phone in a restricted mode over the lock
+screen, with the owner's Medical ID (Settings > Emergency Info). Location
+Services lists the apps that asked for the position; the first ask raises
+the original luna-systemui location alert.*
+
 ## Status
 
 **Milestone 0: the shell runs in a desktop simulator.** You can use the card
@@ -96,7 +111,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `shell/qml/Phoenix/Sim` | Mock apps and device status for the desktop simulator |
 | `shell/qml/Phoenix/Lsm`, `shell/qml/WebOSCompositor` | Adapter that plugs the shell into webOS OSE's `luna-surfacemanager` |
 | `shell/sim` | `phoenix-sim`, the desktop runner (also takes screenshots) |
-| `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Tasks, Voice Memos), with the shared `@phoenix/ui` components and `@phoenix/luna` service client, generated demo media (`apps/media-samples`), the Node.js Luna services of Files (`apps/files/service`) and Voice Memos (`apps/voicememos/service`, speech to text with whisper.cpp), and the CardDAV & CalDAV Synergy account with its sync service (`apps/dav`, see [docs/SYNERGY.md](docs/SYNERGY.md)) |
+| `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Tasks, Voice Memos, First Use, Help), with the shared `@phoenix/ui` components and `@phoenix/luna` service client, generated demo media (`apps/media-samples`), the Node.js Luna services of Files (`apps/files/service`) and Voice Memos (`apps/voicememos/service`, speech to text with whisper.cpp), and the CardDAV & CalDAV Synergy account with its sync service (`apps/dav`, see [docs/SYNERGY.md](docs/SYNERGY.md)) |
 | `runtime/` | The webOS web app runtime for the simulator and browsers (`PalmSystem`, simulated Luna services) |
 | `shell/tests` | Behaviour tests (`qmltestrunner`) |
 | `shell/assets/openwebos` | Original Open webOS system UI artwork (Apache-2.0) |
@@ -166,10 +181,16 @@ that app's card stack.
 `--launch com.palm.app.notes` opens an app at start-up (repeatable);
 `--launch org.webosphoenix.settings.wifi` opens a Settings pane.
 
-`--scene locked|cards|stacks|reorder|maximized|heldcard|launcher|dashboard|justtype|keyboard|systemmenu` opens
+`--scene locked|cards|stacks|reorder|maximized|heldcard|launcher|dashboard|justtype|keyboard|systemmenu|pin|emergency|firstuse` opens
 a demo state (`keyboard`: Just Type with the virtual keyboard up; `heldcard`: a card that keeps the upright orientation, drawn
-turned in card view with `--orientation left`); add `--screenshot out.png`
+turned in card view with `--orientation left`; `emergency`: the PIN pad's
+Emergency Call; `firstuse`: First Use); add `--screenshot out.png`
 to save a PNG and exit.
+
+**First Use** runs at start-up, as on a new device, until it has been
+finished or skipped once (the simulator remembers it in its settings
+file); `--first-use` runs it again. It does not run with `--scene` or
+`--launch`.
 
 Tests:
 
@@ -185,6 +206,10 @@ node tools/test-alarm.cjs                                   # a Clock alarm ring
 node tools/test-keyboard.cjs                                # web fields and the virtual keyboard
 node tools/test-voicememos.cjs                              # Voice Memos
 node tools/test-orientation.cjs                             # apps asking for and following an orientation
+node tools/test-firstuse.cjs                                # First Use, every step
+node tools/test-help.cjs                                    # Help, and Just Type finding it
+node tools/test-emergency.cjs                               # Emergency Info, restricted Phone, Accessibility
+node tools/test-location.cjs                                # Location Services and permissions
 ```
 
 ## Build a webOS OSE image (experimental)

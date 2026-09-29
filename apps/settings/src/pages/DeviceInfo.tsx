@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Device Info: model, software version, battery, storage, memory, open
-// source licenses, reset options.
+// source licenses, help, setup (First Use) again, reset options.
 // Services: com.webos.service.systemservice deviceInfo/query, osInfo/query;
 // com.palm.power batteryStatusQuery (legacy; OSE has no battery service on
 // its reference boards); com.webos.settingsservice resetSystemSettings;
 // org.webosphoenix.service.reset eraseUserData (Phoenix, not yet on device).
 
 import { useEffect, useState } from "react";
-import { call, settings, system, type DeviceInfo, type OsInfo } from "@phoenix/luna";
+import { apps, call, settings, system, type DeviceInfo, type OsInfo } from "@phoenix/luna";
 import { Button, Dialog, ErrorText, Group, Page, PageHeader, Row, Spinner } from "@phoenix/ui";
 import { useBack } from "../nav";
 import notice from "../../../../NOTICE?raw";
@@ -106,6 +106,13 @@ export function DeviceInfoPage() {
                     </Group>
                 </>
             )}
+
+            <Group label="Help & setup">
+                <Row title="Help and tips" chevron testId="open-help"
+                     onClick={() => void apps.launch("org.webosphoenix.help")} />
+                <Row title="Run setup again" subtitle="Language, Wi-Fi, accounts, passcode and the gesture tutorial" chevron
+                     testId="rerun-firstuse" onClick={() => void apps.launch("org.webosphoenix.firstuse", { rerun: true })} />
+            </Group>
 
             <Group label="Legal">
                 <Row title="Open source licenses" chevron onClick={() => setLicenses(true)} testId="licenses" />

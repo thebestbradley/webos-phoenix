@@ -1,0 +1,24 @@
+{
+    "id": "org.webosphoenix.helptopic:1",
+    "owner": "org.webosphoenix.help",
+    "indexes": [
+        {
+            "name": "topicId",
+            "props": [
+                {
+                    "name": "topicId"
+                }
+            ]
+        },
+        {
+            "name": "UI_Typedown_UniversalSearch",
+            "props": [
+                {
+                    "name": "searchText",
+                    "tokenize": "all",
+                    "collate": "primary"
+                }
+            ]
+        }
+    ]
+}
