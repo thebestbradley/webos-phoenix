@@ -50,6 +50,7 @@ private:
     QString m_error;
     QString m_repoDir;
     QStringList m_overlays;                    // searched first
+    QStringList m_excluded;                    // never served
     QList<QPair<QString, QString>> m_mounts;   // longest prefix first
     QHash<QString, QString> m_appDirs;         // app id -> directory
     QVariantList m_apps;

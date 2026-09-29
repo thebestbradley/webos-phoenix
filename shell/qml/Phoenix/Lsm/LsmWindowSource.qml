@@ -253,4 +253,45 @@ Item {
         if (index >= 0 && index < notifications.count)
             notifications.remove(index);
     }
+
+    // ---- System sounds (SystemSounds.qml decides; audiod plays) ------------------------
+    // OSE's audiod-pro plays files by path: playSound {fileName, sink}
+    // (PlaybackManager), stopped with controlPlayback {playbackId,
+    // requestType: "stop"}. It takes .wav and .pcm only, so the MP3 sounds
+    // (ringtone.mp3, boot.mp3, charging.mp3, ...) stay silent on a device
+    // until the image carries WAV copies. Loops, durations and per-sound
+    // volume are not in its API: a ringtone plays once, at the stream's volume.
+    // STATUS: not yet run on a device.
+    property var _playback: ({})     // handle -> playbackId
+    property int _nextSound: 1
+
+    function playSound(path, stream, loop, duration, volume, fallback) {
+        var handle = "snd" + (_nextSound++);
+        var file = /\.(wav|pcm)$/i.test(path) ? path : (fallback && /\.(wav|pcm)$/i.test(fallback) ? fallback : "");
+        if (file === "")
+            return handle;
+        var sink = stream === "ringtones" ? "pringtones" : stream === "feedback" ? "pfeedback" : "palerts";
+        lunaCall("luna://com.webos.service.audio/playSound", { fileName: file, sink: sink }, function(r) {
+            if (r && r.playbackId)
+                source._playback[handle] = r.playbackId;
+        });
+        return handle;
+    }
+
+    function stopSound(handle) {
+        var id = _playback[handle];
+        delete _playback[handle];
+        if (id)
+            lunaCall("luna://com.webos.service.audio/controlPlayback", { playbackId: id, requestType: "stop" }, function() {});
+    }
+
+    // The sounds that ship (tools/install-rootfs.py installs them); anything
+    // else is taken on trust, and audiod reports a missing file.
+    function soundExists(path) {
+        return !!path;
+    }
+
+    function appDir(appId) {
+        return "/usr/palm/applications/" + appId;
+    }
 }

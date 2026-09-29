@@ -28,12 +28,28 @@
 //                            clickableWhenLocked (the dashboard takes taps
 //                            on the lock screen: its {clickableWhenLocked:
 //                            true} window attribute)
-//   alerts        ListModel  key, appId, height (legacy px): popup alert
-//                            windows (windowFor(key)), front first
+//   alerts        ListModel  key, appId, height (legacy px), sound,
+//                            soundClass (the window's sound attributes):
+//                            popup alert windows (windowFor(key)), front first
 //   closeAlert(key)          (optional) close a popup alert window (Home)
-//   bannerRequested(appId, text, icon, params)  signal: a transient banner
-//                            (params: its launch params, JSON, or "")
+//   bannerRequested(appId, text, icon, params, soundClass, soundFile, soundDuration)
+//                            signal: a transient banner (params: its launch
+//                            params, JSON, or ""), and the sound it asked for
+//   soundRequested(appId, soundClass, soundFile, duration)
+//                            signal: an app asked for a sound
+//                            (PalmSystem.playSoundNotification), or a
+//                            notification came with one
 //   cardCloseRequested(uid)  signal: a window asked to close (window.close())
+//
+// System sounds (SystemSounds.qml decides what plays; the source plays it):
+//   playSound(path, stream, loop, durationMs, volume, fallback) -> handle
+//                            play a device path on a stream ("ringtones",
+//                            "alerts", "notifications", "feedback", ...;
+//                            durationMs -1 = the whole file; volume 0..1;
+//                            fallback: played if the file cannot be)
+//   stopSound(handle)
+//   soundExists(path) -> bool
+//   appDir(appId) -> string  the app's folder, for sounds named relative to it
 //
 // Optional (the shell has a built-in fallback without them):
 //   justTypeWindow() -> Item  the Just Type search surface, or null
@@ -252,6 +268,11 @@ Item {
         cardFocusRequested(uid);
     }
 
+    function _soundArgs(payload) {
+        return [payload.soundClass ? String(payload.soundClass) : "", payload.soundFile ? String(payload.soundFile) : "",
+                payload.duration | 0];
+    }
+
     function _hostMessage(appId, uid, type, payload) {
         if (appId === justTypeAppId && (type === "launch" || type === "open"))
             Qt.callLater(source.justTypeDismissed);
@@ -282,14 +303,24 @@ Item {
             // A banner only scrolls by; it leaves nothing in the dashboard
             // (PalmSystem.addBannerMessage).
             var bp = payload.params;
+            var bs = _soundArgs(payload);
             bannerRequested(appId, payload.message || "", _iconUrl(payload.icon, appId),
-                            bp === undefined || bp === null ? "" : typeof bp === "string" ? bp : JSON.stringify(bp));
+                            bp === undefined || bp === null ? "" : typeof bp === "string" ? bp : JSON.stringify(bp),
+                            bs[0], bs[1], bs[2]);
+        } else if (type === "sound") {
+            // PalmSystem.playSoundNotification(soundClass, soundFile, duration).
+            var ss = _soundArgs(payload);
+            soundRequested(appId, ss[0], ss[1], ss[2]);
         } else if (type === "notification") {
             // A notification for another app (e.g. a text the telephony
             // service received for Messaging, a Tasks reminder): {appId,
             // title, body, params?}; tapping it launches the app with params.
             var target = payload.appId && appInfo(payload.appId) ? payload.appId : appId;
             notify(target, payload.title || "", payload.body || "", payload.params);
+            if (payload.soundClass || payload.soundFile) {
+                var ns = _soundArgs(payload);
+                soundRequested(target, ns[0], ns[1], ns[2]);
+            }
         } else if (type === "activate") {
             // PalmSystem.activate: the app brings its card to the front.
             if (cardIndex(uid) >= 0)
@@ -363,14 +394,92 @@ Item {
             w.runScript("window.__phoenixRuntime && __phoenixRuntime.keyboardShown && __phoenixRuntime.keyboardShown(" + (shown ? "true" : "false") + ")");
     }
 
-    // Keyboard sounds (com.palm.audio/systemsounds/playFeedback: "key",
-    // "space", "backspace", "return"; SoundPlayerPool::playFeedback). No
-    // system sounds ship yet (GAPS A1): the simulator counts them.
-    property int feedbackCount: 0
-    property string lastFeedback: ""
-    function playFeedback(name) {
-        lastFeedback = name;
-        feedbackCount++;
+    // ---- System sounds ----------------------------------------------------------------
+    // The shell's SystemSounds picks the file; the simulator plays it with
+    // HTML audio in a runtime page (com.webos.service.audio playSound,
+    // __phoenixRuntime.sounds), preferably the system UI's, which is always
+    // up. Without web pages (tests) nothing is heard; soundLog keeps what
+    // was asked for either way.
+
+    signal soundRequested(string appId, string soundClass, string soundFile, int duration)
+
+    // What was played, newest last: {handle, path, stream, loop, duration,
+    // volume, fallback}; stopped handles are in stoppedSounds.
+    property var soundLog: []
+    property var stoppedSounds: []
+    property int soundCount: 0
+    property var lastSound: null
+    property int _nextSound: 1
+
+    // The system sounds that ship (runtime/rootfs.json: /usr/palm/sounds,
+    // /usr/share/phoenix/sounds), for soundExists without a rootfs (tests).
+    property var shippedSounds: [
+        "/usr/palm/sounds/alert.wav", "/usr/palm/sounds/notification.wav", "/usr/palm/sounds/phone.wav",
+        "/usr/palm/sounds/ringtone.mp3", "/usr/palm/sounds/boot.mp3", "/usr/palm/sounds/shutdown.mp3",
+        "/usr/palm/sounds/charging.mp3", "/usr/palm/sounds/battery_full.mp3", "/usr/palm/sounds/battery_low.mp3",
+        "/usr/palm/sounds/error.mp3", "/usr/palm/sounds/panel.mp3", "/usr/palm/sounds/tap_to_share.mp3",
+        "/usr/share/phoenix/sounds/feedback/key.wav", "/usr/share/phoenix/sounds/feedback/space.wav",
+        "/usr/share/phoenix/sounds/feedback/backspace.wav", "/usr/share/phoenix/sounds/feedback/return.wav",
+        "/usr/share/phoenix/sounds/feedback/appclose.wav"
+    ]
+
+    function soundExists(path) {
+        path = String(path || "");
+        // The user's storage lives in the pages (the Files store): the
+        // runtime plays the fallback if the file is not there.
+        if (path.indexOf("/media/") === 0)
+            return true;
+        if (typeof simRootfs !== "undefined" && simRootfs)
+            return simRootfs.fileUrl(path) !== "";
+        return shippedSounds.indexOf(path) >= 0;
+    }
+
+    function appDir(appId) {
+        var info = appInfo(appId);
+        return info && info.dir ? info.dir : "/usr/palm/applications/" + appId;
+    }
+
+    function _soundPage() {
+        var ui = _headless["com.palm.systemui"];
+        if (ui && ui.runScript)
+            return ui;
+        var pages = _webPages();
+        return pages.length ? pages[0] : null;
+    }
+
+    function playSound(path, stream, loop, duration, volume, fallback) {
+        var handle = "snd" + (_nextSound++);
+        var e = { handle: handle, path: String(path), stream: String(stream), loop: !!loop,
+                  duration: duration > 0 ? duration : -1, volume: volume === undefined ? 1 : volume,
+                  fallback: fallback ? String(fallback) : "" };
+        var log = soundLog.slice(-49);
+        log.push(e);
+        soundLog = log;
+        lastSound = e;
+        soundCount++;
+        var page = _soundPage();
+        if (page)
+            page.runScript("window.__phoenixRuntime && __phoenixRuntime.sounds && __phoenixRuntime.sounds.play("
+                           + JSON.stringify({ playbackId: handle, fileName: e.path, sink: _sinkFor(e.stream), loop: e.loop,
+                                              duration: e.duration, volume: e.volume, fallback: e.fallback }) + ")");
+        return handle;
+    }
+
+    function stopSound(handle) {
+        if (!handle)
+            return;
+        var s = stoppedSounds.slice(-49);
+        s.push(handle);
+        stoppedSounds = s;
+        var pages = _webPages();
+        for (var i = 0; i < pages.length; ++i)
+            pages[i].runScript("window.__phoenixRuntime && __phoenixRuntime.sounds && __phoenixRuntime.sounds.control("
+                               + JSON.stringify(String(handle)) + ", 'stop')");
+    }
+
+    // audiod's stream for a stream class (SoundPolicy.sinkFor).
+    function _sinkFor(stream) {
+        return stream === "ringtones" ? "pringtones" : stream === "feedback" ? "pfeedback" : "palerts";
     }
 
     // The orientations a window can ask for; anything else is "free".
@@ -390,7 +499,7 @@ Item {
     // The card the user is in (maximized and focused), set by the shell;
     // apps it launches stack on it.
     property string focusedUid: ""
-    signal bannerRequested(string appId, string text, url icon, string params)
+    signal bannerRequested(string appId, string text, url icon, string params, string soundClass, string soundFile, int soundDuration)
 
     // A file URL for an icon an app names by device path.
     function _iconUrl(path, appId) {
@@ -423,7 +532,8 @@ Item {
             for (var i = 0; i < alerts.count; ++i)
                 queued.push({ appId: alerts.get(i).appId, name: alerts.get(i).name });
             alerts.insert(Policy.insertIndex(queued, appId, name),
-                          { key: key, appId: appId, name: name, height: parseInt(_param(url, "phoenixHeight")) || 200 });
+                          { key: key, appId: appId, name: name, height: parseInt(_param(url, "phoenixHeight")) || 200,
+                            sound: _param(url, "phoenixSound"), soundClass: _param(url, "phoenixSoundClass") });
         } else {
             var info = appInfo(appId) || { title: appId, color: "#666666", glyph: "!", icon: "" };
             notifications.append({

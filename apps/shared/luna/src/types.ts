@@ -167,12 +167,32 @@ export interface SystemPreferences {
     timeZone?: TimeZone;
     wallpaper?: { wallpaperName: string; wallpaperFile: string };
     ringtone?: { name: string; fullPath: string };
+    /** The tones popup alerts and notifications fall back on (LunaSysMgr Preferences). */
+    alerttone?: { name: string; fullPath: string };
+    notificationtone?: { name: string; fullPath: string };
+    /** "System Sounds": the feedback sounds (keyboard clicks, closing a card). */
     systemSounds?: boolean;
+    /** The virtual keyboard's preferences, a JSON string (see keyboardPrefs). */
+    x_palm_virtualkeyboard_prefs?: string;
     rotationLock?: boolean;
     showAlertsWhenLocked?: boolean;
     /** Phoenix: seconds until the screen turns off. */
     screenTimeout?: number;
     [key: string]: unknown;
+}
+
+/** ringtone/listRingtones: one ringtone; system ones cannot be deleted. */
+export interface Ringtone {
+    name: string;
+    fullPath: string;
+    system?: boolean;
+}
+
+/** x_palm_virtualkeyboard_prefs, parsed (LunaSysMgr VirtualKeyboardPreferences.cpp). */
+export interface VirtualKeyboardPrefs {
+    keyboards?: { layout: string; language: string }[];
+    TapSounds?: boolean;
+    spaces2period?: boolean;
 }
 
 export interface SystemTime {
@@ -272,6 +292,7 @@ export interface LunaApi {
     "luna://com.webos.service.systemservice/time/setSystemTime": { params: { utc: number }; result: Empty };
     "luna://com.webos.service.systemservice/deviceInfo/query": { params: { parameters?: string[] }; result: DeviceInfo };
     "luna://com.webos.service.systemservice/osInfo/query": { params: { parameters?: string[] }; result: OsInfo };
+    "luna://com.webos.service.systemservice/ringtone/listRingtones": { params: Empty; result: { ringtones: Ringtone[] } };
     // audio
     "luna://com.webos.service.audio/master/getVolume": { params: Sub & { soundOutput?: string }; result: VolumeStatus };
     "luna://com.webos.service.audio/master/setVolume": { params: { soundOutput: string; volume: number; sessionId?: number }; result: Empty };
@@ -279,6 +300,11 @@ export interface LunaApi {
     "luna://com.webos.service.audio/getInputVolume": { params: Sub & { streamType: AudioStream }; result: { streamType: string; volume: number } };
     "luna://com.webos.service.audio/setInputVolume": { params: { streamType: AudioStream; volume: number; ramp?: boolean }; result: { streamType: string; volume: number } };
     "luna://com.webos.service.audio/playFeedback": { params: { name: string; sink?: string; play?: boolean }; result: Empty };
+    "luna://com.webos.service.audio/playSound": {
+        params: { fileName: string; sink: AudioStream; loop?: boolean; duration?: number; volume?: number; fallback?: string };
+        result: { playbackId: string };
+    };
+    "luna://com.webos.service.audio/controlPlayback": { params: { playbackId: string; requestType: "stop" | "pause" | "play" }; result: { playbackId: string } };
     // device lock (legacy)
     "luna://com.palm.systemmanager/getDeviceLockMode": { params: Empty; result: { lockMode: LockMode } };
     "luna://com.palm.systemmanager/setDevicePasscode": { params: { lockMode: LockMode; passCode?: string; oldPasscode?: string }; result: Empty };

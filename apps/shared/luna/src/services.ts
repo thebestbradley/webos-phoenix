@@ -7,8 +7,8 @@
 
 import { call, subscribe, type LunaError, type Subscription } from "./bridge";
 import type {
-    AudioStream, BluetoothAdapter, BluetoothDevice, ConnectionStatus, DeviceInfo, LockMode, OsInfo,
-    SystemPreferences, SystemSettings, SystemTime, TimeZone, WifiNetworkInfo, WifiSecurityType, WifiStatus,
+    AudioStream, BluetoothAdapter, BluetoothDevice, ConnectionStatus, DeviceInfo, LockMode, OsInfo, Ringtone,
+    SystemPreferences, SystemSettings, SystemTime, TimeZone, VirtualKeyboardPrefs, WifiNetworkInfo, WifiSecurityType, WifiStatus,
 } from "./types";
 
 type OnError = (e: LunaError) => void;
@@ -151,7 +151,28 @@ export const system = {
     osInfo(parameters?: string[]): Promise<OsInfo> {
         return call("luna://com.webos.service.systemservice/osInfo/query", parameters ? { parameters } : {});
     },
+    /** ringtone/listRingtones: the system's ringtones, then the user's (/media/internal/ringtones). */
+    async ringtones(): Promise<Ringtone[]> {
+        return (await call("luna://com.webos.service.systemservice/ringtone/listRingtones", {})).ringtones;
+    },
 };
+
+/**
+ * The virtual keyboard's preferences (x_palm_virtualkeyboard_prefs, a JSON
+ * string: LunaSysMgr VirtualKeyboardPreferences.cpp). TapSounds is
+ * "Keyboard clicks"; missing means on.
+ */
+export function keyboardPrefs(value: unknown): VirtualKeyboardPrefs {
+    if (typeof value === "string") {
+        try { value = JSON.parse(value); } catch { value = null; }
+    }
+    return value && typeof value === "object" ? value as VirtualKeyboardPrefs : {};
+}
+
+/** The same preference with TapSounds set, other keys kept, as the string it is stored as. */
+export function withTapSounds(value: unknown, on: boolean): string {
+    return JSON.stringify({ ...keyboardPrefs(value), TapSounds: on });
+}
 
 // ---- com.webos.service.audio (audiod-pro) --------------------------------------------
 
@@ -180,6 +201,14 @@ export const audio = {
     /** playFeedback {name}: a short system sound. */
     playFeedback(name: string) {
         return call("luna://com.webos.service.audio/playFeedback", { name });
+    },
+    /** playSound {fileName, sink}: play a sound file on a stream; resolves to its playbackId. */
+    async playSound(fileName: string, sink: AudioStream, options: { duration?: number } = {}): Promise<string> {
+        return (await call("luna://com.webos.service.audio/playSound", { fileName, sink, ...options })).playbackId;
+    },
+    /** controlPlayback {playbackId, requestType: "stop"} */
+    stopSound(playbackId: string) {
+        return call("luna://com.webos.service.audio/controlPlayback", { playbackId, requestType: "stop" });
     },
 };
 

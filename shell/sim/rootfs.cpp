@@ -36,6 +36,10 @@ Rootfs::Rootfs(const QString &repoDir)
     for (const auto &o : cfg.value(QStringLiteral("overlays")).toArray())
         m_overlays.append(QDir(repoDir).filePath(o.toString()));
 
+    // Files of the original apps we do not redistribute (docs/LEGAL.md).
+    for (const auto &e : cfg.value(QStringLiteral("exclude")).toArray())
+        m_excluded.append(e.toString());
+
     const QJsonObject mounts = cfg.value(QStringLiteral("mounts")).toObject();
     for (auto it = mounts.begin(); it != mounts.end(); ++it)
         m_mounts.append({ it.key(), QDir(repoDir).filePath(it.value().toString()) });
@@ -170,7 +174,7 @@ QString Rootfs::urlFor(const QString &devicePath)
 QString Rootfs::resolve(const QString &devicePath) const
 {
     const QString path = QDir::cleanPath(devicePath);
-    if (path.split(QLatin1Char('/')).contains(QStringLiteral("..")))
+    if (path.split(QLatin1Char('/')).contains(QStringLiteral("..")) || m_excluded.contains(path))
         return {};
     for (const QString &overlay : m_overlays) {
         const QString f = overlay + path;

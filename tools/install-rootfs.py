@@ -164,6 +164,9 @@ def main():
     final = {}
     for src, dev in plan:
         final[dev] = src
+    # Files of the original apps we do not redistribute (docs/LEGAL.md).
+    for dev in cfg.get("exclude", []):
+        final.pop(dev, None)
 
     if args.list:
         for dev in sorted(final):

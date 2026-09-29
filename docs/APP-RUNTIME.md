@@ -94,6 +94,21 @@ Pages talk to the shell (launch another app, show a banner) through
 `phoenixHost.postToHost(type, payload)`. In phoenix-sim that arrives as a
 console message with the `__phoenix__` prefix.
 
+System sounds follow LunaSysMgr's routes. `PalmSystem.addBannerMessage(msg,
+params, icon, soundClass, soundFile, duration)` puts the sound in the
+`banner` message; `PalmSystem.playSoundNotification(soundClass, soundFile,
+duration)` posts a `sound` message; a popup alert's `sound` and
+`soundclass` window attributes travel in its URL fragment
+(`phoenixSound`, `phoenixSoundClass`). The shell decides what plays
+(`shell/qml/Phoenix/Shell/SoundPolicy.js`) and plays it through one runtime
+page with the simulated audiod: `com.webos.service.audio` `playSound
+{fileName, sink}` (plus Phoenix's `loop`, `duration`, `volume`, `fallback`),
+`controlPlayback {playbackId, requestType: "stop"}` and `playFeedback
+{name, sink?}` (also `com.palm.audio/systemsounds/playFeedback`), all with
+HTML audio (`__phoenixRuntime.sounds`). The sounds are Open webOS's
+`/usr/palm/sounds` and Phoenix's feedback clicks in
+`/usr/share/phoenix/sounds/feedback` (`shell/assets/sounds/PROVENANCE.md`).
+
 The Settings app's services (Wi-Fi, Bluetooth, settings service, audio, ...)
 are simulated in their own clearly marked block at the end of the runtime;
 see [Settings](#settings) below. The media services (media indexer, camera,
@@ -349,7 +364,7 @@ same request and reply shapes:
 | Bluetooth | `com.webos.service.bluetooth2`: `adapter/getStatus`, `adapter/setState {powered}`, `adapter/startDiscovery`, `adapter/cancelDiscovery`, `adapter/pair`, `adapter/unpair`, `device/getStatus` | `com.webos.service.bluetooth2` `src/bluetoothmanagerservice.cpp`, `bluetoothmanageradapter.cpp` |
 | Screen & Lock | `com.webos.settingsservice` `get/setSystemSettings {category: "picture", backlight}`; `com.webos.service.systemservice` `get/setPreferences` (`screenTimeout`, `rotationLock`, `wallpaper`, `showAlertsWhenLocked`, `blinkNotifications`) | `settingsservice` `inc/SettingsServiceApi.h`; `luna-sysservice` `Src/PrefsFactory.cpp` (stores any key) |
 | Screen & Lock (PIN) | `com.palm.systemmanager` `getDeviceLockMode`, `setDevicePasscode`, `matchDevicePasscode`: the legacy webOS API; OSE has none, so Phoenix will have to provide it | `openwebos/luna-sysmgr` `Src/base/SystemService.cpp` |
-| Sounds | `com.webos.service.audio` `master/getVolume`, `master/setVolume`, `master/muteVolume`, `getInputVolume` / `setInputVolume` (`streamType` `pringtones`, `palerts`, `pmedia`), `playFeedback`; system service `ringtone`, `systemSounds` | `audiod-pro` `src/modules/masterVolumeManager`, `audioPolicyManager`, `systemSoundsManager` |
+| Sounds | `com.webos.service.audio` `master/getVolume`, `master/setVolume`, `master/muteVolume`, `getInputVolume` / `setInputVolume` (`streamType` `pringtones`, `palerts`, `pfeedback`, `pmedia`), `playFeedback`, `playSound`, `controlPlayback`; system service `ringtone`, `systemSounds`, `x_palm_virtualkeyboard_prefs` (`TapSounds`: Keyboard clicks), `ringtone/listRingtones` | `audiod-pro` `src/modules/masterVolumeManager`, `audioPolicyManager`, `systemSoundsManager` |
 | Date & Time | system service `get/setPreferences` (`timeFormat`, `useNetworkTime`, `useNetworkTimeZone`, `timeZone`), `getPreferenceValues {key: "timeZone"}`, `time/getSystemTime`, `time/setSystemTime {utc}` | `luna-sysservice` `Src/TimePrefsHandler.cpp` |
 | Language & Region | `com.webos.settingsservice` `get/setSystemSettings {keys: ["localeInfo"]}` (`locales.UI`, `locales.FMT`) | `settingsservice` |
 | Device Info | system service `deviceInfo/query`, `osInfo/query`; `com.palm.power` `batteryStatusQuery` (legacy); settings service `resetSystemSettings`; `org.webosphoenix.service.reset/eraseUserData` (Phoenix, simulator only so far) | `luna-sysservice` `Src/DeviceInfoService.cpp`, `OsInfoService.cpp` |

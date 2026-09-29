@@ -34,6 +34,19 @@ QtObject {
     // QOrientationSensor where the device provides one).
     property string deviceOrientation: "up"
     property bool muted: false
+    // System sounds (SystemSounds.qml): volumes 0..100, "System Sounds",
+    // the keyboard's clicks and the tones.
+    // STATUS: placeholders; M1 reads them from com.webos.service.audio
+    // (master/getVolume, getInputVolume) and the system service's
+    // preferences (systemSounds, x_palm_virtualkeyboard_prefs, ringtone,
+    // alerttone, notificationtone).
+    property int volume: 100
+    property var streams: ({ pringtones: 100, palerts: 100, pfeedback: 100 })
+    property bool systemSounds: true
+    property bool tapSounds: true
+    property string ringtone: "/usr/palm/sounds/ringtone.mp3"
+    property string alerttone: "/usr/palm/sounds/alert.wav"
+    property string notificationtone: "/usr/palm/sounds/notification.wav"
     property bool twentyFourHour: false
     property bool showAlertsWhenLocked: true
     property real brightness: 1.0

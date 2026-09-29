@@ -7,7 +7,8 @@
         "meta-phoenix recipes install the same files at the same device paths.",
         "overlays: directories laid out like the device filesystem whose files win over everything else (patched or missing files for the original apps).",
         "systemApps: single app directories for system UI apps (Just Type, the system alerts), never shown in the launcher.",
-        "applicationDirs: each child with an appinfo.json is an app; a child whose built output is in dist/ (e.g. React apps) is used from there."
+        "applicationDirs: each child with an appinfo.json is an app; a child whose built output is in dist/ (e.g. React apps) is used from there.",
+        "exclude: device paths that are never served or installed (files of the original apps we do not redistribute; see docs/LEGAL.md)."
     ],
     "overlays": [
         "compat/rootfs"
@@ -36,8 +37,13 @@
         "/usr/lib/luna/system/luna-applauncher/": "third_party/luna-applauncher/",
         "/usr/lib/luna/system/luna-systemui/": "third_party/luna-systemui/",
         "/media/internal/samples/": "apps/media-samples/media/",
-        "/usr/share/fonts/open-sans/": "shell/assets/fonts/open-sans/"
+        "/usr/share/fonts/open-sans/": "shell/assets/fonts/open-sans/",
+        "/usr/palm/sounds/": "shell/assets/sounds/openwebos/",
+        "/usr/share/phoenix/sounds/": "shell/assets/sounds/phoenix/"
     },
+    "exclude": [
+        "/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3"
+    ],
     "applicationDirs": [
         "third_party/core-apps",
         "third_party/isis",

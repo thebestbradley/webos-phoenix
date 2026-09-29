@@ -12,6 +12,10 @@
 //      tagged for the shell with its type, height and window name;
 //   3. Dismiss closes the alert.
 //
+// And the system sounds the alarm and the ringtone picker draw on: Open
+// webOS's /usr/palm/sounds are served, the ringtone list starts with them,
+// and Email's emailreceived.mp3 is left out (docs/LEGAL.md).
+//
 //   node tools/test-alarm.cjs [--out DIR]
 
 "use strict";
@@ -65,8 +69,18 @@ async function main() {
 
         // An alarm a minute from now, and the activity the Clock schedules
         // for it (ActivityManager.setAlarmTimeout). Its sound is a demo song:
-        // no ringtones ship yet, so the Clock's default Flurry.mp3 is absent
+        // the Clock's default, the Pre's Flurry.mp3, was never open-sourced
         // (docs/spec/GAPS.md A1).
+        for (const [p, want] of [["/usr/palm/sounds/ringtone.mp3", 200], ["/usr/palm/sounds/alert.wav", 200],
+                                 ["/usr/share/phoenix/sounds/feedback/key.wav", 200],
+                                 ["/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3", 404]]) {
+            const r = await fetch(origin + p);
+            check(r.status === want, `${p}: ${r.status}`);
+        }
+        const tones = await page.evaluate(() => new Promise((resolve) => __phoenixRuntime.dispatch(
+            "luna://com.webos.service.systemservice/ringtone/listRingtones", {}, resolve, { cancelled: () => false })));
+        check(tones.ringtones.slice(0, 2).map((t) => t.fullPath).join() === "/usr/palm/sounds/ringtone.mp3,/usr/palm/sounds/phone.wav",
+              "the ringtones start with Open webOS's ringtone.mp3 and phone.wav");
         const due = await page.evaluate((key) => new Promise((resolve) => {
             const at = new Date(Date.now() + 60000);
             at.setSeconds(0, 0);

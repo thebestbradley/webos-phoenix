@@ -61,10 +61,10 @@ def load_rootfs():
             if system:
                 info = dict(info, phoenix=dict(info.get("phoenix") or {}, hidden=True))
             apps.setdefault(info.get("id", name), (app_dir, info))
-    return mounts, overlays, apps
+    return mounts, overlays, apps, set(cfg.get("exclude", []))
 
 
-MOUNTS, OVERLAYS, APPS = load_rootfs()
+MOUNTS, OVERLAYS, APPS, EXCLUDE = load_rootfs()
 
 
 def resolve(path):
@@ -72,7 +72,7 @@ def resolve(path):
     # Like QDir::cleanPath in phoenix-sim: apps build paths such as
     # ".../com.palm.app.email//mail/index.html".
     path = re.sub(r"/{2,}", "/", path)
-    if ".." in path.split("/"):
+    if ".." in path.split("/") or path in EXCLUDE:
         return None
     for overlay in OVERLAYS:
         f = os.path.join(overlay, path.lstrip("/"))

@@ -70,6 +70,10 @@ Item {
     readonly property real windowHeight: height - topInset - bottomInset
 
     signal cardClosed(string uid)
+    // A card starts closing: the user threw it away, or (byApp) its window
+    // closed itself. CardWindowManager::closeWindow played "appclose" for
+    // the first (CardWindowManager.cpp:2889-2893).
+    signal cardClosing(string uid, bool byApp)
     signal cardMaximized(string uid)
     signal cardMinimized(string uid)
 
@@ -328,12 +332,13 @@ Item {
     // the top, 300 ms OutCubic, while the others slide into place
     // (removeCardFromGroup -> slideAllGroups) at the same time. It does not
     // fade. The window closes once it is off.
-    function close(uid) {
+    function close(uid, byApp) {
         if (closing[uid])
             return;
         var g = groupIndexOf(uid);
         if (g < 0)
             return;
+        cardClosing(uid, !!byApp);
         var place = layout.cards[uid];
         var card = cardItem(uid);
         var fly = card && place && maximizeProgress === 0;

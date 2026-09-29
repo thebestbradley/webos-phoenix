@@ -177,8 +177,31 @@ async function main() {
         await page.waitForSelector("[data-testid='wifi-toggle'][aria-checked='false']", { timeout: 2000 });
         check(true, "a system menu change shows up in Settings");
 
+        // ---- Sounds & Ringtones -----------------------------------------------------------
+        // The ringtone picker lists the shipped ringtones; picking one, and
+        // the System sounds and Keyboard clicks switches, reach the shell.
+        await open("sounds");
+        await page.waitForSelector("[data-testid='system-sounds']");
+        check(/Ringtone/.test(await page.textContent("[data-testid='ringtone']")), "the default ringtone is Open webOS's ringtone.mp3");
+        await page.click("[data-testid='ringtone']");
+        await page.waitForSelector("[role='option']");
+        const tones = await page.locator("[role='option']").allTextContents();
+        check(tones.some((t) => /^\s*Ringtone\s*$/.test(t)) && tones.some((t) => /^\s*Phone\s*$/.test(t)),
+              "the picker lists the shipped ringtones: " + tones.map((t) => t.trim()).join(", "));
+        await shot("sounds-ringtones");
+        await page.locator("[role='option']", { hasText: /^\s*Phone\s*$/ }).click();
+        await page.waitForFunction(() => /Phone/.test(document.querySelector("[data-testid='ringtone']")?.textContent || ""));
+        check(last().ringtone === "/usr/palm/sounds/phone.wav", "the new ringtone reaches the shell");
+        await page.click("[data-testid='keyboard-clicks']");
+        await page.waitForSelector("[data-testid='keyboard-clicks'][aria-checked='false']");
+        check(last().tapSounds === false, "Keyboard clicks off reaches the shell");
+        await page.click("[data-testid='system-sounds']");
+        await page.waitForSelector("[data-testid='system-sounds'][aria-checked='false']");
+        check(last().systemSounds === false, "System sounds off reaches the shell");
+        await shot("sounds");
+
         // ---- Every other pane renders --------------------------------------------------
-        for (const p of ["sounds", "datetime", "language", "deviceinfo", "updates"]) {
+        for (const p of ["datetime", "language", "deviceinfo", "updates"]) {
             await open(p);
             await shot(p);
         }

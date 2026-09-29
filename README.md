@@ -183,7 +183,8 @@ Controls: drag with the mouse as you would with a finger. The black strip at
 the bottom is the gesture area. Keys: **Esc** back, **F1** swipe up, **Home** the Home button,
 **F2** demo notification, **F3** lock/unlock, **F4** incoming call (rings
 the Phone app), **F5** incoming text message (for Messaging), **F6** low
-battery, **F7** plug a charger in or out, **Ctrl+Left** / **Ctrl+Right**
+battery, **F7** plug a charger in or out, **F8** battery charged to full,
+**Ctrl+Left** / **Ctrl+Right**
 turn the device a quarter turn counter-clockwise / clockwise, type in card
 view for Just Type. `./build/phoenix-sim --open https://example.com` opens a
 page in the browser. A text field taking the focus brings up the virtual
@@ -200,6 +201,13 @@ screenshots of the turn (`--delay 1450` catches it halfway).
 
 The **+** button in each placeholder app opens a second window, which joins
 that app's card stack.
+
+System sounds play as on the original: Open webOS's own sounds
+(notifications, alerts, the ringtone for an incoming call, charging, battery
+full, boot and, when the window closes, shutdown) and Phoenix-made keyboard
+clicks, at the volumes set in Settings > Sounds & Ringtones. The simulator
+plays them with the web engine's audio; `--quiet` leaves out the boot and
+shutdown sounds (so do `--screenshot` and the offscreen platform).
 
 `--launch com.palm.app.notes` opens an app at start-up (repeatable);
 `--launch org.webosphoenix.settings.wifi` opens a Settings pane.

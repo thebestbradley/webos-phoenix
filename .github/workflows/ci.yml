@@ -65,6 +65,9 @@ jobs:
           python3 -m pip install pillow numpy
           python3 tools/hidpi-art.py --check
 
+      - name: Feedback sounds match their generator
+        run: python3 tools/make-feedback-sounds.py --check
+
       - name: Web app tests (original webOS apps in headless Chromium)
         run: |
           npm install -g playwright@1

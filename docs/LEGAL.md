@@ -21,7 +21,45 @@ Excluded on purpose:
 - `normal-usb.png` and `fsck-usb.png`, which picture the TouchPad hardware.
 - Palm and HP app icons, wallpapers and ringtones. They were not in the
   open-source release, so we do not ship them.
-- The Open webOS `sounds/` directory, until its provenance has been checked.
+
+## Open webOS system sounds (`shell/assets/sounds/openwebos/`)
+
+The twelve files of luna-sysmgr's `sounds/` directory (`alert.wav`,
+`notification.wav`, `phone.wav`, `ringtone.mp3`, `boot.mp3`, `shutdown.mp3`,
+`charging.mp3`, `battery_full.mp3`, `battery_low.mp3`, `error.mp3`,
+`panel.mp3`, `tap_to_share.mp3`), copied unmodified and installed where the
+original apps look for them (`/usr/palm/sounds`).
+
+Provenance, checked in September 2026 against the full history of
+<https://github.com/openwebos/luna-sysmgr>: the files arrived in HP's first
+public commit (cd579bc, "Release luna-sysmgr 2.0.4 to the public", Palm,
+2012-07-25) and were never changed. From that commit on the README states
+that all content "except otherwise noted" is Copyright HP (later LG
+Electronics) and Apache-2.0. Nothing in the repository notes otherwise for
+the sounds, and the files themselves carry no author or copyright tags (the
+WAVs hold only Pro Tools session data from April 2009, e.g. a region named
+"Banner_01"; the MP3s have no ID3 tags). LuneOS ships the same set as
+Apache-2.0 (`luneos-system-sounds`). So they are shipped as published:
+Apache-2.0, attribution in `NOTICE`. Residual risk: we cannot know whether
+HP held the rights to relicense sounds it may have commissioned from a
+third party; there is no evidence either way. If a rights holder objects,
+the files can be dropped and the shell falls back to silence.
+
+Not shipped: `com.palm.app.email/sounds/emailreceived.mp3` from
+`openwebos/core-apps`. That repository's README puts all its content under
+LG / Apache-2.0 (the Email app's own `NOTICE` lists its third-party images,
+not this sound), but the file's ID3 tags contradict it: a copyright frame
+(WCOP) reading "@ Peter Steinbach", an album "Top 500 Rock and Roll Songs"
+and "Sound Grinder" as the encoder, which suggests a sound library. It stays
+in the submodule (we do not modify submodules) but `runtime/rootfs.json`
+excludes it, so neither the simulator nor `tools/install-rootfs.py` serves
+or installs it; Email's new-mail sound falls back to the alert tone.
+
+The Pre's own ringtones (`Pre.mp3`, the Clock's `Flurry.mp3`) and audiod's
+feedback sounds (keyboard clicks, `appclose`, `shutter`) were not released.
+Phoenix synthesizes its own feedback sounds (`shell/assets/sounds/phoenix/`,
+`tools/make-feedback-sounds.py`, CC0 1.0; see its `PROVENANCE.md`); nothing
+was downloaded.
 
 HiDPI variants (`name@1.5x.png`, `name@2x.png`, `name@3x.png`) sit beside
 some of these images. Three are Open webOS / Enyo originals at 1.5x; the rest

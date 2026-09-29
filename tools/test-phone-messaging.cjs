@@ -144,6 +144,8 @@ async function main() {
         check(/alert=incoming/.test(alertUrl) && /phoenixWindow=popupalert/.test(alertUrl) && /phoenixHeight=150/.test(alertUrl),
             "an incoming call opens a 150 px popup alert");
         check(/phoenixName=incoming-known/.test(alertUrl), "named incoming-known for a contact (notificationPolicy.conf)");
+        check(/phoenixSoundClass=ringtones/.test(alertUrl) && !/phoenixSound=/.test(alertUrl),
+            "it rings: sound class ringtones, the ringtone preference (AlertWindow sound attributes)");
         await alert.setViewportSize({ width: viewport.width, height: 150 });
         await alert.waitForSelector("[data-testid='incoming-alert']");
         check((await alert.textContent("[data-testid='incoming-name']")) === "Ada Palmer", "the alert shows the caller");
@@ -251,6 +253,8 @@ async function main() {
         check(true, "the received text updates Messaging in another window");
         check(host.some((m) => m.type === "notification" && m.payload.appId === "org.webosphoenix.messaging" && m.payload.title === "Sam Delgado"),
             "the shell is told about the new message");
+        check(host.some((m) => m.type === "notification" && m.payload.appId === "org.webosphoenix.messaging" && m.payload.soundClass === "notifications"),
+            "with the notification tone");
         if (!tablet) {
             check((await msg.textContent("[data-testid='thread-row'] .thread-unread")) === "1", "it counts as unread");
             await shot(msg, "messaging-received-list");

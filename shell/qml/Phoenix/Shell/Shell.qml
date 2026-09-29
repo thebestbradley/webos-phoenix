@@ -229,15 +229,62 @@ FocusScope {
         target: shell.source
         ignoreUnknownSignals: true
         function onCardFocusRequested(uid) { Qt.callLater(cards.focusLaunched, uid); }
-        function onCardCloseRequested(uid) { cards.close(uid); }
+        function onCardCloseRequested(uid) { cards.close(uid, true); }
         function onJustTypeDismissed() { justType.open = false; }
-        function onBannerRequested(appId, text, icon, params) {
+        function onBannerRequested(appId, text, icon, params, soundClass, soundFile, soundDuration) {
             var a = null;
             for (var i = 0; shell.source.apps && i < shell.source.apps.count; ++i)
                 if (shell.source.apps.get(i).appId === appId)
                     a = shell.source.apps.get(i);
             notes.showBanner(text, icon, a ? a.color : "#666666", a ? a.glyph : "", appId, params || "");
+            // BannerMessageHandler::aboutToShowBanner: its sound as it shows.
+            sounds.notification(appId, soundClass || "", soundFile || "", soundDuration || 0, false);
         }
+        // PalmSystem.playSoundNotification, or a notification with a sound.
+        function onSoundRequested(appId, soundClass, soundFile, duration) {
+            sounds.notification(appId, soundClass, soundFile, duration, false);
+        }
+    }
+
+    // ---- System sounds -----------------------------------------------------------------
+    // What plays for banners, popup alerts, the keyboard, closing a card and
+    // the battery (SystemSounds.qml, SoundPolicy.js).
+    readonly property SystemSounds sounds: SystemSounds {
+        source: shell.source
+        system: shell.system
+        playBootSound: shell.bootSound
+    }
+    // WindowServer's boot and shutdown sounds (phoenix-sim turns them on
+    // when interactive).
+    property bool bootSound: false
+
+    // The popup alert in front is the active one (AlertWindow::activate):
+    // it sounds, and stops when it leaves the front or closes.
+    property string _soundingAlert: ""
+    function _updateAlertSound() {
+        var key = notes.alertKey;
+        if (key === _soundingAlert)
+            return;
+        var old = _soundingAlert;
+        _soundingAlert = key;
+        if (old !== "") {
+            var open = false;
+            for (var i = 0; notes.alerts && i < notes.alerts.count; ++i)
+                if (notes.alerts.get(i).key === old)
+                    open = true;
+            if (open)
+                sounds.alertDeactivated(old);
+            else
+                sounds.alertClosed(old);
+        }
+        if (key !== "") {
+            var a = notes.alerts.get(0);
+            sounds.alertActivated(key, a.appId, a.sound || "", a.soundClass || "");
+        }
+    }
+    Connections {
+        target: notes
+        function onAlertKeyChanged() { Qt.callLater(shell._updateAlertSound); }
     }
 
     // Desktop / hardware keyboard shortcuts.
@@ -587,6 +634,8 @@ FocusScope {
         Qt.callLater(function() {
             shell._followRotationLock();
             uiRotation.bootupFinished(shell.system && shell.system.deviceOrientation ? shell.system.deviceOrientation : "up");
+            // WindowServer::bootupFinished: the boot sound.
+            sounds.bootFinished();
         });
     }
 
@@ -633,6 +682,7 @@ FocusScope {
                     id: cards
                     anchors.fill: parent
                     source: shell.source
+                    onCardClosing: (uid, byApp) => { if (!byApp) shell.sounds.feedback("appclose"); }
                     topInset: shell.fullScreen ? 0 : Theme.statusBarHeight
                     // The app's positive space ends where the notifications' negative space begins.
                     bottomInset: notes.negativeSpace
@@ -1017,10 +1067,9 @@ FocusScope {
                         KeyInjector.commitText(t, text);
                 }
                 onHideRequested: shell.hideKeyboard()
-                onFeedback: (name) => {
-                    if (shell.source && typeof shell.source.playFeedback === "function")
-                        shell.source.playFeedback(name);
-                }
+                // VirtualKeyboardPreferences TapSounds: "Keyboard clicks".
+                tapSounds: !shell.system || shell.system.tapSounds !== false
+                onFeedback: (name) => shell.sounds.feedback(name)
             }
             Connections {
                 target: notes

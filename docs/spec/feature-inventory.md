@@ -241,7 +241,7 @@ none has run on a device yet. See `docs/APP-RUNTIME.md`.
 - [ ] Location Services (`com.palm.app.location`)
 - [x] Language picker (`com.palm.app.languagepicker`): Language & Region (UI and format locales); apps do not localize yet
 - [x] Screen & Lock (`com.palm.app.screenlock`): brightness, timeout, rotation lock, wallpaper, notifications when locked, PIN/password (the lock screen does not ask for it yet)
-- [x] Sounds & Ringtones (`com.palm.app.soundsandalerts`): volumes, mute, ringtone (no sound files yet), touch sounds
+- [x] Sounds & Ringtones (`com.palm.app.soundsandalerts`): volumes (master, ringer, alerts, system sounds, media), mute, ringtone (Open webOS's ringtone.mp3 and phone.wav, plus /media/internal/ringtones), System sounds, Keyboard clicks
 - [ ] Text Assist (`com.palm.app.textassist`)
 - [ ] Certificate Manager (`com.palm.app.certificate`). `ApplicationManagerService.cpp:3822`
 - [ ] Phone preferences / Network settings / Power (phone-era prefs apps). Not referenced in this repo.
