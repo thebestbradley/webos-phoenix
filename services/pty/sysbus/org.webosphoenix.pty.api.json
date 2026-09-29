@@ -1,0 +1,14 @@
+{
+    "pty.operation": [
+        "org.webosphoenix.pty/open",
+        "org.webosphoenix.pty/write",
+        "org.webosphoenix.pty/resize",
+        "org.webosphoenix.pty/ack",
+        "org.webosphoenix.pty/close",
+        "org.webosphoenix.pty/list",
+        "org.webosphoenix.pty/getShells"
+    ],
+    "pty.developer": [
+        "org.webosphoenix.pty/exec"
+    ]
+}

@@ -58,6 +58,10 @@
 //   simulateIncomingCall()   ring the Phone app (phoenix-sim F4)
 //   simulateIncomingSms()    deliver a text to Messaging (phoenix-sim F5)
 //   openUrl(url)             open a web page in the browser (phoenix-sim --open)
+//   simPty (context property, C++ SimPty): the Terminal's real shells on
+//                            this computer; "pty" host messages go to it and
+//                            its replies back to the window (runtime block
+//                            "Terminal"); null with --no-host-shell
 //
 // Web apps (the original webOS apps, Settings, ...) come from the virtual
 // webOS filesystem when phoenix-sim was built with Qt WebEngine; they
@@ -133,6 +137,21 @@ Item {
                           removable: true });
         }
         Qt.callLater(_bootSystemApps);
+        if (_simPty())
+            _simPty().event.connect(_ptyEvent);
+    }
+
+    // ---- The Terminal's shells (phoenix-sim's SimPty) -------------------------------
+
+    function _simPty() {
+        return typeof simPty !== "undefined" && simPty ? simPty : null;
+    }
+
+    // A reply for the page in window uid (org.webosphoenix.pty in the runtime).
+    function _ptyEvent(uid, json) {
+        var w = _windows[uid];
+        if (w && w.runScript)
+            w.runScript("window.__phoenixRuntime && __phoenixRuntime.ptyEvent && __phoenixRuntime.ptyEvent(" + json + ")");
     }
 
     function appIdByTitle(titleText) {
@@ -313,6 +332,11 @@ Item {
             // app showed or hid the keyboard itself (runtime: "Virtual
             // keyboard"). Just Type's page is "justtype".
             inputFocusChanged(appId === justTypeAppId && uid === "" ? "justtype" : uid, !!payload.focused, payload.state || null);
+        } else if (type === "pty") {
+            // The Terminal's shell: SimPty checks appId, which is the
+            // shell's record of the window, not the page's say-so.
+            if (_simPty() && uid !== "")
+                _simPty().request(uid, appId, payload);
         } else if (type === "lunaReply") {
             var cb = _lunaCallbacks[payload.id];
             delete _lunaCallbacks[payload.id];
@@ -789,6 +813,9 @@ Item {
             return;
         var appId = cards.get(i).appId;
         cards.remove(i);
+        // Throwing a Terminal card away hangs its shell up (SIGHUP).
+        if (_simPty())
+            _simPty().closeWindow(uid);
         var win = _windows[uid];
         delete _windows[uid];
         if (win)

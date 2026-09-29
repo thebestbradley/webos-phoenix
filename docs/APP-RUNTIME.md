@@ -103,8 +103,9 @@ app installer used by Files (see [Files](#files)); the activity manager
 (`com.palm.activitymanager`) and `com.palm.power` timeouts, which fire
 scheduled activities such as Tasks' reminders (see [Tasks](#tasks)); the
 speech-to-text service of Voice Memos (see [Voice Memos](#voice-memos));
-and last the CardDAV and CalDAV account's transport (see
-[CardDAV and CalDAV](#carddav-and-caldav)).
+the CardDAV and CalDAV account's transport (see
+[CardDAV and CalDAV](#carddav-and-caldav)); and last the Terminal's shells,
+`org.webosphoenix.pty` (see [Terminal](#terminal)).
 
 ## Running apps
 
@@ -244,6 +245,7 @@ Camera, Photos and Music start cleanly too, and `node tools/test-media.cjs
 [--tablet]`, and Tasks, driven by `node tools/test-tasks.cjs [--tablet]`.
 
 [--tablet]`, and Voice Memos, driven by `node tools/test-voicememos.cjs
+[--tablet]`, and the Terminal, driven by `node tools/test-terminal.cjs
 [--tablet]`.
 
 ## Phoenix apps (React + TypeScript)
@@ -264,6 +266,7 @@ New Phoenix apps live in `apps/`, an npm workspace:
 | `apps/tasks` | Tasks (see [below](#tasks)) |
 
 | `apps/voicememos` | Voice Memos (see [below](#voice-memos)); `apps/voicememos/service` is its speech-to-text Luna service (whisper.cpp) for the device |
+| `apps/terminal` | Terminal (see [below](#terminal)): xterm.js on `org.webosphoenix.pty`, the C++ PTY service in `services/pty`; `@phoenix/luna`'s `pty.ts` is its client |
 
 | `apps/dav` | The CardDAV & CalDAV account (see [below](#carddav-and-caldav)): a hidden Enyo 1.0 app with the account's sign-in page, its db8 kinds and account template, and `apps/dav/service`, its Node.js Luna service and sync engine |
 
@@ -833,6 +836,38 @@ placeholder), searches in the app and through Just Type's content search,
 renames, shares by Email, deletes, "transcribe automatically", and the
 `{memoId}` and `{newMemo}` launch params, with screenshots in
 `build/voicememos-tests/`.
+
+## Terminal
+
+`apps/terminal` (`org.webosphoenix.terminal`) is a real Linux terminal:
+xterm.js in a React app, one shell per card, on a PTY owned by the
+`org.webosphoenix.pty` service. [TERMINAL.md](TERMINAL.md) has the design,
+the service's methods, the security model and what is still to do; this is
+how it runs off the device.
+
+| Where | The shell | How the page reaches it |
+| --- | --- | --- |
+| Device | The C++ Luna service in `services/pty` (meta-phoenix `phoenix-pty`), as the device user | `PalmServiceBridge` to `luna://org.webosphoenix.pty` |
+| phoenix-sim | **A real shell on your computer**, in your home directory, with your environment (bash unless Preferences say otherwise): `shell/sim/simpty.cpp` on the service's PTY core | The runtime's "Terminal" block posts `pty` host messages; `SimWindowSource` hands them to `simPty` with the window's app id, and runs the replies in the page as `__phoenixRuntime.ptyEvent(...)` |
+| Browser, `tools/serve-rootfs.py --terminal` | A real shell on your computer (Python's `pty`) | A WebSocket per session, with the token and address from `/usr/share/phoenix/host.json` |
+| Browser without `--terminal`, `phoenix-sim --no-host-shell`, unit tests | The runtime's small simulated shell (`echo`, `ls`, `cd`, `pwd`, `clear`, `seq`, `printenv`, `history`, `exit`) | In the page |
+
+The runtime picks the first one the host offers in
+`/usr/share/phoenix/host.json` (`{"pty": "host"}` from phoenix-sim,
+`{"pty": "websocket", "url": ...}` from the dev server, `{}` otherwise). All
+of them answer only `org.webosphoenix.terminal`; phoenix-sim and the device
+service check the caller's app id themselves, not the page's word for it.
+Throwing a Terminal card away hangs its shells up.
+
+`node tools/test-terminal.cjs [--tablet]` types into the simulated shell
+(commands, the extras row with sticky and locked Ctrl, arrows, its other
+pages, rotation, links, long press and copy and paste, the app menu and
+Preferences, New Session and Ctrl+Shift+T, the back gesture, exit and
+restart, and another app being refused), then runs `/bin/sh` for real
+through `serve-rootfs.py --terminal` (arithmetic, the PTY's size and its
+change, UTF-8, 600 KB through the flow control, the exit status, a wrong
+token and another origin refused). The service itself is tested by
+`services/pty`'s `pty-test`, which phoenix-sim's build compiles.
 
 ## CardDAV and CalDAV
 

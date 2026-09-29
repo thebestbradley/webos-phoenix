@@ -1,0 +1,10 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Started by systemd (phoenix-pty.service), not on demand by the hub:
+# sessions outlive a page reload.
+
+[D-BUS Service]
+Name=org.webosphoenix.pty
+Exec=/usr/sbin/phoenix-pty
+Type=static

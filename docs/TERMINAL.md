@@ -1,11 +1,148 @@
 # Terminal
 
-A plan for a terminal app that ships with Phoenix: a shell on the device,
-in a card, that feels like a webOS app and is safe by default.
+The terminal app that ships with Phoenix: a real Linux shell on the
+device, in a card, that feels like a webOS app and is safe by default.
 
-This is a plan, not a status report: nothing here is built. Facts are as
-of 28 September 2026, with sources at the end; *unverified* marks what we
-could not check.
+The first part of this page says what is **built** (29 September 2026) and
+the decisions taken; the rest is the plan it followed, kept for the phases
+still to come. Facts are as of 28 September 2026, with sources at the end;
+*unverified* marks what we could not check.
+
+![Terminal on a phone](screenshots/terminal-phone.png)
+![top on a phone](screenshots/terminal-top.png)
+![vim on a TouchPad](screenshots/terminal-tablet-vim.png)
+
+## What is built
+
+Phases T1, T2 and the code of T3 below. **Decisions:** the web route
+(xterm.js on a C++ PTY service); **bash is the default shell**, **zsh** can
+be chosen in Preferences (the image ships both), fish is offered wherever it
+is installed but is not in the image (it needs a Rust toolchain since fish
+4); shells run as the unprivileged device user; Developer Mode (sudo, SSH,
+MCP's `exec`) is a follow-up.
+
+| Part | Where | What it does |
+| --- | --- | --- |
+| **Terminal app** | `apps/terminal` (`org.webosphoenix.terminal`, React + TypeScript, xterm.js 6 with the fit and web-links addons, MIT) | One shell per card; the extras row; app menu; preferences; long-press selection; links; hardware keyboard shortcuts; the back gesture as Esc |
+| **PTY core** | `services/pty/src/ptycore.{h,cpp}` (C++17, no dependencies) | `forkpty` a login shell with `TERM=xterm-256color`; output cut into chunks of up to 64 KB that never split a UTF-8 sequence (bytes that are not UTF-8 go as Latin-1 with `encoding: "latin1"`); flow control (stop reading above 256 KB unacknowledged, read again below 64 KB); resize (`TIOCSWINSZ`); SIGHUP to the shell's process group; a small JSON reader |
+| **Luna service** | `services/pty/src/service.cpp`, `main.cpp` (luna-service2, GLib) | `org.webosphoenix.pty` on the device: the methods below, the caller's application id checked on every call, a session per `open` subscription (cancelling it hangs the shell up), sessions logged to the journal (start and end, never contents). Refuses to start as root |
+| **Service files** | `services/pty/sysbus/`, `services/pty/systemd/phoenix-pty.service` | ACG role, API group `pty.operation` (and `pty.developer` for `exec`), hub service file (`Type=static`), a systemd unit with `User=user`, `NoNewPrivileges=yes` |
+| **Simulator** | `shell/sim/simpty.{h,cpp}`, `SimWindowSource.qml` | phoenix-sim runs **your own shell on your computer** (bash by default) for the Terminal's cards, on the same PTY core, with a `QSocketNotifier` and a 16 ms flush timer. The page's runtime posts `pty` host messages; the replies come back as `__phoenixRuntime.ptyEvent(...)`. It checks the app id against the window the message came from, and hangs a card's shells up when the card is thrown away. `--no-host-shell` turns it off, `--host-shell PATH` runs another program. The first line of each session says the shell is the host's |
+| **Browser dev server** | `tools/serve-rootfs.py --terminal` | A WebSocket per session at `/__phoenix/pty` over Python's `pty`, with a random token (from `/usr/share/phoenix/host.json`) and an `Origin` check; off unless asked for. `--terminal-shell PATH` for tests |
+| **Simulated shell** | `runtime/phoenix-runtime.js`, block "Terminal" | Without a host shell: `echo`, `ls` and `cd` over the simulated filesystem, `pwd`, `clear`, `seq`, `printenv`, `history`, `exit`, with line editing and history. Deterministic, for tests and the Playwright runs |
+| **Client** | `apps/shared/luna/src/pty.ts` (`pty.open`, `PtySession`, `pty.shells`, `PTY_ERRORS`) | Queues writes until the shell is up; acks what xterm.js has drawn |
+| **Image** | `meta-phoenix`: `phoenix-pty` recipe (the service, the `user` account, uid 1000), `packagegroup-phoenix-terminal` (bash, zsh, coreutils, less, nano, vim-tiny, tmux, htop, procps, ssh, scp, curl, terminfo, DejaVu Sans Mono), both in `webos-phoenix-image`; the app itself comes with `phoenix-apps` | Written, **not built or booted yet** (no OSE build host here) |
+| **Tests** | `services/pty/tests/pty_test.cpp` (52 checks: UTF-8, JSON, sessions, flow control, SIGHUP, and every service method over a luna-service2 stand-in in `tests/ls2stub`), `apps/shared/luna/src/pty.test.ts`, `apps/terminal/src/keys.test.ts`, `tools/test-terminal.cjs` (simulated shell and a real `/bin/sh` through the dev server's WebSocket) | In CI |
+
+### The service's methods
+
+| Method | Parameters | Replies |
+| --- | --- | --- |
+| `open` | `{cols, rows, shell?, cwd?, subscribe: true}`; `shell` is a name (`bash`, `zsh`, `fish`, `sh`), never a path | `{subscribed: true, sessionId, pid, shell, shellPath}`, then `{sessionId, output, encoding?, bytes}` as the shell writes (at most one reply per session per 16 ms), then `{sessionId, exited: true, exitCode, signal}` |
+| `write` | `{sessionId, data}` | keystrokes and pastes |
+| `resize` | `{sessionId, cols, rows}` | 1 to 999 each |
+| `ack` | `{sessionId, bytes}` | flow control: the page drew this much |
+| `close` | `{sessionId, signal?}` | `SIGHUP` (default), `SIGINT`, `SIGTERM`, `SIGKILL`; the exit reply follows on the subscription |
+| `list` | `{}` | the caller's own sessions |
+| `getShells` | `{}` | `{shells: [{name, path, installed}], default: "bash"}` |
+| `exec` | anything | always error 6 (`DEVMODE_REQUIRED`): **the Developer Mode stub** |
+
+Errors: -1 bad parameters, 1 not allowed (only `org.webosphoenix.terminal`
+may open a shell; another app's session is as good as none), 2 no such
+session, 3 spawn failed, 4 shell not installed, 5 too many sessions (16), 6
+Developer Mode required. The app falls back to bash when the chosen shell is
+not installed.
+
+### The app
+
+- **Cards.** App menu > **New Session** (or Ctrl+Shift+T) opens another card
+  in the Terminal's stack with its own shell; **Close Session** (Ctrl+Shift+W)
+  closes it; throwing the card away hangs the shell up. When the shell
+  exits, the card says so with the status, and Enter starts a new one.
+- **Extras row** (`keys.ts`), above whichever keyboard is up: Esc, Ctrl,
+  Alt, Tab, the four arrows, `|` `~` `/` `-`. Ctrl and Alt are sticky: tap
+  once for the next key (from the row or the keyboard), tap again quickly to
+  lock, tap a locked one to release. Swipe the row (or tap its dots) for
+  Home/End/PgUp/PgDn, braces, brackets, backslash and backtick, and for F1 to F12. Held arrows, Tab,
+  PgUp/PgDn and `-` repeat after 350 ms, every 120 ms, as the keyboard does.
+  Arrows follow the application cursor mode, so they work in vim and less.
+  The row takes no focus, so the keyboard stays up. It can be turned off in
+  Preferences.
+- **The shell's virtual keyboard** works as for any web field: xterm.js's
+  input element takes the focus, the keyboard comes up, and the card
+  shrinks above it (screenshots above). On a device, OSE's keyboard does the
+  same.
+- **App menu:** New Session, Copy, Paste, Select All, Clear, Preferences,
+  Keys Help, Close Session.
+- **Preferences** (shared by all cards, kept in the app's storage): Shell
+  (bash, zsh, fish, sh; the ones not installed are greyed out), Text Size
+  (10, 12, 14, 17 px), Color Scheme (Phoenix, Paper, Classic, Solarized Dark
+  and Light, High Contrast), Extra Keys.
+- **Selection:** long press on the text selects the word; drag on to select
+  more; lifting the finger shows Copy, Paste, Select All, Open Link (on a
+  URL) and Search the Web. Copy and paste use the system clipboard where the
+  runtime allows it and the Terminal's own otherwise, so they always work
+  between its cards.
+- **Links** in the output open on a tap, through the application manager's
+  `open` (web pages in Web, `mailto:` in Email).
+- **Hardware keyboard:** Ctrl+Shift+T/W/C/V/K (new, close, copy, paste,
+  clear), Shift+Insert, Ctrl+= / Ctrl+- / Ctrl+0 (text size). Everything
+  else, Ctrl-C and Ctrl-D included, goes to the shell.
+- **Back gesture:** Esc to the shell, as the Preware Terminal did.
+- **Bell:** a flash of the card and a short vibration where there is one.
+- **Title:** the shell's title (`OSC 0`) becomes the page title.
+
+![Preferences](screenshots/terminal-prefs.png)
+![Terminal on a TouchPad](screenshots/terminal-tablet.png)
+
+### What came from the Preware terminal
+
+WebOS Internals' **Terminal** (`org.webosinternals.terminal` with the
+`termplugin` PDK plugin; <https://github.com/webos-internals/terminal>) was
+the terminal in the Preware catalog: a Mojo app whose C/C++ plugin drew the
+screen with bitmap fonts (4x6, 5x7, 6x10, 8x8) and ran the shell on a PTY.
+Its app menu had **New Session** (another card), **Non-Obvious Keys...** and
+**Preferences...** (font, foreground and background from the eight ANSI
+colours). Because the Pre had a hardware keyboard, its "extra keys" were
+combinations: Sym for Control, Orange+Space or the **back gesture for Esc**,
+Gesture+1..8 for Home, arrows, PgUp and End, Gesture+Q/Y/U/H/J for `\ [ ] { }`,
+Orange+. for `|`; its modifiers had Off, On and Locked states. Ryan Hope's
+**wTerm** (<https://github.com/RyanHope/wTerm>) followed on webOS 2 and the
+TouchPad with an on-screen keyboard, colour schemes, font sizes and custom
+key bindings, and logged in as a non-root `wterm` user. SDLTerminal was a
+third, lighter one for the Pre.
+
+Both are **GPL** (Terminal GPL-2.0, wTerm GPL-3.0), so **none of their code
+is in Phoenix**; they were a reference for the user experience only. What
+Phoenix took from them: "New Session" as a new card and the app menu's
+shape; a keys help page after "Non-Obvious Keys"; the back gesture as Esc;
+sticky modifiers with a locked state; text size and colour choices in
+Preferences; and, from wTerm, a shell that is not root by default.
+
+### Not done yet
+
+- **On a device:** the service and recipes are written but have not been
+  built with bitbake or run on OSE. Unverified there: that WebAppMgr puts
+  the app's id on the call as `LSMessageGetApplicationID` returns it (the
+  service accepts "id" and legacy "id 1234"), the ACG group names, the
+  `useradd` and `ttf-dejavu` package names in the OSE layers, and the
+  Luna round trip per keystroke.
+- **Developer Mode (T4):** `exec` answers `DEVMODE_REQUIRED`; there is no
+  sudo, no SSH server, no Settings page and no Konami code yet. The systemd
+  unit's `NoNewPrivileges=yes` will have to go when sudo comes.
+- **Keep running in the background** and the sessions dashboard, OSC 777
+  notifications, Find, pinch to zoom, selection drag handles, the shell's
+  card title under each card (the page title changes, the card view does
+  not show it yet), per-card colour schemes, and hiding the extras row
+  when a hardware keyboard is used.
+- **The simulator's keys:** phoenix-sim keeps F1 to F7 and Ctrl+Left/Right
+  for itself (gestures, demo events, turning the device); use the extras
+  row's function keys there.
+- **fish** is not in the image; zsh has no Phoenix default configuration.
+
+## The plan
+
+The rest of this page is the plan as approved, lightly updated.
 
 ## Summary
 
@@ -33,8 +170,9 @@ could not check.
 Palm never shipped a terminal. Developers used `novacom` over USB after
 enabling Developer Mode, which on webOS 1.x and 2.x was turned on by typing
 `upupdowndownleftrightleftrightbastart` into Just Type (the Konami code).
-Homebrew filled the gap: WebOS Internals' Preware carried terminal apps
-such as SDLTerminal (*names and details from memory, unverified*). Today
+Homebrew filled the gap: WebOS Internals' Preware carried terminal apps:
+their Terminal, wTerm and SDLTerminal (see "What came from the Preware
+terminal" above). Today
 Ubuntu Touch ships a Terminal app (GPL-3.0), and on Android, Termux is the
 reference for a touch terminal with an extra-keys row.
 
@@ -227,20 +365,19 @@ The terminfo entry is `xterm-256color`, which xterm.js implements.
 
 ## Phases
 
-| Phase | What | Effort |
-| --- | --- | --- |
-| **T1** | `apps/terminal` with xterm.js, extras row, app menu, colour schemes, font; the runtime's simulated shell; `test-terminal.cjs` | M (2 to 3 weeks) |
-| **T2** | The C++ PTY core; `SimPty` in phoenix-sim and the WebSocket in `serve-rootfs.py`, so it is a real terminal on the desktop | S (1 to 2 weeks) |
-| **T3** | `org.webosphoenix.pty` on OSE, ACG files, `meta-phoenix` recipes and package group, tried in `qemux86-64` | M (2 to 3 weeks); needs M1's image to boot |
-| **T4** | Developer Mode page, `user` account, `sudo` with the passcode, SSH server with key management, the Konami code in Just Type | M (2 to 3 weeks); needs the passcode service |
-| **T5** | Polish: selection handles, OSC 777 notifications, background sessions dashboard, restricted mode, the keyboard's terminal layout | S to M |
+| Phase | What | Effort | Status |
+| --- | --- | --- | --- |
+| **T1** | `apps/terminal` with xterm.js, extras row, app menu, colour schemes, font; the runtime's simulated shell; `test-terminal.cjs` | M (2 to 3 weeks) | Done |
+| **T2** | The C++ PTY core; `SimPty` in phoenix-sim and the WebSocket in `serve-rootfs.py`, so it is a real terminal on the desktop | S (1 to 2 weeks) | Done |
+| **T3** | `org.webosphoenix.pty` on OSE, ACG files, `meta-phoenix` recipes and package group, tried in `qemux86-64` | M (2 to 3 weeks); needs M1's image to boot | Written (service, ACG files, recipes, the `user` account); not built or tried |
+| **T4** | Developer Mode page, `user` account, `sudo` with the passcode, SSH server with key management, the Konami code in Just Type | M (2 to 3 weeks); needs the passcode service | Not started (`exec` stub) |
+| **T5** | Polish: selection handles, OSC 777 notifications, background sessions dashboard, restricted mode, the keyboard's terminal layout | S to M | Long-press selection done; the rest not started |
 
 ## Open questions for you
 
-1. **Web (xterm.js) or native (QMLTermWidget)?** This plan recommends web
-   for licence and consistency. Do you want the native route anyway?
-2. **Default shell**: bash, or something friendlier such as fish or zsh
-   (both would add to the image)?
+1. ~~**Web (xterm.js) or native (QMLTermWidget)?**~~ Decided: web.
+2. ~~**Default shell**~~ Decided: bash by default, zsh in the image and
+   selectable in Preferences; fish where installed.
 3. **Root**: is `sudo` in Developer Mode enough, or do you want a root
    shell option in the app's menu (in Developer Mode, after the passcode)?
 4. **SSH server**: Dropbear (small) or OpenSSH (familiar, supports more
@@ -266,3 +403,6 @@ Accessed 28 September 2026.
 - webOS OSE CLI user guide (`ares-setup-device`, root on port 22 for OSE targets): <https://www.webosose.org/docs/tools/sdk/cli/cli-user-guide/>
 - webOS OSE 2.27.0 release notes (Node.js 20.12.2): <https://www.webosose.org/about/release-notes/webos-ose-2-27-0-release-notes/>
 - The shell's keyboard: `shell/qml/Phoenix/Shell/VirtualKeyboard.qml`, `KeyboardKeymap.js`, `shell/native/keyinjector.h` in this repository
+- WebOS Internals' Terminal (GPL-2.0; app menu, preferences and "Non-Obvious Keys" read in `app/controllers` and `app/views/keys/keys-scene.html`): <https://github.com/webos-internals/terminal>; Preware: <https://github.com/webos-internals/preware>
+- wTerm (GPL-3.0): <https://github.com/RyanHope/wTerm>
+- SDLTerminal: <https://www.webosnation.com/sdlterminal>

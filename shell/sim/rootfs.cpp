@@ -212,6 +212,13 @@ void RootfsSchemeHandler::registerScheme()
 void RootfsSchemeHandler::requestStarted(QWebEngineUrlRequestJob *job)
 {
     const QString devicePath = job->requestUrl().path();
+    if (devicePath == QLatin1String("/usr/share/phoenix/host.json")) {
+        auto *buffer = new QBuffer(job);
+        buffer->setData(m_rootfs->hostInfo());
+        buffer->open(QIODevice::ReadOnly);
+        job->reply("application/json;charset=utf-8", buffer);
+        return;
+    }
     if (devicePath == QLatin1String("/usr/share/phoenix/apps.json")) {
         auto *buffer = new QBuffer(job);
         buffer->setData(m_rootfs->launchPointsJson());

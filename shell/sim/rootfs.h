@@ -42,6 +42,11 @@ public:
     // listLaunchPoints returns, with device paths.
     QByteArray launchPointsJson() const;
 
+    // What this host offers the runtime (served as /usr/share/phoenix/host.json):
+    // {"pty": "host"} when phoenix-sim runs the Terminal's shells.
+    void setHostInfo(const QByteArray &json) { m_hostInfo = json; }
+    QByteArray hostInfo() const { return m_hostInfo; }
+
     static QString scheme() { return QStringLiteral("phoenix"); }
     static QString urlFor(const QString &devicePath);
 
@@ -54,6 +59,7 @@ private:
     QHash<QString, QString> m_appDirs;         // app id -> directory
     QVariantList m_apps;
     QList<QVariantMap> m_launchPoints;
+    QByteArray m_hostInfo = "{}";
 };
 
 // The virtual filesystem for the shell's own QML (simRootfs): banner and

@@ -279,8 +279,11 @@ Item {
     }
 
     function _prepareRise(uid) {
-        risingUid = uid;
+        // Progress first: dropping it from a maximized card would otherwise
+        // end the rise before it starts (onMaximizeProgressChanged below),
+        // leaving a window opened from the card in front in card view.
         maximizeProgress = 0;
+        risingUid = uid;
         var card = cardItem(uid);
         if (!card || !card.loading)
             _rise();
