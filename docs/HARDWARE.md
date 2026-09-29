@@ -353,7 +353,13 @@ Verizon Pixels) cannot be unlocked and are out.
   - **webOS Archive and the homebrew community**: the
     [App Museum II](https://appcatalog.webosarchive.org/) catalog and
     Preware are how legacy webOS users find software today; Phoenix should
-    install their `.ipk` apps (see [APP-GAPS.md](APP-GAPS.md)).
+    install their `.ipk` apps (see [APP-GAPS.md](APP-GAPS.md)). webOS
+    Archive also ships **webOS Community Edition 3.1** (September 2026), a
+    patched HP webOS 3.0.5 for the TouchPad with a community App Catalog
+    back end, Preware feeds, libpurple Synergy and the LunaCE launcher. Its
+    users are the fans Phoenix 1.x is for, and its catalog back end is what
+    the store's Classics phase needs. How CE, LuneOS, OSE and Phoenix
+    differ: [WEBOS-FAMILY.md](WEBOS-FAMILY.md).
 - **Demo for people without spare hardware:**
   1. the desktop simulator (works today),
   2. the `qemux86-64` image packaged for VirtualBox and QEMU/UTM (M1),

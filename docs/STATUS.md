@@ -16,7 +16,8 @@ in the documents linked from each item.
 - The CardDAV and CalDAV Synergy account ([SYNERGY.md](SYNERGY.md)).
 - Plans: modern Synergy with cloud drives, the Fediverse, the messaging
   networks Phoenix can use and RCS ([SYNERGY-MODERN.md](SYNERGY-MODERN.md)); LuneOS
-  ([LUNEOS.md](LUNEOS.md)); AI and MCP ([AI-AND-MCP.md](AI-AND-MCP.md)); the
+  ([LUNEOS.md](LUNEOS.md)); how Phoenix differs from webOS Community
+  Edition, LuneOS and OSE ([WEBOS-FAMILY.md](WEBOS-FAMILY.md)); AI and MCP ([AI-AND-MCP.md](AI-AND-MCP.md)); the
   terminal ([TERMINAL.md](TERMINAL.md)); the app store
   ([APP-STORE.md](APP-STORE.md)); Android apps ([ANDROID.md](ANDROID.md));
   hardware ([HARDWARE.md](HARDWARE.md)); 2.0 docking and TV mode

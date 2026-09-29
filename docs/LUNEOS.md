@@ -1,5 +1,8 @@
 # LuneOS and webOS Phoenix
 
+*For a shorter overview of the whole webOS family (webOS Community Edition,
+LuneOS, OSE, Phoenix) see [WEBOS-FAMILY.md](WEBOS-FAMILY.md).*
+
 LuneOS is the community operating system of the
 [WebOS Ports](https://github.com/webOS-ports) project, and the closest
 relative Phoenix has. This page compares the two, component by component,
