@@ -49,7 +49,7 @@ Item {
         clip: true
         Image {
             width: parent.width
-            height: Theme.artPx(sourceSize.height, source)
+            height: Theme.artHeight(source)
             source: Theme.asset("launcher3/quicklaunch-bg.png")
             fillMode: Image.Tile
             horizontalAlignment: Image.AlignLeft

@@ -136,13 +136,13 @@ Item {
     Image {
         y: Theme.statusBarHeight
         width: parent.width
-        height: Theme.artPx(sourceSize.height, source)
+        height: Theme.artHeight(source)
         source: Theme.asset("screen-lock-wallpaper-mask-top.png")
     }
     Image {
         anchors.bottom: parent.bottom
         width: parent.width
-        height: Theme.artPx(sourceSize.height, source)
+        height: Theme.artHeight(source)
         source: Theme.asset("screen-lock-wallpaper-mask-bottom.png")
     }
 
@@ -294,7 +294,7 @@ Item {
                 visible: lockDashboard.count === Theme.lockDashboardMaxItems
                 anchors.bottom: parent.bottom
                 width: parent.width
-                height: Theme.artPx(sourceSize.height, source)
+                height: Theme.artHeight(source)
                 source: Theme.asset("dashboard-scroll-fade.png")
             }
         }

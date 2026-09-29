@@ -315,7 +315,7 @@ Item {
                     visible: phoneDashboard.item !== null && !phoneDashboard.item.atYBeginning
                     anchors.top: parent.top
                     width: parent.width
-                    height: Theme.artPx(sourceSize.height, source)
+                    height: Theme.artHeight(source)
                     source: Theme.asset("dashboard-mask-top.png")
                     fillMode: Image.Stretch
                 }
@@ -324,7 +324,7 @@ Item {
                     visible: phoneDashboard.item !== null && !phoneDashboard.item.atYEnd
                     y: parent.height - Theme.dashboardBottomMaskOffset
                     width: parent.width
-                    height: Theme.artPx(sourceSize.height, source)
+                    height: Theme.artHeight(source)
                     source: Theme.asset("dashboard-mask-bottom.png")
                     fillMode: Image.Stretch
                 }

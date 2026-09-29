@@ -15,9 +15,12 @@ Beside `name.png` may be `name@1.5x.png`, `name@2x.png`, `name@3x.png` or
 - `Theme.asset(path)` gives the smallest variant at least `Theme.u`, else the
   largest there is, else the 1x file. At `Theme.u === 1` it is always the 1x
   file, so 1.0 draws exactly what it always did.
-- A variant's `sourceSize` is k times the art's. Size an image from its art
-  with `Theme.artPx(sourceSize.width, source)`, never
-  `Theme.px(sourceSize.width)`.
+- Size an image from its art with `Theme.artWidth(source)` and
+  `Theme.artHeight(source)`, which read the file's own size and divide by its
+  variant factor. Never from `sourceSize`: on a screen whose device pixel
+  ratio is above 1 (a Retina Mac, a HiDPI laptop), Qt loads `name@2x.png` in
+  place of `name.png` by itself, so `sourceSize` is the @2x file's while the
+  URL still says 1x, and the image comes out twice as big.
 - Give BorderImage borders in the 1x art's pixels through
   `Theme.artBorder(v, source)`. Qt already reads a file named `@<digit>x` as
   having that pixel ratio and scales its borders itself, so this multiplies
@@ -50,7 +53,7 @@ To add variants: add the art to `tools/hidpi-art.json` (`original` with its
 source path when Open webOS / Enyo has it larger, else `upscale`), run
 `tools/hidpi-art.py --ref <checkouts> --model RealESRGAN_x4plus.pth`, look at
 the results beside the 1x art, check that every place that draws it sizes it
-with `artPx` / `artBorder` (or a fixed size), and record it in
+with `artWidth` / `artHeight` / `artBorder` (or a fixed size), and record it in
 `shell/assets/openwebos/PROVENANCE.md`.
 
 Left at 1x on purpose: backgrounds, gradients, shadows, masks and scrims (they

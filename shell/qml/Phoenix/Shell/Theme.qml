@@ -382,9 +382,9 @@ QtObject {
 
     // Original Open webOS artwork, shipped in shell/assets/openwebos, drawn
     // at this density: the best of name@1.5x / @2x / @3x / @4x.png beside it
-    // for u (HiDpi.variant), or the 1x file itself, always when u is 1. The
-    // variant's sourceSize is k times the art's, so size an image from it
-    // with artPx(), and give a BorderImage artBorder() borders. See
+    // for u (HiDpi.variant), or the 1x file itself, always when u is 1. Size
+    // an image with artWidth() / artHeight(), and give a BorderImage
+    // artBorder() borders. See
     // docs/spec/hidpi-art.md.
     function assetUrl(path) {
         return Qt.resolvedUrl("../../../assets/openwebos/" + path)
@@ -397,12 +397,26 @@ QtObject {
     function variant(url, scale) {
         return HiDpi.variant(url, scale)
     }
+    // The width and height of the art in `url` (a file returned by
+    // asset()), in device pixels: the file's own size read from its header,
+    // divided by its variant factor, through px(). Not from the Image's
+    // sourceSize: on a screen with a device pixel ratio above 1, Qt loads
+    // "name@2x.png" in place of "name.png" by itself, and sourceSize is then
+    // the @2x file's while the URL still says 1x.
+    function artWidth(url) {
+        var s = HiDpi.imageSize(url);
+        return s.width > 0 ? px(s.width / HiDpi.variantScale(url)) : 0
+    }
+    function artHeight(url) {
+        var s = HiDpi.imageSize(url);
+        return s.height > 0 ? px(s.height / HiDpi.variantScale(url)) : 0
+    }
     // How many times the 1x art's pixels a file returned by asset() has.
     function artScale(url) {
         return HiDpi.variantScale(url)
     }
     // px() of a length in the art's pixels, measured on a file that may be a
-    // variant: Theme.artPx(sourceSize.width, source).
+    // variant: Theme.artWidth(source).
     function artPx(v, url) {
         return px(v / HiDpi.variantScale(url))
     }

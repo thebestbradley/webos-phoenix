@@ -171,8 +171,8 @@ Item {
         visible: Theme.tablet && opacity > 0
         x: newTitle.width + Theme.statusBarArrowSpacing
         anchors.verticalCenter: parent.verticalCenter
-        width: Theme.artPx(sourceSize.width, source)
-        height: Theme.artPx(sourceSize.height, source)
+        width: Theme.artWidth(source)
+        height: Theme.artHeight(source)
         source: Theme.asset("statusBar/menu-arrow.png")
         opacity: bar._arrowProgress
     }
@@ -181,8 +181,8 @@ Item {
         visible: Theme.tablet && opacity > 0
         x: titleArrow.x + titleArrow.width + Theme.px(7)             // ARROW_SPACING, StatusBar.h:33
         anchors.verticalCenter: parent.verticalCenter
-        width: Theme.artPx(sourceSize.width, source)
-        height: Theme.artPx(sourceSize.height, source)
+        width: Theme.artWidth(source)
+        height: Theme.artHeight(source)
         source: Theme.asset("statusBar/status-bar-separator.png")
         opacity: bar._arrowProgress
     }
@@ -288,7 +288,7 @@ Item {
                     : bar.system.charging && step === 12 ? Theme.asset("statusBar/battery-charged.png")
                     : bar.system.charging ? Theme.asset("statusBar/battery-charging-" + step + ".png")
                     : Theme.asset("statusBar/battery-" + Math.min(step, 11) + ".png")
-            width: Theme.artPx(sourceSize.width, source); height: Theme.artPx(sourceSize.height, source)
+            width: Theme.artWidth(source); height: Theme.artHeight(source)
         }
         // Tablet: the clock, rightmost (the system group's first item).
         Text {
@@ -335,8 +335,8 @@ Item {
         opacity: progress
         Image {
             id: img
-            width: Theme.artPx(sourceSize.width, source)
-            height: Theme.artPx(sourceSize.height, source)
+            width: Theme.artWidth(source)
+            height: Theme.artHeight(source)
         }
     }
 }

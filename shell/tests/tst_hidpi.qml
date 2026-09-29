@@ -10,6 +10,7 @@ import QtQuick
 import QtTest
 import Phoenix.Shell
 import Phoenix.Native
+import Phoenix.Sim
 
 Item {
     id: root
@@ -30,8 +31,13 @@ Item {
     Image {
         id: wifi
         source: Theme.asset("statusBar/wifi-3.png")
-        width: Theme.artPx(sourceSize.width, source)
-        height: Theme.artPx(sourceSize.height, source)
+        width: Theme.artWidth(source)
+        height: Theme.artHeight(source)
+    }
+    StatusBar {
+        id: bar
+        width: root.width
+        system: SimSystemStatus {}
     }
     BorderImage {
         id: menuBg
@@ -113,15 +119,36 @@ Item {
             Theme.u = 1;
             tryCompare(wifi, "status", Image.Ready);
             var w = wifi.width, h = wifi.height;
+            // The 1x art's 20 x 18, whatever file Qt loaded: with a device
+            // pixel ratio of 2 it loads wifi-3@2x.png for wifi-3.png itself
+            // (CI runs this file with QT_SCALE_FACTOR=2 too).
+            compare(w, 20);
+            compare(h, 18);
             Theme.u = 2;
             tryCompare(wifi, "status", Image.Ready);
             compare(root.fileName(wifi.source), "wifi-3@2x.png");
-            compare(wifi.sourceSize.width, 2 * w);
             compare(wifi.width, 2 * w);
             compare(wifi.height, 2 * h);
             Theme.u = 3;
             tryCompare(wifi, "status", Image.Ready);
             compare(wifi.width, 3 * w);
+        }
+
+        // The status bar's icons are the art's size at every density (the
+        // battery is 17 x 20, Wi-Fi 20 x 18 at 1x), also where the device
+        // pixel ratio makes Qt load a @2x file for a 1x name.
+        function test_statusBarIconsKeepTheirSize() {
+            for (var uu of [1, 1.5, 2]) {
+                Theme.u = uu;
+                var battery = findChild(bar, "battery");
+                tryCompare(battery, "status", Image.Ready);
+                compare(battery.width, Theme.px(17), "battery at u " + uu);
+                compare(battery.height, Theme.px(20), "battery at u " + uu);
+                var wifiIcon = findChild(bar, "wifiIcon");
+                tryCompare(wifiIcon, "width", Theme.px(20));
+                compare(wifiIcon.height, Theme.px(18), "Wi-Fi at u " + uu);
+            }
+            Theme.u = 1;
         }
 
         function test_borderImageBorders() {

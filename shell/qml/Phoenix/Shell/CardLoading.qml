@@ -51,8 +51,8 @@ Item {
         id: glow
         anchors.centerIn: parent
         source: Theme.asset("loading-glow.png")
-        width: Theme.artPx(sourceSize.width, source)
-        height: Theme.artPx(sourceSize.height, source)
+        width: Theme.artWidth(source)
+        height: Theme.artHeight(source)
         visible: icon.status === Image.Ready
         opacity: 0
 

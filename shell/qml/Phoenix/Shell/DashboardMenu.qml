@@ -182,7 +182,7 @@ Item {
             verticalTileMode: BorderImage.Stretch
             Image {
                 x: parent.width - width
-                width: Theme.artPx(sourceSize.width, source)
+                width: Theme.artWidth(source)
                 height: parent.height
                 source: Theme.asset("menu-dropdown-swipe-highlight.png")
                 fillMode: Image.Stretch
@@ -392,13 +392,13 @@ Item {
         Behavior on opacity { NumberAnimation { duration: Theme.systemMenuScrollFadeDuration } }
         BorderImage {
             width: parent.width
-            height: Theme.artPx(sourceSize.height, source)
+            height: Theme.artHeight(source)
             source: Theme.asset("menu-dropdown-scrollfade-top.png")
             border { left: Theme.artBorder(20, source); right: Theme.artBorder(20, source) }
         }
         Image {
             x: (parent.width - width) / 2
-            width: Theme.artPx(sourceSize.width, source); height: Theme.artPx(sourceSize.height, source)
+            width: Theme.artWidth(source); height: Theme.artHeight(source)
             source: Theme.asset("menu-arrow-up.png")
         }
     }
@@ -412,14 +412,14 @@ Item {
         Behavior on opacity { NumberAnimation { duration: Theme.systemMenuScrollFadeDuration } }
         BorderImage {
             width: parent.width
-            height: Theme.artPx(sourceSize.height, source)
+            height: Theme.artHeight(source)
             source: Theme.asset("menu-dropdown-scrollfade-bottom.png")
             border { left: Theme.artBorder(20, source); right: Theme.artBorder(20, source) }
         }
         Image {
             x: (parent.width - width) / 2
             y: Theme.px(10)
-            width: Theme.artPx(sourceSize.width, source); height: Theme.artPx(sourceSize.height, source)
+            width: Theme.artWidth(source); height: Theme.artHeight(source)
             source: Theme.asset("menu-arrow-down.png")
         }
     }
