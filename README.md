@@ -323,6 +323,7 @@ Apple's `container` tool; see [docs/BUILDING-MAC.md](docs/BUILDING-MAC.md). See
 
 - [Architecture](docs/ARCHITECTURE.md): how Phoenix sits on top of webOS OSE
 - [Roadmap](docs/ROADMAP.md): milestones from simulator to phones
+- [Status](docs/STATUS.md): where the project stands, open decisions and next work
 - [Web app runtime](docs/APP-RUNTIME.md): how the original webOS apps run
 - [Hardware](docs/HARDWARE.md): target devices, drivers, installer and updates
 - [App gaps](docs/APP-GAPS.md): the apps a modern phone needs, and which Phoenix still lacks
