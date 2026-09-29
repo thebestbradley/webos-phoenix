@@ -113,6 +113,19 @@ data use "Phoenix Account".
   wrote; dedicated to the public domain (CC0 1.0). eSpeak NG itself
   (GPL-3.0) is only a tool used to make them and is not shipped.
 
+- Passwords (`apps/passwords`) and Authenticator (`apps/authenticator`) are
+  new apps (legacy webOS had neither). Their launcher icons are drawn by their
+  `tools/render-icon.cjs` (original). The TOTP/HOTP code in
+  `apps/shared/secrets` is original, written from RFC 4226 and RFC 6238.
+  Passwords bundles **kdbxweb** 2.1.1 (MIT, Antelle), **fflate** 0.7.5 (MIT,
+  Arjun Barrett; used by kdbxweb) and **hash-wasm** 4.12.0 (MIT, Dani Biró;
+  Argon2 compiled to WebAssembly); their licence texts ship with the app in
+  `apps/passwords/public/THIRD-PARTY-LICENSES.txt`. kdbxweb's dependency
+  **@xmldom/xmldom** (MIT) is used only by the unit tests under Node.js and is
+  left out of the app build. `apps/passwords/src/fixtures/pykeepass-kdbx4.kdbx`
+  is test data written with pykeepass (GPL-3.0, a tool only; not shipped, not
+  a dependency) from values we made up.
+
 - CardDAV & CalDAV (`apps/dav`) is original code. Its vCard and iCalendar
   mapping follows the field names and formats of the Open webOS contacts and
   calendar frameworks (`third_party/loadable-frameworks`, Apache-2.0), read

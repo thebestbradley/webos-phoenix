@@ -392,6 +392,28 @@ Item {
     property string focusedUid: ""
     signal bannerRequested(string appId, string text, url icon, string params)
 
+    // Tell a page when its card comes to the front (maximized) or leaves it
+    // (minimized to card view, or another card maximized), as LunaSysMgr
+    // does; the runtime passes it on as the "phoenixcardactivation" event
+    // (runtime/phoenix-runtime.js "Card activation"). Passwords and
+    // Authenticator lock on it.
+    property string _activeUid: ""
+    onFocusedUidChanged: {
+        var previous = _activeUid;
+        _activeUid = focusedUid;
+        if (previous === focusedUid)
+            return;
+        var tell = function (uid, active) {
+            var w = _windows[uid];
+            if (w && w.runScript)
+                w.runScript("window.__phoenixRuntime && __phoenixRuntime.cardActivated && __phoenixRuntime.cardActivated(" + active + ")");
+        };
+        if (previous !== "")
+            tell(previous, false);
+        if (focusedUid !== "")
+            tell(focusedUid, true);
+    }
+
     // A file URL for an icon an app names by device path.
     function _iconUrl(path, appId) {
         if (path && typeof simRootfs !== "undefined" && simRootfs) {

@@ -281,6 +281,7 @@ export interface LunaApi {
     "luna://com.webos.service.audio/playFeedback": { params: { name: string; sink?: string; play?: boolean }; result: Empty };
     // device lock (legacy)
     "luna://com.palm.systemmanager/getDeviceLockMode": { params: Empty; result: { lockMode: LockMode } };
+    "luna://com.palm.systemmanager/getLockStatus": { params: Sub; result: { locked: boolean } };
     "luna://com.palm.systemmanager/setDevicePasscode": { params: { lockMode: LockMode; passCode?: string; oldPasscode?: string }; result: Empty };
     "luna://com.palm.systemmanager/matchDevicePasscode": { params: { passCode: string }; result: { succeeded: boolean } };
 }

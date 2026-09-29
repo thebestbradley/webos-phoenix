@@ -72,6 +72,14 @@
         "status": "works",
         "note": "Phoenix Voice Memos (React, apps/voicememos); tools/test-voicememos.cjs drives it with Chromium's fake microphone. The simulator transcribes only the demo memos (whisper.cpp runs on the device)"
     },
+    "org.webosphoenix.passwords": {
+        "status": "works",
+        "note": "Phoenix Passwords (React, apps/passwords), a KeePass (KDBX 4) password manager; tools/test-passwords.cjs drives it. No key files or autofill yet"
+    },
+    "org.webosphoenix.authenticator": {
+        "status": "works",
+        "note": "Phoenix Authenticator (React, apps/authenticator), TOTP/HOTP codes encrypted with the device passcode; starts on the 'set a device passcode' screen when there is none. tools/test-authenticator.cjs drives it"
+    },
     "org.webosphoenix.dav": {
         "status": "works",
         "note": "Hidden: the CardDAV & CalDAV account's sign-in page and service (apps/dav); its main page only points to Accounts. tools/test-dav-sync.cjs drives it"

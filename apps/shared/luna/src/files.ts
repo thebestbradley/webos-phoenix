@@ -264,6 +264,7 @@ const KINDS: Record<string, [FileKind, string]> = {
     zip: ["archive", "application/zip"], tar: ["archive", "application/x-tar"], gz: ["archive", "application/gzip"],
     tgz: ["archive", "application/gzip"], bz2: ["archive", "application/x-bzip2"], xz: ["archive", "application/x-xz"],
     ipk: ["package", "application/vnd.webos.ipk"],
+    kdbx: ["file", "application/x-keepass2"],
     pdf: ["pdf", "application/pdf"],
 };
 

@@ -74,6 +74,24 @@ transcribe and search. On a device it transcribes with whisper.cpp; the
 simulator records with Chromium's fake microphone and knows only the demo
 memos' scripts.*
 
+| Passwords | Generator | Tablet | Locked in card view |
+| --- | --- | --- | --- |
+| ![](docs/screenshots/passwords-entry.png) | ![](docs/screenshots/passwords-generator.png) | ![](docs/screenshots/passwords-tablet.png) | ![](docs/screenshots/passwords-card-view.png) |
+
+*Passwords, a KeePass password manager: KDBX 4 files that KeePassXC and
+KeePassDX open too, TOTP codes from their `otp` fields, a generator, and a
+clipboard that clears itself. It locks when the screen locks, when the card
+is minimized (right: in phoenix-sim's card view) and after a while.*
+
+| Authenticator | Unlock | Add from a scan | Import | Tablet |
+| --- | --- | --- | --- | --- |
+| ![](docs/screenshots/authenticator-codes.png) | ![](docs/screenshots/authenticator-lock.png) | ![](docs/screenshots/authenticator-confirm.png) | ![](docs/screenshots/authenticator-import.png) | ![](docs/screenshots/authenticator-tablet.png) |
+
+*Authenticator: two-factor codes (TOTP and HOTP) with a countdown ring, tap
+to copy, encrypted with the device passcode; codes from the QR scanner are
+confirmed before they are added. Threat model:
+[docs/SECURITY-APPS.md](docs/SECURITY-APPS.md).*
+
 ## Status
 
 **Milestone 0: the shell runs in a desktop simulator.** You can use the card
@@ -96,7 +114,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `shell/qml/Phoenix/Sim` | Mock apps and device status for the desktop simulator |
 | `shell/qml/Phoenix/Lsm`, `shell/qml/WebOSCompositor` | Adapter that plugs the shell into webOS OSE's `luna-surfacemanager` |
 | `shell/sim` | `phoenix-sim`, the desktop runner (also takes screenshots) |
-| `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Tasks, Voice Memos), with the shared `@phoenix/ui` components and `@phoenix/luna` service client, generated demo media (`apps/media-samples`), the Node.js Luna services of Files (`apps/files/service`) and Voice Memos (`apps/voicememos/service`, speech to text with whisper.cpp), and the CardDAV & CalDAV Synergy account with its sync service (`apps/dav`, see [docs/SYNERGY.md](docs/SYNERGY.md)) |
+| `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Tasks, Voice Memos, Passwords, Authenticator), with the shared `@phoenix/ui` components, `@phoenix/luna` service client and `@phoenix/secrets` (TOTP, sealing, auto-lock), generated demo media (`apps/media-samples`), the Node.js Luna services of Files (`apps/files/service`) and Voice Memos (`apps/voicememos/service`, speech to text with whisper.cpp), and the CardDAV & CalDAV Synergy account with its sync service (`apps/dav`, see [docs/SYNERGY.md](docs/SYNERGY.md)) |
 | `runtime/` | The webOS web app runtime for the simulator and browsers (`PalmSystem`, simulated Luna services) |
 | `shell/tests` | Behaviour tests (`qmltestrunner`) |
 | `shell/assets/openwebos` | Original Open webOS system UI artwork (Apache-2.0) |
@@ -184,6 +202,8 @@ node tools/test-tasks.cjs                                   # Tasks and reminder
 node tools/test-alarm.cjs                                   # a Clock alarm rings as a popup alert
 node tools/test-keyboard.cjs                                # web fields and the virtual keyboard
 node tools/test-voicememos.cjs                              # Voice Memos
+node tools/test-passwords.cjs                               # Passwords (KeePass)
+node tools/test-authenticator.cjs                           # Authenticator (TOTP/HOTP)
 node tools/test-orientation.cjs                             # apps asking for and following an orientation
 ```
 

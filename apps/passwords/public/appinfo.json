@@ -1,0 +1,24 @@
+{
+    "id": "org.webosphoenix.passwords",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Passwords",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "iconColor": "#2f5f8f",
+    "uiRevision": 2,
+    "keywords": ["Password Manager", "KeePass", "KDBX", "Logins", "Vault", "Security"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launcherTab": 0
+    },
+    "//universalSearch": "None on purpose: entries must never reach Just Type's index or any db8 kind (docs/SECURITY-APPS.md). Just Type finds the app by title and keywords only.",
+    "//requiredPermissions": "OSE access control groups for the services the app calls: filemanager.operation (apps/files/service) for the .kdbx files, systemmanager lock status for auto-lock, application launch for Open Website.",
+    "requiredPermissions": [
+        "filemanager.operation",
+        "application.launcher",
+        "application.operation"
+    ]
+}

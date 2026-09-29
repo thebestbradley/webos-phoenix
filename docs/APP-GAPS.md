@@ -12,7 +12,8 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
   `third_party/isis` (the Isis browser)
 - **Phoenix**: a new app in `apps/` (Settings, Phone, Messaging, Camera,
   Photos, Music, Files)
-- **In progress**: Tasks (with reminders), Voice Memos (with transcription)
+- **In progress**: Tasks (with reminders), Voice Memos (with transcription),
+  Passwords, Authenticator
 - **Missing**
 
 **Priority:** **P0** a phone is not usable as a daily phone without it;
@@ -92,8 +93,8 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | App | Status | Legacy webOS | Priority | Approach |
 | --- | --- | --- | --- | --- |
 | Lock screen PIN / password | **Done** (the lock screen asks for the PIN or password) | PIN and password lock | P0 | The lock screen asks through the ported UnlockPanel and checks with `com.palm.systemmanager` `matchDevicePasscode` (GAPS K1). On a device a passcode service is still needed (OSE has none) |
-| **Password manager** | Missing | None built in (third-party SplashID and others) | P1 | Offline-first KeePass (`.kdbx`) vault using [kdbxweb](https://github.com/keeweb/kdbxweb) (MIT), with the file synced through WebDAV; Bitwarden/Vaultwarden support as a second option. System-wide autofill needs a hook in the web runtime and keyboard: design it together with the IME work |
-| **Authenticator (TOTP)** | Missing | None built in | P1 | RFC 6238 TOTP/HOTP, `otpauth://` QR import through the shared scanner, import from Aegis and andOTP exports, encrypted with the device PIN. Small web app; could share storage with the password manager |
+| **Password manager** | **In progress** (Passwords, `apps/passwords`) | None built in (third-party SplashID and others) | P1 | Done in the simulator: KeePass KDBX 4 databases through [kdbxweb](https://github.com/keeweb/kdbxweb) (MIT) with Argon2id from hash-wasm (MIT, WebAssembly) in `/media/internal/passwords`, so KeePassXC and KeePassDX open the same file (checked both ways); groups, entries, search, the generator, TOTP codes from KeePassXC/KeePassDX `otp` fields, copy with auto-clear, auto-lock on screen lock, card minimize and idle, merge when the file changed elsewhere, Files "Open with" (`tools/test-passwords.cjs`; threat model in [SECURITY-APPS.md](SECURITY-APPS.md)). Still to do: WebDAV sync of the file (Files has no WebDAV yet), key files and YubiKey, attachments, running on a device. Bitwarden/Vaultwarden as a second option. System-wide autofill needs a hook in the web runtime and keyboard: designed in SECURITY-APPS.md, to build together with the IME work |
+| **Authenticator (TOTP)** | **In progress** (Authenticator, `apps/authenticator`) | None built in | P1 | Done in the simulator: RFC 6238 TOTP / RFC 4226 HOTP (tested against the RFC vectors), codes with a countdown ring, tap to copy (auto-clear), `otpauth://` links typed in or passed by the QR scanner as launch params `{otpauth}` (confirmed before adding), setup keys, import of Aegis and andOTP plain exports (with a warning) and of its own encrypted backups, encrypted export; secrets encrypted at rest with a key protected by the device passcode, auto-lock (`tools/test-authenticator.cjs`; [SECURITY-APPS.md](SECURITY-APPS.md)). Still to do: the Phoenix key store service to hold the key on a device (today the app wraps it with a PBKDF2 key from the passcode, weak for short PINs), encrypted Aegis vaults, Steam codes, running on a device. It does not share storage with Passwords: KeePass entries carry their own TOTP |
 | **VPN** | Missing | VPN settings pane (`com.palm.app.vpn`) | P1 | Settings pane for WireGuard and OpenVPN over ConnMan's `connman-vpnd`; needs VPN methods in `webos-connman-adapter` or a Phoenix service |
 | Fingerprint unlock | Missing | None | P2 | fprintd or the Android HAL on Halium (see [HARDWARE.md](HARDWARE.md)) |
 
@@ -164,8 +165,9 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 2. **Small, high-value apps** (M4, can start now in the simulator):
    Flashlight, QR scanner (shared component), Emergency/medical ID,
    Weather, PDF viewer, Video player, finishing Tasks and Voice Memos.
-3. **Bigger everyday apps**: Maps and navigation, Podcasts, Authenticator,
-   Password manager, Backup and restore, Notes sync, VPN pane.
+3. **Bigger everyday apps**: Maps and navigation, Podcasts, Backup and
+   restore, Notes sync, VPN pane (Authenticator and Password manager are in
+   progress; next for them: the key store service and WebDAV file sync).
 4. **Platform features**: magnification and accessibility settings, word
    prediction, cell broadcast alerts, screen recording.
 5. **Long projects**: screen reader (designed early, built after M3), swipe
