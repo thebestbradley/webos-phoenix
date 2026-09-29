@@ -3,6 +3,27 @@
 Goal: the full legacy webOS phone and tablet experience, pixel for pixel and
 feature for feature, on webOS OSE. Once that works, modernize it.
 
+## Two lines: 1.x and 2.0
+
+Owner's direction (29 September 2026):
+
+- **1.x is for the fans, and is never deprecated.** Get it running and
+  working as fully as possible, and keep it very close to the original
+  webOS in look, feel and behaviour. It gains only what a classic webOS
+  device needs to be usable today, in the classic style: modern accounts in
+  Synergy, web apps and the catalog, security fixes, drivers for current
+  hardware, sharper redraws of the original art, and accessibility. A new
+  feature belongs in 1.x only if it looks and behaves as if Palm had shipped
+  it.
+- **2.0 is the modern revamp that brings webOS back.** New visual style,
+  new features, docking to monitors and TVs
+  ([CONVERGENCE.md](CONVERGENCE.md)), the big streaming services, a
+  Chromium-based browser. It keeps the webOS ideas (cards, Just Type,
+  Synergy, the dashboard) and is free to redesign everything else.
+
+The two share the platform (OSE, the services, the apps' data), so work
+below the UI serves both. M0 to M5 are 1.x; the 2.0 section is at the end.
+
 The checklist of legacy features is in
 [spec/feature-inventory.md](spec/feature-inventory.md), and the measurements
 are in [spec/legacy-ui-spec.md](spec/legacy-ui-spec.md).
@@ -201,11 +222,13 @@ PHP + MySQL service) is in [APP-STORE.md](APP-STORE.md).
 
 ## M5: modernize
 
-Once parity is reached: high-DPI artwork redraws, dark/light themes, modern
-notification actions, Wayland app compatibility (Linux mobile apps),
-Android apps through Waydroid (plan in [ANDROID.md](ANDROID.md); its spike
-can start on the emulator image after M1), accessibility, and whatever else
-the community agrees fits webOS.
+Once parity is reached, within the 1.x rule above (classic look, as if Palm
+had shipped it): high-DPI redraws of the original artwork, notification
+actions in the dashboard's style, Wayland app compatibility (Linux mobile
+apps), Android apps through Waydroid (plan in [ANDROID.md](ANDROID.md); its
+spike can start on the emulator image after M1), accessibility, and whatever
+else the community agrees fits webOS. New visual styles such as dark and
+light themes go to 2.0.
 
 - [ ] MCP hub `org.webosphoenix.mcp`: OS tools, per-app tools from
       `appinfo.json`, grants, confirmations and an audit log; stdio over
@@ -219,7 +242,17 @@ the community agrees fits webOS.
       not yet built for a device)
 - [ ] Developer Mode with `sudo` and an SSH server ([TERMINAL.md](TERMINAL.md) T4-T5)
 
-## 2.0: one device, every screen
+## 2.0: modern webOS
+
+The modern revamp in style and features (see "Two lines" above). 1.x stays
+supported alongside it.
+
+- [ ] A new visual style and themes (dark and light), designed from the
+      webOS ideas rather than the 2011 art
+- [ ] Chromium-based browser replacing Isis
+- [ ] One device, every screen (below)
+
+### One device, every screen
 
 Plan in [CONVERGENCE.md](CONVERGENCE.md). A phone or tablet docks to a
 monitor, keyboard or mouse (desktop mode, like DeX) and to a TV by cable or
@@ -232,7 +265,6 @@ services are a requirement ([APP-STORE.md](APP-STORE.md#311-streaming-apps-and-d
 - [ ] C3 on a device: display output, EDID, HDCP, two outputs
 - [ ] C4 Miracast and Google Cast sending
 - [ ] C5 Widevine L1 and certification by the streaming services
-- [ ] Chromium-based browser replacing Isis
 
 ## Related projects
 

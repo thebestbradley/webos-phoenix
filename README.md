@@ -10,6 +10,11 @@ Pre 2, Pre 3, Veer and TouchPad: cards, gestures, the quick launch bar, stacked
 notifications, Just Type. It reuses the original Open webOS artwork and
 measurements wherever the license allows.
 
+There are two lines. **1.x** stays very close to the original webOS and is
+never deprecated: it is for the fans. **2.0** is a modern revamp in style
+and features, including docking to monitors and TVs, to bring webOS back.
+See [docs/ROADMAP.md](docs/ROADMAP.md#two-lines-1x-and-20).
+
 | Lock screen | Card view | Card stack | Reordering | App | Launcher | Dashboard | Just Type | System menu |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | ![](docs/screenshots/locked.png) | ![](docs/screenshots/cards.png) | ![](docs/screenshots/stacks.png) | ![](docs/screenshots/reorder.png) | ![](docs/screenshots/maximized.png) | ![](docs/screenshots/launcher.png) | ![](docs/screenshots/dashboard.png) | ![](docs/screenshots/justtype.png) | ![](docs/screenshots/systemmenu.png) |

@@ -13,6 +13,10 @@ into. Owner's direction (29 September 2026):
   TV mode (and the product) is dead in the water. Streaming access is a
   requirement of 2.0, not an extra.
 
+This is 2.0 work, part of the modern revamp. 1.x stays true to the original
+webOS and does not get these modes
+([ROADMAP.md](ROADMAP.md#two-lines-1x-and-20)).
+
 Nothing here is built yet. What 1.x already gives it: the shell resizes to
 any window, rotates on phone and tablet, sizes art by density
 ([spec/hidpi-art.md](spec/hidpi-art.md)), handles trackpad gestures in card

@@ -24,6 +24,13 @@ in the documents linked from each item.
 
 Nothing has run on a phone yet.
 
+## Direction
+
+1.x runs and works as fully as possible and stays very close to the
+original webOS; it is for the fans and is never deprecated. 2.0 is the
+modern revamp in style and features that brings webOS back
+([ROADMAP.md](ROADMAP.md#two-lines-1x-and-20)).
+
 ## Decisions for the owner
 
 From the new apps:
