@@ -223,13 +223,28 @@ PHP + MySQL service) is in [APP-STORE.md](APP-STORE.md).
       notification model; tapping a notification already opens what it is about
 - [ ] Localization: apps follow `localeInfo`
 
+## 1.0 release
+
+1.0 ships when a fan can install Phoenix on hardware they own and use it
+every day. Owner's direction: the app sources below are needed for that
+and come towards the end of 1.0.
+
+- [ ] Web apps and the Phoenix Catalog ([APP-STORE.md](APP-STORE.md) A0-A4)
+- [ ] Classic apps from App Museum II ([APP-STORE.md](APP-STORE.md) A2)
+- [ ] Preware feeds, installed through the catalog
+- [ ] Android apps through Waydroid ([ANDROID.md](ANDROID.md))
+- [ ] Install like a Linux distro: generic images, live boot, the installer,
+      the hardware report and device table, the light profile
+      ([HARDWARE.md](HARDWARE.md#install-it-like-a-linux-distro))
+- [ ] As many devices as possible at Supported or Community level
+      ([HARDWARE.md](HARDWARE.md#device-tiers))
+
 ## M5: modernize
 
 Once parity is reached, within the 1.x rule above (classic look, as if Palm
 had shipped it): high-DPI redraws of the original artwork, notification
 actions in the dashboard's style, Wayland app compatibility (Linux mobile
-apps), Android apps through Waydroid (plan in [ANDROID.md](ANDROID.md); its
-spike can start on the emulator image after M1), accessibility, and whatever
+apps), accessibility, and whatever
 else the community agrees fits webOS. New visual styles such as dark and
 light themes go to 2.0.
 

@@ -350,7 +350,10 @@ months, for one developer.
 ## 11. Open questions
 
 1. **Do you want Android support at all in the first year**, or keep it
-   for after the phones work (M5)? B0 can run on the emulator image early.
+   for after the phones work? *Answered (owner, 29 September 2026):
+   Android apps are part of the 1.0 release, towards its end; see
+   [ROADMAP.md](ROADMAP.md#10-release).* B0 can run on the emulator image
+   early.
 2. **LuneOS layer or our own recipes?** Depend on `meta-luneos`'s Waydroid
    recipes (and share fixes with them), or copy them into `meta-phoenix`?
    This ties into the scarthgap-vs-LuneOS question in HARDWARE.md.

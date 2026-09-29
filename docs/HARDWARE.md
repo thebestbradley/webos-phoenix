@@ -27,6 +27,37 @@ where something is uncertain it says so.
 - **RAUC for A/B updates**, and a device installer built on the UBports
   Installer's config format plus a WebUSB flasher.
 - **A demo that needs no hardware**: a VirtualBox/QEMU image and a browser demo.
+- **Install it like a Linux distro**: generic images, live boot, one
+  installer, a hardware report feeding the device table, and a light
+  profile for old hardware (next section).
+
+## Install it like a Linux distro
+
+Owner's direction (29 September 2026): support as much hardware as
+possible, and make getting Phoenix as easy as installing a Linux
+distribution on an old computer. Easy installs get people using and talking
+about Phoenix; a community that is visibly using it is what gets
+manufacturers to build dedicated webOS hardware again.
+
+What a distro install means, and how close we can get:
+
+| A distro gives you | Phoenix equivalent | How |
+| --- | --- | --- |
+| **One image for many machines** | A few **generic images** instead of one per device | x86-64 UEFI (any PC, tablet or 2-in-1); arm64 UEFI for boards and phones with a UEFI-capable bootloader (U-Boot, Tow-Boot, lk2nd on Qualcomm); one generic Halium image for Android devices with Project Treble (Android 9 and later), where the device's own vendor partition supplies the drivers and only a small per-device adaptation is added (LuneOS's `halium-arm64` and Ubuntu Touch's GSI approach) |
+| **Try it before installing** (live USB) | **Live boot** | x86: a live USB image. Fastboot phones: `fastboot boot` a Phoenix boot image that runs from a file without touching Android, where the device allows it. The browser installer offers "Try" before "Install" |
+| **A graphical installer** | **One installer for Mac, Windows and Linux, and a web page** | Detects the device over USB, says what works on it (from the device table), walks through bootloader unlocking, backs up, flashes, and offers to put Android back ([Installer](#installer)) |
+| **"Does my hardware work?"** | **A hardware report** | A built-in tool (Settings > Device Info > Report hardware) that tests each feature (calls, Wi-Fi, camera, sensors, suspend) and, with the user's consent, sends the result to the public device table, as linux-hardware.org does for Linux PCs. Every install then improves the table |
+| **Drivers in the kernel** | **Mainline first, Halium for reach** | Tiers (b) to (d) below. Upstream every fix to postmarketOS/Nura and the kernel so other projects share the work and it outlives us |
+| **Runs on old machines** | **A light profile** | The classic UI is light; OSE's Chromium web runtime is the heavy part. Measure the minimum RAM on the Pi and x86 images, then trim: fewer preloaded apps, zram, one web runtime process for the Enyo apps. Publish the minimum clearly |
+| **Updates** | **OTA A/B updates** | RAUC ([OTA](#ota-with-ab-updates)) |
+
+**For manufacturers: "Phoenix Ready".** Once the community is there, a short
+public hardware specification tells a maker what to build so Phoenix runs
+fully: an unlockable bootloader, mainline or Treble support, the parts in
+the reference device list, a `device.json` ([Device configuration](#device-configuration))
+declaring its buttons and features, and for 2.0, DisplayPort Alt Mode, HDCP
+and a TEE for Widevine ([CONVERGENCE.md](CONVERGENCE.md#3-hardware-it-depends-on)).
+The device table's install counts are the evidence that there is demand.
 
 ## Device tiers
 
@@ -149,7 +180,8 @@ producing a UEFI disk image with systemd-boot, installable from USB.
 
 - **Original Palm/HP hardware** (Pre, Veer, TouchPad): 512 MB–1 GB RAM and
   32-bit SoCs cannot run OSE's Chromium runtime. LuneOS keeps the TouchPad
-  alive; that is the place for it.
+  alive; that is the place for it. Revisit the TouchPad (1 GB) once the light
+  profile's minimum is measured.
 - **LG webOS TVs**: a different product with its own signed firmware.
 - **Anything with a locked bootloader.**
 
@@ -354,3 +386,7 @@ assume a small volunteer team.
   OSE's Chromium 120 as it does with LuneOS's?
 - Can we share one Luna service implementation with LuneOS instead of
   keeping two?
+- How low can the light profile go: the minimum RAM for the classic UI with
+  OSE's web runtime, and whether 32-bit ARM is worth building for?
+- Does `fastboot boot` of a Phoenix image work on the reference phones, for
+  "try before installing"?

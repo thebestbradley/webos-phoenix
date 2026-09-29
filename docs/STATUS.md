@@ -32,6 +32,11 @@ modern revamp in style and features that brings webOS back
 ([ROADMAP.md](ROADMAP.md#two-lines-1x-and-20)). 2.0 only expands on what
 1.x built; it reverts nothing unless the owner agrees.
 
+1.0 ships with the app sources people need (web apps and the catalog, App
+Museum II, Preware, Android apps) and installs like a Linux distro on as
+much hardware as possible, so the community grows and manufacturers take
+notice ([HARDWARE.md](HARDWARE.md#install-it-like-a-linux-distro)).
+
 ## Decisions for the owner
 
 From the new apps:
