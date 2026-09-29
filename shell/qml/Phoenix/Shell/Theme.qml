@@ -367,6 +367,11 @@ QtObject {
 
     readonly property int cardLaunchDuration: motion(400)
     readonly property int cardAddMaxDuration: motion(750)                    // conf/lunaAnimations.conf:53
+    // conf/lunaAnimations.conf cardPrepareAddDuration: the original waited
+    // this long before preparing a new card (CardWindow::delayPrepare).
+    // Here: the pause between the card in front zooming out and the new
+    // card rising, so the two moves do not run into each other.
+    readonly property int cardPrepareAddDuration: motion(150)
     readonly property int cardSlideDuration: motion(300)                     // curve 10 = OutQuart
     readonly property int cardMaximizeDuration: motion(300)                  // curve 10 = OutQuart
     readonly property int cardMinimizeDuration: motion(300)                  // minimize is a cardSlide

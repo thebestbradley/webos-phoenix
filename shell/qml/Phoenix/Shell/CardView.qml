@@ -316,14 +316,17 @@ Item {
         riseTimeout.stop();
         if (risingUid === "" || (maximizeAnim.running && maximizeAnim.to === 1))
             return;
-        // After the zoom out: the cards' layout animation would drag the rise.
-        if (layoutAnimTimer.running) {
+        // After the zoom out and a short settle (cardPrepareAddDuration):
+        // the cards' layout animation would drag the rise, and a rise that
+        // starts the moment the zoom out ends looks like a bounce.
+        if (layoutAnimTimer.running || riseSettle.running) {
             _risePending = true;
             return;
         }
         _risePending = false;
         maximizeAnim.to = 1;
-        maximizeAnim.duration = Theme.cardMaximizeDuration;
+        // A new card rises at the launch pace (cardLaunchDuration, 400 ms).
+        maximizeAnim.duration = Theme.cardLaunchDuration;
         maximizeAnim.start();
         cardMaximized(risingUid);
     }
@@ -338,6 +341,7 @@ Item {
     }
     function cancelRise() {
         riseTimeout.stop();
+        riseSettle.stop();
         _risePending = false;
         risingUid = "";
         loadingUid = "";
@@ -349,7 +353,12 @@ Item {
     }
     Connections {
         target: layoutAnimTimer
-        function onRunningChanged() { if (!layoutAnimTimer.running && view._risePending) view._rise(); }
+        function onRunningChanged() { if (!layoutAnimTimer.running && view._risePending) riseSettle.restart(); }
+    }
+    Timer {
+        id: riseSettle
+        interval: Theme.cardPrepareAddDuration
+        onTriggered: if (view._risePending) view._rise()
     }
     // The app became ready: rise from below, or maximize from card view.
     Connections {
