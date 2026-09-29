@@ -64,6 +64,12 @@ layers that have none.
   screen reader, magnification, word prediction and swipe typing, health,
   cell broadcast, eSIM, printing, screen recording, fingerprint, notes
   sync, a now-playing dashboard, and the "not done" lists of each new app.
+- **Browser**: fix Share > Add to Launcher (the runtime's `addLaunchPoint`
+  is a stub, and the dialog has no icon because the old browser's native
+  snapshot plugin is missing); add "Install Web App" for sites with a web
+  app manifest (a coloured dot by the app menu, the item under
+  Preferences; install as described in [APP-STORE.md](APP-STORE.md)); plan a
+  Chromium-based Phoenix browser to replace the Isis browser in the 2.0 UI.
 - **Synergy build**, in the order of [SYNERGY-MODERN.md](SYNERGY-MODERN.md#5-roadmap).
 - **Shell gaps**: the P2 rows left in [spec/GAPS.md](spec/GAPS.md) (C5, C7,
   C9-C11, L8, N7, N8, R3-R5, K7, G4, G5, G8, A2, S2) and the rest of A1.
