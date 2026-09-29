@@ -109,6 +109,9 @@ The whole plan, milestone by milestone, with the decisions taken so far:
   HDCP on the display output and deals with each service. LG's webOS Hub is
   TV-only and ships LG's own webOS, so it is not a route. The business talks
   are slow and should start well before 2.0.
+- **Enyo 2 apps**: Enyo 2.5.2 with Onyx is in the simulator, and a temporary
+  Enyo 2 Demo app (Downloads tab) shows the widgets. Next, test real Enyo 2
+  apps (LuneOS's, the App Museum's) ([APP-RUNTIME.md](APP-RUNTIME.md#enyo-2-apps)).
 - **Synergy build**, in the order of [SYNERGY-MODERN.md](SYNERGY-MODERN.md#5-roadmap).
 - **Shell gaps**: the P2 rows left in [spec/GAPS.md](spec/GAPS.md) (C5, C7,
   C9-C11, L8, N7, N8, R3-R5, K7, G4, G5, G8, A2, S2) and the rest of A1.

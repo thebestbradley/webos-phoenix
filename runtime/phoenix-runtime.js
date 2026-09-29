@@ -744,6 +744,28 @@
         });
     }
 
+    // webOS OSE's toasts (notificationmgr), used by OSE-era apps and by
+    // enyo-webos's webOS.notification.showToast. On Phoenix a toast is the
+    // calling app's banner, as PalmSystem.addBannerMessage shows it: tapping
+    // it opens that app with onclick.params. onclick naming another app or a
+    // target URL is not supported yet and is refused, not silently dropped.
+    register(["com.webos.notification"], {
+        "/createToast": function (p, reply) {
+            var click = p.onclick || {};
+            if (!p.message) return reply(fail(-1, "message is required"));
+            if (click.target || (click.appId && click.appId !== PalmSystem.appIdentifier))
+                return reply(fail(-1, "onclick may only reopen the calling app in the Phoenix simulator"));
+            var id = PalmSystem.addBannerMessage(String(p.message), JSON.stringify(p.noaction ? {} : click.params || {}),
+                                                 p.iconUrl || "");
+            reply(ok({ toastId: id }));
+        },
+        "/closeToast": function (p, reply) {
+            if (!p.toastId) return reply(fail(-1, "toastId is required"));
+            PalmSystem.removeBannerMessage(String(p.toastId));
+            reply(ok());
+        }
+    });
+
     register(["com.palm.systemservice", "com.webos.service.systemservice"], {
         "/time/getSystemTime": function (p, reply) { reply(timeInfo()); },
         "/time/getSystemTimezoneFile": function (p, reply) { reply(ok({ timeZoneFile: "/usr/share/zoneinfo/" + PalmSystem.TZ })); },

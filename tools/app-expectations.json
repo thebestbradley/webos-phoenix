@@ -127,5 +127,9 @@
     "org.webosphoenix.firstuse": {
         "status": "works",
         "note": "Hidden: Phoenix First Use (React, apps/firstuse), run by the shell at first start and from Settings > Device Info; tools/test-firstuse.cjs drives it"
+    },
+    "org.webosphoenix.enyo2demo": {
+        "status": "works",
+        "note": "Temporary Enyo 2.5.2 / Onyx sampler (apps/enyo2demo)"
     }
 }

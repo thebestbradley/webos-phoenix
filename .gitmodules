@@ -28,3 +28,15 @@
 [submodule "third_party/isis/isis-browser"]
 	path = third_party/isis/isis-browser
 	url = https://github.com/isis-project/isis-browser.git
+[submodule "third_party/enyo-2/enyo"]
+	path = third_party/enyo-2/enyo
+	url = https://github.com/enyojs/enyo.git
+[submodule "third_party/enyo-2/onyx"]
+	path = third_party/enyo-2/onyx
+	url = https://github.com/enyojs/onyx.git
+[submodule "third_party/enyo-2/layout"]
+	path = third_party/enyo-2/layout
+	url = https://github.com/enyojs/layout.git
+[submodule "third_party/enyo-webos"]
+	path = third_party/enyo-webos
+	url = https://github.com/enyojs/enyo-webos.git

@@ -1,0 +1,17 @@
+{
+    "id": "org.webosphoenix.enyo2demo",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Enyo 2 Demo",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "iconColor": "#343a40",
+    "uiRevision": 2,
+    "keywords": ["Enyo", "Onyx", "Sampler"],
+    "phoenix": {
+        "//": "Temporary: a look at Enyo 2 (2.5.2, Onyx and Layout) and a check that Enyo 2 apps run on Phoenix's runtime. launcherTab 1 = Downloads.",
+        "launcherTab": 1
+    }
+}

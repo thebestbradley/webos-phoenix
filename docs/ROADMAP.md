@@ -251,6 +251,12 @@ every day. The app sources come towards the end of 1.0 (owner, 29 September
 
 - [ ] Web apps and the Phoenix Catalog: curated PWAs shown as apps ([APP-STORE.md](APP-STORE.md) A0-A4)
 - [ ] Classic apps from App Museum II ([APP-STORE.md](APP-STORE.md) A2), with webOS Archive
+- [ ] Enyo 2 apps: test LuneOS's `org.webosports.app.*` apps and the App
+      Museum's Enyo 2 titles in the simulator, then on a device. Enyo 2.5.2,
+      Onyx, Layout and `webOS.js` are mounted at `/usr/palm/frameworks/enyo2/`,
+      and the temporary `apps/enyo2demo` samples them
+      ([APP-RUNTIME.md](APP-RUNTIME.md#enyo-2-apps)). Remove the demo when
+      real apps are tested
 - [ ] Preware feeds, installed through the catalog
 - [ ] Android apps through Waydroid ([ANDROID.md](ANDROID.md))
 - [ ] Install like a Linux distro: generic images, live boot, the installer,
@@ -294,6 +300,9 @@ supported alongside it.
       iCloud-style Phoenix cloud services, as providers next to the others
 - [ ] Streaming apps: Widevine L1, HDCP and certification by the services
       ([APP-STORE.md](APP-STORE.md#311-streaming-apps-and-drm))
+- [ ] Consider Enact, LG's React framework that replaced Enyo, for 2.0
+      apps and for running webOS TV and OSE apps (Enyo is no longer
+      developed; the last release, 2.7.0, was in April 2016)
 - [ ] One device, every screen (below)
 
 ### One device, every screen

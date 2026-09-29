@@ -10,6 +10,8 @@ in the simulator, in a desktop browser, and on a device.
 | --- | --- | --- |
 | `third_party/core-apps` | Accounts, Calculator, Calendar, Clock, Contacts, Email, Memos | Apache-2.0 |
 | `third_party/enyo-1.0` | The Enyo 1.0 framework they are written in | Apache-2.0 |
+| `third_party/enyo-2/enyo`, `onyx`, `layout` | Enyo 2.5.2 with its Onyx widgets and Layout kinds, for Enyo 2 apps ([Enyo 2 apps](#enyo-2-apps)) | Apache-2.0 |
+| `third_party/enyo-webos` | enyo-webos's `webOS.js`: the platform library Enyo 2 and Enact apps use for services, banners and device info | Apache-2.0 |
 | `third_party/foundation-frameworks`, `loadable-frameworks`, `mojoloader`, `underscore` | Shared libraries loaded with MojoLoader (Calendar, Contacts, ...) | Apache-2.0 |
 | `third_party/app-services` | The apps' background services (accounts, contacts, calendar reminders, email) | Apache-2.0 |
 | `third_party/isis/isis-browser` | The browser ("Web"), from HP's Isis project | Apache-2.0 |
@@ -131,6 +133,33 @@ the Terminal's shells, `org.webosphoenix.pty` (see
 location and help (see [First Use](#first-use),
 [Emergency information](#emergency-information),
 [Location](#location) and [Help](#help)).
+
+## Enyo 2 apps
+
+Enyo 2 (2012–2016, with the Onyx widget set) came after the TouchPad. Palm's
+own apps never used it, but LuneOS's apps (`org.webosports.app.*`), many
+App Museum titles and LG's early webOS TV apps did. It is no longer
+developed: the last release is 2.7.0 (April 2016), and LG's successor is
+Enact, a React framework used by webOS TV and webOS OSE.
+
+The simulator serves Enyo 2.5.2, the last release that loads in a browser
+from source without a build step, the way Enyo 2 apps' debug builds did:
+
+| Device path | Repository |
+| --- | --- |
+| `/usr/palm/frameworks/enyo2/enyo/` | `third_party/enyo-2/enyo` (tag 2.5.2) |
+| `/usr/palm/frameworks/enyo2/lib/onyx/`, `lib/layout/` | `third_party/enyo-2/onyx`, `layout` (2.5.2); `$lib` in `package.js` resolves here |
+| `/usr/palm/frameworks/enyo2/webOS/` | `third_party/enyo-webos/webOS` (`webOS.js`) |
+
+Released Enyo 2 apps were built with `deploy`, which bundles Enyo into the
+app, so they run without these paths; the paths are for apps loaded from
+source. `apps/enyo2demo` (temporary) samples the Onyx widgets and the
+`webOS.js` calls. `webOS.js` sets no `webOS.platform` flag on Phoenix, because
+it only recognises webOS 3 when `PalmSystem.deviceInfo` reports
+`platformVersionMinor` as a truthy value, which the TouchPad's `0` is not; its
+calls then take the OSE route, so `webOS.notification.showToast` uses OSE's
+`com.webos.notification` `createToast`, which the runtime shows as the calling
+app's banner.
 
 ## Running apps
 
