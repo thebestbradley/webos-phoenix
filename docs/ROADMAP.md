@@ -246,6 +246,10 @@ Also in 1.0 (owner, 29 September 2026), rows in [spec/GAPS.md](spec/GAPS.md):
       bar (V4), and the shell's keyboard as the device's input method (V5);
       several keyboards installed and chosen in Settings as on iOS: webOS
       Classic, webOS OSE's and a new Phoenix keyboard (V7)
+- [ ] Hardware keyboards, especially on tablets: the TouchPad keyboard's
+      keys, shortcuts, full keyboard navigation of the shell, keyboard
+      accessibility (sticky, slow and bounce keys, Full Keyboard Access) and
+      Settings > Hardware Keyboard (V8)
 - [ ] Editing: the Edit submenu (Select All, Cut, Copy, Paste) in every
       app menu, and the same on a long press in a text field (E1)
 - [ ] The Phoenix Assistant, a voice assistant like Siri: push-to-talk,
