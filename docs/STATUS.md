@@ -29,7 +29,8 @@ Nothing has run on a phone yet.
 1.x runs and works as fully as possible and stays very close to the
 original webOS; it is for the fans and is never deprecated. 2.0 is the
 modern revamp in style and features that brings webOS back
-([ROADMAP.md](ROADMAP.md#two-lines-1x-and-20)).
+([ROADMAP.md](ROADMAP.md#two-lines-1x-and-20)). 2.0 only expands on what
+1.x built; it reverts nothing unless the owner agrees.
 
 ## Decisions for the owner
 

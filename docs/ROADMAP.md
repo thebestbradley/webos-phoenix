@@ -20,6 +20,9 @@ Owner's direction (29 September 2026):
   ([CONVERGENCE.md](CONVERGENCE.md)), the big streaming services, a
   Chromium-based browser. It keeps the webOS ideas (cards, Just Type,
   Synergy, the dashboard) and is free to redesign everything else.
+- **2.0 builds on 1.x and never reverts it.** It only expands on what 1.x
+  built, so that it stays true to webOS. Removing or replacing a 1.x
+  feature or behaviour in 2.0 needs the owner's agreement first.
 
 The two share the platform (OSE, the services, the apps' data), so work
 below the UI serves both. M0 to M5 are 1.x; the 2.0 section is at the end.
