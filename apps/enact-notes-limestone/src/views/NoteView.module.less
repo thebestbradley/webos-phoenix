@@ -1,0 +1,42 @@
+.noteView {
+	height: 100%;
+	box-sizing: border-box;
+}
+
+// Panel puts its children in a block section; this fills it.
+.content {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+
+.center {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 36px;
+}
+
+.date {
+	margin: 0;
+	color: var(--semantic-color-on-background-sub);
+}
+
+.banner {
+	margin: 12px 72px 0;
+	padding: 18px;
+	border-radius: 24px;
+	background: var(--semantic-color-background-overlay-default);
+}
+
+.body {
+	flex: 1;
+	min-height: 0;
+	position: relative;
+}
+
+.scroller {
+	height: 100%;
+}

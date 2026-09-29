@@ -1,0 +1,52 @@
+.noteList {
+	height: 100%;
+	box-sizing: border-box;
+	border-right: 3px solid var(--semantic-color-stroke-sub);
+}
+
+.content {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+
+.noteList .search {
+	margin: 0 48px 12px;
+	width: auto;
+	max-width: none;
+}
+
+.chips {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	margin: 0 36px 12px;
+}
+
+.chips .chipRow {
+	flex-wrap: wrap;
+	flex: 1;
+}
+
+.list {
+	flex: 1;
+}
+
+.section {
+	margin: 24px 48px 0;
+}
+
+.selected {
+	background: var(--semantic-color-surface-default);
+	border-radius: 24px;
+}
+
+.empty {
+	margin-top: 240px;
+	color: var(--semantic-color-on-background-sub);
+}
+
+.hint {
+	margin: 48px;
+	color: var(--semantic-color-on-background-sub);
+}

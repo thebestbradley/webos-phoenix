@@ -1,0 +1,101 @@
+// Markdown's elements in Limestone's type and colours (semantic tokens, so
+// both skins work). Sizes are px at the theme's 4K base resolution.
+
+.preview {
+	padding: 24px 72px 96px;
+	color: var(--semantic-color-on-background-main);
+	font-size: calc(54px * var(--note-text-scale, 1));
+	line-height: 1.5;
+	user-select: text;
+
+	h1, h2, h3, h4, h5, h6 {
+		color: var(--semantic-color-on-background-heading);
+		font-weight: bold;
+		line-height: 1.2;
+		margin: 1em 0 0.4em;
+	}
+	h1 { font-size: 1.9em; margin-top: 0.3em; }
+	h2 { font-size: 1.45em; }
+	h3 { font-size: 1.2em; }
+	h4, h5, h6 { font-size: 1em; }
+
+	p, ul, ol, blockquote, pre, table {
+		margin: 0 0 0.8em;
+	}
+
+	a {
+		color: var(--semantic-color-on-background-accent);
+	}
+
+	ul, ol {
+		padding-left: 1.6em;
+	}
+
+	li.task {
+		list-style: none;
+		margin-left: -1.4em;
+
+		&.done > p,
+		&.done {
+			color: var(--semantic-color-on-background-sub);
+		}
+	}
+
+	input[type="checkbox"] {
+		width: 1em;
+		height: 1em;
+		margin: 0 0.4em 0 0;
+		vertical-align: -0.1em;
+		accent-color: var(--semantic-color-surface-accent);
+	}
+
+	blockquote {
+		margin-left: 0;
+		padding-left: 0.8em;
+		border-left: 12px solid var(--semantic-color-stroke-accent);
+		color: var(--semantic-color-on-background-sub);
+	}
+
+	code, pre {
+		font-family: Menlo, "DejaVu Sans Mono", monospace;
+		font-size: 0.9em;
+		background: var(--semantic-color-background-overlay-default);
+		border-radius: 12px;
+	}
+
+	code {
+		padding: 0.1em 0.3em;
+	}
+
+	pre {
+		padding: 0.6em 0.8em;
+		overflow-x: auto;
+
+		code {
+			padding: 0;
+			background: none;
+		}
+	}
+
+	table {
+		border-collapse: collapse;
+	}
+
+	th, td {
+		padding: 0.3em 0.8em;
+		border: 3px solid var(--semantic-color-stroke-sub);
+	}
+
+	th {
+		background: var(--semantic-color-background-overlay-default);
+	}
+
+	hr {
+		border: none;
+		border-top: 3px solid var(--semantic-color-stroke-sub);
+	}
+
+	img {
+		max-width: 100%;
+	}
+}

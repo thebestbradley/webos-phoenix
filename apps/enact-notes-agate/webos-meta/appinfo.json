@@ -1,0 +1,17 @@
+{
+    "id": "org.webosphoenix.enactnotes.agate",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Notes (Agate)",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "iconColor": "#2f80ed",
+    "uiRevision": 2,
+    "keywords": ["Notes", "Markdown", "Enact", "Agate"],
+    "phoenix": {
+        "//": "Temporary Enact demo (apps/enact-notes-agate/README.md). launcherTab 1 = Downloads.",
+        "launcherTab": 1
+    }
+}

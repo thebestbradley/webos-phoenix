@@ -1,0 +1,29 @@
+// Colours come from Limestone's semantic tokens, so the editor follows the
+// skin (neutral or light). Sizes are px at the theme's base resolution
+// (4K); the build scales them like the theme's own.
+
+.editor {
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	height: 100%;
+	padding: 24px 72px 96px;
+	border: none;
+	outline: none;
+	resize: none;
+	background: transparent;
+	color: var(--semantic-color-on-background-main);
+	caret-color: var(--semantic-color-stroke-accent);
+	font-family: Menlo, "DejaVu Sans Mono", monospace;
+	font-size: calc(54px * var(--note-text-scale, 1));
+	line-height: 1.5;
+	tab-size: 4;
+
+	&::placeholder {
+		color: var(--semantic-color-on-background-sub);
+	}
+
+	&::selection {
+		background: var(--semantic-color-surface-default-selected);
+	}
+}

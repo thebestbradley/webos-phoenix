@@ -21,12 +21,25 @@ const path = require("path");
 const file = process.argv[2] || path.join(__dirname, "..", "apps", "package-lock.json");
 const packages = JSON.parse(fs.readFileSync(file, "utf8")).packages || {};
 
+// Node's lookup: the package's own node_modules, then each enclosing
+// node_modules up to the top ("a/node_modules/b" looks in
+// a/node_modules/b/node_modules, a/node_modules, node_modules). Packages
+// that ship an npm-shrinkwrap.json (@enact/cli) keep their dependencies
+// in their own node_modules, one of those enclosing levels.
+function resolvable(where, dep) {
+    let dir = where;
+    for (;;) {
+        if (((dir ? dir + "/" : "") + "node_modules/" + dep) in packages) return true;
+        if (!dir) return false;
+        const i = dir.lastIndexOf("/node_modules/");
+        dir = i < 0 ? "" : dir.slice(0, i);
+    }
+}
+
 const missing = [];
 for (const [where, pkg] of Object.entries(packages)) {
     for (const dep of Object.keys(pkg.optionalDependencies || {})) {
-        // Resolved beside the dependent package or at the top.
-        const nested = (where ? where + "/" : "") + "node_modules/" + dep;
-        if (!(nested in packages) && !(("node_modules/" + dep) in packages))
+        if (!resolvable(where, dep))
             missing.push(`${dep} (optional dependency of ${where || "the root"})`);
     }
 }

@@ -73,6 +73,33 @@ if(PHOENIX_BUILD_APPS)
             COMMENT "Building the web apps (npm run build in apps/)"
             USES_TERMINAL VERBATIM)
         message(STATUS "phoenix-apps: web apps will be built with ${PHOENIX_NPM}")
+
+        # The Enact demos are npm projects of their own (Enact's CLI needs
+        # the app's packages in its own node_modules; apps/enact-notes-*/
+        # README.md). They take @phoenix/notes-core as built by phoenix-apps
+        # (shared/notes-core/lib), copied in by their `npm ci`, which runs
+        # again when the lock or notes-core's sources change.
+        file(GLOB _notes_core_src CONFIGURE_DEPENDS "${PHOENIX_APPS_DIR}/shared/notes-core/src/*.ts")
+        foreach(_enact_app enact-notes-limestone enact-notes-agate)
+            set(_dir "${PHOENIX_APPS_DIR}/${_enact_app}")
+            set(_stamp "${_dir}/node_modules/.package-lock.json")
+            add_custom_command(
+                OUTPUT "${_stamp}"
+                COMMAND "${PHOENIX_NPM}" ci --no-audit --no-fund
+                COMMAND "${CMAKE_COMMAND}" -E touch "${_stamp}"
+                DEPENDS "${_dir}/package.json" "${_dir}/package-lock.json" ${_notes_core_src}
+                WORKING_DIRECTORY "${_dir}"
+                COMMENT "Installing ${_enact_app} dependencies (npm ci)"
+                USES_TERMINAL VERBATIM)
+            add_custom_target(phoenix-${_enact_app} ALL
+                COMMAND "${PHOENIX_NPM}" run build
+                DEPENDS "${_stamp}"
+                WORKING_DIRECTORY "${_dir}"
+                COMMENT "Building ${_enact_app} (enact pack)"
+                USES_TERMINAL VERBATIM)
+            # notes-core's lib/ must be built before `npm ci` copies it in.
+            add_dependencies(phoenix-${_enact_app} phoenix-apps)
+        endforeach()
     else()
         message(WARNING "phoenix-apps: npm not found; the Phoenix web apps (Settings, ...) will not be "
                         "built. Install Node.js 20+ or run `npm ci && npm run build` in apps/ yourself.")

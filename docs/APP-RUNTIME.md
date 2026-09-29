@@ -161,6 +161,35 @@ calls then take the OSE route, so `webOS.notification.showToast` uses OSE's
 `com.webos.notification` `createToast`, which the runtime shows as the calling
 app's banner.
 
+## Enact apps
+
+Enact is LG's current web app framework (React), used by webOS TV and
+webOS OSE, with themes that give apps their look: Limestone (webOS TV
+today, the successor of Sandstone, which has had no release since April
+2025), Agate (touch screens and car dashboards) and others. Two temporary
+demos show it: `apps/enact-notes-limestone` and `apps/enact-notes-agate`,
+the same Apple Notes-style app in each theme, sharing their notes in db8
+(`apps/shared/notes-core`).
+
+- **Built with Enact's CLI** (`enact pack`), which expects the app's
+  packages in the app's own `node_modules`: with npm workspaces' hoisting
+  it writes theme fonts outside `dist/` and points iLib at the wrong path.
+  So each demo is an npm project of its own with its own lock file, not a
+  workspace of `apps/`, and takes shared code as a built package
+  (`install-links`). CMake and CI build them after `apps/`.
+- **Served like the other built apps**: `dist/` holds `appinfo.json` (from
+  `webos-meta/`), the fonts and iLib's data.
+- **Luna calls** go through Enact's `@enact/webos/LS2Request`, on
+  `PalmServiceBridge` (or `WebOSServiceBridge` on OSE).
+- **TypeScript**: Enact ships type definitions generated from its JSDoc;
+  where they are wrong, `src/enact.ts` in each app says so and corrects
+  them.
+- **Findings**: Limestone is sized for a TV, and its CSS needs Chromium 119+
+  (relative colours; Qt 6.4's WebEngine is 102). Text fields in both themes
+  lock the pointer while editing (the first tap outside only ends editing),
+  which suits a remote, not a touch screen. The app READMEs have the
+  details.
+
 ## Running apps
 
 **In the simulator.** Build `phoenix-sim` with Qt WebEngine (Homebrew's `qt`

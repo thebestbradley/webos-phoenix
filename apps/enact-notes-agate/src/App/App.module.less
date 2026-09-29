@@ -1,0 +1,45 @@
+.panels {
+	height: 100%;
+}
+
+@import "~@enact/agate/styles/mixins.less";
+@import "~@enact/agate/styles/skin.less";
+
+.appTitle {
+	margin: 12px 24px;
+
+	// The tab rail keeps its own colours in every skin.
+	.applySkins({
+		color: @agate-panels-tab-color;
+	});
+}
+
+.newFolder {
+	margin: 12px;
+}
+
+.panel {
+	height: 100%;
+}
+
+.columns {
+	height: 100%;
+}
+
+.column {
+	height: 100%;
+	min-width: 0;
+	overflow: hidden;
+}
+
+.nameInput {
+	width: 100%;
+	margin: 12px 0;
+}
+
+.buttons {
+	display: flex;
+	justify-content: center;
+	gap: 12px;
+	margin-top: 12px;
+}

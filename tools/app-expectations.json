@@ -131,5 +131,13 @@
     "org.webosphoenix.enyo2demo": {
         "status": "works",
         "note": "Temporary Enyo 2.5.2 / Onyx sampler (apps/enyo2demo)"
+    },
+    "org.webosphoenix.enactnotes.limestone": {
+        "status": "works",
+        "note": "Temporary Enact demo (Limestone theme), laid out for tablets: at phone size it starts but its columns do not fit. tools/test-enact-notes.cjs drives it"
+    },
+    "org.webosphoenix.enactnotes.agate": {
+        "status": "works",
+        "note": "Temporary Enact demo (Agate theme), laid out for tablets: at phone size it starts but its columns do not fit. tools/test-enact-notes.cjs drives it"
     }
 }

@@ -8,6 +8,7 @@
     "shared/luna",
     "shared/phoenix-ui",
     "shared/secrets",
+    "shared/notes-core",
     "settings",
     "phone",
     "messaging",

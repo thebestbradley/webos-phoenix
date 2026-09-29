@@ -1,0 +1,32 @@
+// Colours come from Agate's skins (.applySkins builds a rule per skin, day
+// and night), so the editor follows the chosen skin and accent colour.
+// Sizes are px at Agate's base resolution (1920x1080).
+
+@import "~@enact/agate/styles/mixins.less";
+@import "~@enact/agate/styles/skin.less";
+
+.editor {
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	height: 100%;
+	padding: 12px 36px 48px;
+	border: none;
+	outline: none;
+	resize: none;
+	background: transparent;
+	font-family: Menlo, "DejaVu Sans Mono", monospace;
+	font-size: calc(30px * var(--note-text-scale, 1));
+	line-height: 1.5;
+	tab-size: 4;
+
+	.applySkins({
+		color: @agate-text-color;
+		caret-color: @agate-accent;
+
+		&::placeholder {
+			color: @agate-text-color;
+			opacity: 0.5;
+		}
+	});
+}

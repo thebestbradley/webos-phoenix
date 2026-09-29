@@ -1,0 +1,100 @@
+// Markdown's elements in Agate's type and the skin's colours.
+
+@import "~@enact/agate/styles/mixins.less";
+@import "~@enact/agate/styles/skin.less";
+
+.preview {
+	padding: 12px 36px 48px;
+	font-size: calc(30px * var(--note-text-scale, 1));
+	line-height: 1.5;
+	user-select: text;
+
+	h1, h2, h3, h4, h5, h6 {
+		font-weight: bold;
+		line-height: 1.2;
+		margin: 1em 0 0.4em;
+	}
+	h1 { font-size: 1.9em; margin-top: 0.3em; }
+	h2 { font-size: 1.45em; }
+	h3 { font-size: 1.2em; }
+	h4, h5, h6 { font-size: 1em; }
+
+	p, ul, ol, blockquote, pre, table {
+		margin: 0 0 0.8em;
+	}
+
+	ul, ol {
+		padding-left: 1.6em;
+	}
+
+	li.task {
+		list-style: none;
+		margin-left: -1.4em;
+
+		&.done {
+			opacity: 0.6;
+		}
+	}
+
+	input[type="checkbox"] {
+		width: 1em;
+		height: 1em;
+		margin: 0 0.4em 0 0;
+		vertical-align: -0.1em;
+	}
+
+	blockquote {
+		margin-left: 0;
+		padding-left: 0.8em;
+		border-left: 6px solid;
+		opacity: 0.8;
+	}
+
+	code, pre {
+		font-family: Menlo, "DejaVu Sans Mono", monospace;
+		font-size: 0.9em;
+		border-radius: 6px;
+	}
+
+	code {
+		padding: 0.1em 0.3em;
+	}
+
+	pre {
+		padding: 0.6em 0.8em;
+		overflow-x: auto;
+
+		code {
+			padding: 0;
+			background: none;
+		}
+	}
+
+	table {
+		border-collapse: collapse;
+	}
+
+	th, td {
+		padding: 0.3em 0.8em;
+		border: 2px solid;
+	}
+
+	hr {
+		border: none;
+		border-top: 2px solid;
+	}
+
+	img {
+		max-width: 100%;
+	}
+
+	.applySkins({
+		color: @agate-text-color;
+
+		a { color: @agate-accent; }
+		input[type="checkbox"] { accent-color: @agate-accent; }
+		blockquote { border-color: @agate-accent; }
+		code, pre, th { background-color: rgba(128, 128, 128, 0.18); }
+		th, td, hr { border-color: rgba(128, 128, 128, 0.45); }
+	});
+}

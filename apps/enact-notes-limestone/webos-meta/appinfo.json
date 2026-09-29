@@ -1,0 +1,17 @@
+{
+    "id": "org.webosphoenix.enactnotes.limestone",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Notes (Limestone)",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "iconColor": "#e8b400",
+    "uiRevision": 2,
+    "keywords": ["Notes", "Markdown", "Enact", "Limestone"],
+    "phoenix": {
+        "//": "Temporary Enact demo (apps/enact-notes-limestone/README.md). launcherTab 1 = Downloads.",
+        "launcherTab": 1
+    }
+}

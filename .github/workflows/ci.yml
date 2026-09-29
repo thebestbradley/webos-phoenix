@@ -27,7 +27,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: apps/package-lock.json
+          cache-dependency-path: |
+            apps/package-lock.json
+            apps/enact-notes-limestone/package-lock.json
+            apps/enact-notes-agate/package-lock.json
 
       - uses: actions/setup-python@v5
         with:
@@ -48,6 +51,16 @@ jobs:
           # The device services (Node.js, not bundled): syntax only. The DAV
           # service's own tests ran above (vitest, against Radicale).
           for f in files/service/*.js voicememos/service/*.js dav/service/*.js dav/service/lib/*.js; do node --check "$f"; done
+
+      # The Enact demos are npm projects of their own (apps/enact-notes-*/
+      # README.md); `npm ci` copies in @phoenix/notes-core as built above.
+      - name: Enact demo apps - typecheck, build
+        working-directory: apps
+        run: |
+          for app in enact-notes-limestone enact-notes-agate; do
+            node ../tools/check-lockfile.cjs $app/package-lock.json
+            (cd $app && npm ci --no-audit --no-fund && npm run typecheck && npm run build)
+          done
 
       - name: Build simulator
         run: |
@@ -135,6 +148,7 @@ jobs:
           node tools/test-emergency.cjs --tablet --out app-tests/emergency-tablet
           node tools/test-location.cjs --out app-tests/location-phone
           node tools/test-location.cjs --tablet --out app-tests/location-tablet
+          node tools/test-enact-notes.cjs --out app-tests/enact-notes
 
       - name: Screenshots
         run: |

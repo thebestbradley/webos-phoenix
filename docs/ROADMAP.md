@@ -302,7 +302,11 @@ supported alongside it.
       ([APP-STORE.md](APP-STORE.md#311-streaming-apps-and-drm))
 - [ ] Consider Enact, LG's React framework that replaced Enyo, for 2.0
       apps and for running webOS TV and OSE apps (Enyo is no longer
-      developed; the last release, 2.7.0, was in April 2016)
+      developed; the last release, 2.7.0, was in April 2016). The
+      temporary Enact Notes demos (Limestone and Agate) show how it looks
+      and works on a tablet, and what a touch UI would need: text fields
+      that do not lock the pointer, sizes for a hand-held screen, Chromium
+      119+ for Limestone ([APP-RUNTIME.md](APP-RUNTIME.md#enact-apps))
 - [ ] One device, every screen (below)
 
 ### One device, every screen
