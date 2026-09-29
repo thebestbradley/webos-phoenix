@@ -316,7 +316,15 @@ async function main() {
             await jt.keyboard.type(text, { delay: 40 });
             await jt.waitForTimeout(1500);
         };
+        // Just Type shows four quick actions and the rest under "More..."
+        // (which of them come first depends on the installed apps).
+        const showNewTask = async () => {
+            if (await jt.getByText("New Task", { exact: true }).first().isVisible().catch(() => false)) return;
+            await jt.getByText("More...", { exact: true }).first().click();
+            await jt.getByText("New Task", { exact: true }).first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
+        };
         await search("passport");
+        await showNewTask();
         const jtText = (await jt.evaluate(() => document.body.innerText)).replace(/\s+/g, " ");
         check(/Tasks 1/.test(jtText) && /New Task/.test(jtText), "Just Type: \"passport\" finds the task and offers New Task");
         await jt.getByText("Tasks", { exact: true }).first().click();
@@ -328,6 +336,7 @@ async function main() {
         const hit = jtHost.filter((m) => m.type === "launch").map((m) => m.payload).find((l) => l.id === APP);
         check(hit && hit.params.taskId === passport._id, "Just Type: tapping the task opens it in Tasks");
         await search("passport");
+        await showNewTask();
         jtHost.length = 0;
         await jt.getByText("New Task", { exact: true }).first().click();
         await jt.waitForTimeout(500);

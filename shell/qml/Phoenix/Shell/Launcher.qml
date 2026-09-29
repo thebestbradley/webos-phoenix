@@ -218,13 +218,20 @@ Item {
         }
     }
 
-    // As many columns as fit, up to launcherColumns.
+    // As many columns as fit at the TouchPad's cell pitch: 7 on the
+    // TouchPad (launcherColumns, ReorderableIconLayout's maxIconsPerRow),
+    // fewer in portrait, more on a screen wider than the TouchPad, where the
+    // rows are centred. The original kept 7 and spread them apart
+    // (calculateAndSetHorizontalSpaceParameters), which leaves wide gaps on
+    // a big tablet.
     readonly property int columns: Theme.tablet
-        ? Math.max(1, Math.min(Theme.launcherColumns, Math.floor((pages.width - Theme.launcherRowLeftMargin) / Theme.launcherCellPitch)))
+        ? Math.max(1, Math.floor((pages.width - Theme.launcherRowLeftMargin) / Theme.launcherCellPitch))
         : Theme.launcherColumns
     readonly property real cellWidth: Theme.tablet ? Theme.launcherCellPitch : pages.width / columns
     readonly property real cellHeight: Theme.tablet ? Theme.launcherRowPitch : Theme.launcherIconSize + Theme.px(48)
-    readonly property real rowLeft: Theme.tablet ? Theme.launcherRowLeftMargin : 0
+    readonly property real rowLeft: Theme.tablet
+        ? Math.max(Theme.launcherRowLeftMargin, Math.floor((pages.width - columns * Theme.launcherCellPitch) / 2))
+        : 0
     readonly property real pageTopMargin: Theme.px(16)
 
     // Grid index at a point in the current page (launcher coordinates), for drops.

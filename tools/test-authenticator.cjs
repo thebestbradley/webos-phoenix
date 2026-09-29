@@ -297,7 +297,11 @@ async function main() {
         await page.click(tid("lock"));
         await page.waitForSelector(tid("lock-screen"));
         check(!(await page.content()).includes("ada@example.social"), "lock: nothing of the codes left in the page");
-        check((await clipboard()) === "", "lock: locking by hand clears the clipboard");
+        // Clearing is asynchronous (read the clipboard, then write it): give it
+        // a moment, but not the 30 s the timer would take.
+        const cleared = await page.waitForFunction(() => navigator.clipboard.readText().then((t) => t === ""), null, { timeout: 2000, polling: 100 })
+            .then(() => true, () => false);
+        check(cleared, "lock: locking by hand clears the clipboard");
         await unlock(PIN);
         await page.waitForSelector(tid("token-GitHub"), { timeout: 10000 });
         await page.evaluate(() => window.__phoenixRuntime.applyHostStatus({ deviceLocked: true }));

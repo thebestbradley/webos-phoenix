@@ -50,3 +50,17 @@
 		padding: 16px 12px;
 	}
 }
+
+/* Tablets taller than the TouchPad: memos.css fixes the wall at the
+ * TouchPad's 768 px (739 and 687 px), so on a bigger screen it stops two
+ * thirds of the way down. Grow it with the window; never below the
+ * original sizes, so the TouchPad is drawn exactly as before. */
+@media only screen and (min-width: 769px) {
+	#app-container:before {
+		height: max(739px, calc(100vh - 29px));
+	}
+
+	.memo-list {
+		height: max(687px, calc(100vh - 81px));
+	}
+}
