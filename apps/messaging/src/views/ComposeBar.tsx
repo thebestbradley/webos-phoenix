@@ -10,8 +10,10 @@ import { TRANSPORTS } from "@phoenix/luna";
 import { PopupMenu } from "@phoenix/ui";
 import { SendArrow } from "../icons";
 
-export function ComposeBar({ onSend, disabled, autoFocus }: { onSend: (text: string) => void; disabled?: boolean; autoFocus?: boolean }) {
-    const [text, setText] = useState("");
+export function ComposeBar({ onSend, disabled, autoFocus, initialText }: {
+    onSend: (text: string) => void; disabled?: boolean; autoFocus?: boolean; initialText?: string;
+}) {
+    const [text, setText] = useState(initialText ?? "");
     const [transport, setTransport] = useState("sms");
     const [open, setOpen] = useState(false);
     const pill = useRef<HTMLButtonElement>(null);

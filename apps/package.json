@@ -18,7 +18,8 @@
     "voicememos",
     "flashlight",
     "scanner",
-    "weather"
+    "weather",
+    "maps"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

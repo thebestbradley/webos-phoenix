@@ -1,0 +1,12 @@
+{
+    "//": "Maps' default servers (apps/maps/src/lib/providers.ts). An image or an organisation can replace this file to point every device at its own servers; users can still change them in Preferences. See docs/MAPS.md.",
+    "tiles": {
+        "kind": "openmaptiles",
+        "url": "https://tiles.openfreemap.org/planet",
+        "glyphsUrl": "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+        "attribution": "OpenFreeMap © OpenMapTiles Data from OpenStreetMap"
+    },
+    "search": { "kind": "photon", "url": "https://photon.komoot.io" },
+    "routing": { "kind": "valhalla", "url": "https://valhalla1.openstreetmap.de", "clientId": "webos-phoenix-maps" },
+    "renderer": "auto"
+}

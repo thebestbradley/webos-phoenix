@@ -66,12 +66,12 @@ describe("simulated org.webosports.service.torch", () => {
 
 describe("simulated com.webos.service.location", () => {
     it("gives the simulated position, a set one, or an error when location is off", async () => {
-        expect(await location.currentPosition()).toMatchObject({ latitude: 37.3688, longitude: -122.0363 });
+        expect(await location.currentPosition()).toMatchObject({ latitude: 37.3337, longitude: -121.8907 });
         rt().location.set({ latitude: 51.5, longitude: -0.12 });
         expect(await location.currentPosition()).toMatchObject({ latitude: 51.5, longitude: -0.12 });
         rt().location.set(null);
         const e = await location.currentPosition().catch((x) => x);
         expect(e).toBeInstanceOf(LunaError);
-        expect(e.errorText).toBe("Location services are off");
+        expect(e.errorCode).toBe(5);
     });
 });

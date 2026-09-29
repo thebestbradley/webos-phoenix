@@ -108,7 +108,11 @@ async function main() {
         const openMenu = () => page.evaluate(() => window.__phoenixRuntime.openAppMenu());
 
         await page.goto(appUrl);
+        // The device in Sunnyvale (the runtime starts in San Jose, for Maps).
+        const sunnyvale = () => page.evaluate(() => window.__phoenixRuntime.location.set({ latitude: 37.3688, longitude: -122.0363 }));
         await page.evaluate(() => localStorage.clear());
+        await sunnyvale();
+        requests.length = 0;
         await page.goto(appUrl);
 
         // ---- First start: where the device is --------------------------------------------------
@@ -232,7 +236,7 @@ async function main() {
         await page.waitForFunction(() => /isn't available/.test(document.querySelector("[data-testid='places']")?.textContent ?? ""), null, { timeout: 5000 })
             .then(() => check(true, "no location: asks for a city"), () => check(false, "no location: asks for a city"));
         await shot("no-location");
-        await page.evaluate(() => window.__phoenixRuntime.location.set(undefined));
+        await sunnyvale();
 
         check(errors.length === 0, "no page errors" + (errors.length ? ":\n    " + errors.slice(0, 5).join("\n    ") : ""));
         await browser.close();

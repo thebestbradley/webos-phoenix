@@ -11,7 +11,7 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
   (Accounts, Calculator, Calendar, Clock, Contacts, Email, Memos) or
   `third_party/isis` (the Isis browser)
 - **Phoenix**: a new app in `apps/` (Settings, Phone, Messaging, Camera,
-  Photos, Music, Files, Flashlight, QR Scanner, Weather)
+  Photos, Music, Files, Flashlight, QR Scanner, Weather, Maps)
 - **In progress**: Tasks (with reminders), Voice Memos (with transcription)
 - **Missing**
 
@@ -64,8 +64,8 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 
 | App | Status | Legacy webOS | Priority | Approach |
 | --- | --- | --- | --- | --- |
-| **Maps and navigation** | Missing | Google Maps (1.x), Bing Maps (2.x and later); turn-by-turn only from carrier apps (Sprint Navigation, VZ Navigator) | P1 | Web app on OpenStreetMap: [MapLibre GL JS](https://maplibre.org/) for vector maps; tiles from [OpenFreeMap](https://openfreemap.org/) or a self-hosted [Protomaps](https://protomaps.com/) PMTiles file (one file, also usable offline); search with Nominatim or Photon; routing with [Valhalla](https://github.com/valhalla/valhalla) or GraphHopper. Offline maps and routing later through [OSM Scout Server](https://rinigus.github.io/osmscout-server/), which Sailfish and Ubuntu Touch users already run. Needs GPS from GeoClue and turn-by-turn voice through OSE's `com.webos.service.tts` |
-| Location settings | Missing | Location Services pane | P1 | Settings pane over `com.webos.service.location` (`setState`) |
+| Maps and navigation | Phoenix | Google Maps (1.x), Bing Maps (2.x and later); turn-by-turn only from carrier apps (Sprint Navigation, VZ Navigator) | P1 | Done in the simulator (`apps/maps`, `tools/test-maps.cjs`): [MapLibre GL JS](https://maplibre.org/) vector map (canvas renderer when there is no WebGL 2) on [OpenFreeMap](https://openfreemap.org/) tiles, search with Photon or Nominatim, directions for driving, walking and cycling with Valhalla or OSRM, turn-by-turn with spoken directions (OSE `com.webos.service.tts`), saved places in db8, sharing, `geo:`/`maploc:`/`mapto:` links and Contacts'/Calendar's addresses, offline areas and PMTiles files with offline search and routing. Every server is configurable; see [MAPS.md](MAPS.md). Needs on a device: GPS from GeoClue behind `com.webos.service.location`, a TTS engine (OSE's needs Google Cloud credentials), and a check that WAM gives WebGL 2 |
+| Location settings | Missing | Location Services pane | P1 | Settings pane over `com.webos.service.location` (`getState`/`setState`; the simulator has a minimal simulation of the service, added for Maps) |
 
 ## Documents and files
 

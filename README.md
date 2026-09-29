@@ -100,6 +100,18 @@ The codes here are videos for Chromium's fake camera.*
 with the last forecast kept for offline use. It sends only coordinates
 rounded to about a kilometre.*
 
+| Maps | Directions | Navigation | Tablet |
+| --- | --- | --- | --- |
+| ![](docs/screenshots/maps-place.png) | ![](docs/screenshots/maps-directions.png) | ![](docs/screenshots/maps-navigation.png) | ![](docs/screenshots/maps-tablet.png) |
+
+*Maps on OpenStreetMap: search, directions for driving, walking and cycling
+with a turn list, turn-by-turn navigation with spoken directions, saved
+places, sharing, and offline maps with offline search and directions. The
+map tiles, search and routing servers are all configurable; the defaults
+are keyless public services (see [docs/MAPS.md](docs/MAPS.md)). It ships
+with a small demo region (downtown San Jose), which the simulator starts
+in.*
+
 ## Status
 
 **Milestone 0: the shell runs in a desktop simulator.** You can use the card
@@ -122,7 +134,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `shell/qml/Phoenix/Sim` | Mock apps and device status for the desktop simulator |
 | `shell/qml/Phoenix/Lsm`, `shell/qml/WebOSCompositor` | Adapter that plugs the shell into webOS OSE's `luna-surfacemanager` |
 | `shell/sim` | `phoenix-sim`, the desktop runner (also takes screenshots) |
-| `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Tasks, Voice Memos, Flashlight, QR Scanner, Weather), with the shared `@phoenix/ui` components and `@phoenix/luna` service client, generated demo media (`apps/media-samples`), the Node.js Luna services of Files (`apps/files/service`) and Voice Memos (`apps/voicememos/service`, speech to text with whisper.cpp), and the CardDAV & CalDAV Synergy account with its sync service (`apps/dav`, see [docs/SYNERGY.md](docs/SYNERGY.md)) |
+| `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Tasks, Voice Memos, Flashlight, QR Scanner, Weather, Maps), with the shared `@phoenix/ui` components and `@phoenix/luna` service client, generated demo media (`apps/media-samples`), the Node.js Luna services of Files (`apps/files/service`) and Voice Memos (`apps/voicememos/service`, speech to text with whisper.cpp), and the CardDAV & CalDAV Synergy account with its sync service (`apps/dav`, see [docs/SYNERGY.md](docs/SYNERGY.md)) |
 | `runtime/` | The webOS web app runtime for the simulator and browsers (`PalmSystem`, simulated Luna services) |
 | `shell/tests` | Behaviour tests (`qmltestrunner`) |
 | `shell/assets/openwebos` | Original Open webOS system UI artwork (Apache-2.0) |
@@ -210,6 +222,7 @@ node tools/test-tasks.cjs                                   # Tasks and reminder
 node tools/test-alarm.cjs                                   # a Clock alarm rings as a popup alert
 node tools/test-keyboard.cjs                                # web fields and the virtual keyboard
 node tools/test-voicememos.cjs                              # Voice Memos
+node tools/test-maps.cjs                                    # Maps (no live map servers)
 node tools/test-orientation.cjs                             # apps asking for and following an orientation
 ```
 

@@ -943,7 +943,7 @@ dashboard, banner or notification, only what the user opens.
 - **Next 24 hours** in a strip (with the chance of rain from 20%), and **7
   days** with a temperature bar across the week's range.
 - **Places**: Current Location (`com.webos.service.location
-  getCurrentPosition`, once per start; off in Preferences) and cities found
+  getLocationUpdates` without `subscribe`, once per start; off in Preferences) and cities found
   with Open-Meteo's geocoding search, in the user's order; Edit reorders
   and removes them. Tablets show the places beside the forecast.
 - **Units** follow the system region (`com.webos.settingsservice`
@@ -980,10 +980,11 @@ needs a paid plan or its own Open-Meteo server (see
 
 ### In the simulator
 
-The runtime's block "Torch and location" answers `com.webos.service.location
-getCurrentPosition` with a fixed position (Sunnyvale, where Palm was), or
-one set with `__phoenixRuntime.location.set({latitude, longitude})`;
-`set(null)` is "location services are off" (an error reply). On a device
+The runtime's block "Location and text to speech" answers
+`com.webos.service.location getLocationUpdates` with the simulated
+position (downtown San Jose, inside Maps' demo region), or one set with
+`__phoenixRuntime.location.set({latitude, longitude})`; `set(null)` turns
+both handlers off, which is "location services are off" (errorCode 5). On a device
 the location service is OSE's (see [HARDWARE.md](HARDWARE.md), GPS).
 phoenix-sim fetches live forecasts from Open-Meteo (which sends CORS
 headers). `node tools/test-weather.cjs [--tablet]` answers Open-Meteo with
