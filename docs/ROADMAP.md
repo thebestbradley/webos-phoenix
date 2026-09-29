@@ -24,6 +24,8 @@ Owner's direction (29 September 2026):
   built, so that it stays true to webOS. Removing or replacing a 1.x
   feature or behaviour in 2.0 needs the owner's agreement first.
 
+Naming ideas for the product lines are in [BRANDING.md](BRANDING.md).
+
 The two share the platform (OSE, the services, the apps' data), so work
 below the UI serves both. M0 to M5 are 1.x; the 2.0 section is at the end.
 

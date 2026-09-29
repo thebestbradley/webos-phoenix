@@ -281,7 +281,8 @@ open-licensed look-alike is an open task.
 related marks belong to their owners. We use them only to describe
 compatibility and history. If the project is published or distributed widely,
 consider a name that doesn't include "webOS" (for example "Phoenix, a shell
-for webOS OSE").
+for webOS OSE"). Naming ideas and the risks found so far (Pre and Pixi are Palm
+product names) are in [BRANDING.md](BRANDING.md).
 
 ## Code from other projects
 

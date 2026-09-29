@@ -42,6 +42,10 @@ on the keyboard; the Edit menu and a long-press Cut / Copy / Paste menu
 (today only stubs); a Siri-like voice assistant without AI models. The MCP
 layer and the AI agent are 2.0 ([ROADMAP.md](ROADMAP.md#10-release)).
 
+Naming ideas (PreOS with Phoenix UI, PixiOS with Bennu UI for a watch or
+pendant, a bird-named XR variant) are collected in
+[BRANDING.md](BRANDING.md). Not decided; trademark searches come first.
+
 ## Decisions for the owner
 
 From the new apps:
