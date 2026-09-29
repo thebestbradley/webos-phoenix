@@ -4150,8 +4150,18 @@
 
         // The demo videos (with their subtitles) and documents, also added
         // to a filesystem seeded before they shipped.
+        // The demo media's index, read once per page: it is a synchronous
+        // request (PalmSystem.getResource), and the samples cannot change
+        // while a page is open. Reading it on every call made each file
+        // manager request, and so every command in the Terminal, take as
+        // long as a request.
+        var sampleIndex;
         function readSampleIndex() {
-            try { return JSON.parse(PalmSystem.getResource(MEDIA_ROOT + "/samples/index.json") || "null"); } catch (e) { return null; }
+            if (sampleIndex === undefined) {
+                try { sampleIndex = JSON.parse(PalmSystem.getResource(MEDIA_ROOT + "/samples/index.json") || "null"); }
+                catch (e) { sampleIndex = null; }
+            }
+            return sampleIndex;
         }
         function sampleFiles(samples) {
             var out = [];
