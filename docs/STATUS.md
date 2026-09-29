@@ -46,7 +46,8 @@ Microsoft app registrations or bring-your-own; the store's name and PHP
 hosting; approaching the App Museum maintainers; RCS (which carrier first,
 a joint approach with other open mobile OSes); WhatsApp through the EU DMA
 as a Phoenix messaging service; asking LuneOS to add licence files to the
-layers that have none.
+layers that have none; which company holds a Widevine contract, and on which
+reference device.
 
 ## Next work
 
@@ -70,6 +71,12 @@ layers that have none.
   app manifest (a coloured dot by the app menu, the item under
   Preferences; install as described in [APP-STORE.md](APP-STORE.md)); plan a
   Chromium-based Phoenix browser to replace the Isis browser in the 2.0 UI.
+- **Streaming apps and DRM** ([APP-STORE.md](APP-STORE.md#311-streaming-apps-and-drm)):
+  Netflix, Prime Video and similar services need Google's Widevine. LG's
+  webOS Hub is TV-only and ships LG's own webOS, so it is not a route. The
+  way in is the Chromium browser, then a Widevine contract held by the
+  company that ships devices (L1 needs a hardware TEE on the reference
+  device), then direct deals with services.
 - **Synergy build**, in the order of [SYNERGY-MODERN.md](SYNERGY-MODERN.md#5-roadmap).
 - **Shell gaps**: the P2 rows left in [spec/GAPS.md](spec/GAPS.md) (C5, C7,
   C9-C11, L8, N7, N8, R3-R5, K7, G4, G5, G8, A2, S2) and the rest of A1.

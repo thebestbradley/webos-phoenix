@@ -48,6 +48,7 @@ catalog app with three sources" is the starting point.
 1. [PWAs as webOS apps](#1-pwas-as-webos-apps)
 2. [Legacy webOS apps](#2-legacy-webos-apps)
 3. [The store](#3-the-store)
+   - [3.11 Streaming apps and DRM](#311-streaming-apps-and-drm)
 4. [Roadmap](#4-roadmap)
 5. [Risks](#5-risks)
 6. [Open questions](#6-open-questions)
@@ -605,6 +606,38 @@ reach its first thousand users. Until then:
 
 ---
 
+### 3.11 Streaming apps and DRM
+
+Netflix, Prime Video, Disney+, Max, Spotify and most other paid media
+services only play on devices with Google's **Widevine** DRM, in the
+browser and in their web apps alike. That, not the catalog, decides whether
+Phoenix users can watch them.
+
+**LG's own store is not a route.** LG licenses webOS to other TV makers as
+**webOS Hub** (more than 300 brands by 2026), and that is how those TVs
+get the LG Content Store with Netflix, Prime Video, Disney+ and YouTube.
+But the licensee ships LG's closed TV build of webOS on its own TVs (and,
+since 2025, monitors) with its logo and colours; there is no certification
+of another OS, the program is not for phones or tablets, and the apps are
+TV apps for a remote. It would only matter for a Phoenix-branded TV, which
+would then run LG's software, not Phoenix.
+
+**What gets these services onto Phoenix devices:**
+
+| Route | What it takes | Gives |
+| --- | --- | --- |
+| **Widevine on the device** | A contract with Google by the company that ships the devices (an open-source project cannot redistribute Google's CDM binary); certification itself is free and takes about 8 to 12 weeks. **L1** needs a hardware trusted execution environment on the device (Qualcomm/MediaTek TEEs on Halium phones); **L3** is software only | Web versions and installed web apps (section 1) of the DRM services. L1: HD; L3: usually SD on Netflix and Prime Video |
+| **The Chromium browser** (task #32) | A current Chromium web runtime with Widevine enabled (Encrypted Media Extensions) | Where the web versions and PWAs run |
+| **Direct deals** | Per service (e.g. Netflix's partner programme); realistic only once a device sells | Native apps, higher quality tiers |
+| **Android apps** ([ANDROID.md](ANDROID.md)) | Many run under Waydroid, but streaming apps usually check Play Integrity, which a non-Google-certified device cannot pass | Not a dependable route for DRM services |
+
+**Order:** the Chromium browser first; then a Widevine application once
+there is a reference device with a suitable TEE and a company to hold the
+contract (L3 on the simulator and development devices in the meantime,
+where Google allows it); direct deals after the device sells. Services
+without DRM (YouTube's free tier, most news and social sites, podcasts)
+work as PWAs today.
+
 ## 4. Roadmap
 
 Effort: **S** up to a week, **M** two to four weeks, **L** one to three
@@ -687,3 +720,5 @@ Accessed 28 September 2026 unless noted.
 - Push API without Google keys: <https://github.com/ungoogled-software/ungoogled-chromium/issues/1020>
 - The Update Framework: <https://theupdateframework.io/>
 - LuneOS finding that SAM does not rescan (Waydroid patch, September 2026): <https://github.com/webOS-ports/meta-webos-ports/pull/810>
+- LG, "LG Advances Its Smart TV Platform Business With webOS Hub": <https://www.lg.com/global/newsroom/news/media-entertainment-solution/lg-advances-its-smart-tv-platform-business-with-webos-hub/>; HDTVTest on webOS Hub for monitors: <https://www.hdtvtest.co.uk/news/LG-to-expand-webOS-Hub-platform-to-3rd-party-smart-monitors>
+- Widevine certification for device makers (castlabs): <https://castlabs.com/security/widevine-certification/>; Widevine in Chromium and redistribution: <https://chromiumbuilds.org/docs/widevine-drm/> *(third-party sources; check Google's current terms before applying)*
