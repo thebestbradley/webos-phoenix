@@ -1,0 +1,25 @@
+{
+    "id": "org.webosphoenix.authenticator",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Authenticator",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "iconColor": "#1f7a5a",
+    "uiRevision": 2,
+    "keywords": ["Two-Factor", "2FA", "TOTP", "One-Time Password", "Verification Code", "Security"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launcherTab": 0
+    },
+    "//launchParams": "{otpauth: \"otpauth://totp/...\"} offers to add that code (after unlocking, with a confirmation); the QR scanner launches the app this way.",
+    "//universalSearch": "None on purpose: accounts and codes must never reach Just Type's index or db8 (docs/SECURITY-APPS.md).",
+    "//requiredPermissions": "OSE access control groups: systemmanager passcode check and lock status (device lock), filemanager.operation (apps/files/service) for import and export files, application launch for Screen & Lock.",
+    "requiredPermissions": [
+        "filemanager.operation",
+        "application.launcher",
+        "application.operation"
+    ]
+}

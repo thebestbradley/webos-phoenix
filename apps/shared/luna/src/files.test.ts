@@ -72,6 +72,7 @@ describe("paths and formatting", () => {
         expect(kindOf({ name: "hostname", type: "file" })).toBe("text");
         expect(mimeOf("a.jpg")).toBe("image/jpeg");
         expect(mimeOf("blob.bin")).toBe("application/octet-stream");
+        expect(mimeOf("Personal.kdbx")).toBe("application/x-keepass2");
         expect(opensAsText({ name: "a.txt", type: "file", size: 10 })).toBe(true);
         expect(opensAsText({ name: "a.jpg", type: "file", size: 10 })).toBe(false);
         expect(opensAsText({ name: "data", type: "file", size: 1 << 20 })).toBe(false);

@@ -226,6 +226,10 @@ export const deviceLock = {
     async matches(passCode: string): Promise<boolean> {
         return (await call("luna://com.palm.systemmanager/matchDevicePasscode", { passCode })).succeeded;
     },
+    /** getLockStatus {subscribe}: the lock screen is up (the shell says so when the screen locks and unlocks). */
+    watchLocked(cb: (locked: boolean) => void, onError?: OnError): Subscription {
+        return subscribe("luna://com.palm.systemmanager/getLockStatus", {}, (r) => cb(!!r.locked), onError);
+    },
 };
 
 // ---- Applications: com.webos.applicationManager (SAM) ---------------------------------

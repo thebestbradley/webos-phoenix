@@ -1882,6 +1882,17 @@
         global.document.addEventListener("visibilitychange", function () {
             stage(global.document.visibilityState !== "hidden");
         });
+
+        // The shell says the card came to the front or left it (phoenix-sim:
+        // SimWindowSource onFocusedUidChanged): a minimized card stays
+        // visible in card view, so visibilitychange alone misses it. Pages
+        // get a "phoenixcardactivation" event with detail {active}; apps
+        // that hold secrets (Passwords, Authenticator) lock on it.
+        runtime.cardActivated = function (active) {
+            try {
+                global.dispatchEvent(new CustomEvent("phoenixcardactivation", { detail: { active: !!active } }));
+            } catch (e) { console.error("[phoenix-runtime] card activation event failed", e); }
+        };
     })();
 
     // ---- Legacy WebKit border images (core apps) ---------------------------------------
@@ -3911,12 +3922,13 @@
                      mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", mp4: "video/mp4", webm: "video/webm",
                      txt: "text/plain", md: "text/markdown", json: "application/json", html: "text/html",
                      js: "text/javascript", css: "text/css", xml: "application/xml", pdf: "application/pdf",
-                     ipk: "application/vnd.webos.ipk", zip: "application/zip" };
+                     ipk: "application/vnd.webos.ipk", zip: "application/zip", kdbx: "application/x-keepass2" };
         // "Open with": apps that say they open these types.
         var HANDLERS = [
             { prefix: "image/", appId: "org.webosphoenix.photos", title: "Photos" },
             { prefix: "video/", appId: "org.webosphoenix.photos", title: "Photos" },
-            { prefix: "audio/", appId: "org.webosphoenix.music", title: "Music" }
+            { prefix: "audio/", appId: "org.webosphoenix.music", title: "Music" },
+            { prefix: "application/x-keepass2", appId: "org.webosphoenix.passwords", title: "Passwords" }
         ];
 
         function extOf(p) { var m = /[^.\/]\.([a-z0-9]+)$/i.exec(p || ""); return m ? m[1].toLowerCase() : ""; }

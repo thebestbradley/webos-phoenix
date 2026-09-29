@@ -456,6 +456,7 @@ body.pui-app, .pui-app {
     font-size: 18px;
 }
 
+/* Above dialogs (.pui-scrim, 200): a ListSelector inside a dialog drops its menu over it. */
 .pui-popup-scrim {
     position: fixed;
     inset: 0;

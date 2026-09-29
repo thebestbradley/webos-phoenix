@@ -101,15 +101,15 @@ async function withCode(text, format, fn, opts = {}) {
     });
     const context = await browser.newContext({ viewport });
     await context.grantPermissions(["camera", "clipboard-read", "clipboard-write"], { origin });
-    if (opts.authenticator) {
-        // The authenticator "installed": one more entry in the installed apps list.
-        await context.route("**/usr/share/phoenix/apps.json", async (route) => {
-            const res = await route.fetch();
-            const list = JSON.parse(await res.text());
-            list.push({ id: "org.webosphoenix.authenticator", launchPointId: "org.webosphoenix.authenticator_default", title: "Authenticator", params: {} });
-            await route.fulfill({ response: res, body: JSON.stringify(list) });
-        });
-    }
+    // The authenticator installed or not: add it to, or take it out of, the
+    // installed apps list.
+    const AUTH = "org.webosphoenix.authenticator";
+    await context.route("**/usr/share/phoenix/apps.json", async (route) => {
+        const res = await route.fetch();
+        const list = JSON.parse(await res.text()).filter((a) => a.id !== AUTH);
+        if (opts.authenticator) list.push({ id: AUTH, launchPointId: AUTH + "_default", title: "Authenticator", params: {} });
+        await route.fulfill({ response: res, body: JSON.stringify(list) });
+    });
     const page = await context.newPage();
     const errors = [];
     const host = [];

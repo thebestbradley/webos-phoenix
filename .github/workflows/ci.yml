@@ -100,6 +100,10 @@ jobs:
           node tools/test-weather.cjs --tablet --out app-tests/weather-tablet
           node tools/test-maps.cjs --out app-tests/maps-phone
           node tools/test-maps.cjs --tablet --out app-tests/maps-tablet
+          node tools/test-passwords.cjs --out app-tests/passwords-phone
+          node tools/test-passwords.cjs --tablet --out app-tests/passwords-tablet
+          node tools/test-authenticator.cjs --out app-tests/authenticator-phone
+          node tools/test-authenticator.cjs --tablet --out app-tests/authenticator-tablet
           node tools/test-dav-sync.cjs --out app-tests/dav-phone
           node tools/test-dav-sync.cjs --tablet --out app-tests/dav-tablet
           node tools/test-orientation.cjs --out app-tests/orientation-phone

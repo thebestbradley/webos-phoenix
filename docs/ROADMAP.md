@@ -166,6 +166,18 @@ PHP + MySQL service) is in [APP-STORE.md](APP-STORE.md).
       and transcription on the Phoenix service `org.webosphoenix.transcriber`
       (whisper.cpp on the device, `apps/voicememos/service`; the simulator knows
       only the demo memos' scripts), searchable in the app and in Just Type
+- [x] Passwords (`apps/passwords`): KeePass KDBX 4 databases (kdbxweb, Argon2id
+      in WebAssembly) that KeePassXC and KeePassDX open, groups, entries, search,
+      generator, TOTP fields, copy with auto-clear, auto-lock (screen lock,
+      card minimized, idle); Authenticator (`apps/authenticator`): TOTP/HOTP
+      tested against the RFCs, `otpauth://` links and `{otpauth}` launches,
+      Aegis/andOTP import, encrypted backups, secrets encrypted with a key from
+      the device passcode. Threat model: [SECURITY-APPS.md](SECURITY-APPS.md)
+- [ ] Passwords and Authenticator on a device: the Phoenix key store service
+      (`org.webosphoenix.service.keystore`) to hold Authenticator's key behind
+      the device passcode with a device-bound key and a retry limit; WebAppMgr
+      telling pages when their card is minimized; WebDAV sync of the `.kdbx`
+      file; key files; autofill with the keyboard
 - [ ] Voice Memos on a device: build whisper.cpp and its model
       (`meta-phoenix/recipes-support/whisper-cpp` is a stub), measure base.en
       against tiny.en on the target, run the service under `run-js-service`, and

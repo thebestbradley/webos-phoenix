@@ -87,8 +87,11 @@ service bus). `runtime/phoenix-runtime.js` runs before the app's own scripts:
   written for: border images drawn without a border style (buttons, frames),
   `webkitCancelRequestAnimationFrame` (without it Enyo cancels unrelated
   timers and pane transitions hang), `PalmSystem.simulateMouseClick` (Enyo's
-  focus-on-tap), card activation (`Mojo.stageActivated`), cross-app window
-  params, and aliases for the Prelude font.
+  focus-on-tap), card activation (`Mojo.stageActivated`; in phoenix-sim the
+  shell also says when a card gains or leaves the front, as a
+  `phoenixcardactivation` event with `{active}`, because a card minimized to
+  card view stays visible), cross-app window params, and aliases for the
+  Prelude font.
 
 Pages talk to the shell (launch another app, show a banner) through
 `phoenixHost.postToHost(type, payload)`. In phoenix-sim that arrives as a
@@ -260,6 +263,8 @@ Camera, Photos and Music start cleanly too, and `node tools/test-media.cjs
 [--tablet]`, and Tasks, driven by `node tools/test-tasks.cjs [--tablet]`.
 
 [--tablet]`, and Voice Memos, driven by `node tools/test-voicememos.cjs
+[--tablet]`. Passwords and Authenticator are driven by
+`node tools/test-passwords.cjs [--tablet]` and `node tools/test-authenticator.cjs
 [--tablet]`.
 
 ## Phoenix apps (React + TypeScript)
@@ -281,6 +286,9 @@ New Phoenix apps live in `apps/`, an npm workspace:
 
 | `apps/voicememos` | Voice Memos (see [below](#voice-memos)); `apps/voicememos/service` is its speech-to-text Luna service (whisper.cpp) for the device |
 | `apps/flashlight`, `apps/scanner`, `apps/weather` | Flashlight, QR Scanner and Weather (see [below](#flashlight)); `@phoenix/luna`'s `torch.ts` and `location.ts` wrap `org.webosports.service.torch` and `com.webos.service.location` |
+| `apps/shared/secrets` (`@phoenix/secrets`) | For the apps that hold secrets: TOTP/HOTP and `otpauth://` URIs (RFC 6238/4226, on WebCrypto HMAC), base32, sealing with AES-GCM and PBKDF2 (`sealJson`, `wrapKey`, passphrase files), `SecretClipboard` (clears itself), `AutoLock` (screen lock, card minimized, idle); `@phoenix/secrets/react` has `useAutoLock()`, `useTotpCode()`, `CountdownRing` |
+| `apps/passwords` | Passwords, a KeePass (KDBX 4) password manager (see [below](#passwords-and-authenticator)) |
+| `apps/authenticator` | Authenticator, TOTP/HOTP codes (see [below](#passwords-and-authenticator)) |
 
 | `apps/dav` | The CardDAV & CalDAV account (see [below](#carddav-and-caldav)): a hidden Enyo 1.0 app with the account's sign-in page, its db8 kinds and account template, and `apps/dav/service`, its Node.js Luna service and sync engine |
 
@@ -1007,6 +1015,53 @@ recorded replies (`apps/weather/fixtures`) and checks the first start, what
 the requests contain, the cache, search and places, units and the clock,
 offline and error replies, Edit, and no location, with screenshots in
 `build/weather-tests/`.
+
+## Passwords and Authenticator
+
+Two apps that hold secrets; their threat model and what is implemented now
+versus on a device is in [SECURITY-APPS.md](SECURITY-APPS.md).
+
+`apps/passwords` (`org.webosphoenix.passwords`, Apps tab) is a KeePass
+password manager:
+
+- **Locked**: the `.kdbx` files found in `/media/internal/passwords`,
+  `Documents`, `Downloads` and `/media/internal`, and the recently opened
+  ones; tap one and type its master password. New Database makes a KDBX 4
+  file with Argon2id in `/media/internal/passwords`.
+- **Unlocked**: groups and entries (the recycle bin last), a search field
+  (title, user name, URL, notes, tags), an entry's fields with Show and Copy,
+  its TOTP code with a countdown ring, custom fields (protected ones hidden),
+  Open Website, Edit (with the generator and a strength meter) and Delete (to
+  the recycle bin, then for good). The header menu: Rename / Delete Group,
+  Empty Recycle Bin, Change Master Password, Preferences (clipboard clear
+  time, idle lock, lock when minimized), Lock.
+- **Files**: "Open with" offers Passwords for `.kdbx` files
+  (`application/x-keepass2`); the app gets `{target: path}`.
+
+`apps/authenticator` (`org.webosphoenix.authenticator`, Apps tab) shows
+two-factor codes:
+
+- Without a device passcode it asks for one (Screen & Lock); with one, it asks
+  for it on every start and after every lock.
+- The list: service, account, the current code in large digits and a
+  countdown ring (HOTP: "Tap for code"); tap to copy. The per-account menu:
+  Edit, Delete. The + button: Enter a Setup Key, Add from a Link.
+- Launch params `{otpauth: "otpauth://..."}` (the QR scanner) offer that
+  code after unlocking, for confirmation.
+- The header menu: Import (Authenticator backups, Aegis and andOTP plain
+  exports, `otpauth://` lists, from Downloads or Documents), Export Backup
+  (encrypted with a passphrase, into Documents), Preferences, Lock.
+
+### Services
+
+| What | Service and methods | Source |
+| --- | --- | --- |
+| The `.kdbx` files, backups and imports | `org.webosphoenix.filemanager` `list`, `stat`, `read`, `write`, `move`, `mkdir`, `remove` | `apps/files/service` |
+| The device passcode | `com.palm.systemmanager` `getDeviceLockMode`, `matchDevicePasscode {passCode}` | legacy webOS; simulated in the runtime (OSE has no passcode service yet) |
+| Screen lock | `com.palm.systemmanager` `getLockStatus {subscribe}` -> `{locked}` (`deviceLock.watchLocked()`) | legacy webOS; the shell sets it |
+| Open Website, Screen & Lock | `com.webos.applicationManager` `launch` | |
+
+Neither app declares a Just Type search or writes to db8.
 
 ## CardDAV and CalDAV
 
