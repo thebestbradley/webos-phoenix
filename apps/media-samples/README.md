@@ -11,5 +11,16 @@ the songs are chiptunes synthesized by the script and encoded as Ogg Opus
 (32 kbit/s mono). `media/index.json` lists what a media indexer would extract
 from them; the simulated `com.webos.service.mediaindexer` reads it.
 
+Also (tools/make-videos.cjs, tools/make-documents.cjs; they update
+`index.json`'s `videos` and `documents`):
+
+- `videos/`: two WebM clips (VP9 video, Opus sound) drawn frame by frame
+  with canvas and encoded with ffmpeg, the sound synthesized by the script,
+  with WebVTT and SRT subtitles written by the script.
+- `documents/`: a PDF guide (Chromium's print to PDF), an illustrated EPUB
+  story, a Word document, an Excel workbook and a PowerPoint presentation
+  (Office Open XML packages written by hand, the same bytes every run), and
+  a Markdown file. All text and pictures were written or drawn for Phoenix.
+
 Dedicated to the public domain under CC0 1.0. The artist and album names are
 made up.

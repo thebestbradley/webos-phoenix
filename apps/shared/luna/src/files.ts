@@ -247,7 +247,7 @@ export function validFileName(name: string): boolean {
 
 // ---- Types of files ------------------------------------------------------------------
 
-export type FileKind = "folder" | "image" | "audio" | "video" | "text" | "code" | "archive" | "package" | "pdf" | "file";
+export type FileKind = "folder" | "image" | "audio" | "video" | "text" | "code" | "archive" | "package" | "pdf" | "document" | "book" | "file";
 
 const KINDS: Record<string, [FileKind, string]> = {
     jpg: ["image", "image/jpeg"], jpeg: ["image", "image/jpeg"], png: ["image", "image/png"], gif: ["image", "image/gif"],
@@ -255,16 +255,25 @@ const KINDS: Record<string, [FileKind, string]> = {
     mp3: ["audio", "audio/mpeg"], ogg: ["audio", "audio/ogg"], oga: ["audio", "audio/ogg"], opus: ["audio", "audio/ogg"],
     m4a: ["audio", "audio/mp4"], wav: ["audio", "audio/wav"], aac: ["audio", "audio/aac"], flac: ["audio", "audio/flac"],
     mp4: ["video", "video/mp4"], m4v: ["video", "video/mp4"], webm: ["video", "video/webm"], mkv: ["video", "video/x-matroska"],
-    txt: ["text", "text/plain"], log: ["text", "text/plain"], md: ["text", "text/markdown"], csv: ["text", "text/csv"],
+    ogv: ["video", "video/ogg"], mov: ["video", "video/quicktime"],
+    txt: ["text", "text/plain"], log: ["text", "text/plain"], md: ["text", "text/markdown"], markdown: ["text", "text/markdown"], csv: ["text", "text/csv"],
+    srt: ["text", "application/x-subrip"], vtt: ["text", "text/vtt"],
     ini: ["text", "text/plain"], conf: ["text", "text/plain"], cfg: ["text", "text/plain"], rc: ["text", "text/plain"],
     json: ["code", "application/json"], js: ["code", "text/javascript"], mjs: ["code", "text/javascript"], cjs: ["code", "text/javascript"],
     ts: ["code", "text/plain"], css: ["code", "text/css"], html: ["code", "text/html"], htm: ["code", "text/html"],
-    xml: ["code", "application/xml"], sh: ["code", "text/x-sh"], py: ["code", "text/x-python"], c: ["code", "text/x-c"],
+    xml: ["code", "application/xml"], opml: ["code", "text/x-opml"], rss: ["code", "application/rss+xml"], sh: ["code", "text/x-sh"], py: ["code", "text/x-python"], c: ["code", "text/x-c"],
     h: ["code", "text/x-c"], cpp: ["code", "text/x-c++"], qml: ["code", "text/plain"], yaml: ["code", "text/yaml"], yml: ["code", "text/yaml"],
     zip: ["archive", "application/zip"], tar: ["archive", "application/x-tar"], gz: ["archive", "application/gzip"],
     tgz: ["archive", "application/gzip"], bz2: ["archive", "application/x-bzip2"], xz: ["archive", "application/x-xz"],
     ipk: ["package", "application/vnd.webos.ipk"],
     pdf: ["pdf", "application/pdf"],
+    // Office documents (Doc View reads the OOXML ones) and e-books.
+    docx: ["document", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+    xlsx: ["document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+    pptx: ["document", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+    doc: ["document", "application/msword"], xls: ["document", "application/vnd.ms-excel"], ppt: ["document", "application/vnd.ms-powerpoint"],
+    odt: ["document", "application/vnd.oasis.opendocument.text"],
+    epub: ["book", "application/epub+zip"],
 };
 
 /** What a file is, by name (folders by type). */

@@ -74,6 +74,15 @@ transcribe and search. On a device it transcribes with whisper.cpp; the
 simulator records with Chromium's fake microphone and knows only the demo
 memos' scripts.*
 
+| Videos | Podcasts | Now Playing | PDF View | Doc View | Excel |
+| --- | --- | --- | --- | --- | --- |
+| ![](docs/screenshots/videos-player.png) | ![](docs/screenshots/podcasts-episodes.png) | ![](docs/screenshots/podcasts-nowplaying.png) | ![](docs/screenshots/pdfview-search.png) | ![](docs/screenshots/docview-book.png) | ![](docs/screenshots/docview-excel.png) |
+
+*Videos (resume, WebVTT/SRT subtitles, free rotation), Podcasts (RSS,
+directory search, downloads, speed, sleep timer, OPML, background refresh),
+PDF View on PDF.js, and Doc View for EPUB, Word, Excel, PowerPoint and
+Markdown. Demo videos and documents are generated (CC0).*
+
 ## Status
 
 **Milestone 0: the shell runs in a desktop simulator.** You can use the card
@@ -184,6 +193,9 @@ node tools/test-tasks.cjs                                   # Tasks and reminder
 node tools/test-alarm.cjs                                   # a Clock alarm rings as a popup alert
 node tools/test-keyboard.cjs                                # web fields and the virtual keyboard
 node tools/test-voicememos.cjs                              # Voice Memos
+node tools/test-videos.cjs                                  # Videos
+node tools/test-podcasts.cjs                                # Podcasts
+node tools/test-docs.cjs                                    # PDF View and Doc View
 node tools/test-orientation.cjs                             # apps asking for and following an orientation
 ```
 

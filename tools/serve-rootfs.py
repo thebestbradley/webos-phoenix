@@ -19,6 +19,7 @@ redirects followed. Browsers would refuse these cross-origin requests.
 """
 
 import argparse
+import base64
 import html
 import http.client
 import http.server
@@ -149,6 +150,9 @@ def launch_points():
         }
         if "appId" not in a:
             rec["universalSearch"] = APPS[app_id][1].get("universalSearch")
+            # The types the app opens (appinfo.json "mimeTypes", as on legacy webOS).
+            if APPS[app_id][1].get("mimeTypes"):
+                rec["mimeTypes"] = APPS[app_id][1]["mimeTypes"]
         out.append(rec)
     return out
 
@@ -175,7 +179,34 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path.startswith("/usr/palm/applications/") and f.endswith(".html"):
             data = inject_runtime(data)
             ctype = "text/html; charset=utf-8"
+        # Byte ranges, so audio and video can seek (Chromium asks for them).
+        m = re.match(r"bytes=(\d*)-(\d*)$", self.headers.get("Range") or "")
+        if m and (m.group(1) or m.group(2)) and data:
+            size = len(data)
+            if m.group(1):
+                start, end = int(m.group(1)), min(int(m.group(2)) if m.group(2) else size - 1, size - 1)
+            else:
+                start, end = max(0, size - int(m.group(2))), size - 1
+            if start > end or start >= size:
+                self.send_response(416)
+                self.send_header("Content-Range", "bytes */%d" % size)
+                self.end_headers()
+                return
+            return self.send(206, ctype, data[start:end + 1], {"Content-Range": "bytes %d-%d/%d" % (start, end, size)})
         self.send(200, ctype, data)
+
+    def do_HEAD(self):
+        # The size of a file (the simulated file manager asks for it).
+        path = self.path.split("?", 1)[0].split("#", 1)[0]
+        f = resolve(path)
+        if not f or not os.path.isfile(f):
+            self.send_response(404)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", mimetypes.guess_type(f)[0] or "application/octet-stream")
+        self.send_header("Content-Length", str(os.path.getsize(f)))
+        self.end_headers()
 
     def do_POST(self):
         if self.path.split("?", 1)[0] != "/__phoenix/proxy":
@@ -187,11 +218,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             reply = {"error": "bad proxy request: %s" % e, "code": "BAD_REQUEST"}
         self.send(200, "application/json", json.dumps(reply).encode())
 
-    def send(self, code, ctype, body):
+    def send(self, code, ctype, body, extra=None):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Accept-Ranges", "bytes")
+        for k, v in (extra or {}).items():
+            self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
 
@@ -201,25 +235,40 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 def proxy(req):
-    """One HTTP request for the page: {method, url, headers, body} ->
-    {status, headers (lower-case names), body} or {error, code}."""
-    url = urllib.parse.urlsplit(req.get("url", ""))
-    if url.scheme not in ("http", "https") or not url.hostname:
-        return {"error": "unsupported URL: %s" % req.get("url"), "code": "BAD_SERVER"}
-    cls = http.client.HTTPSConnection if url.scheme == "https" else http.client.HTTPConnection
-    target = url.path or "/"
-    if url.query:
-        target += "?" + url.query
+    """One HTTP request for the page: {method, url, headers, body, binary?,
+    follow?} -> {status, headers (lower-case names), body (or bodyBase64 with
+    binary), url} or {error, code}. follow: take up to 5 redirects (GET)."""
+    url_s = req.get("url", "")
+    method = req.get("method", "GET")
     body = req.get("body")
     try:
-        conn = cls(url.hostname, url.port, timeout=60)
-        conn.request(req.get("method", "GET"), target, body=body.encode("utf-8") if body is not None else None,
-                     headers=req.get("headers") or {})
-        res = conn.getresponse()
-        data = res.read().decode("utf-8", "replace")
-        headers = {k.lower(): v for k, v in res.getheaders()}
-        conn.close()
-        return {"status": res.status, "headers": headers, "body": data}
+        for _ in range(6):
+            url = urllib.parse.urlsplit(url_s)
+            if url.scheme not in ("http", "https") or not url.hostname:
+                return {"error": "unsupported URL: %s" % url_s, "code": "BAD_SERVER"}
+            cls = http.client.HTTPSConnection if url.scheme == "https" else http.client.HTTPConnection
+            target = url.path or "/"
+            if url.query:
+                target += "?" + url.query
+            conn = cls(url.hostname, url.port, timeout=60)
+            conn.request(method, target, body=body.encode("utf-8") if body is not None else None,
+                         headers=req.get("headers") or {})
+            res = conn.getresponse()
+            raw = res.read()
+            headers = {k.lower(): v for k, v in res.getheaders()}
+            conn.close()
+            if req.get("follow") and res.status in (301, 302, 303, 307, 308) and headers.get("location"):
+                url_s = urllib.parse.urljoin(url_s, headers["location"])
+                if res.status == 303:
+                    method, body = "GET", None
+                continue
+            out = {"status": res.status, "headers": headers, "url": url_s}
+            if req.get("binary"):
+                out["bodyBase64"] = base64.b64encode(raw).decode("ascii")
+            else:
+                out["body"] = raw.decode("utf-8", "replace")
+            return out
+        return {"error": "too many redirects", "code": "EREDIRECT"}
     except (socket.gaierror,) as e:
         return {"error": str(e), "code": "ENOTFOUND"}
     except ConnectionRefusedError as e:

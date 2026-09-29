@@ -456,6 +456,11 @@ async function main() {
         console.log(`music/${s.file} ${(ogg.length / 1024).toFixed(1)} KB, ${(pcm.length / RATE).toFixed(1)} s`);
     }
 
+    // Keep what tools/make-videos.cjs and tools/make-documents.cjs added.
+    try {
+        const prev = JSON.parse(fs.readFileSync(path.join(OUT, "index.json"), "utf8"));
+        for (const key of ["videos", "documents"]) if (prev[key]) index[key] = prev[key];
+    } catch (e) { /* first run */ }
     fs.writeFileSync(path.join(OUT, "index.json"), JSON.stringify(index, null, 2) + "\n");
     await browser.close();
 }

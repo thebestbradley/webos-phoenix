@@ -1,0 +1,32 @@
+{
+    "id": "org.webosphoenix.podcasts",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Podcasts",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "iconColor": "#7a3fa8",
+    "uiRevision": 2,
+    "keywords": ["Podcast", "RSS", "Episodes", "Radio", "OPML"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launcherTab": 0
+    },
+    "//mimeTypes": "Podcasts imports OPML subscription lists (Files' \"Open with\", Email attachments).",
+    "mimeTypes": [
+        { "mime": "text/x-opml", "extension": "opml" }
+    ],
+    "//requiredPermissions": "OSE access control groups for the services the app calls (filemanager.operation is apps/files/service's). activity.operation and downloadmanager.operation follow the OSE naming but are not yet checked against those services' api.json.",
+    "requiredPermissions": [
+        "application.launcher",
+        "application.operation",
+        "database.operation",
+        "activity.operation",
+        "downloadmanager.operation",
+        "filemanager.operation",
+        "media.operation",
+        "audio.operation"
+    ]
+}

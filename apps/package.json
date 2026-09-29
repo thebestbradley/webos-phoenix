@@ -15,7 +15,11 @@
     "music",
     "files",
     "tasks",
-    "voicememos"
+    "voicememos",
+    "videos",
+    "podcasts",
+    "pdfview",
+    "docview"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

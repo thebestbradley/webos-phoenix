@@ -1,0 +1,33 @@
+{
+    "id": "org.webosphoenix.docview",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Doc View",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "iconColor": "#2b5fa8",
+    "uiRevision": 2,
+    "keywords": ["Books", "E-books", "EPUB", "Reader", "Word", "Excel", "PowerPoint", "Documents", "Markdown"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launcherTab": 0
+    },
+    "//mimeTypes": "What Doc View opens from Files, Email attachments and the browser's downloads (declared as legacy webOS apps did; see apps/videos/public/appinfo.json). Plain text still opens in Files' own editor; Doc View is offered under \"Open with\".",
+    "mimeTypes": [
+        { "mime": "application/epub+zip", "extension": "epub" },
+        { "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "extension": "docx" },
+        { "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "extension": "xlsx" },
+        { "mime": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "extension": "pptx" },
+        { "mime": "text/markdown", "extension": "md" },
+        { "mime": "text/markdown", "extension": "markdown" },
+        { "mime": "text/plain", "extension": "txt" }
+    ],
+    "//requiredPermissions": "OSE access control groups for the services the app calls (filemanager.operation is apps/files/service's).",
+    "requiredPermissions": [
+        "application.launcher",
+        "application.operation",
+        "filemanager.operation"
+    ]
+}

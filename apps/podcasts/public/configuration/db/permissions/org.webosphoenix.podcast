@@ -1,0 +1,8 @@
+[
+    {
+        "type": "db.kind",
+        "object": "org.webosphoenix.podcast:1",
+        "caller": "org.webosphoenix.podcasts",
+        "operations": { "create": "allow", "read": "allow", "update": "allow", "delete": "allow" }
+    }
+]

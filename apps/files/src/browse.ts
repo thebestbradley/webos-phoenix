@@ -79,7 +79,7 @@ export function longDate(ms: number): string {
 
 const KIND_LABELS: Record<FileKind, string> = {
     folder: "Folder", image: "Image", audio: "Audio", video: "Video", text: "Text document", code: "Source code",
-    archive: "Archive", package: "webOS package", pdf: "PDF document", file: "File",
+    archive: "Archive", package: "webOS package", pdf: "PDF document", document: "Office document", book: "E-book", file: "File",
 };
 
 export function kindLabel(entry: Pick<FileEntry, "name" | "type">): string {

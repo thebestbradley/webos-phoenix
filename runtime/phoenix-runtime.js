@@ -3293,7 +3293,7 @@
         var LIST_KEYS = { image: "imageList", audio: "audioList", video: "videoList" };
         var MIME = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp",
                      ogg: "audio/ogg", oga: "audio/ogg", mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav",
-                     webm: "video/webm", mp4: "video/mp4" };
+                     webm: "video/webm", mp4: "video/mp4", m4v: "video/mp4", ogv: "video/ogg", mkv: "video/x-matroska", mov: "video/quicktime" };
 
         function isMediaPath(p) {
             return typeof p === "string" && p.indexOf(MEDIA_ROOT + "/") === 0 && p.split("/").indexOf("..") < 0;
@@ -3396,15 +3396,32 @@
             return item;
         }
 
+        function sampleItem(type, r) {
+            var rec = {};
+            for (var k in r) if (k !== "subtitles") rec[k] = r[k];
+            return makeItem(type, rec);
+        }
         function loadIndex() {
             var idx = store.get(INDEX_KEY, null);
-            if (idx) return idx;
-            idx = { image: [], audio: [], video: [] };
-            var s = readSamples();
+            var s;
+            if (idx) {
+                // Demo videos that shipped after this index was made.
+                s = idx.videoSamples ? null : readSamples();
+                if (s) {
+                    var have = {};
+                    idx.video.forEach(function (it) { have[it.file_path] = true; });
+                    (s.videos || []).forEach(function (r) { if (!have[r.file_path]) idx.video.push(sampleItem("video", r)); });
+                    idx.videoSamples = true;
+                    saveIndex(idx, true);
+                }
+                return idx;
+            }
+            idx = { image: [], audio: [], video: [], videoSamples: true };
+            s = readSamples();
             if (s) {
                 (s.images || []).forEach(function (r) { idx.image.push(makeItem("image", r)); });
                 (s.audios || []).forEach(function (r) { idx.audio.push(makeItem("audio", r)); });
-                (s.videos || []).forEach(function (r) { idx.video.push(makeItem("video", r)); });
+                (s.videos || []).forEach(function (r) { idx.video.push(sampleItem("video", r)); });
             }
             saveIndex(idx, true);
             return idx;
@@ -3759,7 +3776,13 @@
                      mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", mp4: "video/mp4", webm: "video/webm",
                      txt: "text/plain", md: "text/markdown", json: "application/json", html: "text/html",
                      js: "text/javascript", css: "text/css", xml: "application/xml", pdf: "application/pdf",
-                     ipk: "application/vnd.webos.ipk", zip: "application/zip" };
+                     ipk: "application/vnd.webos.ipk", zip: "application/zip", mkv: "video/x-matroska", ogv: "video/ogg",
+                     m4v: "video/mp4", mov: "video/quicktime", srt: "application/x-subrip", vtt: "text/vtt",
+                     opml: "text/x-opml", epub: "application/epub+zip", markdown: "text/markdown", csv: "text/csv",
+                     docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                     xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                     pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                     eml: "message/rfc822" };
         // "Open with": apps that say they open these types.
         var HANDLERS = [
             { prefix: "image/", appId: "org.webosphoenix.photos", title: "Photos" },
@@ -3936,7 +3959,40 @@
             audios.forEach(function (r) { ref(MEDIA_ROOT + "/Music/" + nameOf(r.file_path), r.file_path, r.file_size, Date.parse(r.last_modified_date) || sm); });
             if (audios[0]) ref(MEDIA_ROOT + "/ringtones/Arcade Ring.ogg", audios[0].file_path, audios[0].file_size, sm);
 
-            return { version: SEED_VERSION, nodes: nodes, mediaSeen: {} };
+            var v = { version: SEED_VERSION, nodes: nodes, mediaSeen: {} };
+            addSampleFiles(v, samples);
+            return v;
+        }
+
+        // The demo videos (with their subtitles) and documents, also added
+        // to a filesystem seeded before they shipped.
+        function readSampleIndex() {
+            try { return JSON.parse(PalmSystem.getResource(MEDIA_ROOT + "/samples/index.json") || "null"); } catch (e) { return null; }
+        }
+        function sampleFiles(samples) {
+            var out = [];
+            ((samples && samples.videos) || []).forEach(function (r) {
+                out.push(r);
+                (r.subtitles || []).forEach(function (sub) { out.push({ file_path: sub, file_size: -1, last_modified_date: r.last_modified_date }); });
+            });
+            ((samples && samples.documents) || []).forEach(function (r) { out.push(r); });
+            return out;
+        }
+        function addSampleFiles(v, samples) {
+            var list = sampleFiles(samples);
+            var key = list.map(function (r) { return r.file_path; }).join("|");
+            if (v.samplesKey === key) return false;
+            var sm = Date.parse("2026-09-01T08:00:00Z");
+            list.forEach(function (r) {
+                var p = norm(r.file_path);
+                if (!p || v.nodes[p]) return;
+                for (var d = parentOf(p); !v.nodes[d]; d = parentOf(d))
+                    v.nodes[d] = { t: "d", m: sm, mode: 493, ro: false };
+                v.nodes[p] = { t: "f", m: Date.parse(r.last_modified_date) || sm, mode: 420, ro: false, ref: r.file_path,
+                               size: r.file_size >= 0 ? r.file_size : -1 };
+            });
+            v.samplesKey = key;
+            return true;
         }
 
         function load() {
@@ -3944,6 +4000,8 @@
             if (!v || v.version !== SEED_VERSION || !v.nodes) {
                 v = seed();
                 store.set(VFS_KEY, v);
+            } else if (addSampleFiles(v, readSampleIndex())) {
+                save(v);
             }
             return v;
         }
@@ -4254,16 +4312,92 @@
 
         // ---- Application manager: handlers by MIME type ---------------------------------------
 
-        function handlersFor(mime) {
-            return HANDLERS.filter(function (h) { return String(mime || "").indexOf(h.prefix) === 0; })
-                .map(function (h, i) { return { appId: h.appId, title: h.title, mime: mime, index: i }; });
+        // Apps register the types they open with appinfo.json "mimeTypes"
+        // ([{mime, extension, stream}], luna-sysmgr ApplicationDescription;
+        // Email's message/rfc822 in core-apps): Videos, PDF View, Doc View,
+        // Podcasts. Photos and Music (HANDLERS above) come after them.
+        function registeredTypes() {
+            var out = [];
+            launchPoints().forEach(function (lp) {
+                if (!/_default$/.test(lp.launchPointId) || !lp.mimeTypes || !lp.mimeTypes.forEach) return;
+                lp.mimeTypes.forEach(function (m) {
+                    if (m && (m.mime || m.extension))
+                        out.push({ appId: lp.id, title: lp.title, mime: String(m.mime || "").toLowerCase(),
+                                   extension: String(m.extension || "").toLowerCase(), stream: !!m.stream });
+                });
+            });
+            return out;
         }
+        function typeMatches(pattern, mime) {
+            if (!pattern || !mime) return false;
+            return pattern === mime || (/\/\*$/.test(pattern) && mime.indexOf(pattern.slice(0, -1)) === 0);
+        }
+        function handlersFor(mime, ext) {
+            mime = String(mime || "").toLowerCase();
+            ext = String(ext || "").toLowerCase();
+            var seen = {}, out = [];
+            function add(appId, title) {
+                if (seen[appId]) return;
+                seen[appId] = true;
+                out.push({ appId: appId, title: title, mime: mime, index: out.length });
+            }
+            registeredTypes().forEach(function (r) {
+                if (typeMatches(r.mime, mime) || (ext && r.extension === ext)) add(r.appId, r.title);
+            });
+            HANDLERS.forEach(function (h) { if (mime.indexOf(h.prefix) === 0) add(h.appId, h.title); });
+            return out;
+        }
+        // A file path, file:// uri or web address -> the first app that opens it.
+        function handlerForTarget(target) {
+            var t = String(target || "");
+            var web = /^https?:\/\//i.test(t);
+            var path = web ? t.replace(/[?#].*$/, "") : t.replace(/^file:\/\//, "");
+            try { path = decodeURIComponent(path); } catch (e) { /* keep */ }
+            var ext = extOf(path);
+            if (!ext) return null;
+            if (web) {
+                // Only apps that asked for this extension take a web address;
+                // other pages stay in the browser.
+                var r = registeredTypes().filter(function (x) { return x.extension === ext; })[0];
+                return r ? r.appId : null;
+            }
+            var h = handlersFor(mimeOf(path), ext)[0];
+            return h ? h.appId : null;
+        }
+        runtime.handlerForTarget = handlerForTarget;
         var am = runtime.services["com.palm.applicationManager"];
         if (am) {
             am["/listAllHandlersForMime"] = function (p, reply) { reply(ok({ mime: p.mime, resources: handlersFor(p.mime) })); };
             am["/getHandlerForMimeType"] = function (p, reply) {
                 var h = handlersFor(p.mimeType || p.mime)[0];
                 reply(h ? ok({ appId: h.appId, mimeType: p.mimeType || p.mime }) : fail(-1, "no handler"));
+            };
+            // Email asks before opening an attachment (AttachmentsDrawer.js):
+            // {uri, mime} -> {appIdByExtension, mimeByExtension, uri, canStream}.
+            am["/getResourceInfo"] = function (p, reply) {
+                var uri = String(p.uri || "");
+                var path = uri.replace(/^file:\/\//, "").replace(/[?#].*$/, "");
+                try { path = decodeURIComponent(path); } catch (e) { /* keep */ }
+                var mime = MIME[extOf(path)] || p.mime || "application/octet-stream";
+                var h = handlersFor(mime, extOf(path))[0] || (p.mime ? handlersFor(p.mime)[0] : null);
+                if (!h) return reply(fail(-1, "No handler for " + mime));
+                // stream: the app plays a web address itself (Videos); else it is downloaded first.
+                var ext = extOf(path);
+                var streams = registeredTypes().some(function (r) {
+                    return r.appId === h.appId && r.stream && (r.extension === ext || typeMatches(r.mime, mime));
+                });
+                reply(ok({ uri: uri, appIdByExtension: h.appId, mimeByExtension: mime, canStream: streams && /^https?:/i.test(uri) }));
+            };
+            // open {target}: a file goes to the app that handles its type
+            // (the browser's finished downloads, "Open by Type" in Files).
+            var baseOpen = am["/open"];
+            am["/open"] = function (p, reply, ctx) {
+                var app = !p.id && p.target && handlerForTarget(p.target);
+                if (app) {
+                    host.postToHost("launch", { id: app, params: { target: p.target } });
+                    return reply(ok({ processId: String(Date.now()), appId: app }));
+                }
+                baseOpen(p, reply, ctx);
             };
         }
 
@@ -4292,6 +4426,234 @@
             reset: function () { store.set(VFS_KEY, seed()); },
             errors: E
         };
+    })();
+
+    // ================================================================================
+    // HTTP, downloads and audio focus (Videos, Podcasts, PDF View, Doc View)
+    // ================================================================================
+    //
+    //   __phoenixRuntime.http.request({method, url, headers, body, binary,
+    //       follow}) -> Promise<{status, headers, body | bodyBase64, url}>: what
+    //       @phoenix/luna's httpRequest() uses in the simulator. A page served
+    //       over HTTP (tools/serve-rootfs.py, the tests) goes through the
+    //       server's proxy (POST /__phoenix/proxy), since feeds and podcast
+    //       directories do not allow cross-origin requests; elsewhere
+    //       (phoenix-sim's phoenix:// pages) it fetches directly, which only
+    //       reaches servers that send CORS headers.
+    //   com.webos.service.downloadmanager (and legacy com.palm.downloadmanager,
+    //       which the Isis browser calls)   OSE's download manager keeps the
+    //       legacy API: download {target, targetDir?, targetFilename?,
+    //       subscribe} -> {ticket, url, target, subscribed}, then
+    //       {ticket, amountReceived, amountTotal} and at the end {ticket,
+    //       completed: true, completionStatusCode, destPath, destFile, target,
+    //       url, mimetype} (interrupted: true when it failed); cancelDownload
+    //       {ticket}; getAllHistory; clearHistory. Files land under
+    //       /media/internal (default folder /media/internal/downloads) in the
+    //       media block's store, so Files, the media indexer and the apps see
+    //       them.
+    //   com.webos.service.audiofocusmanager   requestFocus {requestType,
+    //       streamType, displayId, subscribe} -> {result: "AF_GRANTED"}; the
+    //       app that held the focus is told {result: "AF_LOST"}. The holder
+    //       is kept in the shared store, so Music, Videos and Podcasts pages
+    //       pause each other. releaseFocus -> {result: "AF_SUCCESSFULLY_RELEASED"};
+    //       getStatus -> {audioFocusStatus: [{appId, streamType, requestType}]}.
+    //
+    // __phoenixRuntime.downloads: list() (the history), reset().
+    (function mediaAppServices() {
+        var MEDIA_ROOT = "/media/internal";
+        var DOWNLOAD_DIR = MEDIA_ROOT + "/downloads";
+        var HISTORY_KEY = "downloads:history";
+        var FOCUS_KEY = "audiofocus";
+
+        // ---- HTTP -----------------------------------------------------------------------
+
+        function b64(bytes) {
+            var s = "";
+            for (var i = 0; i < bytes.length; i += 0x8000)
+                s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            return global.btoa(s);
+        }
+        function request(req) {
+            var r = { method: req.method || "GET", url: req.url, headers: req.headers || {}, body: req.body,
+                      binary: !!req.binary, follow: req.follow !== false };
+            if (/^https?:$/.test(global.location.protocol)) {
+                return fetch("/__phoenix/proxy", {
+                    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(r)
+                }).then(function (res) { return res.json(); }).then(function (x) {
+                    if (x.error) {
+                        var e = new Error(x.error);
+                        e.code = x.code;
+                        throw e;
+                    }
+                    return x;
+                });
+            }
+            return fetch(r.url, { method: r.method, headers: r.headers, body: r.body, credentials: "omit",
+                                  redirect: r.follow ? "follow" : "manual" }).then(function (res) {
+                var headers = {};
+                res.headers.forEach(function (v, k) { headers[k.toLowerCase()] = v; });
+                var body = r.binary
+                    ? res.arrayBuffer().then(function (buf) { return { bodyBase64: b64(new Uint8Array(buf)) }; })
+                    : res.text().then(function (t) { return { body: t }; });
+                return body.then(function (b) {
+                    b.status = res.status;
+                    b.headers = headers;
+                    b.url = res.url || r.url;
+                    return b;
+                });
+            }, function (e) {
+                var err = new Error("Could not reach " + r.url + " (no answer, or cross-origin requests refused): " + e.message);
+                err.code = "ECONNREFUSED";
+                throw err;
+            });
+        }
+        runtime.http = { request: request };
+
+        // ---- Download manager -------------------------------------------------------------
+
+        var ticketSeq = store.get("downloads:ticket", 0);
+        var running = {};
+        function history() { return store.get(HISTORY_KEY, []); }
+        function remember(rec) {
+            var h = history().filter(function (x) { return x.ticket !== rec.ticket; });
+            h.unshift(rec);
+            store.set(HISTORY_KEY, h.slice(0, 50));
+        }
+        function fileNameOf(url) {
+            var name = String(url).replace(/[?#].*$/, "").replace(/\/+$/, "").replace(/^.*\//, "");
+            try { name = decodeURIComponent(name); } catch (e) { /* keep */ }
+            name = name.replace(/[\/\\\u0000]/g, "_");
+            return name || "download";
+        }
+        function fromB64(s) {
+            var bin = global.atob(s), out = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; ++i) out[i] = bin.charCodeAt(i);
+            return out;
+        }
+
+        function download(p, reply, ctx) {
+            var url = String(p.target || p.url || "");
+            if (!/^https?:\/\//i.test(url)) return reply(fail(-1, "target must be an http or https URL"));
+            var dir = String(p.targetDir || DOWNLOAD_DIR).replace(/\/+$/, "");
+            if (dir.indexOf(MEDIA_ROOT) !== 0 || dir.split("/").indexOf("..") >= 0)
+                return reply(fail(-1, "targetDir must be under " + MEDIA_ROOT));
+            var name = p.targetFilename ? String(p.targetFilename).replace(/[\/\\]/g, "_") : fileNameOf(url);
+            var path = dir + "/" + name;
+            var ticket = ++ticketSeq;
+            store.set("downloads:ticket", ticketSeq);
+            var rec = { ticket: ticket, url: url, target: path, destPath: dir + "/", destFile: name, mimetype: p.mime || "",
+                        owner: PalmSystem.appIdentifier || "", amountReceived: 0, amountTotal: 0, completed: false };
+            running[ticket] = { aborted: false };
+            remember(rec);
+            reply(ok({ ticket: ticket, url: url, target: path, subscribed: !!p.subscribe }));
+            var send = function (x) { if (!ctx.cancelled()) reply(ok(x)); };
+            request({ url: url, binary: true, follow: true }).then(function (res) {
+                if (running[ticket].aborted) throw { aborted: true };
+                if (res.status < 200 || res.status > 299) throw { status: res.status };
+                var bytes = fromB64(res.bodyBase64 || "");
+                var total = bytes.length;
+                rec.amountTotal = total;
+                rec.mimetype = rec.mimetype || (res.headers && res.headers["content-type"] || "").split(";")[0];
+                // Progress in a few steps, as the real service reports it.
+                send({ ticket: ticket, url: url, amountReceived: Math.floor(total / 2), amountTotal: total });
+                var blob = new Blob([bytes], { type: rec.mimetype || "" });
+                if (!runtime.mediaFiles) throw { status: -1 };
+                return runtime.mediaFiles.write(path, blob).then(function () { return total; });
+            }).then(function (total) {
+                if (running[ticket].aborted) throw { aborted: true };
+                rec.amountReceived = total;
+                rec.completed = true;
+                rec.completionStatusCode = 200;
+                remember(rec);
+                delete running[ticket];
+                send({ ticket: ticket, url: url, amountReceived: total, amountTotal: total });
+                send({ ticket: ticket, url: url, target: path, destPath: rec.destPath, destFile: name, mimetype: rec.mimetype,
+                       amountReceived: total, amountTotal: total, completed: true, completionStatusCode: 200,
+                       interrupted: false, aborted: false });
+            }, function (e) {
+                var aborted = !!(e && e.aborted);
+                rec.completed = true;
+                rec.aborted = aborted;
+                rec.interrupted = !aborted;
+                rec.completionStatusCode = e && e.status ? e.status : -1;
+                remember(rec);
+                delete running[ticket];
+                send({ ticket: ticket, url: url, target: path, destPath: rec.destPath, destFile: name, completed: true,
+                       completionStatusCode: rec.completionStatusCode, interrupted: !aborted, aborted: aborted });
+            });
+        }
+
+        var dm = {
+            "/download": download,
+            "/cancelDownload": function (p, reply) {
+                var r = running[p.ticket];
+                if (!r) return reply(fail(-1, "No such download: " + p.ticket));
+                r.aborted = true;
+                reply(ok({ ticket: p.ticket }));
+            },
+            "/getAllHistory": function (p, reply) {
+                var owner = p.owner;
+                reply(ok({ items: history().filter(function (h) { return !owner || h.owner === owner; }) }));
+            },
+            "/clearHistory": function (p, reply) {
+                store.set(HISTORY_KEY, p.owner ? history().filter(function (h) { return h.owner !== p.owner; }) : []);
+                reply(ok());
+            }
+        };
+        register(["com.webos.service.downloadmanager", "com.palm.downloadmanager"], dm);
+        runtime.downloads = {
+            list: history,
+            reset: function () { store.set(HISTORY_KEY, []); }
+        };
+
+        // ---- Audio focus -------------------------------------------------------------------
+
+        var pageId = "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        var focusSeq = 0;
+        var holders = [];   // this page's subscribers: {token, reply, ctx, streamType}
+
+        function current() { return store.get(FOCUS_KEY, null); }
+        // Tell this page's subscribers that are not the holder that they lost it.
+        function tellLosers() {
+            var h = current();
+            holders = holders.filter(function (w) {
+                if (w.ctx.cancelled()) return false;
+                if (h && h.token === w.token) return true;
+                w.reply(ok({ result: "AF_LOST", streamType: w.streamType }));
+                return false;
+            });
+        }
+        try {
+            global.addEventListener("storage", function (e) {
+                if (e.key === "phoenix:" + FOCUS_KEY) tellLosers();
+            });
+        } catch (e) { /* ignore */ }
+
+        register(["com.webos.service.audiofocusmanager"], {
+            "/requestFocus": function (p, reply, ctx) {
+                if (!p.requestType) return reply(fail(-1, "requestType is required"));
+                var token = pageId + ":" + (++focusSeq);
+                var streamType = p.streamType || "pmedia";
+                store.set(FOCUS_KEY, { token: token, appId: PalmSystem.appIdentifier || "", streamType: streamType,
+                                       requestType: p.requestType, time: Date.now() });
+                tellLosers();
+                if (p.subscribe) {
+                    var w = { token: token, reply: reply, ctx: ctx, streamType: streamType };
+                    holders.push(w);
+                    ctx.onCancel = function () { holders = holders.filter(function (x) { return x !== w; }); };
+                }
+                reply(ok({ result: "AF_GRANTED", subscribed: !!p.subscribe }));
+            },
+            "/releaseFocus": function (p, reply) {
+                var h = current();
+                if (h && h.token.indexOf(pageId + ":") === 0) store.set(FOCUS_KEY, null);
+                reply(ok({ result: "AF_SUCCESSFULLY_RELEASED" }));
+            },
+            "/getStatus": function (p, reply) {
+                var h = current();
+                reply(ok({ audioFocusStatus: h ? [{ appId: h.appId, streamType: h.streamType, requestType: h.requestType }] : [] }));
+            }
+        });
     })();
 
     // ================================================================================

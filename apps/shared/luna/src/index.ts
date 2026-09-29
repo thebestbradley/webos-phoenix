@@ -13,3 +13,6 @@ export * from "./media";
 export * from "./files";
 export * from "./tasks";
 export * from "./transcriber";
+export * from "./web";
+export * from "./playback";
+export * from "./documents";

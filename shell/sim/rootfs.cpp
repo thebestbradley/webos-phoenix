@@ -102,6 +102,11 @@ Rootfs::Rootfs(const QString &repoDir)
         record[QStringLiteral("params")] = QVariantMap();
         record[QStringLiteral("hidden")] = entry.value(QStringLiteral("tab")).toInt() < 0;
         record[QStringLiteral("universalSearch")] = app.value(QStringLiteral("universalSearch")).toVariant();
+        // The types the app opens (appinfo.json "mimeTypes": [{mime, extension,
+        // stream}], luna-sysmgr's resource handlers), for the application
+        // manager's listAllHandlersForMime and open {target}.
+        if (app.contains(QStringLiteral("mimeTypes")))
+            record[QStringLiteral("mimeTypes")] = app.value(QStringLiteral("mimeTypes")).toVariant();
         m_launchPoints.append(record);
 
         // Launch points: more launcher icons for the same app, each
