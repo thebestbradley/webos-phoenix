@@ -243,7 +243,9 @@ Also in 1.0 (owner, 29 September 2026), rows in [spec/GAPS.md](spec/GAPS.md):
 
 - [ ] Keyboard: dictation (V2), predictive text and swipe typing (V3),
       emoji (V6), cursor control by holding the space bar or the gesture
-      bar (V4), and the shell's keyboard as the device's input method (V5)
+      bar (V4), and the shell's keyboard as the device's input method (V5);
+      several keyboards installed and chosen in Settings as on iOS: webOS
+      Classic, webOS OSE's and a new Phoenix keyboard (V7)
 - [ ] Editing: the Edit submenu (Select All, Cut, Copy, Paste) in every
       app menu, and the same on a long press in a text field (E1)
 - [ ] The Phoenix Assistant, a voice assistant like Siri: push-to-talk,
