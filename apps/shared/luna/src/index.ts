@@ -15,3 +15,4 @@ export * from "./tasks";
 export * from "./transcriber";
 export * from "./torch";
 export * from "./location";
+export * from "./pty";

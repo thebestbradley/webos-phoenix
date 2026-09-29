@@ -130,6 +130,16 @@ to copy, encrypted with the device passcode; codes from the QR scanner are
 confirmed before they are added. Threat model:
 [docs/SECURITY-APPS.md](docs/SECURITY-APPS.md).*
 
+| Terminal | top | Tablet | vim |
+| --- | --- | --- | --- |
+| ![](docs/screenshots/terminal-phone.png) | ![](docs/screenshots/terminal-top.png) | ![](docs/screenshots/terminal-tablet.png) | ![](docs/screenshots/terminal-tablet-vim.png) |
+
+*Terminal: a real shell (bash by default, zsh in Preferences) in a card,
+drawn by xterm.js, with an extras row of Esc, sticky Ctrl and Alt, Tab and
+arrows above the keyboard. On a device the shells run as the unprivileged
+user under the `org.webosphoenix.pty` service; in the simulator they are
+your own shell on your computer. See [docs/TERMINAL.md](docs/TERMINAL.md).*
+
 ## Status
 
 **Milestone 0: the shell runs in a desktop simulator.** You can use the card
@@ -152,7 +162,8 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `shell/qml/Phoenix/Sim` | Mock apps and device status for the desktop simulator |
 | `shell/qml/Phoenix/Lsm`, `shell/qml/WebOSCompositor` | Adapter that plugs the shell into webOS OSE's `luna-surfacemanager` |
 | `shell/sim` | `phoenix-sim`, the desktop runner (also takes screenshots) |
-| `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Tasks, Voice Memos, Flashlight, QR Scanner, Weather, Maps, Passwords, Authenticator), with the shared `@phoenix/ui` components, `@phoenix/luna` service client and `@phoenix/secrets` (TOTP, sealing, auto-lock), generated demo media (`apps/media-samples`), the Node.js Luna services of Files (`apps/files/service`) and Voice Memos (`apps/voicememos/service`, speech to text with whisper.cpp), and the CardDAV & CalDAV Synergy account with its sync service (`apps/dav`, see [docs/SYNERGY.md](docs/SYNERGY.md)) |
+| `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Tasks, Voice Memos, Flashlight, QR Scanner, Weather, Maps, Passwords, Authenticator, Terminal), with the shared `@phoenix/ui` components, `@phoenix/luna` service client and `@phoenix/secrets` (TOTP, sealing, auto-lock), generated demo media (`apps/media-samples`), the Node.js Luna services of Files (`apps/files/service`) and Voice Memos (`apps/voicememos/service`, speech to text with whisper.cpp), and the CardDAV & CalDAV Synergy account with its sync service (`apps/dav`, see [docs/SYNERGY.md](docs/SYNERGY.md)) |
+| `services/pty` | `org.webosphoenix.pty`, the Terminal's PTY Luna service (C++), whose core phoenix-sim also uses |
 | `runtime/` | The webOS web app runtime for the simulator and browsers (`PalmSystem`, simulated Luna services) |
 | `shell/tests` | Behaviour tests (`qmltestrunner`) |
 | `shell/assets/openwebos` | Original Open webOS system UI artwork (Apache-2.0) |
@@ -251,6 +262,8 @@ node tools/test-voicememos.cjs                              # Voice Memos
 node tools/test-maps.cjs                                    # Maps (no live map servers)
 node tools/test-passwords.cjs                               # Passwords (KeePass)
 node tools/test-authenticator.cjs                           # Authenticator (TOTP/HOTP)
+node tools/test-terminal.cjs                                # Terminal (simulated shell, then /bin/sh for real)
+build/pty/pty-test                                          # the Terminal's PTY service
 node tools/test-orientation.cjs                             # apps asking for and following an orientation
 ```
 

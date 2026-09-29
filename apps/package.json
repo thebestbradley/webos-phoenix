@@ -22,7 +22,8 @@
     "weather",
     "maps",
     "passwords",
-    "authenticator"
+    "authenticator",
+    "terminal"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

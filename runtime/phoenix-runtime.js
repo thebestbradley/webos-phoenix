@@ -5476,8 +5476,7 @@
         };
     })();
 
-    // ================================================================================
-    // Torch (org.webosports.service.torch; apps/flashlight)
+    // =========================================================================    // Torch (org.webosports.service.torch; apps/flashlight)
     // ================================================================================
     //
     // org.webosports.service.torch is LuneOS's torchd
@@ -5562,5 +5561,386 @@
                 torchNotify();
             }
         };
+    })();
+
+    // ================================================================================
+    // Terminal (org.webosphoenix.pty; apps/terminal)
+    // ================================================================================
+    //
+    // The Terminal's shells. On a device this is the C++ Luna service in
+    // services/pty (docs/TERMINAL.md); here the same methods, replies and
+    // error codes (PTY_ERRORS in apps/shared/luna/src/pty.ts) come from one of
+    // three places, whichever the host offers in /usr/share/phoenix/host.json:
+    //
+    //   {"pty": "host"}         phoenix-sim: a real shell on this computer
+    //                           (shell/sim/simpty.cpp). Requests go out as
+    //                           "pty" host messages; replies come back
+    //                           through __phoenixRuntime.ptyEvent({id, reply}).
+    //   {"pty": "websocket", "url": "ws://127.0.0.1:.../__phoenix/pty?token=..."}
+    //                           tools/serve-rootfs.py --terminal: a real shell
+    //                           over a WebSocket per session (Python's pty).
+    //   anything else           a tiny simulated shell, below (echo, ls of the
+    //                           simulated filesystem, cd, pwd, clear, exit,
+    //                           ...), so the app and its tests run anywhere
+    //                           and always the same.
+    //
+    //   open {cols, rows, shell?, cwd?, subscribe: true}
+    //        -> {subscribed: true, sessionId, pid, shell, shellPath, host?}
+    //        -> {sessionId, output, encoding?: "latin1", bytes} ...
+    //        -> {sessionId, exited: true, exitCode, signal}
+    //        cancelling the subscription hangs the shell up
+    //   write {sessionId, data}, resize {sessionId, cols, rows},
+    //   ack {sessionId, bytes}, close {sessionId, signal?}, list {},
+    //   getShells {} -> {shells: [{name, path, installed}], default},
+    //   exec -> DEVMODE_REQUIRED (Developer Mode is a follow-up)
+    //
+    // Only org.webosphoenix.terminal may open a shell. (phoenix-sim checks
+    // that again on its side, against the window the message came from.)
+    (function terminalServices() {
+        var APP_ID = "org.webosphoenix.terminal";
+        var E = { BAD_PARAMS: -1, NOT_ALLOWED: 1, NO_SESSION: 2, SPAWN_FAILED: 3, NO_SHELL: 4, TOO_MANY: 5, DEVMODE_REQUIRED: 6 };
+        var SHELLS = ["bash", "zsh", "fish", "sh"];
+        var SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGKILL: 9, SIGTERM: 15 };
+
+        var hostInfo = null;
+        function host_() {
+            if (hostInfo === null) {
+                try { hostInfo = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/host.json") || "{}") || {}; }
+                catch (e) { hostInfo = {}; }
+            }
+            return hostInfo;
+        }
+        function mode() {
+            var h = host_();
+            if (h.pty === "host") return "host";
+            if (h.pty === "websocket" && h.url && typeof global.WebSocket === "function") return "websocket";
+            return "simulated";
+        }
+
+        var sessions = {};   // sessionId -> {reply, ctx, transport}
+        var nextId = 1;
+
+        function mayOpen() { return PalmSystem.appIdentifier === APP_ID; }
+
+        // ---- phoenix-sim: SimPty over host messages -----------------------------------
+        var hostWaiting = {};   // id -> reply, for one-shot host requests (shells)
+        runtime.ptyEvent = function (msg) {
+            if (!msg || !msg.id) return;
+            var one = hostWaiting[msg.id];
+            if (one) { delete hostWaiting[msg.id]; one(msg.reply); return; }
+            var s = sessions[msg.id];
+            if (s) s.deliver(msg.reply);
+        };
+        function hostTransport(id, p, s) {
+            host.postToHost("pty", { op: "open", id: id, cols: p.cols, rows: p.rows, shell: p.shell || "", cwd: p.cwd || "" });
+            return {
+                write: function (data) { host.postToHost("pty", { op: "write", id: id, data: data }); },
+                resize: function (c, r) { host.postToHost("pty", { op: "resize", id: id, cols: c, rows: r }); },
+                ack: function (n) { host.postToHost("pty", { op: "ack", id: id, bytes: n }); },
+                close: function (signal, cancel) { host.postToHost("pty", { op: "close", id: id, signal: signal || "SIGHUP", cancel: !!cancel }); }
+            };
+        }
+
+        // ---- serve-rootfs.py --terminal: a WebSocket per session -------------------------
+        function wsTransport(id, p, s) {
+            var ws, queue = [], open = false, gone = false;
+            function send(m) {
+                var t = JSON.stringify(m);
+                if (open) ws.send(t); else queue.push(t);
+            }
+            try { ws = new global.WebSocket(host_().url); }
+            catch (e) {
+                setTimeout(function () { s.deliver(fail(E.SPAWN_FAILED, "Cannot reach the dev server's terminal: " + e)); }, 0);
+                return { write: function () {}, resize: function () {}, ack: function () {}, close: function () {} };
+            }
+            ws.onopen = function () {
+                open = true;
+                ws.send(JSON.stringify({ op: "open", cols: p.cols, rows: p.rows, shell: p.shell || "", cwd: p.cwd || "" }));
+                queue.forEach(function (t) { ws.send(t); });
+                queue = [];
+            };
+            ws.onmessage = function (ev) {
+                var r;
+                try { r = JSON.parse(ev.data); } catch (e) { return; }
+                if (r.returnValue !== false) r.sessionId = id;
+                s.deliver(r);
+            };
+            ws.onclose = function () {
+                if (gone) return;
+                gone = true;
+                if (sessions[id]) s.deliver({ returnValue: true, sessionId: id, exited: true, exitCode: -1, signal: 1 });
+            };
+            return {
+                write: function (data) { send({ op: "write", data: data }); },
+                resize: function (c, r) { send({ op: "resize", cols: c, rows: r }); },
+                ack: function (n) { send({ op: "ack", bytes: n }); },
+                close: function (signal, cancel) {
+                    send({ op: "close", signal: signal || "SIGHUP" });
+                    if (cancel) { gone = true; try { ws.close(); } catch (e) { /* ignore */ } }
+                }
+            };
+        }
+
+        // ---- The simulated shell --------------------------------------------------------
+        // A few commands on the simulated filesystem, with line editing
+        // (Backspace, Ctrl-U, Ctrl-C, Ctrl-D, Ctrl-L, Up/Down for history).
+        var HOME = "/media/internal";
+        function fakeShell(id, p, s) {
+            var cwd = HOME, line = "", history = [], hist = 0, esc = null, done = false, cols = p.cols || 80;
+            function out(text) {
+                if (done) return;
+                text = String(text);
+                s.deliver(ok({ sessionId: id, output: text, bytes: text.length }));
+            }
+            function tilde(path) { return path === HOME ? "~" : path.indexOf(HOME + "/") === 0 ? "~" + path.slice(HOME.length) : path; }
+            function prompt() { out("\x1b[1;32muser@phoenix\x1b[0m:\x1b[1;34m" + tilde(cwd) + "\x1b[0m$ "); }
+            function resolve(arg) {
+                if (!arg || arg === "~") return HOME;
+                if (arg.indexOf("~/") === 0) arg = HOME + arg.slice(1);
+                var parts = (arg.charAt(0) === "/" ? arg : cwd + "/" + arg).split("/"), outp = [];
+                parts.forEach(function (x) {
+                    if (!x || x === ".") return;
+                    if (x === "..") outp.pop(); else outp.push(x);
+                });
+                return "/" + outp.join("/");
+            }
+            function fm(method, params) {
+                return new Promise(function (res) {
+                    dispatch("luna://org.webosphoenix.filemanager/" + method, params, res,
+                             { cancelled: function () { return false; }, onCancel: null });
+                });
+            }
+            function unescape(t) {
+                return t.replace(/\\(e|a|n|t|\\|033|x1b)/g, function (m, c) {
+                    return { e: "\x1b", "033": "\x1b", x1b: "\x1b", a: "\x07", n: "\n", t: "\t", "\\": "\\" }[c];
+                });
+            }
+            function words(text) {
+                var w = [], m, re = /"([^"]*)"|'([^']*)'|(\S+)/g;
+                while ((m = re.exec(text))) w.push(m[1] !== undefined ? m[1] : m[2] !== undefined ? m[2] : m[3]);
+                return w;
+            }
+            var commands = {
+                help: function () {
+                    out("Phoenix simulated shell: there is no real shell here (phoenix-sim --no-host-shell,\r\n" +
+                        "or a browser without tools/serve-rootfs.py --terminal). Commands:\r\n" +
+                        "  echo [-e] TEXT   ls [-a] [DIR]   cd [DIR]   pwd   clear   seq N\r\n" +
+                        "  uname [-a]   whoami   printenv   history   exit [CODE]\r\n");
+                },
+                echo: function (a, raw) {
+                    var e = a[0] === "-e";
+                    var text = raw.replace(/^echo\s*/, "").replace(/^-e\s*/, "");
+                    var w = words(text).join(" ");
+                    out((e ? unescape(w) : w).replace(/\n/g, "\r\n") + "\r\n");
+                },
+                pwd: function () { out(cwd + "\r\n"); },
+                whoami: function () { out("user\r\n"); },
+                uname: function (a) { out(a[0] === "-a" ? "Linux phoenix 6.6.0-phoenix-sim #1 SMP webOS Phoenix simulated shell\r\n" : "Linux\r\n"); },
+                printenv: function () { out("HOME=" + HOME + "\r\nSHELL=/bin/fsh\r\nTERM=xterm-256color\r\nUSER=user\r\nCOLUMNS=" + cols + "\r\n"); },
+                history: function () { history.forEach(function (h, i) { out("  " + (i + 1) + "  " + h + "\r\n"); }); },
+                clear: function () { out("\x1b[H\x1b[2J\x1b[3J"); },
+                seq: function (a) {
+                    var n = Math.min(parseInt(a[0], 10) || 0, 10000), t = "";
+                    for (var i = 1; i <= n; ++i) t += i + "\r\n";
+                    out(t);
+                },
+                cd: function (a) {
+                    var dir = resolve(a[0]);
+                    return fm("stat", { path: dir }).then(function (r) {
+                        if (!r.returnValue) out("fsh: cd: " + a[0] + ": No such file or directory\r\n");
+                        else if (r.entry.type !== "directory") out("fsh: cd: " + a[0] + ": Not a directory\r\n");
+                        else cwd = dir;
+                    });
+                },
+                ls: function (a) {
+                    var all = a.indexOf("-a") >= 0 || a.indexOf("-la") >= 0 || a.indexOf("-al") >= 0;
+                    var args = a.filter(function (x) { return x.charAt(0) !== "-"; });
+                    var dir = resolve(args[0]);
+                    return fm("list", { path: dir }).then(function (r) {
+                        if (!r.returnValue) return out("ls: cannot access '" + (args[0] || dir) + "': No such file or directory\r\n");
+                        var names = r.entries.filter(function (e) { return all || e.name.charAt(0) !== "."; })
+                            .sort(function (x, y) { return x.name < y.name ? -1 : x.name > y.name ? 1 : 0; });
+                        if (!names.length) return;
+                        var width = names.reduce(function (m, e) { return Math.max(m, e.name.length); }, 0) + 2;
+                        var per = Math.max(1, Math.floor(cols / width)), t = "";
+                        names.forEach(function (e, i) {
+                            var pad = new Array(width - e.name.length + 1).join(" ");
+                            t += (e.type === "directory" ? "\x1b[1;34m" + e.name + "\x1b[0m" : e.name);
+                            t += (i % per === per - 1 || i === names.length - 1) ? "\r\n" : pad;
+                        });
+                        out(t);
+                    });
+                },
+                exit: function (a) { finish(parseInt(a[0], 10) || 0, 0); }
+            };
+            function run(text) {
+                var a = words(text), cmd = a.shift();
+                if (!cmd) return Promise.resolve();
+                if (!commands[cmd]) { out("fsh: " + cmd + ": command not found\r\n"); return Promise.resolve(); }
+                return Promise.resolve(commands[cmd](a, text));
+            }
+            function finish(code, signal) {
+                if (done) return;
+                s.deliver(ok({ sessionId: id, exited: true, exitCode: code, signal: signal }));
+                done = true;
+            }
+            function redraw(text) {
+                out("\r\x1b[K");
+                prompt();
+                out(text);
+                line = text;
+            }
+            var busy = Promise.resolve();
+            function key(ch) {
+                if (esc !== null) {
+                    esc += ch;
+                    // ESC [ ... final byte, or ESC and one more character (Alt).
+                    if (esc.length === 1 && ch !== "[" && ch !== "O") { esc = null; return; }
+                    if (esc.length > 1 && /[@-~]/.test(ch)) {
+                        var seq = esc;
+                        esc = null;
+                        if (seq === "[A" || seq === "OA") { if (hist > 0) redraw(history[--hist]); }
+                        else if (seq === "[B" || seq === "OB") { hist = Math.min(history.length, hist + 1); redraw(history[hist] || ""); }
+                    }
+                    return;
+                }
+                if (ch === "\x1b") { esc = ""; return; }
+                if (ch === "\r" || ch === "\n") {
+                    out("\r\n");
+                    var text = line.trim();
+                    line = "";
+                    if (text) { history.push(text); }
+                    hist = history.length;
+                    busy = busy.then(function () { return run(text); }).then(function () { if (!done) prompt(); });
+                } else if (ch === "\x7f" || ch === "\b") {
+                    if (line) { line = line.slice(0, -1); out("\b \b"); }
+                } else if (ch === "\x03") {
+                    out("^C\r\n");
+                    line = "";
+                    prompt();
+                } else if (ch === "\x04") {
+                    if (!line) { out("exit\r\n"); finish(0, 0); }
+                } else if (ch === "\x0c") {
+                    out("\x1b[H\x1b[2J");
+                    prompt();
+                    out(line);
+                } else if (ch === "\x15") {
+                    redraw("");
+                } else if (ch === "\t" || ch < " ") {
+                    out("\x07");
+                } else {
+                    line += ch;
+                    out(ch);
+                }
+            }
+            setTimeout(function () {
+                s.deliver(ok({ subscribed: true, sessionId: id, pid: 4242, shell: "fsh", shellPath: "(simulated)", host: false, simulated: true }));
+                out("Phoenix simulated shell. Type \x1b[1mhelp\x1b[0m for its few commands.\r\n");
+                prompt();
+            }, 0);
+            return {
+                write: function (data) { for (var i = 0; i < data.length; ++i) key(data.charAt(i)); },
+                resize: function (c) { cols = c; },
+                ack: function () {},
+                close: function (signal) { finish(-1, SIGNALS[signal || "SIGHUP"] || 1); }
+            };
+        }
+
+        function session(id) {
+            return sessions[id] && sessions[id].owner === PalmSystem.appIdentifier ? sessions[id] : null;
+        }
+
+        register(["org.webosphoenix.pty"], {
+            "/open": function (p, reply, ctx) {
+                if (!mayOpen()) return reply(fail(E.NOT_ALLOWED, "Only the Terminal app may open a shell"));
+                if (!p.subscribe) return reply(fail(E.BAD_PARAMS, "open needs subscribe: true (the output comes as replies)"));
+                if (p.shell && SHELLS.indexOf(p.shell) < 0) return reply(fail(E.NO_SHELL, "Shell not installed: " + p.shell));
+                if (Object.keys(sessions).length >= 16) return reply(fail(E.TOO_MANY, "Too many sessions"));
+                var cols = Math.max(1, Math.min(999, p.cols | 0 || 80)), rows = Math.max(1, Math.min(999, p.rows | 0 || 24));
+                var id = "pty" + (nextId++) + "-" + Math.random().toString(16).slice(2, 10);
+                var m = mode();
+                var s = sessions[id] = { owner: PalmSystem.appIdentifier, shell: p.shell || "bash", pid: 0, transport: null };
+                s.deliver = function (r) {
+                    if (!sessions[id] || ctx.cancelled()) return;
+                    if (r.subscribed) s.pid = r.pid;
+                    if (r.returnValue === false || r.exited) delete sessions[id];
+                    if (r.subscribed && m !== "simulated") r.host = true;
+                    reply(r);
+                };
+                var q = { cols: cols, rows: rows, shell: p.shell, cwd: p.cwd };
+                s.transport = m === "host" ? hostTransport(id, q, s) : m === "websocket" ? wsTransport(id, q, s) : fakeShell(id, q, s);
+                ctx.onCancel = function () {
+                    if (!sessions[id]) return;
+                    delete sessions[id];
+                    s.transport.close("SIGHUP", true);
+                };
+            },
+            "/write": function (p, reply) {
+                var s = session(p.sessionId);
+                if (!s) return reply(fail(E.NO_SESSION, "No such session: " + p.sessionId));
+                if (typeof p.data !== "string") return reply(fail(E.BAD_PARAMS, "data must be a string"));
+                s.transport.write(p.data);
+                reply(ok());
+            },
+            "/resize": function (p, reply) {
+                var s = session(p.sessionId);
+                if (!s) return reply(fail(E.NO_SESSION, "No such session: " + p.sessionId));
+                if (!(p.cols >= 1 && p.cols <= 999 && p.rows >= 1 && p.rows <= 999)) return reply(fail(E.BAD_PARAMS, "cols and rows must be 1 to 999"));
+                s.transport.resize(p.cols | 0, p.rows | 0);
+                reply(ok());
+            },
+            "/ack": function (p, reply) {
+                var s = session(p.sessionId);
+                if (!s) return reply(fail(E.NO_SESSION, "No such session: " + p.sessionId));
+                if (!(p.bytes >= 0)) return reply(fail(E.BAD_PARAMS, "bytes must be a number"));
+                s.transport.ack(p.bytes);
+                reply(ok());
+            },
+            "/close": function (p, reply) {
+                var s = session(p.sessionId);
+                if (!s) return reply(fail(E.NO_SESSION, "No such session: " + p.sessionId));
+                if (p.signal && !SIGNALS[p.signal]) return reply(fail(E.BAD_PARAMS, "signal must be SIGHUP, SIGTERM, SIGKILL or SIGINT"));
+                s.transport.close(p.signal || "SIGHUP", false);
+                reply(ok());
+            },
+            "/list": function (p, reply) {
+                reply(ok({ sessions: Object.keys(sessions).filter(function (k) { return sessions[k].owner === PalmSystem.appIdentifier; })
+                    .map(function (k) { return { sessionId: k, pid: sessions[k].pid, shell: sessions[k].shell }; }) }));
+            },
+            "/getShells": function (p, reply) {
+                var m = mode();
+                if (m === "host") {
+                    var id = "shells" + (nextId++);
+                    hostWaiting[id] = function (r) { r.mode = "host"; reply(r); };
+                    host.postToHost("pty", { op: "shells", id: id });
+                    return;
+                }
+                if (m === "websocket" && global.fetch) {
+                    var url = host_().url.replace(/^ws/, "http").replace(/\/__phoenix\/pty\?/, "/__phoenix/pty/shells?");
+                    global.fetch(url).then(function (r) { return r.json(); }).then(function (r) { r.mode = "websocket"; reply(r); },
+                        function (e) { reply(fail(E.SPAWN_FAILED, String(e))); });
+                    return;
+                }
+                // The simulated shell stands in for all of them.
+                reply(ok({ default: "bash", mode: "simulated", shells: SHELLS.map(function (n) { return { name: n, path: "", installed: false }; }) }));
+            },
+            "/exec": function (p, reply) {
+                reply(fail(E.DEVMODE_REQUIRED, "Developer Mode is not available yet: exec, sudo and SSH are a follow-up (docs/TERMINAL.md, T4)"));
+            }
+        });
+
+        // A page that goes hangs its shells up, as the device service does
+        // when its subscriptions are cancelled.
+        if (global.addEventListener) {
+            global.addEventListener("pagehide", function () {
+                Object.keys(sessions).forEach(function (id) {
+                    var s = sessions[id];
+                    delete sessions[id];
+                    try { s.transport.close("SIGHUP", true); } catch (e) { /* ignore */ }
+                });
+            });
+        }
+
+        runtime.pty = { mode: mode, errors: E, sessions: function () { return Object.keys(sessions); } };
     })();
 })(this);

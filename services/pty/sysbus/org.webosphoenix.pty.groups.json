@@ -1,0 +1,11 @@
+{
+    "allowedNames": [
+        "org.webosphoenix.pty"
+    ],
+    "pty.operation": [
+        "oem"
+    ],
+    "pty.developer": [
+        "oem"
+    ]
+}

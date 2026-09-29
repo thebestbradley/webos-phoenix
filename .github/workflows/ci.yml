@@ -20,7 +20,8 @@ jobs:
             qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtqml-workerscript \
             qml6-module-qttest qml6-module-qt5compat-graphicaleffects \
             qt6-webengine-dev qml6-module-qtwebengine qml6-module-qtwebchannel \
-            xvfb xauth libgl1-mesa-dri fonts-dejavu-core
+            xvfb xauth libgl1-mesa-dri fonts-dejavu-core \
+            pkg-config libglib2.0-dev
 
       - uses: actions/setup-node@v4
         with:
@@ -56,6 +57,9 @@ jobs:
 
       - name: Behaviour tests
         run: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import shell/qml -import build/qml -input shell/tests
+
+      - name: Terminal PTY service (core and Luna methods, services/pty)
+        run: build/pty/pty-test
 
       - name: Trademark overlays up to date
         run: python3 tools/debrand-overlays.py --check
@@ -104,6 +108,8 @@ jobs:
           node tools/test-passwords.cjs --tablet --out app-tests/passwords-tablet
           node tools/test-authenticator.cjs --out app-tests/authenticator-phone
           node tools/test-authenticator.cjs --tablet --out app-tests/authenticator-tablet
+          node tools/test-terminal.cjs --out app-tests/terminal-phone
+          node tools/test-terminal.cjs --tablet --out app-tests/terminal-tablet
           node tools/test-dav-sync.cjs --out app-tests/dav-phone
           node tools/test-dav-sync.cjs --tablet --out app-tests/dav-tablet
           node tools/test-orientation.cjs --out app-tests/orientation-phone

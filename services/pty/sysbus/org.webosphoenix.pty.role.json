@@ -1,0 +1,14 @@
+{
+    "exeName": "/usr/sbin/phoenix-pty",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "org.webosphoenix.pty"
+    ],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.pty",
+            "outbound": []
+        }
+    ]
+}

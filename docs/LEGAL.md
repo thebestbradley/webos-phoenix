@@ -181,7 +181,15 @@ data use "Phoenix Account".
   install it with pip and run it as a separate program. It is not part of
   Phoenix, not linked with it, and not distributed with it.
 - npm dependencies (React, Vite, ...) are MIT-licensed; the Settings app lists
-  the ones it bundles under Device Info > Open source licenses.
+  the ones it bundles under Device Info > Open source licenses. The Terminal
+  bundles **xterm.js** (MIT) and ships its notice as
+  `apps/terminal/public/THIRD-PARTY-LICENSES.txt`.
+- The Terminal (`apps/terminal`, `services/pty`) is original code. The
+  homebrew webOS terminals of the Preware catalog (WebOS Internals'
+  Terminal, GPL-2.0; wTerm, GPL-3.0) were studied for their user experience
+  only; none of their code is in Phoenix. The PTY service's tests use a
+  stand-in for luna-service2's header written from its public API
+  (`services/pty/tests/ls2stub`), not luna-service2's code.
 
 ## QR Scanner, Weather and Flashlight
 

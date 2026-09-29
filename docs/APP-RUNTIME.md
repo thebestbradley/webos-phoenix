@@ -122,8 +122,10 @@ app installer used by Files (see [Files](#files)); the activity manager
 scheduled activities such as Tasks' reminders (see [Tasks](#tasks)); the
 speech-to-text service of Voice Memos (see [Voice Memos](#voice-memos));
 the CardDAV and CalDAV account's transport (see
-[CardDAV and CalDAV](#carddav-and-caldav)); and last the torch and the
-location service (see [Flashlight](#flashlight) and [Weather](#weather)).
+[CardDAV and CalDAV](#carddav-and-caldav)); then the torch and the
+location service (see [Flashlight](#flashlight) and [Weather](#weather));
+and last the Terminal's shells, `org.webosphoenix.pty` (see
+[Terminal](#terminal)).
 
 ## Running apps
 
@@ -265,6 +267,7 @@ Camera, Photos and Music start cleanly too, and `node tools/test-media.cjs
 [--tablet]`, and Voice Memos, driven by `node tools/test-voicememos.cjs
 [--tablet]`. Passwords and Authenticator are driven by
 `node tools/test-passwords.cjs [--tablet]` and `node tools/test-authenticator.cjs
+[--tablet]`, and the Terminal by `node tools/test-terminal.cjs
 [--tablet]`.
 
 ## Phoenix apps (React + TypeScript)
@@ -289,6 +292,7 @@ New Phoenix apps live in `apps/`, an npm workspace:
 | `apps/shared/secrets` (`@phoenix/secrets`) | For the apps that hold secrets: TOTP/HOTP and `otpauth://` URIs (RFC 6238/4226, on WebCrypto HMAC), base32, sealing with AES-GCM and PBKDF2 (`sealJson`, `wrapKey`, passphrase files), `SecretClipboard` (clears itself), `AutoLock` (screen lock, card minimized, idle); `@phoenix/secrets/react` has `useAutoLock()`, `useTotpCode()`, `CountdownRing` |
 | `apps/passwords` | Passwords, a KeePass (KDBX 4) password manager (see [below](#passwords-and-authenticator)) |
 | `apps/authenticator` | Authenticator, TOTP/HOTP codes (see [below](#passwords-and-authenticator)) |
+| `apps/terminal` | Terminal (see [below](#terminal)): xterm.js on `org.webosphoenix.pty`, the C++ PTY service in `services/pty`; `@phoenix/luna`'s `pty.ts` is its client |
 
 | `apps/dav` | The CardDAV & CalDAV account (see [below](#carddav-and-caldav)): a hidden Enyo 1.0 app with the account's sign-in page, its db8 kinds and account template, and `apps/dav/service`, its Node.js Luna service and sync engine |
 
@@ -1062,6 +1066,38 @@ two-factor codes:
 | Open Website, Screen & Lock | `com.webos.applicationManager` `launch` | |
 
 Neither app declares a Just Type search or writes to db8.
+
+## Terminal
+
+`apps/terminal` (`org.webosphoenix.terminal`) is a real Linux terminal:
+xterm.js in a React app, one shell per card, on a PTY owned by the
+`org.webosphoenix.pty` service. [TERMINAL.md](TERMINAL.md) has the design,
+the service's methods, the security model and what is still to do; this is
+how it runs off the device.
+
+| Where | The shell | How the page reaches it |
+| --- | --- | --- |
+| Device | The C++ Luna service in `services/pty` (meta-phoenix `phoenix-pty`), as the device user | `PalmServiceBridge` to `luna://org.webosphoenix.pty` |
+| phoenix-sim | **A real shell on your computer**, in your home directory, with your environment (bash unless Preferences say otherwise): `shell/sim/simpty.cpp` on the service's PTY core | The runtime's "Terminal" block posts `pty` host messages; `SimWindowSource` hands them to `simPty` with the window's app id, and runs the replies in the page as `__phoenixRuntime.ptyEvent(...)` |
+| Browser, `tools/serve-rootfs.py --terminal` | A real shell on your computer (Python's `pty`) | A WebSocket per session, with the token and address from `/usr/share/phoenix/host.json` |
+| Browser without `--terminal`, `phoenix-sim --no-host-shell`, unit tests | The runtime's small simulated shell (`echo`, `ls`, `cd`, `pwd`, `clear`, `seq`, `printenv`, `history`, `exit`) | In the page |
+
+The runtime picks the first one the host offers in
+`/usr/share/phoenix/host.json` (`{"pty": "host"}` from phoenix-sim,
+`{"pty": "websocket", "url": ...}` from the dev server, `{}` otherwise). All
+of them answer only `org.webosphoenix.terminal`; phoenix-sim and the device
+service check the caller's app id themselves, not the page's word for it.
+Throwing a Terminal card away hangs its shells up.
+
+`node tools/test-terminal.cjs [--tablet]` types into the simulated shell
+(commands, the extras row with sticky and locked Ctrl, arrows, its other
+pages, rotation, links, long press and copy and paste, the app menu and
+Preferences, New Session and Ctrl+Shift+T, the back gesture, exit and
+restart, and another app being refused), then runs `/bin/sh` for real
+through `serve-rootfs.py --terminal` (arithmetic, the PTY's size and its
+change, UTF-8, 600 KB through the flow control, the exit status, a wrong
+token and another origin refused). The service itself is tested by
+`services/pty`'s `pty-test`, which phoenix-sim's build compiles.
 
 ## CardDAV and CalDAV
 

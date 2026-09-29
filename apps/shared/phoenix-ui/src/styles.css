@@ -462,6 +462,9 @@ body.pui-app, .pui-app {
     inset: 0;
     z-index: 300;   /* above dialogs: a ListSelector in a Dialog opens over it */
 }
+/* A ListSelector inside a Dialog: its menu opens above the dialog. */
+.pui-scrim ~ .pui-popup-scrim { z-index: 210; }
+.pui-scrim ~ .pui-popup { z-index: 220; }
 
 .pui-popup {
     /* Popup.css: popup-heritage.png 24 */

@@ -1,0 +1,27 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# org.webosphoenix.pty: the Terminal's shells. It runs as the device's
+# unprivileged user, so every shell it starts is that user's: no root
+# shells. (Developer Mode, docs/TERMINAL.md T4, will bring sudo; it will
+# have to drop NoNewPrivileges for that.) The account comes from the image
+# (meta-phoenix's phoenix-pty recipe).
+
+[Unit]
+Description=webOS Phoenix Terminal PTY service (org.webosphoenix.pty)
+After=ls-hubd.service
+Requires=ls-hubd.service
+
+[Service]
+Type=simple
+User=user
+Group=user
+SupplementaryGroups=media
+Environment=HOME=/home/user USER=user LOGNAME=user LANG=C.UTF-8 PATH=/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=/home/user
+ExecStart=/usr/sbin/phoenix-pty
+Restart=on-failure
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

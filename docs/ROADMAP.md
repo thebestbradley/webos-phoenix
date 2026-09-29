@@ -211,9 +211,11 @@ the community agrees fits webOS.
 - [ ] Assistant app and service on the hub; Settings > Assistant with
       Anthropic, OpenAI, Google and OpenAI-compatible providers, a key
       store, and llama.cpp on the device ([AI-AND-MCP.md](AI-AND-MCP.md) A1-A5)
-- [ ] Terminal (`apps/terminal`, xterm.js on the PTY service
-      `org.webosphoenix.pty`), Developer Mode with `sudo` and an SSH
-      server ([TERMINAL.md](TERMINAL.md) T1-T5)
+- [x] Terminal (`apps/terminal`, xterm.js on the PTY service
+      `org.webosphoenix.pty`): the app, the service, the simulator's and the
+      dev server's real shells ([TERMINAL.md](TERMINAL.md) T1-T2; T3 written,
+      not yet built for a device)
+- [ ] Developer Mode with `sudo` and an SSH server ([TERMINAL.md](TERMINAL.md) T4-T5)
 
 ## Related projects
 

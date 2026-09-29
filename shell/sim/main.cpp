@@ -5,7 +5,8 @@
 //
 //   phoenix-sim [--size WxH] [--scale N] [--tablet|--phone] [--scene NAME]
 //               [--orientation up|left|down|right] [--turn ORIENTATION]
-//               [--screenshot FILE [--delay MS]]
+//               [--screenshot FILE [--delay MS]] [--no-host-shell]
+//               [--host-shell PATH]
 //
 // Keys: Esc = back gesture, Home/F1 = up gesture, F2 = demo notification,
 //       F3 = lock/unlock, F4 = incoming call, F5 = incoming text message,
@@ -22,6 +23,7 @@
 #include <QTimer>
 
 #include "rootfs.h"
+#include "simpty.h"
 #include "simsettings.h"
 
 #ifdef PHOENIX_HAVE_WEBENGINE
@@ -67,7 +69,10 @@ int main(int argc, char *argv[])
     QCommandLineOption orientationOpt(QStringLiteral("orientation"), QStringLiteral("How the device is held at start-up: up (default), left (turned counter-clockwise), down or right. The window shows it as held; --size is the screen upright."), QStringLiteral("orientation"), QStringLiteral("up"));
     QCommandLineOption turnOpt(QStringLiteral("turn"), QStringLiteral("Turn the device to this orientation one second after start-up (the UI follows 200 ms later and turns for 300 ms)."), QStringLiteral("orientation"));
     QCommandLineOption quietOpt(QStringLiteral("quiet"), QStringLiteral("No boot and shutdown sounds (they are off anyway with --screenshot and the offscreen platform)."));
-    parser.addOptions({ sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, shotOpt, delayOpt, qmlOpt, repoOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt });
+    QCommandLineOption noHostShellOpt(QStringLiteral("no-host-shell"), QStringLiteral("Do not give the Terminal app a real shell on this computer (it gets the runtime's simulated shell)."));
+    QCommandLineOption hostShellOpt(QStringLiteral("host-shell"), QStringLiteral("Run this program in the Terminal instead of the shell it asks for."), QStringLiteral("path"));
+    parser.addOptions({ sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, shotOpt, delayOpt, qmlOpt, repoOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt,
+                        noHostShellOpt, hostShellOpt });
     parser.process(app);
 
     const QStringList orientations = { QStringLiteral("up"), QStringLiteral("left"), QStringLiteral("down"), QStringLiteral("right") };
@@ -117,6 +122,15 @@ int main(int argc, char *argv[])
     if (!rootfs.isValid())
         qWarning("phoenix-sim: web apps disabled: %s", qPrintable(rootfs.error()));
 
+    // The Terminal's shells: real ones on this computer (docs/TERMINAL.md),
+    // unless turned off. The runtime learns which from /usr/share/phoenix/host.json.
+    SimPty *simPty = nullptr;
+    if (!parser.isSet(noHostShellOpt)) {
+        simPty = new SimPty(&app);
+        simPty->setShellOverride(parser.value(hostShellOpt));
+        rootfs.setHostInfo(QByteArrayLiteral("{\"pty\":\"host\"}"));
+    }
+
     QQuickView view;
     view.engine()->addImportPath(qmlDir);
     // Compiled modules (Phoenix.Native): the build tree, or installed beside
@@ -148,6 +162,7 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simRootfs"), rootfs.isValid() ? &rootfsFiles : nullptr);
     SimSettings settings;
     view.rootContext()->setContextProperty(QStringLiteral("simSettings"), &settings);
+    view.rootContext()->setContextProperty(QStringLiteral("simPty"), simPty);
     view.rootContext()->setContextProperty(QStringLiteral("simScene"), parser.value(sceneOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simDensity"), scale);
     view.rootContext()->setContextProperty(QStringLiteral("simDisplayWidth"), display.width());
