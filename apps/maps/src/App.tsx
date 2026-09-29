@@ -109,6 +109,7 @@ function MapsApp() {
     const said = useRef(new Set<string>());
     const offsets = useRef<number[]>([]);
     const lastReroute = useRef(0);
+    const routeRequest = useRef(0);
     const handled = useRef<object | null>(null);
     const searchAbort = useRef<AbortController | null>(null);
 
@@ -192,6 +193,9 @@ function MapsApp() {
     // ---- Directions -----------------------------------------------------------------------------
 
     const routeFor = useCallback(async (d: DirState, mode: TravelMode) => {
+        // Only the latest request may set the route: switching modes quickly
+        // must not let a slower, older answer replace the newer one.
+        const request = ++routeRequest.current;
         const from: LngLat | null = d.from === "me" ? me : [d.from.lon, d.from.lat];
         if (!from) {
             setDir({ ...d, busy: false, route: null, error: locError || "Waiting for your location…" });
@@ -200,9 +204,11 @@ function MapsApp() {
         setDir({ ...d, busy: true, route: null, error: undefined, note: undefined });
         try {
             const r = await getDirections(providers, from, [d.to.lon, d.to.lat], mode);
+            if (request !== routeRequest.current) return;
             setDir({ ...d, busy: false, route: r.route, note: r.note, error: undefined });
             map.current?.fitBounds(boundsOf(r.route.geometry), wide ? 60 : 50);
         } catch (e) {
+            if (request !== routeRequest.current) return;
             setDir({ ...d, busy: false, route: null, error: errorText(e) });
         }
     }, [me, providers, locError, wide]);

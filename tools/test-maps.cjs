@@ -275,11 +275,18 @@ async function main() {
         await page.waitForSelector(tid("start-nav"));
 
         // ---- Turn by turn --------------------------------------------------------------------
-        const geometry = await page.evaluate(async () => {
+        // The line is drawn once the style has loaded; wait for it rather than read it early.
+        const routeLine = () => page.evaluate(async () => {
             const src = window.__phoenixMap.getSource("phx-route");
             return src ? (await src.getData()).geometry.coordinates : null;
         });
+        let geometry = await routeLine();
+        for (let i = 0; i < 50 && !(geometry && geometry.length); i++) {
+            await page.waitForTimeout(100);
+            geometry = await routeLine();
+        }
         check(Array.isArray(geometry) && geometry.length > 20, "the route is drawn on the map");
+        if (!Array.isArray(geometry) || geometry.length <= 20) throw new Error("no route on the map; the navigation checks need it");
         await page.click(tid("start-nav"));
         await page.waitForSelector(tid("nav-banner"));
         check(/Turn left onto West Santa Clara Street/.test(await page.textContent(tid("nav-instruction"))), "navigation shows the next turn");

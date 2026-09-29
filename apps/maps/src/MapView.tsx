@@ -229,8 +229,12 @@ function vectorImpl(el: HTMLElement, latest: Latest, cam: Camera): Impl {
     let markers: maplibre.Marker[] = [];
     let me: maplibre.Marker | null = null;
     let route: LngLat[] | null = null;
+    // Set once the style has loaded. isStyleLoaded() and loaded() also go
+    // false while tiles load (after every fitBounds), which would drop a
+    // route set in that window; sources and layers can be added then.
+    let styleReady = false;
     const addRoute = () => {
-        if (!map.isStyleLoaded() && !map.loaded()) return;
+        if (!styleReady) return;
         const data = { type: "Feature" as const, properties: {}, geometry: { type: "LineString" as const, coordinates: route ?? [] } };
         const src = map.getSource(ROUTE_SOURCE) as maplibre.GeoJSONSource | undefined;
         if (src) { src.setData(data); return; }
@@ -241,7 +245,7 @@ function vectorImpl(el: HTMLElement, latest: Latest, cam: Camera): Impl {
         map.addLayer({ id: "route", type: "line", source: ROUTE_SOURCE, layout: { "line-cap": "round", "line-join": "round" },
                        paint: { "line-color": COLORS.route, "line-width": ["interpolate", ["linear"], ["zoom"], 10, 3, 18, 10] } }, before);
     };
-    map.on("load", () => { addRoute(); el.dataset.ready = "1"; });
+    map.on("load", () => { styleReady = true; addRoute(); el.dataset.ready = "1"; });
     map.on("idle", () => { el.dataset.idle = String(Date.now()); });
     map.on("moveend", () => latest.current.onMove?.(camera()));
     const camera = (): Camera => ({ center: map.getCenter().toArray() as LngLat, zoom: map.getZoom(), bearing: map.getBearing() });
@@ -262,7 +266,7 @@ function vectorImpl(el: HTMLElement, latest: Latest, cam: Camera): Impl {
         },
         setRoute(r) {
             route = r;
-            if (map.loaded() || map.isStyleLoaded()) addRoute();
+            addRoute();
         },
         setMe(f) {
             if (!f) { me?.remove(); me = null; return; }

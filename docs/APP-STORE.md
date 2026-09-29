@@ -613,6 +613,16 @@ services only play on devices with Google's **Widevine** DRM, in the
 browser and in their web apps alike. That, not the catalog, decides whether
 Phoenix users can watch them.
 
+**Why it already plays in the simulator.** DRM streaming works in the Isis
+browser in phoenix-sim today (Hulu, for example). phoenix-sim is built on
+Qt WebEngine, which looks for Google Chrome's Widevine module on the
+computer and loads it when Chrome is installed. So on a Mac or Linux
+desktop with Chrome, Phoenix's browser borrows Google's licensed Widevine.
+On a Phoenix phone there is no Chrome to borrow from, and we may not ship
+Google's module ourselves, so a device needs its own licence as below. The
+simulator shows the web side already works; the licence is the missing
+piece.
+
 **This is a requirement, not an extra.** In 2.0 a Phoenix phone or tablet
 docks to a monitor (desktop mode) and to a TV (TV mode, a streaming device
 for any TV); see [CONVERGENCE.md](CONVERGENCE.md). Without Netflix, Disney+,
