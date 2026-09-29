@@ -176,6 +176,24 @@ x86-64, and pmOS keeps "Generic x86_64" in its community category.
 Image: a `genericx86-64`-style machine (or meta-intel's `intel-corei7-64`)
 producing a UEFI disk image with systemd-boot, installable from USB.
 
+### (e) Keyboard phones (the Pre's spirit)
+
+Checked 29 September 2026. All are MediaTek or Qualcomm Android phones, so
+they are Halium targets (tier c), not mainline. Square screens (720x720,
+1440x1440) need the phone layout checked at that shape, and a built-in
+keyboard makes the hardware keyboard work ([spec/GAPS.md](spec/GAPS.md) V8)
+a must.
+
+| Device | SoC, RAM | Bootloader | Status | For Phoenix |
+| --- | --- | --- | --- | --- |
+| **Zinwa Q25** (BlackBerry Classic restomod) | Helio G99, 12 GB | **Unlocked** from the factory | Shipping since late 2025 (~$400, or a ~$300 kit for your own Classic); Ubuntu Touch offered | **First keyboard target.** LuneOS already has a machine config (`q25`) |
+| **Minimal Phone** / **Minimal Phone 2** (E Ink, QWERTY) | MediaTek | Unlockable (per the Phone 2 Kickstarter FAQ) | Phone 2 due December 2026 | LuneOS has a config for the first model (`mp01`); E Ink needs a low-refresh mode |
+| **BlackBerry KEY2** | Snapdragon 660, 6 GB | *Check per unit* | Used market only | LuneOS config (`athena`) |
+| **Unihertz Titan 2 / Titan 2 Elite** | Dimensity 7300 / 7400 / 8400, 12 GB | *Not confirmed*; ask Unihertz | Titan 2 shipped October 2025; Elite June and October 2026 | Candidate once unlocking is confirmed |
+| **Clicks Communicator** | Dimensity 8300, 12 GB, Android 17 | *Not announced*; users have asked | Due Q4 2026 | Candidate only if Clicks allows unlocking; worth asking them directly |
+| F(x)tec Pro1-X (slider) | Snapdragon 662 | Unlocked, built for LineageOS and Ubuntu Touch | Shipped late and in small numbers; availability unclear | Community level at best |
+| Planet Computers Astro Slide | Dimensity 800 | Multi-boot by design | Few units ever shipped | Not a target |
+
 ### Devices we will not target
 
 - **Original Palm/HP hardware** (Pre, Veer, TouchPad): 512 MB–1 GB RAM and
