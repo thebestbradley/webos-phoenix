@@ -13,12 +13,17 @@
 //   Share: launches Email with the picture attached ({attachments:
 //       [{fullPath, mimeType}]}, the legacy compose API core-apps' Email
 //       reads) or Messaging ({attachment}).
+//   Play in Videos: videos play here, in place, as in the webOS 2.x Photos &
+//       Videos app; the Videos app (launch {target}) adds resuming,
+//       subtitles and turning the device.
 
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { apps, deleteMedia, system, type MediaItem } from "@phoenix/luna";
 import { useMediaUrl } from "@phoenix/luna/react";
 import { Button, Dialog, PopupMenu, IconToolButton, Toolbar, ToolSpacer, icons } from "@phoenix/ui";
 import { isVideo } from "./albums";
+
+const VIDEOS_APP = "org.webosphoenix.videos";
 
 export interface ViewerProps {
     items: MediaItem[];
@@ -168,6 +173,10 @@ export function Viewer({ items, index, onIndex, onClose, onDeleted }: ViewerProp
                     </div>
                     <ToolSpacer />
                     {kind === "photo" && <IconToolButton icon="wallpaper" label="Set as wallpaper" testId="wallpaper" onClick={() => void setWallpaper()} />}
+                    {kind === "video" && (
+                        <IconToolButton icon="video" label="Play in Videos" testId="open-videos"
+                                        onClick={() => void apps.launch(VIDEOS_APP, { target: item.file_path }).catch(() => setToast("Videos is not installed"))} />
+                    )}
                     <ToolSpacer />
                     <IconToolButton icon="trash" label="Delete" testId="delete" onClick={() => setConfirmDelete(true)} />
                 </Toolbar>

@@ -53,6 +53,18 @@ const GLYPHS: Record<string, ReactNode> = {
     location: <path d="M16 3a9 9 0 0 1 9 9c0 6.5-9 17-9 17S7 18.5 7 12a9 9 0 0 1 9-9zm0 5.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" />,
     qr: <path d="M4 4h10v10H4zm3 3v4h4V7zm11-3h10v10H18zm3 3v4h4V7zM4 18h10v10H4zm3 3v4h4v-4zm11-3h3v3h-3zm4 0h3v3h-3v4h3v3h-6v-3h3v-3h-4zm4 7h3v3h-3zm-8 0h3v3h-3z" />,
     history: <path d="M17 4a12 12 0 1 1-11.3 16h3.3A9 9 0 1 0 8 13h4l-5.5 6L1 13h4A12 12 0 0 1 17 4zm-1.5 5h3v6.4l4.6 2.7-1.5 2.6-6.1-3.5z" />,
+    // Players and readers (Videos, Podcasts, PDF View, Doc View).
+    subtitles: <path fillRule="evenodd" d="M5 6h22a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm2 11v2.6h8V17zm10 0v2.6h8V17zM7 21.4V24h12v-2.6z" />,
+    replay: <path d="M16 4V0L9 5.5 16 11V7a9 9 0 1 1-9 9H4A12 12 0 1 0 16 4z" />,
+    forward: <path d="M16 4V0l7 5.5-7 5.5V7a9 9 0 1 0 9 9h3A12 12 0 1 1 16 4z" />,
+    fit: <path d="M4 13h9V4h-3v3.9L5.1 3 3 5.1 7.9 10H4zm24 6h-9v9h3v-3.9l4.9 4.9 2.1-2.1-4.9-4.9H28z" />,
+    fill: <path d="M3 3h9v3H8.1l4.9 4.9-2.1 2.1L6 8.1V12H3zm26 26h-9v-3h3.9L19 21.1l2.1-2.1 4.9 4.9V20h3z" />,
+    moon: <path d="M19 3a12.5 12.5 0 1 0 9.5 20.5A10.5 10.5 0 0 1 19 3z" />,
+    download: <path d="M13 3h6v11h5l-8 9-8-9h5zM5 25h22v4H5z" />,
+    search: <path fillRule="evenodd" d="M13 3a10 10 0 0 1 8.2 15.7l7.3 7.3-2.7 2.7-7.3-7.3A10 10 0 1 1 13 3zm0 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14z" />,
+    "zoom-in": <path fillRule="evenodd" d="M13 3a10 10 0 0 1 8.2 15.7l7.3 7.3-2.7 2.7-7.3-7.3A10 10 0 1 1 13 3zm0 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm-1.3 3h2.6v2.7H17v2.6h-2.7V17h-2.6v-2.7H9v-2.6h2.7z" />,
+    "zoom-out": <path fillRule="evenodd" d="M13 3a10 10 0 0 1 8.2 15.7l7.3 7.3-2.7 2.7-7.3-7.3A10 10 0 1 1 13 3zm0 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM9 11.7h8v2.6H9z" />,
+    "text-size": <path fillRule="evenodd" d="M2 26L9.5 6h3.2L20 26h-3.4l-1.8-5H7.3l-1.8 5zm6.3-7.9h5.5L11 10.3zM23.4 14c3 0 4.8 1.5 4.8 4.4V26h-2.9v-1.3a4 4 0 0 1-3.3 1.5c-2.3 0-3.9-1.4-3.9-3.5 0-2.3 1.8-3.6 4.9-3.6h2.3v-.5c0-1.2-.8-1.9-2.1-1.9-1 0-2 .4-2.8 1.1l-1.4-2c1.2-1 2.7-1.5 4.4-1.5zm-.8 6.5c-1.3 0-1.9.5-1.9 1.3 0 .8.6 1.3 1.6 1.3 1.3 0 2.1-.8 2.1-1.8v-.8z" />,
 };
 
 export type GlyphName = keyof typeof GLYPHS | string;

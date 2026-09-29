@@ -122,7 +122,9 @@ app installer used by Files (see [Files](#files)); the activity manager
 scheduled activities such as Tasks' reminders (see [Tasks](#tasks)); the
 speech-to-text service of Voice Memos (see [Voice Memos](#voice-memos));
 the CardDAV and CalDAV account's transport (see
-[CardDAV and CalDAV](#carddav-and-caldav)); then the torch and the
+[CardDAV and CalDAV](#carddav-and-caldav)); HTTP, the download manager and
+audio focus for the reading and listening apps (see [Videos, Podcasts, PDF
+View and Doc View](#videos-podcasts-pdf-view-and-doc-view)); then the torch and the
 location service (see [Flashlight](#flashlight) and [Weather](#weather));
 and last the Terminal's shells, `org.webosphoenix.pty` (see
 [Terminal](#terminal)).
@@ -293,6 +295,7 @@ New Phoenix apps live in `apps/`, an npm workspace:
 | `apps/passwords` | Passwords, a KeePass (KDBX 4) password manager (see [below](#passwords-and-authenticator)) |
 | `apps/authenticator` | Authenticator, TOTP/HOTP codes (see [below](#passwords-and-authenticator)) |
 | `apps/terminal` | Terminal (see [below](#terminal)): xterm.js on `org.webosphoenix.pty`, the C++ PTY service in `services/pty`; `@phoenix/luna`'s `pty.ts` is its client |
+| `apps/videos`, `apps/podcasts`, `apps/pdfview`, `apps/docview` | Videos, Podcasts, PDF View and Doc View (see [below](#videos-podcasts-pdf-view-and-doc-view)); `@phoenix/luna`'s `web.ts` (HTTP, download manager), `playback.ts` (audio focus, `nowPlaying`, orientation) and `documents.ts` (launch targets, reading files, finding documents) serve them |
 
 | `apps/dav` | The CardDAV & CalDAV account (see [below](#carddav-and-caldav)): a hidden Enyo 1.0 app with the account's sign-in page, its db8 kinds and account template, and `apps/dav/service`, its Node.js Luna service and sync engine |
 
@@ -1098,6 +1101,85 @@ through `serve-rootfs.py --terminal` (arithmetic, the PTY's size and its
 change, UTF-8, 600 KB through the flow control, the exit status, a wrong
 token and another origin refused). The service itself is tested by
 `services/pty`'s `pty-test`, which phoenix-sim's build compiles.
+
+## Videos, Podcasts, PDF View and Doc View
+
+Four apps for watching, listening and reading, in the webOS 2.x style of
+the other Phoenix apps (Palm never open-sourced its video player or PDF
+View, and shipped no podcast app or e-reader):
+
+- **Videos** (`apps/videos`): the videos of the media indexer
+  (`getVideoList`) with stills the app draws itself, a black full-screen
+  player free to turn with the device (`PalmSystem.setWindowOrientation("free")`,
+  `enableFullScreenMode`), controls that fade (subtitles, back 10 s,
+  play, ahead 30 s, fit / fill), the place kept per file ("Resume at",
+  Start Over), and SRT or WebVTT subtitles found beside the video
+  (`film.srt`, `film.es.vtt`), drawn by the app, the language chosen from a
+  menu. Photos still plays videos in place and has "Play in Videos".
+- **Podcasts** (`apps/podcasts`): subscribe by RSS or Atom address, by a
+  directory search (Apple's keyless iTunes Search API; the Podcast Index
+  when the user enters a key), or from OPML; episodes newest first with
+  what is new and what is left; downloads; a dark Now Playing with the
+  speed and a sleep timer; a mini player; OPML export to
+  `Documents/Podcasts.opml`; a refresh every 6 hours in the background.
+- **PDF View** (`apps/pdfview`): PDF.js 4.10's legacy build (Qt WebEngine
+  6.4 is Chromium 102; PDF.js 5 and 6 need newer browsers): recent
+  documents and the PDFs on the device, continuous pages, zoom (pinch,
+  buttons, Ctrl+wheel, double tap), search with every match marked,
+  thumbnails, passwords, the page kept per file.
+- **Doc View** (`apps/docview`): EPUB books in pages (CSS columns, two on a
+  tablet; table of contents, text size and font, night mode), Word
+  (mammoth.js), Excel and PowerPoint (read by the app's own OOXML code),
+  Markdown and text, scrolled. Each chapter or document is drawn in a
+  frame sandboxed without scripts, after DOMPurify. EPUB and document
+  viewing are one app: the same reflowing reader, and webOS had no
+  e-reader of its own.
+
+Launch params for all four: `{target}` (a path, `file://` uri or web
+address; also `{fileName, mimeType}` from Email), which Files ("Open with",
+"Open by Type"), Email attachments and the browser's downloads send. Each
+app declares what it opens in `appinfo.json`'s `mimeTypes`
+(`[{mime, extension, stream}]`, as legacy webOS apps did; Email's
+`message/rfc822` in core-apps), which phoenix-sim and `serve-rootfs.py`
+pass on in the launch point list.
+### Services
+
+| What | Service and methods | Source |
+| --- | --- | --- |
+| Who opens a type | `com.webos.applicationManager` `listAllHandlersForMime {mime}`, `getResourceInfo {uri, mime}` -> `{appIdByExtension, mimeByExtension, canStream}`, `open {target}` (a file goes to its app; a web address whose extension an app registered goes to that app) | legacy webOS (Email's `AttachmentsDrawer.js`, the Isis browser's `gotResourceInfo`) |
+| Files and documents | `org.webosphoenix.filemanager` `list`, `read {encoding: "base64"}` (see [Files](#files)) | Phoenix |
+| Web pages, feeds | HTTP from the page (`httpRequest` in `web.ts`) | the web runtime |
+| Downloads | `com.webos.service.downloadmanager` (and legacy `com.palm.downloadmanager`) `download {target, targetDir, targetFilename, subscribe}` -> `{ticket}`, `{amountReceived, amountTotal}`, `{completed, completionStatusCode, destPath, destFile, target}`; `cancelDownload {ticket}`, `getAllHistory`, `clearHistory` | OSE `com.webos.service.downloadmanager`, the legacy API the Isis browser calls |
+| Audio focus | `com.webos.service.audiofocusmanager` `requestFocus {requestType, streamType, displayId, subscribe}` -> `{result: "AF_GRANTED"}`, then `"AF_LOST"` to the app that had it; `releaseFocus`, `getStatus`. Music, Videos and Podcasts pause each other | OSE LS2 API reference; the `AF_LOST` / `AF_PAUSE` event names are audiod's, not in the public reference |
+| Podcasts' data | db8 `org.webosphoenix.podcast:1` (feedUrl, title, author, image, lastRefresh, lastError) and `org.webosphoenix.podcast.episode:1` (podcastId, guid, title, published, duration, url, position, played, file); kinds in `public/configuration/db` | Phoenix |
+| Background refresh | `com.palm.activitymanager` `create` `org.webosphoenix.podcasts.refresh` with `schedule: {start}` 6 hours on, callback `launch {id, params: {refresh: true}}`; each run completes it, refreshes, posts a notification for new episodes and schedules the next | as Tasks' reminders |
+| What plays | the `nowPlaying` host message (`{title, artist, album, playing, appId}`) and a banner in the background, as Music | Phoenix |
+
+The shell still has no now-playing dashboard for Music or Podcasts.
+
+### In the simulator
+
+The runtime block "HTTP, downloads and audio focus" gives
+`__phoenixRuntime.http.request`: a page served by `tools/serve-rootfs.py`
+sends requests through its proxy (`POST /__phoenix/proxy`, which now
+follows redirects and can answer binary bodies as base64); phoenix-sim's
+`phoenix://` pages fetch directly, so there only feeds and servers that
+send CORS headers can be reached. Downloads go into the media block's
+store under `/media/internal`, so Files sees them. The audio focus holder is
+kept in the shared store, so pages tell each other. `serve-rootfs.py` also
+answers HEAD and byte ranges now, so videos can seek.
+
+The demo videos (two WebM clips with WebVTT and SRT subtitles) and
+documents (a PDF, an EPUB, a Word document, an Excel workbook, a
+PowerPoint presentation, Markdown) are in `apps/media-samples`
+(generated, CC0), mounted at `/media/internal/samples`; the file manager
+and the media indexer add them to a simulated device seeded before they
+existed.
+
+`node tools/test-videos.cjs`, `node tools/test-podcasts.cjs` (against a
+feed server it runs itself, with the directory search answered by the
+test) and `node tools/test-docs.cjs` (PDF View and Doc View), each with
+`[--tablet]`, drive them, with screenshots in `build/*-tests/`.
 
 ## CardDAV and CalDAV
 

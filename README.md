@@ -140,6 +140,15 @@ arrows above the keyboard. On a device the shells run as the unprivileged
 user under the `org.webosphoenix.pty` service; in the simulator they are
 your own shell on your computer. See [docs/TERMINAL.md](docs/TERMINAL.md).*
 
+| Videos | Podcasts | Now Playing | PDF View | Doc View | Excel |
+| --- | --- | --- | --- | --- | --- |
+| ![](docs/screenshots/videos-player.png) | ![](docs/screenshots/podcasts-episodes.png) | ![](docs/screenshots/podcasts-nowplaying.png) | ![](docs/screenshots/pdfview-search.png) | ![](docs/screenshots/docview-book.png) | ![](docs/screenshots/docview-excel.png) |
+
+*Videos (resume, WebVTT/SRT subtitles, free rotation), Podcasts (RSS,
+directory search, downloads, speed, sleep timer, OPML, background refresh),
+PDF View on PDF.js, and Doc View for EPUB, Word, Excel, PowerPoint and
+Markdown. Demo videos and documents are generated (CC0).*
+
 ## Status
 
 **Milestone 0: the shell runs in a desktop simulator.** You can use the card
@@ -264,6 +273,9 @@ node tools/test-passwords.cjs                               # Passwords (KeePass
 node tools/test-authenticator.cjs                           # Authenticator (TOTP/HOTP)
 node tools/test-terminal.cjs                                # Terminal (simulated shell, then /bin/sh for real)
 build/pty/pty-test                                          # the Terminal's PTY service
+node tools/test-videos.cjs                                  # Videos
+node tools/test-podcasts.cjs                                # Podcasts
+node tools/test-docs.cjs                                    # PDF View and Doc View
 node tools/test-orientation.cjs                             # apps asking for and following an orientation
 ```
 

@@ -23,7 +23,11 @@
     "maps",
     "passwords",
     "authenticator",
-    "terminal"
+    "terminal",
+    "videos",
+    "podcasts",
+    "pdfview",
+    "docview"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

@@ -128,7 +128,8 @@ async function main() {
         await page.waitForSelector("[data-testid='rec-time']", { state: "detached" });
         await page.waitForFunction(() => new Promise((res) => {
             const b = new PalmServiceBridge();
-            b.onservicecallback = (j) => res(JSON.parse(j).videoList.count === 1);
+            // The demo videos (samples/videos) are indexed too.
+            b.onservicecallback = (j) => res(JSON.parse(j).videoList.results.filter((v) => v.file_path.includes("/DCIM/")).length === 1);
             b.call("luna://com.webos.service.mediaindexer/getVideoList", "{}");
         }), null, { timeout: 8000 }).then(() => check(true, "camera: video recorded and indexed"),
             () => check(false, "camera: video recorded and indexed"));

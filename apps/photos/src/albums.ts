@@ -18,6 +18,7 @@ export interface Album {
 const NAMED: Record<string, string> = {
     [CAMERA_DIR]: "Camera Roll",
     [MEDIA_ROOT + "/samples/photos"]: "Sample Photos",
+    [MEDIA_ROOT + "/samples/videos"]: "Sample Videos",
     [MEDIA_ROOT + "/wallpapers"]: "Wallpapers",
     [MEDIA_ROOT + "/screencaptures"]: "Screen Captures",
     [MEDIA_ROOT + "/downloads"]: "Downloads",

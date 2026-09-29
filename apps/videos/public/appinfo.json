@@ -1,0 +1,34 @@
+{
+    "id": "org.webosphoenix.videos",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Videos",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "iconColor": "#7a4fc0",
+    "uiRevision": 2,
+    "keywords": ["Video", "Movies", "Player", "Films", "Subtitles"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launcherTab": 0
+    },
+    "//mimeTypes": "The types Videos opens, declared as legacy webOS apps did (luna-sysmgr ApplicationDescription; core-apps Email's message/rfc822): Files' \"Open with\", Email attachments and the browser's downloads come here with {target}. stream: a web address plays without being downloaded first.",
+    "mimeTypes": [
+        { "mime": "video/webm", "extension": "webm", "stream": true },
+        { "mime": "video/mp4", "extension": "mp4", "stream": true },
+        { "mime": "video/mp4", "extension": "m4v", "stream": true },
+        { "mime": "video/ogg", "extension": "ogv", "stream": true },
+        { "mime": "video/x-matroska", "extension": "mkv", "stream": true },
+        { "mime": "video/quicktime", "extension": "mov", "stream": true }
+    ],
+    "//requiredPermissions": "OSE access control groups for the services the app calls (the groups in each service's sysbus api.json; filemanager.operation is apps/files/service's).",
+    "requiredPermissions": [
+        "application.launcher",
+        "application.operation",
+        "mediaindexer.operation",
+        "filemanager.operation",
+        "audio.operation"
+    ]
+}

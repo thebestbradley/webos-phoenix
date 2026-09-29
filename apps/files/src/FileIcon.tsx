@@ -10,7 +10,7 @@ import type { FileKind } from "@phoenix/luna";
 
 const BANDS: Record<Exclude<FileKind, "folder">, string> = {
     image: "#3f9a4a", audio: "#e07a1f", video: "#7a4fc0", text: "#4f7fb8", code: "#4a5563",
-    archive: "#9a7b2f", package: "#1f75bf", pdf: "#c8322f", file: "#8a8f96",
+    archive: "#9a7b2f", package: "#1f75bf", pdf: "#c8322f", document: "#2b5fa8", book: "#6b3f1f", file: "#8a8f96",
 };
 
 // A white mark in the band (16x10 area at 8,18).
@@ -22,6 +22,9 @@ const MARKS: Partial<Record<FileKind, string>> = {
     code: "M13 20l-3.5 3.5L13 27l1-1-2.5-2.5L14 21zm6 0l-1 1 2.5 2.5L18 26l1 1 3.5-3.5z",
     archive: "M15 19h2v1.5h-2zm0 3h2v1.5h-2zm0 3h2v1.5h-2zm-1 1.5h4V28h-4z",
     package: "M16 18.5l6 2.5v5l-6 2.5-6-2.5v-5zm0 1.6l-4 1.6 4 1.6 4-1.6z",
+    // Lines of a page beside a margin rule; an open book.
+    document: "M9 20h2v8H9zm4 0h10v1.4H13zm0 2.3h10v1.4H13zm0 2.3h10v1.4H13zm0 2.3h6V28h-6z",
+    book: "M16 21.2c-1.8-1.3-4-1.8-6.5-1.7V27c2.5-.1 4.7.4 6.5 1.6 1.8-1.2 4-1.7 6.5-1.6v-7.5c-2.5-.1-4.7.4-6.5 1.7zm-.6 1v5.2c-1.3-.7-2.8-1-4.6-1.1v-5c1.8.1 3.3.3 4.6.9z",
     pdf: "M10 21h3.2a1.6 1.6 0 0 1 0 3.2H11.3V26H10zm1.3 1.2v.8h1.8a.4.4 0 0 0 0-.8zM15 21h2.2a2.5 2.5 0 0 1 0 5H15zm1.3 1.2v2.6h.9a1.3 1.3 0 0 0 0-2.6zM20 21h3v1.2h-1.7v.8h1.5v1.2h-1.5V26H20z",
 };
 

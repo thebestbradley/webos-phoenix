@@ -115,6 +115,12 @@ jobs:
           node tools/test-authenticator.cjs --tablet --out app-tests/authenticator-tablet
           node tools/test-terminal.cjs --out app-tests/terminal-phone
           node tools/test-terminal.cjs --tablet --out app-tests/terminal-tablet
+          node tools/test-videos.cjs --out app-tests/videos-phone
+          node tools/test-videos.cjs --tablet --out app-tests/videos-tablet
+          node tools/test-podcasts.cjs --out app-tests/podcasts-phone
+          node tools/test-podcasts.cjs --tablet --out app-tests/podcasts-tablet
+          node tools/test-docs.cjs --out app-tests/docs-phone
+          node tools/test-docs.cjs --tablet --out app-tests/docs-tablet
           node tools/test-dav-sync.cjs --out app-tests/dav-phone
           node tools/test-dav-sync.cjs --tablet --out app-tests/dav-tablet
           node tools/test-orientation.cjs --out app-tests/orientation-phone

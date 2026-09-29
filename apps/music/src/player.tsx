@@ -10,10 +10,11 @@
 //
 // The shell gets a "nowPlaying" host message ({title, artist, album,
 // playing}) whenever the song or play state changes, and a banner when a
-// new song starts while the card is not in front.
+// new song starts while the card is not in front. Playing takes the audio
+// focus from Videos and Podcasts, and gives it up to them.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { audio as audioService, mediaUrl, type AudioItem } from "@phoenix/luna";
+import { audio as audioService, audioFocus, mediaUrl, type AudioItem, type Subscription } from "@phoenix/luna";
 import { artistOf, playOrder, titleOf } from "./library";
 
 export type Repeat = "off" | "all" | "one";
@@ -97,6 +98,19 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         });
         return () => { live = false; };
     }, [path, s.token]);
+
+    // The audio focus (com.webos.service.audiofocusmanager): playing takes
+    // it, so Videos and Podcasts pause; when one of them takes it, pause.
+    const focus = useRef<Subscription | null>(null);
+    useEffect(() => {
+        if (!s.playing || focus.current) return;
+        focus.current = audioFocus.request(() => {
+            focus.current?.cancel();
+            focus.current = null;
+            setS((x) => ({ ...x, playing: false }));
+        });
+    }, [s.playing]);
+    useEffect(() => () => { focus.current?.cancel(); }, []);
 
     // Play/pause follows the state.
     useEffect(() => {

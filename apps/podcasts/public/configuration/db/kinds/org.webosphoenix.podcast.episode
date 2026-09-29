@@ -1,0 +1,26 @@
+{
+    "id": "org.webosphoenix.podcast.episode:1",
+    "owner": "org.webosphoenix.podcasts",
+    "sync": true,
+    "indexes": [
+        {
+            "name": "podcastId",
+            "props": [
+                {
+                    "name": "podcastId"
+                },
+                {
+                    "name": "published"
+                }
+            ]
+        },
+        {
+            "name": "guid",
+            "props": [
+                {
+                    "name": "guid"
+                }
+            ]
+        }
+    ]
+}
