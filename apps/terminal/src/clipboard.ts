@@ -22,16 +22,23 @@ export async function copyText(text: string): Promise<void> {
         await navigator.clipboard.writeText(text);
         return;
     } catch { /* not allowed here */ }
+    // The older way: select the text in a hidden field and copy. Selecting
+    // takes the keyboard focus, and this runs after the refusal above, when
+    // the user may already be typing again, so the focus goes back to where
+    // it was (the terminal); otherwise their keys would go nowhere.
+    const prev = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const ta = document.createElement("textarea");
     try {
-        const ta = document.createElement("textarea");
         ta.value = text;
         ta.style.position = "fixed";
         ta.style.opacity = "0";
         document.body.appendChild(ta);
         ta.select();
         document.execCommand("copy");
+    } catch { /* the Terminal's own clipboard has it */ } finally {
         ta.remove();
-    } catch { /* the Terminal's own clipboard has it */ }
+        if (prev && prev.isConnected) prev.focus({ preventScroll: true });
+    }
 }
 
 export async function pasteText(): Promise<string> {
