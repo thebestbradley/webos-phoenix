@@ -46,7 +46,7 @@ if(PHOENIX_BUILD_SIM)
 endif()
 
 # Phoenix web apps (React + TypeScript in ../apps): `npm ci` when the lock
-# file changes, then `npm run build` on every build, writing apps/<name>/dist/
+# file changes or node_modules is missing, then `npm run build` on every build, writing apps/<name>/dist/
 # where phoenix-sim and tools/serve-rootfs.py pick them up. Needs Node.js 20+.
 # Off by default for device builds (meta-phoenix sets PHOENIX_BUILD_SIM=OFF).
 option(PHOENIX_BUILD_APPS "Build the web apps in apps/ with npm" ${PHOENIX_BUILD_SIM})
@@ -54,7 +54,10 @@ if(PHOENIX_BUILD_APPS)
     get_filename_component(PHOENIX_APPS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../apps" ABSOLUTE)
     find_program(PHOENIX_NPM npm)
     if(PHOENIX_NPM AND EXISTS "${PHOENIX_APPS_DIR}/package.json")
-        set(_npm_stamp "${CMAKE_CURRENT_BINARY_DIR}/phoenix-apps-npm-ci.stamp")
+        # The stamp is npm's own record of the install, inside node_modules:
+        # when node_modules is deleted (or was never installed) it is
+        # missing, so `npm ci` runs again, not only when the lock changes.
+        set(_npm_stamp "${PHOENIX_APPS_DIR}/node_modules/.package-lock.json")
         add_custom_command(
             OUTPUT "${_npm_stamp}"
             COMMAND "${PHOENIX_NPM}" ci --no-audit --no-fund
