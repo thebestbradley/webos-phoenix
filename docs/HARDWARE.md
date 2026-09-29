@@ -209,6 +209,22 @@ Fairphone 4/5) are in tier (b).
 | **Liberux NEXX** | RK3588S, 8-32 GB | LiberuxOS (Debian, mainline) | Crowdfunding; delivery promised July 2026, first product of a new company | Would be mainline and powerful if it ships |
 | **ClockworkPi uConsole** | Raspberry Pi compute modules (ARM or RISC-V), 1-4 GB | Debian, Raspberry Pi OS | Shipping ($139-$209, 4G add-on) | A keyboard handheld; the Pi image covers it |
 
+### (g) Small tablets and handhelds for local AI
+
+Checked 29 September 2026. There is no open 5-6" tablet with a fast chip
+and lots of RAM; the closest things are Android gaming handhelds whose makers
+publish mainline Linux work, and x86 pocket PCs. For a local LLM, RAM decides
+the model size (16 GB fits a 7-8B model at Q4 comfortably; 32 GB a 30B
+mixture-of-experts model) and memory bandwidth decides the speed. Speeds
+below are estimates until measured ([AI-AND-MCP.md](AI-AND-MCP.md)).
+
+| Device | Screen | SoC, RAM | Linux | For Phoenix |
+| --- | --- | --- | --- | --- |
+| **AYN Odin 2 Mini** / **Odin 2 Portal** | 5" / 7" OLED | Snapdragon 8 Gen 2, 8-16 GB by model | AYN published its mainline kernel work; ROCKNIX runs on the family; the Portal's device tree was posted to the kernel list (March 2026) | **Best small candidate**: the fastest ARM chip with mainline Linux in reach, freedreno GPU, no modem (a tablet) |
+| **GPD MicroPC 2** | 7" | Intel N300/N350, 16 GB | Standard x86 Linux | Covered by the generic x86 image; modest AI speed |
+| **GPD Pocket 4** | 8.8" (mini laptop, twisting screen) | Ryzen AI 9 HX 370, up to 64 GB LPDDR5X-7500 | Standard x86 Linux | The strongest local-AI device that fits a pocket; generic x86 image; a desktop-mode (2.0) machine as much as a tablet |
+| Liberux NEXX (phone) | 6.34" | RK3588S, up to 32 GB | Mainline, Debian | See (f): most RAM of any Linux phone if it ships |
+
 ### Devices we will not target
 
 - **Original Palm/HP hardware** (Pre, Veer, TouchPad): 512 MB–1 GB RAM and
