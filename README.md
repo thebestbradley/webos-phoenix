@@ -233,7 +233,9 @@ cmake -S shell -B build && cmake --build build
 ./build/phoenix-sim
 ```
 
-Controls: drag with the mouse as you would with a finger. The strip at the
+Controls: drag with the mouse as you would with a finger. In card view a
+two-finger trackpad swipe sideways moves between cards and a swipe up throws
+the card under the pointer away; a mouse wheel moves one card per notch. The strip at the
 bottom is the gesture bar, on phones and tablets alike; it moves to the
 bottom of the screen as you hold it. `--home-button` simulates a device
 whose maker uses a hardware Home button instead (no gesture bar; tablets

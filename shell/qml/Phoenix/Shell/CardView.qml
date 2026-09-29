@@ -815,6 +815,114 @@ Item {
         }
     }
 
+    // ---- Trackpad and mouse wheel (Phoenix) ---------------------------------------------
+    // webOS had only the touch screen. On a desktop, a laptop or a tablet
+    // with a trackpad, a two-finger swipe does what one finger does on the
+    // screen: sideways it pans between stacks (and through a long stack's
+    // fan first), up it throws the card under the pointer away. The swipe
+    // follows the content the way the system scrolls (natural scrolling or
+    // not), and its momentum carries it on; it ends when the events stop.
+    // A mouse wheel moves one stack per notch.
+    MouseArea {
+        id: wheel
+        objectName: "cardWheel"
+        anchors.fill: parent
+        enabled: touch.enabled
+        acceptedButtons: Qt.NoButton
+
+        property string axis: ""          // "", "h", "v" or "done"
+        property string uid: ""
+        property real sumX: 0
+        property real sumY: 0
+        property real startPosition: 0
+        property real startFan: 0
+        property real lastTime: 0
+        property real vy: 0
+
+        Timer {
+            id: wheelEnd
+            interval: Theme.wheelGestureEndDelay
+            onTriggered: wheel.finish()
+        }
+
+        onWheel: (e) => {
+            if (touch.fingerCount() > 0 || view.preparing) {
+                e.accepted = false;
+                return;
+            }
+            if (e.pixelDelta.x === 0 && e.pixelDelta.y === 0) {
+                // A mouse wheel: one stack per notch.
+                var d = Math.abs(e.angleDelta.x) > Math.abs(e.angleDelta.y) ? e.angleDelta.x : e.angleDelta.y;
+                if (d !== 0 && axis === "")
+                    view.slideTo(view.currentGroup + (d < 0 ? 1 : -1));
+                return;
+            }
+            swipe(e.x, e.y, e.pixelDelta.x, e.pixelDelta.y);
+        }
+
+        // One step of a two-finger swipe at (x, y), moving the content by
+        // (dx, dy) pixels.
+        function swipe(x, y, dx, dy) {
+            wheelEnd.restart();
+            var now = Date.now();
+            if (lastTime > 0 && now > lastTime)
+                vy = dy / (now - lastTime);
+            lastTime = now;
+            sumX += dx;
+            sumY += dy;
+            if (axis === "") {
+                // Lock to an axis as a finger does (horizontalLockRatio).
+                if (sumX * sumX + sumY * sumY < Theme.tapRadius * Theme.tapRadius)
+                    return;
+                if (Math.abs(sumX) > Theme.horizontalLockRatio * Math.abs(sumY)) {
+                    axis = "h";
+                    slideAnim.stop();
+                    startPosition = view.position;
+                    startFan = touch.currentFan();
+                } else {
+                    var g = view.groups[view.currentGroup];
+                    uid = touch.cardAt(x, y) || (g ? view.focusOf(g) : "");
+                    axis = uid !== "" ? "v" : "done";
+                }
+            }
+            if (axis === "h") {
+                var fanUnit = view.windowWidth * view.activeScale / 3;
+                var wantFan = startFan - sumX / fanUnit;
+                touch.setCurrentFan(wantFan);
+                var leftover = (wantFan - touch.currentFan()) * fanUnit;
+                var pos = startPosition + leftover / view.groupSpacing();
+                var last = view.groupCount - 1;
+                if (pos < 0) pos = pos / 3;
+                if (pos > last) pos = last + (pos - last) / 3;
+                view.position = pos;
+            } else if (axis === "v") {
+                var c = view.cardItem(uid);
+                // Up it goes; pulled down it gives a little and comes back.
+                if (c)
+                    c.flickOffset = sumY < 0 ? sumY : sumY / 3;
+            }
+        }
+
+        // The events stopped: settle as a finger's release does.
+        function finish() {
+            wheelEnd.stop();
+            if (axis === "h") {
+                view.slideTo(Math.round(view.position));
+            } else if (axis === "v") {
+                var c = view.cardItem(uid);
+                if (c)
+                    view.animateFlick(c, touch.shouldClose(c, Math.min(vy, 0))
+                                         || c.flickOffset < -view.windowHeight * view.activeScale / 3);
+            }
+            axis = "";
+            uid = "";
+            sumX = 0;
+            sumY = 0;
+            lastTime = 0;
+            vy = 0;
+        }
+    }
+
     // The angry card is slung from the bottom of the screen up and off the
     // top (closeWindow always throws cards off the top: CardWindowManager.cpp
     // 2866-2878), then closed without keep-alive. On the device, upside down,

@@ -239,6 +239,9 @@ QtObject {
     readonly property real cardCloseMinVelocity: 5.0 * u
     // Drag-lock axis: horizontal if |dx| > 0.866 |dy| (CardWindowManager.cpp:1464-1476).
     readonly property real horizontalLockRatio: 0.866
+    // A trackpad swipe ends when its events (momentum included) stop for this
+    // long. Phoenix: webOS had no trackpad.
+    readonly property int wheelGestureEndDelay: 150
     readonly property int tapRadius: px(25)                          // conf/luna.conf:68 TapRadiusMax
 
     // ---- Quick launch / launcher -------------------------------------------
