@@ -179,7 +179,11 @@ async function main() {
             const at = await text(alert);
             check(/Location Services/.test(at) && /Music/.test(at), "the alert names Location Services and the app (" + at.slice(0, 80) + ")");
             await alert.screenshot({ path: path.join(outDir, "systemui-alert.png") });
-            await alert.getByText("Don't Allow", { exact: true }).click();
+            // The alert closes its own window from the tap handler, so the page can be gone
+            // before Playwright finishes the click; that is the expected outcome, not an error.
+            await alert.getByText("Don't Allow", { exact: true }).click().catch((e) => {
+                if (!alert.isClosed()) throw e;
+            });
         }
         r = await asking;
         check(r.returnValue === false && r.errorCode === 6, "Don't Allow: Music is refused");
