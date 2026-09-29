@@ -16,8 +16,10 @@ Phoenix still needs, for M4), [SYNERGY-MODERN.md](SYNERGY-MODERN.md)
 `.ipk` apps and the catalog, for M4), [ANDROID.md](ANDROID.md) (Android apps
 through Waydroid as webOS cards, for M5), [AI-AND-MCP.md](AI-AND-MCP.md) (an
 MCP layer over every app and the OS, an on-device assistant, and
-bring-your-own-LLM settings, for M5) and [TERMINAL.md](TERMINAL.md) (a
-built-in terminal app and Developer Mode).
+bring-your-own-LLM settings, for M5), [TERMINAL.md](TERMINAL.md) (a
+built-in terminal app and Developer Mode) and [CONVERGENCE.md](CONVERGENCE.md)
+(2.0: desktop mode on a monitor, keyboard or mouse, and TV mode with the
+streaming services).
 
 ## M0: shell in a simulator (done in this repo's first PR)
 
@@ -216,6 +218,21 @@ the community agrees fits webOS.
       dev server's real shells ([TERMINAL.md](TERMINAL.md) T1-T2; T3 written,
       not yet built for a device)
 - [ ] Developer Mode with `sudo` and an SSH server ([TERMINAL.md](TERMINAL.md) T4-T5)
+
+## 2.0: one device, every screen
+
+Plan in [CONVERGENCE.md](CONVERGENCE.md). A phone or tablet docks to a
+monitor, keyboard or mouse (desktop mode, like DeX) and to a TV by cable or
+wirelessly (TV mode, a streaming device for any TV). The big streaming
+services are a requirement ([APP-STORE.md](APP-STORE.md#311-streaming-apps-and-drm)).
+
+- [ ] C0 modes in the simulator (second display, keyboard and mouse)
+- [ ] C1 desktop mode
+- [ ] C2 TV mode, with the phone as the remote
+- [ ] C3 on a device: display output, EDID, HDCP, two outputs
+- [ ] C4 Miracast and Google Cast sending
+- [ ] C5 Widevine L1 and certification by the streaming services
+- [ ] Chromium-based browser replacing Isis
 
 ## Related projects
 

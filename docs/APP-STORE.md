@@ -613,6 +613,15 @@ services only play on devices with Google's **Widevine** DRM, in the
 browser and in their web apps alike. That, not the catalog, decides whether
 Phoenix users can watch them.
 
+**This is a requirement, not an extra.** In 2.0 a Phoenix phone or tablet
+docks to a monitor (desktop mode) and to a TV (TV mode, a streaming device
+for any TV); see [CONVERGENCE.md](CONVERGENCE.md). Without Netflix, Disney+,
+Prime Video and the like, TV mode has no reason to exist and the product is
+dead in the water. TV mode also needs more than a phone does: HD and 4K
+through the display output (Widevine L1 plus HDCP on the output), and a
+10-foot app rather than a web page, since the browser versions are capped
+(Netflix has listed Chrome on Linux at 720p).
+
 **LG's own store is not a route.** LG licenses webOS to other TV makers as
 **webOS Hub** (more than 300 brands by 2026), and that is how those TVs
 get the LG Content Store with Netflix, Prime Video, Disney+ and YouTube.
@@ -631,12 +640,20 @@ would then run LG's software, not Phoenix.
 | **Direct deals** | Per service (e.g. Netflix's partner programme); realistic only once a device sells | Native apps, higher quality tiers |
 | **Android apps** ([ANDROID.md](ANDROID.md)) | Many run under Waydroid, but streaming apps usually check Play Integrity, which a non-Google-certified device cannot pass | Not a dependable route for DRM services |
 
-**Order:** the Chromium browser first; then a Widevine application once
-there is a reference device with a suitable TEE and a company to hold the
-contract (L3 on the simulator and development devices in the meantime,
-where Google allows it); direct deals after the device sells. Services
-without DRM (YouTube's free tier, most news and social sites, podcasts)
-work as PWAs today.
+**Order, run as two tracks at once:**
+
+1. **Technical:** the Chromium browser with Widevine (L3 on the simulator
+   and development devices, where Google allows it); then a reference device
+   chosen for Widevine L1, HDCP, DisplayPort Alt Mode and 4K decode
+   ([CONVERGENCE.md](CONVERGENCE.md#3-hardware-it-depends-on)); then the
+   Widevine application.
+2. **Business, started early because it is slow:** a company to hold the
+   contracts; talks with Netflix, Disney, Amazon and the others about
+   certifying the device and its TV mode, and about their TV apps. These
+   have to be in place when 2.0 ships, not after.
+
+Services without DRM (YouTube's free tier, most news and social sites,
+podcasts) work as PWAs today.
 
 ## 4. Roadmap
 

@@ -19,7 +19,8 @@ in the documents linked from each item.
   ([LUNEOS.md](LUNEOS.md)); AI and MCP ([AI-AND-MCP.md](AI-AND-MCP.md)); the
   terminal ([TERMINAL.md](TERMINAL.md)); the app store
   ([APP-STORE.md](APP-STORE.md)); Android apps ([ANDROID.md](ANDROID.md));
-  hardware ([HARDWARE.md](HARDWARE.md)).
+  hardware ([HARDWARE.md](HARDWARE.md)); 2.0 docking and TV mode
+  ([CONVERGENCE.md](CONVERGENCE.md)).
 
 Nothing has run on a phone yet.
 
@@ -71,12 +72,14 @@ reference device.
   app manifest (a coloured dot by the app menu, the item under
   Preferences; install as described in [APP-STORE.md](APP-STORE.md)); plan a
   Chromium-based Phoenix browser to replace the Isis browser in the 2.0 UI.
-- **Streaming apps and DRM** ([APP-STORE.md](APP-STORE.md#311-streaming-apps-and-drm)):
-  Netflix, Prime Video and similar services need Google's Widevine. LG's
-  webOS Hub is TV-only and ships LG's own webOS, so it is not a route. The
-  way in is the Chromium browser, then a Widevine contract held by the
-  company that ships devices (L1 needs a hardware TEE on the reference
-  device), then direct deals with services.
+- **2.0: one device, every screen** ([CONVERGENCE.md](CONVERGENCE.md)):
+  desktop mode when a monitor, keyboard or mouse is attached; TV mode (a
+  streaming device for any TV) by cable or wirelessly.
+- **Streaming apps and DRM** ([APP-STORE.md](APP-STORE.md#311-streaming-apps-and-drm)),
+  a requirement for 2.0: Netflix, Disney+ and the like need Widevine L1,
+  HDCP on the display output and deals with each service. LG's webOS Hub is
+  TV-only and ships LG's own webOS, so it is not a route. The business talks
+  are slow and should start well before 2.0.
 - **Synergy build**, in the order of [SYNERGY-MODERN.md](SYNERGY-MODERN.md#5-roadmap).
 - **Shell gaps**: the P2 rows left in [spec/GAPS.md](spec/GAPS.md) (C5, C7,
   C9-C11, L8, N7, N8, R3-R5, K7, G4, G5, G8, A2, S2) and the rest of A1.
