@@ -5,7 +5,7 @@
 //
 //   phoenix-sim [--size WxH] [--scale N] [--tablet|--phone] [--scene NAME]
 //               [--orientation up|left|down|right] [--turn ORIENTATION]
-//               [--screenshot FILE [--delay MS]] [--no-host-shell]
+//               [--first-use] [--screenshot FILE [--delay MS]] [--no-host-shell]
 //               [--host-shell PATH]
 //
 // Keys: Esc = back gesture, Home/F1 = up gesture, F2 = demo notification,
@@ -59,7 +59,8 @@ int main(int argc, char *argv[])
     QCommandLineOption scaleOpt(QStringLiteral("scale"), QStringLiteral("Device pixels per legacy pixel, like a denser screen (default 1; the Pre 3 was 1.5 at 480x800)."), QStringLiteral("N"), QStringLiteral("1"));
     QCommandLineOption tabletOpt(QStringLiteral("tablet"), QStringLiteral("Use the tablet (TouchPad) layout."));
     QCommandLineOption phoneOpt(QStringLiteral("phone"), QStringLiteral("Force the phone layout."));
-    QCommandLineOption sceneOpt(QStringLiteral("scene"), QStringLiteral("Demo scene: locked, cards, stacks, reorder, maximized, heldcard, launcher, launcheredit, pin, lowbattery, banner, notified, dashboard, justtype, keyboard, systemmenu, empty."), QStringLiteral("name"));
+    QCommandLineOption sceneOpt(QStringLiteral("scene"), QStringLiteral("Demo scene: locked, cards, stacks, reorder, maximized, heldcard, launcher, launcheredit, pin, emergency, firstuse, lowbattery, banner, notified, dashboard, justtype, keyboard, systemmenu, empty."), QStringLiteral("name"));
+    QCommandLineOption firstUseOpt(QStringLiteral("first-use"), QStringLiteral("Start with First Use, as on a new device (without it, First Use runs until it has been done once, unless --scene or --launch is given)."));
     QCommandLineOption shotOpt(QStringLiteral("screenshot"), QStringLiteral("Save a screenshot to FILE and exit."), QStringLiteral("file"));
     QCommandLineOption delayOpt(QStringLiteral("delay"), QStringLiteral("Delay before the screenshot (default 1500 ms)."), QStringLiteral("ms"), QStringLiteral("1500"));
     QCommandLineOption qmlOpt(QStringLiteral("qml-dir"), QStringLiteral("Directory containing sim.qml and the Phoenix modules."), QStringLiteral("dir"));
@@ -71,7 +72,7 @@ int main(int argc, char *argv[])
     QCommandLineOption quietOpt(QStringLiteral("quiet"), QStringLiteral("No boot and shutdown sounds (they are off anyway with --screenshot and the offscreen platform)."));
     QCommandLineOption noHostShellOpt(QStringLiteral("no-host-shell"), QStringLiteral("Do not give the Terminal app a real shell on this computer (it gets the runtime's simulated shell)."));
     QCommandLineOption hostShellOpt(QStringLiteral("host-shell"), QStringLiteral("Run this program in the Terminal instead of the shell it asks for."), QStringLiteral("path"));
-    parser.addOptions({ sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, shotOpt, delayOpt, qmlOpt, repoOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt,
+    parser.addOptions({ sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt,
                         noHostShellOpt, hostShellOpt });
     parser.process(app);
 
@@ -164,6 +165,7 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simSettings"), &settings);
     view.rootContext()->setContextProperty(QStringLiteral("simPty"), simPty);
     view.rootContext()->setContextProperty(QStringLiteral("simScene"), parser.value(sceneOpt));
+    view.rootContext()->setContextProperty(QStringLiteral("simFirstUse"), parser.isSet(firstUseOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simDensity"), scale);
     view.rootContext()->setContextProperty(QStringLiteral("simDisplayWidth"), display.width());
     view.rootContext()->setContextProperty(QStringLiteral("simDisplayHeight"), display.height());

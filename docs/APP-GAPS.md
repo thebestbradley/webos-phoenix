@@ -12,7 +12,7 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
   `third_party/isis` (the Isis browser)
 - **Phoenix**: a new app in `apps/` (Settings, Phone, Messaging, Camera,
   Photos, Music, Files, Flashlight, QR Scanner, Weather, Maps, Videos,
-  Podcasts, PDF View, Doc View)
+  Podcasts, PDF View, Doc View, First Use, Help)
 - **In progress**: Tasks (with reminders), Voice Memos (with transcription),
   Passwords, Authenticator
 - **Missing**
@@ -38,7 +38,7 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | **Notes sync** | Missing | Memos synced only through some account types | P1 | A Synergy-style connector syncing Memos to the [Nextcloud Notes API](https://github.com/nextcloud/notes/blob/main/docs/api/README.md) or to Markdown files over WebDAV. Service only |
 | Tasks | In progress | Tasks (webOS 1.x/2.x, Exchange sync) | P1 | With reminders on the activity manager; later CalDAV `VTODO` sync |
 | Voice Memos | In progress | Not built in (homebrew) | P2 | With transcription. Recording through `MediaRecorder`; on-device speech-to-text (for example whisper.cpp) as an optional service |
-| **Emergency / medical ID** | Missing | None (emergency calls from the lock screen only) | P1 | Medical info, emergency contacts and "call emergency" reachable from the lock screen without unlocking. Shell feature plus a small Settings pane; data in db8 |
+| **Emergency / medical ID** | Phoenix | None (emergency calls from the lock screen only) | P1 | Done in the simulator: Settings > Emergency Info (medical ID, emergency contacts from Contacts, "Show when locked"), kept as the system preference `emergencyInfo` rather than in db8 so the locked shell can read it; the PIN pad's **Emergency Call** opens Phone's restricted mode (emergency numbers and the owner's contacts only, Medical ID) as the shell's emergency window over the lock screen (after luna-sysmgr's EmergencyWindowManager). To do: the emergency window on a device (compositor adapter), emergency calls in airplane mode, the position for the emergency services (AML). See [APP-RUNTIME.md](APP-RUNTIME.md#emergency-information) |
 
 ## Clock, calculator and small utilities
 
@@ -67,7 +67,7 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | App | Status | Legacy webOS | Priority | Approach |
 | --- | --- | --- | --- | --- |
 | Maps and navigation | Phoenix | Google Maps (1.x), Bing Maps (2.x and later); turn-by-turn only from carrier apps (Sprint Navigation, VZ Navigator) | P1 | Done in the simulator (`apps/maps`, `tools/test-maps.cjs`): [MapLibre GL JS](https://maplibre.org/) vector map (canvas renderer when there is no WebGL 2) on [OpenFreeMap](https://openfreemap.org/) tiles, search with Photon or Nominatim, directions for driving, walking and cycling with Valhalla or OSRM, turn-by-turn with spoken directions (OSE `com.webos.service.tts`), saved places in db8, sharing, `geo:`/`maploc:`/`mapto:` links and Contacts'/Calendar's addresses, offline areas and PMTiles files with offline search and routing. Every server is configurable; see [MAPS.md](MAPS.md). Needs on a device: GPS from GeoClue behind `com.webos.service.location`, a TTS engine (OSE's needs Google Cloud credentials), and a check that WAM gives WebGL 2 |
-| Location settings | Missing | Location Services pane | P1 | Settings pane over `com.webos.service.location` (`getState`/`setState`; the simulator has a minimal simulation of the service, added for Maps) |
+| Location settings | Missing | Location Services pane | P1 | Settings pane over `com.webos.service.location` (`getState`/`setState`). Done in the simulator: Settings > Location Services, per-app permissions and the luna-systemui alert; see [APP-RUNTIME.md](APP-RUNTIME.md#location). On a device a per-app permission service is still needed (OSE has none) |
 
 ## Documents and files
 
@@ -84,10 +84,10 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | App | Status | Legacy webOS | Priority | Approach |
 | --- | --- | --- | --- | --- |
 | **App catalog / store** | Missing | HP App Catalog; homebrew through Preware (WebOS Internals) | P0 | One catalog app with three sources: (1) **Phoenix feed** of native and web apps as signed `.ipk`, installed through OSE's `com.webos.appInstallService`; (2) the **webOS Archive [App Museum II](https://appcatalog.webosarchive.org/)** for legacy Mojo and Enyo apps, which run to the extent our runtime supports them (show a compatibility badge, collected from users); (3) **PWAs**: OSE has installed PWAs since 2.26 (`appinstalld2`), so a curated list of good PWAs plus "Install" from the browser. Talk to the webOS Archive maintainers before pointing at their feed. Preware's feed format is a good model for (1). Plan: [APP-STORE.md](APP-STORE.md) |
-| First use / setup | Missing | First Use app (language, Wi-Fi, Palm Profile, backup restore) | P0 | Language, Wi-Fi, accounts, PIN, restore from backup, and a short gesture tutorial (the legacy one was loved). Web app |
+| First use / setup | Phoenix | First Use app (language, Wi-Fi, Palm Profile, backup restore) | P0 | `apps/firstuse`: language, Wi-Fi, date and time, accounts (Synergy), passcode, privacy (location), a cards and gestures tutorial, Help; every step skippable, run again from Settings > Device Info. The shell runs it at first start in LunaSysMgr's minimal-UI way until the system preference `firstUseComplete` is set. To do: restore from backup (no backup service yet), reading `firstUseComplete` at boot on a device. See [APP-RUNTIME.md](APP-RUNTIME.md#first-use) |
 | System updates | Stub in Settings | System Updates app, over the air | P0 | Settings > Updates on RAUC through a Luna service (see [HARDWARE.md](HARDWARE.md#ota-with-ab-updates)) |
 | **Backup and restore** | Missing | Backup app: daily automatic backup to the Palm Profile (contacts, calendar, accounts, app list and launcher layout), restored at first use; HP shut the servers down | P1 | Export db8 kinds (contacts, calendar, messages, memos, tasks, call log), settings, launcher layout and the installed app list to one encrypted archive; store it on WebDAV/Nextcloud, a USB drive or a computer. Restore from First Use. A service plus a Settings pane |
-| Help and tips | Missing | Help app | P2 | Short web pages shipped with the image |
+| Help and tips | Phoenix | Help app | P2 | `apps/help`: topics in Markdown (`apps/help/topics`) on the gestures, cards, launcher, notifications, Just Type and each app; searchable; Just Type finds them (db8 `org.webosphoenix.helptopic:1`). See [APP-RUNTIME.md](APP-RUNTIME.md#help) |
 
 ## Security and privacy
 
@@ -105,7 +105,7 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | --- | --- | --- | --- | --- |
 | **Screen reader** | Missing | None | P1 (design now, build after M3) | The hardest item on this page. It must cover the QML shell and web apps. Qt Quick exposes an accessibility tree (AT-SPI on Linux) and Chromium exposes one for web pages, but no Linux screen reader is designed for touch (Orca is desktop-first), and whether OSE's Chromium build exposes AT-SPI under Wayland is *unverified*. Likely a Phoenix reader with TalkBack-style gestures in the shell, speaking through `com.webos.service.tts`. Meanwhile, keep every Phoenix app's markup accessible (labels, roles, focus order) so the work is not redone |
 | **Magnification** | Missing | None | P1 | Compositor zoom in the shell (a scaled view of the output with a pan gesture); cheap in QML. Also system text size and bold text settings |
-| Other settings | Missing | None | P1 | High contrast, reduce motion (the card animations), mono audio, captions preference |
+| Other settings | Partly | None | P1 | Settings > Accessibility: reduce motion (the shell's card, launcher and lock screen animations) and high contrast (Phoenix apps) work; mono audio and captions are stored (system preference `accessibility`) but nothing uses them yet |
 
 ## Input
 
@@ -160,11 +160,12 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 ## Recommended build order
 
 1. **Make the apps we have real** (with M1–M3): alarms that ring (activity
-   manager), CalDAV/CardDAV/IMAP sync and account templates, First Use,
+   manager), CalDAV/CardDAV/IMAP sync and account templates, First Use
+   (done in the simulator),
    System Updates, and the app catalog with PWA install and App Museum
    `.ipk` install. Without these nobody can use the phone day to day.
 2. **Small, high-value apps** (M4, can start now in the simulator):
-   Emergency/medical ID, PDF viewer, Video player, finishing Tasks and
+   Emergency/medical ID (done in the simulator), PDF viewer, Video player, finishing Tasks and
    Voice Memos. (Flashlight, QR Scanner and Weather are done in the
    simulator.)
 3. **Bigger everyday apps**: Podcasts, Backup and restore, Notes sync, VPN

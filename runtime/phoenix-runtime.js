@@ -327,6 +327,21 @@
             reply(fail(-1, String(e && e.message || e)));
         }
     }
+    // Calls made but not yet dispatched. A page that calls a service and
+    // closes its window at once (Enyo's alerts: call, then close()) would
+    // lose the call with its timer; on a device it was already on the bus.
+    var unsent = {}, nextUnsent = 1;
+    try {
+        global.addEventListener("pagehide", function () {
+            Object.keys(unsent).forEach(function (k) {
+                var u = unsent[k];
+                if (!u) return;
+                clearTimeout(u.timer);
+                u.run();
+            });
+        });
+    } catch (e) { /* ignore */ }
+
     runtime.dispatch = dispatch;
 
     global.PalmServiceBridge = function () {
@@ -338,13 +353,16 @@
             var params = {};
             try { params = json ? JSON.parse(json) : {}; } catch (e) { params = {}; }
             // Responses are always asynchronous, as on a device.
-            setTimeout(function () {
+            var id = nextUnsent++;
+            var run = function () {
+                delete unsent[id];
                 dispatch(url, params, function (response) {
                     if (cancelled || !bridge.onservicecallback)
                         return;
                     bridge.onservicecallback(JSON.stringify(response));
                 }, ctx);
-            }, 0);
+            };
+            unsent[id] = { run: run, timer: setTimeout(run, 0) };
             return 1;
         };
         this.cancel = function () {
@@ -2227,6 +2245,8 @@
                 alerttone: (p.alerttone && p.alerttone.fullPath) || "",
                 notificationtone: (p.notificationtone && p.notificationtone.fullPath) || "",
                 showAlertsWhenLocked: p.showAlertsWhenLocked !== false,
+                // Settings > Accessibility: the shell's animations.
+                reduceMotion: !!(p.accessibility && p.accessibility.reduceMotion),
                 wallpaperFile: (p.wallpaper && p.wallpaper.wallpaperFile) || ""
             };
         }
@@ -2777,7 +2797,7 @@
         sys["/setPreferences"] = function (p, reply, ctx) {
             baseSetPreferences(p, reply, ctx);
             if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "systemSounds", "ringtone", "alerttone",
-                 "notificationtone", "x_palm_virtualkeyboard_prefs"].some(function (k) { return k in p; })) {
+                 "notificationtone", "x_palm_virtualkeyboard_prefs", "accessibility"].some(function (k) { return k in p; })) {
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
                 changed();
             }
@@ -5075,191 +5095,15 @@
     })();
 
     // ================================================================================
-    // Location and text to speech (com.webos.service.location,
-    // com.webos.service.tts; apps/maps)
+    // Text to speech (com.webos.service.tts; apps/maps)
     // ================================================================================
-    //
-    // A minimal simulation of webOS OSE's location service, with its method
-    // and field names (https://www.webosose.org/docs/reference/ls2-api/
-    // com-webos-service-location/; webosose/location-service
-    // src/location_service.cpp):
-    //
-    //   getLocationUpdates {subscribe?, minimumInterval?, minimumDistance?,
-    //       Handler?: "gps" | "network" | "passive", responseTimeout?}
-    //       -> {latitude, longitude, altitude, direction, speed,
-    //           horizAccuracy, vertAccuracy, timestamp}; every move while
-    //           subscribed. errorCode 5 when both handlers are off.
-    //   getState {Handler, subscribe?} -> {state: 0 | 1}
-    //   setState {Handler, state: boolean}
-    //   getAllLocationHandlers -> {handlers: [{name, state}]}
-    //   getGpsStatus {subscribe?} -> {state: boolean}
-    //   mock/enable {name}, mock/disable {name}
-    //   mock/setLocation {name, location: {latitude, longitude, ...}}: moves
-    //       the simulated device (tests drive navigation with it).
-    //
-    // The device starts in downtown San Jose, inside the demo map region
-    // Maps ships with (apps/maps/public/regions/sample). The position lives
-    // in the shared store, so a move reaches every page's subscribers.
-    // getGeoCodeLocation and getReverseLocation (Google-backed on OSE) are
-    // not simulated: Maps geocodes with its own providers.
-    //
-    // Maps follows the position with getLocationUpdates {subscribe: true};
-    // Weather asks once, without subscribe (apps/shared/luna/src/location.ts).
-    //
-    // __phoenixRuntime.location: set(latitude, longitude, extra?) or
-    // set({latitude, longitude, ...}) moves the device; set(null) turns both
-    // handlers off ("location is off"); set(undefined) or reset() goes back
-    // to the start; get() is the current fix, or null when off.
     //
     // com.webos.service.tts speak {text, language?, clear?} is simulated by
     // remembering what was said (__phoenixRuntime.tts.spoken), so tests can
-    // check Maps' spoken directions; stop {} forgets the queue.
-    (function locationService() {
-        var KEY = "location";
-        var START = { latitude: 37.333700, longitude: -121.890700, altitude: 26, direction: -1, speed: -1,
-                      horizAccuracy: 12, vertAccuracy: 20 };
-        var listeners = [];
-
-        function load() {
-            return store.get(KEY, { gps: true, network: true, mock: false, fix: START, time: Date.now() });
-        }
-        function save(s) {
-            store.set(KEY, s);
-            changed();
-        }
-        function changed() {
-            listeners.slice().forEach(function (fn) { fn(); });
-        }
-        global.addEventListener && global.addEventListener("storage", function (e) {
-            if (e.key === "phoenix:" + KEY) changed();
-        });
-        function on(fn, ctx) {
-            listeners.push(fn);
-            var prev = ctx.onCancel;
-            ctx.onCancel = function () {
-                listeners = listeners.filter(function (l) { return l !== fn; });
-                if (prev) prev();
-            };
-        }
-        function fixReply(s) {
-            var r = ok({ timestamp: s.time || Date.now() });
-            for (var k in s.fix) r[k] = s.fix[k];
-            return r;
-        }
-        function handlerOn(s, name) {
-            if (name === "gps") return s.gps;
-            if (name === "network") return s.network;
-            return s.gps || s.network;
-        }
-
-        register(["com.webos.service.location"], {
-            "/getLocationUpdates": function (p, reply, ctx) {
-                var s = load();
-                if (!handlerOn(s, p.Handler)) {
-                    reply({ returnValue: false, errorCode: 5, errorText: "Location source offline" });
-                    return;
-                }
-                var first = fixReply(s);
-                if (p.subscribe) first.subscribed = true;
-                reply(first);
-                if (!p.subscribe) return;
-                var last = JSON.stringify(s.fix) + s.time;
-                on(function () {
-                    if (ctx.cancelled()) return;
-                    var n = load();
-                    if (!handlerOn(n, p.Handler)) {
-                        reply({ returnValue: false, errorCode: 5, errorText: "Location source offline", subscribed: true });
-                        return;
-                    }
-                    var key = JSON.stringify(n.fix) + n.time;
-                    if (key === last) return;
-                    last = key;
-                    var r = fixReply(n);
-                    r.subscribed = true;
-                    reply(r);
-                }, ctx);
-            },
-            "/getState": function (p, reply, ctx) {
-                var name = p.Handler;
-                if (name !== "gps" && name !== "network") return reply({ returnValue: false, errorCode: 10, errorText: "Invalid input" });
-                var state = function () { return load()[name] ? 1 : 0; };
-                var last = state();
-                reply(ok(p.subscribe ? { state: last, subscribed: true } : { state: last }));
-                if (!p.subscribe) return;
-                on(function () {
-                    if (ctx.cancelled() || state() === last) return;
-                    last = state();
-                    reply(ok({ state: last, subscribed: true }));
-                }, ctx);
-            },
-            "/setState": function (p, reply) {
-                if (p.Handler !== "gps" && p.Handler !== "network") return reply({ returnValue: false, errorCode: 10, errorText: "Invalid input" });
-                var s = load();
-                s[p.Handler] = !!p.state;
-                save(s);
-                reply(ok());
-            },
-            "/getAllLocationHandlers": function (p, reply) {
-                var s = load();
-                reply(ok({ handlers: [{ name: "gps", state: s.gps }, { name: "network", state: s.network }, { name: "passive", state: true }] }));
-            },
-            "/getGpsStatus": function (p, reply) { reply(ok({ state: load().gps })); },
-            "/getLocationHandlerDetails": function (p, reply) {
-                var gps = p.Handler === "gps";
-                reply(ok({ accuracy: gps ? 1 : 3, powerRequirement: gps ? 1 : 3, requiresNetwork: !gps, requiresCell: false, monetaryCost: false }));
-            },
-            "/mock/enable": function (p, reply) { var s = load(); s.mock = true; save(s); reply(ok()); },
-            "/mock/disable": function (p, reply) { var s = load(); s.mock = false; save(s); reply(ok()); },
-            "/mock/setLocation": function (p, reply) {
-                var loc = p.location || {};
-                if (typeof loc.latitude !== "number" || typeof loc.longitude !== "number" || Math.abs(loc.latitude) > 90 || Math.abs(loc.longitude) > 180)
-                    return reply({ returnValue: false, errorCode: 10, errorText: "Invalid input" });
-                var s = load();
-                var fix = {};
-                for (var k in START) fix[k] = loc[k] !== undefined ? loc[k] : (k === "latitude" || k === "longitude" ? 0 : START[k]);
-                s.fix = fix;
-                s.time = Date.now();
-                s.mock = true;
-                save(s);
-                reply(ok());
-            }
-        });
-
-        function reset() { store.set(KEY, { gps: true, network: true, mock: false, fix: START, time: Date.now() }); changed(); }
-        runtime.location = {
-            /** Move the simulated device (degrees; extra: direction, speed, horizAccuracy, ...). */
-            set: function (latitude, longitude, extra) {
-                if (latitude === undefined) return reset();
-                var s;
-                if (latitude === null) {
-                    s = load();
-                    s.gps = false;
-                    s.network = false;
-                    return save(s);
-                }
-                var loc = {};
-                if (typeof latitude === "object") {
-                    for (var j in latitude) loc[j] = latitude[j];
-                } else {
-                    loc.latitude = latitude;
-                    loc.longitude = longitude;
-                    for (var k in extra || {}) loc[k] = extra[k];
-                }
-                s = load();
-                if (!s.gps && !s.network) {
-                    s.gps = true;
-                    s.network = true;
-                    save(s);
-                }
-                return callNow("luna://com.webos.service.location/mock/setLocation", { name: "gps", location: loc });
-            },
-            get: function () {
-                var s = load();
-                return s.gps || s.network ? s.fix : null;
-            },
-            reset: reset
-        };
-
+    // check Maps' spoken directions; stop {} forgets the queue. (The
+    // location service is simulated in the block "First use, emergency
+    // information, location and help".)
+    (function textToSpeech() {
         var spoken = [];
         register(["com.webos.service.tts"], {
             "/speak": function (p, reply) {
@@ -6304,5 +6148,628 @@
         }
 
         runtime.pty = { mode: mode, errors: E, sessions: function () { return Object.keys(sessions); } };
+    })();
+    // ================================================================================
+    // First use, emergency information, location and help (apps/firstuse,
+    // apps/settings, apps/phone, apps/help)
+    // ================================================================================
+    //
+    // System preferences (com.webos.service.systemservice get/setPreferences;
+    // luna-sysservice's PrefsFactory stores any key):
+    //   firstUseComplete   First Use has run (or was skipped). The shell starts
+    //                      First Use at boot until it is set.
+    //   emergencyInfo      the medical ID Settings > Emergency Info keeps and
+    //                      the lock screen's emergency window shows: {name,
+    //                      birthDate, bloodType, conditions, allergies,
+    //                      medications, notes, organDonor, contacts: [{personId,
+    //                      name, number, relation}], showWhenLocked}
+    //   accessibility      Settings > Accessibility: {reduceMotion,
+    //                      highContrast, monoAudio, captions}
+    //
+    // com.palm.systemmanager (legacy webOS, luna-sysmgr SystemService.cpp):
+    //   getBootStatus {subscribe}  -> {finished, firstUse}: firstUse while the
+    //                      shell runs First Use (its minimal UI), as the
+    //                      shell last said (applyHostStatus {firstUse})
+    //   subscribeToSystemUI {subscribe}  events for luna-systemui, which it
+    //                      turns into popup alerts (data/SystemManagerService.js):
+    //                      here only "registerForLocationServiceNotifications"
+    //                      {appId}, its location permission alert
+    //
+    // com.webos.service.location (webOS OSE; also answered as the legacy
+    // com.palm.location). Method and field names follow the OSE service as
+    // LuneOS found it on devices (luneos-components' LunaService mock:
+    // "Handler" with a capital H, the gps and network handlers) and the
+    // legacy com.palm.location API:
+    //   getAllLocationHandlers {subscribe}  -> {handlers: [{name, state}]}
+    //   getState {Handler, subscribe}  -> {state}
+    //   setState {Handler, state}      (errorCode 10 "Invalid input" without Handler)
+    //   getCurrentPosition {Handler?, maximumAge?, responseTime?}
+    //       -> {errorCode: 0, latitude, longitude, altitude, horizAccuracy,
+    //           vertAccuracy, direction, velocity, speed, timestamp (s)}
+    //   getLocationUpdates / startTracking {subscribe, minimumInterval (ms)}
+    //   getReverseLocation {latitude, longitude} -> {address, locality, region,
+    //       country, countryCode} (from a small built-in list of cities)
+    //   errorCodes (the legacy API's): 1 timeout, 2 position unavailable,
+    //       5 location services off, 6 permission denied
+    //   Legacy luna-systemui's LocationAlert answers with com.palm.location
+    //   acceptLocationRequest / acceptAlwaysLocationRequest /
+    //   rejectLocationRequest / ignoreLocationRequest {appId | url}.
+    //
+    // org.webosphoenix.service.location (Phoenix): which apps may have the
+    // position. OSE has no per-app location permission; on a device this
+    // is a Phoenix service in front of com.webos.service.location.
+    //   getPermissions {subscribe}  -> {permissions: [{appId, title, allowed, time, lastUsed}]}
+    //   setPermission {appId, allowed}, removePermission {appId}
+    //
+    // An app with no answer yet asks the user through luna-systemui's own
+    // location alert (above); with no system UI running (a desktop browser)
+    // the simulator allows it and lists it in Settings. The system apps
+    // (Just Type, the system UI, Settings, First Use) never ask.
+    //
+    // navigator.geolocation is answered from the same simulated service, so
+    // web apps using the W3C API get the same position and permission.
+    //
+    // Help (apps/help): the Help app's topics are put into db8
+    // (org.webosphoenix.helptopic:1, from its help-index.json) when Just Type,
+    // the system UI or Help starts, so Just Type's content search finds them.
+    (function systemSetup() {
+        var sys = runtime.services["com.webos.service.systemservice"];
+        var sm = runtime.services["com.palm.systemmanager"];
+        var setPrefs = sys["/setPreferences"];
+
+        defaultPrefs.firstUseComplete = false;
+        defaultPrefs.emergencyInfo = {};
+        defaultPrefs.accessibility = { reduceMotion: false, highContrast: false, monoAudio: false, captions: false };
+
+        var nobody = { cancelled: function () { return false; } };
+        function setPreferences(p) { setPrefs(p, function () {}, nobody); }
+
+        // Every page's subscribers, re-run when this page or another changes the store.
+        var watchers = [];
+        var notifying = false, again = false;
+        function changed() {
+            // Watchers may change the store themselves: run again after, not inside.
+            if (notifying) { again = true; return; }
+            notifying = true;
+            try {
+                do {
+                    again = false;
+                    var list = watchers;
+                    watchers = [];
+                    var keep = list.filter(function (w) { return w(); });
+                    watchers = keep.concat(watchers);
+                } while (again);
+            } finally {
+                notifying = false;
+            }
+        }
+        function watch(p, reply, ctx, compute) {
+            var last = JSON.stringify(compute());
+            var first = JSON.parse(last);
+            if (p.subscribe) first.subscribed = true;
+            reply(first);
+            if (!p.subscribe) return;
+            watchers.push(function () {
+                if (ctx.cancelled()) return false;
+                var now = JSON.stringify(compute());
+                if (now !== last) {
+                    last = now;
+                    var r = JSON.parse(now);
+                    r.subscribed = true;
+                    reply(r);
+                }
+                return true;
+            });
+        }
+        var WATCHED = ["phoenix:shell:firstUse", "phoenix:location:state", "phoenix:location:permissions",
+                       "phoenix:systemui:events", "phoenix:location:ignored", "phoenix:settings:state"];
+        try {
+            global.addEventListener("storage", function (e) {
+                if (WATCHED.indexOf(e.key) >= 0) changed();
+            });
+        } catch (e) { /* ignore */ }
+
+        // ---- Accessibility: high contrast on every page -------------------------------
+
+        function applyContrast() {
+            var a = prefs().accessibility || {};
+            var root = global.document && global.document.documentElement;
+            if (!root || !root.classList) return true;
+            root.classList.toggle("phoenix-high-contrast", !!a.highContrast);
+            return true;
+        }
+        applyContrast();
+        watchers.push(applyContrast);
+        try {
+            global.addEventListener("storage", function (e) { if (e.key === "phoenix:prefs") applyContrast(); });
+        } catch (e) { /* ignore */ }
+        var setPrefsNow = sys["/setPreferences"];
+        sys["/setPreferences"] = function (p, reply, ctx) {
+            setPrefsNow(p, reply, ctx);
+            if ("accessibility" in p) applyContrast();
+        };
+
+        // ---- First use (getBootStatus) ------------------------------------------
+
+        sm["/getBootStatus"] = function (p, reply, ctx) {
+            watch(p, reply, ctx, function () { return ok({ finished: true, firstUse: !!store.get("shell:firstUse", false) }); });
+        };
+        var baseApply = runtime.applyHostStatus;
+        runtime.applyHostStatus = function (st) {
+            if (st && "firstUse" in st && !!st.firstUse !== !!store.get("shell:firstUse", false)) {
+                store.set("shell:firstUse", !!st.firstUse);
+                changed();
+            }
+            baseApply(st);
+        };
+
+        // ---- System UI events (subscribeToSystemUI) ---------------------------------
+
+        var LISTENING = "systemui:listening";
+        function systemUiListening() {
+            return Date.now() - store.get(LISTENING, 0) < 30000;
+        }
+        function postSystemUi(event, message) {
+            var q = store.get("systemui:events", []).filter(function (e) { return Date.now() - e.time < 60000; });
+            q.push({ id: Date.now() + "-" + Math.random().toString(36).slice(2, 7), time: Date.now(), event: event, message: message });
+            store.set("systemui:events", q);
+            changed();
+        }
+        sm["/subscribeToSystemUI"] = function (p, reply, ctx) {
+            reply(ok({ subscribed: !!p.subscribe }));
+            if (!p.subscribe) return;
+            var since = Date.now(), seen = {};
+            var beat = function () { store.set(LISTENING, Date.now()); };
+            beat();
+            var timer = setInterval(beat, 10000);
+            try {
+                global.addEventListener("beforeunload", function () { store.set(LISTENING, 0); });
+            } catch (e) { /* ignore */ }
+            watchers.push(function () {
+                if (ctx.cancelled()) {
+                    clearInterval(timer);
+                    return false;
+                }
+                store.get("systemui:events", []).forEach(function (e) {
+                    if (e.time < since - 1000 || seen[e.id]) return;
+                    seen[e.id] = true;
+                    reply(ok({ event: e.event, message: e.message }));
+                });
+                return true;
+            });
+        };
+
+        // ---- Location ---------------------------------------------------------------
+
+        // Palm's old headquarters, 950 W. Maude Ave., Sunnyvale.
+        // Downtown San Jose: inside the demo map region Maps ships with
+        // (apps/maps/public/regions/sample).
+        var HOME = { latitude: 37.333700, longitude: -121.890700, altitude: 26 };
+        var CITIES = [
+            ["San Jose", "CA", "United States", "US", 37.3382, -121.8863],
+            ["Sunnyvale", "CA", "United States", "US", 37.3688, -122.0363],
+            ["San Francisco", "CA", "United States", "US", 37.7749, -122.4194],
+            ["New York", "NY", "United States", "US", 40.7128, -74.0060],
+            ["Seattle", "WA", "United States", "US", 47.6062, -122.3321],
+            ["London", "England", "United Kingdom", "GB", 51.5074, -0.1278],
+            ["Amsterdam", "North Holland", "Netherlands", "NL", 52.3676, 4.9041],
+            ["Berlin", "Berlin", "Germany", "DE", 52.5200, 13.4050],
+            ["Paris", "Ile-de-France", "France", "FR", 48.8566, 2.3522],
+            ["Seoul", "Seoul", "South Korea", "KR", 37.5665, 126.9780],
+            ["Tokyo", "Tokyo", "Japan", "JP", 35.6762, 139.6503],
+            ["Sydney", "NSW", "Australia", "AU", -33.8688, 151.2093]
+        ];
+        var TRUSTED = ["com.palm.launcher", "com.palm.systemui", "org.webosphoenix.settings", "org.webosphoenix.firstuse"];
+        var LOC_ERR = { timeout: 1, unavailable: 2, off: 5, denied: 6 };
+
+        function locState() {
+            var s = store.get("location:state", null) || {};
+            return {
+                gps: s.gps !== false,
+                network: s.network !== false,
+                position: s.position || HOME,
+                mock: !!s.mock,
+                time: s.time || 0
+            };
+        }
+        function saveLocState(s) {
+            store.set("location:state", s);
+            changed();
+        }
+        function handlers() {
+            var s = locState();
+            return [{ name: "gps", state: s.gps }, { name: "network", state: s.network }];
+        }
+        // Network positioning needs Wi-Fi (or a cell network, which the
+        // simulator does not have).
+        function networkUsable() {
+            var st = store.get("settings:state", null);
+            return !st || (!st.offlineMode && !!(st.wifi && st.wifi.enabled));
+        }
+        // The fix from the handlers that are on; null when none can give one.
+        function fix(want) {
+            var s = locState();
+            var gps = s.gps && want !== "network";
+            var net = s.network && want !== "gps" && networkUsable();
+            if (!gps && !net) return null;
+            var p = s.position, t = s.mock ? s.time || Date.now() : Date.now();
+            // A few metres of wander, as a real fix has (not for a position
+            // set with mock/setLocation, which tests drive exactly).
+            var jitter = gps && !s.mock ? 0.00004 : 0;
+            var num = function (v, d) { return typeof v === "number" ? v : d; };
+            return {
+                errorCode: 0,
+                latitude: +(p.latitude + (Math.random() - 0.5) * jitter).toFixed(6),
+                longitude: +(p.longitude + (Math.random() - 0.5) * jitter).toFixed(6),
+                altitude: gps ? p.altitude || 0 : -1,
+                horizAccuracy: num(p.horizAccuracy, gps ? 8 : 150),
+                vertAccuracy: num(p.vertAccuracy, gps ? 12 : -1),
+                direction: num(p.direction, -1),
+                velocity: num(p.speed, -1),
+                speed: num(p.speed, -1),
+                heading: num(p.direction, -1),
+                handler: gps ? "gps" : "network",
+                // ms, as OSE's service; the legacy com.palm.location name
+                // answers in seconds (below).
+                timestamp: t
+            };
+        }
+        function locationOff() {
+            var s = locState();
+            return !s.gps && !s.network;
+        }
+
+        function permissions() { return store.get("location:permissions", {}); }
+        function savePermissions(all) {
+            store.set("location:permissions", all);
+            changed();
+        }
+        function appTitle(appId) {
+            var lp = launchPoints().filter(function (a) { return a.id === appId && /_default$/.test(a.launchPointId); })[0]
+                || launchPoints().filter(function (a) { return a.id === appId; })[0];
+            return lp ? lp.title : appId;
+        }
+        function setPermission(appId, allowed) {
+            var all = permissions();
+            var cur = all[appId] || {};
+            all[appId] = { appId: appId, title: cur.title || appTitle(appId), allowed: !!allowed,
+                           time: Date.now(), lastUsed: cur.lastUsed || 0 };
+            savePermissions(all);
+        }
+        function used(appId) {
+            var all = permissions();
+            if (!all[appId]) return;
+            all[appId].lastUsed = Date.now();
+            savePermissions(all);
+        }
+
+        // Is appId allowed? cb(true | false); asks the user when it has to.
+        function checkPermission(appId, ctx, cb) {
+            if (TRUSTED.indexOf(appId) >= 0) return cb(true);
+            var p = permissions()[appId];
+            if (p) return cb(!!p.allowed);
+            if (!systemUiListening()) {
+                console.info("[phoenix-runtime] no system UI to ask about location for " + appId + "; allowing");
+                setPermission(appId, true);
+                return cb(true);
+            }
+            var asked = Date.now();
+            postSystemUi("registerForLocationServiceNotifications", { appId: appId });
+            var done = false;
+            var finish = function (v) {
+                if (done) return;
+                done = true;
+                clearInterval(poll);
+                cb(v);
+            };
+            var check = function () {
+                if (done) return false;
+                if (ctx.cancelled()) { finish(false); return false; }
+                var now = permissions()[appId];
+                if (now) { finish(!!now.allowed); return false; }
+                var ignored = store.get("location:ignored", {})[appId] || 0;
+                if (ignored >= asked) { finish(false); return false; }
+                if (Date.now() - asked > 60000) { finish(false); return false; }
+                return true;
+            };
+            // Answers from another page come as storage events; poll too, in case.
+            watchers.push(check);
+            var poll = setInterval(check, 300);
+        }
+
+        function positionReply(p, reply, ctx, appId) {
+            if (locationOff())
+                return reply(fail(LOC_ERR.off, "Location services are off"));
+            checkPermission(appId, ctx, function (allowed) {
+                if (!allowed) return reply(fail(LOC_ERR.denied, "Permission denied"));
+                var f = fix(p.Handler || p.handlerType || p.handler);
+                if (!f) return reply(fail(LOC_ERR.unavailable, "Position unavailable"));
+                used(appId);
+                // GPS takes a moment to answer; network lookups are quicker.
+                setTimeout(function () { reply(ok(f)); }, f.handler === "gps" ? 250 : 80);
+            });
+        }
+
+        function tracking(p, reply, ctx) {
+            var appId = appIdFromLocation();
+            if (!p.subscribe) return positionReply(p, reply, ctx, appId);
+            checkPermission(appId, ctx, function (allowed) {
+                if (!allowed) return reply(fail(LOC_ERR.denied, "Permission denied"));
+                reply(ok({ subscribed: true }));
+                var every = Math.max(1000, +p.minimumInterval || 1000);
+                var lastErr = null;
+                var tick = function () {
+                    if (ctx.cancelled()) {
+                        clearInterval(timer);
+                        return;
+                    }
+                    var f = locationOff() ? null : fix(p.Handler || p.handlerType || p.handler);
+                    var err = locationOff() ? LOC_ERR.off : f ? null : LOC_ERR.unavailable;
+                    if (err) {
+                        if (err !== lastErr) {
+                            var r = fail(err, err === LOC_ERR.off ? "Location services are off" : "Position unavailable");
+                            r.subscribed = true;
+                            reply(r);
+                        }
+                        lastErr = err;
+                        return;
+                    }
+                    lastErr = null;
+                    var out = ok(f);
+                    out.subscribed = true;
+                    reply(out);
+                };
+                var timer = setInterval(tick, every);
+                setTimeout(tick, 100);
+                // A move (mock/setLocation) or a handler switched: at once.
+                var lastKey = JSON.stringify(locState());
+                watchers.push(function () {
+                    if (ctx.cancelled()) return false;
+                    var key = JSON.stringify(locState());
+                    if (key !== lastKey) { lastKey = key; tick(); }
+                    return true;
+                });
+                used(appId);
+            });
+        }
+
+        function distanceKm(a, b, c, d) {
+            var r = Math.PI / 180, x = (d - b) * r * Math.cos((a + c) / 2 * r), y = (c - a) * r;
+            return Math.sqrt(x * x + y * y) * 6371;
+        }
+        function reverse(lat, lon) {
+            var best = null, bestD = Infinity;
+            CITIES.forEach(function (c) {
+                var dd = distanceKm(lat, lon, c[4], c[5]);
+                if (dd < bestD) { bestD = dd; best = c; }
+            });
+            if (!best || bestD > 60) return null;
+            return { locality: best[0], region: best[1], country: best[2], countryCode: best[3],
+                     address: best[0] + ", " + best[1] + ", " + best[2] };
+        }
+
+        function handlerName(p) { return p.Handler; }
+        var location = {
+            "/getAllLocationHandlers": function (p, reply, ctx) {
+                watch(p, reply, ctx, function () { return ok({ handlers: handlers() }); });
+            },
+            "/getLocationHandlers": function (p, reply, ctx) {
+                watch(p, reply, ctx, function () { return ok({ handlers: handlers().map(function (h) { return h.name; }) }); });
+            },
+            "/getState": function (p, reply, ctx) {
+                var h = handlerName(p);
+                if (h !== "gps" && h !== "network") return reply(fail(10, "Invalid input"));
+                watch(p, reply, ctx, function () { return ok({ state: locState()[h] }); });
+            },
+            "/setState": function (p, reply) {
+                var h = handlerName(p);
+                if ((h !== "gps" && h !== "network") || typeof p.state !== "boolean") return reply(fail(10, "Invalid input"));
+                var s = store.get("location:state", null) || {};
+                s[h] = p.state;
+                saveLocState(s);
+                reply(ok());
+            },
+            "/getLocationUpdates": tracking,
+            "/getGpsStatus": function (p, reply, ctx) {
+                watch(p, reply, ctx, function () { return ok({ state: locState().gps }); });
+            },
+            "/getLocationHandlerDetails": function (p, reply) {
+                var gps = p.Handler === "gps";
+                if (!gps && p.Handler !== "network") return reply(fail(10, "Invalid input"));
+                reply(ok({ accuracy: gps ? 1 : 3, powerRequirement: gps ? 1 : 3, requiresNetwork: !gps, requiresCell: false, monetaryCost: false }));
+            },
+            "/mock/enable": function (p, reply) { var s = store.get("location:state", null) || {}; s.mock = true; saveLocState(s); reply(ok()); },
+            "/mock/disable": function (p, reply) { var s = store.get("location:state", null) || {}; s.mock = false; saveLocState(s); reply(ok()); },
+            // Moves the simulated device (tests drive navigation with it).
+            "/mock/setLocation": function (p, reply) {
+                var loc = p.location || {};
+                if (typeof loc.latitude !== "number" || typeof loc.longitude !== "number" || Math.abs(loc.latitude) > 90 || Math.abs(loc.longitude) > 180)
+                    return reply(fail(10, "Invalid input"));
+                var s = store.get("location:state", null) || {};
+                var pos = {};
+                for (var k in loc) pos[k] = loc[k];
+                s.position = pos;
+                s.mock = true;
+                s.time = Date.now();
+                saveLocState(s);
+                reply(ok());
+            },
+            "/getReverseLocation": function (p, reply) {
+                if (typeof p.latitude !== "number" || typeof p.longitude !== "number") return reply(fail(10, "Invalid input"));
+                var a = reverse(p.latitude, p.longitude);
+                reply(a ? ok(a) : fail(LOC_ERR.unavailable, "No address known for this position"));
+            },
+            // luna-systemui's LocationAlert (SystemManagerAlerts.js).
+            "/acceptLocationRequest": function (p, reply) { setPermission(p.appId || p.url, true); reply(ok()); },
+            "/acceptAlwaysLocationRequest": function (p, reply) { setPermission(p.appId || p.url, true); reply(ok()); },
+            "/rejectLocationRequest": function (p, reply) { setPermission(p.appId || p.url, false); reply(ok()); },
+            "/ignoreLocationRequest": function (p, reply) {
+                var ig = store.get("location:ignored", {});
+                ig[p.appId || p.url] = Date.now();
+                store.set("location:ignored", ig);
+                changed();
+                reply(ok());
+            },
+            "*": function (p, reply) { reply(ok()); }
+        };
+        register(["com.webos.service.location"], location);
+        // The legacy name (luna-systemui's alert, Mojo and Enyo apps): the
+        // same, plus getCurrentPosition and startTracking, with timestamps in
+        // seconds as that API had them.
+        function inSeconds(fn) {
+            return function (p, reply, ctx) {
+                fn(p, function (r) {
+                    if (r && typeof r.timestamp === "number") r.timestamp = Math.floor(r.timestamp / 1000);
+                    reply(r);
+                }, ctx);
+            };
+        }
+        var legacy = {};
+        Object.keys(location).forEach(function (k) { legacy[k] = location[k]; });
+        legacy["/getCurrentPosition"] = inSeconds(function (p, reply, ctx) { positionReply(p, reply, ctx, appIdFromLocation()); });
+        legacy["/getLocationUpdates"] = legacy["/startTracking"] = inSeconds(tracking);
+        register(["com.palm.location"], legacy);
+
+        register(["org.webosphoenix.service.location"], {
+            "/getPermissions": function (p, reply, ctx) {
+                watch(p, reply, ctx, function () {
+                    var all = permissions();
+                    // A title the answering page could not look up (the alert answers as its window closes).
+                    return ok({ permissions: Object.keys(all).sort().map(function (k) {
+                        var p = all[k];
+                        if (!p.title || p.title === p.appId) p.title = appTitle(p.appId);
+                        return p;
+                    }) });
+                });
+            },
+            "/setPermission": function (p, reply) {
+                if (!p.appId || typeof p.allowed !== "boolean") return reply(fail(-1, "appId and allowed are required"));
+                setPermission(p.appId, p.allowed);
+                reply(ok());
+            },
+            "/removePermission": function (p, reply) {
+                var all = permissions();
+                delete all[p.appId];
+                savePermissions(all);
+                reply(ok());
+            }
+        });
+
+        // For tests and the console.
+        //   set(latitude, longitude, extra?) or set({latitude, longitude, ...})
+        //       moves the device (mock/setLocation; extra: direction, speed,
+        //       horizAccuracy, ...) and turns Location Services on if it was
+        //       off; set(null) turns it off; set(undefined) goes back home.
+        //   get()  the position, or null when Location Services is off.
+        //   reset()  home, both handlers on, no permissions answered.
+        function setPosition(latitude, longitude, extra) {
+            var s = store.get("location:state", null) || {};
+            if (latitude === undefined) {
+                delete s.position;
+                s.mock = false;
+                s.gps = true;
+                s.network = true;
+                return saveLocState(s);
+            }
+            if (latitude === null) {
+                s.gps = false;
+                s.network = false;
+                return saveLocState(s);
+            }
+            var pos = {};
+            if (typeof latitude === "object") {
+                for (var j in latitude) pos[j] = latitude[j];
+            } else {
+                pos.latitude = latitude;
+                pos.longitude = longitude;
+                for (var k in extra || {}) pos[k] = extra[k];
+            }
+            if (s.gps === false && s.network === false) {
+                s.gps = true;
+                s.network = true;
+                saveLocState(s);
+            }
+            return callNow("luna://com.webos.service.location/mock/setLocation", { name: "gps", location: pos });
+        }
+        runtime.location = {
+            set: setPosition,
+            setPosition: function (pos) { return setPosition(pos); },
+            get: function () { return locationOff() ? null : locState().position; },
+            permissions: permissions,
+            answer: function (appId, allow) { setPermission(appId, allow === true || allow === "allow"); },
+            reset: function () {
+                store.set("location:state", {});
+                store.set("location:permissions", {});
+                changed();
+            }
+        };
+
+        // ---- navigator.geolocation (W3C) over the simulated service -----------------
+
+        (function geolocation() {
+            var nav = global.navigator;
+            if (!nav) return;
+            var watches = {}, nextWatch = 1;
+            function toPosition(f) {
+                return {
+                    coords: {
+                        latitude: f.latitude, longitude: f.longitude,
+                        altitude: f.altitude >= 0 ? f.altitude : null,
+                        accuracy: f.horizAccuracy,
+                        altitudeAccuracy: f.vertAccuracy >= 0 ? f.vertAccuracy : null,
+                        heading: null, speed: null
+                    },
+                    timestamp: f.timestamp
+                };
+            }
+            function toError(r) {
+                var code = r.errorCode === LOC_ERR.denied ? 1 : r.errorCode === LOC_ERR.timeout ? 3 : 2;
+                return { code: code, message: r.errorText || "", PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 };
+            }
+            var geo = {
+                getCurrentPosition: function (success, error) {
+                    dispatch("luna://com.webos.service.location/getLocationUpdates", {}, function (r) {
+                        if (r.returnValue) success(toPosition(r));
+                        else if (error) error(toError(r));
+                    }, { cancelled: function () { return false; }, onCancel: null });
+                },
+                watchPosition: function (success, error) {
+                    var id = nextWatch++, stopped = false;
+                    watches[id] = function () { stopped = true; };
+                    dispatch("luna://com.webos.service.location/getLocationUpdates", { subscribe: true }, function (r) {
+                        if (r.returnValue && typeof r.latitude === "number") success(toPosition(r));
+                        else if (!r.returnValue && error) error(toError(r));
+                    }, { cancelled: function () { return stopped; }, onCancel: null });
+                    return id;
+                },
+                clearWatch: function (id) {
+                    if (watches[id]) watches[id]();
+                    delete watches[id];
+                }
+            };
+            try {
+                Object.defineProperty(nav, "geolocation", { configurable: true, get: function () { return geo; } });
+            } catch (e) { /* read-only in this browser */ }
+        })();
+
+        // ---- Help topics for Just Type ------------------------------------------------
+
+        (function helpIndex() {
+            var INDEXERS = ["com.palm.launcher", "com.palm.systemui", "org.webosphoenix.help"];
+            if (INDEXERS.indexOf(appIdFromLocation()) < 0) return;
+            var KIND = "org.webosphoenix.helptopic:1";
+            var idx = null;
+            try { idx = JSON.parse(PalmSystem.getResource("/usr/palm/applications/org.webosphoenix.help/help-index.json") || "null"); }
+            catch (e) { idx = null; }
+            if (!idx || !idx.topics || store.get("helpIndexVersion", "") === idx.version) return;
+            callNow("palm://com.palm.db/putKind", { id: KIND, owner: "org.webosphoenix.help",
+                                                    indexes: [{ name: "searchText", props: [{ name: "searchText", tokenize: "all", collate: "primary" }] }] });
+            callNow("palm://com.palm.db/del", { query: { from: KIND }, purge: true });
+            callNow("palm://com.palm.db/put", { objects: idx.topics.map(function (t) {
+                return { _kind: KIND, _id: "help-" + t.id, topicId: t.id, title: t.title, summary: t.summary,
+                         category: t.category, searchText: t.searchText, version: idx.version };
+            }) });
+            store.set("helpIndexVersion", idx.version);
+        })();
     })();
 })(this);

@@ -7,6 +7,12 @@
 // PasswordField.qml) and uiComponents/ActionButton from QtQuick 1 to Qt 6,
 // with the same art (images/pin/*, popup-bg.png) and metrics in legacy
 // pixels. LockWindow drives it; see LockScreen.qml.
+//
+// Phoenix adds an Emergency Call button above Cancel and Done: the webOS
+// phones' PIN screen came from the phone app (LockWindow.cpp:625-667, "The
+// PIN/password unlock window was not received from the Phone app") and
+// offered emergency calls; the TouchPad's UnlockPanel, the only one
+// released, had no phone. Same button art (ActionButton, pin/button-black).
 
 import QtQuick
 
@@ -25,8 +31,12 @@ FocusScope {
     readonly property alias hint: passwordField.hint
     readonly property alias enteredText: passwordField.enteredText
 
+    // Show the Emergency Call button (the shell has an emergency window to open).
+    property bool emergencyAvailable: false
+
     signal entryCanceled()
     signal passwordSubmitted(string password, bool isPIN)
+    signal emergencyRequested()
 
     function setupDialog(isPIN, title, hintMessage, enforceLength, minLen) {
         isPINEntry = isPIN;
@@ -191,13 +201,29 @@ FocusScope {
         }
     }
 
+    // ---- Emergency Call (Phoenix) ----------------------------------------------
+
+    ActionButton {
+        id: emergencyButton
+        objectName: "unlockEmergency"
+        visible: panel.emergencyAvailable
+        caption: qsTr("Emergency Call")
+        captionColor: "#ff9d93"
+        width: Theme.px(320) - 2 * panel.margin
+        height: visible ? Theme.px(44) : 0
+        x: panel.edgeOffset + panel.margin
+        anchors.top: panel.isPINEntry ? keyPad.bottom : passwordField.bottom
+        onAction: panel.emergencyRequested()
+    }
+
     // ---- Cancel / Done (ActionButton.qml) --------------------------------------
 
     Grid {
         id: buttonGrid
         width: Theme.px(320) - 2 * panel.margin
         x: panel.edgeOffset + panel.margin
-        anchors.top: panel.isPINEntry ? keyPad.bottom : passwordField.bottom
+        anchors.top: emergencyButton.bottom
+        anchors.topMargin: emergencyButton.visible ? panel.margin + 1 : 0
         columns: 2
         spacing: panel.margin + 1
 
@@ -280,6 +306,7 @@ FocusScope {
         property bool isPressed: false
         property bool active: true
         property string caption: ""
+        property color captionColor: "#FFFFFF"
         property bool affirmative: false
         readonly property real inactiveOpacity: 0.70
         signal action()
@@ -295,7 +322,7 @@ FocusScope {
         Text {
             anchors.centerIn: parent
             text: actionButton.caption
-            color: "#FFFFFF"
+            color: actionButton.captionColor
             font.bold: true
             font.pixelSize: Theme.px(16)
             font.family: Theme.fontFamily

@@ -23,6 +23,10 @@ Item {
     readonly property bool pinEntry: unlockPanel.shown
     readonly property alias unlockPanel: unlockPanel
     signal unlockRequested
+    // The PIN pad's Emergency Call (UnlockPanel): the shell opens Phone's
+    // restricted mode in its emergency window, over the lock screen.
+    property bool emergencyAvailable: false
+    signal emergencyRequested
 
     onLockedChanged: if (locked) unlockPanel.shown = false
 
@@ -439,7 +443,9 @@ Item {
         visible: shown || opacity > 0
         enabled: shown
         Behavior on opacity { NumberAnimation { duration: Theme.lockFadeDuration } }
+        emergencyAvailable: lock.emergencyAvailable
         onEntryCanceled: shown = false
         onPasswordSubmitted: (password, isPIN) => lock._submit(password, isPIN)
+        onEmergencyRequested: lock.emergencyRequested()
     }
 }

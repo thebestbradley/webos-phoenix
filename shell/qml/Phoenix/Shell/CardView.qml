@@ -821,14 +821,22 @@ Item {
     // it played the "birdappclose" sound (:1280-1283, 2890-2891).
     signal angryCardClosed(string uid)
     function slingshot(card) {
+        if (card.uid === pinnedUid) {
+            flickAnimation.createObject(card, { target: card, closing: false, to: 0 }).start();
+            return;
+        }
         angryCardClosed(card.uid);
         view.close(card.uid);
     }
 
+    // A card the user cannot flick away (First Use's, Shell.firstUse): it
+    // springs back. Phoenix addition.
+    property string pinnedUid: ""
+
     // Throw a flicked card off the top and close it, or spring it back. One
     // animation per card, so several can go at once.
     function animateFlick(card, close) {
-        if (close)
+        if (close && card.uid !== pinnedUid)
             view.close(card.uid);
         else
             flickAnimation.createObject(card, { target: card, closing: false, to: 0 }).start();

@@ -16,7 +16,7 @@ works, and how to host every piece yourself.
   north up again. A long press drops a pin ("what is here").
 - **My location**: from webOS OSE's `com.webos.service.location`
   (`getLocationUpdates`, subscribed). The simulator simulates it
-  (`runtime/phoenix-runtime.js`, "Location and text to speech"), starting in
+  (`runtime/phoenix-runtime.js`, "First use, emergency information, location and help"), starting in
   downtown San Jose; `mock/setLocation` moves the device.
 - **Search**: when the user submits (never as-you-type), with Photon or
   Nominatim, cached; coordinates typed in are understood. When the server

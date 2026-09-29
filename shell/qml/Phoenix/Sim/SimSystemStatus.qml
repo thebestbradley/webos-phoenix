@@ -57,6 +57,9 @@ QtObject {
     // Settings > Screen & Lock "Show notifications when locked"
     // (system preference showAlertsWhenLocked).
     property bool showAlertsWhenLocked: true
+    // Settings > Accessibility "Reduce motion" (system preference
+    // accessibility.reduceMotion): the shell's animations (Theme.reduceMotion).
+    property bool reduceMotion: false
     property real brightness: 0.7     // 0.10 (the floor, Theme.minimumBrightness) .. 1
     // Fixed time for reproducible screenshots; null = live clock.
     property var fixedTime: null
@@ -212,7 +215,7 @@ QtObject {
     // wifiConnected, wifiBars, bluetoothOn, airplaneMode, brightness
     // (0-100), rotationLocked, muted, timeFormat, showAlertsWhenLocked,
     // volume, streams, systemSounds, tapSounds, ringtone, alerttone,
-    // notificationtone. Missing keys are left alone.
+    // notificationtone, reduceMotion. Missing keys are left alone.
     function applyAppStatus(s) {
         applyingAppStatus = true;
         if (s.wifiEnabled !== undefined)
@@ -247,6 +250,8 @@ QtObject {
             alerttone = s.alerttone;
         if (s.notificationtone !== undefined)
             notificationtone = s.notificationtone;
+        if (s.reduceMotion !== undefined)
+            reduceMotion = !!s.reduceMotion;
         applyingAppStatus = false;
     }
 

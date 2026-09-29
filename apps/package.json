@@ -27,7 +27,9 @@
     "videos",
     "podcasts",
     "pdfview",
-    "docview"
+    "docview",
+    "help",
+    "firstuse"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

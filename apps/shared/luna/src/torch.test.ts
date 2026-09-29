@@ -66,7 +66,9 @@ describe("simulated org.webosports.service.torch", () => {
 
 describe("simulated com.webos.service.location", () => {
     it("gives the simulated position, a set one, or an error when location is off", async () => {
-        expect(await location.currentPosition()).toMatchObject({ latitude: 37.3337, longitude: -121.8907 });
+        const home = await location.currentPosition();
+        expect(home.latitude).toBeCloseTo(37.3337, 3);
+        expect(home.longitude).toBeCloseTo(-121.8907, 3);
         rt().location.set({ latitude: 51.5, longitude: -0.12 });
         expect(await location.currentPosition()).toMatchObject({ latitude: 51.5, longitude: -0.12 });
         rt().location.set(null);

@@ -22,3 +22,4 @@ SystemMenu 1.0 SystemMenu.qml
 Wallpaper 1.0 Wallpaper.qml
 VirtualKeyboard 1.0 VirtualKeyboard.qml
 SystemSounds 1.0 SystemSounds.qml
+EmergencyWindow 1.0 EmergencyWindow.qml

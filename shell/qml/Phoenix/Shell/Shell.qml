@@ -44,6 +44,8 @@ FocusScope {
     focus: true
 
     Binding { target: Theme; property: "tablet"; value: shell.tablet }
+    // Settings > Accessibility > Reduce motion.
+    Binding { target: Theme; property: "reduceMotion"; value: !!(shell.system && shell.system.reduceMotion) }
     // Tell the window source which card is in front (apps it launches join
     // its stack).
     Binding {
@@ -74,11 +76,111 @@ FocusScope {
         justType.start(text);
     }
 
-    // Not over the lock screen (LockWindow sits above the menus).
-    function openSystemMenu() { if (!locked) systemMenu.open = true; }
+    // Not over the lock screen (LockWindow sits above the menus), nor in First Use.
+    function openSystemMenu() { if (!locked && !firstUse) systemMenu.open = true; }
 
-    function lock() { lockScreen.locked = true; systemMenu.open = false; }
-    function unlock() { lockScreen.locked = false; }
+    function lock() {
+        if (firstUse)
+            return;
+        lockScreen.locked = true;
+        systemMenu.open = false;
+    }
+    function unlock() {
+        lockScreen.locked = false;
+        closeEmergency();
+    }
+
+    // ---- First Use (LunaSysMgr's minimal UI) --------------------------------------
+    // Until First Use has run, LunaSysMgr started in its minimal UI with
+    // only com.palm.app.firstuse (LunaSysMgr.upstart: "-u minimal -a
+    // com.palm.app.firstuse" while /var/luna/preferences/ran-first-use is
+    // missing; WindowManagerMinimal): a status bar and the app, full screen,
+    // no launcher, lock screen or system menu (SystemUiController ignores the
+    // launcher key in UI_MINIMAL). Here the app is the one maximized card:
+    // no dock, launcher, search pill or Just Type; swipe up shows card view
+    // only when First Use opened another app (Accounts, Help), and First
+    // Use's card cannot be flicked away. It ends when the app closes its
+    // window (after setting the system preference firstUseComplete).
+    property string firstUseAppId: "org.webosphoenix.firstuse"
+    property string _firstUseUid: ""
+    readonly property bool firstUse: _firstUseUid !== ""
+    signal firstUseEnded
+
+    function startFirstUse() {
+        if (!source || firstUse)
+            return firstUse;
+        var uid = source.launch(firstUseAppId, "", { firstUse: true });
+        if (uid === "")
+            return false;
+        lockScreen.locked = false;
+        systemMenu.open = false;
+        launcher.open = false;
+        justType.open = false;
+        notes.dashboardOpen = false;
+        _firstUseUid = uid;
+        dockShown = false;
+        Qt.callLater(cards.focusLaunched, uid);
+        return true;
+    }
+    function _checkFirstUseCard() {
+        if (!firstUse || !source || !source.cards)
+            return;
+        for (var i = 0; i < source.cards.count; ++i)
+            if (source.cards.get(i).uid === _firstUseUid)
+                return;
+        _firstUseUid = "";
+        _showDock();
+        firstUseEnded();
+    }
+    Connections {
+        target: shell.source ? shell.source.cards : null
+        function onRowsRemoved() { shell._checkFirstUseCard(); }
+    }
+
+    // ---- The emergency window (EmergencyWindowManager) ------------------------------
+    // The PIN pad's Emergency Call opens Phone's restricted mode as the
+    // emergency window, over the lock screen (EmergencyWindow.qml). The
+    // window source makes it: openSystemWindow(appId, params, "emergency")
+    // -> key, closeSystemWindow(key), systemWindowClosed(key) when the page
+    // closes itself.
+    property string emergencyAppId: "org.webosphoenix.phone"
+    readonly property bool emergencyShown: emergencyWindow.windowKey !== ""
+    readonly property bool emergencyAvailable: !!source && typeof source.openSystemWindow === "function"
+
+    function openEmergency() {
+        if (emergencyShown || !emergencyAvailable)
+            return emergencyShown;
+        var key = source.openSystemWindow(emergencyAppId, { emergency: true }, "emergency");
+        emergencyWindow.windowKey = key || "";
+        return emergencyShown;
+    }
+    // The Home button closes it (EmergencyWindowManager::slotHomeButtonPressed).
+    function closeEmergency() {
+        var key = emergencyWindow.windowKey;
+        if (key === "")
+            return;
+        emergencyWindow.windowKey = "";
+        if (source && typeof source.closeSystemWindow === "function")
+            source.closeSystemWindow(key);
+        _emergencyClosed();
+    }
+    // Back to the PIN pad, which takes the keys again.
+    function _emergencyClosed() {
+        if (lockScreen.pinEntry)
+            lockScreen.unlockPanel.forceActiveFocus();
+        else
+            shell.forceActiveFocus();
+    }
+    Connections {
+        target: shell.source
+        ignoreUnknownSignals: true
+        function onSystemWindowClosed(key) {
+            if (key !== emergencyWindow.windowKey)
+                return;
+            emergencyWindow.windowKey = "";
+            shell._emergencyClosed();
+        }
+    }
 
     // ---- The dock's state (OverlayWindowManager's dock state machine,
     // :340-395, and SystemUiController's show / hide calls) --------------
@@ -88,7 +190,7 @@ FocusScope {
     // dashboard closes in card view - never over Just Type (slotShowDock).
     property bool dockShown: true
     function _showDock() {
-        if (!justType.open)
+        if (!justType.open && !firstUse)
             dockShown = true;
     }
     Connections {
@@ -143,8 +245,18 @@ FocusScope {
     // then Just Type hides, or the launcher closes, or the app minimizes, or
     // the launcher opens.
     function gestureUp() {
+        if (emergencyShown) {
+            closeEmergency();
+            return;
+        }
         if (locked)
             return;
+        // First Use: card view only to switch to an app it opened.
+        if (firstUse) {
+            if (cards.maximizeProgress > 0 && !cards.minimizing && cards.count > 1)
+                cards.minimize();
+            return;
+        }
         systemMenu.open = false;
         notes.dashboardOpen = false;
         if (justType.open)
@@ -164,7 +276,11 @@ FocusScope {
     // second arrives while the card is still minimizing (the original saw
     // it as the release's auto-repeat flag).
     function homeKey() {
-        if (locked)
+        if (emergencyShown) {
+            closeEmergency();
+            return;
+        }
+        if (locked || firstUse)
             return;
         if (notes.dashboardOpen) {
             notes.dashboardOpen = false;
@@ -187,7 +303,7 @@ FocusScope {
     // Key_CoreNavi_SwipeDown (SystemUiController.cpp:498-525): in card view,
     // with nothing open over it, the active card comes up maximized.
     function gestureDown() {
-        if (locked || notes.dashboardOpen || systemMenu.open || launcher.open || justType.open)
+        if (locked || emergencyShown || notes.dashboardOpen || systemMenu.open || launcher.open || justType.open)
             return;
         if (cards.count > 0 && cards.maximizeProgress === 0)
             cards.maximize();
@@ -199,6 +315,10 @@ FocusScope {
     // Just Type is up: the key goes to its page, which closes it. Otherwise
     // the focused app gets it.
     function gestureBack() {
+        if (emergencyShown) {
+            source.back(emergencyWindow.windowKey);
+            return;
+        }
         if (locked)
             return;
         if (notes.dashboardOpen)
@@ -214,7 +334,7 @@ FocusScope {
     }
 
     function gestureTap() {
-        if (locked)
+        if (locked || emergencyShown || (firstUse && cards.count < 2))
             return;
         if (cards.maximizeProgress > 0)
             cards.minimize();
@@ -318,7 +438,7 @@ FocusScope {
             event.accepted = true;
         } else if (event.key === Qt.Key_F3 || event.key === Qt.Key_PowerOff) {
             locked ? unlock() : lock(); event.accepted = true;
-        } else if (!locked && !cards.maximized && !justType.open && event.text.length === 1
+        } else if (!locked && !firstUse && !cards.maximized && !justType.open && event.text.length === 1
                    && event.text.trim() !== "" && !(event.modifiers & Qt.ControlModifier)) {
             // Just Type: typing in card view starts a search.
             startJustType(event.text);
@@ -386,7 +506,8 @@ FocusScope {
     readonly property Item _focusItem: Window.activeFocusItem
     // The window that has the keyboard focus: Just Type's, else the
     // maximized card's (CardWindow focus; a card in card view has none).
-    readonly property string _focusedWindowUid: justType.open ? "justtype" : (cards.maximized ? cards.currentUid : "")
+    readonly property string _focusedWindowUid: emergencyShown ? emergencyWindow.windowKey
+        : justType.open ? "justtype" : (cards.maximized ? cards.currentUid : "")
 
     function _isTextField(item) {
         return item !== null && item !== undefined && item.inputMethodHints !== undefined
@@ -688,6 +809,8 @@ FocusScope {
                     bottomInset: notes.negativeSpace
                     uiOrientation: uiRotation.uiOrientation
                     uiPortrait: uiRotation.uiPortrait
+                    // First Use's card stays until the app closes it.
+                    pinnedUid: shell._firstUseUid
                 }
 
                 Launcher {
@@ -716,7 +839,7 @@ FocusScope {
                 id: searchPill
                 anchors.horizontalCenter: parent.horizontalCenter
                 y: Theme.statusBarHeight + Theme.searchPillTopOffset
-                shown: !locked && cards.maximizeProgress === 0 && !launcher.open && !justType.open
+                shown: !locked && !firstUse && cards.maximizeProgress === 0 && !launcher.open && !justType.open
                 onTapped: shell.startJustType("")
                 backdrop: sceneBackdrop
             }
@@ -975,7 +1098,26 @@ FocusScope {
                 bannerGlyph: notes.bannerGlyph
                 bannerIcon: notes.bannerIcon
                 bannerOpacity: notes.bannerOpacity
+                emergencyAvailable: shell.emergencyAvailable
                 onUnlockRequested: shell.unlock()
+                onEmergencyRequested: shell.openEmergency()
+            }
+
+            // Over the lock screen, under the status bar and the alerts. The
+            // TouchPad release put the emergency window manager under the
+            // lock window, "temporarily demoted" for full-screen Flash
+            // (WindowServerLuna.cpp:163-169); before that it stood above it,
+            // which an emergency call from the lock screen needs.
+            EmergencyWindow {
+                id: emergencyWindow
+                objectName: "emergencyWindow"
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.topMargin: Theme.statusBarHeight
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: shell.locked ? 0 : notes.negativeSpace
+                source: shell.source
             }
 
             StatusBar {
@@ -990,7 +1132,7 @@ FocusScope {
                 // launcher ("Launcher", com.palm.launcher's title; not actionable),
                 // then the maximized app; else the carrier. Our Just Type has no
                 // app menu yet (the original's: Preferences, Help), so no arrow.
-                readonly property string _mode: shell.locked ? "" : justType.open ? "justtype"
+                readonly property string _mode: shell.locked || shell.firstUse ? "" : justType.open ? "justtype"
                     : launcher.open ? "launcher" : cards.maximized ? "app" : ""
                 title: _mode === "justtype" ? qsTr("Just Type") : _mode === "launcher" ? qsTr("Launcher")
                      : _mode === "app" ? cards.currentTitle : (shell.system ? shell.system.carrier : "")
@@ -1000,7 +1142,7 @@ FocusScope {
                 systemMenuOpen: systemMenu.open
                 lockScreen: shell.locked
                 filled: cards.maximized || launcher.open || justType.open
-                onSystemMenuRequested: if (!shell.locked) systemMenu.open = !systemMenu.open
+                onSystemMenuRequested: if (!shell.locked && !shell.firstUse) systemMenu.open = !systemMenu.open
                 onAppMenuRequested: {
                     if (cards.maximized && shell.source && typeof shell.source.appMenu === "function")
                         shell.source.appMenu(cards.currentUid);

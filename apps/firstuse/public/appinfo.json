@@ -1,0 +1,18 @@
+{
+    "id": "org.webosphoenix.firstuse",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "First Use",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "iconColor": "#e07a2c",
+    "uiRevision": 2,
+    "keywords": ["Setup", "Welcome", "Tutorial"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md). Hidden, as com.palm.app.firstuse was: the shell runs it at first boot, and Settings > Device Info runs it again.",
+        "launcherTab": 2,
+        "hidden": true
+    }
+}

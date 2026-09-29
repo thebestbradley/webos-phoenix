@@ -341,6 +341,10 @@ function WeatherApp() {
             return;
         }
         let live = true;
+        // First start (no places yet): show the forecast as soon as there is
+        // a position. Later a fix can come seconds after the start (GPS), and
+        // must not take the user away from where they have gone since.
+        const firstStart = !stateRef.current.places.length;
         setLocating(true);
         locationService.currentPosition()
             .then((pos) => {
@@ -355,7 +359,7 @@ function WeatherApp() {
                     const places = old ? s.places.map((p) => (p.id === CURRENT_ID ? here : p)) : addPlace(s.places, here);
                     return { ...s, places, cache, selected: s.selected ?? CURRENT_ID };
                 });
-                if (!stateRef.current.places.length || stateRef.current.selected === CURRENT_ID) setScreen((sc) => (sc === "places" ? "forecast" : sc));
+                if (firstStart) setScreen((sc) => (sc === "places" ? "forecast" : sc));
             })
             .catch((e: { errorText?: string }) => {
                 if (!live) return;

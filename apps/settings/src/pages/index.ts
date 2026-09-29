@@ -11,6 +11,9 @@ import { DateTimePage } from "./DateTime";
 import { LanguagePage } from "./Language";
 import { DeviceInfoPage } from "./DeviceInfo";
 import { UpdatesPage } from "./Updates";
+import { LocationPage } from "./Location";
+import { EmergencyPage } from "./Emergency";
+import { AccessibilityPage } from "./Accessibility";
 
 export interface PageInfo {
     title: string;
@@ -28,6 +31,9 @@ export const PAGES = {
     sounds: { title: "Sounds & Ringtones", icon: "icons/sounds.png", component: SoundsPage },
     datetime: { title: "Date & Time", icon: "icons/datetime.png", component: DateTimePage },
     language: { title: "Language & Region", icon: "icons/language.png", component: LanguagePage },
+    location: { title: "Location Services", icon: "icons/location.png", component: LocationPage },
+    emergency: { title: "Emergency Info", icon: "icons/emergency.png", component: EmergencyPage },
+    accessibility: { title: "Accessibility", icon: "icons/accessibility.png", component: AccessibilityPage },
     deviceinfo: { title: "Device Info", icon: "icons/deviceinfo.png", component: DeviceInfoPage },
     updates: { title: "Updates", icon: "icons/updates.png", component: UpdatesPage },
 } satisfies Record<string, PageInfo>;

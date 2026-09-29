@@ -5,8 +5,13 @@
 //
 // Context properties set by phoenix-sim:
 //   simScene       "locked" | "cards" | "stacks" | "reorder" | "maximized" | "heldcard" | "launcher" |
-//                  "launcheredit" | "pin" | "lowbattery" | "banner" | "notified" | "dashboard" | "justtype" | "keyboard" |
-//                  "systemmenu" | "empty"
+//                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" |
+//                  "justtype" | "keyboard" | "systemmenu" | "empty"
+//   simFirstUse    start with First Use (--first-use); without it First Use
+//                  runs at start-up until it has been done once
+//                  (simSettings "firstuse/done", set when the app reports the
+//                  system preference firstUseComplete), unless a scene or an
+//                  app to launch was given
 //   simFormFactor  "auto" | "phone" | "tablet"
 //   simDensity     device pixels per legacy pixel (--scale, default 1)
 //   simLaunch      app ids to launch (--launch)
@@ -131,6 +136,8 @@ Item {
     Connections {
         target: shell
         function onLockedChanged() { windows.pushSystemStatus({ deviceLocked: shell.locked }); }
+        // com.palm.systemmanager getBootStatus {firstUse}.
+        function onFirstUseChanged() { windows.pushSystemStatus({ firstUse: shell.firstUse }); }
         // The keyboard is up (com.palm.systemmanager getSystemStatus ime.visible).
         function onKeyboardOpenChanged() { windows.pushSystemStatus({ ime: { visible: shell.keyboardOpen } }); }
     }
@@ -204,6 +211,17 @@ Item {
         onTriggered: Qt.quit()
     }
 
+    // First Use is done (the app set firstUseComplete): not again at the next
+    // start, as LunaSysMgr's /var/luna/preferences/ran-first-use.
+    Connections {
+        target: windows
+        function onPreferencesReported(p) {
+            if (typeof simSettings === "undefined" || p.firstUseComplete === undefined)
+                return;
+            simSettings.setValue("firstuse/done", p.firstUseComplete ? "1" : "");
+        }
+    }
+
     // The launcher layout (icon order, dock) survives restarts (simSettings,
     // phoenix-sim's settings file).
     Connections {
@@ -234,6 +252,17 @@ Item {
             });
             return;
         }
+        // First Use: asked for, or never done on this simulator.
+        var scene = typeof simScene !== "undefined" ? simScene : "";
+        var firstUse = (typeof simFirstUse !== "undefined" && simFirstUse)
+            || (scene === "" && typeof simSettings !== "undefined" && simSettings.value("firstuse/done") !== "1");
+        if (firstUse) {
+            Qt.callLater(function() {
+                if (!shell.startFirstUse())
+                    buildScene();
+            });
+            return;
+        }
         // After the window source has built its app list.
         Qt.callLater(buildScene);
     }
@@ -242,7 +271,9 @@ Item {
         var scene = typeof simScene !== "undefined" && simScene !== "" ? simScene : "locked";
         if (scene === "empty")
             return shell.unlock();
-        if (scene !== "locked" && scene !== "pin")
+        if (scene === "firstuse")
+            return shell.startFirstUse();
+        if (scene !== "locked" && scene !== "pin" && scene !== "emergency")
             shell.unlock();
         // Real apps where the simulator has them (Memos, Calculator), placeholders otherwise.
         var ids = ["Messaging", "Memos", "Calculator", "Web"].map(windows.appIdByTitle);
@@ -302,12 +333,14 @@ Item {
             windows.notify(windows.appIdByTitle("Calendar"), "Launch party", "Tomorrow, 9:41 AM");
             if (scene === "dashboard")
                 shell.notifications.dashboardOpen = true;
-        } else if (scene === "pin") {
+        } else if (scene === "pin" || scene === "emergency") {
             // The PIN panel as it asks for the passcode (nothing is set: the
-            // scene only shows it).
+            // scene only shows it); "emergency" then taps its Emergency Call.
             var panel = shell.lockScreen.unlockPanel;
             panel.setupDialog(true, qsTr("Device Locked"), qsTr("Enter PIN"), false, 0);
             panel.shown = true;
+            if (scene === "emergency")
+                shell.openEmergency();
         } else if (scene === "justtype") {
             shell.startJustType("m");
         } else if (scene === "keyboard") {

@@ -87,6 +87,19 @@ const ICONS = {
         </g>
         <path d="M14.5 15.5l2 12.2 11.2-5.2z" fill="#fff"/>
         <path d="M49.5 48.5l-2-12.2-11.2 5.2z" fill="#fff"/>`],
+    location: ["#4fa3e0", "#1d5a9a", `
+        <path d="M32 50c-1.2 0-13-13.5-13-23a13 13 0 0 1 26 0c0 9.5-11.8 23-13 23z" fill="#fff"/>
+        <circle cx="32" cy="27" r="5.2" fill="url(#bg)"/>`],
+    emergency: ["#ef5a4c", "#9c1c14", `
+        <g fill="#fff">
+          <rect x="27.5" y="13" width="9" height="38" rx="3"/>
+          <rect x="27.5" y="13" width="9" height="38" rx="3" transform="rotate(60 32 32)"/>
+          <rect x="27.5" y="13" width="9" height="38" rx="3" transform="rotate(-60 32 32)"/>
+        </g>`],
+    accessibility: ["#3aa0a8", "#135c63", `
+        <circle cx="32" cy="16.5" r="4.6" fill="#fff"/>
+        <path d="M15.5 24.5l16.5 3.2 16.5-3.2M32 27.7v9.6M32 37.3l-7 12.5M32 37.3l7 12.5" fill="none" stroke="#fff"
+              stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>`],
 };
 
 function svg([top, bottom, glyph]) {
