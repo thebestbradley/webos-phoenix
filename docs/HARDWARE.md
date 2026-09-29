@@ -189,6 +189,24 @@ cheapest way to back several legacy APIs at once.
 | **Fingerprint** | [fprintd](https://fprint.freedesktop.org/) on mainline (few phone sensors supported); Android biometrics HAL on Halium (Droidian's approach) | None in legacy webOS | No | A PAM/lock-screen integration after PIN lock works. Low priority |
 | **Hardware keys, switches** | evdev (power, volume, ringer switch on devices that have one, headset jack) | Legacy `com.palm.keys` (switches, headset, media keys) | Partly (nyx keys module in LuneOS) | Port the keys module; the shell handles power and volume |
 
+### Device configuration
+
+What the shell needs to know about a device's hardware that it cannot
+detect comes from `/etc/phoenix/device.json`, installed by the device's
+layer in `meta-phoenix` (or the file named by `PHOENIX_DEVICE_CONFIG`). A
+missing file or key means the default. Read by `Phoenix.Native`'s
+`DeviceConfig`.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `hardwareHomeButton` | `false` | The device has a Home button (physical or capacitive) that its maker uses **instead of** the on-screen gesture bar. The shell then hides the bar, the key does its job (`Key_Home`), and tablets take the bottom-edge flick for swipe up. |
+
+Phoenix keeps the gesture bar on every phone and tablet by default,
+including the TouchPad, whose Home button was a step back from the Pre's
+gesture area: a device goes without the bar only when its maker chooses
+the button. The bar is on the screen, so it follows the UI to the bottom
+as the device turns.
+
 ## Graphics
 
 - **Mainline: Mesa.** freedreno for Adreno (OnePlus 6, Pixel 3a, SHIFT6mq,

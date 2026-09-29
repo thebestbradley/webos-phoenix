@@ -218,6 +218,7 @@ cmake --build build
 ./build/phoenix-sim            # Pre (320x480)
 ./build/phoenix-sim --size 480x800 --scale 1.5 --scene cards   # Pre 3
 ./build/phoenix-sim --tablet   # TouchPad (1024x768)
+./build/phoenix-sim --tablet --size 2560x1600 --scale 2      # a large tablet
 ```
 
 **Ubuntu 24.04**
@@ -232,8 +233,12 @@ cmake -S shell -B build && cmake --build build
 ./build/phoenix-sim
 ```
 
-Controls: drag with the mouse as you would with a finger. The black strip at
-the bottom is the gesture area. Keys: **Esc** back, **F1** swipe up, **Home** the Home button,
+Controls: drag with the mouse as you would with a finger. The strip at the
+bottom is the gesture bar, on phones and tablets alike; it moves to the
+bottom of the screen as you hold it. `--home-button` simulates a device
+whose maker uses a hardware Home button instead (no gesture bar; tablets
+then take the bottom-edge flick). A big `--size` needs a matching
+`--scale` to look like a real device (2 for most tablets of 2560 px). Keys: **Esc** back, **F1** swipe up, **Home** the Home button,
 **F2** demo notification, **F3** lock/unlock, **F4** incoming call (rings
 the Phone app), **F5** incoming text message (for Messaging), **F6** low
 battery, **F7** plug a charger in or out, **F8** battery charged to full,

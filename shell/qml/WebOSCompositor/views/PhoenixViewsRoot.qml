@@ -16,6 +16,7 @@ import WebOSCompositorBase 1.0
 import WebOSCompositor 1.0
 import Phoenix.Shell
 import Phoenix.Lsm
+import Phoenix.Native
 
 FocusScope {
     id: root
@@ -38,6 +39,7 @@ FocusScope {
         anchors.fill: parent
         focus: true
         formFactor: "auto"
+        hardwareHomeButton: DeviceConfig.hardwareHomeButton
         source: LsmWindowSource { id: windows }
         system: LsmSystemStatus {}
         // OSE's own keyboard (Maliit through com.webos.service.ime, drawn in

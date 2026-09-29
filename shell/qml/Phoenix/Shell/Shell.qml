@@ -44,6 +44,12 @@ FocusScope {
     focus: true
 
     Binding { target: Theme; property: "tablet"; value: shell.tablet }
+    // The device has a Home button its maker uses instead of the gesture
+    // bar (a device's /etc/phoenix/device.json, phoenix-sim --home-button):
+    // no gesture bar, and on a tablet the bottom-edge flick stands in for
+    // its swipe up, as on the TouchPad.
+    property bool hardwareHomeButton: false
+    Binding { target: Theme; property: "hardwareHomeButton"; value: shell.hardwareHomeButton }
     // Settings > Accessibility > Reduce motion.
     Binding { target: Theme; property: "reduceMotion"; value: !!(shell.system && shell.system.reduceMotion) }
     // Tell the window source which card is in front (apps it launches join
@@ -767,14 +773,18 @@ FocusScope {
         color: Theme.black
     }
 
-    // The screen. The phone's gesture area sits below it, outside the
-    // part that turns: it was hardware under the glass (GestureArea).
+    // The screen, less the gesture bar. The Pre's gesture area was hardware
+    // under the glass and stayed put; Phoenix's is on the screen, so it goes
+    // to the bottom of the UI as the UI turns (0: the device's bottom edge;
+    // 90, the UI turned clockwise: the left edge; ...).
+    readonly property int _barAngle: ((uiRotation.uiAngle % 360) + 360) % 360
     Item {
         id: display
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.bottom: gesture.top
+        anchors.fill: parent
+        anchors.bottomMargin: shell._barAngle === 0 ? Theme.gestureAreaHeight : 0
+        anchors.leftMargin: shell._barAngle === 90 ? Theme.gestureAreaHeight : 0
+        anchors.topMargin: shell._barAngle === 180 ? Theme.gestureAreaHeight : 0
+        anchors.rightMargin: shell._barAngle === 270 ? Theme.gestureAreaHeight : 0
 
         // The UI root (WindowServer's m_uiRootItem): turned with the
         // device, at the swapped size when on its side
@@ -1234,7 +1244,8 @@ FocusScope {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 height: Theme.bezelEdgeHeight
-                enabled: shell.tablet && !shell.locked
+                // With the gesture bar its swipe up does this.
+                enabled: shell.tablet && !shell.locked && Theme.gestureAreaHeight === 0
                 preventStealing: true
                 property real sx
                 property real sy
@@ -1273,17 +1284,28 @@ FocusScope {
         return source && typeof source.inputTarget === "function" ? source.inputTarget(c.uid) : null;
     }
 
-    GestureArea {
-        id: gesture
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        height: Theme.gestureAreaHeight
-        visible: height > 0
-        onUp: shell.gestureUp()
-        onDown: shell.gestureDown()
-        onBack: shell.gestureBack()
-        onTapped: shell.gestureTap()
+    // The gesture bar, along the bottom of a screen-sized frame turned as
+    // the UI is, so its swipes read in the UI's directions.
+    Item {
+        id: gestureFrame
+        anchors.centerIn: parent
+        width: shell._barAngle % 180 === 0 ? parent.width : parent.height
+        height: shell._barAngle % 180 === 0 ? parent.height : parent.width
+        rotation: shell._barAngle
+
+        GestureArea {
+            id: gesture
+            objectName: "gestureBar"
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: Theme.gestureAreaHeight
+            visible: height > 0
+            onUp: shell.gestureUp()
+            onDown: shell.gestureDown()
+            onBack: shell.gestureBack()
+            onTapped: shell.gestureTap()
+        }
     }
 
     // A finger on the screen holds a turn back (WindowServer::viewportEvent,

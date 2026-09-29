@@ -14,6 +14,8 @@
 //                  app to launch was given
 //   simFormFactor  "auto" | "phone" | "tablet"
 //   simDensity     device pixels per legacy pixel (--scale, default 1)
+//   simHomeButton  the device has a hardware Home button instead of the
+//                  gesture bar (--home-button; the Home key presses it)
 //   simLaunch      app ids to launch (--launch)
 //   simOpen        a web address to open in the browser (--open)
 //   simDisplayWidth, simDisplayHeight  the device's screen upright (--size)
@@ -53,6 +55,7 @@ Item {
             anchors.fill: parent
             formFactor: typeof simFormFactor !== "undefined" ? simFormFactor : "auto"
             density: typeof simDensity !== "undefined" ? simDensity : 1
+            hardwareHomeButton: typeof simHomeButton !== "undefined" && simHomeButton
             // The phones and the TouchPad of luna-sysmgr's day had one
             // ([VirtualKeyboard] VirtualKeyboardEnabled).
             virtualKeyboard: true

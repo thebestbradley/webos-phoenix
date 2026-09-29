@@ -181,10 +181,14 @@ QtObject {
     readonly property int positiveSpaceTopPadding: px(28)
     readonly property int positiveSpaceBottomPadding: px(28)
 
-    // Phones had a physical gesture area below the screen. Modern phones do
+    // Phones had a physical gesture area below the screen. Modern devices do
     // not, so Phoenix reserves a thin on-screen strip that behaves the same
-    // (swipe up = card view, swipe left = back). 0 disables it.
-    property int gestureAreaHeight: tablet ? 0 : px(20)
+    // (swipe up = card view, swipe left = back), on phones and tablets alike.
+    // The TouchPad had a Home button instead; Phoenix does not follow it.
+    // Only a device whose maker uses a hardware Home button in its place
+    // (Shell.hardwareHomeButton, DeviceConfig) goes without the strip.
+    property bool hardwareHomeButton: false
+    readonly property int gestureAreaHeight: hardwareHomeButton ? 0 : px(20)
     // Tablet bottom-edge flick (G1): where it starts, and how far it goes.
     readonly property int bezelEdgeHeight: px(8)                     // Phoenix: stands in for the bezel
     readonly property int bezelFlickMinimum: 30                       // Phoenix: as GestureArea's swipe

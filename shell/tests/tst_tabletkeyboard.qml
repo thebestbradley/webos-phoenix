@@ -20,6 +20,9 @@ Item {
         id: shell
         anchors.fill: parent
         formFactor: "tablet"
+        // The TouchPad as it was (a Home button, no gesture bar): the tests
+        // measure the keyboard against its pixels.
+        hardwareHomeButton: true
         density: 1
         virtualKeyboard: true
         source: SimWindowSource { id: windows }

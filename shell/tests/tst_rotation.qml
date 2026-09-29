@@ -60,7 +60,7 @@ Item {
         function test_bootsUpright() {
             compare(shell.uiOrientation, "up");
             compare(ui.width, 320);
-            // The gesture area is below the screen, not part of the UI.
+            // The gesture bar is below the UI, not part of it.
             compare(ui.height, 480 - Theme.gestureAreaHeight);
             compare(ui.rotation, 0);
         }
@@ -85,10 +85,15 @@ Item {
             sys.deviceOrientation = "left";
             tryCompare(shell, "uiOrientation", "left", 1000);
             settle();
-            // Resized to the swapped size and turned a quarter clockwise,
-            // filling the screen above the gesture area.
-            compare(ui.width, 480 - Theme.gestureAreaHeight);
-            compare(ui.height, 320);
+            // Resized to the swapped size and turned a quarter clockwise; the
+            // gesture bar goes with it, to the UI's bottom (the device's left
+            // edge), so the UI is the full length and the bar's height less.
+            compare(ui.width, 480);
+            compare(ui.height, 320 - Theme.gestureAreaHeight);
+            var bar = findChild(shell, "gestureBar");
+            var barAt = bar.mapToItem(root, 0, 0);
+            fuzzyCompare(barAt.x, Theme.gestureAreaHeight, 0.5);   // its left end, turned: at the top of the left edge
+            fuzzyCompare(barAt.y, 0, 0.5);
             compare(ui.rotation, 90);
             var topLeft = ui.mapToItem(root, 0, 0);
             fuzzyCompare(topLeft.x, 320, 0.5);
@@ -96,7 +101,7 @@ Item {
             // The layers lay themselves out at that size.
             compare(findChild(shell, "statusBar").width, ui.width);
             compare(shell.cardView.width, ui.width);
-            compare(shell.cardView.windowHeight, 320 - Theme.statusBarHeight - shell.notifications.negativeSpace);
+            compare(shell.cardView.windowHeight, 320 - Theme.gestureAreaHeight - Theme.statusBarHeight - shell.notifications.negativeSpace);
             // A phone on its side stays a phone.
             verify(!shell.tablet);
             // The snapshots are gone: the live UI shows and takes input.
@@ -107,7 +112,8 @@ Item {
             tryCompare(shell, "uiOrientation", "right", 1000);
             settle();
             compare(ui.rotation, 270);
-            compare(ui.width, 480 - Theme.gestureAreaHeight);
+            compare(ui.width, 480);
+            compare(ui.height, 320 - Theme.gestureAreaHeight);
         }
 
         function test_faceUpDoesNotTurn() {

@@ -19,6 +19,9 @@ Item {
         anchors.fill: parent
         formFactor: "tablet"
         density: 1
+        // The TouchPad as it was: a Home button, no gesture bar (the tests
+        // measure it against luna-sysmgr). tst_gesturebar covers the default.
+        hardwareHomeButton: true
         source: SimWindowSource { id: windows }
         system: SimSystemStatus { id: sys }
     }
