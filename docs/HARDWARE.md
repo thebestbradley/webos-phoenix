@@ -194,6 +194,21 @@ a must.
 | F(x)tec Pro1-X (slider) | Snapdragon 662 | Unlocked, built for LineageOS and Ubuntu Touch | Shipped late and in small numbers; availability unclear | Community level at best |
 | Planet Computers Astro Slide | Dimensity 800 | Multi-boot by design | Few units ever shipped | Not a target |
 
+### (f) Phones sold for Linux
+
+Checked 29 September 2026. These makers expect other operating systems, so
+unlocking, documentation and a buying audience that likes to try things
+come with the phone. The mainline ones (PinePhone family, Librem 5,
+Fairphone 4/5) are in tier (b).
+
+| Device | SoC, RAM | Runs today | Status | For Phoenix |
+| --- | --- | --- | --- | --- |
+| **Volla Phone X23** / **Quintus** / **22** | Snapdragon 778G+ 8 GB / Helio G85 6 GB / Snapdragon 680 4 GB | Volla OS, Ubuntu Touch, Droidian; **multi-boot** | Shipping (€450-€720) | Halium; multi-boot means Phoenix can sit next to the owner's OS. Strong candidate |
+| **FuriLabs FLX1** / **FLX1s** | Snapdragon 778G+ 8 GB / Dimensity 900 8 GB, kill switches | FuriOS (Debian on Halium) | Shipping ($550) | LuneOS has a config for the FLX1s (`radon`) |
+| **Jolla Phone** (2025) and Jolla C2 | *not checked* | Sailfish OS | Shipping (€649) | Halium-style; check unlocking |
+| **Liberux NEXX** | RK3588S, 8-32 GB | LiberuxOS (Debian, mainline) | Crowdfunding; delivery promised July 2026, first product of a new company | Would be mainline and powerful if it ships |
+| **ClockworkPi uConsole** | Raspberry Pi compute modules (ARM or RISC-V), 1-4 GB | Debian, Raspberry Pi OS | Shipping ($139-$209, 4G add-on) | A keyboard handheld; the Pi image covers it |
+
 ### Devices we will not target
 
 - **Original Palm/HP hardware** (Pre, Veer, TouchPad): 512 MB–1 GB RAM and
