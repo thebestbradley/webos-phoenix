@@ -18,7 +18,8 @@
 //                  gesture bar (--home-button; the Home key presses it)
 //   simLaunch      app ids to launch (--launch)
 //   simOpen        a web address to open in the browser (--open)
-//   simDisplayWidth, simDisplayHeight  the device's screen upright (--size)
+//   simDisplayWidth, simDisplayHeight  the window's size at start-up, upright (--size);
+//                  after that the screen follows the window
 //   simOrientation how the device is held at start-up (--orientation)
 //   simTurn        an orientation to turn the device to after a second (--turn)
 //   simBootSounds  play the boot and shutdown sounds (not with --quiet,
@@ -39,15 +40,17 @@ Item {
 
     readonly property var orientations: ["up", "left", "down", "right"]   // counter-clockwise
     readonly property int deviceAngle: 90 * Math.max(0, orientations.indexOf(status.deviceOrientation))
-    // The screen's shape upright (--size): its sides keep that shape
-    // whatever the window does while it turns.
-    readonly property bool displayPortrait: typeof simDisplayWidth === "undefined" || simDisplayWidth <= simDisplayHeight
+    // The device's screen is the window, turned back by how the device is
+    // held: --size only sets the window it starts in. Resize the window and
+    // the screen takes the new size (a bigger tablet, a narrower phone), and
+    // the shell lays itself out again.
+    readonly property bool sideways: deviceAngle % 180 !== 0
 
     Item {
         id: device
         anchors.centerIn: parent
-        width: root.displayPortrait ? Math.min(root.width, root.height) : Math.max(root.width, root.height)
-        height: root.displayPortrait ? Math.max(root.width, root.height) : Math.min(root.width, root.height)
+        width: root.sideways ? root.height : root.width
+        height: root.sideways ? root.width : root.height
         rotation: -root.deviceAngle
 
         Shell {
