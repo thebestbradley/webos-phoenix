@@ -330,16 +330,22 @@
     // Calls made but not yet dispatched. A page that calls a service and
     // closes its window at once (Enyo's alerts: call, then close()) would
     // lose the call with its timer; on a device it was already on the bus.
-    var unsent = {}, nextUnsent = 1;
+    // Calls made while the page is going away (a pagehide handler turning the
+    // torch off) are dispatched at once: the timer would never fire. The
+    // listener is a capture one so that it runs before the page's own
+    // pagehide handlers.
+    var unsent = {}, nextUnsent = 1, unloading = false;
     try {
         global.addEventListener("pagehide", function () {
+            unloading = true;
             Object.keys(unsent).forEach(function (k) {
                 var u = unsent[k];
                 if (!u) return;
                 clearTimeout(u.timer);
                 u.run();
             });
-        });
+        }, true);
+        global.addEventListener("pageshow", function () { unloading = false; });
     } catch (e) { /* ignore */ }
 
     runtime.dispatch = dispatch;
@@ -362,6 +368,10 @@
                     bridge.onservicecallback(JSON.stringify(response));
                 }, ctx);
             };
+            if (unloading) {
+                run();
+                return 1;
+            }
             unsent[id] = { run: run, timer: setTimeout(run, 0) };
             return 1;
         };
