@@ -69,10 +69,12 @@ anyway: 19 MB instead of 42 MB.
 - **Size and start-up**: about 19 MB (CanvasKit is 5-7 MB of WebAssembly,
   the app 3 MB of script); it takes a moment longer to start than the web
   demos.
-- **Chromium**: tested so far in current headless Chromium, not yet in
-  phoenix-sim's Qt 6.4 WebEngine (Chromium 102), where the CanvasKit
-  renderer is the one that can run: the faster Skwasm renderer (`--wasm`)
-  needs WasmGC, in Chromium 119 and later.
+- **In phoenix-sim** it needs Qt 6.6 or later: Flutter loads its renderer
+  and fonts with `fetch()`, which Chromium allows on the simulator's
+  `phoenix://` scheme only with Qt's `FetchApiAllowed` flag (new in 6.6).
+  Checked in phoenix-sim with Qt 6.9.3; with Qt 6.4 the app stays blank.
+  The faster Skwasm renderer (`--wasm`) needs WasmGC, in Chromium 119 and
+  later.
 - **Language**: Flutter's engine stops at start if `navigator.language` is
   not a language tag (Chromium on a machine with no locale reports
   `en-US@posix`). A device with its language set is fine; the tests set

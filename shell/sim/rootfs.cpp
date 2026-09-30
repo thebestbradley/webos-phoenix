@@ -212,9 +212,16 @@ void RootfsSchemeHandler::registerScheme()
     // (phoenix://rootfs), so they share localStorage like apps on a device
     // share db8, and absolute paths like /usr/palm/frameworks/... resolve.
     scheme.setSyntax(QWebEngineUrlScheme::Syntax::Host);
-    scheme.setFlags(QWebEngineUrlScheme::SecureScheme
-                    | QWebEngineUrlScheme::LocalAccessAllowed
-                    | QWebEngineUrlScheme::CorsEnabled);
+    // FetchApiAllowed (Qt 6.6+): fetch() works on it, as on a device's
+    // file:// apps. Flutter's web apps load their renderer (WebAssembly) and
+    // fonts with fetch(); without it Chromium refuses the scheme.
+    QWebEngineUrlScheme::Flags flags = QWebEngineUrlScheme::SecureScheme
+                                       | QWebEngineUrlScheme::LocalAccessAllowed
+                                       | QWebEngineUrlScheme::CorsEnabled;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
+    flags |= QWebEngineUrlScheme::FetchApiAllowed;
+#endif
+    scheme.setFlags(flags);
     QWebEngineUrlScheme::registerScheme(scheme);
 }
 
