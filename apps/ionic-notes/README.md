@@ -56,8 +56,7 @@ drives it in headless Chromium at tablet and phone size.
 
 - **It works as it is.** Ionic's components are web components with React
   wrappers; nothing had to be patched. The build targets Chromium 100 (Qt
-  6.4's WebEngine is 102); tested so far in current headless Chromium, not
-  yet in phoenix-sim's WebEngine.
+  6.4's WebEngine is 102), and it runs in phoenix-sim with Qt 6.4.
 - **Size**: `@ionic/react` does not mark itself free of side effects, so
   every component ships: about 1.5 MB of script (350 kB gzipped), loaded
   from the device.

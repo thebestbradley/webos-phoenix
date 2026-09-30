@@ -211,7 +211,9 @@ laid out for phones and tablets and sharing the Enact demos' notes in db8:
   `PalmServiceBridge` from Dart (`dart:js_interop`); the model is a Dart
   port of notes-core, whose tests check it keeps the same kinds and
   welcome note. CanvasKit and the fonts are bundled, so nothing is fetched
-  from Google's CDN. Built only when Flutter is installed (CMake finds it).
+  from Google's CDN. Built only when Flutter is installed (CMake finds it). In phoenix-sim it
+  needs Qt 6.6+, whose `FetchApiAllowed` scheme flag lets Flutter
+  `fetch()` its renderer and fonts from `phoenix://`.
   Flutter draws into a canvas, and its semantics tree (on here for screen
   readers) is what tests drive. LG's native Flutter embedder for webOS TV
   is the route for native Flutter apps later; the READMEs compare them.
