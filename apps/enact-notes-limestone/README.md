@@ -42,6 +42,9 @@ Enact's CLI (`enact pack`) expects an app's packages in the app's own
 `node_modules`, so this is an npm project of its own, not a workspace of
 `apps/`. notes-core is built first and copied in (`install-links`):
 
+Needs Node.js 20.12+, 22 or 24+ (Enact's CLI refuses odd releases such
+as 23).
+
 ```sh
 cd apps && npm ci && npm run build        # builds shared/notes-core/lib too
 cd enact-notes-limestone && npm ci && npm run build   # writes dist/

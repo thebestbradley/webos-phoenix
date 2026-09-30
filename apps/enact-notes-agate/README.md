@@ -28,6 +28,9 @@ ArcSlider, ColorPicker; `@enact/ui` Layout and resolution;
 As for the Limestone demo (an npm project of its own; notes-core built
 first):
 
+Needs Node.js 20.12+, 22 or 24+ (Enact's CLI refuses odd releases such
+as 23).
+
 ```sh
 cd apps && npm ci && npm run build
 cd enact-notes-agate && npm ci && npm run build   # writes dist/

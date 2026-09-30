@@ -47,7 +47,8 @@ endif()
 
 # Phoenix web apps (React + TypeScript in ../apps): `npm ci` when the lock
 # file changes or node_modules is missing, then `npm run build` on every build, writing apps/<name>/dist/
-# where phoenix-sim and tools/serve-rootfs.py pick them up. Needs Node.js 20+.
+# where phoenix-sim and tools/serve-rootfs.py pick them up. Needs Node.js 22
+# or 24 (LTS); 20.19+ also works.
 # Off by default for device builds (meta-phoenix sets PHOENIX_BUILD_SIM=OFF).
 option(PHOENIX_BUILD_APPS "Build the web apps in apps/ with npm" ${PHOENIX_BUILD_SIM})
 if(PHOENIX_BUILD_APPS)
@@ -79,8 +80,33 @@ if(PHOENIX_BUILD_APPS)
         # README.md). They take @phoenix/notes-core as built by phoenix-apps
         # (shared/notes-core/lib), copied in by their `npm ci`, which runs
         # again when the lock or notes-core's sources change.
+        #
+        # Enact's CLI only runs on Node's supported lines (20.12+, 22, 24+),
+        # not on odd-numbered releases such as 23. With another Node the
+        # demos are left out, with a warning, rather than failing the build.
+        set(_enact_node_ok FALSE)
+        find_program(PHOENIX_NODE node)
+        if(PHOENIX_NODE)
+            execute_process(COMMAND "${PHOENIX_NODE}" --version
+                            OUTPUT_VARIABLE _node_version OUTPUT_STRIP_TRAILING_WHITESPACE)
+            if(_node_version MATCHES "^v([0-9]+)\\.([0-9]+)")
+                set(_node_major "${CMAKE_MATCH_1}")
+                set(_node_minor "${CMAKE_MATCH_2}")
+                if((_node_major EQUAL 20 AND _node_minor GREATER_EQUAL 12) OR _node_major EQUAL 22
+                   OR _node_major GREATER_EQUAL 24)
+                    set(_enact_node_ok TRUE)
+                endif()
+            endif()
+        endif()
+        set(_enact_apps enact-notes-limestone enact-notes-agate)
+        if(NOT _enact_node_ok)
+            set(_enact_apps "")
+            message(WARNING "phoenix-apps: Node.js ${_node_version} is not one Enact's CLI supports "
+                            "(20.12+, 22 or 24+), so the Enact demos (apps/enact-notes-*) are not built. "
+                            "Install Node.js 22 or 24 LTS (macOS: `brew install node@22`), then run cmake again.")
+        endif()
         file(GLOB _notes_core_src CONFIGURE_DEPENDS "${PHOENIX_APPS_DIR}/shared/notes-core/src/*.ts")
-        foreach(_enact_app enact-notes-limestone enact-notes-agate)
+        foreach(_enact_app IN LISTS _enact_apps)
             set(_dir "${PHOENIX_APPS_DIR}/${_enact_app}")
             set(_stamp "${_dir}/node_modules/.package-lock.json")
             add_custom_command(

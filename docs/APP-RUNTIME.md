@@ -366,7 +366,7 @@ New Phoenix apps live in `apps/`, an npm workspace:
 
 | `apps/dav` | The CardDAV & CalDAV account (see [below](#carddav-and-caldav)): a hidden Enyo 1.0 app with the account's sign-in page, its db8 kinds and account template, and `apps/dav/service`, its Node.js Luna service and sync engine |
 
-Build (Node.js 20 or newer):
+Build (Node.js 22 or 24 LTS; 20.19+ also works):
 
 ```sh
 cd apps

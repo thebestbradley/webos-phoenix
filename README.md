@@ -204,9 +204,12 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Requires Qt 6.4 or newer with Qt Quick and Qt5Compat. Qt WebEngine is
 needed to run the web apps (the original webOS apps and new Phoenix apps);
-without it the simulator shows placeholder apps only. Node.js 20 or newer
-builds the Phoenix apps (Settings, Phone, Messaging); `cmake --build` runs `npm ci` and
-`npm run build` in `apps/` for you, and warns if npm is missing.
+without it the simulator shows placeholder apps only. Node.js 22 or 24
+(the LTS lines; 20.19+ also works) builds the Phoenix apps (Settings, Phone,
+Messaging); `cmake --build` runs `npm ci` and `npm run build` in `apps/` for
+you, and warns if npm is missing. Odd-numbered Node releases (such as 23)
+are short-lived and Enact's CLI refuses them, so with one the Enact demos
+are skipped with a warning (`brew install node@22` on a Mac).
 
 First fetch the original Open webOS apps and frameworks (git submodules):
 
