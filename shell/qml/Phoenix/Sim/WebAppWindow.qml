@@ -77,6 +77,80 @@ Item {
         request.openIn(view);
     }
 
+    // ---- Editing: Cut, Copy, Paste, Select All ----------------------------------------
+    // The page's Edit commands run in Chromium (as WebAppMgr ran PalmSystem's
+    // paste on webOS), on the system clipboard every app shares. The edit
+    // popup (Phoenix.Shell EditPopup) opens over a selection: on a touch
+    // long press (Chromium selects the word and asks for its menu), a right
+    // click, or a press and hold with a mouse (the runtime selects the word
+    // and sends "editMenu").
+
+    readonly property var _webActions: ({
+        selectAll: WebEngineView.SelectAll, cut: WebEngineView.Cut,
+        copy: WebEngineView.Copy, paste: WebEngineView.Paste
+    })
+
+    function edit(action, target) {
+        const v = target || view;
+        if (_webActions[action] !== undefined)
+            v.triggerWebAction(_webActions[action]);
+    }
+
+    // The popup for a page (view or a page inside it) at rect, in the page's
+    // own coordinates.
+    function _openEditPopup(page, rect, list) {
+        const p = page.mapToItem(win, rect.x, rect.y);
+        editPopup.page = page;
+        editPopup.open(Qt.rect(p.x, p.y, rect.width, rect.height), list);
+    }
+
+    function _contextMenu(page, request) {
+        // webOS had no context menu; only text gets the edit popup.
+        request.accepted = true;
+        if (!request.isContentEditable && !request.selectedText)
+            return;
+        const f = request.editFlags;
+        const list = [];
+        if (f & ContextMenuRequest.CanSelectAll && request.isContentEditable) list.push("selectAll");
+        if (f & ContextMenuRequest.CanCut) list.push("cut");
+        if (f & ContextMenuRequest.CanCopy) list.push("copy");
+        if (f & ContextMenuRequest.CanPaste) list.push("paste");
+        _openEditPopup(page, Qt.rect(request.position.x, request.position.y, 0, 0), list);
+    }
+
+    function _touchMenu(page, request) {
+        request.accepted = true;
+        const f = request.touchSelectionCommandFlags;
+        const list = [];
+        // Paste means a field: Select All then selects its text.
+        if (f & TouchSelectionMenuRequest.Paste) list.push("selectAll");
+        if (f & TouchSelectionMenuRequest.Cut) list.push("cut");
+        if (f & TouchSelectionMenuRequest.Copy) list.push("copy");
+        if (f & TouchSelectionMenuRequest.Paste) list.push("paste");
+        _openEditPopup(page, request.selectionBounds, list);
+    }
+
+    // Chromium's touch selection handles, as round webOS-blue grips.
+    Component {
+        id: selectionHandle
+        Rectangle {
+            width: 18 * Theme.u
+            height: width
+            radius: width / 2
+            color: Theme.highlight
+            border.color: "white"
+            border.width: Math.max(1, 2 * Theme.u)
+        }
+    }
+
+    EditPopup {
+        id: editPopup
+        // The page the popup acts on (the app's, or a page shown inside it).
+        property Item page: view
+        anchors.fill: parent
+        onTriggered: (action) => win.edit(action, page)
+    }
+
     // ---- Pages inside the page (enyo.WebView) ------------------------------------
     // The runtime's BrowserAdapter stand-in (see "BrowserAdapter" in
     // runtime/phoenix-runtime.js) asks for a Chromium view over each
@@ -115,6 +189,7 @@ Item {
         case "reload": v.reload(); break;
         case "stop": v.stop(); break;
         case "find": v.findText(p.text); break;
+        case "edit": edit(p.action, v); break;
         case "destroy":
             delete _webViews[p.id];
             v.destroy();
@@ -131,7 +206,12 @@ Item {
             profile: phoenixWebProfile
             zoomFactor: win.zoom
             settings.javascriptCanOpenWindows: true
+            settings.javascriptCanAccessClipboard: true
+            settings.javascriptCanPaste: true
             settings.playbackRequiresUserGesture: false
+            touchHandleDelegate: selectionHandle
+            onContextMenuRequested: (request) => win._contextMenu(page, request)
+            onTouchSelectionMenuRequested: (request) => win._touchMenu(page, request)
 
             function report() {
                 win._webViewEvent(viewId, "urlTitleChanged", [page.url.toString(), page.title, page.canGoBack, page.canGoForward]);
@@ -173,6 +253,8 @@ Item {
         settings.localContentCanAccessRemoteUrls: true
         settings.javascriptCanOpenWindows: true
         settings.javascriptCanAccessClipboard: true
+        // PalmSystem.paste() and Enyo's Input paste (document.execCommand).
+        settings.javascriptCanPaste: true
         settings.showScrollBars: false
         // Apps start and continue media themselves (Music's next song), as under WebAppMgr.
         settings.playbackRequiresUserGesture: false
@@ -183,6 +265,13 @@ Item {
                     const m = JSON.parse(message.substring(11));
                     if (m.type === "webView")
                         win._webView(m.payload);
+                    else if (m.type === "editAction")
+                        win.edit(m.payload.action);
+                    else if (m.type === "editMenu")
+                        win._openEditPopup(view, Qt.rect(m.payload.x * win.zoom, m.payload.y * win.zoom,
+                                                         m.payload.width * win.zoom, m.payload.height * win.zoom),
+                                           ["selectAll", "cut", "copy", "paste"].filter(
+                                               (a) => m.payload["can" + a.charAt(0).toUpperCase() + a.slice(1)]));
                     else
                         win.hostMessage(m.type, m.payload);
                 } catch (e) {
@@ -200,6 +289,9 @@ Item {
         }
         onNewWindowRequested: (request) => win.windowRequested(request)
         onWindowCloseRequested: win.closeRequested()
+        touchHandleDelegate: selectionHandle
+        onContextMenuRequested: (request) => win._contextMenu(view, request)
+        onTouchSelectionMenuRequested: (request) => win._touchMenu(view, request)
         // Camera and microphone for the Camera app, as an app's
         // requiredPermissions would grant them on a device. Nothing else.
         onFeaturePermissionRequested: (securityOrigin, feature) => {

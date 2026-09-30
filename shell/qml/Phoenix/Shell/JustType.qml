@@ -54,7 +54,13 @@ Item {
         input.forceActiveFocus();
     }
 
-    onOpenChanged: if (!open && surface) source.justTypeStop()
+    onOpenChanged: {
+        if (open)
+            return;
+        editPopup.close();
+        if (surface)
+            source.justTypeStop();
+    }
 
     onSurfaceChanged: {
         if (!surface)
@@ -115,6 +121,40 @@ Item {
             font.pixelSize: Theme.px(17)
             Keys.onEscapePressed: jt.closeRequested()
             onAccepted: if (results.count > 0) jt.launchRequested(results.get(0).appId)
+
+            // A long press selects the word and shows the edit popup, as in
+            // a web page's text field.
+            TapHandler {
+                objectName: "justTypeHold"
+                onLongPressed: {
+                    input.forceActiveFocus();
+                    input.cursorPosition = input.positionAt(point.position.x, point.position.y);
+                    input.selectWord();
+                    var list = ["selectAll"];
+                    if (input.selectedText.length > 0)
+                        list.push("cut", "copy");
+                    if (input.canPaste)
+                        list.push("paste");
+                    var r = input.positionToRectangle(input.selectionStart);
+                    var end = input.positionToRectangle(input.selectionEnd);
+                    var at = input.mapToItem(jt, r.x, 0);
+                    editPopup.open(Qt.rect(at.x, at.y, end.x - r.x, input.height), list);
+                }
+            }
+        }
+    }
+
+    EditPopup {
+        id: editPopup
+        objectName: "justTypeEditPopup"
+        anchors.fill: parent
+        onTriggered: (action) => {
+            switch (action) {
+            case "selectAll": input.selectAll(); break;
+            case "cut": input.cut(); break;
+            case "copy": input.copy(); break;
+            case "paste": input.paste(); break;
+            }
         }
     }
 

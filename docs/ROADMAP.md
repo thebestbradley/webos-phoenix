@@ -273,7 +273,7 @@ every day. The app sources come towards the end of 1.0 (owner, 29 September
       keys, shortcuts, full keyboard navigation of the shell, keyboard
       accessibility (sticky, slow and bounce keys, Full Keyboard Access) and
       Settings > Hardware Keyboard (V8)
-- [ ] Editing: the Edit submenu (Select All, Cut, Copy, Paste) in every
+- [x] Editing: the Edit submenu (Select All, Cut, Copy, Paste) in every
       app menu, and the same on a long press in a text field (E1)
 - [ ] The Phoenix Assistant, a voice assistant like Siri: push-to-talk,
       on-device speech recognition, commands for the phone's own features

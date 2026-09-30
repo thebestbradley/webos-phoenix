@@ -697,6 +697,27 @@ body.pui-app, .pui-app {
     opacity: 0.4;
 }
 
+/* A submenu (Edit): Enyo's MenuItem arrow, its items indented below it. */
+.pui-appmenu-parent {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.pui-appmenu-arrow {
+    width: 30px;
+    height: 24px;
+    background: url(../assets/enyo/menuitem-arrow.png) center 0 no-repeat;
+}
+
+.pui-appmenu-arrow.open {
+    background-position: center -24px;
+}
+
+.pui-appmenu-subitem {
+    padding-left: 25px;
+}
+
 /* ---- High contrast (Settings > Accessibility; the runtime sets the class) -------- */
 
 html.phoenix-high-contrast {

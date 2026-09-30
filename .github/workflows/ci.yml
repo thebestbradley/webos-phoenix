@@ -156,6 +156,8 @@ jobs:
           node tools/test-orientation.cjs --tablet --out app-tests/orientation-tablet
           node tools/test-keyboard.cjs --out app-tests/keyboard-phone
           node tools/test-keyboard.cjs --tablet --out app-tests/keyboard-tablet
+          node tools/test-editing.cjs --out app-tests/editing-phone
+          node tools/test-editing.cjs --tablet --out app-tests/editing-tablet
           node tools/test-firstuse.cjs --out app-tests/firstuse-phone
           node tools/test-firstuse.cjs --tablet --out app-tests/firstuse-tablet
           node tools/test-help.cjs --out app-tests/help-phone

@@ -38,9 +38,9 @@ Museum II, Preware, Android apps) and installs like a Linux distro on as
 much hardware as possible, so the community grows and manufacturers take
 notice ([HARDWARE.md](HARDWARE.md#install-it-like-a-linux-distro)). Also
 in 1.0: dictation, predictive text, swipe typing, emoji and cursor control
-on the keyboard; the Edit menu and a long-press Cut / Copy / Paste menu
-(today only stubs); a Siri-like voice assistant without AI models. The MCP
-layer and the AI agent are 2.0 ([ROADMAP.md](ROADMAP.md#10-release)).
+on the keyboard; a Siri-like voice assistant without AI models. The Edit
+menu and the long-press Cut / Copy / Paste popup are done
+([GAPS.md](spec/GAPS.md) E1). The MCP layer and the AI agent are 2.0 ([ROADMAP.md](ROADMAP.md#10-release)).
 
 Naming ideas (PreOS with Phoenix UI, PixiOS with Bennu UI for a watch or
 pendant, a bird-named XR variant) are collected in

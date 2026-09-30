@@ -133,4 +133,44 @@ describe("AppMenu", () => {
         expect(screen.queryByRole("menu")).toBeNull();
         expect(container).toBeTruthy();
     });
+    describe("Edit", () => {
+        const g = globalThis as { __phoenixRuntime?: unknown };
+        afterEach(() => { delete g.__phoenixRuntime; });
+
+        it("comes first, opens its items, and runs the runtime's edit", () => {
+            const edit = vi.fn(() => true);
+            g.__phoenixRuntime = {
+                editState: () => ({ editable: true, canSelectAll: true, canCut: false, canCopy: false, canPaste: true }),
+                edit,
+            };
+            render(<AppMenu items={[{ label: "Help", onSelect: () => {} }]} />);
+            tapAppName();
+            const items = screen.getAllByRole("menuitem");
+            expect(items[0].textContent).toBe("Edit");
+            expect(screen.queryByText("Paste")).toBeNull();
+            fireEvent.click(items[0]);
+            expect(items[0].getAttribute("aria-expanded")).toBe("true");
+            expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Edit", "Select All", "Cut", "Copy", "Paste", "Help"]);
+            fireEvent.click(screen.getByText("Cut"));
+            expect(edit).not.toHaveBeenCalled();
+            expect(screen.getByRole("menu")).toBeTruthy();
+            fireEvent.click(screen.getByText("Paste"));
+            expect(edit).toHaveBeenCalledWith("paste");
+            expect(screen.queryByRole("menu")).toBeNull();
+        });
+
+        it("keeps the focus where Edit acts", () => {
+            render(<AppMenu items={[]} />);
+            tapAppName();
+            const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+            screen.getByText("Edit").dispatchEvent(press);
+            expect(press.defaultPrevented).toBe(true);
+        });
+
+        it("can be left out", () => {
+            render(<AppMenu edit={false} items={[{ label: "Help", onSelect: () => {} }]} />);
+            tapAppName();
+            expect(screen.queryByText("Edit")).toBeNull();
+        });
+    });
 });

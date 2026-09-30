@@ -193,7 +193,11 @@
         keyboardShow: function (type) { runtime.imeManualShow(type); },
         keyboardHide: function () { runtime.imeManualHide(); },
         editorFocused: function () {},
-        paste: function () {},
+        // Pastes the system clipboard into the focused field (Enyo's Input
+        // and enyo.dom.getClipboard call it): see "Editing" below.
+        paste: function () { runtime.paste(); },
+        // An app telling the system it used the clipboard (the Isis browser);
+        // nothing to do here.
         copiedToClipboard: function () {},
         pastedFromClipboard: function () {},
         printFrame: function () { global.print && global.print(); },
@@ -1052,6 +1056,22 @@
             if (nativeWebViews) this.post("destroy", {});
             delete webViews[this.id];
         },
+        // Cut, Copy, Paste, Select All in the page it shows: the native view
+        // runs the command itself (as BrowserServer did); the iframe's page
+        // gets it as its own command.
+        edit: function (action) {
+            if (nativeWebViews)
+                return this.post("edit", { action: action });
+            var doc = null;
+            try { doc = this.frame && this.frame.contentDocument; } catch (e) { doc = null; }
+            if (!doc)
+                return;
+            var rt = this.frame.contentWindow && this.frame.contentWindow.__phoenixRuntime;
+            if (rt && rt.edit)
+                rt.edit(action);
+            else if (action !== "paste")
+                doc.execCommand(action);
+        },
         // Iframe engine.
         frameNavigate: function (url, fromHistory) {
             if (!fromHistory && this.url) { this.back.push(this.url); this.forward = []; }
@@ -1131,7 +1151,11 @@
             handleFlick: function () {},
             clearCache: function () {},
             clearCookies: function () {},
-            cut: function () {}, copy: function () {}, paste: function () {}, selectAll: function () {},
+            // The Edit commands in the page shown here.
+            cut: function () { this.edit("cut"); },
+            copy: function () { this.edit("copy"); },
+            paste: function () { this.edit("paste"); },
+            selectAll: function () { this.edit("selectAll"); },
             insertStringAtCursor: function () {},
             selectPopupMenuItem: function () {},
             sendDialogResponse: function () {},
@@ -2161,6 +2185,238 @@
             try { mojo.keyboardShown(!!shown); } catch (e) { console.error("[phoenix-runtime] keyboardShown failed", e); }
         }
     };
+
+    // ---- Editing: Cut, Copy, Paste, Select All ---------------------------------------
+    //
+    // The app menu's Edit submenu (Enyo's EditMenu, Mojo's editItem) and the
+    // edit popup act on the focused field or the page's selection. As in
+    // Enyo (base/controls/Input.js), Select All, Cut and Copy are the
+    // page's own commands; Paste goes through PalmSystem.paste(), which asks
+    // the host to paste the system clipboard into the focused field (on
+    // webOS WebAppMgr did it for the page). The clipboard is the system's,
+    // so every app shares it. Without a native host (a page in a plain
+    // browser) Paste reads the clipboard itself.
+
+    function editTarget() {
+        var el = global.document && global.document.activeElement;
+        return editable(el) ? el : null;
+    }
+
+    function selectedText() {
+        var el = editTarget();
+        if (el && typeof el.selectionStart === "number")
+            return el.value.substring(el.selectionStart, el.selectionEnd);
+        var sel = global.getSelection && global.getSelection();
+        return sel ? String(sel) : "";
+    }
+
+    // What the Edit commands can do now (Enyo's EditMenu disabled its items
+    // when nothing editable had the focus).
+    runtime.editState = function () {
+        var el = editTarget();
+        var hasSelection = selectedText().length > 0;
+        return { editable: !!el, canSelectAll: !!el, canCut: !!el && hasSelection, canCopy: hasSelection, canPaste: !!el };
+    };
+
+    function pasteText() {
+        var clip = global.navigator && global.navigator.clipboard;
+        if (!clip || !clip.readText)
+            return;
+        clip.readText().then(function (text) {
+            if (text)
+                global.document.execCommand("insertText", false, text);
+        }, function () { /* no permission: nothing to paste */ });
+    }
+
+    runtime.edit = function (action) {
+        var doc = global.document;
+        if (!doc)
+            return false;
+        switch (action) {
+        case "selectAll":
+            var el = editTarget();
+            if (el && typeof el.select === "function")
+                el.select();
+            else
+                doc.execCommand("selectAll");
+            return true;
+        case "cut":
+        case "copy":
+            return doc.execCommand(action);
+        case "paste":
+            PalmSystem.paste();
+            return true;
+        }
+        return false;
+    };
+
+    // PalmSystem.paste(): the host pastes into the focused field.
+    runtime.paste = function () {
+        if (nativeWebViews)
+            host.postToHost("editAction", { appId: PalmSystem.appIdentifier, action: "paste" });
+        else
+            pasteText();
+    };
+
+    // Every Enyo 1.0 app menu starts with Edit (Enyo's own EditMenu), as
+    // Mojo put Edit in every app's menu; the TouchPad apps did not list it
+    // themselves, so it is added when Enyo defines enyo.AppMenu (the apps
+    // are not changed). An app that has its own EditMenu keeps just that.
+    function withEditMenu(AppMenu) {
+        var proto = AppMenu && AppMenu.prototype;
+        // Enyo 1.0's AppMenu only (Enyo 2 has no EditMenu).
+        if (!proto || proto.__phoenixEditMenu || typeof proto.initComponents !== "function")
+            return;
+        proto.__phoenixEditMenu = true;
+        var init = proto.initComponents;
+        proto.initComponents = function () {
+            init.apply(this, arguments);
+            var enyo = global.enyo;
+            // A popup is lazy: its items are made when it first opens
+            // (enyo.LazyControl.validateComponents calls this again).
+            if (this.lazy || !enyo.EditMenu)
+                return;
+            var has = (this.getControls ? this.getControls() : []).some(function (c) { return c instanceof enyo.EditMenu; });
+            if (has)
+                return;
+            // First on screen (prepend: the client's children) and in the
+            // menu's items (its controls: the last one gets the menu's
+            // bottom style).
+            var edit = this.createComponent({ kind: "EditMenu", prepend: true }, { owner: this });
+            var at = this.controls ? this.controls.indexOf(edit) : -1;
+            if (at > 0)
+                this.controls.unshift(this.controls.splice(at, 1)[0]);
+        };
+    }
+
+    function watchEnyo() {
+        var enyoObj = global.enyo;
+        var hook = function (e) {
+            if (!e || typeof e !== "object" || e.__phoenixWatched)
+                return;
+            Object.defineProperty(e, "__phoenixWatched", { value: true });
+            var menu = e.AppMenu;
+            if (menu)
+                return withEditMenu(menu);
+            Object.defineProperty(e, "AppMenu", {
+                configurable: true,
+                enumerable: true,
+                get: function () { return menu; },
+                set: function (v) { menu = v; withEditMenu(v); }
+            });
+        };
+        if (enyoObj)
+            return hook(enyoObj);
+        Object.defineProperty(global, "enyo", {
+            configurable: true,
+            enumerable: true,
+            get: function () { return enyoObj; },
+            set: function (v) { enyoObj = v; hook(v); }
+        });
+    }
+    watchEnyo();
+
+    // Press and hold with a mouse (the simulator on a computer; touch has
+    // Chromium's own long press, which the host turns into the same popup):
+    // the word under the pointer is selected and the host shows the edit
+    // popup over it, as it does for a right click.
+    var HOLD_MS = 500;
+    var HOLD_SLOP = 6;
+
+    function wordAround(text, at) {
+        var isWord = function (c) { return /[\p{L}\p{N}_'’-]/u.test(c); };
+        var start = at;
+        var end = at;
+        while (start > 0 && isWord(text.charAt(start - 1)))
+            start--;
+        while (end < text.length && isWord(text.charAt(end)))
+            end++;
+        return [start, end];
+    }
+
+    function selectWordAt(x, y, target) {
+        var el = editable(target) ? target : null;
+        if (el && typeof el.selectionStart === "number") {
+            // The press put the caret under the pointer.
+            var w = wordAround(el.value, el.selectionStart);
+            el.setSelectionRange(w[0], w[1]);
+            var box = el.getBoundingClientRect();
+            return { x: x, y: box.top, width: 0, height: box.height };
+        }
+        var doc = global.document;
+        var range = doc.caretRangeFromPoint && doc.caretRangeFromPoint(x, y);
+        if (!range)
+            return null;
+        // Text the page keeps unselectable (Enyo 1.0's own UI, as on webOS).
+        var node = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+        if (!node || global.getComputedStyle(node).userSelect === "none")
+            return null;
+        var sel = global.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        sel.modify("move", "backward", "word");
+        sel.modify("extend", "forward", "word");
+        // Words end before the space that follows them.
+        var text = String(sel);
+        var trimmed = text.replace(/\s+$/, "");
+        for (var i = trimmed.length; i < text.length; i++)
+            sel.modify("extend", "backward", "character");
+        if (!String(sel))
+            return null;
+        var r = sel.getRangeAt(0).getBoundingClientRect();
+        // The word under the pointer, not one the selection moved on to
+        // (Selection.modify skips to the next selectable text).
+        if (x < r.left - 1 || x > r.right + 1 || y < r.top - 1 || y > r.bottom + 1) {
+            sel.removeAllRanges();
+            return null;
+        }
+        return { x: r.left, y: r.top, width: r.width, height: r.height };
+    }
+
+    function showEditPopup(rect) {
+        var s = runtime.editState();
+        host.postToHost("editMenu", {
+            appId: PalmSystem.appIdentifier,
+            x: rect.x, y: rect.y, width: rect.width, height: rect.height,
+            canSelectAll: s.canSelectAll, canCut: s.canCut, canCopy: s.canCopy, canPaste: s.canPaste
+        });
+    }
+
+    if (global.document && global.PointerEvent) {
+        var hold = null;
+        var cancelHold = function () {
+            if (hold) {
+                clearTimeout(hold.timer);
+                hold = null;
+            }
+        };
+        global.document.addEventListener("pointerdown", function (e) {
+            cancelHold();
+            if (e.pointerType !== "mouse" || e.button !== 0)
+                return;
+            var target = e.target;
+            // Links and controls keep their own press.
+            if (target.closest && target.closest("a[href], button, select, [role=button]"))
+                return;
+            var x = e.clientX;
+            var y = e.clientY;
+            hold = {
+                x: x, y: y,
+                timer: setTimeout(function () {
+                    hold = null;
+                    var rect = selectWordAt(x, y, target);
+                    if (rect)
+                        showEditPopup(rect);
+                }, HOLD_MS)
+            };
+        }, true);
+        global.document.addEventListener("pointermove", function (e) {
+            if (hold && Math.abs(e.clientX - hold.x) + Math.abs(e.clientY - hold.y) > HOLD_SLOP)
+                cancelHold();
+        }, true);
+        global.document.addEventListener("pointerup", cancelHold, true);
+        global.document.addEventListener("pointercancel", cancelHold, true);
+    }
 
     // ================================================================================
     // Settings services (simulated webOS OSE APIs used by apps/settings)

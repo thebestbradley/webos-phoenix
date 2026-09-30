@@ -99,6 +99,45 @@ Pages talk to the shell (launch another app, show a banner) through
 `phoenixHost.postToHost(type, payload)`. In phoenix-sim that arrives as a
 console message with the `__phoenix__` prefix.
 
+### Editing: Cut, Copy, Paste, Select All
+
+Every app menu starts with **Edit** (Select All, Cut, Copy, Paste), as Mojo
+gave every app. Enyo 1.0 apps get Enyo's own `EditMenu`. The runtime adds
+it to `enyo.AppMenu` as Enyo defines it, first on screen and first in the
+menu's items. It is added only when the lazy menu makes its items, and not
+at all when an app has its own. The apps are not changed. Phoenix apps get
+the same submenu from `@phoenix/ui`'s `AppMenu` (`edit={false}` leaves it
+out). Its items read `__phoenixRuntime.editState()` as the menu opens, and
+it keeps the field's focus while you choose.
+
+- Select All, Cut and Copy are the page's own commands. As in Enyo's
+  `Input`, `__phoenixRuntime.edit(action)` runs them. Enyo's `EditMenu`
+  sends them to the focused Enyo control, as on webOS.
+- Paste is `PalmSystem.paste()`. In phoenix-sim it posts `editAction
+  {action: "paste"}`, and the shell pastes the system clipboard into the
+  page (`WebEngineView.triggerWebAction`), as WebAppMgr did on webOS. In a
+  plain browser the runtime reads the clipboard itself.
+- There is one clipboard, the system's. Copy from any app, the browser's
+  pages or the shell, and paste into any other.
+- Pressing and holding text shows the **edit popup**
+  (`shell/qml/Phoenix/Shell/EditPopup.qml`), with only the commands that
+  apply:
+  - **Touch:** Chromium's own long press selects the word and shows its
+    handles. The shell draws the handles in the highlight colour.
+  - **Mouse:** a press and hold of 500 ms without moving selects the word.
+    The runtime then posts `editMenu {x, y, width, height, canSelectAll,
+    canCut, canCopy, canPaste}`.
+  - **Right click:** also shows the popup.
+
+  The popup is not shown for text the page keeps unselectable (Enyo 1.0's
+  own UI, as on webOS), nor on buttons or links. The browser's embedded
+  pages get the same popup, and the adapter's `cut`, `copy`, `paste` and
+  `selectAll` act on them. Just Type's built-in search field has the popup
+  too.
+
+Tests: `tools/test-editing.cjs` (Memos and Files in Chromium) and
+`shell/tests/tst_editpopup.qml`.
+
 System sounds follow LunaSysMgr's routes. `PalmSystem.addBannerMessage(msg,
 params, icon, soundClass, soundFile, duration)` puts the sound in the
 `banner` message; `PalmSystem.playSoundNotification(soundClass, soundFile,
