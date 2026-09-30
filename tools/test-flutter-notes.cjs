@@ -58,6 +58,13 @@ async function waitForServer(url, ms) {
 
 const pause = (page, ms = 700) => page.waitForTimeout(ms);
 
+// Flutter makes its text input element when a field takes the focus, a
+// frame or more after the tap; keys sent before then are lost. Wait for it.
+const editing = (page) => page.waitForFunction(() => {
+    const el = document.activeElement;
+    return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
+}, null, { timeout: 10000 });
+
 // The notes in db8, through the page's own Luna bridge.
 function notes(page) {
     return page.evaluate(() => new Promise((resolve) => {
@@ -107,7 +114,7 @@ async function main() {
         check(await text("Folders").isVisible(), "tablet: the folders are beside the notes");
 
         await button("New Note").click();
-        await pause(page, 1200);
+        await editing(page);
         await page.keyboard.type("Groceries");
         await page.keyboard.press("Enter");
         await page.keyboard.press("Enter");
@@ -130,7 +137,7 @@ async function main() {
         await page.screenshot({ path: path.join(outDir, "tablet-preview.png") });
 
         await button("New Folder").click();
-        await pause(page, 800);
+        await editing(page);
         await page.keyboard.type("Work");
         await page.keyboard.press("Enter");
         await pause(page, 1200);
@@ -153,6 +160,7 @@ async function main() {
         await row("All Notes").click();
         await pause(page);
         await page.getByRole("searchbox", { name: "Search" }).click();
+        await editing(page);
         await page.keyboard.type("eggs");
         await pause(page, 1000);
         check(await text("1 found").isVisible(), "tablet: search finds the note by its text");
