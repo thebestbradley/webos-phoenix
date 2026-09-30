@@ -29,6 +29,11 @@ describe("paragraph styles", () => {
         expect(setBlockStyle(at("- [ ] two", 7), "body").text).toBe("two");
     });
 
+    it("styles an empty first line (the cursor at 0 of a note opening with a blank line)", () => {
+        expect(blockStyleAt(at("\n# abc", 0))).toBe("body");
+        expect(setBlockStyle(at("\nabc", 0), "title")).toEqual({ text: "# \nabc", start: 2, end: 2 });
+    });
+
     it("turns a style off when it is chosen again", () => {
         expect(setBlockStyle(at("- a", 2), "bulleted").text).toBe("a");
         expect(setBlockStyle(at("# a", 2), "title").text).toBe("a");

@@ -23,7 +23,9 @@ const LIST = /^([ \t]*)(?:([-*+])|(\d{1,9})([.)]))[ \t]+(\[[ xX]\][ \t]+)?/;
 const QUOTE = /^[ \t]*>[ \t]?/;
 
 function lineRange(text: string, start: number, end: number): [number, number] {
-    const from = text.lastIndexOf("\n", start - 1) + 1;
+    // (lastIndexOf with -1 would look at index 0: a note opening with an
+    // empty line would give a range starting after the caret.)
+    const from = start === 0 ? 0 : text.lastIndexOf("\n", start - 1) + 1;
     let to = text.indexOf("\n", end > start && text[end - 1] === "\n" ? end - 1 : end);
     if (to < 0) to = text.length;
     return [from, to];

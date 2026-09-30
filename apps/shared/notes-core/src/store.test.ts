@@ -64,14 +64,14 @@ function fakeDb(opts: { kindOwner?: string } = {}) {
 const flush = () => new Promise((r) => setTimeout(r, 5));
 
 describe("NotesStore", () => {
-    it("registers the kinds and lets both apps use them", async () => {
+    it("registers the kinds and lets all the Notes demos use them", async () => {
         const db = fakeDb();
         await new NotesStore(db.luna).ensureKinds("org.webosphoenix.enactnotes.limestone");
         expect(db.kinds.get(NOTE_KIND)).toBe("org.webosphoenix.enactnotes.limestone");
         expect(db.calls.filter((c) => c === "putPermissions")).toHaveLength(2);
     });
 
-    it("uses the kinds the other app registered", async () => {
+    it("uses the kinds another demo registered", async () => {
         const db = fakeDb({ kindOwner: "org.webosphoenix.enactnotes.limestone" });
         await new NotesStore(db.luna).ensureKinds("org.webosphoenix.enactnotes.agate");
         expect(db.kinds.get(NOTE_KIND)).toBe("org.webosphoenix.enactnotes.limestone");

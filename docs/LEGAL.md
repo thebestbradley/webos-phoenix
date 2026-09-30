@@ -84,6 +84,13 @@ Palm's Prelude is not redistributable. In its place Phoenix ships Open Sans
 copied unmodified from the `fonts-open-sans` package (see its
 `PROVENANCE.md`). The shell and the apps use Prelude when it is installed.
 
+The Flutter demo (`apps/flutter-notes/fonts/`) bundles its own, since
+Flutter's web build draws text with fonts it loads itself: Roboto (Regular,
+Italic, Medium, Bold), Apache-2.0, copied from the Flutter SDK's
+`bin/cache/artifacts/material_fonts`, and DejaVu Sans Mono (Regular, Bold),
+under the Bitstream Vera license, from Debian's `fonts-dejavu-core`. Each
+folder keeps its license text.
+
 ## Original apps and frameworks (`third_party/`)
 
 Git submodules of the Open webOS repositories (`openwebos/core-apps`,

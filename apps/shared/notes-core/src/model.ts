@@ -1,15 +1,20 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Notes and folders, as the Enact Notes demos keep them in db8. Both apps
-// (Limestone and Agate) share the kinds, so a note written in one shows in
-// the other.
+// Notes and folders, as the Notes demos keep them in db8. The demos
+// (Enact Limestone and Agate, Ionic, Flutter) share the kinds, so a note
+// written in one shows in the others.
 
 export const NOTE_KIND = "org.webosphoenix.enactnotes.note:1";
 export const FOLDER_KIND = "org.webosphoenix.enactnotes.folder:1";
 
 /** The apps allowed to use the kinds; the first owns them. */
-export const APP_IDS = ["org.webosphoenix.enactnotes.limestone", "org.webosphoenix.enactnotes.agate"] as const;
+export const APP_IDS = [
+    "org.webosphoenix.enactnotes.limestone",
+    "org.webosphoenix.enactnotes.agate",
+    "org.webosphoenix.ionicnotes",
+    "org.webosphoenix.flutternotes",
+] as const;
 
 /** The built-in folders, as in Apple Notes. Only user folders are stored. */
 export const ALL_NOTES = "all";

@@ -209,7 +209,9 @@ without it the simulator shows placeholder apps only. Node.js 22 or 24
 Messaging); `cmake --build` runs `npm ci` and `npm run build` in `apps/` for
 you, and warns if npm is missing. Odd-numbered Node releases (such as 23)
 are short-lived and Enact's CLI refuses them, so with one the Enact demos
-are skipped with a warning (`brew install node@22` on a Mac).
+are skipped with a warning (`brew install node@22` on a Mac). The Flutter
+demo is built when Flutter is installed (`brew install --cask flutter`) and
+skipped otherwise.
 
 First fetch the original Open webOS apps and frameworks (git submodules):
 

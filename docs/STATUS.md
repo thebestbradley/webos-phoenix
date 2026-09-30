@@ -116,6 +116,9 @@ The whole plan, milestone by milestone, with the decisions taken so far:
   Notes-style app with standard Markdown in LG's Enact framework, both in
   Downloads and sharing their notes; findings for 2.0 in
   [APP-RUNTIME.md](APP-RUNTIME.md#enact-apps).
+- **Ionic and Flutter demos**: Notes (Ionic) and Notes (Flutter), the same
+  app for phones and tablets, in Downloads with the Enact demos and on the
+  same notes ([APP-RUNTIME.md](APP-RUNTIME.md#ionic-and-flutter-apps)).
 - **Synergy build**, in the order of [SYNERGY-MODERN.md](SYNERGY-MODERN.md#5-roadmap).
 - **Shell gaps**: the P2 rows left in [spec/GAPS.md](spec/GAPS.md) (C5, C7,
   C9-C11, L8, N7, N8, R3-R5, K7, G4, G5, G8, A2, S2) and the rest of A1.

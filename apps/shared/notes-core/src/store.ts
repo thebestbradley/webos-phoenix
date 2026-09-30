@@ -45,8 +45,8 @@ export class NotesStore {
     }
 
     /**
-     * Registers the kinds. The first of the two apps to run owns them and
-     * lets the other use them; for the second, db8 refuses the putKind
+     * Registers the kinds. The first of the apps to run owns them and lets
+     * the others use them (APP_IDS); for the others, db8 refuses the putKind
      * because the kinds belong to the first, which is expected.
      */
     async ensureKinds(appId: string): Promise<void> {

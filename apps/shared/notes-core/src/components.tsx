@@ -13,6 +13,8 @@ import { renderMarkdown } from "./markdown";
 export interface EditorHandle {
     /** Applies a command to the text and selection. */
     apply(command: (s: TextState) => TextState): void;
+    /** The text and selection now (for the style at the caret). */
+    state(): TextState;
     focus(): void;
 }
 
@@ -41,7 +43,14 @@ export const MarkdownEditor = forwardRef<EditorHandle, MarkdownEditorProps>(
             onChange(next.text);
         };
 
-        useImperativeHandle(ref, () => ({ apply: run, focus: () => area.current?.focus() }));
+        useImperativeHandle(ref, () => ({
+            apply: run,
+            state: () => {
+                const el = area.current;
+                return el ? { text: el.value, start: el.selectionStart, end: el.selectionEnd } : { text: value, start: 0, end: 0 };
+            },
+            focus: () => area.current?.focus(),
+        }));
 
         useLayoutEffect(() => {
             const el = area.current;

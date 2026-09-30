@@ -139,5 +139,13 @@
     "org.webosphoenix.enactnotes.agate": {
         "status": "works",
         "note": "Temporary Enact demo (Agate theme), laid out for tablets: at phone size it starts but its columns do not fit. tools/test-enact-notes.cjs drives it"
+    },
+    "org.webosphoenix.ionicnotes": {
+        "status": "works",
+        "note": "2.0 framework demo (Ionic 9, React), for phones and tablets; the same notes as the Enact demos. tools/test-ionic-notes.cjs drives it"
+    },
+    "org.webosphoenix.flutternotes": {
+        "status": "works",
+        "note": "2.0 framework demo (Flutter 3.47 web build, CanvasKit), for phones and tablets; the same notes as the other demos. Built only where Flutter is installed. tools/test-flutter-notes.cjs drives it"
     }
 }

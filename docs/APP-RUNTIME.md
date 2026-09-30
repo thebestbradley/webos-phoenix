@@ -189,6 +189,32 @@ the same Apple Notes-style app in each theme, sharing their notes in db8
   lock the pointer while editing (the first tap outside only ends editing),
   which suits a remote, not a touch screen. The app READMEs have the
   details.
+- **Platform**: Enact's `@enact/webos/platform` finds webOS OSE in Phoenix
+  (`open: true`, from `PalmSystem.deviceInfo`'s platform version), not a TV
+  (`tv` needs "SmartTV" in the user agent). Nothing changes on screen for
+  it: Limestone reads the platform only to ask a TV's input service whether
+  a remote pointer is in use.
+
+## Ionic and Flutter apps
+
+Two more demos of the same Notes app weigh frameworks for 2.0 apps, both
+laid out for phones and tablets and sharing the Enact demos' notes in db8:
+
+- **Ionic** (`apps/ionic-notes`): Ionic 9's React components (iOS and
+  Material Design modes) with its router, built with Vite as a workspace of
+  `apps/`. Luna calls go through `@phoenix/luna`; the model is
+  `@phoenix/notes-core`, the same code as the Enact demos. The back
+  gesture (Escape) becomes Ionic's hardware back button. `@ionic/react`
+  cannot be tree-shaken, so the app is about 1.5 MB of script.
+- **Flutter** (`apps/flutter-notes`): Flutter's web build (dart2js and the
+  CanvasKit renderer) with Material 3 widgets. Luna calls go through
+  `PalmServiceBridge` from Dart (`dart:js_interop`); the model is a Dart
+  port of notes-core, whose tests check it keeps the same kinds and
+  welcome note. CanvasKit and the fonts are bundled, so nothing is fetched
+  from Google's CDN. Built only when Flutter is installed (CMake finds it).
+  Flutter draws into a canvas, and its semantics tree (on here for screen
+  readers) is what tests drive. LG's native Flutter embedder for webOS TV
+  is the route for native Flutter apps later; the READMEs compare them.
 
 ## Running apps
 

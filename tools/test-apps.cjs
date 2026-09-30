@@ -76,7 +76,10 @@ async function main() {
         const browser = await chromium.launch();
         const results = [];
         for (const app of apps) {
-            const context = await browser.newContext({ viewport });
+            // A device's language (Settings sets it). With no locale on the
+            // test machine Chromium reports "en-US@posix", which is not a
+            // language tag, and Flutter's engine refuses to start on it.
+            const context = await browser.newContext({ viewport, locale: "en-US" });
             const page = await context.newPage();
             const errors = [];
             const watch = (p) => {

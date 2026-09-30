@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // notes-core from its sources (its lib/ is built for the Enact apps,
+    // which are separate npm projects; vite.config.ts aliases it the same).
+    "paths": { "@phoenix/notes-core": ["../shared/notes-core/src/index.ts"] }
+  },
+  "include": ["src", "vite.config.ts"]
+}

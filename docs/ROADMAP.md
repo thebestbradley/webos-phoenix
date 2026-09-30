@@ -307,6 +307,10 @@ supported alongside it.
       and works on a tablet, and what a touch UI would need: text fields
       that do not lock the pointer, sizes for a hand-held screen, Chromium
       119+ for Limestone ([APP-RUNTIME.md](APP-RUNTIME.md#enact-apps))
+- [ ] Choose the 2.0 app frameworks. Notes demos in Ionic 9 (React) and
+      Flutter 3.47 (web build) run beside the Enact ones on the same notes,
+      on phones and tablets ([APP-RUNTIME.md](APP-RUNTIME.md#ionic-and-flutter-apps));
+      next, native Flutter through LG's webOS embedder
 - [ ] One device, every screen (below)
 
 ### One device, every screen

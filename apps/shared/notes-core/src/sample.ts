@@ -6,12 +6,12 @@
 
 export const WELCOME_NOTE = `# Welcome to Notes
 
-This is an **Enact** demo for webOS Phoenix. Notes are plain *Markdown*, so they read the same in any Markdown app.
+This is a demo for webOS Phoenix, in four frameworks that share these notes. Notes are plain *Markdown*, so they read the same in any Markdown app.
 
 ## What you can write
 
 - **Bold**, *italic*, ~~strikethrough~~ and \`code\`
-- Links such as <https://enactjs.com>
+- Links such as <https://commonmark.org>
 - Lists, numbered lists and checklists
 
 ### A checklist
@@ -28,10 +28,12 @@ This is an **Enact** demo for webOS Phoenix. Notes are plain *Markdown*, so they
 
 > Quotes look like this.
 
-| Theme | Made for |
+| Demo | Made with |
 | --- | --- |
-| Limestone | webOS TV |
-| Agate | Car dashboards |
+| Limestone | Enact, for webOS TV |
+| Agate | Enact, for car dashboards |
+| Ionic | Ionic, for phones and tablets |
+| Flutter | Flutter, for phones and tablets |
 
 \`\`\`
 Code blocks keep their spacing.

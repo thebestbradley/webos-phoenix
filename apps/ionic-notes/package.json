@@ -1,0 +1,24 @@
+{
+  "name": "@phoenix/ionic-notes",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Notes (Ionic): the Notes demo in Ionic Framework's React components, for weighing Ionic for the 2.0 app pipeline",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@ionic/react": "^9.0.5",
+    "@ionic/react-router": "^9.0.5",
+    "@phoenix/luna": "*",
+    "@phoenix/notes-core": "*",
+    "ionicons": "^8.1.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router": "^6.30.0",
+    "react-router-dom": "^6.30.0"
+  }
+}

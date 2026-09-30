@@ -130,6 +130,29 @@ if(PHOENIX_BUILD_APPS)
         message(WARNING "phoenix-apps: npm not found; the Phoenix web apps (Settings, ...) will not be "
                         "built. Install Node.js 20+ or run `npm ci && npm run build` in apps/ yourself.")
     endif()
+
+    # The Flutter demo (apps/flutter-notes) is a Flutter web build, made
+    # when the Flutter SDK is installed (optional; its README.md) and again
+    # when its sources change. The Ionic demo is one of the web apps above.
+    find_program(PHOENIX_FLUTTER flutter)
+    if(PHOENIX_FLUTTER)
+        set(_flutter_dir "${PHOENIX_APPS_DIR}/flutter-notes")
+        file(GLOB_RECURSE _flutter_src CONFIGURE_DEPENDS
+             "${_flutter_dir}/lib/*.dart" "${_flutter_dir}/web/*" "${_flutter_dir}/fonts/*.ttf")
+        add_custom_command(
+            OUTPUT "${_flutter_dir}/dist/main.dart.js"
+            COMMAND "${CMAKE_COMMAND}" -E env "FLUTTER=${PHOENIX_FLUTTER}" sh tool/build.sh
+            DEPENDS ${_flutter_src} "${_flutter_dir}/pubspec.yaml" "${_flutter_dir}/pubspec.lock"
+                    "${_flutter_dir}/tool/build.sh"
+            WORKING_DIRECTORY "${_flutter_dir}"
+            COMMENT "Building flutter-notes (flutter build web)"
+            USES_TERMINAL VERBATIM)
+        add_custom_target(phoenix-flutter-notes ALL DEPENDS "${_flutter_dir}/dist/main.dart.js")
+        message(STATUS "phoenix-apps: the Flutter demo will be built with ${PHOENIX_FLUTTER}")
+    else()
+        message(STATUS "phoenix-apps: Flutter not found, so the Flutter demo (apps/flutter-notes) is not "
+                       "built; the rest is. To build it, install Flutter (apps/flutter-notes/README.md).")
+    endif()
 endif()
 
 # QML modules and the Open webOS artwork keep their relative layout, so
