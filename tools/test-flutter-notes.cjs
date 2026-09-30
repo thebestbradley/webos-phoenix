@@ -103,11 +103,14 @@ async function main() {
             return page;
         };
         const page = await open(FLUTTER);
-        const button = (name) => page.getByRole("button", { name, exact: true }).first();
-        const text = (t) => page.getByText(t, { exact: true }).first();
+        // The first visible match: Flutter's semantics tree can hold hidden
+        // copies of a label (a tooltip, a node on its way out), and an
+        // action on a hidden one waits for it to show.
+        const button = (name) => page.getByRole("button", { name, exact: true }).filter({ visible: true }).first();
+        const text = (t) => page.getByText(t, { exact: true }).filter({ visible: true }).first();
         // A list row or folder: one button, named by its title and then its
         // other lines (date, preview, count).
-        const row = (title) => page.getByRole("button", { name: new RegExp(`^${title}\\b`) }).first();
+        const row = (title) => page.getByRole("button", { name: new RegExp(`^${title}\\b`) }).filter({ visible: true }).first();
 
         // ---- Tablet ------------------------------------------------------------
         check(await row("Welcome to Notes").isVisible(), "tablet: the welcome note is there on a first run");
@@ -159,11 +162,23 @@ async function main() {
 
         await row("All Notes").click();
         await pause(page);
+        // The filter chips show once the app's search field has the focus
+        // (a tap reaches Flutter a frame or more later), so keys typed then
+        // reach it.
         await page.getByRole("searchbox", { name: "Search" }).click();
-        await editing(page);
+        const filter = page.getByRole("checkbox", { name: "Checklists" }).filter({ visible: true }).first();
+        await filter.waitFor({ timeout: 10000 }).catch(() => {});
+        check(await filter.isVisible(), "tablet: the search field takes the focus (its filters show)");
         await page.keyboard.type("eggs");
-        await pause(page, 1000);
+        await text("1 found").waitFor({ timeout: 10000 }).catch(() => {});
         check(await text("1 found").isVisible(), "tablet: search finds the note by its text");
+        if (!(await text("1 found").isVisible())) {
+            await page.screenshot({ path: path.join(outDir, "FAILED-search.png") });
+            console.log("    focus:", await page.evaluate(() => {
+                const e = document.activeElement;
+                return e ? `${e.tagName} ${e.getAttribute("data-semantics-role") || ""} value=${JSON.stringify(e.value)}` : "none";
+            }));
+        }
         await page.screenshot({ path: path.join(outDir, "tablet-search.png") });
         await button("Clear").click();
         await pause(page);

@@ -182,7 +182,9 @@ jobs:
             xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --tablet --scene $s --orientation right --screenshot screenshots/tablet-portrait/$s.png
           done
 
+      # Also when a step fails: the app tests' screenshots show what went wrong.
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: screenshots
           path: |
