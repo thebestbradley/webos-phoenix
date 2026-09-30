@@ -4,8 +4,8 @@
 """Serve the virtual webOS filesystem (runtime/rootfs.json) over HTTP.
 
 Opens the original webOS apps in any desktop browser, with
-runtime/phoenix-runtime.js added to every app page so they get PalmSystem
-and the simulated service bus.
+runtime/phoenix-runtime.js added to every app page (and framework window
+page) so they get PalmSystem and the simulated service bus.
 
     tools/serve-rootfs.py [--port 8765]
     open http://127.0.0.1:8765/
@@ -200,11 +200,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send(200, "text/html; charset=utf-8", page.encode())
         f = resolve(path)
         if not f or not os.path.isfile(f):
-            return self.send(404, "text/plain", b"not found")
+            # No body, like a missing file on the device: Enyo reads a
+            # config file's text to decide whether it exists (Tellurium,
+            # the test harness, starts on any text).
+            return self.send(404, "text/plain", b"")
         with open(f, "rb") as fh:
             data = fh.read()
         ctype = mimetypes.guess_type(f)[0] or "application/octet-stream"
-        if path.startswith("/usr/palm/applications/") and f.endswith(".html"):
+        # App pages, and Enyo 1.0's framework pages an app opens as a
+        # window (dashboard-window), as in phoenix-sim (shell/sim/rootfs.cpp).
+        if path.startswith(("/usr/palm/applications/", "/usr/palm/frameworks/enyo/")) and f.endswith(".html"):
             data = inject_runtime(data)
             ctype = "text/html; charset=utf-8"
         # Byte ranges, so audio and video can seek (Chromium asks for them).

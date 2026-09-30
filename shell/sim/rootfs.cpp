@@ -20,6 +20,9 @@
 #endif
 
 static const char kAppsPrefix[] = "/usr/palm/applications/";
+// Enyo 1.0's framework pages an app opens as its own windows
+// (dashboard-window/dashboard.html for enyo.windows.openDashboard).
+static const char kEnyoPrefix[] = "/usr/palm/frameworks/enyo/";
 static const char kRuntimeTag[] =
     "<script src=\"/usr/share/phoenix/runtime/phoenix-runtime.js\"></script>";
 
@@ -251,8 +254,11 @@ void RootfsSchemeHandler::requestStarted(QWebEngineUrlRequestJob *job)
     QByteArray data = f.readAll();
     QByteArray mime = QMimeDatabase().mimeTypeForFile(file, QMimeDatabase::MatchExtension).name().toLatin1();
 
-    // App pages get the webOS runtime before any of their own scripts.
-    if (devicePath.startsWith(QLatin1String(kAppsPrefix)) && file.endsWith(QLatin1String(".html"))) {
+    // App pages, and Enyo 1.0 pages an app opens as a window, get the webOS
+    // runtime before any of their own scripts: on webOS every window of an
+    // app had PalmSystem (WebAppMgr).
+    if ((devicePath.startsWith(QLatin1String(kAppsPrefix)) || devicePath.startsWith(QLatin1String(kEnyoPrefix)))
+        && file.endsWith(QLatin1String(".html"))) {
         const int head = data.toLower().indexOf("<head");
         const int close = head >= 0 ? data.indexOf('>', head) : -1;
         if (close >= 0)

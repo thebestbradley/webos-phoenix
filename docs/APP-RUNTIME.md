@@ -279,7 +279,9 @@ open is a card, as on webOS.
 tools/serve-rootfs.py        # then open http://127.0.0.1:8765/
 ```
 
-This serves the same filesystem and adds the runtime to every app page. It's
+This serves the same filesystem and adds the runtime to every app page
+(and to the framework pages apps open as windows, such as Enyo's dashboard
+window). It's
 handy for debugging an app with the browser's developer tools.
 
 **Automated check.** `node tools/test-apps.cjs [--tablet]` loads every app in
@@ -351,7 +353,8 @@ permissions under `/etc/palm/db`. An app's Node.js Luna service
 (`apps/<app>/service`, e.g. Files' or Voice Memos') goes to `/usr/palm/services/<service id>`,
 where `run-js-service` starts it, and its `sysbus/` role, permission, groups,
 manifest and service files to `/usr/share/luna-service2/*.d`. Overlays are
-applied and app pages get the runtime `<script>` tag. The `phoenix-apps` recipe in `meta-phoenix` runs it,
+applied and app pages (and framework pages opened as windows, such as
+Enyo's dashboard window) get the runtime `<script>` tag. The `phoenix-apps` recipe in `meta-phoenix` runs it,
 and `webos-phoenix-image` includes it. Built apps (`dist/`) must be built
 before the recipe runs.
 

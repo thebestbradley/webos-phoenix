@@ -52,7 +52,16 @@
 
     function appIdFromLocation() {
         var m = /\/usr\/palm\/applications\/([^\/]+)\//.exec(global.location.pathname);
-        return m ? m[1] : "com.webos.phoenix.unknown";
+        if (m)
+            return m[1];
+        // A framework page the app opened as a window (Enyo 1.0's dashboard
+        // window) belongs to that app, as every window of an app did on webOS.
+        try {
+            var opener = global.opener;
+            if (opener && opener.PalmSystem && opener.PalmSystem.appIdentifier)
+                return opener.PalmSystem.appIdentifier;
+        } catch (e) { /* another origin */ }
+        return "com.webos.phoenix.unknown";
     }
 
     function queryParam(name) {

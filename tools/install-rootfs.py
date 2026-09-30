@@ -176,7 +176,9 @@ def main():
     for dev, src in sorted(final.items()):
         dst = os.path.join(args.destdir, dev.lstrip("/"))
         os.makedirs(os.path.dirname(dst), exist_ok=True)
-        if dev.startswith("/usr/palm/applications/") and dev.endswith(".html"):
+        # App pages, and Enyo 1.0's framework pages an app opens as a
+        # window (dashboard-window), as in phoenix-sim and serve-rootfs.py.
+        if dev.startswith(("/usr/palm/applications/", "/usr/palm/frameworks/enyo/")) and dev.endswith(".html"):
             with open(src, "rb") as f:
                 data = inject_runtime(f.read())
             with open(dst, "wb") as f:
