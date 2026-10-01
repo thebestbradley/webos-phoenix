@@ -39,6 +39,8 @@ do_install:append() {
 FILES:${PN} += " \
     ${datadir}/phoenix \
     ${datadir}/fonts/open-sans \
+    ${datadir}/fonts/noto-color-emoji \
+    ${sysconfdir}/fonts/conf.d/50-phoenix-emoji.conf \
     ${QT6_INSTALL_QMLDIR}/Phoenix \
     ${sysconfdir}/surface-manager.d/product.env \
 "

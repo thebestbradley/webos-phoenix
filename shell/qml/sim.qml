@@ -238,12 +238,23 @@ Item {
         }
     }
 
+    // The keyboard's recent emoji and skin tones survive restarts too.
+    Connections {
+        target: shell.keyboard
+        function onEmojiPrefsChanged() {
+            if (typeof simSettings !== "undefined")
+                simSettings.setValue("keyboard/emoji", shell.keyboard.emojiPrefs);
+        }
+    }
+
     // Build a demo scene, as if the user had been using the phone for a bit.
     Component.onCompleted: {
         windows.pushSystemStatus({ deviceLocked: shell.locked });
         pushOrientation();
         if (typeof simSettings !== "undefined")
             windows.launcherLayoutJson = simSettings.value("launcher/layout");
+        if (typeof simSettings !== "undefined")
+            shell.keyboard.emojiPrefs = simSettings.value("keyboard/emoji");
         // --launch <appId>: open these apps, in card view, then stop.
         // --open <url>: open a web page in the browser, as a link would.
         var opening = typeof simOpen !== "undefined" && simOpen !== "";

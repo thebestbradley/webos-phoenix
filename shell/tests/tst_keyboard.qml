@@ -50,6 +50,8 @@ Item {
             tryCompare(shell, "uiOrientation", "up", 3000);
             tryVerify(function() { return !shell.rotator.rotating; }, 3000);
             field.inputMethodHints = Qt.ImhNone;
+            field.echoMode = TextInput.Normal;
+            kb.emojiPrefs = "{}";
             field.focus = false;
             shell.forceActiveFocus();
             tryCompare(shell, "keyboardOpen", false, 2000);
@@ -324,6 +326,127 @@ Item {
             verify(!bar.cursorActive);
             verify(shell.keyboardOpen);
             compare(shell.cardView.maximizeProgress, 0);
+        }
+
+        // Emoji (GAPS V6): the emoji key beside the space bar opens the
+        // emoji page; an emoji types, joins the recents, keeps its tone.
+        readonly property string smile: "\uD83D\uDE42"
+        readonly property string grin: "\uD83D\uDE00"
+        readonly property string wave: "\uD83D\uDC4B"
+        readonly property string waveMedium: "\uD83D\uDC4B\uD83C\uDFFD"
+
+        function openEmoji() {
+            showKeyboard();
+            tapKey(smile);
+            tryCompare(kb, "emojiOpen", true, 1000);
+            var panel = findChild(kb, "emojiPanel");
+            tryCompare(panel, "visible", true, 1000);
+            return panel;
+        }
+        function cellFor(panel, emoji) {
+            var grid = findChild(panel, "emojiGrid");
+            var model = grid.model;
+            for (var i = 0; i < model.length; ++i)
+                if (model[i].e === emoji)
+                    grid.positionViewAtIndex(i, GridView.Center);
+            waitForItemPolished(grid);
+            var cell;
+            tryVerify(function() { cell = findChild(grid, "emoji-" + emoji); return cell && cell.visible; }, 1000, "cell " + emoji);
+            return cell;
+        }
+
+        function test_emojiKeyTypesAnEmoji() {
+            var panel = openEmoji();
+            // No recents yet: smileys first.
+            compare(panel.category, "smileys");
+            verify(!findChild(kb, "keyboardFrame").visible);
+            mouseClick(cellFor(panel, grin));
+            compare(field.text, grin);
+            compare(JSON.parse(kb.emojiPrefs).recent, [grin]);
+            // ABC: the letters again.
+            mouseClick(findChild(panel, "emojiAbc"));
+            verify(!kb.emojiOpen);
+            type(["a"]);
+            compare(field.text, grin + "a");
+        }
+
+        function test_emojiSpaceAndDelete() {
+            var panel = openEmoji();
+            mouseClick(cellFor(panel, grin));
+            mouseClick(findChild(panel, "emojiSpace"));
+            compare(field.text, grin + " ");
+            mouseClick(findChild(panel, "emojiBackspace"));
+            compare(field.text, grin);
+        }
+
+        function test_emojiRecentsAndTones() {
+            var panel = openEmoji();
+            // Hold the waving hand: its tones; the medium one types and stays.
+            mousePress(cellFor(panel, wave));
+            var tones = findChild(panel, "emojiTones");
+            tryCompare(tones, "visible", true, 2000);
+            mouseRelease(cellFor(panel, wave));
+            // (A Row places its items when polished.)
+            waitForItemPolished(findChild(tones, "emojiToneRow"));
+            mouseClick(findChild(tones, "emojiTone-3"));
+            compare(field.text, waveMedium);
+            verify(!tones.visible);
+            compare(JSON.parse(kb.emojiPrefs).tones[wave], waveMedium);
+            mouseClick(cellFor(panel, wave));
+            compare(field.text, waveMedium + waveMedium);
+            // Reopened, it starts on the recents.
+            mouseClick(findChild(panel, "emojiAbc"));
+            tapKey(smile);
+            tryCompare(panel, "visible", true, 1000);
+            compare(panel.category, "recent");
+            verify(cellFor(panel, waveMedium));
+        }
+
+        function test_emojiSurvivesInPrefs() {
+            kb.emojiPrefs = JSON.stringify({ recent: [grin], tones: {} });
+            var panel = openEmoji();
+            compare(panel.category, "recent");
+            verify(cellFor(panel, grin));
+        }
+
+        function test_emojiSearch() {
+            var panel = openEmoji();
+            mouseClick(findChild(panel, "emojiTab-search"));
+            tryCompare(kb, "emojiSearch", true, 1000);
+            var bar = findChild(kb, "emojiSearchBar");
+            verify(bar.visible);
+            verify(!panel.visible);
+            verify(findChild(kb, "keyboardFrame").visible);
+            // The keys type the search, not the field.
+            type(["w", "a", "v", "i", "n"]);
+            compare(kb.emojiQuery, "wavin");
+            compare(field.text, "");
+            var result;
+            tryVerify(function() { result = findChild(bar, "emojiResult-" + wave); return result !== null; }, 1000);
+            mouseClick(result);
+            compare(field.text, wave);
+            tapKey("Space");
+            type(["h"]);
+            compare(kb.emojiQuery, "wavin h");
+            // Back: the emoji page.
+            mouseClick(findChild(bar, "emojiSearchBack"));
+            verify(!kb.emojiSearch);
+            tryCompare(panel, "visible", true, 1000);
+        }
+
+        function test_emojiClosesWithTheKeyboard() {
+            openEmoji();
+            field.focus = false;
+            shell.forceActiveFocus();
+            tryCompare(shell, "keyboardOpen", false, 2000);
+            verify(!kb.emojiOpen);
+        }
+
+        function test_noEmojiKeyInPasswordFields() {
+            field.echoMode = TextInput.Password;
+            showKeyboard();
+            verify(kb.keyRect(smile) === null);
+            field.echoMode = TextInput.Normal;
         }
 
         function test_landscape() {

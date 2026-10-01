@@ -72,8 +72,17 @@ QtObject {
         FontLoader { source: Qt.resolvedUrl("../../../assets/fonts/open-sans/OpenSans-Light.ttf") },
         FontLoader { source: Qt.resolvedUrl("../../../assets/fonts/open-sans/OpenSans-Semibold.ttf") },
         FontLoader { source: Qt.resolvedUrl("../../../assets/fonts/open-sans/OpenSans-Italic.ttf") },
-        FontLoader { source: Qt.resolvedUrl("../../../assets/fonts/open-sans/OpenSans-BoldItalic.ttf") }
+        FontLoader { source: Qt.resolvedUrl("../../../assets/fonts/open-sans/OpenSans-BoldItalic.ttf") },
+        // Colour emoji after the text font, everywhere text is drawn (GAPS V6;
+        // assets/fonts/noto-color-emoji, SIL OFL 1.1).
+        // (macOS draws emoji with its own Apple Color Emoji; Core Text has
+        // no colour bitmap (CBDT) support for this font.)
+        FontLoader { source: Qt.platform.os === "osx" ? "" : Qt.resolvedUrl("../../../assets/fonts/noto-color-emoji/NotoColorEmoji.ttf") }
     ]
+    // For text that is only emoji (the keyboard's emoji page): the colour
+    // font by name; elsewhere fontconfig's order brings it in after the text
+    // font (assets/fonts/noto-color-emoji/50-phoenix-emoji.conf).
+    readonly property string emojiFontFamily: Qt.platform.os === "osx" ? "Apple Color Emoji" : "Noto Color Emoji"
 
     // ---- Status bar (luna-sysmgr/images/statusBar/status-bar-background.png is 28px tall)
 

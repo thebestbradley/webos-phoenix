@@ -35,6 +35,10 @@
 // into a trackpad: the keys fade, sliding moves the cursor (arrow keys),
 // and a second finger down selects (Shift with the arrows). Space no longer
 // repeats.
+// Phoenix: emoji (GAPS V6). The emoji key beside the space bar in text
+// fields opens the emoji page (EmojiPanel): categories, recents, skin tones
+// (hold an emoji), search by name typed on the keys. The symbol page's
+// emoticon keys still type the original's text emoticons.
 // Not ported: the XT9 candidate bar and trace typing (CandidateBar.cpp, a
 // licensed engine; off unless turned on), keyboard combos (language key),
 // and the emoticon pictures (/usr/palm/emoticons, not in the Apache-2.0
@@ -42,6 +46,7 @@
 
 import QtQuick
 import "KeyboardKeymap.js" as KM
+import "EmojiData.js" as ED
 
 Item {
     id: kb
@@ -77,6 +82,169 @@ Item {
     signal hideRequested()
     // keyDownAudioFeedback: "key", "space", "backspace" or "return".
     signal feedback(string name)
+
+    // ---- Emoji (Phoenix, GAPS V6) ---------------------------------------------------
+    // Recents and each emoji's skin tone, as JSON {recent: [...], tones:
+    // {base: toned}}; the shell keeps it between runs.
+    property string emojiPrefs: ""
+    // The emoji page is up; searching: the keys type the search.
+    property bool emojiOpen: false
+    property bool emojiSearch: false
+    property string emojiQuery: ""
+    readonly property int emojiRecentMax: 32
+    // The categories, without the emoji this Qt and font cannot draw as one
+    // glyph (built when the page first opens: _buildEmoji).
+    readonly property var emojiCategories: _emojiShown || []
+    property var _emojiShown: null
+    property var _emojiRecent: []
+    property var _emojiTones: ({})
+    // The prefs the state above was last read from or written to.
+    property string _emojiPrefsCurrent: ""
+    onEmojiPrefsChanged: {
+        if (emojiPrefs === _emojiPrefsCurrent)
+            return;            // our own write
+        _emojiPrefsCurrent = emojiPrefs;
+        _loadEmojiPrefs();
+    }
+
+    function _loadEmojiPrefs() {
+        var p = {};
+        try { p = JSON.parse(emojiPrefs || "{}") || {}; } catch (e) { p = {}; }
+        _emojiRecent = Array.isArray(p.recent) ? p.recent.filter(function (e) { return typeof e === "string"; }).slice(0, emojiRecentMax) : [];
+        _emojiTones = p.tones && typeof p.tones === "object" ? p.tones : ({});
+    }
+    function _saveEmojiPrefs() {
+        _emojiPrefsCurrent = JSON.stringify({ recent: _emojiRecent, tones: _emojiTones });
+        emojiPrefs = _emojiPrefsCurrent;
+    }
+    // What an emoji types: its remembered skin tone, if any.
+    function emojiFor(entry) {
+        return entry.t && _emojiTones[entry.e] ? _emojiTones[entry.e] : entry.e;
+    }
+    // Types an emoji and keeps it in the recents. With a base, the emoji is
+    // the tone chosen for it (the base itself: no tone), remembered.
+    function chooseEmoji(text, base) {
+        if (base !== undefined) {
+            var tones = Object.assign({}, _emojiTones);
+            if (text === base)
+                delete tones[base];
+            else
+                tones[base] = text;
+            _emojiTones = tones;
+        }
+        var recent = _emojiRecent.filter(function (e) { return e !== text; });
+        recent.unshift(text);
+        _emojiRecent = recent.slice(0, emojiRecentMax);
+        _saveEmojiPrefs();
+        _makeSound(KM.Key.A);
+        kb.textCommitted(text);
+    }
+    // Sequences of several code points (joined with ZWJ, or a text
+    // character made emoji with VS16) are drawn as one glyph only where Qt
+    // segments emoji (Qt 6.9: "❤️‍🔥", keycaps; Qt 6.4 draws their parts).
+    // Each is measured once; one that comes out wider than an emoji is not
+    // offered, nor are tones that do. Measured in small steps after start-up
+    // (a phone takes a while for all), finished at once if the page opens
+    // first.
+    TextMetrics { id: emojiMetrics; font.family: Theme.emojiFontFamily; font.pixelSize: 40 }
+    property var _emojiBuild: null       // {c, i, single, out}
+    function _emojiDrawable(e) {
+        if (_emojiBuild.single <= 0 || (e.length <= 2 && !/[\uFE0F\u200D\u20E3]/.test(e)))
+            return true;
+        emojiMetrics.text = e;
+        return emojiMetrics.advanceWidth <= _emojiBuild.single * 1.3;
+    }
+    // Measures up to n more emoji; true when all are done.
+    function _buildEmoji(n) {
+        if (_emojiShown)
+            return true;
+        if (!_emojiBuild) {
+            emojiMetrics.text = "\uD83D\uDE00";
+            _emojiBuild = { c: 0, i: 0, single: emojiMetrics.advanceWidth, out: [] };
+        }
+        var b = _emojiBuild, cats = ED.categories;
+        for (var done = 0; b.c < cats.length && !(done >= n); ++done) {
+            var cat = cats[b.c];
+            if (b.i === 0)
+                b.out.push({ key: cat.key, icon: cat.icon, emoji: [] });
+            var entry = cat.emoji[b.i];
+            if (_emojiDrawable(entry.e)) {
+                if (entry.t && !(_emojiDrawable(entry.t[0]) && _emojiDrawable(entry.t[4])))
+                    entry = { e: entry.e, n: entry.n };
+                b.out[b.c].emoji.push(entry);
+            }
+            if (++b.i >= cat.emoji.length) {
+                b.c++;
+                b.i = 0;
+            }
+        }
+        if (b.c < cats.length)
+            return false;
+        _emojiShown = b.out;
+        _emojiBuild = null;
+        return true;
+    }
+    Timer {
+        id: emojiBuildTimer
+        interval: 0
+        repeat: true
+        running: true
+        onTriggered: if (kb._buildEmoji(60)) stop()
+    }
+    function openEmoji() {
+        _buildEmoji(Infinity);
+        _touchEnd();
+        emojiSearch = false;
+        emojiQuery = "";
+        emojiOpen = true;
+    }
+    function closeEmoji() {
+        emojiOpen = false;
+        emojiSearch = false;
+        emojiQuery = "";
+    }
+    function startEmojiSearch() {
+        emojiQuery = "";
+        emojiSearch = true;
+    }
+    function endEmojiSearch() {
+        emojiSearch = false;
+        emojiQuery = "";
+    }
+    // Emoji whose CLDR name has a word starting with each word of the
+    // query; names starting with the query first.
+    function emojiMatches(query, max) {
+        var words = String(query).toLowerCase().trim().split(/\s+/).filter(function (w) { return w !== ""; });
+        if (!words.length)
+            return [];
+        var q = words.join(" ");
+        var first = [], rest = [];
+        for (var c = 0; c < emojiCategories.length; ++c) {
+            var list = emojiCategories[c].emoji;
+            for (var i = 0; i < list.length; ++i) {
+                var name = list[i].n.toLowerCase();
+                var nameWords = name.split(/[\s:,\-]+/);
+                var all = words.every(function (w) { return nameWords.some(function (n) { return n.indexOf(w) === 0; }); });
+                if (all)
+                    (name.indexOf(q) === 0 ? first : rest).push(list[i]);
+            }
+        }
+        return first.concat(rest).slice(0, max || 60);
+    }
+    // While searching, the keys type the search (not the field).
+    function _emojiSearchKey(key) {
+        if (key === KM.Key.Backspace)
+            emojiQuery = emojiQuery.slice(0, -1);
+        else if (key === KM.Key.Space)
+            emojiQuery += " ";
+        else if (key === KM.Key.Return || key === KM.Key.Emoji)
+            endEmojiSearch();
+        else if (KM.isUnicodeKey(key))
+            emojiQuery += KM.lower(String.fromCharCode(key));
+        else
+            return false;
+        return true;
+    }
 
     // The keyboard is a trackpad (cursor control).
     readonly property bool trackpad: _trackpadId !== ""
@@ -280,6 +448,7 @@ Item {
             _setKeyboardHeight(_requestedHeight > 0 ? _requestedHeight : _presetHeight());
         } else {
             // visibleChanged(false): back to plain letters.
+            closeEmoji();
             _km.setSymbolMode(KM.SymbolMode.Off);
             _km.setShiftMode(KM.ShiftMode.Off);
             _clearExtendedKeys();
@@ -390,6 +559,10 @@ Item {
     function _keyCap(r, cx, cy, key, use) {
         var ops = [];
         var loc = { x: r.x, y: r.y, w: r.w, h: r.h - 4 };   // location.setBottom(bottom - 4)
+        if (key === KM.Key.Emoji)    // Phoenix: the emoji, centred, in colour (no shadow)
+            return [{ text: _km.displayString(key, false), x: loc.x, y: loc.y, w: loc.w, h: loc.h,
+                      size: Math.round(Math.min(loc.w, loc.h) * (use === 2 ? 0.55 : 0.45)), bold: false,
+                      color: cActiveColor, back: cActiveColor, align: "center", emoji: true }];
         var useWhite = use === 0 || use === 1;
         var extraLarge = !tablet && (use === 1 || use === 2);
         if (tablet && use === 1)
@@ -735,6 +908,8 @@ Item {
     // ---- Keys (handleKey) ------------------------------------------------------------------
 
     function _handleKey(key, where) {
+        if (emojiSearch && _emojiSearchKey(key))
+            return;
         var shiftMode = _km.shiftMode, symbolMode = _km.symbolMode;
         var consumeMode = false;
         var qtkey = 0;          // Qt::Key_unknown
@@ -787,6 +962,9 @@ Item {
                 break;
             case KM.Key.Hide:
                 kb.hideRequested();
+                break;
+            case KM.Key.Emoji:
+                openEmoji();
                 break;
             case KM.Key.Left:
             case KM.Key.Right:
@@ -1137,7 +1315,7 @@ Item {
                         height: op.height - (op.shadow ? 1 : 0)
                         text: op.modelData.text
                         color: back ? op.modelData.back : op.modelData.color
-                        font.family: Theme.fontFamily
+                        font.family: op.modelData.emoji ? Theme.emojiFontFamily : Theme.fontFamily
                         font.pixelSize: Math.max(1, op.modelData.size)
                         font.bold: op.modelData.bold
                         horizontalAlignment: op.modelData.align === "bottomRight" ? Text.AlignRight : Text.AlignHCenter
@@ -1167,6 +1345,7 @@ Item {
     Item {
         id: frame
         objectName: "keyboardFrame"
+        visible: !kb.emojiOpen || kb.emojiSearch
         width: kb._spaceWidth
         height: kb._keymapHeight + kb._topPadding
         scale: kb.pixelScale
@@ -1352,7 +1531,7 @@ Item {
         y: whole ? -kb.y : (kb._grace ? -kb.graceZone * kb.pixelScale : 0)
         width: whole ? kb.parent.width : kb.width
         height: whole ? kb.parent.height : kb.height - y
-        enabled: kb.acceptingInput && kb.shown
+        enabled: kb.acceptingInput && kb.shown && (!kb.emojiOpen || kb.emojiSearch)
         mouseEnabled: true
         maximumTouchPoints: 10
 
@@ -1387,5 +1566,19 @@ Item {
                 kb._touchEnd();
         }
         onCanceled: kb._touchEnd()
+    }
+
+    // The emoji page over the keys, and while searching, the search above
+    // them (Phoenix, GAPS V6).
+    EmojiPanel {
+        keyboard: kb
+        anchors.fill: parent
+        visible: kb.emojiOpen && !kb.emojiSearch
+    }
+    EmojiSearchBar {
+        keyboard: kb
+        width: parent.width
+        y: -height
+        visible: kb.emojiOpen && kb.emojiSearch
     }
 }

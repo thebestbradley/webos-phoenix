@@ -86,6 +86,9 @@ var Key = {
     EmoticonGasp: 0x01200311,
     EmoticonHeart: 0x01200312,
     EmoticonOptions: 0x01200313,
+    // Phoenix: opens the emoji page (GAPS V6). In the plugin's range of its
+    // own keys, unused there.
+    Emoji: 0x01200220,
     ComboFirst: 0x01200400,
     ComboLast: 0x012004ff
 };
@@ -402,6 +405,34 @@ var tabletFamilies = {
               layout: tabletAzerty, bottomRow: tabletAzertyBottom }
 };
 
+// ---- Phoenix: the emoji key (GAPS V6) ---------------------------------------------------
+// Beside the space bar in text fields, in a slot the original leaves empty
+// there (the phone's leftSpace, the tablet's free key before the space bar),
+// the space bar giving up one weight, as for the e-mail and URL keys. Not in
+// password, number and phone fields.
+
+function phoneCustomWithEmoji(custom) {
+    var plain = custom.plain.slice();
+    plain[1] = K(1, Key.Emoji);
+    return { plain: plain, plainNoEmoji: custom.plain, symbol: custom.symbol, email: custom.email, url: custom.url };
+}
+
+function tabletRowWithEmoji(row) {
+    row = row.slice();
+    for (var x = 1; x < row.length; ++x) {
+        if (row[x].key === Key.Space && row[x - 1].w === 0) {
+            row[x - 1] = K(1, Key.Emoji);
+            row[x] = K(row[x].w - 1, Key.Space);
+            break;
+        }
+    }
+    return row;
+}
+
+function emojiAllowed(type) {
+    return type !== FieldType.Password && type !== FieldType.Number && type !== FieldType.Phone;
+}
+
 // ---- PalmIME::EditorState (luna-webkit-api palmimedefines.h:33-80) ---------------------
 
 var FieldType = { Text: 0, Password: 1, Search: 2, Range: 3, Email: 4, Number: 5, Phone: 6, URL: 7, Color: 8 };
@@ -463,10 +494,11 @@ Keymap.prototype.setLayoutFamily = function (name, force) {
     this.family = family;
     this.layout = family.layout();
     if (this.tablet) {
-        this.bottomRows = { "": family.bottomRow(""), url: family.bottomRow("url"), email: family.bottomRow("email") };
+        this.bottomRows = { "": tabletRowWithEmoji(family.bottomRow("")), noEmoji: family.bottomRow(""),
+                            url: family.bottomRow("url"), email: family.bottomRow("email") };
         this.updateLanguageKey();
     } else {
-        this.custom = family.custom();
+        this.custom = phoneCustomWithEmoji(family.custom());
     }
     this.setEditorState(this.editorState, true);
     this.limitsDirty = true;
@@ -630,7 +662,8 @@ Keymap.prototype.setEditorState = function (state, force) {
         numLock = true;
     var lastRow = this.rows - 1, x;
     if (this.tablet) {
-        var newRow = this.bottomRows[type === FieldType.Email ? "email" : type === FieldType.URL ? "url" : ""];
+        var newRow = this.bottomRows[type === FieldType.Email ? "email" : type === FieldType.URL ? "url"
+                                     : emojiAllowed(type) ? "" : "noEmoji"];
         this.updateLanguageKey(newRow);
         var row = this.layout[lastRow];
         for (x = 0; x < this.columns; ++x) {
@@ -643,7 +676,7 @@ Keymap.prototype.setEditorState = function (state, force) {
             row[x] = newRow[x];
         }
     } else {
-        var c = this.isSymbolActive() ? this.custom.symbol : this.custom.plain;
+        var c = this.isSymbolActive() ? this.custom.symbol : emojiAllowed(type) ? this.custom.plain : this.custom.plainNoEmoji;
         if (type === FieldType.Email)
             c = this.custom.email;
         else if (type === FieldType.URL)
@@ -842,6 +875,7 @@ Keymap.prototype.displayString = function (key, logging) {
             return "";
         switch (key) {
         case Key.Return: return this.customEnter === "" ? this.localized.Enter : this.customEnter;
+        case Key.Emoji: return "\uD83D\uDE42";   // 🙂
         case Key.Tab: return this.localized.Tab;   // tabAction(): always Tab on the tablet (:531-534)
         case Key.EmoticonOptions: return ":)";
         case Key.EmoticonFrown: return ":-(";

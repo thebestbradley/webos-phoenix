@@ -16,11 +16,18 @@
 
 #include <QCommandLineParser>
 #include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QFontDatabase>
 #include <QGuiApplication>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickView>
 #include <QTimer>
+
+#ifdef Q_OS_LINUX
+#include <unistd.h>
+#endif
 
 #include "rootfs.h"
 #include "simpty.h"
@@ -41,14 +48,66 @@
 #define PHOENIX_REPO_DIR ""
 #endif
 
+// Colour emoji (shell/assets/fonts/noto-color-emoji, GAPS V6). The shell
+// loads the font itself (Theme.qml); the web runtime finds fonts through
+// fontconfig, and both take the order from it. So on Linux, before Qt or
+// Chromium read fontconfig, its configuration gets the font's directory and
+// the rule that puts it after the text fonts, as on a device, where both
+// are installed (/usr/share/fonts, /etc/fonts/conf.d). macOS has Apple
+// Color Emoji, for the shell and the web pages.
+static void useBundledEmojiFont(int argc, char *argv[])
+{
+#ifdef Q_OS_LINUX
+    if (!qEnvironmentVariableIsEmpty("FONTCONFIG_FILE"))
+        return;
+    // The QML directory: --qml-dir, the build's, or ../qml beside the program.
+    QString qmlDir;
+    for (int i = 1; i < argc; ++i) {
+        const QString arg = QString::fromLocal8Bit(argv[i]);
+        if (arg == QLatin1String("--qml-dir") && i + 1 < argc)
+            qmlDir = QString::fromLocal8Bit(argv[i + 1]);
+        else if (arg.startsWith(QLatin1String("--qml-dir=")))
+            qmlDir = arg.mid(10);
+    }
+    if (qmlDir.isEmpty())
+        qmlDir = QString::fromUtf8(PHOENIX_QML_DIR);
+    if (qmlDir.isEmpty())
+        qmlDir = QFileInfo(QString::fromLocal8Bit(argv[0])).absoluteDir().filePath(QStringLiteral("../qml"));
+    const QDir emojiDir(QDir(qmlDir).absoluteFilePath(QStringLiteral("../assets/fonts/noto-color-emoji")));
+    if (!emojiDir.exists(QStringLiteral("NotoColorEmoji.ttf")))
+        return;
+    const QString confDir = QDir::temp().filePath(QStringLiteral("phoenix-sim-fonts-") + QString::number(getuid()));
+    QDir().mkpath(confDir);
+    QFile conf(QDir(confDir).filePath(QStringLiteral("fonts.conf")));
+    if (!conf.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return;
+    conf.write("<?xml version=\"1.0\"?>\n<!DOCTYPE fontconfig SYSTEM \"urn:fontconfig:fonts.dtd\">\n<fontconfig>\n"
+               "  <include ignore_missing=\"yes\">/etc/fonts/fonts.conf</include>\n"
+               "  <dir>" + emojiDir.absolutePath().toHtmlEscaped().toUtf8() + "</dir>\n"
+               "  <include ignore_missing=\"yes\">"
+               + emojiDir.absoluteFilePath(QStringLiteral("50-phoenix-emoji.conf")).toHtmlEscaped().toUtf8()
+               + "</include>\n</fontconfig>\n");
+    conf.close();
+    qputenv("FONTCONFIG_FILE", conf.fileName().toLocal8Bit());
+#else
+    Q_UNUSED(argc);
+    Q_UNUSED(argv);
+#endif
+}
+
 int main(int argc, char *argv[])
 {
+    useBundledEmojiFont(argc, argv);
 #ifdef PHOENIX_HAVE_WEBENGINE
     // Both must happen before the application object exists.
     RootfsSchemeHandler::registerScheme();
     QtWebEngineQuick::initialize();
 #endif
     QGuiApplication app(argc, argv);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0) && !defined(Q_OS_DARWIN)
+    // Emoji presentation from the colour font, whatever the text font.
+    QFontDatabase::addApplicationEmojiFontFamily(QStringLiteral("Noto Color Emoji"));
+#endif
     app.setApplicationName(QStringLiteral("phoenix-sim"));
     app.setOrganizationName(QStringLiteral("webos-phoenix"));
 

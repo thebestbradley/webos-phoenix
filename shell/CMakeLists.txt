@@ -158,8 +158,17 @@ endif()
 # QML modules and the Open webOS artwork keep their relative layout, so
 # Theme.asset() resolves the same way in the tree and on the device.
 install(DIRECTORY qml/ DESTINATION ${PHOENIX_DATA_DIR}/qml)
-install(DIRECTORY assets/ DESTINATION ${PHOENIX_DATA_DIR}/assets)
+install(DIRECTORY assets/ DESTINATION ${PHOENIX_DATA_DIR}/assets
+        PATTERN "noto-color-emoji" EXCLUDE)
 # The Prelude stand-in, where the web apps find it too
 # (runtime/phoenix-runtime.js aliasPreludeFonts).
 install(DIRECTORY assets/fonts/open-sans/ DESTINATION ${CMAKE_INSTALL_DATADIR}/fonts/open-sans
         FILES_MATCHING PATTERN "*.ttf")
+# The colour emoji font (10 MB) once, in the system's fonts where the web
+# runtime finds it through fontconfig; the shell's assets link to it.
+install(DIRECTORY assets/fonts/noto-color-emoji/ DESTINATION ${CMAKE_INSTALL_DATADIR}/fonts/noto-color-emoji
+        PATTERN "*.conf" EXCLUDE)
+# ...and after the text fonts in fontconfig's order.
+install(FILES assets/fonts/noto-color-emoji/50-phoenix-emoji.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/fonts/conf.d)
+install(CODE "file(CREATE_LINK ../../../fonts/noto-color-emoji
+    \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${PHOENIX_DATA_DIR}/assets/fonts/noto-color-emoji\" SYMBOLIC)")
