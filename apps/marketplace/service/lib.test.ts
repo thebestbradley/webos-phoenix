@@ -64,7 +64,9 @@ describe("Ed25519", () => {
     });
 });
 
-describe(".ipk packages", () => {
+// These run tar and ar: on a busy CI runner, with every test file at once,
+// starting them has taken longer than the default 5 s.
+describe(".ipk packages", { timeout: 30000 }, () => {
     const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-ipk-"));
 
     it("reads what opkg-build's tools (ar, tar) make", async () => {
