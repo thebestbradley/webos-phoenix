@@ -60,6 +60,7 @@
 //   removeApp(appId)         the user deleted the app in the launcher
 //   savedLauncherLayout() -> string, saveLauncherLayout(json)
 //                            the launcher's icon order, kept across sessions
+//   launcherLayoutRestored(json)  signal: a restored backup brought one back
 //   apps also has removable: whether the launcher offers to delete the app
 //
 // Simulator only (sim.qml wires these to SimSystemStatus and the shell):
@@ -388,6 +389,11 @@ Item {
                 cb(payload.reply);
         } else if (type === "preferences") {
             preferencesReported(payload);
+        } else if (type === "launcherLayout") {
+            // A restored backup's launcher layout (com.palm.sysMgrDataBackup
+            // postRestore, as LunaSysMgr's BackupManager put its files back).
+            if (typeof payload.json === "string")
+                launcherLayoutRestored(payload.json);
         } else if (type === "systemStatus") {
             // The pages are in step with the shell again.
             _pendingStatus = null;
@@ -404,6 +410,7 @@ Item {
 
     signal systemStatusReported(var status)
     signal preferencesReported(var prefs)
+    signal launcherLayoutRestored(string json)
 
     // ---- System windows: the emergency window ---------------------------------------
     // An app page shown by the shell outside the cards: Phone's restricted
@@ -729,7 +736,7 @@ Item {
     // State only the shell knows (the lock screen, how the UI and the device
     // are turned), which every page gets as it loads; unlike the rest it is
     // not the pages' to overrule.
-    readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse"]
+    readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse", "launcherLayout"]
     property var _shellStatus: ({})
 
     function pushSystemStatus(changes) {

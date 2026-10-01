@@ -7,7 +7,7 @@
 // never open-sourced the app). The steps, each but the first and last
 // skippable:
 //
-//   Welcome (language)  ->  Wi-Fi  ->  Date & Time  ->  Accounts (Synergy)
+//   Welcome (language)  ->  Wi-Fi  ->  Restore (a backup)  ->  Date & Time  ->  Accounts (Synergy)
 //   ->  Passcode  ->  Privacy (location, the assistant)  ->  Cards & gestures
 //   (the tutorial)  ->  All set (Help and tips)
 //
@@ -18,12 +18,13 @@
 //
 // Services: com.webos.settingsservice localeInfo; com.webos.service.wifi;
 // com.webos.service.systemservice (timeZone, useNetworkTime, timeFormat,
-// firstUseComplete); com.palm.service.accounts listAccounts;
+// firstUseComplete); org.webosphoenix.service.backup; com.palm.service.accounts listAccounts;
 // com.palm.systemmanager setDevicePasscode; com.webos.service.location.
 
 import { useEffect, useState, type ReactNode } from "react";
 import {
-    apps, call, deviceLock, firstUse, LunaError, location, settings, system, wifi, WIFI_ERROR_INVALID_KEY,
+    apps, backup, backupErrorCode, BACKUP_PARTS, call, deviceLock, firstUse, LunaError, location, settings, system, wifi, WIFI_ERROR_INVALID_KEY,
+    type BackupDestination, type BackupFile,
     type LocaleInfo, type LocationHandler, type LockMode, type SystemPreferences, type TimeZone, type WifiNetworkInfo, type WifiStatus,
 } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
@@ -168,6 +169,116 @@ function WifiStep(nav: NavProps) {
                 <Button variant="affirmative" busy={busy !== null} disabled={!pass} data-testid="wifi-connect"
                         onClick={() => join && void connect(join, pass)}>Connect</Button>
                 <Button variant="dark" onClick={() => setJoin(null)}>Cancel</Button>
+            </Dialog>
+        </StepPage>
+    );
+}
+
+// ---- Restore -----------------------------------------------------------------------------
+//
+// A backup made by Settings > Backup on another (or this) device: where it
+// is, which one, its passphrase. Afterwards this device backs up to the same
+// place, every day, with the same passphrase.
+
+function RestoreStep(nav: NavProps) {
+    const [mode, setMode] = useState<"ask" | "where" | "list" | "restored">("ask");
+    const [type, setType] = useState<"usb" | "webdav">("usb");
+    const [url, setUrl] = useState("");
+    const [user, setUser] = useState("");
+    const [password, setPassword] = useState("");
+    const [files, setFiles] = useState<BackupFile[] | null>(null);
+    const [chosen, setChosen] = useState<BackupFile | null>(null);
+    const [pass, setPass] = useState("");
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [restored, setRestored] = useState<string[]>([]);
+    const text = (e: unknown) => (e instanceof LunaError ? e.errorText : String(e));
+
+    async function look() {
+        setBusy(true);
+        setError(null);
+        const destination: BackupDestination = type === "usb" ? { type: "usb" } : { type: "webdav", url: url.trim(), username: user.trim(), password };
+        try {
+            await backup.configure({ destination });
+            setFiles(await backup.list());
+            setMode("list");
+        } catch (e) {
+            setError(backupErrorCode(e) === "UNAUTHORIZED" ? "The server did not accept the user name or password." : text(e));
+        } finally {
+            setBusy(false);
+        }
+    }
+    async function restore() {
+        if (!chosen) return;
+        setBusy(true);
+        setError(null);
+        try {
+            const r = await backup.restore(chosen.name, pass);
+            // Keep backing up there, with the same passphrase.
+            await backup.configure({ passphrase: pass, auto: true });
+            setRestored(r.restored);
+            setChosen(null);
+            setMode("restored");
+        } catch (e) {
+            setError(backupErrorCode(e) === "WRONG_PASSPHRASE" ? "That is not this backup's passphrase." : text(e));
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    if (mode === "restored") {
+        return (
+            <StepPage testId="restore" title="Restored" {...nav} onSkip={undefined}
+                      intro="Your backup is back on this device. It will back up there every day.">
+                <Group>{restored.map((id) => <Row key={id} title={BACKUP_PARTS[id] ?? id} icon={<Checkmark />} />)}</Group>
+                <Note>Add your accounts again in the next steps: their mail, contacts and calendars sync back from the server.</Note>
+            </StepPage>
+        );
+    }
+    if (mode === "ask") {
+        return (
+            <StepPage testId="restore" title="Restore" {...nav} nextLabel="Set Up as New"
+                      intro="Is there a backup from your old Phoenix device? It brings back your contacts, calendar, messages and settings.">
+                <Group>
+                    <Row title="Restore from a backup" chevron testId="restore-start" onClick={() => setMode("where")} />
+                </Group>
+            </StepPage>
+        );
+    }
+    if (mode === "where") {
+        return (
+            <StepPage testId="restore" title="Where Is It?" onBack={() => setMode("ask")} onNext={() => void look()}
+                      nextLabel={busy ? "Looking…" : "Find Backups"} nextDisabled={busy || (type === "webdav" && !url.trim())}>
+                <Group>
+                    <ListSelector title="Place" value={type} testId="restore-type" onChange={(v) => setType(v as "usb" | "webdav")}
+                                  options={[{ label: "USB drive", value: "usb" }, { label: "WebDAV server", value: "webdav" }]} />
+                </Group>
+                {type === "usb"
+                    ? <Note>Copy the backup file into the backups folder of this device's USB drive from your computer first.</Note>
+                    : <Group>
+                        <TextField label="Folder address" value={url} onChange={setUrl} testId="restore-url" />
+                        <TextField label="User name" value={user} onChange={setUser} testId="restore-user" />
+                        <TextField label="Password" type="password" value={password} onChange={setPassword} testId="restore-password" />
+                    </Group>}
+                {error && <ErrorText testId="restore-error">{error}</ErrorText>}
+            </StepPage>
+        );
+    }
+    return (
+        <StepPage testId="restore" title="Choose a Backup" onBack={() => setMode("where")} onNext={nav.onNext} nextLabel="Set Up as New">
+            <Group>
+                {files?.length === 0 && <Row title="No backups there" />}
+                {files?.map((f) => (
+                    <Row key={f.name} title={f.created ? new Date(f.created).toLocaleString() : f.name} chevron
+                         testId={`restore-file-${f.name}`} onClick={() => { setChosen(f); setPass(""); setError(null); }} />
+                ))}
+            </Group>
+            <Dialog open={!!chosen} title="Restore this backup?" onClose={busy ? undefined : () => setChosen(null)} testId="restore-dialog">
+                <TextField type="password" label="The backup's passphrase" value={pass} onChange={setPass} testId="restore-pass"
+                           onSubmit={() => void restore()} />
+                {error && <ErrorText testId="restore-pass-error">{error}</ErrorText>}
+                <Button variant="affirmative" busy={busy} disabled={!pass} data-testid="restore-confirm" onClick={() => void restore()}>Restore</Button>
+                <Button variant="dark" disabled={busy} onClick={() => setChosen(null)}>Cancel</Button>
             </Dialog>
         </StepPage>
     );
@@ -378,6 +489,7 @@ function FirstUse() {
     switch (step) {
     case "welcome": page = <Welcome onNext={nav.onNext} onSkipAll={() => setConfirmSkip(true)} />; break;
     case "wifi": page = <WifiStep {...nav} />; break;
+    case "restore": page = <RestoreStep {...nav} />; break;
     case "datetime": page = <DateTimeStep {...nav} />; break;
     case "accounts": page = <AccountsStep {...nav} />; break;
     case "passcode": page = <PasscodeStep {...nav} />; break;

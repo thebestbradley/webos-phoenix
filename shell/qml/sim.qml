@@ -241,6 +241,9 @@ Item {
         function onLauncherLayoutJsonChanged() {
             if (typeof simSettings !== "undefined" && windows.launcherLayoutJson !== "")
                 simSettings.setValue("launcher/layout", windows.launcherLayoutJson);
+            // The pages back it up (com.palm.sysMgrDataBackup in the runtime).
+            if (windows.launcherLayoutJson !== "")
+                windows.pushSystemStatus({ launcherLayout: windows.launcherLayoutJson });
         }
     }
 

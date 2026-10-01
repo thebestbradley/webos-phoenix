@@ -225,7 +225,7 @@ Still to do:
       is in [STATUS.md](STATUS.md#next-work)
 - [ ] Lock screen asks for the PIN / password set in Screen & Lock
 - [ ] Notification actions (e.g. Snooze / Done on a reminder)
-- [ ] Second wave of apps: backup, screen reader, magnification, health,
+- [ ] Second wave of apps: screen reader, magnification, health,
       cell broadcast, eSIM, printing, screen recording, fingerprint, notes
       sync, a now-playing dashboard ([APP-GAPS.md](APP-GAPS.md))
 - [ ] Localization: apps follow `localeInfo`

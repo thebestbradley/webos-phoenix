@@ -92,7 +92,7 @@ The whole plan, milestone by milestone, with the decisions taken so far:
   boot on the device window source, a per-app location permission service,
   the key store service, WAV copies of the system sounds, a TTS engine, the
   `com.palm.app.maps` alias in the app manager, Podcasts' ACG names.
-- **Second wave of apps** ([APP-GAPS.md](APP-GAPS.md)): backup,
+- **Second wave of apps** ([APP-GAPS.md](APP-GAPS.md)):
   screen reader, magnification, word prediction and swipe typing, health,
   cell broadcast, eSIM, printing, screen recording, fingerprint, notes
   sync, a now-playing dashboard, and the "not done" lists of each new app.

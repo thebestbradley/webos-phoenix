@@ -98,6 +98,29 @@
         };
     })();
 
+    // ---- Temporary files (backup and restore) ---------------------------------------
+    //
+    // The temporary folder org.webosphoenix.service.backup hands its
+    // participants (tempDir), in this page's memory: on a device a real
+    // folder, written by db8, luna-sysservice and the shell.
+    runtime.backupFiles = (function () {
+        var files = {};
+        function bytesOf(v) { return typeof v === "string" ? new TextEncoder().encode(v) : v; }
+        return {
+            write: function (path, data) { files[path] = bytesOf(data); },
+            read: function (path) {
+                if (!files[path]) throw new Error("No such file: " + path);
+                return files[path];
+            },
+            readText: function (path) { return new TextDecoder().decode(this.read(path)); },
+            remove: function (dir) {
+                var pre = dir.replace(/\/$/, "") + "/";
+                Object.keys(files).forEach(function (k) { if (k.indexOf(pre) === 0) delete files[k]; });
+            },
+            list: function () { return Object.keys(files); }
+        };
+    })();
+
     // ---- Device compatibility -------------------------------------------------------
 
     // Legacy service names that webOS OSE serves under a different name,
@@ -575,10 +598,57 @@
         var api = {
             "/putKind": function (p, reply) {
                 var db = load();
+                // "sync": the kind's objects are backed up (MojDbKind's
+                // SyncKey; internal/preBackup below dumps only those). Kept
+                // when a putKind leaves it out: here it stands for the kind
+                // file a device installs (see "Kinds that are backed up").
+                var had = db.kinds[p.id];
                 db.kinds[p.id] = { extends: p.extends || [], indexes: p.indexes || [],
-                                   revSets: (p.revSets || []).map(function (r) { return r.name; }) };
+                                   revSets: (p.revSets || []).map(function (r) { return r.name; }),
+                                   sync: p.sync !== undefined ? !!p.sync : !!(had && had.sync) };
                 save(db);
                 reply(ok());
+            },
+            // Backup (MojDbServiceHandlerInternal handlePreBackup / handlePostRestore):
+            // {dir, bytes, incrementalKey} -> the objects of the kinds marked
+            // "sync" dumped to dir/backup-<microseconds>.json, {files: [name]}
+            // (none when there is nothing to back up); {dir, files} loads them
+            // back, replacing objects with the same _id (MojDbFlagForce). The
+            // files go through runtime.backupFiles, the simulator's temporary
+            // folder (org.webosphoenix.service.backup's tempDir).
+            "/internal/preBackup": function (p, reply) {
+                if (!p.dir || typeof p.bytes !== "number") return reply(fail(-986, "dir and bytes are required"));
+                var db = load(), objects = [];
+                Object.keys(db.objects).forEach(function (id) {
+                    var o = db.objects[id], k = db.kinds[o._kind];
+                    if (!o._del && k && k.sync) objects.push(o);
+                });
+                var files = [];
+                if (objects.length) {
+                    var file = "backup-" + Date.now() + "000.json";
+                    runtime.backupFiles.write(p.dir.replace(/\/$/, "") + "/" + file, JSON.stringify({ objects: objects }));
+                    files.push(file);
+                }
+                reply(ok({ files: files, count: objects.length, description: "db8 objects of the kinds marked sync", version: "1" }));
+            },
+            "/internal/postRestore": function (p, reply) {
+                if (!p.dir || !Array.isArray(p.files)) return reply(fail(-986, "dir and files are required"));
+                var db = load(), count = 0;
+                try {
+                    p.files.forEach(function (f) {
+                        var text = runtime.backupFiles.readText(p.dir.replace(/\/$/, "") + "/" + f);
+                        (JSON.parse(text).objects || []).forEach(function (o) {
+                            delete o._rev;
+                            put(db, o);
+                            count++;
+                        });
+                    });
+                } catch (e) {
+                    return reply(fail(-1, "Could not load the backup: " + e.message));
+                }
+                save(db);
+                reply(ok({ count: count }));
+                notify();
             },
             "/delKind": function (p, reply) {
                 var db = load();
@@ -843,14 +913,29 @@
 
     // Apps the original webOS apps launch by id that Phoenix replaces:
     // Contacts' and Calendar's addresses open "com.palm.app.maps" (Google
-    // or Bing Maps then), which is Phoenix Maps now.
-    var APP_ALIASES = { "com.palm.app.maps": "org.webosphoenix.maps" };
-    function appId(id) { return APP_ALIASES[id] || id; }
+    // or Bing Maps then), which is Phoenix Maps now; luna-systemui's backup
+    // dashboard opens the Backup app, which is a Settings page now. An alias
+    // is an app id, or {id, params} for a page of an app (its params are
+    // added to the launch's).
+    var APP_ALIASES = {
+        "com.palm.app.maps": "org.webosphoenix.maps",
+        "com.palm.app.backup": { id: "org.webosphoenix.settings", params: { page: "backup" } }
+    };
+    function appId(id) {
+        var a = APP_ALIASES[id];
+        return a ? (typeof a === "string" ? a : a.id) : id;
+    }
+    function aliasParams(id, params) {
+        var a = APP_ALIASES[id], out = {};
+        if (a && typeof a === "object") for (var k in a.params) out[k] = a.params[k];
+        for (var j in params || {}) out[j] = params[j];
+        return out;
+    }
     runtime.appAliases = APP_ALIASES;
 
     register(["com.palm.applicationManager", "com.webos.applicationManager"], {
         "/launch": function (p, reply) {
-            host.postToHost("launch", { id: appId(p.id), params: p.params || {} });
+            host.postToHost("launch", { id: appId(p.id), params: aliasParams(p.id, p.params) });
             reply(ok({ processId: String(Date.now()) }));
         },
         // As on webOS: {id, params} launches the app; {target} goes to the
@@ -859,7 +944,7 @@
         "/open": function (p, reply) {
             var handler = appId(p.id) || (p.target && resourceHandler(p.target));
             if (handler)
-                host.postToHost("launch", { id: handler, params: p.id ? (p.params || {}) : { target: p.target } });
+                host.postToHost("launch", { id: handler, params: p.id ? aliasParams(p.id, p.params) : { target: p.target } });
             else
                 host.postToHost("open", { target: p.target, params: p.params || {} });
             reply(ok({ processId: String(Date.now()) }));
@@ -1819,6 +1904,33 @@
             });
         });
         store.set("db8SystemKinds", VERSION);
+    })();
+
+    // ---- Kinds that are backed up -------------------------------------------------------
+    //
+    // db8 backs up the kinds whose definition says "sync": true (MojDbKind;
+    // internal/preBackup). These are the data that lives only on the device:
+    // the local address book, calendar, tasks, memos, messages, the call log,
+    // alarms and the apps' own preferences. Data that syncs with an account
+    // (email, CardDAV / CalDAV contacts and events) is in sub-kinds of its
+    // own and comes back from the server instead. Phoenix's own apps say so
+    // in their kind files (apps/tasks/public/configuration/db/kinds); the
+    // core apps' kinds get it from meta-phoenix on a device.
+    (function backupKinds() {
+        var VERSION = 1;
+        if (store.get("db8BackupKinds", 0) >= VERSION) return;
+        var key = "db8:com.palm.db";
+        var db = store.get(key, { objects: {}, kinds: {}, rev: 1, nextId: 1 });
+        ["com.palm.person:1", "com.palm.contact.palmprofile:1", "com.palm.calendar:1", "com.palm.calendarevent:1",
+         "com.palm.task:1", "com.palm.tasklist:1", "com.palm.note:1", "com.palm.smsmessage:1", "com.palm.chatthread:1",
+         "com.palm.phonecall:1", "com.palm.clock.alarm:1", "com.palm.clock.prefs:1", "com.palm.app.contacts.prefs:1",
+         "com.palm.app.email.prefs:1", "org.webosphoenix.voicememo:1", "org.webosphoenix.maps.place:1"].forEach(function (id) {
+            var k = db.kinds[id] || { extends: [], indexes: [], revSets: [] };
+            k.sync = true;
+            db.kinds[id] = k;
+        });
+        store.set(key, db);
+        store.set("db8BackupKinds", VERSION);
     })();
 
     // ---- Sample data (simulator only) ------------------------------------------------
@@ -6127,6 +6239,90 @@
         runtime.voiceMemos = { placeholder: PLACEHOLDER, errors: E };
     })();
 
+    // ---- Node.js device services in the page --------------------------------------
+    //
+    // Some Phoenix services are Node.js modules a device runs with
+    // run-js-service (apps/dav/service, apps/settings/service). The simulator
+    // runs the same code in the page: nodeServiceLoader(dir, label) is a
+    // require() for its CommonJS modules (relative requires only), read
+    // from the virtual rootfs; nodeServiceLuna() is its luna.call(uri,
+    // params) -> Promise<reply> on the simulated bus; proxiedRequest is its
+    // HTTP, {method, url, headers, body} -> Promise<{status, headers, body}>.
+    // A page served over HTTP (tools/serve-rootfs.py, the tests) sends each
+    // request through the server's proxy, POST /__phoenix/proxy, since
+    // servers do not allow cross-origin requests; elsewhere (phoenix-sim's
+    // phoenix:// pages) it uses fetch directly, which only works with
+    // servers that send CORS headers.
+    function nodeServiceLoader(serviceDir, label) {
+        var modules = {};
+        function normPath(p) {
+            var out = [];
+            p.split("/").forEach(function (s) {
+                if (s === "..") out.pop();
+                else if (s && s !== ".") out.push(s);
+            });
+            return out.join("/");
+        }
+        function loadModule(rel) {
+            rel = normPath(rel);
+            if (modules[rel]) return modules[rel].exports;
+            var text = PalmSystem.getResource(serviceDir + rel);
+            if (!text) throw new Error(label + " module not found: " + serviceDir + rel);
+            var module = { exports: {} };
+            modules[rel] = module;
+            var dir = rel.indexOf("/") >= 0 ? rel.slice(0, rel.lastIndexOf("/") + 1) : "";
+            function req(name) {
+                if (name.charAt(0) !== ".") throw new Error(label + ": no module " + name + " in the simulator");
+                return loadModule(dir + name + (/\.js$/.test(name) ? "" : ".js"));
+            }
+            new Function("module", "exports", "require", text + "\n//# sourceURL=" + serviceDir + rel)(module, module.exports, req);
+            return module.exports;
+        }
+        return loadModule;
+    }
+
+    function nodeServiceLuna() {
+        return {
+            call: function (uri, params) {
+                return new Promise(function (resolve) {
+                    var done = false;
+                    dispatch(uri, clone(params || {}), function (r) {
+                        if (done) return;
+                        done = true;
+                        setTimeout(function () { resolve(r); }, 0);
+                    }, { cancelled: function () { return done; }, onCancel: null });
+                });
+            }
+        };
+    }
+
+    function proxiedRequest(req) {
+        if (/^https?:$/.test(global.location.protocol)) {
+            return fetch("/__phoenix/proxy", {
+                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req)
+            }).then(function (res) { return res.json(); }).then(function (r) {
+                if (r.error) {
+                    var e = new Error(r.error);
+                    e.code = r.code;
+                    throw e;
+                }
+                return r;
+            });
+        }
+        return fetch(req.url, { method: req.method, headers: req.headers, body: req.body, credentials: "omit" })
+            .then(function (res) {
+                return res.text().then(function (body) {
+                    var h = {};
+                    res.headers.forEach(function (v, k) { h[k.toLowerCase()] = v; });
+                    return { status: res.status, headers: h, body: body };
+                });
+            }, function (e) {
+                var err = new Error("Could not reach " + req.url + " (no answer, or cross-origin requests refused): " + e.message);
+                err.code = "ECONNREFUSED";
+                throw err;
+            });
+    }
+
     // ================================================================================
     // CardDAV and CalDAV (Synergy transport org.webosphoenix.service.dav; apps/dav)
     // ================================================================================
@@ -6136,16 +6332,10 @@
     // this block runs the device's own service code, apps/dav/service
     // (davservice.js and lib/, CommonJS modules without dependencies), in the
     // page, loaded from /usr/palm/applications/org.webosphoenix.dav/service/,
-    // and gives it what run-js-service gives it on a device:
-    //
-    //   luna    calls on the simulated bus (db8, tempdb, accounts, activities)
-    //   request HTTP for the DAV client. A page served over HTTP
-    //           (tools/serve-rootfs.py, the tests) sends each request through
-    //           the server's proxy, POST /__phoenix/proxy {method, url,
-    //           headers, body} -> {status, headers, body}, since DAV servers
-    //           do not allow cross-origin requests. Elsewhere (phoenix-sim's
-    //           phoenix:// pages) it uses fetch directly, which only works
-    //           with servers that send CORS headers (docs/SYNERGY.md).
+    // and gives it what run-js-service gives it on a device ("Node.js device
+    // services in the page" above): luna calls on the simulated bus (db8,
+    // tempdb, accounts, activities) and HTTP for the DAV client
+    // (docs/SYNERGY.md).
     //
     // It also adds to the blocks above what a Synergy transport needs from
     // the system, only for accounts of templates listed in DAV_TEMPLATES:
@@ -6174,76 +6364,9 @@
         var ACCOUNT_KIND = "com.palm.account:1";
         var LOCK_MS = 5 * 60 * 1000;
 
-        // ---- The service's modules -------------------------------------------------
-
-        var modules = {};
-        function normPath(p) {
-            var out = [];
-            p.split("/").forEach(function (s) {
-                if (s === "..") out.pop();
-                else if (s && s !== ".") out.push(s);
-            });
-            return out.join("/");
-        }
-        function loadModule(rel) {
-            rel = normPath(rel);
-            if (modules[rel]) return modules[rel].exports;
-            var text = PalmSystem.getResource(SERVICE_DIR + rel);
-            if (!text) throw new Error("DAV service module not found: " + SERVICE_DIR + rel);
-            var module = { exports: {} };
-            modules[rel] = module;
-            var dir = rel.indexOf("/") >= 0 ? rel.slice(0, rel.lastIndexOf("/") + 1) : "";
-            function req(name) {
-                if (name.charAt(0) !== ".") throw new Error("DAV service: no module " + name + " in the simulator");
-                return loadModule(dir + name + (/\.js$/.test(name) ? "" : ".js"));
-            }
-            new Function("module", "exports", "require", text + "\n//# sourceURL=" + SERVICE_DIR + rel)(module, module.exports, req);
-            return module.exports;
-        }
-
-        // ---- What run-js-service would give it --------------------------------------
-
-        var luna = {
-            call: function (uri, params) {
-                return new Promise(function (resolve) {
-                    var done = false;
-                    dispatch(uri, clone(params || {}), function (r) {
-                        if (done) return;
-                        done = true;
-                        setTimeout(function () { resolve(r); }, 0);
-                    }, { cancelled: function () { return done; }, onCancel: null });
-                });
-            }
-        };
-
-        function readHeaders(res) {
-            var h = {};
-            res.headers.forEach(function (v, k) { h[k.toLowerCase()] = v; });
-            return h;
-        }
-
-        function request(req) {
-            if (/^https?:$/.test(global.location.protocol)) {
-                return fetch("/__phoenix/proxy", {
-                    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req)
-                }).then(function (res) { return res.json(); }).then(function (r) {
-                    if (r.error) {
-                        var e = new Error(r.error);
-                        e.code = r.code;
-                        throw e;
-                    }
-                    return r;
-                });
-            }
-            return fetch(req.url, { method: req.method, headers: req.headers, body: req.body, credentials: "omit" })
-                .then(function (res) {
-                    return res.text().then(function (body) { return { status: res.status, headers: readHeaders(res), body: body }; });
-                }, function (e) {
-                    var err = new Error("Could not reach " + req.url + " (no answer, or cross-origin requests refused): " + e.message);
-                    err.code = "ECONNREFUSED";
-                    throw err;
-                });
-        }
+        var loadModule = nodeServiceLoader(SERVICE_DIR, "DAV service");
+        var luna = nodeServiceLuna();
+        var request = proxiedRequest;
 
         var methods = null;
         function service() {
@@ -6505,7 +6628,217 @@
         };
     })();
 
-    // =========================================================================    // Torch (org.webosports.service.torch; apps/flashlight)
+
+    // ================================================================================
+    // Backup and restore (org.webosphoenix.service.backup; apps/settings/service)
+    // ================================================================================
+    //
+    // Like the DAV transport above, this runs the device's own service
+    // (apps/settings/service/backupservice.js and lib/, loaded from
+    // /usr/palm/services/org.webosphoenix.service.backup/) and gives it what
+    // service.js gives it on a device:
+    //
+    //   participants  the registrations in /etc/palm/backup/ (read by name:
+    //                 the simulator cannot list a folder): db8's and the
+    //                 shell's (apps/settings/service/etc/palm/backup/) and
+    //                 luna-sysservice's (compat/rootfs)
+    //   temp          runtime.backupFiles, in this page's memory
+    //   usb           the USB drive, through org.webosphoenix.filemanager
+    //   crypto        WebCrypto (PBKDF2-SHA256, AES-256-GCM)
+    //   config        the shared store ("backup:config"); on a device a file
+    //                 only the service can read
+    //
+    // and the participants a device has that the simulator does not:
+    //
+    //   com.webos.service.systemservice backup/preBackup, backup/postRestore
+    //       (luna-sysservice Src/BackupManager.cpp): the preferences listed
+    //       in /etc/palm/sysservice-backupkeys.json, as one file
+    //       (systemprefs_backup.db there, JSON here), merged back on restore
+    //   com.palm.sysMgrDataBackup preBackup, postRestore (luna-sysmgr
+    //       Src/base/BackupManager.cpp): the launcher's layout, which the
+    //       shell owns; it tells the pages (applyHostStatus {launcherLayout})
+    //       and gets it back with a "launcherLayout" host message
+    //
+    // db8's internal/preBackup and internal/postRestore are in its block.
+    // The daily activity has an interval schedule, which the simulated
+    // activity manager does not run (no background process); "scheduled"
+    // can be called directly.
+    (function backupService() {
+        var SERVICE = "org.webosphoenix.service.backup";
+        var SERVICE_DIR = "/usr/palm/services/" + SERVICE + "/";
+        var REGISTRATIONS = ["com.palm.db.backupRegistration.json", "com.palm.sysMgrDataBackup.backupRegistration.json",
+                             "com.webos.service.systemservice.backupRegistration.json"];
+        var luna = nodeServiceLuna();
+        var fm = "luna://org.webosphoenix.filemanager/";
+
+        // ---- The participants the simulator stands in for ------------------------------
+
+        var sys = runtime.services["com.webos.service.systemservice"];
+        function backupKeys() {
+            try { return JSON.parse(PalmSystem.getResource("/etc/palm/sysservice-backupkeys.json") || "[]"); }
+            catch (e) { return []; }
+        }
+        sys["/backup/preBackup"] = function (p, reply) {
+            var dir = String(p.tempDir || "/tmp").replace(/\/$/, "");
+            var all = prefs(), out = {};
+            backupKeys().forEach(function (k) { if (k in all) out[k] = all[k]; });
+            var file = dir + "/systemprefs_backup.db";
+            runtime.backupFiles.write(file, JSON.stringify(out));
+            reply(ok({ description: "Backup of LunaSysService, containing the systemprefs sqlite3 database", version: "1.0", files: [file] }));
+        };
+        sys["/backup/postRestore"] = function (p, reply) {
+            if (typeof p.tempDir !== "string" || !Array.isArray(p.files)) return reply(fail(-1, "tempDir and files are required"));
+            var merged = {};
+            p.files.forEach(function (f) {
+                var path = f.charAt(0) === "/" ? f : p.tempDir.replace(/\/$/, "") + "/" + f;
+                if (path.indexOf("systemprefs_backup.db") < 0) return;
+                var saved;
+                try { saved = JSON.parse(runtime.backupFiles.readText(path)); } catch (e) { return; }
+                // Only the keys that are backed up, as PrefsDb::merge.
+                backupKeys().forEach(function (k) { if (k in saved) merged[k] = saved[k]; });
+            });
+            if (Object.keys(merged).length) dispatch("luna://com.webos.service.systemservice/setPreferences", merged, function () {}, { cancelled: function () { return false; } });
+            reply(ok());
+        };
+
+        register(["com.palm.sysMgrDataBackup"], {
+            "/preBackup": function (p, reply) {
+                var files = [], layout = store.get("shell:launcherLayout", "");
+                if (layout) {
+                    var file = String(p.tempDir || "/tmp").replace(/\/$/, "") + "/launcher-layout.json";
+                    runtime.backupFiles.write(file, layout);
+                    files.push(file);
+                }
+                reply(ok({ description: "Backup of LunaSysMgr files for launcher, quicklaunch and dockmode", version: "1.0", files: files }));
+            },
+            "/postRestore": function (p, reply) {
+                if (!Array.isArray(p.files)) return reply(fail(-1, "files is required"));
+                p.files.forEach(function (f) {
+                    if (!/launcher-layout\.json$/.test(f)) return;
+                    var path = f.charAt(0) === "/" ? f : String(p.tempDir || p.dir).replace(/\/$/, "") + "/" + f;
+                    var json = runtime.backupFiles.readText(path);
+                    store.set("shell:launcherLayout", json);
+                    host.postToHost("launcherLayout", { json: json });
+                });
+                reply(ok());
+            }
+        });
+
+        // ---- What service.js gives the service on a device -------------------------------
+
+        var subtle = global.crypto && global.crypto.subtle;
+        var webCrypto = {
+            randomBytes: function (n) { return Promise.resolve(global.crypto.getRandomValues(new Uint8Array(n))); },
+            deriveKey: function (passphrase, salt, iterations) {
+                return subtle.importKey("raw", new TextEncoder().encode(String(passphrase)), "PBKDF2", false, ["deriveBits"]).then(function (k) {
+                    return subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: salt, iterations: iterations }, k, 256);
+                }).then(function (bits) { return new Uint8Array(bits); });
+            },
+            encrypt: function (key, iv, plaintext, aad) {
+                return subtle.importKey("raw", key, "AES-GCM", false, ["encrypt"]).then(function (k) {
+                    return subtle.encrypt({ name: "AES-GCM", iv: iv, additionalData: aad }, k, plaintext);
+                }).then(function (ct) { return new Uint8Array(ct); });
+            },
+            decrypt: function (key, iv, data, aad) {
+                return subtle.importKey("raw", key, "AES-GCM", false, ["decrypt"]).then(function (k) {
+                    return subtle.decrypt({ name: "AES-GCM", iv: iv, additionalData: aad }, k, data);
+                }).then(function (pt) { return new Uint8Array(pt); });
+            },
+            exportKey: function (key) { return Promise.resolve(archiveLib().toBase64(key)); },
+            importKey: function (text) { return Promise.resolve(archiveLib().fromBase64(text)); }
+        };
+
+        function fmCall(method, params) {
+            return luna.call(fm + method, params).then(function (r) {
+                if (r.returnValue === false) {
+                    var e = new Error(r.errorText || method + " failed");
+                    // The file manager's codes (its E table): 1 not found, 7 too large.
+                    e.code = r.errorCode === 1 ? "NOT_FOUND" : r.errorCode === 7 ? "NO_SPACE" : "UNKNOWN_ERROR";
+                    throw e;
+                }
+                return r;
+            });
+        }
+        var usb = {
+            list: function (dir) {
+                return luna.call(fm + "list", { path: dir }).then(function (r) {
+                    return r.returnValue === false ? [] : (r.entries || []).filter(function (f) {
+                        return f.type === "file";
+                    }).map(function (f) { return { name: f.name, size: f.size || 0, modified: f.mtime ? new Date(f.mtime).toISOString() : null }; });
+                });
+            },
+            read: function (path) { return fmCall("read", { path: path, encoding: "utf8" }).then(function (r) { return r.data; }); },
+            write: function (path, text) { return fmCall("write", { path: path, data: text, overwrite: true }); },
+            remove: function (path) { return luna.call(fm + "remove", { path: path }); },
+            mkdir: function (dir) {
+                return luna.call(fm + "stat", { path: dir }).then(function (r) {
+                    if (r.returnValue === false) return fmCall("mkdir", { path: dir });
+                });
+            }
+        };
+
+        var loadModule = nodeServiceLoader(SERVICE_DIR, "Backup service");
+        function archiveLib() { return loadModule("lib/archive.js"); }
+        var methods = null;
+        function service() {
+            if (!methods) {
+                methods = loadModule("backupservice.js").createBackupService({
+                    luna: luna,
+                    request: proxiedRequest,
+                    crypto: webCrypto,
+                    config: {
+                        load: function () { return store.get("backup:config", null); },
+                        save: function (o) { store.set("backup:config", o); }
+                    },
+                    temp: {
+                        make: function () { return "/tmp/phoenix-backup-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); },
+                        read: function (path) { return runtime.backupFiles.read(path); },
+                        write: function (path, data) { runtime.backupFiles.write(path, data); },
+                        remove: function (dir) { runtime.backupFiles.remove(dir); }
+                    },
+                    usb: usb,
+                    participants: function () {
+                        return REGISTRATIONS.map(function (name) {
+                            try { return JSON.parse(PalmSystem.getResource("/etc/palm/backup/" + name) || "null"); }
+                            catch (e) { return null; }
+                        }).filter(Boolean);
+                    },
+                    log: function (m) { console.info("[backup] " + m); }
+                });
+            }
+            return methods;
+        }
+
+        // ---- The service on the simulated bus ---------------------------------------------
+        //
+        // The service's state (idle, backing up, restoring) is this page's;
+        // its settings and its last result are shared. A subscriber hears of
+        // changes another page makes through the store.
+
+        var names;
+        try { names = loadModule("backupservice.js").METHODS; }
+        catch (e) { return; }   // no rootfs behind the page (the runtime's unit tests)
+        var serviceMethods = {};
+        names.forEach(function (name) {
+            serviceMethods["/" + name] = function (p, reply, ctx) {
+                var m;
+                try { m = service(); } catch (e) { return reply(fail("UNKNOWN_ERROR", String(e.message || e))); }
+                var push = null;
+                if (name === "getStatus" && p.subscribe) {
+                    push = function (st) {
+                        if (ctx.cancelled()) { m.unwatch(push); return; }
+                        reply(st);
+                    };
+                }
+                m[name](p, push).then(reply, function (e) { reply(fail("UNKNOWN_ERROR", String(e && e.message || e))); });
+            };
+        });
+        register([SERVICE], serviceMethods);
+        runtime.backup = { service: service };
+    })();
+
+    // ================================================================================
+    // Torch (org.webosports.service.torch; apps/flashlight)
     // ================================================================================
     //
     // org.webosports.service.torch is LuneOS's torchd
@@ -7119,6 +7452,10 @@
         };
         var baseApply = runtime.applyHostStatus;
         runtime.applyHostStatus = function (st) {
+            // The launcher's layout, as the shell keeps it: what
+            // com.palm.sysMgrDataBackup backs up (see "Backup").
+            if (st && typeof st.launcherLayout === "string")
+                store.set("shell:launcherLayout", st.launcherLayout);
             if (st && "firstUse" in st && !!st.firstUse !== !!store.get("shell:firstUse", false)) {
                 store.set("shell:firstUse", !!st.firstUse);
                 changed();
@@ -7160,6 +7497,15 @@
                 });
                 return true;
             });
+        };
+
+        // publishToSystemUI {event, message}: another service's event for the
+        // system UI (luna-sysmgr SystemService.cpp cbPublishToSystemUI), e.g.
+        // the backup service's "subscribeToBackupStatus".
+        sm["/publishToSystemUI"] = function (p, reply) {
+            if (!p.event) return reply(fail(-1, "event is required"));
+            postSystemUi(String(p.event), p.message === undefined ? {} : p.message);
+            reply(ok());
         };
 
         // ---- Location ---------------------------------------------------------------

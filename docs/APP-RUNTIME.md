@@ -414,7 +414,7 @@ New Phoenix apps live in `apps/`, an npm workspace:
 | --- | --- |
 | `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers), `tasks.ts` Tasks (`com.palm.task:1`, `com.palm.tasklist:1`, reminder activities, `postNotification`); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
 
-| `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers), `transcriber.ts` Voice Memos (`transcriber.transcribe()` with progress, `TRANSCRIBE_ERRORS`), `location.ts` the location service and per-app permissions (`location`, `locationPermissions`, `LOCATION_ERRORS`), `setup.ts` First Use, the medical ID, accessibility and the emergency numbers (`firstUse`, `emergencyInfo`, `accessibility`, `isEmergencyNumber`); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
+| `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers), `transcriber.ts` Voice Memos (`transcriber.transcribe()` with progress, `TRANSCRIBE_ERRORS`), `location.ts` the location service and per-app permissions (`location`, `locationPermissions`, `LOCATION_ERRORS`), `setup.ts` First Use, the medical ID, accessibility and the emergency numbers (`firstUse`, `emergencyInfo`, `accessibility`, `isEmergencyNumber`); `vpn.ts` the VPN service (`vpn`, file import helpers), `backup.ts` the backup service (`backup`, `BACKUP_PARTS`); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
 | `apps/shared/phoenix-ui` (`@phoenix/ui`) | React components with the webOS 1.x/2.x look, drawn with the Enyo 1.0 "Heritage" artwork (copied into `assets/enyo`, see its `PROVENANCE.md`): `PageHeader`, `Group`, `Row`, `Divider`, `ToggleButton`, `Slider` (also as a progress/seek bar), `ListSelector`, `Picker`, `PopupMenu`, `Button`, `Drawer`, `DividerDrawer`, `Dialog`, `Spinner`, `TextField`; for Phone and Messaging the webOS dial pad (`Dialpad`, `DialButton`, `BackspaceButton`, from Enyo's `lib/telephony` art), the command menu (`ToolBar`, `RadioToolGroup`, `ToolButton`), `Avatar` and number / time formatting (`formatDuration` takes milliseconds); for the media apps `Toolbar`, `IconToolButton`, `GroupedToolButtons`, `Glyph` and `formatSeconds`; for Files `CheckBox` (Heritage `checkbox.png`) and file glyphs (copy, cut, paste, new folder, ...); `BackProvider`/`useBack` for the back gesture |
 | `apps/settings` | Settings (see below) |
 | `apps/phone`, `apps/messaging` | Phone and Messaging (see below) |
@@ -499,7 +499,7 @@ params match a launch point opens that launch point's card.
 `apps/settings` is one app with one launch point per pane, like the separate
 preference apps of webOS 2.x: Wi-Fi, Bluetooth, Airplane Mode, Screen & Lock,
 Sounds & Ringtones, Date & Time, Language & Region, Accessibility, Location
-Services, Emergency Info, Device Info, Updates, VPN.
+Services, Emergency Info, Device Info, Backup, Updates, VPN.
 Launched without a page it lists them all. The launcher icons are drawn by
 `apps/settings/tools/render-icons.cjs` and the wallpapers by
 `tools/make-wallpapers.py` (CC0); Palm's were never open-sourced.
@@ -521,6 +521,7 @@ same request and reply shapes:
 | Date & Time | system service `get/setPreferences` (`timeFormat`, `useNetworkTime`, `useNetworkTimeZone`, `timeZone`), `getPreferenceValues {key: "timeZone"}`, `time/getSystemTime`, `time/setSystemTime {utc}` | `luna-sysservice` `Src/TimePrefsHandler.cpp` |
 | Language & Region | `com.webos.settingsservice` `get/setSystemSettings {keys: ["localeInfo"]}` (`locales.UI`, `locales.FMT`) | `settingsservice` |
 | Device Info | system service `deviceInfo/query`, `osInfo/query`; `com.palm.power` `batteryStatusQuery` (legacy); `com.palm.telephony` `platformQuery` (IMEI/MEID, carrier), `subscriberIdQuery` (`msisdn`: the phone number), `simStatusQuery`, `networkStatusQuery`; settings service `resetSystemSettings`; `org.webosphoenix.service.reset` `eraseUserData` (apps' data and settings; the user's files on the USB drive are kept, as legacy webOS's "Erase Apps & Data") and `fullErase` (everything, files too) (Phoenix, simulator only so far); "Help and tips" and "Run setup again" launch Help and First Use (`{rerun: true}`) | `luna-sysservice` `Src/DeviceInfoService.cpp`, `OsInfoService.cpp` |
+| Backup | `org.webosphoenix.service.backup` `getStatus`, `configure`, `backupNow`, `listBackups`, `inspect`, `restore`, `deleteBackup` | see [Backup](#backup) |
 | Accessibility | system service `get/setPreferences` `accessibility {reduceMotion, highContrast, monoAudio, captions}` (Phoenix key) | `luna-sysservice` `Src/PrefsFactory.cpp` (stores any key) |
 | Location Services | `com.webos.service.location` `getAllLocationHandlers`, `setState {Handler, state}`, `getLocationUpdates`, `getReverseLocation`; `org.webosphoenix.service.location` `getPermissions`, `setPermission`, `removePermission` (Phoenix) | see [Location](#location) |
 | Emergency Info | system service `get/setPreferences` `emergencyInfo` (Phoenix key); contacts from db8 `com.palm.person:1` | see [Emergency information](#emergency-information) |
@@ -1384,7 +1385,9 @@ launcher, lock screen or system menu), and `com.palm.systemmanager/getBootStatus
 answered `firstUse: true` meanwhile. Phoenix does the same:
 
 - **Steps**: Welcome (language: `com.webos.settingsservice` `localeInfo`),
-  Wi-Fi (join, with a password dialog), Date & Time (time zone, network
+  Wi-Fi (join, with a password dialog), Restore (a backup from the USB
+  drive or a WebDAV server, see [Backup](#backup); afterwards the device
+  backs up there every day with the same passphrase), Date & Time (time zone, network
   time, 24-hour clock), Accounts (Synergy explained, the accounts there are,
   "Add an account" opens the Accounts app; what syncs today, per
   [SYNERGY-MODERN.md](SYNERGY-MODERN.md)), Passcode (none, simple PIN or
@@ -1416,6 +1419,70 @@ as an ordinary card with `{rerun: true}`.
 
 On a device, the shell has to read `firstUseComplete` from the system
 service at boot (not wired in `LsmSystemStatus` yet).
+
+## Backup
+
+Legacy webOS backed up to the Palm Profile servers every day, through a
+backup service HP never released (`com.palm.service.backup`), and restored
+at First Use. HP shut the servers down. Phoenix keeps the part that was
+released and that OSE still ships, the **participant protocol**, and adds
+its own coordinator, `org.webosphoenix.service.backup`
+(`apps/settings/service/`, Node.js, run by run-js-service; methods in
+`backupservice.js`):
+
+- **Participants** register in `/etc/palm/backup/` with
+  `{id, preBackup, postRestore}` (luna-sysservice
+  `files/conf/com.webos.service.systemservice.backupRegistration.json`).
+  For a backup the coordinator calls each one's `preBackup {tempDir,
+  maxTempBytes, incrementalKey}` (plus `dir` and `bytes`, db8's names) and
+  takes the files it answers with; for a restore it puts them back in a
+  temporary folder and calls `postRestore {tempDir, dir, files}`. Phoenix
+  1.0 has three:
+
+  | Participant | What | Source |
+  | --- | --- | --- |
+  | `com.palm.db` `internal/preBackup`, `internal/postRestore` | db8 objects of the kinds marked `"sync": true` (MojDbKind); Phoenix marks the data that lives only on the device: the local contacts and people, calendar, tasks, memos, messages and chat threads, call log, alarms, the apps' preferences, voice memo and map place records. Account data (email, CardDAV / CalDAV) is in sub-kinds of its own and syncs back instead | db8 `MojDbServiceHandlerInternal.cpp`; registration shipped by Phoenix |
+  | `com.webos.service.systemservice` `backup/preBackup`, `backup/postRestore` | The preferences in `/etc/palm/sysservice-backupkeys.json`: OSE's six plus Phoenix's (time format, tones, screen and lock, accessibility, emergency information; not the wallpaper, usually a picture the backup does not hold) | luna-sysservice `Src/BackupManager.cpp`; `compat/rootfs/etc/palm/` |
+  | `com.palm.sysMgrDataBackup` `preBackup`, `postRestore` | The launcher layout (pages, dock, removed apps) | luna-sysmgr `Src/base/BackupManager.cpp`, a role the Phoenix shell takes |
+
+- **The file**: `phoenix-backup-YYYYMMDD-HHMMSS.pbak`, one JSON document
+  (`lib/archive.js`): a readable header (when, which device, which parts,
+  the key derivation) and the parts' files encrypted with AES-256-GCM under
+  a key from the passphrase (PBKDF2-SHA256, 600 000 iterations, random
+  salt); the header is the additional data, so changing it makes the file
+  fail to open. The service keeps the derived key, never the passphrase,
+  so daily backups need no one to type it.
+- **Where**: the USB drive (`/media/internal/backups`, to copy to a
+  computer) or a WebDAV folder (Nextcloud, ownCloud, a NAS: `lib/webdav.js`,
+  MKCOL, PROPFIND, PUT, GET, DELETE with Basic auth; the folder is checked
+  and made when it is chosen, and a wrong password is refused there). The
+  newest five backups are kept.
+- **Every day**: an activity (`org.webosphoenix.backup.daily`, interval
+  24 h, internet for WebDAV) calls `scheduled`. When backups keep failing
+  for five days, the service publishes luna-systemui's own
+  `subscribeToBackupStatus` event (`com.palm.systemmanager
+  publishToSystemUI`), so the original "Backup Failure" dashboard shows;
+  tapping it opens `com.palm.app.backup`, an alias of Settings > Backup.
+- **UI**: Settings > Backup (`apps/settings/src/pages/Backup.tsx`: every
+  day, Back Up Now, the last backup, where, the passphrase, the backups
+  there, each with what it holds, Restore and Delete) and First Use's
+  Restore step. Client: `@phoenix/luna` `backup`.
+
+In the simulator the runtime runs the same service code in the page and
+stands in for luna-sysservice's and the shell's participants (the shell
+tells the pages its layout, `applyHostStatus {launcherLayout}`, and gets a
+restored one back as a `launcherLayout` host message); the temporary
+folder is in memory, the USB drive is the file manager's, and the settings
+are in the shared store. The interval activity does not run there (no
+background process).
+
+On a device still to do: the shell's `com.palm.sysMgrDataBackup` service;
+`"sync": true` on the core apps' kind files (meta-phoenix); the ACGs that
+let the service call the participants' methods; the service's settings in
+a file only it can read (service.js does this) or the key store; and the
+installed apps list as a fourth participant once the Marketplace installs
+apps. Tests: `apps/settings/service/backupservice.test.ts` (against a real
+WebDAV server, WsgiDAV), `tools/test-backup.cjs`, `tools/test-firstuse.cjs`.
 
 ## Help
 

@@ -10,7 +10,7 @@ export function Hub({ onOpen }: { onOpen: (id: PageId) => void }) {
         { label: "Connections", ids: ["wifi", "bluetooth", "vpn", "airplane"] },
         { label: "Device", ids: ["screen", "sounds", "datetime", "language", "accessibility"] },
         { label: "Privacy & Safety", ids: ["location", "emergency"] },
-        { label: "About", ids: ["deviceinfo", "updates"] },
+        { label: "About", ids: ["deviceinfo", "backup", "updates"] },
     ];
     return (
         <Page>

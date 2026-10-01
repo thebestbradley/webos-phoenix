@@ -16,3 +16,16 @@ libraries shared by several apps go under
 `usr/palm/frameworks/enyo/0.10/framework/lib/`. Problems common to all
 Enyo apps in current Chromium are fixed in `runtime/phoenix-runtime.js`
 instead.
+
+JSON files cannot say why they are here, so they are listed here:
+
+- `rootfs/etc/palm/backup/com.webos.service.systemservice.backupRegistration.json`:
+  luna-sysservice's backup registration (`files/conf/`, Apache-2.0),
+  unchanged. On a device luna-sysservice installs it; the simulator's
+  backup service reads it from here (apps/settings/service).
+- `rootfs/etc/palm/sysservice-backupkeys.json`: the system preferences
+  luna-sysservice backs up. Its own list (`files/conf/`) has the first six
+  keys; Phoenix adds the time format, the tones, the screen and lock
+  settings, accessibility and the emergency information. The wallpaper is
+  left out: it is usually a picture on the USB drive, which a backup does
+  not hold.

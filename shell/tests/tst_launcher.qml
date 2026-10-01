@@ -224,5 +224,22 @@ Item {
             compare(LauncherLayout.pageOf(shell.launcherLayout, id), -1);
             verify(shell.launcherLayout.removed.indexOf(id) >= 0);
         }
+
+        // A restored backup's layout (the window source's
+        // launcherLayoutRestored) replaces this one and is kept; apps that
+        // are not installed are dropped from it.
+        function test_restoredLayout() {
+            var ids = shell.launcherLayout.pages[0].slice(0, 3);
+            verify(ids.length === 3);
+            var restored = { pages: [[ids[2], ids[0], "com.example.gone"], [ids[1]], []], dock: [ids[0]], removed: [] };
+            windows.launcherLayoutRestored(JSON.stringify(restored));
+            compare(shell.launcherLayout.pages[0].slice(0, 2), [ids[2], ids[0]]);
+            compare(LauncherLayout.pageOf(shell.launcherLayout, ids[1]), 1);
+            compare(LauncherLayout.pageOf(shell.launcherLayout, "com.example.gone"), -1);
+            compare(shell.launcherLayout.dock, [ids[0]]);
+            compare(JSON.parse(windows.savedLauncherLayout()).dock, [ids[0]]);
+            windows.launcherLayoutRestored("not json");
+            compare(shell.launcherLayout.dock, [ids[0]]);
+        }
     }
 }

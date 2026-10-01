@@ -57,6 +57,12 @@ const ICONS = {
         <path d="M32 11.5l17 6.2v12.6c0 10.6-7.2 18.6-17 22.2-9.8-3.6-17-11.6-17-22.2V17.7z" fill="#fff"/>
         <rect x="25" y="30" width="14" height="11" rx="2" fill="url(#bg)"/>
         <path d="M27.8 30v-3.2a4.2 4.2 0 0 1 8.4 0V30" fill="none" stroke="url(#bg)" stroke-width="2.6"/>`],
+    backup: ["#4aa8d8", "#175b85", `
+        <path d="M32 13.5A18.5 18.5 0 1 1 13.5 32" fill="none" stroke="#fff" stroke-width="4.6" stroke-linecap="round"/>
+        <path d="M7.4 34.5L13.5 25.5 19.6 34.5z" fill="#fff" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>
+        <rect x="23.5" y="27" width="17" height="15" rx="2.4" fill="#fff"/>
+        <path d="M27.4 27v-3.4a4.6 4.6 0 0 1 9.2 0V27" fill="none" stroke="#fff" stroke-width="3"/>
+        <circle cx="32" cy="34" r="2.4" fill="url(#bg)"/>`],
     airplane: ["#f2a13b", "#b8560f", `
         <path d="M32 11c2.2 0 3.3 2.5 3.3 5.2v10.1l14.7 8.4v4.4l-14.7-4.3v9.4l4.4 3.3v3.6L32 49.6l-7.7 1.9v-3.6l4.4-3.3v-9.4L14 39.5v-4.4l14.7-8.4V16.2c0-2.7 1.1-5.2 3.3-5.2z"
               fill="#fff"/>`],

@@ -12,6 +12,8 @@ Produces the same layout the simulator serves, for a device image:
     /usr/palm/services/<id>/         Node.js services apps carry in service/
                                      (run by run-js-service), with their
     /usr/share/luna-service2/...     roles, permissions and service files
+    /etc/...                         a service's etc/ (e.g. the backup
+                                     registrations in /etc/palm/backup)
 
 compat/rootfs overlays are applied on top, app pages get the runtime
 <script> tag (as tools/serve-rootfs.py and phoenix-sim add it), and
@@ -96,6 +98,11 @@ def plan_service(svc_id, svc_dir, plan):
         src = os.path.join(svc_dir, fn)
         if fn == "sysbus" or fn in SKIP_NAMES or ".test." in fn:
             continue
+        if fn == "etc":
+            # Files the service puts in the system's /etc (e.g. the backup
+            # registrations in /etc/palm/backup).
+            copy_tree(src, "/etc", plan)
+            continue
         copy_tree(src, "/usr/palm/services/%s/%s" % (svc_id, fn), plan)
     sysbus = os.path.join(svc_dir, "sysbus")
     if os.path.isdir(sysbus):
@@ -136,9 +143,17 @@ def main():
 
     cfg = load_config()
     plan = []   # (source file, device path)
+    services = find_services(cfg)
+    service_dirs = [os.path.realpath(d) + os.sep for _, d in services]
     for prefix, target in cfg["mounts"].items():
         if prefix == "/usr/palm/frameworks/enyo/1.0/framework/":
             continue   # installed once, as 0.10, and symlinked below
+        # A mount into an app's service/ is there for the simulator, which
+        # reads the service from its device path; the service itself is
+        # installed below, with its sysbus files and without its tests.
+        src = os.path.realpath(os.path.join(REPO, target)) + os.sep
+        if any(src.startswith(d) for d in service_dirs):
+            continue
         copy_tree(os.path.join(REPO, target), prefix.rstrip("/"), plan)
     for app_id, app_dir in find_apps(cfg):
         # An app's service/ is installed on its own, below (apps/dav keeps
@@ -149,7 +164,7 @@ def main():
             d = os.path.join(app_dir, "configuration", "db", kind)
             if os.path.isdir(d):
                 copy_tree(d, "/etc/palm/db/" + kind, plan)
-    for svc_id, svc_dir in find_services(cfg):
+    for svc_id, svc_dir in services:
         plan_service(svc_id, svc_dir, plan)
     for overlay in cfg.get("overlays", []):
         base = os.path.join(REPO, overlay)

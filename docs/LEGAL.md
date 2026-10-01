@@ -234,6 +234,16 @@ data use "Phoenix Account".
   source. LuneOS's Torch app (GPL-3.0) was read for the API only; none of
   its code or art is used.
 
+## Backup
+
+- The backup participant protocol (`preBackup` / `postRestore`, the
+  registrations in `/etc/palm/backup`) follows Open webOS and OSE sources
+  (luna-sysservice, luna-sysmgr, db8; Apache-2.0). `compat/rootfs/etc/palm/backup/com.webos.service.systemservice.backupRegistration.json`
+  is luna-sysservice's file, unchanged, and `compat/rootfs/etc/palm/sysservice-backupkeys.json`
+  is its key list with Phoenix's keys added. The coordinator, the file
+  format and the WebDAV client are original. The tests use WsgiDAV
+  (MIT) as a WebDAV server; it is not shipped.
+
 ## VPN
 
 - **luneos-vpn-adapter** (<https://github.com/webOS-ports/luneos-vpn-adapter>,

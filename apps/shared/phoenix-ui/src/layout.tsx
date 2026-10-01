@@ -132,8 +132,8 @@ export function Note({ children }: { children: ReactNode }) {
 }
 
 /** Red error text. */
-export function ErrorText({ children }: { children: ReactNode }) {
-    return <div className="pui-error" role="alert">{children}</div>;
+export function ErrorText({ children, testId }: { children: ReactNode; testId?: string }) {
+    return <div className="pui-error" role="alert" data-testid={testId}>{children}</div>;
 }
 
 /** The blue checkmark of a selected item. */

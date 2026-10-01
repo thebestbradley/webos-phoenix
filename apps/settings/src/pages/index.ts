@@ -12,6 +12,7 @@ import { DateTimePage } from "./DateTime";
 import { LanguagePage } from "./Language";
 import { DeviceInfoPage } from "./DeviceInfo";
 import { UpdatesPage } from "./Updates";
+import { BackupPage } from "./Backup";
 import { LocationPage } from "./Location";
 import { EmergencyPage } from "./Emergency";
 import { AccessibilityPage } from "./Accessibility";
@@ -37,6 +38,7 @@ export const PAGES = {
     emergency: { title: "Emergency Info", icon: "icons/emergency.png", component: EmergencyPage },
     accessibility: { title: "Accessibility", icon: "icons/accessibility.png", component: AccessibilityPage },
     deviceinfo: { title: "Device Info", icon: "icons/deviceinfo.png", component: DeviceInfoPage },
+    backup: { title: "Backup", icon: "icons/backup.png", component: BackupPage },
     updates: { title: "Updates", icon: "icons/updates.png", component: UpdatesPage },
 } satisfies Record<string, PageInfo>;
 

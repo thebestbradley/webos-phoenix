@@ -3,10 +3,11 @@
 //
 // The order of First Use's steps, after webOS's First Use app (language,
 // Wi-Fi, the Palm Profile, backup restore; then the "how to use cards and
-// gestures" tutorial) with the Palm Profile replaced by accounts and the
-// passcode and privacy choices added.
+// gestures" tutorial) with the Palm Profile replaced by accounts, the backup
+// restore from the USB drive or a WebDAV server, and the passcode and
+// privacy choices added.
 
-export type StepId = "welcome" | "wifi" | "datetime" | "accounts" | "passcode" | "privacy" | "tutorial" | "done";
+export type StepId = "welcome" | "wifi" | "restore" | "datetime" | "accounts" | "passcode" | "privacy" | "tutorial" | "done";
 
 export interface StepInfo {
     id: StepId;
@@ -18,6 +19,7 @@ export interface StepInfo {
 export const STEPS: StepInfo[] = [
     { id: "welcome", title: "Welcome", skippable: false },
     { id: "wifi", title: "Wi-Fi", skippable: true },
+    { id: "restore", title: "Restore", skippable: true },
     { id: "datetime", title: "Date & Time", skippable: true },
     { id: "accounts", title: "Accounts", skippable: true },
     { id: "passcode", title: "Passcode", skippable: true },

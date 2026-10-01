@@ -6,7 +6,7 @@ import { lessons, nextStep, passcodeProblem, previousStep, STEPS } from "./flow"
 
 describe("First Use steps", () => {
     it("run from Welcome to All Set, and only the ends cannot be skipped", () => {
-        expect(STEPS.map((s) => s.id)).toEqual(["welcome", "wifi", "datetime", "accounts", "passcode", "privacy", "tutorial", "done"]);
+        expect(STEPS.map((s) => s.id)).toEqual(["welcome", "wifi", "restore", "datetime", "accounts", "passcode", "privacy", "tutorial", "done"]);
         expect(STEPS.filter((s) => !s.skippable).map((s) => s.id)).toEqual(["welcome", "done"]);
         expect(nextStep("welcome")).toBe("wifi");
         expect(nextStep("done")).toBe("done");

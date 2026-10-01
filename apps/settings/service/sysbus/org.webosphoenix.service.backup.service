@@ -1,0 +1,7 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+
+[D-BUS Service]
+Name=org.webosphoenix.service.backup
+Exec=/usr/bin/run-js-service -n /usr/palm/services/org.webosphoenix.service.backup
+Type=dynamic

@@ -1,0 +1,8 @@
+{
+  "name": "org.webosphoenix.service.backup",
+  "version": "0.1.0",
+  "private": true,
+  "description": "webOS Phoenix backup and restore (Luna): one encrypted file on the USB drive or a WebDAV server, from the legacy webOS backup participants (preBackup / postRestore)",
+  "license": "Apache-2.0",
+  "main": "service.js"
+}

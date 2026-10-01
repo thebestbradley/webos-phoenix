@@ -145,7 +145,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [ ] Haptics / vibration (`vibrate`, `vibrateNamedEffect`). `Src/base/HapticsController.cpp`; README.md:127-128
 - [ ] Headset, audio, media and ringer switch keys (`com.palm.keys/*`). README.md:96-99
 - [ ] Locale, region, time zone and network time preferences. `conf/defaultPreferences.txt`; `conf/locale.txt`; `conf/timezone.txt`
-- [ ] Backup and restore hooks (`preBackup` / `postRestore`). `Src/base/BackupManager.cpp`; README.md:27-28
+- [ ] Backup and restore hooks (`preBackup` / `postRestore`). `Src/base/BackupManager.cpp`; README.md:27-28. *Phoenix: the launcher layout, in the simulator (the runtime's `com.palm.sysMgrDataBackup`); the shell's own service on a device is still to do.*
 - [ ] Turbo-mode (CPU boost) subscription. `Src/base/SystemService.cpp:249`
 - [ ] FPS counter / touch plot debugging overlays. `Src/base/SystemService.cpp:238-239`; `Src/base/visual/TouchPlot.cpp`
 
@@ -223,7 +223,7 @@ others need reimplementation or an alternative for Phoenix.
 - [ ] **HP App Catalog** (`com.palm.app.enyo-findapps`, older `com.palm.app.findapps`), plus the payment app. `conf/luna.conf:157`; `Src/lunaui/launcher/operationalsettings.cpp:194`
 - [ ] **First Use / setup wizard** (`com.palm.app.firstuse`). `Src/base/application/ApplicationManager.cpp:2381`
 - [ ] **Software Manager** (`com.palm.app.swmanager`) and **System Updates** (`com.palm.app.updates`). `conf/default-launcher-page-layout.json`. *Phoenix: Settings > Updates is a stub (version + check button); no OTA yet.*
-- [ ] **Backup** (`com.palm.app.backup`). `conf/default-launcher-page-layout.json`
+- [x] **Backup** (`com.palm.app.backup`). `conf/default-launcher-page-layout.json`. *Phoenix: Settings > Backup and `org.webosphoenix.service.backup` (USB drive or WebDAV, encrypted), restore in First Use; `com.palm.app.backup` opens it (docs/APP-RUNTIME.md#backup).*
 
 ## Settings apps (launcher "Settings" page, `conf/default-launcher-page-layout.json:29-51`)
 

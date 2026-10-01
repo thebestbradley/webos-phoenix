@@ -25,6 +25,7 @@
             { "id": "org.webosphoenix.settings.emergency", "title": "Emergency Info", "icon": "icons/emergency.png", "params": { "page": "emergency" } },
             { "id": "org.webosphoenix.settings.accessibility", "title": "Accessibility", "icon": "icons/accessibility.png", "params": { "page": "accessibility" } },
             { "id": "org.webosphoenix.settings.deviceinfo", "title": "Device Info", "icon": "icons/deviceinfo.png", "params": { "page": "deviceinfo" } },
+            { "id": "org.webosphoenix.settings.backup", "title": "Backup", "icon": "icons/backup.png", "params": { "page": "backup" } },
             { "id": "org.webosphoenix.settings.updates", "title": "Updates", "icon": "icons/updates.png", "params": { "page": "updates" } }
         ]
     }

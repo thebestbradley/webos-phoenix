@@ -458,14 +458,19 @@ FocusScope {
 
     property var launcherLayout: null
 
-    function rebuildLauncherLayout() {
-        if (!source || !source.apps)
-            return;
+    function _launcherEntries() {
         var entries = [];
-        for (var i = 0; i < source.apps.count; ++i) {
+        for (var i = 0; source && source.apps && i < source.apps.count; ++i) {
             var a = source.apps.get(i);
             entries.push({ id: a.appId, title: a.title, tab: a.tab, quickLaunch: a.quickLaunch });
         }
+        return entries;
+    }
+
+    function rebuildLauncherLayout() {
+        if (!source || !source.apps)
+            return;
+        var entries = _launcherEntries();
         var saved = launcherLayout;
         if (!saved && typeof source.savedLauncherLayout === "function") {
             try { saved = JSON.parse(source.savedLauncherLayout() || "null"); } catch (e) { saved = null; }
@@ -479,9 +484,24 @@ FocusScope {
             source.saveLauncherLayout(JSON.stringify(l));
     }
 
+    // A backup brought a layout back: it replaces this one, for the apps
+    // that are installed (LauncherLayout.build keeps those only).
+    function restoreLauncherLayout(json) {
+        var l;
+        try { l = JSON.parse(json); } catch (e) { return; }
+        if (!l || typeof l !== "object" || !source || !source.apps)
+            return;
+        setLauncherLayout(LauncherLayout.build(_launcherEntries(), launcher.tabs.length, l));
+    }
+
     Connections {
         target: shell.source ? shell.source.apps : null
         function onCountChanged() { Qt.callLater(shell.rebuildLauncherLayout); }
+    }
+    Connections {
+        target: shell.source
+        ignoreUnknownSignals: true
+        function onLauncherLayoutRestored(json) { shell.restoreLauncherLayout(json); }
     }
     onSourceChanged: Qt.callLater(rebuildLauncherLayout)
 

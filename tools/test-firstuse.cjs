@@ -95,6 +95,20 @@ async function main() {
 
         await page.goto(appUrl(APP));
         await page.evaluate(() => localStorage.clear());
+        // The old device: a backup on its USB drive, of a task and a setting.
+        const B = "luna://org.webosphoenix.service.backup/";
+        await page.goto(appUrl(APP));
+        await luna(page, "luna://com.palm.db/put", { objects: [{ _kind: "com.palm.task:1", summary: "Restore canary", completed: false,
+                                                                 priority: 0, listId: "l", accountId: "" }] });
+        await luna(page, "luna://com.webos.service.systemservice/setPreferences", { screenTimeout: 300 });
+        await luna(page, B + "configure", { destination: { type: "usb" }, passphrase: "old phone passphrase" });
+        const made = await luna(page, B + "backupNow", {});
+        const file = await luna(page, "luna://org.webosphoenix.filemanager/read", { path: "/media/internal/backups/" + made.name });
+        // A new device, with that file copied onto its USB drive.
+        await page.evaluate(() => localStorage.clear());
+        await page.goto(appUrl(APP));
+        await luna(page, "luna://org.webosphoenix.filemanager/mkdir", { path: "/media/internal/backups" });
+        await luna(page, "luna://org.webosphoenix.filemanager/write", { path: "/media/internal/backups/" + made.name, data: file.data });
         await start();
         check(await pref("firstUseComplete") === false, "a new device has not run First Use");
 
@@ -124,6 +138,29 @@ async function main() {
         await page.waitForFunction(() => document.querySelector("[data-testid='network-Lab 5G']")?.textContent.includes("Connected"));
         check(true, "Wi-Fi: joined Lab 5G");
         await shot("2-wifi");
+        await next();
+
+        // ---- Restore -----------------------------------------------------------------
+        await step("restore");
+        await shot("2b-restore");
+        await page.click("[data-testid=restore-start]");
+        await page.waitForSelector("[data-testid=restore-type]");
+        await next();
+        await page.waitForSelector(`[data-testid='restore-file-${made.name}']`);
+        await page.click(`[data-testid='restore-file-${made.name}']`);
+        await page.fill("[data-testid=restore-pass]", "not the passphrase");
+        await page.click("[data-testid=restore-confirm]");
+        await page.waitForSelector("[data-testid=restore-pass-error]", { timeout: 15000 });
+        check(/not this backup's passphrase/.test(await page.textContent("[data-testid=restore-pass-error]")), "Restore: a wrong passphrase is refused");
+        await page.fill("[data-testid=restore-pass]", "old phone passphrase");
+        await page.click("[data-testid=restore-confirm]");
+        await page.waitForFunction(() => /Restored/.test(document.body.innerText), null, { timeout: 15000 });
+        await shot("2c-restored");
+        const tasks = (await luna(page, "luna://com.palm.db/find", { query: { from: "com.palm.task:1" } })).results || [];
+        check(tasks.some((t) => t.summary === "Restore canary") && await pref("screenTimeout") === 300,
+              "Restore: the old device's task and screen timeout are back");
+        const bst = await luna(page, B + "getStatus", {});
+        check(bst.configured && bst.auto && bst.destination.type === "usb", "Restore: this device backs up there every day, with the same passphrase");
         await next();
 
         // ---- Date & Time -------------------------------------------------------------
@@ -246,7 +283,7 @@ async function main() {
         check(!!again && again.payload.params.rerun === true, "Settings > Device Info runs it again");
         await start({ rerun: true });
         await step("welcome");
-        for (let i = 0; i < 7; ++i) {
+        for (let i = 0; i < 8; ++i) {
             if (await page.locator("[data-testid=skip]").count()) await page.click("[data-testid=skip]");
             else await next();
             await page.waitForTimeout(200);
@@ -256,7 +293,7 @@ async function main() {
         await start({ rerun: true });
         await step("welcome");
         await next();
-        for (const id of ["wifi", "datetime", "accounts"]) {
+        for (const id of ["wifi", "restore", "datetime", "accounts"]) {
             await step(id);
             await page.click("[data-testid=skip]");
         }
