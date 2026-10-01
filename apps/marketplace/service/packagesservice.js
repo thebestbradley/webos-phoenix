@@ -45,7 +45,7 @@
 //
 // Errors: {returnValue: false, errorCode, errorText}: NOT_FOUND, UNTRUSTED,
 // BAD_SIGNATURE, EXPIRED, ROLLBACK, BAD_INDEX, BAD_SERVER, CONNECTION_FAILED,
-// DOWNLOAD_FAILED, BAD_PACKAGE, UNSUPPORTED, NEEDS_MOJO, BAD_MANIFEST,
+// DOWNLOAD_FAILED, BAD_PACKAGE, UNSUPPORTED, NEEDS_DEVMODE, NEEDS_MOJO, BAD_MANIFEST,
 // INSTALL_FAILED, BUSY, BAD_PARAMS.
 //
 // Written against injected dependencies (createPackagesService), so it runs
@@ -324,22 +324,31 @@ function createPackagesService(deps) {
 
     // ---- Installing --------------------------------------------------------------------------
 
+    // Developer Mode (com.webos.service.devmode; Settings > Developer Mode).
+    function devMode() {
+        return Promise.resolve(deps.luna.call("luna://com.webos.service.devmode/getDevMode", {}))
+            .then(function (r) { return !!r && r.status === "enabled"; }, function () { return false; });
+    }
+
     // The package's bytes -> its app, or an error saying why it cannot be installed.
-    function check(bytes, entry) {
+    // dev (Developer Mode): install scripts, services and files outside the
+    // app are allowed ({developer: true}: the installer is told so).
+    function check(bytes, entry, dev) {
         return ipk.read(bytes).then(function (pkg) {
             var app = pkg.apps[0];
             if (!app || pkg.apps.length > 1) throw err("BAD_PACKAGE", "The package does not hold one app");
             if (entry.kind === "ipk" && (app.id !== entry.id || pkg.control.Package !== entry.id))
                 throw err("BAD_PACKAGE", "The package is " + (pkg.control.Package || app.id) + ", not " + entry.id);
-            if (pkg.scripts.length) throw err("UNSUPPORTED", "The package runs install scripts, which Phoenix does not allow");
-            if (pkg.services.length) throw err("UNSUPPORTED", "The app has background services, which Phoenix cannot run yet");
             var outside = pkg.files.filter(function (f) { return f.path.indexOf(app.dir) !== 0; });
-            if (outside.length) throw err("UNSUPPORTED", "The package puts files outside its app (" + outside[0].path + ")");
+            var needs = pkg.scripts.length ? "The package runs install scripts as the system"
+                : pkg.services.length ? "The app has background services"
+                : outside.length ? "The package puts files outside its app (" + outside[0].path + ")" : "";
+            if (needs && !dev) throw err("NEEDS_DEVMODE", needs + ": turn on Developer Mode in Settings to install it");
             var type = app.appinfo.type || "web";
             if (type !== "web") throw err("UNSUPPORTED", "It is a native (" + type + ") app built for 2011 phones; Phoenix runs web apps");
             var has = function (name) { return pkg.files.some(function (f) { return f.path === app.dir + name; }); };
             if (has("sources.json") && !has("depends.js")) throw err("NEEDS_MOJO", "It is a Mojo app: Palm's Mojo framework was never open-sourced, so Phoenix cannot run it");
-            return { pkg: pkg, app: app };
+            return { pkg: pkg, app: app, developer: !!needs };
         });
     }
 
@@ -399,7 +408,8 @@ function createPackagesService(deps) {
     }
 
     // OSE's installer, to the end: {ok, error}.
-    function osInstall(id, path) {
+    // developer: the package needs Developer Mode (scripts, services, ...).
+    function osInstall(id, path, developer) {
         return new Promise(function (resolve) {
             var done = false, cancel = null;
             function finish(r) {
@@ -408,10 +418,12 @@ function createPackagesService(deps) {
                 if (cancel) cancel();
                 resolve(r);
             }
-            cancel = deps.luna.subscribe("luna://com.webos.appInstallService/install", { id: id, ipkUrl: path, subscribe: true }, function (r) {
+            var req = { id: id, ipkUrl: path, subscribe: true };
+            if (developer) req.developerMode = true;
+            cancel = deps.luna.subscribe("luna://com.webos.appInstallService/install", req, function (r) {
                 if (r.returnValue === false && !r.details) return finish({ ok: false, error: r.errorText || "The installer refused the package" });
                 var st = r.details && r.details.state;
-                if (r.statusValue === 30 || st === "installed") finish({ ok: true });
+                if (r.statusValue === 30 || st === "installed") finish({ ok: true, skipped: (r.details && r.details.skipped) || [] });
                 else if (r.statusValue === 24 || r.statusValue === 23 || /failed/.test(st || ""))
                     finish({ ok: false, error: (r.details && r.details.reason) || "The installer failed" });
             });
@@ -443,9 +455,10 @@ function createPackagesService(deps) {
             if (entry.verdict && !entry.verdict.ok) throw err("UNSUPPORTED", entry.verdict.text);
             if (entry.kind === "preware" && entry.architecture && entry.architecture !== "all")
                 throw err("UNSUPPORTED", "It is built for " + entry.architecture + " processors");
-            return packageFor(s, entry, progress);
-        }).then(function (bytes) {
-            return check(bytes, entry).then(function (c) {
+            return Promise.all([packageFor(s, entry, progress), devMode()]);
+        }).then(function (got) {
+            var bytes = got[0];
+            return check(bytes, entry, got[1]).then(function (c) {
                 appId = c.app.id;
                 if (entry.kind !== "classic" && entry.kind !== "preware" && appId !== entry.id) throw err("BAD_PACKAGE", "The package holds another app");
                 var owner = load().installed[appId];
@@ -454,7 +467,7 @@ function createPackagesService(deps) {
                 return Promise.resolve(deps.temp.write(appId + ".ipk", bytes)).then(function (where) {
                     path = where;
                     progress({ state: "installing", progress: 80 });
-                    return osInstall(appId, path);
+                    return osInstall(appId, path, c.developer);
                 }).then(function (r) {
                     if (!r.ok) throw err("INSTALL_FAILED", r.error);
                     var s2 = load();
@@ -469,6 +482,8 @@ function createPackagesService(deps) {
                         if (am) am.countDownload(entry.museumId);
                     }
                     var done = { returnValue: true, id: p.id, appId: appId, state: "installed", progress: 100 };
+                    // What the installer could not do (the simulator: scripts, services).
+                    if (r.skipped && r.skipped.length) done.skipped = r.skipped;
                     push(done);
                     return done;
                 });

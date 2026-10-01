@@ -45,8 +45,13 @@ Item {
         z: 1
     }
 
+    // The row's own icon and text, when the app has no dashboard window
+    // (the window draws its own; behind it they would show through).
+    readonly property bool _own: item.windowKey === ""
+
     AppIcon {
         id: dIcon
+        visible: item._own
         x: Theme.px(10)
         anchors.verticalCenter: parent.verticalCenter
         size: Theme.px(32)
@@ -56,6 +61,7 @@ Item {
         source: item.icon
     }
     Column {
+        visible: item._own
         anchors.left: dIcon.right
         anchors.leftMargin: Theme.px(10)
         anchors.right: parent.right

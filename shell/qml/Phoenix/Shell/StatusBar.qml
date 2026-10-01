@@ -29,9 +29,11 @@ Item {
     // Tablet: an app, the launcher or Just Type is up; the bar's fill fades
     // in under its tiled art (StatusBar::fadeBar, setMaximizedAppTitle).
     property bool filled: false
-    // Width of the system indicators at the right (tablet notification
-    // icons go just left of them).
+    // Width of the system group at the right: its indicators and, on
+    // tablets, the separator at its left (StatusBarItemGroup::layoutRight).
+    // Tablet notification icons go just left of it.
     readonly property real systemGroupWidth: indicators.width + Theme.px(6)
+        + (Theme.tablet ? systemSeparator.width + Theme.px(6) : 0)
 
     signal systemMenuRequested
     signal appMenuRequested
@@ -232,6 +234,21 @@ Item {
             enabled: Theme.tablet
             NumberAnimation { duration: Theme.statusBarMenuFadeDuration }
         }
+    }
+
+    // Tablets: the system group's separator at its left, between it and the
+    // notification icons; it fades out as the tab fades in (StatusBarItemGroup
+    // paint: opacity 1 - the tab's).
+    Image {
+        id: systemSeparator
+        objectName: "systemGroupSeparator"
+        visible: Theme.tablet
+        x: bar.width - bar.systemGroupWidth
+        anchors.verticalCenter: parent.verticalCenter
+        width: Theme.artWidth(source)
+        height: Theme.artHeight(source)
+        source: Theme.asset("statusBar/status-bar-separator.png")
+        opacity: 1 - menuTab.opacity
     }
 
     Row {

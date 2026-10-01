@@ -395,12 +395,39 @@ Item {
             }
         }
 
-        // Tablets: the notification icons in the status bar; they open the drop-down.
+        // Tablets: the notification icons are a group of their own, as
+        // luna-sysmgr's (StatusBar m_notifGroup): a separator at its left,
+        // and its own tab behind the icons while the drop-down is open (the
+        // system menu's tab covers the system group only).
+        BorderImage {
+            id: notifTab
+            objectName: "notificationTab"
+            visible: tabletIcons.visible && opacity > 0
+            x: notifSeparator.x
+            y: -Theme.statusBarHeight
+            width: tabletIcons.x + tabletIcons.width + Theme.px(5) - x
+            height: Theme.statusBarHeight
+            source: Theme.asset("statusBar/status-bar-menu-dropdown-tab.png")
+            border { left: Theme.artBorder(11, source); right: Theme.artBorder(11, source); top: 0; bottom: 0 }
+            opacity: root.dashboardOpen ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.statusBarMenuFadeDuration } }
+        }
+        Image {
+            id: notifSeparator
+            objectName: "notificationSeparator"
+            visible: tabletIcons.visible
+            x: tabletIcons.x - Theme.px(5) - width
+            y: -Theme.statusBarHeight + (Theme.statusBarHeight - height) / 2
+            width: Theme.artWidth(source)
+            height: Theme.artHeight(source)
+            source: Theme.asset("statusBar/status-bar-separator.png")
+            opacity: 1 - notifTab.opacity
+        }
         Row {
             id: tabletIcons
             visible: root.overlay && root.hasNotifications && !root.bannerActive
             anchors.right: parent.right
-            anchors.rightMargin: root.statusBarRightInset + Theme.px(5)
+            anchors.rightMargin: root.statusBarRightInset + Theme.px(6)
             y: -Theme.statusBarHeight + (Theme.statusBarHeight - height) / 2
             spacing: Theme.px(5)                                        // StatusBar.h:31-32
             Repeater {
@@ -411,6 +438,9 @@ Item {
                     showLabel: false
                     color: model.color
                     glyph: model.glyph
+                    // The notification's small icon (a dashboard window's
+                    // "icon" attribute), or its app's.
+                    source: model.icon || ""
                 }
             }
         }
@@ -472,6 +502,13 @@ Item {
                 width: list.width
                 height: Theme.dashboardItemHeight
 
+                // Uncovered as the row is swiped away (Phoenix).
+                SwipeClearLabel {
+                    distance: Math.abs(content.x)
+                    rowWidth: item.width
+                    fromRight: content.x < 0
+                    visible: !item.ongoing && content.x !== 0
+                }
                 DashboardItem {
                     id: content
                     width: parent.width

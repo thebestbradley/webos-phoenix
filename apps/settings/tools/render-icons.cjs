@@ -112,6 +112,12 @@ const ICONS = {
         <text x="32" y="35.5" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="14.5"
               text-anchor="middle" fill="#fff">Abc</text>
         <path d="M21 50.5h22" stroke="#fff" stroke-width="4" stroke-linecap="round"/>`],
+    devmode: ["#7a7f87", "#2c3036", `
+        <g fill="none" stroke="#fff" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M24 21L13 32l11 11"/>
+          <path d="M40 21l11 11-11 11"/>
+          <path d="M35.5 16l-7 32"/>
+        </g>`],
     accessibility: ["#3aa0a8", "#135c63", `
         <circle cx="32" cy="16.5" r="4.6" fill="#fff"/>
         <path d="M15.5 24.5l16.5 3.2 16.5-3.2M32 27.7v9.6M32 37.3l-7 12.5M32 37.3l7 12.5" fill="none" stroke="#fff"

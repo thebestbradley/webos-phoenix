@@ -201,7 +201,8 @@ function createIpk(opts) {
     }
 
     // {control: {Package, Version, ...}, files: [{path (device path without
-    // the leading /), data: Uint8Array | string}]} -> the .ipk's bytes.
+    // the leading /), data: Uint8Array | string}], scripts?: {postinst: text,
+    // ...}} -> the .ipk's bytes.
     function write(pkg) {
         var c = pkg.control, lines = [];
         ["Package", "Version", "Section", "Priority", "Architecture", "Maintainer", "Installed-Size", "Description", "Source"].forEach(function (k) {
@@ -211,7 +212,8 @@ function createIpk(opts) {
             return { path: f.path.replace(/^\/+/, ""), data: typeof f.data === "string" ? utf8(f.data) : f.data, mode: f.mode };
         });
         return Promise.all([
-            gz.gzip(writeTar([{ path: "control", data: utf8(lines.join("\n") + "\n") }])),
+            gz.gzip(writeTar([{ path: "control", data: utf8(lines.join("\n") + "\n") }].concat(
+                Object.keys(pkg.scripts || {}).map(function (n) { return { path: n, data: utf8(pkg.scripts[n]), mode: 493 }; })))),
             gz.gzip(writeTar(files))
         ]).then(function (r) {
             return writeAr([{ name: "debian-binary", data: utf8("2.0\n") }, { name: "control.tar.gz", data: r[0] },

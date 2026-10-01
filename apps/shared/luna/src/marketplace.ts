@@ -84,6 +84,8 @@ export interface InstallProgress {
     appId?: string;
     errorCode?: string;
     errorText?: string;
+    /** Installed, but parts of the package were not (the simulator: install scripts, services). */
+    skipped?: string[];
 }
 
 export type Section = "featured" | "web" | "apps" | "classics";

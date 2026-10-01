@@ -27,3 +27,5 @@ EditPopup 1.0 EditPopup.qml
 EmojiPanel 1.0 EmojiPanel.qml
 EmojiSearchBar 1.0 EmojiSearchBar.qml
 CandidateBar 1.0 CandidateBar.qml
+SwipeClearLabel 1.0 SwipeClearLabel.qml
+SiteMenu 1.0 SiteMenu.qml

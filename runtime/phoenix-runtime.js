@@ -306,6 +306,11 @@
             if (m) { try { attrs = JSON.parse(m[1]); } catch (e) { attrs = {}; } }
             if (attrs.window && attrs.window !== "card" && typeof url === "string") {
                 var h = /height=(\d+)/.exec(f);
+                // A relative icon (enyo.Dashboard's smallIcon, "images/...") is
+                // the app's: the shell gets its device path.
+                if (attrs.icon && !/^\//.test(attrs.icon)) {
+                    try { attrs.icon = decodeURIComponent(new URL(attrs.icon, global.location.href).pathname); } catch (e) { /* as it is */ }
+                }
                 url += (url.indexOf("#") < 0 ? "#" : "&") + "phoenixWindow=" + encodeURIComponent(attrs.window)
                      + (h ? "&phoenixHeight=" + h[1] : "")
                      + (attrs.icon ? "&phoenixIcon=" + encodeURIComponent(attrs.icon) : "")
@@ -1991,8 +1996,11 @@
     // runtime.resetSampleData() loads it again on the next start;
     // runtime.loadSampleData(true) loads it now (objects have fixed ids, so
     // loading again replaces rather than duplicates them).
+    // Version 2 added the accounts' credentials: a profile that loaded
+    // version 1 gets those alone (its data is the user's now).
     runtime.loadSampleData = function (force) {
-        if (!force && store.get("sampleData", 0))
+        var loaded = store.get("sampleData", 0);
+        if (!force && loaded >= 2)
             return;
         var text = PalmSystem.getResource("/usr/share/phoenix/runtime/sample-data.js");
         var data;
@@ -2000,6 +2008,15 @@
             data = new Function(text + "\nreturn phoenixSampleData;")()(new Date());
         } catch (e) {
             console.warn("[phoenix-runtime] sample data not loaded: " + e);
+            return;
+        }
+        var creds = store.get("accountCredentials", {});
+        Object.keys(data.credentials || {}).forEach(function (id) {
+            if (!creds[id]) creds[id] = data.credentials[id];
+        });
+        store.set("accountCredentials", creds);
+        if (!force && loaded) {
+            store.set("sampleData", data.version || 1);
             return;
         }
         var byDb = {};
@@ -3404,6 +3421,34 @@
             "*": stub["*"]
         });
 
+        // ---- Developer Mode (com.webos.service.devmode, OSE's API) ------------------
+        //
+        //   getDevMode {}                 -> {status: "enabled" | "disabled"}
+        //   setDevMode {status}           OSE restarts the device for it; the
+        //                                 simulator applies it at once
+        //
+        // Settings > Developer Mode asks for the device passcode first
+        // (matchDevicePasscode); with Developer Mode on, the Marketplace
+        // installs packages with install scripts and services, and the
+        // Terminal's sudo and SSH become possible (docs/TERMINAL.md T4).
+        // Wiping the device (erase) turns it off.
+        function devMode() { return store.get("devMode", false) ? "enabled" : "disabled"; }
+        var devModeWatchers = [];
+        register(["com.webos.service.devmode"], {
+            "/getDevMode": function (p, reply, ctx) {
+                reply(ok({ status: devMode(), subscribed: !!p.subscribe }));
+                if (p.subscribe) devModeWatchers.push({ reply: reply, ctx: ctx });
+            },
+            "/setDevMode": function (p, reply) {
+                if (p.status !== "enabled" && p.status !== "disabled")
+                    return reply(fail(-1, "status: \"enabled\" or \"disabled\""));
+                store.set("devMode", p.status === "enabled");
+                reply(ok({ status: devMode() }));
+                devModeWatchers = devModeWatchers.filter(function (w) { return !w.ctx.cancelled(); });
+                devModeWatchers.forEach(function (w) { w.reply(ok({ status: devMode() })); });
+            }
+        });
+
         // ---- Phoenix: erase (no OSE equivalent yet) ---------------------------------
         //
         // Device Info's reset options, as legacy webOS had them: eraseUserData
@@ -3900,6 +3945,8 @@
             if ("bluetoothOn" in st) s.bluetooth.powered = !!st.bluetoothOn;
             if ("brightness" in st) s.settings.picture.backlight = Math.round(st.brightness);
             if ("muted" in st) s.audio.muted = !!st.muted;
+            // The system menu's volume slider: the master volume.
+            if ("volume" in st) s.audio.volume = Math.max(0, Math.min(100, Math.round(st.volume)));
             vpnFromShell(s, st);
             // The shell's lock screen (com.palm.systemmanager getLockStatus).
             if ("deviceLocked" in st && !!st.deviceLocked !== !!store.get("deviceLocked", false)) {
@@ -7044,8 +7091,12 @@
             if (/^(installed|install failed|removed|remove failed)$/.test(d.state)) delete statuses[id];
         }
 
-        // -> Promise<{appId, version}>; rejects with an Error (code, message).
-        function installPackage(id, path, each) {
+        // -> Promise<{appId, version, skipped}>; rejects with an Error (code, message).
+        // developer: Developer Mode is on and the caller asked for it: a
+        // package with install scripts, services or files outside its app
+        // installs its app; the rest is skipped here (the simulator cannot
+        // run scripts or a 2011 service) and listed in `skipped`.
+        function installPackage(id, path, each, developer) {
             report(id || "", 11, { state: "install needed", ipkUrl: path }, each);
             return readPackage(path).then(function (bytes) {
                 return ipk().read(bytes);
@@ -7054,17 +7105,32 @@
                 if (!app) throw Object.assign(new Error("The package has no app"), { code: "NO_APP" });
                 if (id && app.id !== id) throw Object.assign(new Error("The package is " + app.id + ", not " + id), { code: "WRONG_ID" });
                 id = app.id;
-                if (pkg.scripts.length) throw Object.assign(new Error("Packages with install scripts are not supported"), { code: "SCRIPTS" });
                 var outside = pkg.files.filter(function (f) { return f.path.indexOf(app.dir) !== 0; });
-                if (outside.length || pkg.services.length || pkg.apps.length > 1)
-                    throw Object.assign(new Error("Only packages of one app are supported (this one also has " +
+                var dev = !!developer && store.get("devMode", false);
+                var skipped = [];
+                if (pkg.scripts.length) {
+                    if (!dev) throw Object.assign(new Error("Packages with install scripts need Developer Mode"), { code: "SCRIPTS" });
+                    skipped.push("install scripts (" + pkg.scripts.join(", ") + ")");
+                }
+                if (pkg.apps.length > 1)
+                    throw Object.assign(new Error("Only packages of one app are supported"), { code: "UNSUPPORTED" });
+                if (outside.length || pkg.services.length) {
+                    if (!dev) throw Object.assign(new Error("Only packages of one app are supported without Developer Mode (this one also has " +
                         (outside[0] ? outside[0].path : "services") + ")"), { code: "UNSUPPORTED" });
+                    // services: the files under usr/palm/services/<id>/.
+                    var serviceIds = {};
+                    pkg.services.forEach(function (f) { serviceIds[String(f).split("/")[3]] = true; });
+                    var ids = Object.keys(serviceIds);
+                    if (ids.length) skipped.push("services (" + ids.join(", ") + ")");
+                    var others = outside.filter(function (f) { return pkg.services.indexOf(f.path) < 0; });
+                    if (others.length) skipped.push(others.length + " files outside the app");
+                }
                 report(id, 13, { state: "installing", ipkUrl: path }, each);
                 var files = pkg.files.map(function (f) { return { path: f.path.slice(app.dir.length), data: b64(f.data) }; });
                 return hostInstall("install", id, files).then(function (r) {
                     if (!r.ok) throw Object.assign(new Error(r.error || "Install failed"), { code: "HOST" });
-                    report(id, 30, { state: "installed", installBasePath: "/media/cryptofs/apps" }, each);
-                    return { appId: id, version: app.appinfo.version || pkg.control.Version || "" };
+                    report(id, 30, { state: "installed", installBasePath: "/media/cryptofs/apps", skipped: skipped }, each);
+                    return { appId: id, version: app.appinfo.version || pkg.control.Version || "", skipped: skipped };
                 });
             }).then(null, function (e) {
                 report(id || "", 24, { state: "install failed", errorCode: -1, reason: e.message }, each);
@@ -7096,7 +7162,8 @@
                 if (typeof p.ipkUrl !== "string" || p.ipkUrl.charAt(0) !== "/") return reply(fail(-2, "invalid ipkUrl"));
                 reply(ok({ subscribed: !!p.subscribe }));
                 var each = p.subscribe ? function (m) { if (!ctx.cancelled()) reply(m); } : null;
-                installPackage(p.id, p.ipkUrl, each).then(null, function () { /* reported */ });
+                // developerMode (Phoenix): the Marketplace asks for it in Developer Mode.
+                installPackage(p.id, p.ipkUrl, each, !!p.developerMode).then(null, function () { /* reported */ });
             },
             "/remove": function (p, reply, ctx) {
                 if (!p.id) return reply(fail(-2, "id is empty"));

@@ -418,9 +418,13 @@ Item {
             tryCompare(r.parent, "x", 0, 1500);
             compare(windows.notifications.count, 3);
 
-            // Past a quarter, slowly: slides right, then goes.
+            // Past a quarter, slowly: slides right, then goes. "Clear" shows in
+            // the space it leaves, bright once letting go clears it.
             mousePress(r, 20, y);
             for (i = 1; i <= 10; ++i) { wait(30); mouseMove(r, 20 + i * 12, y); }
+            var clear = findChild(r.parent.parent, "swipeClearLabel");
+            verify(clear && clear.visible && clear.armed, "Clear shows, armed");
+            compare(clear.text, "Clear");
             mouseRelease(r, 140, y);
             tryCompare(windows.notifications, "count", 2, 1000);
 

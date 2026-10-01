@@ -51,11 +51,12 @@ Item {
 
         // A swipe of (dx, dy) in steps, with the events coming as a
         // trackpad's do, then the pause that ends it.
-        function swipe(dx, dy) {
-            var n = 10;
+        // slow: the fingers slow down to a stop before lifting (no flick).
+        function swipe(dx, dy, slow) {
+            var n = slow ? 20 : 10;
             for (var i = 0; i < n; ++i) {
                 wheel.swipe(root.width / 2, root.height / 2, dx / n, dy / n);
-                wait(8);
+                wait(slow ? 40 : 8);
             }
             wait(Theme.wheelGestureEndDelay + 50);
         }
@@ -71,8 +72,27 @@ Item {
 
         function test_smallSwipeSettlesBack() {
             threeApps();
-            swipe(-cv.groupSpacing() * 0.3, 0);
+            swipe(-cv.groupSpacing() * 0.2, 0, true);
             tryCompare(cv, "position", 1, 2000);
+        }
+
+        // Stopped between two cards, past a third of the way: on to the
+        // next one, quickly, and then it stays (the momentum that follows
+        // a trackpad swipe is ignored).
+        function test_swipeStoppedBetweenCardsSnapsForward() {
+            threeApps();
+            swipe(-cv.groupSpacing() * 0.45, 0, true);
+            verify(wheel.settling, "momentum after the swipe is ignored");
+            tryCompare(cv, "position", 2, Theme.wheelSettleDuration + 300);
+            swipe(cv.groupSpacing() * 0.45, 0, true);
+            tryCompare(cv, "position", 1, Theme.wheelSettleDuration + 300);
+        }
+
+        // A quick short swipe goes on to the next stack, as a finger's flick.
+        function test_quickShortSwipeFlicksToTheNextStack() {
+            threeApps();
+            swipe(-cv.groupSpacing() * 0.25, 0);
+            tryCompare(cv, "position", 2, 1000);
         }
 
         function test_swipeUpClosesTheCard() {

@@ -46,6 +46,9 @@ Phoenix UI, PixiOS with Bennu UI, an XR bird) are in [BRANDING.md](BRANDING.md).
 | [ANDROID.md](ANDROID.md) | Android apps through Waydroid, as webOS cards | 1.0 |
 | [AI-AND-MCP.md](AI-AND-MCP.md) | The voice assistant (1.0), the MCP layer and the AI agent (2.0) | 1.0, 2.0 |
 | [TERMINAL.md](TERMINAL.md) | The Terminal app and Developer Mode | M5 |
+| [SCREENSHOTS.md](SCREENSHOTS.md) | Screenshots as the original took them (1.x), and preview, markup, recording, text and AI look-up (2.0) | 1.0, 2.0 |
+| [GESTURE-BAR.md](GESTURE-BAR.md) | The original's light bar animations (1.x), buttons at the ends of the gesture area, and the animated 2.0 bar | 1.0, 2.0 |
+| [COMMUNITY-FEATURES.md](COMMUNITY-FEATURES.md) | What the community added after HP (webOS CE 3.1.0, LunaCE, Preware patches, webOS Archive), ranked, with 1.x and 2.0 targets | 1.0, 2.0 |
 | [SECURITY-APPS.md](SECURITY-APPS.md) | Passwords and Authenticator threat model | M4 |
 | [CONVERGENCE.md](CONVERGENCE.md) | 2.0: desktop mode, TV mode, wireless display | 2.0 |
 | [LUNEOS.md](LUNEOS.md), [WEBOS-FAMILY.md](WEBOS-FAMILY.md) | LuneOS, webOS Community Edition, OSE and Phoenix compared; which LuneOS layers to build on | M1, M3 |
@@ -250,7 +253,17 @@ dark and light themes go to 2.0.
 - [x] Terminal (`apps/terminal`, xterm.js on the PTY service
       `org.webosphoenix.pty`; bash by default, zsh available)
       ([TERMINAL.md](TERMINAL.md) T1-T2; T3 written, not yet built for a device)
-- [ ] Developer Mode with `sudo` and an SSH server ([TERMINAL.md](TERMINAL.md) T4-T5)
+- [ ] Developer Mode with `sudo` and an SSH server ([TERMINAL.md](TERMINAL.md) T4-T5).
+      Done in the simulator: Settings > Developer Mode behind the device PIN
+      or password, and the Marketplace installs packages with install
+      scripts and services only in it ([APP-RUNTIME.md](APP-RUNTIME.md#developer-mode))
+- [ ] Screenshots as the original took them ([SCREENSHOTS.md](SCREENSHOTS.md) SC1-SC2)
+- [ ] The light bar's animations, and buttons at the ends of the gesture
+      area ([GESTURE-BAR.md](GESTURE-BAR.md) GB1-GB3)
+- [ ] Community features for 1.x, from the top 20 in
+      [COMMUNITY-FEATURES.md](COMMUNITY-FEATURES.md) (launcher groups and
+      tab management, the power menu, battery percentage, game controllers
+      and USB OTG, and more), each added here as it is picked
 
 ## 1.0 release
 
@@ -330,6 +343,13 @@ supported alongside it.
       Flutter 3.47 (web build) run beside the Enact ones on the same notes,
       on phones and tablets ([APP-RUNTIME.md](APP-RUNTIME.md#ionic-and-flutter-apps));
       next, native Flutter through LG's webOS embedder
+- [ ] Screenshots on a par with iOS and Android: preview, markup, full
+      page, recording, text in screenshots, Ask and circle to look up
+      ([SCREENSHOTS.md](SCREENSHOTS.md) SC3-SC8)
+- [ ] The animated gesture bar: thickness, glow and motion for each
+      gesture, and teaching ([GESTURE-BAR.md](GESTURE-BAR.md) GB4-GB5)
+- [ ] Community features for 2.0 from [COMMUNITY-FEATURES.md](COMMUNITY-FEATURES.md)
+      (automation profiles, second screen, performance panel, card gestures)
 - [ ] One device, every screen (below)
 
 ### One device, every screen

@@ -110,6 +110,15 @@ async function main() {
         check(last().wifiConnected === true && last().wifiBars === 2, "shell gets the new network's signal (2 bars)");
         await shot("wifi-connected");
 
+        // ---- Developer Mode without a PIN: set one first --------------------------
+        await open("devmode");
+        await page.click("[data-testid='devmode-toggle']");
+        await page.waitForSelector("[data-testid='devmode-nolock']");
+        check(await page.locator("[data-testid='devmode-open-screen']").count() === 1, "Developer Mode asks for a PIN or password to be set first");
+        await page.keyboard.press("Escape");
+        await page.waitForSelector("[data-testid='devmode-nolock']", { state: "detached" });
+        check(await page.getAttribute("[data-testid='devmode-toggle']", "aria-checked") === "false", "Developer Mode stays off");
+
         // ---- Screen & Lock: brightness and PIN ------------------------------------
         await open("screen");
         const slider = page.locator("[data-testid='brightness']");
@@ -148,6 +157,31 @@ async function main() {
         await page.waitForTimeout(200);
         check(/aurora\.jpg$/.test(last().wallpaperFile || ""), "wallpaper choice reaches the shell");
         await shot("screen-lock");
+
+        // ---- Developer Mode: warning and the PIN ---------------------------------
+        const devStatus = () => page.evaluate(() => new Promise((res) => {
+            const b = new PalmServiceBridge();
+            b.onservicecallback = (j) => res(JSON.parse(j).status);
+            b.call("luna://com.webos.service.devmode/getDevMode", "{}");
+        }));
+        await open("devmode");
+        await page.click("[data-testid='devmode-toggle']");
+        await page.waitForSelector("[data-testid='devmode-confirm']");
+        check(/install scripts and background services/.test(await page.textContent("[data-testid='devmode-confirm']")), "Developer Mode warns before turning on");
+        await page.fill("[data-testid='devmode-passcode']", "9999");
+        await page.click("[data-testid='devmode-enable']");
+        await page.waitForFunction(() => /not correct/.test(document.querySelector("[data-testid='devmode-confirm']")?.textContent || ""));
+        check(await devStatus() === "disabled", "a wrong PIN leaves Developer Mode off");
+        await shot("devmode-confirm");
+        await page.fill("[data-testid='devmode-passcode']", "1234");
+        await page.click("[data-testid='devmode-enable']");
+        await page.waitForSelector("[data-testid='devmode-confirm']", { state: "detached" });
+        await page.waitForSelector("[data-testid='devmode-toggle'][aria-checked='true']");
+        check(await devStatus() === "enabled", "the right PIN turns Developer Mode on");
+        await shot("devmode-on");
+        await page.click("[data-testid='devmode-toggle']");
+        await page.waitForSelector("[data-testid='devmode-toggle'][aria-checked='false']");
+        check(await devStatus() === "disabled", "turning Developer Mode off needs no PIN");
 
         // ---- Airplane mode, Bluetooth ----------------------------------------------
         await open("airplane");

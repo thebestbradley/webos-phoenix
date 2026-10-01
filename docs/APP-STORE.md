@@ -52,6 +52,11 @@ catalog app with three sources" is the starting point.
   sold through the store in the first year.
 - **Web apps only at first.** Packages that contain native code or
   background services wait until there is a sandbox for them (phase A5).
+  Until then, Developer Mode (Settings, behind the device PIN or password)
+  lets a user install packages with install scripts or services (not
+  native code) from Preware feeds and other catalogs
+  themselves, unsandboxed and at their own risk
+  ([APP-RUNTIME.md](APP-RUNTIME.md#developer-mode)).
 
 ## Contents
 

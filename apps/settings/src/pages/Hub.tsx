@@ -11,6 +11,7 @@ export function Hub({ onOpen }: { onOpen: (id: PageId) => void }) {
         { label: "Device", ids: ["screen", "sounds", "datetime", "language", "accessibility"] },
         { label: "Privacy & Safety", ids: ["location", "emergency"] },
         { label: "About", ids: ["deviceinfo", "backup", "updates"] },
+        { label: "Advanced", ids: ["devmode"] },
     ];
     return (
         <Page>

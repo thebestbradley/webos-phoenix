@@ -63,7 +63,24 @@
 .mk-progress-bar { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(#73a9e6, #3a7bc3); transition: width 0.3s; }
 .mk-progress span { position: relative; }
 .mk-shots { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 8px; }
-.mk-shots img { height: 200px; border-radius: 6px; border: 1px solid #aaa; flex: none; }
+.mk-shot { flex: none; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.mk-shot img { display: block; height: 200px; border-radius: 6px; border: 1px solid #aaa; }
+
+/* The full-screen screenshot viewer (Gallery.tsx). */
+.mk-viewer { position: fixed; inset: 0; z-index: 100; background: #000; color: #fff; }
+.mk-viewer-area { position: absolute; inset: 0; overflow: hidden; touch-action: pan-y; }
+.mk-viewer-track { display: flex; height: 100%; transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.3, 1); }
+.mk-viewer-page { flex: none; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+                  padding: 48px 12px; box-sizing: border-box; }
+.mk-viewer-page img { width: 100%; height: 100%; object-fit: contain; user-select: none; -webkit-user-drag: none; }
+.mk-viewer button { font-family: inherit; color: #fff; background: rgba(255, 255, 255, 0.14); border: 0; cursor: pointer; }
+.mk-viewer-close { position: absolute; top: 8px; right: 8px; width: 40px; height: 40px; border-radius: 20px; font-size: 28px; line-height: 1; }
+.mk-viewer-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 64px; border-radius: 8px; font-size: 40px; }
+.mk-viewer-arrow.left { left: 8px; }
+.mk-viewer-arrow.right { right: 8px; }
+.mk-viewer-dots { position: absolute; bottom: 16px; left: 0; right: 0; display: flex; justify-content: center; gap: 10px; }
+.mk-viewer-dots button { width: 9px; height: 9px; padding: 0; border-radius: 5px; background: rgba(255, 255, 255, 0.35); }
+.mk-viewer-dots button.on { background: #fff; }
 .mk-desc { white-space: pre-wrap; line-height: 1.4; margin: 8px 2px; }
 .mk-footer {
     display: flex; flex: none; gap: 1px; background: linear-gradient(#5d5d5d, #333); border-top: 1px solid #222;

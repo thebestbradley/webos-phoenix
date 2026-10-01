@@ -51,7 +51,18 @@ Item {
                            + JSON.stringify(orientation) + ")");
     }
 
+    // A site (an installed web app whose main is an https:// address): the
+    // page is the site, without the runtime; the shell gives it navigation
+    // (the back gesture goes back in its history; SiteMenu).
+    readonly property bool site: /^https?:/.test(String(url))
+
     function back() {
+        if (site) {
+            if (!view.canGoBack)
+                return false;
+            view.goBack();
+            return true;
+        }
         view.runJavaScript("window.__phoenixRuntime && __phoenixRuntime.back()");
         return true;
     }

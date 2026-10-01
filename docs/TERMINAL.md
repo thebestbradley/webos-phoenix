@@ -127,8 +127,12 @@ Preferences; and, from wTerm, a shell that is not root by default.
   service accepts "id" and legacy "id 1234"), the ACG group names, the
   `useradd` and `ttf-dejavu` package names in the OSE layers, and the
   Luna round trip per keystroke.
-- **Developer Mode (T4):** `exec` answers `DEVMODE_REQUIRED`; there is no
-  sudo, no SSH server, no Settings page and no Konami code yet. The systemd
+- **Developer Mode (T4):** the Settings page is done (Settings > Developer
+  Mode: a warning, then the device PIN or password; it calls OSE's
+  `com.webos.service.devmode` setDevMode, and the Marketplace already
+  checks it, see [APP-RUNTIME.md](APP-RUNTIME.md#developer-mode)). `exec`
+  still answers `DEVMODE_REQUIRED`; there is no sudo, no SSH server and no
+  Konami code yet. The systemd
   unit's `NoNewPrivileges=yes` will have to go when sudo comes.
 - **Keep running in the background** and the sessions dashboard, OSC 777
   notifications, Find, pinch to zoom, selection drag handles, the shell's
@@ -370,7 +374,7 @@ The terminfo entry is `xterm-256color`, which xterm.js implements.
 | **T1** | `apps/terminal` with xterm.js, extras row, app menu, colour schemes, font; the runtime's simulated shell; `test-terminal.cjs` | M (2 to 3 weeks) | Done |
 | **T2** | The C++ PTY core; `SimPty` in phoenix-sim and the WebSocket in `serve-rootfs.py`, so it is a real terminal on the desktop | S (1 to 2 weeks) | Done |
 | **T3** | `org.webosphoenix.pty` on OSE, ACG files, `meta-phoenix` recipes and package group, tried in `qemux86-64` | M (2 to 3 weeks); needs M1's image to boot | Written (service, ACG files, recipes, the `user` account); not built or tried |
-| **T4** | Developer Mode page, `user` account, `sudo` with the passcode, SSH server with key management, the Konami code in Just Type | M (2 to 3 weeks); needs the passcode service | Not started (`exec` stub) |
+| **T4** | Developer Mode page, `user` account, `sudo` with the passcode, SSH server with key management, the Konami code in Just Type | M (2 to 3 weeks); needs the passcode service | Developer Mode page done (simulator); the rest not started (`exec` stub) |
 | **T5** | Polish: selection handles, OSC 777 notifications, background sessions dashboard, restricted mode, the keyboard's terminal layout | S to M | Long-press selection done; the rest not started |
 
 ## Open questions for you

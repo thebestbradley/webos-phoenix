@@ -190,10 +190,12 @@ Item {
                 source: Theme.asset("menu-dropdown-swipe-highlight.png")
                 fillMode: Image.Stretch
             }
+            SwipeClearLabel {
+                distance: content.x
+                rowWidth: row.width
+            }
         }
 
-        // The gaps rows leave while they close up (:1403-1428): above the
-        // top row, below the bottom one, and between this row and the next.
         // The gaps rows leave while they close up (:1403-1428): above the
         // top row, below the bottom one, and between this row and the next.
         GapShade {

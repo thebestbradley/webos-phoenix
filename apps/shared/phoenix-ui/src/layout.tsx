@@ -127,8 +127,8 @@ export function Divider({ caption }: { caption?: ReactNode }) {
 }
 
 /** Small grey explanatory text. */
-export function Note({ children }: { children: ReactNode }) {
-    return <div className="pui-note">{children}</div>;
+export function Note({ children, testId }: { children: ReactNode; testId?: string }) {
+    return <div className="pui-note" data-testid={testId}>{children}</div>;
 }
 
 /** Red error text. */

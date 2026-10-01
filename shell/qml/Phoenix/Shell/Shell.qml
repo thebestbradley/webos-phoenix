@@ -329,6 +329,8 @@ FocusScope {
             return;
         if (notes.dashboardOpen)
             notes.dashboardOpen = false;
+        else if (siteMenu.open)
+            siteMenu.open = false;
         else if (systemMenu.open)
             systemMenu.open = false;
         else if (justType.open)
@@ -1179,8 +1181,22 @@ FocusScope {
                 filled: cards.maximized || launcher.open || justType.open
                 onSystemMenuRequested: if (!shell.locked && !shell.firstUse) systemMenu.open = !systemMenu.open
                 onAppMenuRequested: {
-                    if (cards.maximized && shell.source && typeof shell.source.appMenu === "function")
-                        shell.source.appMenu(cards.currentUid);
+                    if (!cards.maximized || !shell.source || typeof shell.source.appMenu !== "function")
+                        return;
+                    if (siteMenu.open) {
+                        siteMenu.open = false;
+                        return;
+                    }
+                    if (shell.source.appMenu(cards.currentUid) === false && typeof shell.source.siteState === "function") {
+                        // A site: the shell's menu (SiteMenu).
+                        var st = shell.source.siteState(cards.currentUid);
+                        if (st) {
+                            siteMenu.canGoBack = st.canGoBack;
+                            siteMenu.canGoForward = st.canGoForward;
+                            siteMenu.url = st.url;
+                            siteMenu.open = true;
+                        }
+                    }
                 }
             }
 
@@ -1205,6 +1221,17 @@ FocusScope {
                 // Locked: only its lock-screen alert shows (Notifications.locked).
                 screenHeight: ui.height
                 statusBarRightInset: statusBar.systemGroupWidth
+            }
+
+            SiteMenu {
+                id: siteMenu
+                anchors.fill: parent
+                onCloseRequested: siteMenu.open = false
+                onAction: (name) => shell.source.siteAction(cards.currentUid, name)
+                Connections {
+                    target: cards
+                    function onMaximizedChanged() { if (!cards.maximized) siteMenu.open = false; }
+                }
             }
 
             SystemMenu {

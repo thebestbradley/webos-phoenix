@@ -499,7 +499,7 @@ params match a launch point opens that launch point's card.
 `apps/settings` is one app with one launch point per pane, like the separate
 preference apps of webOS 2.x: Wi-Fi, Bluetooth, Airplane Mode, Screen & Lock,
 Sounds & Ringtones, Date & Time, Language & Region, Accessibility, Location
-Services, Emergency Info, Device Info, Backup, Updates, VPN.
+Services, Emergency Info, Device Info, Backup, Updates, VPN, Developer Mode.
 Launched without a page it lists them all. The launcher icons are drawn by
 `apps/settings/tools/render-icons.cjs` and the wallpapers by
 `tools/make-wallpapers.py` (CC0); Palm's were never open-sourced.
@@ -525,6 +525,7 @@ same request and reply shapes:
 | Accessibility | system service `get/setPreferences` `accessibility {reduceMotion, highContrast, monoAudio, captions}` (Phoenix key) | `luna-sysservice` `Src/PrefsFactory.cpp` (stores any key) |
 | Location Services | `com.webos.service.location` `getAllLocationHandlers`, `setState {Handler, state}`, `getLocationUpdates`, `getReverseLocation`; `org.webosphoenix.service.location` `getPermissions`, `setPermission`, `removePermission` (Phoenix) | see [Location](#location) |
 | Emergency Info | system service `get/setPreferences` `emergencyInfo` (Phoenix key); contacts from db8 `com.palm.person:1` | see [Emergency information](#emergency-information) |
+| Developer Mode | `com.webos.service.devmode` `getDevMode {subscribe}`, `setDevMode {status: "enabled" \| "disabled"}`; `com.palm.systemmanager` `getDeviceLockMode`, `matchDevicePasscode` | OSE's Developer Mode service (`com.webos.service.devmode`); see [Developer Mode](#developer-mode) |
 | VPN | `com.webos.service.vpn` (LuneOS): `getStatus` (connection states and credential prompts, subscribed), `getProfileList`, `getProfileDetails`, `getConnectionDetails`, `getAgents`, `getAgentFormFields`, `addProfile`, `updateProfile`, `deleteProfile`, `connect`, `disconnect`, `uiPromptResponse`, `cancelUiPrompt`; errors -1 to -10 as legacy `com.palm.vpn`. A `.ovpn` is written with `org.webosphoenix.filemanager` to `/media/internal/vpn` and used as `OpenVPN.ConfigFile`; a WireGuard `.conf` is split into its fields (`@phoenix/luna` `parseWireGuardConf`). The shell's VPN drawer gets the profiles from `systemStatus` `vpnProfiles` and sends `{vpnConnect}` / `{vpnDisconnect}` | `luneos-vpn-adapter` `src/vpn_service.c`, `vpn_errors.h`, `vpn_providers.c`, `files/formfields/*.json` (commit 40bdda2) |
 
 The simulated services keep their state in the runtime's store (shared by
@@ -539,8 +540,10 @@ Settings and the status bar stay in step:
 1. Whenever a radio, airplane mode, brightness, mute, rotation lock or the
    wallpaper changes, and when a page starts, the runtime posts
    `systemStatus` (`wifiEnabled`, `wifiConnected`, `wifiBars`, `bluetoothOn`,
-   `airplaneMode`, `brightness` 0-100, `rotationLocked`, `muted`,
-   `reduceMotion`, `wallpaperFile`).
+   `airplaneMode`, `brightness` 0-100, `volume` 0-100, `rotationLocked`,
+   `muted`, `reduceMotion`, `wallpaperFile`). The system menu has a volume
+   slider below brightness (a Phoenix addition, in the brightness row's
+   art); on a device it is `com.webos.service.audio` `master/setVolume`.
 2. `SimWindowSource` turns the wallpaper's device path into a file URL and
    emits `systemStatusReported(status)`; `sim.qml` applies it with
    `SimSystemStatus.applyAppStatus()` and sets the shell wallpaper.
@@ -1450,9 +1453,17 @@ which runs unchanged in the simulator:
     catalog signed;
   - a Classic: the App Museum's package (`lib/appmuseum.js`), or a Preware
     feed's (`lib/preware.js`, MD5 checked).
-  Every package is read first and refused when it runs install scripts,
-  has services, puts files outside its app, is native, or is a Mojo app
+  Every package is read first and refused when it is native or a Mojo app
   (`sources.json` without `depends.js`: Palm's Mojo was never released).
+  One that runs install scripts, has services or puts files outside its
+  app needs [Developer Mode](#developer-mode) (`NEEDS_DEVMODE`; the app
+  page then links to Settings > Developer Mode), and is installed with
+  `developerMode: true`.
+- **Screenshots**: the app page's strip leaves out the ones that do not
+  load (the webOS Archive lists some it no longer has); a tap opens them
+  full screen (`src/Gallery.tsx`), where they follow the finger and
+  settle on the next one after a quarter of the width or a flick, with
+  arrows, dots, the arrow keys, and the back gesture to close.
 - **Updates**: a daily activity reads the catalogs and posts one toast
   ("2 app updates in the Marketplace", opening Installed); Update All
   installs them. Apps removed in the launcher are forgotten.
@@ -1481,9 +1492,40 @@ reads the package and hands its app's files to the host, phoenix-sim's
 at `/usr/palm/applications/<id>/` like the built-in ones, are marked
 `removable`, and the launcher's Delete removes them (as webOS did); pages
 hear of it through `launchPointChanges`. An app whose "main" is an
-`https://` address (an installed web app) opens that site. A built-in
+`https://` address (an installed web app) opens that site; the site has
+no webOS app menu, so the shell draws one for it (`SiteMenu.qml`, in the
+system menu's art): Back, Forward, Reload, Copy Link and Open in Browser.
+The back gesture goes back in the site's history first. Android cards will
+get the same menu ([ANDROID.md](ANDROID.md)). A built-in
 app's id cannot be installed over. `build/siminstaller-test` tests
 SimInstaller.
+
+### Developer Mode
+
+Settings > Developer Mode (the last pane, under Advanced) turns on what
+ordinary apps may not do: packages that run install scripts, have
+background services or put files outside their app, and later the
+Terminal's sudo and SSH ([TERMINAL.md](TERMINAL.md) T4). Turning it on
+shows what it allows and asks for the device PIN or password
+(`matchDevicePasscode`); with no secure unlock set it asks for one first
+and offers Screen & Lock. Turning it off asks nothing. The state is OSE's
+`com.webos.service.devmode` (`getDevMode`, `setDevMode`); erasing the
+device turns it off.
+
+The installer takes such a package only when Developer Mode is on and the
+request says `developerMode: true` (`com.webos.appInstallService install`;
+the Marketplace sets it after its own check). In the simulator the app's
+files are installed and the rest is not run: the reply's `details.skipped`
+lists the install scripts, the services and the other files, and the
+Marketplace's app page says so. On a device the installer will need the
+privileged path OSE's Developer Mode uses for `ares-install` (services
+under `/media/developer`), which is M1 work.
+
+Why not ACL. HP's Android app player for the TouchPad ("ACL", Open Mobile)
+was a closed-source chroot of Android 2.3 with kernel modules built for
+the TouchPad's 2.6.35 kernel, sold per device: it cannot be redistributed
+or run on Phoenix. Its ideas carry over to the Android plan
+([ANDROID.md](ANDROID.md)), which uses Waydroid.
 
 ## System updates
 

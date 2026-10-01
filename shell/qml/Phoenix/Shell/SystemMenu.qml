@@ -342,6 +342,159 @@ Item {
         }
     }
 
+    // ---- BrightnessElement.qml / Slider.qml: a slider between two icons ---------------
+    // value 0..1; moved(v) as the user drags or taps the rail. Phoenix uses
+    // it for the volume too (SystemMenu.qml had brightness alone).
+    component SliderRow: Entry {
+        id: sliderRow
+        property real value: 0
+        property string sliderName: ""
+        property url lessSource: ""
+        property url moreSource: ""
+        // Icons drawn in place of art (the volume's speakers).
+        property Component lessIcon: null
+        property Component moreIcon: null
+        signal moved(real v)
+        selectable: false
+        Item {
+            id: brightnessContent
+            x: Theme.px(4)
+            width: parent.width - Theme.px(8)
+            height: parent.height
+            readonly property int margin: Theme.px(5)
+            readonly property int spacing: Theme.px(5)
+
+            Loader {
+                id: less
+                x: brightnessContent.margin
+                anchors.verticalCenter: parent.verticalCenter
+                sourceComponent: sliderRow.lessIcon ? sliderRow.lessIcon : artIcon
+                property url art: sliderRow.lessSource
+            }
+            Loader {
+                id: more
+                x: parent.width - width - brightnessContent.margin
+                anchors.verticalCenter: parent.verticalCenter
+                sourceComponent: sliderRow.moreIcon ? sliderRow.moreIcon : artIcon
+                property url art: sliderRow.moreSource
+            }
+            Component {
+                id: artIcon
+                Image {
+                    width: Theme.artWidth(source); height: Theme.artHeight(source)
+                    source: parent ? parent.art : ""
+                }
+            }
+
+            Item {
+                id: slider
+                objectName: sliderRow.sliderName
+                readonly property real value: Math.max(0, Math.min(1, sliderRow.value))
+                readonly property int railEdgeOffset: Theme.px(8)
+                readonly property int railBorderWidth: Theme.px(11)
+                readonly property int handleGrabTolerance: Theme.px(12)
+                readonly property int railTapTolerance: Theme.px(20)
+                readonly property real railChangeStep: 0.20
+                function setValue(v) { sliderRow.moved(Math.max(0, Math.min(1, v))); }
+                function valueForX(px) {
+                    return (px - railEdgeOffset) / (width - 2 * railEdgeOffset);
+                }
+
+                width: parent.width - (less.width + more.width + 2 * brightnessContent.margin + 2 * brightnessContent.spacing)
+                height: handle.height + handleGrabTolerance
+                x: (parent.width - width) / 2
+                y: (parent.height - height) / 2
+
+                BorderImage {
+                    width: parent.width
+                    height: Theme.artHeight(source)
+                    anchors.verticalCenter: parent.verticalCenter
+                    source: Theme.asset("statusBar/slider-track.png")
+                    border { left: Theme.artBorder(11, source); right: Theme.artBorder(11, source) }
+                }
+                BorderImage {
+                    width: Math.max((parent.width - handle.width / 2) * slider.value + handle.width / 2,
+                                    2 * slider.railBorderWidth)
+                    height: Theme.artHeight(source)
+                    anchors.verticalCenter: parent.verticalCenter
+                    source: Theme.asset("statusBar/slider-track-progress.png")
+                    border { left: Theme.artBorder(11, source); right: Theme.artBorder(11, source) }
+                }
+                Image {
+                    id: handle
+                    x: slider.railEdgeOffset + (slider.width - 2 * slider.railEdgeOffset) * slider.value - width / 2
+                    y: (slider.height - height) / 2
+                    width: Theme.artWidth(source); height: Theme.artHeight(source)
+                    source: Theme.asset("statusBar/slider-handle.png")
+                }
+
+                // Drag the handle, or tap the rail to step 20% towards
+                // the tap (Slider.qml:35-120). The menu does not
+                // scroll meanwhile (setFlickOverride).
+                MouseArea {
+                    id: sliderArea
+                    readonly property int xOffset: 2 * slider.handleGrabTolerance
+                    property bool onHandle: false
+                    property bool onBar: false
+                    property real downX: 0
+                    x: -xOffset
+                    width: parent.width + 2 * xOffset
+                    height: parent.height
+                    preventStealing: true
+                    onPressed: (mouse) => {
+                        var mx = mouse.x - xOffset;
+                        downX = mx;
+                        onHandle = mx > handle.x - slider.handleGrabTolerance
+                                   && mx < handle.x + handle.width + slider.handleGrabTolerance;
+                        onBar = !onHandle && mouse.y > handle.y && mouse.y < handle.y + handle.height;
+                    }
+                    onPositionChanged: (mouse) => {
+                        var mx = mouse.x - xOffset;
+                        if (onHandle)
+                            slider.setValue(slider.valueForX(mx));
+                        else if (onBar && Math.abs(mx - downX) > slider.railTapTolerance)
+                            onBar = false;
+                    }
+                    onReleased: (mouse) => {
+                        var mx = mouse.x - xOffset;
+                        if (onHandle && mx !== downX)
+                            slider.setValue(slider.valueForX(mx));
+                        else if (onBar)
+                            slider.setValue(slider.value + (mx < handle.x ? -1 : 1) * slider.railChangeStep);
+                        onHandle = onBar = false;
+                    }
+                    onCanceled: onHandle = onBar = false
+                }
+            }
+        }
+    }
+
+    // A speaker in the brightness icons' grey, drawn (the original art has no
+    // volume icons): waves 0 for quiet, 2 for loud.
+    component SpeakerIcon: Canvas {
+        property int waves: 0
+        width: Theme.px(24)
+        height: Theme.px(24)
+        onPaint: {
+            var c = getContext("2d"), u = width / 24;
+            c.reset();
+            c.fillStyle = "#d2d2d2";
+            c.strokeStyle = "#d2d2d2";
+            c.beginPath();
+            c.moveTo(4 * u, 9 * u); c.lineTo(8 * u, 9 * u); c.lineTo(13 * u, 4.5 * u);
+            c.lineTo(13 * u, 19.5 * u); c.lineTo(8 * u, 15 * u); c.lineTo(4 * u, 15 * u);
+            c.closePath();
+            c.fill();
+            c.lineWidth = 1.8 * u;
+            c.lineCap = "round";
+            for (var i = 1; i <= waves; ++i) {
+                c.beginPath();
+                c.arc(13 * u, 12 * u, (2.5 + 3.2 * i) * u, -Math.PI / 4, Math.PI / 4);
+                c.stroke();
+            }
+        }
+    }
+
     // ---- SystemMenu.qml ------------------------------------------------------------
 
     Item {
@@ -428,119 +581,25 @@ Item {
                     }
                     Divider {}
 
-                    // ---- BrightnessElement.qml / Slider.qml ----
-                    Entry {
-                        selectable: false
-                        Item {
-                            id: brightnessContent
-                            x: Theme.px(4)
-                            width: parent.width - Theme.px(8)
-                            height: parent.height
-                            readonly property int margin: Theme.px(5)
-                            readonly property int spacing: Theme.px(5)
+                    // ---- BrightnessElement.qml ----
+                    // 0..1 on the slider is the 10..100% the display allows.
+                    SliderRow {
+                        readonly property real floor: Theme.minimumBrightness
+                        sliderName: "systemMenuBrightness"
+                        lessSource: Theme.asset("statusBar/brightness-less.png")
+                        moreSource: Theme.asset("statusBar/brightness-more.png")
+                        value: menu.sys ? (menu.sys.brightness - floor) / (1 - floor) : 0
+                        onMoved: (v) => { if (menu.sys) menu.sys.brightness = floor + v * (1 - floor); }
+                    }
+                    Divider {}
 
-                            Image {
-                                id: less
-                                x: brightnessContent.margin
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: Theme.artWidth(source); height: Theme.artHeight(source)
-                                source: Theme.asset("statusBar/brightness-less.png")
-                            }
-                            Image {
-                                id: more
-                                x: parent.width - width - brightnessContent.margin
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: Theme.artWidth(source); height: Theme.artHeight(source)
-                                source: Theme.asset("statusBar/brightness-more.png")
-                            }
-
-                            Item {
-                                id: slider
-                                objectName: "systemMenuBrightness"
-                                // 0..1 on the slider is the 10..100% the display allows.
-                                readonly property real floor: Theme.minimumBrightness
-                                readonly property real value: menu.sys
-                                    ? Math.max(0, Math.min(1, (menu.sys.brightness - floor) / (1 - floor))) : 0
-                                readonly property int railEdgeOffset: Theme.px(8)
-                                readonly property int railBorderWidth: Theme.px(11)
-                                readonly property int handleGrabTolerance: Theme.px(12)
-                                readonly property int railTapTolerance: Theme.px(20)
-                                readonly property real railChangeStep: 0.20
-                                function setValue(v) {
-                                    if (menu.sys)
-                                        menu.sys.brightness = floor + Math.max(0, Math.min(1, v)) * (1 - floor);
-                                }
-                                function valueForX(px) {
-                                    return (px - railEdgeOffset) / (width - 2 * railEdgeOffset);
-                                }
-
-                                width: parent.width - (less.width + more.width + 2 * brightnessContent.margin + 2 * brightnessContent.spacing)
-                                height: handle.height + handleGrabTolerance
-                                x: (parent.width - width) / 2
-                                y: (parent.height - height) / 2
-
-                                BorderImage {
-                                    width: parent.width
-                                    height: Theme.artHeight(source)
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    source: Theme.asset("statusBar/slider-track.png")
-                                    border { left: Theme.artBorder(11, source); right: Theme.artBorder(11, source) }
-                                }
-                                BorderImage {
-                                    width: Math.max((parent.width - handle.width / 2) * slider.value + handle.width / 2,
-                                                    2 * slider.railBorderWidth)
-                                    height: Theme.artHeight(source)
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    source: Theme.asset("statusBar/slider-track-progress.png")
-                                    border { left: Theme.artBorder(11, source); right: Theme.artBorder(11, source) }
-                                }
-                                Image {
-                                    id: handle
-                                    x: slider.railEdgeOffset + (slider.width - 2 * slider.railEdgeOffset) * slider.value - width / 2
-                                    y: (slider.height - height) / 2
-                                    width: Theme.artWidth(source); height: Theme.artHeight(source)
-                                    source: Theme.asset("statusBar/slider-handle.png")
-                                }
-
-                                // Drag the handle, or tap the rail to step 20% towards
-                                // the tap (Slider.qml:35-120). The menu does not
-                                // scroll meanwhile (setFlickOverride).
-                                MouseArea {
-                                    id: sliderArea
-                                    readonly property int xOffset: 2 * slider.handleGrabTolerance
-                                    property bool onHandle: false
-                                    property bool onBar: false
-                                    property real downX: 0
-                                    x: -xOffset
-                                    width: parent.width + 2 * xOffset
-                                    height: parent.height
-                                    preventStealing: true
-                                    onPressed: (mouse) => {
-                                        var mx = mouse.x - xOffset;
-                                        downX = mx;
-                                        onHandle = mx > handle.x - slider.handleGrabTolerance
-                                                   && mx < handle.x + handle.width + slider.handleGrabTolerance;
-                                        onBar = !onHandle && mouse.y > handle.y && mouse.y < handle.y + handle.height;
-                                    }
-                                    onPositionChanged: (mouse) => {
-                                        var mx = mouse.x - xOffset;
-                                        if (onHandle)
-                                            slider.setValue(slider.valueForX(mx));
-                                        else if (onBar && Math.abs(mx - downX) > slider.railTapTolerance)
-                                            onBar = false;
-                                    }
-                                    onReleased: (mouse) => {
-                                        var mx = mouse.x - xOffset;
-                                        if (onHandle && mx !== downX)
-                                            slider.setValue(slider.valueForX(mx));
-                                        else if (onBar)
-                                            slider.setValue(slider.value + (mx < handle.x ? -1 : 1) * slider.railChangeStep);
-                                        onHandle = onBar = false;
-                                    }
-                                    onCanceled: onHandle = onBar = false
-                                }
-                            }
-                        }
+                    // ---- Volume (Phoenix): the master volume, below brightness ----
+                    SliderRow {
+                        sliderName: "systemMenuVolume"
+                        lessIcon: Component { SpeakerIcon { waves: 0 } }
+                        moreIcon: Component { SpeakerIcon { waves: 2 } }
+                        value: menu.sys && menu.sys.volume !== undefined ? menu.sys.volume / 100 : 0
+                        onMoved: (v) => { if (menu.sys) menu.sys.volume = Math.round(v * 100); }
                     }
                     Divider {}
 

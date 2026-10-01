@@ -251,6 +251,11 @@ QtObject {
     // A trackpad swipe ends when its events (momentum included) stop for this
     // long. Phoenix: webOS had no trackpad.
     readonly property int wheelGestureEndDelay: 150
+    // A trackpad swipe settles quicker than a finger's release: the content
+    // has already followed the fingers most of the way (Phoenix).
+    readonly property int wheelSettleDuration: motion(180)
+    // Content pixels per ms above which a lifted swipe goes on to the next stack.
+    readonly property real wheelFlickVelocity: 0.5     // as a finger's flick (CardView release)
     readonly property int tapRadius: px(25)                          // conf/luna.conf:68 TapRadiusMax
 
     // ---- Quick launch / launcher -------------------------------------------

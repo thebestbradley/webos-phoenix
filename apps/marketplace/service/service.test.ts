@@ -30,9 +30,11 @@ const ipk = ipkLib.createIpk({ gzip });
 
 function makeService(sources: Any[]) {
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-mkt-"));
-    const world = { state: null as Any, installed: {} as Record<string, Any>, installs: [] as Any[], toasts: [] as Any[], fail: null as string | null };
+    const world = { state: null as Any, installed: {} as Record<string, Any>, installs: [] as Any[], toasts: [] as Any[], fail: null as string | null,
+                    devMode: false };
     const luna = {
         call: async (uri: string, params: Any) => {
+            if (uri.endsWith("/getDevMode")) return { returnValue: true, status: world.devMode ? "enabled" : "disabled" };
             if (uri.endsWith("/listLaunchPoints")) return { returnValue: true, launchPoints: Object.keys(world.installed).map((id) => ({ id, removable: true })) };
             if (uri.endsWith("/createToast")) { world.toasts.push(params); return { returnValue: true }; }
             return { returnValue: true };
@@ -43,7 +45,7 @@ function makeService(sources: Any[]) {
                 if (uri.endsWith("/install")) {
                     const bytes = new Uint8Array(fs.readFileSync(params.ipkUrl));
                     const pkg = await ipk.read(bytes);
-                    world.installs.push({ id: params.id, pkg });
+                    world.installs.push({ id: params.id, pkg, developerMode: !!params.developerMode });
                     if (world.fail) return onReply({ returnValue: true, id: params.id, statusValue: 24, details: { state: "install failed", reason: world.fail } });
                     world.installed[params.id] = pkg;
                     onReply({ returnValue: true, id: params.id, statusValue: 13, details: { state: "installing" } });
@@ -226,7 +228,7 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         const { service } = makeService(defaults());
         await service.setSource({ id: "precentral", enabled: true });
         const all = (await service.browse({ section: "classics" })).apps.filter((a: Any) => a.kind === "preware");
-        expect(all.map((a: Any) => [a.id, a.version])).toEqual([["org.example.homebrew", "0.9.1"], ["org.example.nativelib", "1.0"]]);
+        expect(all.map((a: Any) => [a.id, a.version])).toEqual([["org.example.homebrew", "0.9.1"], ["org.example.nativelib", "1.0"], ["org.example.hooked", "2.0"]]);
         expect(all[0]).toMatchObject({ description: "Line one\nLine two", license: "GPL-2.0", developer: { name: "Homebrewer" } });
         expect(all[1].verdict).toMatchObject({ ok: false });
         expect(await service.install({ sourceId: "precentral", id: "org.example.nativelib" })).toMatchObject({ errorCode: "UNSUPPORTED" });
@@ -234,5 +236,19 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         feed.corrupt();
         await service.remove({ id: "org.example.homebrew" });
         expect(await service.install({ sourceId: "precentral", id: "org.example.homebrew" })).toMatchObject({ errorCode: "BAD_PACKAGE" });
+    });
+
+    it("installs a package with install scripts and services only in Developer Mode, and says so to the installer", async () => {
+        const { service, world } = makeService(defaults());
+        await service.setSource({ id: "precentral", enabled: true });
+        await service.refresh({ id: "precentral" });
+        const refused = await service.install({ sourceId: "precentral", id: "org.example.hooked" });
+        expect(refused).toMatchObject({ errorCode: "NEEDS_DEVMODE" });
+        expect(refused.errorText).toMatch(/install scripts.*Developer Mode/);
+        expect(world.installs).toHaveLength(0);
+        world.devMode = true;
+        expect(await service.install({ sourceId: "precentral", id: "org.example.hooked" })).toMatchObject({ returnValue: true, appId: "org.example.hooked" });
+        expect(world.installs.at(-1)).toMatchObject({ id: "org.example.hooked", developerMode: true });
+        expect(world.installs.at(-1).pkg.scripts).toEqual(["postinst"]);
     });
 });

@@ -393,9 +393,16 @@ var phoenixSampleData = function (now) {
     mail({ ago: 60 * 69, read: true, folder: "sent", to: ["Daniel Okafor", "dan.okafor@example.com"], subject: "Re: Photos from the hike",
            summary: "These are fantastic, thanks for sharing! The one at the summit is my favourite.", body: "reply" });
 
+    // The accounts' credentials, as the accounts service keeps them once an
+    // account is set up (a device never has an account without them;
+    // luna-systemui's "Accounts: Action Needed" says so). Demo values.
+    var credentials = {};
+    credentials[MAIL_ACCOUNT] = { common: { password: "phoenix-demo" } };
+
     return {
-        version: 1,
+        version: 2,
         profile: owner,
-        objects: objects
+        objects: objects,
+        credentials: credentials
     };
 };

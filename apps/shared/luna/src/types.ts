@@ -316,4 +316,7 @@ export interface LunaApi {
     "luna://com.palm.systemmanager/getLockStatus": { params: Sub; result: { locked: boolean } };
     "luna://com.palm.systemmanager/setDevicePasscode": { params: { lockMode: LockMode; passCode?: string; oldPasscode?: string }; result: Empty };
     "luna://com.palm.systemmanager/matchDevicePasscode": { params: { passCode: string }; result: { succeeded: boolean } };
+    // Developer Mode (OSE)
+    "luna://com.webos.service.devmode/getDevMode": { params: Sub; result: { status: "enabled" | "disabled" } };
+    "luna://com.webos.service.devmode/setDevMode": { params: { status: "enabled" | "disabled" }; result: { status: "enabled" | "disabled" } };
 }

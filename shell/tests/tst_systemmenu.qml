@@ -113,6 +113,9 @@ Item {
 
         function test_muteLabels() {
             var row = findChild(menu, "systemMenuMute");
+            // The last row: below the fold on a phone (the menu scrolls).
+            var flick = findChild(menu, "systemMenuFlickable");
+            flick.contentY = Math.max(0, flick.contentHeight - flick.height);
             compare(row.label, "Mute Sound");
             mouseClick(row);
             verify(status.muted);
@@ -133,6 +136,23 @@ Item {
             // A tap on the rail steps 20% towards it.
             mouseClick(slider, slider.width - 10, slider.height / 2);
             fuzzyCompare(status.brightness, 0.10 + 0.2 * 0.9, 0.001);
+        }
+
+        // Phoenix: the volume, below brightness: the master volume, 0-100.
+        function test_volumeSlider() {
+            var slider = findChild(menu, "systemMenuVolume");
+            verify(slider, "a volume slider");
+            var bright = findChild(menu, "systemMenuBrightness");
+            verify(slider.mapToItem(menu, 0, 0).y > bright.mapToItem(menu, 0, 0).y, "below brightness");
+            fuzzyCompare(slider.value, status.volume / 100, 0.001);
+            var hx = 8 + (slider.width - 16) * slider.value;
+            mousePress(slider, hx, slider.height / 2);
+            mouseMove(slider, hx + 30, slider.height / 2);
+            mouseMove(slider, slider.width + 40, slider.height / 2);
+            mouseRelease(slider, slider.width + 40, slider.height / 2);
+            compare(status.volume, 100);
+            mouseClick(slider, 10, slider.height / 2);
+            compare(status.volume, 80);
         }
 
         function test_wifiDrawer() {

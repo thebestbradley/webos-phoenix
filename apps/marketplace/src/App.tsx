@@ -24,6 +24,7 @@ import {
     type CatalogSource, type InstalledApp, type InstallProgress, type MarketApp, type PendingKey, type Section,
 } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
+import { Screenshots } from "./Gallery";
 import { AppMenu, BackProvider, Button, Dialog, ErrorText, Group, Note, Row, Spinner, TextField, ToggleButton, useBack } from "@phoenix/ui";
 
 const errorText = (e: unknown) => (e instanceof LunaError ? e.errorText : e instanceof Error ? e.message : String(e));
@@ -273,9 +274,14 @@ function AppPage({ sourceId, id, seed, onRemoved }: { sourceId: string; id: stri
             </div>
             {app.verdict && !app.verdict.ok && <Note>{app.verdict.text}</Note>}
             {error && <ErrorText testId="install-error">{error}</ErrorText>}
-            {app.screenshots.length > 0 && (
-                <div className="mk-shots">{app.screenshots.map((s) => <img key={s} src={s} alt="" loading="lazy" />)}</div>
+            {progress?.errorCode === "NEEDS_DEVMODE" && (
+                <Button variant="dark" data-testid="open-devmode"
+                        onClick={() => void apps.launch("org.webosphoenix.settings", { page: "devmode" })}>Developer Mode Settings</Button>
             )}
+            {progress?.state === "installed" && progress.skipped && progress.skipped.length > 0 && (
+                <Note testId="install-skipped">Installed without its {progress.skipped.join(" and ")}: this device cannot run them yet.</Note>
+            )}
+            <Screenshots urls={app.screenshots} />
             {(app.description || app.summary) && <p className="mk-desc">{app.description || app.summary}</p>}
             <Group label="Details">
                 <Row title="Kind" value={kindText(app)} />

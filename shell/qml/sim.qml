@@ -137,6 +137,7 @@ Item {
         function onBrightnessChanged() { root.statusChanged("brightness"); }
         function onRotationLockedChanged() { root.statusChanged("rotationLocked"); }
         function onMutedChanged() { root.statusChanged("muted"); }
+        function onVolumeChanged() { root.statusChanged("volume"); }
     }
     // The lock screen, for the apps (com.palm.systemmanager getLockStatus):
     // the phone answers a ringing call when the user unlocks.

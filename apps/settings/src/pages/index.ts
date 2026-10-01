@@ -17,6 +17,7 @@ import { LocationPage } from "./Location";
 import { EmergencyPage } from "./Emergency";
 import { AccessibilityPage } from "./Accessibility";
 import { TextAssistPage } from "./TextAssist";
+import { DevModePage } from "./DevMode";
 
 export interface PageInfo {
     title: string;
@@ -42,6 +43,7 @@ export const PAGES = {
     deviceinfo: { title: "Device Info", icon: "icons/deviceinfo.png", component: DeviceInfoPage },
     backup: { title: "Backup", icon: "icons/backup.png", component: BackupPage },
     updates: { title: "Updates", icon: "icons/updates.png", component: UpdatesPage },
+    devmode: { title: "Developer Mode", icon: "icons/devmode.png", component: DevModePage },
 } satisfies Record<string, PageInfo>;
 
 export type PageId = keyof typeof PAGES;

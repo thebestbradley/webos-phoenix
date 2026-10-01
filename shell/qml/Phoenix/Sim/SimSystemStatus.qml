@@ -286,6 +286,7 @@ QtObject {
         case "brightness": return { brightness: Math.round(brightness * 100) };
         case "rotationLocked": return { rotationLocked: rotationLocked };
         case "muted": return { muted: muted };
+        case "volume": return { volume: volume };
         }
         return {};
     }

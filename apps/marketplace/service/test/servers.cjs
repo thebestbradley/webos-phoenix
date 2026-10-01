@@ -75,7 +75,8 @@ function webApp(id, version, extra) {
         { path: dir + "index.html", data: `<!doctype html><title>${id}</title><h1>${id} ${version}</h1>` },
         { path: dir + "icon.png", data: new Uint8Array(png(64, [40, 120, 200])) }
     ].concat((extra && extra.files) || []);
-    return ipk.write({ control: { Package: id, Version: version, Architecture: (extra && extra.arch) || "all", Description: id }, files });
+    return ipk.write({ control: { Package: id, Version: version, Architecture: (extra && extra.arch) || "all", Description: id }, files,
+                       scripts: extra && extra.scripts });
 }
 
 // ---- The catalog service ---------------------------------------------------------
@@ -171,7 +172,11 @@ async function startMuseum() {
           category: "Utilities", Pre3: true, TouchPad: false, LuneOS: false, Adult: false }
     ];
     const details = {
-        9001: { publicApplicationId: "com.example.classicnotes", version: "1.2.0", description: "Takes notes.", filename: "com.example.classicnotes_1.2.0_all.ipk", appSize: enyo.length, images: {} },
+        9001: { publicApplicationId: "com.example.classicnotes", version: "1.2.0", description: "Takes notes.", filename: "com.example.classicnotes_1.2.0_all.ipk", appSize: enyo.length,
+                // Three listed, one gone (the real archive has such: Quickoffice's).
+                images: [{ screenshot: "9001/images/1/L/a.png", thumbnail: "9001/images/1/L/a.png" },
+                         { screenshot: "9001/images/2/L/gone.png", thumbnail: "9001/images/2/L/gone.png" },
+                         { screenshot: "9001/images/3/L/b.png", thumbnail: "9001/images/3/L/b.png" }] },
         9002: { publicApplicationId: "com.example.mojoclock", version: "2.0.1", description: "Tells time.", filename: "com.example.mojoclock_2.0.1_all.ipk", appSize: mojo.length, images: {} }
     };
     const counted = [];
@@ -186,6 +191,7 @@ async function startMuseum() {
         if (u.pathname === "/WebService/countAppDownload.php") { counted.push(u.searchParams.get("appid")); return json({ ok: true }); }
         if (u.pathname === "/packages/com.example.classicnotes_1.2.0_all.ipk") { res.writeHead(200); res.end(Buffer.from(enyo)); return; }
         if (u.pathname === "/packages/com.example.mojoclock_2.0.1_all.ipk") { res.writeHead(200); res.end(Buffer.from(mojo)); return; }
+        if (u.pathname.includes("/gone.png")) { res.writeHead(404); res.end(); return; }
         if (u.pathname.startsWith("/AppImages/")) { res.writeHead(200, { "Content-Type": "image/png" }); res.end(png(64, [90, 90, 160])); return; }
         res.writeHead(404); res.end();
     });
@@ -198,6 +204,10 @@ async function startMuseum() {
 async function startFeed() {
     const web = Buffer.from(await webApp("org.example.homebrew", "0.9.1", { title: "Homebrew Thing" }));
     const native = Buffer.from(await webApp("org.example.nativelib", "1.0", { arch: "armv7" }));
+    // A homebrew app with a service and a postinst, as many Preware packages are.
+    const hooked = Buffer.from(await webApp("org.example.hooked", "2.0", {
+        title: "Hooked", scripts: { postinst: "#!/bin/sh\necho hi\n" },
+        files: [{ path: "usr/palm/services/org.example.hooked.service/service.js", data: "// a 2011 service" }] }));
     const md5 = (b) => crypto.createHash("md5").update(b).digest("hex");
     const para = (id, v, arch, file, b, title) => [
         `Package: ${id}`, `Version: ${v}`, "Section: misc", `Architecture: ${arch}`, `MD5Sum: ${md5(b)}`, `Size: ${b.length}`, `Filename: ${file}`,
@@ -205,12 +215,14 @@ async function startFeed() {
         `Source: {"Title": "${title}", "Category": "Utilities", "FullDescription": "Line one\\nLine two", "License": "GPL-2.0"}`].join("\n");
     let packages = [para("org.example.homebrew", "0.9.0", "all", "old.ipk", web, "Homebrew Thing"),
                     para("org.example.homebrew", "0.9.1", "all", "org.example.homebrew_0.9.1_all.ipk", web, "Homebrew Thing"),
-                    para("org.example.nativelib", "1.0", "armv7", "org.example.nativelib_1.0_armv7.ipk", native, "Native Lib")].join("\n\n") + "\n";
+                    para("org.example.nativelib", "1.0", "armv7", "org.example.nativelib_1.0_armv7.ipk", native, "Native Lib"),
+                    para("org.example.hooked", "2.0", "all", "org.example.hooked_2.0_all.ipk", hooked, "Hooked")].join("\n\n") + "\n";
     let serveWeb = web;
     const f = await listen((req, res) => {
         const u = req.url.split("?")[0];
         if (u === "/feed/Packages") { res.writeHead(200); res.end(packages); return; }
         if (u === "/feed/org.example.homebrew_0.9.1_all.ipk") { res.writeHead(200); res.end(serveWeb); return; }
+        if (u === "/feed/org.example.hooked_2.0_all.ipk") { res.writeHead(200); res.end(hooked); return; }
         res.writeHead(404); res.end();
     });
     return Object.assign(f, { feedUrl: f.url + "/feed/", corrupt: () => { serveWeb = Buffer.concat([web, Buffer.from("x")]); } });

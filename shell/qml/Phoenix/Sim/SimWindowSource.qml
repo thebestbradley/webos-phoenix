@@ -878,12 +878,34 @@ Item {
     }
 
     // The app menu of the app in card uid (the status bar's app name).
+    // false: a site, which has none; the shell draws one (siteState, siteAction).
     function appMenu(uid) {
         var win = _windows[uid];
+        if (win && win.site)
+            return false;
         if (win && win.runScript)
             win.runScript("window.__phoenixRuntime && __phoenixRuntime.openAppMenu && __phoenixRuntime.openAppMenu()");
         else if (win && win.appMenuRequested)
             win.appMenuRequested();
+        return true;
+    }
+
+    // A site's navigation, for the shell's SiteMenu: null for other apps.
+    function siteState(uid) {
+        var win = _windows[uid];
+        if (!win || !win.site)
+            return null;
+        return { canGoBack: win.view.canGoBack, canGoForward: win.view.canGoForward, url: String(win.view.url) };
+    }
+    // "back", "forward", "reload", or "browser" (the page in the browser).
+    function siteAction(uid, name) {
+        var win = _windows[uid];
+        if (!win || !win.site)
+            return;
+        if (name === "back") win.view.goBack();
+        else if (name === "forward") win.view.goForward();
+        else if (name === "reload") win.view.reload();
+        else if (name === "browser") openUrl(String(win.view.url));
     }
 
     // ---- Launcher --------------------------------------------------------------------

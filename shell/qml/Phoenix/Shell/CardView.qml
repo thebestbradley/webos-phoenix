@@ -206,9 +206,11 @@ Item {
         return -1;
     }
 
-    function slideTo(groupIndex) {
+    // duration: the trackpad's quicker settle (Theme.wheelSettleDuration).
+    function slideTo(groupIndex, duration) {
         slideAnim.stop();
         slideAnim.to = Math.max(0, Math.min(groupCount - 1, groupIndex));
+        slideAnim.duration = duration !== undefined ? duration : Theme.cardSlideDuration;
         slideAnim.start();
     }
 
@@ -888,7 +890,11 @@ Item {
     // screen: sideways it pans between stacks (and through a long stack's
     // fan first), up it throws the card under the pointer away. The swipe
     // follows the content the way the system scrolls (natural scrolling or
-    // not), and its momentum carries it on; it ends when the events stop.
+    // not). It ends when the fingers lift (the scroll phase says so, or the
+    // events stop): it then snaps at once, as a finger's release does, to
+    // the stack it was heading for (a quick swipe goes on to the next one),
+    // and the momentum events the system sends after the fingers lift are
+    // ignored, so the snap is not pulled back and forth.
     // A mouse wheel moves one stack per notch.
     MouseArea {
         id: wheel
@@ -904,12 +910,21 @@ Item {
         property real startPosition: 0
         property real startFan: 0
         property real lastTime: 0
+        property real vx: 0
         property real vy: 0
+        // After a swipe: the momentum that follows it is ignored until the
+        // events stop or a new swipe begins.
+        property bool settling: false
 
         Timer {
             id: wheelEnd
             interval: Theme.wheelGestureEndDelay
             onTriggered: wheel.finish()
+        }
+        Timer {
+            id: settleEnd
+            interval: Theme.wheelGestureEndDelay
+            onTriggered: wheel.settling = false
         }
 
         onWheel: (e) => {
@@ -917,6 +932,20 @@ Item {
                 e.accepted = false;
                 return;
             }
+            // Fingers down again: a new swipe, whatever is still settling.
+            if (e.phase === Qt.ScrollBegin)
+                settling = false;
+            if (settling) {
+                settleEnd.restart();
+                return;
+            }
+            // The fingers lifted: momentum (or the end) follows.
+            if (axis !== "" && (e.phase === Qt.ScrollMomentum || e.phase === Qt.ScrollEnd)) {
+                finish();
+                return;
+            }
+            if (e.phase === Qt.ScrollMomentum || e.phase === Qt.ScrollEnd)
+                return;
             if (e.pixelDelta.x === 0 && e.pixelDelta.y === 0) {
                 // A mouse wheel: one stack per notch.
                 var d = Math.abs(e.angleDelta.x) > Math.abs(e.angleDelta.y) ? e.angleDelta.x : e.angleDelta.y;
@@ -932,8 +961,11 @@ Item {
         function swipe(x, y, dx, dy) {
             wheelEnd.restart();
             var now = Date.now();
-            if (lastTime > 0 && now > lastTime)
+            if (lastTime > 0 && now > lastTime) {
+                // Smoothed: trackpad events come unevenly.
+                vx = 0.6 * dx / (now - lastTime) + 0.4 * vx;
                 vy = dy / (now - lastTime);
+            }
             lastTime = now;
             sumX += dx;
             sumY += dy;
@@ -970,23 +1002,47 @@ Item {
             }
         }
 
-        // The events stopped: settle as a finger's release does.
+        // The fingers lifted: settle as a finger's release does, at once.
         function finish() {
             wheelEnd.stop();
             if (axis === "h") {
-                view.slideTo(Math.round(view.position));
+                view.slideTo(settleTarget(), Theme.wheelSettleDuration);
             } else if (axis === "v") {
                 var c = view.cardItem(uid);
                 if (c)
                     view.animateFlick(c, touch.shouldClose(c, Math.min(vy, 0))
                                          || c.flickOffset < -view.windowHeight * view.activeScale / 3);
             }
+            if (axis !== "") {
+                settling = true;
+                settleEnd.restart();
+            }
             axis = "";
             uid = "";
             sumX = 0;
             sumY = 0;
             lastTime = 0;
+            vx = 0;
             vy = 0;
+        }
+
+        // Where a sideways swipe settles: a quick one goes on to the next
+        // stack (as a finger's flick); otherwise the stack it was heading for
+        // once it is past a third of the way there, not the nearest one, so a
+        // swipe that stops between two cards does not drift back.
+        function settleTarget() {
+            var from = Math.round(startPosition), pos = view.position;
+            var dir = pos > startPosition + 0.001 ? 1 : pos < startPosition - 0.001 ? -1 : 0;
+            var target;
+            if (Math.abs(vx) > Theme.wheelFlickVelocity && Math.round(pos) === from)
+                target = from + (vx < 0 ? 1 : -1);
+            else if (dir > 0)
+                target = Math.floor(pos) + (pos - Math.floor(pos) > 0.35 ? 1 : 0);
+            else if (dir < 0)
+                target = Math.ceil(pos) - (Math.ceil(pos) - pos > 0.35 ? 1 : 0);
+            else
+                target = Math.round(pos);
+            return target;
         }
     }
 

@@ -37,7 +37,8 @@ QtObject {
     // System sounds (SystemSounds.qml): volumes 0..100, "System Sounds",
     // the keyboard's clicks and the tones.
     // STATUS: placeholders; M1 reads them from com.webos.service.audio
-    // (master/getVolume, getInputVolume) and the system service's
+    // (master/getVolume, getInputVolume; the system menu's volume slider
+    // sets `volume`, which M1 sends as master/setVolume) and the system service's
     // preferences (systemSounds, x_palm_virtualkeyboard_prefs, ringtone,
     // alerttone, notificationtone).
     property int volume: 100

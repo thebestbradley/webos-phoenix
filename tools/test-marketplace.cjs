@@ -59,6 +59,7 @@ async function main() {
                     featured: true, manifest: site.manifestUrl, origin: site.url, icon: site.url + "/app/icon-192.png" }]
     });
     const museum = await servers.startMuseum();
+    const feed = await servers.startFeed();
     const port = await servers.freePort();
     const origin = `http://127.0.0.1:${port}`;
     const installedDir = fs.mkdtempSync(path.join(require("os").tmpdir(), "phoenix-installed-"));
@@ -186,6 +187,32 @@ async function main() {
         await page.waitForSelector("[data-testid='app-appmuseum.9001']", { timeout: 15000 });
         await shot("8-classics");
         await page.click("[data-testid='app-appmuseum.9001']");
+
+        // ---- Screenshots: full screen, swiped through; a missing one left out -----------------------
+        await page.waitForSelector("[data-testid=screenshot-1]");
+        await page.waitForTimeout(500);
+        check(await page.locator("[data-testid=screenshots] img").count() === 2, "screenshots: the one the archive lacks is left out");
+        await page.click("[data-testid=screenshot-0]");
+        await page.waitForSelector("[data-testid=screenshot-viewer]");
+        const viewer = await page.locator("[data-testid=screenshot-viewer]").boundingBox();
+        check(viewer.width === viewport.width && viewer.height === viewport.height, "a tapped screenshot opens full screen");
+        const trackAt = () => page.evaluate(() => getComputedStyle(document.querySelector("[data-testid=viewer-track]")).transform);
+        const startT = await trackAt();
+        await page.mouse.move(viewport.width * 0.8, viewport.height / 2);
+        await page.mouse.down();
+        for (let i = 1; i <= 8; ++i) await page.mouse.move(viewport.width * (0.8 - i * 0.07), viewport.height / 2);
+        await page.mouse.up();
+        await page.waitForTimeout(400);
+        check(await trackAt() !== startT && await page.locator("[data-testid=viewer-next]").count() === 0,
+              "swiping shows the next screenshot");
+        await shot("8b-screenshot-viewer");
+        await page.click("[data-testid=viewer-prev]");
+        await page.waitForTimeout(400);
+        check(await trackAt() === startT, "the arrow goes back to the first");
+        await page.keyboard.press("Escape");
+        await page.waitForSelector("[data-testid=screenshot-viewer]", { state: "detached" });
+        check(await page.locator("[data-testid=install-app]").count() === 1, "the back gesture closes it, on the app's page");
+
         await page.click("[data-testid=install-app]");
         await page.waitForSelector("[data-testid=open-app]", { timeout: 20000 });
         check((await apps()).some((a) => a.id === "com.example.classicnotes"), "a Classic from the App Museum installs");
@@ -195,6 +222,32 @@ async function main() {
         await page.waitForSelector("[data-testid=install-error]", { timeout: 20000 });
         check(/Mojo/.test(await page.textContent("[data-testid=install-error]")), "a Mojo app is refused, saying why");
         await shot("9-mojo");
+
+        // ---- Install scripts and services need Developer Mode -------------------------------------------------
+        await page.evaluate((u) => {
+            const st = JSON.parse(localStorage.getItem("phoenix:marketplace:state"));
+            Object.assign(st.sources.find((s) => s.id === "precentral"), { url: u, enabled: true });
+            localStorage.setItem("phoenix:marketplace:state", JSON.stringify(st));
+        }, feed.feedUrl);
+        await luna(P + "refresh", { id: "precentral" });
+        const hooked = { sourceId: "precentral", id: "org.example.hooked" };
+        await page.goto(appUrl("org.webosphoenix.marketplace", hooked));
+        await page.click("[data-testid=install-app]", { timeout: 15000 });
+        await page.waitForSelector("[data-testid=install-error]", { timeout: 20000 });
+        check(/Developer Mode/.test(await page.textContent("[data-testid=install-error]")) && await page.locator("[data-testid=open-devmode]").count() === 1,
+              "a package with install scripts needs Developer Mode, and links to it");
+        check(!(await apps()).some((a) => a.id === "org.example.hooked"), "... and is not installed");
+        await shot("9b-needs-devmode");
+        await luna("luna://com.webos.service.devmode/setDevMode", { status: "enabled" });
+        await page.goto(appUrl("org.webosphoenix.marketplace", hooked));
+        await page.click("[data-testid=install-app]", { timeout: 15000 });
+        await page.waitForSelector("[data-testid=install-skipped]", { timeout: 20000 });
+        const skippedText = await page.textContent("[data-testid=install-skipped]");
+        check(/install scripts \(postinst\)/.test(skippedText) && /services \(org\.example\.hooked\.service\)/.test(skippedText),
+              "in Developer Mode it installs; the simulator says it left out the scripts and the service (" + skippedText + ")");
+        check((await apps()).some((a) => a.id === "org.example.hooked"), "... and the app is on the device");
+        await shot("9c-devmode-installed");
+        await luna("luna://com.webos.service.devmode/setDevMode", { status: "disabled" });
 
         // ---- Deleting an installed app in the launcher (the shell asks the installer) ---------------------------
         const removed = await luna("luna://com.webos.appInstallService/remove", { id: "com.example.classicnotes" });
@@ -207,7 +260,7 @@ async function main() {
     } finally {
         if (browser) await browser.close();
         rootfs.kill();
-        await Promise.all([catalog.stop(), site.close(), museum.close()]);
+        await Promise.all([catalog.stop(), site.close(), museum.close(), feed.close()]);
         fs.rmSync(installedDir, { recursive: true, force: true });
     }
     console.log(failures ? `\n${failures} check(s) failed` : `\nAll checks passed. Screenshots in ${outDir}`);

@@ -244,6 +244,19 @@ export const deviceLock = {
     },
 };
 
+// ---- Developer Mode: com.webos.service.devmode (OSE) ---------------------------------
+
+export const devMode = {
+    /** getDevMode {subscribe}: whether Developer Mode is on. */
+    watch(cb: (on: boolean) => void, onError?: OnError): Subscription {
+        return subscribe("luna://com.webos.service.devmode/getDevMode", {}, (r) => cb(r.status === "enabled"), onError);
+    },
+    /** setDevMode {status}: Settings asks for the device passcode before turning it on. */
+    set(on: boolean) {
+        return call("luna://com.webos.service.devmode/setDevMode", { status: on ? "enabled" : "disabled" });
+    },
+};
+
 // ---- Applications: com.webos.applicationManager (SAM) ---------------------------------
 
 export const apps = {
