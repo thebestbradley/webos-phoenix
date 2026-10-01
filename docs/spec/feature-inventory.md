@@ -233,9 +233,9 @@ none has run on a device yet. See `docs/APP-RUNTIME.md`.
 
 - [x] Wi-Fi (`com.palm.app.wifi`): on/off, network list, join with password, join other network, forget
 - [x] Bluetooth (`com.palm.app.bluetooth`): on/off, search, pair, forget (no per-profile connect yet)
-- [ ] VPN (`com.palm.app.vpn`)
+- [x] VPN (`com.palm.app.vpn`): profiles of six kinds (LuneOS `com.webos.service.vpn`), import of WireGuard and OpenVPN files, connect with sign-in, edit, delete
 - [x] Date & Time (`com.palm.app.dateandtime`): 12/24 hour, network time and time zone, zone picker, manual date/time
-- [x] Device Info (`com.palm.app.deviceinfo`): device, software, battery, storage, memory, licenses, reset options
+- [x] Device Info (`com.palm.app.deviceinfo`): device, software, phone (number, carrier, network, IMEI/MEID, SIM), battery, storage, memory, licenses, reset options (Reset All Settings, Erase Apps & Data, Full Erase)
 - [ ] Exhibition preferences (`com.palm.app.exhibitionpreferences`)
 - [ ] Just Type / search preferences (`com.palm.app.searchpreferences`)
 - [ ] Location Services (`com.palm.app.location`)

@@ -591,6 +591,25 @@ Item {
             tryVerify(function() { return !plane.visible; }, 2500);
         }
 
+        // The VPN icon while a profile is connected, between rotation lock
+        // and Wi-Fi (StatusBarInfo.cpp:255-259).
+        function test_vpnIndicator() {
+            var sys = shell.system;
+            var vpn = findChild(shell, "vpnIcon");
+            verify(!vpn.visible);
+            verify(/statusBar\/vpn-status-icon\.png$/.test(vpn.source));
+            sys.vpnProfiles = [{ name: "Office", state: "connected" }];
+            verify(vpn.visible);
+            tryCompare(vpn, "progress", 1, 2500);
+            sys.rotationLocked = true;
+            tryCompare(findChild(shell, "rotationLockIcon"), "progress", 1, 2500);
+            verify(vpn.x > findChild(shell, "rotationLockIcon").x);
+            verify(vpn.x < findChild(shell, "wifiIcon").x);
+            sys.rotationLocked = false;
+            sys.vpnProfiles = [{ name: "Office", state: "disconnected" }];
+            tryVerify(function() { return !vpn.visible; }, 2500);
+        }
+
         // Back: the dashboard, then the menu, then the launcher
         // (SystemUiController.cpp:424-443).
         function test_backOrder() {

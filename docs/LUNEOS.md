@@ -299,7 +299,8 @@ right-hand column compares with [HARDWARE.md](HARDWARE.md).
 | Haptics | `luna-haptics` | Apache-2.0 | Reuse instead of a feedbackd bridge on Halium |
 | Keyboard | webos-keyboard (Maliit, LGPL-3.0 plus BSD, CC-BY and Apache files) | LGPL-3.0 | Learn only; Phoenix has its own keyboard |
 | Fingerprint, face, NFC | `biomd` plus `webos-fingerprint-adapter`, `luneos-faced`, `nfcd` plus `webos-nfc-adapter` | | Later |
-| Printing, VPN | `luneos-print-adapter` (CUPS, `com.palm.printmgr`), `luneos-vpn-adapter` | | Later; covers HARDWARE.md's VPN row |
+| Printing | `luneos-print-adapter` (CUPS, `com.palm.printmgr`) | | Later |
+| VPN | `luneos-vpn-adapter` (`com.webos.service.vpn` over `connman-vpnd`) | Apache-2.0 | **Used**: Settings > VPN codes against its API, and the simulator reimplements it (provider table and form fields copied, NOTICE); on a device it runs unchanged. Covers HARDWARE.md's VPN row |
 | Graphics | Mesa on mainline; libhybris and hwcomposer on Halium; `luna-surfacemanager` waits for the GPU before starting | | Same plan |
 
 ## 5. Services

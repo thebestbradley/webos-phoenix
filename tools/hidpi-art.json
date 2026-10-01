@@ -33,6 +33,7 @@
         { "art": "statusBar/icon-mute-off.png" },
         { "art": "statusBar/icon-rotation-lock.png" },
         { "art": "statusBar/icon-rotation-lock-off.png" },
+        { "art": "statusBar/vpn-status-icon.png" },
         { "art": "statusBar/menu-arrow.png" },
         { "art": "statusBar/rssi-[0-5].png" },
         { "art": "statusBar/rssi-flightmode.png" },

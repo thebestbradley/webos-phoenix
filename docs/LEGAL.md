@@ -234,6 +234,19 @@ data use "Phoenix Account".
   source. LuneOS's Torch app (GPL-3.0) was read for the API only; none of
   its code or art is used.
 
+## VPN
+
+- **luneos-vpn-adapter** (<https://github.com/webOS-ports/luneos-vpn-adapter>,
+  Apache-2.0, Copyright (c) 2026 Herman van Hazendonk) is the VPN service
+  Phoenix uses on a device (`com.webos.service.vpn` over ConnMan's
+  `connman-vpnd`). Settings > VPN codes against its API; the simulator
+  reimplements that API in `runtime/phoenix-runtime.js` and copies, verbatim,
+  its provider table (`src/vpn_providers.c`) and form field descriptors
+  (`files/formfields/*.json`) from commit 40bdda2, credited in NOTICE.
+- The status bar's VPN icon (`vpn-status-icon.png`) is Open webOS art like
+  the rest of `shell/assets/openwebos/statusBar`; its @2x and @3x copies are
+  upscaled by `tools/hidpi-art.py`.
+
 ## Map data (OpenStreetMap)
 
 Maps shows, searches and routes on **OpenStreetMap** data, © OpenStreetMap

@@ -3,6 +3,7 @@
 
 import type { ComponentType } from "react";
 import { WifiPage } from "./Wifi";
+import { VpnPage } from "./Vpn";
 import { BluetoothPage } from "./Bluetooth";
 import { AirplanePage } from "./Airplane";
 import { ScreenPage } from "./Screen";
@@ -27,6 +28,7 @@ export const PAGES = {
     wifi: { title: "Wi-Fi", icon: "icons/wifi.png", component: WifiPage },
     bluetooth: { title: "Bluetooth", icon: "icons/bluetooth.png", component: BluetoothPage },
     airplane: { title: "Airplane Mode", icon: "icons/airplane.png", component: AirplanePage },
+    vpn: { title: "VPN", icon: "icons/vpn.png", component: VpnPage },
     screen: { title: "Screen & Lock", icon: "icons/screen.png", component: ScreenPage },
     sounds: { title: "Sounds & Ringtones", icon: "icons/sounds.png", component: SoundsPage },
     datetime: { title: "Date & Time", icon: "icons/datetime.png", component: DateTimePage },

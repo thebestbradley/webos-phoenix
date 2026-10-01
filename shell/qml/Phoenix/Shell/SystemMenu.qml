@@ -42,7 +42,6 @@ Item {
     // each (com.palm.app.wifi, .bluetooth, .vpn: SystemMenu.cpp:56-59);
     // Phoenix's Settings takes the page as a launch param, and the window
     // source opens its launch point for it (Wi-Fi, Bluetooth cards).
-    // Settings has no VPN page yet: it shows its list of panes.
     readonly property string settingsAppId: "org.webosphoenix.settings"
     function openPreferences(page) { launchRequested(settingsAppId, { page: page }); }
 
@@ -678,6 +677,14 @@ Item {
                         // VpnElement.qml:504-513; SystemMenu.cpp:765-774. The
                         // list is rebuilt by the change, so the drawer does it.
                         function pick(p) {
+                            // A VPN that asks for a user name and password
+                            // signs in in Settings > VPN, which connects it
+                            // (the legacy drawer opened the VPN app for it).
+                            if (p.needsCredentials && p.state === "disconnected") {
+                                menu.launchRequested(menu.settingsAppId, { page: "vpn", connect: p.name });
+                                menu.closeAfter(Theme.systemMenuEntryCloseDelay);
+                                return;
+                            }
                             joining = p.state === "connected" ? "" : p.name;
                             if (p.state === "connected")
                                 menu.closeAfter(Theme.systemMenuEntryCloseDelay);

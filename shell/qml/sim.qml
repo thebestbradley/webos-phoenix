@@ -148,6 +148,12 @@ Item {
         function onKeyboardOpenChanged() { windows.pushSystemStatus({ ime: { visible: shell.keyboardOpen } }); }
     }
 
+    // A VPN row in the system menu: the runtime has the profiles.
+    Connections {
+        target: status
+        function onVpnRequested(request) { windows.pushSystemStatus(request); }
+    }
+
     function statusChanged(name) {
         if (!status.applyingAppStatus)
             windows.pushSystemStatus(status.appStatusFor(name));

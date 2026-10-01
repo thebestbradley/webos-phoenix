@@ -200,6 +200,164 @@ async function main() {
         check(last().systemSounds === false, "System sounds off reaches the shell");
         await shot("sounds");
 
+        // ---- Device Info: the phone, and the legacy reset options ----------------------
+        // Erase Apps & Data keeps the files on the USB drive; Full Erase does not.
+        const svc = (uri, params) => page.evaluate(([u, p]) => new Promise((resolve) => {
+            __phoenixRuntime.dispatch(u, p, resolve, { cancelled: () => false, onCancel: null });
+        }), [uri, params]);
+        const KEEP = "/media/internal/Documents/keep.txt";
+        const PHOTO = "/media/internal/Pictures/kept.png";
+        const plant = async () => {
+            await svc("luna://org.webosphoenix.filemanager/write", { path: KEEP, data: "my file", overwrite: true });
+            await svc("luna://org.webosphoenix.service.mediafiles/write", { path: PHOTO, data: "iVBORw0KGgo=", mimeType: "image/png" });
+            await svc("luna://com.webos.service.systemservice/setPreferences", { wallpaper: "phoenix-test" });
+        };
+        const state = () => page.evaluate(([k, ph]) => new Promise((resolve) => {
+            __phoenixRuntime.dispatch("luna://org.webosphoenix.filemanager/stat", { path: k }, (r) => {
+                __phoenixRuntime.mediaFiles.list("/media/internal/Pictures/").then((photos) => {
+                    resolve({ file: r.returnValue !== false, photo: photos.indexOf(ph) >= 0 });
+                });
+            }, { cancelled: () => false, onCancel: null });
+        }), [KEEP, PHOTO]);
+        const erase = async (button) => {
+            await open("deviceinfo");
+            await page.click(`[data-testid='${button}']`);
+            await page.waitForSelector("[data-testid='reset-dialog']");
+            await shot("deviceinfo-" + button);
+            await page.click("[data-testid='reset-confirm']");
+            await page.waitForSelector(".pui-note");
+        };
+        await open("deviceinfo");
+        await page.waitForSelector("[data-testid='imei']");
+        const phoneText = await page.locator(".pui-group", { hasText: "IMEI" }).innerText();
+        check(/\+1 \(408\) 555-0199/.test(phoneText) && /490154203237518/.test(phoneText) && /Phoenix/.test(phoneText)
+              && /3G \(UMTS\)/.test(phoneText) && /Ready/.test(phoneText),
+              "Device Info: phone number, carrier, network, IMEI and SIM (" + phoneText.replace(/\s+/g, " ") + ")");
+        await shot("deviceinfo-phone");
+        await plant();
+        let st = await state();
+        check(st.file && st.photo, "a file and a picture on the USB drive");
+        await erase("erase-data");
+        st = await state();
+        const pref = await svc("luna://com.webos.service.systemservice/getPreferences", { keys: ["wallpaper"] });
+        check(st.file && st.photo && pref.wallpaper !== "phoenix-test",
+              "Erase Apps & Data: settings gone, the USB drive's files kept (" + JSON.stringify({ st, wallpaper: pref.wallpaper }) + ")");
+        await erase("full-erase");
+        st = await state();
+        check(!st.file && !st.photo, "Full Erase: the USB drive's files gone too (" + JSON.stringify(st) + ")");
+
+        // ---- VPN: com.webos.service.vpn (LuneOS), the page, the system menu -----------
+        const VPN = "luna://com.webos.service.vpn/";
+        const vpnStatus = () => (last().vpnProfiles || []);
+        const vpnShell = (name) => vpnStatus().find((v) => v.name === name) || {};
+        const PRIV = "yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=", PUB = "xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=";
+        await open("vpn");
+        await page.waitForSelector("[data-testid='vpn-Office']");
+        await shot("vpn");
+        check(/WireGuard · vpn\.example\.com/.test(await page.locator("[data-testid='vpn-Office']").innerText()),
+              "VPN: the WireGuard demo profile");
+        await page.click("[data-testid='vpn-toggle-Office']");
+        await page.waitForTimeout(150);
+        check(vpnShell("Office").state === "connecting", "connecting reaches the shell (" + JSON.stringify(vpnStatus()) + ")");
+        await page.waitForTimeout(1400);
+        check(vpnShell("Office").state === "connected", "... then connected (" + vpnShell("Office").state + ")");
+        const conn = await svc(VPN + "getConnectionDetails", { vpnProfileName: "Office" });
+        check(conn.state === "connected" && conn.clientIpAddress === "10.8.0.2" && conn.ifName === "wg0" && conn.subscribed === false,
+              "getConnectionDetails: the tunnel's address (" + JSON.stringify(conn) + ")");
+        // The system menu's drawer: by name, as the shell asks every page.
+        await page.evaluate(() => __phoenixRuntime.applyHostStatus({ vpnDisconnect: "Office" }));
+        await page.waitForSelector("[data-testid='vpn-toggle-Office'][aria-checked='false']");
+        await page.waitForTimeout(400);   // connman's "disconnect", then "idle"
+        check(vpnShell("Office").state === "disconnected", "the system menu disconnects it");
+        await page.evaluate(() => __phoenixRuntime.applyHostStatus({ vpnConnect: "Office" }));
+        await page.evaluate(() => __phoenixRuntime.applyHostStatus({ vpnConnect: "Office" }));   // a second page: no change
+        await page.waitForTimeout(1500);
+        check(vpnShell("Office").state === "connected", "... and connects it (once, from every page)");
+
+        // The service's own answers, codes as legacy webOS numbered them.
+        const e3 = await svc(VPN + "connect", { vpnProfileName: "Nope" });
+        const e4 = await svc(VPN + "addProfile", { vpnProfileName: "Office", vpnAgentGuid: "com.webos.vpn.wireguard", vpnProfile: { vpnHost: "x" } });
+        const e9 = await svc(VPN + "addProfile", { vpnProfileName: "X", vpnAgentGuid: "com.example.nope", vpnProfile: { vpnHost: "x" } });
+        const e2 = await svc(VPN + "addProfile", { vpnProfileName: "X", vpnAgentGuid: "com.webos.vpn.wireguard", vpnProfile: {} });
+        const e6 = await svc(VPN + "connect", { vpnProfileName: "Office" });
+        check(e3.errorCode === -3 && e3.errorText === "Profile not found." && e4.errorCode === -4 && e9.errorCode === -9
+              && e2.errorCode === -2 && e2.errorText === "Invalid parameters." && e6.errorCode === -6 && e6.errorText === "Already connected",
+              "errors -2, -3, -4, -6, -9 (" + [e2, e3, e4, e6, e9].map((e) => e.errorCode).join(", ") + ")");
+        const agents = (await svc(VPN + "getAgents", {})).vpnAgents;
+        const wgForm = (await svc(VPN + "getAgentFormFields", { vpnAgentGuid: "com.webos.vpn.wireguard" })).vpnFormFields;
+        check(agents.map((a) => a.connmanType).join() === "wireguard,openvpn,openconnect,vpnc,l2tp,pptp"
+              && agents[5].deprecated === true && agents[0].supportsImport[0] === "wg-conf" && wgForm.length === 9,
+              "getAgents and getAgentFormFields as luneos-vpn-adapter has them");
+
+        // Add an OpenVPN profile from its .ovpn file: it signs in when connecting.
+        await page.click("[data-testid='vpn-add']");
+        await page.click("[data-testid='vpn-agent-openvpn']");
+        await page.waitForSelector("[data-testid='vpn-edit-dialog']");
+        await page.fill("[data-testid='vpn-name']", "Home");
+        await page.setInputFiles("[data-testid='vpn-file']", { name: "home.ovpn", mimeType: "text/plain",
+            buffer: Buffer.from("client\ndev tun\nremote home.example.net 443 tcp\nauth-user-pass\n") });
+        await page.waitForFunction(() => document.querySelector("[data-testid='vpn-host']").value === "home.example.net");
+        await page.waitForTimeout(400);   // the dialog's fade
+        await shot("vpn-add");
+        await page.click("[data-testid='vpn-save']");
+        await page.waitForSelector("[data-testid='vpn-Home']");
+        check(/OpenVPN · home\.example\.net/.test(await page.locator("[data-testid='vpn-Home']").innerText()), "an OpenVPN profile from its file");
+        const hd = await svc(VPN + "getProfileDetails", { vpnProfileName: "Home" });
+        const hv = (id) => (hd.vpnProfile.vpnFormFields.find((f) => f.id === id) || {}).value;
+        const ovpnFile = await svc("luna://org.webosphoenix.filemanager/stat", { path: "/media/internal/vpn/Home.ovpn" });
+        check(hv("ovpnConfigFile") === "/media/internal/vpn/Home.ovpn" && hv("ovpnPort") === "443" && hv("ovpnProto") === "tcp"
+              && hv("ovpnAuthUserPass") === "-" && ovpnFile.returnValue !== false,
+              "... its file stored and used as OpenVPN.ConfigFile, port, protocol, user/password auth");
+        check(vpnShell("Home").needsCredentials === true, "the system menu knows it signs in (needsCredentials)");
+        await page.click("[data-testid='vpn-toggle-Home']");
+        await page.waitForSelector("[data-testid='vpn-prompt']");
+        await page.waitForTimeout(400);
+        await shot("vpn-prompt");
+        await page.fill("[data-testid='vpn-prompt-user-name']", "pat");
+        await page.fill("[data-testid='vpn-prompt-password']", "secret");
+        await page.click("[data-testid='vpn-prompt-ok']");
+        await page.waitForTimeout(1500);
+        check(vpnShell("Home").state === "connected" && vpnShell("Office").state === "disconnected",
+              "signed in: connected, and the other VPN is not (one at a time)");
+        const leak = JSON.stringify(await svc(VPN + "getProfileDetails", { vpnProfileName: "Home" }));
+        check(!leak.includes("secret") && vpnShell("Home").needsCredentials === false, "the password never comes back; it is kept for next time");
+        await page.click("[data-testid='vpn-toggle-Home']");
+        await page.waitForTimeout(500);
+        await page.click("[data-testid='vpn-toggle-Home']");
+        await page.waitForTimeout(1500);
+        check(vpnShell("Home").state === "connected" && await page.locator("[data-testid='vpn-prompt']").count() === 0,
+              "... connecting again asks nothing");
+
+        // A WireGuard profile from its .conf; a broken one is refused, with why.
+        await page.click("[data-testid='vpn-add']");
+        await page.click("[data-testid='vpn-agent-wireguard']");
+        await page.setInputFiles("[data-testid='vpn-file']", { name: "bad.conf", mimeType: "text/plain", buffer: Buffer.from("[Interface]\nAddress = 10.0.0.2/32\n") });
+        await page.waitForSelector("[data-testid='vpn-edit-dialog'] .pui-error");
+        check(/PrivateKey/.test(await page.locator("[data-testid='vpn-edit-dialog'] .pui-error").innerText()), "a .conf without a key is refused");
+        await page.setInputFiles("[data-testid='vpn-file']", { name: "lab.conf", mimeType: "text/plain", buffer: Buffer.from(
+            `[Interface]\nPrivateKey = ${PRIV}\nAddress = 10.9.0.5/24\nDNS = 10.9.0.1\n\n[Peer]\nPublicKey = ${PUB}\nEndpoint = lab.example.org:51000\nAllowedIPs = 10.9.0.0/24\n`) });
+        await page.waitForFunction(() => document.querySelector("[data-testid='vpn-host']").value === "lab.example.org");
+        await page.click("[data-testid='vpn-save']");
+        await page.waitForSelector("[data-testid='vpn-lab']");
+        const ld = await svc(VPN + "getProfileDetails", { vpnProfileName: "lab" });
+        const lv = (id) => ld.vpnProfile.vpnFormFields.find((f) => f.id === id);
+        check(ld.vpnProfile.vpnHost === "lab.example.org" && lv("wgAddress").value === "10.9.0.5/24" && lv("wgEndpointPort").value === "51000"
+              && lv("wgPrivateKey").value === "" && lv("wgPrivateKey").hasStoredValue === false,
+              "a WireGuard .conf split into its fields; the key not given back");
+
+        // Airplane mode drops the VPN.
+        await svc("luna://com.webos.service.connectionmanager/setstate", { offlineMode: "enabled" });
+        await page.waitForTimeout(200);
+        check(vpnShell("Home").state === "disconnected", "airplane mode disconnects the VPN");
+        await svc("luna://com.webos.service.connectionmanager/setstate", { offlineMode: "disabled" });
+
+        // Delete.
+        await page.click("[data-testid='vpn-lab']");
+        await page.click("[data-testid='vpn-delete']");
+        await page.click("[data-testid='vpn-delete-confirm']");
+        await page.waitForSelector("[data-testid='vpn-lab']", { state: "detached" });
+        check(!vpnStatus().some((v) => v.name === "lab"), "a deleted profile leaves the system menu too");
+
         // ---- Every other pane renders --------------------------------------------------
         for (const p of ["datetime", "language", "deviceinfo", "updates"]) {
             await open(p);

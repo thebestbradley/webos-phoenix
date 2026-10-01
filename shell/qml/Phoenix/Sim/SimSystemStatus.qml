@@ -85,10 +85,17 @@ QtObject {
         { name: "Car Kit", address: "00:1d:fe:00:00:02", state: "disconnected" }
     ]
     // VPN profiles: name, state "disconnected" | "connecting" | "connected"
-    // | "connectfailed".
+    // | "connectfailed". A demo profile until the web runtime reports its
+    // own (Settings > VPN, com.webos.service.vpn); from then on the runtime
+    // has them, and connecting one asks it (vpnRequested). needsCredentials:
+    // it asks for a user name and password, which Settings > VPN answers.
     property var vpnProfiles: [
         { name: "Office", state: "disconnected" }
     ]
+    property bool _runtimeVpn: false
+    // The system menu connects or disconnects a profile the runtime has:
+    // {vpnConnect: name} or {vpnDisconnect: name}, for the web pages.
+    signal vpnRequested(var request)
 
     // The network, device and profile in use ("" for none): the drawers'
     // headers show them (SystemMenu.cpp:397-412, 568-610, 776-800).
@@ -177,6 +184,12 @@ QtObject {
 
     // Connect a VPN profile, or disconnect it when it is connected.
     function connectVpn(name) {
+        if (_runtimeVpn) {
+            var p = vpnProfiles.filter(function(v) { return v.name === name; })[0];
+            if (p)
+                vpnRequested(p.state === "connected" ? { vpnDisconnect: name } : { vpnConnect: name });
+            return;
+        }
         vpnProfiles = _toggle(vpnProfiles, "name", name, function() { return true; },
                               function(v) { vpnProfiles = v; });
     }
@@ -215,7 +228,7 @@ QtObject {
     // wifiConnected, wifiBars, bluetoothOn, airplaneMode, brightness
     // (0-100), rotationLocked, muted, timeFormat, showAlertsWhenLocked,
     // volume, streams, systemSounds, tapSounds, ringtone, alerttone,
-    // notificationtone, reduceMotion. Missing keys are left alone.
+    // notificationtone, reduceMotion, vpnProfiles. Missing keys are left alone.
     function applyAppStatus(s) {
         applyingAppStatus = true;
         if (s.wifiEnabled !== undefined)
@@ -252,6 +265,10 @@ QtObject {
             notificationtone = s.notificationtone;
         if (s.reduceMotion !== undefined)
             reduceMotion = !!s.reduceMotion;
+        if (s.vpnProfiles !== undefined) {
+            _runtimeVpn = true;
+            vpnProfiles = s.vpnProfiles;
+        }
         applyingAppStatus = false;
     }
 

@@ -225,6 +225,45 @@ Item {
             compare(status.vpnProfile, "");
         }
 
+        // Once the web runtime reports its profiles (Settings > VPN), the
+        // drawer shows those, and a row asks the runtime to connect or
+        // disconnect (sim.qml sends the request to the pages).
+        SignalSpy { id: vpnAsked; target: status; signalName: "vpnRequested" }
+        function test_vpnFromTheRuntime() {
+            var demo = status.vpnProfiles;
+            status.applyAppStatus({ vpnProfiles: [{ id: "vpn1", name: "Office", state: "disconnected" },
+                                                  { id: "vpn2", name: "Home", state: "connected" }] });
+            var vpn = findChild(menu, "systemMenuVpn");
+            compare(vpn.stateText, "Home");
+            vpnAsked.clear();
+            status.connectVpn("Office");
+            compare(vpnAsked.count, 1);
+            compare(vpnAsked.signalArguments[0][0].vpnConnect, "Office");
+            status.connectVpn("Home");
+            compare(vpnAsked.signalArguments[1][0].vpnDisconnect, "Home");
+            // The runtime answers; the menu follows it, not a guess of its own.
+            compare(status.vpnProfiles[0].state, "disconnected");
+            status.applyAppStatus({ vpnProfiles: [{ id: "vpn1", name: "Office", state: "connecting" },
+                                                  { id: "vpn2", name: "Home", state: "disconnected" }] });
+            compare(vpn.stateText, "Office");
+            // One that asks for a user name and password: the row opens
+            // Settings > VPN to sign in there.
+            status.applyAppStatus({ vpnProfiles: [{ name: "Home", state: "disconnected", needsCredentials: true }] });
+            vpn.open();
+            tryVerify(function() { return vpn.height > 42 * 2; }, 1000);
+            launched.clear();
+            vpnAsked.clear();
+            mouseClick(findChild(menu, "systemMenuVpnProfile"));
+            compare(vpnAsked.count, 0);
+            compare(launched.count, 1);
+            compare(launched.signalArguments[0][0], "org.webosphoenix.settings");
+            compare(launched.signalArguments[0][1].page, "vpn");
+            compare(launched.signalArguments[0][1].connect, "Home");
+            tryCompare(menu, "open", false, 1000);
+            status._runtimeVpn = false;
+            status.vpnProfiles = demo;
+        }
+
         function test_preferences() {
             var wifi = findChild(menu, "systemMenuWifi");
             wifi.open();

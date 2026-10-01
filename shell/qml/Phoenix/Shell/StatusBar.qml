@@ -245,7 +245,7 @@ Item {
         // Bluetooth, Wi-Fi, TTY, HAC, call forward, roaming, VPN, rotation
         // lock, mute, airplane (StatusBarInfo.cpp:143-275). This Row runs
         // left to right, so the reverse. Not shown yet, for want of the
-        // state: WAN, TTY, HAC, call forward, roaming, VPN.
+        // state: WAN, TTY, HAC, call forward, roaming.
         Indicator {
             objectName: "airplaneIcon"
             shown: bar.system !== null && bar.system !== undefined && bar.system.airplaneMode
@@ -260,6 +260,13 @@ Item {
             objectName: "rotationLockIcon"
             shown: bar.system !== null && bar.system !== undefined && bar.system.rotationLocked
             source: Theme.asset("statusBar/icon-rotation-lock.png")
+        }
+        // A VPN connected (StatusBarInfo::setVpn, from com.palm.vpn's
+        // profile list; here the system menu's VPN profiles).
+        Indicator {
+            objectName: "vpnIcon"
+            shown: !!bar.system && !!bar.system.vpnProfile
+            source: Theme.asset("statusBar/vpn-status-icon.png")
         }
         Indicator {
             objectName: "wifiIcon"

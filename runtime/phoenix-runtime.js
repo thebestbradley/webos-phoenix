@@ -2459,6 +2459,11 @@
     //   com.palm.systemmanager               legacy webOS 2.x (no OSE equivalent yet)
     //       getDeviceLockMode, setDevicePasscode, matchDevicePasscode,
     //       getSystemStatus (luna-sysmgr SystemService.cpp:3860-3970)
+    //   com.webos.service.vpn                LuneOS luneos-vpn-adapter src/vpn_service.c (connman-vpnd
+    //                                        on the bus; legacy com.palm.vpn names and error codes):
+    //       getStatus, getProfileList, getProfileDetails, getConnectionDetails,
+    //       getAgents, getAgentFormFields, connect, disconnect, addProfile,
+    //       updateProfile, deleteProfile, uiPromptResponse, acceptEula. See "VPN" below.
     //
     // State lives in the shared store under "settings:state", so every app
     // window sees the same radios. Changes other windows make arrive as
@@ -2489,6 +2494,18 @@
             { name: "Stylus Keyboard", address: "00:1d:fe:10:20:04", typeOfDevice: "ble", classOfDevice: 9536 }
         ];
 
+        // A demo profile, as the system menu had (a fictional server and the
+        // example keys of the WireGuard documentation): a connman-vpnd
+        // connection, its path and properties (see "VPN" below).
+        var DEMO_VPN = {
+            path: "/net/connman/vpn/connection/vpn_example_com",
+            props: { Name: "Office", Type: "wireguard", Host: "vpn.example.com", State: "idle", Immutable: false,
+                     "WireGuard.PrivateKey": "yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+                     "WireGuard.PublicKey": "xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+                     "WireGuard.Address": "10.8.0.2/32", "WireGuard.DNS": "10.8.0.1",
+                     "WireGuard.AllowedIPs": "0.0.0.0/0, ::/0", "WireGuard.EndpointPort": "51820" }
+        };
+
         function defaults() {
             return {
                 wifi: { enabled: true, connected: "Phoenix", profiles: [{ profileId: 1, ssid: "Phoenix", security: "psk" }], nextProfileId: 2 },
@@ -2501,7 +2518,8 @@
                 },
                 audio: { volume: 60, muted: false, streams: { pringtones: 80, palerts: 70, pmedia: 60, pfeedback: 50 } },
                 lock: { lockMode: "none", hash: "" },
-                timeOffset: 0
+                timeOffset: 0,
+                vpn: { connections: [DEMO_VPN] }
             };
         }
 
@@ -2544,7 +2562,16 @@
                 showAlertsWhenLocked: p.showAlertsWhenLocked !== false,
                 // Settings > Accessibility: the shell's animations.
                 reduceMotion: !!(p.accessibility && p.accessibility.reduceMotion),
-                wallpaperFile: (p.wallpaper && p.wallpaper.wallpaperFile) || ""
+                wallpaperFile: (p.wallpaper && p.wallpaper.wallpaperFile) || "",
+                // The system menu's VPN drawer: each profile's name, its state
+                // (disconnected, connecting, connected) and whether connecting
+                // asks for a user name and password (then the drawer opens
+                // Settings > VPN, which answers the prompt).
+                vpnProfiles: (s.vpn ? s.vpn.connections : []).map(function (c) {
+                    var st = vpnApiState(c.props.State);
+                    return { name: c.props.Name, state: st === "disconnecting" ? "connecting" : st === "unknown" ? "disconnected" : st,
+                             needsCredentials: vpnNeedsCredentials(c) };
+                })
             };
         }
 
@@ -2561,6 +2588,7 @@
         }
 
         function save(s) {
+            vpnFollowNetwork(s);
             store.set(KEY, s);
             if (!suppressHost)
                 host.postToHost("systemStatus", hostStatus(s));
@@ -3197,19 +3225,487 @@
             "*": stub["*"]
         });
 
-        // ---- Phoenix: erase user data (no OSE equivalent yet) -----------------------
+        // ---- Phoenix: erase (no OSE equivalent yet) ---------------------------------
+        //
+        // Device Info's reset options, as legacy webOS had them: eraseUserData
+        // ("Erase Apps & Data") removes the apps' data, accounts and settings
+        // but keeps the user's files (the USB drive: /media/internal, its
+        // index); fullErase ("Full Erase") removes those files too. First Use
+        // runs at the next start either way.
 
+        // The user's files: the file manager's tree and the media index.
+        var USER_FILE_KEYS = ["phoenix:files:vfs", "phoenix:media:index"];
+        function eraseStore(keepFiles) {
+            try {
+                var ls = global.localStorage, keys = [];
+                for (var i = 0; i < ls.length; ++i) {
+                    var k = ls.key(i);
+                    if (k.indexOf("phoenix:") === 0 && !(keepFiles && USER_FILE_KEYS.indexOf(k) >= 0))
+                        keys.push(k);
+                }
+                keys.forEach(function (k) { ls.removeItem(k); });
+            } catch (e) { /* ignore */ }
+            save(load());
+        }
         register(["org.webosphoenix.service.reset"], {
             "/eraseUserData": function (p, reply) {
-                try {
-                    var ls = global.localStorage, keys = [];
-                    for (var i = 0; i < ls.length; ++i) if (ls.key(i).indexOf("phoenix:") === 0) keys.push(ls.key(i));
-                    keys.forEach(function (k) { ls.removeItem(k); });
-                } catch (e) { /* ignore */ }
-                save(load());
+                eraseStore(true);
                 reply(ok());
+            },
+            "/fullErase": function (p, reply) {
+                eraseStore(false);
+                var media = runtime.mediaFiles;
+                (media ? media.clear() : Promise.resolve()).then(function () { reply(ok()); },
+                    function (e) { reply(fail(-1, "Could not erase the files: " + e)); });
             }
         });
+
+        // ---- VPN (com.webos.service.vpn: LuneOS luneos-vpn-adapter) ----------------
+        //
+        // OSE has no VPN service, and legacy webOS's com.palm.vpn (PmVpnDaemon)
+        // was not released. LuneOS bridges connman-vpnd onto the bus as
+        // com.webos.service.vpn, keeping the legacy method names and error codes
+        // (github.com/webOS-ports/luneos-vpn-adapter, Apache-2.0, master 40bdda2:
+        // src/vpn_service.c, vpn_errors.h, vpn_providers.c, profile_build.c,
+        // files/formfields/*.json). Phoenix uses it unchanged on a device; this
+        // simulates it, wire for wire: the replies, the -1 to -10 errors, the
+        // state mapping, the subscriptions and the credential prompt (connect
+        // answers -7 with a promptId, pushes the prompt on getStatus, and
+        // uiPromptResponse answers it). Only connman-vpnd is pretended: the
+        // connections (path + properties, kept in "settings:state"), their
+        // State (idle -> configuration -> ready), and credentials it asks for.
+        //
+        // Differences, all on purpose: nothing is really tunnelled; the
+        // credentials are kept in the simulated store (connman-vpnd keeps them
+        // under /var/lib/connman-vpn, 0600, and re-supplies them itself); and
+        // a VPN needs Wi-Fi here (no mobile data in the simulator).
+
+        // vpn_providers.c: [connmanType, guid, label, technology, deprecated, import].
+        var VPN_PROVIDERS = [
+            ["wireguard", "com.webos.vpn.wireguard", "WireGuard", "WireGuard", false, "wg-conf"],
+            ["openvpn", "com.webos.vpn.openvpn", "OpenVPN", "ssl", false, "ovpn"],
+            ["openconnect", "com.webos.vpn.openconnect", "OpenConnect (AnyConnect)", "ssl", false, null],
+            ["vpnc", "com.webos.vpn.vpnc", "Cisco IPsec", "IPSec", false, null],
+            ["l2tp", "com.webos.vpn.l2tp", "L2TP/IPsec", "L2TP", false, null],
+            ["pptp", "com.webos.vpn.pptp", "PPTP", "PPTP", true, null]
+        ];
+        // files/formfields/<type>.json "vpnFormFields", verbatim. These and the
+        // provider table above: Copyright (c) 2026 Herman van Hazendonk,
+        // Apache-2.0 (NOTICE).
+        var VPN_FORM_FIELDS = {"l2tp":[{"id":"l2tpUser","type":"textfield","label":"User name","connmanProperty":"L2TP.User"},{"id":"l2tpPassword","type":"passwordfield","label":"Password","connmanProperty":"L2TP.Password"},{"id":"l2tpIpsecSaref","type":"checkbox","label":"Use IPsec SA reference","trueValue":"true","falseValue":"false","connmanProperty":"L2TP.IPsecSaref"},{"id":"l2tpPort","type":"textfield","label":"UDP port","value":"1701","inputType":"number","connmanProperty":"L2TP.Port"},{"id":"l2tpDefaultRoute","type":"checkbox","label":"Use as default route","value":"true","trueValue":"true","falseValue":"false","connmanProperty":"L2TP.DefaultRoute"},{"id":"pppdReqMppe128","type":"checkbox","label":"Require MPPE 128-bit","trueValue":"true","falseValue":"false","connmanProperty":"PPPD.ReqMPPE128"},{"id":"pppdRefuseEap","type":"checkbox","label":"Refuse EAP","trueValue":"true","falseValue":"false","connmanProperty":"PPPD.RefuseEAP"},{"id":"pppdEchoInterval","type":"textfield","label":"LCP echo interval (s)","inputType":"number","connmanProperty":"PPPD.EchoInterval"},{"id":"pppdEchoFailure","type":"textfield","label":"LCP echo failures","inputType":"number","connmanProperty":"PPPD.EchoFailure"}],"openconnect":[{"id":"ocAuthType","type":"listselector","label":"Authentication","value":"cookie","connmanProperty":"OpenConnect.AuthType","options":[{"label":"Cookie","value":"cookie"},{"label":"Username / password then cookie","value":"cookie_with_userpass"},{"label":"Username / password","value":"userpass"},{"label":"Certificate","value":"publickey"},{"label":"PKCS#12","value":"pkcs"}]},{"id":"ocUsergroup","type":"textfield","label":"Login group","connmanProperty":"OpenConnect.Usergroup"},{"id":"ocCaCert","type":"textfield","label":"CA certificate","connmanProperty":"OpenConnect.CACert"},{"id":"ocClientCert","type":"textfield","label":"Client certificate","connmanProperty":"OpenConnect.ClientCert"},{"id":"ocUserPrivateKey","type":"textfield","label":"Client private key","connmanProperty":"OpenConnect.UserPrivateKey"},{"id":"ocPkcsClientCert","type":"textfield","label":"PKCS#12 bundle","connmanProperty":"OpenConnect.PKCSClientCert"},{"id":"ocServerCert","type":"textfield","label":"Server cert fingerprint (SHA1)","connmanProperty":"OpenConnect.ServerCert"},{"id":"ocAllowSelfSigned","type":"checkbox","label":"Allow self-signed server certificate","trueValue":"true","falseValue":"false","connmanProperty":"OpenConnect.AllowSelfSignedCert"},{"id":"ocDisableIPv6","type":"checkbox","label":"Disable IPv6","trueValue":"true","falseValue":"false","connmanProperty":"OpenConnect.DisableIPv6"},{"id":"ocNoDtls","type":"checkbox","label":"Disable DTLS / ESP","trueValue":"true","falseValue":"false","connmanProperty":"OpenConnect.NoDTLS"},{"id":"ocNoHttpKeepalive","type":"checkbox","label":"Disable HTTP keep-alive","trueValue":"true","falseValue":"false","connmanProperty":"OpenConnect.NoHTTPKeepalive"},{"id":"ocMtu","type":"textfield","label":"MTU","inputType":"number","connmanProperty":"VPN.MTU"}],"openvpn":[{"id":"ovpnConfigFile","type":"textfield","label":"Config file","hint":"use Import to set this","editable":false,"connmanProperty":"OpenVPN.ConfigFile"},{"id":"ovpnCaCert","type":"textfield","label":"CA certificate","connmanProperty":"OpenVPN.CACert"},{"id":"ovpnCert","type":"textfield","label":"Client certificate","connmanProperty":"OpenVPN.Cert"},{"id":"ovpnKey","type":"textfield","label":"Client key","connmanProperty":"OpenVPN.Key"},{"id":"ovpnAuthUserPass","type":"checkbox","label":"Username / password auth","trueValue":"-","falseValue":"","connmanProperty":"OpenVPN.AuthUserPass","note":"connman's ov_options table maps OpenVPN.AuthUserPass -> --auth-user-pass and treats the literal value \"-\" as \"query over the OpenVPN management interface\". Empty clears it. Never write \"true\"/\"false\" here."},{"id":"ovpnProto","type":"listselector","label":"Protocol","value":"udp","connmanProperty":"OpenVPN.Proto","options":[{"label":"UDP","value":"udp"},{"label":"TCP","value":"tcp"}]},{"id":"ovpnPort","type":"textfield","label":"Port","value":"1194","inputType":"number","connmanProperty":"OpenVPN.Port"},{"id":"ovpnDeviceType","type":"listselector","label":"Device type","value":"tun","connmanProperty":"OpenVPN.DeviceType","options":[{"label":"tun (layer 3)","value":"tun"},{"label":"tap (layer 2)","value":"tap"}]},{"id":"ovpnCipher","type":"textfield","label":"Cipher","connmanProperty":"OpenVPN.Cipher"},{"id":"ovpnAuth","type":"textfield","label":"HMAC digest","connmanProperty":"OpenVPN.Auth"},{"id":"ovpnRemoteCertTls","type":"listselector","label":"Verify peer cert type","value":"server","connmanProperty":"OpenVPN.RemoteCertTls","options":[{"label":"server","value":"server"},{"label":"client","value":"client"}]},{"id":"ovpnCompLzo","type":"listselector","label":"LZO compression","value":"adaptive","connmanProperty":"OpenVPN.CompLZO","options":[{"label":"Adaptive","value":"adaptive"},{"label":"Yes","value":"yes"},{"label":"No","value":"no"}]},{"id":"ovpnMtu","type":"textfield","label":"MTU","inputType":"number","connmanProperty":"OpenVPN.MTU"},{"id":"ovpnAuthNoCache","type":"checkbox","label":"Never cache credentials","trueValue":"true","falseValue":"false","connmanProperty":"OpenVPN.AuthNoCache"}],"pptp":[{"id":"pptpDeprecationWarning","type":"status","statusType":"error","value":"PPTP encryption is broken and can be decrypted by an attacker. Use WireGuard or OpenVPN where possible."},{"id":"pptpUser","type":"textfield","label":"User name","connmanProperty":"PPTP.User"},{"id":"pptpPassword","type":"passwordfield","label":"Password","connmanProperty":"PPTP.Password"},{"id":"pppdReqMppe128","type":"checkbox","label":"Require MPPE 128-bit","value":"true","trueValue":"true","falseValue":"false","connmanProperty":"PPPD.RequirMPPE128"},{"id":"pppdRefuseEap","type":"checkbox","label":"Refuse EAP","trueValue":"true","falseValue":"false","connmanProperty":"PPPD.RefuseEAP"},{"id":"pppdEchoInterval","type":"textfield","label":"LCP echo interval (s)","inputType":"number","connmanProperty":"PPPD.EchoInterval"}],"vpnc":[{"id":"vpnUserId","type":"textfield","label":"User name","connmanProperty":"VPNC.Xauth.Username"},{"id":"vpnPassword","type":"passwordfield","label":"Password","connmanProperty":"VPNC.Xauth.Password"},{"id":"vpnGroupId","type":"textfield","label":"Group name","connmanProperty":"VPNC.IPSec.ID","required":true},{"id":"vpnGroupSecret","type":"passwordfield","label":"Group password","connmanProperty":"VPNC.IPSec.Secret"},{"id":"vpnDomain","type":"textfield","label":"Domain","connmanProperty":"VPNC.Domain"},{"id":"vpnDeadPeerDetection","type":"textfield","label":"DPD idle timeout (our side)","inputType":"number","connmanProperty":"VPNC.DPDTimeout"},{"id":"vpnEncryptionMethod","type":"listselector","label":"Encryption method","value":"secure","connmanPropertyMap":{"secure":{"VPNC.SingleDES":"","VPNC.NoEncryption":""},"singledes":{"VPNC.SingleDES":"yes","VPNC.NoEncryption":""},"noencryption":{"VPNC.SingleDES":"","VPNC.NoEncryption":"yes"}},"options":[{"label":"Secure","value":"secure"},{"label":"Single DES","value":"singledes","deprecated":true},{"label":"No encryption","value":"noencryption","deprecated":true}]},{"id":"vpnNatTraversal","type":"listselector","label":"NAT traversal","value":"natt","connmanProperty":"VPNC.NATTMode","options":[{"label":"NAT-T (auto-detect)","value":"natt"},{"label":"Cisco-UDP","value":"cisco-udp"},{"label":"NAT-T (always)","value":"force-natt"},{"label":"Disabled","value":"none"}]},{"id":"vpnIkeAuthmode","type":"textfield","label":"IKE auth mode","connmanProperty":"VPNC.IKE.Authmode"},{"id":"vpnIkeDhGroup","type":"textfield","label":"IKE DH group","connmanProperty":"VPNC.IKE.DHGroup"},{"id":"vpnPfs","type":"textfield","label":"Perfect forward secrecy group","connmanProperty":"VPNC.PFS"},{"id":"vpnVendor","type":"textfield","label":"Gateway vendor","connmanProperty":"VPNC.Vendor"},{"id":"vpnDeviceType","type":"listselector","label":"Device type","value":"tun","connmanProperty":"VPNC.DeviceType","options":[{"label":"tun (layer 3)","value":"tun"},{"label":"tap (layer 2)","value":"tap"}]}],"wireguard":[{"id":"wgPrivateKey","type":"passwordfield","label":"Private key","connmanProperty":"WireGuard.PrivateKey","required":true},{"id":"wgPublicKey","type":"textfield","label":"Peer public key","connmanProperty":"WireGuard.PublicKey","required":true},{"id":"wgPresharedKey","type":"passwordfield","label":"Preshared key","connmanProperty":"WireGuard.PresharedKey"},{"id":"wgAddress","type":"textfield","label":"Address","hint":"10.2.0.2/24","connmanProperty":"WireGuard.Address","required":true},{"id":"wgDns","type":"textfield","label":"DNS servers","hint":"comma separated","connmanProperty":"WireGuard.DNS"},{"id":"wgAllowedIPs","type":"textfield","label":"Allowed IPs","value":"0.0.0.0/0, ::/0","connmanProperty":"WireGuard.AllowedIPs"},{"id":"wgEndpointPort","type":"textfield","label":"Endpoint port","value":"51820","inputType":"number","connmanProperty":"WireGuard.EndpointPort"},{"id":"wgListenPort","type":"textfield","label":"Local listen port","inputType":"number","connmanProperty":"WireGuard.ListenPort"},{"id":"wgKeepalive","type":"textfield","label":"Persistent keepalive (s)","inputType":"number","connmanProperty":"WireGuard.PersistentKeepalive"}]};
+        var VPN_ERR = {
+            "-1": "", "-2": "Invalid parameters.", "-3": "Profile not found.",
+            "-4": "Profile with that name already exists.", "-7": "User authentication required.",
+            "-8": "connman-vpnd is not available.", "-9": "Unknown VPN agent."
+        };
+        var VPN_CONNECT_MS = 1200;
+        var VPN_DISCONNECT_MS = 300;
+
+        function vpnErr(code, text) {
+            return { returnValue: false, errorCode: code, errorText: text || VPN_ERR[String(code)] };
+        }
+        function vpnProvider(by, v) {
+            for (var i = 0; i < VPN_PROVIDERS.length; ++i) {
+                var p = VPN_PROVIDERS[i];
+                if (by === "guid" ? p[1] === v : String(v || "").toLowerCase() === p[0]) return p;
+            }
+            return null;
+        }
+        // connman State -> the API's (vpn_service.c).
+        function vpnApiState(st) {
+            return { ready: "connected", configuration: "connecting", disconnect: "disconnecting",
+                     idle: "disconnected", failure: "disconnected" }[st] || "unknown";
+        }
+        // connman's connection path: Host (and Domain), non-alphanumerics as "_".
+        function vpnPath(host, domain) {
+            return "/net/connman/vpn/connection/" + (host + (domain ? "_" + domain : "")).replace(/[^A-Za-z0-9]/g, "_");
+        }
+        function vpnConnections() { return load().vpn.connections; }
+        function vpnByName(s, name) {
+            return s.vpn.connections.filter(function (c) { return c.props.Name === name; })[0] || null;
+        }
+        // luna_service_object_get_string: a non-empty string, or absent.
+        function vpnStr(p, k) { return p && typeof p[k] === "string" && p[k] !== "" ? p[k] : null; }
+
+        function vpnEntry(c) {
+            var e = { vpnProfileName: c.props.Name || "" };
+            var prov = vpnProvider("type", c.props.Type);
+            if (prov) e.vpnAgentGuid = prov[1];
+            if (c.props.Host) e.vpnHost = c.props.Host;
+            e.vpnProfileConnectState = vpnApiState(c.props.State);
+            e.immutable = !!c.props.Immutable;
+            e.splitRouting = !!c.props.SplitRouting;
+            return e;
+        }
+        function vpnStatus() {
+            return { returnValue: true, connmanVpnAvailable: true,
+                     activeProfiles: vpnConnections().filter(function (c) { return vpnApiState(c.props.State) !== "disconnected"; }).map(vpnEntry) };
+        }
+        function vpnList() {
+            return { returnValue: true, vpnProfiles: vpnConnections().map(vpnEntry) };
+        }
+        // The descriptor, filled from the connection (getProfileDetails): secrets
+        // never come back (connman hides them), the rest as connman has them.
+        function vpnFill(fields, props) {
+            return fields.map(function (f) {
+                var o = JSON.parse(JSON.stringify(f));
+                if (o.type === "rowgroup" && o.vpnFormFields) o.vpnFormFields = vpnFill(o.vpnFormFields, props);
+                if (o.type === "groups" && o.groups) o.groups.forEach(function (g) { g.vpnFormFields = vpnFill(g.vpnFormFields || [], props); });
+                if (o.connmanProperty) {
+                    if (o.type === "passwordfield") { o.value = ""; o.hasStoredValue = false; }
+                    else if (typeof props[o.connmanProperty] === "string") o.value = props[o.connmanProperty];
+                }
+                return o;
+            });
+        }
+        function vpnDetails(c) {
+            var r = { returnValue: true, vpnProfileName: c.props.Name || "" };
+            var prov = vpnProvider("type", c.props.Type);
+            if (prov) r.vpnAgentGuid = prov[1];
+            r.immutable = !!c.props.Immutable;
+            var vp = {};
+            if (c.props.Host) vp.vpnHost = c.props.Host;
+            if (c.props.Domain) vp.vpnDomain = c.props.Domain;
+            if (prov && VPN_FORM_FIELDS[prov[0]]) vp.vpnFormFields = vpnFill(VPN_FORM_FIELDS[prov[0]], c.props);
+            r.vpnProfile = vp;
+            return r;
+        }
+        // getConnectionDetails: the tunnel's addresses once it is up.
+        function vpnConnDetails(c) {
+            var p = c.props, r = { returnValue: true, state: vpnApiState(p.State) };
+            if (p.Type) r.tunnelType = p.Type;
+            if (p.Host) r.serverHostname = p.Host;
+            if (p.Domain) r.domain = p.Domain;
+            if (p.State === "ready") {
+                var addr = String(p["WireGuard.Address"] || "10.8.0.6/24").split(",")[0].trim().split("/");
+                var bits = addr[1] ? Math.max(0, Math.min(32, parseInt(addr[1], 10))) : 32;
+                var mask = [0, 8, 16, 24].map(function (sh) { return (((0xffffffff << (32 - bits)) >>> 0) >>> (24 - sh)) & 255; }).join(".");
+                r.clientIpAddress = addr[0];
+                r.netmask = bits === 0 ? "0.0.0.0" : mask;
+                r.index = 7;
+                r.ifName = p.Type === "wireguard" ? "wg0" : p.Type === "l2tp" || p.Type === "pptp" ? "ppp0" : "tun0";
+                var up = Math.max(0, Date.now() - (c.since || Date.now()));
+                r.bytesRx = Math.round(up * 2.1);
+                r.bytesTx = Math.round(up * 0.7);
+            }
+            r.splitRouting = !!p.SplitRouting;
+            var dns = p["WireGuard.DNS"];
+            if (p.State === "ready") r.nameservers = dns ? dns.split(/\s*,\s*/) : ["10.8.0.1"];
+            return r;
+        }
+
+        // What connman-vpnd asks the agent for when connecting (its
+        // RequestInput fields), per type; none once it has them stored.
+        function vpnCredentialKeys(c) {
+            var p = c.props;
+            switch (String(p.Type).toLowerCase()) {
+            case "openvpn": return p["OpenVPN.AuthUserPass"] === "-" ? ["OpenVPN.Username", "OpenVPN.Password"] : [];
+            case "vpnc": return p["VPNC.Xauth.Password"] ? [] : ["VPNC.Xauth.Username", "VPNC.Xauth.Password"];
+            case "l2tp": return p["L2TP.Password"] ? [] : ["Username", "Password"];
+            case "pptp": return p["PPTP.Password"] ? [] : ["Username", "Password"];
+            case "openconnect": return p["OpenConnect.AuthType"] === "userpass" || p["OpenConnect.AuthType"] === "cookie_with_userpass"
+                ? ["Username", "Password"] : (p["OpenConnect.AuthType"] || "cookie") === "cookie" ? ["OpenConnect.Cookie"] : [];
+            }
+            return [];
+        }
+        function vpnNeedsCredentials(c) {
+            return vpnCredentialKeys(c).length > 0 && !c.credentials;
+        }
+        // on_agent_prompt: the prompt's fields from connman's request.
+        function vpnPromptFields(c, keys) {
+            var f = [{ id: "Host", type: "label", label: "Host", value: c.props.Host },
+                     { id: "Name", type: "label", label: "Name", value: c.props.Name }];
+            keys.forEach(function (k) {
+                var secret = /Password|Cookie/.test(k);
+                f.push({ id: k, type: secret ? "passwordfield" : "textfield", label: k, required: true,
+                         promptValueType: secret ? "password" : "string" });
+            });
+            return f;
+        }
+
+        // getStatus also carries prompts, notices and promptResolved for this
+        // page's subscribers (the agent's calls; vpn_service.c on_agent_*).
+        var vpnAgentListeners = [];
+        var vpnPrompts = {};        // promptId -> {name, keys}
+        var vpnPending = {};        // path -> true while a connect is unanswered
+        function vpnAgentPush(payload) {
+            vpnAgentListeners.slice().forEach(function (fn) { fn(payload); });
+        }
+
+        // A subscribable method: the first reply always says subscribed;
+        // pushes, the same object without it, whenever it changes.
+        function vpnWatch(p, reply, ctx, compute, onSubscribe) {
+            var first = compute();
+            var last = JSON.stringify(first);
+            var subscribed = p.subscribe === true && first.returnValue !== false;
+            var r = JSON.parse(last);
+            r.subscribed = subscribed;
+            reply(r);
+            if (!subscribed) return;
+            var fn = function () {
+                if (ctx.cancelled()) { listeners = listeners.filter(function (l) { return l !== fn; }); return; }
+                var now = compute();
+                if (now.returnValue === false) return;          // a deleted profile: the key goes silent
+                var str = JSON.stringify(now);
+                if (str === last) return;
+                last = str;
+                reply(now);
+            };
+            listeners.push(fn);
+            if (onSubscribe) onSubscribe();
+        }
+        // The lookup preamble (vpn_service.c): -2, -8, -3.
+        function vpnLookup(p, reply) {
+            var name = vpnStr(p, "vpnProfileName");
+            if (!name) { reply(vpnErr(-2)); return null; }
+            var s = load(), c = vpnByName(s, name);
+            if (!c) { reply(vpnErr(-3)); return null; }
+            return { s: s, c: c };
+        }
+        function vpnSetState(path, st, extra) {
+            var s = load(), c = s.vpn.connections.filter(function (x) { return x.path === path; })[0];
+            if (!c) return null;
+            c.props.State = st;
+            if (st === "ready") c.since = Date.now();
+            if (extra) extra(c);
+            save(s);
+            return c;
+        }
+        // connman brings it up (configuration -> ready), or fails it.
+        function vpnBringUp(path, done) {
+            setTimeout(function () {
+                var s = load(), c = s.vpn.connections.filter(function (x) { return x.path === path; })[0];
+                // Taken down meanwhile (disconnect, deleted): connman aborts the Connect.
+                if (!c || c.props.State !== "configuration") return done && done(vpnErr(-6, "Operation aborted"));
+                if (!netUp(s)) {
+                    vpnSetState(path, "idle");
+                    vpnAgentPush({ vpnProfileName: c.props.Name, notice: "connect-failed", noticeSeverity: "errorNotice" });
+                    return done && done(vpnErr(-6, "Input/output error"));
+                }
+                vpnSetState(path, "ready");
+                if (done) done({ returnValue: true });
+            }, VPN_CONNECT_MS);
+        }
+        function netUp(s) {
+            return !s.offlineMode && !!(s.wifi.enabled && s.wifi.connected);
+        }
+        // Carrier loss: connman takes the VPN down with it.
+        function vpnFollowNetwork(s) {
+            if (!s.vpn || netUp(s)) return;
+            s.vpn.connections.forEach(function (c) {
+                if (c.props.State === "ready" || c.props.State === "configuration") c.props.State = "idle";
+            });
+        }
+        function vpnBuildProps(fields, props) {
+            (fields || []).forEach(function (f) {
+                if (!f || typeof f !== "object") return;
+                if (f.type === "rowgroup") return vpnBuildProps(f.vpnFormFields, props);
+                if (f.type === "groups") return (f.groups || []).forEach(function (g) { vpnBuildProps(g.vpnFormFields, props); });
+                var v = typeof f.value === "string" && f.value !== "" ? f.value : null;
+                if (v === null) return;
+                if (f.connmanPropertyMap && typeof f.connmanPropertyMap === "object") {
+                    var m = f.connmanPropertyMap[v] || {};
+                    Object.keys(m).forEach(function (k) { props[k] = typeof m[k] === "string" ? m[k] : ""; });
+                } else if (typeof f.connmanProperty === "string" && f.connmanProperty) {
+                    props[f.connmanProperty] = v;
+                }
+            });
+        }
+
+        register(["com.webos.service.vpn"], {
+            "/getStatus": function (p, reply, ctx) {
+                vpnWatch(p, reply, ctx, vpnStatus, function () {
+                    var fn = function (payload) {
+                        if (ctx.cancelled()) { vpnAgentListeners = vpnAgentListeners.filter(function (l) { return l !== fn; }); return; }
+                        reply(payload);
+                    };
+                    vpnAgentListeners.push(fn);
+                });
+            },
+            "/getProfileList": function (p, reply, ctx) { vpnWatch(p, reply, ctx, vpnList); },
+            "/getProfileDetails": function (p, reply, ctx) {
+                var name = vpnStr(p, "vpnProfileName");
+                if (!vpnLookup(p, reply)) return;
+                vpnWatch(p, reply, ctx, function () {
+                    var c = vpnByName(load(), name);
+                    return c ? vpnDetails(c) : vpnErr(-3);
+                });
+            },
+            "/getConnectionDetails": function (p, reply, ctx) {
+                var name = vpnStr(p, "vpnProfileName");
+                if (!vpnLookup(p, reply)) return;
+                vpnWatch(p, reply, ctx, function () {
+                    var c = vpnByName(load(), name);
+                    return c ? vpnConnDetails(c) : vpnErr(-3);
+                });
+            },
+            "/getAgents": function (p, reply) {
+                reply({ returnValue: true, vpnAgents: VPN_PROVIDERS.map(function (v) {
+                    var a = { vpnAgentGuid: v[1], vpnAgentLabel: v[2], vpnAgentTechnology: [v[3]], connmanType: v[0],
+                              vpnAgentIcon: "", vpnAgentEula: "" };
+                    if (v[4]) a.deprecated = true;
+                    if (v[5]) a.supportsImport = [v[5]];
+                    return a;
+                }) });
+            },
+            "/getAgentFormFields": function (p, reply) {
+                var guid = vpnStr(p, "vpnAgentGuid");
+                if (!guid) return reply(vpnErr(-2));
+                var prov = vpnProvider("guid", guid);
+                if (!prov) return reply(vpnErr(-9));
+                reply({ returnValue: true, vpnAgentGuid: guid, vpnFormFields: JSON.parse(JSON.stringify(VPN_FORM_FIELDS[prov[0]])) });
+            },
+            "/connect": function (p, reply) {
+                var l = vpnLookup(p, reply);
+                if (!l) return;
+                var c = l.c, path = c.path;
+                if (vpnPending[path]) return reply(vpnErr(-6, "A connection attempt for this profile is already in progress."));
+                if (c.props.State === "ready") return reply(vpnErr(-6, "Already connected"));
+                if (c.props.State === "configuration") return reply(vpnErr(-6, "In progress"));
+                if (!netUp(l.s)) return reply(vpnErr(-6, "Input/output error"));
+                // Only one VPN at a time: connman takes the other down.
+                l.s.vpn.connections.forEach(function (o) {
+                    if (o !== c && (o.props.State === "ready" || o.props.State === "configuration")) o.props.State = "idle";
+                });
+                c.props.State = "configuration";
+                save(l.s);
+                if (vpnNeedsCredentials(c)) {
+                    // RequestInput: the prompt is pushed, then the call answered -7.
+                    var keys = vpnCredentialKeys(c);
+                    vpnPrompts[path] = { name: c.props.Name, keys: keys };
+                    vpnAgentPush({ promptId: path, promptType: "form", vpnProfileName: c.props.Name,
+                                   vpnAgentGuid: vpnProvider("type", c.props.Type)[1], label: c.props.Name,
+                                   vpnFormFields: vpnPromptFields(c, keys) });
+                    var r = vpnErr(-7);
+                    r.promptId = path;
+                    return reply(r);
+                }
+                vpnPending[path] = true;
+                vpnBringUp(path, function (r) { delete vpnPending[path]; if (r) reply(r); });
+            },
+            "/disconnect": function (p, reply) {
+                var name = vpnStr(p, "vpnProfileName"), s = load();
+                var down = function (c) {
+                    c.props.State = "disconnect";
+                    var path = c.path;
+                    setTimeout(function () { vpnSetState(path, "idle"); }, VPN_DISCONNECT_MS);
+                };
+                if (!name) {
+                    s.vpn.connections.forEach(function (c) { if (vpnApiState(c.props.State) !== "disconnected") down(c); });
+                    save(s);
+                    return reply({ returnValue: true });
+                }
+                var c = vpnByName(s, name);
+                if (!c) return reply(vpnErr(-3));
+                if (c.props.State === "idle" || c.props.State === "failure") return reply(vpnErr(-6, "Not connected"));
+                delete vpnPrompts[c.path];
+                down(c);
+                save(s);
+                reply({ returnValue: true });
+            },
+            "/addProfile": function (p, reply) {
+                var name = vpnStr(p, "vpnProfileName"), guid = vpnStr(p, "vpnAgentGuid");
+                if (!name || !guid) return reply(vpnErr(-2));
+                var prov = vpnProvider("guid", guid);
+                if (!prov) return reply(vpnErr(-9));
+                var s = load();
+                if (vpnByName(s, name)) return reply(vpnErr(-4));
+                var vp = p.vpnProfile && typeof p.vpnProfile === "object" ? p.vpnProfile : null;
+                var host = vpnStr(vp, "vpnHost");
+                if (!host) return reply(vpnErr(-2));
+                var domain = vpnStr(vp, "vpnDomain");
+                var props = { Type: prov[0], Name: name, Host: host };
+                if (domain) props.Domain = domain;
+                vpnBuildProps(vp.vpnFormFields, props);
+                var path = vpnPath(host, domain);
+                // connman keys connections by Host and Domain: the same server
+                // under a new name is the same connection (a known limitation).
+                var same = s.vpn.connections.filter(function (c) { return c.path === path; })[0];
+                if (same) {
+                    for (var k in props) same.props[k] = props[k];
+                    delete same.credentials;
+                } else {
+                    props.State = "idle";
+                    props.Immutable = false;
+                    s.vpn.connections.push({ path: path, props: props });
+                }
+                save(s);
+                reply({ returnValue: true, vpnProfilePath: path });
+            },
+            "/updateProfile": function (p, reply) {
+                var l = vpnLookup(p, reply);
+                if (!l) return;
+                if (l.c.props.Immutable) return reply(vpnErr(-10, "This profile is provisioned and cannot be changed."));
+                var vp = p.vpnProfile && typeof p.vpnProfile === "object" ? p.vpnProfile : {};
+                var host = vpnStr(vp, "vpnHost"), domain = vpnStr(vp, "vpnDomain");
+                if (host) l.c.props.Host = host;
+                if (domain) l.c.props.Domain = domain;
+                var before = JSON.stringify(l.c.props);
+                vpnBuildProps(vp.vpnFormFields, l.c.props);
+                if (JSON.stringify(l.c.props) !== before) delete l.c.credentials;
+                save(l.s);
+                reply({ returnValue: true });
+            },
+            "/deleteProfile": function (p, reply) {
+                var l = vpnLookup(p, reply);
+                if (!l) return;
+                if (l.c.props.Immutable) return reply(vpnErr(-10, "This profile is provisioned and cannot be removed."));
+                l.s.vpn.connections = l.s.vpn.connections.filter(function (c) { return c !== l.c; });
+                delete vpnPrompts[l.c.path];
+                save(l.s);
+                reply({ returnValue: true });
+            },
+            "/uiPromptResponse": function (p, reply) {
+                var id = vpnStr(p, "promptId");
+                if (!id) return reply(vpnErr(-2));
+                reply({ returnValue: true });
+                var prompt = vpnPrompts[id];
+                if (!prompt) return;
+                delete vpnPrompts[id];
+                if (p.cancelled === true || p.buttonId === "backButton") {
+                    vpnSetState(id, "failure");
+                    setTimeout(function () { vpnSetState(id, "idle"); }, VPN_DISCONNECT_MS);
+                    return;
+                }
+                var given = {};
+                (Array.isArray(p.vpnFormFields) ? p.vpnFormFields : []).forEach(function (f) {
+                    if (f && typeof f === "object" && ["label", "status", "button"].indexOf(f.type) < 0
+                            && vpnStr(f, "id") && vpnStr(f, "value")) given[f.id] = f.value;
+                });
+                if (!prompt.keys.every(function (k) { return given[k]; })) {
+                    // connman: the login failed (ReportError), the connection ends.
+                    vpnSetState(id, "idle");
+                    vpnAgentPush({ vpnProfileName: prompt.name, notice: "auth-failed", noticeSeverity: "errorNotice" });
+                    return;
+                }
+                // connman-vpnd keeps the credentials for the next time.
+                vpnSetState(id, "configuration", function (c) { c.credentials = given; });
+                vpnBringUp(id);
+            },
+            "/acceptEula": function (p, reply) { reply({ returnValue: true }); }
+        });
+
+        // The system menu's VPN rows: connect or disconnect by name, as the
+        // shell asks every page (idempotent). A profile that needs credentials
+        // is not connected from here: the drawer opens Settings > VPN instead.
+        function vpnFromShell(s, st) {
+            if (!s.vpn) return;
+            var c;
+            if (st.vpnConnect && (c = vpnByName(s, st.vpnConnect)) && !vpnNeedsCredentials(c)
+                    && (c.props.State === "idle" || c.props.State === "failure") && netUp(s)) {
+                s.vpn.connections.forEach(function (o) {
+                    if (o !== c && (o.props.State === "ready" || o.props.State === "configuration")) o.props.State = "idle";
+                });
+                c.props.State = "configuration";
+                var path = c.path;
+                setTimeout(function () { vpnBringUp(path); }, 0);
+            }
+            if (st.vpnDisconnect && (c = vpnByName(s, st.vpnDisconnect)) && (c.props.State === "ready" || c.props.State === "configuration")) {
+                c.props.State = "disconnect";
+                var p2 = c.path;
+                setTimeout(function () { vpnSetState(p2, "idle"); }, VPN_DISCONNECT_MS);
+            }
+        }
 
         // ---- Shell <-> runtime ------------------------------------------------------
 
@@ -3225,6 +3721,7 @@
             if ("bluetoothOn" in st) s.bluetooth.powered = !!st.bluetoothOn;
             if ("brightness" in st) s.settings.picture.backlight = Math.round(st.brightness);
             if ("muted" in st) s.audio.muted = !!st.muted;
+            vpnFromShell(s, st);
             // The shell's lock screen (com.palm.systemmanager getLockStatus).
             if ("deviceLocked" in st && !!st.deviceLocked !== !!store.get("deviceLocked", false)) {
                 store.set("deviceLocked", !!st.deviceLocked);
@@ -3306,7 +3803,10 @@
     //   com.palm.telephony                   webOS-ports/webos-telephonyd src/telephonyservice.c,
     //                                        src/telephonyservice_call.c, src/telephonyservice_sms.c
     //       dial {number, blockId}, answer {id}, ignore {id}, hangup {id},
-    //       isTelephonyReady, powerQuery, platformQuery, networkStatusQuery
+    //       isTelephonyReady, powerQuery, platformQuery, networkStatusQuery,
+    //       simStatusQuery, subscriberIdQuery (src/telephonyservice_misc.c,
+    //       telephonyservice_sim.c; the values are fictional: the ITU test
+    //       network 001-01, a 555 number, the IMEI standard's example)
     //     Phoenix additions (telephonyd leaves call state to oFono, which the
     //     LuneOS phone app reads directly; shaped after oFono's VoiceCall,
     //     CallVolume and MessageWaiting D-Bus APIs, see apps/shared/luna/src/telephony.ts):
@@ -3430,7 +3930,12 @@
                 reply(ok({ extended: { radioConnected: !offline(), networkRegistered: !offline(), dataRegistered: false, simReady: true } }));
             },
             "/platformQuery": function (p, reply) {
-                reply(ok({ extended: { platformType: "gsm", imei: "000000000000000", version: "phoenix-sim" } }));
+                reply(ok({ extended: { platformType: "gsm", imei: "490154203237518", carrier: "Phoenix",
+                                       mcc: 1, mnc: 1, version: "phoenix-sim" } }));
+            },
+            "/simStatusQuery": function (p, reply) { reply(ok({ extended: { state: "simready" } })); },
+            "/subscriberIdQuery": function (p, reply) {
+                reply(ok({ extended: { platformType: "gsm", imsi: "001010123456789", msisdn: "+14085550199" } }));
             },
             "/powerQuery": function (p, reply) { reply(ok({ extended: { powerState: offline() ? "off" : "on" } })); },
             "/networkStatusQuery": function (p, reply) {
@@ -3836,6 +4341,17 @@
                 return tx("readwrite", function (st) {
                     if (!st) { delete memFiles[path]; return; }
                     return reqP(st.delete(path));
+                });
+            },
+            // Every stored file (Device Info > Full Erase).
+            clear: function () {
+                Object.keys(urlCache).forEach(function (k) {
+                    if (urlCache[k].indexOf("blob:") === 0) try { URL.revokeObjectURL(urlCache[k]); } catch (e) { /* ignore */ }
+                });
+                urlCache = {};
+                return tx("readwrite", function (st) {
+                    if (!st) { memFiles = {}; return; }
+                    return reqP(st.clear());
                 });
             },
             list: function (prefix) {

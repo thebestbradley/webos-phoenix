@@ -53,6 +53,10 @@ const ICONS = {
     bluetooth: ["#5b6ee0", "#27348f", `
         <path d="M24 23l17 16-9 8.5V16.5L41 25 24 41" fill="none" stroke="#fff" stroke-width="4.4"
               stroke-linecap="round" stroke-linejoin="round"/>`],
+    vpn: ["#5d86b3", "#203f63", `
+        <path d="M32 11.5l17 6.2v12.6c0 10.6-7.2 18.6-17 22.2-9.8-3.6-17-11.6-17-22.2V17.7z" fill="#fff"/>
+        <rect x="25" y="30" width="14" height="11" rx="2" fill="url(#bg)"/>
+        <path d="M27.8 30v-3.2a4.2 4.2 0 0 1 8.4 0V30" fill="none" stroke="url(#bg)" stroke-width="2.6"/>`],
     airplane: ["#f2a13b", "#b8560f", `
         <path d="M32 11c2.2 0 3.3 2.5 3.3 5.2v10.1l14.7 8.4v4.4l-14.7-4.3v9.4l4.4 3.3v3.6L32 49.6l-7.7 1.9v-3.6l4.4-3.3v-9.4L14 39.5v-4.4l14.7-8.4V16.2c0-2.7 1.1-5.2 3.3-5.2z"
               fill="#fff"/>`],

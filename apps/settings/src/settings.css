@@ -196,3 +196,8 @@ div.license-text { font-family: var(--pui-font); font-size: 13px; }
 }
 .emergency-pick:active { background: rgba(255, 255, 255, 0.15); }
 .emergency-pick-type { color: #9ab; font-size: 14px; margin-left: 6px; }
+
+/* VPN: importing the provider's configuration file. */
+.vpn-import {
+    margin: 4px 0 10px;
+}

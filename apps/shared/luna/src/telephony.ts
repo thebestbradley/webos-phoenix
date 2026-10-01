@@ -12,6 +12,9 @@
 //   isTelephonyReady, powerQuery, networkStatusQuery, platformQuery
 //       same method table; also what luna-systemui's TelephonyService.js
 //       subscribes to (third_party/luna-systemui/data/TelephonyService.js)
+//   platformQuery, subscriberIdQuery, simStatusQuery
+//       their replies in src/telephonyservice_misc.c, telephonyservice_sim.c
+//       (the phone's identity for Settings > Device Info)
 //
 // telephonyd has no call-state notification on the bus: the LuneOS phone app
 // (webOS-ports/org.webosports.app.phone, qml/services/VoiceCallMgrWrapper.qml)
@@ -73,7 +76,56 @@ export interface VoicemailStatus {
 
 type OnError = (e: LunaError) => void;
 
+/** platformQuery: the modem (telephonyservice_misc.c). */
+export interface PlatformInfo {
+    platformType: "gsm" | "cdma" | "unknown";
+    imei?: string;
+    carrier?: string;
+    mcc?: number;
+    mnc?: number;
+    version?: string;
+}
+
+/** subscriberIdQuery: the subscription (GSM: IMSI and number; CDMA: MIN and MDN). */
+export interface SubscriberInfo {
+    imsi?: string;
+    msisdn?: string;
+    min?: string;
+    mdn?: string;
+}
+
+/** simStatusQuery state (telephonydriver.c telephony_sim_status_to_string). */
+export type SimState = "simnotfound" | "siminvalid" | "simready" | "pinrequired" | "pukrequired" | "pinpermblocked" | "unknown";
+
+/** networkStatusQuery (as the simulator and luna-systemui read it). */
+export interface NetworkStatus {
+    state?: string;
+    registration?: string;
+    networkName?: string;
+    rat?: string;
+}
+
+function extended<T>(r: object): T {
+    return ((r as { extended?: unknown }).extended ?? {}) as T;
+}
+
 export const telephony = {
+    /** platformQuery: modem type, IMEI, carrier. */
+    async platform(): Promise<PlatformInfo> {
+        return extended<PlatformInfo>(await call(`${TEL}/platformQuery`, {}));
+    },
+    /** subscriberIdQuery: IMSI and phone number (MSISDN), or CDMA's MIN / MDN. */
+    async subscriber(): Promise<SubscriberInfo> {
+        return extended<SubscriberInfo>(await call(`${TEL}/subscriberIdQuery`, {}));
+    },
+    /** simStatusQuery */
+    async simState(): Promise<SimState> {
+        return extended<{ state?: SimState }>(await call(`${TEL}/simStatusQuery`, {})).state ?? "unknown";
+    },
+    /** networkStatusQuery */
+    async network(): Promise<NetworkStatus> {
+        return extended<NetworkStatus>(await call(`${TEL}/networkStatusQuery`, {}));
+    },
     /** callStatusQuery {subscribe}: every call and its state; replies again on each change. */
     watchCalls(cb: (s: CallStatus) => void, onError?: OnError): Subscription {
         return subscribe(`${TEL}/callStatusQuery`, {}, (r) => {

@@ -20,3 +20,4 @@ export * from "./web";
 export * from "./playback";
 export * from "./documents";
 export * from "./setup";
+export * from "./vpn";

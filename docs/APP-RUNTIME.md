@@ -499,7 +499,7 @@ params match a launch point opens that launch point's card.
 `apps/settings` is one app with one launch point per pane, like the separate
 preference apps of webOS 2.x: Wi-Fi, Bluetooth, Airplane Mode, Screen & Lock,
 Sounds & Ringtones, Date & Time, Language & Region, Accessibility, Location
-Services, Emergency Info, Device Info, Updates.
+Services, Emergency Info, Device Info, Updates, VPN.
 Launched without a page it lists them all. The launcher icons are drawn by
 `apps/settings/tools/render-icons.cjs` and the wallpapers by
 `tools/make-wallpapers.py` (CC0); Palm's were never open-sourced.
@@ -520,10 +520,11 @@ same request and reply shapes:
 | Sounds | `com.webos.service.audio` `master/getVolume`, `master/setVolume`, `master/muteVolume`, `getInputVolume` / `setInputVolume` (`streamType` `pringtones`, `palerts`, `pfeedback`, `pmedia`), `playFeedback`, `playSound`, `controlPlayback`; system service `ringtone`, `systemSounds`, `x_palm_virtualkeyboard_prefs` (`TapSounds`: Keyboard clicks), `ringtone/listRingtones` | `audiod-pro` `src/modules/masterVolumeManager`, `audioPolicyManager`, `systemSoundsManager` |
 | Date & Time | system service `get/setPreferences` (`timeFormat`, `useNetworkTime`, `useNetworkTimeZone`, `timeZone`), `getPreferenceValues {key: "timeZone"}`, `time/getSystemTime`, `time/setSystemTime {utc}` | `luna-sysservice` `Src/TimePrefsHandler.cpp` |
 | Language & Region | `com.webos.settingsservice` `get/setSystemSettings {keys: ["localeInfo"]}` (`locales.UI`, `locales.FMT`) | `settingsservice` |
-| Device Info | system service `deviceInfo/query`, `osInfo/query`; `com.palm.power` `batteryStatusQuery` (legacy); settings service `resetSystemSettings`; `org.webosphoenix.service.reset/eraseUserData` (Phoenix, simulator only so far); "Help and tips" and "Run setup again" launch Help and First Use (`{rerun: true}`) | `luna-sysservice` `Src/DeviceInfoService.cpp`, `OsInfoService.cpp` |
+| Device Info | system service `deviceInfo/query`, `osInfo/query`; `com.palm.power` `batteryStatusQuery` (legacy); `com.palm.telephony` `platformQuery` (IMEI/MEID, carrier), `subscriberIdQuery` (`msisdn`: the phone number), `simStatusQuery`, `networkStatusQuery`; settings service `resetSystemSettings`; `org.webosphoenix.service.reset` `eraseUserData` (apps' data and settings; the user's files on the USB drive are kept, as legacy webOS's "Erase Apps & Data") and `fullErase` (everything, files too) (Phoenix, simulator only so far); "Help and tips" and "Run setup again" launch Help and First Use (`{rerun: true}`) | `luna-sysservice` `Src/DeviceInfoService.cpp`, `OsInfoService.cpp` |
 | Accessibility | system service `get/setPreferences` `accessibility {reduceMotion, highContrast, monoAudio, captions}` (Phoenix key) | `luna-sysservice` `Src/PrefsFactory.cpp` (stores any key) |
 | Location Services | `com.webos.service.location` `getAllLocationHandlers`, `setState {Handler, state}`, `getLocationUpdates`, `getReverseLocation`; `org.webosphoenix.service.location` `getPermissions`, `setPermission`, `removePermission` (Phoenix) | see [Location](#location) |
 | Emergency Info | system service `get/setPreferences` `emergencyInfo` (Phoenix key); contacts from db8 `com.palm.person:1` | see [Emergency information](#emergency-information) |
+| VPN | `com.webos.service.vpn` (LuneOS): `getStatus` (connection states and credential prompts, subscribed), `getProfileList`, `getProfileDetails`, `getConnectionDetails`, `getAgents`, `getAgentFormFields`, `addProfile`, `updateProfile`, `deleteProfile`, `connect`, `disconnect`, `uiPromptResponse`, `cancelUiPrompt`; errors -1 to -10 as legacy `com.palm.vpn`. A `.ovpn` is written with `org.webosphoenix.filemanager` to `/media/internal/vpn` and used as `OpenVPN.ConfigFile`; a WireGuard `.conf` is split into its fields (`@phoenix/luna` `parseWireGuardConf`). The shell's VPN drawer gets the profiles from `systemStatus` `vpnProfiles` and sends `{vpnConnect}` / `{vpnDisconnect}` | `luneos-vpn-adapter` `src/vpn_service.c`, `vpn_errors.h`, `vpn_providers.c`, `files/formfields/*.json` (commit 40bdda2) |
 
 The simulated services keep their state in the runtime's store (shared by
 every app window, persistent across restarts) and have a few simulated

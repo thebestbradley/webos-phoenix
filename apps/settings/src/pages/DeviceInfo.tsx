@@ -1,22 +1,63 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Device Info: model, software version, battery, storage, memory, open
-// source licenses, help, setup (First Use) again, reset options.
+// Device Info: model, software version, the phone (number, carrier,
+// network, IMEI, SIM), battery, storage, memory, open source licenses, help,
+// setup (First Use) again, and the legacy reset options: Reset All
+// Settings, Erase Apps & Data (keeps the files on the USB drive), Full Erase.
 // Services: com.webos.service.systemservice deviceInfo/query, osInfo/query;
-// com.palm.power batteryStatusQuery (legacy; OSE has no battery service on
-// its reference boards); com.webos.settingsservice resetSystemSettings;
-// org.webosphoenix.service.reset eraseUserData (Phoenix, not yet on device).
+// com.palm.telephony platformQuery, subscriberIdQuery, simStatusQuery,
+// networkStatusQuery (webos-telephonyd; the section is left out without a
+// modem, as on the TouchPad); com.palm.power batteryStatusQuery (legacy; OSE
+// has no battery service on its reference boards); com.webos.settingsservice
+// resetSystemSettings; org.webosphoenix.service.reset eraseUserData,
+// fullErase (Phoenix, not yet on device).
 
 import { useEffect, useState } from "react";
-import { apps, call, settings, system, type DeviceInfo, type OsInfo } from "@phoenix/luna";
-import { Button, Dialog, ErrorText, Group, Page, PageHeader, Row, Spinner } from "@phoenix/ui";
+import { apps, call, LunaError, settings, system, telephony, type DeviceInfo, type NetworkStatus, type OsInfo,
+         type PlatformInfo, type SimState, type SubscriberInfo } from "@phoenix/luna";
+import { Button, Dialog, ErrorText, formatNumber, Group, Page, PageHeader, Row, Spinner } from "@phoenix/ui";
 import { useBack } from "../nav";
 import notice from "../../../../NOTICE?raw";
 import license from "../../../../LICENSE?raw";
 import { LICENSES } from "../licenses";
 
-type Reset = "settings" | "erase";
+type Reset = "settings" | "erase" | "full";
+
+interface Phone {
+    platform: PlatformInfo;
+    subscriber: SubscriberInfo;
+    sim: SimState;
+    network: NetworkStatus;
+}
+
+// The phone, when the device has one (no telephony service: no section).
+function usePhone() {
+    const [phone, setPhone] = useState<Phone | null>(null);
+    useEffect(() => {
+        let live = true;
+        telephony.platform().then(async (platform) => {
+            const [subscriber, sim, network] = await Promise.all([
+                telephony.subscriber().catch(() => ({})),
+                telephony.simState().catch((): SimState => "unknown"),
+                telephony.network().catch(() => ({})),
+            ]);
+            if (live) setPhone({ platform, subscriber, sim, network });
+        }, () => { /* no modem */ });
+        return () => { live = false; };
+    }, []);
+    return phone;
+}
+
+const SIM_STATES: Record<SimState, string> = {
+    simready: "Ready", simnotfound: "No SIM card", siminvalid: "Invalid SIM card", pinrequired: "Locked (PIN)",
+    pukrequired: "Locked (PUK)", pinpermblocked: "Blocked", unknown: "—",
+};
+// oFono's radio access technologies.
+const RATS: Record<string, string> = {
+    gsm: "2G (GSM)", edge: "2G (EDGE)", umts: "3G (UMTS)", hspa: "3G (HSPA)", lte: "4G (LTE)", nr: "5G (NR)",
+    "1x": "2G (1xRTT)", evdo: "3G (EV-DO)",
+};
 
 function useBattery() {
     const [b, setB] = useState<{ percent: number; charging: boolean } | null>(null);
@@ -39,6 +80,7 @@ export function DeviceInfoPage() {
     const [dev, setDev] = useState<DeviceInfo | null>(null);
     const [os, setOs] = useState<OsInfo | null>(null);
     const battery = useBattery();
+    const phone = usePhone();
     const [licenses, setLicenses] = useState(false);
     const [reset, setReset] = useState<Reset | null>(null);
     const [resetting, setResetting] = useState(false);
@@ -63,12 +105,15 @@ export function DeviceInfoPage() {
             if (kind === "settings") {
                 await settings.reset();
                 setDone("All settings are back to their defaults.");
-            } else {
+            } else if (kind === "erase") {
                 await call("luna://org.webosphoenix.service.reset/eraseUserData", {});
-                setDone("Apps and data were erased.");
+                setDone("Apps and data were erased; the files on the USB drive are kept. Setup runs at the next start.");
+            } else {
+                await call("luna://org.webosphoenix.service.reset/fullErase", {});
+                setDone("Everything was erased, the USB drive too. Setup runs at the next start.");
             }
         } catch (e) {
-            setError(e instanceof Error ? e.message : String(e));
+            setError(e instanceof LunaError ? e.errorText : String(e));
         } finally {
             setResetting(false);
             setReset(null);
@@ -91,6 +136,17 @@ export function DeviceInfoPage() {
                         <Row title="Platform" value={[os.core_os_name, os.core_os_release].filter(Boolean).join(" ") || "—"} />
                         <Row title="Kernel" value={os.core_os_kernel_version ?? "—"} />
                     </Group>
+                    {phone && (
+                        <Group label="Phone">
+                            <Row title="Phone number" testId="phone-number"
+                                 value={formatNumber(phone.subscriber.msisdn ?? phone.subscriber.mdn ?? "") || "—"} />
+                            <Row title="Carrier" value={phone.platform.carrier ?? phone.network.networkName ?? "—"} />
+                            <Row title="Network" value={phone.network.state === "service"
+                                ? RATS[phone.network.rat ?? ""] ?? phone.network.rat ?? "—" : "No service"} />
+                            <Row title={phone.platform.platformType === "cdma" ? "MEID" : "IMEI"} value={phone.platform.imei ?? "—"} testId="imei" />
+                            <Row title="SIM" value={SIM_STATES[phone.sim] ?? phone.sim} />
+                        </Group>
+                    )}
                     <Group label="Hardware">
                         <Row title="Battery" value={battery ? `${battery.percent}%${battery.charging ? " (charging)" : ""}` : "—"} testId="battery" />
                         <Row title="Memory" value={dev.ram_size ?? "—"} />
@@ -122,24 +178,42 @@ export function DeviceInfoPage() {
                 <div className="reset-buttons">
                     <Button variant="negative" onClick={() => setReset("settings")} data-testid="reset-settings">Reset All Settings</Button>
                     <Button variant="negative" onClick={() => setReset("erase")} data-testid="erase-data">Erase Apps &amp; Data</Button>
+                    <Button variant="negative" onClick={() => setReset("full")} data-testid="full-erase">Full Erase</Button>
                 </div>
             </Group>
             {done && <div className="pui-note">{done}</div>}
             {error && <ErrorText>{error}</ErrorText>}
 
             <Dialog open={!!reset} onClose={resetting ? undefined : () => setReset(null)} testId="reset-dialog"
-                    title={reset === "erase" ? "Erase apps & data?" : "Reset all settings?"}
-                    message={reset === "erase"
-                        ? "This removes every app you installed and all your data: accounts, memos, messages, photos. It cannot be undone."
-                        : "Wi-Fi networks, Bluetooth devices, sounds, screen and region settings go back to their defaults. Your data is kept."}>
+                    title={RESETS[reset ?? "settings"].title}
+                    message={RESETS[reset ?? "settings"].message}>
                 <Button variant="negative" busy={resetting} onClick={() => reset && void doReset(reset)} data-testid="reset-confirm">
-                    {reset === "erase" ? "Erase" : "Reset"}
+                    {RESETS[reset ?? "settings"].action}
                 </Button>
                 <Button variant="dark" disabled={resetting} onClick={() => setReset(null)}>Cancel</Button>
             </Dialog>
         </Page>
     );
 }
+
+// As legacy webOS put them.
+const RESETS: Record<Reset, { title: string; message: string; action: string }> = {
+    settings: {
+        title: "Reset all settings?",
+        message: "Wi-Fi networks, Bluetooth devices, sounds, screen and region settings go back to their defaults. Your data is kept.",
+        action: "Reset",
+    },
+    erase: {
+        title: "Erase apps & data?",
+        message: "This removes every app you installed and all your data: accounts, memos, messages, settings. The files on the USB drive (pictures, music, documents) are kept. It cannot be undone.",
+        action: "Erase",
+    },
+    full: {
+        title: "Full erase?",
+        message: "This erases everything: every app, all your data and every file on the USB drive (pictures, music, videos, documents). It cannot be undone.",
+        action: "Erase Everything",
+    },
+};
 
 function Licenses() {
     return (
