@@ -55,12 +55,110 @@ Item {
     // (DashboardWindowManager::setBannerHasContent, :454-465).
     readonly property bool hasContent: hasNotifications || bannerActive
 
+    // ---- The drawer (Phoenix) ------------------------------------------------------
+    // Live activities (ongoing) are pinned at the top of the list, above the
+    // notifications (the window sources insert them there); ongoingCount is
+    // how many lead the list. The open dashboard has a handle that pulls it
+    // to the whole screen, whose header offers Select and Clear All.
+    property int ongoingCount: 0
+    function _countOngoing() {
+        var n = 0;
+        while (model && n < model.count && model.get(n).ongoing)
+            ++n;
+        ongoingCount = n;
+    }
+    Connections {
+        target: root.model
+        function onRowsInserted() { root._countOngoing(); }
+        function onRowsRemoved() { root._countOngoing(); }
+        function onRowsMoved() { root._countOngoing(); }
+        function onDataChanged() { root._countOngoing(); }
+        function onModelReset() { root._countOngoing(); }
+    }
+    onModelChanged: _countOngoing()
+    readonly property int clearableCount: (model ? model.count : 0) - ongoingCount
+
+    property bool drawerExpanded: false
+    property bool selecting: false
+    property var selectedIds: ({})
+    readonly property int selectedCount: Object.keys(selectedIds).length
+    // Phones: the drawer's height beyond the negative space while it opens
+    // to the whole screen (animated), and the finger's pull on the handle.
+    property real drawerLift: 0
+    readonly property real drawerFullHeight: screenHeight - Theme.statusBarHeight
+    readonly property real drawerPull: overlay ? 0 : phoneHandle.pull
+    readonly property real phoneSpaceHeight: Math.max(0, Math.min(drawerFullHeight,
+        Math.max(negativeSpace, drawerLift) + (dashboardOpen ? drawerPull : 0)))
+    NumberAnimation {
+        id: liftAnim
+        target: root
+        property: "drawerLift"
+        duration: Theme.drawerDuration
+        easing.type: Easing.OutCubic
+    }
+    function setDrawerExpanded(on) {
+        if (!on) {
+            selecting = false;
+            selectedIds = {};
+        }
+        if (!overlay) {
+            var from = Math.max(negativeSpace, drawerLift) + drawerPull;
+            liftAnim.stop();
+            drawerLift = from;
+            liftAnim.to = on ? drawerFullHeight : 0;
+            liftAnim.start();
+        }
+        drawerExpanded = on;
+    }
+    onDashboardOpenChanged: {
+        if (!dashboardOpen) {
+            liftAnim.stop();
+            drawerLift = 0;
+            drawerExpanded = false;
+            selecting = false;
+            selectedIds = {};
+        }
+    }
+    function toggleSelected(id) {
+        var s = Object.assign({}, selectedIds);
+        if (s[id])
+            delete s[id];
+        else
+            s[id] = true;
+        selectedIds = s;
+    }
+    // Dismiss these rows, last first so the earlier indexes still hold.
+    function _dismissAll(indexes) {
+        indexes.sort(function(a, b) { return b - a; });
+        for (var i = 0; i < indexes.length; ++i)
+            dismissRequested(indexes[i]);
+    }
+    function clearSelected() {
+        var list = [];
+        for (var i = 0; i < model.count; ++i)
+            if (!model.get(i).ongoing && selectedIds[model.get(i).id])
+                list.push(i);
+        selecting = false;
+        selectedIds = {};
+        _dismissAll(list);
+    }
+    function clearAll() {
+        var list = [];
+        for (var i = 0; i < model.count; ++i)
+            if (!model.get(i).ongoing)
+                list.push(i);
+        selecting = false;
+        selectedIds = {};
+        _dismissAll(list);
+    }
+
     // Phones: the space taken from the bottom of the screen, animated. The
     // shell ends the cards and the quick launch bar above it. The rows and
     // the 10 px above them, no more than the positive space can give up
     // (DashboardWindowContainer::calculateScrollProperties, :984-990).
+    // (Phoenix: and the drawer's handle above them.)
     readonly property real dashboardHeight: Math.min(
-        Theme.dashboardTopPadding + (model ? model.count : 0) * Theme.dashboardItemHeight,
+        Theme.drawerHandleHeight + Theme.dashboardTopPadding + (model ? model.count : 0) * Theme.dashboardItemHeight,
         screenHeight * Theme.maximumNegativeSpaceRatio)
     // The front popup alert, if any (phones: it takes the negative space;
     // DashboardWindowManagerStates.cpp:76-110).
@@ -223,7 +321,7 @@ Item {
             x: root.overlay ? root.width / 2 + Theme.px(40) : 0
             width: root.overlay ? root.width / 2 - Theme.px(40) - root.statusBarRightInset : root.width
             y: root.overlay ? -Theme.statusBarHeight : root.height - height
-            height: root.overlay ? Theme.statusBarHeight : root.negativeSpace
+            height: root.overlay ? Theme.statusBarHeight : root.phoneSpaceHeight
             visible: root.overlay ? root.bannerActive : height > 0
 
             // The banner, in the bar's top 28 px while the space opens under it.
@@ -304,10 +402,34 @@ Item {
             Item {
                 anchors.fill: parent
                 visible: !root.overlay && root.dashboardOpen
+                // Pull up for the whole screen (Phoenix).
+                DrawerHandle {
+                    id: phoneHandle
+                    width: parent.width
+                    expanded: root.drawerExpanded
+                    expandsUp: true
+                    enabled: !root.overlay && root.dashboardOpen
+                    onExpandRequested: root.setDrawerExpanded(true)
+                    onCollapseRequested: root.setDrawerExpanded(false)
+                    onCloseRequested: root.dashboardOpen = false
+                }
+                DrawerHeader {
+                    id: phoneHeader
+                    anchors.top: phoneHandle.bottom
+                    width: parent.width
+                    visible: root.drawerExpanded
+                    selecting: root.selecting
+                    selectedCount: root.selectedCount
+                    clearableCount: root.clearableCount
+                    onSelectRequested: root.selecting = true
+                    onCancelRequested: { root.selecting = false; root.selectedIds = {}; }
+                    onClearSelectedRequested: root.clearSelected()
+                    onClearAllRequested: root.clearAll()
+                }
                 Loader {
                     id: phoneDashboard
                     anchors.fill: parent
-                    anchors.topMargin: Theme.dashboardTopPadding
+                    anchors.topMargin: Theme.drawerHandleHeight + (root.drawerExpanded ? Theme.drawerHeaderHeight : 0) + Theme.dashboardTopPadding
                     active: parent.visible
                     sourceComponent: dashboardList
                     onLoaded: item.positionViewAtEnd()
@@ -315,7 +437,7 @@ Item {
                 Image {
                     objectName: "dashboardMaskTop"
                     visible: phoneDashboard.item !== null && !phoneDashboard.item.atYBeginning
-                    anchors.top: parent.top
+                    y: phoneDashboard.y - Theme.dashboardTopPadding
                     width: parent.width
                     height: Theme.artHeight(source)
                     source: Theme.asset("dashboard-mask-top.png")
@@ -462,6 +584,9 @@ Item {
             y: 0                                                // positiveSpace.y(), :1326-1338
             open: root.overlay && root.dashboardOpen
             model: root.overlay ? root.model : null
+            ongoingCount: root.ongoingCount
+            drawer: root
+            fullHeight: root.screenHeight - Theme.statusBarHeight - Theme.px(10)
             source: root.source
             backdrop: root.backdrop
             locked: root.locked
@@ -499,8 +624,23 @@ Item {
                 required property string windowKey
                 required property bool ongoing
                 required property real progress
+                required property var model
+                readonly property string key: model.id
+                readonly property bool selectable: root.selecting && !ongoing
                 width: list.width
                 height: Theme.dashboardItemHeight
+
+                // A faint rule between the live activities and the
+                // notifications (Phoenix).
+                Rectangle {
+                    objectName: "drawerRule"
+                    visible: root.ongoingCount > 0 && item.index === root.ongoingCount
+                    x: Theme.px(8)
+                    width: parent.width - 2 * x
+                    height: Math.max(1, Theme.px(1))
+                    color: Theme.drawerRule
+                    z: 2
+                }
 
                 // Uncovered as the row is swiped away (Phoenix).
                 SwipeClearLabel {
@@ -539,7 +679,7 @@ Item {
                         objectName: "dashboardSwipe"
                         anchors.fill: parent
                         // An ongoing activity stays until it ends.
-                        drag.target: item.ongoing ? null : content
+                        drag.target: item.ongoing || root.selecting ? null : content
                         drag.axis: Drag.XAxis
                         enabled: !remove.running
                         property point start
@@ -564,10 +704,22 @@ Item {
                         onClicked: {
                             if (content.x !== 0)
                                 return;
+                            if (root.selecting) {
+                                if (item.selectable)
+                                    root.toggleSelected(item.key);
+                                return;
+                            }
                             root.activated(item.appId, item.params);
                             if (!item.ongoing)
                                 root.dismissRequested(item.index);
                         }
+                    }
+                    SelectMark {
+                        visible: item.selectable
+                        anchors.right: parent.right
+                        anchors.rightMargin: Theme.px(12)
+                        anchors.verticalCenter: parent.verticalCenter
+                        checked: !!root.selectedIds[item.key]
                     }
                     NumberAnimation {
                         id: remove

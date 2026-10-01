@@ -29,3 +29,6 @@ EmojiSearchBar 1.0 EmojiSearchBar.qml
 CandidateBar 1.0 CandidateBar.qml
 SwipeClearLabel 1.0 SwipeClearLabel.qml
 SiteMenu 1.0 SiteMenu.qml
+DrawerHandle 1.0 DrawerHandle.qml
+DrawerHeader 1.0 DrawerHeader.qml
+SelectMark 1.0 SelectMark.qml

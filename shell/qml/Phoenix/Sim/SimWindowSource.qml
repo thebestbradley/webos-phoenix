@@ -1138,7 +1138,7 @@ Item {
     // set / clear in the runtime): one dashboard item per id that stays,
     // with its progress, until it is cleared. {id, title, body, icon?,
     // progress (0-100, -1: none), params?} or {id, clear: true}.
-    // (Later these move to the Live Activities pane: docs/ROADMAP.md.)
+    // They are pinned at the top of the list, above the notifications.
     function setOngoing(appId, p) {
         var key = "ongoing:" + appId + ":" + p.id;
         var at = -1;
@@ -1160,7 +1160,10 @@ Item {
             notifications.setProperty(at, "params", params);
             return;
         }
-        notifications.append({
+        var flags = [];
+        for (var j = 0; j < notifications.count; ++j)
+            flags.push(notifications.get(j).ongoing);
+        notifications.insert(Policy.ongoingInsertIndex(flags), {
             id: key, appId: target, title: p.title || "", body: p.body || "",
             color: info.color, glyph: info.glyph, icon: p.icon ? _iconUrl(p.icon, target) : (info.icon || ""),
             params: params, windowKey: "", clickableWhenLocked: false,

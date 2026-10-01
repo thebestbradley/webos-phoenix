@@ -203,7 +203,7 @@ jobs:
       - name: Screenshots
         run: |
           mkdir -p screenshots/phone screenshots/tablet
-          for s in locked cards stacks reorder maximized launcher launcheredit lowbattery banner notified dashboard justtype keyboard systemmenu pin emergency firstuse; do
+          for s in locked cards stacks reorder maximized launcher launcheredit lowbattery banner notified dashboard drawer justtype keyboard systemmenu pin emergency firstuse; do
             xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --scene $s --screenshot screenshots/phone/$s.png
             xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --tablet --scene $s --screenshot screenshots/tablet/$s.png
           done

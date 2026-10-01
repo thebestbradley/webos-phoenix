@@ -32,6 +32,12 @@
 // (DashboardItem, source.windowFor): taps on it are its own, as
 // handleTap (:1104-1146) passed them on.
 //
+// Phoenix additions: live activities (ongoing) are pinned at the top, in the
+// order they began, with a faint rule between them and the notifications,
+// which stay newest first below; a handle at the foot pulls the drop-down
+// down to the screen's height, where a header offers Select and Clear All
+// (Notifications.qml keeps the drawer's state: `drawer`).
+//
 // Not reproduced: a row removed by its app rather than by a swipe does not
 // slide out first (removeWindow, :653-709): the Repeater drops it at once
 // and the rows below close up as after a swipe. Grouped notification
@@ -52,22 +58,44 @@ Item {
     // back to the rows on unlock.
     property bool locked: false
 
+    // The live activities at the head of the model (Notifications.ongoingCount).
+    property int ongoingCount: 0
+    // Notifications.qml: the drawer's expanded, selecting and selection state.
+    property Item drawer: null
+    readonly property bool expanded: drawer !== null && drawer.drawerExpanded
+    // The height the drop-down may take when pulled to the whole screen.
+    property real fullHeight: Theme.dashboardMenuMaxContentHeight
+
     signal activated(string appId, string params)
     signal dismissRequested(int index)
 
     readonly property int count: model ? model.count : 0
+    // The gap for the rule between live activities and notifications.
+    readonly property real groupGap: ongoingCount > 0 && ongoingCount < count ? Theme.drawerRuleGap : 0
+    // A row's place from the top: live activities first, in order, then
+    // the notifications newest first (the model's last).
+    function posOf(index) { return index < ongoingCount ? index : ongoingCount + (count - 1 - index); }
+    function indexAt(pos) { return pos < ongoingCount ? pos : count - 1 - (pos - ongoingCount); }
+    readonly property real headerHeight: expanded ? Theme.drawerHeaderHeight : 0
     readonly property int rowHeight: Theme.dashboardItemHeight
     readonly property int dividerHeight: Theme.dashboardMenuDividerHeight
 
     // MenuContainer.qml:14-19: the rows' width and the side margins; as
     // tall as setMaximumHeight made it, the art only as tall as the rows.
     width: Theme.dashboardMenuWidth + 2 * Theme.dashboardMenuSideMargin
-    height: Theme.dashboardMenuMaxContentHeight + Theme.dashboardMenuBottomMargin
+    // (Phoenix: and the drawer handle under the rows; pulled down, the
+    // screen's height, following the finger on the way.)
+    property real expandedHeight: expanded ? fullHeight : Theme.dashboardMenuMaxContentHeight + Theme.dashboardMenuBottomMargin + Theme.drawerHandleHeight
+    Behavior on expandedHeight {
+        enabled: menu.shown
+        NumberAnimation { duration: Theme.drawerDuration; easing.type: Easing.OutCubic }
+    }
+    height: Math.max(0, Math.min(fullHeight, expandedHeight + tabletHandle.pull))
     clip: true                                                  // MenuContainer.qml:5
 
     // The rows and the dividers between them
     // (DashboardWindowContainer.cpp:625, 675, 747).
-    readonly property real rowsHeight: count > 0 ? count * rowHeight + (count - 1) * dividerHeight : 0
+    readonly property real rowsHeight: count > 0 ? count * rowHeight + (count - 1) * dividerHeight + groupGap : 0
     // The container's height, animated while the menu shows and set while
     // it does not (animateResize, :456-473).
     property real containerHeight: rowsHeight
@@ -116,6 +144,7 @@ Item {
         required property string windowKey
         required property bool ongoing
         required property real progress
+        required property var model
 
         // Ongoing activities (a download, an install) are persistent: they
         // stay until they end (DashboardWindow::persistent, honoured at
@@ -123,10 +152,16 @@ Item {
         // WebAppManager, and its name is not in the open sources).
         readonly property bool persistent: ongoing
 
-        // Where the row goes back to: newest at the top (:541-560, 863-894).
-        readonly property real slotY: (menu.count - 1 - index) * (menu.rowHeight + menu.dividerHeight)
-        readonly property bool isTop: index === menu.count - 1
-        readonly property bool isBottom: index === 0
+        // Where the row goes back to: newest at the top (:541-560, 863-894),
+        // under the live activities (Phoenix).
+        readonly property int pos: menu.posOf(index)
+        readonly property real slotY: pos * (menu.rowHeight + menu.dividerHeight)
+                                      + (pos >= menu.ongoingCount ? menu.groupGap : 0)
+        readonly property bool isTop: pos === 0
+        readonly property bool isBottom: pos === menu.count - 1
+        readonly property bool firstNotification: menu.groupGap > 0 && pos === menu.ongoingCount
+        readonly property bool selectable: menu.drawer !== null && menu.drawer.selecting && !persistent
+        readonly property string key: model.id
         // The window's sideways offset from its place.
         readonly property alias swipeX: content.x
         readonly property bool removing: remove.running
@@ -134,7 +169,7 @@ Item {
         // The next row down, whose top closes the gap under this one.
         readonly property Item below: {
             var deps = menu.rowsRevision;
-            return index > 0 ? rows.itemAt(index - 1) : null;
+            return pos < menu.count - 1 ? rows.itemAt(menu.indexAt(pos + 1)) : null;
         }
 
         width: menu.width - 2 * Theme.dashboardMenuSideMargin
@@ -168,6 +203,18 @@ Item {
             height: menu.dividerHeight
             source: Theme.asset("menu-divider.png")
             fillMode: Image.Stretch
+        }
+
+        // The faint rule between the live activities and the notifications
+        // (Phoenix), in the gap above the first notification.
+        Rectangle {
+            objectName: "drawerRule"
+            visible: row.firstNotification
+            x: Theme.px(8)
+            y: -menu.dividerHeight - menu.groupGap / 2 - height / 2
+            width: row.width - 2 * x
+            height: Math.max(1, Theme.px(1))
+            color: Theme.drawerRule
         }
 
         // Behind a window moved off its place, from the left edge up to it,
@@ -212,7 +259,8 @@ Item {
         GapShade {
             // down to the next row's divider
             y: row.height
-            height: row.below ? row.below.y - menu.dividerHeight - row.y - row.height : 0
+            height: row.below ? row.below.y - menu.dividerHeight - row.y - row.height
+                                - (row.below.firstNotification ? menu.groupGap : 0) : 0
         }
 
         DashboardItem {
@@ -267,7 +315,7 @@ Item {
                             mode = 2;
                         }
                     }
-                    if (mode === 1)
+                    if (mode === 1 && !(menu.drawer && menu.drawer.selecting))
                         content.x = Math.max(0, content.x + p.x - lastX);
                     lastX = p.x;
                 }
@@ -294,10 +342,22 @@ Item {
                 onClicked: {
                     if (mode !== 0 || content.x !== 0)
                         return;
+                    if (menu.drawer && menu.drawer.selecting) {
+                        if (row.selectable)
+                            menu.drawer.toggleSelected(row.key);
+                        return;
+                    }
                     menu.activated(row.appId, row.params);
                     if (!row.persistent)
                         menu.dismissRequested(row.index);
                 }
+            }
+            SelectMark {
+                visible: row.selectable
+                anchors.right: parent.right
+                anchors.rightMargin: Theme.px(12)
+                anchors.verticalCenter: parent.verticalCenter
+                checked: !!(menu.drawer && menu.drawer.selectedIds[row.key])
             }
             // triggerItemDelete (:1149-1180): a width and a half on, linear.
             NumberAnimation {
@@ -326,7 +386,9 @@ Item {
         id: menuBorder
         objectName: "dashboardMenuBorder"
         width: parent.width
-        height: Math.max(Theme.px(40), Math.min(menu.height, menu.containerHeight + Theme.dashboardMenuBottomMargin))
+        height: menu.expanded || tabletHandle.pull > 0 ? menu.height
+                : Math.max(Theme.px(40), Math.min(menu.height, menu.headerHeight + menu.containerHeight
+                                                  + Theme.dashboardMenuBottomMargin + Theme.drawerHandleHeight))
         source: Theme.asset("menu-dropdown-bg.png")
         border { left: Theme.artBorder(30, source); top: Theme.artBorder(10, source); right: Theme.artBorder(30, source); bottom: Theme.artBorder(30, source) }
 
@@ -349,11 +411,26 @@ Item {
     }
 
     // MenuContainer.qml:43-68: the list, clipped inside the art.
+    DrawerHeader {
+        id: tabletHeader
+        x: Theme.dashboardMenuSideMargin
+        width: parent.width - 2 * Theme.dashboardMenuSideMargin
+        visible: menu.expanded
+        selecting: menu.drawer ? menu.drawer.selecting : false
+        selectedCount: menu.drawer ? menu.drawer.selectedCount : 0
+        clearableCount: menu.drawer ? menu.drawer.clearableCount : 0
+        onSelectRequested: menu.drawer.selecting = true
+        onCancelRequested: { menu.drawer.selecting = false; menu.drawer.selectedIds = {}; }
+        onClearSelectedRequested: menu.drawer.clearSelected()
+        onClearAllRequested: menu.drawer.clearAll()
+    }
+
     Item {
         id: clipRect
         x: Theme.dashboardMenuSideMargin
+        y: menu.headerHeight
         width: parent.width - 2 * Theme.dashboardMenuSideMargin
-        height: parent.height - Theme.dashboardMenuBottomMargin
+        height: menuBorder.height - menu.headerHeight - Theme.dashboardMenuBottomMargin - Theme.drawerHandleHeight
         clip: true
 
         Flickable {
@@ -395,6 +472,7 @@ Item {
         z: 10
         width: parent.width - 2 * Theme.dashboardMenuSideMargin
         x: (parent.width - width) / 2
+        y: clipRect.y
         opacity: !flick.atYBeginning ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.systemMenuScrollFadeDuration } }
         BorderImage {
@@ -414,7 +492,7 @@ Item {
         z: 10
         width: parent.width - 2 * Theme.dashboardMenuSideMargin
         x: (parent.width - width) / 2
-        y: flick.height - Theme.dashboardMenuScrollFadeBottomOffset
+        y: clipRect.y + flick.height - Theme.dashboardMenuScrollFadeBottomOffset
         opacity: !flick.atYEnd ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.systemMenuScrollFadeDuration } }
         BorderImage {
@@ -429,5 +507,19 @@ Item {
             width: Theme.artWidth(source); height: Theme.artHeight(source)
             source: Theme.asset("menu-arrow-down.png")
         }
+    }
+
+    // Pull down for the whole screen's height (Phoenix).
+    DrawerHandle {
+        id: tabletHandle
+        x: Theme.dashboardMenuSideMargin
+        y: menuBorder.height - Theme.dashboardMenuBottomMargin - height
+        width: parent.width - 2 * Theme.dashboardMenuSideMargin
+        expanded: menu.expanded
+        expandsUp: false
+        enabled: menu.open && menu.drawer !== null
+        onExpandRequested: menu.drawer.setDrawerExpanded(true)
+        onCollapseRequested: menu.drawer.setDrawerExpanded(false)
+        onCloseRequested: menu.drawer.dashboardOpen = false
     }
 }

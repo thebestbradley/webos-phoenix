@@ -5,7 +5,7 @@
 //
 // Context properties set by phoenix-sim:
 //   simScene       "locked" | "cards" | "stacks" | "reorder" | "maximized" | "heldcard" | "launcher" |
-//                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" |
+//                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" | "drawer" |
 //                  "justtype" | "keyboard" | "systemmenu" | "empty"
 //   simFirstUse    start with First Use (--first-use); without it First Use
 //                  runs at start-up until it has been done once
@@ -389,6 +389,17 @@ Item {
             // An app is open; a notification comes in and the app makes room.
             shell.cardView.maximizeProgress = 1;
             windows.notify(windows.appIdByTitle("Messaging"), "Palm Pre", "It's good to be back.");
+        } else if (scene === "drawer") {
+            // The notification drawer pulled to the whole screen: a live
+            // activity pinned on top of three notifications (Phoenix).
+            shell.cardView.maximizeProgress = 1;
+            windows.notify(windows.appIdByTitle("Messaging"), "Palm Pre", "It's good to be back.");
+            windows.notify(windows.appIdByTitle("Email"), "3 new emails", "webOS Phoenix build passed");
+            windows.notify(windows.appIdByTitle("Calendar"), "Launch party", "Tomorrow, 9:41 AM");
+            windows.setOngoing("org.webosphoenix.marketplace", { id: "scene", title: "Downloading Quickoffice", body: "42%", progress: 42 });
+            shell.notifications.bannerActive = false;
+            shell.notifications.dashboardOpen = true;
+            shell.notifications.setDrawerExpanded(true);
         } else if (scene === "dashboard" || scene === "notified" || scene === "locked") {
             if (scene !== "locked")
                 shell.cardView.maximizeProgress = 1;

@@ -342,6 +342,23 @@ QtObject {
     readonly property real flickMinVelocity: 2.5 * u
     readonly property real flickMaxVelocity: 11.0 * u
 
+    // ---- Notification drawer (Phoenix) --------------------------------------
+    // A handle on the dashboard's open edge pulls it to the whole screen
+    // (phones: up; tablets: the drop-down's foot, down), where a header
+    // offers Select and Clear All. Live activities stay at the top, a faint
+    // rule under them.
+    readonly property int drawerHandleHeight: px(16)
+    readonly property int drawerHandleWidth: px(36)
+    readonly property int drawerHandleThickness: px(4)
+    readonly property int drawerHeaderHeight: px(40)
+    readonly property int drawerHeaderFontSize: px(16)
+    // How far the handle must travel to expand or collapse.
+    readonly property int drawerPullThreshold: px(40)
+    readonly property int drawerDuration: motion(250)
+    readonly property color drawerRule: Qt.rgba(1, 1, 1, 0.18)
+    readonly property int drawerRuleGap: px(6)
+    readonly property int drawerCheckSize: px(22)
+
     // ---- Tablet dashboard drop-down (uiComponents/DashboardMenu, MenuContainer)
     // 320 px rows (DashboardWindowManager.cpp:63 kTabletNotificationContentWidth;
     // MenuContainer.qml:65) 11 px in from the art's sides and 15 up from its

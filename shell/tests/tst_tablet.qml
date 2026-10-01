@@ -223,6 +223,39 @@ Item {
 
         // Newest at the top (layoutAllWindowsInMenu), a 2 px divider above
         // every row but the top one; the art 15 px taller than the rows.
+        // Phoenix: live activities stay at the top, above the newest
+        // notification, a rule between; the handle at the foot pulls the
+        // drop-down to the screen's height, where Clear All leaves the
+        // activity.
+        function test_dashboardMenuActivitiesOnTopAndDrawer() {
+            windows.setOngoing("org.webosphoenix.marketplace", { id: "dl", title: "Downloading Hooked", progress: 30 });
+            var menu = openMenu(["One", "Two"]);
+            var rows = menuRows();
+            compare(rows.length, 3);
+            compare(rows[0].title, "Downloading Hooked");
+            compare(rows[1].title, "Two");
+            compare(rows[2].title, "One");
+            compare(rows[1].y, 52 + 2 + Theme.drawerRuleGap);
+            var rule = findChild(rows[1], "drawerRule");
+            verify(rule && rule.visible);
+            verify(!findChild(rows[2], "drawerRule").visible);
+
+            var area = findChild(menu, "drawerHandleArea");
+            var p = area.mapToItem(root, area.width / 2, area.height / 2);
+            mousePress(root, p.x, p.y);
+            for (var i = 1; i <= 10; ++i) { wait(16); mouseMove(root, p.x, p.y + i * 12); }
+            mouseRelease(root, p.x, p.y + 120);
+            verify(shell.notifications.drawerExpanded);
+            tryCompare(menu, "height", menu.fullHeight, 2000);
+            var clearAll = findChild(menu, "drawer_clearAll");
+            verify(clearAll.visible);
+            mouseClick(clearAll);
+            compare(windows.notifications.count, 1);
+            compare(windows.notifications.get(0).ongoing, true);
+            windows.setOngoing("org.webosphoenix.marketplace", { id: "dl", clear: true });
+            closeMenu();
+        }
+
         function test_dashboardMenuNewestAtTop() {
             var menu = openMenu(["One", "Two", "Three"]);
             var rows = menuRows();
@@ -238,7 +271,7 @@ Item {
             verify(rows[2].divided);
             compare(visibleGapShades(menu), 0);
             compare(menu.containerHeight, 3 * 52 + 2 * 2);
-            compare(findChild(menu, "dashboardMenuBorder").height, 3 * 52 + 2 * 2 + 15);
+            compare(findChild(menu, "dashboardMenuBorder").height, 3 * 52 + 2 * 2 + 15 + Theme.drawerHandleHeight);
             // 342 wide, its right edge 11 px past the notification area's,
             // under the status bar.
             compare(menu.width, 342);
@@ -258,7 +291,7 @@ Item {
             var flick = findChild(menu, "dashboardMenuFlickable");
             compare(menu.containerHeight, 8 * 52 + 7 * 2);
             compare(flick.height, 295);
-            compare(findChild(menu, "dashboardMenuBorder").height, 295 + 15);
+            compare(findChild(menu, "dashboardMenuBorder").height, 295 + 15 + Theme.drawerHandleHeight);
             tryCompare(findChild(menu, "dashboardMenuScrollDown"), "opacity", 1, 500);
             compare(findChild(menu, "dashboardMenuScrollUp").opacity, 0);
             flick.contentY = flick.contentHeight - flick.height;
@@ -331,7 +364,7 @@ Item {
             // The shading goes with the last frame, which the fuzzy compares
             // above may not have reached yet.
             tryVerify(function() { return visibleGapShades(menu) === 0; }, 1000);
-            compare(findChild(menu, "dashboardMenuBorder").height, 2 * 52 + 2 + 15);
+            compare(findChild(menu, "dashboardMenuBorder").height, 2 * 52 + 2 + 15 + Theme.drawerHandleHeight);
             closeMenu();
         }
 

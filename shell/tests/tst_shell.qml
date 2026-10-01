@@ -405,8 +405,8 @@ Item {
             notes.bannerActive = false;
             notes.dashboardOpen = true;
             tryCompare(notes, "negativeSpace", notes.dashboardHeight, 2000);
-            // Phones: the rows and the 10 px above them.
-            compare(notes.dashboardHeight, Theme.dashboardTopPadding + 3 * Theme.dashboardItemHeight);
+            // Phones: the rows and the 10 px above them (Phoenix: under the drawer's handle).
+            compare(notes.dashboardHeight, Theme.drawerHandleHeight + Theme.dashboardTopPadding + 3 * Theme.dashboardItemHeight);
             var rows = dashboardRows();
             compare(rows.length, 3);
 
@@ -475,6 +475,78 @@ Item {
             compare(windows.notifications.count, 1);
 
             windows.setOngoing("org.webosphoenix.settings", { id: "com.palm.update", clear: true });
+            compare(windows.notifications.count, 0);
+            notes.dashboardOpen = false;
+            notes.bannerActive = false;
+            tryCompare(notes, "negativeSpace", 0, 2000);
+        }
+
+        function visibleChild(parentItem, name) {
+            var found = null;
+            (function walk(o) {
+                for (var i = 0; i < o.children.length && !found; ++i) {
+                    if (o.children[i].objectName === name && o.children[i].visible)
+                        found = o.children[i];
+                    walk(o.children[i]);
+                }
+            })(parentItem);
+            return found;
+        }
+
+        // Phoenix: live activities are pinned at the top with a faint rule
+        // under them; the handle pulls the dashboard up to the whole
+        // screen, where Select and Clear All clear notifications but never
+        // a live activity.
+        function test_drawerPinsActivitiesSelectsAndClears() {
+            var notes = shell.notifications;
+            windows.notify("org.webosphoenix.messaging", "First", "");
+            windows.notify("org.webosphoenix.messaging", "Second", "");
+            windows.notify("org.webosphoenix.messaging", "Third", "");
+            windows.setOngoing("org.webosphoenix.marketplace", { id: "dl", title: "Downloading Hooked", progress: 30 });
+            compare(windows.notifications.get(0).ongoing, true, "the activity goes to the top");
+            compare(notes.ongoingCount, 1);
+            notes.bannerActive = false;
+            notes.dashboardOpen = true;
+            tryCompare(notes, "negativeSpace", notes.dashboardHeight, 2000);
+            verify(visibleChild(notes, "drawerRule") !== null, "a rule under the activity");
+
+            // Pull the handle up past the threshold: the whole screen.
+            var area = findChild(notes, "drawerHandleArea");
+            var p = area.mapToItem(shell, area.width / 2, area.height / 2);
+            mousePress(shell, p.x, p.y);
+            for (var i = 1; i <= 10; ++i) { wait(16); mouseMove(shell, p.x, p.y - i * 12); }
+            mouseRelease(shell, p.x, p.y - 120);
+            verify(notes.drawerExpanded);
+            tryCompare(notes, "phoneSpaceHeight", notes.drawerFullHeight, 2000);
+            verify(visibleChild(notes, "drawerHeader") !== null);
+
+            // Select one notification and clear it.
+            mouseClick(visibleChild(notes, "drawer_select"));
+            verify(notes.selecting);
+            var rows = dashboardRows();
+            compare(rows.length, 4);
+            mouseClick(rows[0]);                    // the activity: not selectable
+            compare(notes.selectedCount, 0);
+            mouseClick(rows[2]);                    // "Second"
+            compare(notes.selectedCount, 1);
+            verify(visibleChild(notes, "drawerSelectMark") !== null);
+            mouseClick(visibleChild(notes, "drawer_clearSelected"));
+            compare(windows.notifications.count, 3);
+            compare(windows.notifications.get(1).title, "First");
+            compare(windows.notifications.get(2).title, "Third");
+            verify(!notes.selecting);
+
+            // Clear All: the activity stays.
+            mouseClick(visibleChild(notes, "drawer_clearAll"));
+            compare(windows.notifications.count, 1);
+            compare(windows.notifications.get(0).ongoing, true);
+
+            // A tap on the handle goes back to the normal size.
+            mouseClick(findChild(notes, "drawerHandleArea"));
+            verify(!notes.drawerExpanded);
+            tryVerify(function() { return Math.abs(notes.phoneSpaceHeight - notes.dashboardHeight) < 0.5; }, 2000);
+
+            windows.setOngoing("org.webosphoenix.marketplace", { id: "dl", clear: true });
             compare(windows.notifications.count, 0);
             notes.dashboardOpen = false;
             notes.bannerActive = false;

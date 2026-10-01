@@ -76,3 +76,14 @@ function insertIndex(queued, appId, name) {
             return i;
     return queued.length;
 }
+
+// Where a new ongoing activity goes in the notification list: after the
+// ones already there, which are all at the top (Phoenix: live activities
+// are pinned above the notifications, which keep the original's newest-
+// at-the-bottom order). `ongoing` is the list's ongoing flags, in order.
+function ongoingInsertIndex(ongoing) {
+    var i = 0;
+    while (i < ongoing.length && ongoing[i])
+        ++i;
+    return i;
+}

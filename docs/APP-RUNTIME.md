@@ -1581,10 +1581,20 @@ its params. It is the shell's API:
 - `luna://org.webosphoenix.ongoing/set {id, appId?, title, body?, icon?, progress (0-100, -1: none), params?}`
 - `luna://org.webosphoenix.ongoing/clear {id}`
 
-System updates (`com.palm.update`) and Marketplace installs use it. The
-owner's plan (1 October 2026) is Live Activities: these get their own place on
-the left of the notification area and open a pane when tapped
-([ROADMAP.md](ROADMAP.md)). The services do not change for that.
+System updates (`com.palm.update`) and Marketplace installs use it. They are
+pinned at the top of the notification list, in the order they began, with a
+faint rule between them and the notifications (which keep the original's
+order below). The owner's plan (1 October 2026) is Live Activities: these get
+their own place on the left of the notification area and open a pane when
+tapped ([ROADMAP.md](ROADMAP.md)). The services do not change for that.
+
+The notification drawer (Phoenix): the open dashboard has a handle on its
+open edge (phones: the top; the tablet's drop-down: its foot). Pulled, the
+dashboard follows the finger and opens to the whole screen past 40 px; a
+tap toggles it, and on a phone a pull down from the normal size closes it.
+At full screen a header offers Select (a check mark on each notification,
+then Clear (n)) and Clear All. Live activities are never selected or
+cleared. `phoenix-sim --scene drawer` shows it.
 
 Other legacy hooks the simulator now answers as a device would:
 `com.palm.bus/signal/registerServerStatus` says whether a service exists
