@@ -89,7 +89,19 @@ async function main() {
             watch(page);
             let shown = page;
             context.on("page", (p) => { watch(p); shown = p; });
+            // Launch points (e.g. Settings > Wi-Fi) share their app's expectation.
+            const expect = expectations[app.id] || expectations[app.appId] || { status: "unknown" };
             await page.goto(base + app.main);
+            // A state the app needs to show something ("storage": runtime
+            // store keys, written once the runtime has set up the profile,
+            // then the app starts again).
+            if (expect.storage) {
+                await page.waitForTimeout(500);
+                await page.evaluate((st) => {
+                    for (const k of Object.keys(st)) localStorage.setItem("phoenix:" + k, JSON.stringify(st[k]));
+                }, expect.storage);
+                await page.goto(base + app.main);
+            }
             // Headless apps: the window they open is what the user sees. They
             // set up their data first (Email takes a few seconds), so wait for it.
             if (app.noWindow) {
@@ -106,8 +118,6 @@ async function main() {
             }).catch(() => false);
             const real = errors.filter((e) => !ignorable(e));
             const pass = rendered && real.length === 0;
-            // Launch points (e.g. Settings > Wi-Fi) share their app's expectation.
-            const expect = expectations[app.id] || expectations[app.appId] || { status: "unknown" };
             const mustPass = expect.status === "works" || (tablet ? expect.tablet === "works" : expect.phone === "works");
             let verdict = pass ? "PASS" : "FAIL";
             if (!pass && mustPass) { failed = true; verdict = "FAIL (regression)"; }

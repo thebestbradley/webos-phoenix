@@ -154,6 +154,7 @@
     },
     "com.palm.systemui": {
         "status": "works",
-        "note": "luna-systemui as the shell's headless page: alerts, dashboards and banners (its services now see com.palm.bus registerServerStatus answer)"
+        "note": "luna-systemui as the shell's headless page: alerts, dashboards and banners (its services now see com.palm.bus registerServerStatus answer). Tested with the mail account signed out, so it opens its Accounts: Action Needed dashboard",
+        "storage": { "accountCredentials": {} }
     }
 }

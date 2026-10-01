@@ -50,6 +50,7 @@ function device(booted = { version: "1.0.0", build: 100 }) {
         compatible: COMPATIBLE, booted: "rootfs.0", primary: "rootfs.0",
         slots: { "rootfs.0": booted, "rootfs.1": null },
     }));
+    fs.rmSync(path.join(dir, "rauc.json.calls"), { force: true });
     osRelease(booted);
     battery(80, false);
 }
@@ -67,12 +68,18 @@ function battery(percent: number, charging: boolean) {
     fs.writeFileSync(path.join(ps, "usb/type"), "USB\n");
     fs.writeFileSync(path.join(ps, "usb/online"), charging ? "1\n" : "0\n");
 }
-const raucState = () => JSON.parse(fs.readFileSync(path.join(dir, "rauc.json"), "utf8"));
+// The slots, and the commands run so far (test/fake-rauc.cjs logs them apart).
+const raucState = () => {
+    const calls = path.join(dir, "rauc.json.calls");
+    return { ...JSON.parse(fs.readFileSync(path.join(dir, "rauc.json"), "utf8")),
+             calls: fs.existsSync(calls) ? fs.readFileSync(calls, "utf8").split("\n").filter(Boolean) : [] };
+};
 // The bootloader: start the primary slot (or, failing, stay).
 function restart(fails = false) {
     const st = raucState();
     if (!fails) st.booted = st.primary;
     else st.primary = st.booted;
+    delete st.calls;
     fs.writeFileSync(path.join(dir, "rauc.json"), JSON.stringify(st));
     osRelease(st.slots[st.booted]);
 }

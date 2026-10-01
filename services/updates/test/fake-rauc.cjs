@@ -7,21 +7,28 @@
 // in $FAKE_RAUC_STATE. A "bundle" is its manifest as text ([update]
 // compatible, version, build); one starting with "BAD" fails the signature
 // check, as RAUC refuses a bundle not signed for its keyring.
+//
+// The service runs several of these at once (a status while another
+// command works), so only the commands that change the slots write the
+// state, read just before they change it; every call is appended to
+// $FAKE_RAUC_STATE.calls, one per line. A read-only command that wrote the
+// whole state back could undo a change made while it ran.
 
 "use strict";
 const fs = require("fs");
 
 const file = process.env.FAKE_RAUC_STATE;
-const st = JSON.parse(fs.readFileSync(file, "utf8"));
-const save = () => {
+let st = JSON.parse(fs.readFileSync(file, "utf8"));
+const change = (fn) => {
+    st = JSON.parse(fs.readFileSync(file, "utf8"));
+    fn();
     const tmp = file + "." + process.pid;
     fs.writeFileSync(tmp, JSON.stringify(st));
     fs.renameSync(tmp, file);
 };
 const other = () => (st.booted === "rootfs.0" ? "rootfs.1" : "rootfs.0");
 const args = process.argv.slice(2);
-(st.calls = st.calls || []).push(args.join(" "));
-save();
+fs.appendFileSync(file + ".calls", args.join(" ") + "\n");
 
 function manifest(path) {
     const text = fs.readFileSync(path, "utf8");
@@ -46,8 +53,7 @@ if (args[0] === "status" && args[1] === "--output-format=json") {
     process.stdout.write(JSON.stringify({ compatible: st.compatible, variant: "", booted: st.booted === "rootfs.0" ? "A" : "B",
         boot_primary: st.primary, slots: [slot("rootfs.0"), slot("rootfs.1"), { "bootloader.0": { class: "bootloader", state: "inactive" } }] }) + "\n");
 } else if (args[0] === "status" && args[1] === "mark-active") {
-    st.primary = args[2] === "booted" ? st.booted : args[2] === "other" ? other() : args[2];
-    save();
+    change(() => { st.primary = args[2] === "booted" ? st.booted : args[2] === "other" ? other() : args[2]; });
     process.stdout.write("rauc status: marked slot " + st.primary + " as active\n");
 } else if (args[0] === "info" && args[1] === "--output-format=json") {
     const m = manifest(args[2]);
@@ -60,9 +66,10 @@ if (args[0] === "status" && args[1] === "--output-format=json") {
     }
     for (const [pct, msg] of [[0, "Installing"], [20, "Checking bundle done."], [40, "Copying image to rootfs"], [80, "Copying image to rootfs done."], [100, "Installing done."]])
         process.stdout.write(String(pct).padStart(3) + "% " + msg + "\n");
-    st.slots[other()] = { version: m.version, build: Number(m.build) };
-    st.primary = other();
-    save();
+    change(() => {
+        st.slots[other()] = { version: m.version, build: Number(m.build) };
+        st.primary = other();
+    });
     process.stdout.write("idle\nInstalling `" + args[1] + "` succeeded\n");
 } else {
     process.stderr.write("fake rauc: unknown command " + args.join(" ") + "\n");
