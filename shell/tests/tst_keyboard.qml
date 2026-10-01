@@ -235,6 +235,97 @@ Item {
             compare(field.text, "ok. ");
         }
 
+        // Cursor control (GAPS V4): holding the space bar, or sliding along
+        // it, makes the keyboard a trackpad; a tap still types a space.
+        function spaceCenter() {
+            var r;
+            tryVerify(function() { r = kb.keyRect("Space"); return r !== null; }, 1000);
+            return Qt.point(r.x + r.width / 2, r.y + r.height / 2);
+        }
+        function stepX() { return kb.cTrackpadStepX * kb.pixelScale; }
+
+        function test_spaceHoldMovesTheCursor() {
+            showKeyboard();
+            field.text = "hello world";
+            field.cursorPosition = 11;
+            var c = spaceCenter();
+            mousePress(kb, c.x, c.y);
+            tryCompare(kb, "trackpad", true, 1000);
+            // The keys fade.
+            tryVerify(function() { return findChild(kb, "keyboardFrame").children[1].opacity < 1; }, 1000);
+            mouseMove(kb, c.x - 5.5 * stepX(), c.y);
+            compare(field.cursorPosition, 6);
+            // Steps count from the last one taken (-5): two right.
+            mouseMove(kb, c.x - 2.5 * stepX(), c.y);
+            compare(field.cursorPosition, 8);
+            mouseRelease(kb, c.x - 2.5 * stepX(), c.y);
+            verify(!kb.trackpad);
+            compare(field.text, "hello world");     // no space typed
+            compare(field.selectedText, "");
+        }
+
+        function test_spaceSlideStartsAtOnce() {
+            showKeyboard();
+            field.text = "abcdef";
+            field.cursorPosition = 6;
+            var c = spaceCenter();
+            mousePress(kb, c.x, c.y);
+            // Past the slop at once, before the hold delay.
+            var slop = (kb.cTrackpadSlop + 1) * kb.pixelScale;
+            mouseMove(kb, c.x - slop, c.y, 0);
+            verify(kb.trackpad);
+            mouseMove(kb, c.x - slop - 2.5 * stepX(), c.y, 0);
+            mouseRelease(kb, c.x - slop - 2.5 * stepX(), c.y, 0);
+            compare(field.text, "abcdef");
+            compare(field.cursorPosition, 4);
+        }
+
+        function test_spaceTapStillTypes() {
+            showKeyboard();
+            type(["a", "Space", "b"]);
+            compare(field.text, "a b");
+            verify(!kb.trackpad);
+        }
+
+        function test_secondFingerSelects() {
+            showKeyboard();
+            field.text = "hello world";
+            field.cursorPosition = 11;
+            var c = spaceCenter();
+            var q = kb.keyRect("q");
+            var t = touchEvent(kb);
+            t.press(0, kb, c.x, c.y).commit();
+            tryCompare(kb, "trackpad", true, 1000);
+            // A second finger down: the moves select.
+            t.stationary(0).press(1, kb, q.x + 5, q.y + 5).commit();
+            t.move(0, kb, c.x - 5.5 * stepX(), c.y).stationary(1).commit();
+            // (Touch events reach the area on the next pass of the event loop.)
+            tryCompare(field, "selectedText", "world", 1000);
+            t.stationary(0).release(1, kb, q.x + 5, q.y + 5).commit();
+            t.release(0, kb, c.x - 5.5 * stepX(), c.y).commit();
+            tryCompare(kb, "trackpad", false, 1000);
+            compare(field.text, "hello world");
+        }
+
+        // The gesture bar: with the keyboard up, hold and slide to move the
+        // cursor a character at a time; the hold is not a gesture.
+        function test_gestureBarMovesTheCursor() {
+            showKeyboard();
+            field.text = "abcdef";
+            field.cursorPosition = 6;
+            var bar = findChild(shell, "gestureBar");
+            verify(bar.cursorControl);
+            var x = bar.width / 2, y = bar.height / 2;
+            mousePress(bar, x, y);
+            tryCompare(bar, "cursorActive", true, 1000);
+            mouseMove(bar, x - 3.5 * bar.cursorStepWidth, y);
+            compare(field.cursorPosition, 3);
+            mouseRelease(bar, x - 3.5 * bar.cursorStepWidth, y);
+            verify(!bar.cursorActive);
+            verify(shell.keyboardOpen);
+            compare(shell.cardView.maximizeProgress, 0);
+        }
+
         function test_landscape() {
             showKeyboard();
             sys.deviceOrientation = "left";

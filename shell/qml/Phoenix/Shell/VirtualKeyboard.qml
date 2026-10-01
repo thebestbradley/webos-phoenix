@@ -30,6 +30,11 @@
 //  * the phone shows the key under the finger enlarged above it (popup-bg).
 //  * key sounds: "key", "space", "backspace", "return" for the system's
 //    feedback player (SysmgrIMEModel::keyDownAudioFeedback).
+// Phoenix: cursor control (GAPS V4). Holding the space bar (from when the
+// original began repeating it), or sliding along it, turns the keyboard
+// into a trackpad: the keys fade, sliding moves the cursor (arrow keys),
+// and a second finger down selects (Shift with the arrows). Space no longer
+// repeats.
 // Not ported: the XT9 candidate bar and trace typing (CandidateBar.cpp, a
 // licensed engine; off unless turned on), keyboard combos (language key),
 // and the emoticon pictures (/usr/palm/emoticons, not in the Apache-2.0
@@ -72,6 +77,9 @@ Item {
     signal hideRequested()
     // keyDownAudioFeedback: "key", "space", "backspace" or "return".
     signal feedback(string name)
+
+    // The keyboard is a trackpad (cursor control).
+    readonly property bool trackpad: _trackpadId !== ""
 
     // m_keyboardHeight, in shell pixels: what the keyboard takes from the
     // screen.
@@ -124,6 +132,11 @@ Item {
     readonly property int cLetterDeleteRepeatDelay: 120
     readonly property int cWordDeleteRepeatDelay: 275
     readonly property int cWordDeleteDelay: cFirstRepeatDelay + 1500
+    // Cursor control: a slide this far along the space bar starts it; the
+    // cursor moves a character per quarter key, a line per key row.
+    readonly property int cTrackpadSlop: 20
+    readonly property int cTrackpadStepX: tablet ? 22 : 12
+    readonly property int cTrackpadStepY: _keyHalf
     readonly property int doubleTapDuration: 500     // DOUBLE_TAP_DURATION
     // IMEView::acceptPoint: 40 px above the keys also count for 500 ms
     // after a touch began (IMEView.cpp:289-298).
@@ -167,6 +180,8 @@ Item {
 
     property var _touches: ({})          // id -> Touch
     property var _repeatKey: null
+    property string _trackpadId: ""      // the touch moving the cursor
+    property var _trackpadAnchor: null   // where the last step was taken
     property real _repeatStartTime: 0
     property var _extendedKeys: null
     property var _extendedFrame: null    // {x, y, w, h}
@@ -516,6 +531,22 @@ Item {
         var now = _now();
         var rectTop = _km.rect.y;
         var tpx = px, tpy = py - rectTop;                 // touchPosition, keymap relative
+        if (trackpad) {
+            if (String(id) === _trackpadId)
+                _moveTrackpad(tpx, tpy);
+            else if (_touches[id] === undefined)          // a second finger: selects while down
+                _touches[id] = { visible: false, consumed: true, coord: null, first: { x: tpx, y: tpy },
+                                 last: { x: tpx, y: tpy }, time: now };
+            return;
+        }
+        var spaceTouch = _touches[id];
+        if (spaceTouch && spaceTouch.onSpace && !spaceTouch.consumed && Object.keys(_touches).length === 1
+                && Math.abs(tpx - spaceTouch.first.x) > cTrackpadSlop) {
+            // Slid along the space bar: cursor control at once.
+            spaceTouch.last = { x: tpx, y: tpy };
+            _startTrackpad(String(id));
+            return;
+        }
         var ext = _pointToExtendedPopup(tpx, tpy);
         var keyCoord = (!ext.inside && py > rectTop - _topPadding) ? _km.pointToKeyboard(px, py) : null;
         var touches = _touches;
@@ -524,6 +555,10 @@ Item {
             touches[id] = { visible: true, consumed: false, coord: null, first: { x: tpx, y: tpy }, last: { x: tpx, y: tpy }, time: 0 };
         var touch = touches[id];
         var newKey = keyCoord ? _km.map(keyCoord.x, keyCoord.y) : KM.Key.None;
+        if (newTouch)
+            touch.onSpace = newKey === KM.Key.Space;
+        else if (newKey !== KM.Key.Space)
+            touch.onSpace = false;
         if (ext.key !== KM.Key.None) {
             if (newTouch)
                 _makeSound(ext.key);
@@ -589,6 +624,11 @@ Item {
         var touch = _touches[id];
         if (!touch)
             return;
+        if (trackpad) {
+            if (String(id) === _trackpadId)
+                _endTrackpad();
+            return;
+        }
         if (_extendedKeys) {
             var ext = _pointToExtendedPopup(touch.last.x, touch.last.y);
             if (!ext.inside) {
@@ -641,11 +681,48 @@ Item {
 
     // Everything released (QEvent::TouchEnd).
     function _touchEnd() {
+        _endTrackpad();
         _touches = ({});
         _stopRepeat();
         _setShiftKeyDown(false);
         _setSymbolKeyDown(false);
         _triggerRepaint();
+    }
+
+    // ---- Cursor control (Phoenix) -----------------------------------------------------------
+
+    function _startTrackpad(id) {
+        var touch = _touches[id];
+        _stopRepeat();
+        touch.consumed = true;           // the space is not typed
+        touch.visible = false;
+        _trackpadAnchor = { x: touch.last.x, y: touch.last.y };
+        _trackpadId = String(id);
+        _resetShortcuts();
+        _triggerRepaint();
+    }
+
+    function _endTrackpad() {
+        if (!trackpad)
+            return;
+        _trackpadId = "";
+        _trackpadAnchor = null;
+        _triggerRepaint();
+    }
+
+    // Arrow keys for each step from the anchor; Shift while another finger
+    // is down (selecting).
+    function _moveTrackpad(tx, ty) {
+        var touch = _touches[_trackpadId];
+        touch.last = { x: tx, y: ty };
+        var mods = Object.keys(_touches).length > 1 ? Qt.ShiftModifier : Qt.NoModifier;
+        var nx = Math.trunc((tx - _trackpadAnchor.x) / cTrackpadStepX);
+        var ny = Math.trunc((ty - _trackpadAnchor.y) / cTrackpadStepY);
+        for (var i = 0; i < Math.abs(nx); ++i)
+            _sendKeyDownUp(nx < 0 ? KM.Key.Left : KM.Key.Right, mods);
+        for (i = 0; i < Math.abs(ny); ++i)
+            _sendKeyDownUp(ny < 0 ? KM.Key.Up : KM.Key.Down, mods);
+        _trackpadAnchor = { x: _trackpadAnchor.x + nx * cTrackpadStepX, y: _trackpadAnchor.y + ny * cTrackpadStepY };
     }
 
     // A flick from the screen's edge started on the keyboard: its touches
@@ -848,6 +925,15 @@ Item {
             return;
         }
         var key = _km.map(_repeatKey.x, _repeatKey.y);
+        if (key === KM.Key.Space) {
+            // Held: cursor control, with one finger on the keyboard.
+            var ids = Object.keys(_touches);
+            if (ids.length === 1 && _sameCoord(_touches[ids[0]].coord, _repeatKey) && !_touches[ids[0]].consumed)
+                _startTrackpad(ids[0]);
+            else
+                _stopRepeat();
+            return;
+        }
         if (_canRepeat(key)) {
             _makeSound(key);
             var wordDelete = _km.shiftDown || (_now() - _repeatStartTime > cWordDeleteDelay);
@@ -930,6 +1016,8 @@ Item {
     property var _pressed: []
     function _computePressed() {
         var out = [];
+        if (trackpad)
+            return out;
         for (var id in _touches) {
             var t = _touches[id];
             if (_pointToExtendedPopup(t.last.x, t.last.y).inside)
@@ -1096,6 +1184,9 @@ Item {
             delegate: Item {
                 id: keyItem
                 required property var modelData
+                // Faded while the keyboard is a trackpad.
+                opacity: kb.trackpad ? 0.25 : 1
+                Behavior on opacity { NumberAnimation { duration: 150 } }
                 x: modelData.x
                 y: modelData.y
                 width: modelData.w

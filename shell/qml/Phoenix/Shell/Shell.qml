@@ -1305,6 +1305,13 @@ FocusScope {
             onDown: shell.gestureDown()
             onBack: shell.gestureBack()
             onTapped: shell.gestureTap()
+            // With the keyboard up, hold and slide to move the cursor.
+            cursorControl: ime.visible
+            onCursorStep: (direction) => {
+                var t = shell._imeTarget();
+                if (t)
+                    KeyInjector.sendImeKey(t, direction < 0 ? Qt.Key_Left : Qt.Key_Right, Qt.NoModifier);
+            }
         }
     }
 

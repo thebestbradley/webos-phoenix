@@ -266,7 +266,7 @@ every day. The app sources come towards the end of 1.0 (owner, 29 September
       ([HARDWARE.md](HARDWARE.md#device-tiers))
 - [ ] Keyboard: dictation (V2), predictive text and swipe typing (V3),
       emoji (V6), cursor control by holding the space bar or the gesture
-      bar (V4), the keyboards as the device's input method (V5), and
+      bar (V4, done in the simulator), the keyboards as the device's input method (V5), and
       keyboards chosen in Settings as on iOS: webOS Classic, webOS OSE's and
       a new Phoenix keyboard (V7)
 - [ ] Hardware keyboards, especially on tablets: the TouchPad keyboard's
