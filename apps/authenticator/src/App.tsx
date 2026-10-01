@@ -554,8 +554,11 @@ function Codes({ session, prefs, setPrefs, pending, clearPending, onLock }: {
             refresh();
             setHotpShown((h) => ({ ...h, [t.id]: code }));
             await copy(t, code);
-        } else if (codes[t.id]) {
-            await copy(t, codes[t.id]);
+        } else {
+            // The shown codes are worked out after each 30 s step (and after
+            // the list changes); a tap in between takes the code now rather
+            // than doing nothing.
+            await copy(t, codes[t.id] ?? await totp(t.key, Date.now(), t.digits, t.period));
         }
     };
     const add = async (p: OtpParams) => {
