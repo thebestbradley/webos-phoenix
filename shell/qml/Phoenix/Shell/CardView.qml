@@ -957,10 +957,11 @@ Item {
         }
 
         // One step of a two-finger swipe at (x, y), moving the content by
-        // (dx, dy) pixels.
-        function swipe(x, y, dx, dy) {
+        // (dx, dy) pixels. time: when it happened, in ms (tests give their
+        // own clock; the default is now).
+        function swipe(x, y, dx, dy, time) {
             wheelEnd.restart();
-            var now = Date.now();
+            var now = time === undefined ? Date.now() : time;
             if (lastTime > 0 && now > lastTime) {
                 // Smoothed: trackpad events come unevenly.
                 vx = 0.6 * dx / (now - lastTime) + 0.4 * vx;

@@ -52,12 +52,17 @@ Item {
         // A swipe of (dx, dy) in steps, with the events coming as a
         // trackpad's do, then the pause that ends it.
         // slow: the fingers slow down to a stop before lifting (no flick).
+        // The events carry their own times (8 ms apart, or 40 slow), so a
+        // busy test machine does not change how fast the swipe was.
+        property real clock: 1000
         function swipe(dx, dy, slow) {
-            var n = slow ? 20 : 10;
+            var n = slow ? 20 : 10, step = slow ? 40 : 8;
             for (var i = 0; i < n; ++i) {
-                wheel.swipe(root.width / 2, root.height / 2, dx / n, dy / n);
-                wait(slow ? 40 : 8);
+                clock += step;
+                wheel.swipe(root.width / 2, root.height / 2, dx / n, dy / n, clock);
+                wait(step);
             }
+            clock += 1000;
             wait(Theme.wheelGestureEndDelay + 50);
         }
 
