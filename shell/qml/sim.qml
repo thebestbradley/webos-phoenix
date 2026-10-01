@@ -62,6 +62,7 @@ Item {
             // The phones and the TouchPad of luna-sysmgr's day had one
             // ([VirtualKeyboard] VirtualKeyboardEnabled).
             virtualKeyboard: true
+            dictationCommand: typeof simTranscriberCommand !== "undefined" ? simTranscriberCommand : []
             bootSound: typeof simBootSounds !== "undefined" && simBootSounds
             source: SimWindowSource { id: windows }
             system: SimSystemStatus {
@@ -220,7 +221,31 @@ Item {
     Timer {
         id: shutdownTimer
         interval: 4200    // shutdown.mp3 is 4.1 s
-        onTriggered: Qt.quit()
+        property bool restart: false
+        onTriggered: {
+            if (restart && typeof simProcess !== "undefined" && simProcess.restart())
+                return;
+            Qt.quit();
+        }
+    }
+
+    // A restart (machineReboot: a system update's "Install now"): off as
+    // above, then phoenix-sim starts again and boots into the new system.
+    Connections {
+        target: windows
+        function onRebootRequested() {
+            if (root.shuttingDown)
+                return;
+            root.shuttingDown = true;
+            device.visible = false;
+            shutdownTimer.restart = true;
+            if (shell.bootSound) {
+                shell.sounds.shutdown();
+                shutdownTimer.start();
+            } else {
+                shutdownTimer.triggered();
+            }
+        }
     }
 
     // First Use is done (the app set firstUseComplete): not again at the next
@@ -247,12 +272,22 @@ Item {
         }
     }
 
-    // The keyboard's recent emoji and skin tones survive restarts too.
+    // The keyboard's recent emoji and skin tones survive restarts too, and
+    // the words Text Assist learned (saved a moment after the typing stops).
     Connections {
         target: shell.keyboard
         function onEmojiPrefsChanged() {
             if (typeof simSettings !== "undefined")
                 simSettings.setValue("keyboard/emoji", shell.keyboard.emojiPrefs);
+        }
+        function onTextAssistDataChanged() { textAssistSave.restart(); }
+    }
+    Timer {
+        id: textAssistSave
+        interval: 2000
+        onTriggered: {
+            if (typeof simSettings !== "undefined")
+                simSettings.setValue("keyboard/words", shell.keyboard.textAssistData);
         }
     }
 
@@ -262,8 +297,10 @@ Item {
         pushOrientation();
         if (typeof simSettings !== "undefined")
             windows.launcherLayoutJson = simSettings.value("launcher/layout");
-        if (typeof simSettings !== "undefined")
+        if (typeof simSettings !== "undefined") {
             shell.keyboard.emojiPrefs = simSettings.value("keyboard/emoji");
+            shell.keyboard.textAssistData = simSettings.value("keyboard/words");
+        }
         // --launch <appId>: open these apps, in card view, then stop.
         // --open <url>: open a web page in the browser, as a link would.
         var opening = typeof simOpen !== "undefined" && simOpen !== "";

@@ -31,7 +31,8 @@
     "pdfview",
     "docview",
     "help",
-    "firstuse"
+    "firstuse",
+    "marketplace"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

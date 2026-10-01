@@ -220,9 +220,9 @@ others need reimplementation or an alternative for Phoenix.
 - [x] **File manager** (not shipped by Palm; homebrew from Preware, above all Internalz Pro). Phoenix: `apps/files` (`org.webosphoenix.files`), a clean-room design with Internalz Pro's feature set: browse, sort, hidden files, favourites, multi-select, copy / cut / paste, delete, rename, new folder / file, info, image viewer, text editor, "Open with", .ipk install through `com.palm.appinstaller` (simulated); on the Phoenix service `org.webosphoenix.filemanager`. See `docs/APP-RUNTIME.md#files`
 
 ## Store and first use
-- [ ] **HP App Catalog** (`com.palm.app.enyo-findapps`, older `com.palm.app.findapps`), plus the payment app. `conf/luna.conf:157`; `Src/lunaui/launcher/operationalsettings.cpp:194`
+- [x] **HP App Catalog** (`com.palm.app.enyo-findapps`, older `com.palm.app.findapps`), plus the payment app. *Phoenix: the Marketplace (`apps/marketplace`, `server/marketplace`; no payments), with the App Museum II and Preware as add-on catalogs (docs/APP-RUNTIME.md#marketplace).* `conf/luna.conf:157`; `Src/lunaui/launcher/operationalsettings.cpp:194`
 - [ ] **First Use / setup wizard** (`com.palm.app.firstuse`). `Src/base/application/ApplicationManager.cpp:2381`
-- [ ] **Software Manager** (`com.palm.app.swmanager`) and **System Updates** (`com.palm.app.updates`). `conf/default-launcher-page-layout.json`. *Phoenix: Settings > Updates is a stub (version + check button); no OTA yet.*
+- [ ] **Software Manager** (`com.palm.app.swmanager`) and **System Updates** (`com.palm.app.updates`). `conf/default-launcher-page-layout.json`. *Phoenix: System Updates is Settings > Updates on `com.palm.update` (Palm's API, kept for luna-systemui's alerts) over RAUC A/B slots; done in the simulator (docs/APP-RUNTIME.md#system-updates).*
 - [x] **Backup** (`com.palm.app.backup`). `conf/default-launcher-page-layout.json`. *Phoenix: Settings > Backup and `org.webosphoenix.service.backup` (USB drive or WebDAV, encrypted), restore in First Use; `com.palm.app.backup` opens it (docs/APP-RUNTIME.md#backup).*
 
 ## Settings apps (launcher "Settings" page, `conf/default-launcher-page-layout.json:29-51`)
@@ -242,7 +242,7 @@ none has run on a device yet. See `docs/APP-RUNTIME.md`.
 - [x] Language picker (`com.palm.app.languagepicker`): Language & Region (UI and format locales); apps do not localize yet
 - [x] Screen & Lock (`com.palm.app.screenlock`): brightness, timeout, rotation lock, wallpaper, notifications when locked, PIN/password (the lock screen does not ask for it yet)
 - [x] Sounds & Ringtones (`com.palm.app.soundsandalerts`): volumes (master, ringer, alerts, system sounds, media), mute, ringtone (Open webOS's ringtone.mp3 and phone.wav, plus /media/internal/ringtones), System sounds, Keyboard clicks
-- [ ] Text Assist (`com.palm.app.textassist`)
+- [x] Text Assist (`com.palm.app.textassist`). *Phoenix: Settings > Text Assist (suggestions, auto-correct, swipe typing, learned words) for the keyboard's candidate bar, swipe typing and dictation (docs/spec/GAPS.md V2, V3).*
 - [ ] Certificate Manager (`com.palm.app.certificate`). `ApplicationManagerService.cpp:3822`
 - [ ] Phone preferences / Network settings / Power (phone-era prefs apps). Not referenced in this repo.
 - [x] Airplane Mode pane (Phoenix addition; on webOS it lived only in the system menu)

@@ -680,18 +680,11 @@ page and registers `org.webosphoenix.service.dav` on the simulated bus with
 the device's code. It adds the template to the simulated accounts service,
 calls the transport's callbacks as the real accounts service does (1.3),
 runs "Sync now" activities, and teaches db8 the new kinds. HTTP goes through
-`tools/serve-rootfs.py`'s `/__phoenix/proxy` when the page is served over
-HTTP (the browser dev server and the tests). phoenix-sim's `phoenix://`
-pages call the server directly, which only works with a server that allows
-cross-origin requests; for Radicale that is its `[headers]` section:
-
-```ini
-[headers]
-Access-Control-Allow-Origin = *
-Access-Control-Allow-Methods = GET, PUT, DELETE, PROPFIND, REPORT, OPTIONS
-Access-Control-Allow-Headers = Authorization, Content-Type, Depth, If-Match, If-None-Match
-Access-Control-Expose-Headers = ETag
-```
+a proxy of the host, since DAV servers do not allow cross-origin requests:
+`tools/serve-rootfs.py`'s `POST /__phoenix/proxy` when the page is served
+over HTTP (the browser dev server and the tests), phoenix-sim's
+`GET /__phoenix/proxy?req=...` (its `phoenix://` scheme handler, on Qt
+Network) in the simulator. Any server works; none needs CORS headers.
 
 To try it: `pip install radicale`, run it with a user (recent versions refuse
 every login until an `[auth]` type is set; `apps/dav/service/test/radicale.cjs`

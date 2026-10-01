@@ -10,8 +10,18 @@ qt_add_qml_module(phoenix-native
     PLUGIN_TARGET phoenix-native
     OUTPUT_DIRECTORY ${PHOENIX_QML_BUILD_DIR}/Phoenix/Native
     SOURCES keyinjector.h keyinjector.cpp fonttools.h fonttools.cpp hidpi.h hidpi.cpp deviceconfig.h deviceconfig.cpp
+            dictation.h dictation.cpp
 )
 target_link_libraries(phoenix-native PRIVATE Qt6::Quick Qt6::Gui)
+# Dictation records with Qt Multimedia; without it the keyboard has no microphone.
+find_package(Qt6 QUIET COMPONENTS Multimedia)
+if(TARGET Qt6::Multimedia)
+    target_link_libraries(phoenix-native PRIVATE Qt6::Multimedia)
+    target_compile_definitions(phoenix-native PRIVATE PHOENIX_HAVE_MULTIMEDIA)
+    message(STATUS "Phoenix.Native: dictation enabled (Qt Multimedia found)")
+else()
+    message(STATUS "Phoenix.Native: Qt Multimedia not found; no dictation")
+endif()
 
 # A plugin library, so on the device it goes with Qt's own QML modules
 # (meta-phoenix passes QT6_INSTALL_QMLDIR), which are on every import path.

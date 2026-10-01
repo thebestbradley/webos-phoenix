@@ -114,11 +114,14 @@ Item {
         required property string icon
         required property string params
         required property string windowKey
+        required property bool ongoing
+        required property real progress
 
-        // No row is persistent yet: the window attribute that made one
-        // (DashboardWindow::persistent, honoured at :345-347) was set in
-        // the closed WebAppManager, and its name is not in the open sources.
-        readonly property bool persistent: false
+        // Ongoing activities (a download, an install) are persistent: they
+        // stay until they end (DashboardWindow::persistent, honoured at
+        // :345-347; the window attribute that made one was set in the closed
+        // WebAppManager, and its name is not in the open sources).
+        readonly property bool persistent: ongoing
 
         // Where the row goes back to: newest at the top (:541-560, 863-894).
         readonly property real slotY: (menu.count - 1 - index) * (menu.rowHeight + menu.dividerHeight)
@@ -221,6 +224,7 @@ Item {
             color: row.color
             glyph: row.glyph
             icon: row.icon
+            progress: row.progress
 
             Connections {
                 target: menu
@@ -289,7 +293,8 @@ Item {
                     if (mode !== 0 || content.x !== 0)
                         return;
                     menu.activated(row.appId, row.params);
-                    menu.dismissRequested(row.index);
+                    if (!row.persistent)
+                        menu.dismissRequested(row.index);
                 }
             }
             // triggerItemDelete (:1149-1180): a width and a half on, linear.

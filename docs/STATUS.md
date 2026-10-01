@@ -40,7 +40,13 @@ notice ([HARDWARE.md](HARDWARE.md#install-it-like-a-linux-distro)). Also
 in 1.0: dictation, predictive text and swipe typing on the keyboard; a
 Siri-like voice assistant without AI models. Done in the simulator: the
 Edit menu and the long-press Cut / Copy / Paste popup (E1), cursor control
-(V4) and emoji (V6) ([GAPS.md](spec/GAPS.md)). The MCP layer and the AI
+(V4), emoji (V6), and Text Assist: word suggestions, auto-correct, swipe
+typing and dictation (V2, V3) ([GAPS.md](spec/GAPS.md)); Backup and Restore
+([APP-RUNTIME.md](APP-RUNTIME.md#backup)); the Marketplace with web apps,
+App Museum II and Preware as sources and its PHP catalog service
+([APP-RUNTIME.md](APP-RUNTIME.md#marketplace)); System Updates on RAUC
+([APP-RUNTIME.md](APP-RUNTIME.md#system-updates)); downloads and installs as
+ongoing activities in the notification area. The MCP layer and the AI
 agent are 2.0 ([ROADMAP.md](ROADMAP.md#10-release)).
 
 Naming ideas (PreOS with Phoenix UI, PixiOS with Bennu UI for a watch or
@@ -93,7 +99,7 @@ The whole plan, milestone by milestone, with the decisions taken so far:
   the key store service, WAV copies of the system sounds, a TTS engine, the
   `com.palm.app.maps` alias in the app manager, Podcasts' ACG names.
 - **Second wave of apps** ([APP-GAPS.md](APP-GAPS.md)):
-  screen reader, magnification, word prediction and swipe typing, health,
+  screen reader, magnification, health,
   cell broadcast, eSIM, printing, screen recording, fingerprint, notes
   sync, a now-playing dashboard, and the "not done" lists of each new app.
 - **Browser**: fix Share > Add to Launcher (the runtime's `addLaunchPoint`

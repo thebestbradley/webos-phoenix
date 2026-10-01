@@ -276,6 +276,7 @@ Item {
                             color: row.entry.color
                             glyph: row.entry.glyph
                             icon: row.entry.icon
+                            progress: row.entry.progress === undefined ? -1 : row.entry.progress
                             // Taps reach the window only when it allows them.
                             MouseArea {
                                 anchors.fill: parent

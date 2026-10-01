@@ -98,12 +98,13 @@
         };
     })();
 
-    // ---- Temporary files (backup and restore) ---------------------------------------
+    // ---- Temporary files (/tmp) -----------------------------------------------------
     //
-    // The temporary folder org.webosphoenix.service.backup hands its
-    // participants (tempDir), in this page's memory: on a device a real
-    // folder, written by db8, luna-sysservice and the shell.
-    runtime.backupFiles = (function () {
+    // Files services hand each other by path that a device keeps in /tmp:
+    // the backup service's tempDir (written by db8, luna-sysservice and the
+    // shell) and the packages the Marketplace downloads for the installer.
+    // In this page's memory.
+    runtime.tmpFiles = (function () {
         var files = {};
         function bytesOf(v) { return typeof v === "string" ? new TextEncoder().encode(v) : v; }
         return {
@@ -614,7 +615,7 @@
             // "sync" dumped to dir/backup-<microseconds>.json, {files: [name]}
             // (none when there is nothing to back up); {dir, files} loads them
             // back, replacing objects with the same _id (MojDbFlagForce). The
-            // files go through runtime.backupFiles, the simulator's temporary
+            // files go through runtime.tmpFiles, the simulator's temporary
             // folder (org.webosphoenix.service.backup's tempDir).
             "/internal/preBackup": function (p, reply) {
                 if (!p.dir || typeof p.bytes !== "number") return reply(fail(-986, "dir and bytes are required"));
@@ -626,7 +627,7 @@
                 var files = [];
                 if (objects.length) {
                     var file = "backup-" + Date.now() + "000.json";
-                    runtime.backupFiles.write(p.dir.replace(/\/$/, "") + "/" + file, JSON.stringify({ objects: objects }));
+                    runtime.tmpFiles.write(p.dir.replace(/\/$/, "") + "/" + file, JSON.stringify({ objects: objects }));
                     files.push(file);
                 }
                 reply(ok({ files: files, count: objects.length, description: "db8 objects of the kinds marked sync", version: "1" }));
@@ -636,7 +637,7 @@
                 var db = load(), count = 0;
                 try {
                     p.files.forEach(function (f) {
-                        var text = runtime.backupFiles.readText(p.dir.replace(/\/$/, "") + "/" + f);
+                        var text = runtime.tmpFiles.readText(p.dir.replace(/\/$/, "") + "/" + f);
                         (JSON.parse(text).objects || []).forEach(function (o) {
                             delete o._rev;
                             put(db, o);
@@ -836,9 +837,16 @@
         "/createToast": function (p, reply) {
             var click = p.onclick || {};
             if (!p.message) return reply(fail(-1, "message is required"));
-            if (click.target || (click.appId && click.appId !== PalmSystem.appIdentifier))
-                return reply(fail(-1, "onclick may only reopen the calling app in the Phoenix simulator"));
-            var id = PalmSystem.addBannerMessage(String(p.message), JSON.stringify(p.noaction ? {} : click.params || {}),
+            if (click.target) return reply(fail(-1, "onclick.target is not supported in the Phoenix simulator"));
+            // For another app (a service's toast: "Updated to ...", opening
+            // Settings): its notification, which a tap launches with the params.
+            if (click.appId && appId(click.appId) !== PalmSystem.appIdentifier) {
+                host.postToHost("notification", { appId: appId(click.appId), title: String(p.message), body: "",
+                                                  params: aliasParams(click.appId, click.params) });
+                return reply(ok({ toastId: "n" + Date.now() }));
+            }
+            var id = PalmSystem.addBannerMessage(String(p.message),
+                                                 JSON.stringify(p.noaction ? {} : click.appId ? aliasParams(click.appId, click.params) : click.params || {}),
                                                  p.iconUrl || "");
             reply(ok({ toastId: id }));
         },
@@ -889,6 +897,7 @@
     // and tools/serve-rootfs.py serve the list): {id, launchPointId, title,
     // icon, params, hidden, universalSearch}.
     var launchPointCache = null;
+    var launchPointWatchers = [];
     function launchPoints() {
         if (!launchPointCache) {
             try { launchPointCache = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/apps.json") || "[]"); }
@@ -896,6 +905,25 @@
         }
         return launchPointCache;
     }
+    // The installed apps changed (the shell says so, applyHostStatus
+    // {appsVersion}): read the list again and tell launchPointChanges.
+    function appsChanged() {
+        var before = launchPoints();
+        launchPointCache = null;
+        var after = launchPoints(), was = {}, now = {};
+        before.forEach(function (lp) { was[lp.launchPointId] = lp; });
+        after.forEach(function (lp) { now[lp.launchPointId] = lp; });
+        var changes = [];
+        after.forEach(function (lp) { if (!was[lp.launchPointId]) changes.push(Object.assign({ change: "added" }, lp)); });
+        before.forEach(function (lp) {
+            if (!now[lp.launchPointId]) changes.push({ change: "removed", id: lp.id, launchPointId: lp.launchPointId });
+        });
+        changes.forEach(function (c) {
+            launchPointWatchers = launchPointWatchers.filter(function (w) { return w(c) !== false; });
+        });
+    }
+    runtime.appsChanged = appsChanged;
+
     function visibleLaunchPoints() {
         return launchPoints().filter(function (lp) { return !lp.hidden; });
     }
@@ -919,7 +947,10 @@
     // added to the launch's).
     var APP_ALIASES = {
         "com.palm.app.maps": "org.webosphoenix.maps",
-        "com.palm.app.backup": { id: "org.webosphoenix.settings", params: { page: "backup" } }
+        "com.palm.app.backup": { id: "org.webosphoenix.settings", params: { page: "backup" } },
+        // System Updates (luna-systemui opens it from its update alerts).
+        "com.palm.app.updates": { id: "org.webosphoenix.settings", params: { page: "updates" } },
+        "com.palm.app.textassist": { id: "org.webosphoenix.settings", params: { page: "textassist" } }
     };
     function appId(id) {
         var a = APP_ALIASES[id];
@@ -964,7 +995,17 @@
             reply(ok({ apps: hits.map(function (lp) { return { launchPoint: lp.launchPointId }; }) }));
         },
         // Nothing is installed or removed at run time in the simulator.
-        "/launchPointChanges": function (p, reply) { reply(ok({ subscribed: !!p.subscribe })); },
+        // {subscribe: true}: each launch point added or removed (an app was
+        // installed or removed), {change: "added" | "removed", ...launch point}.
+        "/launchPointChanges": function (p, reply, ctx) {
+            launchPoints();   // what there is now, to tell changes from
+            reply(ok({ subscribed: !!p.subscribe }));
+            if (p.subscribe) launchPointWatchers.push(function (change) {
+                if (ctx.cancelled()) return false;
+                reply(ok(change));
+                return true;
+            });
+        },
         "/getAppInfo": function (p, reply) {
             var app = launchPoints().filter(function (a) {
                 return /_default$/.test(a.launchPointId) && (a.id === p.appId || a.id === p.id);
@@ -1331,6 +1372,14 @@
     runtime.signal = signal;
 
     register(["com.palm.bus"], {
+        // registerServerStatus {serviceName, subscribe}: {serviceName,
+        // connected} (luna-service2), here whether the simulator has it;
+        // luna-systemui waits for it before subscribing to a service
+        // (SysUpdateService.js, com.palm.update).
+        "/signal/registerServerStatus": function (p, reply) {
+            var name = String(p.serviceName || "");
+            reply(ok({ serviceName: name, connected: !!(name && runtime.services[name]) }));
+        },
         "/signal/addmatch": function (p, reply, ctx) {
             reply(ok({ subscribed: !!p.subscribe }));
             if (p.subscribe)
@@ -2668,6 +2717,10 @@
                            pfeedback: s.audio.streams.pfeedback },
                 systemSounds: p.systemSounds !== false,
                 tapSounds: tapSounds(p),
+                // Settings > Text Assist (the keyboard): suggestions,
+                // auto-correction, swipe typing, double space for a period,
+                // and when the learned words were last forgotten.
+                textAssist: textAssist(p),
                 ringtone: (p.ringtone && p.ringtone.fullPath) || "",
                 alerttone: (p.alerttone && p.alerttone.fullPath) || "",
                 notificationtone: (p.notificationtone && p.notificationtone.fullPath) || "",
@@ -2689,10 +2742,19 @@
 
         // The keyboard's "Keyboard clicks": x_palm_virtualkeyboard_prefs
         // (a JSON string, VirtualKeyboardPreferences.cpp:233, 325) TapSounds.
-        function tapSounds(p) {
+        function keyboardPrefs(p) {
             var kb = p.x_palm_virtualkeyboard_prefs;
             if (typeof kb === "string") { try { kb = JSON.parse(kb); } catch (e) { kb = null; } }
-            return !(kb && kb.TapSounds === false);
+            return kb && typeof kb === "object" ? kb : {};
+        }
+        function tapSounds(p) {
+            return keyboardPrefs(p).TapSounds !== false;
+        }
+        function textAssist(p) {
+            var kb = keyboardPrefs(p);
+            return { suggestions: kb.WordSuggestions !== false, autoCorrect: kb.AutoCorrect !== false,
+                     swipe: kb.SwipeTyping !== false, spaces2period: kb.spaces2period !== false,
+                     forgetWords: typeof kb.ForgetWords === "number" ? kb.ForgetWords : 0 };
         }
 
         function changed() {
@@ -3268,7 +3330,7 @@
         };
         var osInfo = {
             core_os_kernel_version: "6.6.0", core_os_name: "Rockhopper", core_os_release: "2.0.0",
-            core_os_release_codename: "rockhopper", webos_api_version: "2.0.0", webos_build_id: "sim",
+            core_os_release_codename: "rockhopper", webos_api_version: "2.0.0", webos_build_id: "1",
             webos_build_datetime: "20260928000000", webos_imagename: "webos-phoenix-image", webos_name: "webOS Phoenix",
             webos_prerelease: "", webos_release: "0.1.0", webos_release_codename: "phoenix", webos_manufacturing_version: "0.1.0",
             encryption_key_type: ""
@@ -3287,7 +3349,12 @@
             }
             reply(r);
         };
-        sys["/osInfo/query"] = function (p, reply) { reply(pick(osInfo, p.parameters)); };
+        sys["/osInfo/query"] = function (p, reply) {
+            // The running system: the booted slot (System updates, below).
+            var b = runtime.updateSlots && runtime.updateSlots.booted();
+            if (b) { osInfo.webos_release = b.version; osInfo.webos_build_id = String(b.build); }
+            reply(pick(osInfo, p.parameters));
+        };
 
         // ---- com.palm.systemmanager: device lock (legacy webOS API) ----------------
 
@@ -4864,8 +4931,8 @@
     // system folders (/usr/palm/applications with the installed apps, /etc).
     //
     // com.palm.appinstaller installNoVerify {target, subscribe} (legacy webOS,
-    // as Preware-era file managers installed .ipk files) reports STARTING,
-    // IPKG_INSTALL and SUCCESS; nothing is really installed in the simulator.
+    // as Preware-era file managers installed .ipk files) installs the package
+    // for real ("Installing apps" below).
     // The application manager learns listAllHandlersForMime and
     // getHandlerForMimeType for "Open with" (Photos, Music).
     //
@@ -5042,11 +5109,10 @@
                  "# Harbor weekend\n\n* Ferry leaves 8:15\n* Pack the camera\n* Dinner at the pier\n", when("2026-09-12T20:10:00Z"));
             text(MEDIA_ROOT + "/Downloads/release-notes.txt",
                  "webOS Phoenix 0.1.0\n\nNew: Files, a file manager for the whole device.\n", when("2026-09-25T12:00:00Z"));
-            // A tiny stand-in package ("!<arch>" header, as .ipk files are ar archives).
-            var ipk = utf8Bytes("!<arch>\ndebian-binary   0           0     0     100644  4         `\n2.0\n");
-            nodes[MEDIA_ROOT + "/Downloads/org.example.hello_1.0.0_all.ipk"] = {
-                t: "f", m: when("2026-09-26T15:30:00Z"), mode: 420, enc: "base64", data: toB64(ipk), size: ipk.length
-            };
+            // A real (tiny) app package to install: apps/media-samples/media/packages,
+            // made by apps/media-samples/tools/make-sample-ipk.cjs.
+            ref(MEDIA_ROOT + "/Downloads/org.example.hello_1.0.0_all.ipk",
+                MEDIA_ROOT + "/samples/packages/org.example.hello_1.0.0_all.ipk", 3106, when("2026-09-26T15:30:00Z"));
 
             // The demo media (apps/media-samples, mounted at /media/internal/samples).
             var samples = null;
@@ -5401,33 +5467,7 @@
         };
         register(["org.webosphoenix.filemanager"], methods);
 
-        // ---- com.palm.appinstaller (legacy) ---------------------------------------------------
-
-        var ticket = 0;
-        function install(p, reply, ctx) {
-            var path = norm(String(p.target || "").replace(/^file:\/\//, ""));
-            if (!path) return reply(fail(E.BAD_PARAMS, "target is required"));
-            var n = load().nodes[path];
-            if (!n || n.t !== "f") return reply(fail(E.NOT_FOUND, "No such package: " + path));
-            var t = ++ticket;
-            var steps = extOf(path) === "ipk"
-                ? ["STARTING", "IPKG_INSTALL", "SUCCESS"]
-                : ["STARTING", "FAILED_IPKG_INSTALL"];
-            steps.forEach(function (status, i) {
-                setTimeout(function () {
-                    if (ctx.cancelled() && i) return;
-                    var r = ok({ ticket: t, status: status });
-                    if (/^FAILED/.test(status)) r.details = { reason: "Not an .ipk package" };
-                    if (status === "SUCCESS") {
-                        var log = store.get("files:installed", []);
-                        log.push({ target: path, time: Date.now() });
-                        store.set("files:installed", log);
-                    }
-                    reply(r);
-                }, i * 250);
-            });
-        }
-        register(["com.palm.appinstaller"], { "/installNoVerify": install, "/install": install });
+        // com.palm.appinstaller (Files' .ipk sheet): see "Installing apps" below.
 
         // ---- Application manager: handlers by MIME type ---------------------------------------
 
@@ -5571,12 +5611,11 @@
     //
     //   __phoenixRuntime.http.request({method, url, headers, body, binary,
     //       follow}) -> Promise<{status, headers, body | bodyBase64, url}>: what
-    //       @phoenix/luna's httpRequest() uses in the simulator. A page served
-    //       over HTTP (tools/serve-rootfs.py, the tests) goes through the
-    //       server's proxy (POST /__phoenix/proxy), since feeds and podcast
-    //       directories do not allow cross-origin requests; elsewhere
-    //       (phoenix-sim's phoenix:// pages) it fetches directly, which only
-    //       reaches servers that send CORS headers.
+    //       @phoenix/luna's httpRequest() uses in the simulator. Feeds and
+    //       podcast directories do not allow cross-origin requests, so it goes
+    //       through the host's proxy: POST /__phoenix/proxy on a page served
+    //       over HTTP (tools/serve-rootfs.py, the tests), GET
+    //       /__phoenix/proxy?req=... on phoenix-sim's phoenix:// pages.
     //   com.webos.service.downloadmanager (and legacy com.palm.downloadmanager,
     //       which the Isis browser calls)   OSE's download manager keeps the
     //       legacy API: download {target, targetDir?, targetFilename?,
@@ -5613,10 +5652,13 @@
         function request(req) {
             var r = { method: req.method || "GET", url: req.url, headers: req.headers || {}, body: req.body,
                       binary: !!req.binary, follow: req.follow !== false };
-            if (/^https?:$/.test(global.location.protocol)) {
-                return fetch("/__phoenix/proxy", {
-                    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(r)
-                }).then(function (res) { return res.json(); }).then(function (x) {
+            var viaHost = /^https?:$/.test(global.location.protocol)
+                ? fetch("/__phoenix/proxy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(r) })
+                : global.location.protocol === "phoenix:"
+                ? fetch("/__phoenix/proxy?req=" + encodeURIComponent(JSON.stringify(r)))
+                : null;
+            if (viaHost) {
+                return viaHost.then(function (res) { return res.json(); }).then(function (x) {
                     if (x.error) {
                         var e = new Error(x.error);
                         e.code = x.code;
@@ -5819,6 +5861,9 @@
     // until it is completed or replaced, and is not fired again. Activities
     // without a schedule are kept but never fire here (they wait on
     // triggers the simulator does not have).
+    // One requirement is honoured: requirements {charging: true} holds an
+    // activity until the charger is connected (System Updates' "install at
+    // next charge"); it fires then, or at once if it already is.
     //
     // The older alarm API, com.palm.power timeout/set {key, at: "MM/DD/YYYY
     // HH:MM:SS" (UTC) | in: "HH:MM:SS", uri, params} and timeout/clear {key},
@@ -5879,9 +5924,11 @@
                 schedule: a.schedule || null, callback: a.callback || null, creator: PalmSystem.appIdentifier,
                 due: p.start === false ? null : due, fired: false
             };
+            if (a.requirements && a.requirements.charging === true) entry.charging = true;
             // With no schedule or trigger, a started activity runs now: its
             // callback is called once, by the page that created it.
-            var now = p.start !== false && !a.schedule && !a.trigger && !!entry.callback;
+            var now = p.start !== false && !a.schedule && !a.trigger && !!entry.callback &&
+                (!entry.charging || charging());
             if (now) entry.fired = true;
             st.byName[a.name] = entry;
             save(st);
@@ -5941,12 +5988,22 @@
             dispatch(a.callback.method, params, function () {}, { cancelled: function () { return true; }, onCancel: null });
         }
 
+        function charging() { return store.get("power", { charger: "none" }).charger !== "none"; }
+
         // Fire what is due (for this page: see above). `at` forces the time.
         function check(at) {
             var now = at === undefined ? Date.now() : at;
             var st = load(), due = [];
+            var plugged = charging();
             for (var n in st.byName) {
                 var a = st.byName[n];
+                if (a.charging && !a.fired && !a.schedule && a.callback && plugged) {
+                    a.fired = true;
+                    a.due = now;
+                    due.push(a);
+                    continue;
+                }
+                if (a.charging && !plugged) continue;
                 if (a.fired || a.due === null || a.due === undefined || a.due > now) continue;
                 if (at === undefined && !forThisPage(a) && now < a.due + GRACE_MS) continue;
                 a.fired = true;
@@ -6013,7 +6070,14 @@
 
         global.addEventListener && global.addEventListener("storage", function (e) {
             if (e.key === "phoenix:" + KEY) arm();
+            else if (e.key === "phoenix:power") check();   // the charger, for requirements.charging
         });
+        var setPower = runtime.setPower;
+        runtime.setPower = function (changes) {
+            var st = setPower(changes);
+            check();
+            return st;
+        };
         // What came due while no page was running.
         setTimeout(function () { check(); }, 0);
 
@@ -6248,11 +6312,12 @@
     // from the virtual rootfs; nodeServiceLuna() is its luna.call(uri,
     // params) -> Promise<reply> on the simulated bus; proxiedRequest is its
     // HTTP, {method, url, headers, body} -> Promise<{status, headers, body}>.
-    // A page served over HTTP (tools/serve-rootfs.py, the tests) sends each
-    // request through the server's proxy, POST /__phoenix/proxy, since
-    // servers do not allow cross-origin requests; elsewhere (phoenix-sim's
-    // phoenix:// pages) it uses fetch directly, which only works with
-    // servers that send CORS headers.
+    // Servers do not allow cross-origin requests, so each goes through a
+    // proxy of the host: a page served over HTTP (tools/serve-rootfs.py, the
+    // tests) POSTs it to /__phoenix/proxy; phoenix-sim's phoenix:// pages GET
+    // /__phoenix/proxy?req=... (its RootfsSchemeHandler). Elsewhere it uses
+    // fetch directly, which only works with servers that send CORS headers.
+    // proxiedRequestBytes is the same with the body as a Uint8Array (bytes).
     function nodeServiceLoader(serviceDir, label) {
         var modules = {};
         function normPath(p) {
@@ -6283,6 +6348,14 @@
 
     function nodeServiceLuna() {
         return {
+            // A subscription: onReply for each reply until cancel().
+            subscribe: function (uri, params, onReply) {
+                var stopped = false;
+                dispatch(uri, clone(params || {}), function (r) {
+                    if (!stopped) setTimeout(function () { if (!stopped) onReply(r); }, 0);
+                }, { cancelled: function () { return stopped; }, onCancel: null });
+                return function () { stopped = true; };
+            },
             call: function (uri, params) {
                 return new Promise(function (resolve) {
                     var done = false;
@@ -6296,11 +6369,23 @@
         };
     }
 
+    function proxiedRequestBytes(req) {
+        return proxiedRequest(Object.assign({}, req, { binary: true, follow: true })).then(function (r) {
+            if (r.bytes) return r;
+            var s = atob(r.bodyBase64 || ""), bytes = new Uint8Array(s.length);
+            for (var i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
+            return { status: r.status, headers: r.headers, bytes: bytes };
+        });
+    }
+
     function proxiedRequest(req) {
-        if (/^https?:$/.test(global.location.protocol)) {
-            return fetch("/__phoenix/proxy", {
-                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req)
-            }).then(function (res) { return res.json(); }).then(function (r) {
+        var viaHost = /^https?:$/.test(global.location.protocol)
+            ? fetch("/__phoenix/proxy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) })
+            : global.location.protocol === "phoenix:"
+            ? fetch("/__phoenix/proxy?req=" + encodeURIComponent(JSON.stringify(req)))
+            : null;
+        if (viaHost) {
+            return viaHost.then(function (res) { return res.json(); }).then(function (r) {
                 if (r.error) {
                     var e = new Error(r.error);
                     e.code = r.code;
@@ -6311,10 +6396,13 @@
         }
         return fetch(req.url, { method: req.method, headers: req.headers, body: req.body, credentials: "omit" })
             .then(function (res) {
-                return res.text().then(function (body) {
+                return (req.binary ? res.arrayBuffer() : res.text()).then(function (body) {
                     var h = {};
                     res.headers.forEach(function (v, k) { h[k.toLowerCase()] = v; });
-                    return { status: res.status, headers: h, body: body };
+                    var out = { status: res.status, headers: h };
+                    if (req.binary) out.bytes = new Uint8Array(body);
+                    else out.body = body;
+                    return out;
                 });
             }, function (e) {
                 var err = new Error("Could not reach " + req.url + " (no answer, or cross-origin requests refused): " + e.message);
@@ -6642,7 +6730,7 @@
     //                 the simulator cannot list a folder): db8's and the
     //                 shell's (apps/settings/service/etc/palm/backup/) and
     //                 luna-sysservice's (compat/rootfs)
-    //   temp          runtime.backupFiles, in this page's memory
+    //   temp          runtime.tmpFiles, in this page's memory
     //   usb           the USB drive, through org.webosphoenix.filemanager
     //   crypto        WebCrypto (PBKDF2-SHA256, AES-256-GCM)
     //   config        the shared store ("backup:config"); on a device a file
@@ -6683,7 +6771,7 @@
             var all = prefs(), out = {};
             backupKeys().forEach(function (k) { if (k in all) out[k] = all[k]; });
             var file = dir + "/systemprefs_backup.db";
-            runtime.backupFiles.write(file, JSON.stringify(out));
+            runtime.tmpFiles.write(file, JSON.stringify(out));
             reply(ok({ description: "Backup of LunaSysService, containing the systemprefs sqlite3 database", version: "1.0", files: [file] }));
         };
         sys["/backup/postRestore"] = function (p, reply) {
@@ -6693,7 +6781,7 @@
                 var path = f.charAt(0) === "/" ? f : p.tempDir.replace(/\/$/, "") + "/" + f;
                 if (path.indexOf("systemprefs_backup.db") < 0) return;
                 var saved;
-                try { saved = JSON.parse(runtime.backupFiles.readText(path)); } catch (e) { return; }
+                try { saved = JSON.parse(runtime.tmpFiles.readText(path)); } catch (e) { return; }
                 // Only the keys that are backed up, as PrefsDb::merge.
                 backupKeys().forEach(function (k) { if (k in saved) merged[k] = saved[k]; });
             });
@@ -6706,7 +6794,7 @@
                 var files = [], layout = store.get("shell:launcherLayout", "");
                 if (layout) {
                     var file = String(p.tempDir || "/tmp").replace(/\/$/, "") + "/launcher-layout.json";
-                    runtime.backupFiles.write(file, layout);
+                    runtime.tmpFiles.write(file, layout);
                     files.push(file);
                 }
                 reply(ok({ description: "Backup of LunaSysMgr files for launcher, quicklaunch and dockmode", version: "1.0", files: files }));
@@ -6716,7 +6804,7 @@
                 p.files.forEach(function (f) {
                     if (!/launcher-layout\.json$/.test(f)) return;
                     var path = f.charAt(0) === "/" ? f : String(p.tempDir || p.dir).replace(/\/$/, "") + "/" + f;
-                    var json = runtime.backupFiles.readText(path);
+                    var json = runtime.tmpFiles.readText(path);
                     store.set("shell:launcherLayout", json);
                     host.postToHost("launcherLayout", { json: json });
                 });
@@ -6792,9 +6880,9 @@
                     },
                     temp: {
                         make: function () { return "/tmp/phoenix-backup-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); },
-                        read: function (path) { return runtime.backupFiles.read(path); },
-                        write: function (path, data) { runtime.backupFiles.write(path, data); },
-                        remove: function (dir) { runtime.backupFiles.remove(dir); }
+                        read: function (path) { return runtime.tmpFiles.read(path); },
+                        write: function (path, data) { runtime.tmpFiles.write(path, data); },
+                        remove: function (dir) { runtime.tmpFiles.remove(dir); }
                     },
                     usb: usb,
                     participants: function () {
@@ -6835,6 +6923,515 @@
         });
         register([SERVICE], serviceMethods);
         runtime.backup = { service: service };
+    })();
+
+
+    // ================================================================================
+    // Installing apps (com.webos.appInstallService; legacy com.palm.appinstaller)
+    // ================================================================================
+    //
+    // OSE's installer (appinstalld2; API reference "com.webos.appInstallService"):
+    //
+    //   install {id, ipkUrl, subscribe}   ipkUrl: an absolute path to the
+    //       .ipk; subscribers get {id, statusValue, details: {state,
+    //       packageId, progress, errorCode, reason}}: 11 "need to install",
+    //       13 "installing", 30 "installed"; 24 "install failed"
+    //   remove {id, subscribe}            31 "removed"; 25 "remove failed";
+    //       -2 "No such id"
+    //   status {subscribe}                {status: {apps: [details]}}, then
+    //       each change
+    //
+    // Here the package is read in the page (lib/ipk.js of the Marketplace's
+    // service) and its app's files go to the shell: phoenix-sim writes them
+    // to its installed-apps folder (SimInstaller, "installApp" host message);
+    // tools/serve-rootfs.py to its own (POST /__phoenix/installer). The app
+    // list is read again everywhere (applyHostStatus {appsVersion};
+    // launchPointChanges). Only the app's own folder is installed: packages
+    // with services, maintainer scripts or files elsewhere are refused (the
+    // Marketplace does not offer them either).
+    //
+    // The legacy installer (Files' .ipk sheet), installNoVerify {target}, is
+    // the same with legacy status strings (STARTING, IPKG_INSTALL, SUCCESS,
+    // FAILED_IPKG_INSTALL).
+    (function appInstaller() {
+        var PACKAGES_DIR = "/usr/palm/services/org.webosphoenix.service.packages/";
+        var loadModule = nodeServiceLoader(PACKAGES_DIR, "Packages service");
+        var luna = nodeServiceLuna();
+        var ipkReader = null;
+        var browserGzip = {
+            gunzip: function (bytes) { return streamBytes(bytes, new DecompressionStream("gzip")); },
+            gzip: function (bytes) { return streamBytes(bytes, new CompressionStream("gzip")); }
+        };
+        function streamBytes(bytes, transform) {
+            var out = new Response(bytes).body.pipeThrough(transform);
+            return new Response(out).arrayBuffer().then(function (b) { return new Uint8Array(b); });
+        }
+        function ipk() {
+            if (!ipkReader) ipkReader = loadModule("lib/ipk.js").createIpk({ gzip: browserGzip });
+            return ipkReader;
+        }
+        runtime.ipk = ipk;
+        runtime.browserGzip = browserGzip;
+
+        function b64(bytes) {
+            var s = "";
+            for (var i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            return btoa(s);
+        }
+        function unb64(text) {
+            var s = atob(text), out = new Uint8Array(s.length);
+            for (var i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+            return out;
+        }
+
+        // The package's bytes: a /tmp file (a download) or a file on the device.
+        function readPackage(path) {
+            try { return Promise.resolve(runtime.tmpFiles.read(path)); } catch (e) { /* not a /tmp file */ }
+            return luna.call("luna://org.webosphoenix.filemanager/read", { path: path, encoding: "base64" }).then(function (r) {
+                if (r.returnValue === false) throw Object.assign(new Error(r.errorText || "Cannot read " + path), { code: "NOT_FOUND" });
+                return unb64(r.data);
+            });
+        }
+
+        // ---- The shell's side ----------------------------------------------------------
+
+        var pending = {}, lastAppsVersion = -1;
+        var baseApply = runtime.applyHostStatus;
+        runtime.applyHostStatus = function (st) {
+            if (st && st.installerResult && pending[st.installerResult.requestId]) {
+                var cb = pending[st.installerResult.requestId];
+                delete pending[st.installerResult.requestId];
+                cb(st.installerResult);
+            }
+            if (st && typeof st.appsVersion === "number" && st.appsVersion !== lastAppsVersion) {
+                var first = lastAppsVersion < 0;
+                lastAppsVersion = st.appsVersion;
+                if (!first || st.appsVersion > 0) appsChanged();
+            }
+            baseApply(st);
+        };
+        function hostInstall(op, appId, files) {
+            launchPoints();   // the list before, for launchPointChanges
+            if (/^https?:$/.test(global.location.protocol)) {
+                return fetch("/__phoenix/installer", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ op: op, appId: appId, files: files || [] })
+                }).then(function (res) { return res.json(); }).then(function (r) {
+                    if (r.ok) appsChanged();
+                    return r;
+                });
+            }
+            return new Promise(function (resolve) {
+                var id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+                var timer = setTimeout(function () {
+                    delete pending[id];
+                    resolve({ ok: false, error: "The shell did not answer" });
+                }, 60000);
+                pending[id] = function (r) { clearTimeout(timer); resolve(r); };
+                host.postToHost(op === "install" ? "installApp" : "removeApp", { requestId: id, appId: appId, files: files || [] });
+            });
+        }
+
+        // ---- Install and remove ---------------------------------------------------------
+
+        var statuses = {}, statusWatchers = [];
+        function report(id, statusValue, details, each) {
+            var d = Object.assign({ packageId: id }, details || {});
+            statuses[id] = d;
+            var msg = ok({ id: id, statusValue: statusValue, details: d });
+            if (each) each(msg);
+            statusWatchers = statusWatchers.filter(function (w) { return w(msg) !== false; });
+            if (/^(installed|install failed|removed|remove failed)$/.test(d.state)) delete statuses[id];
+        }
+
+        // -> Promise<{appId, version}>; rejects with an Error (code, message).
+        function installPackage(id, path, each) {
+            report(id || "", 11, { state: "install needed", ipkUrl: path }, each);
+            return readPackage(path).then(function (bytes) {
+                return ipk().read(bytes);
+            }).then(function (pkg) {
+                var app = pkg.apps[0];
+                if (!app) throw Object.assign(new Error("The package has no app"), { code: "NO_APP" });
+                if (id && app.id !== id) throw Object.assign(new Error("The package is " + app.id + ", not " + id), { code: "WRONG_ID" });
+                id = app.id;
+                if (pkg.scripts.length) throw Object.assign(new Error("Packages with install scripts are not supported"), { code: "SCRIPTS" });
+                var outside = pkg.files.filter(function (f) { return f.path.indexOf(app.dir) !== 0; });
+                if (outside.length || pkg.services.length || pkg.apps.length > 1)
+                    throw Object.assign(new Error("Only packages of one app are supported (this one also has " +
+                        (outside[0] ? outside[0].path : "services") + ")"), { code: "UNSUPPORTED" });
+                report(id, 13, { state: "installing", ipkUrl: path }, each);
+                var files = pkg.files.map(function (f) { return { path: f.path.slice(app.dir.length), data: b64(f.data) }; });
+                return hostInstall("install", id, files).then(function (r) {
+                    if (!r.ok) throw Object.assign(new Error(r.error || "Install failed"), { code: "HOST" });
+                    report(id, 30, { state: "installed", installBasePath: "/media/cryptofs/apps" }, each);
+                    return { appId: id, version: app.appinfo.version || pkg.control.Version || "" };
+                });
+            }).then(null, function (e) {
+                report(id || "", 24, { state: "install failed", errorCode: -1, reason: e.message }, each);
+                throw e;
+            });
+        }
+        runtime.installPackage = installPackage;
+
+        function installed(id) {
+            return launchPoints().some(function (lp) { return lp.id === id && lp.removable; });
+        }
+        function removeApp(id, each) {
+            if (!installed(id)) return Promise.reject(Object.assign(new Error("No such id"), { code: -2 }));
+            report(id, 41, { state: "remove needed" }, each);
+            return hostInstall("remove", id).then(function (r) {
+                if (!r.ok) {
+                    report(id, 25, { state: "remove failed", reason: r.error }, each);
+                    throw Object.assign(new Error(r.error || "Remove failed"), { code: -7 });
+                }
+                report(id, 31, { state: "removed" }, each);
+            });
+        }
+        runtime.removeApp = removeApp;
+
+        register(["com.webos.appInstallService"], {
+            "/install": function (p, reply, ctx) {
+                if (!p.id) return reply(fail(-2, "id is empty"));
+                if (!p.ipkUrl) return reply(fail(-2, "ipkUrl is empty"));
+                if (typeof p.ipkUrl !== "string" || p.ipkUrl.charAt(0) !== "/") return reply(fail(-2, "invalid ipkUrl"));
+                reply(ok({ subscribed: !!p.subscribe }));
+                var each = p.subscribe ? function (m) { if (!ctx.cancelled()) reply(m); } : null;
+                installPackage(p.id, p.ipkUrl, each).then(null, function () { /* reported */ });
+            },
+            "/remove": function (p, reply, ctx) {
+                if (!p.id) return reply(fail(-2, "id is empty"));
+                if (!installed(p.id)) return reply(fail(-2, "No such id"));
+                reply(ok({ subscribed: !!p.subscribe }));
+                var each = p.subscribe ? function (m) { if (!ctx.cancelled()) reply(m); } : null;
+                removeApp(p.id, each).then(null, function () { /* reported */ });
+            },
+            "/status": function (p, reply, ctx) {
+                reply(ok({ subscribed: !!p.subscribe, status: { apps: Object.keys(statuses).map(function (k) { return statuses[k]; }) } }));
+                if (p.subscribe) statusWatchers.push(function (m) {
+                    if (ctx.cancelled()) return false;
+                    reply(m);
+                    return true;
+                });
+            }
+        });
+
+        // Legacy webOS (Files' .ipk sheet; luna-sysmgr ApplicationInstaller.cpp).
+        var ticket = 0;
+        function legacyInstall(p, reply, ctx) {
+            var path = String(p.target || "").replace(/^file:\/\//, "");
+            if (!path) return reply(fail(-1, "target is required"));
+            // A missing target is an error reply (the file manager's code), as before.
+            luna.call("luna://org.webosphoenix.filemanager/stat", { path: path }).then(function (st) {
+                if (st.returnValue === false && !/^\/tmp\//.test(path))
+                    return reply(fail(st.errorCode, "No such package: " + path));
+                var t = ++ticket;
+                var send = function (status, extra) {
+                    if (!ctx.cancelled() || status === "STARTING") reply(ok(Object.assign({ ticket: t, status: status }, extra || {})));
+                };
+                send("STARTING");
+                installPackage(null, path, function (m) {
+                    if (m.details.state === "installing") send("IPKG_INSTALL");
+                }).then(function (r) {
+                    send("SUCCESS", { appId: r.appId });
+                }, function (e) {
+                    send("FAILED_IPKG_INSTALL", { details: { reason: e.message } });
+                });
+            });
+        }
+        register(["com.palm.appinstaller"], {
+            "/installNoVerify": legacyInstall,
+            "/install": legacyInstall,
+            "/remove": function (p, reply) {
+                removeApp(p.packageName || p.id).then(function () { reply(ok()); }, function (e) { reply(fail(-1, e.message)); });
+            },
+            "/isInstalled": function (p, reply) { reply(ok({ installed: launchPoints().some(function (lp) { return lp.id === (p.appId || p.packageName); }) })); }
+        });
+    })();
+
+
+    // ================================================================================
+    // Marketplace (org.webosphoenix.service.packages; apps/marketplace/service)
+    // ================================================================================
+    //
+    // The device's own service (packagesservice.js and lib/, loaded from
+    // /usr/palm/services/org.webosphoenix.service.packages/), given what
+    // service.js gives it on a device: HTTP through the host's proxy (the
+    // catalogs, web app manifests and icons, packages), WebCrypto for SHA-256
+    // and SHA-512, gzip streams, /tmp in memory for the downloaded packages,
+    // the default sources from /etc/palm/marketplace/sources.json, and its
+    // state in the shared store ("marketplace:state"). It installs through
+    // com.webos.appInstallService ("Installing apps" above).
+    (function packagesService() {
+        var SERVICE = "org.webosphoenix.service.packages";
+        var loadModule = nodeServiceLoader("/usr/palm/services/" + SERVICE + "/", "Packages service");
+        var subtle = global.crypto && global.crypto.subtle;
+        function digest(alg) {
+            return function (bytes) { return subtle.digest(alg, bytes).then(function (h) { return new Uint8Array(h); }); };
+        }
+        var methods = null;
+        function service() {
+            if (!methods) {
+                methods = loadModule("packagesservice.js").createPackagesService({
+                    luna: nodeServiceLuna(),
+                    request: proxiedRequest,
+                    requestBytes: proxiedRequestBytes,
+                    crypto: { sha256: digest("SHA-256"), sha512: digest("SHA-512") },
+                    gzip: runtime.browserGzip,
+                    state: {
+                        load: function () { return store.get("marketplace:state", null); },
+                        save: function (o) { store.set("marketplace:state", o); }
+                    },
+                    temp: {
+                        write: function (name, bytes) {
+                            var path = "/tmp/marketplace/" + name;
+                            runtime.tmpFiles.write(path, bytes);
+                            return path;
+                        },
+                        remove: function (path) { runtime.tmpFiles.remove(path); }
+                    },
+                    defaultSources: function () {
+                        try { return JSON.parse(PalmSystem.getResource("/etc/palm/marketplace/sources.json") || "{}").sources || []; }
+                        catch (e) { return []; }
+                    },
+                    log: function (m) { console.info("[marketplace] " + m); }
+                });
+            }
+            return methods;
+        }
+
+        var names;
+        try { names = loadModule("packagesservice.js").METHODS; }
+        catch (e) { return; }   // no rootfs behind the page (the runtime's unit tests)
+        var serviceMethods = {};
+        names.forEach(function (name) {
+            serviceMethods["/" + name] = function (p, reply, ctx) {
+                var m;
+                try { m = service(); } catch (e) { return reply(fail("UNKNOWN_ERROR", String(e.message || e))); }
+                if (name === "install" && p.subscribe) {
+                    // Progress as it goes; the last reply says installed or failed.
+                    reply(ok({ subscribed: true, id: p.id, state: "queued" }));
+                    m.install(p, function (st) { if (!ctx.cancelled()) reply(st); });
+                    return;
+                }
+                m[name](p).then(reply, function (e) { reply(fail("UNKNOWN_ERROR", String(e && e.message || e))); });
+            };
+        });
+        register([SERVICE], serviceMethods);
+    })();
+
+    // ================================================================================
+    // Ongoing activities (org.webosphoenix.ongoing; the shell's)
+    // ================================================================================
+    //
+    // Work going on in the background, a download or an install, shown in
+    // the notification area with its progress until it ends; a tap opens
+    // the app. (Later they move to the Live Activities pane: docs/ROADMAP.md.)
+    //
+    //   set {id, appId?, title, body?, icon? (relative to the app), progress
+    //        (0-100, -1: none), params? (the app's launch params on a tap)}
+    //   clear {id}
+    //
+    // The shell keys them by id, so whichever page calls updates one item.
+    register(["org.webosphoenix.ongoing"], {
+        "/set": function (p, reply) {
+            if (!p.id || !p.title) return reply(fail(-1, "id and title are required"));
+            host.postToHost("ongoing", { id: String(p.id), appId: p.appId || PalmSystem.appIdentifier, title: String(p.title),
+                body: p.body ? String(p.body) : "", icon: p.icon || "", params: p.params || null,
+                progress: typeof p.progress === "number" ? p.progress : -1 });
+            reply(ok());
+        },
+        "/clear": function (p, reply) {
+            if (!p.id) return reply(fail(-1, "id is required"));
+            host.postToHost("ongoing", { id: String(p.id), clear: true });
+            reply(ok());
+        }
+    });
+
+    // ================================================================================
+    // System updates (com.palm.update; services/updates)
+    // ================================================================================
+    //
+    // The device's own service (updatesservice.js, loaded from
+    // /usr/palm/services/com.palm.update/) over a simulated RAUC: two slots
+    // in the shared store ("updates:slots"), the running one's version is
+    // what osInfo/query says (webos_release, webos_build_id). A bundle here is
+    // the simulator's stand-in for a RAUC bundle: only its manifest, as text
+    // ("[update]" compatible=phoenix-sim, version=, build=;
+    // server/updates/bin/publish.php --simulator makes one). Installing writes
+    // the version to the other slot; com.palm.power/shutdown/machineReboot
+    // then starts the primary slot (phoenix-sim restarts itself; a browser
+    // page reloads).
+    //
+    // The service's work runs in the page that asked (Settings); what it says
+    // to GetStatus subscribers (luna-systemui's alerts) reaches every page
+    // through the store ("updates:palm"), as one service process would.
+    (function systemUpdates() {
+        var DIR = "/usr/palm/services/com.palm.update/";
+        var SLOTS = "updates:slots";
+        var loadModule = nodeServiceLoader(DIR, "Updates service");
+
+        function slots() {
+            var st = store.get(SLOTS, null);
+            if (!st) st = { compatible: "phoenix-sim", booted: "rootfs.0", primary: "rootfs.0",
+                            slots: { "rootfs.0": { version: "0.1.0", build: 1 }, "rootfs.1": null } };
+            return st;
+        }
+        function otherOf(st) { return st.booted === "rootfs.0" ? "rootfs.1" : "rootfs.0"; }
+        runtime.updateSlots = {
+            get: slots,
+            booted: function () { var st = slots(); return st.slots[st.booted]; },
+            // The restart: the bootloader starts the primary slot.
+            boot: function () {
+                var st = slots();
+                if (st.slots[st.primary]) st.booted = st.primary;
+                else st.primary = st.booted;
+                store.set(SLOTS, st);
+            },
+            set: function (st) { store.set(SLOTS, st); }
+        };
+
+        function manifest(bytes) {
+            var text = new TextDecoder().decode(bytes), m = {}, section = "";
+            text.split("\n").forEach(function (line) {
+                line = line.trim();
+                var sec = /^\[(.+)\]$/.exec(line), kv = /^([a-z]+)=(.*)$/.exec(line);
+                if (sec) section = sec[1];
+                else if (kv && section === "update") m[kv[1]] = kv[2];
+            });
+            if (!m.compatible || !m.version || !/^\d+$/.test(m.build || ""))
+                throw new Error("bundle is not a valid RAUC bundle");
+            return { compatible: m.compatible, version: m.version, build: parseInt(m.build, 10) };
+        }
+        var rauc = {
+            status: function () {
+                var st = slots(), b = st.slots[st.booted];
+                return Promise.resolve({ compatible: st.compatible, name: "webOS Phoenix", primary: st.primary, other: otherOf(st),
+                                         booted: { slot: st.booted, version: b.version, build: b.build } });
+            },
+            info: function (file) {
+                return new Promise(function (resolve) { resolve(manifest(runtime.tmpFiles.read(file))); });
+            },
+            install: function (file, onProgress) {
+                return rauc.info(file).then(function (m) {
+                    var st = slots();
+                    if (m.compatible !== st.compatible) throw new Error("Compatible mismatch");
+                    var steps = [0, 20, 40, 60, 80, 100];
+                    return steps.reduce(function (p, pct) {
+                        return p.then(function () {
+                            onProgress(pct, pct < 100 ? "Copying image to " + otherOf(st) : "Installing done.");
+                            return new Promise(function (r) { setTimeout(r, 150); });
+                        });
+                    }, Promise.resolve()).then(function () {
+                        var st2 = slots();
+                        st2.slots[otherOf(st2)] = { version: m.version, build: m.build };
+                        st2.primary = otherOf(st2);
+                        store.set(SLOTS, st2);
+                    });
+                });
+            },
+            markActive: function (slot) {
+                var st = slots();
+                st.primary = slot === "booted" ? st.booted : slot === "other" ? otherOf(st) : slot;
+                store.set(SLOTS, st);
+                return Promise.resolve();
+            }
+        };
+
+        var subtle = global.crypto && global.crypto.subtle;
+        function hex(buf) {
+            return Array.prototype.map.call(new Uint8Array(buf), function (b) { return (b < 16 ? "0" : "") + b.toString(16); }).join("");
+        }
+
+        var methods = null, palmSubs = [], statusSubs = [], seq = 0;
+        function service() {
+            if (methods) return methods;
+            methods = loadModule("updatesservice.js").createUpdatesService({
+                rauc: rauc,
+                request: proxiedRequest,
+                download: function (url, file, onProgress) {
+                    var cancelled = false;
+                    var promise = proxiedRequestBytes({ method: "GET", url: url }).then(function (r) {
+                        if (cancelled) throw Object.assign(new Error("Cancelled"), { code: "CANCELLED" });
+                        if (r.status !== 200) throw new Error("the server answered " + r.status);
+                        onProgress(r.bytes.length);
+                        runtime.tmpFiles.write(file, r.bytes);
+                        return subtle.digest("SHA-256", r.bytes).then(function (h) { return { size: r.bytes.length, sha256: hex(h) }; });
+                    });
+                    return { promise: promise, cancel: function () { cancelled = true; } };
+                },
+                files: {
+                    path: function (name) { return "/tmp/updates/" + name; },
+                    exists: function (file) { try { runtime.tmpFiles.read(file); return true; } catch (e) { return false; } },
+                    remove: function (file) { try { runtime.tmpFiles.remove(file); } catch (e) { /* gone */ } }
+                },
+                power: function () {
+                    var p = store.get("power", { percent: 76, charger: "none" });
+                    return Promise.resolve({ percent: p.percent, charging: p.charger !== "none" });
+                },
+                luna: nodeServiceLuna(),
+                // /etc/palm/updates.json; "updates:config" in the store
+                // stands for an edited one (tools/test-updates.cjs).
+                config: function () {
+                    var c;
+                    try { c = JSON.parse(PalmSystem.getResource(DIR + "etc/palm/updates.json") || "{}"); }
+                    catch (e) { c = {}; }
+                    return Object.assign(c, store.get("updates:config", {}));
+                },
+                state: {
+                    load: function () { return store.get("updates:state", null); },
+                    save: function (o) { store.set("updates:state", o); }
+                },
+                log: function (m) { console.info("[updates] " + m); }
+            });
+            // What this page's service says goes to every page's subscribers.
+            methods.watchPalm(function (r) {
+                store.set("updates:palm", { seq: Date.now() + "." + (++seq), reply: r });
+                palmSubs.forEach(function (w) { w(r); });
+            });
+            methods.watch(function (st) { statusSubs.forEach(function (w) { w(st); }); });
+            return methods;
+        }
+        global.addEventListener && global.addEventListener("storage", function (e) {
+            if (e.key !== "phoenix:updates:palm" || !e.newValue) return;
+            var ev;
+            try { ev = JSON.parse(e.newValue); } catch (x) { return; }
+            if (ev && ev.reply) palmSubs.forEach(function (w) { w(ev.reply); });
+        });
+
+        var names;
+        try { names = loadModule("updatesservice.js").METHODS; }
+        catch (e) { return; }   // no rootfs behind the page (the runtime's unit tests)
+        var serviceMethods = {};
+        names.forEach(function (name) {
+            serviceMethods["/" + name] = function (p, reply, ctx) {
+                var m;
+                try { m = service(); } catch (e) { return reply(fail("UNKNOWN_ERROR", String(e.message || e))); }
+                m[name](p).then(function (r) {
+                    var subs = name === "GetStatus" ? palmSubs : name === "getStatus" ? statusSubs : null;
+                    if (subs && p.subscribe && r.returnValue) {
+                        r.subscribed = true;
+                        var w = function (x) {
+                            if (ctx.cancelled()) { subs.splice(subs.indexOf(w), 1); return; }
+                            reply(x);
+                        };
+                        subs.push(w);
+                    }
+                    reply(r);
+                });
+            };
+        });
+        register(["com.palm.update"], serviceMethods);
+
+        // The restart.
+        var power = runtime.services["com.palm.power"];
+        if (power) power["/shutdown/machineReboot"] = function (p, reply) {
+            reply(ok());
+            runtime.updateSlots.boot();
+            setTimeout(function () {
+                if (/^https?:$/.test(global.location.protocol)) global.location.reload();
+                else host.postToHost("reboot", { reason: p.reason || "" });
+            }, 0);
+        };
     })();
 
     // ================================================================================

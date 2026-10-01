@@ -19,6 +19,8 @@ Item {
     property color color: "#666666"
     property string glyph: ""
     property string icon: ""
+    // An ongoing activity's progress, 0-100 (a download, an install); -1: none.
+    property real progress: -1
 
     height: Theme.dashboardItemHeight
 
@@ -74,6 +76,21 @@ Item {
             color: Theme.textDim
             font.family: Theme.fontFamily
             font.pixelSize: Theme.px(14)
+        }
+        // The progress of an ongoing activity.
+        Rectangle {
+            objectName: "dashboardProgress"
+            visible: item.progress >= 0
+            width: parent.width - Theme.px(10)
+            height: Theme.px(4)
+            radius: height / 2
+            color: Qt.rgba(1, 1, 1, 0.2)
+            Rectangle {
+                width: parent.width * Math.max(0, Math.min(100, item.progress)) / 100
+                height: parent.height
+                radius: parent.radius
+                color: Theme.text
+            }
         }
     }
 }

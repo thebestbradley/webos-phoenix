@@ -27,10 +27,12 @@ if(PHOENIX_BUILD_SIM)
     # The Terminal's PTY core (and its tests, pty-test), shared with the
     # device's org.webosphoenix.pty service.
     add_subdirectory(../services/pty ${CMAKE_CURRENT_BINARY_DIR}/pty)
-    add_executable(phoenix-sim sim/main.cpp sim/rootfs.cpp sim/rootfs.h sim/simsettings.h sim/simpty.cpp sim/simpty.h)
+    add_executable(phoenix-sim sim/main.cpp sim/rootfs.cpp sim/rootfs.h sim/simsettings.h sim/simprocess.h sim/simpty.cpp sim/simpty.h sim/siminstaller.cpp sim/siminstaller.h)
     target_link_libraries(phoenix-sim PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick phoenix-pty-core)
     if(TARGET Qt6::WebEngineQuick)
-        target_link_libraries(phoenix-sim PRIVATE Qt6::WebEngineQuick)
+        # Network: the pages' HTTP proxy (RootfsSchemeHandler, /__phoenix/proxy).
+        find_package(Qt6 6.4 REQUIRED COMPONENTS Network)
+        target_link_libraries(phoenix-sim PRIVATE Qt6::WebEngineQuick Qt6::Network)
         target_compile_definitions(phoenix-sim PRIVATE PHOENIX_HAVE_WEBENGINE)
         message(STATUS "phoenix-sim: web apps enabled (Qt WebEngine found)")
     else()
@@ -38,6 +40,13 @@ if(PHOENIX_BUILD_SIM)
     endif()
     # Run straight from the build tree against the source QML and apps.
     get_filename_component(PHOENIX_REPO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+    # The keyboard's dictation, without a microphone (CI: build/dictation-test).
+    add_executable(dictation-test native/dictation_test.cpp native/dictation.cpp native/dictation.h)
+    target_link_libraries(dictation-test PRIVATE Qt6::Core Qt6::Qml)
+    # phoenix-sim's installed apps, without a window (CI: build/siminstaller-test).
+    add_executable(siminstaller-test sim/siminstaller_test.cpp sim/rootfs.cpp sim/rootfs.h sim/siminstaller.cpp sim/siminstaller.h)
+    target_link_libraries(siminstaller-test PRIVATE Qt6::Core)
+    target_compile_definitions(siminstaller-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
     target_compile_definitions(phoenix-sim PRIVATE
         PHOENIX_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
         PHOENIX_QML_BUILD_DIR="${PHOENIX_QML_BUILD_DIR}"

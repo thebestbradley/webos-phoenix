@@ -1,0 +1,12 @@
+{
+    "appId": "org.webosphoenix.service.packages",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": ["org.webosphoenix.service.packages"],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.service.packages",
+            "outbound": ["com.webos.appInstallService", "com.webos.applicationManager", "com.palm.activitymanager", "com.webos.notification"]
+        }
+    ]
+}

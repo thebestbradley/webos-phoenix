@@ -61,6 +61,8 @@
 //   savedLauncherLayout() -> string, saveLauncherLayout(json)
 //                            the launcher's icon order, kept across sessions
 //   launcherLayoutRestored(json)  signal: a restored backup brought one back
+//   (installing: "installApp" / "removeApp" host messages, phoenix-sim's
+//   simInstaller; deleting an installed app in the launcher removes it)
 //   apps also has removable: whether the launcher offers to delete the app
 //
 // Simulator only (sim.qml wires these to SimSystemStatus and the shell):
@@ -140,16 +142,8 @@ Item {
         var web = (typeof simWebEngine !== "undefined" && simWebEngine && typeof simWebApps !== "undefined") ? simWebApps : [];
         var titles = {};
         for (var i = 0; i < web.length; ++i) {
-            var a = web[i];
-            titles[a.title] = true;
-            // Launch points (appinfo.json phoenix.launchPoints) are entries of
-            // their own: own icon, title, card and launch params.
-            apps.append({ appId: a.id, title: a.title, color: "#555c66", glyph: a.title.charAt(0),
-                          tab: a.tab !== undefined ? a.tab : 0, quickLaunch: a.quickLaunch || webQuickLaunch[a.title] || 0,
-                          icon: a.icon, largeIcon: a.largeIcon || "", web: true, main: a.main, noWindow: !!a.noWindow,
-                          orientation: a.requestedWindowOrientation || "",
-                          webAppId: a.appId || a.id, params: a.params || "", dir: a.dir || "",
-                          removable: false });
+            titles[web[i].title] = true;
+            apps.append(_webEntry(web[i]));
         }
         for (i = 0; i < placeholders.count; ++i) {
             var p = placeholders.get(i);
@@ -166,6 +160,72 @@ Item {
         Qt.callLater(_bootSystemApps);
         if (_simPty())
             _simPty().event.connect(_ptyEvent);
+    }
+
+    // A launcher entry for a web app (Rootfs::apps()). Launch points
+    // (appinfo.json phoenix.launchPoints) are entries of their own: own icon,
+    // title, card and launch params. Apps the user installed can be deleted.
+    function _webEntry(a) {
+        return { appId: a.id, title: a.title, color: "#555c66", glyph: a.title.charAt(0),
+                 tab: a.tab !== undefined ? a.tab : 0, quickLaunch: a.quickLaunch || webQuickLaunch[a.title] || 0,
+                 icon: a.icon, largeIcon: a.largeIcon || "", web: true, main: a.main, noWindow: !!a.noWindow,
+                 orientation: a.requestedWindowOrientation || "",
+                 webAppId: a.appId || a.id, params: a.params || "", dir: a.dir || "",
+                 removable: !!a.installed };
+    }
+
+    // ---- Installing and removing apps (phoenix-sim's SimInstaller) ---------------------
+    // The runtime's com.webos.appInstallService unpacks a package and sends
+    // its files ("installApp"); removing one is "removeApp". The result goes
+    // back to every page (applyHostStatus {installerResult, appsVersion}),
+    // which then read the app list again, and the launcher follows.
+
+    property int appsVersion: 0
+
+    function _simInstaller() {
+        return typeof simInstaller !== "undefined" && simInstaller ? simInstaller : null;
+    }
+
+    // The web apps again, after an install or removal: entries come and go,
+    // changed ones are replaced in place.
+    function _syncWebApps() {
+        var inst = _simInstaller();
+        if (!inst)
+            return;
+        var list = inst.apps(), byId = {};
+        for (var i = 0; i < list.length; ++i)
+            byId[list[i].id] = list[i];
+        for (var j = apps.count - 1; j >= 0; --j) {
+            var e = apps.get(j);
+            if (!e.web)
+                continue;
+            if (!byId[e.appId])
+                apps.remove(j);
+            else {
+                apps.set(j, _webEntry(byId[e.appId]));
+                delete byId[e.appId];
+            }
+        }
+        for (var k = 0; k < list.length; ++k)
+            if (byId[list[k].id])
+                apps.append(_webEntry(list[k]));
+        appsVersion++;
+    }
+
+    function _installerRequest(type, payload) {
+        var inst = _simInstaller();
+        var error = !inst ? "Installing apps is not available"
+                  : type === "installApp" ? inst.install(String(payload.appId || ""), payload.files || [])
+                  : inst.remove(String(payload.appId || ""));
+        if (!error) {
+            // Its windows go with it; an update starts afresh.
+            for (var i = cards.count - 1; i >= 0; --i)
+                if (cards.get(i).appId === payload.appId || cards.get(i).webAppId === payload.appId)
+                    close(cards.get(i).uid);
+            _syncWebApps();
+        }
+        pushSystemStatus({ installerResult: { requestId: payload.requestId, ok: !error, error: error },
+                           appsVersion: appsVersion });
     }
 
     // ---- The Terminal's shells (phoenix-sim's SimPty) -------------------------------
@@ -389,6 +449,12 @@ Item {
                 cb(payload.reply);
         } else if (type === "preferences") {
             preferencesReported(payload);
+        } else if (type === "ongoing") {
+            setOngoing(appId, payload || {});
+        } else if (type === "reboot") {
+            rebootRequested();
+        } else if (type === "installApp" || type === "removeApp") {
+            _installerRequest(type, payload);
         } else if (type === "launcherLayout") {
             // A restored backup's launcher layout (com.palm.sysMgrDataBackup
             // postRestore, as LunaSysMgr's BackupManager put its files back).
@@ -411,6 +477,8 @@ Item {
     signal systemStatusReported(var status)
     signal preferencesReported(var prefs)
     signal launcherLayoutRestored(string json)
+    // The page asked the device to restart (com.palm.power/shutdown/machineReboot).
+    signal rebootRequested
 
     // ---- System windows: the emergency window ---------------------------------------
     // An app page shown by the shell outside the cards: Phone's restricted
@@ -644,7 +712,8 @@ Item {
                 id: key, appId: appId, title: info.title, body: "",
                 color: info.color, glyph: info.glyph, icon: _iconUrl(_param(url, "phoenixIcon"), appId),
                 params: "", windowKey: key,
-                clickableWhenLocked: _param(url, "phoenixClickableWhenLocked") === "1"
+                clickableWhenLocked: _param(url, "phoenixClickableWhenLocked") === "1",
+                ongoing: false, progress: -1
             });
         }
     }
@@ -824,11 +893,19 @@ Item {
     function savedLauncherLayout() { return launcherLayoutJson; }
     function saveLauncherLayout(json) { launcherLayoutJson = json; }
 
-    // Deleting an app closes its windows (the launcher layout keeps it out).
+    // Deleting an app closes its windows (the launcher layout keeps it out);
+    // one the user installed is removed from the device, as webOS did.
     function removeApp(appId) {
         for (var i = cards.count - 1; i >= 0; --i)
             if (cards.get(i).appId === appId)
                 close(cards.get(i).uid);
+        for (var j = 0; j < apps.count; ++j) {
+            var e = apps.get(j);
+            if (e.appId === appId && e.web && e.removable) {
+                _installerRequest("removeApp", { appId: e.webAppId, requestId: "" });
+                break;
+            }
+        }
     }
 
     // Open a web page in the browser, as a tapped link does (phoenix-sim --open).
@@ -1030,7 +1107,42 @@ Item {
             appId: appId, title: titleText, body: body,
             color: info.color, glyph: info.glyph, icon: info.icon || "",
             params: params && typeof params === "object" ? JSON.stringify(params) : "",
-            windowKey: "", clickableWhenLocked: false
+            windowKey: "", clickableWhenLocked: false,
+            ongoing: false, progress: -1
+        });
+    }
+
+    // An ongoing activity (a download, an install; org.webosphoenix.ongoing
+    // set / clear in the runtime): one dashboard item per id that stays,
+    // with its progress, until it is cleared. {id, title, body, icon?,
+    // progress (0-100, -1: none), params?} or {id, clear: true}.
+    // (Later these move to the Live Activities pane: docs/ROADMAP.md.)
+    function setOngoing(appId, p) {
+        var key = "ongoing:" + appId + ":" + p.id;
+        var at = -1;
+        for (var i = 0; i < notifications.count; ++i)
+            if (notifications.get(i).id === key) { at = i; break; }
+        if (p.clear) {
+            if (at >= 0)
+                notifications.remove(at);
+            return;
+        }
+        var target = p.appId && appInfo(p.appId) ? p.appId : appId;
+        var info = appInfo(target) || { color: "#666666", glyph: "!", icon: "" };
+        var progress = typeof p.progress === "number" ? Math.max(-1, Math.min(100, p.progress)) : -1;
+        var params = p.params && typeof p.params === "object" ? JSON.stringify(p.params) : "";
+        if (at >= 0) {
+            notifications.setProperty(at, "title", p.title || "");
+            notifications.setProperty(at, "body", p.body || "");
+            notifications.setProperty(at, "progress", progress);
+            notifications.setProperty(at, "params", params);
+            return;
+        }
+        notifications.append({
+            id: key, appId: target, title: p.title || "", body: p.body || "",
+            color: info.color, glyph: info.glyph, icon: p.icon ? _iconUrl(p.icon, target) : (info.icon || ""),
+            params: params, windowKey: "", clickableWhenLocked: false,
+            ongoing: true, progress: progress
         });
     }
 

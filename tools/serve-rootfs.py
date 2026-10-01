@@ -17,6 +17,14 @@ that talk to servers (the CardDAV and CalDAV account): the page sends
 {method, url, headers, body} and gets {status, headers, body} back, without
 redirects followed. Browsers would refuse these cross-origin requests.
 
+POST /__phoenix/installer installs or removes an app for the simulated
+com.webos.appInstallService (runtime/phoenix-runtime.js, which unpacks the
+.ipk): {op: "install", appId, files: [{path, data (base64)}]} or {op:
+"remove", appId} -> {ok, error}. Installed apps live in --installed-dir (a
+new temporary folder by default), laid out like a device's
+/media/cryptofs/apps, and are served and listed like the others, as
+phoenix-sim's SimInstaller does.
+
 --terminal gives the Terminal app (apps/terminal) a real shell on this
 computer, as phoenix-sim does: a WebSocket per session at /__phoenix/pty
 speaking the org.webosphoenix.pty protocol (docs/TERMINAL.md) over Python's
@@ -41,6 +49,7 @@ import mimetypes
 import os
 import re
 import secrets
+import tempfile
 import select
 import shutil
 import signal
@@ -86,6 +95,84 @@ def load_rootfs():
 
 
 MOUNTS, OVERLAYS, APPS, EXCLUDE = load_rootfs()
+BUILTIN_APPS = dict(APPS)
+INSTALLED_DIR = None
+INSTALLED = set()
+APP_ID_RE = re.compile(r"^[A-Za-z0-9]+([._-][A-Za-z0-9]+)+$")
+
+
+def installed_apps_dir():
+    return os.path.join(INSTALLED_DIR, "usr", "palm", "applications")
+
+
+def rescan_installed():
+    """The apps in INSTALLED_DIR join the built-in ones (which keep their ids)."""
+    APPS.clear()
+    APPS.update(BUILTIN_APPS)
+    INSTALLED.clear()
+    base = installed_apps_dir() if INSTALLED_DIR else None
+    if not base or not os.path.isdir(base):
+        return
+    for name in sorted(os.listdir(base)):
+        info_path = os.path.join(base, name, "appinfo.json")
+        if name.endswith((".new", ".old")) or name in APPS or not os.path.isfile(info_path):
+            continue
+        try:
+            with open(info_path, encoding="utf-8-sig") as f:
+                info = json.load(f)
+        except ValueError:
+            continue
+        APPS[name] = (os.path.join(base, name), info)
+        INSTALLED.add(name)
+
+
+def install_app(app_id, files):
+    """What SimInstaller::install does: "" when done, else what is wrong."""
+    if not APP_ID_RE.match(app_id or "") or len(app_id) > 128:
+        return "Not a valid app id: %s" % app_id
+    if app_id in BUILTIN_APPS:
+        return "A built-in app has the id %s" % app_id
+    dest = os.path.join(installed_apps_dir(), app_id)
+    temp, old = dest + ".new", dest + ".old"
+    shutil.rmtree(temp, ignore_errors=True)
+    os.makedirs(temp)
+    has_info = False
+    for f in files:
+        rel = os.path.normpath(f.get("path", ""))
+        if not rel or rel.startswith(("/", "..")) or rel == ".":
+            shutil.rmtree(temp, ignore_errors=True)
+            return "A file outside the app: %s" % rel
+        data = base64.b64decode(f.get("data", ""))
+        if rel == "appinfo.json":
+            try:
+                if json.loads(data.decode("utf-8-sig")).get("id") != app_id:
+                    raise ValueError
+            except ValueError:
+                shutil.rmtree(temp, ignore_errors=True)
+                return "appinfo.json does not have the id %s" % app_id
+            has_info = True
+        path = os.path.join(temp, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as out:
+            out.write(data)
+    if not has_info:
+        shutil.rmtree(temp, ignore_errors=True)
+        return "The app has no appinfo.json"
+    shutil.rmtree(old, ignore_errors=True)
+    if os.path.exists(dest):
+        os.rename(dest, old)
+    os.rename(temp, dest)
+    shutil.rmtree(old, ignore_errors=True)
+    rescan_installed()
+    return ""
+
+
+def remove_app(app_id):
+    if app_id not in INSTALLED:
+        return "No such id"
+    shutil.rmtree(os.path.join(installed_apps_dir(), app_id), ignore_errors=True)
+    rescan_installed()
+    return ""
 
 
 def resolve(path):
@@ -124,7 +211,10 @@ def app_list():
     out = []
     for app_id, (_, info) in sorted(APPS.items()):
         base = "/usr/palm/applications/%s/" % app_id
-        main = base + info.get("main", "index.html")
+        main = info.get("main", "index.html")
+        # A hosted web app (an installed PWA) starts at its site's URL.
+        if not re.match(r"^https?://", main):
+            main = base + main
         phoenix = info.get("phoenix") or {}
         tab = phoenix.get("launcherTab", 0)
         out.append({
@@ -167,6 +257,8 @@ def launch_points():
             "icon": a["icon"],
             "params": a.get("params", {}),
             "hidden": a.get("hidden", False),
+            "removable": app_id in INSTALLED,
+            "version": APPS[app_id][1].get("version", "") if app_id in APPS else "",
         }
         if "appId" not in a:
             rec["universalSearch"] = APPS[app_id][1].get("universalSearch")
@@ -242,6 +334,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        if self.path.split("?", 1)[0] == "/__phoenix/installer":
+            try:
+                req = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+                error = install_app(req.get("appId"), req.get("files") or []) if req.get("op") == "install" \
+                    else remove_app(req.get("appId")) if req.get("op") == "remove" else "op: install or remove"
+            except (ValueError, OSError) as e:
+                error = "bad installer request: %s" % e
+            return self.send(200, "application/json", json.dumps({"ok": not error, "error": error}).encode())
         if self.path.split("?", 1)[0] != "/__phoenix/proxy":
             return self.send(404, "text/plain", b"not found")
         try:
@@ -593,7 +693,11 @@ def main():
     ap.add_argument("--terminal", action="store_true",
                     help="give the Terminal app a real shell on this computer (a WebSocket with a random token)")
     ap.add_argument("--terminal-shell", metavar="PATH", help="run this program in the Terminal instead of the shell it asks for")
+    ap.add_argument("--installed-dir", metavar="DIR", help="where installed apps go (default: a new temporary folder)")
     args = ap.parse_args()
+    global INSTALLED_DIR
+    INSTALLED_DIR = args.installed_dir or tempfile.mkdtemp(prefix="phoenix-installed-")
+    rescan_installed()
     srv = http.server.ThreadingHTTPServer((args.host, args.port), Handler)
     srv.daemon_threads = True
     srv.verbose = args.verbose

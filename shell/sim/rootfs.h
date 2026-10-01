@@ -31,6 +31,17 @@ public:
     // Device path (e.g. /usr/palm/applications/<id>/index.html) -> file.
     QString resolve(const QString &devicePath) const;
 
+    // Apps the user installed (com.webos.appInstallService in the runtime,
+    // through SimInstaller): a folder laid out like a device's
+    // /media/cryptofs/apps (usr/palm/applications/<id>/), whose apps are
+    // served at /usr/palm/applications/<id>/ like the built-in ones and are
+    // removable. rescan() reads the apps again after a change.
+    void setInstalledDir(const QString &dir);
+    QString installedDir() const { return m_installedDir; }
+    bool isInstalled(const QString &appId) const { return m_installed.contains(appId); }
+    bool hasApp(const QString &appId) const { return m_appDirs.contains(appId); }
+    void rescan();
+
     // Launcher entries as maps: id, appId (the app; differs from id for a
     // launch point), title, type, noWindow, main (phoenix:// URL, with
     // ?launchParams= for launch points), params (JSON), tab (-1 = hidden),
@@ -58,6 +69,10 @@ private:
     QStringList m_excluded;                    // never served
     QList<QPair<QString, QString>> m_mounts;   // longest prefix first
     QHash<QString, QString> m_appDirs;         // app id -> directory
+    QStringList m_applicationDirs;             // rootfs.json applicationDirs, absolute
+    QStringList m_systemApps;                  // rootfs.json systemApps, absolute
+    QString m_installedDir;
+    QStringList m_installed;                   // ids of installed apps
     QVariantList m_apps;
     QList<QVariantMap> m_launchPoints;
     QByteArray m_hostInfo = "{}";
@@ -80,6 +95,8 @@ private:
 };
 
 #ifdef PHOENIX_HAVE_WEBENGINE
+class QNetworkAccessManager;
+
 class RootfsSchemeHandler : public QWebEngineUrlSchemeHandler
 {
 public:
@@ -92,6 +109,15 @@ public:
     static void registerScheme();
 
 private:
+    // GET /__phoenix/proxy?req={method, url, headers, body, binary?, follow?}:
+    // one HTTP request for the simulated services that talk to servers (DAV
+    // accounts, backups to WebDAV, the Marketplace), which servers' CORS
+    // rules would refuse from a page; answers {status, headers, url, body |
+    // bodyBase64} or {error, code}, as tools/serve-rootfs.py's POST
+    // /__phoenix/proxy does.
+    void proxy(QWebEngineUrlRequestJob *job);
+
     const Rootfs *m_rootfs;
+    QNetworkAccessManager *m_network = nullptr;
 };
 #endif

@@ -5,9 +5,10 @@
 // Draws the Settings launcher icons (public/icon.png, public/icons/*.png).
 // The original Palm preference-app icons were not open-sourced, so these
 // are new: a glossy rounded tile in the webOS 2.x style with a white glyph.
-// The PNGs are committed; rerun this after changing a glyph:
+// The PNGs are committed; rerun this after changing a glyph (names: only
+// those icons):
 //
-//   node apps/settings/tools/render-icons.cjs
+//   node apps/settings/tools/render-icons.cjs [NAME...]
 //
 // Needs Playwright with Chromium (the same one tools/test-apps.cjs uses).
 
@@ -106,6 +107,11 @@ const ICONS = {
           <rect x="27.5" y="13" width="9" height="38" rx="3" transform="rotate(60 32 32)"/>
           <rect x="27.5" y="13" width="9" height="38" rx="3" transform="rotate(-60 32 32)"/>
         </g>`],
+    textassist: ["#6f8fd8", "#2a4685", `
+        <rect x="12.5" y="16" width="39" height="27" rx="5" fill="none" stroke="#fff" stroke-width="4"/>
+        <text x="32" y="35.5" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="14.5"
+              text-anchor="middle" fill="#fff">Abc</text>
+        <path d="M21 50.5h22" stroke="#fff" stroke-width="4" stroke-linecap="round"/>`],
     accessibility: ["#3aa0a8", "#135c63", `
         <circle cx="32" cy="16.5" r="4.6" fill="#fff"/>
         <path d="M15.5 24.5l16.5 3.2 16.5-3.2M32 27.7v9.6M32 37.3l-7 12.5M32 37.3l7 12.5" fill="none" stroke="#fff"
@@ -147,7 +153,8 @@ const sized = (file, scale) => scale === 1 ? file : file.replace(/\.png$/, `-${S
     // loading card (docs/spec/hidpi-art.md).
     for (const scale of [1, 4]) {
         const page = await browser.newPage({ viewport: { width: SIZE, height: SIZE }, deviceScaleFactor: scale });
-        for (const [name, spec] of Object.entries(ICONS)) {
+        const only = process.argv.slice(2);
+        for (const [name, spec] of Object.entries(ICONS).filter(([n]) => !only.length || only.includes(n))) {
             await page.setContent(`<html><body style="margin:0;background:transparent">${svg(spec)}</body></html>`);
             const file = name === "icon" ? path.join(OUT, "icon.png") : path.join(OUT, "icons", name + ".png");
             await page.locator("svg").screenshot({ path: sized(file, scale), omitBackground: true });

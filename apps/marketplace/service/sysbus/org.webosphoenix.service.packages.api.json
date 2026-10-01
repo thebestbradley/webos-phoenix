@@ -1,0 +1,18 @@
+{
+    "marketplace.management": [
+        "org.webosphoenix.service.packages/getSources",
+        "org.webosphoenix.service.packages/addSource",
+        "org.webosphoenix.service.packages/trustSource",
+        "org.webosphoenix.service.packages/setSource",
+        "org.webosphoenix.service.packages/removeSource",
+        "org.webosphoenix.service.packages/refresh",
+        "org.webosphoenix.service.packages/browse",
+        "org.webosphoenix.service.packages/search",
+        "org.webosphoenix.service.packages/getApp",
+        "org.webosphoenix.service.packages/install",
+        "org.webosphoenix.service.packages/remove",
+        "org.webosphoenix.service.packages/listInstalled",
+        "org.webosphoenix.service.packages/updateAll",
+        "org.webosphoenix.service.packages/scheduled"
+    ]
+}

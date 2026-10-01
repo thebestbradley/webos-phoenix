@@ -9,7 +9,7 @@ Produces the same layout the simulator serves, for a device image:
     /usr/palm/frameworks/...         Enyo 1.0, MojoLoader, foundation frameworks
     /usr/share/phoenix/runtime/      phoenix-runtime.js
     /etc/palm/db/kinds, permissions  db8 kinds the apps declare
-    /usr/palm/services/<id>/         Node.js services apps carry in service/
+    /usr/palm/services/<id>/         Node.js services apps carry in service/, and services/*/
                                      (run by run-js-service), with their
     /usr/share/luna-service2/...     roles, permissions and service files
     /etc/...                         a service's etc/ (e.g. the backup
@@ -77,8 +77,15 @@ SYSBUS_DIRS = [
 
 
 def find_services(cfg):
-    """Node.js Luna services that apps carry in service/ (e.g. apps/files/service)."""
+    """Node.js Luna services that apps carry in service/ (e.g. apps/files/service),
+    and the system's own in services/ (e.g. services/updates)."""
     services = []
+    top = os.path.join(REPO, "services")
+    for name in sorted(os.listdir(top)) if os.path.isdir(top) else []:
+        pkg = os.path.join(top, name, "package.json")
+        if os.path.isfile(pkg):
+            with open(pkg, encoding="utf-8") as f:
+                services.append((json.load(f)["name"], os.path.join(top, name)))
     for rel in cfg["applicationDirs"]:
         base = os.path.join(REPO, rel)
         if not os.path.isdir(base):

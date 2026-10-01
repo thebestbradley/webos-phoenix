@@ -6,8 +6,18 @@
 > catalog, instead of the usual "visit the site and add it to the home
 > screen" (which still works). Next to it: an **Android catalog** (see
 > [ANDROID.md](ANDROID.md)), and the **App Museum / Preware archives as
-> add-on catalogs** a user can switch on. The catalog's name and where the
-> PHP backend is hosted are still open.
+> add-on catalogs** a user can switch on.
+>
+> **1 October 2026:** it is called the **Marketplace** for now; Phoenix
+> picks the curated sites and they can opt out; the App Museum is used and
+> the owner is telling the webOS Archive (it is removed if they say no); the
+> PHP backend runs on this computer until launch, then on a server.
+>
+> **Status:** A0 (the Marketplace app and its service), A2 (App Museum II
+> and Preware feeds as add-on catalogs) and A3 (the catalog service,
+> `server/marketplace`) are done in the simulator; see
+> [APP-RUNTIME.md](APP-RUNTIME.md#marketplace). Still to do: the server
+> online, A1 and A4 on a device, the Android catalog.
 
 How people will find, install and update apps on Phoenix: installable web
 apps (PWAs) as first-class cards, the original webOS `.ipk` apps from the

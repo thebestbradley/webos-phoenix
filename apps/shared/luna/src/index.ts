@@ -22,3 +22,5 @@ export * from "./documents";
 export * from "./setup";
 export * from "./vpn";
 export * from "./backup";
+export * from "./updates";
+export * from "./marketplace";

@@ -225,6 +225,15 @@ Still to do:
       is in [STATUS.md](STATUS.md#next-work)
 - [ ] Lock screen asks for the PIN / password set in Screen & Lock
 - [ ] Notification actions (e.g. Snooze / Done on a reminder)
+- [x] Ongoing activities: downloads and installs (system updates,
+      Marketplace installs) as items with their progress in the
+      notification area, until they end (`org.webosphoenix.ongoing`;
+      [APP-RUNTIME.md](APP-RUNTIME.md#ongoing-activities))
+- [ ] Live Activities (owner, 1 October 2026): ongoing activities get their
+      own place on the left of the notification area, the notification
+      icons stay on the right, and tapping an activity's icon opens its
+      pane. Builds on the ongoing activities above; only the shell's
+      drawing of them changes. Which line (1.x or 2.0) is still to decide
 - [ ] Second wave of apps: screen reader, magnification, health,
       cell broadcast, eSIM, printing, screen recording, fingerprint, notes
       sync, a now-playing dashboard ([APP-GAPS.md](APP-GAPS.md))
@@ -249,22 +258,28 @@ dark and light themes go to 2.0.
 every day. The app sources come towards the end of 1.0 (owner, 29 September
 2026).
 
-- [ ] Web apps and the Phoenix Catalog: curated PWAs shown as apps ([APP-STORE.md](APP-STORE.md) A0-A4)
-- [ ] Classic apps from App Museum II ([APP-STORE.md](APP-STORE.md) A2), with webOS Archive
+- [ ] Web apps and the Phoenix Catalog: curated PWAs shown as apps ([APP-STORE.md](APP-STORE.md) A0-A4).
+      Done in the simulator: the Marketplace (A0) and the catalog service on
+      this computer (A3); to do: the server online, A1 on a device, A4
+- [ ] Classic apps from App Museum II ([APP-STORE.md](APP-STORE.md) A2), with webOS Archive.
+      Done in the simulator (an add-on catalog, off by default); the owner is
+      asking the webOS Archive
 - [ ] Enyo 2 apps: test LuneOS's `org.webosports.app.*` apps and the App
       Museum's Enyo 2 titles in the simulator, then on a device. Enyo 2.5.2,
       Onyx, Layout and `webOS.js` are mounted at `/usr/palm/frameworks/enyo2/`,
       and the temporary `apps/enyo2demo` samples them
       ([APP-RUNTIME.md](APP-RUNTIME.md#enyo-2-apps)). Remove the demo when
       real apps are tested
-- [ ] Preware feeds, installed through the catalog
+- [ ] Preware feeds, installed through the catalog (done in the simulator:
+      the PreCentral homebrew feed as an add-on catalog)
 - [ ] Android apps through Waydroid ([ANDROID.md](ANDROID.md))
 - [ ] Install like a Linux distro: generic images, live boot, the installer,
       the hardware report and device table, the light profile
       ([HARDWARE.md](HARDWARE.md#install-it-like-a-linux-distro))
 - [ ] As many devices as possible at Supported or Community level
       ([HARDWARE.md](HARDWARE.md#device-tiers))
-- [ ] Keyboard: dictation (V2), predictive text and swipe typing (V3),
+- [ ] Keyboard: dictation (V2, done in the simulator), predictive text and
+      swipe typing (V3, done in the simulator; Settings > Text Assist),
       emoji (V6, done in the simulator), cursor control by holding the space bar or the gesture
       bar (V4, done in the simulator), the keyboards as the device's input method (V5), and
       keyboards chosen in Settings as on iOS: webOS Classic, webOS OSE's and
@@ -279,7 +294,11 @@ every day. The app sources come towards the end of 1.0 (owner, 29 September
       on-device speech recognition, commands for the phone's own features
       and spoken answers, in the classic style
       ([AI-AND-MCP.md](AI-AND-MCP.md#10-and-20))
-- [ ] OTA updates with A/B slots ([HARDWARE.md](HARDWARE.md#ota-with-ab-updates))
+- [ ] OTA updates with A/B slots ([HARDWARE.md](HARDWARE.md#ota-with-ab-updates)).
+      Done in the simulator: `com.palm.update` (Palm's API, so luna-systemui's
+      update alerts work) on RAUC, Settings > Updates, the feed publisher
+      `server/updates` ([APP-RUNTIME.md](APP-RUNTIME.md#system-updates)); to do:
+      the A/B image, RAUC's bootloader setup and signing keys per device
 
 ## 2.0: modern webOS
 

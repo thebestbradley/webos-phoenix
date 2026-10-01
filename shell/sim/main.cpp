@@ -23,6 +23,7 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickView>
+#include <QStandardPaths>
 #include <QTimer>
 
 #ifdef Q_OS_LINUX
@@ -30,8 +31,10 @@
 #endif
 
 #include "rootfs.h"
+#include "siminstaller.h"
 #include "simpty.h"
 #include "simsettings.h"
+#include "simprocess.h"
 
 #ifdef PHOENIX_HAVE_WEBENGINE
 #include <QQuickWebEngineProfile>
@@ -124,6 +127,7 @@ int main(int argc, char *argv[])
     QCommandLineOption delayOpt(QStringLiteral("delay"), QStringLiteral("Delay before the screenshot (default 1500 ms)."), QStringLiteral("ms"), QStringLiteral("1500"));
     QCommandLineOption qmlOpt(QStringLiteral("qml-dir"), QStringLiteral("Directory containing sim.qml and the Phoenix modules."), QStringLiteral("dir"));
     QCommandLineOption repoOpt(QStringLiteral("repo-dir"), QStringLiteral("Checkout root holding runtime/rootfs.json and the web apps."), QStringLiteral("dir"));
+    QCommandLineOption installedOpt(QStringLiteral("installed-dir"), QStringLiteral("Where apps the user installs go (default: the simulator's data folder, cryptofs/apps)."), QStringLiteral("dir"));
     QCommandLineOption launchOpt(QStringLiteral("launch"), QStringLiteral("Launch this app id after start-up (repeatable)."), QStringLiteral("appId"));
     QCommandLineOption openOpt(QStringLiteral("open"), QStringLiteral("Open this web address in the browser after start-up."), QStringLiteral("url"));
     QCommandLineOption orientationOpt(QStringLiteral("orientation"), QStringLiteral("How the device is held at start-up: up (default), left (turned counter-clockwise), down or right. The window shows it as held; --size is the screen upright."), QStringLiteral("orientation"), QStringLiteral("up"));
@@ -132,7 +136,7 @@ int main(int argc, char *argv[])
     QCommandLineOption quietOpt(QStringLiteral("quiet"), QStringLiteral("No boot and shutdown sounds (they are off anyway with --screenshot and the offscreen platform)."));
     QCommandLineOption noHostShellOpt(QStringLiteral("no-host-shell"), QStringLiteral("Do not give the Terminal app a real shell on this computer (it gets the runtime's simulated shell)."));
     QCommandLineOption hostShellOpt(QStringLiteral("host-shell"), QStringLiteral("Run this program in the Terminal instead of the shell it asks for."), QStringLiteral("path"));
-    parser.addOptions({ sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
+    parser.addOptions({ sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
                         noHostShellOpt, hostShellOpt });
     parser.process(app);
 
@@ -180,8 +184,19 @@ int main(int argc, char *argv[])
     if (repoDir.isEmpty())
         repoDir = QDir(qmlDir).filePath(QStringLiteral("../.."));
     Rootfs rootfs(repoDir);
+    // The keyboard's dictation transcribes with the device's own transcriber
+    // code (whisper.cpp) on this computer.
+    const QStringList transcriberCommand = { QStringLiteral("node"),
+        QDir(repoDir).filePath(QStringLiteral("apps/voicememos/service/transcribe-cli.js")),
+        QStringLiteral("%f"), QStringLiteral("%l") };
     if (!rootfs.isValid())
         qWarning("phoenix-sim: web apps disabled: %s", qPrintable(rootfs.error()));
+    // Apps the user installs (the Marketplace, Files' .ipk sheet) live with
+    // the simulator's other data, as on a device in /media/cryptofs/apps.
+    if (rootfs.isValid())
+        rootfs.setInstalledDir(parser.isSet(installedOpt) ? parser.value(installedOpt)
+            : QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath(QStringLiteral("cryptofs/apps")));
+    SimInstaller installer(&rootfs);
 
     // The Terminal's shells: real ones on this computer (docs/TERMINAL.md),
     // unless turned off. The runtime learns which from /usr/share/phoenix/host.json.
@@ -222,8 +237,12 @@ int main(int argc, char *argv[])
     RootfsFiles rootfsFiles(&rootfs);
     view.rootContext()->setContextProperty(QStringLiteral("simRootfs"), rootfs.isValid() ? &rootfsFiles : nullptr);
     SimSettings settings;
+    SimProcess simProcess;
+    view.rootContext()->setContextProperty(QStringLiteral("simProcess"), &simProcess);
+    view.rootContext()->setContextProperty(QStringLiteral("simTranscriberCommand"), transcriberCommand);
     view.rootContext()->setContextProperty(QStringLiteral("simSettings"), &settings);
     view.rootContext()->setContextProperty(QStringLiteral("simPty"), simPty);
+    view.rootContext()->setContextProperty(QStringLiteral("simInstaller"), rootfs.isValid() ? &installer : nullptr);
     view.rootContext()->setContextProperty(QStringLiteral("simScene"), parser.value(sceneOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simFirstUse"), parser.isSet(firstUseOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simDensity"), scale);

@@ -135,6 +135,17 @@ div.license-text { font-family: var(--pui-font); font-size: 13px; }
     color: #333;
 }
 
+.update-progress {
+    height: 6px;
+    margin: 0 16px 10px;
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.12);
+    overflow: hidden;
+}
+.update-progress > div { height: 100%; background: #3a7bd5; transition: width 0.3s; }
+.update-notes { margin: 4px 16px 10px 32px; padding: 0; font-size: 15px; color: #333; }
+.update-notes li { margin: 2px 0; }
+
 .dim-row { color: var(--pui-text-dim); }
 
 /* Emergency Info ------------------------------------------------------------------------ */

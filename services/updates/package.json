@@ -1,0 +1,8 @@
+{
+  "name": "com.palm.update",
+  "version": "0.1.0",
+  "private": true,
+  "description": "webOS Phoenix system updates (Luna; Palm's com.palm.update API): reads the update feed, downloads RAUC bundles and installs them into the other slot",
+  "license": "Apache-2.0",
+  "main": "service.js"
+}

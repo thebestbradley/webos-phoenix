@@ -39,14 +39,23 @@
 // fields opens the emoji page (EmojiPanel): categories, recents, skin tones
 // (hold an emoji), search by name typed on the keys. The symbol page's
 // emoticon keys still type the original's text emoticons.
-// Not ported: the XT9 candidate bar and trace typing (CandidateBar.cpp, a
-// licensed engine; off unless turned on), keyboard combos (language key),
+// Phoenix: Text Assist (GAPS V2, V3), in place of the XT9 candidate bar
+// and trace typing the original had through a licensed engine
+// (CandidateBar.cpp; never released). A candidate bar above the keys in text
+// fields: the word as typed, the correction the space bar will put in (in
+// bold), completions; between words, the next word. Backspace right after a
+// correction puts the typed word back. Swipe across the letters to type a
+// word (TextAssist.swipe; the other candidates in the bar). The words come
+// from TextAssist.js (WordsEnUS.js and what the user types, learned here and
+// kept by the shell: textAssistData). Dictation: the bar's microphone.
+// Not ported: keyboard combos (language key),
 // and the emoticon pictures (/usr/palm/emoticons, not in the Apache-2.0
 // images): emoticon keys show their text.
 
 import QtQuick
 import "KeyboardKeymap.js" as KM
 import "EmojiData.js" as ED
+import "TextAssist.js" as TA
 
 Item {
     id: kb
@@ -82,6 +91,281 @@ Item {
     signal hideRequested()
     // keyDownAudioFeedback: "key", "space", "backspace" or "return".
     signal feedback(string name)
+
+    // ---- Text Assist (Phoenix, GAPS V2, V3) ---------------------------------------------
+    // Settings > Text & Keyboard: suggestions, auto-correction, swipe typing.
+    property bool textSuggestions: true
+    property bool autoCorrect: true
+    property bool swipeTyping: true
+    // Dictation: an object with start() / stop() / cancel(), listening,
+    // busy, and a signal transcribed(text, error) (Phoenix.Native Dictation);
+    // null: no microphone key.
+    property var dictation: null
+    // What the user typed, learned (TextAssist.userData); the shell keeps it.
+    property string textAssistData: ""
+    // Settings > Text Assist > Forget Learned Words: when (ms). Words learned
+    // before it are dropped (once: the time is kept in textAssistData).
+    property real forgetWordsAt: 0
+    onForgetWordsAtChanged: _forgetIfAsked()
+    function _forgetIfAsked() {
+        if (forgetWordsAt > 0 && forgetWordsAt > TA.forgottenAt()) {
+            TA.forget(forgetWordsAt);
+            _saveTextAssist();
+            _refreshCandidates();
+        }
+    }
+    property string _textAssistDataCurrent: ""
+    onTextAssistDataChanged: {
+        if (textAssistData === _textAssistDataCurrent)
+            return;
+        _textAssistDataCurrent = textAssistData;
+        TA.setUserData(textAssistData);
+        _forgetIfAsked();
+    }
+    // A text field where words are typed (not a password, number, phone,
+    // e-mail or web address).
+    readonly property bool assistField: {
+        var t = KM.editorState(editorState).type;
+        return t === KM.FieldType.Text || t === KM.FieldType.Search;
+    }
+    readonly property bool candidateBarShown: assistField && !emojiOpen && (textSuggestions || swipeTyping || dictation !== null)
+    // The bar's height, in keyboard pixels.
+    readonly property int candidateBarRows: tablet ? 44 : 54
+    readonly property real candidateBarHeight: candidateBarShown ? candidateBarRows * pixelScale : 0
+    // [{text, kind}]: kind "typed", "correction" (what space puts in), "word".
+    property var candidates: []
+    // The word being typed (since the last space or punctuation), the one
+    // before it, and whether a sentence ended there.
+    property string _word: ""
+    property string _prevWord: ""
+    property bool _sentenceStart: true
+    // The last correction, until the next key: {typed, corrected, sep}.
+    property var _lastCorrection: null
+    // The typed word was put back after a correction: not corrected again.
+    property string _keepWord: ""
+    property bool _assistOwnText: false
+
+    function _assistReset() {
+        _word = "";
+        _prevWord = "";
+        _lastCorrection = null;
+        _keepWord = "";
+        _refreshCandidates();
+    }
+    function _refreshCandidates() {
+        if (!candidateBarShown || !textSuggestions) {
+            candidates = [];
+            return;
+        }
+        var prev = _sentenceStart ? (_prevWord ? _prevWord + "." : "") : _prevWord;
+        var list = TA.suggest(_word, prev, tablet ? 5 : 3);
+        if (!autoCorrect || _word === _keepWord)
+            list = list.map(function (c) { return c.kind === "correction" ? { text: c.text, kind: "word" } : c; });
+        candidates = list;
+    }
+    function _saveTextAssist() {
+        _textAssistDataCurrent = TA.userData();
+        textAssistData = _textAssistDataCurrent;
+    }
+    // Typed text the keyboard puts in itself (a correction, a candidate).
+    function _assistBackspaces(n) {
+        for (var i = 0; i < n; ++i)
+            kb.keyTyped(KM.Key.Backspace, Qt.NoModifier);
+    }
+    function _assistCommit(text) {
+        _assistOwnText = true;
+        kb.textCommitted(text);
+        _assistOwnText = false;
+    }
+    onTextCommitted: if (!_assistOwnText) _assistReset()
+    // A word ends (space, punctuation, return): learned, and the next one begins.
+    function _endWord(sentence) {
+        if (_word) {
+            TA.learn(_sentenceStart ? "" : _prevWord, _word);
+            _saveTextAssist();
+            _prevWord = _word;
+        }
+        _word = "";
+        _keepWord = "";
+        _sentenceStart = sentence;
+        _refreshCandidates();
+    }
+    // Every key the keyboard sends: the word being typed follows it.
+    function _trackKey(key, modifiers) {
+        if (key === KM.Key.Backspace) {
+            if (_word)
+                _word = _word.slice(0, -1);
+            else
+                _prevWord = "";
+            _lastCorrection = null;
+            _refreshCandidates();
+            return;
+        }
+        var ch = key > 0 && key < 0x110000 && !KM.isFunctionKey(key) ? String.fromCharCode(key) : "";
+        if (/^[A-Za-z\u00c0-\u024f]$/.test(ch) || (ch === "'" && _word)) {
+            _word += (modifiers & Qt.ShiftModifier) ? ch.toUpperCase() : ch.toLowerCase();
+            _lastCorrection = null;
+            _refreshCandidates();
+        } else if (key === KM.Key.Space || key === KM.Key.Return || /^[.,!?;:]$/.test(ch)) {
+            var keep = _lastCorrection;
+            _endWord(key === KM.Key.Return || /^[.!?]$/.test(ch));
+            if (keep && key === KM.Key.Space)
+                _lastCorrection = keep;        // backspace now puts the typed word back
+        } else if (ch) {
+            _word = "";
+            _lastCorrection = null;
+            _refreshCandidates();
+        } else {
+            _assistReset();               // arrows, tab: somewhere else in the text
+        }
+    }
+    // Before a space or punctuation: the correction, if any, goes in.
+    function _autoCorrect() {
+        if (!autoCorrect || !assistField || !_word || _word === _keepWord)
+            return;
+        var fix = TA.correction(_word);
+        if (!fix || fix === _word)
+            return;
+        _assistBackspaces(_word.length);
+        _assistCommit(fix);
+        _lastCorrection = { typed: _word, corrected: fix };
+        _word = fix;
+    }
+    // Backspace right after a correction and its space: the typed word back.
+    function _undoCorrection() {
+        var c = _lastCorrection;
+        if (!c || _word)
+            return false;
+        _assistBackspaces(1 + c.corrected.length);
+        _assistCommit(c.typed);
+        _word = c.typed;
+        _keepWord = c.typed;
+        _prevWord = "";
+        _lastCorrection = null;
+        _refreshCandidates();
+        return true;
+    }
+    // A candidate tapped: it replaces the word being typed, and a space follows.
+    function pickCandidate(index) {
+        var c = candidates[index];
+        if (!c)
+            return;
+        _makeSound(KM.Key.A);
+        _assistBackspaces(_word.length);
+        _assistCommit(c.text + " ");
+        _word = c.text;
+        _lastCorrection = null;
+        _endWord(false);
+        if (_km.setAutoCap(false))
+            _layoutChanged();
+    }
+    // A swipe's word: after a space unless one is there already.
+    function _commitSwipe(words) {
+        if (!words.length)
+            return;
+        var w = words[0].text;
+        if (_km.isCapActive() || _sentenceStart)
+            w = w.charAt(0).toUpperCase() + w.slice(1);
+        var space = _word !== "" || _swipeNeedsSpace;
+        if (_word)
+            _endWord(false);
+        _assistCommit((space ? " " : "") + w);
+        _word = w;
+        _swipeNeedsSpace = true;
+        // The other words it may have been, in the bar.
+        candidates = [{ text: w, kind: "correction" }].concat(words.slice(1).map(function (x) {
+            var t = _sentenceStart ? x.text.charAt(0).toUpperCase() + x.text.slice(1) : x.text;
+            return { text: t, kind: "word" };
+        })).slice(0, tablet ? 5 : 3);
+        _swipeWords = true;
+        if (_km.shiftMode === KM.ShiftMode.Once && _km.setShiftMode(KM.ShiftMode.Off))
+            _layoutChanged();
+        if (_km.setAutoCap(false))
+            _layoutChanged();
+    }
+    // After a swipe, a candidate replaces the swiped word (and no space follows).
+    property bool _swipeWords: false
+    property bool _swipeNeedsSpace: false
+    function _pickSwipe(index) {
+        var c = candidates[index];
+        if (!c)
+            return;
+        _makeSound(KM.Key.A);
+        _assistBackspaces(_word.length);
+        _assistCommit(c.text);
+        _word = c.text;
+        candidates = [{ text: c.text, kind: "correction" }].concat(candidates.filter(function (x) { return x.text !== c.text; })).slice(0, tablet ? 5 : 3);
+    }
+    function candidateTapped(index) {
+        if (_swipeWords)
+            _pickSwipe(index);
+        else
+            pickCandidate(index);
+    }
+
+    // ---- Dictation (GAPS V2) ------------------------------------------------------------
+    // What went wrong last, shown in the bar for a few seconds.
+    property string dictationMessage: ""
+    Timer { id: dictationMessageTimer; interval: 4000; onTriggered: kb.dictationMessage = "" }
+    function toggleDictation() {
+        if (!dictation || dictation.busy)
+            return;
+        _makeSound(KM.Key.A);
+        dictationMessage = "";
+        if (dictation.listening)
+            dictation.stop();
+        else
+            dictation.start();
+    }
+    Connections {
+        target: kb.dictation
+        ignoreUnknownSignals: true
+        function onTranscribed(text, error) {
+            if (error) {
+                kb.dictationMessage = error;
+                dictationMessageTimer.restart();
+                return;
+            }
+            text = String(text || "").trim();
+            if (!text)
+                return;
+            var space = kb._word !== "" || kb._swipeNeedsSpace;
+            if (kb._sentenceStart || kb._km.isCapActive())
+                text = text.charAt(0).toUpperCase() + text.slice(1);
+            kb._assistCommit((space ? " " : "") + text);
+            kb._word = "";
+            kb._prevWord = "";
+            kb._sentenceStart = /[.!?]$/.test(text);
+            kb._swipeNeedsSpace = true;
+            kb._refreshCandidates();
+            if (kb._km.setAutoCap(false))
+                kb._layoutChanged();
+        }
+    }
+
+    // ---- Swipe typing ---------------------------------------------------------------------
+    property string _swipeId: ""
+    property var _swipePath: []          // frame pixels
+    // The letter keys' centres (frame pixels) and their width.
+    function _letterKeys() {
+        var keys = {}, w = 0;
+        for (var i = 0; i < _keys.length; ++i) {
+            var k = _keys[i];
+            if (/^[a-z]$/.test(k.name)) {
+                keys[k.name] = { x: k.x + k.w / 2, y: k.y + k.h / 2 };
+                w = Math.max(w, k.w);
+            }
+        }
+        return { keys: keys, width: w };
+    }
+    function _letterAt(x, y) {
+        for (var i = 0; i < _keys.length; ++i) {
+            var k = _keys[i];
+            if (x >= k.x && x < k.x + k.w && y >= k.y && y < k.y + k.h)
+                return /^[a-z]$/.test(k.name) ? k.name : "";
+        }
+        return "";
+    }
 
     // ---- Emoji (Phoenix, GAPS V6) ---------------------------------------------------
     // Recents and each emoji's skin tone, as JSON {recent: [...], tones:
@@ -251,14 +535,16 @@ Item {
 
     // m_keyboardHeight, in shell pixels: what the keyboard takes from the
     // screen.
-    readonly property real keyboardHeight: (_keymapHeight + _topPadding) * pixelScale
+    readonly property real keyboardHeight: keysHeight + candidateBarHeight
+    // The keys alone (the original keyboard's height).
+    readonly property real keysHeight: (_keymapHeight + _topPadding) * pixelScale
     readonly property alias keymap: kb._km
     // For tests: key rectangles in shell pixels, by label.
     function keyRect(label) {
         for (var i = 0; i < _keys.length; ++i) {
             var k = _keys[i];
             if (k.label === label || k.name === label)
-                return Qt.rect(k.x * pixelScale, k.y * pixelScale, k.w * pixelScale, k.h * pixelScale);
+                return Qt.rect(k.x * pixelScale, k.y * pixelScale + candidateBarHeight, k.w * pixelScale, k.h * pixelScale);
         }
         return null;
     }
@@ -404,6 +690,8 @@ Item {
         _availableSpaceChanged();
         _km.setEditorState(editorState);
         _resetShortcuts(editorState);
+        _sentenceStart = true;
+        _assistReset();
     }
 
     function _setKeyboardHeight(height) {
@@ -444,11 +732,18 @@ Item {
     }
 
     onShownChanged: {
+        // Text Assist starts over: the text around the cursor is not known.
+        _swipeNeedsSpace = false;
+        _sentenceStart = true;
+        _assistReset();
         if (shown) {
             _setKeyboardHeight(_requestedHeight > 0 ? _requestedHeight : _presetHeight());
         } else {
             // visibleChanged(false): back to plain letters.
             closeEmoji();
+            _cancelSwipe();
+            if (dictation && dictation.listening)
+                dictation.cancel();
             _km.setSymbolMode(KM.SymbolMode.Off);
             _km.setShiftMode(KM.ShiftMode.Off);
             _clearExtendedKeys();
@@ -720,12 +1015,37 @@ Item {
             _startTrackpad(String(id));
             return;
         }
+        // Swipe typing: one finger from a letter across to other letters.
+        if (_swipeId !== "") {
+            if (String(id) === _swipeId) {
+                _swipePath.push({ x: px, y: py });
+                swipeTrail.requestPaint();
+            }
+            return;
+        }
+        if (spaceTouch && _swipeCanStart(spaceTouch)) {
+            spaceTouch.path.push({ x: px, y: py });
+            var from = spaceTouch.path[0];
+            var startLetter = _letterAt(from.x, from.y), here = _letterAt(px, py);
+            if (startLetter && here && here !== startLetter
+                    && Math.hypot(px - from.x, py - from.y) > _letterKeys().width * 0.8) {
+                _stopRepeat();
+                spaceTouch.consumed = true;
+                spaceTouch.visible = false;
+                _swipeId = String(id);
+                _swipePath = spaceTouch.path;
+                _triggerRepaint();
+                swipeTrail.requestPaint();
+                return;
+            }
+        }
         var ext = _pointToExtendedPopup(tpx, tpy);
         var keyCoord = (!ext.inside && py > rectTop - _topPadding) ? _km.pointToKeyboard(px, py) : null;
         var touches = _touches;
         var newTouch = touches[id] === undefined;
         if (newTouch)
-            touches[id] = { visible: true, consumed: false, coord: null, first: { x: tpx, y: tpy }, last: { x: tpx, y: tpy }, time: 0 };
+            touches[id] = { visible: true, consumed: false, coord: null, first: { x: tpx, y: tpy }, last: { x: tpx, y: tpy }, time: 0,
+                            path: [{ x: px, y: py }] };
         var touch = touches[id];
         var newKey = keyCoord ? _km.map(keyCoord.x, keyCoord.y) : KM.Key.None;
         if (newTouch)
@@ -797,6 +1117,13 @@ Item {
         var touch = _touches[id];
         if (!touch)
             return;
+        if (String(id) === _swipeId) {
+            var lk = _letterKeys();
+            var words = TA.swipe(_swipePath, lk.keys, lk.width, tablet ? 5 : 3);
+            _cancelSwipe();
+            _commitSwipe(words);
+            return;
+        }
         if (trackpad) {
             if (String(id) === _trackpadId)
                 _endTrackpad();
@@ -852,8 +1179,22 @@ Item {
         }
     }
 
+    // A touch may become a swipe: one finger, from a letter, in a text field,
+    // on the letters page, nothing else going on.
+    function _swipeCanStart(touch) {
+        return swipeTyping && assistField && !touch.consumed && touch.visible && touch.path !== undefined
+            && !_extendedKeys && !emojiOpen && !trackpad && _km.symbolMode === KM.SymbolMode.Off
+            && Object.keys(_touches).length === 1;
+    }
+    function _cancelSwipe() {
+        _swipeId = "";
+        _swipePath = [];
+        swipeTrail.requestPaint();
+    }
+
     // Everything released (QEvent::TouchEnd).
     function _touchEnd() {
+        _cancelSwipe();
         _endTrackpad();
         _touches = ({});
         _stopRepeat();
@@ -872,6 +1213,7 @@ Item {
         _trackpadAnchor = { x: touch.last.x, y: touch.last.y };
         _trackpadId = String(id);
         _resetShortcuts();
+        _assistReset();
         _triggerRepaint();
     }
 
@@ -990,6 +1332,19 @@ Item {
         }
         if (qtkey !== 0) {
             consumeMode = true;
+            // Text Assist: backspace takes a correction back; a space or
+            // punctuation puts one in first.
+            if (qtkey === KM.Key.Backspace && _undoCorrection()) {
+                qtkey = 0;
+                _resetShortcuts();        // the space before it is gone: no ". " on the next
+            } else if (qtkey === KM.Key.Space || (KM.isUnicodeKey(key) && key < 128 && ".,!?;:".indexOf(String.fromCharCode(key)) >= 0)) {
+                if (_swipeWords && qtkey !== KM.Key.Space) {
+                    _swipeWords = false;      // punctuation right after a swiped word
+                }
+                _autoCorrect();
+            }
+        }
+        if (qtkey !== 0) {
             if (KM.isTextShortcutKey(key)) {
                 kb.textCommitted(_km.displayString(key, false));
                 _resetShortcuts();
@@ -1024,6 +1379,9 @@ Item {
 
     function _sendKeyDownUp(key, modifiers) {
         kb.keyTyped(key, modifiers);
+        _swipeWords = false;
+        _swipeNeedsSpace = false;
+        _trackKey(key, modifiers);
     }
 
     // ShortcutsHandler: two spaces within a second type ". " (the first
@@ -1346,6 +1704,7 @@ Item {
         id: frame
         objectName: "keyboardFrame"
         visible: !kb.emojiOpen || kb.emojiSearch
+        y: kb.candidateBarHeight
         width: kb._spaceWidth
         height: kb._keymapHeight + kb._topPadding
         scale: kb.pixelScale
@@ -1386,6 +1745,30 @@ Item {
                     visible: keyItem.modelData.ellipsis
                     r: ({ x: 0, y: 0, w: keyItem.width, h: keyItem.height })
                 }
+            }
+        }
+
+        // A swipe's trail over the keys (Text Assist).
+        Canvas {
+            id: swipeTrail
+            objectName: "swipeTrail"
+            anchors.fill: parent
+            z: 2
+            onPaint: {
+                var ctx = getContext("2d");
+                ctx.clearRect(0, 0, width, height);
+                var pts = kb._swipePath;
+                if (kb._swipeId === "" || pts.length < 2)
+                    return;
+                ctx.lineCap = "round";
+                ctx.lineJoin = "round";
+                ctx.strokeStyle = Qt.rgba(75 / 255, 151 / 255, 222 / 255, 0.85);
+                ctx.lineWidth = kb.tablet ? 10 : 12;
+                ctx.beginPath();
+                ctx.moveTo(pts[0].x, pts[0].y);
+                for (var i = 1; i < pts.length; ++i)
+                    ctx.lineTo(pts[i].x, pts[i].y);
+                ctx.stroke();
             }
         }
 
@@ -1566,6 +1949,14 @@ Item {
                 kb._touchEnd();
         }
         onCanceled: kb._touchEnd()
+    }
+
+    // The candidate bar above the keys (Text Assist).
+    CandidateBar {
+        keyboard: kb
+        width: parent.width
+        height: kb.candidateBarHeight
+        visible: kb.candidateBarShown
     }
 
     // The emoji page over the keys, and while searching, the search above

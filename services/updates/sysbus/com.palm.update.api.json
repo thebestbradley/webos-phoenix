@@ -1,0 +1,16 @@
+{
+    "systemupdate.management": [
+        "com.palm.update/GetStatus",
+        "com.palm.update/InstallLater",
+        "com.palm.update/InstallNow",
+        "com.palm.update/AlertDisplayed",
+        "com.palm.update/getStatus",
+        "com.palm.update/check",
+        "com.palm.update/download",
+        "com.palm.update/cancel",
+        "com.palm.update/installNow",
+        "com.palm.update/setPreferences",
+        "com.palm.update/scheduled",
+        "com.palm.update/charging"
+    ]
+}

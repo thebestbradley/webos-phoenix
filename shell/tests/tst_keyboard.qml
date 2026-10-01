@@ -91,7 +91,10 @@ Item {
             // 377 keyboard pixels upright (PhoneKeyboard.cpp:231), the Pre 3's
             // 1.5 per shell pixel at density 1.
             compare(Theme.keyboardScale, 1 / 1.5);
-            fuzzyCompare(kb.keyboardHeight, 377 / 1.5, 0.01);
+            fuzzyCompare(kb.keysHeight, 377 / 1.5, 0.01);
+            // With Text Assist's candidate bar above the keys in a text field.
+            verify(kb.candidateBarShown);
+            fuzzyCompare(kb.keyboardHeight, kb.keysHeight + 54 / 1.5, 0.01);
             tryCompare(shell.notifications, "negativeSpace", kb.keyboardHeight, 2000);
             verify(kb.visible);
             // The keyboard's top is the negative space's (slotNegativeSpaceChanged).
@@ -454,7 +457,7 @@ Item {
             sys.deviceOrientation = "left";
             tryCompare(shell, "uiOrientation", "left", 3000);
             // 260 keyboard pixels on its side (PhoneKeyboard.cpp:232), at once.
-            tryVerify(function() { return Math.abs(kb.keyboardHeight - 260 / 1.5) < 0.01; }, 3000);
+            tryVerify(function() { return Math.abs(kb.keysHeight - 260 / 1.5) < 0.01; }, 3000);
             tryCompare(shell.notifications, "negativeSpace", kb.keyboardHeight, 3000);
             fuzzyCompare(kb.width, shell.uiRoot.width, 0.01);
         }
@@ -514,5 +517,132 @@ Item {
             field.forceActiveFocus();
             tryCompare(shell, "keyboardOpen", true, 1000);
         }
-    }
+    
+        // ---- Text Assist (GAPS V2, V3) ---------------------------------------------------
+
+        function candidateTexts() {
+            return kb.candidates.map(function (c) { return c.text; });
+        }
+        function tapCandidate(text) {
+            var bar = findChild(kb, "candidateBar");
+            var cells = [];
+            (function walk(o) {
+                for (var i = 0; i < o.children.length; ++i) {
+                    if (o.children[i].objectName === "candidate")
+                        cells.push(o.children[i]);
+                    walk(o.children[i]);
+                }
+            })(bar);
+            for (var i = 0; i < cells.length; ++i) {
+                if (cells[i].modelData.text === text) {
+                    var p = cells[i].mapToItem(kb, cells[i].width / 2, cells[i].height / 2);
+                    mouseClick(kb, p.x, p.y);
+                    wait(20);
+                    return;
+                }
+            }
+            fail("no candidate " + text + " in " + JSON.stringify(candidateTexts()));
+        }
+
+        function test_textAssistSuggestsAndCompletes() {
+            kb.textAssistData = "";
+            showKeyboard();
+            verify(findChild(kb, "candidateBar").visible);
+            type(["h", "e", "l"]);
+            compare(field.text.toLowerCase(), "hel");
+            tryVerify(function() { return candidateTexts().length === 3; }, 1000);
+            var texts = candidateTexts().map(function (t) { return t.toLowerCase(); });
+            compare(texts[0], "hel");
+            verify(texts.indexOf("help") > 0 || texts.indexOf("held") > 0, JSON.stringify(texts));
+            tapCandidate(kb.candidates[1].text);
+            compare(field.text.toLowerCase(), texts[1] + " ");
+            // Between words: the next word.
+            verify(kb.candidates.length > 0);
+        }
+
+        function test_textAssistCorrectsOnSpaceAndBackspaceUndoes() {
+            showKeyboard();
+            type(["t", "e", "h"]);
+            compare(kb.candidates[1].kind, "correction");
+            compare(kb.candidates[1].text.toLowerCase(), "the");
+            tapKey("Space");
+            compare(field.text.toLowerCase(), "the ");
+            // Backspace right after: the word as typed, kept.
+            tapKey("Backspace");
+            compare(field.text.toLowerCase(), "teh");
+            tapKey("Space");
+            compare(field.text.toLowerCase(), "teh ");
+            // Contractions: "dont" becomes "don't".
+            type(["d", "o", "n", "t"]);
+            tapKey("Space");
+            compare(field.text.toLowerCase(), "teh don't ");
+        }
+
+        function test_textAssistLearnsTheNextWord() {
+            kb.textAssistData = "";
+            showKeyboard();
+            for (var n = 0; n < 2; ++n)
+                type(["s", "e", "e", "Space", "y", "o", "u", "Space"]);
+            type(["s", "e", "e", "Space"]);
+            compare(candidateTexts()[0], "you");
+            verify(kb.textAssistData.indexOf("\"see\"") >= 0, "kept for the next run");
+            // Settings > Text Assist > Forget Learned Words.
+            kb.forgetWordsAt = Date.now();
+            verify(kb.textAssistData.indexOf("\"see\"") < 0, "forgotten");
+            type(["s", "e", "e", "Space"]);
+            verify(candidateTexts()[0] !== "you");
+            kb.forgetWordsAt = 0;
+        }
+
+        function test_swipeTyping() {
+            showKeyboard();
+            // Across h, e, l, o: one finger, without lifting.
+            var pts = ["h", "e", "l", "o"].map(function (k) {
+                var r = kb.keyRect(k);
+                return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+            });
+            mousePress(kb, pts[0].x, pts[0].y);
+            for (var i = 1; i < pts.length; ++i) {
+                for (var s = 1; s <= 6; ++s) {
+                    mouseMove(kb, pts[i - 1].x + (pts[i].x - pts[i - 1].x) * s / 6, pts[i - 1].y + (pts[i].y - pts[i - 1].y) * s / 6);
+                    wait(10);
+                }
+            }
+            verify(findChild(kb, "swipeTrail") !== null);
+            mouseRelease(kb, pts[3].x, pts[3].y);
+            compare(field.text.toLowerCase(), "hello");
+            // The other words it may have been, in the bar; a second swipe gets a space.
+            verify(kb.candidates.length > 1);
+            compare(kb.candidates[0].text.toLowerCase(), "hello");
+        }
+
+        // Dictation: the bar's microphone; what was said is typed at the cursor.
+        // (The transcriber here is a stand-in command with transcribe's reply.)
+        function test_dictation() {
+            if (kb.dictation === null)
+                skip("built without Qt Multimedia: no microphone");
+            showKeyboard();
+            verify(findChild(kb, "dictationKey").visible);
+            var old = kb.dictation.command;
+            kb.dictation.command = ["sh", "-c", "echo '{\"returnValue\":true,\"text\":\" hello there. \"}'"];
+            kb.dictation.transcribeFile("/dev/null");
+            verify(kb.dictation.busy);
+            tryCompare(field, "text", "Hello there.", 3000);
+            verify(!kb.dictation.busy);
+            // Not installed: said in the bar, nothing typed.
+            kb.dictation.command = ["sh", "-c", "echo '{\"returnValue\":false,\"errorCode\":2,\"errorText\":\"Speech recognition is not installed\"}'; exit 1"];
+            kb.dictation.transcribeFile("/dev/null");
+            tryCompare(kb, "dictationMessage", "Speech recognition is not installed", 3000);
+            compare(field.text, "Hello there.");
+            kb.dictation.command = old;
+        }
+
+        function test_noCandidateBarInPasswordFields() {
+            field.echoMode = TextInput.Password;
+            showKeyboard();
+            verify(!kb.candidateBarShown);
+            fuzzyCompare(kb.keyboardHeight, kb.keysHeight, 0.01);
+            field.echoMode = TextInput.Normal;
+        }
+}
 }

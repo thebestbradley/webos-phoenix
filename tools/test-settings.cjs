@@ -200,6 +200,23 @@ async function main() {
         check(last().systemSounds === false, "System sounds off reaches the shell");
         await shot("sounds");
 
+        // ---- Text Assist: the keyboard's suggestions, corrections, swipe -----------------
+        await open("textassist");
+        await page.waitForSelector("[data-testid='ta-suggestions'][aria-checked='true']");
+        check(last().textAssist && last().textAssist.suggestions === true && last().textAssist.swipe === true,
+              "Text Assist: all on by default");
+        await page.click("[data-testid='ta-autocorrect']");
+        await page.waitForSelector("[data-testid='ta-autocorrect'][aria-checked='false']");
+        check(last().textAssist.autoCorrect === false && last().tapSounds === false, "Auto-correct off reaches the shell (other keyboard settings kept)");
+        await page.click("[data-testid='ta-swipe']");
+        await page.waitForSelector("[data-testid='ta-swipe'][aria-checked='false']");
+        check(last().textAssist.swipe === false, "Swipe typing off reaches the shell");
+        await page.click("[data-testid='ta-forget']");
+        await page.click("[data-testid='ta-forget-confirm']");
+        await page.waitForFunction(() => /forgotten/.test(document.querySelector("[data-testid='ta-learned-note']")?.textContent || ""));
+        check(last().textAssist.forgetWords > 0, "Forget Learned Words reaches the shell");
+        await shot("textassist");
+
         // ---- Device Info: the phone, and the legacy reset options ----------------------
         // Erase Apps & Data keeps the files on the USB drive; Full Erase does not.
         const svc = (uri, params) => page.evaluate(([u, p]) => new Promise((resolve) => {

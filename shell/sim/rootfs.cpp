@@ -15,6 +15,11 @@
 #include <algorithm>
 
 #ifdef PHOENIX_HAVE_WEBENGINE
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QPointer>
+#include <QUrlQuery>
 #include <QWebEngineUrlRequestJob>
 #include <QWebEngineUrlScheme>
 #endif
@@ -50,8 +55,28 @@ Rootfs::Rootfs(const QString &repoDir)
         return a.first.size() > b.first.size();
     });
 
+    for (const auto &dirValue : cfg.value(QStringLiteral("applicationDirs")).toArray())
+        m_applicationDirs.append(QDir(repoDir).filePath(dirValue.toString()));
+    for (const auto &dirValue : cfg.value(QStringLiteral("systemApps")).toArray())
+        m_systemApps.append(QDir(repoDir).filePath(dirValue.toString()));
+    rescan();
+    m_valid = true;
+}
+
+void Rootfs::setInstalledDir(const QString &dir)
+{
+    m_installedDir = dir;
+    rescan();
+}
+
+void Rootfs::rescan()
+{
+    m_appDirs.clear();
+    m_apps.clear();
+    m_launchPoints.clear();
+    m_installed.clear();
     // systemApps are always hidden from the launcher (Just Type, the system UI).
-    auto addApp = [&](QString appDir, const QString &name, bool system) {
+    auto addApp = [&](QString appDir, const QString &name, bool system, bool installed) {
         // Built apps (e.g. React) keep their installable output in dist/.
         if (!QFileInfo::exists(appDir + QStringLiteral("/appinfo.json")))
             appDir += QStringLiteral("/dist");
@@ -67,7 +92,10 @@ Rootfs::Rootfs(const QString &repoDir)
             return;
         m_appDirs.insert(id, appDir);
         const QString root = QString::fromLatin1(kAppsPrefix) + id + QLatin1Char('/');
-        const QString main = urlFor(root + app.value(QStringLiteral("main")).toString(QStringLiteral("index.html")));
+        const QString mainFile = app.value(QStringLiteral("main")).toString(QStringLiteral("index.html"));
+        // A hosted web app (an installed PWA) starts at its site's URL.
+        const QString main = mainFile.startsWith(QLatin1String("https://")) || mainFile.startsWith(QLatin1String("http://"))
+            ? mainFile : urlFor(root + mainFile);
         // Phoenix launcher metadata (see docs/APP-RUNTIME.md): launcherTab
         // (0 Apps, 1 Downloads, 2 Settings), hidden, quickLaunch (slot
         // 1-4), launchPoints.
@@ -100,6 +128,10 @@ Rootfs::Rootfs(const QString &repoDir)
             large = app.value(QStringLiteral("largeIcon")).toString();
         entry[QStringLiteral("largeIcon")] = large.isEmpty() || !QFileInfo::exists(appDir + QLatin1Char('/') + large)
             ? QString() : QUrl::fromLocalFile(appDir + QLatin1Char('/') + large).toString();
+        // Installed by the user: the launcher may delete it (uninstall).
+        entry[QStringLiteral("installed")] = installed;
+        if (installed)
+            m_installed.append(id);
         m_apps.append(entry);
         QVariantMap record;
         record[QStringLiteral("id")] = id;
@@ -109,6 +141,8 @@ Rootfs::Rootfs(const QString &repoDir)
         record[QStringLiteral("params")] = QVariantMap();
         record[QStringLiteral("hidden")] = entry.value(QStringLiteral("tab")).toInt() < 0;
         record[QStringLiteral("universalSearch")] = app.value(QStringLiteral("universalSearch")).toVariant();
+        record[QStringLiteral("removable")] = installed;
+        record[QStringLiteral("version")] = app.value(QStringLiteral("version")).toString();
         // The types the app opens (appinfo.json "mimeTypes": [{mime, extension,
         // stream}], luna-sysmgr's resource handlers), for the application
         // manager's listAllHandlersForMime and open {target}.
@@ -147,17 +181,22 @@ Rootfs::Rootfs(const QString &repoDir)
             m_launchPoints.append(pointRecord);
         }
     };
-    for (const auto &dirValue : cfg.value(QStringLiteral("applicationDirs")).toArray()) {
-        QDir base(QDir(repoDir).filePath(dirValue.toString()));
+    for (const QString &dir : m_applicationDirs) {
+        QDir base(dir);
         const auto entries = base.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
         for (const QString &name : entries)
-            addApp(base.filePath(name), name, false);
+            addApp(base.filePath(name), name, false, false);
     }
-    for (const auto &dirValue : cfg.value(QStringLiteral("systemApps")).toArray()) {
-        const QString dir = QDir(repoDir).filePath(dirValue.toString());
-        addApp(dir, QFileInfo(dir).fileName(), true);
+    for (const QString &dir : m_systemApps)
+        addApp(dir, QFileInfo(dir).fileName(), true, false);
+    // Installed apps come last: a built-in app keeps its id.
+    if (!m_installedDir.isEmpty()) {
+        QDir base(QDir(m_installedDir).filePath(QStringLiteral("usr/palm/applications")));
+        const auto entries = base.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+        for (const QString &name : entries)
+            if (!name.endsWith(QLatin1String(".new")) && !name.endsWith(QLatin1String(".old")))
+                addApp(base.filePath(name), name, false, true);
     }
-    m_valid = true;
 }
 
 QByteArray Rootfs::launchPointsJson() const
@@ -228,9 +267,80 @@ void RootfsSchemeHandler::registerScheme()
     QWebEngineUrlScheme::registerScheme(scheme);
 }
 
+static void replyJson(QWebEngineUrlRequestJob *job, const QJsonObject &o)
+{
+    auto *buffer = new QBuffer(job);
+    buffer->setData(QJsonDocument(o).toJson(QJsonDocument::Compact));
+    buffer->open(QIODevice::ReadOnly);
+    job->reply("application/json;charset=utf-8", buffer);
+}
+
+void RootfsSchemeHandler::proxy(QWebEngineUrlRequestJob *job)
+{
+    const QJsonObject req = QJsonDocument::fromJson(
+        QUrlQuery(job->requestUrl()).queryItemValue(QStringLiteral("req"), QUrl::FullyDecoded).toUtf8()).object();
+    const QUrl url(req.value(QStringLiteral("url")).toString());
+    if (!url.isValid() || (url.scheme() != QLatin1String("http") && url.scheme() != QLatin1String("https")) || url.host().isEmpty()) {
+        replyJson(job, { { QStringLiteral("error"), QStringLiteral("unsupported URL: ") + url.toString() },
+                         { QStringLiteral("code"), QStringLiteral("BAD_SERVER") } });
+        return;
+    }
+    if (!m_network)
+        m_network = new QNetworkAccessManager(this);
+    QNetworkRequest nr(url);
+    nr.setTransferTimeout(60000);
+    nr.setAttribute(QNetworkRequest::RedirectPolicyAttribute, req.value(QStringLiteral("follow")).toBool()
+                    ? QNetworkRequest::NoLessSafeRedirectPolicy : QNetworkRequest::ManualRedirectPolicy);
+    const QJsonObject headers = req.value(QStringLiteral("headers")).toObject();
+    for (auto it = headers.begin(); it != headers.end(); ++it)
+        nr.setRawHeader(it.key().toUtf8(), it.value().toString().toUtf8());
+    const QByteArray method = req.value(QStringLiteral("method")).toString(QStringLiteral("GET")).toUtf8();
+    const QJsonValue body = req.value(QStringLiteral("body"));
+    QNetworkReply *reply = body.isString()
+        ? m_network->sendCustomRequest(nr, method, body.toString().toUtf8())
+        : m_network->sendCustomRequest(nr, method);
+    const bool binary = req.value(QStringLiteral("binary")).toBool();
+    QPointer<QWebEngineUrlRequestJob> guard(job);
+    QObject::connect(reply, &QNetworkReply::finished, reply, [reply, guard, binary]() {
+        reply->deleteLater();
+        if (!guard)
+            return;
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (status == 0) {
+            QString code = QStringLiteral("ECONNRESET");
+            switch (reply->error()) {
+            case QNetworkReply::HostNotFoundError: code = QStringLiteral("ENOTFOUND"); break;
+            case QNetworkReply::ConnectionRefusedError: code = QStringLiteral("ECONNREFUSED"); break;
+            case QNetworkReply::TimeoutError: case QNetworkReply::OperationCanceledError: code = QStringLiteral("ETIMEDOUT"); break;
+            case QNetworkReply::SslHandshakeFailedError: code = QStringLiteral("UNABLE_TO_VERIFY_LEAF_SIGNATURE"); break;
+            default: break;
+            }
+            replyJson(guard, { { QStringLiteral("error"), reply->errorString() }, { QStringLiteral("code"), code } });
+            return;
+        }
+        QJsonObject out;
+        out[QStringLiteral("status")] = status;
+        out[QStringLiteral("url")] = reply->url().toString();
+        QJsonObject h;
+        for (const auto &pair : reply->rawHeaderPairs())
+            h[QString::fromUtf8(pair.first).toLower()] = QString::fromUtf8(pair.second);
+        out[QStringLiteral("headers")] = h;
+        const QByteArray data = reply->readAll();
+        if (binary)
+            out[QStringLiteral("bodyBase64")] = QString::fromLatin1(data.toBase64());
+        else
+            out[QStringLiteral("body")] = QString::fromUtf8(data);
+        replyJson(guard, out);
+    });
+}
+
 void RootfsSchemeHandler::requestStarted(QWebEngineUrlRequestJob *job)
 {
     const QString devicePath = job->requestUrl().path();
+    if (devicePath == QLatin1String("/__phoenix/proxy")) {
+        proxy(job);
+        return;
+    }
     if (devicePath == QLatin1String("/usr/share/phoenix/host.json")) {
         auto *buffer = new QBuffer(job);
         buffer->setData(m_rootfs->hostInfo());

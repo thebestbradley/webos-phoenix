@@ -178,7 +178,12 @@ export function keyboardPrefs(value: unknown): VirtualKeyboardPrefs {
 
 /** The same preference with TapSounds set, other keys kept, as the string it is stored as. */
 export function withTapSounds(value: unknown, on: boolean): string {
-    return JSON.stringify({ ...keyboardPrefs(value), TapSounds: on });
+    return withKeyboardPrefs(value, { TapSounds: on });
+}
+
+/** The same preference with these keys changed, the others kept, as the string it is stored as. */
+export function withKeyboardPrefs(value: unknown, changes: Partial<VirtualKeyboardPrefs>): string {
+    return JSON.stringify({ ...keyboardPrefs(value), ...changes });
 }
 
 // ---- com.webos.service.audio (audiod-pro) --------------------------------------------

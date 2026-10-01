@@ -59,6 +59,13 @@ Settings > VPN shows:
     Copyright (c) 2026 Herman van Hazendonk
     Licensed under the Apache License, Version 2.0.
 
+The keyboard's word list (shell/qml/Phoenix/Shell/WordsEnUS.js) is generated
+from the English (US) dictionary source of AOSP LatinIME
+(https://android.googlesource.com/platform/packages/inputmethods/LatinIME,
+dictionaries/en_US_wordlist.combined.gz):
+    Copyright (c) 2008, The Android Open Source Project
+    Licensed under the Apache License, Version 2.0.
+
 This product includes the Open Sans typeface in shell/assets/fonts/open-sans/:
     Open Sans by Steve Matteson.
     Digitized data copyright (c) 2010-2011, Google Corporation.

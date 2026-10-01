@@ -435,6 +435,48 @@ Item {
             notes.dashboardOpen = false;
         }
 
+        // An ongoing activity (a download, an install: org.webosphoenix.ongoing)
+        // is one row per id with its progress; swiping does not dismiss it, a
+        // tap opens its app and leaves it; it goes when cleared.
+        function test_ongoingActivity() {
+            var notes = shell.notifications;
+            windows.setOngoing("org.webosphoenix.settings", { id: "com.palm.update", title: "Downloading webOS Phoenix 0.2.0",
+                                                               body: "10%", progress: 10, params: { page: "updates" } });
+            windows.setOngoing("org.webosphoenix.settings", { id: "com.palm.update", title: "Downloading webOS Phoenix 0.2.0",
+                                                               body: "60%", progress: 60, params: { page: "updates" } });
+            compare(windows.notifications.count, 1);
+            compare(windows.notifications.get(0).progress, 60);
+            compare(windows.notifications.get(0).ongoing, true);
+            notes.bannerActive = false;
+            notes.dashboardOpen = true;
+            tryCompare(notes, "negativeSpace", notes.dashboardHeight, 2000);
+            var bar = findChild(notes, "dashboardProgress");
+            verify(bar && bar.visible);
+
+            var r = dashboardRows()[0], y = r.height / 2;
+            mousePress(r, 20, y);
+            for (var i = 1; i <= 10; ++i) { wait(30); mouseMove(r, 20 + i * 12, y); }
+            mouseRelease(r, 140, y);
+            wait(400);
+            compare(windows.notifications.count, 1);
+
+            var launched = [];
+            var onActivated = function (appId, params) { launched.push([appId, params]); };
+            notes.activated.connect(onActivated);
+            mouseClick(r, 40, y);
+            notes.activated.disconnect(onActivated);
+            compare(launched.length, 1);
+            compare(launched[0][0], "org.webosphoenix.settings");
+            compare(JSON.parse(launched[0][1]).page, "updates");
+            compare(windows.notifications.count, 1);
+
+            windows.setOngoing("org.webosphoenix.settings", { id: "com.palm.update", clear: true });
+            compare(windows.notifications.count, 0);
+            notes.dashboardOpen = false;
+            notes.bannerActive = false;
+            tryCompare(notes, "negativeSpace", 0, 2000);
+        }
+
         // Phones: newest at the bottom; the scroll masks show only while
         // rows are out of view (setMaskVisibility).
         function test_dashboardMasks() {

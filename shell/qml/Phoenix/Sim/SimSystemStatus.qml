@@ -49,6 +49,9 @@ QtObject {
     property var streams: ({ pringtones: 80, palerts: 70, pfeedback: 50 })
     property bool systemSounds: true
     property bool tapSounds: true
+    // Settings > Text Assist: {suggestions, autoCorrect, swipe, spaces2period,
+    // forgetWords (when the learned words were forgotten, ms)}.
+    property var textAssist: ({ suggestions: true, autoCorrect: true, swipe: true, spaces2period: true, forgetWords: 0 })
     property string ringtone: "/usr/palm/sounds/ringtone.mp3"
     property string alerttone: "/usr/palm/sounds/alert.wav"
     property string notificationtone: "/usr/palm/sounds/notification.wav"
@@ -227,7 +230,7 @@ QtObject {
     // Apply a "systemStatus" report from the web runtime: wifiEnabled,
     // wifiConnected, wifiBars, bluetoothOn, airplaneMode, brightness
     // (0-100), rotationLocked, muted, timeFormat, showAlertsWhenLocked,
-    // volume, streams, systemSounds, tapSounds, ringtone, alerttone,
+    // volume, streams, systemSounds, tapSounds, textAssist, ringtone, alerttone,
     // notificationtone, reduceMotion, vpnProfiles. Missing keys are left alone.
     function applyAppStatus(s) {
         applyingAppStatus = true;
@@ -257,6 +260,8 @@ QtObject {
             systemSounds = !!s.systemSounds;
         if (s.tapSounds !== undefined)
             tapSounds = !!s.tapSounds;
+        if (s.textAssist !== undefined && s.textAssist !== null)
+            textAssist = s.textAssist;
         if (s.ringtone !== undefined)
             ringtone = s.ringtone;
         if (s.alerttone !== undefined)

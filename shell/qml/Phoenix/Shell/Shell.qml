@@ -514,6 +514,10 @@ FocusScope {
     // The height of a keyboard the platform draws (OSE's IME panel on a
     // device, PhoenixViewsRoot): the shell makes room for it the same way.
     property real platformKeyboardHeight: 0
+    // Dictation's transcriber (Phoenix.Native Dictation.command): [] for the
+    // device's (luna-send to org.webosphoenix.transcriber); phoenix-sim runs
+    // the same code on the computer.
+    property var dictationCommand: []
     // IMEController::isIMEOpened (or the platform's keyboard is up). With
     // it the tablet's bezel flick must travel further.
     readonly property bool keyboardOpen: _imeOpened || platformKeyboardHeight > 0
@@ -609,12 +613,13 @@ FocusScope {
             return;
         }
         _pendingVisibility = "";
+        // The field first: it decides the keyboard's height (the candidate bar).
+        if (imeClient && restart)
+            ime.editorState = imeClient.state;
         if (!_imeOpened) {
             _imeOpened = true;
             _slotShowIME();
         }
-        if (imeClient && restart)
-            ime.editorState = imeClient.state;
     }
     function _hideIMEInternal() {
         if (fingers.active) {
@@ -1218,9 +1223,15 @@ FocusScope {
             // top window manager, WindowServerLuna.cpp:133-136, 171-172). It
             // slides with the negative space (InputWindowManager::
             // slotNegativeSpaceChanged, InputWindowManager.cpp:131-139).
+            // The keyboard's microphone (Text Assist, GAPS V2).
+            Dictation {
+                id: dictation
+                command: shell.dictationCommand
+            }
             VirtualKeyboard {
                 id: ime
                 objectName: "virtualKeyboard"
+                dictation: dictation.available ? dictation : null
                 tablet: shell.tablet
                 pixelScale: Theme.keyboardScale
                 availableWidth: ui.width
@@ -1241,6 +1252,13 @@ FocusScope {
                 onHideRequested: shell.hideKeyboard()
                 // VirtualKeyboardPreferences TapSounds: "Keyboard clicks".
                 tapSounds: !shell.system || shell.system.tapSounds !== false
+                // Settings > Text Assist.
+                readonly property var _assistPrefs: shell.system && shell.system.textAssist ? shell.system.textAssist : ({})
+                textSuggestions: _assistPrefs.suggestions !== false
+                autoCorrect: _assistPrefs.autoCorrect !== false
+                swipeTyping: _assistPrefs.swipe !== false
+                spaces2period: _assistPrefs.spaces2period !== false
+                forgetWordsAt: _assistPrefs.forgetWords || 0
                 onFeedback: (name) => shell.sounds.feedback(name)
             }
             Connections {

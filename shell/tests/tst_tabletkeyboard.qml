@@ -88,10 +88,13 @@ Item {
             // The TouchPad's own pixels, 340 high by default (keyboard-bg.png;
             // TabletKeyboard.cpp:247).
             compare(Theme.keyboardScale, 1);
-            compare(kb.keyboardHeight, 340);
-            compare(shell.notifications.negativeSpace, 340);
-            compare(kb.y, root.height - 340);
-            compare(shell.cardView.windowHeight, root.height - Theme.statusBarHeight - 340);
+            compare(kb.keysHeight, 340);
+            // Text Assist's candidate bar above the keys, in a text field.
+            compare(kb.candidateBarHeight, 44);
+            compare(kb.keyboardHeight, 340 + 44);
+            compare(shell.notifications.negativeSpace, 384);
+            compare(kb.y, root.height - 384);
+            compare(shell.cardView.windowHeight, root.height - Theme.statusBarHeight - 384);
             // Five rows; the number row on the short keys.
             compare(keyBackground("1"), "key-gray-short.png");
             compare(keyBackground("q"), "key-white.png");
@@ -147,13 +150,13 @@ Item {
             var c = cell.mapToItem(kb, cell.width / 2, cell.height / 2);
             mouseMove(kb, c.x, c.y);
             mouseRelease(kb, c.x, c.y);
-            tryCompare(kb, "keyboardHeight", 291, 1000);
+            tryCompare(kb, "keysHeight", 291, 1000);
             // At once (slotKeyboardHeightChanged: immediate).
-            compare(shell.notifications.negativeSpace, 291);
+            compare(shell.notifications.negativeSpace, 291 + 44);
             verify(shell.keyboardOpen);
             kb.keyboardSize = 1;
-            compare(kb.keyboardHeight, 393);
-            compare(shell.notifications.negativeSpace, 393);
+            compare(kb.keysHeight, 393);
+            compare(shell.notifications.negativeSpace, 393 + 44);
         }
 
         function test_urlField() {
@@ -173,8 +176,8 @@ Item {
             tryVerify(function() { return !shell.rotator.rotating && Math.abs(kb.width - 768) < 0.5; }, 3000);
             // The keys laid out again for the narrower screen.
             tryVerify(function() { var r = kb.keyRect("p"); return r !== null && r.x + r.width < 768; }, 1000);
-            compare(kb.keyboardHeight, 340);
-            tryCompare(shell.notifications, "negativeSpace", 340, 3000);
+            compare(kb.keysHeight, 340);
+            tryCompare(shell.notifications, "negativeSpace", 340 + 44, 3000);
             tapKey("z");
             compare(field.text, "z");
         }

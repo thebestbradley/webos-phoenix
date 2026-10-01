@@ -780,7 +780,7 @@ the Enyo 1.0 art:
 | What | Service and methods | Source |
 | --- | --- | --- |
 | Files and folders | `org.webosphoenix.filemanager` `list {path}` -> `{entries: [{name, path, type, size, mtime, mode, readOnly?}]}`, `stat {path}` -> `{entry}` (folders add `count`), `mkdir {path}`, `copy` / `move {from, to, overwrite?}` (folders recursively), `remove {path, recursive?}`, `read {path, encoding: "utf8" \| "base64", maxBytes?}` -> `{data, size}`, `write {path, data, encoding, overwrite?}`. Errors: `errorCode` 1 not found, 2 exists, 3 read-only, 4 not a folder, 5 is a folder, 6 not empty, 7 too large, 8 invalid (a folder into itself), -1 bad parameters | Phoenix; `apps/files/service` on a device, simulated in the runtime |
-| Install a package | `com.palm.appinstaller` `installNoVerify {target, subscribe}` -> `{ticket, status}`: `STARTING`, `IPKG_INSTALL`, then `SUCCESS` or `FAILED_*` | legacy webOS (as Preware-era file managers called it); OSE's installer is `com.webos.appInstallService`, not yet wired |
+| Install a package | `com.palm.appinstaller` `installNoVerify {target, subscribe}` -> `{ticket, status}`: `STARTING`, `IPKG_INSTALL`, then `SUCCESS` or `FAILED_*` | legacy webOS (as Preware-era file managers called it); both it and OSE's `com.webos.appInstallService` install for real in the simulator ([Installing apps](#installing-apps)) |
 | Open with | `com.webos.applicationManager` `listAllHandlersForMime {mime}` -> `{resources: [{appId}]}`, `launch {id, params: {target}}`, `open {target}` | legacy webOS / SAM |
 
 The device service is Node.js (`apps/files/service`: `filemanager.js` does
@@ -1306,8 +1306,8 @@ The runtime block "HTTP, downloads and audio focus" gives
 `__phoenixRuntime.http.request`: a page served by `tools/serve-rootfs.py`
 sends requests through its proxy (`POST /__phoenix/proxy`, which now
 follows redirects and can answer binary bodies as base64); phoenix-sim's
-`phoenix://` pages fetch directly, so there only feeds and servers that
-send CORS headers can be reached. Downloads go into the media block's
+`phoenix://` pages use its own proxy (`GET /__phoenix/proxy?req=...`,
+`RootfsSchemeHandler` on Qt Network), so any feed or server can be reached. Downloads go into the media block's
 store under `/media/internal`, so Files sees them. The audio focus holder is
 kept in the shared store, so pages tell each other. `serve-rootfs.py` also
 answers HEAD and byte ranges now, so videos can seek.
@@ -1363,9 +1363,9 @@ and on "Sync now". One sync runs at a time per account across all pages.
 
 HTTP needs a way past the browser's same-origin rule: pages served over HTTP
 (`tools/serve-rootfs.py`, the tests) send requests through the server's
-`POST /__phoenix/proxy`; phoenix-sim's pages call the server directly, which
-only works with servers that send CORS headers (SYNERGY.md section 3.6 has a
-Radicale configuration). `__phoenixRuntime.dav.sync(accountId)` syncs from a
+`POST /__phoenix/proxy`; phoenix-sim's pages through its own,
+`GET /__phoenix/proxy?req=...` (`RootfsSchemeHandler`, Qt Network), so any
+DAV server works there too. `__phoenixRuntime.dav.sync(accountId)` syncs from a
 test or the console.
 
 `node tools/test-dav-sync.cjs [--tablet]` starts Radicale (`pip install
@@ -1419,6 +1419,136 @@ as an ordinary card with `{rerun: true}`.
 
 On a device, the shell has to read `firstUseComplete` from the system
 service at boot (not wired in `LsmSystemStatus` yet).
+
+## Marketplace
+
+`apps/marketplace` (`org.webosphoenix.marketplace`, Downloads tab) is the
+Marketplace ([APP-STORE.md](APP-STORE.md); the owner named it, 1 October
+2026): the webOS 2.x App Catalog's shape (a blue header with search,
+Featured / Web Apps / Apps / Classics with categories, an app page whose
+Download button becomes the progress bar and then Open, Installed with
+Update All, Catalogs). Behind it is `org.webosphoenix.service.packages`
+(`apps/marketplace/service/`, Node.js; methods in `packagesservice.js`),
+which runs unchanged in the simulator:
+
+- **Sources** (`/etc/palm/marketplace/sources.json`, then the user's):
+  the Phoenix Marketplace (a signed catalog; for now at
+  `http://127.0.0.1:8088/v1/`, `server/marketplace/bin/serve.sh`), the
+  webOS Archive's App Museum II and the PreCentral homebrew feed (both off
+  until switched on). Catalogs can be added by address.
+- **Signed catalogs** (`lib/catalog.js`, `lib/ed25519.js`): `index.json`,
+  its Ed25519 signature and `key.json`. A catalog's key is trusted once,
+  after the user sees its fingerprint; then only indexes signed with it,
+  not expired and not older than the last one taken are read.
+- **Installing** goes through OSE's installer (`com.webos.appInstallService
+  install {id, ipkUrl}`), which takes an `.ipk`:
+  - a web app (PWA): the site's manifest is read (`lib/pwa.js`; its start
+    page must stay on the catalog's origin) and packaged as an `.ipk`
+    (`lib/ipk.js`) whose `appinfo.json` "main" is the site, with the site's
+    icons: its own launcher icon and cards;
+  - a Phoenix app: the `.ipk`, checked against the size and SHA-256 the
+    catalog signed;
+  - a Classic: the App Museum's package (`lib/appmuseum.js`), or a Preware
+    feed's (`lib/preware.js`, MD5 checked).
+  Every package is read first and refused when it runs install scripts,
+  has services, puts files outside its app, is native, or is a Mojo app
+  (`sources.json` without `depends.js`: Palm's Mojo was never released).
+- **Updates**: a daily activity reads the catalogs and posts one toast
+  ("2 app updates in the Marketplace", opening Installed); Update All
+  installs them. Apps removed in the launcher are forgotten.
+
+In the simulator, the runtime gives the service HTTP through the host's
+proxy, WebCrypto and gzip streams, and `/tmp` in memory; its state is in the
+shared store. Tests: `apps/marketplace/service/lib.test.ts` (against OpenSSL,
+`ar` and `tar`), `service.test.ts` (against the real catalog service, a web
+app site, an App Museum stand-in and a Preware feed), `tools/test-marketplace.cjs`.
+
+The catalog service is `server/marketplace` (PHP 8 + PDO; MySQL/MariaDB on a
+server, SQLite on one computer): accounts, submissions with the same
+automatic checks, a review queue (`/admin`), ratings and reviews, reports,
+opt-outs for the curated web apps, and publishing the signed index (its
+README).
+
+### Installing apps
+
+`com.webos.appInstallService` (`install`, `remove`, `status`, with OSE's
+status values) and the legacy `com.palm.appinstaller` (`installNoVerify`,
+which Files' `.ipk` sheet uses) are real in the simulator now: the runtime
+reads the package and hands its app's files to the host, phoenix-sim's
+`SimInstaller` ("installApp" / "removeApp" host messages; its data folder's
+`cryptofs/apps`, or `--installed-dir`) or `tools/serve-rootfs.py`
+(`POST /__phoenix/installer`, `--installed-dir`). Installed apps are served
+at `/usr/palm/applications/<id>/` like the built-in ones, are marked
+`removable`, and the launcher's Delete removes them (as webOS did); pages
+hear of it through `launchPointChanges`. An app whose "main" is an
+`https://` address (an installed web app) opens that site. A built-in
+app's id cannot be installed over. `build/siminstaller-test` tests
+SimInstaller.
+
+## System updates
+
+`com.palm.update` (`services/updates`, Node.js; methods in
+`updatesservice.js`) is System Updates. Palm's update daemon had this name,
+and the luna-systemui Phoenix runs still listens to it
+(`data/SysUpdateService.js`, `app/SysUpdateAlerts`): `GetStatus` says when to
+show the "Update Available" alert, the download dashboard and the countdown
+alert, which answer with `InstallLater`, `InstallNow` and `AlertDisplayed`. The
+service keeps that API and adds Phoenix's own (`getStatus`, `check`,
+`download`, `cancel`, `installNow`, `setPreferences`) for Settings > Updates,
+which is `com.palm.app.updates` (the alerts open it).
+
+The system is installed with RAUC into two root slots, so:
+
+1. a daily activity reads the feed, `<feed>/<compatible>/<channel>.json`
+   (`/etc/palm/updates.json`; `server/updates` writes them), stable or beta;
+2. over Wi-Fi (or when asked) it downloads the bundle, checks its size and
+   SHA-256 against the feed, and RAUC writes it to the other slot, while the
+   device is in use. Both are an ongoing activity in the notification area;
+3. the running slot stays the one that starts. luna-systemui shows "Update
+   Available"; Install now switches slots and restarts (about a minute, which
+   is what the alert says); Install later asks again, with the countdown
+   alert, when the charger is next connected (an activity with
+   `requirements: {charging: true}`). Installing needs 20% battery or the
+   charger;
+4. after the restart a notification says "Updated to ..." or, when the
+   bootloader went back to the old slot, that the update did not start.
+
+The feed is not signed; the bundles are. RAUC checks a bundle's signature
+against the keyring in the running system, and the service then uses it only
+if its manifest is for this device (`compatible`) and its build is newer than
+the running one (`/etc/os-release` `BUILD_ID`), so no feed can put an older
+system back.
+
+In the simulator the service runs unchanged over a simulated RAUC: two slots in
+the shared store; osInfo's `webos_release` and `webos_build_id` are the running
+slot's. A simulator bundle is only a RAUC manifest
+(`php server/updates/bin/updates.php simulator --version 0.2.0 --build 2`,
+served by `server/updates/bin/serve.sh` at `http://127.0.0.1:8089/`).
+`com.palm.power/shutdown/machineReboot` restarts phoenix-sim (`simProcess`),
+or reloads the page under `tools/serve-rootfs.py`. Tests:
+`services/updates/updatesservice.test.ts` (with a stand-in for RAUC's command
+line), `server/updates/tests/run.php`, `tools/test-updates.cjs`.
+
+## Ongoing activities
+
+Work going on in the background, such as a download or an install, is an
+ongoing activity: a row in the notification area with its progress that
+cannot be swiped away and goes when the work ends. A tap opens its app with
+its params. It is the shell's API:
+
+- `luna://org.webosphoenix.ongoing/set {id, appId?, title, body?, icon?, progress (0-100, -1: none), params?}`
+- `luna://org.webosphoenix.ongoing/clear {id}`
+
+System updates (`com.palm.update`) and Marketplace installs use it. The
+owner's plan (1 October 2026) is Live Activities: these get their own place on
+the left of the notification area and open a pane when tapped
+([ROADMAP.md](ROADMAP.md)). The services do not change for that.
+
+Other legacy hooks the simulator now answers as a device would:
+`com.palm.bus/signal/registerServerStatus` says whether a service exists
+(luna-systemui waits on it before subscribing), and
+`com.webos.notification/createToast` with an `onclick.appId` for another app
+(a service's toast) posts that app's notification.
 
 ## Backup
 

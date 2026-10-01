@@ -1,0 +1,8 @@
+{
+    "//": "The catalogs the Marketplace starts with (org.webosphoenix.service.packages). The Phoenix Marketplace runs on this computer for now (server/marketplace: bin/serve.sh); its key is trusted the first time, after the user checks its fingerprint. When it goes live, its address and key go here. The App Museum and the PreCentral homebrew feed are add-on catalogs the user switches on.",
+    "sources": [
+        { "id": "phoenix", "name": "Phoenix Marketplace", "kind": "phoenix", "url": "http://127.0.0.1:8088/v1/", "key": null, "enabled": true },
+        { "id": "appmuseum", "name": "App Museum II (webOS Archive)", "kind": "appmuseum", "url": "https://appcatalog.webosarchive.org/", "enabled": false },
+        { "id": "precentral", "name": "PreCentral homebrew (webOS Lives mirror)", "kind": "preware", "url": "http://weboslives.eu/feeds/precentral/", "enabled": false }
+    ]
+}

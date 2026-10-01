@@ -246,7 +246,7 @@ Item {
     function notify(appId, title, body, params) {
         notifications.append({ id: "n" + Date.now(), appId: appId, title: title, body: body || "",
                                color: "#666666", glyph: "!", icon: "", params: params ? JSON.stringify(params) : "",
-                               windowKey: "", clickableWhenLocked: false });
+                               windowKey: "", clickableWhenLocked: false, ongoing: false, progress: -1 });
     }
 
     function dismissNotification(index) {

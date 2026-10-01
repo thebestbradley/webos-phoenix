@@ -5,8 +5,9 @@
 // simulated org.webosphoenix.filemanager, com.palm.appinstaller and "Open
 // with" in runtime/phoenix-runtime.js.
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { CompressionStream, DecompressionStream } from "node:stream/web";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { call, LunaError } from "./bridge";
 import {
@@ -29,7 +30,38 @@ beforeAll(() => {
         "/media/internal/samples/index.json": readFileSync(resolve(REPO, "apps/media-samples/media/index.json"), "utf8"),
         "/usr/share/phoenix/runtime/sample-data.js": readFileSync(resolve(REPO, "runtime/sample-data.js"), "utf8"),
     };
-    (w.PalmSystem as { getResource: (p: string) => string | undefined }).getResource = (p: string) => files[p];
+    // The installer reads the package with the Marketplace service's modules
+    // (PalmSystem.getResource) and gzip streams, which jsdom lacks.
+    const PACKAGES = "/usr/palm/services/org.webosphoenix.service.packages/";
+    (w.PalmSystem as { getResource: (p: string) => string | undefined }).getResource = (p: string) =>
+        p.startsWith(PACKAGES) ? readFileSync(resolve(REPO, "apps/marketplace/service", p.slice(PACKAGES.length)), "utf8") : files[p];
+    w.CompressionStream = CompressionStream;
+    w.DecompressionStream = DecompressionStream;
+    // Sample files on the device are fetched from the rootfs (the demo media).
+    w.XMLHttpRequest = class {
+        status = 0; response: ArrayBuffer | null = null; responseType = ""; onload?: () => void; onerror?: () => void;
+        private url = "";
+        open(_method: string, url: string) { this.url = url; }
+        getResponseHeader() { return this.response ? String(this.response.byteLength) : null; }
+        send() {
+            const file = this.url.startsWith("/media/internal/samples/")
+                ? resolve(REPO, "apps/media-samples/media", this.url.slice("/media/internal/samples/".length)) : "";
+            setTimeout(() => {
+                if (!file || !existsSync(file)) { this.status = 404; return this.onload?.(); }
+                const b = readFileSync(file);
+                this.status = 200;
+                this.response = b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
+                this.onload?.();
+            });
+        }
+    };
+    // tools/serve-rootfs.py's installer (the page is served over http).
+    const realFetch = window.fetch;
+    w.fetch = (url: string, init?: RequestInit) => {
+        if (url !== "/__phoenix/installer") return realFetch(url, init);
+        hostMessages.push({ type: "installer", payload: JSON.parse(String(init?.body)) });
+        return Promise.resolve(new Response(JSON.stringify({ ok: true })));
+    };
 });
 
 beforeEach(() => {
@@ -214,6 +246,9 @@ describe("installing and opening files (simulated)", () => {
         const r = await appInstaller.install("/media/internal/Downloads/org.example.hello_1.0.0_all.ipk", (s) => seen.push(s));
         expect(r.status).toBe("SUCCESS");
         expect(seen.map((s) => s.status)).toEqual(["STARTING", "IPKG_INSTALL", "SUCCESS"]);
+        const sent = hostMessages.find((m) => m.type === "installer")?.payload as { op: string; appId: string; files: { path: string }[] };
+        expect(sent).toMatchObject({ op: "install", appId: "org.example.hello" });
+        expect(sent.files.map((f) => f.path)).toContain("appinfo.json");
         expect(await appInstaller.install("/media/internal/Documents/Welcome.txt").catch((e) => e.message)).toMatch(/ipk/);
         expect(code(await appInstaller.install("/media/internal/none.ipk").catch((e) => e))).toBe(FILE_ERRORS.NOT_FOUND);
     });

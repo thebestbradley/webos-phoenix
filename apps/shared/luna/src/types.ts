@@ -193,6 +193,12 @@ export interface VirtualKeyboardPrefs {
     keyboards?: { layout: string; language: string }[];
     TapSounds?: boolean;
     spaces2period?: boolean;
+    /** Phoenix, Settings > Text Assist (missing means on). */
+    WordSuggestions?: boolean;
+    AutoCorrect?: boolean;
+    SwipeTyping?: boolean;
+    /** When the user asked for the learned words to be forgotten (ms). */
+    ForgetWords?: number;
 }
 
 export interface SystemTime {

@@ -1,0 +1,409 @@
+{
+  "//": "Written by bin/probe-pwas.py from curated-sites.json; checked live. Edit curated-sites.json, not this.",
+  "apps": [
+    {
+      "id": "org.webosphoenix.pwa.x",
+      "title": "X",
+      "developer": "X Corp.",
+      "categories": [
+        "Social"
+      ],
+      "featured": true,
+      "summary": "Posts, replies and messages from X (formerly Twitter).",
+      "manifest": "https://x.com/manifest.json",
+      "origin": "https://x.com",
+      "icon": "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363cba131578a.png",
+      "manifestName": "X"
+    },
+    {
+      "id": "org.webosphoenix.pwa.mastodon",
+      "title": "Mastodon",
+      "developer": "Mastodon gGmbH",
+      "categories": [
+        "Social"
+      ],
+      "featured": false,
+      "summary": "Decentralized social media, here on mastodon.social.",
+      "manifest": "https://mastodon.social/manifest",
+      "origin": "https://mastodon.social",
+      "icon": "https://mastodon.social/packs/assets/android-chrome-192x192-jYKJbpas.png",
+      "manifestName": "Mastodon"
+    },
+    {
+      "id": "org.webosphoenix.pwa.pinterest",
+      "title": "Pinterest",
+      "developer": "Pinterest",
+      "categories": [
+        "Lifestyle"
+      ],
+      "featured": false,
+      "summary": "Find and save ideas for recipes, home and style.",
+      "manifest": "https://www.pinterest.com/manifest.json",
+      "origin": "https://www.pinterest.com",
+      "icon": "https://s.pinimg.com/images/favicon_red_192.png",
+      "manifestName": "Pinterest"
+    },
+    {
+      "id": "org.webosphoenix.pwa.element",
+      "title": "Element",
+      "developer": "Element",
+      "categories": [
+        "Communication"
+      ],
+      "featured": true,
+      "summary": "Secure, decentralized chat on Matrix.",
+      "manifest": "https://app.element.io/manifest.json",
+      "origin": "https://app.element.io",
+      "icon": "https://app.element.io/vector-icons/512.png",
+      "manifestName": "Element"
+    },
+    {
+      "id": "org.webosphoenix.pwa.protonmail",
+      "title": "Proton Mail",
+      "developer": "Proton AG",
+      "categories": [
+        "Communication",
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "End-to-end encrypted email from Switzerland.",
+      "manifest": "https://mail.proton.me/assets/manifest.webmanifest",
+      "origin": "https://mail.proton.me",
+      "icon": "https://mail.proton.me/assets/android-chrome-192x192.png",
+      "manifestName": "Proton Mail"
+    },
+    {
+      "id": "org.webosphoenix.pwa.spotify",
+      "title": "Spotify",
+      "developer": "Spotify",
+      "categories": [
+        "Music"
+      ],
+      "featured": true,
+      "summary": "Music and podcasts.",
+      "manifest": "https://open.spotifycdn.com/cdn/generated/manifest-mobile-web-player.a1ddf51c.json",
+      "origin": "https://open.spotify.com",
+      "icon": "https://open.spotifycdn.com/cdn/images/icons/Spotify_MWP_192.ebf939fd.png",
+      "manifestName": "Spotify"
+    },
+    {
+      "id": "org.webosphoenix.pwa.youtubemusic",
+      "title": "YouTube Music",
+      "developer": "Google",
+      "categories": [
+        "Music"
+      ],
+      "featured": false,
+      "summary": "Songs, albums and music videos.",
+      "manifest": "https://music.youtube.com/manifest.webmanifest",
+      "origin": "https://music.youtube.com",
+      "icon": "https://www.gstatic.com/youtube/media/ytm/images/applauncher/music_icon_192x192.png",
+      "manifestName": "YT Music"
+    },
+    {
+      "id": "org.webosphoenix.pwa.tidal",
+      "title": "TIDAL",
+      "developer": "TIDAL",
+      "categories": [
+        "Music"
+      ],
+      "featured": false,
+      "summary": "High-fidelity music streaming.",
+      "manifest": "https://listen.tidal.com/manifest.json",
+      "origin": "https://listen.tidal.com",
+      "icon": "https://listen.tidal.com/img/app-icon-192.png",
+      "manifestName": "TIDAL"
+    },
+    {
+      "id": "org.webosphoenix.pwa.todoist",
+      "title": "Todoist",
+      "developer": "Doist",
+      "categories": [
+        "Productivity"
+      ],
+      "featured": true,
+      "summary": "To-do lists and projects.",
+      "manifest": "https://app.todoist.com/manifest.json",
+      "origin": "https://app.todoist.com",
+      "icon": "https://todoist.b-cdn.net/assets/icons/todoist-pwa-192.45bc3b2c471fae15.png",
+      "manifestName": "Todoist"
+    },
+    {
+      "id": "org.webosphoenix.pwa.excalidraw",
+      "title": "Excalidraw",
+      "developer": "Excalidraw",
+      "categories": [
+        "Productivity",
+        "Graphics"
+      ],
+      "featured": false,
+      "summary": "Hand-drawn style diagrams and sketches.",
+      "manifest": "https://excalidraw.com/manifest.webmanifest",
+      "origin": "https://excalidraw.com",
+      "icon": "https://excalidraw.com/android-chrome-192x192.png",
+      "manifestName": "Excalidraw"
+    },
+    {
+      "id": "org.webosphoenix.pwa.photopea",
+      "title": "Photopea",
+      "developer": "Photopea",
+      "categories": [
+        "Graphics",
+        "Photography"
+      ],
+      "featured": false,
+      "summary": "An image editor that opens PSD, XCF and Sketch files.",
+      "manifest": "https://www.photopea.com/manifest.json",
+      "origin": "https://www.photopea.com",
+      "icon": "https://www.photopea.com/promo/icon512.png",
+      "manifestName": "Photopea"
+    },
+    {
+      "id": "org.webosphoenix.pwa.squoosh",
+      "title": "Squoosh",
+      "developer": "Google Chrome Labs",
+      "categories": [
+        "Graphics",
+        "Utilities"
+      ],
+      "featured": false,
+      "summary": "Make pictures smaller without losing quality.",
+      "manifest": "https://squoosh.app/manifest.json",
+      "origin": "https://squoosh.app",
+      "icon": "https://squoosh.app/c/icon-large-cb438cac.png",
+      "manifestName": "Squoosh"
+    },
+    {
+      "id": "org.webosphoenix.pwa.devdocs",
+      "title": "DevDocs",
+      "developer": "freeCodeCamp",
+      "categories": [
+        "Developer",
+        "Reference"
+      ],
+      "featured": false,
+      "summary": "API documentation for many languages, offline too.",
+      "manifest": "https://devdocs.io/manifest.json",
+      "origin": "https://devdocs.io",
+      "icon": "https://devdocs.io/images/webapp-icon-192.png",
+      "manifestName": "DevDocs"
+    },
+    {
+      "id": "org.webosphoenix.pwa.starbucks",
+      "title": "Starbucks",
+      "developer": "Starbucks",
+      "categories": [
+        "Food & Drink"
+      ],
+      "featured": false,
+      "summary": "Order ahead and collect rewards.",
+      "manifest": "https://www.starbucks.com/manifest.json",
+      "origin": "https://www.starbucks.com",
+      "icon": "https://www.starbucks.com/pwa-icon-192.png",
+      "manifestName": "Starbucks"
+    },
+    {
+      "id": "org.webosphoenix.pwa.uber",
+      "title": "Uber",
+      "developer": "Uber",
+      "categories": [
+        "Travel"
+      ],
+      "featured": false,
+      "summary": "Request a ride.",
+      "manifest": "https://m.uber.com/manifest.json",
+      "origin": "https://m.uber.com",
+      "icon": "https://d3i4yxtzktqr9n.cloudfront.net/web-plan/b8c00410291161d0.png",
+      "manifestName": "Uber"
+    },
+    {
+      "id": "org.webosphoenix.pwa.flipboard",
+      "title": "Flipboard",
+      "developer": "Flipboard",
+      "categories": [
+        "News"
+      ],
+      "featured": false,
+      "summary": "Stories from the topics you follow.",
+      "manifest": "https://flipboard.com/manifest.webmanifest",
+      "origin": "https://flipboard.com",
+      "icon": "https://s.flipboard.com/assets/webu/images/meta/flipboard-192.png",
+      "manifestName": "Flipboard"
+    },
+    {
+      "id": "org.webosphoenix.pwa.wikipedia",
+      "title": "Wikipedia",
+      "developer": "Wikimedia Foundation",
+      "categories": [
+        "Reference"
+      ],
+      "featured": false,
+      "summary": "The free encyclopedia.",
+      "manifest": "https://en.wikipedia.org/w/api.php?action=webapp-manifest",
+      "origin": "https://en.wikipedia.org",
+      "icon": "https://en.wikipedia.org/static/apple-touch/wikipedia.png",
+      "manifestName": "Wikipedia"
+    },
+    {
+      "id": "org.webosphoenix.pwa.openstreetmap",
+      "title": "OpenStreetMap",
+      "developer": "OpenStreetMap Foundation",
+      "categories": [
+        "Navigation"
+      ],
+      "featured": false,
+      "summary": "The free, editable map of the world.",
+      "manifest": "https://www.openstreetmap.org/assets/manifest-97cb57bafa7f7f002cc5fe5532b856c4246eef5cbbd21c78b4c6bc2ffa46747a.json",
+      "origin": "https://www.openstreetmap.org",
+      "icon": "https://www.openstreetmap.org/assets/android-chrome-192x192-f970b9be3965dfda6ea9481b305c39b2ec794e296f802235e30d4671f0f896e1.png",
+      "manifestName": "OSM"
+    },
+    {
+      "id": "org.webosphoenix.pwa.tinder",
+      "title": "Tinder",
+      "developer": "Match Group",
+      "categories": [
+        "Social"
+      ],
+      "featured": false,
+      "summary": "Meet new people.",
+      "manifest": "https://tinder.com/manifest-en.json",
+      "origin": "https://tinder.com",
+      "icon": "https://tinder.com/static/android-chrome-192x192.png",
+      "manifestName": "Tinder"
+    },
+    {
+      "id": "org.webosphoenix.pwa.duolingo",
+      "title": "Duolingo",
+      "developer": "Duolingo",
+      "categories": [
+        "Education"
+      ],
+      "featured": false,
+      "summary": "Learn a language, a few minutes a day.",
+      "manifest": "https://www.duolingo.com/manifest.json",
+      "origin": "https://www.duolingo.com",
+      "icon": "https://d35aaqx5ub95lt.cloudfront.net/images/pwa-icon-circle-192.png",
+      "manifestName": "Duolingo"
+    },
+    {
+      "id": "org.webosphoenix.pwa.figma",
+      "title": "Figma",
+      "developer": "Figma",
+      "categories": [
+        "Graphics",
+        "Developer"
+      ],
+      "featured": false,
+      "summary": "Design together, in the browser.",
+      "manifest": "https://www.figma.com/manifest.json?v=1",
+      "origin": "https://www.figma.com",
+      "icon": "https://static.figma.com/app/icon/2/icon-192.png",
+      "manifestName": "Figma"
+    },
+    {
+      "id": "org.webosphoenix.pwa.soundcloud",
+      "title": "SoundCloud",
+      "developer": "SoundCloud",
+      "categories": [
+        "Music"
+      ],
+      "featured": false,
+      "summary": "Music and audio from independent creators.",
+      "manifest": "https://m.soundcloud.com/webmanifest.json",
+      "origin": "https://m.soundcloud.com",
+      "icon": "https://m.soundcloud.com/pwa-icon-192.png",
+      "manifestName": "SoundCloud"
+    },
+    {
+      "id": "org.webosphoenix.pwa.kiwix",
+      "title": "Kiwix",
+      "developer": "Kiwix",
+      "categories": [
+        "Reference"
+      ],
+      "featured": false,
+      "summary": "Wikipedia and more, offline.",
+      "manifest": "https://pwa.kiwix.org/manifest.json",
+      "origin": "https://pwa.kiwix.org",
+      "icon": "https://pwa.kiwix.org/www/img/icons/kiwix-192.png",
+      "manifestName": "Kiwix PWA"
+    },
+    {
+      "id": "org.webosphoenix.pwa.weather",
+      "title": "Weather.com",
+      "developer": "The Weather Company",
+      "categories": [
+        "Weather"
+      ],
+      "featured": false,
+      "summary": "Forecasts and radar.",
+      "manifest": "https://weather.com/manifest.webmanifest",
+      "origin": "https://weather.com",
+      "icon": "https://weather.com/_next/static/media/twc_192x192.1tox2feob5cac.png?dpl=dpl_4n9Q2YGedKwV9knqiQs6bHyCA8GK",
+      "manifestName": "Weather.com"
+    }
+  ],
+  "notFound": [
+    {
+      "title": "Bluesky",
+      "url": "https://bsky.app/",
+      "why": "no web app manifest found"
+    },
+    {
+      "title": "Instagram",
+      "url": "https://www.instagram.com/",
+      "why": "no web app manifest found"
+    },
+    {
+      "title": "Facebook",
+      "url": "https://www.facebook.com/",
+      "why": "no web app manifest found"
+    },
+    {
+      "title": "Reddit",
+      "url": "https://www.reddit.com/",
+      "why": "no web app manifest found"
+    },
+    {
+      "title": "Telegram",
+      "url": "https://web.telegram.org/k/",
+      "why": "manifest has no usable icon"
+    },
+    {
+      "title": "Discord",
+      "url": "https://discord.com/app",
+      "why": "no web app manifest found"
+    },
+    {
+      "title": "WhatsApp",
+      "url": "https://web.whatsapp.com/",
+      "why": "no web app manifest found"
+    },
+    {
+      "title": "Outlook",
+      "url": "https://outlook.live.com/mail/",
+      "why": "no web app manifest found"
+    },
+    {
+      "title": "YouTube",
+      "url": "https://m.youtube.com/",
+      "why": "no web app manifest found"
+    },
+    {
+      "title": "trivago",
+      "url": "https://www.trivago.com/",
+      "why": "no web app manifest found"
+    },
+    {
+      "title": "Notion",
+      "url": "https://www.notion.so/",
+      "why": "no web app manifest found"
+    },
+    {
+      "title": "Trello",
+      "url": "https://trello.com/",
+      "why": "no web app manifest found"
+    }
+  ]
+}

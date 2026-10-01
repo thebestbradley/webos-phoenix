@@ -1,0 +1,88 @@
+<!doctype html>
+<!-- Copyright (c) 2026 webOS Phoenix contributors. SPDX-License-Identifier: Apache-2.0 -->
+<!-- The review queue: new apps, releases, reports and opt-outs; publishing. Uses the admin API with an admin token. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marketplace Admin</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f4f4f2; --fg: #222; --card: #fff; --line: #ddd; --accent: #2f6fb3; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1b1c1e; --fg: #e8e8e8; --card: #26282b; --line: #3a3d41; --accent: #6ea8e8; } }
+  body { margin: 0; font: 15px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+  main { max-width: 900px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 22px; } h2 { font-size: 17px; margin-top: 28px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  input { flex: 1; min-width: 200px; padding: 6px 8px; }
+  button { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; }
+  button.go { background: var(--accent); color: #fff; border-color: var(--accent); }
+  code { font-size: 13px; word-break: break-all; }
+  .muted { opacity: .7; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Marketplace Admin</h1>
+  <div class="row">
+    <input id="token" type="password" placeholder="Admin token (data/admin.token)">
+    <button class="go" id="load">Load Queue</button>
+    <button id="publish">Publish Now</button>
+  </div>
+  <p id="status" class="muted"></p>
+  <h2>New apps</h2><div id="apps"></div>
+  <h2>Releases</h2><div id="releases"></div>
+  <h2>Reports</h2><div id="reports"></div>
+  <h2>Opt-outs</h2><div id="optouts"></div>
+</main>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+try { $("token").value = sessionStorage.getItem("token") || ""; } catch (e) { /* no storage */ }
+async function api(method, path, body) {
+  try { sessionStorage.setItem("token", $("token").value); } catch (e) { /* no storage */ }
+  const res = await fetch(path, { method, headers: { Authorization: "Bearer " + $("token").value, "Content-Type": "application/json" },
+                                  body: body ? JSON.stringify(body) : undefined });
+  const out = await res.json();
+  if (!res.ok) throw new Error(out.error || res.status);
+  return out;
+}
+function card(html, buttons) {
+  const d = document.createElement("div");
+  d.className = "card";
+  d.innerHTML = html;
+  const row = document.createElement("div");
+  row.className = "row";
+  for (const [label, fn, cls] of buttons) {
+    const b = document.createElement("button");
+    b.textContent = label;
+    if (cls) b.className = cls;
+    b.onclick = async () => { try { await fn(); await load(); } catch (e) { $("status").textContent = e.message; } };
+    row.appendChild(b);
+  }
+  d.appendChild(row);
+  return d;
+}
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[c]));
+async function load() {
+  const q = await api("GET", "/api/admin/queue");
+  $("status").textContent = "";
+  const fill = (id, list, make) => { $(id).replaceChildren(...(list.length ? list.map(make) : [Object.assign(document.createElement("p"), { className: "muted", textContent: "Nothing waiting." })])); };
+  fill("apps", q.apps, (a) => card(`<b>${esc(a.title)}</b> <code>${esc(a.id)}</code> (${esc(a.kind)})<br><code>${esc(a.manifest)}</code>`,
+    [["List", () => api("POST", `/api/admin/apps/${encodeURIComponent(a.id)}/list`), "go"], ["Pull", () => api("POST", `/api/admin/apps/${encodeURIComponent(a.id)}/pull`)]]));
+  fill("releases", q.releases, (r) => card(`<b>${esc(r.app_id)}</b> ${esc(r.version)} &middot; ${r.size} bytes<br><code>sha256 ${esc(r.sha256)}</code>`,
+    [["Approve", () => api("POST", `/api/admin/releases/${r.id}/approve`, {}), "go"],
+     ["Reject", () => api("POST", `/api/admin/releases/${r.id}/reject`, { notes: prompt("Why? (the developer sees this)") || "" })]]));
+  fill("reports", q.reports, (r) => card(`<b>${esc(r.kind)}</b> about <code>${esc(r.app_id)}</code><br>${esc(r.text)}<br><span class="muted">${esc(r.contact)}</span>`,
+    [["Pull the app", () => api("POST", `/api/admin/apps/${encodeURIComponent(r.app_id)}/pull`)]]));
+  fill("optouts", q.optouts, (o) => card(`<b>${esc(o.origin)}</b> asks not to be listed<br>${esc(o.text)}<br><span class="muted">${esc(o.contact)}</span>`,
+    [["Accept", () => api("POST", `/api/admin/optouts/${o.id}/accept`), "go"]]));
+}
+$("load").onclick = () => load().catch((e) => { $("status").textContent = e.message; });
+$("publish").onclick = async () => {
+  try { const r = await api("POST", "/api/admin/publish"); $("status").textContent = `Published build ${r.publish.build}: ${r.publish.apps} apps`; }
+  catch (e) { $("status").textContent = e.message; }
+};
+</script>
+</body>
+</html>

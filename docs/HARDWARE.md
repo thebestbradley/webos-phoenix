@@ -342,8 +342,15 @@ client) but retired it in OSE 2.16, so there is **no OTA in OSE today**
 
 Plan: a read-only root (EROFS or squashfs, later dm-verity), two root slots,
 `/var` and `/home` on a data partition, RAUC bundles signed in CI, and the
-Settings > Updates pane talking to a small Luna service over RAUC's D-Bus
-API.
+Settings > Updates pane talking to a small Luna service over RAUC.
+
+The service is written: `services/updates`, `com.palm.update` (Palm's update
+daemon's name and API, which luna-systemui's update alerts still use), over
+RAUC's command line (`rauc status`, `info`, `install`, `status mark-active`).
+The feed is static JSON per device type and channel (`server/updates`). See
+[APP-RUNTIME.md](APP-RUNTIME.md#system-updates). Still to do per device: the
+slot layout in `system.conf`, the bootloader backend, the keyring, and
+`rauc-mark-good` after a good start.
 
 ### Bootloader constraints
 

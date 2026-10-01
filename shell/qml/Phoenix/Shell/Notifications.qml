@@ -31,7 +31,9 @@ import "NotificationPolicy.js" as Policy
 Item {
     id: root
 
-    property var model            // ListModel: appId, title, body, color, glyph, icon, params (JSON or ""), windowKey
+    property var model            // ListModel: appId, title, body, color, glyph, icon, params (JSON or ""), windowKey,
+                                  // ongoing (an ongoing activity: a download, an install; it stays
+                                  // until it ends), progress (0-100, -1: none)
     // The window source: its alerts (popup alert windows) and windowFor(key)
     // for alert and dashboard windows.
     property var source
@@ -465,6 +467,8 @@ Item {
                 required property string icon
                 required property string params
                 required property string windowKey
+                required property bool ongoing
+                required property real progress
                 width: list.width
                 height: Theme.dashboardItemHeight
 
@@ -480,6 +484,7 @@ Item {
                     color: item.color
                     glyph: item.glyph
                     icon: item.icon
+                    progress: item.progress
 
                     // The lock screen showed the window while locked; it
                     // comes back here (LockScreen's dashboard).
@@ -496,7 +501,8 @@ Item {
                         id: swipe
                         objectName: "dashboardSwipe"
                         anchors.fill: parent
-                        drag.target: content
+                        // An ongoing activity stays until it ends.
+                        drag.target: item.ongoing ? null : content
                         drag.axis: Drag.XAxis
                         enabled: !remove.running
                         property point start
@@ -522,7 +528,8 @@ Item {
                             if (content.x !== 0)
                                 return;
                             root.activated(item.appId, item.params);
-                            root.dismissRequested(item.index);
+                            if (!item.ongoing)
+                                root.dismissRequested(item.index);
                         }
                     }
                     NumberAnimation {
