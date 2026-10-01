@@ -20,8 +20,15 @@ export function TextAssistPage() {
     const kb = keyboardPrefs(prefs.x_palm_virtualkeyboard_prefs);
     const [confirm, setConfirm] = useState(false);
     const [forgotten, setForgotten] = useState(false);
-    const set = (changes: Partial<VirtualKeyboardPrefs>) =>
-        void system.setPreferences({ x_palm_virtualkeyboard_prefs: withKeyboardPrefs(prefs.x_palm_virtualkeyboard_prefs, changes) });
+    const save = (changes: Partial<VirtualKeyboardPrefs>) =>
+        system.setPreferences({ x_palm_virtualkeyboard_prefs: withKeyboardPrefs(prefs.x_palm_virtualkeyboard_prefs, changes) });
+    const set = (changes: Partial<VirtualKeyboardPrefs>) => void save(changes);
+    // Said once it is saved.
+    const forget = async () => {
+        setConfirm(false);
+        await save({ ForgetWords: Date.now() });
+        setForgotten(true);
+    };
 
     const toggle = (title: string, key: "WordSuggestions" | "AutoCorrect" | "SwipeTyping" | "spaces2period", testId: string, subtitle?: string) => (
         <Row title={title} subtitle={subtitle}>
@@ -53,7 +60,7 @@ export function TextAssistPage() {
             {confirm && (
                 <Dialog open title="Forget Learned Words?" onClose={() => setConfirm(false)} testId="ta-forget-dialog"
                         message="The keyboard forgets the words and phrases it learned from your typing.">
-                    <Button variant="negative" onClick={() => { set({ ForgetWords: Date.now() }); setConfirm(false); setForgotten(true); }}
+                    <Button variant="negative" onClick={() => void forget()}
                             data-testid="ta-forget-confirm">Forget</Button>
                     <Button variant="dark" onClick={() => setConfirm(false)}>Cancel</Button>
                 </Dialog>

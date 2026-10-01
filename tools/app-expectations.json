@@ -147,5 +147,13 @@
     "org.webosphoenix.flutternotes": {
         "status": "works",
         "note": "2.0 framework demo (Flutter 3.47 web build, CanvasKit), for phones and tablets; the same notes as the other demos. Built only where Flutter is installed. tools/test-flutter-notes.cjs drives it"
+    },
+    "org.webosphoenix.marketplace": {
+        "status": "works",
+        "note": "Phoenix Marketplace (React, apps/marketplace); tools/test-marketplace.cjs drives it against the catalog service"
+    },
+    "com.palm.systemui": {
+        "status": "works",
+        "note": "luna-systemui as the shell's headless page: alerts, dashboards and banners (its services now see com.palm.bus registerServerStatus answer)"
     }
 }

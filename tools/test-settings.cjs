@@ -214,6 +214,7 @@ async function main() {
         await page.click("[data-testid='ta-forget']");
         await page.click("[data-testid='ta-forget-confirm']");
         await page.waitForFunction(() => /forgotten/.test(document.querySelector("[data-testid='ta-learned-note']")?.textContent || ""));
+        for (let i = 0; i < 50 && !(last().textAssist && last().textAssist.forgetWords > 0); ++i) await page.waitForTimeout(100);
         check(last().textAssist.forgetWords > 0, "Forget Learned Words reaches the shell");
         await shot("textassist");
 
