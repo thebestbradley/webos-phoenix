@@ -84,7 +84,6 @@ body.pui-app { overflow: hidden; }
 .fm-row .pui-row-subtitle { font-size: 13px; }
 .fm-row.hidden-file .pui-row-title { color: #8a8a88; }
 .fm-row.selected { background: rgba(31, 117, 191, 0.14); }
-.fm-icon { display: block; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3)); }
 
 /* ---- Messages ----------------------------------------------------------------------- */
 

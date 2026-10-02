@@ -3,10 +3,14 @@
 //
 // List icons by file type, drawn for Phoenix in the webOS 2.x manner (a
 // small illustrated object with a soft shade). A folder, or a sheet of
-// paper with a coloured band and a mark for its kind.
+// paper with a coloured band and a mark for its kind. Files and the
+// system's save picker show them.
 
 import { useId } from "react";
-import type { FileKind } from "@phoenix/luna";
+
+/** The kinds a file icon can show (@phoenix/luna's FileKind). */
+export type FileIconKind = "folder" | "image" | "audio" | "video" | "text" | "code" | "archive" | "package" | "pdf" | "document" | "book" | "file";
+type FileKind = FileIconKind;
 
 const BANDS: Record<Exclude<FileKind, "folder">, string> = {
     image: "#3f9a4a", audio: "#e07a1f", video: "#7a4fc0", text: "#4f7fb8", code: "#4a5563",
@@ -32,7 +36,7 @@ export function FileIcon({ kind, size = 32 }: { kind: FileKind; size?: number })
     const id = useId().replace(/:/g, "");
     if (kind === "folder") {
         return (
-            <svg className="fm-icon" width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
+            <svg className="pui-file-icon" width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
                 <defs>
                     <linearGradient id={`${id}f`} x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0" stopColor="#ffe08a" /><stop offset="1" stopColor="#e3a92c" />
@@ -45,7 +49,7 @@ export function FileIcon({ kind, size = 32 }: { kind: FileKind; size?: number })
         );
     }
     return (
-        <svg className="fm-icon" width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
+        <svg className="pui-file-icon" width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
             <defs>
                 <linearGradient id={`${id}p`} x1="0" y1="0" x2="1" y2="1">
                     <stop offset="0" stopColor="#fff" /><stop offset="1" stopColor="#dcdcda" />

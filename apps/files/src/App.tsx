@@ -27,11 +27,10 @@ import {
 } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import {
-    AppMenu, BackProvider, CheckBox, cx, Glyph, IconToolButton, PageHeader, PopupMenu, Spinner, Toolbar, ToolSpacer, useBack, type Option,
+    AppMenu, BackProvider, CheckBox, cx, FileIcon, Glyph, IconToolButton, PageHeader, PopupMenu, Spinner, Toolbar, ToolSpacer, useBack, type Option,
 } from "@phoenix/ui";
 import { crumbs, folderTitle, HOME, loadPrefs, planPaste, savePrefs, shortDate, type Clipboard, type Prefs } from "./browse";
 import { DeleteDialog, InfoDialog, InstallDialog, NameDialog, OpenWithDialog } from "./Dialogs";
-import { FileIcon } from "./FileIcon";
 import { ImageViewer, TextEditor } from "./Viewers";
 
 type Sheet =

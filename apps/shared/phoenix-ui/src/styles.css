@@ -523,6 +523,9 @@ body.pui-app, .pui-app {
     background: url(../assets/enyo/checkmark.png) no-repeat center;
 }
 
+/* File type icons (FileIcon). */
+.pui-file-icon { display: block; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3)); }
+
 /* ---- Drawer ---------------------------------------------------------------------- */
 
 .pui-drawer {

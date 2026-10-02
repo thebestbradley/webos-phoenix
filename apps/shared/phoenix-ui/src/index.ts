@@ -14,6 +14,8 @@ export { icons } from "./assets";
 export { Dialpad, DialButton, BackspaceButton, ToolBar, RadioToolGroup, ToolButton, Avatar, DIALPAD_KEYS, phoneArt } from "./telephony";
 export type { DialpadProps, DialButtonProps, ToolOption, RadioToolGroupProps, ToolButtonProps } from "./telephony";
 export { BackProvider, useBack } from "./back";
+export { FileIcon } from "./fileicon";
+export type { FileIconKind } from "./fileicon";
 export { AppMenu, useAppMenuToggle } from "./appmenu";
 export type { AppMenuItem, AppMenuProps } from "./appmenu";
 export { formatNumber, dialable, formatDuration, formatTime, daysAgo, dayLabel, shortWhen } from "./format";

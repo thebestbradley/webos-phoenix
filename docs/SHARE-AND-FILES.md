@@ -5,8 +5,13 @@ system, so a new place to share or save to appears in every app at once.
 The trigger was the Screenshot preview's Save (Save to Photos or Save to
 Files, in a folder the user picks).
 
-> **Status (2 October 2026).** A plan for the owner to agree. Nothing is
-> built yet.
+> **Status (2 October 2026).** Agreed with the owner: the sheet looks like
+> webOS 1 (its popup art and menu rows) with a row of app icons on top (two
+> rows when there are many) that scrolls sideways, the way the latest iOS
+> sheet mixes icons and a list; Save to Files opens the last folder used.
+> **Built in the simulator:** SF3 (save picker), SF4 (share sheet) and SF5
+> for Screenshot; Messaging takes text and links. To do: SF1, SF2 and the
+> other apps of SF5.
 
 ## 1. What the original had
 
@@ -32,6 +37,19 @@ Files, in a folder the user picks).
 | **SF4. Share sheet** | `luna://org.webosphoenix.share/open {files, text, url, title}`: a sheet that slides up from the bottom, in the classic look. It has two rows. **Actions**: Save to Photos (pictures and videos), Save to Files (SF3), Copy, Print later. **Apps**: those that say in their `appinfo.json` what they take, e.g. `"phoenix": {"shareTargets": [{"types": ["image/*"], "label": "Email"}]}`. The chosen app is launched with `{share: {...}}` | 1.x |
 | **SF5. Apps** | Screenshot first (Share opens the sheet; Save asks Photos or Files). Then Photos, Docs, Files, Voice Memos, Browser (Share Page), Maps (Share Location): their own menus give way to the sheet | 1.x |
 | **SF6. 2.0** | The sheet's 2.0 look, people to share with (recent conversations), share to nearby devices, extensions that edit in place (markup) | 2.0 |
+
+**How it is built.** The sheet and the picker are one hidden app,
+`org.webosphoenix.sharesheet` (`apps/sharesheet`). The runtime of the page
+that asks lays it over its card in a frame and dims the card; the two talk
+with postMessage. The picker only chooses (a folder, a name, new folders):
+the runtime of the asking page writes the file, into the media store under
+`/media/internal` (pictures there show in Photos, everything in Files). Save
+to Photos copies into the Camera Roll unless the picture is in a Photos
+album already. The back gesture goes to the sheet while it is up. Apps call
+`shareSheet.open` and `filePicker.save` (`@phoenix/luna`); `appinfo.json`
+`"phoenix": {"shareTargets": [{"types": [...], "label"?}]}` puts an app in
+the sheet (`apps.json` carries it), and the original Email, which cannot
+say so, is in a table in the runtime (its `attachments` launch params).
 
 **Why system-wide.** The sheet and the pickers are pages the system
 provides (as the original's picker was). An app calls a service and gets

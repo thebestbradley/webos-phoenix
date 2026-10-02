@@ -265,6 +265,11 @@ def launch_points():
             # The types the app opens (appinfo.json "mimeTypes", as on legacy webOS).
             if APPS[app_id][1].get("mimeTypes"):
                 rec["mimeTypes"] = APPS[app_id][1]["mimeTypes"]
+            # What it takes from the share sheet (appinfo.json "phoenix": {"shareTargets"};
+            # docs/SHARE-AND-FILES.md).
+            targets = (APPS[app_id][1].get("phoenix") or {}).get("shareTargets")
+            if targets:
+                rec["shareTargets"] = targets
         out.append(rec)
     return out
 

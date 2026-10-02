@@ -7700,6 +7700,235 @@
     })();
 
     // ================================================================================
+    // Share sheet and save picker (org.webosphoenix.share, org.webosphoenix.filepicker)
+    // ================================================================================
+    //
+    // docs/SHARE-AND-FILES.md. One sheet and one picker for every app: the
+    // system's own page (org.webosphoenix.sharesheet, apps/sharesheet) laid
+    // over the calling app's card, as the original's file picker was
+    // (luna-systemui's, in a CrossAppUI frame). Changing the page changes it
+    // in every app.
+    //
+    //   org.webosphoenix.share/open {title?, text?, url?, files?: [{path,
+    //       mimeType?}]} -> {action: "app" (appId), "photos" | "files" (path),
+    //       "copy" or "cancel"}. Sharing to an app launches it with
+    //       {share: {title, text, url, files}} (or the params a legacy app
+    //       takes, below).
+    //   org.webosphoenix.share/targets {types: [mime]} -> {targets: [{appId,
+    //       title, icon, label}]}: the apps whose appinfo.json says they take
+    //       all of these types ("phoenix": {"shareTargets": [{"types":
+    //       ["image/*"], "label"?}]}), and the legacy apps below.
+    //   org.webosphoenix.filepicker/save {name, from?: path, data?: base64,
+    //       mimeType?, title?} -> {path} or {canceled: true}: the user picks a
+    //       folder of /media/internal (the last one used first) and a name;
+    //       the file is written there (copied from `from`, or from `data`).
+    //
+    // The page talks to the runtime of the page under it with postMessage.
+    (function shareSheet() {
+        var doc = global.document;
+        if (!doc) return;
+        var SHEET_APP = "org.webosphoenix.sharesheet";
+        var SHEET_URL = "/usr/palm/applications/" + SHEET_APP + "/index.html";
+        var MEDIA = "/media/internal";
+        var CAMERA_DIR = MEDIA + "/DCIM/100PHNX";
+        var LAST_FOLDER = "filepicker:lastFolder";
+
+        // Legacy apps that cannot say it in their appinfo.json: what they take.
+        var LEGACY_TARGETS = {
+            "com.palm.app.email": { types: ["*/*"], label: "Email", params: function (s) {
+                var text = [s.text, s.url].filter(Boolean).join("\n");
+                var p = {};
+                if (s.files && s.files.length) p.attachments = s.files.map(function (f) { return { fullPath: f.path, mimeType: f.mimeType || "" }; });
+                if (s.title) p.summary = s.title;
+                if (text) p.text = text;
+                return p;
+            } }
+        };
+
+        function callP(url, params) {
+            return new Promise(function (resolve) {
+                dispatch(url, params || {}, resolve, { cancelled: function () { return false; }, onCancel: null });
+            });
+        }
+        function mimeMatches(pattern, type) {
+            if (pattern === "*/*" || pattern === type) return true;
+            return /\/\*$/.test(pattern) && type.indexOf(pattern.slice(0, -1)) === 0;
+        }
+        function shareTypes(s) {
+            var t = (s.files || []).map(function (f) { return f.mimeType || "application/octet-stream"; });
+            if (s.text) t.push("text/plain");
+            if (s.url) t.push("text/uri-list");
+            return t;
+        }
+        function targetsFor(types) {
+            var out = [];
+            launchPoints().forEach(function (lp) {
+                if (lp.launchPointId !== lp.id + "_default") return;
+                var decl = (lp.shareTargets || []).slice();
+                if (LEGACY_TARGETS[lp.id]) decl.push(LEGACY_TARGETS[lp.id]);
+                for (var i = 0; i < decl.length; ++i) {
+                    var d = decl[i], pats = d.types || [];
+                    var takes = types.length > 0 && types.every(function (t) { return pats.some(function (p) { return mimeMatches(p, t); }); });
+                    if (takes) {
+                        out.push({ appId: lp.id, title: lp.title, icon: lp.icon, label: d.label || lp.title });
+                        break;
+                    }
+                }
+            });
+            out.sort(function (a, b) { return a.label.localeCompare(b.label); });
+            return out;
+        }
+        function launchParams(appId, s) {
+            var legacy = LEGACY_TARGETS[appId];
+            var share = { title: s.title || "", text: s.text || "", url: s.url || "", files: s.files || [] };
+            return legacy ? legacy.params(share) : { share: share };
+        }
+
+        // ---- The overlay -----------------------------------------------------------------
+
+        var open = null;     // {frame, id, resolve, request}
+        var seq = 0;
+        function closeSheet(result) {
+            if (!open) return;
+            var o = open;
+            open = null;
+            global.removeEventListener("message", onMessage);
+            if (o.frame.parentNode) o.frame.parentNode.removeChild(o.frame);
+            try { if (o.focus && o.focus.focus) o.focus.focus(); } catch (e) { /* gone */ }
+            o.resolve(result);
+        }
+        function onMessage(e) {
+            var m = e.data;
+            if (!open || !m || m.phoenixSheet !== open.id) return;
+            if (m.type === "ready") open.frame.contentWindow.postMessage({ phoenixSheet: open.id, type: "request", request: open.request }, "*");
+            else if (m.type === "leaving") open.frame.style.background = "rgba(0, 0, 0, 0)";
+            else if (m.type === "done") closeSheet(m.result || { action: "cancel" });
+        }
+        function showSheet(kind, request) {
+            if (open) closeSheet({ action: "cancel" });
+            return new Promise(function (resolve) {
+                var id = "sheet" + (++seq) + "_" + Date.now();
+                var frame = doc.createElement("iframe");
+                frame.setAttribute("data-phoenix-sheet", kind);
+                frame.setAttribute("title", kind === "save" ? "Save to Files" : "Share");
+                frame.src = SHEET_URL + "?launchParams=" + encodeURIComponent(toJson({ kind: kind, id: id }));
+                var st = frame.style;
+                st.position = "fixed"; st.left = "0"; st.top = "0"; st.width = "100%"; st.height = "100%";
+                st.border = "0"; st.margin = "0"; st.padding = "0"; st.zIndex = "2147483647";
+                // The dimming is this page's (the frame's own background): the
+                // sheet's page has nothing see-through but its art, which
+                // every web engine composites the same.
+                st.background = "rgba(0, 0, 0, 0)";
+                st.transition = "background-color 0.2s ease-out";
+                frame.setAttribute("allowtransparency", "true");
+                frame.addEventListener("load", function () { st.background = "rgba(0, 0, 0, 0.45)"; });
+                open = { frame: frame, id: id, resolve: resolve, request: request, focus: doc.activeElement };
+                global.addEventListener("message", onMessage);
+                (doc.body || doc.documentElement).appendChild(frame);
+                try { frame.focus(); } catch (e) { /* ignore */ }
+            });
+        }
+        // The back gesture closes the sheet (or goes back inside it), not the app.
+        var appBack = runtime.back;
+        runtime.back = function () {
+            if (open) {
+                open.frame.contentWindow.postMessage({ phoenixSheet: open.id, type: "back" }, "*");
+                return true;
+            }
+            return appBack.apply(this, arguments);
+        };
+        runtime.sheetOpen = function () { return !!open; };
+
+        // ---- Writing a file -------------------------------------------------------------
+
+        function writeTo(dest, req, overwrite) {
+            var mf = runtime.mediaFiles;
+            var before = overwrite ? callP("luna://org.webosphoenix.filemanager/remove", { path: dest }) : Promise.resolve();
+            return before.then(function () {
+                if (req.data !== undefined) {
+                    if (!mf) throw new Error("No media store");
+                    var bin = atob(String(req.data).replace(/^data:[^,]*,/, "")), bytes = new Uint8Array(bin.length);
+                    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                    return mf.write(dest, new Blob([bytes], { type: req.mimeType || "application/octet-stream" }));
+                }
+                return callP("luna://org.webosphoenix.filemanager/copy", { from: req.from, to: dest, overwrite: !!overwrite }).then(function (r) {
+                    if (r.returnValue !== false) return;
+                    // Not one of the user's files (a sample, a file of the
+                    // system image): its bytes, from where the system serves it.
+                    if (!mf || !global.fetch) throw new Error(r.errorText || "Could not copy");
+                    return global.fetch(req.from).then(function (res) {
+                        if (!res.ok) throw new Error(r.errorText || "Could not copy");
+                        return res.blob();
+                    }).then(function (blob) { return mf.write(dest, blob); });
+                });
+            }).then(function () {
+                // Pictures and videos show up in Photos, everything in Files.
+                return callP("luna://org.webosphoenix.filemanager/stat", { path: dest });
+            }).then(function () {
+                return callP("luna://com.webos.service.mediaindexer/requestMediaScan", { path: dest.replace(/\/[^\/]*$/, "") });
+            });
+        }
+
+        function save(req) {
+            return showSheet("save", { name: req.name || "Untitled", title: req.title || "Save to Files",
+                                       folder: store.get(LAST_FOLDER, MEDIA + "/Documents") }).then(function (r) {
+                if (!r || r.action !== "save" || !r.folder) return { canceled: true };
+                var dest = r.folder.replace(/\/$/, "") + "/" + r.name;
+                store.set(LAST_FOLDER, r.folder);
+                return writeTo(dest, req, !!r.overwrite).then(function () { return { path: dest }; });
+            });
+        }
+
+        function inPhotos(path) {
+            return /^\/media\/internal\//.test(path) && !/\/\./.test(path) && /\.(jpe?g|png|gif|webp|bmp|heic|mp4|m4v|mov|webm)$/i.test(path);
+        }
+
+        register(["org.webosphoenix.share"], {
+            "/open": function (p, reply) {
+                var files = (p.files || []).filter(function (f) { return f && f.path; }).map(function (f) {
+                    return { path: String(f.path), mimeType: f.mimeType || "" };
+                });
+                if (!files.length && !p.text && !p.url) return reply(fail(-1, "Nothing to share: files, text or url"));
+                var s = { title: p.title || "", text: p.text || "", url: p.url || "", files: files };
+                showSheet("share", { share: s, targets: targetsFor(shareTypes(s)) }).then(function (r) {
+                    r = r || { action: "cancel" };
+                    if (r.action === "app") {
+                        host.postToHost("launch", { id: r.appId, params: launchParams(r.appId, s) });
+                        return reply(ok({ action: "app", appId: r.appId }));
+                    }
+                    if (r.action === "photos") {
+                        var f = s.files[0];
+                        if (inPhotos(f.path) && f.path.indexOf(MEDIA + "/samples/") !== 0)
+                            return reply(ok({ action: "photos", path: f.path, already: true }));
+                        var dest = CAMERA_DIR + "/" + f.path.replace(/^.*\//, "");
+                        return writeTo(dest, { from: f.path }, false).then(function () {
+                            reply(ok({ action: "photos", path: dest }));
+                        }, function (e) { reply(fail(-1, String(e && e.message || e))); });
+                    }
+                    if (r.action === "files") {
+                        var src = s.files[0];
+                        return save({ name: src.path.replace(/^.*\//, ""), from: src.path }).then(function (sv) {
+                            reply(sv.canceled ? ok({ action: "cancel" }) : ok({ action: "files", path: sv.path }));
+                        }, function (e) { reply(fail(-1, String(e && e.message || e))); });
+                    }
+                    reply(ok({ action: r.action || "cancel" }));
+                });
+            },
+            "/targets": function (p, reply) {
+                reply(ok({ targets: targetsFor(p.types || []) }));
+            }
+        });
+
+        register(["org.webosphoenix.filepicker"], {
+            "/save": function (p, reply) {
+                if (!p.name) return reply(fail(-1, "name is required"));
+                if (p.data === undefined && !p.from) return reply(fail(-1, "from (a path) or data (base64) is required"));
+                save(p).then(function (r) { reply(ok(r)); }, function (e) { reply(fail(-1, String(e && e.message || e))); });
+            }
+        });
+    })();
+
+    // ================================================================================
     // Torch (org.webosports.service.torch; apps/flashlight)
     // ================================================================================
     //

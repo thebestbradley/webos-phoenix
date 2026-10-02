@@ -24,7 +24,8 @@ import { Bubbles, Compose as ComposeIcon } from "./icons";
 type View = { kind: "list" } | { kind: "thread"; id: string } | { kind: "compose"; to?: Recipient | null; text?: string };
 
 function Messaging() {
-    const params = useLaunchParams<{ threadId?: string; to?: string; name?: string; messageText?: string }>();
+    const params = useLaunchParams<{ threadId?: string; to?: string; name?: string; messageText?: string;
+                                     share?: { title?: string; text?: string; url?: string } }>();
     const people = usePeople();
     const threads = useThreads();
     const wide = useWide();
@@ -33,6 +34,9 @@ function Messaging() {
 
     useEffect(() => {
         if (params.threadId) setView({ kind: "thread", id: params.threadId });
+        // From the share sheet: a new message with the text and the link.
+        else if (params.share)
+            setView({ kind: "compose", to: null, text: [params.share.text, params.share.url].filter(Boolean).join(" ") });
         else if (params.to || params.messageText)
             setView({ kind: "compose", to: params.to ? { addr: params.to, name: params.name } : null, text: params.messageText });
     }, [params]);

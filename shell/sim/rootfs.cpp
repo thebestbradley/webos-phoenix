@@ -148,6 +148,10 @@ void Rootfs::rescan()
         // manager's listAllHandlersForMime and open {target}.
         if (app.contains(QStringLiteral("mimeTypes")))
             record[QStringLiteral("mimeTypes")] = app.value(QStringLiteral("mimeTypes")).toVariant();
+        // What it takes from the share sheet ("phoenix": {"shareTargets"};
+        // docs/SHARE-AND-FILES.md).
+        if (phoenix.contains(QStringLiteral("shareTargets")))
+            record[QStringLiteral("shareTargets")] = phoenix.value(QStringLiteral("shareTargets")).toVariant();
         m_launchPoints.append(record);
 
         // Launch points: more launcher icons for the same app, each
