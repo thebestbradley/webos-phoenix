@@ -1,0 +1,17 @@
+{
+    "id": "org.webosphoenix.notificationlab",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Notification Lab",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "iconColor": "#2a2f36",
+    "uiRevision": 2,
+    "keywords": ["Notifications", "Live Activities", "Background", "Dashboard", "Banner", "Developer"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launcherTab": 0
+    }
+}

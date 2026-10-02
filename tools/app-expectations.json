@@ -152,6 +152,10 @@
         "status": "works",
         "note": "Phoenix Marketplace (React, apps/marketplace); tools/test-marketplace.cjs drives it against the catalog service"
     },
+    "org.webosphoenix.notificationlab": {
+        "status": "works",
+        "note": "Phoenix Notification Lab (React, apps/notificationlab): live activities, banners, dashboards, alerts and background tasks to review the notification area; tools/test-notificationlab.cjs drives it"
+    },
     "org.webosphoenix.screenshot": {
         "status": "works",
         "note": "the screen capture preview; without a capture it says how to take one"

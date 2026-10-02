@@ -1584,7 +1584,13 @@ its params. It is the shell's API:
 System updates (`com.palm.update`) and Marketplace installs use it. They are
 pinned at the top of the notification list, in the order they began, with a
 faint rule between them and the notifications (which keep the original's
-order below). The owner's plan (1 October 2026) is Live Activities: these get
+order below). On a phone the list opens at them when there are any (else at
+the newest notification, as the original). An app's activities go when its
+last card closes: their work ran in its pages, and they cannot be swiped
+away. The Notification Lab (`apps/notificationlab`, in the launcher) starts
+them, with and without progress, one or several at once, next to a banner,
+a dashboard, a popup alert and background tasks (`com.palm.activitymanager`),
+to review how they look. The owner's plan (1 October 2026) is Live Activities: these get
 their own place on the left of the notification area and open a pane when
 tapped ([ROADMAP.md](ROADMAP.md)). The services do not change for that.
 
