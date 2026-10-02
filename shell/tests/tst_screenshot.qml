@@ -41,8 +41,10 @@ Item {
         }
 
         function test_homeAndPowerTakeACapture() {
-            shell.launch("org.webosphoenix.email");
-            tryCompare(shell.cardView, "maximizeProgress", 1, 2000);
+            var uid = shell.launch("org.webosphoenix.email");
+            // Its card up and still: maximizeProgress alone can read 1 from
+            // the test before, ahead of the new card's rise.
+            tryVerify(function() { var cv = shell.cardView; return cv.currentUid === uid && cv.maximized && !cv.animating; }, 3000);
             keyPress(Qt.Key_Home);
             keyPress(Qt.Key_F3);                // the simulator's Power
             keyRelease(Qt.Key_F3);
