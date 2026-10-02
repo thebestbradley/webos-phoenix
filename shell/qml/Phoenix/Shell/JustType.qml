@@ -19,6 +19,11 @@ Item {
     property var source
     property bool open: false
     property alias query: input.text
+    // What the keyboard (or a popup alert) takes at the bottom: the results
+    // end above it, as an app's positive space does
+    // (InputWindowManager -> changeNegativeSpace), so they stay in view on
+    // small screens.
+    property real bottomInset: 0
 
     // Created once the source's app list is ready, so the page is loaded
     // before the first search.
@@ -97,6 +102,7 @@ Item {
         visible: jt.surface !== null
         anchors.fill: parent
         anchors.topMargin: Theme.statusBarHeight
+        anchors.bottomMargin: jt.bottomInset
     }
 
     BorderImage {

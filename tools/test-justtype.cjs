@@ -132,6 +132,23 @@ async function main() {
         check(web && /google\.com\/search\?q=webos(%20|\+)phoenix/.test(web.params && web.params.target || ""),
               "web: Search Google opens the browser on the query");
 
+        // Any width, and resized while it shows (the page stays loaded): nothing
+        // runs off the right edge (a TouchPad-sized field or group at 600 px did).
+        await search("m");
+        const overflow = (w) => page.evaluate((W) => Array.from(document.querySelectorAll("[id]")).filter((e) => {
+            const r = e.getBoundingClientRect(), s = getComputedStyle(e);
+            return r.width > 0 && r.right > W + 1 && s.visibility !== "hidden" && !e.closest(".enyo-text-ellipsis")
+                && !/enyo-text-ellipsis/.test(e.className);
+        }).map((e) => e.id.replace("justTypeApp_justType_", "")), w);
+        for (const w of [1024, 768, 600, 500, 400, 320]) {
+            await page.setViewportSize({ width: w, height: viewport.height });
+            await page.waitForTimeout(300);
+            const over = await overflow(w);
+            check(over.length === 0, `${w} px wide: nothing runs off the edge` + (over.length ? " (" + over.slice(0, 3).join(", ") + ")" : ""));
+            if (w === 600) await shot("narrow-600");
+        }
+        await page.setViewportSize(viewport);
+
         check(errors.length === 0, "no errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
         await browser.close();
     } finally {

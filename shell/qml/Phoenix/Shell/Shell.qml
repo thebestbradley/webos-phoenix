@@ -1207,6 +1207,7 @@ FocusScope {
             JustType {
                 id: justType
                 anchors.fill: parent
+                bottomInset: notes.negativeSpace
                 apps: shell.source ? shell.source.apps : null
                 source: shell.source
                 onLaunchRequested: (appId) => shell.launch(appId)
