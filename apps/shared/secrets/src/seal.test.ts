@@ -48,9 +48,14 @@ describe("sealing", () => {
     });
 
     it("seals files with a passphrase", async () => {
-        const f = await sealWithPassphrase("phoenix-test", { secret: "abc" }, "correct horse", FAST);
-        expect(JSON.stringify(f)).not.toContain("abc");
-        expect(await unsealWithPassphrase(f, "correct horse")).toEqual({ secret: "abc" });
+        // "!" and spaces never occur in base64: only a leak could put the
+        // secret in the file (a plain "abc" turned up in the ciphertext by
+        // chance, ...TIabc=).
+        const secret = "open sesame!";
+        const f = await sealWithPassphrase("phoenix-test", { secret }, "correct horse", FAST);
+        expect(JSON.stringify(f)).not.toContain(secret);
+        expect(JSON.stringify(f)).not.toContain("sesame");
+        expect(await unsealWithPassphrase(f, "correct horse")).toEqual({ secret });
         await expect(unsealWithPassphrase(f, "wrong")).rejects.toBeInstanceOf(SealError);
     });
 
