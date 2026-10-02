@@ -564,10 +564,12 @@ Item {
     // 9-tile corners: 22 phone, 13 tablet (PhoneKeyboard.cpp:181, TabletKeyboard.cpp:176).
     readonly property int _corner: tablet ? 13 : 22
     // Phoenix: the phone's bordered keys (shift, delete, the bottom row)
-    // trimmed of 3 of their art's 5 black pixels a side, so they stand 4 px
-    // apart, not 10, nearer the letters' spacing (the plugin never trimmed
-    // the phone's: PhoneKeyboard.cpp:478-479).
-    readonly property int cPhoneKeyTrim: 3
+    // drawn inset in their space (the art's own edge plus these, a side), so
+    // they are not slabs beside the borderless letters (the plugin drew
+    // them to the full key: PhoneKeyboard.cpp:478-479). Touch areas are
+    // unchanged.
+    readonly property int cPhoneKeyInsetH: 3
+    readonly property int cPhoneKeyInsetV: 12
     // Phoenix: the emoji key's face, in outline.
     readonly property color cEmojiKeyColor: "#ffc83d"
     // popup-bg.png 100x90, popup-bg-2.png 100x150, popup-key.png 80x120.
@@ -1639,17 +1641,26 @@ Item {
         property int half: 48
         property int corner: 22
         property real trim: 0
-        clip: true
-        BorderImage {
-            source: tile.source
-            x: -tile.trim
-            y: (tile.pressed ? -tile.half : 0) - tile.trim
-            width: tile.width + 2 * tile.trim
-            height: tile.height + 2 * tile.trim + tile.half
-            border.left: tile.corner
-            border.right: tile.corner
-            border.top: tile.pressed ? tile.half + tile.corner : tile.corner
-            border.bottom: tile.pressed ? tile.corner : tile.half + tile.corner
+        // Phoenix: drawn this much inside the key, a side (the phone).
+        property real insetH: 0
+        property real insetV: 0
+        Item {
+            x: tile.insetH
+            y: tile.insetV
+            width: tile.width - 2 * tile.insetH
+            height: tile.height - 2 * tile.insetV
+            clip: true
+            BorderImage {
+                source: tile.source
+                x: -tile.trim
+                y: (tile.pressed ? -tile.half : 0) - tile.trim
+                width: parent.width + 2 * tile.trim
+                height: parent.height + 2 * tile.trim + tile.half
+                border.left: tile.corner
+                border.right: tile.corner
+                border.top: tile.pressed ? tile.half + tile.corner : tile.corner
+                border.bottom: tile.pressed ? tile.corner : tile.half + tile.corner
+            }
         }
     }
 
@@ -1802,7 +1813,9 @@ Item {
                     source: kb._art + keyItem.modelData.background
                     half: kb._keyHalfFor(keyItem.modelData.background)
                     corner: kb._corner
-                    trim: kb.tablet ? kb._trim : kb.cPhoneKeyTrim
+                    trim: kb.tablet ? kb._trim : 0
+                    insetH: kb.tablet ? 0 : kb.cPhoneKeyInsetH
+                    insetV: kb.tablet ? 0 : kb.cPhoneKeyInsetV
                 }
                 Caps {
                     x: -keyItem.x
@@ -1867,7 +1880,9 @@ Item {
                         pressed: true
                         half: kb._keyHalfFor(pressedItem.modelData.background)
                         corner: kb._corner
-                        trim: kb.tablet ? kb._trim : kb.cPhoneKeyTrim
+                        trim: kb.tablet ? kb._trim : 0
+                    insetH: kb.tablet ? 0 : kb.cPhoneKeyInsetH
+                    insetV: kb.tablet ? 0 : kb.cPhoneKeyInsetV
                     }
                     Ellipsis {
                         visible: pressedItem.modelData.ellipsis
