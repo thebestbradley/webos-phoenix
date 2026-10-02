@@ -33,3 +33,4 @@ DrawerHandle 1.0 DrawerHandle.qml
 DrawerHeader 1.0 DrawerHeader.qml
 SelectMark 1.0 SelectMark.qml
 ScreenCaptureFlash 1.0 ScreenCaptureFlash.qml
+ScreenCaptureThumbnail 1.0 ScreenCaptureThumbnail.qml

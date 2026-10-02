@@ -38,12 +38,13 @@ Item {
     component Action: Text {
         id: action
         property string name
-        property bool enabled: true
+        // Whether it can be used now (not Item.enabled, which it keeps).
+        property bool available: true
         signal triggered
         objectName: "drawer_" + name
         anchors.verticalCenter: parent.verticalCenter
-        color: enabled ? Theme.text : Theme.textDim
-        opacity: enabled ? (tap.pressed ? 0.6 : 1) : 0.5
+        color: available ? Theme.text : Theme.textDim
+        opacity: available ? (tap.pressed ? 0.6 : 1) : 0.5
         font.family: Theme.fontFamily
         font.pixelSize: Theme.drawerHeaderFontSize
         font.bold: true
@@ -56,7 +57,7 @@ Item {
             anchors.rightMargin: -Theme.px(8)
             anchors.topMargin: -Theme.px(4)
             anchors.bottomMargin: -Theme.px(4)
-            enabled: action.enabled
+            enabled: action.available
             onClicked: action.triggered()
         }
     }
@@ -81,16 +82,16 @@ Item {
         Action {
             name: "select"
             visible: !header.selecting
-            enabled: header.clearableCount > 0
+            available: header.clearableCount > 0
             text: qsTr("Select")
             onTriggered: header.selectRequested()
         }
         Action {
             name: "clearAll"
             visible: !header.selecting
-            enabled: header.clearableCount > 0
+            available: header.clearableCount > 0
             text: header.confirmingClearAll ? qsTr("Clear %1?").arg(header.clearableCount) : qsTr("Clear All")
-            color: header.confirmingClearAll ? Theme.drawerConfirmColor : (enabled ? Theme.text : Theme.textDim)
+            color: header.confirmingClearAll ? Theme.drawerConfirmColor : (available ? Theme.text : Theme.textDim)
             onTriggered: {
                 if (!header.confirmingClearAll) {
                     header.confirmingClearAll = true;
@@ -109,7 +110,7 @@ Item {
         Action {
             name: "clearSelected"
             visible: header.selecting
-            enabled: header.selectedCount > 0
+            available: header.selectedCount > 0
             text: header.selectedCount > 0 ? qsTr("Clear (%1)").arg(header.selectedCount) : qsTr("Clear")
             onTriggered: header.clearSelectedRequested()
         }

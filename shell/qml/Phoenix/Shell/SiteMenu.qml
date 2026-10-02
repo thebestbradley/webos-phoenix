@@ -46,13 +46,14 @@ Item {
         id: entry
         property string text
         property string name
-        property bool enabled: true
+        // Whether it can be chosen now (not Item.enabled, which it keeps).
+        property bool available: true
         property bool last: false
         width: parent ? parent.width : 0
         height: Theme.systemMenuRowHeight
         objectName: "siteMenu_" + name
         BorderImage {
-            visible: area.pressed && area.containsMouse && entry.enabled
+            visible: area.pressed && area.containsMouse && entry.available
             source: Theme.asset(entry.last ? "menu-selection-gradient-last.png" : "menu-selection-gradient-default.png")
             x: Theme.px(4)
             width: parent.width - Theme.px(8)
@@ -64,14 +65,14 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             text: entry.text
             color: Theme.systemMenuText
-            opacity: entry.enabled ? 1 : 0.4
+            opacity: entry.available ? 1 : 0.4
             font.family: Theme.fontFamily
             font.pixelSize: Theme.systemMenuFontSize
         }
         MouseArea {
             id: area
             anchors.fill: parent
-            enabled: entry.enabled && menu.open
+            enabled: entry.available && menu.open
             onClicked: {
                 if (entry.name === "copy")
                     menu.copyLink();
@@ -107,15 +108,15 @@ Item {
             id: column
             x: Theme.systemMenuSideMargin
             width: parent.width - 2 * Theme.systemMenuSideMargin
-            Entry { text: qsTr("Back"); name: "back"; enabled: menu.canGoBack }
+            Entry { text: qsTr("Back"); name: "back"; available: menu.canGoBack }
             Divider {}
-            Entry { text: qsTr("Forward"); name: "forward"; enabled: menu.canGoForward }
+            Entry { text: qsTr("Forward"); name: "forward"; available: menu.canGoForward }
             Divider {}
             Entry { text: qsTr("Reload"); name: "reload" }
             Divider {}
-            Entry { text: qsTr("Copy Link"); name: "copy"; enabled: menu.url !== "" }
+            Entry { text: qsTr("Copy Link"); name: "copy"; available: menu.url !== "" }
             Divider {}
-            Entry { text: qsTr("Open in Browser"); name: "browser"; enabled: menu.url !== ""; last: true }
+            Entry { text: qsTr("Open in Browser"); name: "browser"; available: menu.url !== ""; last: true }
         }
     }
 }

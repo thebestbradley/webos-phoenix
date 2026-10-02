@@ -325,8 +325,12 @@ FocusScope {
             source.back(emergencyWindow.windowKey);
             return;
         }
-        if (locked)
+        if (locked) {
+            // The back gesture (or Esc) on the passcode panel cancels it.
+            if (lockScreen.unlockPanel.shown)
+                lockScreen.unlockPanel.entryCanceled();
             return;
+        }
         if (notes.dashboardOpen)
             notes.dashboardOpen = false;
         else if (siteMenu.open)
@@ -435,14 +439,7 @@ FocusScope {
                 return;
             }
         }
-        if (event.key === Qt.Key_Escape || event.key === Qt.Key_Back) {
-            gestureBack(); event.accepted = true;
-        } else if (event.key === Qt.Key_F1) {
-            gestureUp(); event.accepted = true;
-        } else if (event.key === Qt.Key_F2 && source) {
-            source.notify("org.webosphoenix.messaging", "Palm Pre", "It's good to be back.");
-            event.accepted = true;
-        } else if (!locked && !firstUse && !cards.maximized && !justType.open && event.text.length === 1
+        if (!locked && !firstUse && !cards.maximized && !justType.open && event.text.length === 1
                    && event.text.trim() !== "" && !(event.modifiers & Qt.ControlModifier)) {
             // Just Type: typing in card view starts a search.
             startJustType(event.text);
@@ -459,7 +456,10 @@ FocusScope {
     // Control+Option+P capture.
     SystemKeys {
         id: systemKeys
-        keys: [Qt.Key_Home, Qt.Key_F3, Qt.Key_PowerOff, Qt.Key_Print, Qt.Key_F9]
+        // Also the simulator's gestures and demo keys (sim/main.cpp): Esc
+        // (or Back) the back gesture, F1 the up gesture, F2 a notification.
+        keys: [Qt.Key_Home, Qt.Key_F3, Qt.Key_PowerOff, Qt.Key_Print, Qt.Key_F9,
+               Qt.Key_Escape, Qt.Key_Back, Qt.Key_F1, Qt.Key_F2]
         chords: [{ key: Qt.Key_P, modifiers: Qt.ControlModifier | Qt.AltModifier },
                  { key: Qt.Key_P, modifiers: Qt.MetaModifier | Qt.AltModifier }]
         onPressed: (key, autoRepeat) => {
@@ -467,7 +467,14 @@ FocusScope {
                 return;
             if (key === Qt.Key_Print || key === Qt.Key_F9)
                 shell.takeScreenshot();
-            else
+            else if (key === Qt.Key_Escape || key === Qt.Key_Back)
+                shell.gestureBack();
+            else if (key === Qt.Key_F1)
+                shell.gestureUp();
+            else if (key === Qt.Key_F2) {
+                if (shell.source)
+                    shell.source.notify("org.webosphoenix.messaging", "Palm Pre", "It's good to be back.");
+            } else
                 shell._buttonDown(key === Qt.Key_Home);
         }
         onReleased: (key, autoRepeat) => {
@@ -546,6 +553,35 @@ FocusScope {
         }
         return launcher.open ? qsTr("Launcher") : qsTr("Card View");
     }
+    // Back in card view, or with the launcher or nothing in front, the
+    // shell has the keyboard again (arrow keys, type to search): the card's
+    // web view kept it otherwise.
+    Connections {
+        target: cards
+        function onMaximizeProgressChanged() {
+            if (cards.maximizeProgress === 0 && !shell.locked && !justType.open)
+                shell.forceActiveFocus();
+        }
+    }
+    property var _captureResult: null
+    // The runtime's "Screen captured" notification names the file: the
+    // thumbnail opens that one.
+    Connections {
+        target: shell.source && shell.source.notifications ? shell.source.notifications : null
+        ignoreUnknownSignals: true
+        function onRowsInserted(parent, first, last) {
+            for (var i = first; i <= last; ++i) {
+                var n = shell.source.notifications.get(i);
+                if (n.appId !== "org.webosphoenix.screenshot" || !n.params)
+                    continue;
+                try {
+                    var p = JSON.parse(n.params);
+                    if (p.path && captureThumbnail.shown)
+                        captureThumbnail.path = p.path;
+                } catch (e) { /* not ours */ }
+            }
+        }
+    }
     function takeScreenshot() {
         if (_capturing)
             return false;
@@ -555,6 +591,9 @@ FocusScope {
             shell._capturing = false;
             sounds.feedback("shutter");
             captureFlash.start();
+            // Kept while its thumbnail shows (the url lives as long as it).
+            shell._captureResult = result;
+            captureThumbnail.show(result.url);
             var png = ImageTools.pngBase64(result.image);
             if (png !== "" && source && typeof source.saveScreenshot === "function")
                 source.saveScreenshot(png, name);
@@ -1501,6 +1540,17 @@ FocusScope {
         PointHandler {
             id: fingers
         }
+    }
+
+    // The capture's thumbnail, in the corner above the gesture area; a tap
+    // opens it in the preview.
+    ScreenCaptureThumbnail {
+        id: captureThumbnail
+        anchors.bottom: parent.bottom
+        // Above the phone's notification area (its banner says "Screen captured").
+        anchors.bottomMargin: Theme.px(24) + notes.negativeSpaceTarget
+        z: 99999
+        onActivated: (path) => shell.launch("org.webosphoenix.screenshot", path ? { path: path } : null)
     }
 
     // Over everything, the gesture area too (WindowServer's UI elements group).

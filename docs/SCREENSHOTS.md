@@ -4,10 +4,11 @@ How the original took screenshots, how Phoenix 1.x keeps that, and what
 2.0 adds to match today's phones, including the AI features people now
 expect.
 
-> **Decisions (2 October 2026, from the project owner).** 1.x shows a
-> notification after a capture; tapping it opens a preview of the capture,
-> and 1.x gets a few of the easy features there: share, save, delete and
-> simple edits.
+> **Decisions (2 October 2026, from the project owner).** 1.x behaves
+> like iOS without its premium features: after a capture its thumbnail sits
+> in the corner for a few seconds, and tapping it (or the notification)
+> opens a preview of the capture with the easy features: share, save,
+> delete and simple edits.
 >
 > **Status.** SC1 and SC2 are done in the simulator (below). On a device,
 > the capture is the compositor's frame (M1).
@@ -41,6 +42,7 @@ From the webOS 3.0.5 source (`luna-sysmgr`):
 | Feedback | The "shutter" feedback sound (synthesized, `tools/make-feedback-sounds.py`) and the original's flash, 900 ms |
 | File | `/media/internal/screencaptures/<App name> YYYY-MM-DD at HH.MM.SS.png` (ISO date); "Card View", "Launcher" or "Lock Screen" when no app is in front |
 | Photos | The "Screen captures" album, as the original |
+| Thumbnail | As iOS: the capture, framed, in the bottom left corner for 5 s (above the phone's notification area); a tap opens it in the preview, a swipe to the left puts it away (Phoenix addition, the owner's decision) |
 | Notification | "Screen captured" and the capture's name; a tap opens the preview (Phoenix addition, the owner's decision) |
 | Preview | The Screenshot app (`apps/screenshot`, hidden from the launcher): the capture, with Crop (drag the frame's corners or middle), Markup (a pen in six colours, Undo), Share (Email, Messaging), Delete (after asking), and Save, which writes the edits over the capture (Revert drops them) |
 | Service | Later: `luna://org.webosphoenix.screenshot/capture {}` and the original's `com.palm.systemmanager/takeScreenShot` (SystemService.cpp:210, for patches and apps that used it); both reply with the file |
@@ -76,7 +78,7 @@ MCP clients only with the user's permission each time.
 | --- | --- | --- | --- |
 | SC1 | Capture; keys; shutter sound and flash; file with ISO dates; the Screen Captures album; simulator support and tests. Then on a device: the compositor's frame, `org.webosphoenix.screenshot` and `takeScreenShot` | 1.x | Done in the simulator; the device part M1 |
 | SC2 | The "Screen captured" notification and the preview: crop, markup, share, delete, save. Then: secure cards | 1.x | Done in the simulator; secure cards to do |
-| SC3 | Preview thumbnail with swipe, tap and drag into a card | 2.0 | S to M |
+| SC3 | Preview thumbnail: tap to open, swipe away (1.x, done in the simulator); drag into a card (2.0) | 1.x / 2.0 | Done; the drag S to M |
 | SC4 | Markup editor (crop, pen, text, shapes, redact) | 2.0 | M (2 to 3 weeks) |
 | SC5 | Region and full-page capture (scrolling web views and lists) | 2.0 | M |
 | SC6 | Screen recording with the status bar indicator | 2.0 | M |

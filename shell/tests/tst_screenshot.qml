@@ -46,10 +46,15 @@ Item {
         function init() {
             while (windows.cards.count > 0)
                 windows.close(windows.cards.get(0).uid);
+            shell.cardView.maximizeProgress = 0;
             shell.unlock();
             shell.forceActiveFocus();
             taken.clear();
             windows._pendingCaptures = [];
+            // An earlier test's thumbnail is still up for a few seconds.
+            var thumb = findChild(shell, "screenCaptureThumbnail");
+            thumb.hide();
+            tryCompare(thumb, "visible", false, 2000);
         }
 
         function test_homeAndPowerTakeACapture() {
@@ -111,6 +116,83 @@ Item {
             keyClick(Qt.Key_A);
             compare(appField.keysSeen, 1);
             compare(appField.text, "a");
+            shell.forceActiveFocus();
+        }
+
+        // As iOS: the capture's thumbnail in the bottom left corner; a tap
+        // opens the file the runtime saved in the preview, a swipe to the
+        // left puts it away, and it goes by itself after a few seconds.
+        SignalSpy { id: thumbTapped; signalName: "activated" }
+        function test_thumbnail() {
+            var thumb = findChild(shell, "screenCaptureThumbnail");
+            thumbTapped.target = thumb;
+            thumbTapped.clear();
+            verify(!thumb.visible);
+            keyClick(Qt.Key_F9);
+            tryCompare(taken, "count", 1, 2000);
+            tryCompare(thumb, "x", Theme.px(16), 1000);
+            verify(thumb.visible && thumb.shown);
+            verify(String(findChild(thumb, "screenCaptureThumbnailImage").source) !== "", "the capture in it");
+            verify(thumb.x + thumb.width < root.width / 2 && thumb.y + thumb.height > root.height / 2, "bottom left");
+            // The runtime saved it and posted its notification: the path.
+            var path = "/media/internal/screencaptures/Card View 2026-10-02 at 01.05.09.png";
+            windows.notify("org.webosphoenix.screenshot", "Screen captured", "Card View 2026-10-02 at 01.05.09", { path: path });
+            compare(thumb.path, path);
+            mouseClick(findChild(thumb, "screenCaptureThumbnailArea"));
+            compare(thumbTapped.count, 1);
+            compare(thumbTapped.signalArguments[0][0], path);
+            verify(!thumb.shown);
+            // (The shell then launches org.webosphoenix.screenshot with
+            // {path}; this test's window source has no such app.)
+            tryCompare(thumb, "visible", false, 2000);
+
+            // Swiped to the left: gone, nothing opened.
+            wait(50);
+            keyClick(Qt.Key_F9);
+            tryCompare(taken, "count", 2, 2000);
+            tryCompare(thumb, "x", Theme.px(16), 1000);
+            var area = findChild(thumb, "screenCaptureThumbnailArea");
+            var c = area.mapToItem(root, area.width / 2, area.height / 2);
+            mousePress(root, c.x, c.y);
+            for (var i = 1; i <= 8; ++i) { wait(16); mouseMove(root, c.x - i * thumb.width / 6, c.y); }
+            mouseRelease(root, c.x - thumb.width * 8 / 6, c.y);
+            verify(!thumb.shown);
+            tryCompare(thumb, "visible", false, 2000);
+            compare(thumbTapped.count, 1, "the swipe opened nothing");
+
+            // Left alone: gone after a few seconds.
+            wait(50);
+            keyClick(Qt.Key_F9);
+            tryCompare(taken, "count", 3, 2000);
+            tryVerify(function() { return thumb.shown; }, 1000);
+            tryVerify(function() { return !thumb.visible; }, Theme.screenCaptureThumbnailDuration + 2000);
+        }
+
+        // The simulator's other keys work with an app's page focused too:
+        // Esc the back gesture, F1 the up gesture, F2 a notification.
+        function test_otherSimKeysWhileAnAppHasTheFocus() {
+            appField.forceActiveFocus();
+            appField.keysSeen = 0;
+            var n = windows.notifications.count;
+            keyClick(Qt.Key_F2);
+            compare(windows.notifications.count, n + 1, "F2: a notification");
+            while (windows.notifications.count) windows.dismissNotification(0);
+            shell.notifications.bannerActive = false;
+            appField.forceActiveFocus();
+            verify(!shell.launcherOpen);
+            // In card view the first up gesture shows the dock, the next one
+            // the launcher (as the gesture bar does).
+            keyClick(Qt.Key_F1);
+            if (!shell.launcherOpen) {
+                verify(shell.dockShown, "F1: the up gesture shows the dock");
+                appField.forceActiveFocus();
+                keyClick(Qt.Key_F1);
+            }
+            verify(shell.launcherOpen, "F1: the up gesture opens the launcher");
+            appField.forceActiveFocus();
+            keyClick(Qt.Key_Escape);
+            verify(!shell.launcherOpen, "Esc: back closes it");
+            compare(appField.keysSeen, 0, "the app saw none of them");
             shell.forceActiveFocus();
         }
 

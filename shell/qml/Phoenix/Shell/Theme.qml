@@ -354,6 +354,8 @@ QtObject {
     readonly property int drawerHeaderFontSize: px(16)
     // Clear All's second tap: how long it waits, and its colour meanwhile.
     readonly property int drawerConfirmTimeout: 3000
+    // How long a capture's thumbnail stays in the corner (iOS: about 5 s).
+    readonly property int screenCaptureThumbnailDuration: 5000
     readonly property color drawerConfirmColor: "#ff6b5e"
     // How far the handle must travel to expand or collapse.
     readonly property int drawerPullThreshold: px(40)
