@@ -9,7 +9,7 @@ export default defineConfig({
         environment: "jsdom",
         setupFiles: ["./vitest.setup.ts"],
         include: ["shared/*/src/**/*.test.{ts,tsx}", "settings/src/**/*.test.{ts,tsx}",
-                  "{phone,messaging,camera,photos,music,files,tasks,voicememos,flashlight,scanner,weather,maps,passwords,authenticator,terminal,videos,podcasts,pdfview,docview,help,firstuse}/src/**/*.test.{ts,tsx}",
+                  "{phone,messaging,camera,photos,music,files,tasks,voicememos,flashlight,scanner,weather,maps,passwords,authenticator,terminal,videos,podcasts,pdfview,docview,help,firstuse,screenshot}/src/**/*.test.{ts,tsx}",
                   "{files,voicememos,dav,settings,marketplace}/service/**/*.test.ts",
                   "../services/updates/**/*.test.ts"],
     },

@@ -435,23 +435,130 @@ FocusScope {
                 return;
             }
         }
+        // A screen capture from a keyboard: Print Screen, or Ctrl+Alt+P
+        // (the phones' Orange+Sym+P, WindowServer.cpp:687-697); F9 in the
+        // simulator, for keyboards without Home.
+        if (event.key === Qt.Key_Print || event.key === Qt.Key_F9 || (event.key === Qt.Key_P && (event.modifiers & Qt.ControlModifier)
+                                           && (event.modifiers & Qt.AltModifier))) {
+            if (!event.isAutoRepeat)
+                takeScreenshot();
+            event.accepted = true;
+            return;
+        }
+        if (event.key === Qt.Key_Home || _isPowerKey(event.key)) {
+            // On release (below), as the original: Home + Power together is
+            // a screen capture.
+            if (!event.isAutoRepeat)
+                _buttonDown(event.key === Qt.Key_Home);
+            event.accepted = true;
+            return;
+        }
         if (event.key === Qt.Key_Escape || event.key === Qt.Key_Back) {
             gestureBack(); event.accepted = true;
-        } else if (event.key === Qt.Key_Home) {
-            homeKey(); event.accepted = true;
         } else if (event.key === Qt.Key_F1) {
             gestureUp(); event.accepted = true;
         } else if (event.key === Qt.Key_F2 && source) {
             source.notify("org.webosphoenix.messaging", "Palm Pre", "It's good to be back.");
             event.accepted = true;
-        } else if (event.key === Qt.Key_F3 || event.key === Qt.Key_PowerOff) {
-            locked ? unlock() : lock(); event.accepted = true;
         } else if (!locked && !firstUse && !cards.maximized && !justType.open && event.text.length === 1
                    && event.text.trim() !== "" && !(event.modifiers & Qt.ControlModifier)) {
             // Just Type: typing in card view starts a search.
             startJustType(event.text);
             event.accepted = true;
         }
+    }
+
+    Keys.onReleased: (event) => {
+        if ((event.key === Qt.Key_Home || _isPowerKey(event.key)) && !event.isAutoRepeat) {
+            _buttonUp(event.key === Qt.Key_Home);
+            event.accepted = true;
+        }
+    }
+
+    // ---- Home + Power: a screen capture -----------------------------------------
+    // WindowServer.cpp:629-683: releasing one of the two while the other is
+    // held, within 3 s of its press, takes the capture, and the other's
+    // release is then eaten (no Home, no screen off). Alone, each does its
+    // job on release. (The simulator's Power is F3.)
+    property bool _homeDown: false
+    property bool _powerDown: false
+    property real _homeDownAt: 0
+    property real _powerDownAt: 0
+    property bool _eatHomeUp: false
+    property bool _eatPowerUp: false
+    function _isPowerKey(k) { return k === Qt.Key_F3 || k === Qt.Key_PowerOff; }
+    function _buttonDown(home) {
+        if (home) {
+            _homeDown = true;
+            _eatHomeUp = false;
+            _homeDownAt = Date.now();
+        } else {
+            _powerDown = true;
+            _eatPowerUp = false;
+            _powerDownAt = Date.now();
+        }
+    }
+    function _buttonUp(home) {
+        var now = Date.now();
+        if (home) {
+            _homeDown = false;
+            if (_eatHomeUp) {
+                _eatHomeUp = false;
+            } else if (_powerDown && now - _homeDownAt <= 3000) {
+                takeScreenshot();
+                _eatPowerUp = true;
+            } else {
+                homeKey();
+            }
+        } else {
+            _powerDown = false;
+            if (_eatPowerUp) {
+                _eatPowerUp = false;
+            } else if (_homeDown && now - _powerDownAt <= 3000) {
+                takeScreenshot();
+                _eatHomeUp = true;
+            } else {
+                locked ? unlock() : lock();
+            }
+        }
+    }
+
+    // ---- Screen captures (docs/SCREENSHOTS.md SC1) ------------------------------
+    // WindowServer::takeAndSaveScreenShot: the UI as it is, the "shutter"
+    // feedback sound, then the flash; the window source saves the PNG
+    // (the simulator: runtime.saveScreenshot, which files it under
+    // /media/internal/screencaptures and posts the "Screen captured"
+    // notification that opens the Screenshot app's preview), named after
+    // the app in front.
+    signal screenshotTaken(string name, int bytes)
+    property bool _capturing: false
+    function captureName() {
+        if (locked)
+            return qsTr("Lock Screen");
+        if (cards.maximized && cards.currentUid !== "") {
+            var c = cards.cardItem(cards.currentUid);
+            if (c && c.title)
+                return c.title;
+        }
+        return launcher.open ? qsTr("Launcher") : qsTr("Card View");
+    }
+    function takeScreenshot() {
+        if (_capturing)
+            return false;
+        _capturing = true;
+        var name = captureName();
+        var ok = ui.grabToImage(function(result) {
+            shell._capturing = false;
+            sounds.feedback("shutter");
+            captureFlash.start();
+            var png = ImageTools.pngBase64(result.image);
+            if (png !== "" && source && typeof source.saveScreenshot === "function")
+                source.saveScreenshot(png, name);
+            shell.screenshotTaken(name, png.length);
+        });
+        if (!ok)
+            _capturing = false;
+        return ok;
     }
 
     // ---- Launcher layout: icon order on the pages and in the dock --------------
@@ -1389,5 +1496,12 @@ FocusScope {
         PointHandler {
             id: fingers
         }
+    }
+
+    // Over everything, the gesture area too (WindowServer's UI elements group).
+    ScreenCaptureFlash {
+        id: captureFlash
+        anchors.fill: parent
+        z: 100000
     }
 }

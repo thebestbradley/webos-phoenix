@@ -825,7 +825,25 @@ Item {
             pages[i].runScript(js);
     }
 
+    // A screen capture for the runtime to save (runtime.saveScreenshot:
+    // /media/internal/screencaptures, the media index, its notification).
+    // One page saves it; with none running it waits for the next.
+    property var _pendingCaptures: []
+    function saveScreenshot(dataUrl, appTitle) {
+        var js = "window.__phoenixRuntime && __phoenixRuntime.saveScreenshot && __phoenixRuntime.saveScreenshot("
+            + JSON.stringify({ data: String(dataUrl), app: appTitle || "", time: Date.now() }) + ")";
+        var pages = _webPages();
+        if (pages.length === 0) {
+            _pendingCaptures.push(js);
+            return false;
+        }
+        pages[0].runScript(js);
+        return true;
+    }
+
     function _pageLoaded(win) {
+        while (_pendingCaptures.length > 0)
+            win.runScript(_pendingCaptures.shift());
         if (_pendingStatus) {
             win.runScript(_statusScript(_pendingStatus));
             _pendingStatus = null;

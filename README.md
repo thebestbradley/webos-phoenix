@@ -254,6 +254,7 @@ then take the bottom-edge flick). A big `--size` needs a matching
 **F2** demo notification, **F3** lock/unlock, **F4** incoming call (rings
 the Phone app), **F5** incoming text message (for Messaging), **F6** low
 battery, **F7** plug a charger in or out, **F8** battery charged to full,
+**F9** (or **Home**+**F3**, **Print Screen**, **Ctrl+Alt+P**) a screen capture,
 **Ctrl+Left** / **Ctrl+Right**
 turn the device a quarter turn counter-clockwise / clockwise, type in card
 view for Just Type. `./build/phoenix-sim --open https://example.com` opens a

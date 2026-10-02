@@ -162,6 +162,8 @@ jobs:
           node tools/test-voicememos.cjs --tablet --out app-tests/voicememos-tablet
           node tools/test-flashlight.cjs --out app-tests/flashlight-phone
           node tools/test-flashlight.cjs --tablet --out app-tests/flashlight-tablet
+          node tools/test-screenshot.cjs --out app-tests/screenshot-phone
+          node tools/test-screenshot.cjs --tablet --out app-tests/screenshot-tablet
           node tools/test-scanner.cjs --out app-tests/scanner-phone
           node tools/test-scanner.cjs --tablet --out app-tests/scanner-tablet
           node tools/test-weather.cjs --out app-tests/weather-phone

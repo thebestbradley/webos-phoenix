@@ -4855,6 +4855,39 @@
             }
         });
 
+        // ---- Screen captures (Phoenix; docs/SCREENSHOTS.md SC1-SC2) -----------------------
+        //
+        // The shell grabs the screen and hands the picture to one page:
+        // runtime.saveScreenshot({data: base64 PNG, app: the app in front's
+        // title}). It is saved where the original saved them,
+        // /media/internal/screencaptures, named "<app> YYYY-MM-DD at
+        // HH.MM.SS.png" (the original's name had the day before the month),
+        // indexed for Photos' Screen captures album, and a notification
+        // ("Screen captured") opens it in the Screenshot app's preview.
+        var CAPTURE_DIR = MEDIA_ROOT + "/screencaptures";
+        var SCREENSHOT_APP = "org.webosphoenix.screenshot";
+        function captureName(app, d) {
+            function two(n) { return (n < 10 ? "0" : "") + n; }
+            var safe = String(app || "Screen").replace(/[\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim() || "Screen";
+            return safe + " " + d.getFullYear() + "-" + two(d.getMonth() + 1) + "-" + two(d.getDate())
+                + " at " + two(d.getHours()) + "." + two(d.getMinutes()) + "." + two(d.getSeconds()) + ".png";
+        }
+        runtime.saveScreenshot = function (p) {
+            p = p || {};
+            var path = CAPTURE_DIR + "/" + captureName(p.app, p.time ? new Date(p.time) : new Date());
+            var blob;
+            try { blob = b64ToBlob(String(p.data || "").replace(/^data:image\/png;base64,/, ""), "image/png"); }
+            catch (e) { return Promise.reject(new Error("not a PNG")); }
+            return files.write(path, blob).then(function () {
+                return scan(CAPTURE_DIR);
+            }).then(function () {
+                host.postToHost("notification", { appId: SCREENSHOT_APP, title: "Screen captured",
+                                                  body: path.slice(CAPTURE_DIR.length + 1).replace(/\.png$/, ""),
+                                                  params: { path: path } });
+                return path;
+            });
+        };
+
         // ---- com.webos.service.camera2 ---------------------------------------------------
 
         function videoInputs() {

@@ -6,8 +6,8 @@
 LunaSysMgr asked audiod for feedback sounds by name
 (SoundPlayerPool::playFeedback -> palm://com.palm.audio/systemsounds/
 playFeedback): the keyboard's "key", "space", "backspace" and "return"
-(SysmgrIMEDataInterface.cpp:199-205) and "appclose" when a card is thrown
-away (CardWindowManager.cpp:2893). audiod's sound files were not part of
+(SysmgrIMEDataInterface.cpp:199-205), "appclose" when a card is thrown
+away (CardWindowManager.cpp:2893) and "shutter" for a screen capture. audiod's sound files were not part of
 the Open webOS release, so Phoenix makes its own: short clicks and a soft
 whoosh, synthesized here from sine waves and seeded noise. Nothing is
 sampled or recorded. The output is dedicated to the public domain (CC0 1.0).
@@ -87,6 +87,17 @@ def whoosh(length, seed):
     return y * shape / (np.max(np.abs(y * shape)) or 1.0)
 
 
+def shutter(seed):
+    """A camera shutter: two clicks 70 ms apart (the curtain opening and closing)."""
+    first = click(3200.0, 0.045, 0.0060, 0.70, 0.6, seed)
+    second = click(2400.0, 0.060, 0.0080, 0.60, 0.7, seed + 1, drop=0.1)
+    gap = int(0.070 * RATE)
+    x = np.zeros(gap + len(second))
+    x[:len(first)] += first
+    x[gap:] += 0.85 * second
+    return x
+
+
 SOUNDS = {
     # name: (make, peak level)
     "key": (lambda: click(2300.0, 0.030, 0.0045, 0.55, 0.8, 1), 0.50),
@@ -94,6 +105,8 @@ SOUNDS = {
     "backspace": (lambda: click(1100.0, 0.035, 0.0055, 0.45, 0.9, 3, drop=0.15), 0.48),
     "return": (lambda: click(800.0, 0.070, 0.0120, 0.35, 1.0, 4, drop=0.25), 0.55),
     "appclose": (lambda: whoosh(0.26, 5), 0.35),
+    # A screen capture (WindowServer::takeAndSaveScreenShot played "shutter").
+    "shutter": (lambda: shutter(6), 0.55),
 }
 
 

@@ -1,0 +1,17 @@
+{
+    "id": "org.webosphoenix.screenshot",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Screenshot",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "iconColor": "#1c1c1c",
+    "uiRevision": 2,
+    "phoenix": {
+        "//": "Opened by a screen capture's notification ({path}); not in the launcher (Photos has the Screen captures album). docs/SCREENSHOTS.md.",
+        "launcherTab": 0,
+        "hidden": true
+    }
+}

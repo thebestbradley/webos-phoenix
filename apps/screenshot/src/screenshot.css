@@ -1,0 +1,114 @@
+/* Copyright (c) 2026 webOS Phoenix contributors. SPDX-License-Identifier: Apache-2.0 */
+/* The screen capture preview: the picture on black, a bar above, tools below. */
+
+html, body, #root { height: 100%; margin: 0; }
+.sc-body { background: #000; overflow: hidden; }
+.sc-app {
+    position: relative;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #000;
+    color: #fff;
+    user-select: none;
+}
+.sc-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 24px;
+    color: #a0a0a0;
+    font-size: 17px;
+}
+.sc-empty h2 { margin: 12px 0 6px; color: #fff; font-size: 20px; }
+.sc-empty p { margin: 4px 0; font-size: 15px; }
+.sc-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 0 10px;
+    background: linear-gradient(#2a2a2a, #161616);
+    border-bottom: 1px solid #000;
+}
+.sc-title {
+    flex: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 15px;
+    color: #d0d0d0;
+}
+.sc-top-button {
+    border: 0;
+    border-radius: 6px;
+    padding: 7px 14px;
+    font: inherit;
+    font-size: 15px;
+    font-weight: bold;
+    color: #fff;
+    background: #444;
+}
+.sc-top-button.primary { background: #2d74c4; }
+.sc-top-button:active { filter: brightness(0.8); }
+.sc-top-button:disabled { opacity: 0.5; }
+.sc-stage {
+    position: relative;
+    flex: 1;
+    overflow: hidden;
+    touch-action: none;
+}
+.sc-canvas { position: absolute; }
+.sc-canvas.drawing { cursor: crosshair; }
+.sc-crop {
+    position: absolute;
+    box-sizing: border-box;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+    cursor: move;
+    touch-action: none;
+}
+.sc-handle {
+    position: absolute;
+    width: 28px;
+    height: 28px;
+    touch-action: none;
+}
+.sc-handle::after {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border: 4px solid #fff;
+}
+.sc-handle.tl { left: -14px; top: -14px; cursor: nwse-resize; }
+.sc-handle.tl::after { left: 10px; top: 10px; border-right: 0; border-bottom: 0; }
+.sc-handle.tr { right: -14px; top: -14px; cursor: nesw-resize; }
+.sc-handle.tr::after { right: 10px; top: 10px; border-left: 0; border-bottom: 0; }
+.sc-handle.bl { left: -14px; bottom: -14px; cursor: nesw-resize; }
+.sc-handle.bl::after { left: 10px; bottom: 10px; border-right: 0; border-top: 0; }
+.sc-handle.br { right: -14px; bottom: -14px; cursor: nwse-resize; }
+.sc-handle.br::after { right: 10px; bottom: 10px; border-left: 0; border-top: 0; }
+.sc-bottom { min-height: 56px; }
+.sc-swatch {
+    width: 26px;
+    height: 26px;
+    margin: 0 5px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    padding: 0;
+}
+.sc-swatch.on { border-color: #fff; box-shadow: 0 0 0 2px #2d74c4; }
+.sc-toast {
+    position: absolute;
+    left: 50%;
+    bottom: 72px;
+    transform: translateX(-50%);
+    padding: 8px 16px;
+    border-radius: 16px;
+    background: rgba(40, 40, 40, 0.92);
+    font-size: 15px;
+}

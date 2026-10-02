@@ -5,7 +5,7 @@
 //
 // Context properties set by phoenix-sim:
 //   simScene       "locked" | "cards" | "stacks" | "reorder" | "maximized" | "heldcard" | "launcher" |
-//                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" | "drawer" |
+//                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" | "drawer" | "capture" | "capturepreview" |
 //                  "justtype" | "keyboard" | "systemmenu" | "empty"
 //   simFirstUse    start with First Use (--first-use); without it First Use
 //                  runs at start-up until it has been done once
@@ -385,6 +385,12 @@ Item {
             // by the window source) raises its Low Battery alert.
             shell.cardView.maximizeProgress = 1;
             lowBatteryTimer.start();
+        } else if (scene === "capture" || scene === "capturepreview") {
+            // An app is open; the screen is captured (Home + Power): the
+            // flash, then the "Screen captured" notification once the
+            // runtime has saved it (docs/SCREENSHOTS.md).
+            shell.cardView.maximizeProgress = 1;
+            captureTimer.start();
         } else if (scene === "banner") {
             // An app is open; a notification comes in and the app makes room.
             shell.cardView.maximizeProgress = 1;
@@ -422,6 +428,22 @@ Item {
             // Just Type, its field focused: the keyboard comes up.
             shell.startJustType("");
         }
+    }
+
+    Timer {
+        id: captureTimer
+        interval: 3000
+        onTriggered: {
+            shell.takeScreenshot();
+            if (typeof simScene !== "undefined" && simScene === "capturepreview")
+                previewTimer.start();
+        }
+    }
+    // "capturepreview": then the notification's preview (the newest capture).
+    Timer {
+        id: previewTimer
+        interval: 2500
+        onTriggered: shell.launch("org.webosphoenix.screenshot")
     }
 
     Timer {

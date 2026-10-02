@@ -152,6 +152,10 @@
         "status": "works",
         "note": "Phoenix Marketplace (React, apps/marketplace); tools/test-marketplace.cjs drives it against the catalog service"
     },
+    "org.webosphoenix.screenshot": {
+        "status": "works",
+        "note": "the screen capture preview; without a capture it says how to take one"
+    },
     "com.palm.systemui": {
         "status": "works",
         "note": "luna-systemui as the shell's headless page: alerts, dashboards and banners (its services now see com.palm.bus registerServerStatus answer). Tested with the mail account signed out, so it opens its Accounts: Action Needed dashboard",

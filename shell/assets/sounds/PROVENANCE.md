@@ -55,12 +55,14 @@ fd650ad4747e172bf10af12d48391bfbe3351e7b2fcb1dc8b20f6d373174a681  phone.wav
 
 LunaSysMgr asked audiod for feedback sounds by name
 (`SoundPlayerPool::playFeedback`): the virtual keyboard's `key`, `space`,
-`backspace` and `return` (`SysmgrIMEDataInterface.cpp:199-205`) and
-`appclose` when a card is thrown away (`CardWindowManager.cpp:2893`).
+`backspace` and `return` (`SysmgrIMEDataInterface.cpp:199-205`),
+`appclose` when a card is thrown away (`CardWindowManager.cpp:2893`) and
+`shutter` for a screen capture (`WindowServer.cpp:1552`,
+`Settings.cpp:107`).
 audiod's sound set was not in the open-source release, so these are
 mimics made for Phoenix: short clicks (a damped sine at 2.3, 1.5, 1.1 and
 0.8 kHz over a burst of filtered noise) and a soft whoosh (noise through a
-sweeping low-pass filter). They are synthesized by
+sweeping low-pass filter); the shutter is two clicks 70 ms apart. They are synthesized by
 `tools/make-feedback-sounds.py` (NumPy, seeded noise; nothing sampled or
 downloaded), 44.1 kHz mono 16-bit WAV, and dedicated to the public domain
 (CC0 1.0). `python3 tools/make-feedback-sounds.py --check` confirms the

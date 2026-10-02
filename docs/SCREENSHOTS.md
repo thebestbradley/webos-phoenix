@@ -1,8 +1,16 @@
 # Screenshots and screen recording
 
-A plan, not built yet. How the original took screenshots, how Phoenix 1.x
-keeps that, and what 2.0 adds to match today's phones, including the AI
-features people now expect.
+How the original took screenshots, how Phoenix 1.x keeps that, and what
+2.0 adds to match today's phones, including the AI features people now
+expect.
+
+> **Decisions (2 October 2026, from the project owner).** 1.x shows a
+> notification after a capture; tapping it opens a preview of the capture,
+> and 1.x gets a few of the easy features there: share, save, delete and
+> simple edits.
+>
+> **Status.** SC1 and SC2 are done in the simulator (below). On a device,
+> the capture is the compositor's frame (M1).
 
 ## 1. What the original did
 
@@ -14,8 +22,14 @@ From the webOS 3.0.5 source (`luna-sysmgr`):
 - **Where.** A PNG in `/media/internal/screencaptures/`, named
   `<app>_YYYY-DD-MM_HHMMSS.png` after the app in front. The date puts the
   day before the month, a bug Phoenix does not copy.
-- **Feedback.** The "shutter" sound and `WSOverlayScreenShotAnimation`: a
-  dark radial overlay over the screen that fades out in 900 ms.
+- **Keys, exactly.** Releasing one of Home and Power while the other is
+  held, within 3 s of its press, takes the capture, and the other key's
+  release is eaten, so neither goes home nor turns the screen off
+  (`WindowServer.cpp:629-683`).
+- **Feedback.** The "shutter" feedback sound (`Settings.cpp:107`) and
+  `WSOverlayScreenShotAnimation`: a flash. The screen dims to black at
+  0x88 under a radial glow from its centre, white to pale yellow, gone at
+  half the shorter side, all fading out over 900 ms.
 - **After.** Nothing on screen. Photos showed the screencaptures album,
   and from there the picture could be shared.
 
@@ -23,12 +37,13 @@ From the webOS 3.0.5 source (`luna-sysmgr`):
 
 | What | Phoenix 1.x |
 | --- | --- |
-| Keys | Home + Power on tablets (Power + Volume Down on devices without Home); Ctrl + Shift + 3 on a hardware keyboard (on a Mac host, the simulator's own key); Orange + Sym + P on phones with a keyboard |
-| Feedback | The shutter sound (the system's feedback stream, so the ringer switch mutes it) and the radial overlay, 900 ms |
-| File | `/media/internal/screencaptures/<App name> YYYY-MM-DD HH.MM.SS.png` (ISO date) |
+| Keys | Home + Power, as the original (Power + Volume Down on devices without Home); Print Screen or Ctrl+Alt+P on a hardware keyboard (the phones' Orange+Sym+P); F9 in the simulator |
+| Feedback | The "shutter" feedback sound (synthesized, `tools/make-feedback-sounds.py`) and the original's flash, 900 ms |
+| File | `/media/internal/screencaptures/<App name> YYYY-MM-DD at HH.MM.SS.png` (ISO date); "Card View", "Launcher" or "Lock Screen" when no app is in front |
 | Photos | The "Screen captures" album, as the original |
-| Notification | A notification, "Screen captured", with the picture as its icon; a tap opens it in Photos, Share in the notification shares it (Phoenix addition, the minimum a user expects today) |
-| Service | `luna://org.webosphoenix.screenshot/capture {}` and the original's `com.palm.systemmanager/takeScreenShot` (for patches and apps that used it); both reply with the file |
+| Notification | "Screen captured" and the capture's name; a tap opens the preview (Phoenix addition, the owner's decision) |
+| Preview | The Screenshot app (`apps/screenshot`, hidden from the launcher): the capture, with Crop (drag the frame's corners or middle), Markup (a pen in six colours, Undo), Share (Email, Messaging), Delete (after asking), and Save, which writes the edits over the capture (Revert drops them) |
+| Service | Later: `luna://org.webosphoenix.screenshot/capture {}` and the original's `com.palm.systemmanager/takeScreenShot` (SystemService.cpp:210, for patches and apps that used it); both reply with the file |
 | Protected cards | An app can mark its card secure (a Phoenix appinfo key, like Android's FLAG_SECURE); the capture shows it black |
 
 The capture is the composited screen (the compositor's frame), status bar
@@ -59,8 +74,8 @@ MCP clients only with the user's permission each time.
 
 | Step | What | Line | Effort |
 | --- | --- | --- | --- |
-| SC1 | Capture in the compositor; keys; shutter sound and overlay; file with ISO dates; the screencaptures album; `org.webosphoenix.screenshot` and `takeScreenShot`; simulator support and tests | 1.x | M (2 weeks) |
-| SC2 | The "Screen captured" notification with open and share; secure cards | 1.x | S (1 week) |
+| SC1 | Capture; keys; shutter sound and flash; file with ISO dates; the Screen Captures album; simulator support and tests. Then on a device: the compositor's frame, `org.webosphoenix.screenshot` and `takeScreenShot` | 1.x | Done in the simulator; the device part M1 |
+| SC2 | The "Screen captured" notification and the preview: crop, markup, share, delete, save. Then: secure cards | 1.x | Done in the simulator; secure cards to do |
 | SC3 | Preview thumbnail with swipe, tap and drag into a card | 2.0 | S to M |
 | SC4 | Markup editor (crop, pen, text, shapes, redact) | 2.0 | M (2 to 3 weeks) |
 | SC5 | Region and full-page capture (scrolling web views and lists) | 2.0 | M |
@@ -70,7 +85,7 @@ MCP clients only with the user's permission each time.
 
 ## Open questions for you
 
-1. Should 1.x show the notification after a capture (a small change from
-   the original), or stay silent like it?
+1. ~~Should 1.x show the notification after a capture?~~ Decided: yes, and
+   it opens a preview with the easy features.
 2. Is the screenshot memory (SC8) something you want at all? It is opt-in
    either way.

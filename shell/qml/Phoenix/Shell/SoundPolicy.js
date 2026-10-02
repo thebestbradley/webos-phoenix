@@ -36,7 +36,7 @@ var batteryFullSound = systemSoundsPath + "/battery_full.mp3";   // StatusBarBat
 // Feedback sounds by name. audiod's own set was not open-sourced; Phoenix
 // ships mimics for the names LunaSysMgr asked for (tools/make-feedback-sounds.py).
 var feedbackSoundsPath = "/usr/share/phoenix/sounds/feedback";
-var feedbackSounds = ["key", "space", "backspace", "return", "appclose"];
+var feedbackSounds = ["key", "space", "backspace", "return", "appclose", "shutter"];
 // The keyboard's (SysmgrIMEDataInterface.cpp:199-205): the keyboard's
 // "Keyboard clicks" (VirtualKeyboardPreferences TapSounds) silences them too.
 var keyboardSounds = ["key", "space", "backspace", "return"];

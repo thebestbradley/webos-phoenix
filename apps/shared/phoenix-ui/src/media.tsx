@@ -14,6 +14,9 @@ import { cx } from "./layout";
 // White 32x32 glyphs drawn for Phoenix (Palm's menu icons were not
 // open-sourced). SVG path data in a 32x32 box.
 const GLYPHS: Record<string, ReactNode> = {
+    crop: <path d="M9 3h3v17h17v3h-5v6h-3v-6H9zM3 9h17v11h-3v-8H3z" />,
+    markup: <path d="M22.5 4.5l5 5L12 25H7v-5zM5 27h22v2H5z" />,
+    undo: <path d="M12 7L4 13l8 6v-4h7a5 5 0 0 1 0 10h-4v3h4a8 8 0 0 0 0-16h-7z" />,
     camera: <path d="M11 8l-2 3H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h22a2 2 0 0 0 2-2V13a2 2 0 0 0-2-2h-4l-2-3zm5 6.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11zm0 2.6a2.9 2.9 0 1 0 0 5.8 2.9 2.9 0 0 0 0-5.8z" />,
     video: <path d="M4 10a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zm19 5l6-4v10l-6-4z" />,
     flash: <path d="M18 3L7 18h7l-2 11 11-16h-7z" />,

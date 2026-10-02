@@ -257,7 +257,10 @@ dark and light themes go to 2.0.
       Done in the simulator: Settings > Developer Mode behind the device PIN
       or password, and the Marketplace installs packages with install
       scripts and services only in it ([APP-RUNTIME.md](APP-RUNTIME.md#developer-mode))
-- [ ] Screenshots as the original took them ([SCREENSHOTS.md](SCREENSHOTS.md) SC1-SC2)
+- [ ] Screenshots as the original took them, with a notification that
+      opens a preview to crop, mark up, share or delete
+      ([SCREENSHOTS.md](SCREENSHOTS.md) SC1-SC2). Done in the simulator;
+      to do: the compositor's capture on a device, secure cards
 - [ ] The light bar's animations, and buttons at the ends of the gesture
       area ([GESTURE-BAR.md](GESTURE-BAR.md) GB1-GB3)
 - [ ] Community features for 1.x, from the top 20 in

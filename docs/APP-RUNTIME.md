@@ -1602,6 +1602,26 @@ Other legacy hooks the simulator now answers as a device would:
 `com.webos.notification/createToast` with an `onclick.appId` for another app
 (a service's toast) posts that app's notification.
 
+## Screen captures
+
+Home + Power together, as the original (released one while the other is
+held), or Print Screen, Ctrl+Alt+P or (simulator) F9: the shell grabs the
+UI (`Shell.takeScreenshot`), plays the "shutter" feedback sound and the
+original's flash (`ScreenCaptureFlash.qml`, after
+`WSOverlayScreenShotAnimation`), and hands the PNG (`ImageTools.pngBase64`,
+Phoenix.Native) to the window source. In the simulator `SimWindowSource.
+saveScreenshot` runs `runtime.saveScreenshot({data, app, time})` on one
+page: the file goes to `/media/internal/screencaptures/<app> YYYY-MM-DD at
+HH.MM.SS.png`, the media index scans it (Photos' Screen Captures album),
+and a "Screen captured" notification opens it in the Screenshot app
+(`apps/screenshot`, `org.webosphoenix.screenshot`, hidden from the
+launcher; without a path it shows the newest capture). There: Crop,
+Markup, Share (Email, Messaging), Delete, and Save over the capture.
+Tests: `shell/tests/tst_screenshot.qml` (the keys, the flash, the hand
+over), `apps/screenshot/src/editor.test.ts`, `tools/test-screenshot.cjs`;
+`phoenix-sim --scene capture` / `capturepreview` (with `--delay`).
+Plan and later features: [SCREENSHOTS.md](SCREENSHOTS.md).
+
 ## Backup
 
 Legacy webOS backed up to the Palm Profile servers every day, through a
