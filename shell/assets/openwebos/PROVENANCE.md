@@ -37,3 +37,10 @@ The model is a tool only: neither it nor its code is in this repository.
 
 Not used: LuneOS's larger versions of some of this art
 (`webOS-ports/luna-next-cardshell`), whose origin is not recorded.
+
+## Phoenix keyboard art
+
+`keyboard-phone/key-charcoal.png` is a modified version of
+`keyboard-phone/key-gray.png` above (Apache-2.0): its face and rim recoloured
+to charcoal, the rest unchanged. `tools/keyboard-charcoal.py` makes it and
+checks it (`--check`, in CI).

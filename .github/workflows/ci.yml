@@ -126,6 +126,7 @@ jobs:
         run: |
           python3 -m pip install pillow numpy
           python3 tools/hidpi-art.py --check
+          python3 tools/keyboard-charcoal.py --check
 
       - name: Feedback sounds match their generator
         run: python3 tools/make-feedback-sounds.py --check

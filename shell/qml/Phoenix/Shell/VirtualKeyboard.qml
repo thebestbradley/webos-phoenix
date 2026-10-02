@@ -568,6 +568,12 @@ Item {
     // apart, not 10, nearer the letters' spacing (the plugin never trimmed
     // the phone's: PhoneKeyboard.cpp:478-479).
     readonly property int cPhoneKeyTrim: 3
+    // Phoenix (the owner, 2 October 2026): the phone keyboard upright is
+    // 336 px, not the plugin's 377 (PhoneKeyboard.cpp:231-232), and its
+    // bordered keys are drawn 4 px short at top and bottom: buttons, not
+    // slabs, and more of the app above. Touch areas follow the rows.
+    readonly property int cPhoneHeight: 336
+    readonly property int cPhoneKeyInsetV: 4
     // Phoenix: the emoji key's face, in outline.
     readonly property color cEmojiKeyColor: "#ffc83d"
     // popup-bg.png 100x90, popup-bg-2.png 100x150, popup-key.png 80x120.
@@ -679,8 +685,8 @@ Item {
     function _presetHeight() {
         if (tablet)
             return _tabletPresets[Math.max(0, Math.min(3, 2 + keyboardSize))];
-        // PhoneKeyboard.cpp:231-232: 377 upright, 260 on its side.
-        return _landscape ? 260 : 377;
+        // PhoneKeyboard.cpp:231-232: 377 upright (Phoenix: cPhoneHeight), 260 on its side.
+        return _landscape ? 260 : cPhoneHeight;
     }
 
     function _availableSpaceChanged() {
@@ -819,9 +825,13 @@ Item {
                      : _km.shiftMode === KM.ShiftMode.Once ? "key-shift-on.png" : "key-black.png";
         }
         var plain = _km.mapPage(x, y, 0);
+        // Phoenix: the phone's bordered keys in charcoal (key-charcoal.png,
+        // tools/keyboard-charcoal.py) where the plugin drew key-black.png /
+        // key-gray.png (the same art: a near-black face in a grey rim).
+        var bordered = tablet ? null : "key-charcoal.png";
         if (KM.isFunctionKey(plain) && !KM.isTextShortcutKey(plain))
-            return "key-black.png";
-        return KM.isLetter(plain) ? "key-white.png" : "key-gray.png";
+            return bordered || "key-black.png";
+        return KM.isLetter(plain) ? "key-white.png" : (bordered || "key-gray.png");
     }
     function _keyHalfFor(bg) { return bg === "key-gray-short.png" ? _shortKeyHalf : _keyHalf; }
 
@@ -1639,17 +1649,23 @@ Item {
         property int half: 48
         property int corner: 22
         property real trim: 0
-        clip: true
-        BorderImage {
-            source: tile.source
-            x: -tile.trim
-            y: (tile.pressed ? -tile.half : 0) - tile.trim
-            width: tile.width + 2 * tile.trim
-            height: tile.height + 2 * tile.trim + tile.half
-            border.left: tile.corner
-            border.right: tile.corner
-            border.top: tile.pressed ? tile.half + tile.corner : tile.corner
-            border.bottom: tile.pressed ? tile.corner : tile.half + tile.corner
+        property real insetV: 0
+        Item {
+            y: tile.insetV
+            width: tile.width
+            height: tile.height - 2 * tile.insetV
+            clip: true
+            BorderImage {
+                source: tile.source
+                x: -tile.trim
+                y: (tile.pressed ? -tile.half : 0) - tile.trim
+                width: parent.width + 2 * tile.trim
+                height: parent.height + 2 * tile.trim + tile.half
+                border.left: tile.corner
+                border.right: tile.corner
+                border.top: tile.pressed ? tile.half + tile.corner : tile.corner
+                border.bottom: tile.pressed ? tile.corner : tile.half + tile.corner
+            }
         }
     }
 
@@ -1803,6 +1819,7 @@ Item {
                     half: kb._keyHalfFor(keyItem.modelData.background)
                     corner: kb._corner
                     trim: kb.tablet ? kb._trim : kb.cPhoneKeyTrim
+                    insetV: kb.tablet ? 0 : kb.cPhoneKeyInsetV
                 }
                 Caps {
                     x: -keyItem.x
@@ -1868,6 +1885,7 @@ Item {
                         half: kb._keyHalfFor(pressedItem.modelData.background)
                         corner: kb._corner
                         trim: kb.tablet ? kb._trim : kb.cPhoneKeyTrim
+                    insetV: kb.tablet ? 0 : kb.cPhoneKeyInsetV
                     }
                     Ellipsis {
                         visible: pressedItem.modelData.ellipsis

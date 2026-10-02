@@ -88,10 +88,11 @@ Item {
             verify(!kb.visible);
             field.forceActiveFocus();
             tryCompare(shell, "keyboardOpen", true, 1000);
-            // 377 keyboard pixels upright (PhoneKeyboard.cpp:231), the Pre 3's
-            // 1.5 per shell pixel at density 1.
+            // 336 keyboard pixels upright (Phoenix; the plugin's 377,
+            // PhoneKeyboard.cpp:231), the Pre 3's 1.5 per shell pixel at
+            // density 1.
             compare(Theme.keyboardScale, 1 / 1.5);
-            fuzzyCompare(kb.keysHeight, 377 / 1.5, 0.01);
+            fuzzyCompare(kb.keysHeight, 336 / 1.5, 0.01);
             // With Text Assist's candidate bar above the keys in a text field.
             verify(kb.candidateBarShown);
             fuzzyCompare(kb.keyboardHeight, kb.keysHeight + 54 / 1.5, 0.01);
@@ -185,11 +186,16 @@ Item {
             // it (they were drawn behind it: neither seen nor reachable).
             verify(kb.candidateBarShown);
             verify(p.y < kb.candidateBarHeight, "the popup reaches into the candidate bar");
-            // Where the popup crosses the bar (in its middle): the popup's
-            // light art, not the bar (black over the keys, 45% over a key).
-            var onScreen = kb.mapToItem(shell, p.x, kb.candidateBarHeight / 2);
-            var px = grabImage(shell).pixel(Math.round(onScreen.x), Math.round(onScreen.y));
-            verify(px.r > 0.65 && px.g > 0.65 && px.b > 0.65, "the popup in front of the candidate bar (" + px + ")");
+            // Down the bar where the popup crosses it: mostly the popup's
+            // light art (its keys and frame; a dark seam between them), not
+            // the bar (black over the keys).
+            var shot = grabImage(shell), light = 0, n = 0;
+            for (var yy = 2; yy < kb.candidateBarHeight - 2; yy += 2, ++n) {
+                var q = kb.mapToItem(shell, p.x, yy);
+                if (shot.pixel(Math.round(q.x), Math.round(q.y)).r > 0.65)
+                    ++light;
+            }
+            verify(light > n * 0.6, "the popup in front of the candidate bar (" + light + " of " + n + " light)");
             mouseMove(kb, p.x, p.y);
             mouseRelease(kb, p.x, p.y);
             compare(field.text, "è");
@@ -465,6 +471,16 @@ Item {
             near(kb.keyRect("Space").width, 4.25 * letter, "the space bar");
             // The row spans the keyboard, as the letters' rows do.
             near(kb.keyRect("Space").x + kb.keyRect("Space").width + 2.5 * letter, kb.width, "the period and Return");
+        }
+
+        // The phone's bordered keys are charcoal (Phoenix): a face close to
+        // its rim, not a near-black face in a grey outline.
+        function test_borderedKeysCharcoal() {
+            showKeyboard();
+            var r = kb.keyRect("Space");
+            var c = kb.mapToItem(shell, r.x + r.width / 2, r.y + r.height / 2);
+            var px = grabImage(shell).pixel(Math.round(c.x), Math.round(c.y));
+            verify(px.r > 0.16 && px.r < 0.24, "a charcoal face (" + px + ")");
         }
 
         function test_emojiKeyTypesAnEmoji() {
