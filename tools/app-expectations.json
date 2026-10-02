@@ -18,7 +18,7 @@
     },
     "com.palm.app.clock": {
         "status": "works",
-        "note": "Phone: clock faces scaled to fit. Alarms are stored but never ring (no activity manager)"
+        "note": "Phone: clock faces scaled to fit. Alarms ring through the simulated activity manager (tools/test-alarm.cjs)"
     },
     "com.palm.app.contacts": {
         "status": "works",

@@ -12,9 +12,10 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
   `third_party/isis` (the Isis browser)
 - **Phoenix**: a new app in `apps/` (Settings, Phone, Messaging, Camera,
   Photos, Music, Files, Flashlight, QR Scanner, Weather, Maps, Videos,
-  Podcasts, PDF View, Doc View, First Use, Help)
-- **In progress**: Tasks (with reminders), Voice Memos (with transcription),
-  Passwords, Authenticator
+  Podcasts, PDF View, Doc View, First Use, Help, Tasks, Voice Memos,
+  Passwords, Authenticator, and the Notification Lab, a developer's tool)
+- **In progress**: none at the moment (each Phoenix app's row says what it
+  still needs, mostly on a device)
 - **Missing**
 
 **Priority:** **P0** a phone is not usable as a daily phone without it;
@@ -27,7 +28,7 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 
 | App | Status | Legacy webOS | Priority | Approach |
 | --- | --- | --- | --- | --- |
-| Phone | Phoenix | Phone (dial pad, call log, voicemail, conference) | P0 | Done in the simulator. Needs the device telephony service (webos-telephonyd on oFono), lock-screen answer, active-call banner. See [HARDWARE.md](HARDWARE.md#hardware-abstraction-plan) |
+| Phone | Phoenix | Phone (dial pad, call log, voicemail, conference) | P0 | Done in the simulator. The lock-screen answer is done. Needs the device telephony service (webos-telephonyd on oFono) and the active-call banner. See [HARDWARE.md](HARDWARE.md#hardware-abstraction-plan) |
 | Messaging | Phoenix | Messaging (SMS, MMS, IM through Synergy) | P0 | Done for SMS in the simulator. Needs MMS (oFono has MMS through `mmsd`), cell broadcast alerts |
 | Contacts | Open webOS | Contacts with Synergy linking | P0 | Works. Needs CardDAV sync (below), vCard import/export, contact photos |
 | Email | Open webOS | Email (IMAP, POP, Exchange EAS) | P0 | Works with simulated transports. Needs real IMAP/SMTP transports in the email service (`third_party/app-services`); OAuth2 for Gmail and Outlook is the hard part |
@@ -36,8 +37,8 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | **Cloud sync** (contacts, calendar, files) | Missing | Palm Profile plus Synergy connectors (Google, Exchange, Facebook, Yahoo, LinkedIn); servers shut down | P0 | Standards, not vendors: CalDAV/CardDAV (Nextcloud, Fastmail, iCloud, Google), IMAP/SMTP, WebDAV for files. Built fresh in `apps/dav` (Apache-2.0): LuneOS's [C+Dav Synergy connector](https://github.com/webOS-ports/org.webosports.service.contacts.carddav) is GPL-3.0, so it is a reference only, not a starting point (see [LUNEOS.md](LUNEOS.md)). No UI of its own; it plugs into Accounts |
 | Memos | Open webOS | Memos (sticky notes) | P1 | Works locally |
 | **Notes sync** | Missing | Memos synced only through some account types | P1 | A Synergy-style connector syncing Memos to the [Nextcloud Notes API](https://github.com/nextcloud/notes/blob/main/docs/api/README.md) or to Markdown files over WebDAV. Service only |
-| Tasks | In progress | Tasks (webOS 1.x/2.x, Exchange sync) | P1 | With reminders on the activity manager; later CalDAV `VTODO` sync |
-| Voice Memos | In progress | Not built in (homebrew) | P2 | With transcription. Recording through `MediaRecorder`; on-device speech-to-text (for example whisper.cpp) as an optional service |
+| Tasks | Phoenix | Tasks (webOS 1.x/2.x, Exchange sync) | P1 | Done in the simulator, with reminders on the activity manager. Later: CalDAV `VTODO` sync |
+| Voice Memos | Phoenix | Not built in (homebrew) | P2 | Done in the simulator, with transcription. Recording through `MediaRecorder`; on-device speech-to-text (for example whisper.cpp) as an optional service |
 | **Emergency / medical ID** | Phoenix | None (emergency calls from the lock screen only) | P1 | Done in the simulator: Settings > Emergency Info (medical ID, emergency contacts from Contacts, "Show when locked"), kept as the system preference `emergencyInfo` rather than in db8 so the locked shell can read it; the PIN pad's **Emergency Call** opens Phone's restricted mode (emergency numbers and the owner's contacts only, Medical ID) as the shell's emergency window over the lock screen (after luna-sysmgr's EmergencyWindowManager). To do: the emergency window on a device (compositor adapter), emergency calls in airplane mode, the position for the emergency services (AML). See [APP-RUNTIME.md](APP-RUNTIME.md#emergency-information) |
 
 ## Clock, calculator and small utilities
@@ -94,8 +95,8 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | App | Status | Legacy webOS | Priority | Approach |
 | --- | --- | --- | --- | --- |
 | Lock screen PIN / password | **Done** (the lock screen asks for the PIN or password) | PIN and password lock | P0 | The lock screen asks through the ported UnlockPanel and checks with `com.palm.systemmanager` `matchDevicePasscode` (GAPS K1). On a device a passcode service is still needed (OSE has none) |
-| **Password manager** | **In progress** (Passwords, `apps/passwords`) | None built in (third-party SplashID and others) | P1 | Done in the simulator: KeePass KDBX 4 databases through [kdbxweb](https://github.com/keeweb/kdbxweb) (MIT) with Argon2id from hash-wasm (MIT, WebAssembly) in `/media/internal/passwords`, so KeePassXC and KeePassDX open the same file (checked both ways); groups, entries, search, the generator, TOTP codes from KeePassXC/KeePassDX `otp` fields, copy with auto-clear, auto-lock on screen lock, card minimize and idle, merge when the file changed elsewhere, Files "Open with" (`tools/test-passwords.cjs`; threat model in [SECURITY-APPS.md](SECURITY-APPS.md)). Still to do: WebDAV sync of the file (Files has no WebDAV yet), key files and YubiKey, attachments, running on a device. Bitwarden/Vaultwarden as a second option. System-wide autofill needs a hook in the web runtime and keyboard: designed in SECURITY-APPS.md, to build together with the IME work |
-| **Authenticator (TOTP)** | **In progress** (Authenticator, `apps/authenticator`) | None built in | P1 | Done in the simulator: RFC 6238 TOTP / RFC 4226 HOTP (tested against the RFC vectors), codes with a countdown ring, tap to copy (auto-clear), `otpauth://` links typed in or passed by the QR scanner as launch params `{otpauth}` (confirmed before adding), setup keys, import of Aegis and andOTP plain exports (with a warning) and of its own encrypted backups, encrypted export; secrets encrypted at rest with a key protected by the device passcode, auto-lock (`tools/test-authenticator.cjs`; [SECURITY-APPS.md](SECURITY-APPS.md)). Still to do: the Phoenix key store service to hold the key on a device (today the app wraps it with a PBKDF2 key from the passcode, weak for short PINs), encrypted Aegis vaults, Steam codes, running on a device. It does not share storage with Passwords: KeePass entries carry their own TOTP |
+| **Password manager** | **Phoenix** (Passwords, `apps/passwords`) | None built in (third-party SplashID and others) | P1 | Done in the simulator: KeePass KDBX 4 databases through [kdbxweb](https://github.com/keeweb/kdbxweb) (MIT) with Argon2id from hash-wasm (MIT, WebAssembly) in `/media/internal/passwords`, so KeePassXC and KeePassDX open the same file (checked both ways); groups, entries, search, the generator, TOTP codes from KeePassXC/KeePassDX `otp` fields, copy with auto-clear, auto-lock on screen lock, card minimize and idle, merge when the file changed elsewhere, Files "Open with" (`tools/test-passwords.cjs`; threat model in [SECURITY-APPS.md](SECURITY-APPS.md)). Still to do: WebDAV sync of the file (Files has no WebDAV yet), key files and YubiKey, attachments, running on a device. Bitwarden/Vaultwarden as a second option. System-wide autofill needs a hook in the web runtime and keyboard: designed in SECURITY-APPS.md, to build together with the IME work |
+| **Authenticator (TOTP)** | **Phoenix** (Authenticator, `apps/authenticator`) | None built in | P1 | Done in the simulator: RFC 6238 TOTP / RFC 4226 HOTP (tested against the RFC vectors), codes with a countdown ring, tap to copy (auto-clear), `otpauth://` links typed in or passed by the QR scanner as launch params `{otpauth}` (confirmed before adding), setup keys, import of Aegis and andOTP plain exports (with a warning) and of its own encrypted backups, encrypted export; secrets encrypted at rest with a key protected by the device passcode, auto-lock (`tools/test-authenticator.cjs`; [SECURITY-APPS.md](SECURITY-APPS.md)). Still to do: the Phoenix key store service to hold the key on a device (today the app wraps it with a PBKDF2 key from the passcode, weak for short PINs), encrypted Aegis vaults, Steam codes, running on a device. It does not share storage with Passwords: KeePass entries carry their own TOTP |
 | **VPN** | **Done in the simulator** (Settings > VPN) | VPN settings pane (`com.palm.app.vpn`), the system menu's VPN drawer, the status bar's VPN icon | P1 | Settings > VPN codes against LuneOS's `luneos-vpn-adapter` (`com.webos.service.vpn` over ConnMan's `connman-vpnd`; legacy `com.palm.vpn` method names and error codes), which the simulator reimplements: WireGuard, OpenVPN, OpenConnect, Cisco IPsec (vpnc), L2TP/IPsec and PPTP (marked not secure) profiles with the adapter's own form fields; import of a WireGuard `.conf` (split into its fields) and an OpenVPN `.ovpn` (stored and used as `OpenVPN.ConfigFile`, as the adapter does not import files yet); connect, disconnect, edit, delete; the sign-in prompt when a profile needs a user name and password (connect answers -7, the page answers the prompt); the tunnel's address and traffic. The system menu's drawer connects and disconnects (a profile that signs in opens Settings > VPN), the status bar shows the VPN icon while one is connected, and airplane mode drops it (`tools/test-settings.cjs`, `tst_systemmenu.qml`, `tst_shell.qml`). Still to do: building the adapter and `connman-vpnd` with its plugins into the image, and mobile data as a VPN carrier |
 | Fingerprint unlock | Missing | None | P2 | fprintd or the Android HAL on Halium (see [HARDWARE.md](HARDWARE.md)) |
 
@@ -166,12 +167,11 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
    `.ipk` install (the Marketplace is done in the simulator). Without these
    nobody can use the phone day to day.
 2. **Small, high-value apps** (M4, can start now in the simulator):
-   Emergency/medical ID (done in the simulator), PDF viewer, Video player, finishing Tasks and
-   Voice Memos. (Flashlight, QR Scanner and Weather are done in the
-   simulator.)
+   all done in the simulator (Emergency/medical ID, PDF viewer, Video
+   player, Tasks, Voice Memos, Flashlight, QR Scanner, Weather).
 3. **Bigger everyday apps**: Podcasts, Notes sync
-   (Backup, VPN and Maps are done in the simulator; Authenticator and Password manager
-   are in progress; next for them: the key store service and WebDAV file
+   (Backup, VPN, Maps, Authenticator and Password manager are done in the
+   simulator; next for the last two: the key store service and WebDAV file
    sync).
 4. **Platform features**: magnification and accessibility settings, word
    prediction, cell broadcast alerts, screen recording.
