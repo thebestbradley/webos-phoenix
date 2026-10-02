@@ -70,7 +70,7 @@
     var host = global.phoenixHost = global.phoenixHost || {
         postToHost: function (type, payload) {
             try {
-                console.info("__phoenix__" + JSON.stringify({ type: type, payload: payload || {} }));
+                console.info("__phoenix__" + toJson({ type: type, payload: payload || {} }));
             } catch (e) { /* ignore */ }
         }
     };
@@ -96,6 +96,66 @@
         return m ? decodeURIComponent(m[1]) : null;
     }
 
+    // ---- JSON ---------------------------------------------------------------------
+    //
+    // Everything the runtime writes as JSON (its stores, service replies,
+    // messages to the shell) goes through toJson. Prototype.js 1.6, which
+    // 2011 apps bundled (Quickoffice's QOWT), adds Array.prototype.toJSON,
+    // and JSON.stringify then writes every array as a string in Prototype's
+    // format ({"a":"[1, 2]"}): saved from such a page, the shared settings,
+    // media index and db8 came back broken in every other app.
+    function toJson(value, replacer, space) {
+        var A = Array.prototype;
+        var d = Object.prototype.hasOwnProperty.call(A, "toJSON") ? Object.getOwnPropertyDescriptor(A, "toJSON") : null;
+        if (!d || !d.configurable) return JSON.stringify(value, replacer, space);
+        delete A.toJSON;
+        try {
+            return JSON.stringify(value, replacer, space);
+        } finally {
+            Object.defineProperty(A, "toJSON", d);
+        }
+    }
+
+    // Data written that way before toJson: arrays saved as strings ("[1, 2]")
+    // are arrays again. Once per profile (the stores are shared), and only
+    // strings that are a JSON array.
+    function repairPrototypeArrays(ls) {
+        var FLAG = "phoenix:__arraysRepaired";
+        if (ls.getItem(FLAG)) return;
+        function fix(v) {
+            if (typeof v === "string") {
+                if (v.length >= 2 && v.charAt(0) === "[" && v.charAt(v.length - 1) === "]") {
+                    try {
+                        var a = JSON.parse(v);
+                        if (Array.isArray(a)) return fix(a);
+                    } catch (e) { /* a string, after all */ }
+                }
+                return v;
+            }
+            if (Array.isArray(v)) return v.map(fix);
+            if (v && typeof v === "object") {
+                var o = {};
+                for (var k in v) if (Object.prototype.hasOwnProperty.call(v, k)) o[k] = fix(v[k]);
+                return o;
+            }
+            return v;
+        }
+        var keys = [];
+        for (var i = 0; i < ls.length; ++i) {
+            var k = ls.key(i);
+            if (k && k.indexOf("phoenix:") === 0) keys.push(k);
+        }
+        keys.forEach(function (k) {
+            var raw = ls.getItem(k), v;
+            try { v = JSON.parse(raw); } catch (e) { return; }
+            var out = toJson(fix(v));
+            if (out !== raw) {
+                try { ls.setItem(k, out); } catch (e) { console.error("[phoenix-runtime] could not repair " + k, e); }
+            }
+        });
+        ls.setItem(FLAG, "1");
+    }
+
     // ---- Storage ------------------------------------------------------------------
 
     var store = (function () {
@@ -108,6 +168,9 @@
         } catch (e) {
             ls = null;
         }
+        if (ls) {
+            try { repairPrototypeArrays(ls); } catch (e) { console.error("[phoenix-runtime] array repair failed", e); }
+        }
         return {
             get: function (key, fallback) {
                 try {
@@ -118,7 +181,7 @@
                 }
             },
             set: function (key, value) {
-                var s = JSON.stringify(value);
+                var s = toJson(value);
                 if (ls) ls.setItem("phoenix:" + key, s);
                 else mem[key] = s;
             }
@@ -206,7 +269,7 @@
         windowOrientation: "up",
         specifiedWindowOrientation: "free",
         videoOrientation: "up",
-        deviceInfo: JSON.stringify({
+        deviceInfo: toJson({
             modelName: "Phoenix Simulator",
             modelNameAscii: "Phoenix Simulator",
             platformVersion: "3.0.5",
@@ -450,7 +513,7 @@
                     // uncaught error, as on a device (the reply came over
                     // the bus), never the service's failure.
                     try {
-                        bridge.onservicecallback(JSON.stringify(response));
+                        bridge.onservicecallback(toJson(response));
                     } catch (e) {
                         setTimeout(function () { throw e; }, 0);
                     }
@@ -638,7 +701,7 @@
         }
 
         function put(db, o) {
-            o = JSON.parse(JSON.stringify(o));
+            o = JSON.parse(toJson(o));
             assignSubIds(db, o);
             if (!o._id) o._id = newId(db);
             o._rev = ++db.rev;
@@ -678,7 +741,7 @@
                 var files = [];
                 if (objects.length) {
                     var file = "backup-" + Date.now() + "000.json";
-                    runtime.tmpFiles.write(p.dir.replace(/\/$/, "") + "/" + file, JSON.stringify({ objects: objects }));
+                    runtime.tmpFiles.write(p.dir.replace(/\/$/, "") + "/" + file, toJson({ objects: objects }));
                     files.push(file);
                 }
                 reply(ok({ files: files, count: objects.length, description: "db8 objects of the kinds marked sync", version: "1" }));
@@ -738,7 +801,7 @@
                 var db = load();
                 var results = [];
                 var targets = p.objects || runQuery(db, p.query).map(function (o) {
-                    var m = JSON.parse(JSON.stringify(p.props || {}));
+                    var m = JSON.parse(toJson(p.props || {}));
                     m._id = o._id;
                     return m;
                 });
@@ -897,7 +960,7 @@
                 return reply(ok({ toastId: "n" + Date.now() }));
             }
             var id = PalmSystem.addBannerMessage(String(p.message),
-                                                 JSON.stringify(p.noaction ? {} : click.appId ? aliasParams(click.appId, click.params) : click.params || {}),
+                                                 toJson(p.noaction ? {} : click.appId ? aliasParams(click.appId, click.params) : click.params || {}),
                                                  p.iconUrl || "");
             reply(ok({ toastId: id }));
         },
@@ -1513,7 +1576,7 @@
     }
     runtime.callNow = callNow;
 
-    function clone(o) { return o === undefined ? undefined : JSON.parse(JSON.stringify(o)); }
+    function clone(o) { return o === undefined ? undefined : JSON.parse(toJson(o)); }
 
     // Application manager additions used by the core apps. Enyo's
     // CrossAppUI (e.g. the Email account wizard inside Accounts) asks for
@@ -2362,7 +2425,7 @@
     var ime = { manual: false, reported: null };
 
     function reportInput(focused, state) {
-        var key = focused ? JSON.stringify(state) : "";
+        var key = focused ? toJson(state) : "";
         if (ime.reported === key)
             return;
         ime.reported = key;
@@ -2841,7 +2904,7 @@
 
         // Subscribe helper: reply now, then again whenever the answer changes.
         function watch(p, reply, ctx, compute) {
-            var last = JSON.stringify(compute());
+            var last = toJson(compute());
             var first = JSON.parse(last);
             if (p.subscribe) first.subscribed = true;
             reply(first);
@@ -2851,7 +2914,7 @@
                     listeners = listeners.filter(function (l) { return l !== fn; });
                     return;
                 }
-                var now = JSON.stringify(compute());
+                var now = toJson(compute());
                 if (now === last) return;
                 last = now;
                 var r = JSON.parse(now);
@@ -3618,7 +3681,7 @@
         // never come back (connman hides them), the rest as connman has them.
         function vpnFill(fields, props) {
             return fields.map(function (f) {
-                var o = JSON.parse(JSON.stringify(f));
+                var o = JSON.parse(toJson(f));
                 if (o.type === "rowgroup" && o.vpnFormFields) o.vpnFormFields = vpnFill(o.vpnFormFields, props);
                 if (o.type === "groups" && o.groups) o.groups.forEach(function (g) { g.vpnFormFields = vpnFill(g.vpnFormFields || [], props); });
                 if (o.connmanProperty) {
@@ -3706,7 +3769,7 @@
         // pushes, the same object without it, whenever it changes.
         function vpnWatch(p, reply, ctx, compute, onSubscribe) {
             var first = compute();
-            var last = JSON.stringify(first);
+            var last = toJson(first);
             var subscribed = p.subscribe === true && first.returnValue !== false;
             var r = JSON.parse(last);
             r.subscribed = subscribed;
@@ -3716,7 +3779,7 @@
                 if (ctx.cancelled()) { listeners = listeners.filter(function (l) { return l !== fn; }); return; }
                 var now = compute();
                 if (now.returnValue === false) return;          // a deleted profile: the key goes silent
-                var str = JSON.stringify(now);
+                var str = toJson(now);
                 if (str === last) return;
                 last = str;
                 reply(now);
@@ -3823,7 +3886,7 @@
                 if (!guid) return reply(vpnErr(-2));
                 var prov = vpnProvider("guid", guid);
                 if (!prov) return reply(vpnErr(-9));
-                reply({ returnValue: true, vpnAgentGuid: guid, vpnFormFields: JSON.parse(JSON.stringify(VPN_FORM_FIELDS[prov[0]])) });
+                reply({ returnValue: true, vpnAgentGuid: guid, vpnFormFields: JSON.parse(toJson(VPN_FORM_FIELDS[prov[0]])) });
             },
             "/connect": function (p, reply) {
                 var l = vpnLookup(p, reply);
@@ -3910,9 +3973,9 @@
                 var host = vpnStr(vp, "vpnHost"), domain = vpnStr(vp, "vpnDomain");
                 if (host) l.c.props.Host = host;
                 if (domain) l.c.props.Domain = domain;
-                var before = JSON.stringify(l.c.props);
+                var before = toJson(l.c.props);
                 vpnBuildProps(vp.vpnFormFields, l.c.props);
-                if (JSON.stringify(l.c.props) !== before) delete l.c.credentials;
+                if (toJson(l.c.props) !== before) delete l.c.credentials;
                 save(l.s);
                 reply({ returnValue: true });
             },
@@ -4000,7 +4063,7 @@
                 changed();
             }
             // How the UI and the device are turned (getSystemStatus).
-            if (st.orientation && JSON.stringify(st.orientation) !== JSON.stringify(store.get("orientation", null))) {
+            if (st.orientation && toJson(st.orientation) !== toJson(store.get("orientation", null))) {
                 store.set("orientation", { ui: st.orientation.ui, device: st.orientation.device });
                 changed();
             }
@@ -4046,7 +4109,7 @@
         // applicationRelaunch); OSE apps through the "webOSRelaunch" document
         // event (detail = params), as WebAppMgr does.
         runtime.relaunch = function (params) {
-            PalmSystem.launchParams = JSON.stringify(params || {});
+            PalmSystem.launchParams = toJson(params || {});
             if (global.Mojo && typeof global.Mojo.relaunch === "function") {
                 global.Mojo.relaunch();
                 return true;
@@ -4397,7 +4460,7 @@
                 var msg = p.message;
                 if (!msg || !msg._kind || (!msg.to && !msg.from))
                     return reply(fail(-1, "Requiring valid message argument with _kind member already set."));
-                msg = JSON.parse(JSON.stringify(msg));
+                msg = JSON.parse(toJson(msg));
                 var r = assign(msg);
                 reply(ok({ threadids: [r.threadId] }));
                 if (msg._kind === "com.palm.smsmessage:1" && msg.folder === "outbox" && msg.status === "pending")
@@ -5199,7 +5262,7 @@
             text("/etc/hosts", "127.0.0.1\tlocalhost\n127.0.1.1\twebos-phoenix\n::1\t\tlocalhost ip6-localhost\n", T0, true);
             text("/etc/os-release", "ID=webos-phoenix\nNAME=\"webOS Phoenix\"\nVERSION=\"0.1.0 (simulator)\"\n" +
                  "PRETTY_NAME=\"webOS Phoenix 0.1.0\"\nID_LIKE=webos\nHOME_URL=\"https://github.com/thebestbradley/webos-phoenix\"\n", T0, true);
-            text("/etc/palm/device-info.json", JSON.stringify({ modelName: "Phoenix Simulator", platformVersion: "3.0.5" }, null, 2) + "\n", T0, true);
+            text("/etc/palm/device-info.json", toJson({ modelName: "Phoenix Simulator", platformVersion: "3.0.5" }, null, 2) + "\n", T0, true);
             text("/var/log/messages", "Jan 15 09:00:01 webos-phoenix kernel: Booting webOS Phoenix (simulator)\n" +
                  "Jan 15 09:00:03 webos-phoenix LunaSysMgr: Phoenix shell started\n", T0, true);
             ref("/usr/share/phoenix/runtime/phoenix-runtime.js", "/usr/share/phoenix/runtime/phoenix-runtime.js", -1, T0, true);
@@ -5363,7 +5426,7 @@
                             size: n.size >= 0 ? n.size : 0, modifiedTime: Math.floor((n.m || 0) / 1000),
                             mimeType: DOC_TYPES[ext], searchKey: m[1].toLowerCase().replace(/\s+/g, "_") });
             });
-            var sig = JSON.stringify(want);
+            var sig = toJson(want);
             if (sig === docIndexSig) return;
             docIndexSig = sig;
             var keep = {};
@@ -5835,9 +5898,9 @@
             var r = { method: req.method || "GET", url: req.url, headers: req.headers || {}, body: req.body,
                       binary: !!req.binary, follow: req.follow !== false };
             var viaHost = /^https?:$/.test(global.location.protocol)
-                ? fetch("/__phoenix/proxy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(r) })
+                ? fetch("/__phoenix/proxy", { method: "POST", headers: { "Content-Type": "application/json" }, body: toJson(r) })
                 : global.location.protocol === "phoenix:"
-                ? fetch("/__phoenix/proxy?req=" + encodeURIComponent(JSON.stringify(r)))
+                ? fetch("/__phoenix/proxy?req=" + encodeURIComponent(toJson(r)))
                 : null;
             if (viaHost) {
                 return viaHost.then(function (res) { return res.json(); }).then(function (x) {
@@ -6562,9 +6625,9 @@
 
     function proxiedRequest(req) {
         var viaHost = /^https?:$/.test(global.location.protocol)
-            ? fetch("/__phoenix/proxy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) })
+            ? fetch("/__phoenix/proxy", { method: "POST", headers: { "Content-Type": "application/json" }, body: toJson(req) })
             : global.location.protocol === "phoenix:"
-            ? fetch("/__phoenix/proxy?req=" + encodeURIComponent(JSON.stringify(req)))
+            ? fetch("/__phoenix/proxy?req=" + encodeURIComponent(toJson(req)))
             : null;
         if (viaHost) {
             return viaHost.then(function (res) { return res.json(); }).then(function (r) {
@@ -6756,7 +6819,7 @@
             return calls.reduce(function (p, c) {
                 return p.then(function () {
                     return luna.call(c.address, c.params).then(function (r) {
-                        if (!r || r.returnValue === false) console.warn("[phoenix-runtime] " + c.address + " failed: " + JSON.stringify(r));
+                        if (!r || r.returnValue === false) console.warn("[phoenix-runtime] " + c.address + " failed: " + toJson(r));
                     });
                 });
             }, Promise.resolve());
@@ -6953,7 +7016,7 @@
             var all = prefs(), out = {};
             backupKeys().forEach(function (k) { if (k in all) out[k] = all[k]; });
             var file = dir + "/systemprefs_backup.db";
-            runtime.tmpFiles.write(file, JSON.stringify(out));
+            runtime.tmpFiles.write(file, toJson(out));
             reply(ok({ description: "Backup of LunaSysService, containing the systemprefs sqlite3 database", version: "1.0", files: [file] }));
         };
         sys["/backup/postRestore"] = function (p, reply) {
@@ -7197,7 +7260,7 @@
             if (/^https?:$/.test(global.location.protocol)) {
                 return fetch("/__phoenix/installer", {
                     method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ op: op, appId: appId, files: files || [] })
+                    body: toJson({ op: op, appId: appId, files: files || [] })
                 }).then(function (res) { return res.json(); }).then(function (r) {
                     if (r.ok) appsChanged();
                     return r;
@@ -7806,7 +7869,7 @@
         function wsTransport(id, p, s) {
             var ws, queue = [], open = false, gone = false;
             function send(m) {
-                var t = JSON.stringify(m);
+                var t = toJson(m);
                 if (open) ws.send(t); else queue.push(t);
             }
             try { ws = new global.WebSocket(host_().url); }
@@ -7816,7 +7879,7 @@
             }
             ws.onopen = function () {
                 open = true;
-                ws.send(JSON.stringify({ op: "open", cols: p.cols, rows: p.rows, shell: p.shell || "", cwd: p.cwd || "" }));
+                ws.send(toJson({ op: "open", cols: p.cols, rows: p.rows, shell: p.shell || "", cwd: p.cwd || "" }));
                 queue.forEach(function (t) { ws.send(t); });
                 queue = [];
             };
@@ -8199,14 +8262,14 @@
             }
         }
         function watch(p, reply, ctx, compute) {
-            var last = JSON.stringify(compute());
+            var last = toJson(compute());
             var first = JSON.parse(last);
             if (p.subscribe) first.subscribed = true;
             reply(first);
             if (!p.subscribe) return;
             watchers.push(function () {
                 if (ctx.cancelled()) return false;
-                var now = JSON.stringify(compute());
+                var now = toJson(compute());
                 if (now !== last) {
                     last = now;
                     var r = JSON.parse(now);
@@ -8490,10 +8553,10 @@
                 var timer = setInterval(tick, every);
                 setTimeout(tick, 100);
                 // A move (mock/setLocation) or a handler switched: at once.
-                var lastKey = JSON.stringify(locState());
+                var lastKey = toJson(locState());
                 watchers.push(function () {
                     if (ctx.cancelled()) return false;
-                    var key = JSON.stringify(locState());
+                    var key = toJson(locState());
                     if (key !== lastKey) { lastKey = key; tick(); }
                     return true;
                 });
