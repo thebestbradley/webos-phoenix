@@ -4826,7 +4826,18 @@
                     return reply(fail(-1, "Invalid request count"));
                 if (p.subscribe) {
                     reply(ok({ subscribed: true }));
-                    var w = function () { if (!ctx.cancelled()) reply(listReply(type, p)); };
+                    // Later answers come from timers and other pages' changes,
+                    // where a throw would reach no one: the subscriber gets it
+                    // as an error instead of waiting for ever.
+                    var w = function () {
+                        if (ctx.cancelled()) return;
+                        var r;
+                        try { r = listReply(type, p); } catch (e) {
+                            console.error("[phoenix-runtime] mediaindexer list failed", e && e.stack ? e.stack : e);
+                            r = fail(-1, "The media index could not be read: " + (e && e.message || e));
+                        }
+                        reply(r);
+                    };
                     listWatchers.push(w);
                     ctx.onCancel = function () { listWatchers = listWatchers.filter(function (x) { return x !== w; }); };
                     setTimeout(w, 0);

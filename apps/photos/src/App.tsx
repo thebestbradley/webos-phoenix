@@ -14,7 +14,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apps, folderOf, mediaIndexer, type ImageItem, type MediaItem, type VideoItem } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
-import { AppMenu, BackProvider, Spinner, useBack } from "@phoenix/ui";
+import { AppMenu, BackProvider, Button, Spinner, useBack } from "@phoenix/ui";
 import { countLabel, groupAlbums, isVideo, type Album } from "./albums";
 import { Thumb } from "./Thumb";
 import { Viewer } from "./Viewer";
@@ -81,9 +81,12 @@ function AlbumGrid({ album, onOpen }: { album: Album; onOpen: (index: number) =>
 }
 
 function Photos() {
-    const images = useLuna<ImageItem[]>((cb, err) => mediaIndexer.watchImages(cb, err), []);
-    const videos = useLuna<VideoItem[]>((cb, err) => mediaIndexer.watchVideos(cb, err), []);
+    // Retry subscribes again (the index could not be read: shown, not a spinner for ever).
+    const [attempt, setAttempt] = useState(0);
+    const images = useLuna<ImageItem[]>((cb, err) => mediaIndexer.watchImages(cb, err), [attempt]);
+    const videos = useLuna<VideoItem[]>((cb, err) => mediaIndexer.watchVideos(cb, err), [attempt]);
     const loaded = images.value !== undefined;
+    const failed = !loaded && images.error !== undefined;
     const albums = useMemo(
         () => groupAlbums([...(images.value ?? []), ...(videos.value ?? [])] as MediaItem[]),
         [images.value, videos.value],
@@ -111,7 +114,15 @@ function Photos() {
         return (
             <div className="ph-scroll">
                 <Header title="Photos & Videos" />
-                <div className="ph-loading"><Spinner large /></div>
+                {failed ? (
+                    <div className="ph-failed" data-testid="load-failed">
+                        <p>Photos could not read your pictures.</p>
+                        <p className="ph-failed-detail">{images.error?.errorText}</p>
+                        <Button onClick={() => setAttempt((n) => n + 1)} data-testid="retry">Try Again</Button>
+                    </div>
+                ) : (
+                    <div className="ph-loading"><Spinner large /></div>
+                )}
             </div>
         );
     }
