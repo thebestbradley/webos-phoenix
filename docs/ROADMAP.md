@@ -311,6 +311,10 @@ every day. The app sources come towards the end of 1.0 (owner, 29 September
       Settings > Hardware Keyboard (V8)
 - [x] Editing: the Edit submenu (Select All, Cut, Copy, Paste) in every
       app menu, and the same on a long press in a text field (E1)
+- [ ] One share sheet and one file picker for every app: the original's
+      file picker back for legacy apps, a save picker (Save to Files in a
+      chosen folder), and a share sheet apps join through `appinfo.json`
+      ([SHARE-AND-FILES.md](SHARE-AND-FILES.md))
 - [ ] The Phoenix Assistant, a voice assistant like Siri: push-to-talk,
       on-device speech recognition, commands for the phone's own features
       and spoken answers, in the classic style
