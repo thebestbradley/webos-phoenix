@@ -536,8 +536,13 @@ Item {
             compare(windows.notifications.get(2).title, "Third");
             verify(!notes.selecting);
 
-            // Clear All: the activity stays.
-            mouseClick(visibleChild(notes, "drawer_clearAll"));
+            // Clear All asks once ("Clear 2?"); the second tap clears, and
+            // the activity stays.
+            var clearAll = visibleChild(notes, "drawer_clearAll");
+            mouseClick(clearAll);
+            compare(windows.notifications.count, 3);
+            compare(clearAll.text, "Clear 2?");
+            mouseClick(clearAll);
             compare(windows.notifications.count, 1);
             compare(windows.notifications.get(0).ongoing, true);
 
@@ -549,6 +554,84 @@ Item {
             windows.setOngoing("org.webosphoenix.marketplace", { id: "dl", clear: true });
             compare(windows.notifications.count, 0);
             notes.dashboardOpen = false;
+            notes.bannerActive = false;
+            tryCompare(notes, "negativeSpace", 0, 2000);
+        }
+
+        // Regressions: a tap just under the handle (to put the drawer back)
+        // never reaches Clear All; Clear All's first tap clears nothing and
+        // lapses; a pull down longer than the dashboard closes it rather
+        // than leaving it pulled to nothing with the cards and the quick
+        // launch bar held above the space it took.
+        function test_drawerCloseKeepsNotificationsAndSpace() {
+            var notes = shell.notifications;
+            windows.notify("org.webosphoenix.messaging", "First", "");
+            windows.notify("org.webosphoenix.messaging", "Second", "");
+            notes.bannerActive = false;
+            notes.dashboardOpen = true;
+            tryCompare(notes, "negativeSpace", notes.dashboardHeight, 2000);
+            mouseClick(findChild(notes, "drawerHandleArea"));
+            verify(notes.drawerExpanded);
+            tryCompare(notes, "phoneSpaceHeight", notes.drawerFullHeight, 2000);
+
+            var handle = findChild(notes, "drawerHandle");
+            var under = handle.mapToItem(shell, 0, handle.height);
+            var clearAll = visibleChild(notes, "drawer_clearAll");
+            var right = clearAll.mapToItem(shell, clearAll.width / 2, 0).x;
+            // The handle's foot and just below it: neither is Clear All.
+            var textTop = clearAll.mapToItem(shell, 0, 0).y;
+            verify(textTop - Theme.px(4) > under.y, "a gap between the handle and the buttons");
+            for (var y = under.y - 4; y < textTop - Theme.px(4); y += 2) {
+                mouseClick(shell, right, y);
+                compare(windows.notifications.count, 2, "a tap at " + y + " clears nothing");
+                compare(clearAll.text, "Clear All", "a tap at " + y + " is not on Clear All");
+                verify(!shell.justTypeOpen, "a tap at " + y + " stays in the drawer");
+                if (!notes.drawerExpanded) {         // it was the handle: back up
+                    mouseClick(findChild(notes, "drawerHandleArea"));
+                    tryCompare(notes, "phoneSpaceHeight", notes.drawerFullHeight, 2000);
+                }
+            }
+
+            // Nor does a tap on the empty space under the rows.
+            mouseClick(shell, shell.width / 2, shell.height - Theme.px(60));
+            compare(windows.notifications.count, 2);
+            verify(notes.dashboardOpen && notes.drawerExpanded);
+            compare(windows.cards.count, 0);
+            verify(!shell.justTypeOpen && !shell.launcherOpen);
+
+            mouseClick(clearAll);
+            compare(clearAll.text, "Clear 2?");
+            wait(Theme.drawerConfirmTimeout + 200);
+            compare(clearAll.text, "Clear All", "the question lapses");
+            compare(windows.notifications.count, 2);
+
+            // Back to the normal size, then pulled down well past it.
+            mouseClick(findChild(notes, "drawerHandleArea"));
+            tryVerify(function() { return Math.abs(notes.phoneSpaceHeight - notes.dashboardHeight) < 0.5; }, 2000);
+            var area = findChild(notes, "drawerHandleArea");
+            var p = area.mapToItem(shell, area.width / 2, area.height / 2);
+            var dist = notes.dashboardHeight + 100;
+            mousePress(shell, p.x, p.y);
+            for (var i = 1; i <= 10; ++i) {
+                wait(16);
+                mouseMove(shell, p.x, p.y + dist * i / 10);
+                verify(notes.phoneSpaceHeight >= Theme.bannerHeight, "the drawer stays under the finger");
+            }
+            mouseRelease(shell, p.x, p.y + dist);
+            verify(!notes.dashboardOpen);
+            compare(notes.drawerPull, 0);
+            compare(windows.notifications.count, 2);
+            tryCompare(notes, "negativeSpace", Theme.bannerHeight, 2000);
+            compare(notes.phoneSpaceHeight, Theme.bannerHeight);
+
+            // Opened again, it is its normal size.
+            notes.dashboardOpen = true;
+            tryCompare(notes, "negativeSpace", notes.dashboardHeight, 2000);
+            compare(notes.phoneSpaceHeight, notes.dashboardHeight);
+
+            notes.dashboardOpen = false;
+            while (windows.notifications.count)
+                windows.dismissNotification(0);
             notes.bannerActive = false;
             tryCompare(notes, "negativeSpace", 0, 2000);
         }

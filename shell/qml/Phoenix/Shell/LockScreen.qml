@@ -115,6 +115,10 @@ Item {
 
     visible: opacity > 0
     opacity: locked ? 1 : 0
+    // Unlocked, it takes no input while it fades out: the screen under it
+    // is already the user's (the original stops routing input to the lock
+    // window once it unlocks).
+    enabled: locked
     // LockWindow::fadeWindow: 150 ms InQuad (lunaAnimations.conf:104-105).
     Behavior on opacity { NumberAnimation { duration: Theme.lockWindowFadeDuration; easing.type: Easing.InQuad } }
 

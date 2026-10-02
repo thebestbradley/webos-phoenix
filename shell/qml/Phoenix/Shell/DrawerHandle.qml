@@ -18,8 +18,10 @@ Item {
 
     property bool expanded: false
     property bool expandsUp: true
-    // How far the drawer is being pulled toward expanding (negative: back).
-    readonly property real pull: area.pull
+    // How far the drawer is being pulled toward expanding (negative: back);
+    // 0 unless a finger is on the handle, so a press the handle never sees
+    // end (its drawer closed under it) cannot leave the drawer pulled.
+    readonly property real pull: area.pressed ? area.pull : 0
 
     signal expandRequested
     signal collapseRequested
@@ -42,9 +44,10 @@ Item {
         id: area
         objectName: "drawerHandleArea"
         anchors.fill: parent
-        // A finger-sized target around the thin strip.
-        anchors.topMargin: -Theme.px(8)
-        anchors.bottomMargin: -Theme.px(8)
+        // A finger-sized target: the strip and a little past the drawer's
+        // edge, never over the header or the rows on the other side.
+        anchors.topMargin: handle.expandsUp ? -Theme.px(8) : 0
+        anchors.bottomMargin: handle.expandsUp ? 0 : -Theme.px(8)
         preventStealing: true
         property real startY: 0
         property real pull: 0
@@ -76,6 +79,7 @@ Item {
                 handle.collapseRequested();
         }
         onCanceled: pull = 0
+        onEnabledChanged: pull = 0
         onClicked: {
             if (moved)
                 return;

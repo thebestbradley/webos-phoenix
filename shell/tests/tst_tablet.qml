@@ -250,6 +250,9 @@ Item {
             var clearAll = findChild(menu, "drawer_clearAll");
             verify(clearAll.visible);
             mouseClick(clearAll);
+            compare(windows.notifications.count, 3, "Clear All asks first");
+            compare(clearAll.text, "Clear 2?");
+            mouseClick(clearAll);
             compare(windows.notifications.count, 1);
             compare(windows.notifications.get(0).ongoing, true);
             windows.setOngoing("org.webosphoenix.marketplace", { id: "dl", clear: true });

@@ -87,8 +87,12 @@ Item {
     property real drawerLift: 0
     readonly property real drawerFullHeight: screenHeight - Theme.statusBarHeight
     readonly property real drawerPull: overlay ? 0 : phoneHandle.pull
+    // While open it never shrinks under the banner's height: pulled down
+    // past its own height the drawer stays under the finger (and its
+    // handle sees the release that closes it) rather than vanishing.
     readonly property real phoneSpaceHeight: Math.max(0, Math.min(drawerFullHeight,
-        Math.max(negativeSpace, drawerLift) + (dashboardOpen ? drawerPull : 0)))
+        dashboardOpen ? Math.max(Theme.bannerHeight, Math.max(negativeSpace, drawerLift) + drawerPull)
+                      : Math.max(negativeSpace, drawerLift)))
     NumberAnimation {
         id: liftAnim
         target: root
@@ -402,6 +406,10 @@ Item {
             Item {
                 anchors.fill: parent
                 visible: !root.overlay && root.dashboardOpen
+                // Taps on the dashboard stay in it: between the header's
+                // buttons, or under the rows of a drawer pulled to the whole
+                // screen, they never reach the cards or Just Type beneath.
+                MouseArea { anchors.fill: parent }
                 // Pull up for the whole screen (Phoenix).
                 DrawerHandle {
                     id: phoneHandle

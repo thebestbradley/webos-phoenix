@@ -347,11 +347,14 @@ QtObject {
     // (phones: up; tablets: the drop-down's foot, down), where a header
     // offers Select and Clear All. Live activities stay at the top, a faint
     // rule under them.
-    readonly property int drawerHandleHeight: px(16)
+    readonly property int drawerHandleHeight: px(24)
     readonly property int drawerHandleWidth: px(36)
     readonly property int drawerHandleThickness: px(4)
     readonly property int drawerHeaderHeight: px(40)
     readonly property int drawerHeaderFontSize: px(16)
+    // Clear All's second tap: how long it waits, and its colour meanwhile.
+    readonly property int drawerConfirmTimeout: 3000
+    readonly property color drawerConfirmColor: "#ff6b5e"
     // How far the handle must travel to expand or collapse.
     readonly property int drawerPullThreshold: px(40)
     readonly property int drawerDuration: motion(250)

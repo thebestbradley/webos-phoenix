@@ -1591,10 +1591,14 @@ tapped ([ROADMAP.md](ROADMAP.md)). The services do not change for that.
 The notification drawer (Phoenix): the open dashboard has a handle on its
 open edge (phones: the top; the tablet's drop-down: its foot). Pulled, the
 dashboard follows the finger and opens to the whole screen past 40 px; a
-tap toggles it, and on a phone a pull down from the normal size closes it.
-At full screen a header offers Select (a check mark on each notification,
-then Clear (n)) and Clear All. Live activities are never selected or
-cleared. `phoenix-sim --scene drawer` shows it.
+tap toggles it, and on a phone a pull down from the normal size closes it
+(however far the finger goes, the dashboard stays under it until it lets
+go). At full screen a header offers Select (a check mark on each
+notification, then Clear (n)) and Clear All, which asks once ("Clear 3?"):
+a second tap within 3 s clears. The handle's and the buttons' touch areas
+never overlap, and taps on the dashboard's blank parts stay in it. Live
+activities are never selected or cleared. `phoenix-sim --scene drawer`
+shows it.
 
 Other legacy hooks the simulator now answers as a device would:
 `com.palm.bus/signal/registerServerStatus` says whether a service exists
