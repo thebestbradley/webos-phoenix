@@ -111,6 +111,30 @@ describe("activity manager (simulated com.palm.activitymanager)", () => {
         expect(launches()).toHaveLength(0);
     });
 
+    // The app's dashboard (or alert) may outlive its card: it is not the
+    // app, so the shell launches the app instead of a relaunch inside it.
+    it("from the app's dashboard window, asks the shell to launch the app", async () => {
+        palm.appIdentifier = "com.palm.app.clock";
+        const was = location.hash;
+        location.hash = "phoenixWindow=dashboard&phoenixHeight=52";
+        const got: unknown[] = [];
+        const on = (e: Event) => got.push((e as CustomEvent).detail);
+        document.addEventListener("webOSRelaunch", on);
+        try {
+            await call("luna://com.palm.activitymanager/create", {
+                start: true,
+                activity: { name: "wake3", schedule: { start: activityDateString(Date.now() + HOUR) },
+                            callback: { method: "palm://com.palm.applicationManager/launch", params: { id: "com.palm.app.clock", params: { key: "a3" } } } },
+            });
+            expect(rt.activities.fireDue(Date.now() + HOUR)).toBe(1);
+        } finally {
+            document.removeEventListener("webOSRelaunch", on);
+            location.hash = was;
+        }
+        expect(got).toEqual([]);
+        expect(launches()).toEqual([{ id: "com.palm.app.clock", params: { key: "a3", $activity: expect.objectContaining({ name: "wake3" }) } }]);
+    });
+
     it("fires on its own when the time comes", async () => {
         palm.appIdentifier = "com.palm.app.clock";
         const fired = new Promise<unknown>((res) => {

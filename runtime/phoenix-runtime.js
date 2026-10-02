@@ -6120,7 +6120,9 @@
     // up: the app decides what to show), other pages a second later (the
     // shell then starts or relaunches the app without focusing its card).
     // One page claims each activity in the store before firing it. What is
-    // due while no page runs fires when the next page starts.
+    // due while no page runs fires when the next page starts. A dashboard or
+    // popup alert of the app counts as another page (it may outlive the
+    // app's card).
     //
     // For tests: __phoenixRuntime.activities.fireDue(at) fires everything
     // due by `at` (ms) at once, as if the clock had moved on; list() shows
@@ -6211,9 +6213,16 @@
             return /^(?:palm|luna):\/\/com\.(?:palm|webos)\.applicationManager\/(?:launch|open)\/?$/.test(String(method || ""));
         }
 
+        // A dashboard or popup alert the app opened (#phoenixWindow=, see
+        // window.open above) is not the app: it may be all that is left of
+        // it once its card is closed, and a relaunch there is never seen.
+        function systemWindow() {
+            return /[#&]phoenixWindow=/.test(String(global.location && global.location.hash || ""));
+        }
+
         function forThisPage(a) {
             return !!a.callback && isAppLaunch(a.callback.method) && a.callback.params &&
-                a.callback.params.id === PalmSystem.appIdentifier;
+                a.callback.params.id === PalmSystem.appIdentifier && !systemWindow();
         }
 
         function fire(a) {
@@ -6223,7 +6232,7 @@
             if (isAppLaunch(a.callback.method) && params.id) {
                 params.params = params.params || {};
                 params.params.$activity = act;
-                if (params.id === PalmSystem.appIdentifier && runtime.relaunch) {
+                if (params.id === PalmSystem.appIdentifier && !systemWindow() && runtime.relaunch) {
                     runtime.relaunch(params.params);
                     return;
                 }

@@ -481,6 +481,59 @@ Item {
             tryCompare(notes, "negativeSpace", 0, 2000);
         }
 
+        // An app's live activities go when its last card closes (their
+        // work ran in its pages; they cannot be swiped away); another
+        // app's stay.
+        function test_ongoingGoesWithItsApp() {
+            var a = windows.launch("org.webosphoenix.memos", "");
+            var b = windows.launch("org.webosphoenix.memos", "");
+            windows.setOngoing("org.webosphoenix.memos", { id: "one", title: "Syncing", progress: -1 });
+            windows.setOngoing("org.webosphoenix.memos", { id: "two", title: "Uploading", progress: 40 });
+            windows.setOngoing("org.webosphoenix.marketplace", { id: "dl", title: "Downloading Hooked", progress: 30 });
+            compare(windows.notifications.count, 3);
+            windows.close(a);
+            if (b !== a) {
+                compare(windows.notifications.count, 3, "a card of it still runs");
+                windows.close(b);
+            }
+            compare(windows.notifications.count, 1);
+            compare(windows.notifications.get(0).id, "ongoing:org.webosphoenix.marketplace:dl");
+            windows.setOngoing("org.webosphoenix.marketplace", { id: "dl", clear: true });
+            compare(windows.notifications.count, 0);
+        }
+
+        // Phones open the list at its end (the newest notification), but
+        // with live activities, at its start: they are pinned on top and
+        // must not open half hidden under the handle.
+        function test_phoneDashboardOpensOnActivities() {
+            var notes = shell.notifications;
+            for (var i = 0; i < 6; ++i)
+                windows.notify("org.webosphoenix.messaging", "Text " + i, "");
+            windows.setOngoing("org.webosphoenix.marketplace", { id: "dl", title: "Downloading Hooked", progress: 30 });
+            notes.bannerActive = false;
+            notes.dashboardOpen = true;
+            tryCompare(notes, "negativeSpace", notes.dashboardHeight, 2000);
+            var list = findChild(notes, "phoneDashboardList");
+            verify(list && list.contentHeight > list.height, "more rows than fit");
+            tryVerify(function() { return list.atYBeginning; }, 1000, "opens at the activity");
+            var row = dashboardRows()[0];
+            var top = row.mapToItem(list, 0, 0).y;
+            verify(top >= -0.5, "the activity's row is whole (" + top + ")");
+            notes.dashboardOpen = false;
+            tryVerify(function() { return findChild(notes, "phoneDashboardList") === null; }, 2000);
+            windows.setOngoing("org.webosphoenix.marketplace", { id: "dl", clear: true });
+            // Without one: at the newest notification, as the original.
+            notes.dashboardOpen = true;
+            tryCompare(notes, "negativeSpace", notes.dashboardHeight, 2000);
+            list = findChild(notes, "phoneDashboardList");
+            tryVerify(function() { return list.atYEnd; }, 1000, "opens at the newest");
+            notes.dashboardOpen = false;
+            while (windows.notifications.count > 0)
+                windows.notifications.remove(0);
+            notes.bannerActive = false;
+            tryCompare(notes, "negativeSpace", 0, 2000);
+        }
+
         function visibleChild(parentItem, name) {
             var found = null;
             (function walk(o) {

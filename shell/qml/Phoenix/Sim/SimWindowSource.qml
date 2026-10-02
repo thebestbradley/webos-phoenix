@@ -1132,6 +1132,17 @@ Item {
             _headless[appId].destroy();
             delete _headless[appId];
         }
+        // Its live activities go with it: their work ran in its pages, and
+        // they cannot be swiped away.
+        if (runningUid(appId) === "" && !_headless[appId])
+            _clearOngoingOf(appId);
+    }
+
+    function _clearOngoingOf(appId) {
+        var prefix = "ongoing:" + appId + ":";
+        for (var i = notifications.count - 1; i >= 0; --i)
+            if (String(notifications.get(i).id).indexOf(prefix) === 0)
+                notifications.remove(i);
     }
 
     function back(uid) {

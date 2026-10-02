@@ -440,7 +440,9 @@ Item {
                     anchors.topMargin: Theme.drawerHandleHeight + (root.drawerExpanded ? Theme.drawerHeaderHeight : 0) + Theme.dashboardTopPadding
                     active: parent.visible
                     sourceComponent: dashboardList
-                    onLoaded: item.positionViewAtEnd()
+                    // At the newest notification (the end), as the original;
+                    // with live activities, at them: they are pinned on top.
+                    onLoaded: root.ongoingCount > 0 ? item.positionViewAtBeginning() : item.positionViewAtEnd()
                 }
                 Image {
                     objectName: "dashboardMaskTop"
@@ -615,6 +617,7 @@ Item {
 
         ListView {
             id: list
+            objectName: "phoneDashboardList"
             clip: true
             model: root.model
             interactive: contentHeight > height
