@@ -19,6 +19,6 @@ export default defineConfig({
         chunkSizeWarningLimit: 800,
     },
     server: {
-        fs: { allow: [resolve(__dirname, "../..")] },
+        fs: { allow: [resolve(import.meta.dirname, "../..")] },
     },
 });

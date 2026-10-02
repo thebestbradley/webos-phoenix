@@ -15,8 +15,11 @@ export default defineConfig({
         emptyOutDir: true,
         target: "chrome100",
         assetsInlineLimit: 0,
+        // MapLibre GL alone is most of the bundle; the app is installed on
+        // the device, not downloaded, so one chunk is fine.
+        chunkSizeWarningLimit: 1600,
     },
     server: {
-        fs: { allow: [resolve(__dirname, "../..")] },
+        fs: { allow: [resolve(import.meta.dirname, "../..")] },
     },
 });

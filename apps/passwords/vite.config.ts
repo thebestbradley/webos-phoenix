@@ -13,7 +13,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
 
-const stub = resolve(__dirname, "src/node-stub.ts");
+const stub = resolve(import.meta.dirname, "src/node-stub.ts");
 
 // index.html's Content-Security-Policy forbids inline scripts, which the dev
 // server's hot reload needs: drop it under `vite` (dev) only; builds keep it.
@@ -36,6 +36,6 @@ export default defineConfig({
         assetsInlineLimit: 0,
     },
     server: {
-        fs: { allow: [resolve(__dirname, "../..")] },
+        fs: { allow: [resolve(import.meta.dirname, "../..")] },
     },
 });

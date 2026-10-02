@@ -9,13 +9,13 @@ import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { buildIndex, parseTopic } from "./src/lib/topics";
+import { buildIndex, parseTopic } from "./src/lib/topics.ts";
 
 function helpIndex(): Plugin {
     return {
         name: "phoenix-help-index",
         generateBundle() {
-            const dir = resolve(__dirname, "topics");
+            const dir = resolve(import.meta.dirname, "topics");
             const topics = readdirSync(dir).filter((f) => f.endsWith(".md"))
                 .map((f) => parseTopic(f, readFileSync(resolve(dir, f), "utf8")));
             this.emitFile({ type: "asset", fileName: "help-index.json", source: JSON.stringify(buildIndex(topics), null, 1) });
@@ -33,6 +33,6 @@ export default defineConfig({
         assetsInlineLimit: 0,
     },
     server: {
-        fs: { allow: [resolve(__dirname, "../..")] },
+        fs: { allow: [resolve(import.meta.dirname, "../..")] },
     },
 });

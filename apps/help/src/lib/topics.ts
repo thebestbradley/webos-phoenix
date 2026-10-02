@@ -17,7 +17,7 @@
 // The app bundles them (import.meta.glob); vite.config.ts also writes
 // dist/help-index.json from them, which is put into db8 for Just Type.
 
-import { frontMatter, plainText } from "./markdown";
+import { frontMatter, plainText } from "./markdown.ts";
 
 export interface Topic {
     id: string;

@@ -21,6 +21,6 @@ export default defineConfig({
         assetsInlineLimit: 0,
     },
     server: {
-        fs: { allow: [resolve(__dirname, "../..")] },
+        fs: { allow: [resolve(import.meta.dirname, "../..")] },
     },
 });
