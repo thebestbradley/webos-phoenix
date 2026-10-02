@@ -309,7 +309,7 @@ exported as a Preware `Packages` file for LuneOS users.
 | **Enyo 1.0** web apps (`type: web`, `enyo.depends`) | Yes, to the extent `phoenix-runtime.js` covers their services, like the core apps today. The best-supported group |
 | **Mojo** web apps | Only with a Mojo framework at `/usr/palm/frameworks/mojo`. Palm's is proprietary, so Phoenix cannot ship it. Options: the user installs it from LuneOS's repository (legal position unclear), or a clean-room Mojo reimplementation (very large). *Open question* |
 | **Enyo 2 / Bootplate** apps | Usually self-contained; likely to work |
-| **PDK / hybrid** (SDL, `armv7` binaries) | No: 32-bit ARM binaries against legacy libraries; Phoenix targets arm64 and x86-64 |
+| **PDK / hybrid** (SDL, `armv7` binaries) | Not yet: 32-bit ARM binaries against 2011 libraries, and Phoenix devices are arm64 or x86-64. The plan is a compatibility layer ([PDK.md](PDK.md)). Until then the Marketplace refuses PDK apps and says why, and installs a web app with a native plugin (Quickoffice) naming the plugin as what this device cannot run yet |
 | **JS services** (`usr/palm/services`) | Legacy `mojoservice` services need the Foundations service runtime; OSE's `run-js-service` runs Node services. Case by case; not in the first phases |
 | **Patches** (Preware system patches) | No: they patch files of a system that is not there |
 

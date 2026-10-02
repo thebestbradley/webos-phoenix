@@ -222,6 +222,10 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         expect(museum.counted).toEqual(["9001"]);
         const mojo = await service.install({ sourceId: "appmuseum", id: "appmuseum.9002" });
         expect(mojo).toMatchObject({ returnValue: false, errorCode: "NEEDS_MOJO" });
+        // An Enyo app with a native PDK plugin installs; the plugin is named
+        // as what this device cannot run yet.
+        const hybrid = await service.install({ sourceId: "appmuseum", id: "appmuseum.9003" });
+        expect(hybrid).toMatchObject({ returnValue: true, appId: "com.example.classicoffice", skipped: ["native plugin (docservice)"] });
     });
 
     it("reads a Preware feed: web apps install, native ones and changed downloads do not", async () => {
@@ -231,7 +235,9 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         expect(all.map((a: Any) => [a.id, a.version])).toEqual([["org.example.homebrew", "0.9.1"], ["org.example.nativelib", "1.0"], ["org.example.hooked", "2.0"]]);
         expect(all[0]).toMatchObject({ description: "Line one\nLine two", license: "GPL-2.0", developer: { name: "Homebrewer" } });
         expect(all[1].verdict).toMatchObject({ ok: false });
-        expect(await service.install({ sourceId: "precentral", id: "org.example.nativelib" })).toMatchObject({ errorCode: "UNSUPPORTED" });
+        const native = await service.install({ sourceId: "precentral", id: "org.example.nativelib" });
+        expect(native).toMatchObject({ errorCode: "UNSUPPORTED" });
+        expect(native.errorText).toMatch(/native webOS app, compiled for armv7 processors.*planned/);
         expect(await service.install({ sourceId: "precentral", id: "org.example.homebrew" })).toMatchObject({ returnValue: true });
         feed.corrupt();
         await service.remove({ id: "org.example.homebrew" });

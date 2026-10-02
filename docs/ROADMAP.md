@@ -288,6 +288,11 @@ every day. The app sources come towards the end of 1.0 (owner, 29 September
       real apps are tested
 - [ ] Preware feeds, installed through the catalog (done in the simulator:
       the PreCentral homebrew feed as an add-on catalog)
+- [ ] Native webOS apps (PDK games and hybrid apps such as Quickoffice)
+      through a compatibility layer: a 32-bit ARM user space, qemu where
+      the CPU cannot run it, a rewritten `libpdl` and the plugin bridge
+      ([PDK.md](PDK.md)). Quickoffice first; today it installs and lists
+      documents, and opening one needs its plugin
 - [ ] Android apps through Waydroid ([ANDROID.md](ANDROID.md))
 - [ ] Install like a Linux distro: generic images, live boot, the installer,
       the hardware report and device table, the light profile

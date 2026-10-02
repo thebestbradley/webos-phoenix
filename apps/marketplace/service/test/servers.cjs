@@ -71,7 +71,8 @@ function png(size, rgb) {
 function webApp(id, version, extra) {
     const dir = `usr/palm/applications/${id}/`;
     const files = [
-        { path: dir + "appinfo.json", data: JSON.stringify({ id, version, vendor: "Example", type: (extra && extra.type) || "web", main: "index.html", title: (extra && extra.title) || id, icon: "icon.png" }) },
+        { path: dir + "appinfo.json", data: JSON.stringify(Object.assign({ id, version, vendor: "Example", type: (extra && extra.type) || "web", main: "index.html", title: (extra && extra.title) || id, icon: "icon.png" },
+                                                                         (extra && extra.appinfo) || {})) },
         { path: dir + "index.html", data: `<!doctype html><title>${id}</title><h1>${id} ${version}</h1>` },
         { path: dir + "icon.png", data: new Uint8Array(png(64, [40, 120, 200])) }
     ].concat((extra && extra.files) || []);
@@ -165,11 +166,20 @@ async function startMuseum() {
         title: "Mojo Clock",
         files: [{ path: "usr/palm/applications/com.example.mojoclock/sources.json", data: "[{\"source\": \"app/assistants/stage-assistant.js\"}]" }]
     });
+    // An Enyo app with a native PDK plugin (as Quickoffice).
+    const hybrid = await webApp("com.example.classicoffice", "3.0.0", {
+        title: "Classic Office", appinfo: { "plug-ins": true },
+        files: [{ path: "usr/palm/applications/com.example.classicoffice/depends.js", data: "enyo.depends('source/App.js');" },
+                { path: "usr/palm/applications/com.example.classicoffice/import/docservice/docservice_appinfo.json", data: "{\"type\": \"hybrid\"}" },
+                { path: "usr/palm/applications/com.example.classicoffice/import/docservice/docservice", data: new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 1, 1, 1]) }]
+    });
     const apps = [
         { id: 9001, title: "Classic Notes", author: "Example Soft", summary: "Notes, the 2011 way.", appIcon: "9001/icon.png", appIconBig: "9001/icon-256.png",
           category: "Productivity", Pre3: true, TouchPad: true, LuneOS: false, Adult: false, starRating: 4, reviewCount: 2 },
         { id: 9002, title: "Mojo Clock", author: "Example Soft", summary: "A clock in Mojo.", appIcon: "9002/icon.png", appIconBig: "9002/icon.png",
-          category: "Utilities", Pre3: true, TouchPad: false, LuneOS: false, Adult: false }
+          category: "Utilities", Pre3: true, TouchPad: false, LuneOS: false, Adult: false },
+        { id: 9003, title: "Classic Office", author: "Example Soft", summary: "Documents, with a native engine.", appIcon: "9003/icon.png", appIconBig: "9003/icon.png",
+          category: "Business", Pre3: true, TouchPad: true, LuneOS: false, Adult: false }
     ];
     const details = {
         9001: { publicApplicationId: "com.example.classicnotes", version: "1.2.0", description: "Takes notes.", filename: "com.example.classicnotes_1.2.0_all.ipk", appSize: enyo.length,
@@ -177,7 +187,8 @@ async function startMuseum() {
                 images: [{ screenshot: "9001/images/1/L/a.png", thumbnail: "9001/images/1/L/a.png" },
                          { screenshot: "9001/images/2/L/gone.png", thumbnail: "9001/images/2/L/gone.png" },
                          { screenshot: "9001/images/3/L/b.png", thumbnail: "9001/images/3/L/b.png" }] },
-        9002: { publicApplicationId: "com.example.mojoclock", version: "2.0.1", description: "Tells time.", filename: "com.example.mojoclock_2.0.1_all.ipk", appSize: mojo.length, images: {} }
+        9002: { publicApplicationId: "com.example.mojoclock", version: "2.0.1", description: "Tells time.", filename: "com.example.mojoclock_2.0.1_all.ipk", appSize: mojo.length, images: {} },
+        9003: { publicApplicationId: "com.example.classicoffice", version: "3.0.0", description: "Opens documents.", filename: "com.example.classicoffice_3.0.0_all.ipk", appSize: hybrid.length, images: {} }
     };
     const counted = [];
     let port = 0;
@@ -191,6 +202,7 @@ async function startMuseum() {
         if (u.pathname === "/WebService/countAppDownload.php") { counted.push(u.searchParams.get("appid")); return json({ ok: true }); }
         if (u.pathname === "/packages/com.example.classicnotes_1.2.0_all.ipk") { res.writeHead(200); res.end(Buffer.from(enyo)); return; }
         if (u.pathname === "/packages/com.example.mojoclock_2.0.1_all.ipk") { res.writeHead(200); res.end(Buffer.from(mojo)); return; }
+        if (u.pathname === "/packages/com.example.classicoffice_3.0.0_all.ipk") { res.writeHead(200); res.end(Buffer.from(hybrid)); return; }
         if (u.pathname.includes("/gone.png")) { res.writeHead(404); res.end(); return; }
         if (u.pathname.startsWith("/AppImages/")) { res.writeHead(200, { "Content-Type": "image/png" }); res.end(png(64, [90, 90, 160])); return; }
         res.writeHead(404); res.end();

@@ -234,6 +234,11 @@ function createPackagesService(deps) {
         })[0];
         return appId ? { appId: appId, rec: s.installed[appId] } : (s.installed[e.id] ? { appId: e.id, rec: s.installed[e.id] } : null);
     }
+    // Why a native package (PDK, or a Preware program) does not install.
+    function nativeText(arch) {
+        return "it is a native webOS app" + (arch && arch !== "all" ? ", compiled for " + arch + " processors" : "") +
+            ". Phoenix runs webOS web apps (Enyo); running native apps is planned, not here yet";
+    }
     function withState(s, e) {
         var found = installedFor(s, e), inst = found && found.rec;
         var o = clone(e);
@@ -241,7 +246,7 @@ function createPackagesService(deps) {
         if (found) o.appId = found.appId;
         o.update = inst && inst.sourceId === e.sourceId && e.version && version.compare(e.version, inst.version) > 0 ? e.version : null;
         if (e.kind === "preware" && e.architecture !== "all")
-            o.verdict = { ok: false, text: "Not for this device: it is built for " + (e.architecture || "another") + " processors" };
+            o.verdict = { ok: false, text: "Not for this device yet: " + nativeText(e.architecture) };
         return o;
     }
     function catalogApps(s, kinds) {
@@ -345,10 +350,18 @@ function createPackagesService(deps) {
                 : outside.length ? "The package puts files outside its app (" + outside[0].path + ")" : "";
             if (needs && !dev) throw err("NEEDS_DEVMODE", needs + ": turn on Developer Mode in Settings to install it");
             var type = app.appinfo.type || "web";
-            if (type !== "web") throw err("UNSUPPORTED", "It is a native (" + type + ") app built for 2011 phones; Phoenix runs web apps");
+            if (type !== "web")
+                throw err("UNSUPPORTED", "Not for this device yet: " + nativeText(pkg.control.Architecture));
             var has = function (name) { return pkg.files.some(function (f) { return f.path === app.dir + name; }); };
             if (has("sources.json") && !has("depends.js")) throw err("NEEDS_MOJO", "It is a Mojo app: Palm's Mojo framework was never open-sourced, so Phoenix cannot run it");
-            return { pkg: pkg, app: app, developer: !!needs };
+            // A web app with native PDK plugins (appinfo "plug-ins"; each
+            // plugin has a <name>_appinfo.json beside its binary): it installs
+            // and runs, but what it asks of its plugins does not happen yet.
+            var plugins = !app.appinfo["plug-ins"] ? [] : pkg.files.map(function (f) {
+                var m = f.path.indexOf(app.dir) === 0 && /([^/]+)_appinfo\.json$/.exec(f.path);
+                return m ? m[1] : "";
+            }).filter(Boolean);
+            return { pkg: pkg, app: app, developer: !!needs, plugins: plugins };
         });
     }
 
@@ -454,7 +467,7 @@ function createPackagesService(deps) {
             entry = e;
             if (entry.verdict && !entry.verdict.ok) throw err("UNSUPPORTED", entry.verdict.text);
             if (entry.kind === "preware" && entry.architecture && entry.architecture !== "all")
-                throw err("UNSUPPORTED", "It is built for " + entry.architecture + " processors");
+                throw err("UNSUPPORTED", "Not for this device yet: " + nativeText(entry.architecture));
             return Promise.all([packageFor(s, entry, progress), devMode()]);
         }).then(function (got) {
             var bytes = got[0];
@@ -482,8 +495,11 @@ function createPackagesService(deps) {
                         if (am) am.countDownload(entry.museumId);
                     }
                     var done = { returnValue: true, id: p.id, appId: appId, state: "installed", progress: 100 };
-                    // What the installer could not do (the simulator: scripts, services).
-                    if (r.skipped && r.skipped.length) done.skipped = r.skipped;
+                    // What the installer could not do (the simulator: scripts,
+                    // services), and native plugins nothing runs yet.
+                    var skipped = (r.skipped || []).concat(c.plugins && c.plugins.length
+                        ? ["native " + (c.plugins.length > 1 ? "plugins" : "plugin") + " (" + c.plugins.join(", ") + ")"] : []);
+                    if (skipped.length) done.skipped = skipped;
                     push(done);
                     return done;
                 });
