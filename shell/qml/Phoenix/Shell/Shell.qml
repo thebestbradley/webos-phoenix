@@ -535,7 +535,9 @@ FocusScope {
     function captureName() {
         if (locked)
             return qsTr("Lock Screen");
-        if (cards.maximized && cards.currentUid !== "") {
+        // The card in front once it fills most of the screen: a capture
+        // taken while it is still maximizing (or minimizing) shows it.
+        if (cards.maximizeProgress > 0.5 && cards.currentUid !== "") {
             var c = cards.cardItem(cards.currentUid);
             if (c && c.title)
                 return c.title;
