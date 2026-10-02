@@ -480,7 +480,7 @@ Item {
             var r = kb.keyRect("Space");
             var c = kb.mapToItem(shell, r.x + r.width / 2, r.y + r.height / 2);
             var px = grabImage(shell).pixel(Math.round(c.x), Math.round(c.y));
-            verify(px.r > 0.16 && px.r < 0.24, "a charcoal face (" + px + ")");
+            verify(px.r > 0.10 && px.r < 0.16, "a charcoal face, near black (" + px + ")");
         }
 
         function test_emojiKeyTypesAnEmoji() {

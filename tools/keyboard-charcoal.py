@@ -8,8 +8,8 @@
 # Phoenix's bordered phone keys (shift, delete, the bottom row) use it: the
 # original's near-black face (#1a1a1a) in a lighter grey rim (#404040) made
 # each key an outline, busy beside the borderless letters (the owner,
-# 2 October 2026). Here the face is charcoal and the rim only a shade
-# lighter, so a key reads as one soft shape. The black edge, the corners'
+# 2 October 2026). Here the face is charcoal, near black, and the rim
+# only a shade lighter, so a key reads as one dark shape. The black edge, the corners'
 # alpha and the pressed half (the blue glow, below the middle) are kept.
 #
 #   python3 tools/keyboard-charcoal.py           write it
@@ -27,8 +27,8 @@ OUT = ART / "key-charcoal.png"
 
 # The original's greys (r = g = b) and what they become, by level:
 # 0 the black edge, 26 the face, 64 the rim. In between, linear.
-FACE = (48, 50, 52)    # #303234
-RIM = (60, 62, 65)     # #3c3e41
+FACE = (32, 33, 36)    # #202124
+RIM = (43, 44, 47)     # #2b2c2f
 
 
 def remap(v):
