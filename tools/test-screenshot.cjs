@@ -63,6 +63,19 @@ async function main() {
         await waitForServer(origin + "/apps.json", 10000);
         browser = await chromium.launch();
         const context = await browser.newContext({ viewport });
+        // Every toast the page shows, as it shows it: a toast lasts 2.5 s,
+        // and a busy machine can take longer than that between two steps.
+        await context.addInitScript(() => {
+            window.__toasts = [];
+            const seen = new WeakSet();
+            new MutationObserver(() => {
+                const t = document.querySelector("[data-testid=toast]");
+                if (t && !seen.has(t)) {
+                    seen.add(t);
+                    window.__toasts.push(t.textContent);
+                }
+            }).observe(document, { subtree: true, childList: true });
+        });
         const page = await context.newPage();
         const errors = [], host = [];
         page.on("pageerror", (e) => errors.push(e.message));
@@ -72,6 +85,15 @@ async function main() {
             else if (m.type() === "error" && !/Failed to load resource/.test(t)) errors.push(t);
         });
         const shot = (name) => page.screenshot({ path: path.join(outDir, name + ".png") });
+        // Wait for a toast with this text, shown since the last call.
+        let toastsSeen = 0;
+        const toast = async (text) => {
+            const at = await page.waitForFunction(([t, from]) => {
+                const i = window.__toasts.findIndex((s, n) => n >= from && s.includes(t));
+                return i >= 0 ? i + 1 : false;
+            }, [text, toastsSeen]);
+            toastsSeen = await at.jsonValue();
+        };
         const luna = (uri, params) => page.evaluate(([u, p]) => new Promise((res) => {
             const b = new PalmServiceBridge();
             b.onservicecallback = (s) => res(JSON.parse(s));
@@ -154,7 +176,7 @@ async function main() {
         await page.click("[data-testid=save]");
         // Save asks where: Photos (over the capture) or Files (a copy).
         await page.click(".pui-popup >> text=Save to Photos");
-        await page.waitForSelector("[data-testid=toast]:has-text('Saved')");
+        await toast("Saved");
         const after = await picture(want, 5, 0);
         check(after && after.width < 320 && after.height < 480 && after.width >= 200,
               `saved over the capture, cropped (${after && after.width}x${after && after.height})`);
@@ -206,7 +228,11 @@ async function main() {
         await page.click("[data-testid=save]");
         await page.click(".pui-popup >> text=Save to Files…");
         f = await sheet("save");
-        check((await f.textContent("[data-testid=save-folder]")).trim() === "Documents", "the first time: Documents");
+        const folderTitle = () => f.waitForFunction(() => {
+            const el = document.querySelector("[data-testid=save-folder]");
+            return el && document.querySelector("[data-testid=save-folders] [data-testid^=save-folder-], [data-testid=save-folders] .ss-empty") && el.textContent.trim();
+        }).then((h) => h.jsonValue());
+        check(await folderTitle() === "Documents", "the first time: Documents");
         await f.click("[data-testid=save-new-folder]");
         await f.fill("[data-testid=new-folder-name]", "Screens");
         await f.click("[data-testid=new-folder-create]");
@@ -215,7 +241,7 @@ async function main() {
         await shot("6-save-picker");
         await f.click("[data-testid=save-confirm]");
         await sheetGone();
-        await page.waitForSelector("[data-testid=toast]:has-text('Saved to Screens')");
+        await toast("Saved to Screens");
         const saved2 = "/media/internal/Documents/Screens/Edited capture.png";
         const st = await luna("luna://org.webosphoenix.filemanager/stat", { path: saved2 });
         check(st.returnValue && st.entry.size > 0, "saved in the new folder, where Files sees it");
@@ -227,14 +253,14 @@ async function main() {
         await page.click("[data-testid=save]");
         await page.click(".pui-popup >> text=Save to Files…");
         f = await sheet("save");
-        check((await f.textContent("[data-testid=save-folder]")).trim() === "Screens", "the next time: the last folder used");
+        check(await folderTitle() === "Screens", "the next time: the last folder used");
         await f.fill("[data-testid=save-name]", "Edited capture.png");
         await f.click("[data-testid=save-confirm]");
         await f.waitForSelector("[data-testid=replace-dialog]");
         check(true, "the same name: Replace asks first");
         await f.click("[data-testid=replace-confirm]");
         await sheetGone();
-        await page.waitForSelector("[data-testid=toast]:has-text('Saved to Screens')");
+        await toast("Saved to Screens");
         check(true, "replaced");
         // Any app's share: a picture not yet in Photos goes to the Camera Roll.
         const openShare = (req) => page.evaluate((r) => {

@@ -104,7 +104,11 @@ function Editor({ path }: { path: string }) {
     const [saving, setSaving] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [busy, setBusy] = useState(false);
-    const [toast, setToast] = useState("");
+    // A toast: each one shows for its full time, even with the same words
+    // as the one still up (a second save).
+    const [toastState, setToastState] = useState({ text: "", n: 0 });
+    const toast = toastState.text;
+    const setToast = (text: string) => setToastState((t) => ({ text, n: t.n + 1 }));
     const saveButton = useRef<HTMLButtonElement>(null);
     const stage = useRef<HTMLDivElement>(null);
     const canvas = useRef<HTMLCanvasElement>(null);
@@ -123,10 +127,10 @@ function Editor({ path }: { path: string }) {
         return () => ro.disconnect();
     }, []);
     useEffect(() => {
-        if (!toast) return;
-        const t = setTimeout(() => setToast(""), 2500);
+        if (!toastState.text) return;
+        const t = setTimeout(() => setToastState((s) => ({ text: "", n: s.n })), 2500);
         return () => clearTimeout(t);
-    }, [toast]);
+    }, [toastState]);
 
     const size: Size = image ? { width: image.naturalWidth, height: image.naturalHeight } : { width: 0, height: 0 };
     // Cropping shows the whole picture with the frame on it.
@@ -353,7 +357,7 @@ function Editor({ path }: { path: string }) {
                 <Button variant="negative" onClick={() => void remove()} data-testid="delete-confirm">Delete</Button>
                 <Button onClick={() => setConfirmDelete(false)}>Cancel</Button>
             </Dialog>
-            {toast && <div className="sc-toast" role="status" data-testid="toast">{toast}</div>}
+            {toast && <div key={toastState.n} className="sc-toast" role="status" data-testid="toast">{toast}</div>}
         </div>
     );
 }
