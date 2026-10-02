@@ -27,6 +27,18 @@ Item {
 
     SignalSpy { id: taken; target: shell; signalName: "screenshotTaken" }
 
+    // Stands in for an app's web view, which takes every key it is given.
+    TextInput {
+        id: appField
+        width: 100; height: 20
+        // Not counting the modifier keys themselves, which apps do see.
+        Keys.onPressed: (event) => {
+            if ([Qt.Key_Control, Qt.Key_Alt, Qt.Key_Meta, Qt.Key_Shift].indexOf(event.key) < 0)
+                appField.keysSeen++;
+        }
+        property int keysSeen: 0
+    }
+
     TestCase {
         name: "Screenshot"
         when: windowShown
@@ -70,6 +82,36 @@ Item {
             tryCompare(taken, "count", 1, 2000);
             compare(taken.signalArguments[0][0], "Card View");
             verify(!shell.locked);
+        }
+
+        // Regression: the keys reach the shell while an app has the
+        // keyboard focus (they did not: the web view swallowed them), and
+        // the app never sees them.
+        function test_keysWhileAnAppHasTheFocus() {
+            appField.forceActiveFocus();
+            appField.keysSeen = 0;
+            verify(appField.activeFocus);
+            keyClick(Qt.Key_F9);
+            tryCompare(taken, "count", 1, 2000);
+            wait(50);
+            keyClick(Qt.Key_P, Qt.ControlModifier | Qt.AltModifier);
+            tryCompare(taken, "count", 2, 2000);
+            wait(50);
+            keyClick(Qt.Key_P, Qt.MetaModifier | Qt.AltModifier);    // Control+Option+P on a Mac
+            tryCompare(taken, "count", 3, 2000);
+            wait(50);
+            keyPress(Qt.Key_Home);
+            keyPress(Qt.Key_F3);
+            keyRelease(Qt.Key_F3);
+            keyRelease(Qt.Key_Home);
+            tryCompare(taken, "count", 4, 2000);
+            verify(!shell.locked, "the chord did not lock");
+            compare(appField.keysSeen, 0, "the app saw none of them");
+            // Other keys still go to the app.
+            keyClick(Qt.Key_A);
+            compare(appField.keysSeen, 1);
+            compare(appField.text, "a");
+            shell.forceActiveFocus();
         }
 
         function test_keyboardKeys() {

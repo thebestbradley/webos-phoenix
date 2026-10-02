@@ -435,24 +435,6 @@ FocusScope {
                 return;
             }
         }
-        // A screen capture from a keyboard: Print Screen, or Ctrl+Alt+P
-        // (the phones' Orange+Sym+P, WindowServer.cpp:687-697); F9 in the
-        // simulator, for keyboards without Home.
-        if (event.key === Qt.Key_Print || event.key === Qt.Key_F9 || (event.key === Qt.Key_P && (event.modifiers & Qt.ControlModifier)
-                                           && (event.modifiers & Qt.AltModifier))) {
-            if (!event.isAutoRepeat)
-                takeScreenshot();
-            event.accepted = true;
-            return;
-        }
-        if (event.key === Qt.Key_Home || _isPowerKey(event.key)) {
-            // On release (below), as the original: Home + Power together is
-            // a screen capture.
-            if (!event.isAutoRepeat)
-                _buttonDown(event.key === Qt.Key_Home);
-            event.accepted = true;
-            return;
-        }
         if (event.key === Qt.Key_Escape || event.key === Qt.Key_Back) {
             gestureBack(); event.accepted = true;
         } else if (event.key === Qt.Key_F1) {
@@ -468,11 +450,31 @@ FocusScope {
         }
     }
 
-    Keys.onReleased: (event) => {
-        if ((event.key === Qt.Key_Home || _isPowerKey(event.key)) && !event.isAutoRepeat) {
-            _buttonUp(event.key === Qt.Key_Home);
-            event.accepted = true;
+    // The system's keys, whatever has the keyboard focus (an app's web
+    // view takes every key it is given): Home and Power act on release, as
+    // the original, and together are a screen capture; Print Screen, F9 (the
+    // simulator, for keyboards without Home) and Ctrl+Alt+P (the phones'
+    // Orange+Sym+P, WindowServer.cpp:687-697) capture at once. On a Mac,
+    // Qt's Ctrl is Command and Meta is Control: both Command+Option+P and
+    // Control+Option+P capture.
+    SystemKeys {
+        id: systemKeys
+        keys: [Qt.Key_Home, Qt.Key_F3, Qt.Key_PowerOff, Qt.Key_Print, Qt.Key_F9]
+        chords: [{ key: Qt.Key_P, modifiers: Qt.ControlModifier | Qt.AltModifier },
+                 { key: Qt.Key_P, modifiers: Qt.MetaModifier | Qt.AltModifier }]
+        onPressed: (key, autoRepeat) => {
+            if (autoRepeat)
+                return;
+            if (key === Qt.Key_Print || key === Qt.Key_F9)
+                shell.takeScreenshot();
+            else
+                shell._buttonDown(key === Qt.Key_Home);
         }
+        onReleased: (key, autoRepeat) => {
+            if (!autoRepeat && (key === Qt.Key_Home || shell._isPowerKey(key)))
+                shell._buttonUp(key === Qt.Key_Home);
+        }
+        onChord: shell.takeScreenshot()
     }
 
     // ---- Home + Power: a screen capture -----------------------------------------

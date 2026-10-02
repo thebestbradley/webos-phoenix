@@ -10,7 +10,9 @@
 //
 // Keys: Esc = back gesture, Home/F1 = up gesture, F2 = demo notification,
 //       F3 = lock/unlock, F4 = incoming call, F5 = incoming text message,
-//       F6 = low battery, F7 = charger in/out, Ctrl+Left / Ctrl+Right =
+//       F6 = low battery, F7 = charger in/out, F9 / Print Screen /
+//       Ctrl+Alt+P (Command or Control+Option+P on a Mac) = screen capture,
+//       Home + F3 together = screen capture, Ctrl+Left / Ctrl+Right =
 //       turn the device a quarter turn counter-clockwise / clockwise.
 //       Type in card view for Just Type.
 

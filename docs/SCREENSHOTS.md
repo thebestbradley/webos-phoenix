@@ -37,7 +37,7 @@ From the webOS 3.0.5 source (`luna-sysmgr`):
 
 | What | Phoenix 1.x |
 | --- | --- |
-| Keys | Home + Power, as the original (Power + Volume Down on devices without Home); Print Screen or Ctrl+Alt+P on a hardware keyboard (the phones' Orange+Sym+P); F9 in the simulator |
+| Keys | Home + Power, as the original (Power + Volume Down on devices without Home); Print Screen or Ctrl+Alt+P on a hardware keyboard (the phones' Orange+Sym+P; on a Mac, Command+Option+P or Control+Option+P); F9 in the simulator (fn+F9 on a Mac keyboard set to media keys). The shell takes these keys whatever has the focus, as the original's WindowServer did: an app never sees them |
 | Feedback | The "shutter" feedback sound (synthesized, `tools/make-feedback-sounds.py`) and the original's flash, 900 ms |
 | File | `/media/internal/screencaptures/<App name> YYYY-MM-DD at HH.MM.SS.png` (ISO date); "Card View", "Launcher" or "Lock Screen" when no app is in front |
 | Photos | The "Screen captures" album, as the original |
