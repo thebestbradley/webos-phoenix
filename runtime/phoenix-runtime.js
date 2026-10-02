@@ -38,6 +38,33 @@
         log: []
     };
 
+    // ---- Prototype.js and the standard array methods ---------------------------
+    //
+    // Apps of the time bundle Prototype.js (Mojo does; Quickoffice's QOWT
+    // carries a build of it), which puts its Enumerable on Array.prototype,
+    // some, every and find among them. Those stop the loop by throwing
+    // $break, which only Prototype's own each catches; a build whose
+    // Array#each is a plain loop (QOWT's) lets it escape, so any some()
+    // that finds a match throws: in the app's code and in this runtime's
+    // services, which run in the page here (on a device they were across
+    // the bus). Before any app script runs, the standard some, every and
+    // find stay the browser's: an assignment is taken and ignored, so code
+    // in strict mode does not fail either. Prototype's other methods
+    // (any, detect, collect, ...) and its map and filter are left alone.
+    (function keepStandardArrayMethods() {
+        ["some", "every", "find"].forEach(function (name) {
+            var native = Array.prototype[name];
+            if (typeof native !== "function") return;
+            try {
+                Object.defineProperty(Array.prototype, name, {
+                    configurable: false, enumerable: false,
+                    get: function () { return native; },
+                    set: function () { /* Prototype's; see above */ }
+                });
+            } catch (e) { /* already fixed by the page: leave it */ }
+        });
+    })();
+
     // ---- Host messaging --------------------------------------------------------
 
     var host = global.phoenixHost = global.phoenixHost || {
@@ -270,23 +297,35 @@
 
         // Synchronous file read. Returns undefined for missing files, which
         // MojoLoader relies on (e.g. to fall back from concatenated.js to the
-        // individual sources listed in a framework's manifest).
-        getResource: function (path) {
+        // individual sources listed in a framework's manifest). With "json"
+        // in its flags ("const json", as enyo.fetchConfigFile asks for
+        // appinfo.json) the file is parsed, as WebAppManager did: Enyo apps
+        // read enyo.fetchAppInfo().version and the like.
+        getResource: function (path, flags) {
+            var text;
             try {
                 var req = new XMLHttpRequest();
                 req.open("GET", path, false);
                 req.send(null);
-                return req.status >= 200 && req.status < 300 ? req.responseText : undefined;
+                text = req.status >= 200 && req.status < 300 ? req.responseText : undefined;
             } catch (e) {
                 // Custom schemes (phoenix-sim) report a missing file by throwing.
                 return undefined;
             }
+            return asResource(text, flags);
         },
         getIdentifierForFrame: function () { return PalmSystem.identifier; },
         getLocalizedString: function (s) { return s; }
     };
 
     global.PalmSystem = PalmSystem;
+
+    // getResource's flags: "json" (with "const") parses the file (a BOM and
+    // all); otherwise the text.
+    function asResource(text, flags) {
+        if (text === undefined || !/\bjson\b/.test(String(flags || ""))) return text;
+        try { return JSON.parse(String(text).replace(/^\ufeff/, "")); } catch (e) { return undefined; }
+    }
 
     // Window types. Enyo opens alerts and dashboards with window.open(url,
     // name, "height=150, attributes={\"window\":\"popupalert\", ...}")
@@ -322,7 +361,7 @@
             return nativeOpen.call(global, url, name, features);
         };
     }
-    global.palmGetResource = function (path) { return PalmSystem.getResource(path); };
+    global.palmGetResource = function (path, flags) { return PalmSystem.getResource(path, flags); };
 
     // ---- Service bus -------------------------------------------------------------------
 
@@ -365,7 +404,7 @@
         try {
             fn(params || {}, reply, ctx, method);
         } catch (e) {
-            console.error("[phoenix-runtime] " + url + " threw", e);
+            console.error("[phoenix-runtime] " + url + " threw", e && e.stack ? e.stack : e);
             reply(fail(-1, String(e && e.message || e)));
         }
     }
@@ -407,7 +446,14 @@
                 dispatch(url, params, function (response) {
                     if (cancelled || !bridge.onservicecallback)
                         return;
-                    bridge.onservicecallback(JSON.stringify(response));
+                    // The app's own handler: what it throws is the app's
+                    // uncaught error, as on a device (the reply came over
+                    // the bus), never the service's failure.
+                    try {
+                        bridge.onservicecallback(JSON.stringify(response));
+                    } catch (e) {
+                        setTimeout(function () { throw e; }, 0);
+                    }
                 }, ctx);
             };
             if (unloading) {
@@ -1861,9 +1907,9 @@
     (function emailTransports() {
         var FILE_CACHE = "/var/file-cache/email/phoenix/";
         var readFile = PalmSystem.getResource;
-        PalmSystem.getResource = function (path) {
+        PalmSystem.getResource = function (path, flags) {
             var cache = store.get("fileCache", {});
-            return Object.prototype.hasOwnProperty.call(cache, path) ? cache[path] : readFile(path);
+            return Object.prototype.hasOwnProperty.call(cache, path) ? asResource(cache[path], flags) : readFile(path, flags);
         };
 
         function mailAccount(accountId) {
@@ -5268,15 +5314,57 @@
             } else if (addSampleFiles(v, readSampleIndex())) {
                 save(v);
             }
+            syncDocumentIndex(v);
             return v;
         }
         function save(v) {
             try {
                 store.set(VFS_KEY, v);
+                syncDocumentIndex(v);
                 return true;
             } catch (e) {
                 return false;   // quota
             }
+        }
+
+        // webOS 3's media indexer also listed the documents on the USB
+        // drive, in db8 kind com.palm.media.misc.file:1: {path, name (the
+        // stem), extension, size, modifiedTime (s), mimeType, searchKey}.
+        // Quickoffice's "My TouchPad" is that list (its LocalFileService
+        // finds in the kind). Kept in step with the files here; hidden
+        // folders are left out, as the indexer did.
+        var DOC_TYPES = {
+            doc: "application/msword", docx: MIME.docx, xls: "application/vnd.ms-excel", xlsx: MIME.xlsx,
+            ppt: "application/vnd.ms-powerpoint", pptx: MIME.pptx, pdf: "application/pdf", txt: "text/plain",
+            rtf: "application/rtf", csv: "text/csv", odt: "application/vnd.oasis.opendocument.text",
+            ods: "application/vnd.oasis.opendocument.spreadsheet", odp: "application/vnd.oasis.opendocument.presentation"
+        };
+        var DOC_KIND = "com.palm.media.misc.file:1";
+        var docIndexSig = null;
+        function syncDocumentIndex(v) {
+            var want = [];
+            Object.keys(v.nodes).sort().forEach(function (path) {
+                var n = v.nodes[path];
+                if (n.t !== "f" || path.indexOf(MEDIA_ROOT + "/") !== 0 || /\/\./.test(path)) return;
+                var m = /\/([^\/]*?)(?:\.([^.\/]+))?$/.exec(path), ext = m && m[2] ? m[2].toLowerCase() : "";
+                if (!DOC_TYPES[ext]) return;
+                want.push({ _id: "phoenix-document:" + path, _kind: DOC_KIND, path: path, name: m[1], extension: ext,
+                            size: n.size >= 0 ? n.size : 0, modifiedTime: Math.floor((n.m || 0) / 1000),
+                            mimeType: DOC_TYPES[ext], searchKey: m[1].toLowerCase().replace(/\s+/g, "_") });
+            });
+            var sig = JSON.stringify(want);
+            if (sig === docIndexSig) return;
+            docIndexSig = sig;
+            var keep = {};
+            want.forEach(function (o) { keep[o._id] = true; });
+            var have = (callNow("palm://com.palm.db/find", { query: { from: DOC_KIND } }) || {}).results || [];
+            var gone = have.filter(function (o) { return !keep[o._id]; }).map(function (o) { return o._id; });
+            var changed = want.filter(function (o) {
+                var h = have.filter(function (x) { return x._id === o._id; })[0];
+                return !h || h.size !== o.size || h.modifiedTime !== o.modifiedTime;
+            });
+            if (gone.length) callNow("palm://com.palm.db/del", { ids: gone });
+            if (changed.length) callNow("palm://com.palm.db/put", { objects: changed });
         }
 
         function children(v, p) {
@@ -5665,6 +5753,9 @@
             reset: function () { store.set(VFS_KEY, seed()); },
             errors: E
         };
+        // The documents' index (com.palm.media.misc.file:1) is there for
+        // apps that read it without asking this service (Quickoffice).
+        setTimeout(function () { try { load(); } catch (e) { /* the store is unavailable */ } }, 0);
 
         // ringtone/listRingtones: the system's ringtones (Open webOS's
         // /usr/palm/sounds), then the user's (/media/internal/ringtones, the
