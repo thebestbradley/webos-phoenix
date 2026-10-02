@@ -563,6 +563,13 @@ Item {
     readonly property int _shortKeyHalf: 55
     // 9-tile corners: 22 phone, 13 tablet (PhoneKeyboard.cpp:181, TabletKeyboard.cpp:176).
     readonly property int _corner: tablet ? 13 : 22
+    // Phoenix: the phone's bordered keys (shift, delete, the bottom row)
+    // trimmed of 3 of their art's 5 black pixels a side, so they stand 4 px
+    // apart, not 10, nearer the letters' spacing (the plugin never trimmed
+    // the phone's: PhoneKeyboard.cpp:478-479).
+    readonly property int cPhoneKeyTrim: 3
+    // Phoenix: the emoji key's face, in outline.
+    readonly property color cEmojiKeyColor: "#ffc83d"
     // popup-bg.png 100x90, popup-bg-2.png 100x150, popup-key.png 80x120.
     readonly property int _popupWidth: 100
     readonly property int _popupHeight: 90
@@ -854,10 +861,10 @@ Item {
     function _keyCap(r, cx, cy, key, use) {
         var ops = [];
         var loc = { x: r.x, y: r.y, w: r.w, h: r.h - 4 };   // location.setBottom(bottom - 4)
-        if (key === KM.Key.Emoji)    // Phoenix: the emoji, centred, in colour (no shadow)
-            return [{ text: _km.displayString(key, false), x: loc.x, y: loc.y, w: loc.w, h: loc.h,
-                      size: Math.round(Math.min(loc.w, loc.h) * (use === 2 ? 0.55 : 0.45)), bold: false,
-                      color: cActiveColor, back: cActiveColor, align: "center", emoji: true }];
+        if (key === KM.Key.Emoji) {  // Phoenix: a face drawn in outline, centred (EmojiFace)
+            var d = Math.round(Math.min(loc.w, loc.h) * (use === 2 ? 0.55 : 0.45));
+            return [{ face: true, x: loc.x + Math.floor((loc.w - d) / 2), y: loc.y + Math.floor((loc.h - d) / 2), w: d, h: d }];
+        }
         var useWhite = use === 0 || use === 1;
         var extraLarge = !tablet && (use === 1 || use === 2);
         if (tablet && use === 1)
@@ -1518,6 +1525,13 @@ Item {
                 f.x = 0;
             else if (f.x + f.w - 1 > keymapRight)
                 f.x -= f.x + f.w - 1 - keymapRight;
+            // Phoenix: wider than the keys (six to a line, on the phone),
+            // the plugin's frame went off the left edge, hiding half of the
+            // first key; the keys are centred instead, the frame's sides
+            // beyond the edges.
+            var cellsWidth = spec.lineLength * _popupKeyWidth;
+            if (f.w > _km.rect.width)
+                f.x = _km.rect.x + Math.floor((_km.rect.width - cellsWidth) / 2) - cPopupLeftSide;
             _extendedFrame = f;
             _triggerRepaint();
             return true;
@@ -1655,6 +1669,10 @@ Item {
                 width: modelData.w
                 height: modelData.h
                 readonly property bool shadow: modelData.text !== undefined && !Qt.colorEqual(modelData.color, modelData.back)
+                EmojiFace {
+                    visible: op.modelData.face === true
+                    anchors.fill: parent
+                }
                 Image {
                     visible: op.modelData.icon !== undefined
                     anchors.fill: parent
@@ -1685,6 +1703,53 @@ Item {
         }
     }
 
+    // Phoenix: the emoji key's cap, a smiling face in outline (no fill),
+    // drawn from rectangles so it is sharp at any scale.
+    component EmojiFace: Item {
+        id: face
+        objectName: "emojiFace"
+        readonly property real d: Math.min(width, height)
+        readonly property real line: Math.max(1.5, d * 0.08)
+        Rectangle {
+            objectName: "emojiFaceRing"
+            anchors.fill: parent
+            radius: width / 2
+            color: "transparent"
+            border.color: kb.cEmojiKeyColor
+            border.width: face.line
+        }
+        Repeater {
+            model: [0.34, 0.66]
+            delegate: Rectangle {
+                required property real modelData
+                width: face.line * 1.4
+                height: face.line * 1.8
+                radius: width / 2
+                x: face.d * modelData - width / 2
+                y: face.d * 0.36 - height / 2
+                color: kb.cEmojiKeyColor
+            }
+        }
+        // The smile: the lower part of a smaller ring.
+        Item {
+            x: 0
+            y: face.d * 0.56
+            width: face.d
+            height: face.d - y
+            clip: true
+            Rectangle {
+                x: face.d * 0.25
+                y: face.d * 0.25 - parent.y
+                width: face.d * 0.5
+                height: width
+                radius: width / 2
+                color: "transparent"
+                border.color: kb.cEmojiKeyColor
+                border.width: face.line
+            }
+        }
+    }
+
     // The ellipsis on keys with extended characters while a popup shows.
     component Ellipsis: Text {
         property var r
@@ -1704,6 +1769,9 @@ Item {
         id: frame
         objectName: "keyboardFrame"
         visible: !kb.emojiOpen || kb.emojiSearch
+        // Above the candidate bar: the extended keys and the phone's key
+        // preview rise from the top row over it.
+        z: 1
         y: kb.candidateBarHeight
         width: kb._spaceWidth
         height: kb._keymapHeight + kb._topPadding
@@ -1734,7 +1802,7 @@ Item {
                     source: kb._art + keyItem.modelData.background
                     half: kb._keyHalfFor(keyItem.modelData.background)
                     corner: kb._corner
-                    trim: kb._trim
+                    trim: kb.tablet ? kb._trim : kb.cPhoneKeyTrim
                 }
                 Caps {
                     x: -keyItem.x
@@ -1799,7 +1867,7 @@ Item {
                         pressed: true
                         half: kb._keyHalfFor(pressedItem.modelData.background)
                         corner: kb._corner
-                        trim: kb._trim
+                        trim: kb.tablet ? kb._trim : kb.cPhoneKeyTrim
                     }
                     Ellipsis {
                         visible: pressedItem.modelData.ellipsis
@@ -1910,6 +1978,9 @@ Item {
         id: touchArea
         objectName: "keyboardTouch"
         readonly property bool whole: kb._extendedKeys !== null && kb.parent !== null
+        // Over the candidate bar too while the extended keys show: those
+        // over it are tapped, not the words under them.
+        z: whole ? 2 : 0
         x: whole ? -kb.x : 0
         y: whole ? -kb.y : (kb._grace ? -kb.graceZone * kb.pixelScale : 0)
         width: whole ? kb.parent.width : kb.width

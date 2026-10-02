@@ -181,9 +181,50 @@ Item {
             var cell = findChild(kb, "extendedKey1");
             verify(cell);
             var p = cell.mapToItem(kb, cell.width / 2, cell.height / 2);
+            // The top row's accents rise over the candidate bar, in front of
+            // it (they were drawn behind it: neither seen nor reachable).
+            verify(kb.candidateBarShown);
+            verify(p.y < kb.candidateBarHeight, "the popup reaches into the candidate bar");
+            // Where the popup crosses the bar (in its middle): the popup's
+            // light art, not the bar (black over the keys, 45% over a key).
+            var onScreen = kb.mapToItem(shell, p.x, kb.candidateBarHeight / 2);
+            var px = grabImage(shell).pixel(Math.round(onScreen.x), Math.round(onScreen.y));
+            verify(px.r > 0.65 && px.g > 0.65 && px.b > 0.65, "the popup in front of the candidate bar (" + px + ")");
             mouseMove(kb, p.x, p.y);
             mouseRelease(kb, p.x, p.y);
             compare(field.text, "è");
+            tryCompare(popup, "visible", false, 1000);
+        }
+
+        // Let go on the key: the accents stay up (the phone), and a tap on
+        // one over the candidate bar types it (the bar does not take it).
+        function test_extendedCharactersTapOverBar() {
+            showKeyboard();
+            var r = kb.keyRect("o");          // two lines of accents
+            mousePress(kb, r.x + r.width / 2, r.y + r.height / 2);
+            var popup = findChild(kb, "extendedKeys");
+            tryCompare(popup, "visible", true, 1000);
+            mouseRelease(kb, r.x + r.width / 2, r.y + r.height / 2);
+            verify(popup.visible);
+            // Six to a line, as wide as the keys: all of each on the screen.
+            for (var j = 0; j < 6; ++j) {
+                var e = findChild(kb, "extendedKey" + j);
+                var lt = e.mapToItem(kb, 0, 0), rb = e.mapToItem(kb, e.width, e.height);
+                verify(lt.x >= -0.5 && rb.x <= kb.width + 0.5, "extendedKey" + j + " on the screen (" + lt.x + ".." + rb.x + ")");
+            }
+            // A cell of the lower line, over the bar.
+            var cell = null, p = null;
+            for (var i = 0; !cell; ++i) {
+                var c = findChild(kb, "extendedKey" + i);
+                verify(c, "a cell over the candidate bar");
+                var q = c.mapToItem(kb, c.width / 2, c.height / 2);
+                if (q.y > 0 && q.y < kb.candidateBarHeight) {
+                    cell = c;
+                    p = q;
+                }
+            }
+            mouseClick(kb, p.x, p.y);
+            compare(field.text, cell.modelData.text);
             tryCompare(popup, "visible", false, 1000);
         }
 
@@ -356,6 +397,59 @@ Item {
             var cell;
             tryVerify(function() { cell = findChild(grid, "emoji-" + emoji); return cell && cell.visible; }, 1000, "cell " + emoji);
             return cell;
+        }
+
+        // The emoji key's cap: a face in yellow outline, no fill (Phoenix),
+        // inside the key.
+        function shownChild(item, name) {
+            for (var i = 0; i < item.children.length; ++i) {
+                var c = item.children[i];
+                if (!c.visible)
+                    continue;
+                if (c.objectName === name)
+                    return c;
+                var f = shownChild(c, name);
+                if (f)
+                    return f;
+            }
+            return null;
+        }
+        function test_emojiKeyFace() {
+            showKeyboard();
+            var r = kb.keyRect(smile);
+            verify(r);
+            var face = shownChild(kb, "emojiFace");
+            verify(face, "the face on the key");
+            var ring = findChild(face, "emojiFaceRing");
+            compare(ring.color.a, 0);
+            verify(Qt.colorEqual(ring.border.color, kb.cEmojiKeyColor));
+            var c = face.mapToItem(kb, face.width / 2, face.height / 2);
+            verify(Math.abs(c.x - (r.x + r.width / 2)) < 3, "centred across the key");
+            verify(c.y > r.y && c.y < r.y + r.height);
+            // The middle of the face is the key, not yellow.
+            var at = face.mapToItem(shell, face.width / 2, face.height / 2);
+            var px = grabImage(shell).pixel(Math.round(at.x), Math.round(at.y));
+            verify(px.r < 0.3 && px.g < 0.3, "no fill (" + px + ")");
+        }
+
+        // The phone's bordered keys stand 4 px apart (their art's black
+        // edge trimmed), not 10.
+        function test_borderedKeysSpacing() {
+            showKeyboard();
+            var shot = grabImage(shell);
+            var r = kb.keyRect("Space");
+            verify(r);
+            var y = kb.mapToItem(shell, 0, r.y + r.height / 2).y;
+            // From inside the space bar, leftwards: its fill and border
+            // (grey), then the black between the keys.
+            var x = Math.round(kb.mapToItem(shell, r.x + 10 * kb.pixelScale, 0).x);
+            var lum = function(x) { var c = shot.pixel(x, Math.round(y)); return c.r; };
+            while (lum(x) > 0.03) --x;
+            var dark = 0;
+            for (; lum(x) <= 0.03 && dark < 30; --x)
+                ++dark;
+            dark /= kb.pixelScale;         // in keyboard pixels
+            verify(dark >= 2 && dark <= 6, "gap " + dark + " px");
         }
 
         function test_emojiKeyTypesAnEmoji() {
