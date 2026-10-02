@@ -432,32 +432,39 @@ Item {
             verify(px.r < 0.3 && px.g < 0.3, "no fill (" + px + ")");
         }
 
-        // The phone's bordered keys are drawn inset in their space (Phoenix):
-        // 3 px a side and 12 above and below, past the art's own 5 px edge.
-        function test_borderedKeysInset() {
+        // The phone's bordered keys stand 4 px apart (their art's black
+        // edge trimmed), not 10.
+        function test_borderedKeysSpacing() {
             showKeyboard();
             var shot = grabImage(shell);
             var r = kb.keyRect("Space");
             verify(r);
-            var lum = function(x, y) { return shot.pixel(Math.round(x), Math.round(y)).r; };
-            // Across: from inside the space bar leftwards, its fill and
-            // border (grey), then the black up to the emoji key's border.
             var y = kb.mapToItem(shell, 0, r.y + r.height / 2).y;
-            var x = kb.mapToItem(shell, r.x + 30 * kb.pixelScale, 0).x;
-            while (lum(x, y) > 0.03) --x;
-            var gap = 0;
-            for (; lum(x, y) <= 0.03 && gap < 60; --x)
-                ++gap;
-            gap /= kb.pixelScale;          // in keyboard pixels
-            verify(gap >= 13 && gap <= 19, "16 px between them (" + gap + ")");
-            // Down: the box starts below the key's top by the art's edge and
-            // the inset (17 px).
-            var cx = kb.mapToItem(shell, r.x + r.width / 2, 0).x;
-            var top = kb.mapToItem(shell, 0, r.y).y;
-            var yy = top;
-            while (lum(cx, yy) <= 0.03 && yy < top + 40 * kb.pixelScale) ++yy;
-            var above = (yy - top) / kb.pixelScale;
-            verify(above >= 14 && above <= 20, "17 px above the box (" + above + ")");
+            // From inside the space bar, leftwards: its fill and border
+            // (grey), then the black between the keys.
+            var x = Math.round(kb.mapToItem(shell, r.x + 10 * kb.pixelScale, 0).x);
+            var lum = function(x) { var c = shot.pixel(x, Math.round(y)); return c.r; };
+            while (lum(x) > 0.03) --x;
+            var dark = 0;
+            for (; lum(x) <= 0.03 && dark < 30; --x)
+                ++dark;
+            dark /= kb.pixelScale;         // in keyboard pixels
+            verify(dark >= 2 && dark <= 6, "gap " + dark + " px");
+        }
+
+        // The bottom row's cells fit their labels (Phoenix): 123 a letter
+        // and a quarter, the keys beside the space bar a letter, Return a
+        // letter and a half, the space bar the rest; the row's total width
+        // is the original's.
+        function test_bottomRowCells() {
+            showKeyboard();
+            var letter = kb.keyRect("q").width;
+            var near = function(a, b, what) { verify(Math.abs(a - b) < 1.5, what + " (" + a + " vs " + b + ")"); };
+            near(kb.keyRect("123").width, 1.25 * letter, "123");
+            near(kb.keyRect(smile).width, letter, "the emoji key");
+            near(kb.keyRect("Space").width, 4.25 * letter, "the space bar");
+            // The row spans the keyboard, as the letters' rows do.
+            near(kb.keyRect("Space").x + kb.keyRect("Space").width + 2.5 * letter, kb.width, "the period and Return");
         }
 
         function test_emojiKeyTypesAnEmoji() {

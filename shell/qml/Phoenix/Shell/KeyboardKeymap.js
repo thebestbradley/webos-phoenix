@@ -179,7 +179,18 @@ var PX = {
     periodExclamation: keys(".!•…¡")
 };
 
-var SPACE_KEY_WEIGHT = 4;   // PhoneKeymap.cpp:27
+// Phoenix: the phone's bottom row is resized so its bordered keys fit
+// their labels, the space bar taking the room they gave up (the owner,
+// 2 October 2026). The plugin's weights (PhoneKeymap.cpp:27, :145-154,
+// :284-308) were space 4, the symbol and Return keys 1.5 (AZERTY 2) and
+// the keys beside the space bar 1.5: 123 and "," floated in boxes half
+// again as wide as a letter. Now: 123 1.25 (AZERTY 1.75), Return 1.5 (its
+// word at full size; AZERTY 2), the keys beside the space bar 1 (a
+// letter's width), the space bar 5.25 less what stands beside it (4.25
+// with the emoji key). Each row keeps its total, so the letters above are
+// unchanged.
+var SPACE_KEY_WEIGHT = 5.25;
+var BESIDE_SPACE_WEIGHT = 1;
 
 function phoneBottomRow(symbolWeight, returnWeight) {
     // QWERT_BOTTOM_ROW / AZERTY_BOTTOM (:145-154, :264-273)
@@ -202,7 +213,7 @@ function phoneQwerty() {   // sQwerty (:156-161)
                           [X.Z, null, X.C, null, null, X.N, X.M],
                           [PX.semicolon, PX.colon, PX.equal, PX.plus, PX.minus, PX.apostrophe, PX.quoteDbl]))
             .concat([K(-0.25, Key.Backspace), K(1.25, Key.Backspace), NOKEY()]),
-        phoneBottomRow(1.5, 1.5)
+        phoneBottomRow(1.25, 1.5)
     ];
 }
 
@@ -215,7 +226,7 @@ function phoneQwertz() {   // sQwertz (:208-213)
         [K(1.25, Key.Shift, Key.ToggleLanguage, null, "languages"), K(-0.25, code("Y"), code(";"), X.Y)]
             .concat(pairs(1, "YXCVBNM", ";:=+-'\"", [X.Y, null, X.C, null, null, X.N, X.M]))
             .concat([K(-0.25, Key.Backspace), K(1.25, Key.Backspace), NOKEY()]),
-        phoneBottomRow(1.5, 1.5)
+        phoneBottomRow(1.25, 1.5)
     ];
 }
 
@@ -229,7 +240,7 @@ function phoneAzerty() {   // sAzerty (:275-280)
         [K(1.25, Key.Shift, Key.ToggleLanguage, null, "languages"), K(-0.25, Key.Shift, Key.ToggleLanguage, null, "languages")]
             .concat(pairs(1, "WXCVBN", ";:=+-'", [null, null, X.C, null, null, X.N]))
             .concat([K(1.5, code("'"), code("@")), K(-0.25, Key.Backspace), K(1.25, Key.Backspace)]),
-        phoneBottomRow(2, 2)
+        phoneBottomRow(1.75, 2)
     ];
 }
 
@@ -237,14 +248,15 @@ function phoneAzerty() {   // sAzerty (:275-280)
 // afterSpace) for plain, symbol, e-mail and URL fields (:284-308).
 function phoneCustom(azerty) {
     var hidden = NOKEY();
-    var commaSlash = K(1.5, code(","), code("/"), PX.commaSlash);
-    var periodQuestion = K(1.5, code("."), code("?"), PX.periodQuestion);
-    var commaQuestion = K(1.5, code(","), code("?"), PX.commaQuestion);
-    var periodExclamation = K(1.5, code("."), code("!"), PX.periodExclamation);
+    var w = BESIDE_SPACE_WEIGHT;
+    var commaSlash = K(w, code(","), code("/"), PX.commaSlash);
+    var periodQuestion = K(w, code("."), code("?"), PX.periodQuestion);
+    var commaQuestion = K(w, code(","), code("?"), PX.commaQuestion);
+    var periodExclamation = K(w, code("."), code("!"), PX.periodExclamation);
     var before = azerty ? commaQuestion : commaSlash;
     var after = azerty ? periodExclamation : periodQuestion;
-    var emoticons = K(1.5, Key.EmoticonOptions, Key.EmoticonOptions, PX.emoticons, PX.emoticons);
-    var more = K(1.5, Key.MorePopup, Key.MorePopup);
+    var emoticons = K(w, Key.EmoticonOptions, Key.EmoticonOptions, PX.emoticons, PX.emoticons);
+    var more = K(w, Key.MorePopup, Key.MorePopup);
     var at = K(1, code("@"));
     var dotCom = K(1, Key.DotCom, Key.DotCom, PX.dotCom);
     var slash = K(1, code("/"));
