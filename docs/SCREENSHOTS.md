@@ -44,7 +44,7 @@ From the webOS 3.0.5 source (`luna-sysmgr`):
 | Photos | The "Screen captures" album, as the original |
 | Thumbnail | As iOS: the capture, framed, in the bottom left corner for 5 s (above the phone's notification area); a tap opens it in the preview, a swipe to the left puts it away (Phoenix addition, the owner's decision) |
 | Notification | "Screen captured" and the capture's name; a tap opens the preview (Phoenix addition, the owner's decision) |
-| Preview | The Screenshot app (`apps/screenshot`, hidden from the launcher): the capture, with Crop (drag the frame's corners or middle), Markup (a pen in six colours, Undo), Share (Email, Messaging), Delete (after asking), and Save, which writes the edits over the capture (Revert drops them) |
+| Preview | The Screenshot app (`apps/screenshot`, hidden from the launcher): the capture, with Crop (drag the frame's corners or middle), Markup (a pen in six colours, Undo), Share (the system's share sheet: [SHARE-AND-FILES.md](SHARE-AND-FILES.md)), Delete (after asking), and Save, which asks: Save to Photos writes the edits over the capture (Revert drops them), Save to Files writes the edited picture to a folder the user picks |
 | Service | Later: `luna://org.webosphoenix.screenshot/capture {}` and the original's `com.palm.systemmanager/takeScreenShot` (SystemService.cpp:210, for patches and apps that used it); both reply with the file |
 | Protected cards | An app can mark its card secure (a Phoenix appinfo key, like Android's FLAG_SECURE); the capture shows it black |
 

@@ -5,11 +5,12 @@
 // the newest capture): the picture, and
 //   Crop     drag the corners (or the middle) of a frame; Reset, Done
 //   Markup   draw with a pen in six colours; Undo
-//   Share    Email (attachments: [{fullPath, mimeType}]) or Messaging
-//            ({attachment}), as Photos shares
+//   Share    the system's share sheet (apps that take a picture, Save to
+//            Photos, Save to Files; docs/SHARE-AND-FILES.md), edits saved first
 //   Delete   the file and its index entry, after asking
-//   Save     once edited: the edits written over the capture (Revert
-//            drops them); Done otherwise
+//   Save     once edited: Save to Photos writes the edits over the capture
+//            (Revert drops them); Save to Files writes the edited picture
+//            where the user picks (the system's save picker). Done otherwise
 // Edits are kept as data (editor.ts) and drawn at the picture's own size
 // when saved. docs/SCREENSHOTS.md SC2.
 //
@@ -18,7 +19,7 @@
 // requestDelete.
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { apps, mediaFiles, mediaIndexer, MEDIA_ROOT } from "@phoenix/luna";
+import { filePicker, mediaFiles, mediaIndexer, shareSheet, MEDIA_ROOT } from "@phoenix/luna";
 import { useLaunchParams, useMediaUrl } from "@phoenix/luna/react";
 import { BackProvider, Button, Dialog, IconToolButton, PopupMenu, Toolbar, ToolSpacer, useBack } from "@phoenix/ui";
 import {
@@ -39,6 +40,16 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 const nameOf = (path: string) => path.slice(path.lastIndexOf("/") + 1).replace(/\.png$/i, "");
+const folderName = (path: string) => {
+    const dir = path.slice(0, path.lastIndexOf("/"));
+    return dir === MEDIA_ROOT ? "Internal Storage" : dir.slice(dir.lastIndexOf("/") + 1);
+};
+const toBase64 = (blob: Blob): Promise<string> => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).replace(/^data:[^,]*,/, ""));
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(blob);
+});
 
 export function App() {
     return (
@@ -90,11 +101,11 @@ function Editor({ path }: { path: string }) {
     const [mode, setMode] = useState<Mode>("view");
     const [draftCrop, setDraftCrop] = useState<Rect | null>(null);
     const [color, setColor] = useState(PEN_COLORS[0]);
-    const [sharing, setSharing] = useState(false);
+    const [saving, setSaving] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [busy, setBusy] = useState(false);
     const [toast, setToast] = useState("");
-    const shareButton = useRef<HTMLDivElement>(null);
+    const saveButton = useRef<HTMLButtonElement>(null);
     const stage = useRef<HTMLDivElement>(null);
     const canvas = useRef<HTMLCanvasElement>(null);
     const [box, setBox] = useState<Size>({ width: 0, height: 0 });
@@ -191,7 +202,7 @@ function Editor({ path }: { path: string }) {
     const handleUp = () => { cropDrag.current = null; };
 
     useBack(() => {
-        if (sharing) setSharing(false);
+        if (saving) setSaving(false);
         else if (mode === "crop") setMode("view");
         else if (mode === "markup") setMode("view");
         else return false;
@@ -231,13 +242,29 @@ function Editor({ path }: { path: string }) {
             setBusy(false);
         }
     };
-    const share = async (target: string) => {
-        setSharing(false);
+    const share = async () => {
         if (!(await save())) return;
-        if (target === "email")
-            void apps.launch("com.palm.app.email", { attachments: [{ fullPath: path, mimeType: "image/png" }] });
-        else
-            void apps.launch("org.webosphoenix.messaging", { attachment: path });
+        try {
+            const r = await shareSheet.open({ title: nameOf(path), files: [{ path, mimeType: "image/png" }] });
+            if (r.action === "photos") setToast("Saved to Photos");
+            else if (r.action === "files") setToast("Saved to " + folderName(r.path));
+        } catch {
+            setToast("Could not share");
+        }
+    };
+    // Save to Files: the edited picture (or the capture), where the user picks.
+    const saveToFiles = async () => {
+        setSaving(false);
+        setBusy(true);
+        try {
+            const blob = await render();
+            const r = await filePicker.save({ name: nameOf(path) + ".png", data: await toBase64(blob), mimeType: "image/png" });
+            if ("path" in r) setToast("Saved to " + folderName(r.path));
+        } catch {
+            setToast("Could not save");
+        } finally {
+            setBusy(false);
+        }
     };
     const remove = async () => {
         setConfirmDelete(false);
@@ -264,7 +291,7 @@ function Editor({ path }: { path: string }) {
                 {mode === "view" && (edited ? (
                     <>
                         <button type="button" className="sc-top-button" data-testid="revert" onClick={() => setEdits(noEdits())}>Revert</button>
-                        <button type="button" className="sc-top-button primary" data-testid="save" disabled={busy} onClick={() => void save()}>Save</button>
+                        <button type="button" ref={saveButton} className="sc-top-button primary" data-testid="save" disabled={busy} onClick={() => setSaving(true)}>Save</button>
                     </>
                 ) : (
                     <button type="button" className="sc-top-button primary" data-testid="done" onClick={() => window.close()}>Done</button>
@@ -294,9 +321,7 @@ function Editor({ path }: { path: string }) {
                         <IconToolButton icon="crop" label="Crop" testId="crop" disabled={!image} onClick={startCrop} />
                         <IconToolButton icon="markup" label="Markup" testId="markup" disabled={!image} onClick={() => setMode("markup")} />
                         <ToolSpacer />
-                        <div ref={shareButton}>
-                            <IconToolButton icon="share" label="Share" testId="share" disabled={!image || busy} onClick={() => setSharing(true)} />
-                        </div>
+                        <IconToolButton icon="share" label="Share" testId="share" disabled={!image || busy} onClick={() => void share()} />
                         <IconToolButton icon="trash" label="Delete" testId="delete" onClick={() => setConfirmDelete(true)} />
                     </Toolbar>
                 )}
@@ -318,10 +343,10 @@ function Editor({ path }: { path: string }) {
                 )}
             </div>
 
-            {sharing && (
-                <PopupMenu anchor={shareButton.current}
-                           options={[{ label: "Email", value: "email" }, { label: "Messaging", value: "messaging" }]}
-                           onSelect={(v) => void share(v)} onClose={() => setSharing(false)} />
+            {saving && (
+                <PopupMenu anchor={saveButton.current}
+                           options={[{ label: "Save to Photos", value: "photos" }, { label: "Save to Files…", value: "files" }]}
+                           onSelect={(v) => (v === "photos" ? void save() : void saveToFiles())} onClose={() => setSaving(false)} />
             )}
             <Dialog open={confirmDelete} title="Delete this screen capture?" message="It will be removed from this device."
                     onClose={() => setConfirmDelete(false)} testId="delete-dialog">

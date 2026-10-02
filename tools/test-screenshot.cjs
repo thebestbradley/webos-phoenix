@@ -152,6 +152,8 @@ async function main() {
         await shot("3-markup");
         await page.click("[data-testid=mode-done]");
         await page.click("[data-testid=save]");
+        // Save asks where: Photos (over the capture) or Files (a copy).
+        await page.click(".pui-popup >> text=Save to Photos");
         await page.waitForSelector("[data-testid=toast]:has-text('Saved')");
         const after = await picture(want, 5, 0);
         check(after && after.width < 320 && after.height < 480 && after.width >= 200,
@@ -162,13 +164,123 @@ async function main() {
         check(await page.locator("[data-testid=done]").count() === 1, "saved: Done again");
         await shot("4-saved");
 
-        // Share to Email.
+        // ---- The system's share sheet (docs/SHARE-AND-FILES.md) -----------------------------------
+        const sheet = async (kind) => {
+            const el = await page.waitForSelector(`iframe[data-phoenix-sheet=${kind}]`);
+            const f = await el.contentFrame();
+            await f.waitForSelector(kind === "share" ? "[data-testid=share-sheet]" : "[data-testid=save-picker]");
+            return f;
+        };
+        const sheetGone = () => page.waitForSelector("iframe[data-phoenix-sheet]", { state: "detached" });
         await page.click("[data-testid=share]");
-        await page.click(".pui-popup >> text=Email");
+        let f = await sheet("share");
+        check((await f.textContent("[data-testid=share-title]")).includes("Email 2026-10-01 at 21.05.09"), "the sheet names what is shared");
+        check(await f.locator("[data-testid=share-thumb]").count() === 1, "... with its thumbnail");
+        const apps = await f.$$eval(".ss-app", (els) => els.map((e) => e.getAttribute("data-testid")));
+        check(apps.includes("share-app-com.palm.app.email") && !apps.includes("share-app-org.webosphoenix.messaging"),
+              `the apps that take a picture: Email, not Messaging (${apps.join(", ")})`);
+        check(await f.locator("[data-testid=share-photos]").count() === 1 && await f.locator("[data-testid=share-files]").count() === 1,
+              "Save to Photos and Save to Files");
+        await shot("5-share-sheet");
+        await f.click('[data-testid="share-app-com.palm.app.email"]');
+        await sheetGone();
         await page.waitForTimeout(200);
         const launch = host.filter((m) => m.type === "launch").pop();
         check(launch && launch.payload.id === "com.palm.app.email" && launch.payload.params.attachments[0].fullPath === want,
               "Share > Email attaches it");
+
+        // The back gesture closes the sheet, not the preview.
+        await page.click("[data-testid=share]");
+        await sheet("share");
+        await page.evaluate(() => window.__phoenixRuntime.back());
+        await sheetGone();
+        check(await page.locator("[data-testid=preview]").count() === 1, "back closes the sheet; the preview stays");
+
+        // Save to Files: edit, Save > Save to Files..., a new folder, a name.
+        await page.click("[data-testid=markup]");
+        await page.mouse.move(stage.x + 20, stage.y + 20);
+        await page.mouse.down();
+        await page.mouse.move(stage.x + 60, stage.y + 60, { steps: 4 });
+        await page.mouse.up();
+        await page.click("[data-testid=mode-done]");
+        await page.click("[data-testid=save]");
+        await page.click(".pui-popup >> text=Save to Files…");
+        f = await sheet("save");
+        check((await f.textContent("[data-testid=save-folder]")).trim() === "Documents", "the first time: Documents");
+        await f.click("[data-testid=save-new-folder]");
+        await f.fill("[data-testid=new-folder-name]", "Screens");
+        await f.click("[data-testid=new-folder-create]");
+        await f.waitForFunction(() => document.querySelector("[data-testid=save-folder]").textContent.trim() === "Screens");
+        await f.fill("[data-testid=save-name]", "Edited capture.png");
+        await shot("6-save-picker");
+        await f.click("[data-testid=save-confirm]");
+        await sheetGone();
+        await page.waitForSelector("[data-testid=toast]:has-text('Saved to Screens')");
+        const saved2 = "/media/internal/Documents/Screens/Edited capture.png";
+        const st = await luna("luna://org.webosphoenix.filemanager/stat", { path: saved2 });
+        check(st.returnValue && st.entry.size > 0, "saved in the new folder, where Files sees it");
+        const copy = await picture(saved2, 25, 25);
+        check(copy && copy.width === after.width, `the edited picture (${copy && copy.width}x${copy && copy.height})`);
+        check(await page.locator("[data-testid=revert]").count() === 1, "the capture itself keeps its edits unsaved (Save to Files is a copy)");
+
+        // The last folder comes back; the same name asks before replacing.
+        await page.click("[data-testid=save]");
+        await page.click(".pui-popup >> text=Save to Files…");
+        f = await sheet("save");
+        check((await f.textContent("[data-testid=save-folder]")).trim() === "Screens", "the next time: the last folder used");
+        await f.fill("[data-testid=save-name]", "Edited capture.png");
+        await f.click("[data-testid=save-confirm]");
+        await f.waitForSelector("[data-testid=replace-dialog]");
+        check(true, "the same name: Replace asks first");
+        await f.click("[data-testid=replace-confirm]");
+        await sheetGone();
+        await page.waitForSelector("[data-testid=toast]:has-text('Saved to Screens')");
+        check(true, "replaced");
+        // Any app's share: a picture not yet in Photos goes to the Camera Roll.
+        const openShare = (req) => page.evaluate((r) => {
+            window.__shareResult = null;
+            const b = new PalmServiceBridge();
+            b.onservicecallback = (s) => { window.__shareResult = JSON.parse(s); };
+            b.call("luna://org.webosphoenix.share/open", JSON.stringify(r));
+        }, req);
+        const shareResult = () => page.waitForFunction(() => window.__shareResult).then((h) => h.jsonValue());
+        // (Photos shows every folder of pictures: one in Documents is in Photos already.)
+        await openShare({ files: [{ path: saved2, mimeType: "image/png" }] });
+        f = await sheet("share");
+        await f.click("[data-testid=share-photos]");
+        await sheetGone();
+        let rp = await shareResult();
+        check(rp.action === "photos" && rp.already === true && rp.path === saved2, "a picture already in a Photos album is not copied again");
+        const sample = "/media/internal/samples/photos/harbor-dusk.jpg";
+        await openShare({ files: [{ path: sample, mimeType: "image/jpeg" }] });
+        f = await sheet("share");
+        await f.click("[data-testid=share-photos]");
+        await sheetGone();
+        rp = await shareResult();
+        check(rp.action === "photos" && rp.path === "/media/internal/DCIM/100PHNX/harbor-dusk.jpg", `Save to Photos: a sample goes to the Camera Roll (${rp.path})`);
+        const roll = await luna("luna://com.webos.service.mediaindexer/getImageList", { uri: "storage:///media/internal" });
+        check(roll.imageList.results.some((i) => i.file_path === rp.path), "... and Photos shows it");
+
+        // Text and a link: Messaging takes them, and Copy.
+        await openShare({ text: "Look at this", url: "https://webosarchive.org/" });
+        f = await sheet("share");
+        const textApps = await f.$$eval(".ss-app", (els) => els.map((e) => e.getAttribute("data-testid")));
+        check(textApps.includes("share-app-org.webosphoenix.messaging") && textApps.includes("share-app-com.palm.app.email"),
+              `text: Messaging and Email (${textApps.join(", ")})`);
+        check(await f.locator("[data-testid=share-copy]").count() === 1 && await f.locator("[data-testid=share-files]").count() === 0,
+              "text: Copy, no Save to Files");
+        await f.click('[data-testid="share-app-org.webosphoenix.messaging"]');
+        await sheetGone();
+        await shareResult();
+        const msg = host.filter((m) => m.type === "launch").pop();
+        check(msg && msg.payload.id === "org.webosphoenix.messaging" && msg.payload.params.share.url === "https://webosarchive.org/",
+              "Share > Messaging gets {share: {text, url}}");
+
+        // Save to Photos writes the edits over the capture.
+        await page.click("[data-testid=save]");
+        await page.click(".pui-popup >> text=Save to Photos");
+        await page.waitForSelector("[data-testid=done]");
+        check(true, "Save to Photos: saved over the capture (Done again)");
 
         // Delete.
         await page.click("[data-testid=delete]");
