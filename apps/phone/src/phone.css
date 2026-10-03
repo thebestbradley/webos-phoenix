@@ -32,14 +32,19 @@ html:has(> body.phone-app), body.phone-app {
 }
 
 .dialer-display {
-    flex: none;
-    height: 96px;
+    /* The dial string: 96px on a 480-tall Pre; on a taller phone it takes
+       the height the dial pad leaves (the pad grows first, below), the
+       number staying at its foot just above the keys. */
+    flex: 1 1 96px;
+    min-height: 96px;
     padding: 10px 12px 0 16px;
+    box-sizing: border-box;
     background: linear-gradient(#303234, #121314 70%, #0b0b0b);
     border-bottom: 1px solid #000;
     box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08);
     display: flex;
     flex-direction: column;
+    justify-content: flex-end;
 }
 
 .dialer-contact {
@@ -54,7 +59,8 @@ html:has(> body.phone-app), body.phone-app {
 .dialer-error { color: #ff6b5e; }
 
 .dialer-number-row {
-    flex: 1;
+    height: 64px;
+    flex: none;
     display: flex;
     align-items: center;
     min-height: 0;
@@ -79,7 +85,16 @@ html:has(> body.phone-app), body.phone-app {
 .dialer-number.empty { font-size: 18px; color: #6f7377; padding-left: 0; }
 .dialer-number-row .pui-backspace { margin-top: 0; }
 
-.dialer .pui-dialpad { background-color: #111; }
+.dialer .pui-dialpad {
+    /* Fills the card's width; the rows grow to 96px before the display
+       above takes the rest (flex-grow 1000 against its 1). */
+    --pui-dialpad-row-max: 96px;
+    flex: 1000 1 230px;
+    height: auto;
+    background-color: #111;
+}
+.dialer .pui-dialpad-digit { font-size: clamp(30px, 4.6vh, 38px); line-height: 1.05; }
+.dialer .pui-dialpad-letters { font-size: clamp(13px, 1.8vh, 15px); }
 
 .dialer-dial {
     flex: none;
@@ -366,6 +381,7 @@ html:has(> body.phone-app), body.phone-app {
 }
 .phone-root.wide .dialer { height: auto; padding: 0 20px; background: none; }
 .phone-root.wide .dialer-display { border-radius: 10px 10px 0 0; }
+.phone-root.wide .dialer .pui-dialpad { flex: none; --pui-dialpad-height: 270px; --pui-dialpad-row-max: 66px; }
 .phone-root.wide .dialer-dial { padding-bottom: 0; background: none; }
 .phone-root.wide .phone-right { height: 100%; min-width: 0; }
 .phone-toolbar.wide { left: 360px; }
@@ -379,10 +395,12 @@ html:has(> body.phone-app), body.phone-app {
 /* ---- Restricted mode: the lock screen's emergency window (views/Emergency) ------------------- */
 
 .emergency-root .dialer-display.emergency-display {
-    height: 64px;
+    flex: 1 1 64px;
+    min-height: 64px;
     padding-top: 4px;
     background: linear-gradient(#5a1712, #2a0906 70%, #120302);
 }
+.emergency-root .dialer-number-row { height: 38px; }
 .emergency-root .dialer-number { line-height: 36px; }
 .emergency-root .dialer-contact { height: 18px; }
 .emergency-title { color: #ffb3aa; font-weight: bold; letter-spacing: 0.3px; }
