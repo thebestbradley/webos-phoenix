@@ -449,6 +449,13 @@ Verizon Pixels) cannot be unlocked and are out.
   24.04: `gawk diffstat chrpath cpio zstd lz4` and the `en_US.UTF-8`
   locale. bitbake will not run as root; in a root-only container use
   `unshare --user --map-user=1000 --map-group=1000 scripts/parse-check.sh`.
+  On Ubuntu 24.04 hosts (GitHub's runners included) AppArmor stops
+  unprivileged programs from creating user namespaces, which BitBake needs
+  ("User namespaces are not usable by BitBake"); the CI job lifts that with
+  `sysctl kernel.apparmor_restrict_unprivileged_userns=0` on its throwaway
+  runner, as the Yocto manual suggests. **To harden later:** an AppArmor
+  profile that grants `userns` to BitBake alone, and the same for build hosts
+  that aren't throwaway.
 
 ### Device CI matrix
 

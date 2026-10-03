@@ -53,6 +53,15 @@ jobs:
             !${{ env.PHOENIX_PARSE_DIR }}/parse-check-*.log
           key: webos-layers-${{ hashFiles('scripts/setup-build.sh') }}
 
+      # BitBake runs its tasks in user namespaces, which Ubuntu 24.04's
+      # AppArmor restricts for unprivileged programs ("User namespaces are
+      # not usable by BitBake, possibly due to AppArmor"). The Yocto manual's
+      # fix for 24.04 hosts: lift the restriction. The runner is a throwaway
+      # VM; a profile granting userns to BitBake alone would be tighter
+      # (docs/HARDWARE.md, Build).
+      - name: Allow user namespaces for BitBake
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Parse and resolve webos-phoenix-image (${{ matrix.machine }})
         run: scripts/parse-check.sh ${{ matrix.machine }}
 
