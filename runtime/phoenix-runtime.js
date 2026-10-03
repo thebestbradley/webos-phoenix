@@ -355,7 +355,17 @@
         // nothing to do here.
         copiedToClipboard: function () {},
         pastedFromClipboard: function () {},
-        printFrame: function () { global.print && global.print(); },
+        // Puts this window (frameName "": the app's own document) on paper
+        // for a print job of com.palm.printmgr (PrintDialog's frameToPrint):
+        // in phoenix-sim the shell renders the window ("print" host
+        // message); elsewhere its text is printed. See "Printing" below.
+        printFrame: function (frameName, jobID) {
+            if (!jobID || !runtime.print) return;
+            var doc = global.document;
+            runtime.print.render(jobID, global.location.protocol === "phoenix:"
+                ? { title: doc.title, host: { type: "print", id: "" } }
+                : { title: doc.title, text: doc.body ? doc.body.innerText : "" });
+        },
         // The TouchPad launcher's glow on a tapped icon (Just Type).
         applyLaunchFeedback: function () {},
         simulateMouseClick: function () {},
@@ -1340,15 +1350,22 @@
             if (this.destroyed) return;
             var n = this.node, b = n.getBoundingClientRect();
             var r = { left: b.left, top: b.top, right: b.right, bottom: b.bottom };
+            // Shown: laid out and not hidden. Not offsetParent, which is null
+            // for position: fixed, as the app menu is.
+            function shown(e) {
+                if (!e.getClientRects().length) return false;
+                var cs = global.getComputedStyle(e);
+                return cs.visibility !== "hidden" && cs.display !== "none";
+            }
             var popup = Array.prototype.some.call(global.document.querySelectorAll(".enyo-popup"), function (e) {
-                return e.offsetParent !== null && e.getBoundingClientRect().height > 0;
+                return shown(e) && e.getBoundingClientRect().height > 0;
             });
             // A drawer flown in from a side (enyo.Toaster, class enyo-toaster:
             // the browser's bookmarks, history and downloads) covers part of
             // the page: the view keeps to the part it leaves, since nothing in
             // the page can draw over a native view.
             Array.prototype.forEach.call(global.document.querySelectorAll(".enyo-toaster"), function (e) {
-                if (e.offsetParent === null) return;
+                if (!shown(e)) return;
                 var t = e.getBoundingClientRect();
                 if (t.width === 0 || t.height === 0 || t.right <= r.left || t.left >= r.right || t.bottom <= r.top || t.top >= r.bottom) return;
                 if (t.top <= r.top && t.bottom >= r.bottom) {
@@ -1485,7 +1502,20 @@
             generateIconFromFile: function () {},
             resizeImage: function () {},
             deleteImage: function () {},
-            printFrame: function () {}
+            // (frameName, jobID, width, height, dpi, landscape, reverse): the
+            // page shown here, for a com.palm.printmgr job (the browser's and
+            // Email's Print). The native view renders it with Chromium; the
+            // iframe engine prints the page's text (all it can read of a
+            // same-origin page).
+            printFrame: function (frameName, jobID) {
+                if (!jobID || !runtime.print) return;
+                if (nativeWebViews)
+                    return runtime.print.render(jobID, { title: this.title, host: { type: "webView", id: this.id } });
+                var doc = null;
+                try { doc = this.frame && this.frame.contentDocument; } catch (e) { doc = null; }
+                runtime.print.render(jobID, { title: (doc && doc.title) || this.title || this.url,
+                                              text: doc && doc.body ? doc.body.innerText : this.url });
+            }
         }
     };
 
@@ -1520,6 +1550,29 @@
         if (name === "urlTitleChanged") { a.url = args[0]; a.title = args[1]; }
         a.listener.apply(a, [name].concat(args || []));
     };
+
+    // A page view nobody sees, showing some HTML: what Email prints its
+    // message from (the message itself is a div of its window). In
+    // phoenix-sim only; loaded(id) once the page has loaded, then the view
+    // can be printed by its id and must be destroyed.
+    runtime.offscreenWebView = nativeWebViews ? function (html, loaded) {
+        var a = { id: "wv" + (nextWebView++), fired: false };
+        a.listener = function (name) {
+            if (name === "documentLoadFinished" && !a.fired) { a.fired = true; loaded(a.id); }
+        };
+        webViews[a.id] = a;
+        host.postToHost("webView", { id: a.id, op: "create" });
+        // Letter width at 96 dpi; the PDF is laid out for its paper anyway.
+        host.postToHost("webView", { id: a.id, op: "geometry", x: 0, y: 0, width: 816, height: 1056, visible: false });
+        host.postToHost("webView", { id: a.id, op: "html", url: "", html: html });
+        return {
+            destroy: function () {
+                if (!webViews[a.id]) return;
+                delete webViews[a.id];
+                host.postToHost("webView", { id: a.id, op: "destroy" });
+            }
+        };
+    } : null;
 
     // ---- Connectivity, power, accounts and friends -------------------------------------
 
@@ -7759,6 +7812,567 @@
             reply(ok());
         }
     });
+
+    // ================================================================================
+    // Printing (com.palm.printmgr; Print Manager)
+    // ================================================================================
+    //
+    // Enyo 1.0's print dialog (lib/printdialog: PrintDialog, the browser's
+    // and Email's Print) speaks to the print manager, com.palm.printmgr.
+    // Its calls, as PrintJob.js, DocumentPrintJob.js, ImagePrintJob.js,
+    // PrinterSelector.js, PrinterOptions.js and PrinterAdder.js make them:
+    //
+    //   printers/list {subscribe}     {eventType: "Add" | "Rmv", printerID,
+    //                                  printerName, printerAddress} per printer
+    //   printers/getCurrent, printers/setCurrent {printerID}
+    //   printers/getCapabilities {printerID} -> {mediaSize[], mediaType[],
+    //                                  printQuality[], canDuplex, hasColor}
+    //   printers/add {printerID, printerName, printerAddress}
+    //   jobs/open {printerID, description, appName} -> {jobID}
+    //   jobs/editPrintParams {jobID, numCopies, mediaSize, color, duplex,
+    //                         topInset, leftInset, rightInset, bottomInset (in)}
+    //   jobs/getFinalParamsAndArea {jobID} -> {width, height, pixelUnits,
+    //                         renderInReverseOrder, ...}: the printable area
+    //                         in dots at pixelUnits dots per inch
+    //   jobs/getStatus {subscribe} -> {jobID, printerState: "DONE",
+    //                         jobStatus: "Success" | "Cancelled" | "Error"}
+    //   jobs/getRenderStatus {subscribe} -> {jobID, currentPage, totalPages,
+    //                         renderResultCode (0 done, -502 cancelled)}
+    //   jobs/addFile {jobID, pathName, currentPage, totalPages} (images)
+    //   jobs/close {jobID}, jobs/cancel {jobID}
+    //
+    // Errors use the print manager's codes (PrintManagerError.js).
+    //
+    // The printer is "Save as PDF": the job becomes a PDF in
+    // /media/internal/Documents, which Files, PDF View and the Print
+    // Manager open. A document job is rendered by the page view or window
+    // that prints: in phoenix-sim by Chromium (QtWebEngine's printToPdf,
+    // WebAppWindow.qml, the "print" host message; the PDF comes back
+    // through __phoenixRuntime.print.rendered), elsewhere (a desktop
+    // browser, the tests) as the page's text. Image jobs (jobs/addFile) are
+    // put on pages here, one picture a page. Network printers would need
+    // CUPS / IPP Everywhere on a device; the simulator has none, so adding
+    // one answers PM_ERR_PRINTER_NO_RESPONSE_MANUAL.
+    //
+    // Phoenix additions for the Print Manager app (com.palm.app.printmanager,
+    // which is org.webosphoenix.printmanager): jobs/list {subscribe} ->
+    // {jobs: [{jobID, description, appName, printerID, printerName, state
+    // ("Printing", "Done", "Cancelled", "Failed"), pages, file, created,
+    // finished, errorText}]} newest first; jobs/remove {jobID} (a finished
+    // one). A job prints as an ongoing activity, as the Print Manager's
+    // status dashboard did; its headless launch by PrintJob opens no card.
+    //
+    // __phoenixRuntime.print: render(jobID, how) (a page view or window),
+    // renderHtml(jobID, {title, html}) (some HTML, Email's message),
+    // rendered(jobID, base64 | null, info), pdf (the PDF writer), jobs().
+    (function printing() {
+        var SERVICE = "com.palm.printmgr";
+        var PRINT_MANAGER = "org.webosphoenix.printmanager";
+        var JOBS_KEY = "print:jobs", CURRENT_KEY = "print:current";
+        var PDF_PRINTER = { printerID: "phoenix-save-as-pdf", printerName: "Save as PDF", printerAddress: "/media/internal/Documents" };
+        var OUT_DIR = "/media/internal/Documents";
+        var DPI = 300;
+        // Points (1/72 in) per paper size; PrintDialog's names.
+        var PAPER = { US_Letter: [612, 792], US_Legal: [612, 1008], ISO_A4: [595, 842],
+                      Photo_4x6: [288, 432], Photo_5x7: [360, 504], Photo_5x7_MainTray: [360, 504], Photo_L: [252, 360], HAGAKI: [283, 420] };
+        var E = { NO_RESPONSE_MANUAL: -203, BAD_JOB: -601, RENDER: -301, CANCEL_REQUESTED: -502 };
+        runtime.appAliases["com.palm.app.printmanager"] = PRINT_MANAGER;
+
+        // ---- Jobs (shared by every page, so the Print Manager sees them) ----------------
+
+        function jobs() { return store.get(JOBS_KEY, []); }
+        function saveJob(j) {
+            var all = jobs().filter(function (x) { return x.jobID !== j.jobID; });
+            all.unshift(j);
+            store.set(JOBS_KEY, all.slice(0, 100));
+            changed();
+        }
+        function findJob(id) { return jobs().filter(function (x) { return x.jobID === id; })[0] || null; }
+        var listeners = [];
+        function changed() { listeners.slice().forEach(function (f) { try { f(); } catch (e) { /* a page gone */ } }); }
+        function listen(ctx, f) {
+            listeners.push(f);
+            var prev = ctx.onCancel;
+            ctx.onCancel = function () { listeners = listeners.filter(function (x) { return x !== f; }); if (prev) prev(); };
+        }
+        try {
+            global.addEventListener("storage", function (e) { if (e.key === "phoenix:" + JOBS_KEY) changed(); });
+        } catch (x) { /* no window events */ }
+
+        // This page's open jobs: what is not shared (the rendered bytes, the
+        // pictures added, the subscriptions of the app printing).
+        var open = {};
+        function local(id) { alive(); return open[id] || (open[id] = { files: [], status: [], render: [] }); }
+
+        // A job lives in the page that prints it. While that page has jobs it
+        // says so every few seconds ("print:alive:<page>"); a job still
+        // printing whose page has gone quiet (the card closed, the app
+        // crashed) has failed, and a page going away cancels its own.
+        var PAGE = "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+        var ALIVE_EVERY = 4000, QUIET_AFTER = 12000, aliveTimer = null;
+        function alive() {
+            store.set("print:alive:" + PAGE, Date.now());
+            if (!aliveTimer) aliveTimer = setInterval(function () {
+                if (Object.keys(open).length) return store.set("print:alive:" + PAGE, Date.now());
+                clearInterval(aliveTimer);
+                aliveTimer = null;
+                try { global.localStorage.removeItem("phoenix:print:alive:" + PAGE); } catch (e) { /* no storage */ }
+            }, ALIVE_EVERY);
+        }
+        function reap() {
+            jobs().forEach(function (j) {
+                if (j.state !== "Printing" || j.page === PAGE) return;
+                if (store.get("print:alive:" + j.page, 0) < Date.now() - QUIET_AFTER)
+                    finish(j, "Failed", { errorText: "The app printing it closed" });
+            });
+        }
+        try {
+            global.addEventListener("pagehide", function () {
+                Object.keys(open).forEach(function (id) {
+                    var j = findJob(id);
+                    if (j && j.state === "Printing") finish(j, "Cancelled");
+                });
+                try { global.localStorage.removeItem("phoenix:print:alive:" + PAGE); } catch (e) { /* no storage */ }
+            });
+        } catch (x) { /* no window events */ }
+        function tell(list, x) { list.slice().forEach(function (f) { f(x); }); }
+        function subscribeTo(list, ctx, f) {
+            list.push(f);
+            var prev = ctx.onCancel;
+            ctx.onCancel = function () { var i = list.indexOf(f); if (i >= 0) list.splice(i, 1); if (prev) prev(); };
+        }
+        var statusSubs = [], renderSubs = [];
+
+        function printers() { return [PDF_PRINTER]; }
+        function printerById(id) { return printers().filter(function (p) { return p.printerID === id; })[0] || null; }
+
+        function showOngoing(j) {
+            host.postToHost("ongoing", { id: "print-" + j.jobID, appId: PRINT_MANAGER, title: "Printing " + (j.description || j.appName || "a document"),
+                body: j.pages ? j.pages + (j.pages === 1 ? " page" : " pages") + " to " + j.printerName : "Preparing to print to " + j.printerName,
+                progress: j.state === "Printing" && j.pages ? 100 : -1, params: { jobID: j.jobID } });
+        }
+        function finish(j, state, extra) {
+            j.state = state;
+            j.finished = Date.now();
+            for (var k in extra || {}) j[k] = extra[k];
+            saveJob(j);
+            host.postToHost("ongoing", { id: "print-" + j.jobID, clear: true });
+            tell(statusSubs, { jobID: j.jobID, printerState: "DONE",
+                               jobStatus: state === "Done" ? "Success" : state === "Cancelled" ? "Cancelled" : "Error" });
+            if (state === "Done")
+                host.postToHost("notification", { appId: PRINT_MANAGER, title: "Saved as PDF", body: nameOf(j.file),
+                                                  params: { jobID: j.jobID } });
+        }
+        function nameOf(p) { return String(p || "").replace(/^.*\//, ""); }
+
+        // A free name in the Documents folder: "<title>.pdf", then "<title> (2).pdf".
+        function freePath(title) {
+            var base = String(title || "Document").replace(/[\/\\:*?"<>|\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "Document";
+            var mf = runtime.mediaFiles;
+            function attempt(n) {
+                var p = OUT_DIR + "/" + base + (n > 1 ? " (" + n + ")" : "") + ".pdf";
+                if (!mf) return Promise.resolve(p);
+                return mf.read(p).then(function (b) { return b ? attempt(n + 1) : p; }, function () { return p; });
+            }
+            return attempt(1);
+        }
+
+        function writePdf(j, bytes) {
+            if (!runtime.mediaFiles) return Promise.reject(new Error("No place to save the PDF"));
+            return freePath(j.description).then(function (path) {
+                return runtime.mediaFiles.write(path, new Blob([bytes], { type: "application/pdf" })).then(function () { return path; });
+            });
+        }
+
+        // ---- A small PDF writer ---------------------------------------------------------
+        //
+        // pages: [{width, height (points), items: [{image: {jpeg: Uint8Array,
+        // width, height (pixels)}, x, y, w, h} | {text, x, y, size}]}].
+        // Text is Helvetica in WinAnsi (other characters become "?"); y is
+        // from the top of the page.
+        function pdf(pages) {
+            var chunks = [], offsets = [], length = 0;
+            function add(x) {
+                var b = typeof x === "string" ? latin1(x) : x;
+                chunks.push(b);
+                length += b.length;
+            }
+            function latin1(s) {
+                var b = new Uint8Array(s.length);
+                for (var i = 0; i < s.length; i++) { var c = s.charCodeAt(i); b[i] = c < 256 ? c : 63; }
+                return b;
+            }
+            function obj(n, body) { offsets[n] = length; add(n + " 0 obj\n"); body(); add("\nendobj\n"); }
+            function esc(s) { return String(s).replace(/[\\()]/g, "\\$&").replace(/[\r\n\t]/g, " "); }
+            // 1 catalog, 2 pages, 3 font; then per page: page, content, images.
+            var next = 4, kids = [], plan = pages.map(function (pg) {
+                var p = { page: next++, content: next++, images: [] };
+                pg.items.forEach(function (it) { if (it.image) p.images.push(next++); });
+                kids.push(p.page + " 0 R");
+                return p;
+            });
+            add("%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n");
+            obj(1, function () { add("<< /Type /Catalog /Pages 2 0 R >>"); });
+            obj(2, function () { add("<< /Type /Pages /Kids [" + kids.join(" ") + "] /Count " + pages.length + " >>"); });
+            obj(3, function () { add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"); });
+            pages.forEach(function (pg, i) {
+                var p = plan[i], ops = [], xobj = [], img = 0;
+                pg.items.forEach(function (it) {
+                    if (it.image) {
+                        var name = "Im" + (img + 1);
+                        xobj.push("/" + name + " " + p.images[img] + " 0 R");
+                        ops.push("q " + it.w.toFixed(2) + " 0 0 " + it.h.toFixed(2) + " " + it.x.toFixed(2) + " " +
+                                 (pg.height - it.y - it.h).toFixed(2) + " cm /" + name + " Do Q");
+                        img++;
+                    } else if (it.text !== undefined) {
+                        ops.push("BT /F1 " + it.size + " Tf " + it.x.toFixed(2) + " " + (pg.height - it.y - it.size).toFixed(2) +
+                                 " Td (" + esc(it.text) + ") Tj ET");
+                    }
+                });
+                obj(p.page, function () {
+                    add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + pg.width + " " + pg.height + "] /Contents " + p.content +
+                        " 0 R /Resources << /Font << /F1 3 0 R >> /XObject << " + xobj.join(" ") + " >> >> >>");
+                });
+                var content = ops.join("\n");
+                obj(p.content, function () { add("<< /Length " + content.length + " >>\nstream\n" + content + "\nendstream"); });
+                img = 0;
+                pg.items.forEach(function (it) {
+                    if (!it.image) return;
+                    obj(p.images[img++], function () {
+                        add("<< /Type /XObject /Subtype /Image /Width " + it.image.width + " /Height " + it.image.height +
+                            " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + it.image.jpeg.length + " >>\nstream\n");
+                        add(it.image.jpeg);
+                        add("\nendstream");
+                    });
+                });
+            });
+            var xref = length, count = next;
+            var x = "xref\n0 " + count + "\n0000000000 65535 f \n";
+            for (var n = 1; n < count; n++) x += ("0000000000" + offsets[n]).slice(-10) + " 00000 n \n";
+            add(x + "trailer\n<< /Size " + count + " /Root 1 0 R >>\nstartxref\n" + xref + "\n%%EOF\n");
+            var out = new Uint8Array(length), at = 0;
+            chunks.forEach(function (c) { out.set(c, at); at += c.length; });
+            return out;
+        }
+        // Pages of a PDF (Chromium's): its page objects.
+        function pageCount(bytes) {
+            var s = "";
+            for (var i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            var m = s.match(/\/Type\s*\/Page(?![a-zA-Z])/g);
+            return m ? m.length : 1;
+        }
+
+        function paperOf(j) {
+            var size = PAPER[j.params.mediaSize] || PAPER.US_Letter;
+            return j.params.landscape ? [size[1], size[0]] : size.slice();
+        }
+        function insetsOf(j) {
+            var p = j.params;
+            return { top: (p.topInset || 0) * 72, left: (p.leftInset || 0) * 72, right: (p.rightInset || 0) * 72, bottom: (p.bottomInset || 0) * 72 };
+        }
+
+        // A page's text on pages (what a desktop browser can print of it).
+        function textPages(j, title, text) {
+            var paper = paperOf(j), m = insetsOf(j), size = 11, lead = 14;
+            var cols = Math.max(20, Math.floor((paper[0] - m.left - m.right) / (size * 0.5)));
+            var rows = Math.max(5, Math.floor((paper[1] - m.top - m.bottom) / lead));
+            var lines = [];
+            (title ? [title, ""] : []).concat(String(text || "").split(/\r?\n/)).forEach(function (para) {
+                para = para.replace(/\s+/g, " ").trim();
+                if (!para) { if (lines.length && lines[lines.length - 1] !== "") lines.push(""); return; }
+                while (para.length > cols) {
+                    var cut = para.lastIndexOf(" ", cols);
+                    if (cut <= 0) cut = cols;
+                    lines.push(para.slice(0, cut));
+                    para = para.slice(cut).trim();
+                }
+                lines.push(para);
+            });
+            var pages = [];
+            for (var i = 0; i < Math.max(1, lines.length); i += rows) {
+                pages.push({ width: paper[0], height: paper[1], items: lines.slice(i, i + rows).map(function (l, k) {
+                    return { text: l, x: m.left, y: m.top + k * lead, size: size };
+                }) });
+            }
+            return pdf(pages);
+        }
+
+        // A picture as JPEG bytes and its size (through a canvas, so PNG,
+        // GIF and WebP print too).
+        function jpegOf(path) {
+            var url = runtime.fileManager ? runtime.fileManager.url(path) : Promise.resolve(path);
+            return url.then(function (u) {
+                return new Promise(function (resolve, reject) {
+                    var im = new global.Image();
+                    im.onload = function () {
+                        var c = global.document.createElement("canvas");
+                        c.width = im.naturalWidth;
+                        c.height = im.naturalHeight;
+                        var g = c.getContext("2d");
+                        g.fillStyle = "#fff";
+                        g.fillRect(0, 0, c.width, c.height);
+                        g.drawImage(im, 0, 0);
+                        c.toBlob(function (b) {
+                            if (!b) return reject(new Error("Could not read " + path));
+                            b.arrayBuffer().then(function (buf) {
+                                resolve({ jpeg: new Uint8Array(buf), width: c.width, height: c.height });
+                            }, reject);
+                        }, "image/jpeg", 0.92);
+                    };
+                    im.onerror = function () { reject(new Error("Could not read " + path)); };
+                    im.src = u;
+                });
+            });
+        }
+        function imagePages(j, paths) {
+            return Promise.all(paths.map(jpegOf)).then(function (images) {
+                var m = j.params.borderless ? { top: 0, left: 0, right: 0, bottom: 0 } : insetsOf(j);
+                return pdf(images.map(function (im) {
+                    var paper = PAPER[j.params.mediaSize] || PAPER.US_Letter;
+                    // autoRotate: a landscape picture on a page turned to it.
+                    if (j.params.autoRotate !== false && (im.width > im.height) !== (paper[0] > paper[1])) paper = [paper[1], paper[0]];
+                    var bw = paper[0] - m.left - m.right, bh = paper[1] - m.top - m.bottom;
+                    var s = Math.min(bw / im.width, bh / im.height);
+                    var w = im.width * s, h = im.height * s;
+                    return { width: paper[0], height: paper[1],
+                             items: [{ image: im, x: m.left + (bw - w) / 2, y: m.top + (bh - h) / 2, w: w, h: h }] };
+                }));
+            });
+        }
+
+        // ---- Rendering a document job -----------------------------------------------------
+
+        // A page view (the browser's, Email's) or the app's own window asks
+        // to be put on paper. jobs: jobID -> what to do once rendered.
+        function render(jobID, how) {
+            var j = findJob(jobID);
+            if (!j || j.state !== "Printing") return false;
+            var L = local(jobID);
+            L.title = how.title || "";
+            if (!j.description && how.title) { j.description = how.title; saveJob(j); showOngoing(j); }
+            var paper = PAPER[j.params.mediaSize] || PAPER.US_Letter;
+            var size = paper === PAPER.ISO_A4 ? "A4" : paper === PAPER.US_Legal ? "Legal" : "Letter";
+            if (how.host) {
+                host.postToHost(how.host.type, { op: "print", id: how.host.id, jobID: jobID, pageSize: size, landscape: !!j.params.landscape });
+            } else {
+                setTimeout(function () { rendered(jobID, null, { text: how.text, title: how.title }); }, 0);
+            }
+            return true;
+        }
+        // A page's HTML put on paper (Email's message, which is a part of its
+        // window): in phoenix-sim rendered by Chromium in a page view nobody
+        // sees, elsewhere its text.
+        function renderHtml(jobID, how) {
+            var j = findJob(jobID);
+            if (!j || j.state !== "Printing") return false;
+            if (!runtime.offscreenWebView) {
+                var div = global.document.createElement("div");
+                div.innerHTML = String(how.html || "");
+                return render(jobID, { title: how.title, text: div.innerText || div.textContent || "" });
+            }
+            var view = runtime.offscreenWebView(String(how.html || ""), function (id) {
+                render(jobID, { title: how.title, host: { type: "webView", id: id } });
+            });
+            local(jobID).cleanup = view.destroy;
+            return true;
+        }
+
+        // The rendering is back: a PDF (base64) from the host, or null to
+        // print the text instead.
+        function rendered(jobID, b64, info) {
+            var j = findJob(jobID);
+            if (!j) return;
+            var L = local(jobID);
+            if (L.cleanup) { L.cleanup(); delete L.cleanup; }
+            if (j.state !== "Printing") {
+                tell(renderSubs, { jobID: jobID, renderResultCode: E.CANCEL_REQUESTED });
+                return;
+            }
+            var bytes;
+            try {
+                if (b64) {
+                    var bin = global.atob(b64);
+                    bytes = new Uint8Array(bin.length);
+                    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                } else if (info && info.error) {
+                    throw new Error(info.error);
+                } else {
+                    bytes = textPages(j, info && info.title || L.title, info && info.text || "");
+                }
+            } catch (e) {
+                tell(renderSubs, { jobID: jobID, renderResultCode: E.RENDER });
+                finish(j, "Failed", { errorText: String(e && e.message || e) });
+                return;
+            }
+            L.pdf = bytes;
+            j.pages = pageCount(bytes);
+            saveJob(j);
+            showOngoing(j);
+            for (var n = 1; n <= j.pages; n++) tell(renderSubs, { jobID: jobID, currentPage: n, totalPages: j.pages });
+            tell(renderSubs, { jobID: jobID, currentPage: j.pages, totalPages: j.pages, renderResultCode: 0 });
+        }
+
+        // ---- The service --------------------------------------------------------------------
+
+        var jobSeq = Date.now() % 100000;
+        function newJobId() { return "job" + Date.now().toString(36) + (++jobSeq).toString(36); }
+        function needJob(p, reply) {
+            var j = findJob(p.jobID);
+            if (!j) reply(fail(E.BAD_JOB, "No such print job: " + p.jobID));
+            return j;
+        }
+        function publicJob(j) {
+            return { jobID: j.jobID, description: j.description, appName: j.appName, printerID: j.printerID, printerName: j.printerName,
+                     state: j.state, pages: j.pages || 0, file: j.file || "", created: j.created, finished: j.finished || 0,
+                     errorText: j.errorText || "" };
+        }
+
+        var methods = {
+            "/printers/list": function (p, reply, ctx) {
+                reply(ok({ subscribed: !!p.subscribe }));
+                printers().forEach(function (pr) {
+                    setTimeout(function () {
+                        if (!ctx.cancelled()) reply(ok({ eventType: "Add", printerID: pr.printerID, printerName: pr.printerName, printerAddress: pr.printerAddress }));
+                    }, 0);
+                });
+            },
+            "/printers/getCurrent": function (p, reply) {
+                var pr = printerById(store.get(CURRENT_KEY, PDF_PRINTER.printerID)) || PDF_PRINTER;
+                reply(ok({ printerID: pr.printerID, printerName: pr.printerName, printerAddress: pr.printerAddress }));
+            },
+            "/printers/setCurrent": function (p, reply) {
+                if (!printerById(p.printerID)) return reply(fail(-1, "No such printer: " + p.printerID));
+                store.set(CURRENT_KEY, p.printerID);
+                reply(ok());
+            },
+            "/printers/getCapabilities": function (p, reply) {
+                if (!printerById(p.printerID)) return reply(fail(-1, "No such printer: " + p.printerID));
+                reply(ok({ printerID: p.printerID, mediaSize: ["US_Letter", "ISO_A4", "US_Legal", "Photo_4x6", "Photo_5x7"],
+                           mediaType: ["Plain", "Photo"], printQuality: ["Normal", "Best"], canDuplex: false, hasColor: true }));
+            },
+            "/printers/add": function (p, reply) {
+                reply(fail(E.NO_RESPONSE_MANUAL, "There are no network printers in the simulator (on a device: CUPS, IPP Everywhere)"));
+            },
+            "/jobs/open": function (p, reply) {
+                var pr = printerById(p.printerID);
+                if (!pr) return reply(fail(-1, "No such printer: " + p.printerID));
+                var j = { jobID: newJobId(), printerID: pr.printerID, printerName: pr.printerName, appName: String(p.appName || ""),
+                          appId: PalmSystem.appIdentifier || "", page: PAGE, description: String(p.description || ""), state: "Printing",
+                          params: {}, created: Date.now(), pages: 0 };
+                saveJob(j);
+                local(j.jobID);
+                showOngoing(j);
+                reply(ok({ jobID: j.jobID, subscribed: !!p.subscribe }));
+            },
+            "/jobs/editPrintParams": function (p, reply) {
+                var j = needJob(p, reply);
+                if (!j) return;
+                for (var k in p) if (k !== "jobID") j.params[k] = p[k];
+                saveJob(j);
+                reply(ok({ jobID: j.jobID }));
+            },
+            "/jobs/getFinalParamsAndArea": function (p, reply) {
+                var j = needJob(p, reply);
+                if (!j) return;
+                var paper = paperOf(j), m = insetsOf(j);
+                reply(ok({ jobID: j.jobID, width: Math.round((paper[0] - m.left - m.right) / 72 * DPI),
+                           height: Math.round((paper[1] - m.top - m.bottom) / 72 * DPI), pixelUnits: DPI,
+                           renderInReverseOrder: false, mediaSize: j.params.mediaSize || "US_Letter",
+                           numCopies: j.params.numCopies || 1, color: j.params.color || "Color" }));
+            },
+            "/jobs/getStatus": function (p, reply, ctx) {
+                reply(ok({ subscribed: !!p.subscribe }));
+                if (p.subscribe) subscribeTo(statusSubs, ctx, function (x) { if (!ctx.cancelled()) reply(ok(x)); });
+            },
+            "/jobs/getRenderStatus": function (p, reply, ctx) {
+                reply(ok({ subscribed: !!p.subscribe }));
+                if (p.subscribe) subscribeTo(renderSubs, ctx, function (x) { if (!ctx.cancelled()) reply(ok(x)); });
+            },
+            "/jobs/addFile": function (p, reply) {
+                var j = needJob(p, reply);
+                if (!j) return;
+                if (!p.pathName) return reply(fail(-1, "pathName is required"));
+                local(j.jobID).files.push(String(p.pathName));
+                reply(ok({ jobID: j.jobID }));
+            },
+            "/jobs/close": function (p, reply) {
+                var j = needJob(p, reply);
+                if (!j) return;
+                if (j.state !== "Printing") return reply(ok({ jobID: j.jobID }));
+                var L = local(j.jobID);
+                var bytes = L.pdf ? Promise.resolve(L.pdf) : L.files.length ? imagePages(j, L.files) : null;
+                if (!bytes) {
+                    finish(j, "Failed", { errorText: "Nothing was printed" });
+                    return reply(ok({ jobID: j.jobID }));
+                }
+                bytes.then(function (b) {
+                    if (!L.pdf) j.pages = pageCount(b);
+                    return writePdf(j, b);
+                }).then(function (path) {
+                    finish(j, "Done", { file: path });
+                    delete open[j.jobID];
+                    reply(ok({ jobID: j.jobID }));
+                }, function (e) {
+                    finish(j, "Failed", { errorText: String(e && e.message || e) });
+                    reply(fail(E.RENDER, String(e && e.message || e)));
+                });
+            },
+            "/jobs/cancel": function (p, reply) {
+                var j = needJob(p, reply);
+                if (!j) return;
+                if (j.state === "Printing") finish(j, "Cancelled");
+                delete open[j.jobID];
+                reply(ok({ jobID: j.jobID }));
+            },
+            "/jobs/list": function (p, reply, ctx) {
+                var send = function () { if (!ctx.cancelled()) reply(ok({ jobs: jobs().map(publicJob), subscribed: !!p.subscribe })); };
+                reap();
+                send();
+                if (p.subscribe) {
+                    listen(ctx, send);
+                    // A page printing may go quiet while the list is open.
+                    var t = setInterval(function () { if (ctx.cancelled()) clearInterval(t); else reap(); }, QUIET_AFTER / 2);
+                    var prev = ctx.onCancel;
+                    ctx.onCancel = function () { clearInterval(t); if (prev) prev(); };
+                }
+            },
+            "/jobs/remove": function (p, reply) {
+                var j = needJob(p, reply);
+                if (!j) return;
+                if (j.state === "Printing") return reply(fail(-1, "The job is still printing; cancel it first"));
+                store.set(JOBS_KEY, jobs().filter(function (x) { return x.jobID !== j.jobID; }));
+                changed();
+                reply(ok());
+            }
+        };
+        register([SERVICE], methods);
+
+        // A job cancelled elsewhere (the Print Manager) stops here too.
+        listeners.push(function () {
+            Object.keys(open).forEach(function (id) {
+                var j = findJob(id);
+                if (!j || j.state === "Cancelled") {
+                    tell(statusSubs, { jobID: id, printerState: "DONE", jobStatus: "Cancelled" });
+                    tell(renderSubs, { jobID: id, renderResultCode: E.CANCEL_REQUESTED });
+                    delete open[id];
+                }
+            });
+        });
+
+        // PrintJob launches the Print Manager headless for its status
+        // dashboard; here the job's ongoing activity is that dashboard.
+        var am = runtime.services["com.palm.applicationManager"];
+        if (am) {
+            var baseOpen = am["/open"];
+            am["/open"] = function (p, reply, ctx) {
+                if (p.id === "com.palm.app.printmanager" && p.params && p.params.runHeadless)
+                    return reply(ok({ processId: String(Date.now()), appId: PRINT_MANAGER }));
+                baseOpen(p, reply, ctx);
+            };
+        }
+
+        runtime.print = { render: render, renderHtml: renderHtml, rendered: rendered, pdf: pdf, jobs: jobs };
+    })();
 
     // ================================================================================
     // System updates (com.palm.update; services/updates)

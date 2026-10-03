@@ -124,7 +124,7 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | Cell broadcast / emergency alerts | Missing | Carrier dependent | P1 | Legally required in some countries. ModemManager and oFono both support cell broadcast; show them as full-screen alerts in the shell |
 | eSIM management | Missing | None | P2 | `lpac` (LuneOS already packages it) behind a Settings pane |
 | Voice assistant | Missing | Voice Dial | P2 | Voice dial first, on-device speech recognition only; the assistant and its MCP layer are planned in [AI-AND-MCP.md](AI-AND-MCP.md) |
-| Print | Missing | Print Manager (HP printers) | P2 | CUPS with IPP Everywhere; OSE has no print service |
+| Print | **Done in the simulator** (Save as PDF; `apps/printmanager`) | Print Manager (HP printers) | P2 | Print in Web, Email and Photos, the original Enyo print dialog, the Print Manager, `com.palm.printmgr` simulated with a "Save as PDF" printer (Chromium renders the page); see [APP-RUNTIME.md](APP-RUNTIME.md#printing). Still to do on a device: real printers with CUPS and IPP Everywhere behind the same service (OSE has no print service) |
 
 ## Streaming services, honestly
 

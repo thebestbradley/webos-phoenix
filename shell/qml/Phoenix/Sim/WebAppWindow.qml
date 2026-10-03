@@ -171,6 +171,36 @@ Item {
 
     property var _webViews: ({})
 
+    // A print job (com.palm.printmgr in the runtime, "Save as PDF"): the
+    // page view's page (the browser's Print) or this window's own document
+    // (PalmSystem.printFrame) as a PDF, which Chromium makes, handed back to
+    // the page's print manager as base64. p: {jobID, pageSize: "A4" |
+    // "Letter" | "Legal", landscape}.
+    function _print(target, p) {
+        const sizes = { A4: WebEngineView.A4, Letter: WebEngineView.Letter, Legal: WebEngineView.Legal };
+        target.printToPdf((data) => {
+            const bytes = data ? new Uint8Array(data) : new Uint8Array(0);
+            view.runJavaScript("window.__phoenixRuntime && __phoenixRuntime.print && __phoenixRuntime.print.rendered("
+                               + JSON.stringify(p.jobID) + "," + (bytes.length ? JSON.stringify(_base64(bytes)) : "null") + ","
+                               + JSON.stringify(bytes.length ? {} : { error: "The page could not be printed" }) + ")");
+        }, sizes[p.pageSize] !== undefined ? sizes[p.pageSize] : WebEngineView.Letter,
+           p.landscape ? WebEngineView.Landscape : WebEngineView.Portrait);
+    }
+    function _base64(bytes) {
+        const abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        const out = [];
+        let i = 0;
+        for (; i + 2 < bytes.length; i += 3) {
+            const n = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2];
+            out.push(abc[n >> 18] + abc[(n >> 12) & 63] + abc[(n >> 6) & 63] + abc[n & 63]);
+        }
+        if (i < bytes.length) {
+            const n = (bytes[i] << 16) | ((i + 1 < bytes.length ? bytes[i + 1] : 0) << 8);
+            out.push(abc[n >> 18] + abc[(n >> 12) & 63] + (i + 1 < bytes.length ? abc[(n >> 6) & 63] : "=") + "=");
+        }
+        return out.join("");
+    }
+
     function _webViewEvent(id, name, args) {
         view.runJavaScript("window.__phoenixRuntime && __phoenixRuntime.webViewEvent && __phoenixRuntime.webViewEvent("
                            + JSON.stringify(id) + "," + JSON.stringify(name) + "," + JSON.stringify(args || []) + ")");
@@ -201,6 +231,7 @@ Item {
         case "stop": v.stop(); break;
         case "find": v.findText(p.text); break;
         case "edit": edit(p.action, v); break;
+        case "print": _print(v, p); break;
         case "destroy":
             delete _webViews[p.id];
             v.destroy();
@@ -294,6 +325,8 @@ Item {
                     const m = JSON.parse(message.substring(11));
                     if (m.type === "webView")
                         win._webView(m.payload);
+                    else if (m.type === "print")
+                        win._print(view, m.payload);
                     else if (m.type === "editAction")
                         win.edit(m.payload.action);
                     else if (m.type === "editMenu")

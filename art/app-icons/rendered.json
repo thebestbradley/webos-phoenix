@@ -367,6 +367,22 @@
   "svg": "a63d7fec09d3135840c120ee8fe8375c661e16cdf8c8809980218b94bf484a10",
   "png": "2258dbef741b2c0a91be5306e0a51388c8520681561d28c3bb5900ecebe235b7"
  },
+ "apps/printmanager/public/icon-128x128.png": {
+  "svg": "96fdefb5c35f9d863ab703162e5fc71cfe3d0bd9b3cc899569e2a9f24afc00e7",
+  "png": "c00184869dfb46a903c61962926f3e2cb2f56b5b2eb7fd524e77585f263f08ca"
+ },
+ "apps/printmanager/public/icon-256x256.png": {
+  "svg": "93f43bdbf626d2100af2dbb32c6a08561b7c81685d9080e4433b5c82e5f66688",
+  "png": "90c9c83aa79c635f4a08488bec8b3b7ab5c83ad869e1f43add6cb272a93f3675"
+ },
+ "apps/printmanager/public/icon-512x512.png": {
+  "svg": "9eb87f8816ec7384a99cd810f266ad0a23d1d552441f0208bf3eec936a0207dc",
+  "png": "acb6afb300dfb6bec97821d1a2a9bd633694c1478b027071fb892ddd071c822a"
+ },
+ "apps/printmanager/public/icon.png": {
+  "svg": "4b8e8122cce90bac63603f014394ba56208b733e0a552bbcd604ffc0bfb564bc",
+  "png": "2ad0902c22b9ee2e87a7cfdf5f08c7d57e2f916f8a7590f7d1398512f252de46"
+ },
  "apps/scanner/public/icon-128x128.png": {
   "svg": "3b0602175cc4fd765bb303374ecfae8b2df15306b5372cfe08d6980d107b7a8c",
   "png": "8f5e29bc5be96acf79afe491677f4542f4ca385b22ba0c5d012fd79f2bdc60ce"

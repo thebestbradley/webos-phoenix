@@ -16,6 +16,8 @@
 //   download  a file the page view does not show is downloaded with
 //             com.palm.downloadmanager: an ongoing activity with progress,
 //             the Downloads drawer, the Downloads folder, Open in its app
+//   print     Print in the app menu: the print dialog, Save as PDF, the
+//             PDF in Documents and the job in the Print Manager
 //
 //   node tools/test-browser.cjs [--tablet] [--out DIR]
 
@@ -191,6 +193,44 @@ async function main() {
             document.querySelector("object[type='application/x-palm-browser']").eventListener.mimeNotSupported("application/zip", "https://example.org/a.zip");
         });
         check(!!await waitFor(() => page.getByText("Cannot open MIME type").first().isVisible()), "download: a type nothing opens says \"Cannot open MIME type\"");
+        await page.locator(".enyo-popup:visible .enyo-button").first().click();
+
+        // Print: the app menu's Print opens Enyo 1.0's print dialog, which
+        // finds the print manager's "Save as PDF" printer; Print renders the
+        // page (here its text: the iframe engine) into a PDF in Documents.
+        await page.goto(browserUrl({ target: CALCULATOR }));
+        await waitForFrame(CALCULATOR);
+        // Isis keeps Print disabled while the page loads, which it counts
+        // until a second after the progress bar reached 100 %.
+        await page.waitForTimeout(1600);
+        host.length = 0;
+        await page.evaluate(() => __phoenixRuntime.openAppMenu());
+        const printItem = page.locator(".enyo-appmenu .enyo-menuitem:has-text('Print')").first();
+        check(!!await waitFor(() => printItem.isVisible()), "print: the app menu has Print");
+        await printItem.click();
+        const dialog = page.locator(".print-dialog:visible");
+        check(!!await waitFor(() => dialog.getByText("Save as PDF").first().isVisible()), "print: the print dialog offers Save as PDF");
+        check(!!await waitFor(() => dialog.getByText("Number of Copies").first().isVisible()), "print: and its options (the dialog's picker kinds exist)");
+        await shot("print-dialog");
+        await dialog.locator(".enyo-button:has-text('Print')").last().click();
+        const saved = await waitFor(() => host.find((m) => m.type === "notification" && m.payload.title === "Saved as PDF"), 10000);
+        check(!!saved && saved.payload.appId === "org.webosphoenix.printmanager", "print: \"Saved as PDF\" (" + (saved && saved.payload.body) + ")");
+        const jobs = await luna("luna://com.palm.printmgr/jobs/list", {});
+        const printed = (jobs.jobs || [])[0];
+        check(!!printed && printed.state === "Done" && printed.appName === "Browser" && printed.pages >= 1, "print: the Print Manager lists the job, done");
+        const pdfStat = printed && await luna("luna://org.webosphoenix.filemanager/stat", { path: printed.file });
+        check(!!pdfStat && pdfStat.entry && pdfStat.entry.size > 300 && /^\/media\/internal\/Documents\/.+\.pdf$/.test(printed.file),
+            "print: the PDF is in Documents (" + (printed && printed.file) + ")");
+        const head = printed && await luna("luna://org.webosphoenix.filemanager/read", { path: printed.file, encoding: "base64" });
+        const headText = head && (head.encoding === "base64" ? Buffer.from(head.data || "", "base64").toString("latin1") : head.data || "");
+        check(/^%PDF-/.test(headText || ""), "print: and it is a PDF");
+        await page.goto(`${origin}/usr/palm/applications/org.webosphoenix.printmanager/index.html?launchParams=` +
+                        encodeURIComponent(JSON.stringify({ jobID: printed && printed.jobID })));
+        const jobRow = page.locator(`[data-testid='job-${printed && printed.jobID}']`);
+        check(!!await waitFor(() => jobRow.isVisible()) && /Calculator/.test(await jobRow.textContent()) && /saved as PDF/.test(await jobRow.textContent()),
+            "print: the Print Manager shows the job (" + (await jobRow.textContent().catch(() => "")) + ")");
+        check(await page.locator(".pm-shown").count() === 1, "print: the job a notification opened is marked");
+        await shot("printmanager");
 
         check(errors.length === 0, "no errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
         await browser.close();

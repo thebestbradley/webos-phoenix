@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Print Manager: a silver printer with a page waiting in its feeder and a printed page coming out. Original Phoenix art. -->
+<defs>
+  <linearGradient id="body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f6f8"/><stop offset="0.45" stop-color="#cfd4d9"/><stop offset="0.5" stop-color="#b3b9bf"/><stop offset="1" stop-color="#8e959c"/></linearGradient>
+  <linearGradient id="top" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9aa1a8"/><stop offset="1" stop-color="#dfe3e6"/></linearGradient>
+  <linearGradient id="slot" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#15181b"/><stop offset="1" stop-color="#3b4046"/></linearGradient>
+  <linearGradient id="base" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5d636a"/><stop offset="1" stop-color="#2a2e33"/></linearGradient>
+</defs>
+<path d="M90 30H166L170 82H86Z" fill="url(#c-paper)" stroke="#8e959c" stroke-width="2.5" stroke-linejoin="round"/>
+<path d="M98 44H158M98 54H150M98 64H156" stroke="#b9c2ca" stroke-width="3" stroke-linecap="round"/>
+<path d="M70 76H186L198 92H58Z" fill="url(#top)" stroke="#555b62" stroke-width="2.5" stroke-linejoin="round"/>
+<rect x="58" y="90" width="140" height="74" rx="9" fill="url(#body)" stroke="#555b62" stroke-width="2.5"/>
+<path d="M66 98H190" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+<rect x="74" y="114" width="108" height="9" rx="4.5" fill="url(#slot)"/>
+<circle cx="182" cy="102" r="4" fill="#5fd35a" stroke="#2c7a28" stroke-width="1.5"/>
+<g filter="url(#c-lift)">
+  <path d="M82 118H174L178 170H78Z" fill="url(#c-paper)" stroke="#8e959c" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M92 134H164M92 144H150M92 154H160" stroke="#3d6fae" stroke-width="3.5" stroke-linecap="round"/>
+</g>
+<rect x="62" y="164" width="132" height="12" rx="4" fill="url(#base)"/>
+</svg>

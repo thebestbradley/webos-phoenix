@@ -189,6 +189,14 @@
             "apps/screenshot/public/icon"
         ]
     },
+    "printmanager": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 66,
+        "out": [
+            "apps/printmanager/public/icon"
+        ]
+    },
     "notificationlab": {
         "platter": "diamond",
         "base": 178,

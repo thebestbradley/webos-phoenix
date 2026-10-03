@@ -455,6 +455,7 @@ New Phoenix apps live in `apps/`, an npm workspace:
 | `apps/videos`, `apps/podcasts`, `apps/pdfview`, `apps/docview` | Videos, Podcasts, PDF View and Doc View (see [below](#videos-podcasts-pdf-view-and-doc-view)); `@phoenix/luna`'s `web.ts` (HTTP, download manager), `playback.ts` (audio focus, `nowPlaying`, orientation) and `documents.ts` (launch targets, reading files, finding documents) serve them |
 
 | `apps/firstuse` | First Use (see [below](#first-use)) |
+| `apps/printmanager` | Print Manager (see [below](#printing)); `@phoenix/luna`'s `print.ts` is the print manager's client and `@phoenix/ui`'s `PrintDialog` the print dialog for Phoenix apps |
 | `apps/help` | Help (see [below](#help)); its topics are Markdown files in `apps/help/topics` |
 
 | `apps/dav` | The CardDAV & CalDAV account (see [below](#carddav-and-caldav)): a hidden Enyo 1.0 app with the account's sign-in page, its db8 kinds and account template, and `apps/dav/service`, its Node.js Luna service and sync engine |
@@ -1671,6 +1672,56 @@ Other legacy hooks the simulator now answers as a device would:
 (luna-systemui waits on it before subscribing), and
 `com.webos.notification/createToast` with an `onclick.appId` for another app
 (a service's toast) posts that app's notification.
+
+## Printing
+
+Print is where webOS had it: in the app menu of Web and Email (both open
+Enyo 1.0's own print dialog, `lib/printdialog`) and in Photos' viewer.
+The dialog speaks to the print manager, `com.palm.printmgr`, which the
+runtime simulates (block "Printing") with the calls `PrintJob.js`,
+`DocumentPrintJob.js`, `ImagePrintJob.js` and the printer kinds make
+(`printers/list`, `getCurrent`, `setCurrent`, `getCapabilities`, `add`;
+`jobs/open`, `editPrintParams`, `getFinalParamsAndArea`, `getStatus`,
+`getRenderStatus`, `addFile`, `close`, `cancel`) and the print manager's
+error codes.
+
+- **The printer** is **Save as PDF**: the job becomes a PDF in
+  `/media/internal/Documents` (named after the page, "(2)" when taken),
+  which Files and PDF View open. A network printer would need CUPS with
+  IPP Everywhere on a device; there is none in the simulator, so Add a
+  Printer answers "Unable to communicate with the printer" (-203).
+- **Rendering**: a page view's page (the browser's, Email's message) or an
+  app's own window (`PalmSystem.printFrame`, the dialog's `frameToPrint`)
+  is rendered by Chromium in phoenix-sim: the "print" host message (or the
+  page view's `print` op) has `WebAppWindow.qml` call QtWebEngine's
+  `printToPdf` on that view, in the job's paper size, and hand the PDF back
+  (`__phoenixRuntime.print.rendered`). In a desktop browser (and the
+  Playwright tests) the page's text is printed instead. Pictures
+  (`jobs/addFile`) are put on pages by the runtime's small PDF writer, one a
+  page, turned and scaled to the paper.
+- **Enyo 1.0** was released with two of the dialog's files empty
+  (`MediaTypePicker.js`, `PrintQualityPicker.js`) although the options
+  page creates both, so opening a printer's options failed; the compat
+  overlay supplies them, written after `MediaSizePicker.js`.
+- **While it prints**, a job is an ongoing activity in the notification area
+  ("Printing <name>"), as the original Print Manager's status dashboard was
+  (`PrintJob` still launches it headless, which opens no card here); when
+  it is done a "Saved as PDF" notification opens the Print Manager at the
+  job.
+- **Print Manager** (`apps/printmanager`, `org.webosphoenix.printmanager`,
+  on the launcher's Settings page as on webOS; `com.palm.app.printmanager`
+  is an alias): the jobs (printing ones with Cancel, then the rest newest
+  first; tap one to open its PDF; Clear Finished Jobs in the app menu) and
+  the printers (the current one checked). It uses two Phoenix additions,
+  `jobs/list {subscribe}` and `jobs/remove`. `@phoenix/luna`'s `print.ts`
+  is the client; `@phoenix/ui`'s `PrintDialog` is the dialog for Phoenix
+  apps (Photos), with the original's steps and words.
+
+Tests: `apps/shared/luna/src/print.test.ts` (the service, the PDF writer),
+`apps/printmanager/src/jobs.test.ts`, `tools/test-browser.cjs` (print:
+the app menu, the dialog, the PDF, the Print Manager). Checked in
+phoenix-sim, phone and tablet: the browser's page as Chromium's PDF and a
+photo from Photos, both opened in PDF View.
 
 ## Screen captures
 

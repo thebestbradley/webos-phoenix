@@ -16,12 +16,14 @@
 //   Play in Videos: videos play here, in place, as in the webOS 2.x Photos &
 //       Videos app; the Videos app (launch {target}) adds resuming,
 //       subtitles and turning the device.
+//   Print (app menu, pictures): PrintPhoto.tsx, through the print manager.
 
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { apps, deleteMedia, system, type MediaItem } from "@phoenix/luna";
 import { useMediaUrl } from "@phoenix/luna/react";
-import { Button, Dialog, PopupMenu, IconToolButton, Toolbar, ToolSpacer, cssImage, icons } from "@phoenix/ui";
+import { AppMenu, Button, Dialog, PopupMenu, IconToolButton, Toolbar, ToolSpacer, cssImage, icons } from "@phoenix/ui";
 import { isVideo } from "./albums";
+import { PrintPhoto } from "./PrintPhoto";
 
 const VIDEOS_APP = "org.webosphoenix.videos";
 
@@ -69,6 +71,7 @@ export function Viewer({ items, index, onIndex, onClose, onDeleted }: ViewerProp
     const shareButton = useRef<HTMLDivElement>(null);
     const [sharing, setSharing] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
+    const [printing, setPrinting] = useState(false);
     const [toast, setToast] = useState<string | null>(null);
     const item = items[index];
 
@@ -195,6 +198,9 @@ export function Viewer({ items, index, onIndex, onClose, onDeleted }: ViewerProp
                 <Button variant="negative" onClick={() => void remove()} data-testid="delete-confirm">Delete</Button>
                 <Button onClick={() => setConfirmDelete(false)}>Cancel</Button>
             </Dialog>
+            {printing && <PrintPhoto item={item} onClose={() => setPrinting(false)}
+                                     onDone={(text) => { setPrinting(false); setToast(text); }} />}
+            <AppMenu items={[{ label: "Print", onSelect: () => setPrinting(true), disabled: kind !== "photo" }]} />
             {toast && <div className="ph-toast" role="status">{toast}</div>}
         </div>
     );

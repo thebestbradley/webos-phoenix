@@ -1,0 +1,19 @@
+{
+    "id": "org.webosphoenix.printmanager",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Print Manager",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "iconColor": "#5d636a",
+    "uiRevision": 2,
+    "keywords": ["Print", "Printer", "Printing", "PDF", "Save as PDF"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings. Print Manager was on the settings page of the webOS launcher (luna-sysmgr conf/default-launcher-page-layout.json, com.palm.app.printmanager); the print dialog launches it by that id, an alias of this one.",
+        "launcherTab": 2
+    }
+}
