@@ -30,8 +30,8 @@ public:
 
     // Device path (e.g. /usr/palm/applications/<id>/index.html) -> file.
     QString resolve(const QString &devicePath) const;
-    // Each mount's directory paired with each overlay's directory at the
-    // same device path, where the overlay has one.
+    // Each mount's and each app's directory paired with each overlay's
+    // directory at the same device path, where the overlay has one.
     QList<QPair<QString, QString>> twinDirectories() const;
 
     // Apps the user installed (com.webos.appInstallService in the runtime,

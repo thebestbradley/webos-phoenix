@@ -1,0 +1,63 @@
+/* webOS Phoenix overlay (tools/hidpi-art.py): the original stylesheet, with each
+   picture that has HiDPI variants asked for as an image set of them
+   (docs/spec/hidpi-art.md). Do not edit; regenerate. */
+/* @@@LICENSE
+* Copyright (c) 2011-2013 LG Electronics, Inc.
+* Use of this file is subject to the license terms as set forth in the
+* file README.md found in the root directory of this repository.
+* LICENSE@@@   */
+
+/*
+ * Other Files Styles
+ */
+
+.files-file-ext {
+  	display: inline-block;
+	color: #8f8f90;
+}
+
+.files-file-date,
+.files-file-size,
+.files-file-duration,
+.video-file-size, 
+.video-file-duration {
+  color: #4d4d4f;
+	font-size: 12px;
+	line-height: 14px;
+	height: 14px !important;
+	margin: -15px 0px 0px 58px;
+	position: absolute;
+}
+
+.files-file-size {
+  left: 101px;
+}
+
+.video-file-size {
+  left: 101px;
+}
+
+.file-selected {	
+	background: -webkit-image-set(url(../images/highlight-bg.png) 1x, url(../images/highlight-bg@2x.png) 2x, url(../images/highlight-bg@3x.png) 3x) left top no-repeat;
+    -webkit-background-size: 100% 100%;
+}
+
+.enyo-misc-files-list-empty {
+	background: -webkit-image-set(url(../images/empty-folder-other.png) 1x, url(../images/empty-folder-other@2x.png) 2x, url(../images/empty-folder-other@3x.png) 3x) center center no-repeat;
+	height:120px;
+	width:120px;
+}
+
+.enyo-misc-files-list-empty-msg {
+	color: grey;
+	font-size: 18px;
+}
+
+.filepicker-file-icon  {
+  margin: 7px 0px 0px 2px;
+}
+
+.files-file-name {
+    padding-left: 14px;
+    width: 300px;
+}

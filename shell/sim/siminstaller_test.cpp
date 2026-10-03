@@ -59,6 +59,13 @@ int main(int argc, char **argv)
     check(entry(rootfs, QStringLiteral("org.webosphoenix.phone")).value(QStringLiteral("largeIcon")).toString()
               .endsWith(QStringLiteral("icon-256x256.png")),
           "a Phoenix app's large icon is still its splashicon");
+    // The HiDPI variants of a core app's pictures sit in the overlay at the
+    // app's device path: the shell finds them there (HiDpi twin directories).
+    bool twin = false;
+    for (const auto &p : rootfs.twinDirectories())
+        twin = twin || (p.first.endsWith(QStringLiteral("third_party/core-apps/com.palm.app.email"))
+                        && p.second.endsWith(QStringLiteral("compat/rootfs/usr/palm/applications/com.palm.app.email")));
+    check(twin, "an app's directory is paired with the overlay's at its device path");
 
     const QString id = QStringLiteral("org.example.hello");
     const QByteArray info = R"({"id": "org.example.hello", "title": "Hello", "version": "1.0.0", "main": "index.html"})";

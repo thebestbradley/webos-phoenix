@@ -280,15 +280,20 @@ QVariantList RootfsFiles::twinDirectories() const
 QList<QPair<QString, QString>> Rootfs::twinDirectories() const
 {
     QList<QPair<QString, QString>> pairs;
-    for (const auto &m : m_mounts) {
-        if (!m.first.endsWith(QLatin1Char('/')) || !QFileInfo(m.second).isDir())
-            continue;
+    const auto add = [&](const QString &devicePath, const QString &dir) {
         for (const QString &overlay : m_overlays) {
-            const QString twin = QDir::cleanPath(overlay + m.first);
+            const QString twin = QDir::cleanPath(overlay + devicePath);
             if (QFileInfo(twin).isDir())
-                pairs.append({ QDir::cleanPath(m.second), twin });
+                pairs.append({ QDir::cleanPath(dir), twin });
         }
-    }
+    };
+    for (const auto &m : m_mounts)
+        if (m.first.endsWith(QLatin1Char('/')) && QFileInfo(m.second).isDir())
+            add(m.first, m.second);
+    // An app's own directory, served at /usr/palm/applications/<id>/: the
+    // shell draws pictures it names (dashboard and banner icons) from there.
+    for (auto it = m_appDirs.constBegin(); it != m_appDirs.constEnd(); ++it)
+        add(QString::fromLatin1(kAppsPrefix) + it.key(), it.value());
     return pairs;
 }
 

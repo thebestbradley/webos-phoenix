@@ -2362,6 +2362,201 @@
         else add();
     })();
 
+    // ---- HiDPI art named from script (the original apps) --------------------------
+    //
+    // The shell zooms a web view by its density, which the page sees as its
+    // devicePixelRatio. The original apps' and frameworks' stylesheets ask
+    // for their art's @2x and @3x variants with image sets (their overlay
+    // copies, written by tools/hidpi-art.py); a picture a page names from
+    // script (an <img>'s src, an inline background: Enyo's Image and
+    // IconButton kinds, the apps' own templates) gets them here.
+    // hidpi-art.json beside this file lists the art that has variants, by
+    // device directory, name@2x.png / name@3x.png beside it
+    // (docs/spec/hidpi-art.md). An <img> gets a srcset, an inline background
+    // or border image an image set; both keep the 1x art's size. A page's
+    // own srcset or image set is left alone. So do the pages an app shows in
+    // its frames without a runtime of their own (luna-systemui's file
+    // picker, which Enyo's FilePicker opens in the app's card).
+    (function hidpiArt() {
+        if (!global.document || typeof MutationObserver !== "function" || typeof URL !== "function" ||
+            typeof WeakMap !== "function" || typeof WeakSet !== "function")
+            return;
+        var IMAGE = /^([^?#]*\/)([^\/?#]+?)(\.(?:png|jpg|gif))([?#].*)?$/i;
+        var list;   // undefined until first needed; null when unavailable
+        function art() {
+            if (list === undefined) {
+                list = null;
+                try {
+                    var req = new XMLHttpRequest();
+                    req.open("GET", "/usr/share/phoenix/runtime/hidpi-art.json", false);
+                    req.send(null);
+                    if ((req.status === 200 || req.status === 0) && req.responseText)
+                        list = JSON.parse(req.responseText).art || null;
+                } catch (e) { list = null; }
+            }
+            return list;
+        }
+        // [[factor, url]] of an absolute URL's variants, or null.
+        function variants(url) {
+            var m = IMAGE.exec(url);
+            if (!m || m[4] || /@[\d.]+x$/.test(m[2]))
+                return null;
+            var dir;
+            try { dir = decodeURIComponent(new URL(m[1]).pathname); } catch (e) { return null; }
+            var all = art();
+            var ks = all && all[dir] && all[dir][decodeURIComponent(m[2] + m[3])];
+            return ks ? ks.map(function (k) { return [k, m[1] + m[2] + "@" + k + "x" + m[3]]; }) : null;
+        }
+        function absolute(url, node) {
+            try { return new URL(url, node.ownerDocument.baseURI).href; } catch (e) { return null; }
+        }
+
+        var given = new WeakMap();   // img -> the srcset set here
+        function fixImg(img) {
+            watch(img.ownerDocument);
+            var mine = given.get(img);
+            var current = img.getAttribute("srcset");
+            if (current !== null && current !== mine)
+                return;   // the page's own
+            var src = img.getAttribute("src");
+            var abs = src && absolute(src, img);
+            var v = abs && variants(abs);
+            if (!v) {
+                if (mine !== undefined) {
+                    img.removeAttribute("srcset");
+                    given.delete(img);
+                }
+                return;
+            }
+            var set = [abs + " 1x"].concat(v.map(function (e) { return e[1] + " " + e[0] + "x"; })).join(", ");
+            if (set !== current) {
+                given.set(img, set);
+                img.setAttribute("srcset", set);
+            }
+        }
+
+        var PROPS = ["background-image", "border-image-source"];
+        var URL_FN = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g;
+        function fixStyle(el) {
+            var st = el.style;
+            if (!st)
+                return;
+            PROPS.forEach(function (prop) {
+                var value = st.getPropertyValue(prop);
+                if (!value || value.indexOf("url(") < 0 || value.indexOf("image-set(") >= 0)
+                    return;
+                var changed = false;
+                var out = value.replace(URL_FN, function (all, q, url) {
+                    var abs = absolute(url, el);
+                    var v = abs && variants(abs);
+                    if (!v)
+                        return all;
+                    changed = true;
+                    return "-webkit-image-set(" + ["url(\"" + abs + "\") 1x"].concat(v.map(function (e) {
+                        return "url(\"" + e[1] + "\") " + e[0] + "x";
+                    })).join(", ") + ")";
+                });
+                if (changed)
+                    st.setProperty(prop, out, st.getPropertyPriority(prop));
+            });
+        }
+
+        // A same-origin frame's window, as soon as the frame is in the page:
+        // its first (empty) document's window is the one the page it loads
+        // from this origin gets, so what is set up here is there before
+        // that page's scripts run; again when it loads, for a frame that
+        // navigates elsewhere.
+        var frames = new WeakSet();
+        function fixFrame(frame) {
+            try { install(frame.contentWindow); } catch (e) { /* another origin */ }
+            if (frames.has(frame))
+                return;
+            frames.add(frame);
+            frame.addEventListener("load", function () {
+                try {
+                    install(frame.contentWindow);
+                    if (frame.contentDocument && frame.contentDocument.documentElement)
+                        scan(frame.contentDocument.documentElement);
+                } catch (e) { /* another origin */ }
+            });
+        }
+
+        function fix(el) {
+            if (el.tagName === "IMG")
+                fixImg(el);
+            else if (el.tagName === "IFRAME")
+                fixFrame(el);
+            if (el.hasAttribute("style"))
+                fixStyle(el);
+        }
+        function scan(node) {
+            if (!node || node.nodeType !== 1)
+                return;
+            fix(node);
+            var els = node.querySelectorAll("img[src], [style], iframe");
+            for (var i = 0; i < els.length; ++i)
+                fix(els[i]);
+        }
+
+        // The page's own markup, inline styles (which load when they are
+        // drawn) and frames as they change.
+        var watched = new WeakSet();
+        function watch(d) {
+            if (!d || watched.has(d))
+                return;
+            watched.add(d);
+            new MutationObserver(function (records) {
+                records.forEach(function (r) {
+                    if (r.type === "childList")
+                        Array.prototype.forEach.call(r.addedNodes, scan);
+                    else if (r.attributeName === "src" && r.target.tagName === "IMG")
+                        fixImg(r.target);
+                    else if (r.attributeName === "style")
+                        fixStyle(r.target);
+                });
+            }).observe(d, { childList: true, subtree: true, attributes: true, attributeFilter: ["src", "style"] });
+        }
+
+        // An <img> starts loading as soon as its src is set, attached or not
+        // (Enyo renders with innerHTML, often before the node is in the
+        // page): its srcset is set then, before the load starts, so the 1x
+        // picture is never fetched.
+        function after(proto, name, then) {
+            var d = proto && Object.getOwnPropertyDescriptor(proto, name);
+            if (!d || !d.configurable)
+                return;
+            if (d.set) {
+                var set = d.set;
+                d.set = function (v) { set.call(this, v); then(this); };
+            } else if (typeof d.value === "function") {
+                var fn = d.value;
+                d.value = function () { var r = fn.apply(this, arguments); then(this, arguments); return r; };
+            } else {
+                return;
+            }
+            Object.defineProperty(proto, name, d);
+        }
+        function install(win) {
+            if (!win || win.__phoenixHidpiArt)
+                return;
+            Object.defineProperty(win, "__phoenixHidpiArt", { value: true });
+            if (win.Element && win.HTMLImageElement) {
+                var E = win.Element.prototype;
+                after(E, "innerHTML", scan);
+                after(E, "outerHTML", function (el) { scan(el.parentNode); });
+                after(E, "insertAdjacentHTML", function (el) { scan(el.parentNode && el.parentNode.nodeType === 1 ? el.parentNode : el); });
+                after(win.HTMLImageElement.prototype, "src", fixImg);
+                after(E, "setAttribute", function (el, args) {
+                    if (el.tagName === "IMG" && String(args[0]).toLowerCase() === "src")
+                        fixImg(el);
+                });
+            }
+            watch(win.document);
+        }
+        install(global);
+        runtime.hidpiArt = { variants: variants };
+    })();
+
     // Back gesture: the shell calls this; Mojo/Enyo 1.0 apps treat Escape
     // (and keyIdentifier U+1200001 on devices) as "back".
     runtime.back = function () {

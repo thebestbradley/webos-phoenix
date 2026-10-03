@@ -1,0 +1,86 @@
+/* webOS Phoenix overlay (tools/hidpi-art.py): the original stylesheet, with each
+   picture that has HiDPI variants asked for as an image set of them
+   (docs/spec/hidpi-art.md). Do not edit; regenerate. */
+/* @@@LICENSE
+* Copyright (c) 2011-2013 LG Electronics, Inc.
+* Use of this file is subject to the license terms as set forth in the
+* file README.md found in the root directory of this repository.
+* LICENSE@@@   */
+
+.enyo-audiolist-artwork-frame {
+	background: -webkit-image-set(url(../images/highlighticon.png) 1x, url(../images/highlighticon@2x.png) 2x, url(../images/highlighticon@3x.png) 3x) top left no-repeat;
+	width: 38px;
+  	height: 38px;
+}	
+
+.enyo-audiolist-artwork {
+	padding:3px;
+}
+
+.enyo-audiolist-music-preview-play {
+	width: 46px;
+  	height: 46px; 
+	background: -webkit-image-set(url(../images/icn-play.png) 1x, url(../images/icn-play@2x.png) 2x, url(../images/icn-play@3x.png) 3x) center center no-repeat;
+}
+
+.enyo-audiolist-music-preview-stop {
+  	background: -webkit-image-set(url(../images/icn-pause.png) 1x, url(../images/icn-pause@2x.png) 2x, url(../images/icn-pause@3x.png) 3x) center center no-repeat;
+}
+.enyo-audiolist-audio-title {
+	font-size: 14px;
+    width: 140px;
+}
+
+.enyo-audiolist-audio-artist {
+	font-size: 12px;
+    color: #4d4d4f;
+}
+
+.audio-timer-text {
+	font-size: 12px;
+}
+
+.enyo-audio-list-empty {
+	background: -webkit-image-set(url(../images/empty-folder-audio.png) 1x, url(../images/empty-folder-audio@2x.png) 2x, url(../images/empty-folder-audio@3x.png) 3x) center center no-repeat;
+	color: grey;
+	font-size: 18px;
+	height:	120px;
+	width:	120px;
+}
+
+.audio-file-selected {
+	border: 3px solid blue;
+}
+
+.enyo-progress-bar-item-background {
+	border-width: 12px 0px;
+	-webkit-border-image: -webkit-image-set(url(../images/progress-item.png) 1x, url(../images/progress-item@2x.png) 2x, url(../images/progress-item@3x.png) 3x) 12 0 12 0 repeat repeat;
+	-webkit-box-sizing: border-box;
+	position: relative;
+}
+
+.enyo-progress-bar-item-inner {
+	margin: -12px 0px;
+	height:100%;
+	border-width: 0 9px 0 0;
+	position:absolute;
+	-webkit-border-image: -webkit-image-set(url(../images/progress-item-inner.png) 1x, url(../images/progress-item-inner@2x.png) 2x, url(../images/progress-item-inner@3x.png) 3x) 0 9 0 0;
+}
+
+.enyo-progress-bar-item-client {
+	margin: -12px 0px;
+	position:relative;
+}
+
+.audioFileSelected {
+	-webkit-border-image: -webkit-image-set(url(../images/multi-select-9tile.png) 1x, url(../images/multi-select-9tile@2x.png) 2x, url(../images/multi-select-9tile@3x.png) 3x) 14 14 14 14;
+	border-width: 14px;
+	z-index: 8px;
+	margin: -14px;
+	height: 38px;
+	width: 38px;
+}
+.boxshadow{
+	box-shadow: 0px 2px 5px #888;
+	-webkit-box-shadow: 0px 2px 5px #888;
+}
