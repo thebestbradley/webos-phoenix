@@ -75,6 +75,23 @@
         }
     };
 
+    // A JSON answer from the host at a path of its own (phoenix-sim's
+    // /__phoenix/proxy?req=..., /__phoenix/proxy/progress?id=...). With
+    // XMLHttpRequest: before Qt 6.6 Chromium refuses fetch() on a custom
+    // scheme such as phoenix: (QWebEngineUrlScheme::FetchApiAllowed is 6.6),
+    // and XHR is how the apps' own pages read files there anyway.
+    function hostGetJson(path) {
+        return new Promise(function (resolve, reject) {
+            var x = new global.XMLHttpRequest();
+            x.open("GET", path, true);
+            x.onload = function () {
+                try { resolve(JSON.parse(x.responseText)); } catch (e) { reject(e); }
+            };
+            x.onerror = function () { reject(new Error("The host did not answer " + path.replace(/\?.*$/, ""))); };
+            x.send();
+        });
+    }
+
     // ---- App identity ------------------------------------------------------------
 
     function appIdFromLocation() {
@@ -369,7 +386,17 @@
         // nothing to do here.
         copiedToClipboard: function () {},
         pastedFromClipboard: function () {},
-        printFrame: function () { global.print && global.print(); },
+        // Puts this window (frameName "": the app's own document) on paper
+        // for a print job of com.palm.printmgr (PrintDialog's frameToPrint):
+        // in phoenix-sim the shell renders the window ("print" host
+        // message); elsewhere its text is printed. See "Printing" below.
+        printFrame: function (frameName, jobID) {
+            if (!jobID || !runtime.print) return;
+            var doc = global.document;
+            runtime.print.render(jobID, global.location.protocol === "phoenix:"
+                ? { title: doc.title, host: { type: "print", id: "" } }
+                : { title: doc.title, text: doc.body ? doc.body.innerText : "" });
+        },
         // The TouchPad launcher's glow on a tapped icon (Just Type).
         applyLaunchFeedback: function () {},
         simulateMouseClick: function () {},
@@ -775,13 +802,16 @@
         function isOfKind(db, obj, kind) {
             if (!kind) return true;
             if (obj._kind === kind) return true;
-            // Kinds may extend others (e.g. "com.palm.contact.palmprofile:1" extends "com.palm.person:1").
-            var k = db.kinds[obj._kind];
-            var seen = {};
-            while (k && k.extends && !seen[obj._kind]) {
-                seen[obj._kind] = true;
+            // Kinds may extend others (e.g. "com.palm.contact.palmprofile:1" extends "com.palm.person:1"),
+            // through any number of levels ("com.palm.immessage.xmpp:1" extends "com.palm.immessage:1",
+            // which extends "com.palm.message:1"); a kind seen twice ends the walk.
+            var id = obj._kind, seen = {};
+            while (id && !seen[id]) {
+                seen[id] = true;
+                var k = db.kinds[id];
+                if (!k || !k.extends || !k.extends.length) return false;
                 if (k.extends.indexOf(kind) >= 0) return true;
-                k = db.kinds[k.extends[0]];
+                id = k.extends[0];
             }
             return false;
         }
@@ -1897,10 +1927,34 @@
         track: function () {
             var self = this;
             if (this.destroyed) return;
-            var n = this.node, r = n.getBoundingClientRect();
+            var n = this.node, b = n.getBoundingClientRect();
+            var r = { left: b.left, top: b.top, right: b.right, bottom: b.bottom };
+            // Shown: laid out and not hidden. Not offsetParent, which is null
+            // for position: fixed, as the app menu is.
+            function shown(e) {
+                if (!e.getClientRects().length) return false;
+                var cs = global.getComputedStyle(e);
+                return cs.visibility !== "hidden" && cs.display !== "none";
+            }
             var popup = Array.prototype.some.call(global.document.querySelectorAll(".enyo-popup"), function (e) {
-                return e.offsetParent !== null && e.getBoundingClientRect().height > 0;
+                return shown(e) && e.getBoundingClientRect().height > 0;
             });
+            // A drawer flown in from a side (enyo.Toaster, class enyo-toaster:
+            // the browser's bookmarks, history and downloads) covers part of
+            // the page: the view keeps to the part it leaves, since nothing in
+            // the page can draw over a native view.
+            Array.prototype.forEach.call(global.document.querySelectorAll(".enyo-toaster"), function (e) {
+                if (!shown(e)) return;
+                var t = e.getBoundingClientRect();
+                if (t.width === 0 || t.height === 0 || t.right <= r.left || t.left >= r.right || t.bottom <= r.top || t.top >= r.bottom) return;
+                if (t.top <= r.top && t.bottom >= r.bottom) {
+                    if (t.left > r.left) r.right = Math.min(r.right, t.left);
+                    else r.left = Math.max(r.left, t.right);
+                } else if (t.top > r.top) r.bottom = Math.min(r.bottom, t.top);
+                else r.top = Math.max(r.top, t.bottom);
+            });
+            r.width = Math.max(0, r.right - r.left);
+            r.height = Math.max(0, r.bottom - r.top);
             var hidden = !n.isConnected || n.offsetParent === null || r.width === 0 || r.height === 0 || popup;
             var rect = [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)].join(",");
             if (rect !== this.rect || hidden !== this.hidden) {
@@ -2039,7 +2093,20 @@
                 this.picture({ op: "resize", src: src, path: path, width: width, height: height });
             },
             deleteImage: function (path) { this.picture({ op: "delete", path: path }); },
-            printFrame: function () {}
+            // (frameName, jobID, width, height, dpi, landscape, reverse): the
+            // page shown here, for a com.palm.printmgr job (the browser's and
+            // Email's Print). The native view renders it with Chromium; the
+            // iframe engine prints the page's text (all it can read of a
+            // same-origin page).
+            printFrame: function (frameName, jobID) {
+                if (!jobID || !runtime.print) return;
+                if (nativeWebViews)
+                    return runtime.print.render(jobID, { title: this.title, host: { type: "webView", id: this.id } });
+                var doc = null;
+                try { doc = this.frame && this.frame.contentDocument; } catch (e) { doc = null; }
+                runtime.print.render(jobID, { title: (doc && doc.title) || this.title || this.url,
+                                              text: doc && doc.body ? doc.body.innerText : this.url });
+            }
         }
     };
 
@@ -2074,6 +2141,29 @@
         if (name === "urlTitleChanged") { a.url = args[0]; a.title = args[1]; }
         a.listener.apply(a, [name].concat(args || []));
     };
+
+    // A page view nobody sees, showing some HTML: what Email prints its
+    // message from (the message itself is a div of its window). In
+    // phoenix-sim only; loaded(id) once the page has loaded, then the view
+    // can be printed by its id and must be destroyed.
+    runtime.offscreenWebView = nativeWebViews ? function (html, loaded) {
+        var a = { id: "wv" + (nextWebView++), fired: false };
+        a.listener = function (name) {
+            if (name === "documentLoadFinished" && !a.fired) { a.fired = true; loaded(a.id); }
+        };
+        webViews[a.id] = a;
+        host.postToHost("webView", { id: a.id, op: "create" });
+        // Letter width at 96 dpi; the PDF is laid out for its paper anyway.
+        host.postToHost("webView", { id: a.id, op: "geometry", x: 0, y: 0, width: 816, height: 1056, visible: false });
+        host.postToHost("webView", { id: a.id, op: "html", url: "", html: html });
+        return {
+            destroy: function () {
+                if (!webViews[a.id]) return;
+                delete webViews[a.id];
+                host.postToHost("webView", { id: a.id, op: "destroy" });
+            }
+        };
+    } : null;
 
     // ---- Connectivity, power, accounts and friends -------------------------------------
 
@@ -5510,6 +5600,33 @@
             dbSvc[method](params, function (r) { if (out === undefined) out = r; }, { cancelled: function () { return true; } });
             return out || {};
         }
+        // Presence lives in tempdb, as on webOS (com.palm.imbuddystatus:1).
+        var tempdbSvc = runtime.services["com.palm.tempdb"];
+        function tempdbCall(method, params) {
+            var out;
+            tempdbSvc[method](params, function (r) { if (out === undefined) out = r; }, { cancelled: function () { return true; } });
+            return out || {};
+        }
+        var MMS_KIND = "com.palm.mmsmessage:1";
+        var IM_KIND = "com.palm.immessage:1";
+        var IM_BUDDY_KIND = "com.palm.imbuddystatus:1";
+        var IM_LOGIN_KIND = "com.palm.imloginstate:1";
+
+        // The kinds MMS and IM add (their own version, so a store seeded
+        // before them gets them too; seeding again puts them back).
+        messagingKinds();
+        function messagingKinds() {
+            var VERSION = 1;
+            if (store.get("messaging:kinds", 0) >= VERSION) return;
+            [["com.palm.message:1", []], ["com.palm.smsmessage:1", ["com.palm.message:1"]],
+             [MMS_KIND, ["com.palm.message:1"]], [IM_KIND, ["com.palm.message:1"]],
+             ["com.palm.immessage.xmpp:1", [IM_KIND]], ["com.palm.chatthread:1", []],
+             [IM_LOGIN_KIND, []]].forEach(function (k) {
+                dbCall("/putKind", { id: k[0], owner: "org.webosphoenix.simulator", extends: k[1] });
+            });
+            tempdbCall("/putKind", { id: IM_BUDDY_KIND, owner: "org.webosphoenix.simulator" });
+            store.set("messaging:kinds", VERSION);
+        }
 
         // ---- Messaging: thread assignment (LuneOS MessageAssigner.js) ----------------
 
@@ -5534,12 +5651,33 @@
             return null;
         }
 
+        // Texts (SMS, MMS) go by phone number; instant messages by the
+        // buddy's address on an IM service ("type_jabber", ...), which is
+        // not a phone number, and keep to their own conversations.
+        function isIm(service) { return /^type_/.test(String(service || "")); }
+        // The person an IM buddy is (the transport links its roster to the
+        // address book, as the contacts linker did: imbuddystatus personId).
+        function personForIm(addr, service) {
+            var b = (tempdbCall("/find", { query: { from: IM_BUDDY_KIND } }).results || []).filter(function (x) {
+                return x.serviceName === service && String(x.username).toLowerCase() === String(addr).toLowerCase();
+            })[0];
+            return b && b.personId ? (dbCall("/get", { ids: [b.personId] }).results || [])[0] || null : null;
+        }
+        // What a conversation's last line says of a picture message.
+        function summaryOf(msg) {
+            var pics = (msg.parts || []).filter(function (p) { return /^image\//.test(p.mimeType || ""); }).length;
+            if (!pics && !(msg.parts || []).length) return msg.messageText;
+            var what = pics ? (pics === 1 ? "Picture" : pics + " pictures") : "Attachment";
+            return msg.messageText ? what + ": " + msg.messageText : what;
+        }
+
         // Find or create msg's chat thread, update it (summary, timestamp,
         // unread count) and store msg with conversations = [thread id].
         function assign(msg) {
             var incomingMsg = msg.folder === "inbox";
             var addr = incomingMsg ? (msg.from && msg.from.addr) : (msg.to && msg.to[0] && msg.to[0].addr);
-            var person = addr ? personFor(addr) : null;
+            var im = isIm(msg.serviceName);
+            var person = addr ? (im ? personForIm(addr, msg.serviceName) : personFor(addr)) : null;
             var thread = null;
             if (msg.conversations && msg.conversations.length)
                 thread = (dbCall("/get", { ids: [msg.conversations[0]] }).results || [])[0] || null;
@@ -5547,18 +5685,23 @@
                 var threads = dbCall("/find", { query: { from: "com.palm.chatthread:1" } }).results || [];
                 for (var i = 0; i < threads.length && !thread; ++i) {
                     var t = threads[i];
-                    if ((person && t.personId === person._id) || (!person && t.replyAddress && sameNumber(t.replyAddress, addr)))
+                    if (im !== isIm(t.replyService)) continue;
+                    if (im ? t.replyService === msg.serviceName && String(t.replyAddress).toLowerCase() === String(addr).toLowerCase()
+                              && (!t.username || !msg.username || t.username === msg.username)
+                           : (person && t.personId === person._id) || (!person && t.replyAddress && sameNumber(t.replyAddress, addr)))
                         thread = t;
                 }
             }
             thread = thread || { _kind: "com.palm.chatthread:1", unreadCount: 0, flags: {} };
             thread.displayName = (person && personName(person)) || thread.displayName ||
-                (!incomingMsg && msg.to[0].name) || addr;
+                (!incomingMsg && msg.to[0].name) || (incomingMsg && msg.from.name) || addr;
             if (person) thread.personId = person._id;
-            thread.normalizedAddress = digits(addr);
+            thread.normalizedAddress = im ? String(addr).toLowerCase() : digits(addr);
             thread.replyAddress = addr;
             thread.replyService = msg.serviceName || "sms";
-            thread.summary = msg.messageText;
+            // The IM account the conversation is on (the immessage's username).
+            if (im && msg.username) thread.username = msg.username;
+            thread.summary = summaryOf(msg);
             thread.timestamp = msg.localTimestamp || Date.now();
             thread.flags = thread.flags || {};
             thread.flags.visible = true;
@@ -5571,16 +5714,53 @@
         }
 
         // telephonyd: pending outbox texts -> sending -> successful / failed.
+        // A picture message (MMS, mmsd under oFono) takes longer.
         function sendOutbox() {
-            var pending = dbCall("/find", { query: { from: "com.palm.smsmessage:1", where: [
-                { prop: "folder", op: "=", val: "outbox" }, { prop: "status", op: "=", val: "pending" }] } }).results || [];
-            pending.forEach(function (m) {
-                dbCall("/merge", { objects: [{ _id: m._id, status: "sending" }] });
-                setTimeout(function () {
-                    dbCall("/merge", { objects: [{ _id: m._id, status: offline() ? "failed" : "successful" }] });
-                }, 600);
+            [["com.palm.smsmessage:1", 600], [MMS_KIND, 1500]].forEach(function (k) {
+                var pending = dbCall("/find", { query: { from: k[0], where: [
+                    { prop: "folder", op: "=", val: "outbox" }, { prop: "status", op: "=", val: "pending" }] } }).results || [];
+                pending.forEach(function (m) {
+                    dbCall("/merge", { objects: [{ _id: m._id, status: "sending" }] });
+                    setTimeout(function () {
+                        dbCall("/merge", { objects: [{ _id: m._id, status: offline() ? "failed" : "successful" }] });
+                    }, k[1]);
+                });
             });
         }
+
+        function callP(url, params) {
+            return new Promise(function (resolve) {
+                dispatch(url, params || {}, resolve, { cancelled: function () { return false; }, onCancel: null });
+            });
+        }
+        // A picture message keeps its own copies of its pictures, as the MMS
+        // store does (/media/internal/.mms, which Files and Photos leave out):
+        // the message stays whole when the original goes. parts:
+        // [{path, mimeType, name?}] -> the same with the copies' paths.
+        var MMS_DIR = "/media/internal/.mms";
+        var partSeq = 0;
+        function keepParts(parts) {
+            // The folder first (an error when it is there already is fine).
+            return callP("luna://org.webosphoenix.filemanager/mkdir", { path: MMS_DIR }).then(function () {
+                return copyParts(parts);
+            });
+        }
+        function copyParts(parts) {
+            return Promise.all((parts || []).map(function (part) {
+                var name = String(part.name || part.path || "part").replace(/^.*\//, "");
+                var dest = MMS_DIR + "/" + Date.now().toString(36) + "-" + (++partSeq) + "-" + name;
+                return callP("luna://org.webosphoenix.filemanager/copy", { from: part.path, to: dest }).then(function (r) {
+                    var out = { mimeType: part.mimeType || "", name: name, path: r.returnValue === false ? part.path : dest };
+                    if (r.returnValue === false) console.warn("[phoenix-runtime] MMS: kept the picture where it is: " + r.errorText);
+                    return out;
+                });
+            }));
+        }
+
+        // The IM transports deliver outgoing instant messages
+        // (org.webosphoenix.service.xmpp, block "Instant messaging" below).
+        var imTransports = {};
+        runtime.registerImTransport = function (service, send) { imTransports[service] = send; };
 
         register(["org.webosports.service.messaging"], {
             "/putMessage": function (p, reply) {
@@ -5588,12 +5768,43 @@
                 if (!msg || !msg._kind || (!msg.to && !msg.from))
                     return reply(fail(-1, "Requiring valid message argument with _kind member already set."));
                 msg = JSON.parse(toJson(msg));
-                var r = assign(msg);
-                reply(ok({ threadids: [r.threadId] }));
-                if (msg._kind === "com.palm.smsmessage:1" && msg.folder === "outbox" && msg.status === "pending")
-                    setTimeout(sendOutbox, 250);
+                var mms = msg._kind === MMS_KIND;
+                (mms && msg.parts && msg.parts.length ? keepParts(msg.parts) : Promise.resolve(msg.parts)).then(function (parts) {
+                    if (parts) msg.parts = parts;
+                    var r = assign(msg);
+                    reply(ok({ threadids: [r.threadId] }));
+                    var outgoing = msg.folder === "outbox" && msg.status === "pending";
+                    if (outgoing && (msg._kind === "com.palm.smsmessage:1" || mms))
+                        setTimeout(sendOutbox, 250);
+                    else if (outgoing && isIm(msg.serviceName) && imTransports[msg.serviceName])
+                        setTimeout(function () { imTransports[msg.serviceName](r.messageId); }, 150);
+                });
             }
         });
+        runtime.messaging = { assign: assign, isIm: isIm, personName: personName, tempdbCall: tempdbCall, dbCall: dbCall,
+                              IM_BUDDY_KIND: IM_BUDDY_KIND, IM_LOGIN_KIND: IM_LOGIN_KIND };
+
+        // A picture message arrives (phoenix-sim Shift+F5): its pictures in
+        // the MMS store, then as a text: a thread, unread, a notification.
+        runtime.simulateIncomingMms = function (opts) {
+            opts = opts || {};
+            var from = opts.from || "(408) 555-0142";
+            var text = opts.text === undefined ? "Look where we are!" : opts.text;
+            var image = opts.image || "/media/internal/samples/photos/harbor-dusk.jpg";
+            return keepParts([{ path: image, mimeType: opts.mimeType || "image/jpeg" }]).then(function (parts) {
+                var now = Date.now();
+                var r = assign({
+                    _kind: MMS_KIND, folder: "inbox", status: "successful", serviceName: "mms",
+                    messageText: text, parts: parts, localTimestamp: now, timestamp: now, simId: 0,
+                    from: { addr: from }, flags: { read: false, visible: true }
+                });
+                var person = personFor(from);
+                host.postToHost("notification", { appId: MESSAGING_APP, title: person ? personName(person) : from,
+                                                  body: text ? "Picture: " + text : "Picture message",
+                                                  params: { threadId: r.threadId }, soundClass: "notifications" });
+                return r.threadId;
+            });
+        };
 
         runtime.simulateIncomingSms = function (opts) {
             opts = opts || {};
@@ -5622,6 +5833,8 @@
              ["com.palm.chatthread:1", []], ["com.palm.phonecall:1", []]].forEach(function (k) {
                 dbCall("/putKind", { id: k[0], owner: "org.webosphoenix.simulator", extends: k[1] });
             });
+            store.set("messaging:kinds", 0);
+            messagingKinds();
             // The people are the simulator's sample contacts (runtime/sample-data.js,
             // loaded earlier), so Phone, Messaging and Contacts share one address book.
             var persons = dbCall("/find", { query: { from: "com.palm.person:1" } }).results || [];
@@ -5685,6 +5898,223 @@
         // Ids for the shell (sim.qml F4 / F5).
         runtime.phoneAppId = PHONE_APP;
         runtime.messagingAppId = MESSAGING_APP;
+    })();
+
+    // ================================================================================
+    // Instant messaging (simulated XMPP: org.webosphoenix.service.xmpp)
+    // ================================================================================
+    //
+    // An IM transport as webOS's Synergy ones were (libpurple's AIM and
+    // Google Talk), shaped like the XMPP transport Phoenix plans
+    // (docs/SYNERGY-MODERN.md: template com.webosphoenix.xmpp, MESSAGING
+    // with capabilitySubtype "IM", serviceName "type_jabber"), against a
+    // simulated server, chat.example, whose people are fictional and linked
+    // to the sample contacts.
+    //
+    //   The account: Accounts > Add Account > Jabber (XMPP), with any
+    //   address on chat.example (you@chat.example) and a password; the
+    //   template (runtime/accounts/com.webosphoenix.xmpp/) goes through the
+    //   accounts block of "CardDAV and CalDAV", which calls this service's
+    //   checkCredentials, onCreate, onEnabled and onDelete as Synergy did.
+    //   Signed in, the account's state is a com.palm.imloginstate:1 (db8:
+    //   accountId, username, serviceName, state "online" | "offline",
+    //   availability 0 available, 2 busy, 4 offline, customMessage) and its
+    //   roster com.palm.imbuddystatus:1 objects (tempdb: accountId, username
+    //   (the buddy's address), serviceName, displayName, personId,
+    //   availability, personAvailability, status, group), which Messaging's
+    //   Buddies and Contacts' presence read, as on webOS.
+    //   Messages are com.palm.immessage.xmpp:1 (extends com.palm.immessage:1,
+    //   extends com.palm.message:1: folder, status, serviceName, username =
+    //   the account's address, from / to, messageText), put through
+    //   putMessage like texts and threaded per buddy; the outbox goes out
+    //   here (successful, or failed while signed out or in airplane mode).
+    //   A buddy who is available or busy answers after a moment (the
+    //   simulated server); an offline one does not.
+    //
+    //   setPresence {accountId, availability, customMessage?} (Phoenix): your
+    //   own status; 4 signs out (the roster goes offline), else signs in.
+    //
+    // Simulator helpers (phoenix-sim Ctrl+F5, the tests):
+    //   __phoenixRuntime.simulateIncomingIm({from?, text?}) -> thread id
+    //   __phoenixRuntime.xmpp.setBuddyPresence(jid, availability, status?)
+    (function instantMessaging() {
+        var M = runtime.messaging;
+        if (!M) return;
+        var SERVICE = "org.webosphoenix.service.xmpp";
+        var TEMPLATE = "com.webosphoenix.xmpp";
+        var IM_SERVICE = "type_jabber";
+        var MSG_KIND = "com.palm.immessage.xmpp:1";
+        var SERVER = "chat.example";
+        var MESSAGING_APP = runtime.messagingAppId;
+        var AVAILABLE = 0, BUSY = 2, OFFLINE = 4;
+
+        // The simulated server's people, and how they answer.
+        var ROSTER = [
+            { jid: "ada.palmer@" + SERVER, given: "Ada", family: "Palmer", availability: AVAILABLE, status: "Flashing a Pre 3",
+              replies: ["Ha, yes!", "Cards forever.", "Send me a picture when it boots?", "On my way."] },
+            { jid: "marcus.reyes@" + SERVER, given: "Marcus", family: "Reyes", availability: BUSY, status: "In a meeting until 3",
+              replies: ["In a meeting, will reply after.", "Can't talk now, later?"] },
+            { jid: "lena.okafor@" + SERVER, given: "Lena", family: "Okafor", availability: AVAILABLE, status: "",
+              replies: ["Hi! Just landed.", "Sounds good.", "See you there."] },
+            { jid: "theo.lindqvist@" + SERVER, given: "Theo", family: "Lindqvist", availability: OFFLINE, status: "", replies: [] }
+        ];
+        function rosterEntry(jid) {
+            return ROSTER.filter(function (b) { return b.jid === String(jid).toLowerCase(); })[0] || null;
+        }
+
+        function db(method, params) { return M.dbCall(method, params); }
+        function tdb(method, params) { return M.tempdbCall(method, params); }
+        function account(id) { return (db("/get", { ids: [id] }).results || [])[0] || null; }
+        function loginState(accountId) {
+            return (db("/find", { query: { from: M.IM_LOGIN_KIND, where: [{ prop: "accountId", op: "=", val: accountId }] } }).results || [])[0] || null;
+        }
+        function signedInAccounts() {
+            return (db("/find", { query: { from: M.IM_LOGIN_KIND } }).results || []).filter(function (s) {
+                return s.serviceName === IM_SERVICE && s.state === "online";
+            });
+        }
+        function personByName(given, family) {
+            return (db("/find", { query: { from: "com.palm.person:1" } }).results || []).filter(function (p) {
+                return p.name && p.name.givenName === given && p.name.familyName === family;
+            })[0] || null;
+        }
+
+        // Presence (the buddies' and your own) as stored for the apps.
+        // The server's view of the buddies' presence, per account
+        // ("xmpp:presence:<account>": jid -> {availability, status}); a buddy
+        // not in it has the roster's.
+        function buddyPresence(accountId, b) {
+            return store.get("xmpp:presence:" + accountId, {})[b.jid] || { availability: b.availability, status: b.status };
+        }
+        function writeRoster(accountId, signedIn) {
+            tdb("/del", { purge: true, query: { from: M.IM_BUDDY_KIND, where: [{ prop: "accountId", op: "=", val: accountId }] } });
+            if (!signedIn) return;
+            tdb("/put", { objects: ROSTER.map(function (b) {
+                var person = personByName(b.given, b.family), pr = buddyPresence(accountId, b);
+                var o = { _kind: M.IM_BUDDY_KIND, accountId: accountId, serviceName: IM_SERVICE, username: b.jid,
+                          displayName: b.given + " " + b.family, availability: pr.availability, personAvailability: pr.availability,
+                          status: pr.status || "", group: "Buddies" };
+                if (person) o.personId = person._id;
+                return o;
+            }) });
+        }
+        function setLogin(acc, availability, customMessage) {
+            var cur = loginState(acc._id);
+            var online = availability !== OFFLINE;
+            var o = { _kind: M.IM_LOGIN_KIND, accountId: acc._id, serviceName: IM_SERVICE, username: acc.username,
+                      state: online ? "online" : "offline", availability: availability,
+                      customMessage: customMessage !== undefined ? customMessage : cur && cur.customMessage || "" };
+            if (cur) { o._id = cur._id; db("/merge", { objects: [o] }); }
+            else db("/put", { objects: [o] });
+            writeRoster(acc._id, online);
+        }
+
+        // ---- Messages ----------------------------------------------------------------------
+
+        function deliver(acc, jid, text) {
+            var b = rosterEntry(jid);
+            var now = Date.now();
+            var r = M.assign({ _kind: MSG_KIND, folder: "inbox", status: "successful", serviceName: IM_SERVICE,
+                               username: acc.username, messageText: text, localTimestamp: now, timestamp: now,
+                               from: { addr: jid, name: b ? b.given + " " + b.family : jid }, flags: { read: false, visible: true } });
+            host.postToHost("notification", { appId: MESSAGING_APP, title: b ? b.given + " " + b.family : jid, body: text,
+                                              params: { threadId: r.threadId }, soundClass: "notifications" });
+            return r.threadId;
+        }
+        var replySeq = {};
+        function send(messageId) {
+            var m = (db("/get", { ids: [messageId] }).results || [])[0];
+            if (!m || m.status !== "pending") return;
+            var login = (db("/find", { query: { from: M.IM_LOGIN_KIND, where: [{ prop: "username", op: "=", val: m.username }] } }).results || [])[0];
+            var st = store.get("settings:state", null);
+            var ok_ = login && login.state === "online" && !(st && st.offlineMode);
+            db("/merge", { objects: [{ _id: m._id, status: "sending" }] });
+            setTimeout(function () {
+                db("/merge", { objects: [{ _id: m._id, status: ok_ ? "successful" : "failed" }] });
+                if (!ok_) return;
+                var jid = m.to && m.to[0] && m.to[0].addr, b = rosterEntry(jid);
+                var acc = account(login.accountId);
+                if (!b || !acc || !b.replies.length) return;
+                var pr = buddyPresence(acc._id, b);
+                if (pr.availability === OFFLINE) return;
+                var n = replySeq[b.jid] = (replySeq[b.jid] || 0) + 1;
+                setTimeout(function () {
+                    var still = loginState(acc._id);
+                    if (still && still.state === "online") deliver(acc, b.jid, b.replies[(n - 1) % b.replies.length]);
+                }, 1800);
+            }, 400);
+        }
+        runtime.registerImTransport(IM_SERVICE, send);
+
+        // ---- The transport's service (Synergy callbacks) -------------------------------------
+
+        register([SERVICE], {
+            // Any address on the simulated server with a password signs in.
+            "/checkCredentials": function (p, reply) {
+                var user = String(p.username || "").trim().toLowerCase();
+                if (!/^[^@\s]+@[^@\s]+$/.test(user))
+                    return reply({ returnValue: false, errorCode: "401_UNAUTHORIZED", errorText: "Enter your address, like you@" + SERVER });
+                if (user.split("@")[1] !== SERVER)
+                    return reply({ returnValue: false, errorCode: "HOST_NOT_FOUND", errorText: "Only the simulated server, " + SERVER + ", is reachable here" });
+                if (!p.password)
+                    return reply({ returnValue: false, errorCode: "401_UNAUTHORIZED", errorText: "Enter your password" });
+                reply(ok({ credentials: { common: { password: String(p.password) } }, config: { server: SERVER } }));
+            },
+            "/onCreate": function (p, reply) { reply(ok()); },
+            "/onEnabled": function (p, reply) {
+                var acc = account(p.accountId);
+                if (!acc) return reply(fail(-1, "No such account: " + p.accountId));
+                setLogin(acc, p.enabled ? AVAILABLE : OFFLINE);
+                reply(ok());
+            },
+            // The account goes: its state, roster, messages and conversations.
+            "/onDelete": function (p, reply) {
+                var acc = account(p.accountId) || { _id: p.accountId, username: "" };
+                writeRoster(acc._id, false);
+                db("/del", { query: { from: M.IM_LOGIN_KIND, where: [{ prop: "accountId", op: "=", val: acc._id }] } });
+                var threads = (db("/find", { query: { from: "com.palm.chatthread:1" } }).results || []).filter(function (t) {
+                    return t.replyService === IM_SERVICE && (!acc.username || t.username === acc.username);
+                });
+                threads.forEach(function (t) {
+                    db("/del", { query: { from: "com.palm.message:1", where: [{ prop: "conversations", op: "=", val: t._id }] } });
+                    db("/del", { ids: [t._id] });
+                });
+                reply(ok());
+            },
+            "/setPresence": function (p, reply) {
+                var acc = account(p.accountId);
+                if (!acc) return reply(fail(-1, "No such account: " + p.accountId));
+                var a = Number(p.availability);
+                if ([AVAILABLE, BUSY, OFFLINE].indexOf(a) < 0) return reply(fail(-1, "availability: 0, 2 or 4"));
+                setLogin(acc, a, p.customMessage);
+                reply(ok());
+            }
+        });
+
+        // ---- Helpers for the simulator and the tests ----------------------------------------
+
+        runtime.simulateIncomingIm = function (opts) {
+            opts = opts || {};
+            var login = signedInAccounts()[0];
+            if (!login) return null;
+            var acc = account(login.accountId);
+            return acc ? deliver(acc, opts.from || ROSTER[0].jid, opts.text || "Are you on Phoenix yet?") : null;
+        };
+        runtime.xmpp = {
+            server: SERVER,
+            roster: function () { return ROSTER.map(function (b) { return { jid: b.jid, name: b.given + " " + b.family }; }); },
+            setBuddyPresence: function (jid, availability, status) {
+                var b = rosterEntry(jid);
+                if (!b) return false;
+                signedInAccounts().forEach(function (login) {
+                    var mine = store.get("xmpp:presence:" + login.accountId, {});
+                    mine[b.jid] = { availability: availability, status: status || "" };
+                    store.set("xmpp:presence:" + login.accountId, mine);
+                    writeRoster(login.accountId, true);
+                });
+                return true;
+            }
+        };
     })();
 
     // ================================================================================
@@ -5973,7 +6403,8 @@
                 var idx = loadIndex();
                 var known = {};
                 ["image", "audio", "video"].forEach(function (t) { idx[t].forEach(function (it) { known[it.file_path] = true; }); });
-                var fresh = paths.filter(function (p) { return !known[p] && typeOf(p); });
+                // Not hidden folders' files (a message's pictures, /.mms).
+                var fresh = paths.filter(function (p) { return !known[p] && typeOf(p) && !/\/\./.test(p); });
                 return Promise.all(fresh.map(function (p) {
                     return files.read(p).then(function (blob) {
                         var type = typeOf(p);
@@ -7533,10 +7964,17 @@
     //       {ticket, amountReceived, amountTotal} and at the end {ticket,
     //       completed: true, completionStatusCode, destPath, destFile, target,
     //       url, mimetype} (interrupted: true when it failed); cancelDownload
-    //       {ticket}; getAllHistory; clearHistory. Files land under
-    //       /media/internal (default folder /media/internal/downloads) in the
-    //       media block's store, so Files, the media indexer and the apps see
-    //       them.
+    //       {ticket}; getAllHistory (items oldest first, with the legacy
+    //       state, fileExistsOnFilesys and recordString); clearHistory.
+    //       Files land under /media/internal in the media block's store, so
+    //       Files, the media indexer and the apps see them. The default
+    //       folder is /media/internal/Downloads, the Downloads folder Files
+    //       shows (legacy webOS used /media/internal/downloads; Linux names
+    //       are case-sensitive, so there is one folder; a device image will
+    //       have to set the service's default to it). The amounts come from the host's proxy
+    //       while the body comes (progressOf), and each download is an
+    //       ongoing activity in the notification area until it ends; a tap
+    //       opens its app's list of downloads (the browser's drawer).
     //   com.webos.service.audiofocusmanager   requestFocus {requestType,
     //       streamType, displayId, subscribe} -> {result: "AF_GRANTED"}; the
     //       app that held the focus is told {result: "AF_LOST"}. The holder
@@ -7547,7 +7985,7 @@
     // __phoenixRuntime.downloads: list() (the history), reset().
     (function mediaAppServices() {
         var MEDIA_ROOT = "/media/internal";
-        var DOWNLOAD_DIR = MEDIA_ROOT + "/downloads";
+        var DOWNLOAD_DIR = MEDIA_ROOT + "/Downloads";
         var HISTORY_KEY = "downloads:history";
         var FOCUS_KEY = "audiofocus";
 
@@ -7559,16 +7997,20 @@
                 s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
             return global.btoa(s);
         }
+        // req.progress: an id the host's proxy reports the body's progress
+        // under (progressOf below); the download manager's.
         function request(req) {
             var r = { method: req.method || "GET", url: req.url, headers: req.headers || {}, body: req.body,
                       binary: !!req.binary, follow: req.follow !== false };
+            if (req.progress) r.progress = String(req.progress);
             var viaHost = /^https?:$/.test(global.location.protocol)
                 ? fetch("/__phoenix/proxy", { method: "POST", headers: { "Content-Type": "application/json" }, body: toJson(r) })
+                    .then(function (res) { return res.json(); })
                 : global.location.protocol === "phoenix:"
-                ? fetch("/__phoenix/proxy?req=" + encodeURIComponent(toJson(r)))
+                ? hostGetJson("/__phoenix/proxy?req=" + encodeURIComponent(toJson(r)))
                 : null;
             if (viaHost) {
-                return viaHost.then(function (res) { return res.json(); }).then(function (x) {
+                return viaHost.then(function (x) {
                     if (x.error) {
                         var e = new Error(x.error);
                         e.code = x.code;
@@ -7596,6 +8038,19 @@
                 throw err;
             });
         }
+        // How far the proxy has come with a request made with {progress: id}:
+        // {received, total} (total -1: not known), or null (over, unknown, or
+        // no proxy: a page fetching directly cannot tell).
+        function progressOf(id) {
+            var proto = global.location.protocol;
+            var path = "/__phoenix/proxy/progress?id=" + encodeURIComponent(id);
+            var answer = /^https?:$/.test(proto) ? fetch(path).then(function (res) { return res.json(); })
+                : proto === "phoenix:" ? hostGetJson(path) : null;
+            if (!answer) return Promise.resolve(null);
+            return answer.then(function (x) {
+                return x && typeof x.received === "number" ? { received: x.received, total: typeof x.total === "number" ? x.total : -1 } : null;
+            }, function () { return null; });
+        }
         runtime.http = { request: request };
 
         // ---- Download manager -------------------------------------------------------------
@@ -7620,6 +8075,30 @@
             return out;
         }
 
+        function sizeText(n) {
+            if (n < 1024) return n + " B";
+            if (n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+            return (n / (1024 * 1024)).toFixed(1) + " MB";
+        }
+        // Where a tap on a download's ongoing activity goes: the app's own
+        // list of downloads where it has one (the browser's Downloads drawer,
+        // the launch params its "finished downloading" banner uses).
+        var DOWNLOAD_LISTS = { "com.palm.app.browser": { toasterOpen: "downloads" } };
+        // A download in the notification area while it runs
+        // (org.webosphoenix.ongoing, "Ongoing activities" below): the file's
+        // name, how much has come, and the progress when the size is known.
+        function showOngoing(rec) {
+            var known = rec.amountTotal > 0;
+            host.postToHost("ongoing", {
+                id: "download-" + rec.ticket, appId: rec.owner || PalmSystem.appIdentifier, title: rec.destFile,
+                body: known ? "Downloading " + sizeText(rec.amountReceived) + " of " + sizeText(rec.amountTotal)
+                            : rec.amountReceived > 0 ? "Downloading " + sizeText(rec.amountReceived) : "Downloading",
+                icon: "", params: DOWNLOAD_LISTS[rec.owner] || null,
+                progress: known ? Math.min(100, Math.floor(rec.amountReceived * 100 / rec.amountTotal)) : -1
+            });
+        }
+        function clearOngoing(rec) { host.postToHost("ongoing", { id: "download-" + rec.ticket, clear: true }); }
+
         function download(p, reply, ctx) {
             var url = String(p.target || p.url || "");
             if (!/^https?:\/\//i.test(url)) return reply(fail(-1, "target must be an http or https URL"));
@@ -7632,34 +8111,53 @@
             store.set("downloads:ticket", ticketSeq);
             var rec = { ticket: ticket, url: url, target: path, destPath: dir + "/", destFile: name, mimetype: p.mime || "",
                         owner: PalmSystem.appIdentifier || "", amountReceived: 0, amountTotal: 0, completed: false };
-            running[ticket] = { aborted: false };
+            var job = running[ticket] = { aborted: false, progressId: "dl-" + Date.now().toString(36) + "-" + ticket };
             remember(rec);
             reply(ok({ ticket: ticket, url: url, target: path, subscribed: !!p.subscribe }));
             var send = function (x) { if (!ctx.cancelled()) reply(ok(x)); };
-            request({ url: url, binary: true, follow: true }).then(function (res) {
-                if (running[ticket].aborted) throw { aborted: true };
+            showOngoing(rec);
+            // The host's proxy says how much has come while the body comes;
+            // the subscriber and the notification area get it as the real
+            // service reports it, {ticket, amountReceived, amountTotal}.
+            var polling = true;
+            (function poll() {
+                if (!polling) return;
+                progressOf(job.progressId).then(function (pr) {
+                    if (!polling) return;
+                    if (pr && (pr.received !== rec.amountReceived || (pr.total > 0 && pr.total !== rec.amountTotal))) {
+                        rec.amountReceived = pr.received;
+                        if (pr.total > 0) rec.amountTotal = pr.total;
+                        send({ ticket: ticket, url: url, amountReceived: rec.amountReceived, amountTotal: rec.amountTotal });
+                        showOngoing(rec);
+                    }
+                    setTimeout(poll, 250);
+                });
+            })();
+            request({ url: url, binary: true, follow: true, progress: job.progressId }).then(function (res) {
+                polling = false;
+                if (job.aborted) throw { aborted: true };
                 if (res.status < 200 || res.status > 299) throw { status: res.status };
                 var bytes = fromB64(res.bodyBase64 || "");
                 var total = bytes.length;
                 rec.amountTotal = total;
                 rec.mimetype = rec.mimetype || (res.headers && res.headers["content-type"] || "").split(";")[0];
-                // Progress in a few steps, as the real service reports it.
-                send({ ticket: ticket, url: url, amountReceived: Math.floor(total / 2), amountTotal: total });
                 var blob = new Blob([bytes], { type: rec.mimetype || "" });
                 if (!runtime.mediaFiles) throw { status: -1 };
                 return runtime.mediaFiles.write(path, blob).then(function () { return total; });
             }).then(function (total) {
-                if (running[ticket].aborted) throw { aborted: true };
+                if (job.aborted) throw { aborted: true };
                 rec.amountReceived = total;
                 rec.completed = true;
                 rec.completionStatusCode = 200;
                 remember(rec);
                 delete running[ticket];
+                clearOngoing(rec);
                 send({ ticket: ticket, url: url, amountReceived: total, amountTotal: total });
                 send({ ticket: ticket, url: url, target: path, destPath: rec.destPath, destFile: name, mimetype: rec.mimetype,
                        amountReceived: total, amountTotal: total, completed: true, completionStatusCode: 200,
                        interrupted: false, aborted: false });
             }, function (e) {
+                polling = false;
                 var aborted = !!(e && e.aborted);
                 rec.completed = true;
                 rec.aborted = aborted;
@@ -7667,9 +8165,22 @@
                 rec.completionStatusCode = e && e.status ? e.status : -1;
                 remember(rec);
                 delete running[ticket];
+                clearOngoing(rec);
                 send({ ticket: ticket, url: url, target: path, destPath: rec.destPath, destFile: name, completed: true,
                        completionStatusCode: rec.completionStatusCode, interrupted: !aborted, aborted: aborted });
             });
+        }
+
+        // getAllHistory's items as the legacy service kept them (Isis reads
+        // state, fileExistsOnFilesys and the record, recordString, to list the
+        // finished downloads again), with the record's fields beside them.
+        function historyItem(h) {
+            var item = {}, k;
+            for (k in h) item[k] = h[k];
+            item.state = !h.completed ? "running" : h.completionStatusCode === 200 && !h.aborted && !h.interrupted ? "completed"
+                : h.aborted ? "cancelled" : "failed";
+            item.recordString = toJson(h);
+            return item;
         }
 
         var dm = {
@@ -7680,9 +8191,21 @@
                 r.aborted = true;
                 reply(ok({ ticket: p.ticket }));
             },
+            // Oldest first, as the legacy service sorted them by ticket.
             "/getAllHistory": function (p, reply) {
                 var owner = p.owner;
-                reply(ok({ items: history().filter(function (h) { return !owner || h.owner === owner; }) }));
+                var mine = history().filter(function (h) { return !owner || h.owner === owner; });
+                var mf = runtime.mediaFiles;
+                Promise.all(mine.map(function (h) {
+                    if (!h.completed || !mf) return Promise.resolve(false);
+                    return mf.read(h.target).then(function (b) { return !!b; }, function () { return false; });
+                })).then(function (exists) {
+                    reply(ok({ items: mine.map(function (h, i) {
+                        var item = historyItem(h);
+                        item.fileExistsOnFilesys = exists[i];
+                        return item;
+                    }).reverse() }));
+                });
             },
             "/clearHistory": function (p, reply) {
                 store.set(HISTORY_KEY, p.owner ? history().filter(function (h) { return h.owner !== p.owner; }) : []);
@@ -8226,6 +8749,115 @@
         runtime.voiceMemos = { placeholder: PLACEHOLDER, errors: E };
     })();
 
+    // ================================================================================
+    // Dictation for the apps (org.webosphoenix.dictation; Voice Dial)
+    // ================================================================================
+    //
+    // The shell's microphone and transcriber, the keyboard's dictation (shell/
+    // native/dictation.cpp: it records, writes a 16 kHz WAV and runs
+    // org.webosphoenix.transcriber's whisper.cpp on it), lent to an app that
+    // listens without a text field. A Phoenix service; the original Voice
+    // Dial called com.palm.pmvoicecommand, which was never released.
+    //
+    //   start {prompt?, autoStop?, subscribe: true}
+    //       -> {subscribed: true, state: "listening"}, {state: "transcribing"},
+    //          then {state: "done", text}, or an error (DICTATION_ERRORS in
+    //          apps/shared/luna/src/dictation.ts). prompt: words to expect,
+    //          e.g. the contacts' names (whisper's initial prompt); autoStop:
+    //          end by itself when the speaker is done. Cancelling the
+    //          subscription stops listening without a transcript.
+    //   stop {}      the speaker is done: transcribe what was heard
+    //   getStatus {} -> {available}
+    //
+    // One microphone: one recording at a time, for one window; the keyboard
+    // and other windows get NOT_AVAILABLE / IN_USE meanwhile.
+    //
+    // The shell does the work when /usr/share/phoenix/host.json says
+    // {"dictation": true} (phoenix-sim; a device's shell): "dictation" host
+    // messages ({op: "start" | "stop" | "cancel", prompt, autoStop}) go out,
+    // and the states come back through __phoenixRuntime.dictationEvent({state,
+    // text?, errorText?}). Anywhere else (a browser) there is no microphone
+    // to lend: start fails with NOT_AVAILABLE.
+    (function dictationServices() {
+        var E = { BAD_PARAMS: -1, NOT_AVAILABLE: 1, IN_USE: 2, NOTHING_HEARD: 3, FAILED: 4 };
+        var hostInfo = null;
+        function available() {
+            if (hostInfo === null) {
+                try { hostInfo = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/host.json") || "{}") || {}; }
+                catch (e) { hostInfo = {}; }
+            }
+            return hostInfo.dictation === true;
+        }
+        var current = null;           // {reply, ctx} of the listening start call
+        function finish(r) {
+            var c = current;
+            current = null;
+            if (c && !c.ctx.cancelled()) c.reply(r);
+        }
+        runtime.dictationEvent = function (ev) {
+            if (!current || !ev) return;
+            if (ev.state === "listening" || ev.state === "transcribing") {
+                if (!current.ctx.cancelled()) current.reply(ok({ subscribed: true, state: ev.state }));
+            } else if (ev.state === "done") {
+                var text = String(ev.text || "").trim();
+                finish(text ? ok({ state: "done", text: text }) : fail(E.NOTHING_HEARD, "Nothing was heard."));
+            } else if (ev.state === "error") {
+                var why = String(ev.errorText || "Dictation failed.");
+                finish(fail(/^Nothing was heard/.test(why) ? E.NOTHING_HEARD
+                            : /in use/.test(why) ? E.IN_USE
+                            : /not available|no microphone|not installed/i.test(why) ? E.NOT_AVAILABLE : E.FAILED, why));
+            }
+        };
+        register(["org.webosphoenix.dictation"], {
+            "/start": function (p, reply, ctx) {
+                if (p.prompt !== undefined && (typeof p.prompt !== "string" || p.prompt.length > 1000))
+                    return reply(fail(E.BAD_PARAMS, "prompt must be text of up to 1000 characters"));
+                if (!available())
+                    return reply(fail(E.NOT_AVAILABLE, "Dictation needs the Phoenix shell's microphone."));
+                if (current) return reply(fail(E.IN_USE, "This app is already listening."));
+                current = { reply: reply, ctx: ctx };
+                var mine = current;
+                ctx.onCancel = function () {
+                    if (current !== mine) return;
+                    current = null;
+                    host.postToHost("dictation", { op: "cancel" });
+                };
+                host.postToHost("dictation", { op: "start", prompt: p.prompt || "", autoStop: !!p.autoStop });
+            },
+            "/stop": function (p, reply) {
+                if (!current) return reply(fail(E.BAD_PARAMS, "Not listening."));
+                host.postToHost("dictation", { op: "stop" });
+                reply(ok());
+            },
+            "/getStatus": function (p, reply) { reply(ok({ available: available() })); }
+        });
+        // A page that goes away stops listening.
+        global.addEventListener("pagehide", function () {
+            if (current) { current = null; host.postToHost("dictation", { op: "cancel" }); }
+        });
+        runtime.dictation = { errors: E };
+    })();
+
+    // ================================================================================
+    // Voice Dial (com.palm.sysapp.voicedial)
+    // ================================================================================
+    //
+    // luna-sysmgr's Voice Dial launcher icon only called
+    // palm://com.palm.pmvoicecommand/startVoiceCommand {source: "appicon"}
+    // (ApplicationManager.cpp slotBuiltInAppEntryPoint_VoiceDial), a service
+    // that was never released. Phoenix Voice Dial (apps/voicedial,
+    // org.webosphoenix.voicedial) answers to that id and that call.
+    (function voiceDial() {
+        var VOICE_DIAL = "org.webosphoenix.voicedial";
+        runtime.appAliases["com.palm.sysapp.voicedial"] = VOICE_DIAL;
+        register(["com.palm.pmvoicecommand"], {
+            "/startVoiceCommand": function (p, reply) {
+                host.postToHost("launch", { id: VOICE_DIAL, params: { source: p.source || "service" } });
+                reply(ok());
+            }
+        });
+    })();
+
     // ---- Node.js device services in the page --------------------------------------
     //
     // Some Phoenix services are Node.js modules a device runs with
@@ -8304,11 +8936,12 @@
     function proxiedRequest(req) {
         var viaHost = /^https?:$/.test(global.location.protocol)
             ? fetch("/__phoenix/proxy", { method: "POST", headers: { "Content-Type": "application/json" }, body: toJson(req) })
+                .then(function (res) { return res.json(); })
             : global.location.protocol === "phoenix:"
-            ? fetch("/__phoenix/proxy?req=" + encodeURIComponent(toJson(req)))
+            ? hostGetJson("/__phoenix/proxy?req=" + encodeURIComponent(toJson(req)))
             : null;
         if (viaHost) {
-            return viaHost.then(function (res) { return res.json(); }).then(function (r) {
+            return viaHost.then(function (r) {
                 if (r.error) {
                     var e = new Error(r.error);
                     e.code = r.code;
@@ -8371,7 +9004,10 @@
     (function davTransport() {
         var SERVICE = "org.webosphoenix.service.dav";
         var SERVICE_DIR = "/usr/palm/applications/org.webosphoenix.dav/service/";
-        var DAV_TEMPLATES = ["/usr/palm/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json"];
+        // And the simulated Jabber (XMPP) account (block "Instant
+        // messaging"), whose accounts need the same handling.
+        var DAV_TEMPLATES = ["/usr/palm/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json",
+                             "/usr/share/phoenix/runtime/accounts/com.webosphoenix.xmpp/com.webosphoenix.xmpp.json"];
         var ACCOUNT_KIND = "com.palm.account:1";
         var LOCK_MS = 5 * 60 * 1000;
 
@@ -9438,6 +10074,567 @@
     });
 
     // ================================================================================
+    // Printing (com.palm.printmgr; Print Manager)
+    // ================================================================================
+    //
+    // Enyo 1.0's print dialog (lib/printdialog: PrintDialog, the browser's
+    // and Email's Print) speaks to the print manager, com.palm.printmgr.
+    // Its calls, as PrintJob.js, DocumentPrintJob.js, ImagePrintJob.js,
+    // PrinterSelector.js, PrinterOptions.js and PrinterAdder.js make them:
+    //
+    //   printers/list {subscribe}     {eventType: "Add" | "Rmv", printerID,
+    //                                  printerName, printerAddress} per printer
+    //   printers/getCurrent, printers/setCurrent {printerID}
+    //   printers/getCapabilities {printerID} -> {mediaSize[], mediaType[],
+    //                                  printQuality[], canDuplex, hasColor}
+    //   printers/add {printerID, printerName, printerAddress}
+    //   jobs/open {printerID, description, appName} -> {jobID}
+    //   jobs/editPrintParams {jobID, numCopies, mediaSize, color, duplex,
+    //                         topInset, leftInset, rightInset, bottomInset (in)}
+    //   jobs/getFinalParamsAndArea {jobID} -> {width, height, pixelUnits,
+    //                         renderInReverseOrder, ...}: the printable area
+    //                         in dots at pixelUnits dots per inch
+    //   jobs/getStatus {subscribe} -> {jobID, printerState: "DONE",
+    //                         jobStatus: "Success" | "Cancelled" | "Error"}
+    //   jobs/getRenderStatus {subscribe} -> {jobID, currentPage, totalPages,
+    //                         renderResultCode (0 done, -502 cancelled)}
+    //   jobs/addFile {jobID, pathName, currentPage, totalPages} (images)
+    //   jobs/close {jobID}, jobs/cancel {jobID}
+    //
+    // Errors use the print manager's codes (PrintManagerError.js).
+    //
+    // The printer is "Save as PDF": the job becomes a PDF in
+    // /media/internal/Documents, which Files, PDF View and the Print
+    // Manager open. A document job is rendered by the page view or window
+    // that prints: in phoenix-sim by Chromium (QtWebEngine's printToPdf,
+    // WebAppWindow.qml, the "print" host message; the PDF comes back
+    // through __phoenixRuntime.print.rendered), elsewhere (a desktop
+    // browser, the tests) as the page's text. Image jobs (jobs/addFile) are
+    // put on pages here, one picture a page. Network printers would need
+    // CUPS / IPP Everywhere on a device; the simulator has none, so adding
+    // one answers PM_ERR_PRINTER_NO_RESPONSE_MANUAL.
+    //
+    // Phoenix additions for the Print Manager app (com.palm.app.printmanager,
+    // which is org.webosphoenix.printmanager): jobs/list {subscribe} ->
+    // {jobs: [{jobID, description, appName, printerID, printerName, state
+    // ("Printing", "Done", "Cancelled", "Failed"), pages, file, created,
+    // finished, errorText}]} newest first; jobs/remove {jobID} (a finished
+    // one). A job prints as an ongoing activity, as the Print Manager's
+    // status dashboard did; its headless launch by PrintJob opens no card.
+    //
+    // __phoenixRuntime.print: render(jobID, how) (a page view or window),
+    // renderHtml(jobID, {title, html}) (some HTML, Email's message),
+    // rendered(jobID, base64 | null, info), pdf (the PDF writer), jobs().
+    (function printing() {
+        var SERVICE = "com.palm.printmgr";
+        var PRINT_MANAGER = "org.webosphoenix.printmanager";
+        var JOBS_KEY = "print:jobs", CURRENT_KEY = "print:current";
+        var PDF_PRINTER = { printerID: "phoenix-save-as-pdf", printerName: "Save as PDF", printerAddress: "/media/internal/Documents" };
+        var OUT_DIR = "/media/internal/Documents";
+        var DPI = 300;
+        // Points (1/72 in) per paper size; PrintDialog's names.
+        var PAPER = { US_Letter: [612, 792], US_Legal: [612, 1008], ISO_A4: [595, 842],
+                      Photo_4x6: [288, 432], Photo_5x7: [360, 504], Photo_5x7_MainTray: [360, 504], Photo_L: [252, 360], HAGAKI: [283, 420] };
+        var E = { NO_RESPONSE_MANUAL: -203, BAD_JOB: -601, RENDER: -301, CANCEL_REQUESTED: -502 };
+        runtime.appAliases["com.palm.app.printmanager"] = PRINT_MANAGER;
+
+        // ---- Jobs (shared by every page, so the Print Manager sees them) ----------------
+
+        function jobs() { return store.get(JOBS_KEY, []); }
+        function saveJob(j) {
+            var all = jobs().filter(function (x) { return x.jobID !== j.jobID; });
+            all.unshift(j);
+            store.set(JOBS_KEY, all.slice(0, 100));
+            changed();
+        }
+        function findJob(id) { return jobs().filter(function (x) { return x.jobID === id; })[0] || null; }
+        var listeners = [];
+        function changed() { listeners.slice().forEach(function (f) { try { f(); } catch (e) { /* a page gone */ } }); }
+        function listen(ctx, f) {
+            listeners.push(f);
+            var prev = ctx.onCancel;
+            ctx.onCancel = function () { listeners = listeners.filter(function (x) { return x !== f; }); if (prev) prev(); };
+        }
+        try {
+            global.addEventListener("storage", function (e) { if (e.key === "phoenix:" + JOBS_KEY) changed(); });
+        } catch (x) { /* no window events */ }
+
+        // This page's open jobs: what is not shared (the rendered bytes, the
+        // pictures added, the subscriptions of the app printing).
+        var open = {};
+        function local(id) { alive(); return open[id] || (open[id] = { files: [], status: [], render: [] }); }
+
+        // A job lives in the page that prints it. While that page has jobs it
+        // says so every few seconds ("print:alive:<page>"); a job still
+        // printing whose page has gone quiet (the card closed, the app
+        // crashed) has failed, and a page going away cancels its own.
+        var PAGE = "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+        var ALIVE_EVERY = 4000, QUIET_AFTER = 12000, aliveTimer = null;
+        function alive() {
+            store.set("print:alive:" + PAGE, Date.now());
+            if (!aliveTimer) aliveTimer = setInterval(function () {
+                if (Object.keys(open).length) return store.set("print:alive:" + PAGE, Date.now());
+                clearInterval(aliveTimer);
+                aliveTimer = null;
+                try { global.localStorage.removeItem("phoenix:print:alive:" + PAGE); } catch (e) { /* no storage */ }
+            }, ALIVE_EVERY);
+        }
+        function reap() {
+            jobs().forEach(function (j) {
+                if (j.state !== "Printing" || j.page === PAGE) return;
+                if (store.get("print:alive:" + j.page, 0) < Date.now() - QUIET_AFTER)
+                    finish(j, "Failed", { errorText: "The app printing it closed" });
+            });
+        }
+        try {
+            global.addEventListener("pagehide", function () {
+                Object.keys(open).forEach(function (id) {
+                    var j = findJob(id);
+                    if (j && j.state === "Printing") finish(j, "Cancelled");
+                });
+                try { global.localStorage.removeItem("phoenix:print:alive:" + PAGE); } catch (e) { /* no storage */ }
+            });
+        } catch (x) { /* no window events */ }
+        function tell(list, x) { list.slice().forEach(function (f) { f(x); }); }
+        function subscribeTo(list, ctx, f) {
+            list.push(f);
+            var prev = ctx.onCancel;
+            ctx.onCancel = function () { var i = list.indexOf(f); if (i >= 0) list.splice(i, 1); if (prev) prev(); };
+        }
+        var statusSubs = [], renderSubs = [];
+
+        function printers() { return [PDF_PRINTER]; }
+        function printerById(id) { return printers().filter(function (p) { return p.printerID === id; })[0] || null; }
+
+        function showOngoing(j) {
+            host.postToHost("ongoing", { id: "print-" + j.jobID, appId: PRINT_MANAGER, title: "Printing " + (j.description || j.appName || "a document"),
+                body: j.pages ? j.pages + (j.pages === 1 ? " page" : " pages") + " to " + j.printerName : "Preparing to print to " + j.printerName,
+                progress: j.state === "Printing" && j.pages ? 100 : -1, params: { jobID: j.jobID } });
+        }
+        function finish(j, state, extra) {
+            j.state = state;
+            j.finished = Date.now();
+            for (var k in extra || {}) j[k] = extra[k];
+            saveJob(j);
+            host.postToHost("ongoing", { id: "print-" + j.jobID, clear: true });
+            tell(statusSubs, { jobID: j.jobID, printerState: "DONE",
+                               jobStatus: state === "Done" ? "Success" : state === "Cancelled" ? "Cancelled" : "Error" });
+            if (state === "Done")
+                host.postToHost("notification", { appId: PRINT_MANAGER, title: "Saved as PDF", body: nameOf(j.file),
+                                                  params: { jobID: j.jobID } });
+        }
+        function nameOf(p) { return String(p || "").replace(/^.*\//, ""); }
+
+        // A free name in the Documents folder: "<title>.pdf", then "<title> (2).pdf".
+        function freePath(title) {
+            var base = String(title || "Document").replace(/[\/\\:*?"<>|\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "Document";
+            var mf = runtime.mediaFiles;
+            function attempt(n) {
+                var p = OUT_DIR + "/" + base + (n > 1 ? " (" + n + ")" : "") + ".pdf";
+                if (!mf) return Promise.resolve(p);
+                return mf.read(p).then(function (b) { return b ? attempt(n + 1) : p; }, function () { return p; });
+            }
+            return attempt(1);
+        }
+
+        function writePdf(j, bytes) {
+            if (!runtime.mediaFiles) return Promise.reject(new Error("No place to save the PDF"));
+            return freePath(j.description).then(function (path) {
+                return runtime.mediaFiles.write(path, new Blob([bytes], { type: "application/pdf" })).then(function () { return path; });
+            });
+        }
+
+        // ---- A small PDF writer ---------------------------------------------------------
+        //
+        // pages: [{width, height (points), items: [{image: {jpeg: Uint8Array,
+        // width, height (pixels)}, x, y, w, h} | {text, x, y, size}]}].
+        // Text is Helvetica in WinAnsi (other characters become "?"); y is
+        // from the top of the page.
+        function pdf(pages) {
+            var chunks = [], offsets = [], length = 0;
+            function add(x) {
+                var b = typeof x === "string" ? latin1(x) : x;
+                chunks.push(b);
+                length += b.length;
+            }
+            function latin1(s) {
+                var b = new Uint8Array(s.length);
+                for (var i = 0; i < s.length; i++) { var c = s.charCodeAt(i); b[i] = c < 256 ? c : 63; }
+                return b;
+            }
+            function obj(n, body) { offsets[n] = length; add(n + " 0 obj\n"); body(); add("\nendobj\n"); }
+            function esc(s) { return String(s).replace(/[\\()]/g, "\\$&").replace(/[\r\n\t]/g, " "); }
+            // 1 catalog, 2 pages, 3 font; then per page: page, content, images.
+            var next = 4, kids = [], plan = pages.map(function (pg) {
+                var p = { page: next++, content: next++, images: [] };
+                pg.items.forEach(function (it) { if (it.image) p.images.push(next++); });
+                kids.push(p.page + " 0 R");
+                return p;
+            });
+            add("%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n");
+            obj(1, function () { add("<< /Type /Catalog /Pages 2 0 R >>"); });
+            obj(2, function () { add("<< /Type /Pages /Kids [" + kids.join(" ") + "] /Count " + pages.length + " >>"); });
+            obj(3, function () { add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"); });
+            pages.forEach(function (pg, i) {
+                var p = plan[i], ops = [], xobj = [], img = 0;
+                pg.items.forEach(function (it) {
+                    if (it.image) {
+                        var name = "Im" + (img + 1);
+                        xobj.push("/" + name + " " + p.images[img] + " 0 R");
+                        ops.push("q " + it.w.toFixed(2) + " 0 0 " + it.h.toFixed(2) + " " + it.x.toFixed(2) + " " +
+                                 (pg.height - it.y - it.h).toFixed(2) + " cm /" + name + " Do Q");
+                        img++;
+                    } else if (it.text !== undefined) {
+                        ops.push("BT /F1 " + it.size + " Tf " + it.x.toFixed(2) + " " + (pg.height - it.y - it.size).toFixed(2) +
+                                 " Td (" + esc(it.text) + ") Tj ET");
+                    }
+                });
+                obj(p.page, function () {
+                    add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + pg.width + " " + pg.height + "] /Contents " + p.content +
+                        " 0 R /Resources << /Font << /F1 3 0 R >> /XObject << " + xobj.join(" ") + " >> >> >>");
+                });
+                var content = ops.join("\n");
+                obj(p.content, function () { add("<< /Length " + content.length + " >>\nstream\n" + content + "\nendstream"); });
+                img = 0;
+                pg.items.forEach(function (it) {
+                    if (!it.image) return;
+                    obj(p.images[img++], function () {
+                        add("<< /Type /XObject /Subtype /Image /Width " + it.image.width + " /Height " + it.image.height +
+                            " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + it.image.jpeg.length + " >>\nstream\n");
+                        add(it.image.jpeg);
+                        add("\nendstream");
+                    });
+                });
+            });
+            var xref = length, count = next;
+            var x = "xref\n0 " + count + "\n0000000000 65535 f \n";
+            for (var n = 1; n < count; n++) x += ("0000000000" + offsets[n]).slice(-10) + " 00000 n \n";
+            add(x + "trailer\n<< /Size " + count + " /Root 1 0 R >>\nstartxref\n" + xref + "\n%%EOF\n");
+            var out = new Uint8Array(length), at = 0;
+            chunks.forEach(function (c) { out.set(c, at); at += c.length; });
+            return out;
+        }
+        // Pages of a PDF (Chromium's): its page objects.
+        function pageCount(bytes) {
+            var s = "";
+            for (var i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            var m = s.match(/\/Type\s*\/Page(?![a-zA-Z])/g);
+            return m ? m.length : 1;
+        }
+
+        function paperOf(j) {
+            var size = PAPER[j.params.mediaSize] || PAPER.US_Letter;
+            return j.params.landscape ? [size[1], size[0]] : size.slice();
+        }
+        function insetsOf(j) {
+            var p = j.params;
+            return { top: (p.topInset || 0) * 72, left: (p.leftInset || 0) * 72, right: (p.rightInset || 0) * 72, bottom: (p.bottomInset || 0) * 72 };
+        }
+
+        // A page's text on pages (what a desktop browser can print of it).
+        function textPages(j, title, text) {
+            var paper = paperOf(j), m = insetsOf(j), size = 11, lead = 14;
+            var cols = Math.max(20, Math.floor((paper[0] - m.left - m.right) / (size * 0.5)));
+            var rows = Math.max(5, Math.floor((paper[1] - m.top - m.bottom) / lead));
+            var lines = [];
+            (title ? [title, ""] : []).concat(String(text || "").split(/\r?\n/)).forEach(function (para) {
+                para = para.replace(/\s+/g, " ").trim();
+                if (!para) { if (lines.length && lines[lines.length - 1] !== "") lines.push(""); return; }
+                while (para.length > cols) {
+                    var cut = para.lastIndexOf(" ", cols);
+                    if (cut <= 0) cut = cols;
+                    lines.push(para.slice(0, cut));
+                    para = para.slice(cut).trim();
+                }
+                lines.push(para);
+            });
+            var pages = [];
+            for (var i = 0; i < Math.max(1, lines.length); i += rows) {
+                pages.push({ width: paper[0], height: paper[1], items: lines.slice(i, i + rows).map(function (l, k) {
+                    return { text: l, x: m.left, y: m.top + k * lead, size: size };
+                }) });
+            }
+            return pdf(pages);
+        }
+
+        // A picture as JPEG bytes and its size (through a canvas, so PNG,
+        // GIF and WebP print too).
+        function jpegOf(path) {
+            var url = runtime.fileManager ? runtime.fileManager.url(path) : Promise.resolve(path);
+            return url.then(function (u) {
+                return new Promise(function (resolve, reject) {
+                    var im = new global.Image();
+                    im.onload = function () {
+                        var c = global.document.createElement("canvas");
+                        c.width = im.naturalWidth;
+                        c.height = im.naturalHeight;
+                        var g = c.getContext("2d");
+                        g.fillStyle = "#fff";
+                        g.fillRect(0, 0, c.width, c.height);
+                        g.drawImage(im, 0, 0);
+                        c.toBlob(function (b) {
+                            if (!b) return reject(new Error("Could not read " + path));
+                            b.arrayBuffer().then(function (buf) {
+                                resolve({ jpeg: new Uint8Array(buf), width: c.width, height: c.height });
+                            }, reject);
+                        }, "image/jpeg", 0.92);
+                    };
+                    im.onerror = function () { reject(new Error("Could not read " + path)); };
+                    im.src = u;
+                });
+            });
+        }
+        function imagePages(j, paths) {
+            return Promise.all(paths.map(jpegOf)).then(function (images) {
+                var m = j.params.borderless ? { top: 0, left: 0, right: 0, bottom: 0 } : insetsOf(j);
+                return pdf(images.map(function (im) {
+                    var paper = PAPER[j.params.mediaSize] || PAPER.US_Letter;
+                    // autoRotate: a landscape picture on a page turned to it.
+                    if (j.params.autoRotate !== false && (im.width > im.height) !== (paper[0] > paper[1])) paper = [paper[1], paper[0]];
+                    var bw = paper[0] - m.left - m.right, bh = paper[1] - m.top - m.bottom;
+                    var s = Math.min(bw / im.width, bh / im.height);
+                    var w = im.width * s, h = im.height * s;
+                    return { width: paper[0], height: paper[1],
+                             items: [{ image: im, x: m.left + (bw - w) / 2, y: m.top + (bh - h) / 2, w: w, h: h }] };
+                }));
+            });
+        }
+
+        // ---- Rendering a document job -----------------------------------------------------
+
+        // A page view (the browser's, Email's) or the app's own window asks
+        // to be put on paper. jobs: jobID -> what to do once rendered.
+        function render(jobID, how) {
+            var j = findJob(jobID);
+            if (!j || j.state !== "Printing") return false;
+            var L = local(jobID);
+            L.title = how.title || "";
+            if (!j.description && how.title) { j.description = how.title; saveJob(j); showOngoing(j); }
+            var paper = PAPER[j.params.mediaSize] || PAPER.US_Letter;
+            var size = paper === PAPER.ISO_A4 ? "A4" : paper === PAPER.US_Legal ? "Legal" : "Letter";
+            if (how.host) {
+                host.postToHost(how.host.type, { op: "print", id: how.host.id, jobID: jobID, pageSize: size, landscape: !!j.params.landscape });
+            } else {
+                setTimeout(function () { rendered(jobID, null, { text: how.text, title: how.title }); }, 0);
+            }
+            return true;
+        }
+        // A page's HTML put on paper (Email's message, which is a part of its
+        // window): in phoenix-sim rendered by Chromium in a page view nobody
+        // sees, elsewhere its text.
+        function renderHtml(jobID, how) {
+            var j = findJob(jobID);
+            if (!j || j.state !== "Printing") return false;
+            if (!runtime.offscreenWebView) {
+                var div = global.document.createElement("div");
+                div.innerHTML = String(how.html || "");
+                return render(jobID, { title: how.title, text: div.innerText || div.textContent || "" });
+            }
+            var view = runtime.offscreenWebView(String(how.html || ""), function (id) {
+                render(jobID, { title: how.title, host: { type: "webView", id: id } });
+            });
+            local(jobID).cleanup = view.destroy;
+            return true;
+        }
+
+        // The rendering is back: a PDF (base64) from the host, or null to
+        // print the text instead.
+        function rendered(jobID, b64, info) {
+            var j = findJob(jobID);
+            if (!j) return;
+            var L = local(jobID);
+            if (L.cleanup) { L.cleanup(); delete L.cleanup; }
+            if (j.state !== "Printing") {
+                tell(renderSubs, { jobID: jobID, renderResultCode: E.CANCEL_REQUESTED });
+                return;
+            }
+            var bytes;
+            try {
+                if (b64) {
+                    var bin = global.atob(b64);
+                    bytes = new Uint8Array(bin.length);
+                    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                } else if (info && info.error) {
+                    throw new Error(info.error);
+                } else {
+                    bytes = textPages(j, info && info.title || L.title, info && info.text || "");
+                }
+            } catch (e) {
+                tell(renderSubs, { jobID: jobID, renderResultCode: E.RENDER });
+                finish(j, "Failed", { errorText: String(e && e.message || e) });
+                return;
+            }
+            L.pdf = bytes;
+            j.pages = pageCount(bytes);
+            saveJob(j);
+            showOngoing(j);
+            for (var n = 1; n <= j.pages; n++) tell(renderSubs, { jobID: jobID, currentPage: n, totalPages: j.pages });
+            tell(renderSubs, { jobID: jobID, currentPage: j.pages, totalPages: j.pages, renderResultCode: 0 });
+        }
+
+        // ---- The service --------------------------------------------------------------------
+
+        var jobSeq = Date.now() % 100000;
+        function newJobId() { return "job" + Date.now().toString(36) + (++jobSeq).toString(36); }
+        function needJob(p, reply) {
+            var j = findJob(p.jobID);
+            if (!j) reply(fail(E.BAD_JOB, "No such print job: " + p.jobID));
+            return j;
+        }
+        function publicJob(j) {
+            return { jobID: j.jobID, description: j.description, appName: j.appName, printerID: j.printerID, printerName: j.printerName,
+                     state: j.state, pages: j.pages || 0, file: j.file || "", created: j.created, finished: j.finished || 0,
+                     errorText: j.errorText || "" };
+        }
+
+        var methods = {
+            "/printers/list": function (p, reply, ctx) {
+                reply(ok({ subscribed: !!p.subscribe }));
+                printers().forEach(function (pr) {
+                    setTimeout(function () {
+                        if (!ctx.cancelled()) reply(ok({ eventType: "Add", printerID: pr.printerID, printerName: pr.printerName, printerAddress: pr.printerAddress }));
+                    }, 0);
+                });
+            },
+            "/printers/getCurrent": function (p, reply) {
+                var pr = printerById(store.get(CURRENT_KEY, PDF_PRINTER.printerID)) || PDF_PRINTER;
+                reply(ok({ printerID: pr.printerID, printerName: pr.printerName, printerAddress: pr.printerAddress }));
+            },
+            "/printers/setCurrent": function (p, reply) {
+                if (!printerById(p.printerID)) return reply(fail(-1, "No such printer: " + p.printerID));
+                store.set(CURRENT_KEY, p.printerID);
+                reply(ok());
+            },
+            "/printers/getCapabilities": function (p, reply) {
+                if (!printerById(p.printerID)) return reply(fail(-1, "No such printer: " + p.printerID));
+                reply(ok({ printerID: p.printerID, mediaSize: ["US_Letter", "ISO_A4", "US_Legal", "Photo_4x6", "Photo_5x7"],
+                           mediaType: ["Plain", "Photo"], printQuality: ["Normal", "Best"], canDuplex: false, hasColor: true }));
+            },
+            "/printers/add": function (p, reply) {
+                reply(fail(E.NO_RESPONSE_MANUAL, "There are no network printers in the simulator (on a device: CUPS, IPP Everywhere)"));
+            },
+            "/jobs/open": function (p, reply) {
+                var pr = printerById(p.printerID);
+                if (!pr) return reply(fail(-1, "No such printer: " + p.printerID));
+                var j = { jobID: newJobId(), printerID: pr.printerID, printerName: pr.printerName, appName: String(p.appName || ""),
+                          appId: PalmSystem.appIdentifier || "", page: PAGE, description: String(p.description || ""), state: "Printing",
+                          params: {}, created: Date.now(), pages: 0 };
+                saveJob(j);
+                local(j.jobID);
+                showOngoing(j);
+                reply(ok({ jobID: j.jobID, subscribed: !!p.subscribe }));
+            },
+            "/jobs/editPrintParams": function (p, reply) {
+                var j = needJob(p, reply);
+                if (!j) return;
+                for (var k in p) if (k !== "jobID") j.params[k] = p[k];
+                saveJob(j);
+                reply(ok({ jobID: j.jobID }));
+            },
+            "/jobs/getFinalParamsAndArea": function (p, reply) {
+                var j = needJob(p, reply);
+                if (!j) return;
+                var paper = paperOf(j), m = insetsOf(j);
+                reply(ok({ jobID: j.jobID, width: Math.round((paper[0] - m.left - m.right) / 72 * DPI),
+                           height: Math.round((paper[1] - m.top - m.bottom) / 72 * DPI), pixelUnits: DPI,
+                           renderInReverseOrder: false, mediaSize: j.params.mediaSize || "US_Letter",
+                           numCopies: j.params.numCopies || 1, color: j.params.color || "Color" }));
+            },
+            "/jobs/getStatus": function (p, reply, ctx) {
+                reply(ok({ subscribed: !!p.subscribe }));
+                if (p.subscribe) subscribeTo(statusSubs, ctx, function (x) { if (!ctx.cancelled()) reply(ok(x)); });
+            },
+            "/jobs/getRenderStatus": function (p, reply, ctx) {
+                reply(ok({ subscribed: !!p.subscribe }));
+                if (p.subscribe) subscribeTo(renderSubs, ctx, function (x) { if (!ctx.cancelled()) reply(ok(x)); });
+            },
+            "/jobs/addFile": function (p, reply) {
+                var j = needJob(p, reply);
+                if (!j) return;
+                if (!p.pathName) return reply(fail(-1, "pathName is required"));
+                local(j.jobID).files.push(String(p.pathName));
+                reply(ok({ jobID: j.jobID }));
+            },
+            "/jobs/close": function (p, reply) {
+                var j = needJob(p, reply);
+                if (!j) return;
+                if (j.state !== "Printing") return reply(ok({ jobID: j.jobID }));
+                var L = local(j.jobID);
+                var bytes = L.pdf ? Promise.resolve(L.pdf) : L.files.length ? imagePages(j, L.files) : null;
+                if (!bytes) {
+                    finish(j, "Failed", { errorText: "Nothing was printed" });
+                    return reply(ok({ jobID: j.jobID }));
+                }
+                bytes.then(function (b) {
+                    if (!L.pdf) j.pages = pageCount(b);
+                    return writePdf(j, b);
+                }).then(function (path) {
+                    finish(j, "Done", { file: path });
+                    delete open[j.jobID];
+                    reply(ok({ jobID: j.jobID }));
+                }, function (e) {
+                    finish(j, "Failed", { errorText: String(e && e.message || e) });
+                    reply(fail(E.RENDER, String(e && e.message || e)));
+                });
+            },
+            "/jobs/cancel": function (p, reply) {
+                var j = needJob(p, reply);
+                if (!j) return;
+                if (j.state === "Printing") finish(j, "Cancelled");
+                delete open[j.jobID];
+                reply(ok({ jobID: j.jobID }));
+            },
+            "/jobs/list": function (p, reply, ctx) {
+                var send = function () { if (!ctx.cancelled()) reply(ok({ jobs: jobs().map(publicJob), subscribed: !!p.subscribe })); };
+                reap();
+                send();
+                if (p.subscribe) {
+                    listen(ctx, send);
+                    // A page printing may go quiet while the list is open.
+                    var t = setInterval(function () { if (ctx.cancelled()) clearInterval(t); else reap(); }, QUIET_AFTER / 2);
+                    var prev = ctx.onCancel;
+                    ctx.onCancel = function () { clearInterval(t); if (prev) prev(); };
+                }
+            },
+            "/jobs/remove": function (p, reply) {
+                var j = needJob(p, reply);
+                if (!j) return;
+                if (j.state === "Printing") return reply(fail(-1, "The job is still printing; cancel it first"));
+                store.set(JOBS_KEY, jobs().filter(function (x) { return x.jobID !== j.jobID; }));
+                changed();
+                reply(ok());
+            }
+        };
+        register([SERVICE], methods);
+
+        // A job cancelled elsewhere (the Print Manager) stops here too.
+        listeners.push(function () {
+            Object.keys(open).forEach(function (id) {
+                var j = findJob(id);
+                if (!j || j.state === "Cancelled") {
+                    tell(statusSubs, { jobID: id, printerState: "DONE", jobStatus: "Cancelled" });
+                    tell(renderSubs, { jobID: id, renderResultCode: E.CANCEL_REQUESTED });
+                    delete open[id];
+                }
+            });
+        });
+
+        // PrintJob launches the Print Manager headless for its status
+        // dashboard; here the job's ongoing activity is that dashboard.
+        var am = runtime.services["com.palm.applicationManager"];
+        if (am) {
+            var baseOpen = am["/open"];
+            am["/open"] = function (p, reply, ctx) {
+                if (p.id === "com.palm.app.printmanager" && p.params && p.params.runHeadless)
+                    return reply(ok({ processId: String(Date.now()), appId: PRINT_MANAGER }));
+                baseOpen(p, reply, ctx);
+            };
+        }
+
+        runtime.print = { render: render, renderHtml: renderHtml, rendered: rendered, pdf: pdf, jobs: jobs };
+    })();
+
+    // ================================================================================
     // System updates (com.palm.update; services/updates)
     // ================================================================================
     //
@@ -9643,6 +10840,10 @@
     //       title, icon, label}]}: the apps whose appinfo.json says they take
     //       all of these types ("phoenix": {"shareTargets": [{"types":
     //       ["image/*"], "label"?}]}), and the legacy apps below.
+    //   org.webosphoenix.filepicker/pick {kinds: ["image"], title?} ->
+    //       {files: [{fullPath, mimeType, name}]} or {canceled: true}: the
+    //       user picks a picture (SF2, pictures only so far; Messaging's
+    //       picture messages).
     //   org.webosphoenix.filepicker/save {name, from?: path, data?: base64,
     //       mimeType?, title?} -> {path} or {canceled: true}: the user picks a
     //       folder of /media/internal (the last one used first) and a name;
@@ -9735,7 +10936,7 @@
                 var id = "sheet" + (++seq) + "_" + Date.now();
                 var frame = doc.createElement("iframe");
                 frame.setAttribute("data-phoenix-sheet", kind);
-                frame.setAttribute("title", kind === "save" ? "Save to Files" : "Share");
+                frame.setAttribute("title", kind === "save" ? "Save to Files" : kind === "pick" ? "Choose a Picture" : "Share");
                 frame.src = SHEET_URL + "?launchParams=" + encodeURIComponent(toJson({ kind: kind, id: id }));
                 var st = frame.style;
                 st.position = "fixed"; st.left = "0"; st.top = "0"; st.width = "100%"; st.height = "100%";
@@ -9845,6 +11046,17 @@
         });
 
         register(["org.webosphoenix.filepicker"], {
+            // SF2 for pictures: the user picks from the pictures Photos has
+            // (by album), as the original picker did for "image".
+            "/pick": function (p, reply) {
+                var kinds = p.kinds || ["image"];
+                if (!kinds.length || kinds.some(function (k) { return k !== "image"; }))
+                    return reply(fail(-1, "Only pictures can be picked so far: kinds [\"image\"]"));
+                showSheet("pick", { title: p.title || "Choose a Picture", kinds: kinds }).then(function (r) {
+                    if (!r || r.action !== "pick" || !r.files || !r.files.length) return reply(ok({ canceled: true }));
+                    reply(ok({ files: r.files.map(function (f) { return { fullPath: f.path, mimeType: f.mimeType || "", name: f.path.replace(/^.*\//, "") }; }) }));
+                });
+            },
             "/save": function (p, reply) {
                 if (!p.name) return reply(fail(-1, "name is required"));
                 if (p.data === undefined && !p.from) return reply(fail(-1, "from (a path) or data (base64) is required"));

@@ -119,6 +119,19 @@ describe("org.webosphoenix.transcriber (device service)", () => {
         expect(args.slice(0, 6)).toEqual(["-m", model, "-f", memo, "-l", "en"]);
         expect(args).toContain("-oj");
         expect(args).toContain("-pp");
+        expect(args).not.toContain("--prompt");
+    });
+
+    it("passes a prompt (words to expect) to whisper-cli as one argument", async () => {
+        const log = join(dir, "args.json");
+        script("whisper-cli", FAKE_WHISPER);
+        const t = createTranscriber({ model, configFile: noConfig(), env: { PATH: bin, FAKE_LOG: log } });
+        const prompt = "Call Ada Palmer. Call Lena Okafor; $(rm -rf /)";
+        expect(await t.transcribe({ path: memo, prompt })).toMatchObject({ returnValue: true });
+        const args = JSON.parse(readFileSync(log, "utf8")) as string[];
+        expect(args.slice(args.indexOf("--prompt"), args.indexOf("--prompt") + 2)).toEqual(["--prompt", prompt]);
+        expect(await t.transcribe({ path: memo, prompt: "x".repeat(1001) })).toMatchObject({ errorCode: ERRORS.BAD_PARAMS });
+        expect(await t.transcribe({ path: memo, prompt: 42 as unknown as string })).toMatchObject({ errorCode: ERRORS.BAD_PARAMS });
     });
 
     it("converts other audio with ffmpeg, or says it needs it", async () => {

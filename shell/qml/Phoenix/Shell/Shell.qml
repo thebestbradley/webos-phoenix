@@ -1462,6 +1462,19 @@ FocusScope {
     // device's (luna-send to org.webosphoenix.transcriber); phoenix-sim runs
     // the same code on the computer.
     property var dictationCommand: []
+    // WAV files dictation hears instead of the microphone, one per
+    // recording (phoenix-sim --microphone-file); [] for the microphone.
+    property var dictationInputFiles: []
+    // The microphone, for the keyboard and for the apps (the window source
+    // routes org.webosphoenix.dictation to it, e.g. Voice Dial); null when
+    // the device cannot record.
+    readonly property var dictation: dictationEngine.available || dictationInputFiles.length > 0 ? dictationEngine : null
+    Binding {
+        target: shell.source
+        property: "dictation"
+        value: shell.dictation
+        when: !!shell.source && ("dictation" in shell.source)
+    }
     // IMEController::isIMEOpened (or the platform's keyboard is up). With
     // it the tablet's bezel flick must travel further.
     readonly property bool keyboardOpen: _imeOpened || platformKeyboardHeight > 0
@@ -2356,13 +2369,14 @@ FocusScope {
             // slotNegativeSpaceChanged, InputWindowManager.cpp:131-139).
             // The keyboard's microphone (Text Assist, GAPS V2).
             Dictation {
-                id: dictation
+                id: dictationEngine
                 command: shell.dictationCommand
+                inputFiles: shell.dictationInputFiles
             }
             VirtualKeyboard {
                 id: ime
                 objectName: "virtualKeyboard"
-                dictation: dictation.available ? dictation : null
+                dictation: shell.dictation
                 tablet: shell.tablet
                 pixelScale: Theme.keyboardScale
                 availableWidth: ui.width

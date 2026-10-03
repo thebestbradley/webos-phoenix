@@ -437,7 +437,8 @@ drives it (Wi-Fi, password, PIN, brightness, airplane mode, Bluetooth).
 Phoenix Phone and Messaging start cleanly too, and
 `node tools/test-phone-messaging.cjs [--tablet]` places, holds and ends a
 call, answers and ignores simulated incoming calls, and sends and receives
-texts.
+texts, picture messages (MMS) and instant messages (a Jabber account on
+the simulated server).
 
 Camera, Photos and Music start cleanly too, and `node tools/test-media.cjs
 [--tablet]` drives them. So does Files, driven by `node tools/test-files.cjs
@@ -478,6 +479,8 @@ New Phoenix apps live in `apps/`, an npm workspace:
 | `apps/videos`, `apps/podcasts`, `apps/pdfview`, `apps/docview` | Videos, Podcasts, PDF View and Doc View (see [below](#videos-podcasts-pdf-view-and-doc-view)); `@phoenix/luna`'s `web.ts` (HTTP, download manager), `playback.ts` (audio focus, `nowPlaying`, orientation) and `documents.ts` (launch targets, reading files, finding documents) serve them |
 
 | `apps/firstuse` | First Use (see [below](#first-use)) |
+| `apps/printmanager` | Print Manager (see [below](#printing)); `@phoenix/luna`'s `print.ts` is the print manager's client and `@phoenix/ui`'s `PrintDialog` the print dialog for Phoenix apps |
+| `apps/voicedial` | Voice Dial (see [below](#voice-dial)); `@phoenix/luna`'s `dictation.ts` is the client of `org.webosphoenix.dictation`, the shell's microphone and transcriber |
 | `apps/help` | Help (see [below](#help)); its topics are Markdown files in `apps/help/topics` |
 
 | `apps/dav` | The CardDAV & CalDAV account (see [below](#carddav-and-caldav)): a hidden Enyo 1.0 app with the account's sign-in page, its db8 kinds and account template, and `apps/dav/service`, its Node.js Luna service and sync engine |
@@ -658,13 +661,23 @@ framework's avatar.
 - **Messaging**: Conversations / Buddies view menu, conversations newest
   first with unread counts, the conversation as chat balloons with time
   stamps and sending status, compose with a "To:" field that suggests
-  contacts by name or number, and a transport picker in which only SMS is
-  available (AIM, Google Talk, Yahoo!, Skype are listed as unavailable, as
-  is the Buddies view). Tablet: conversations on the left, the
-  conversation on the right.
+  contacts by name or number and IM buddies. The compose bar's attach
+  button opens the system picture picker
+  (`org.webosphoenix.filepicker/pick`); the picture waits above the field
+  and the message goes as MMS, its pictures shown in the balloon (tap: full
+  screen, with Share). **Buddies**: My Status per IM account (Available /
+  Busy / Offline, Offline signs out), the buddies of signed-in accounts
+  grouped by presence with their status messages (tap: chat), Accounts to
+  add one; an IM conversation shows the buddy's presence under the name and
+  sends by their service, text only. AIM, Google Talk, Yahoo! and Skype are
+  listed as not available (closed networks). Tablet: conversations on the
+  left, the conversation on the right.
 
-Launch params: Phone `{number}` fills in the dial pad; Messaging
-`{threadId}` opens a conversation, `{to, name}` starts a message.
+Launch params: Phone `{number}` fills in the dial pad, `{number, dial: true}`
+calls it at once (Voice Dial); Messaging
+`{threadId}` opens a conversation, `{to, name}` starts a message,
+`{attachment}` or a share's `{share: {files}}` with a picture starts a
+picture message (Messaging is a share target for `image/*`).
 
 ### Services
 
@@ -681,6 +694,9 @@ end of `runtime/phoenix-runtime.js`):
 | Call log | db8 `com.palm.phonecall:1` (`type` incoming / outgoing / missed / ignored, `timestamp`, `duration`, `from`, `to[]`), written by the app | LuneOS phone app `qml/model/CallHistory.qml` |
 | Texts | db8 `com.palm.smsmessage:1` (extends `com.palm.message:1`: `folder` inbox / outbox, `status` pending / sending / successful / failed, `messageText`, `from`, `to[]`, `conversations[]`, `flags.read`), `com.palm.chatthread:1` (`displayName`, `summary`, `timestamp`, `unreadCount`, `personId`, `replyAddress`) | `webos-telephonyd` `files/db8/kinds`, `src/telephonyservice_sms.c`; `webOS-ports/org.webosports.messaging` `service/configuration/db/kinds` |
 | Sending | `org.webosports.service.messaging` `putMessage {message}` -> `{threadids}`: assigns the thread and stores the message; the telephony service then sends outbox messages with status pending (`sendSmsFromDb`) | `org.webosports.messaging` `service/javascript/assistants/PutMessage.js`, `utils/MessageAssigner.js`; `webos-telephonyd` `files/activities/com.palm.telephony/outgoing-sms.json` |
+| Picture messages | db8 `com.palm.mmsmessage:1` (extends `com.palm.message:1`; `serviceName: "mms"`, `parts[{path, mimeType, name}]`), shipped by Messaging. `putMessage` first copies each part into `/media/internal/.mms/` so the message keeps its picture (the media indexer skips dot folders); the summary reads "Picture: text" | the legacy `com.palm.mmsmessage` kind (`webos-telephonyd` leaves MMS to `mmsd`, which LuneOS never wired up) |
+| Instant messages | db8 `com.palm.immessage:1` / `com.palm.immessage.xmpp:1` (`serviceName: "type_jabber"`, `username` = your account), `com.palm.imloginstate:1` (per account: `state` online / offline, `availability` 0 available, 2 busy, 4 offline, `customMessage`), tempdb `com.palm.imbuddystatus:1` (`username`, `displayName`, `availability`, `status`, `personId`). An IM conversation is its own `com.palm.chatthread:1` (`replyService`, `replyAddress` = the buddy, `username`); a person's texts and IMs are not merged into one thread | the readers in the tree: Enyo 1.0 `lib/contactsui/UI/PersonList.js` (`imloginstate`, `imbuddystatus` from tempdb), Email `facades/ContactCache.js`; `webOS-ports/org.webosports.messaging` `service/configuration/db/kinds` |
+| IM transport | `org.webosphoenix.service.xmpp`: the Synergy callbacks of the `com.webosphoenix.xmpp` account template (Accounts > Add > Jabber (XMPP), `runtime/accounts/com.webosphoenix.xmpp`): `checkCredentials`, `onCreate`, `onEnabled` (signs in: login state + roster), `onDelete` (state, roster, IM conversations); `setPresence {accountId, availability}` (Phoenix) | the template layout of the legacy Synergy accounts (`com.palm.service.accounts`) |
 
 The apps ship their db8 kinds in `public/configuration/db/kinds`, which
 `tools/install-rootfs.py` installs to `/etc/palm/db/kinds`.
@@ -705,6 +721,23 @@ Helpers for tests and the shell:
   text and posts `phoenixHost.postToHost("notification", {appId, title,
   body})` for Messaging, which `SimWindowSource` shows as a banner and
   dashboard item for that app (phoenix-sim **F5**)
+- `__phoenixRuntime.simulateIncomingMms({from?, text?, image?})` the same
+  for a picture message (default: a sample photo from Ada; **Shift+F5**)
+- `__phoenixRuntime.simulateIncomingIm({from?, text?})` an instant message
+  to the first signed-in Jabber account (**Ctrl+F5**);
+  `__phoenixRuntime.xmpp.setBuddyPresence(jid, availability, status?)`
+
+The IM server is simulated: any `name@chat.example` with a password signs
+in, the roster is four of the demo contacts (Ada and Lena available,
+Marcus busy, Theo offline), and a buddy who is not offline answers a
+message after about two seconds. Sending fails while signed out or in
+airplane mode. A real transport (XMPP, as planned in
+`docs/SYNERGY-MODERN.md`) registers with
+`runtime.registerImTransport(service, send)` the same way.
+
+db8 here follows `extends` through every level (`com.palm.immessage.xmpp:1`
+-> `com.palm.immessage:1` -> `com.palm.message:1`), and watches on tempdb
+fire across windows as db8's do.
 
 ## Camera, Photos and Music
 
@@ -850,7 +883,36 @@ made is served when it is ready. In a desktop browser the page is an
 Links for other apps (`mailto:`, `tel:`, `sms:`) go to them through
 `/usr/palm/command-resource-handlers.json` (a compat file), as the
 application manager's `open` does on webOS. `tools/test-browser.cjs` browses
-with it end to end. On a device, OSE's WebAppMgr has no BrowserAdapter, so
+with it end to end.
+
+**Downloads.** A file the page view does not show (a PDF, a link with
+`download`) is not downloaded by Chromium: phoenix-sim's view hands it
+back to the page as BrowserAdapter did, with the plugin's
+`mimeNotSupported(mime, url)` callback (`WebAppWindow.qml` catches the
+profile's `downloadRequested` for that view). The browser then does what
+it always did: `getResourceInfo` names the app for the type, and
+`com.palm.downloadmanager/download` fetches the file into
+`/media/internal/Downloads` (the folder Files shows), while Isis's own
+Downloads drawer shows the progress bar. The simulated download manager
+reports the real progress, read from the host's proxy while the body
+comes (`/__phoenix/proxy/progress`), and shows each download as an
+[ongoing activity](#ongoing-activities); a tap opens the browser's
+Downloads drawer (`{toasterOpen: "downloads"}`, the params of its
+"finished downloading" banner). Open in the drawer, or tapping the file in
+Files, opens it in its app (PDF View for a PDF). A type no app opens gets
+the browser's original "Cannot open MIME type", as on webOS, whose
+application manager had no handler for it either. Downloaded files are not
+apps: the launcher's Downloads tab lists installed apps, as on webOS.
+`tools/test-browser.cjs` (download) and `apps/shared/luna/src/
+mediaapps.test.ts` check it; the native view's hand-back was checked in
+phoenix-sim. The drawer (`enyo.Toaster`) flies in over the page: the native
+view keeps to the part it leaves uncovered (on a phone, none), since
+nothing in the page can draw over it.
+
+phoenix-sim's own proxy, and every request the runtime makes to the host
+there, go through `XMLHttpRequest`: Chromium refuses `fetch()` on the
+`phoenix:` scheme before Qt 6.6 (`FetchApiAllowed`), which left downloads
+(and the other proxied requests) failing on Qt 6.4. On a device, OSE's WebAppMgr has no BrowserAdapter, so
 the browser needs a native view there too (see the roadmap).
 
 ## Files
@@ -1116,6 +1178,65 @@ placeholder), searches in the app and through Just Type's content search,
 renames, shares by Email, deletes, "transcribe automatically", and the
 `{memoId}` and `{newMemo}` launch params, with screenshots in
 `build/voicememos-tests/`.
+
+## Voice Dial
+
+`apps/voicedial` (`org.webosphoenix.voicedial`, Apps tab, with the original
+generic microphone icon of luna-sysmgr's
+`sysapps/com.palm.sysapp.voicedial`) is the Voice Dial system app.
+`com.palm.sysapp.voicedial` is an alias of it, and
+`com.palm.pmvoicecommand/startVoiceCommand {source}`, the only thing the
+original's launcher icon did (`ApplicationManager.cpp`
+`slotBuiltInAppEntryPoint_VoiceDial`; that service was never released),
+opens it.
+
+- It listens as soon as it opens: "Call Ada Palmer", "Call Marcus at work",
+  "Dial 4 0 8 5 5 5 0 1 4 2" (digits or words, "double five"). It stops by
+  itself a second after you finish speaking; a tap on the microphone stops
+  it sooner, or listens again.
+- What was said is matched to the contacts with a phone number
+  (`com.palm.person:1`; `src/lib/match.ts`): word by word, letter by letter,
+  so a name heard wrong still finds them ("Call either Palmer" is Ada
+  Palmer). A number is matched to its contact. "at work", "home", "mobile"
+  pick the number. When two people are about as likely (two Marcuses), it
+  asks which one; no match, or nothing heard, says so with Try Again.
+- The confirmation ("Call Ada Palmer?", the number and its type) listens
+  for "Yes" or "No", or takes a tap on Call or No. Yes launches Phone with
+  `{number, dial: true}` (a Phoenix launch param: Phone places the call at
+  once and shows it), and Voice Dial closes.
+
+**Listening** is the keyboard's dictation, lent to the app: the runtime's
+`org.webosphoenix.dictation` (`start {prompt, autoStop, subscribe}`,
+`stop`, `getStatus`; `@phoenix/luna`'s `dictation.ts`) sends "dictation"
+host messages to the shell, whose `Dictation` (`shell/native/dictation.cpp`)
+records the microphone and runs `org.webosphoenix.transcriber`
+(whisper.cpp) on it, and `SimWindowSource` passes its states back to the
+window. One microphone: the window that started a recording owns it
+(`Dictation.owner`) and only it gets the transcript; the keyboard ignores
+it. Voice Dial passes the contacts' names as `prompt`, which goes to
+whisper as its initial prompt (`transcribe {prompt}`, `whisper-cli
+--prompt`): with it whisper.cpp writes the names as they are spelled
+(espeak-ng saying "Call Lena Okafor mobile" came back as "Call the Iraq
+Affirmal" without it, "Call Lena Okafor Mobile." with it). `autoStop` ends
+the recording after speech and a second of quiet (`Dictation::EndOfSpeech`),
+or with "Nothing was heard." after 7 seconds without speech. In a browser
+without the shell there is no microphone to lend, and Voice Dial says so.
+
+**In phoenix-sim**, dictation runs `apps/voicememos/service/transcribe-cli.js`
+on the computer (whisper.cpp from `PHOENIX_WHISPER_CLI` /
+`PHOENIX_WHISPER_MODEL`, or the PATH). A computer without a microphone (or
+a test) can play WAV files as the microphone: `--microphone-file
+call.wav --microphone-file yes.wav` plays one per recording, each followed
+by quiet.
+
+`node tools/test-voicedial.cjs [--tablet]` drives it with the script in the
+shell's place (the dictation host messages, answered with the transcripts
+whisper.cpp made of espeak-ng's speech): the prompt, a misheard name, Yes
+and Phone's call, No, a number, a choice, no match, nothing heard, the
+microphone button, no microphone, and the original ids;
+`apps/voicedial/src/lib/match.test.ts` the matching;
+`build/dictation-test` the end of speech, the prompt and the file
+microphone.
 
 ## Flashlight
 
@@ -1784,7 +1905,9 @@ its params. It is the shell's API:
 - `luna://org.webosphoenix.ongoing/set {id, appId?, title, body?, icon?, progress (0-100, -1: none), params?}`
 - `luna://org.webosphoenix.ongoing/clear {id}`
 
-System updates (`com.palm.update`) and Marketplace installs use it. They are
+System updates (`com.palm.update`), Marketplace installs and the download
+manager (each download: file name, "Downloading 160 KB of 441 KB" and its
+progress) use it. They are
 pinned at the top of the notification list, in the order they began, with a
 faint rule between them and the notifications (which keep the original's
 order below). On a phone the list opens at them when there are any (else at
@@ -1814,6 +1937,56 @@ Other legacy hooks the simulator now answers as a device would:
 (luna-systemui waits on it before subscribing), and
 `com.webos.notification/createToast` with an `onclick.appId` for another app
 (a service's toast) posts that app's notification.
+
+## Printing
+
+Print is where webOS had it: in the app menu of Web and Email (both open
+Enyo 1.0's own print dialog, `lib/printdialog`) and in Photos' viewer.
+The dialog speaks to the print manager, `com.palm.printmgr`, which the
+runtime simulates (block "Printing") with the calls `PrintJob.js`,
+`DocumentPrintJob.js`, `ImagePrintJob.js` and the printer kinds make
+(`printers/list`, `getCurrent`, `setCurrent`, `getCapabilities`, `add`;
+`jobs/open`, `editPrintParams`, `getFinalParamsAndArea`, `getStatus`,
+`getRenderStatus`, `addFile`, `close`, `cancel`) and the print manager's
+error codes.
+
+- **The printer** is **Save as PDF**: the job becomes a PDF in
+  `/media/internal/Documents` (named after the page, "(2)" when taken),
+  which Files and PDF View open. A network printer would need CUPS with
+  IPP Everywhere on a device; there is none in the simulator, so Add a
+  Printer answers "Unable to communicate with the printer" (-203).
+- **Rendering**: a page view's page (the browser's, Email's message) or an
+  app's own window (`PalmSystem.printFrame`, the dialog's `frameToPrint`)
+  is rendered by Chromium in phoenix-sim: the "print" host message (or the
+  page view's `print` op) has `WebAppWindow.qml` call QtWebEngine's
+  `printToPdf` on that view, in the job's paper size, and hand the PDF back
+  (`__phoenixRuntime.print.rendered`). In a desktop browser (and the
+  Playwright tests) the page's text is printed instead. Pictures
+  (`jobs/addFile`) are put on pages by the runtime's small PDF writer, one a
+  page, turned and scaled to the paper.
+- **Enyo 1.0** was released with two of the dialog's files empty
+  (`MediaTypePicker.js`, `PrintQualityPicker.js`) although the options
+  page creates both, so opening a printer's options failed; the compat
+  overlay supplies them, written after `MediaSizePicker.js`.
+- **While it prints**, a job is an ongoing activity in the notification area
+  ("Printing <name>"), as the original Print Manager's status dashboard was
+  (`PrintJob` still launches it headless, which opens no card here); when
+  it is done a "Saved as PDF" notification opens the Print Manager at the
+  job.
+- **Print Manager** (`apps/printmanager`, `org.webosphoenix.printmanager`,
+  on the launcher's Settings page as on webOS; `com.palm.app.printmanager`
+  is an alias): the jobs (printing ones with Cancel, then the rest newest
+  first; tap one to open its PDF; Clear Finished Jobs in the app menu) and
+  the printers (the current one checked). It uses two Phoenix additions,
+  `jobs/list {subscribe}` and `jobs/remove`. `@phoenix/luna`'s `print.ts`
+  is the client; `@phoenix/ui`'s `PrintDialog` is the dialog for Phoenix
+  apps (Photos), with the original's steps and words.
+
+Tests: `apps/shared/luna/src/print.test.ts` (the service, the PDF writer),
+`apps/printmanager/src/jobs.test.ts`, `tools/test-browser.cjs` (print:
+the app menu, the dialog, the PDF, the Print Manager). Checked in
+phoenix-sim, phone and tablet: the browser's page as Chromium's PDF and a
+photo from Photos, both opened in PDF View.
 
 ## Screen captures
 

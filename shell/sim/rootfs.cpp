@@ -536,7 +536,16 @@ void RootfsSchemeHandler::proxy(QWebEngineUrlRequestJob *job)
         ? m_network->sendCustomRequest(nr, method, body.toString().toUtf8())
         : m_network->sendCustomRequest(nr, method);
     const bool binary = req.value(QStringLiteral("binary")).toBool();
+    const QString progressId = req.value(QStringLiteral("progress")).toString();
+    if (!progressId.isEmpty()) {
+        m_progress.insert(progressId, { 0, -1 });
+        QObject::connect(reply, &QNetworkReply::downloadProgress, this, [this, progressId](qint64 received, qint64 total) {
+            if (m_progress.contains(progressId))
+                m_progress[progressId] = { received, total };
+        });
+    }
     QPointer<QWebEngineUrlRequestJob> guard(job);
+    QObject::connect(reply, &QNetworkReply::finished, this, [this, progressId]() { m_progress.remove(progressId); });
     QObject::connect(reply, &QNetworkReply::finished, reply, [reply, guard, binary]() {
         reply->deleteLater();
         if (!guard)
@@ -570,11 +579,27 @@ void RootfsSchemeHandler::proxy(QWebEngineUrlRequestJob *job)
     });
 }
 
+void RootfsSchemeHandler::proxyProgress(QWebEngineUrlRequestJob *job)
+{
+    const QString id = QUrlQuery(job->requestUrl()).queryItemValue(QStringLiteral("id"), QUrl::FullyDecoded);
+    QJsonObject out;
+    const auto it = m_progress.constFind(id);
+    if (it != m_progress.constEnd()) {
+        out[QStringLiteral("received")] = double(it->first);
+        out[QStringLiteral("total")] = double(it->second);
+    }
+    replyJson(job, out);
+}
+
 void RootfsSchemeHandler::requestStarted(QWebEngineUrlRequestJob *job)
 {
     const QString devicePath = job->requestUrl().path();
     if (devicePath == QLatin1String("/__phoenix/proxy")) {
         proxy(job);
+        return;
+    }
+    if (devicePath == QLatin1String("/__phoenix/proxy/progress")) {
+        proxyProgress(job);
         return;
     }
     if (devicePath == QLatin1String("/usr/share/phoenix/host.json")) {

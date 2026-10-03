@@ -87,11 +87,18 @@
 //                            cb(null) when no runtime page is up
 //   simulateIncomingCall()   ring the Phone app (phoenix-sim F4)
 //   simulateIncomingSms()    deliver a text to Messaging (phoenix-sim F5)
+//   simulateIncomingMms()    a picture message (Shift+F5)
+//   simulateIncomingIm()     an instant message from a buddy (Ctrl+F5)
 //   openUrl(url)             open a web page in the browser (phoenix-sim --open)
 //   simPty (context property, C++ SimPty): the Terminal's real shells on
 //                            this computer; "pty" host messages go to it and
 //                            its replies back to the window (runtime block
 //                            "Terminal"); null with --no-host-shell
+//   dictation                the shell's Dictation (Shell.dictation; null
+//                            when it cannot record): "dictation" host
+//                            messages ({op: start | stop | cancel, prompt,
+//                            autoStop}) go to it and its states back to the
+//                            window (runtime block "Dictation": Voice Dial)
 //   preferencesReported(prefs)  signal: a page set system preferences
 //                            (com.webos.service.systemservice setPreferences),
 //                            e.g. firstUseComplete when First Use is done
@@ -681,6 +688,9 @@ Item {
             // shell's record of the window, not the page's say-so.
             if (_simPty() && uid !== "")
                 _simPty().request(uid, appId, payload);
+        } else if (type === "dictation") {
+            if (uid !== "")
+                _dictationRequest(uid, payload || {});
         } else if (type === "lunaReply") {
             var cb = _lunaCallbacks[payload.id];
             delete _lunaCallbacks[payload.id];
@@ -1673,7 +1683,20 @@ Item {
     // runtime then posts a "notification" for Messaging. With no web page
     // running, Messaging starts in the background to receive it.
     function simulateIncomingSms() {
-        var js = "window.__phoenixRuntime && __phoenixRuntime.simulateIncomingSms()";
+        _simulateMessage("window.__phoenixRuntime && __phoenixRuntime.simulateIncomingSms()");
+    }
+    // A picture message arrives (phoenix-sim Shift+F5; the runtime's
+    // simulateIncomingMms), the same way.
+    function simulateIncomingMms() {
+        _simulateMessage("window.__phoenixRuntime && __phoenixRuntime.simulateIncomingMms()");
+    }
+    // An instant message from a buddy (phoenix-sim Ctrl+F5): only with an
+    // IM account signed in (Accounts > Jabber (XMPP)); the runtime's
+    // simulateIncomingIm says null otherwise.
+    function simulateIncomingIm() {
+        _simulateMessage("window.__phoenixRuntime && __phoenixRuntime.simulateIncomingIm && __phoenixRuntime.simulateIncomingIm()");
+    }
+    function _simulateMessage(js) {
         var pages = _webPages();
         if (pages.length > 0) {
             pages[0].runScript(js);
@@ -1779,6 +1802,74 @@ Item {
             cards.setProperty(i, "groupId", groupId);
     }
 
+    // ---- Dictation for the apps (org.webosphoenix.dictation) ------------------------
+    // One microphone: the window that started a recording owns it
+    // (Dictation.owner) until it is transcribed, and only it hears the
+    // result; the keyboard's own recordings have owner "".
+
+    property var dictation: null
+
+    function _dictationEvent(uid, ev) {
+        var w = _windows[uid];
+        if (w && w.runScript)
+            w.runScript("window.__phoenixRuntime && __phoenixRuntime.dictationEvent && __phoenixRuntime.dictationEvent("
+                        + JSON.stringify(ev) + ")");
+    }
+
+    function _dictationRequest(uid, p) {
+        var d = dictation;
+        if (!d) {
+            _dictationEvent(uid, { state: "error", errorText: qsTr("Dictation is not available on this device.") });
+            return;
+        }
+        var mine = d.owner === uid;
+        if (p.op === "start") {
+            if ((d.listening || d.busy) && !mine) {
+                _dictationEvent(uid, { state: "error", errorText: qsTr("The microphone is in use.") });
+                return;
+            }
+            if (d.listening || d.busy)
+                d.cancel();
+            d.owner = uid;
+            d.prompt = typeof p.prompt === "string" ? p.prompt.slice(0, 1000) : "";
+            d.autoStop = !!p.autoStop;
+            d.start();
+            if (d.listening)
+                _dictationEvent(uid, { state: "listening" });
+        } else if (p.op === "stop" && mine) {
+            d.stop();
+        } else if (p.op === "cancel" && mine) {
+            d.cancel();
+            _dictationDone();
+        }
+    }
+
+    function _dictationDone() {
+        if (!dictation)
+            return;
+        dictation.owner = "";
+        dictation.prompt = "";
+        dictation.autoStop = false;
+    }
+
+    Connections {
+        target: source.dictation
+        ignoreUnknownSignals: true
+        function onStateChanged() {
+            var d = source.dictation;
+            if (d.owner !== "" && d.busy)
+                source._dictationEvent(d.owner, { state: "transcribing" });
+        }
+        function onTranscribed(text, error) {
+            var d = source.dictation;
+            var uid = d.owner;
+            if (uid === "")
+                return;
+            source._dictationDone();
+            source._dictationEvent(uid, error ? { state: "error", errorText: error } : { state: "done", text: text });
+        }
+    }
+
     // disableKeepAlive: close for good, kept alive or not (the angry card,
     // CardWindowManager::closeWindow -> setDisableKeepAlive; an app removed).
     function close(uid, disableKeepAlive) {
@@ -1788,6 +1879,11 @@ Item {
         var card = { appId: cards.get(i).appId, title: cards.get(i).title, orientation: cards.get(i).orientation };
         var appId = card.appId;
         cards.remove(i);
+        // Its recording stops unheard.
+        if (dictation && dictation.owner === uid) {
+            dictation.cancel();
+            _dictationDone();
+        }
         if (!disableKeepAlive && _windows[uid] && _keepsWindow(uid, appId, appInfo(appId))) {
             // Kept alive: the page goes on running without its card.
             _park(uid, card);

@@ -1,0 +1,16 @@
+{
+    "id": "org.webosphoenix.voicedial",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Voice Dial",
+    "icon": "icon.png",
+    "iconColor": "#5d636a",
+    "uiRevision": 2,
+    "keywords": ["Voice Dial", "Voice", "Dial", "Call", "Speak"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps. Voice Dial was luna-sysmgr's built-in system app com.palm.sysapp.voicedial (sysapps/com.palm.sysapp.voicedial, category Applications), an alias of this one; icon.png is its original icon (PROVENANCE.md).",
+        "launcherTab": 0
+    }
+}

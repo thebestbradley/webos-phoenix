@@ -1,0 +1,28 @@
+/* Copyright (c) 2026 webOS Phoenix contributors. SPDX-License-Identifier: Apache-2.0 */
+
+/* Two lines under a job's name: where it came from, and how it went. */
+.pm-source, .pm-state {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.pm-state.pm-printing { color: #2d6fb5; }
+.pm-state.pm-failed { color: #b3261e; }
+
+.pm-printing {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.pm-cancel.pui-button {
+    min-width: 0;
+    height: 36px;
+    padding: 0 10px;
+    font-size: 15px;
+}
+
+/* The job a notification was about. */
+.pm-shown .pui-row {
+    background-color: rgba(45, 111, 181, 0.12);
+}

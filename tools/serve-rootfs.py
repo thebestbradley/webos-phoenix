@@ -16,6 +16,10 @@ POST /__phoenix/proxy forwards one HTTP request for the simulated services
 that talk to servers (the CardDAV and CalDAV account): the page sends
 {method, url, headers, body} and gets {status, headers, body} back, without
 redirects followed. Browsers would refuse these cross-origin requests.
+With {progress: ID} the transfer's progress can be read meanwhile at
+GET /__phoenix/proxy/progress?id=ID -> {received, total} (total -1 when
+the server did not say; {} once it is over or unknown), which the
+simulated download manager shows (phoenix-sim's proxy does the same).
 
 POST /__phoenix/installer installs or removes an app for the simulated
 com.webos.appInstallService (runtime/phoenix-runtime.js, which unpacks the
@@ -443,6 +447,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send(200, "application/json", json.dumps(info).encode())
         if path in ("/__phoenix/pty", "/__phoenix/pty/shells"):
             return pty_request(self, path)
+        if path == "/__phoenix/proxy/progress":
+            q = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            info = PROXY_PROGRESS.get((q.get("id") or [""])[0], {})
+            return self.send(200, "application/json", json.dumps(info).encode())
         if path == "/usr/share/phoenix/apps.json":
             return self.send(200, "application/json", json.dumps(launch_points()).encode())
         if path == "/apps.json":
@@ -529,10 +537,41 @@ class Handler(http.server.BaseHTTPRequestHandler):
             sys.stderr.write("%s\n" % (fmt % args))
 
 
+# The proxy's transfers that asked for progress: id -> {received, total}.
+PROXY_PROGRESS = {}
+
+
+def read_body(res, progress_id):
+    """The response's body; with a progress id it is read in pieces, noted
+    in PROXY_PROGRESS as they come."""
+    if not progress_id:
+        return res.read()
+    total = int(res.getheader("Content-Length") or -1)
+    parts, received = [], 0
+    PROXY_PROGRESS[progress_id] = {"received": 0, "total": total}
+    while True:
+        chunk = res.read(64 * 1024)
+        if not chunk:
+            break
+        parts.append(chunk)
+        received += len(chunk)
+        PROXY_PROGRESS[progress_id] = {"received": received, "total": total}
+    return b"".join(parts)
+
+
 def proxy(req):
     """One HTTP request for the page: {method, url, headers, body, binary?,
-    follow?} -> {status, headers (lower-case names), body (or bodyBase64 with
-    binary), url} or {error, code}. follow: take up to 5 redirects (GET)."""
+    follow?, progress?} -> {status, headers (lower-case names), body (or
+    bodyBase64 with binary), url} or {error, code}. follow: take up to 5
+    redirects (GET). progress: an id under which the body's progress can be
+    read while it comes (GET /__phoenix/proxy/progress?id=)."""
+    try:
+        return proxy_request(req)
+    finally:
+        PROXY_PROGRESS.pop(req.get("progress") or "", None)
+
+
+def proxy_request(req):
     url_s = req.get("url", "")
     method = req.get("method", "GET")
     body = req.get("body")
@@ -549,7 +588,7 @@ def proxy(req):
             conn.request(method, target, body=body.encode("utf-8") if body is not None else None,
                          headers=req.get("headers") or {})
             res = conn.getresponse()
-            raw = res.read()
+            raw = read_body(res, req.get("progress"))
             headers = {k.lower(): v for k, v in res.getheaders()}
             conn.close()
             if req.get("follow") and res.status in (301, 302, 303, 307, 308) and headers.get("location"):

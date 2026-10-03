@@ -34,7 +34,18 @@ export const shareSheet = {
     },
 };
 
+export interface PickedFile {
+    fullPath: string;
+    mimeType: string;
+    name: string;
+}
+
 export const filePicker = {
+    /** Choose a picture (SF2: pictures only so far), from the pictures Photos has. */
+    async pick(req: { kinds?: "image"[]; title?: string } = {}): Promise<{ files: PickedFile[] } | { canceled: true }> {
+        const r = await call("luna://org.webosphoenix.filepicker/pick", { kinds: req.kinds ?? ["image"], ...(req.title ? { title: req.title } : {}) });
+        return r.canceled ? { canceled: true } : { files: (r.files as PickedFile[]) ?? [] };
+    },
     /** Save to Files: the user picks a folder (the last one used first) and a name. */
     async save(req: SaveRequest): Promise<{ path: string } | { canceled: true }> {
         const r = await call("luna://org.webosphoenix.filepicker/save", req);

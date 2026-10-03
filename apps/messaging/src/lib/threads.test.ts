@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, expect, it } from "vitest";
-import type { Message, Person } from "@phoenix/luna";
-import { chatItems, suggestRecipients, typedRecipient } from "./threads";
+import type { ImBuddy, ImLoginState, Message, Person } from "@phoenix/luna";
+import { buddyFor, buddyRecipient, chatItems, groupBuddies, presenceText, suggestBuddies, suggestRecipients, typedRecipient } from "./threads";
 
 const msg = (id: string, minutes: number, folder: "inbox" | "outbox"): Message => ({
     _id: id, _kind: "com.palm.smsmessage:1", folder, serviceName: "sms", messageText: id,
@@ -44,5 +44,40 @@ describe("recipients", () => {
         expect(typedRecipient("555-0177")).toEqual({ addr: "555-0177" });
         expect(typedRecipient("sam")).toBeNull();
         expect(typedRecipient("12")).toBeNull();
+    });
+});
+
+describe("buddies", () => {
+    const buddy = (username: string, displayName: string, availability: number, status = ""): ImBuddy => ({
+        _kind: "com.palm.imbuddystatus:1", accountId: "acc", serviceName: "type_jabber", username, displayName, availability, status,
+    });
+    const roster = [buddy("theo@chat.example", "Theo Lindqvist", 4), buddy("marcus@chat.example", "Marcus Reyes", 2, "In a meeting"),
+                    buddy("lena@chat.example", "Lena Okafor", 0), buddy("ada@chat.example", "Ada Palmer", 0, "Flashing a Pre 3")];
+    const accounts: ImLoginState[] = [{ _kind: "com.palm.imloginstate:1", accountId: "acc", username: "me@chat.example",
+                                        serviceName: "type_jabber", state: "online", availability: 0 }];
+
+    it("groups them under Available, Busy and Offline, by name", () => {
+        expect(groupBuddies(roster).map((g) => [g.label, g.buddies.map((b) => b.displayName)])).toEqual([
+            ["Available", ["Ada Palmer", "Lena Okafor"]], ["Busy", ["Marcus Reyes"]], ["Offline", ["Theo Lindqvist"]]]);
+    });
+
+    it("says their presence and status, but not an offline one's", () => {
+        expect(presenceText(roster[1])).toBe("Busy: In a meeting");
+        expect(presenceText(roster[2])).toBe("Available");
+        expect(presenceText({ availability: 4, status: "gone fishing" })).toBe("Offline");
+        expect(presenceText(undefined)).toBe("Offline");
+    });
+
+    it("finds a conversation's buddy, and makes a buddy a recipient on their account", () => {
+        expect(buddyFor({ replyService: "type_jabber", replyAddress: "ADA@chat.example" }, roster)?.displayName).toBe("Ada Palmer");
+        expect(buddyFor({ replyService: "sms", replyAddress: "ada@chat.example" }, roster)).toBeUndefined();
+        expect(buddyRecipient(roster[3], accounts)).toMatchObject({ addr: "ada@chat.example", service: "type_jabber",
+                                                                     account: "me@chat.example", label: "Jabber (XMPP)" });
+    });
+
+    it("suggests buddies of signed-in accounts in To:", () => {
+        expect(suggestBuddies(roster, accounts, "le").map((r) => r.name)).toEqual(["Lena Okafor"]);
+        expect(suggestBuddies(roster, accounts, "marcus@").map((r) => r.addr)).toEqual(["marcus@chat.example"]);
+        expect(suggestBuddies(roster, [{ ...accounts[0], state: "offline" }], "le")).toEqual([]);
     });
 });

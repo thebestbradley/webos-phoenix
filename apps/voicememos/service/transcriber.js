@@ -9,7 +9,7 @@
 // ("Voice memos"); the codes are TRANSCRIBE_ERRORS in
 // apps/shared/luna/src/transcriber.ts.
 //
-//   transcribe {path, language?} -> {state: "done", progress: 100, text,
+//   transcribe {path, language?, prompt?} -> {state: "done", progress: 100, text,
 //       segments: [{start, end, text}] (seconds), language, engine}; while
 //       it works, onProgress gets {state: "queued" | "converting" |
 //       "transcribing", progress} (service.js sends them to subscribers)
@@ -19,7 +19,9 @@
 //   1. whisper-cli reads 16 kHz WAV (what Voice Memos records) as it is;
 //      anything else is converted with ffmpeg first. Without ffmpeg, recent
 //      whisper-cli builds still read MP3, Ogg and FLAC themselves.
-//   2. whisper-cli -m MODEL -f WAV -l LANG -oj -of TMP -pp: the result is
+//   2. whisper-cli -m MODEL -f WAV -l LANG -oj -of TMP -pp [--prompt TEXT]
+//      (prompt: words to expect, whisper's initial prompt; Voice Dial
+//      passes the contacts' names): the result is
 //      TMP.json ("transcription": [{offsets: {from, to} (ms), text}]) and
 //      the progress lines ("whisper_print_progress_callback: progress = 40%")
 //      come on stderr.
@@ -217,7 +219,7 @@ function createTranscriber(options) {
             const outBase = path.join(tmp, "result");
             let last = 0;
             const r = await run(spawn, c.whisper, env, ["-m", c.model, "-f", input, "-l", language, "-t", String(c.threads),
-                                                   "-oj", "-of", outBase, "-pp"], (chunk) => {
+                                                   "-oj", "-of", outBase, "-pp"].concat(p.prompt ? ["--prompt", p.prompt] : []), (chunk) => {
                 const pr = parseProgress(chunk);
                 if (pr !== null && pr > last) {
                     last = pr;
@@ -251,6 +253,8 @@ function createTranscriber(options) {
                     throw new TranscribeError(E.BAD_PARAMS, "path must be an absolute path");
                 if (p.language !== undefined && (typeof p.language !== "string" || !/^(auto|[a-z]{2,3})$/.test(p.language)))
                     throw new TranscribeError(E.BAD_PARAMS, "language must be a language code such as \"en\", or \"auto\"");
+                if (p.prompt !== undefined && (typeof p.prompt !== "string" || p.prompt.length > 1000 || p.prompt.includes("\0")))
+                    throw new TranscribeError(E.BAD_PARAMS, "prompt must be text of up to 1000 characters");
                 let st;
                 try { st = await fsp.stat(p.path); } catch (e) { st = null; }
                 if (!st || !st.isFile()) throw new TranscribeError(E.NOT_FOUND, "No such file: " + p.path);

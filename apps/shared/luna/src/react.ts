@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from "react";
 import type { LunaError, Subscription } from "./bridge";
+import { fileUrl } from "./files";
 import { mediaUrl } from "./media";
 
 export interface LunaState<T> {
@@ -55,6 +56,22 @@ export function useLaunchParams<T extends object>(): T {
         return () => document.removeEventListener("webOSRelaunch", onRelaunch);
     }, []);
     return params;
+}
+
+/**
+ * A URL to show any file of the device (see fileUrl(): the file manager's,
+ * which also knows files that are copies of the system's, such as a
+ * message's pictures); undefined until it is known.
+ */
+export function useFileUrl(path: string | undefined): string | undefined {
+    const [url, setUrl] = useState<{ path: string; url: string }>();
+    useEffect(() => {
+        if (!path) return;
+        let live = true;
+        fileUrl(path).then((u) => { if (live) setUrl({ path, url: u }); }, () => {});
+        return () => { live = false; };
+    }, [path]);
+    return url && url.path === path ? url.url : undefined;
 }
 
 /** A URL for a media file path (see mediaUrl()); undefined until it is known. */

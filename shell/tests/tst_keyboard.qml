@@ -891,6 +891,19 @@ Item {
             kb.dictation.transcribeFile("/dev/null");
             tryCompare(kb, "dictationMessage", "Speech recognition is not installed", 3000);
             compare(field.text, "Hello there.");
+            // An app's recording (Voice Dial's) is not typed, nor shown in the bar.
+            kb.dictation.owner = "w7";
+            kb.dictation.command = ["sh", "-c", "echo '{\"returnValue\":true,\"text\":\"call ada\"}'"];
+            var heard = "";
+            var take = function(t) { heard = t; };
+            kb.dictation.transcribed.connect(take);
+            kb.dictation.transcribeFile("/dev/null");
+            verify(!findChild(kb, "candidateBar").transcribing);
+            tryCompare(kb.dictation, "busy", false, 3000);
+            kb.dictation.transcribed.disconnect(take);
+            compare(heard, "call ada");
+            compare(field.text, "Hello there.");
+            kb.dictation.owner = "";
             kb.dictation.command = old;
         }
 

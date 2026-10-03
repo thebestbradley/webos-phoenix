@@ -75,6 +75,7 @@ Item {
             // ([VirtualKeyboard] VirtualKeyboardEnabled).
             virtualKeyboard: true
             dictationCommand: typeof simTranscriberCommand !== "undefined" ? simTranscriberCommand : []
+            dictationInputFiles: typeof simMicrophoneFiles !== "undefined" ? simMicrophoneFiles : []
             bootSound: typeof simBootSounds !== "undefined" && simBootSounds
             bootAnimation: typeof simBootAnimation !== "undefined" && simBootAnimation
             bootUpdating: typeof simUpdating !== "undefined" && simUpdating
@@ -215,9 +216,11 @@ Item {
             windows.pushSystemStatus(status.appStatusFor(name));
     }
 
-    // Simulator only: F4 rings the phone, F5 delivers a text message
-    // (SimWindowSource.simulateIncomingCall / simulateIncomingSms). Shortcuts,
-    // so they work while a web app has keyboard focus.
+    // Simulator only: F4 rings the phone, F5 delivers a text message,
+    // Shift+F5 a picture message and Ctrl+F5 an instant message from a
+    // buddy (SimWindowSource.simulateIncomingCall / simulateIncomingSms /
+    // simulateIncomingMms / simulateIncomingIm). Shortcuts, so they work
+    // while a web app has keyboard focus.
     Shortcut {
         sequence: "F4"
         context: Qt.ApplicationShortcut
@@ -227,6 +230,16 @@ Item {
         sequence: "F5"
         context: Qt.ApplicationShortcut
         onActivated: windows.simulateIncomingSms()
+    }
+    Shortcut {
+        sequence: "Shift+F5"
+        context: Qt.ApplicationShortcut
+        onActivated: windows.simulateIncomingMms()
+    }
+    Shortcut {
+        sequence: "Ctrl+F5"
+        context: Qt.ApplicationShortcut
+        onActivated: windows.simulateIncomingIm()
     }
     // F6: the battery runs low (5% and under: luna-systemui's Low Battery
     // alert, battery_low.mp3). F7: plug a wall charger in or out ("Charging

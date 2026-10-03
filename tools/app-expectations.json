@@ -164,6 +164,14 @@
         "status": "works",
         "note": "Phoenix Agenda (React, apps/agenda), the dock mode exhibition of the calendar's coming days (com.palm.app.agendaview's place); not in the launcher. tools/test-exhibition.cjs drives it"
     },
+    "org.webosphoenix.printmanager": {
+        "status": "works",
+        "note": "Phoenix Print Manager (React, apps/printmanager; com.palm.app.printmanager): the jobs and printers of com.palm.printmgr, whose only printer in the simulator is Save as PDF; tools/test-browser.cjs prints to it"
+    },
+    "org.webosphoenix.voicedial": {
+        "status": "works",
+        "note": "Phoenix Voice Dial (React, apps/voicedial; com.palm.sysapp.voicedial): listens through the shell's dictation (org.webosphoenix.dictation); in a browser without the shell it says it needs the microphone. tools/test-voicedial.cjs drives it"
+    },
     "com.palm.systemui": {
         "status": "works",
         "note": "luna-systemui as the shell's headless page: alerts, dashboards and banners (its services now see com.palm.bus registerServerStatus answer). Tested with the mail account signed out, so it opens its Accounts: Action Needed dashboard",

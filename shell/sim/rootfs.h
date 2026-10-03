@@ -165,11 +165,16 @@ private:
     // accounts, backups to WebDAV, the Marketplace), which servers' CORS
     // rules would refuse from a page; answers {status, headers, url, body |
     // bodyBase64} or {error, code}, as tools/serve-rootfs.py's POST
-    // /__phoenix/proxy does.
+    // /__phoenix/proxy does. With progress: ID, GET
+    // /__phoenix/proxy/progress?id=ID answers {received, total} (total -1
+    // when the server did not say) while the body comes, {} after: the
+    // simulated download manager's progress.
     void proxy(QWebEngineUrlRequestJob *job);
+    void proxyProgress(QWebEngineUrlRequestJob *job);
 
     const Rootfs *m_rootfs;
     QNetworkAccessManager *m_network = nullptr;
     PictureMaker *m_snapshots = nullptr;
+    QHash<QString, QPair<qint64, qint64>> m_progress;   // progress id -> received, total
 };
 #endif
