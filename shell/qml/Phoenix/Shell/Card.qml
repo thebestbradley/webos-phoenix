@@ -166,6 +166,16 @@ Item {
             }
         }
 
+        // Darkened when it has lost focus (CardWindow.cpp:211-213), inside
+        // the corners, as the shader multiplied the colour by the dimming.
+        Rectangle {
+            anchors.fill: parent
+            z: 2
+            color: "black"
+            opacity: card.dimmed ? 1 - Theme.cardDimming : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.cardDimmingDuration; easing.type: Easing.OutCubic } }
+        }
+
         layer.enabled: card.rounded && GraphicsInfo.api !== GraphicsInfo.Software
         layer.smooth: true
         layer.effect: OpacityMask {
@@ -173,22 +183,15 @@ Item {
         }
     }
 
-    // Rounded-corner mask; rendered only as a texture for the effect above.
-    Rectangle {
+    // The corners (CardCornerMask: the devices' corner shader); rendered
+    // only as a texture for the effect above.
+    CardCornerMask {
         id: cornerMask
+        objectName: "cardCornerMask"
         anchors.fill: parent
         visible: false
         layer.enabled: true
-        // Fixed radius in window coordinates (CardWindow.cpp:2515-2529).
-        radius: Theme.cardCornerRadius
-    }
-
-    Rectangle {
-        anchors.fill: parent
-        radius: card.rounded ? Theme.cardCornerRadius : 0
-        color: "black"
-        opacity: card.dimmed ? 1 - Theme.cardDimming : 0
-        Behavior on opacity { NumberAnimation { duration: Theme.cardDimmingDuration; easing.type: Easing.OutCubic } }
+        fullSize: card.cardScale >= 0.999
     }
 
     onWindowChanged: attachWindow()

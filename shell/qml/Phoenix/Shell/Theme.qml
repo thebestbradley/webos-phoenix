@@ -236,7 +236,6 @@ QtObject {
     readonly property int launchFeedbackTimeout: 3000
     readonly property int tapAndHoldInterval: 700                             // WebosTapAndHoldGestureRecognizer.cpp:52
     // Radius in window (buffer) coordinates, i.e. before the card is scaled.
-    readonly property int cardCornerRadius: px(40)                   // CardWindow.cpp:2515-2529
     readonly property int cardShadowOutset: px(20)                   // CardDropShadowEffect.cpp:34-35
     readonly property int cardShadowOffsetY: px(5)                   // CardDropShadowEffect.cpp:44
     // The card that just lost focus dims to this brightness.

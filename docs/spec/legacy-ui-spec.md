@@ -176,7 +176,7 @@ scale = activeScale                                                  // :723
 
 | property | value | source |
 |---|---|---|
-| rounded-corner radius | **40 px** in buffer coordinates (GL shader) | `Src/lunaui/cards/CardWindow.cpp:2515-2529` |
+| rounded-corner radius | **40 px** passed to the GL shader, which for a radius of 45 or less uses fixed factors: quarter ellipses 0.009 W × 0.022 H (0.027 H wider than tall), feathered 30 % while scaled, 1 % at full size (`CardRoundedCornerShaderStage.h:64-127`); the software path is a 25 px circle (`m_paintPath`) | `Src/lunaui/cards/CardWindow.cpp:2515-2529` |
 | corner radius vs scale | above scale 0.5 the radius factor is interpolated toward square, with the factor clamped at 0.48 | `Src/lunaui/cards/CardRoundedCornerShaderStage.h:112-116` |
 | drop shadow | 9-tile `card-shadow-tile.png` (87x87), extends **20 px** on every side, offset **+5 px** down | `Src/base/visual/CardDropShadowEffect.cpp:34-35,44,75-81` |
 | shadows off | while the launcher is fully visible ("low-res mode") and on the card being reordered | `CardWindowManager.cpp:3053-3067, 1893` |

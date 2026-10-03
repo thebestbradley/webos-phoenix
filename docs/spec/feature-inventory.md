@@ -18,7 +18,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Tap a card to maximize it; tap a partly hidden card to scroll the fan instead. `CardWindowManager.cpp:2151-2195`; `CardGroup.cpp:402-470`
 - [x] Tap left or right of the stack, or tap-and-hold off a card, to switch stacks. `CardWindowManager.cpp:1648-1661,2176-2188`
 - [x] Tap-and-hold to reorder cards within a stack and move them between stacks (20% edge zones). `CardWindowManager.cpp:1835-2101`
-- [x] Rounded card corners (shader) and drop shadow. `CardWindow.cpp:2485-2533`; `Src/base/visual/CardDropShadowEffect.cpp`
+- [x] Rounded card corners (shader) and drop shadow. `CardWindow.cpp:2485-2533`; `Src/base/visual/CardDropShadowEffect.cpp` *Phoenix: the devices' shader corners (CardCornerMask.qml).*
 - [x] Dimming of cards that aren't active (0.8). `CardWindow.cpp:245-255`
 - [x] Loading card: splash icon, pulsing glow and splash background while an app launches. `Src/lunaui/cards/CardLoading.cpp` *Phoenix: CardLoading.qml: the app's splashicon fitted to SplashIconSize (else its launcher icon at 1.5×), the pulsing glow, and its appinfo.json splashBackground tiled from the top left (else loading-bg.png). Not the per-window splashbackgroundname a window can name when it opens.*
 - [ ] In-app scene push/pop zoom transition. `Src/lunaui/cards/CardTransition.cpp`
