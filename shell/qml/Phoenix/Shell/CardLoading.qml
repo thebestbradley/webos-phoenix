@@ -21,6 +21,8 @@ Item {
     // Its bigger icon (appinfo.json "splashicon"), drawn in its place when
     // the icon would be magnified (Theme.appIcon).
     property url largeIcon: ""
+    // Window pixels per point (AppIcon.pixelRatio).
+    property real pixelRatio: Screen.devicePixelRatio
 
     // Shown at once; cross-fades away (CardLoading::finish).
     visible: opacity > 0
@@ -75,10 +77,13 @@ Item {
         // The launcher icon, half as big again, no larger than the splash size.
         readonly property size iconSize: loading.icon != "" ? HiDpi.imageSize(loading.icon) : Qt.size(0, 0)
         readonly property real side: Math.min(Math.max(iconSize.width, iconSize.height) * 1.5, Theme.splashIconSize)
-        readonly property url best: loading.icon != "" ? Theme.appIcon(loading.icon, Theme.px(side), loading.largeIcon) : ""
+        // In the window's pixels (AppIcon.pixelRatio): two per point on a
+        // Retina Mac.
+        readonly property int pixels: Math.ceil(Theme.px(side) * loading.pixelRatio)
+        readonly property url best: loading.icon != "" ? Theme.appIcon(loading.icon, pixels, loading.largeIcon) : ""
         source: best
         // A bigger icon is decoded at the drawn size, smoothly scaled down.
-        sourceSize: best != loading.icon ? Qt.size(Theme.px(side), Theme.px(side)) : Qt.size(-1, -1)
+        sourceSize: best != loading.icon ? Qt.size(pixels, pixels) : Qt.size(-1, -1)
         width: Theme.px(side)
         height: Theme.px(side)
         fillMode: Image.PreserveAspectFit

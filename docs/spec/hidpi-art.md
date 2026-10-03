@@ -153,7 +153,13 @@ OSE `largeIcon`, `largeIcon` in the app list) and files beside the icon named
 `icon-<N>x<N>.png`, `icon-<N>.png` or `icon@<k>x.png`. `AppIcon` and the
 loading card use it, and decode any file bigger than the drawn size at that
 size (`sourceSize`), so it is scaled down smoothly rather than shrunk by the
-scene graph. At 1.0 the launcher and dock draw `icon.png` as before;
+scene graph. The drawn size is in the window's pixels: the item's size times
+its `pixelRatio` (`Screen.devicePixelRatio`). On a Retina Mac Qt draws
+phoenix-sim's window at 2 pixels per point with u 1, so the 64 point launcher
+icon covers 128 pixels and comes from the 128 or 256 px file; Qt's own `@2x`
+lookup does not find an app's `icon-256x256.png`, and Qt takes a PNG's
+`sourceSize` as the file's pixels, not points. At 1.0 the launcher and dock
+draw `icon.png` as before;
 notifications (22 px), dashboards (32 px) and the drag proxy decode it at their
 size; the loading card, which draws the icon half as big again, scales the
 256 px icon down instead of the 64 px one up. At 2.0 the launcher draws the

@@ -26,6 +26,9 @@ Item {
     // on it (icongeometrysettings.cpp:193-195 give the icon and the
     // feedback the same offset), from the tap until its app is up.
     property bool feedback: false
+    // Window pixels per point: 2 on a Retina Mac, where Qt draws the
+    // window at twice the size; 1 on a device (the shell scales by Theme.u).
+    property real pixelRatio: Screen.devicePixelRatio
 
     signal clicked
 
@@ -55,11 +58,15 @@ Item {
             // size (that bigger one, or the 64 px icon in a 22 px
             // notification) is decoded at the drawn size, smoothly scaled
             // down, rather than shrunk by the scene graph, which aliases.
-            readonly property url best: icon.source != "" ? Theme.appIcon(icon.source, icon.size, icon.largeSource) : ""
+            // The drawn size is in the window's pixels (pixelRatio): a
+            // 64 px icon covers 128 on a Retina Mac. Qt takes a PNG's
+            // sourceSize as the file's own pixels, not points.
+            readonly property int pixels: Math.ceil(icon.size * icon.pixelRatio)
+            readonly property url best: icon.source != "" ? Theme.appIcon(icon.source, pixels, icon.largeSource) : ""
             readonly property size fileSize: best != "" ? HiDpi.imageSize(best) : Qt.size(-1, -1)
-            readonly property bool larger: Math.max(fileSize.width, fileSize.height) > icon.size
+            readonly property bool larger: Math.max(fileSize.width, fileSize.height) > pixels
             source: best
-            sourceSize: larger ? Qt.size(icon.size, icon.size) : Qt.size(-1, -1)
+            sourceSize: larger ? Qt.size(pixels, pixels) : Qt.size(-1, -1)
             smooth: true
         }
 

@@ -260,6 +260,36 @@ Item {
             compare(img.width, 128);
         }
 
+        // A Retina Mac: Qt draws the window at 2 pixels per point with u
+        // still 1. The 64 point icon covers 128 of the window's pixels, so
+        // it comes from the 256 px file decoded at 128, not the 64 px one
+        // magnified (soft).
+        function test_appIconOnARetinaWindow() {
+            var img = findChild(appIcon, "iconImage");
+            Theme.u = 1;
+            appIcon.pixelRatio = 2;
+            compare(appIcon.size, 64);
+            compare(root.fileName(img.source), "icon-256x256.png");
+            tryCompare(img, "status", Image.Ready);
+            compare(img.sourceSize.width, 128);
+            compare(img.width, 64);
+            appIcon.pixelRatio = 1;
+            compare(String(img.source), String(root.calculator));
+        }
+
+        function test_loadingCardOnARetinaWindow() {
+            var img = null;
+            for (var i = 0; i < loading.children.length; ++i)
+                if (loading.children[i].hasOwnProperty("side"))
+                    img = loading.children[i];
+            Theme.u = 1;
+            loading.pixelRatio = 2;
+            compare(img.width, 96);
+            compare(img.sourceSize.width, 192);
+            compare(root.fileName(img.source), "icon-256x256.png");
+            loading.pixelRatio = 1;
+        }
+
         function test_appIconDecodesABiggerFileAtTheDrawnSize() {
             // A notification's 22 px icon from the 64 px file: decoded at
             // 22 px, not shrunk by the scene graph.
