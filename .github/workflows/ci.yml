@@ -150,6 +150,7 @@ jobs:
           node tools/test-backup.cjs --tablet --out app-tests/backup-tablet
           node tools/test-marketplace.cjs --out app-tests/marketplace-phone
           node tools/test-marketplace.cjs --tablet --out app-tests/marketplace-tablet
+          node tools/test-appmanager.cjs
           node tools/test-updates.cjs --out app-tests/updates-phone
           node tools/test-updates.cjs --tablet --out app-tests/updates-tablet
           node tools/test-phone-messaging.cjs --out app-tests/phone-messaging-phone
