@@ -72,11 +72,11 @@ Item {
         view.forceActiveFocus();
     }
 
-    // Run a snippet in the page (the shell talking to the runtime); done,
-    // if given, is called with its result once it has run.
+    // Run a snippet in the page (the shell talking to the runtime).
+    // done(result), if given, gets what the script's last expression was.
     function runScript(js, done) {
         if (done)
-            view.runJavaScript(js, function (result) { done(result); });
+            view.runJavaScript(js, done);
         else
             view.runJavaScript(js);
     }

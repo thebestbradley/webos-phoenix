@@ -178,6 +178,98 @@ export const telephony = {
     },
 };
 
+// ---- The phone preferences ------------------------------------------------------
+//
+// The legacy telephony service's supplementary services and network modes,
+// as webOS's phone preferences called them (com.palm.app.phone
+// shared/phoneprefs/controls/CallsPref.js, NetworkPref.js,
+// VoicemailNumberPref.js), and com.palm.wan for mobile data. The simulator
+// implements them (runtime/phoenix-runtime.js, "Phone and Messaging
+// services"). The supplementary services fail with errorCode 102 without
+// the network (airplane mode).
+
+/** Unconditional call forwarding (forwardQuery's default-bearer status). */
+export interface CallForwarding {
+    activated: boolean;
+    number: string;
+}
+
+/** roamModeSet's modes: "carrieronly" keeps voice calls on the carrier's own network. */
+export type VoiceRoaming = "automatic" | "carrieronly";
+/** ratSet's modes: 2G, 3G or automatic. */
+export type NetworkType = "automatic" | "umts" | "gsm";
+
+/** No network to ask (CallsPref.js showFDNError). */
+export const TELEPHONY_NO_NETWORK = 102;
+
+export const phonePrefs = {
+    /** forwardQuery {condition: "unconditional", bearer, subscribe} */
+    watchForwarding(cb: (f: CallForwarding) => void, onError?: OnError): Subscription {
+        return subscribe(`${TEL}/forwardQuery`, { condition: "unconditional", bearer: "defaultbearer" }, (r) => {
+            const status = (extended<{ status?: { bearer?: string; activated?: boolean; number?: string }[] }>(r).status ?? [])
+                .find((s) => s.bearer === "voice" || s.bearer === "default" || s.bearer === "defaultbearer");
+            cb({ activated: !!status?.activated, number: status?.number ?? "" });
+        }, onError);
+    },
+    /** forwardRegister: forward every call to `number`; "" stops forwarding. */
+    setForwarding(number: string) {
+        return call(`${TEL}/forwardRegister`, { number, condition: "unconditional", bearer: "defaultbearer", time: "0" });
+    },
+    /** clirQuery: whether the other party sees this phone's number. */
+    async callerIdShown(): Promise<boolean> {
+        return !extended<{ restricted?: boolean }>(await call(`${TEL}/clirQuery`, {})).restricted;
+    },
+    setCallerIdShown(shown: boolean) {
+        return call(`${TEL}/clirSet`, { restrict: !shown });
+    },
+    async callWaiting(): Promise<boolean> {
+        return !!extended<{ enabled?: boolean }>(await call(`${TEL}/callWaitingQuery`, { bearer: "defaultbearer" })).enabled;
+    },
+    setCallWaiting(enable: boolean) {
+        return call(`${TEL}/callWaitingSet`, { bearer: "defaultbearer", enable });
+    },
+    watchVoicemailNumber(cb: (number: string) => void, onError?: OnError): Subscription {
+        return subscribe(`${TEL}/voicemailNumberQuery`, {}, (r) => cb(extended<{ number?: string }>(r).number ?? ""), onError);
+    },
+    setVoicemailNumber(number: string) {
+        return call(`${TEL}/voicemailNumberSet`, { number });
+    },
+    async voiceRoaming(): Promise<VoiceRoaming> {
+        return extended<{ mode?: VoiceRoaming }>(await call(`${TEL}/roamModeQuery`, {})).mode ?? "automatic";
+    },
+    setVoiceRoaming(mode: VoiceRoaming) {
+        return call(`${TEL}/roamModeSet`, { mode });
+    },
+    async networkType(): Promise<NetworkType> {
+        return extended<{ mode?: NetworkType }>(await call(`${TEL}/ratQuery`, {})).mode ?? "automatic";
+    },
+    setNetworkType(mode: NetworkType) {
+        return call(`${TEL}/ratSet`, { mode });
+    },
+};
+
+/** com.palm.wan getstatus: Data Usage (disablewan "off": on) and Data Roaming (roamguard "disable": allowed). */
+export interface MobileData {
+    enabled: boolean;
+    roaming: boolean;
+    connected: boolean;
+}
+
+export const mobileData = {
+    watch(cb: (d: MobileData) => void, onError?: OnError): Subscription {
+        return subscribe("luna://com.palm.wan/getstatus", {}, (r) => {
+            const w = r as unknown as { disablewan?: string; roamguard?: string; state?: string };
+            cb({ enabled: w.disablewan !== "on", roaming: w.roamguard === "disable" || w.roamguard === "neverblock", connected: w.state === "connected" });
+        }, onError);
+    },
+    setEnabled(on: boolean) {
+        return call("luna://com.palm.wan/set", { disablewan: on ? "off" : "on" });
+    },
+    setRoaming(allowed: boolean) {
+        return call("luna://com.palm.wan/set", { roamguard: allowed ? "disable" : "enable" });
+    },
+};
+
 /** Calls that are still up or ringing. */
 export function liveCalls(calls: readonly Call[]): Call[] {
     return calls.filter((c) => c.state !== "disconnected");

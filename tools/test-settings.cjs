@@ -80,6 +80,10 @@ async function main() {
             await page.waitForTimeout(300);
         };
         const shot = (name) => page.screenshot({ path: path.join(outDir, name + ".png"), fullPage: true });
+        // Call a simulated service in the page, as an app would.
+        const svc = (uri, params) => page.evaluate(([u, p]) => new Promise((resolve) => {
+            __phoenixRuntime.dispatch(u, p, resolve, { cancelled: () => false, onCancel: null });
+        }), [uri, params]);
 
         // ---- Wi-Fi ------------------------------------------------------------
         await open("wifi");
@@ -245,6 +249,18 @@ async function main() {
         await page.locator("[role='option']", { hasText: /^\s*Phone\s*$/ }).click();
         await page.waitForFunction(() => /Phone/.test(document.querySelector("[data-testid='ringtone']")?.textContent || ""));
         check(last().ringtone === "/usr/palm/sounds/phone.wav", "the new ringtone reaches the shell");
+        // The alert and notification tones: Open webOS's by default, any
+        // ringtone too.
+        check(/Alert/.test(await page.textContent("[data-testid='alerttone']"))
+              && /Notification/.test(await page.textContent("[data-testid='notificationtone']")), "alert.wav and notification.wav by default");
+        await page.click("[data-testid='notificationtone']");
+        await page.locator("[role='option']", { hasText: /^\s*Ringtone\s*$/ }).click();
+        await page.waitForFunction(() => /Ringtone/.test(document.querySelector("[data-testid='notificationtone']")?.textContent || ""));
+        check(last().notificationtone === "/usr/palm/sounds/ringtone.mp3", "the new notification tone reaches the shell");
+        await page.click("[data-testid='alerttone']");
+        await page.locator("[role='option']", { hasText: /^\s*Notification\s*$/ }).click();
+        await page.waitForFunction(() => /Notification/.test(document.querySelector("[data-testid='alerttone']")?.textContent || ""));
+        check(last().alerttone === "/usr/palm/sounds/notification.wav", "the new alert tone reaches the shell");
         await page.click("[data-testid='keyboard-clicks']");
         await page.waitForSelector("[data-testid='keyboard-clicks'][aria-checked='false']");
         check(last().tapSounds === false, "Keyboard clicks off reaches the shell");
@@ -289,6 +305,19 @@ async function main() {
         await page.click("role=option[name='Desktop style (Alt, Super)']");
         await page.waitForTimeout(200);
         check(last().keyboardShortcuts === "desktop", `desktop-style shortcuts reach the shell (${last().keyboardShortcuts})`);
+        // Shortcuts: one added reaches the keyboard; a bad one is refused.
+        await page.click("[data-testid='ta-shortcut-add']");
+        await page.fill("[data-testid='ta-shortcut-field']", "on my");
+        await page.fill("[data-testid='ta-shortcut-text']", "x");
+        await page.click("[data-testid='ta-shortcut-save']");
+        check(/letters only/.test(await page.textContent("[data-testid='ta-shortcut-error']")), "a shortcut with a space is refused");
+        await page.fill("[data-testid='ta-shortcut-field']", "omw");
+        await page.fill("[data-testid='ta-shortcut-text']", "On my way");
+        await shot("textassist-shortcut");
+        await page.click("[data-testid='ta-shortcut-save']");
+        await page.waitForSelector("[data-testid='ta-shortcut-omw']");
+        check(last().textAssist.shortcuts && last().textAssist.shortcuts.omw === "On my way" && last().textAssist.shortcutsOn === true,
+              `a new shortcut reaches the keyboard (${JSON.stringify(last().textAssist.shortcuts)})`);
         await shot("textassist");
 
         // ---- Accessibility > Keyboard: the hardware keyboard's options reach the shell ----
@@ -310,12 +339,39 @@ async function main() {
         await page.waitForTimeout(200);
         check(last().keyboardAccess.customRepeat === false, "back to the keyboard's own repeat");
         await shot("accessibility-keyboard");
+        // ---- Just Type: com.palm.universalsearch, what Just Type reads ------------------
+        const usList = () => svc("luna://com.palm.universalsearch/getUniversalSearchList", {});
+        await open("justtype");
+        await page.waitForSelector("[data-testid='jt-engine-amazon']");
+        check((await usList()).UniversalSearchList.map((e) => e.id).join() === "google,wikipedia,amazon,imdb,cnn", "the engines as UniversalSearchList.json lists them");
+        await page.click("[data-testid='jt-engine-amazon']");
+        await page.waitForSelector("[data-testid='jt-engine-amazon'][aria-checked='true']");
+        check((await usList()).UniversalSearchList.find((e) => e.id === "amazon").enabled === true, "Amazon turned on for Just Type");
+        // Drag Amazon to the top by its grip.
+        const grip = await page.locator("[data-testid='grip-amazon']").boundingBox();
+        const top = await page.locator("[data-testid='grip-google']").boundingBox();
+        await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(grip.x + grip.width / 2, top.y + 4, { steps: 8 });
+        await page.mouse.up();
+        for (let i = 0; i < 30 && (await usList()).UniversalSearchList[0].id !== "amazon"; ++i) await page.waitForTimeout(100);
+        check((await usList()).UniversalSearchList.map((e) => e.id).join() === "amazon,google,wikipedia,imdb,cnn", "dragged to the top, Amazon is first in Just Type's list");
+        await page.click("[data-testid='jt-default-engine']");
+        await page.click("role=option[name='Wikipedia']");
+        for (let i = 0; i < 30 && (await usList()).defaultSearchEngine !== "wikipedia"; ++i) await page.waitForTimeout(100);
+        check((await usList()).defaultSearchEngine === "wikipedia", "Wikipedia is Just Type's default search");
+        await page.waitForTimeout(300);
+        await shot("justtype");
+        // Just Type's Preferences item opens this pane.
+        const hostMsgs = [];
+        page.on("console", (m) => { const t = m.text(); if (t.startsWith("__phoenix__")) hostMsgs.push(JSON.parse(t.slice(11))); });
+        await svc("luna://com.palm.applicationManager/launch", { id: "com.palm.app.searchpreferences" });
+        await page.waitForTimeout(200);
+        check(hostMsgs.some((m) => m.type === "launch" && m.payload.id === "org.webosphoenix.settings" && m.payload.params.page === "justtype"),
+              "com.palm.app.searchpreferences opens Settings > Just Type");
 
         // ---- Device Info: the phone, and the legacy reset options ----------------------
         // Erase Apps & Data keeps the files on the USB drive; Full Erase does not.
-        const svc = (uri, params) => page.evaluate(([u, p]) => new Promise((resolve) => {
-            __phoenixRuntime.dispatch(u, p, resolve, { cancelled: () => false, onCancel: null });
-        }), [uri, params]);
         const KEEP = "/media/internal/Documents/keep.txt";
         const PHOTO = "/media/internal/Pictures/kept.png";
         const plant = async () => {
@@ -468,6 +524,69 @@ async function main() {
         await page.click("[data-testid='vpn-delete-confirm']");
         await page.waitForSelector("[data-testid='vpn-lab']", { state: "detached" });
         check(!vpnStatus().some((v) => v.name === "lab"), "a deleted profile leaves the system menu too");
+
+        // ---- Certificate Manager: com.palm.certificatemanager -------------------------
+        // The system's CAs; the demo CA added from the device's storage with
+        // the picker, its details, distrusted, then deleted.
+        await open("certificates");
+        await page.waitForSelector("[data-testid='cert-isrg-root-x1']");
+        check(await page.locator("[data-testid^='cert-'][role='button']").count() >= 7, "the system's root certificates are listed");
+        await shot("certificates");
+        await page.click("[data-testid='cert-add']");
+        await page.waitForSelector("[data-testid='cert-file-phoenix-lab-root-ca.crt']");
+        await shot("certificates-picker");
+        await page.click("[data-testid='cert-file-phoenix-lab-root-ca.crt']");
+        await page.waitForSelector("[data-testid='cert-notice']");
+        const labRow = page.locator("[data-testid^='cert-user-']");
+        check(/Phoenix Lab Root CA/.test(await labRow.first().textContent()), "the picked certificate is installed");
+        const store = await svc("luna://com.palm.certificatemanager/listcertificates", {});
+        check(store.userCertificateStore.length === 1 && store.userCertificateStore[0].commonname === "Phoenix Lab Root CA",
+              "Wi-Fi's view (userCertificateStore) has it");
+        await labRow.first().click();
+        await page.waitForSelector("[data-testid='cert-sha256']");
+        check((await page.textContent("[data-testid='cert-sha256']")).startsWith("06:1E:77:61"), "its SHA-256 fingerprint is shown");
+        await shot("certificates-details");
+        await page.click("[data-testid='cert-trusted']");
+        await page.waitForSelector("[data-testid='cert-trusted'][aria-checked='false']");
+        const userCerts = async () => (await svc("luna://com.palm.certificatemanager/listcertificates", {})).userCertificateStore;
+        for (let i = 0; i < 30 && (await userCerts())[0].trusted !== false; ++i) await page.waitForTimeout(100);
+        check((await userCerts())[0].trusted === false, "distrusted");
+        await page.click("[data-testid='cert-delete']");
+        await page.click("[data-testid='cert-delete-confirm']");
+        await page.waitForSelector("[data-testid='cert-add']");
+        for (let i = 0; i < 30 && (await userCerts()).length; ++i) await page.waitForTimeout(100);
+        check((await userCerts()).length === 0, "deleted");
+
+        // ---- Phone Preferences: call forwarding, data and roaming ----------------------
+        await open("phone");
+        await page.waitForSelector("[data-testid='phone-forward']");
+        check(last().callForwarding !== true, "no call forwarding at first");
+        await page.click("[data-testid='phone-forward']");
+        await page.fill("[data-testid='phone-forward-number']", "(408) 555-0177");
+        await page.click("[data-testid='phone-forward-save']");
+        for (let i = 0; i < 30 && last().callForwarding !== true; ++i) await page.waitForTimeout(100);
+        check(last().callForwarding === true, "call forwarding on reaches the shell (its status bar icon)");
+        check(await page.evaluate(() => __phoenixRuntime.simulateIncomingCall({})) === 0, "a call that comes in is forwarded, not rung");
+        await page.click("[data-testid='phone-data']");
+        await page.waitForSelector("[data-testid='phone-data'][aria-checked='false']");
+        check((await svc("luna://com.palm.wan/getstatus", {})).disablewan === "on", "Data Usage off: com.palm.wan disablewan on");
+        await page.click("[data-testid='phone-data']");
+        await page.click("[data-testid='phone-roaming']");
+        await page.click("role=option[name='Enabled']");
+        for (let i = 0; i < 30 && (await svc("luna://com.palm.wan/getstatus", {})).roamguard !== "disable"; ++i) await page.waitForTimeout(100);
+        check((await svc("luna://com.palm.wan/getstatus", {})).roamguard === "disable", "Data Roaming enabled: roamguard disable");
+        await page.waitForTimeout(200);
+        await shot("phone");
+        await page.click("[data-testid='phone-forward']");
+        for (let i = 0; i < 30 && last().callForwarding !== false; ++i) await page.waitForTimeout(100);
+        check(last().callForwarding === false, "call forwarding off reaches the shell");
+        // Airplane mode: the network's settings cannot be read.
+        await svc("luna://com.webos.service.connectionmanager/setstate", { offlineMode: "enabled" });
+        await open("phone");
+        await page.waitForSelector("[data-testid='phone-forward-status']");
+        check(/network connection/.test(await page.textContent("[data-testid='phone-forward-status']")), "airplane mode: call forwarding needs the network");
+        await shot("phone-airplane");
+        await svc("luna://com.webos.service.connectionmanager/setstate", { offlineMode: "disabled" });
 
         // ---- Every other pane renders --------------------------------------------------
         for (const p of ["datetime", "language", "deviceinfo", "updates"]) {

@@ -25,3 +25,5 @@ export * from "./backup";
 export * from "./updates";
 export * from "./marketplace";
 export * from "./share";
+export * from "./search";
+export * from "./certificates";

@@ -741,6 +741,39 @@ Item {
             compare(field.text.toLowerCase(), "teh don't ");
         }
 
+        // Settings > Text Assist > Shortcuts (x_palm_textinput): the space bar
+        // puts in what a shortcut stands for, with auto-correct off too;
+        // backspace puts the shortcut back; the switch turns them off.
+        function test_textAssistShortcuts() {
+            var before = sys.textAssist;
+            sys.textAssist = { suggestions: true, autoCorrect: false, swipe: true, spaces2period: true, forgetWords: 0,
+                               shortcuts: { omw: "On my way", brb: "be right back" }, shortcutsOn: true };
+            showKeyboard();
+            type(["o", "m", "w"]);
+            compare(kb.candidates[0].kind, "typed");
+            compare(kb.candidates[1].kind, "correction");
+            compare(kb.candidates[1].text, "On my way");
+            tapKey("Space");
+            compare(field.text, "On my way ");
+            tapKey("Backspace");
+            compare(field.text.toLowerCase(), "omw");
+            tapKey("Space");
+            compare(field.text.toLowerCase(), "omw ");
+            // Capitalized as typed.
+            tapKey("Shift");
+            type(["b", "r", "b", "Space"]);
+            compare(field.text.toLowerCase().slice(0, 4), "omw ");
+            compare(field.text.slice(4), "Be right back ");
+            // Off: left as typed.
+            sys.textAssist = { suggestions: true, autoCorrect: false, swipe: true, spaces2period: true, forgetWords: 0,
+                               shortcuts: { omw: "On my way" }, shortcutsOn: false };
+            type(["o", "m", "w"]);
+            verify(!kb.candidates.some(function (c) { return c.text === "On my way"; }), JSON.stringify(kb.candidates));
+            tapKey("Space");
+            verify(/omw $/.test(field.text), field.text);
+            sys.textAssist = before;
+        }
+
         function test_textAssistLearnsTheNextWord() {
             kb.textAssistData = "";
             showKeyboard();

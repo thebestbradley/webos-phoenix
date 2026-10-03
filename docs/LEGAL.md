@@ -334,6 +334,17 @@ data use "Phoenix Account".
   the rest of `shell/assets/openwebos/statusBar`; its @2x and @3x copies are
   upscaled by `tools/hidpi-art.py`.
 
+## Certificate Manager
+
+- `runtime/certs/*.pem` are six public root CA certificates (ISRG Root X1
+  and X2, DigiCert Global Root G2, GTS Root R1, Amazon Root CA 1, USERTrust
+  RSA Certification Authority) as their authorities publish them and as the
+  Mozilla CA list (Debian's `ca-certificates`) ships them: public keys and
+  names, the simulator's stand-in for a device's system store.
+- `apps/media-samples/media/documents/phoenix-lab-root-ca.crt` is a
+  fictional CA made for Phoenix with openssl (its key was thrown away),
+  CC0 like the other demo documents.
+
 ## Map data (OpenStreetMap)
 
 Maps shows, searches and routes on **OpenStreetMap** data, © OpenStreetMap

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Just Type: a magnifying glass standing on its handle, a typed line seen through the lens. Original Phoenix art. -->
+<defs>
+  <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4b5056"/><stop offset="1" stop-color="#16181b"/></linearGradient>
+  <path id="s2" d="M150 120L186 168C189 172 187 176 182 177L174 178C170 178 167 176 165 173L132 130Z"/>
+  <radialGradient id="g3" cx="0.4" cy="0.35" r="0.75"><stop offset="0" stop-color="#ffffff"/><stop offset="0.7" stop-color="#dfeefb"/><stop offset="1" stop-color="#b4cfe6"/></radialGradient>
+  <linearGradient id="g4" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.85"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.1"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+</defs>
+<g>
+<use href="#s2" y="-4" fill="#80868c" stroke="#0b0c0e" stroke-width="2.5"/>
+<use href="#s2" y="-3" fill="#80868c" stroke="#0b0c0e" stroke-width="2.5"/>
+<use href="#s2" y="-2" fill="#80868c" stroke="#0b0c0e" stroke-width="2.5"/>
+<use href="#s2" y="-1" fill="#80868c" stroke="#0b0c0e" stroke-width="2.5"/>
+<use href="#s2" fill="url(#g1)" stroke="#0b0c0e" stroke-width="2.5" stroke-linejoin="round"/>
+</g>
+<path d="M156 128L184 166" stroke="#fff" stroke-opacity="0.3" stroke-width="2" stroke-linecap="round"/>
+<circle cx="112" cy="88" r="54" fill="none" stroke="#3a3f45" stroke-width="20"/>
+<circle cx="112" cy="88" r="54" fill="none" stroke="url(#c-chrome)" stroke-width="15"/>
+<circle cx="112" cy="88" r="46" fill="url(#g3)" stroke="#3a3f45" stroke-width="2"/>
+<path d="M84 80H118" stroke="#2a2d31" stroke-width="9" stroke-linecap="round"/>
+<path d="M84 100H104" stroke="#2a2d31" stroke-width="9" stroke-linecap="round"/>
+<path d="M128 70V110" stroke="#1f80d6" stroke-width="5" stroke-linecap="round"/>
+<path d="M76 70A46 46 0 0 1 132 46A50 50 0 0 0 76 104Z" fill="url(#g4)"/>
+<circle cx="112" cy="88" r="61.5" fill="none" stroke="#2c3035" stroke-width="2.5"/>
+</svg>

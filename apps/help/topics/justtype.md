@@ -16,5 +16,6 @@ pill at the top). Just Type looks everywhere at once:
   Memo*, *New Task*, *New Voice Memo*, *New Event*, *New Email*.
 - **Search the web** with Google, Wikipedia and others.
 
-Tap the Just Type preferences (at the end of the results) to choose what
-it searches.
+To choose what it searches, which search engines it offers and in what
+order, tap **Just Type** at the top left of the screen and then
+**Preferences** (or open Settings > Just Type).

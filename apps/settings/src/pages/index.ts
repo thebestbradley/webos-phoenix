@@ -17,6 +17,9 @@ import { LocationPage } from "./Location";
 import { EmergencyPage } from "./Emergency";
 import { AccessibilityPage } from "./Accessibility";
 import { TextAssistPage } from "./TextAssist";
+import { JustTypePage } from "./JustType";
+import { CertificatesPage } from "./Certificates";
+import { PhonePrefsPage } from "./PhonePrefs";
 import { DevModePage } from "./DevMode";
 
 export interface PageInfo {
@@ -31,18 +34,21 @@ export const PAGES = {
     wifi: { title: "Wi-Fi", icon: "icons/wifi.png", component: WifiPage },
     bluetooth: { title: "Bluetooth", icon: "icons/bluetooth.png", component: BluetoothPage },
     airplane: { title: "Airplane Mode", icon: "icons/airplane.png", component: AirplanePage },
+    phone: { title: "Phone Preferences", icon: "icons/phoneprefs.png", component: PhonePrefsPage },
     vpn: { title: "VPN", icon: "icons/vpn.png", component: VpnPage },
     screen: { title: "Screen & Lock", icon: "icons/screen.png", component: ScreenPage },
     sounds: { title: "Sounds & Ringtones", icon: "icons/sounds.png", component: SoundsPage },
     datetime: { title: "Date & Time", icon: "icons/datetime.png", component: DateTimePage },
     language: { title: "Language & Region", icon: "icons/language.png", component: LanguagePage },
     textassist: { title: "Text Assist", icon: "icons/textassist.png", component: TextAssistPage },
+    justtype: { title: "Just Type", icon: "icons/justtype.png", component: JustTypePage },
     location: { title: "Location Services", icon: "icons/location.png", component: LocationPage },
     emergency: { title: "Emergency Info", icon: "icons/emergency.png", component: EmergencyPage },
     accessibility: { title: "Accessibility", icon: "icons/accessibility.png", component: AccessibilityPage },
     deviceinfo: { title: "Device Info", icon: "icons/deviceinfo.png", component: DeviceInfoPage },
     backup: { title: "Backup", icon: "icons/backup.png", component: BackupPage },
     updates: { title: "Updates", icon: "icons/updates.png", component: UpdatesPage },
+    certificates: { title: "Certificate Manager", icon: "icons/certificates.png", component: CertificatesPage },
     devmode: { title: "Developer Mode", icon: "icons/devmode.png", component: DevModePage },
 } satisfies Record<string, PageInfo>;
 

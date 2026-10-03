@@ -7,7 +7,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { call } from "./bridge";
 import { LunaError } from "./bridge";
 import { CAMERA_DIR, cameraService, deleteMedia, folderOf, mediaFiles, mediaIndexer, mediaUrl, type ImageItem } from "./media";
@@ -64,7 +64,9 @@ describe("simulated media services", () => {
         const replies: Record<string, unknown>[] = [];
         const { subscribe } = await import("./bridge");
         const sub = subscribe("luna://com.webos.service.mediaindexer/getAudioList", { uri: "storage:///media/internal" }, (r) => replies.push(r));
-        await new Promise((r) => setTimeout(r, 20));
+        // The list follows once the store has been read: wait for it rather
+        // than a fixed time, which a busy machine overruns.
+        await vi.waitFor(() => expect(replies.length).toBeGreaterThanOrEqual(2), { timeout: 4000 });
         sub.cancel();
         expect(replies[0]).toMatchObject({ subscribed: true });
         expect(replies[1]).toHaveProperty("audioList.count");

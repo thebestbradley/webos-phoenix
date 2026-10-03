@@ -184,7 +184,26 @@ export interface SystemPreferences {
     sysUiEnableNextPrevGestures?: boolean;
     /** Phoenix: the shell's hardware keyboard shortcuts, iPad-style or desktop-style. */
     keyboardShortcuts?: "ipad" | "desktop";
+    /** Text Assist's checks and the user's shortcuts (see TextInputPrefs). */
+    x_palm_textinput?: TextInputPrefs;
     [key: string]: unknown;
+}
+
+/** One of the user's Text Assist shortcuts: typed `shortcut`, the space bar puts in `text`. */
+export interface TextAssistShortcut {
+    shortcut: string;
+    text: string;
+}
+
+/**
+ * x_palm_textinput (LunaSysMgr conf/defaultPreferences.txt): "autoCorrect" or
+ * "off" for each check. Phoenix keeps the user's shortcuts in it too.
+ */
+export interface TextInputPrefs {
+    spellChecking?: "autoCorrect" | "off";
+    grammarChecking?: "autoCorrect" | "off";
+    shortcutChecking?: "autoCorrect" | "off";
+    shortcuts?: TextAssistShortcut[];
 }
 
 /** ringtone/listRingtones: one ringtone; system ones cannot be deleted. */

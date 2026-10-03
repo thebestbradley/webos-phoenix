@@ -40,8 +40,8 @@ notice ([HARDWARE.md](HARDWARE.md#install-it-like-a-linux-distro)). Also
 in 1.0: dictation, predictive text and swipe typing on the keyboard; a
 Siri-like voice assistant without AI models. Done in the simulator: the
 Edit menu and the long-press Cut / Copy / Paste popup (E1), cursor control
-(V4), emoji (V6), and Text Assist: word suggestions, auto-correct, swipe
-typing and dictation (V2, V3) ([GAPS.md](spec/GAPS.md)); Backup and Restore
+(V4), emoji (V6), and Text Assist: word suggestions, auto-correct, the
+user's shortcuts, swipe typing and dictation (V2, V3) ([GAPS.md](spec/GAPS.md)); Backup and Restore
 ([APP-RUNTIME.md](APP-RUNTIME.md#backup)); the Marketplace with web apps,
 App Museum II and Preware as sources and its PHP catalog service
 ([APP-RUNTIME.md](APP-RUNTIME.md#marketplace)); System Updates on RAUC

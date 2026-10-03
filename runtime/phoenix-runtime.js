@@ -968,6 +968,11 @@
         // Settings > Text Assist > Hardware keyboard: the shell's shortcut
         // scheme, "ipad" or "desktop" (Phoenix).
         keyboardShortcuts: "ipad",
+        // Text Assist (conf/defaultPreferences.txt x_palm_textinput): the
+        // original's checks, and Phoenix's list of the user's shortcuts
+        // (Settings > Text Assist > Shortcuts), [{shortcut, text}], which
+        // the keyboard's space bar puts in while shortcutChecking is not "off".
+        x_palm_textinput: { spellChecking: "autoCorrect", grammarChecking: "autoCorrect", shortcutChecking: "autoCorrect", shortcuts: [] },
         firstUse: false
     };
 
@@ -1164,8 +1169,21 @@
         "com.palm.app.backup": { id: "org.webosphoenix.settings", params: { page: "backup" } },
         // System Updates (luna-systemui opens it from its update alerts).
         "com.palm.app.updates": { id: "org.webosphoenix.settings", params: { page: "updates" } },
-        "com.palm.app.textassist": { id: "org.webosphoenix.settings", params: { page: "textassist" } }
+        "com.palm.app.textassist": { id: "org.webosphoenix.settings", params: { page: "textassist" } },
+        // Just Type's preferences (luna-applauncher AppLauncher.js
+        // launchPreferences, from Just Type's app menu).
+        "com.palm.app.searchpreferences": { id: "org.webosphoenix.settings", params: { page: "justtype" } },
+        // The Certificate Manager (Device Info's menu, Email's "Open
+        // Certificate Manager", ApplicationManagerService.cpp:3822).
+        "com.palm.app.certificate": { id: "org.webosphoenix.settings", params: { page: "certificates" } },
+        // Help: Enyo 1.0's HelpMenu (every original app's "Help", Just
+        // Type's too) opens com.palm.app.help with {target:
+        // "http://help.palm.com/<area>/index.html"}; Phoenix's Help opens the
+        // matching topic (HELP_TOPICS), else its list.
+        "com.palm.app.help": "org.webosphoenix.help"
     };
+    var HELP_TOPICS = { universalsearch: "justtype", accountsmgr: "accounts", phone: "phone", messaging: "messaging",
+                        camera: "camera", photos: "photos", music: "music", launcher: "launcher", notifications: "notifications" };
     function appId(id) {
         var a = APP_ALIASES[id];
         return a ? (typeof a === "string" ? a : a.id) : id;
@@ -1174,6 +1192,11 @@
         var a = APP_ALIASES[id], out = {};
         if (a && typeof a === "object") for (var k in a.params) out[k] = a.params[k];
         for (var j in params || {}) out[j] = params[j];
+        if (id === "com.palm.app.help" && typeof out.target === "string") {
+            var m = /^https?:\/\/help\.palm\.com\/([^\/]+)\//i.exec(out.target);
+            delete out.target;
+            if (m && HELP_TOPICS[m[1].toLowerCase()]) out.topic = HELP_TOPICS[m[1].toLowerCase()];
+        }
         return out;
     }
     runtime.appAliases = APP_ALIASES;
@@ -1444,6 +1467,19 @@
     // its UniversalSearchList.json, and the "action" (New Memo, New Event...)
     // and "dbsearch" (content search) providers the installed apps declare
     // in their appinfo.json "universalSearch" field. Preferences persist.
+    // The Just Type preferences (Settings > Just Type, in place of
+    // com.palm.app.searchpreferences) change them with its methods
+    // (UniversalSearchService.cpp:75-92):
+    //   updateSearchItem {category, id, enabled, setDefault?}
+    //   updateAllSearchItems {category, enabled}
+    //   reorderSearchItem {category, id, toIndex}: toIndex is the item's new
+    //       place in its category's list (the original counted it in the
+    //       list below the default engine, SearchItemsManager.cpp:766-775;
+    //       Settings shows every engine in one list)
+    //   get/getAll/setSearchPreference {key, value}: defaultSearchEngine,
+    //       defaultSearch (the default engine's row in Just Type),
+    //       ContactSearch, AppSearch, GAL (strings "true" / "false")
+    // getUniversalSearchList lists each category in the user's order.
 
     var US_ICONS = "/usr/lib/luna/system/luna-applauncher/images/";
     var US_ENGINES = [
@@ -1458,7 +1494,13 @@
     var US_DEFAULT_PREFS = { defaultSearchEngine: "google", defaultSearch: "true", ContactSearch: "true", AppSearch: "true", GAL: "false" };
     var usWatchers = [];
 
-    function usState() { return store.get("universalsearch", { prefs: {}, enabled: {} }); }
+    function usState() {
+        var st = store.get("universalsearch", null) || {};
+        st.prefs = st.prefs || {};
+        st.enabled = st.enabled || {};
+        st.order = st.order || {};
+        return st;
+    }
     function usSave(st) {
         store.set("universalsearch", st);
         usWatchers = usWatchers.filter(function (w) { return w(); });
@@ -1486,16 +1528,33 @@
             if (kind === "dbsearch" && !x.url) x.url = lp.id;
             out.push(x);
         });
-        return out;
+        return usOrdered(kind, out);
+    }
+    function usEngines() {
+        return usOrdered("search", US_ENGINES.map(function (e) {
+            var x = { category: "search", type: "web", iconFilePath: US_ICONS + "search-icon-" + e.id + ".png" }, k;
+            for (k in e) x[k] = e[k];
+            x.enabled = usEnabled("search:" + e.id, e.enabled);
+            return x;
+        }));
+    }
+    // The items of a category in the user's order (reorderSearchItem); new
+    // ones keep their place after those.
+    function usOrdered(category, items) {
+        var order = usState().order[category] || [];
+        return items.map(function (x, i) { return { x: x, i: i, o: order.indexOf(x.id) }; }).sort(function (a, b) {
+            if (a.o >= 0 && b.o >= 0) return a.o - b.o;
+            if (a.o >= 0 || b.o >= 0) return a.o >= 0 ? -1 : 1;
+            return a.i - b.i;
+        }).map(function (e) { return e.x; });
+    }
+    function usItems(category) {
+        return category === "search" ? usEngines() : category === "action" ? usProviders("action")
+             : category === "dbsearch" ? usProviders("dbsearch") : null;
     }
     function usList() {
         return ok({
-            UniversalSearchList: US_ENGINES.map(function (e) {
-                var x = { category: "search", type: "web", iconFilePath: US_ICONS + "search-icon-" + e.id + ".png" }, k;
-                for (k in e) x[k] = e[k];
-                x.enabled = usEnabled("search:" + e.id, e.enabled);
-                return x;
-            }),
+            UniversalSearchList: usEngines(),
             ActionList: usProviders("action"),
             DBSearchItemList: usProviders("dbsearch"),
             defaultSearchEngine: usPrefs().defaultSearchEngine
@@ -1522,10 +1581,38 @@
             usSave(st);
             reply(ok());
         },
-        // {id, category: "search" | "action" | "dbsearch", enabled}
+        // {id, category: "search" | "action" | "dbsearch", enabled, setDefault}
         "/updateSearchItem": function (p, reply) {
+            var category = p.category || "search", items = usItems(category);
+            if (!items) return reply(fail(-1, "Invalid category"));
+            if (!items.some(function (x) { return x.id === p.id; })) return reply(fail(-1, "Unable to update item"));
             var st = usState();
-            st.enabled[(p.category || "search") + ":" + p.id] = !!p.enabled;
+            if (p.enabled !== undefined) st.enabled[category + ":" + p.id] = !!p.enabled;
+            // The default engine (SearchItemsManager::updateSearchItem).
+            if (p.setDefault && category === "search") st.prefs.defaultSearchEngine = String(p.id);
+            usSave(st);
+            reply(ok());
+        },
+        // {category, enabled}: every item of the category on or off.
+        "/updateAllSearchItems": function (p, reply) {
+            var category = p.category || "search", items = usItems(category);
+            if (!items) return reply(fail(-1, "Invalid category"));
+            var st = usState();
+            items.forEach(function (x) { st.enabled[category + ":" + x.id] = !!p.enabled; });
+            usSave(st);
+            reply(ok());
+        },
+        // {category, id, toIndex}
+        "/reorderSearchItem": function (p, reply) {
+            var category = p.category || "search", items = usItems(category);
+            if (!items) return reply(fail(-1, "Invalid category"));
+            var ids = items.map(function (x) { return x.id; });
+            var from = ids.indexOf(p.id), to = Number(p.toIndex);
+            if (from < 0 || !(to >= 0)) return reply(fail(-1, "Unable to reorder item"));
+            ids.splice(from, 1);
+            ids.splice(Math.min(to, ids.length), 0, p.id);
+            var st = usState();
+            st.order[category] = ids;
             usSave(st);
             reply(ok());
         },
@@ -3193,6 +3280,9 @@
                 keyboards: keyboardCombos(p),
                 keyboard: keyboardInUse(p),
                 ringtone: (p.ringtone && p.ringtone.fullPath) || "",
+                // Phone preferences: unconditional call forwarding on (the
+                // status bar's call-forward icon, StatusBarInfo::setCallForward).
+                callForwarding: runtime.callForwarding ? runtime.callForwarding() : false,
                 alerttone: (p.alerttone && p.alerttone.fullPath) || "",
                 notificationtone: (p.notificationtone && p.notificationtone.fullPath) || "",
                 showAlertsWhenLocked: p.showAlertsWhenLocked !== false,
@@ -3273,9 +3363,17 @@
         }
         function textAssist(p) {
             var kb = keyboardPrefs(p);
+            var ti = p.x_palm_textinput && typeof p.x_palm_textinput === "object" ? p.x_palm_textinput : {};
+            // The user's shortcuts, typed (lower case) -> text.
+            var shortcuts = {};
+            (Array.isArray(ti.shortcuts) ? ti.shortcuts : []).forEach(function (s) {
+                if (s && typeof s.shortcut === "string" && s.shortcut && typeof s.text === "string" && s.text)
+                    shortcuts[s.shortcut.toLowerCase()] = s.text;
+            });
             return { suggestions: kb.WordSuggestions !== false, autoCorrect: kb.AutoCorrect !== false,
                      swipe: kb.SwipeTyping !== false, spaces2period: kb.spaces2period !== false,
-                     forgetWords: typeof kb.ForgetWords === "number" ? kb.ForgetWords : 0 };
+                     forgetWords: typeof kb.ForgetWords === "number" ? kb.ForgetWords : 0,
+                     shortcuts: shortcuts, shortcutsOn: ti.shortcutChecking !== "off" };
         }
 
         function changed() {
@@ -3817,7 +3915,7 @@
         sys["/setPreferences"] = function (p, reply, ctx) {
             baseSetPreferences(p, reply, ctx);
             if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "screenTimeout", "lockTimeout", "sysUiEnableNextPrevGestures", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
-                 "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "accessibility"].some(function (k) { return k in p; })) {
+                 "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "x_palm_textinput", "accessibility"].some(function (k) { return k in p; })) {
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
                 changed();
             }
@@ -4847,6 +4945,31 @@
     //     CallVolume and MessageWaiting D-Bus APIs, see apps/shared/luna/src/telephony.ts):
     //       callStatusQuery {subscribe}, hold {id}, unhold {id}, sendDtmf {tones},
     //       muteSet {mute}, speakerSet {speaker}, voicemailQuery {subscribe}
+    //     The legacy phone preferences' calls (com.palm.app.phone
+    //     shared/phoneprefs/controls/CallsPref.js, NetworkPref.js,
+    //     VoicemailNumberPref.js; LunaSysMgr's StatusBarServicesConnector
+    //     subscribes to forwardQuery for the status bar's icon):
+    //       forwardQuery {condition, bearer, subscribe} -> {extended: {condition,
+    //           status: [{bearer, activated, number}]}}
+    //       forwardRegister {number ("" to stop), condition, bearer, time}
+    //       clirQuery -> {extended: {restricted}}, clirSet {restrict}
+    //       callWaitingQuery -> {extended: {enabled}}, callWaitingSet {enable}
+    //       voicemailNumberQuery {subscribe} -> {extended: {number}},
+    //           voicemailNumberSet {number}
+    //       roamModeQuery -> {extended: {mode: "automatic" | "carrieronly"}},
+    //           roamModeSet {mode}
+    //       ratQuery -> {extended: {mode: "automatic" | "umts" | "gsm"}}, ratSet {mode}
+    //     The supplementary services (forwarding, caller ID, waiting) need
+    //     the network: errorCode 102 in airplane mode, as the phone app's
+    //     messages say. Only unconditional forwarding is kept; while it is on,
+    //     a simulated incoming call is forwarded and does not ring.
+    //   com.palm.wan                          the data connection (legacy wand):
+    //       getstatus {subscribe} -> {disablewan: "on" | "off" (Data Usage
+    //       off / on), roamguard: "enable" | "disable" (data roaming off /
+    //       on; "disable" also as the original's "neverblock"), state}
+    //       set {disablewan?, roamguard?} (NetworkPref.js toggleWAN,
+    //       toggleDataRoaming). The original read roamguard from
+    //       com.palm.preferences appProperties; here getstatus says it.
     //   org.webosports.service.messaging     webOS-ports/org.webosports.messaging
     //       putMessage {message} -> {threadids}   service/javascript/assistants/PutMessage.js,
     //                                              utils/MessageAssigner.js (thread assignment)
@@ -4880,7 +5003,10 @@
 
         function defaults() {
             return { calls: [], muted: false, speaker: false, nextId: 1,
-                     voicemail: { number: "(408) 555-0100", waiting: true, count: 2 } };
+                     voicemail: { number: "(408) 555-0100", waiting: true, count: 2 },
+                     // The phone preferences (network-side settings).
+                     forward: { activated: false, number: "" }, clirRestricted: false, callWaiting: true,
+                     roamMode: "automatic", rat: "automatic" };
         }
         function load() {
             var s = store.get(KEY, null);
@@ -4955,6 +5081,9 @@
         function incoming(opts) {
             opts = opts || {};
             var s = load();
+            // Forwarded by the network: the phone never rings.
+            if (s.forward && s.forward.activated && !offline())
+                return 0;
             var id = s.nextId++;
             var busy = s.calls.some(function (x) { return live(x) && x.state !== "incoming"; });
             s.calls.push({ id: id, state: busy ? "waiting" : "incoming", number: opts.number || "(415) 555-0123",
@@ -5033,7 +5162,60 @@
                 if (p.subscribe) listen(ctx, function () { if (!ctx.cancelled()) reply(v()); });
             },
             // telephonyd's activity callback for the outbox (outgoing-sms.json).
-            "/sendSmsFromDb": function (p, reply) { sendOutbox(); reply(ok()); }
+            "/sendSmsFromDb": function (p, reply) { sendOutbox(); reply(ok()); },
+
+            // ---- The phone preferences ---------------------------------------------
+            "/forwardQuery": function (p, reply, ctx) {
+                var answer = function () {
+                    if (offline()) return fail(102, "No network");
+                    var f = load().forward;
+                    return ok({ extended: { condition: "unconditional",
+                                            status: [{ bearer: "defaultbearer", activated: !!f.activated, number: f.number || "" }] } });
+                };
+                reply(answer());
+                if (p.subscribe) listen(ctx, function () { if (!ctx.cancelled()) reply(answer()); });
+            },
+            "/forwardRegister": function (p, reply) {
+                if (offline()) return reply(fail(102, "No network"));
+                if (p.condition && p.condition !== "unconditional") return reply(fail(-1, "Only unconditional forwarding is supported"));
+                var number = String(p.number || "").replace(/[^0-9+*#]/g, "");
+                var s = load();
+                s.forward = number ? { activated: true, number: String(p.number) } : { activated: false, number: s.forward.number || "" };
+                save(s);
+                reply(ok());
+            },
+            "/clirQuery": function (p, reply) {
+                reply(offline() ? fail(102, "No network") : ok({ extended: { restricted: !!load().clirRestricted, permanent: false } }));
+            },
+            "/clirSet": function (p, reply) {
+                if (offline()) return reply(fail(102, "No network"));
+                var s = load(); s.clirRestricted = !!p.restrict; save(s); reply(ok());
+            },
+            "/callWaitingQuery": function (p, reply) {
+                reply(offline() ? fail(102, "No network") : ok({ extended: { enabled: load().callWaiting !== false } }));
+            },
+            "/callWaitingSet": function (p, reply) {
+                if (offline()) return reply(fail(102, "No network"));
+                var s = load(); s.callWaiting = !!p.enable; save(s); reply(ok());
+            },
+            "/voicemailNumberQuery": function (p, reply, ctx) {
+                var v = function () { return ok({ extended: { number: load().voicemail.number } }); };
+                reply(v());
+                if (p.subscribe) listen(ctx, function () { if (!ctx.cancelled()) reply(v()); });
+            },
+            "/voicemailNumberSet": function (p, reply) {
+                var s = load(); s.voicemail.number = String(p.number || ""); save(s); reply(ok());
+            },
+            "/roamModeQuery": function (p, reply) { reply(ok({ extended: { mode: load().roamMode } })); },
+            "/roamModeSet": function (p, reply) {
+                if (["automatic", "carrieronly", "homeonly"].indexOf(p.mode) < 0) return reply(fail(-1, "Invalid mode"));
+                var s = load(); s.roamMode = p.mode; save(s); reply(ok());
+            },
+            "/ratQuery": function (p, reply) { reply(ok({ extended: { mode: load().rat } })); },
+            "/ratSet": function (p, reply) {
+                if (["automatic", "umts", "gsm"].indexOf(p.mode) < 0) return reply(fail(-1, "Invalid mode"));
+                var s = load(); s.rat = p.mode; save(s); reply(ok());
+            }
         };
         register(["com.palm.telephony"], telephony);
 
@@ -5042,6 +5224,42 @@
         } catch (x) { /* no window events */ }
 
         runtime.simulateIncomingCall = function (opts) { return incoming(opts); };
+        // The status bar's call forwarding icon (runtime.hostStatus).
+        // Off with the radio, as LunaSysMgr hid it (StatusBarServicesConnector.cpp:962).
+        runtime.callForwarding = function () { var f = load().forward; return !!(f && f.activated) && !offline(); };
+
+        // com.palm.wan: Data Usage and Data Roaming (NetworkPref.js).
+        var WAN_KEY = "wan:state";
+        var wanWatchers = [];
+        function wan() {
+            var w = store.get(WAN_KEY, null) || {};
+            return { disablewan: w.disablewan === "on" ? "on" : "off", roamguard: w.roamguard === "disable" ? "disable" : "enable" };
+        }
+        function wanStatus() {
+            var w = wan();
+            return ok({ disablewan: w.disablewan, roamguard: w.roamguard,
+                        state: w.disablewan === "on" || offline() ? "disconnected" : "connected" });
+        }
+        register(["com.palm.wan"], {
+            "/getstatus": function (p, reply, ctx) {
+                reply(wanStatus());
+                if (p.subscribe) wanWatchers.push(function () { if (ctx.cancelled()) return false; reply(wanStatus()); return true; });
+            },
+            "/set": function (p, reply) {
+                var w = wan();
+                if (p.disablewan !== undefined) {
+                    if (p.disablewan !== "on" && p.disablewan !== "off") return reply(fail(-1, "disablewan is \"on\" or \"off\""));
+                    w.disablewan = p.disablewan;
+                }
+                if (p.roamguard !== undefined) {
+                    if (["enable", "disable", "neverblock"].indexOf(p.roamguard) < 0) return reply(fail(-1, "Invalid roamguard"));
+                    w.roamguard = p.roamguard === "enable" ? "enable" : "disable";
+                }
+                store.set(WAN_KEY, w);
+                wanWatchers = wanWatchers.filter(function (fn) { return fn(); });
+                reply(ok());
+            }
+        });
         runtime.simulateRemoteHangup = function () {
             var s = load();
             var c = s.calls.filter(function (x) { return x.state === "active"; })[0] || s.calls.filter(live)[0];
@@ -6675,6 +6893,413 @@
             });
             reply(ok({ ringtones: SYSTEM_RINGTONES.concat(mine) }));
         };
+    })();
+
+    // ================================================================================
+    // Certificate manager (com.palm.certificatemanager; Settings > Certificate Manager)
+    // ================================================================================
+    //
+    // The legacy webOS certificate store, which com.palm.app.certificate
+    // (Device Info's "Certificate Manager...") managed and others read: Enyo
+    // 1.0's Wi-Fi setup lists the user's certificates for networks that ask
+    // for one (lib/wifi/wifi.js: listcertificates -> userCertificateStore
+    // [{certificateId, certificateFilename, commonname, organization}]), the
+    // browser shows a site's certificate (isis-browser CertificateDetail.js:
+    // getcertificatedetails {certificateFilename} -> subject / issuer
+    // {commonname, organization, organizationalunit, country, state,
+    // location, altname}, startdate, expiredate, serialNumber, version,
+    // signature.algorithm, publicKey.algorithm). Phoenix adds what the
+    // Settings pane needs, in the same style:
+    //
+    //   listcertificates {}  -> {certificates: [summary], userCertificateStore:
+    //       [the imported ones]}; summary: {certificateId, certificateFilename,
+    //       commonname, organization, issuer, startdate, expiredate (ms),
+    //       trusted, system, isCA}
+    //   getcertificatedetails {certificateId | certificateFilename} -> the
+    //       details above, plus fingerprints {sha256, sha1}, publicKey.bits /
+    //       curve, isCA, trusted, system
+    //   addcertificate {certificateFilename}: a .pem / .crt (PEM, one or more
+    //       certificates) or .cer / .der (DER) on the device, read with
+    //       org.webosphoenix.filemanager -> {certificateIds}
+    //   setcertificatetrust {certificateId, trusted}
+    //   removecertificate {certificateId}
+    //   errors: -1 bad parameters, -2 not a certificate, -3 already
+    //   installed, -4 no such certificate, -5 the file cannot be read
+    //
+    // The system's root certificates are a few real CAs' (runtime/certs, as
+    // published in the Mozilla CA list); the user may distrust or remove them
+    // (and restore them: restorecertificates). What is imported, and every
+    // change, is kept in the runtime's store, so it lasts. X.509 is read here
+    // (DER, enough of RFC 5280 to show a certificate); signatures are not
+    // checked: the store only says which certificates the device trusts.
+    (function certificateManager() {
+        var KEY = "certificates";
+        var SYSTEM_CERTS = ["isrg-root-x1", "isrg-root-x2", "digicert-global-root-g2", "gts-root-r1",
+                            "amazon-root-ca-1", "usertrust-rsa-certification-authority"];
+        var SYSTEM_DIR = "/usr/share/phoenix/runtime/certs/";
+        var E = { BAD_PARAMS: -1, NOT_CERT: -2, EXISTS: -3, NOT_FOUND: -4, READ: -5 };
+
+        // ---- DER and X.509 --------------------------------------------------------------
+
+        function b64Bytes(s) {
+            var bin = global.atob(String(s).replace(/[^A-Za-z0-9+\/=]/g, ""));
+            var out = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; ++i) out[i] = bin.charCodeAt(i);
+            return out;
+        }
+        function bytesB64(b) {
+            var s = "";
+            for (var i = 0; i < b.length; ++i) s += String.fromCharCode(b[i]);
+            return global.btoa(s);
+        }
+        // The certificates in a file: PEM blocks, else the file as DER.
+        function certsIn(bytes) {
+            var text = "";
+            for (var i = 0; i < Math.min(bytes.length, 4 * 1024 * 1024); ++i) text += String.fromCharCode(bytes[i]);
+            var re = /-----BEGIN (?:X509 |TRUSTED )?CERTIFICATE-----([\s\S]*?)-----END (?:X509 |TRUSTED )?CERTIFICATE-----/g;
+            var out = [], m;
+            while ((m = re.exec(text))) out.push(b64Bytes(m[1]));
+            if (!out.length && bytes[0] === 0x30) out.push(bytes);
+            return out;
+        }
+        // One TLV at pos: {tag, start (of the value), end}.
+        function tlv(b, pos) {
+            if (pos + 2 > b.length) throw new Error("truncated");
+            var tag = b[pos], len = b[pos + 1], p = pos + 2;
+            if (len & 0x80) {
+                var n = len & 0x7f;
+                if (n < 1 || n > 4) throw new Error("bad length");
+                len = 0;
+                for (var i = 0; i < n; ++i) len = len * 256 + b[p++];
+            }
+            if (p + len > b.length) throw new Error("truncated");
+            return { tag: tag, start: p, end: p + len };
+        }
+        function children(b, t) {
+            var out = [];
+            for (var p = t.start; p < t.end;) { var c = tlv(b, p); out.push(c); p = c.end; }
+            return out;
+        }
+        function oid(b, t) {
+            var parts = [], v = 0;
+            for (var i = t.start; i < t.end; ++i) {
+                v = v * 128 + (b[i] & 0x7f);
+                if (!(b[i] & 0x80)) {
+                    if (!parts.length) parts.push(v < 80 ? Math.floor(v / 40) : 2, v < 80 ? v % 40 : v - 80);
+                    else parts.push(v);
+                    v = 0;
+                }
+            }
+            return parts.join(".");
+        }
+        function str(b, t) {
+            var s = "", i;
+            if (t.tag === 0x1e) {                       // BMPString
+                for (i = t.start; i + 1 < t.end; i += 2) s += String.fromCharCode(b[i] * 256 + b[i + 1]);
+                return s;
+            }
+            for (i = t.start; i < t.end; ++i) s += String.fromCharCode(b[i]);
+            if (t.tag === 0x0c) {                       // UTF8String
+                try { return decodeURIComponent(global.escape(s)); } catch (e) { return s; }
+            }
+            return s;
+        }
+        function hex(b, start, end, sep) {
+            var out = [];
+            for (var i = start; i < end; ++i) out.push((b[i] < 16 ? "0" : "") + b[i].toString(16).toUpperCase());
+            return out.join(sep || "");
+        }
+        function time(b, t) {
+            var s = str(b, t);
+            var m = t.tag === 0x17 ? /^(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)?Z$/.exec(s) : /^(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)?Z$/.exec(s);
+            if (!m) return 0;
+            var y = +m[1];
+            if (t.tag === 0x17) y += y >= 50 ? 1900 : 2000;
+            return Date.UTC(y, +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+        }
+        var NAME_KEYS = { "2.5.4.3": "commonname", "2.5.4.6": "country", "2.5.4.7": "location", "2.5.4.8": "state",
+                          "2.5.4.10": "organization", "2.5.4.11": "organizationalunit", "1.2.840.113549.1.9.1": "email" };
+        function name(b, t) {
+            var out = {};
+            children(b, t).forEach(function (set) {
+                children(b, set).forEach(function (atv) {
+                    var kv = children(b, atv), k = NAME_KEYS[oid(b, kv[0])];
+                    if (k && !(k in out)) out[k] = str(b, kv[1]);
+                });
+            });
+            return out;
+        }
+        var ALGS = { "1.2.840.113549.1.1.1": "RSA", "1.2.840.113549.1.1.4": "MD5 with RSA", "1.2.840.113549.1.1.5": "SHA-1 with RSA",
+                     "1.2.840.113549.1.1.11": "SHA-256 with RSA", "1.2.840.113549.1.1.12": "SHA-384 with RSA",
+                     "1.2.840.113549.1.1.13": "SHA-512 with RSA", "1.2.840.113549.1.1.10": "RSA-PSS",
+                     "1.2.840.10045.2.1": "Elliptic curve", "1.2.840.10045.4.3.2": "ECDSA with SHA-256",
+                     "1.2.840.10045.4.3.3": "ECDSA with SHA-384", "1.2.840.10045.4.3.4": "ECDSA with SHA-512",
+                     "1.3.101.112": "Ed25519", "1.3.101.113": "Ed448" };
+        var CURVES = { "1.2.840.10045.3.1.7": "P-256", "1.3.132.0.34": "P-384", "1.3.132.0.35": "P-521" };
+        function alg(b, t) {
+            var id = oid(b, children(b, t)[0]);
+            return ALGS[id] || id;
+        }
+
+        // The parts of a certificate the store and Settings show.
+        function parse(der) {
+            var b = der;
+            var cert = tlv(b, 0);
+            if (cert.tag !== 0x30 || cert.end !== b.length) throw new Error("not a certificate");
+            var top = children(b, cert);
+            var tbs = children(b, top[0]), i = 0, version = 1;
+            if (tbs[0].tag === 0xa0) { version = b[children(b, tbs[0])[0].start] + 1; i = 1; }
+            var serial = tbs[i], sigAlg = tbs[i + 1], issuer = tbs[i + 2], validity = children(b, tbs[i + 3]);
+            var subject = tbs[i + 4], spki = children(b, tbs[i + 5]);
+            var out = {
+                version: version,
+                serialNumber: hex(b, serial.start + (b[serial.start] === 0 && serial.end - serial.start > 1 ? 1 : 0), serial.end, ":"),
+                signature: { algorithm: alg(b, sigAlg) },
+                issuer: name(b, issuer),
+                subject: name(b, subject),
+                startdate: time(b, validity[0]),
+                expiredate: time(b, validity[1]),
+                publicKey: { algorithm: alg(b, spki[0]) },
+                isCA: false
+            };
+            var keyAlg = children(b, spki[0]);
+            if (keyAlg[1] && keyAlg[1].tag === 0x06) out.publicKey.curve = CURVES[oid(b, keyAlg[1])] || oid(b, keyAlg[1]);
+            if (out.publicKey.algorithm === "RSA") {
+                // BIT STRING: unused-bits byte, then RSAPublicKey {modulus, exponent}.
+                var rsa = children(b, tlv(b, spki[1].start + 1))[0];
+                var m0 = rsa.start;
+                while (m0 < rsa.end && b[m0] === 0) m0++;
+                out.publicKey.bits = (rsa.end - m0) * 8 - (b[m0] ? Math.clz32(b[m0]) - 24 : 0);
+            } else if (out.publicKey.curve) {
+                out.publicKey.bits = { "P-256": 256, "P-384": 384, "P-521": 521 }[out.publicKey.curve];
+            }
+            tbs.slice(i + 6).forEach(function (t) {
+                if (t.tag !== 0xa3) return;
+                children(b, children(b, t)[0]).forEach(function (ext) {
+                    var parts = children(b, ext), id = oid(b, parts[0]), value = parts[parts.length - 1];
+                    var inner = tlv(b, value.start);
+                    if (id === "2.5.29.17") {           // subjectAltName
+                        out.subject.altname = children(b, inner).filter(function (g) {
+                            return g.tag === 0x81 || g.tag === 0x82 || g.tag === 0x86 || g.tag === 0x87;
+                        }).map(function (g) {
+                            if (g.tag !== 0x87) return str(b, g);
+                            var ip = [];
+                            for (var k = g.start; k < g.end; ++k) ip.push(b[k]);
+                            return ip.length === 4 ? ip.join(".") : hex(b, g.start, g.end, ":");
+                        });
+                    } else if (id === "2.5.29.19") {    // basicConstraints
+                        var bc = children(b, inner);
+                        out.isCA = !!(bc[0] && bc[0].tag === 0x01 && b[bc[0].start]);
+                    }
+                });
+            });
+            return out;
+        }
+
+        // SHA-256 and SHA-1 of the DER (the fingerprints Settings shows).
+        function sha(bytes, one) {
+            var K = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+                     0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+                     0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+                     0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+                     0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+                     0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+                     0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+                     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2];
+            var n = bytes.length, len = ((n + 9 + 63) >> 6) << 6, m = new Uint8Array(len), i, j;
+            m.set(bytes);
+            m[n] = 0x80;
+            var bits = n * 8;
+            for (i = 0; i < 8; ++i) m[len - 1 - i] = i < 4 ? (bits >>> (8 * i)) & 0xff : Math.floor(bits / 0x100000000 / Math.pow(256, i - 4)) & 0xff;
+            var h = one ? [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0]
+                        : [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+            var w = new Array(80);
+            function rotr(x, k) { return (x >>> k) | (x << (32 - k)); }
+            for (var off = 0; off < len; off += 64) {
+                for (i = 0; i < 16; ++i)
+                    w[i] = (m[off + 4 * i] << 24) | (m[off + 4 * i + 1] << 16) | (m[off + 4 * i + 2] << 8) | m[off + 4 * i + 3];
+                var a = h.slice();
+                if (one) {
+                    for (i = 16; i < 80; ++i) { var x = w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]; w[i] = (x << 1) | (x >>> 31); }
+                    for (i = 0; i < 80; ++i) {
+                        var f = i < 20 ? (a[1] & a[2]) | (~a[1] & a[3]) : i < 40 || i >= 60 ? a[1] ^ a[2] ^ a[3] : (a[1] & a[2]) | (a[1] & a[3]) | (a[2] & a[3]);
+                        var k = i < 20 ? 0x5a827999 : i < 40 ? 0x6ed9eba1 : i < 60 ? 0x8f1bbcdc : 0xca62c1d6;
+                        var t1 = (((a[0] << 5) | (a[0] >>> 27)) + f + a[4] + k + w[i]) | 0;
+                        a = [t1, a[0], (a[1] << 30) | (a[1] >>> 2), a[2], a[3]];
+                    }
+                } else {
+                    for (i = 16; i < 64; ++i) {
+                        var s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+                        var s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+                        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+                    }
+                    for (i = 0; i < 64; ++i) {
+                        var S1 = rotr(a[4], 6) ^ rotr(a[4], 11) ^ rotr(a[4], 25);
+                        var ch = (a[4] & a[5]) ^ (~a[4] & a[6]);
+                        var u1 = (a[7] + S1 + ch + K[i] + w[i]) | 0;
+                        var S0 = rotr(a[0], 2) ^ rotr(a[0], 13) ^ rotr(a[0], 22);
+                        var maj = (a[0] & a[1]) ^ (a[0] & a[2]) ^ (a[1] & a[2]);
+                        var u2 = (S0 + maj) | 0;
+                        a = [(u1 + u2) | 0, a[0], a[1], a[2], (a[3] + u1) | 0, a[4], a[5], a[6]];
+                    }
+                }
+                for (j = 0; j < h.length; ++j) h[j] = (h[j] + a[j]) | 0;
+            }
+            var out = new Uint8Array(h.length * 4);
+            for (j = 0; j < h.length; ++j) { out[4 * j] = h[j] >>> 24; out[4 * j + 1] = (h[j] >>> 16) & 0xff; out[4 * j + 2] = (h[j] >>> 8) & 0xff; out[4 * j + 3] = h[j] & 0xff; }
+            return hex(out, 0, out.length, ":");
+        }
+
+        // ---- The store ------------------------------------------------------------------
+
+        // user: [{certificateId, der (base64), trusted, added}]; system:
+        // {id: {trusted?, removed?}}.
+        function load() {
+            var st = store.get(KEY, null) || {};
+            return { user: st.user || [], system: st.system || {}, nextId: st.nextId || 1 };
+        }
+        var systemCerts = null;
+        function systemList() {
+            if (!systemCerts) {
+                systemCerts = [];
+                SYSTEM_CERTS.forEach(function (id) {
+                    var text = PalmSystem.getResource(SYSTEM_DIR + id + ".pem");
+                    if (!text) return;
+                    var bytes = new Uint8Array(text.length);
+                    for (var i = 0; i < text.length; ++i) bytes[i] = text.charCodeAt(i) & 0xff;
+                    var der = certsIn(bytes)[0];
+                    if (der) systemCerts.push({ certificateId: id, der: der, system: true });
+                });
+            }
+            return systemCerts;
+        }
+        // Every certificate: {certificateId, der (bytes), trusted, system}.
+        function all(st) {
+            st = st || load();
+            var out = [];
+            systemList().forEach(function (c) {
+                var o = st.system[c.certificateId] || {};
+                if (!o.removed) out.push({ certificateId: c.certificateId, der: c.der, trusted: o.trusted !== false, system: true });
+            });
+            st.user.forEach(function (c) {
+                out.push({ certificateId: c.certificateId, der: b64Bytes(c.der), trusted: c.trusted !== false, system: false });
+            });
+            return out;
+        }
+        function filename(c) {
+            return c.system ? SYSTEM_DIR + c.certificateId + ".pem" : "/var/palm/data/certificates/" + c.certificateId + ".pem";
+        }
+        var parsed = {};
+        function info(c) {
+            var k = c.certificateId + ":" + c.der.length;
+            if (!parsed[k]) parsed[k] = parse(c.der);
+            return parsed[k];
+        }
+        function displayName(n) { return n.commonname || n.organization || n.organizationalunit || ""; }
+        function summary(c) {
+            var p = info(c);
+            return { certificateId: c.certificateId, certificateFilename: filename(c),
+                     commonname: p.subject.commonname || "", organization: p.subject.organization || "",
+                     issuer: displayName(p.issuer), startdate: p.startdate, expiredate: p.expiredate,
+                     trusted: c.trusted, system: c.system, isCA: p.isCA };
+        }
+        function find(p) {
+            return all().filter(function (c) {
+                return (p.certificateId !== undefined && String(c.certificateId) === String(p.certificateId))
+                    || (p.certificateFilename && filename(c) === p.certificateFilename);
+            })[0] || null;
+        }
+        function sameDer(a, b) {
+            if (a.length !== b.length) return false;
+            for (var i = 0; i < a.length; ++i) if (a[i] !== b[i]) return false;
+            return true;
+        }
+        var watchers = [];
+        function save(st) {
+            store.set(KEY, st);
+            watchers = watchers.filter(function (w) { return w(); });
+        }
+        function listReply() {
+            var list = all().map(summary).sort(function (a, b) {
+                return (a.commonname || a.organization).toLowerCase() < (b.commonname || b.organization).toLowerCase() ? -1 : 1;
+            });
+            return ok({ certificates: list, userCertificateStore: list.filter(function (c) { return !c.system; }) });
+        }
+
+        register(["com.palm.certificatemanager"], {
+            // {subscribe}: again after each change (Phoenix).
+            "/listcertificates": function (p, reply, ctx) {
+                reply(listReply());
+                if (p.subscribe) watchers.push(function () { if (ctx.cancelled()) return false; reply(listReply()); return true; });
+            },
+            "/getcertificatedetails": function (p, reply) {
+                if (p.certificateId === undefined && !p.certificateFilename) return reply(fail(E.BAD_PARAMS, "certificateId or certificateFilename is required"));
+                var c = find(p);
+                if (!c) return reply(fail(E.NOT_FOUND, "No such certificate"));
+                var d = info(c), r = ok({}), k;
+                for (k in d) r[k] = d[k];
+                r.certificateId = c.certificateId;
+                r.certificateFilename = filename(c);
+                r.trusted = c.trusted;
+                r.system = c.system;
+                r.fingerprints = { sha256: sha(c.der, false), sha1: sha(c.der, true) };
+                r.pem = "-----BEGIN CERTIFICATE-----\n" + bytesB64(c.der).replace(/(.{64})/g, "$1\n").replace(/\n$/, "") + "\n-----END CERTIFICATE-----\n";
+                reply(r);
+            },
+            "/addcertificate": function (p, reply) {
+                var path = p.certificateFilename;
+                if (typeof path !== "string" || path.charAt(0) !== "/") return reply(fail(E.BAD_PARAMS, "certificateFilename must be an absolute path"));
+                dispatch("palm://org.webosphoenix.filemanager/read", { path: path, encoding: "base64", maxBytes: 1024 * 1024 }, function (r) {
+                    if (!r || !r.returnValue) return reply(fail(E.READ, (r && r.errorText) || "Cannot read " + path));
+                    var ders = certsIn(b64Bytes(r.data)), good = [];
+                    ders.forEach(function (der) { try { parse(der); good.push(der); } catch (e) { /* not one */ } });
+                    if (!good.length) return reply(fail(E.NOT_CERT, "There is no certificate in " + path.replace(/^.*\//, "")));
+                    var st = load(), have = all(st), ids = [];
+                    good.forEach(function (der) {
+                        if (have.some(function (c) { return sameDer(c.der, der); })) return;
+                        var id = "user-" + st.nextId++;
+                        st.user.push({ certificateId: id, der: bytesB64(der), trusted: true, added: Date.now() });
+                        have.push({ certificateId: id, der: der });
+                        ids.push(id);
+                    });
+                    if (!ids.length) return reply(fail(E.EXISTS, "This certificate is installed already"));
+                    save(st);
+                    reply(ok({ certificateIds: ids }));
+                }, { cancelled: function () { return false; }, onCancel: null });
+            },
+            "/setcertificatetrust": function (p, reply) {
+                var c = find(p);
+                if (!c || p.certificateId === undefined) return reply(fail(E.NOT_FOUND, "No such certificate"));
+                var st = load();
+                if (c.system) {
+                    var o = st.system[c.certificateId] || {};
+                    o.trusted = !!p.trusted;
+                    st.system[c.certificateId] = o;
+                } else {
+                    st.user.forEach(function (u) { if (u.certificateId === c.certificateId) u.trusted = !!p.trusted; });
+                }
+                save(st);
+                reply(ok());
+            },
+            "/removecertificate": function (p, reply) {
+                var c = find(p);
+                if (!c || p.certificateId === undefined) return reply(fail(E.NOT_FOUND, "No such certificate"));
+                var st = load();
+                if (c.system) st.system[c.certificateId] = { removed: true };
+                else st.user = st.user.filter(function (u) { return u.certificateId !== c.certificateId; });
+                save(st);
+                reply(ok());
+            },
+            // The system's certificates back as shipped (Phoenix).
+            "/restorecertificates": function (p, reply) {
+                var st = load();
+                st.system = {};
+                save(st);
+                reply(ok());
+            }
+        });
+        runtime.certificates = { parse: function (der) { return parse(der); }, sha256: function (b) { return sha(b, false); },
+                                 sha1: function (b) { return sha(b, true); }, certsIn: certsIn };
     })();
 
     // ================================================================================

@@ -16,7 +16,7 @@
 import { useEffect, useState } from "react";
 import { apps, call, LunaError, settings, system, telephony, type DeviceInfo, type NetworkStatus, type OsInfo,
          type PlatformInfo, type SimState, type SubscriberInfo } from "@phoenix/luna";
-import { Button, Dialog, ErrorText, formatNumber, Group, Page, PageHeader, Row, Spinner } from "@phoenix/ui";
+import { AppMenu, Button, Dialog, ErrorText, formatNumber, Group, Page, PageHeader, Row, Spinner } from "@phoenix/ui";
 import { useBack } from "../nav";
 import notice from "../../../../NOTICE?raw";
 import license from "../../../../LICENSE?raw";
@@ -122,6 +122,8 @@ export function DeviceInfoPage() {
 
     return (
         <Page>
+            {/* The original's app menu had "Certificate Manager..." (com.palm.app.deviceinfo list-assistant.js). */}
+            <AppMenu items={[{ label: "Certificate Manager", onSelect: () => void apps.launch("com.palm.app.certificate") }]} />
             <PageHeader title="Device Info" icon="icons/deviceinfo.png" />
             {!dev || !os ? <Row title="Loading…"><Spinner /></Row> : (
                 <>

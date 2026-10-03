@@ -42,6 +42,9 @@ QtObject {
     // Ctrl+Right). The shell turns the UI to follow (UiRotation).
     property string deviceOrientation: "up"
     property bool muted: false
+    // Unconditional call forwarding is on (Settings > Phone; the runtime's
+    // com.palm.telephony forwardQuery), for the status bar's icon.
+    property bool callForwarding: false
     // System sounds (SystemSounds.qml), as the runtime reports them
     // (Settings > Sounds & Ringtones): the master and stream volumes
     // (0..100), "System Sounds", "Keyboard clicks" and the tones' paths.
@@ -54,7 +57,8 @@ QtObject {
     property bool tapSounds: true
     // Settings > Text Assist: {suggestions, autoCorrect, swipe, spaces2period,
     // forgetWords (when the learned words were forgotten, ms)}.
-    property var textAssist: ({ suggestions: true, autoCorrect: true, swipe: true, spaces2period: true, forgetWords: 0 })
+    property var textAssist: ({ suggestions: true, autoCorrect: true, swipe: true, spaces2period: true, forgetWords: 0,
+                                shortcuts: {}, shortcutsOn: true })
     // Settings > Text Assist > Keyboards: [{layout, language}] turned on,
     // and the one in use (the keyboard's language key picks another).
     property var keyboards: [{ layout: "qwerty", language: "en" }]
@@ -256,7 +260,8 @@ QtObject {
     // screenTimeout, lockTimeout, advancedGestures, keyboardShortcuts,
     // volume, streams, systemSounds, tapSounds, textAssist, keyboards,
     // keyboard, ringtone, alerttone,
-    // notificationtone, reduceMotion, keyboardAccess, vpnProfiles. Missing keys are left alone.
+    // notificationtone, callForwarding, reduceMotion, keyboardAccess,
+    // vpnProfiles. Missing keys are left alone.
     function applyAppStatus(s) {
         applyingAppStatus = true;
         if (s.wifiEnabled !== undefined)
@@ -273,6 +278,8 @@ QtObject {
             rotationLocked = !!s.rotationLocked;
         if (s.muted !== undefined)
             muted = !!s.muted;
+        if (s.callForwarding !== undefined)
+            callForwarding = !!s.callForwarding;
         if (s.timeFormat !== undefined)
             twentyFourHour = s.timeFormat === "HH24";
         if (s.showAlertsWhenLocked !== undefined)

@@ -34,6 +34,11 @@ QtObject {
     // QOrientationSensor where the device provides one).
     property string deviceOrientation: "up"
     property bool muted: false
+    // Unconditional call forwarding on, for the status bar's icon.
+    // STATUS: placeholder; M1 subscribes to com.palm.telephony forwardQuery
+    // {condition: "unconditional", subscribe: true}, as LunaSysMgr's
+    // StatusBarServicesConnector::requestCallForwardStatus did.
+    property bool callForwarding: false
     // System sounds (SystemSounds.qml): volumes 0..100, "System Sounds",
     // the keyboard's clicks and the tones.
     // STATUS: placeholders; M1 reads them from com.webos.service.audio
