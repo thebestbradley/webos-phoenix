@@ -223,9 +223,15 @@ int main(int argc, char *argv[])
     if (rootfs.isValid()) {
         // One persistent profile for all apps, like the single web runtime
         // on a device. Data lives under the platform's app data directory.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+        // Made with its storage from the start (Qt 6.9): the parent-only
+        // constructor makes an off-the-record profile first, and warns.
+        auto *profile = new QQuickWebEngineProfile(QStringLiteral("phoenix-sim"), &view);
+#else
         auto *profile = new QQuickWebEngineProfile(&view);
         profile->setStorageName(QStringLiteral("phoenix-sim"));
         profile->setOffTheRecord(false);
+#endif
         profile->installUrlSchemeHandler(Rootfs::scheme().toLatin1(), new RootfsSchemeHandler(&rootfs, profile));
         view.rootContext()->setContextProperty(QStringLiteral("phoenixWebProfile"), profile);
         webEngine = true;
