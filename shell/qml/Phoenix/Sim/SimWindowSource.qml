@@ -674,7 +674,20 @@ Item {
         } else if (type === "ongoing") {
             setOngoing(appId, payload || {});
         } else if (type === "reboot") {
-            rebootRequested();
+            rebootRequested(payload.reason ? String(payload.reason) : "");
+        } else if (type === "erase") {
+            // The device was erased (com.palm.storage erase/EraseAll, Wipe;
+            // Settings' Full Erase): it restarts into First Use.
+            eraseRequested();
+        } else if (type === "enterMSM") {
+            // com.palm.storage diskmode/enterMSM, for the simulated storaged.
+            enterMSMRequested(!!payload.enterIMasq);
+        } else if (type === "debugOverlay") {
+            // com.palm.systemmanager enableFpsCounter / enableTouchPlot.
+            debugOverlayRequested(payload);
+        } else if (type === "progressAnimation") {
+            // com.palm.systemmanager runProgressAnimation.
+            progressAnimationRequested(String(payload.type || ""), String(payload.state || ""));
         } else if (type === "installApp" || type === "removeApp") {
             _installerRequest(type, payload);
         } else if (type === "appManagerOp") {
@@ -716,8 +729,29 @@ Item {
     signal systemStatusReported(var status)
     signal preferencesReported(var prefs)
     signal launcherLayoutRestored(string json)
-    // The page asked the device to restart (com.palm.power/shutdown/machineReboot).
-    signal rebootRequested
+    // The page asked the device to restart (com.palm.power/shutdown/machineReboot),
+    // and why ("System update" for an update's Install Now).
+    signal rebootRequested(string reason)
+    // The device was erased; it restarts into First Use.
+    signal eraseRequested
+    // USB drive mode was asked for (com.palm.storage diskmode/enterMSM).
+    signal enterMSMRequested(bool enterIMasq)
+    // enableFpsCounter {enable, reset, dump} as {fpsCounter: {...}};
+    // enableTouchPlot {collection, trails, crosshairs} as {touchPlot: {...}}.
+    signal debugOverlayRequested(var request)
+    // runProgressAnimation {type, state}.
+    signal progressAnimationRequested(string type, string state)
+
+    // A /storaged signal (the simulated storage daemon's, SimStorage.qml)
+    // for every page's com.palm.bus/signal/addmatch listeners
+    // (luna-systemui's StoragedService.js).
+    function storagedSignal(method, payload) {
+        var js = "window.__phoenixRuntime && __phoenixRuntime.storagedSignal && __phoenixRuntime.storagedSignal("
+            + JSON.stringify(method) + ", " + JSON.stringify(payload || {}) + ")";
+        var pages = _webPages();
+        for (var i = 0; i < pages.length; ++i)
+            pages[i].runScript(js);
+    }
 
     // ---- System windows: the emergency window ---------------------------------------
     // An app page shown by the shell outside the cards: Phone's restricted
@@ -992,6 +1026,28 @@ Item {
                         sound: "", soundClass: "" });
     }
 
+    // "USB Drive connection failed": storaged could not take the drive
+    // (WindowServerLuna::slotBrickModeFailed, uiComponents/MsmEntryFailed;
+    // 160 px tall in the popup alert's place); OK closes it.
+    readonly property string msmEntryFailedKey: "msmentryfailed"
+    Component {
+        id: msmEntryFailedComponent
+        MsmEntryFailedAlert {}
+    }
+    function showMsmEntryFailedAlert() {
+        if (_windows[msmEntryFailedKey])
+            return;
+        var alert = msmEntryFailedComponent.createObject(source, { visible: false });
+        alert.okButtonPressed.connect(function () { source.closeAlert(source.msmEntryFailedKey); });
+        _windows[msmEntryFailedKey] = alert;
+        var queued = [];
+        for (var i = 0; i < alerts.count; ++i)
+            queued.push({ appId: alerts.get(i).appId, name: alerts.get(i).name });
+        alerts.insert(Policy.insertIndex(queued, "com.palm.systemui", "msmentryfailed"),
+                      { key: msmEntryFailedKey, appId: "com.palm.systemui", name: "msmentryfailed", height: 160,
+                        sound: "", soundClass: "" });
+    }
+
     // The Home button closes the front popup alert
     // (DashboardWindowManager::slotCloseAlert: the window is closed).
     function closeAlert(key) {
@@ -1064,6 +1120,7 @@ Item {
             if (info && info.web && !_headless[bootApps[i]])
                 _headless[bootApps[i]] = _webWindow(bootApps[i], info.main, "");
         }
+        _systemUiPage = _headless["com.palm.systemui"] || null;
         // Not when a demo scene or a test sets the scene up.
         if (bootAppsEnabled)
             for (var j = 0; j < launchAtBootApps.length; ++j)
@@ -1227,6 +1284,12 @@ Item {
             if (_pids[id] === processId)
                 closeApp(id);
     }
+    // The system UI's page: loaded, and how far (0-100) it has; phoenix-sim's
+    // boot animation waits for it.
+    property var _systemUiPage: null
+    property bool systemUiLoaded: false
+    readonly property int systemUiProgress: systemUiLoaded ? 100
+        : _systemUiPage && _systemUiPage.view ? _systemUiPage.view.loadProgress : 0
 
     // phoenix-sim: the battery and charger (runtime setPower in every page,
     // so luna-systemui's powerd listeners hear it).
@@ -1282,7 +1345,8 @@ Item {
     // State only the shell knows (the lock screen, how the UI and the device
     // are turned), which every page gets as it loads; unlike the rest it is
     // not the pages' to overrule.
-    readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse", "launcherLayout", "gestureArea"]
+    readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse", "launcherLayout", "gestureArea",
+                                        "debugOverlays", "usbHost"]
     property var _shellStatus: ({})
 
     function pushSystemStatus(changes) {
@@ -1319,6 +1383,8 @@ Item {
     }
 
     function _pageLoaded(win) {
+        if (win === _systemUiPage)
+            systemUiLoaded = true;
         while (_pendingCaptures.length > 0)
             win.runScript(_pendingCaptures.shift());
         if (_pendingStatus) {

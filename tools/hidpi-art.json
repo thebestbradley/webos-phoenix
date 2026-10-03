@@ -190,7 +190,11 @@
         { "art": "dockmode/time/digital/portrait/Divider-Date.png", "method": "smooth" }
     ],
     "derived": [
-        { "art": "keyboard-phone/key-charcoal.png", "by": "tools/keyboard-charcoal.py" }
+        { "art": "keyboard-phone/key-charcoal.png", "by": "tools/keyboard-charcoal.py" },
+        { "art": "boot-logo.png", "by": "tools/draw-system-art.py" },
+        { "art": "boot-logo-bright.png", "by": "tools/draw-system-art.py" },
+        { "art": "msm-usb.png", "by": "tools/draw-system-art.py" },
+        { "art": "msm-fsck-usb.png", "by": "tools/draw-system-art.py" }
     ],
     "sets": [
         {

@@ -31,16 +31,121 @@ Item {
     onLockedChanged: {
         if (locked) {
             unlockPanel.shown = false;
+            _resetSecurityStates();
             lockedAt = Date.now();
         }
     }
     // "Lock after" (Screen & Lock; system preference lockTimeout, seconds):
     // with a PIN or password, unlocking within this long of locking needs
-    // neither (LockWindow::requiresPasscode, :1316-1327). 0: always.
+    // neither (LockWindow::requiresPasscode, :1316-1327). 0: always. A
+    // security policy's inactivity limit caps it (LockWindow::setLockTimeout,
+    // :595-612; EASPolicy::clampInactivityInSeconds).
     readonly property int lockTimeout: system && system.lockTimeout > 0 ? system.lockTimeout : 0
     property real lockedAt: Date.now()
     function requiresPasscode() {
-        return (Date.now() - lockedAt) / 1000 >= lockTimeout;
+        var timeout = lockTimeout;
+        if (_policy && _policy.password && _policy.password.enabled && timeout >= _policy.inactivityInSeconds)
+            timeout = _policy.inactivityInSeconds;
+        return (Date.now() - lockedAt) / 1000 >= timeout;
+    }
+
+    // ---- Security policy (EASPolicyManager; LockWindow.h:129-137) -------------------
+    // The policy as getSecurityPolicy last gave it (null without one), the
+    // lock screen's dialog ("lastTry": LockWindow's StateLastTryDialog;
+    // "newPin": StateNewPinDialog; "wipe": the last try failed) and the new
+    // passcode being set ("pin" or "password": m_setupNewPin /
+    // m_setupNewPassword, with the first entry in _newPasscode).
+    property var _policy: null
+    property string _lockMode: "none"
+    property string dialogState: ""
+    property string setupNew: ""
+    property string _newPasscode: ""
+    readonly property alias messageDialog: messageDialog
+    function _resetSecurityStates() {
+        dialogState = "";
+        setupNew = "";
+        _newPasscode = "";
+    }
+    function _validMaxRetries() {
+        return !!(_policy && _policy.password && _policy.password.enabled && _policy.password.maxRetries > 1);
+    }
+    function _minLength() {
+        return _policy && _policy.password && _policy.password.enabled && _policy.password.minLength > 1
+            ? _policy.password.minLength : 0;
+    }
+    function _newHint(pin) {
+        var min = _minLength();
+        if (min <= 0)
+            return " ";
+        return pin ? qsTr("Must be at least %1 numbers").arg(min) : qsTr("Must be at least %1 characters").arg(min);
+    }
+
+    // LockWindow::changeState(StateNewPinDialog), :1065-1095.
+    function _showNewPinDialog() {
+        unlockPanel.shown = false;
+        if (_policy && _policy.password && _policy.password.alphaNumeric) {
+            messageDialog.setupDialog(qsTr("Password Required"),
+                qsTr("Your security requirements have changed. To access your device, you must set a new password. This will automatically turn on Secure Unlock"), 3);
+            messageDialog.setButton1("", "disabled");
+            messageDialog.setButton2(qsTr("New Password"), "affirmative");
+            messageDialog.setButton3(qsTr("Cancel"), "normal");
+        } else {
+            messageDialog.setupDialog(qsTr("PIN Required"),
+                qsTr("To access your device, you must first set a PIN or Password for Secure Unlock. This will automatically turn on Secure Unlock"), 3);
+            messageDialog.setButton1(qsTr("New PIN"), "affirmative");
+            messageDialog.setButton2(qsTr("New Password"), "affirmative");
+            messageDialog.setButton3(qsTr("Cancel"), "normal");
+        }
+        dialogState = "newPin";
+    }
+    // LockWindow::changeState(StateLastTryDialog), :1097-1120.
+    function _showLastTryDialog() {
+        unlockPanel.shown = false;
+        if (_lockMode === "pin")
+            messageDialog.setupDialog(qsTr("Warning"), qsTr("PIN incorrect. If you enter an incorrect PIN now your device will be erased"), 1);
+        else
+            messageDialog.setupDialog(qsTr("Warning"), qsTr("Password incorrect. If you enter an incorrect Password now your device will be erased"), 1);
+        messageDialog.setButton1(qsTr("Ok"), "normal");
+        messageDialog.setButton2("", "disabled");
+        messageDialog.setButton3("", "disabled");
+        dialogState = "lastTry";
+    }
+    // The last try failed: the device erases itself (LockWindow.cpp:1394-1409).
+    function _showWipeDialog() {
+        unlockPanel.shown = false;
+        messageDialog.setupDialog(_lockMode === "pin" ? qsTr("PIN Incorrect") : qsTr("Password Incorrect"),
+                                  qsTr("Your device will now be erased."), 0);
+        dialogState = "wipe";
+    }
+    // LockWindow::showPinPanel (:2031-2110).
+    function _showPinPanel() {
+        dialogState = "";
+        if (setupNew !== "") {
+            var pin = setupNew === "pin";
+            unlockPanel.setupDialog(pin, pin ? qsTr("Enter PIN") : qsTr("Enter Password"), _newHint(pin), _minLength() > 0, _minLength());
+        } else {
+            var isPin = _lockMode !== "password";
+            var hint = _retriesLeft === 1 && _validMaxRetries() ? qsTr("Final Try") : isPin ? qsTr("Enter PIN") : qsTr("Enter Password");
+            unlockPanel.setupDialog(isPin, qsTr("Device Locked"), hint, false, 0);
+        }
+        unlockPanel.shown = true;
+        unlockPanel.forceActiveFocus();
+    }
+    property int _retriesLeft: 0
+    // LockWindow::slotDialogButton1..3Pressed (:1556-1586).
+    function _dialogButton(n) {
+        if (dialogState === "newPin") {
+            if (n === 3) {
+                // Cancel: locked again.
+                _resetSecurityStates();
+                return;
+            }
+            setupNew = n === 1 ? "pin" : "password";
+            _newPasscode = "";
+            _showPinPanel();
+        } else if (dialogState === "lastTry" && n === 1) {
+            _showPinPanel();
+        }
     }
 
     // The phone is ringing: the padlock is the incoming-call handle and the
@@ -67,13 +172,17 @@ Item {
     property url bannerIcon: ""
     property real bannerOpacity: 1
     readonly property bool showAlertsWhenLocked: !system || system.showAlertsWhenLocked !== false
-    readonly property bool _alertsShown: locked && showAlertsWhenLocked && !alertShown && !unlockPanel.shown
+    // The unlock panel or a dialog is up: no padlock, help or alerts.
+    readonly property bool _covered: unlockPanel.shown || dialogState !== ""
+    readonly property bool _alertsShown: locked && showAlertsWhenLocked && !alertShown && !_covered
     readonly property bool bannerShown: _alertsShown && bannerActive
     readonly property bool dashboardShown: _alertsShown && !bannerActive && notifications !== null && notifications.count > 0
 
     onIncomingCallChanged: {
         if (incomingCall) {
             unlockPanel.shown = false;
+            if (dialogState !== "wipe")
+                _resetSecurityStates();
             hideHelp.stop();
             helpShown = true;
         } else if (!drag.pressed) {
@@ -89,29 +198,53 @@ Item {
         source.lunaCall("palm://com.palm.systemmanager/" + method, params, callback);
     }
 
-    // The padlock reached the ring: unlock, or ask for the passcode first
-    // (LockWindow.cpp:1259-1271).
+    // The padlock reached the ring: unlock, or ask for the passcode first,
+    // or for a new one when a security policy asks for it
+    // (LockWindow::tryUnlock, :1257-1287).
     function requestUnlock() {
         _call("getDeviceLockMode", {}, function (r) {
             if (!lock.locked)
                 return;
             // No lock service, no passcode can have been set.
-            var mode = r && r.returnValue !== false ? r.lockMode : "none";
             if (!r || r.returnValue === false)
                 console.warn("Phoenix: device lock service unavailable; unlocking");
-            if ((mode !== "pin" && mode !== "password") || !lock.requiresPasscode()) {
-                lock.unlockRequested();
-                return;
+            var ok = r && r.returnValue !== false;
+            var mode = ok ? r.lockMode : "none";
+            var pending = ok && r.policyState === "pending";
+            lock._lockMode = mode === "pin" || mode === "password" ? mode : "none";
+            lock._retriesLeft = ok && r.retriesLeft > 0 ? r.retriesLeft : 0;
+            var decide = function () {
+                if (!lock.locked)
+                    return;
+                if (pending && lock._policy && lock._policy.password && lock._policy.password.enabled) {
+                    lock._showNewPinDialog();
+                    return;
+                }
+                if (lock._lockMode === "none" || !lock.requiresPasscode()) {
+                    lock.unlockRequested();
+                    return;
+                }
+                lock.setupNew = "";
+                lock._showPinPanel();
+            };
+            if (ok && r.policyState && r.policyState !== "none") {
+                lock._call("getSecurityPolicy", {}, function (p) {
+                    lock._policy = p && p.returnValue !== false && p.policy ? p.policy : null;
+                    decide();
+                });
+            } else {
+                lock._policy = null;
+                decide();
             }
-            var pin = mode === "pin";
-            unlockPanel.setupDialog(pin, qsTr("Device Locked"), pin ? qsTr("Enter PIN") : qsTr("Enter Password"), false, 0);
-            unlockPanel.shown = true;
-            unlockPanel.forceActiveFocus();
         });
     }
 
-    // LockWindow::slotPasswordSubmitted.
+    // LockWindow::slotPasswordSubmitted (:1341-1534).
     function _submit(passcode, isPin) {
+        if (setupNew !== "") {
+            _submitNew(passcode);
+            return;
+        }
         _call("matchDevicePasscode", { passCode: passcode }, function (r) {
             if (!lock.locked || !unlockPanel.shown)
                 return;
@@ -120,9 +253,63 @@ Item {
                 lock.unlockRequested();
                 return;
             }
-            unlockPanel.queueUpTitle(qsTr("Device Locked"), isPin ? qsTr("Enter PIN") : qsTr("Enter Password"));
-            unlockPanel.setupDialog(isPin, isPin ? qsTr("PIN Incorrect") : qsTr("Password Incorrect"),
-                                    qsTr("Try Again"), false, 0);
+            // The policy's tries left (EASPolicyManager::retriesLeft).
+            lock._call("getDeviceLockMode", {}, function (m) {
+                if (!lock.locked || !unlockPanel.shown)
+                    return;
+                var retries = m && m.returnValue !== false && m.retriesLeft > 0 ? m.retriesLeft : 0;
+                lock._retriesLeft = retries;
+                var message;
+                if (retries > 1) {
+                    message = qsTr("%1 Tries Remaining").arg(retries);
+                } else if (retries === 1) {
+                    lock._showLastTryDialog();
+                    return;
+                } else if (lock._validMaxRetries()) {
+                    // Device Will Be Erased.
+                    lock._showWipeDialog();
+                    return;
+                } else {
+                    message = qsTr("Try Again");
+                }
+                unlockPanel.queueUpTitle(qsTr("Device Locked"), isPin ? qsTr("Enter PIN") : qsTr("Enter Password"));
+                unlockPanel.setupDialog(isPin, isPin ? qsTr("PIN Incorrect") : qsTr("Password Incorrect"), message, false, 0);
+            });
+        });
+    }
+
+    // The new PIN or password, twice, then set (m_setupNewPin /
+    // m_setupNewPassword, :1427-1532).
+    function _submitNew(passcode) {
+        var pin = setupNew === "pin";
+        var min = _minLength();
+        if (_newPasscode === "") {
+            _newPasscode = passcode;
+            unlockPanel.setupDialog(pin, pin ? qsTr("Enter PIN Again") : qsTr("Enter Password Again"), " ", min > 0, min);
+            return;
+        }
+        if (_newPasscode !== passcode) {
+            // They do not match: both again.
+            _newPasscode = "";
+            unlockPanel.setupDialog(pin, pin ? qsTr("PIN Doesn't Match") : qsTr("Password Doesn't Match"), qsTr("Try Again"), min > 0, min);
+            unlockPanel.queueUpTitle(pin ? qsTr("Enter PIN") : qsTr("Enter Password"), _newHint(pin));
+            return;
+        }
+        _call("setDevicePasscode", { lockMode: setupNew, passCode: passcode }, function (r) {
+            if (!lock.locked || !unlockPanel.shown)
+                return;
+            if (r && r.returnValue !== false) {
+                unlockPanel.shown = false;
+                lock._resetSecurityStates();
+                lock.unlockRequested();
+                return;
+            }
+            lock._newPasscode = "";
+            var weak = r && (r.errorCode === -8 || r.errorCode === -9);
+            var title = weak ? (pin ? qsTr("PIN Not Secure") : qsTr("Password Not Secure"))
+                             : (pin ? qsTr("Enter PIN") : qsTr("Enter Password"));
+            unlockPanel.setupDialog(pin, title, r && r.errorText ? r.errorText : " ", min > 0, min);
+            unlockPanel.queueUpTitle(pin ? qsTr("Enter PIN") : qsTr("Enter Password"), lock._newHint(pin));
         });
     }
 
@@ -194,7 +381,7 @@ Item {
     Row {
         id: clock
         anchors.horizontalCenter: parent.horizontalCenter
-        opacity: lock.sideways && unlockPanel.shown ? 0 : 1
+        opacity: lock.sideways && lock._covered ? 0 : 1
         Behavior on opacity { NumberAnimation { duration: Theme.lockFadeDuration } }
         // Centred 15% down the screen (LockWindow.cpp:427).
         y: Math.max(Theme.statusBarHeight, lock.height * Theme.lockClockCenterRatio - Theme.lockDigitHeight / 2)
@@ -247,7 +434,7 @@ Item {
         id: alertFrame
         objectName: "lockAlert"
         visible: opacity > 0
-        opacity: lock.locked && lock.alertShown && !unlockPanel.shown ? 1 : 0
+        opacity: lock.locked && lock.alertShown && !lock._covered ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.alertFadeDuration } }
         anchors.horizontalCenter: parent.horizontalCenter
         readonly property real contentWidth: Math.min(Theme.px(320), lock.width) - 2 * Theme.px(10)
@@ -421,7 +608,7 @@ Item {
         width: Theme.px(320)
         height: Theme.px(190)
         source: Theme.asset("screen-lock-target-scrim.png")
-        visible: lock.helpShown && !unlockPanel.shown
+        visible: lock.helpShown && !lock._covered
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
@@ -438,7 +625,7 @@ Item {
         id: padlock
         objectName: "padlock"
         // Not over the unlock panel (LockWindow.cpp:1053).
-        visible: !unlockPanel.shown
+        visible: !lock._covered
         width: Theme.lockPadlockSize
         height: Theme.lockPadlockSize
         source: Theme.asset((lock.incomingCall ? "screen-lock-incoming-call-" : "screen-lock-padlock-")
@@ -498,8 +685,27 @@ Item {
         enabled: shown
         Behavior on opacity { NumberAnimation { duration: Theme.lockFadeDuration } }
         emergencyAvailable: lock.emergencyAvailable
-        onEntryCanceled: shown = false
+        // LockWindow::slotCancelPasswordEntry: locked again, the new
+        // passcode forgotten.
+        onEntryCanceled: { shown = false; lock._resetSecurityStates(); }
         onPasswordSubmitted: (password, isPIN) => lock._submit(password, isPIN)
         onEmergencyRequested: lock.emergencyRequested()
+    }
+
+    // ---- The security policy's dialog (uiComponents/MessageDialog) ----------------
+    // Its bottom at the centre of the screen (LockWindow::showDialog,
+    // :2114-2122); faded in and out over lockFadeDuration.
+    MessageDialog {
+        id: messageDialog
+        readonly property bool shown: lock.locked && lock.dialogState !== ""
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Math.max(Theme.statusBarHeight, lock.height / 2 - height)
+        opacity: shown ? 1 : 0
+        visible: opacity > 0
+        enabled: shown
+        Behavior on opacity { NumberAnimation { duration: Theme.lockFadeDuration } }
+        onButton1Pressed: lock._dialogButton(1)
+        onButton2Pressed: lock._dialogButton(2)
+        onButton3Pressed: lock._dialogButton(3)
     }
 }

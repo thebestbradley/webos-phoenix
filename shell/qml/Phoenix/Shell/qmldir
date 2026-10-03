@@ -42,3 +42,11 @@ DrawerHeader 1.0 DrawerHeader.qml
 SelectMark 1.0 SelectMark.qml
 ScreenCaptureFlash 1.0 ScreenCaptureFlash.qml
 ScreenCaptureThumbnail 1.0 ScreenCaptureThumbnail.qml
+MessageDialog 1.0 MessageDialog.qml
+MsmEntryFailedAlert 1.0 MsmEntryFailedAlert.qml
+BootAnimation 1.0 BootAnimation.qml
+ProgressAnimation 1.0 ProgressAnimation.qml
+FullEraseConfirmation 1.0 FullEraseConfirmation.qml
+FpsCounter 1.0 FpsCounter.qml
+TouchPlot 1.0 TouchPlot.qml
+SystemScreens 1.0 SystemScreens.qml

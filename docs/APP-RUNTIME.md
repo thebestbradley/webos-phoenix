@@ -587,7 +587,7 @@ same request and reply shapes:
 | Airplane Mode | `com.webos.service.connectionmanager`: `getstatus` (`offlineMode`), `setstate {offlineMode}` | `webos-connman-adapter` `src/connectionmanager_service.c` |
 | Bluetooth | `com.webos.service.bluetooth2`: `adapter/getStatus`, `adapter/setState {powered}`, `adapter/startDiscovery`, `adapter/cancelDiscovery`, `adapter/pair`, `adapter/unpair`, `device/getStatus` | `com.webos.service.bluetooth2` `src/bluetoothmanagerservice.cpp`, `bluetoothmanageradapter.cpp` |
 | Screen & Lock | `com.webos.settingsservice` `get/setSystemSettings {category: "picture", backlight}`; `com.webos.service.systemservice` `get/setPreferences` (`screenTimeout`, `rotationLock`, `wallpaper`, `showAlertsWhenLocked`, `blinkNotifications`) | `settingsservice` `inc/SettingsServiceApi.h`; `luna-sysservice` `Src/PrefsFactory.cpp` (stores any key) |
-| Screen & Lock (PIN) | `com.palm.systemmanager` `getDeviceLockMode`, `setDevicePasscode`, `matchDevicePasscode`: the legacy webOS API; OSE has none, so Phoenix will have to provide it | `openwebos/luna-sysmgr` `Src/base/SystemService.cpp` |
+| Screen & Lock (PIN) | `com.palm.systemmanager` `getDeviceLockMode`, `setDevicePasscode`, `matchDevicePasscode` (and `getSecurityPolicy`: a security policy's rules; see [Device security](#device-security-erase-usb-drive-mode-and-debugging)): the legacy webOS API; OSE has none, so Phoenix will have to provide it | `openwebos/luna-sysmgr` `Src/base/SystemService.cpp` |
 | Sounds | `com.webos.service.audio` `master/getVolume`, `master/setVolume`, `master/muteVolume`, `getInputVolume` / `setInputVolume` (`streamType` `pringtones`, `palerts`, `pfeedback`, `pmedia`), `playFeedback`, `playSound`, `controlPlayback`; system service `ringtone`, `systemSounds`, `x_palm_virtualkeyboard_prefs` (`TapSounds`: Keyboard clicks), `ringtone/listRingtones` | `audiod-pro` `src/modules/masterVolumeManager`, `audioPolicyManager`, `systemSoundsManager` |
 | Date & Time | system service `get/setPreferences` (`timeFormat`, `useNetworkTime`, `useNetworkTimeZone`, `timeZone`), `getPreferenceValues {key: "timeZone"}`, `time/getSystemTime`, `time/setSystemTime {utc}` | `luna-sysservice` `Src/TimePrefsHandler.cpp` |
 | Language & Region | `com.webos.settingsservice` `get/setSystemSettings {keys: ["localeInfo"]}` (`locales.UI`, `locales.FMT`) | `settingsservice` |
@@ -1629,7 +1629,9 @@ shows what it allows and asks for the device PIN or password
 (`matchDevicePasscode`); with no secure unlock set it asks for one first
 and offers Screen & Lock. Turning it off asks nothing. The state is OSE's
 `com.webos.service.devmode` (`getDevMode`, `setDevMode`); erasing the
-device turns it off.
+device turns it off. While it is on, its Debugging switches show the
+shell's frame rate counter and touch plot (`enableFpsCounter`,
+`enableTouchPlot`; see [Device security](#device-security-erase-usb-drive-mode-and-debugging)).
 
 The installer takes such a package only when Developer Mode is on and the
 request says `developerMode: true` (`com.webos.appInstallService install`;
@@ -1686,9 +1688,69 @@ slot's. A simulator bundle is only a RAUC manifest
 (`php server/updates/bin/updates.php simulator --version 0.2.0 --build 2`,
 served by `server/updates/bin/serve.sh` at `http://127.0.0.1:8089/`).
 `com.palm.power/shutdown/machineReboot` restarts phoenix-sim (`simProcess`),
-or reloads the page under `tools/serve-rootfs.py`. Tests:
+or reloads the page under `tools/serve-rootfs.py`; for a system update
+(`reason: "System update"`) phoenix-sim starts again with `--updating`, and
+the boot shows luna-sysmgr's "Updating the system / Do not remove battery"
+(BootupAnimation's activity state) while the new system's UI loads, its
+progress that page's loading. Tests:
 `services/updates/updatesservice.test.ts` (with a stand-in for RAUC's command
 line), `server/updates/tests/run.php`, `tools/test-updates.cjs`.
+
+## Device security, erase, USB drive mode and debugging
+
+The rest of luna-sysmgr's `com.palm.systemmanager` and the storage daemon's
+`com.palm.storage` the system UI relies on, simulated in the runtime
+(`runtime/phoenix-runtime.js`, "com.palm.systemmanager: device lock",
+"com.palm.storage", "Debugging overlays"). OSE has none of them; on a device
+Phoenix will have to provide them. `tools/test-security.cjs` tests them.
+
+**Device lock and security policy** (`Security.cpp`, `EASPolicyManager.cpp`):
+
+| Method | Phoenix |
+| --- | --- |
+| `getDeviceLockMode {subscribe}` | `{lockMode: "none" \| "pin" \| "password", policyState: "none" \| "active" \| "pending", retriesLeft}` (the policy's tries left; 0 without one) |
+| `getSecurityPolicy {}` | `{policy: {password: {enabled, minLength, maxRetries, alphaNumeric, allowSimplePassword?}, inactivityInSeconds, id, status: {enforced, retriesLeft}}}`; `returnValue: false` without a policy |
+| `setDevicePasscode {lockMode, passCode, oldPasscode}` | the old passcode when one is set, except while the policy is pending (the lock screen sets the new one it asks for); against a policy, the original's checks: `errorCode` -1 empty, -2 too short, -3 / -4 not alphanumeric, -5 not digits, -8 repeating, -9 sequential, with its texts ("No sequential numbers (1234)") |
+| `matchDevicePasscode {passCode}` | `{succeeded}`, and when wrong `{lockedOut, retriesLeft}` (the original answered `returnValue: false`) |
+
+A policy is what an Exchange account puts in db8: `com.palm.securitypolicy:1`
+objects with EAS's fields (`devicePasswordEnabled`, `minDevicePasswordLength`,
+`maxDevicePasswordFailedAttempts`, `alphanumericDevicePasswordRequired`,
+`allowSimpleDevicePassword`, `maxInactivityTimeDeviceLock`), merged into the
+strictest. phoenix-sim `--security-policy minLength=6,maxRetries=4,...` puts
+one there (`_id` `phoenix-sim-policy`; `none` removes it). A policy the
+passcode does not satisfy is pending: the lock screen shows "PIN Required" (or
+"Password Required") and sets a new one. Active, each wrong passcode costs a
+try: "2 Tries Remaining", then the last-try warning, then "Your device will
+now be erased." and `com.palm.storage/erase/Wipe`. Its inactivity caps
+Screen & Lock's "Lock after". Without a policy, three wrong passcodes hold the
+next try off for 15 s (`lockedOut`).
+
+**Erase and USB drive mode** (`com.palm.storage`):
+
+| Method | Phoenix |
+| --- | --- |
+| `erase/EraseAll {}`, `erase/Wipe {}` | Full Erase (the Full Erase key chord; a policy's last try): as Settings' Full Erase (`org.webosphoenix.service.reset/fullErase`, which now does the same), then an `erase` host message: phoenix-sim restarts with no data (`simProcess.eraseAndRestart`: its data and cache folders and settings file go) into First Use |
+| `diskmode/hostIsConnected {}` | `{result: true, hostIsConnected}`: a USB cable from a computer is in (the shell says so with the `usbHost` host status; a page waits for it, 3 s at most) |
+| `diskmode/enterMSM {"user-confirmed", enterIMasq}` | an `enterMSM` host message to phoenix-sim's storaged (`SimStorage.qml`) |
+
+storaged's `/storaged` signals (`MSMAvail {mode-avail}`, `MSMProgress {stage}`,
+`MSMEntry {new-mode}`, `MSMFscking`, `PartitionAvail {fscked}`) reach
+`com.palm.bus/signal/addmatch` in every page (`runtime.storagedSignal`,
+luna-systemui's StoragedService.js: the "Connected" alert, the USB warning,
+the USB dashboard, "Some data was damaged") and the shell
+(`Shell.storagedSignal`: the brick screen, the check of the drive, "USB Drive
+connection failed").
+
+**Debugging and the rest** (`SystemService.cpp:209-250`):
+
+| Method | Phoenix |
+| --- | --- |
+| `enableFpsCounter {enable?, reset?, dump?}` | the frame rate counter at the bottom left; `debugOverlay` host message |
+| `enableTouchPlot {collection?, trails?, crosshairs?}` | the touch plot; `debugOverlay` host message. Both `returnValue: false` without a key they know |
+| `getDebugOverlays {subscribe}` (Phoenix) | `{fpsCounter, touchPlot: {collection, trails, crosshairs}}`, as the shell reports them (`debugOverlays` host status); Settings > Developer Mode > Debugging has a switch for each |
+| `runProgressAnimation {type, state}` | `"msm"`, `"fsck"` or anything else (the logo); `"start"` / `"stop"`; `progressAnimation` host message |
+| `subscribeTurboMode {subscribe}` | `{subscribed, turboMode: true}` while subscribed (nothing to boost in the simulator) |
 
 ## Ongoing activities
 

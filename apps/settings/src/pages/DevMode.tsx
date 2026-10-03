@@ -10,10 +10,12 @@
 // the Developer Mode app and com.webos.service.devmode).
 // Services:
 //   com.webos.service.devmode getDevMode {subscribe} / setDevMode {status}
-//   com.palm.systemmanager getDeviceLockMode / matchDevicePasscode
+//   com.palm.systemmanager getDeviceLockMode / matchDevicePasscode;
+//   getDebugOverlays, enableFpsCounter, enableTouchPlot (the shell's
+//   frame rate counter and touch plot, under Debugging while it is on)
 
 import { useEffect, useState } from "react";
-import { apps, deviceLock, devMode, LunaError, type LockMode } from "@phoenix/luna";
+import { apps, call, deviceLock, devMode, LunaError, subscribe, type LockMode } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
 import { Button, Dialog, ErrorText, Group, Note, Page, PageHeader, Row, TextField, ToggleButton } from "@phoenix/ui";
 
@@ -47,8 +49,30 @@ export function DevModePage() {
                 background services. They run with more access to the device than other apps, so only install
                 them from people you trust.
             </Note>
+            {on && <DebugOverlays />}
             <DevModeDialog open={asking} lockMode={lockMode} onDone={() => setAsking(false)} />
         </Page>
+    );
+}
+
+interface Overlays { fpsCounter: boolean; touchPlot: { trails: boolean; crosshairs: boolean } }
+
+/** The shell's debugging overlays (com.palm.systemmanager enableFpsCounter / enableTouchPlot). */
+function DebugOverlays() {
+    const shown = useLuna<Overlays>((cb, err) =>
+        subscribe("luna://com.palm.systemmanager/getDebugOverlays", {}, (r) => cb(r as unknown as Overlays), err), []).value;
+    const touches = !!shown && (shown.touchPlot.trails || shown.touchPlot.crosshairs);
+    return (
+        <Group label="Debugging">
+            <Row title="Frame rate counter">
+                <ToggleButton value={!!shown?.fpsCounter} label="Frame rate counter" disabled={!shown} testId="devmode-fps"
+                              onChange={(v) => void call("luna://com.palm.systemmanager/enableFpsCounter", { enable: v })} />
+            </Row>
+            <Row title="Touch plot">
+                <ToggleButton value={touches} label="Touch plot" disabled={!shown} testId="devmode-touchplot"
+                              onChange={(v) => void call("luna://com.palm.systemmanager/enableTouchPlot", { trails: v, crosshairs: v })} />
+            </Row>
+        </Group>
     );
 }
 
