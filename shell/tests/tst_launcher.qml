@@ -332,9 +332,22 @@ Item {
             mouseClick(findChild(shell, function(o) { return o.objectName === "deleteDialogCancel"; }));
             tryCompare(dialog, "visible", false, 1000);
             verify(LauncherLayout.pageOf(shell.launcherLayout, id) >= 0, "Cancel keeps it");
+            // With a keyboard (GAPS V8 (3)): Esc cancels; Tab rings Cancel
+            // first, again Remove, Enter presses it.
             mouseClick(shell, decorator.x, decorator.y);
             tryCompare(dialog, "opacity", 1, 1000);
-            mouseClick(findChild(shell, function(o) { return o.objectName === "deleteDialogRemove"; }));
+            shell.forceActiveFocus();
+            keyClick(Qt.Key_Escape);
+            tryCompare(dialog, "visible", false, 1000);
+            verify(LauncherLayout.pageOf(shell.launcherLayout, id) >= 0, "Esc keeps it");
+            mouseClick(shell, decorator.x, decorator.y);
+            tryCompare(dialog, "opacity", 1, 1000);
+            shell.forceActiveFocus();
+            keyClick(Qt.Key_Tab);
+            verify(findChild(shell, function(o) { return o.objectName === "deleteDialogCancel"; }).keyFocused);
+            keyClick(Qt.Key_Tab);
+            verify(findChild(shell, function(o) { return o.objectName === "deleteDialogRemove"; }).keyFocused);
+            keyClick(Qt.Key_Return);
             compare(LauncherLayout.pageOf(shell.launcherLayout, id), -1);
             verify(shell.launcherLayout.removed.indexOf(id) >= 0);
         }

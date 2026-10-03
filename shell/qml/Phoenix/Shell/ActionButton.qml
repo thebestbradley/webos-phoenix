@@ -15,6 +15,8 @@ Item {
     property color captionColor: "#FFFFFF"
     property bool affirmative: false
     readonly property real inactiveOpacity: 0.70
+    // A keyboard's focus (GAPS V8 (3)): ringed; Enter presses it.
+    property bool keyFocused: false
     signal action()
 
     ArtBorderImage {
@@ -33,6 +35,16 @@ Item {
         font.pixelSize: Theme.px(16)
         font.family: Theme.fontFamily
         opacity: actionButton.active ? 1.0 : actionButton.inactiveOpacity
+    }
+    Rectangle {
+        objectName: "actionButtonKeyFocus"
+        visible: actionButton.keyFocused
+        anchors.fill: parent
+        anchors.margins: -Theme.px(3)
+        radius: Theme.px(10)
+        color: "transparent"
+        border.color: "#2c8ce0"
+        border.width: Theme.px(3)
     }
     MouseArea {
         anchors.fill: parent
