@@ -130,3 +130,28 @@ html:has(> body.ss-body), body.pui-app.ss-body { background: transparent; }
 .ss-error { color: #b0291f; font-size: 14px; }
 .ss-buttons { display: flex; gap: 8px; }
 .ss-buttons > * { flex: 1; }
+
+/* Choose a Picture: albums of square thumbnails, as the original picker. */
+.ss-pick { height: min(600px, calc(100% - 40px)); }
+.ss-pick-title { text-align: center; margin-top: -10px; }
+.ss-pick-albums {
+    flex: 1;
+    min-height: 120px;
+    overflow-y: auto;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.55);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+    padding: 4px 6px 8px;
+}
+.ss-pick-album-name { font-size: 14px; font-weight: bold; color: var(--pui-label); margin: 6px 2px 4px; }
+.ss-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); gap: 4px; }
+.ss-pick-thumb {
+    aspect-ratio: 1;
+    border: 2px solid #fff;
+    border-radius: 3px;
+    padding: 0;
+    background: #ccc center / cover no-repeat;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+}
+.ss-pick-thumb:active { outline: 3px solid var(--pui-label); }

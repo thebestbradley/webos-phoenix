@@ -414,7 +414,8 @@ drives it (Wi-Fi, password, PIN, brightness, airplane mode, Bluetooth).
 Phoenix Phone and Messaging start cleanly too, and
 `node tools/test-phone-messaging.cjs [--tablet]` places, holds and ends a
 call, answers and ignores simulated incoming calls, and sends and receives
-texts.
+texts, picture messages (MMS) and instant messages (a Jabber account on
+the simulated server).
 
 Camera, Photos and Music start cleanly too, and `node tools/test-media.cjs
 [--tablet]` drives them. So does Files, driven by `node tools/test-files.cjs
@@ -611,13 +612,22 @@ framework's avatar.
 - **Messaging**: Conversations / Buddies view menu, conversations newest
   first with unread counts, the conversation as chat balloons with time
   stamps and sending status, compose with a "To:" field that suggests
-  contacts by name or number, and a transport picker in which only SMS is
-  available (AIM, Google Talk, Yahoo!, Skype are listed as unavailable, as
-  is the Buddies view). Tablet: conversations on the left, the
-  conversation on the right.
+  contacts by name or number and IM buddies. The compose bar's attach
+  button opens the system picture picker
+  (`org.webosphoenix.filepicker/pick`); the picture waits above the field
+  and the message goes as MMS, its pictures shown in the balloon (tap: full
+  screen, with Share). **Buddies**: My Status per IM account (Available /
+  Busy / Offline, Offline signs out), the buddies of signed-in accounts
+  grouped by presence with their status messages (tap: chat), Accounts to
+  add one; an IM conversation shows the buddy's presence under the name and
+  sends by their service, text only. AIM, Google Talk, Yahoo! and Skype are
+  listed as not available (closed networks). Tablet: conversations on the
+  left, the conversation on the right.
 
 Launch params: Phone `{number}` fills in the dial pad; Messaging
-`{threadId}` opens a conversation, `{to, name}` starts a message.
+`{threadId}` opens a conversation, `{to, name}` starts a message,
+`{attachment}` or a share's `{share: {files}}` with a picture starts a
+picture message (Messaging is a share target for `image/*`).
 
 ### Services
 
@@ -634,6 +644,9 @@ end of `runtime/phoenix-runtime.js`):
 | Call log | db8 `com.palm.phonecall:1` (`type` incoming / outgoing / missed / ignored, `timestamp`, `duration`, `from`, `to[]`), written by the app | LuneOS phone app `qml/model/CallHistory.qml` |
 | Texts | db8 `com.palm.smsmessage:1` (extends `com.palm.message:1`: `folder` inbox / outbox, `status` pending / sending / successful / failed, `messageText`, `from`, `to[]`, `conversations[]`, `flags.read`), `com.palm.chatthread:1` (`displayName`, `summary`, `timestamp`, `unreadCount`, `personId`, `replyAddress`) | `webos-telephonyd` `files/db8/kinds`, `src/telephonyservice_sms.c`; `webOS-ports/org.webosports.messaging` `service/configuration/db/kinds` |
 | Sending | `org.webosports.service.messaging` `putMessage {message}` -> `{threadids}`: assigns the thread and stores the message; the telephony service then sends outbox messages with status pending (`sendSmsFromDb`) | `org.webosports.messaging` `service/javascript/assistants/PutMessage.js`, `utils/MessageAssigner.js`; `webos-telephonyd` `files/activities/com.palm.telephony/outgoing-sms.json` |
+| Picture messages | db8 `com.palm.mmsmessage:1` (extends `com.palm.message:1`; `serviceName: "mms"`, `parts[{path, mimeType, name}]`), shipped by Messaging. `putMessage` first copies each part into `/media/internal/.mms/` so the message keeps its picture (the media indexer skips dot folders); the summary reads "Picture: text" | the legacy `com.palm.mmsmessage` kind (`webos-telephonyd` leaves MMS to `mmsd`, which LuneOS never wired up) |
+| Instant messages | db8 `com.palm.immessage:1` / `com.palm.immessage.xmpp:1` (`serviceName: "type_jabber"`, `username` = your account), `com.palm.imloginstate:1` (per account: `state` online / offline, `availability` 0 available, 2 busy, 4 offline, `customMessage`), tempdb `com.palm.imbuddystatus:1` (`username`, `displayName`, `availability`, `status`, `personId`). An IM conversation is its own `com.palm.chatthread:1` (`replyService`, `replyAddress` = the buddy, `username`); a person's texts and IMs are not merged into one thread | the readers in the tree: Enyo 1.0 `lib/contactsui/UI/PersonList.js` (`imloginstate`, `imbuddystatus` from tempdb), Email `facades/ContactCache.js`; `webOS-ports/org.webosports.messaging` `service/configuration/db/kinds` |
+| IM transport | `org.webosphoenix.service.xmpp`: the Synergy callbacks of the `com.webosphoenix.xmpp` account template (Accounts > Add > Jabber (XMPP), `runtime/accounts/com.webosphoenix.xmpp`): `checkCredentials`, `onCreate`, `onEnabled` (signs in: login state + roster), `onDelete` (state, roster, IM conversations); `setPresence {accountId, availability}` (Phoenix) | the template layout of the legacy Synergy accounts (`com.palm.service.accounts`) |
 
 The apps ship their db8 kinds in `public/configuration/db/kinds`, which
 `tools/install-rootfs.py` installs to `/etc/palm/db/kinds`.
@@ -658,6 +671,23 @@ Helpers for tests and the shell:
   text and posts `phoenixHost.postToHost("notification", {appId, title,
   body})` for Messaging, which `SimWindowSource` shows as a banner and
   dashboard item for that app (phoenix-sim **F5**)
+- `__phoenixRuntime.simulateIncomingMms({from?, text?, image?})` the same
+  for a picture message (default: a sample photo from Ada; **Shift+F5**)
+- `__phoenixRuntime.simulateIncomingIm({from?, text?})` an instant message
+  to the first signed-in Jabber account (**Ctrl+F5**);
+  `__phoenixRuntime.xmpp.setBuddyPresence(jid, availability, status?)`
+
+The IM server is simulated: any `name@chat.example` with a password signs
+in, the roster is four of the demo contacts (Ada and Lena available,
+Marcus busy, Theo offline), and a buddy who is not offline answers a
+message after about two seconds. Sending fails while signed out or in
+airplane mode. A real transport (XMPP, as planned in
+`docs/SYNERGY-MODERN.md`) registers with
+`runtime.registerImTransport(service, send)` the same way.
+
+db8 here follows `extends` through every level (`com.palm.immessage.xmpp:1`
+-> `com.palm.immessage:1` -> `com.palm.message:1`), and watches on tempdb
+fire across windows as db8's do.
 
 ## Camera, Photos and Music
 

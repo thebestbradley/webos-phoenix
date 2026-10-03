@@ -80,6 +80,8 @@
 //                            cb(null) when no runtime page is up
 //   simulateIncomingCall()   ring the Phone app (phoenix-sim F4)
 //   simulateIncomingSms()    deliver a text to Messaging (phoenix-sim F5)
+//   simulateIncomingMms()    a picture message (Shift+F5)
+//   simulateIncomingIm()     an instant message from a buddy (Ctrl+F5)
 //   openUrl(url)             open a web page in the browser (phoenix-sim --open)
 //   simPty (context property, C++ SimPty): the Terminal's real shells on
 //                            this computer; "pty" host messages go to it and
@@ -1099,7 +1101,20 @@ Item {
     // runtime then posts a "notification" for Messaging. With no web page
     // running, Messaging starts in the background to receive it.
     function simulateIncomingSms() {
-        var js = "window.__phoenixRuntime && __phoenixRuntime.simulateIncomingSms()";
+        _simulateMessage("window.__phoenixRuntime && __phoenixRuntime.simulateIncomingSms()");
+    }
+    // A picture message arrives (phoenix-sim Shift+F5; the runtime's
+    // simulateIncomingMms), the same way.
+    function simulateIncomingMms() {
+        _simulateMessage("window.__phoenixRuntime && __phoenixRuntime.simulateIncomingMms()");
+    }
+    // An instant message from a buddy (phoenix-sim Ctrl+F5): only with an
+    // IM account signed in (Accounts > Jabber (XMPP)); the runtime's
+    // simulateIncomingIm says null otherwise.
+    function simulateIncomingIm() {
+        _simulateMessage("window.__phoenixRuntime && __phoenixRuntime.simulateIncomingIm && __phoenixRuntime.simulateIncomingIm()");
+    }
+    function _simulateMessage(js) {
         var pages = _webPages();
         if (pages.length > 0) {
             pages[0].runScript(js);

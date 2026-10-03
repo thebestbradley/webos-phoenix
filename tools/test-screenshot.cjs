@@ -203,8 +203,8 @@ async function main() {
         check((await f.textContent("[data-testid=share-title]")).includes("Email 2026-10-01 at 21.05.09"), "the sheet names what is shared");
         check(await f.locator("[data-testid=share-thumb]").count() === 1, "... with its thumbnail");
         const apps = await f.$$eval(".ss-app", (els) => els.map((e) => e.getAttribute("data-testid")));
-        check(apps.includes("share-app-com.palm.app.email") && !apps.includes("share-app-org.webosphoenix.messaging"),
-              `the apps that take a picture: Email, not Messaging (${apps.join(", ")})`);
+        check(apps.includes("share-app-com.palm.app.email") && apps.includes("share-app-org.webosphoenix.messaging"),
+              `the apps that take a picture: Email, and Messaging as a picture message (${apps.join(", ")})`);
         check(await f.locator("[data-testid=share-photos]").count() === 1 && await f.locator("[data-testid=share-files]").count() === 1,
               "Save to Photos and Save to Files");
         await shot("5-share-sheet");

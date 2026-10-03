@@ -23,13 +23,61 @@
 // message to a thread and stores it (service/javascript/assistants/PutMessage.js):
 //
 //   luna://org.webosports.service.messaging/putMessage {message} -> {threadids}
+//
+// Picture messages and instant messages, as webOS kept them (the TouchPad
+// Messaging app's queries name the fields):
+//
+//   com.palm.mmsmessage:1  extends com.palm.message:1; serviceName "mms",
+//                          parts [{path, mimeType, name}] (the pictures, kept
+//                          by the MMS store; the text is messageText)
+//   com.palm.immessage:1   extends com.palm.message:1, one kind per transport
+//                          (com.palm.immessage.xmpp:1); serviceName
+//                          "type_jabber", username = the account's address,
+//                          from / to the buddy's
+//   com.palm.imloginstate:1   db8: an IM account's state (accountId,
+//                          username, serviceName, state "online" | "offline",
+//                          availability, customMessage)
+//   com.palm.imbuddystatus:1  tempdb: a buddy's presence (accountId,
+//                          username, displayName, personId, availability,
+//                          status), which Contacts shows too
+//
+// Availability, as webOS numbered it: 0 available, 1 mobile, 2 busy (away),
+// 3 invisible, 4 offline.
 
 import { call, type LunaError, type Subscription } from "./bridge";
-import { db, type DbObject } from "./db8";
+import { db, tempdb, type DbObject } from "./db8";
 
 export const MESSAGE_KIND = "com.palm.message:1";
 export const SMS_KIND = "com.palm.smsmessage:1";
+export const MMS_KIND = "com.palm.mmsmessage:1";
+export const IM_KIND = "com.palm.immessage:1";
 export const THREAD_KIND = "com.palm.chatthread:1";
+export const IM_LOGIN_KIND = "com.palm.imloginstate:1";
+export const IM_BUDDY_KIND = "com.palm.imbuddystatus:1";
+
+/** The IM transports' message kinds, by serviceName. */
+export const IM_MESSAGE_KINDS: Record<string, string> = { type_jabber: "com.palm.immessage.xmpp:1" };
+
+export const AVAILABILITY = { AVAILABLE: 0, MOBILE: 1, BUSY: 2, INVISIBLE: 3, OFFLINE: 4 } as const;
+
+/** "available", "busy", "offline": the presence class for an availability. */
+export function presenceClass(availability: number | undefined): "available" | "busy" | "offline" {
+    if (availability === AVAILABILITY.AVAILABLE || availability === AVAILABILITY.MOBILE) return "available";
+    if (availability === AVAILABILITY.BUSY) return "busy";
+    return "offline";
+}
+
+/** True for an instant messaging service name ("type_jabber"), false for SMS and MMS. */
+export function isImService(service: string | undefined): boolean {
+    return /^type_/.test(service ?? "");
+}
+
+/** A picture (or other part) of a picture message. */
+export interface MessagePart {
+    path: string;
+    mimeType: string;
+    name?: string;
+}
 
 export interface MessageAddress {
     addr: string;
@@ -43,7 +91,7 @@ export type MessageStatus = "pending" | "sending" | "successful" | "failed" | "p
 export interface Message extends DbObject {
     folder: MessageFolder;
     status?: MessageStatus;
-    serviceName: string;          // "sms", or an IM transport
+    serviceName: string;          // "sms", "mms", or an IM transport ("type_jabber")
     messageText: string;
     from?: MessageAddress;
     to?: MessageAddress[];
@@ -52,6 +100,10 @@ export interface Message extends DbObject {
     localTimestamp: number;
     timestamp: number;
     flags?: { read?: boolean; visible?: boolean };
+    /** A picture message's pictures. */
+    parts?: MessagePart[];
+    /** An instant message's account (its address). */
+    username?: string;
 }
 
 export interface ChatThread extends DbObject {
@@ -63,7 +115,32 @@ export interface ChatThread extends DbObject {
     normalizedAddress?: string;
     replyAddress?: string;
     replyService?: string;
+    /** An IM conversation's account (its address). */
+    username?: string;
     flags?: { visible?: boolean };
+}
+
+/** An IM account's state (com.palm.imloginstate:1). */
+export interface ImLoginState extends DbObject {
+    accountId: string;
+    username: string;
+    serviceName: string;
+    state: "online" | "offline" | "logging-on" | "retrieving-buddies" | "logging-out";
+    availability: number;
+    customMessage?: string;
+}
+
+/** A buddy and their presence (com.palm.imbuddystatus:1, tempdb). */
+export interface ImBuddy extends DbObject {
+    accountId: string;
+    /** The buddy's address on the service. */
+    username: string;
+    serviceName: string;
+    displayName?: string;
+    personId?: string;
+    availability: number;
+    status?: string;
+    group?: string;
 }
 
 type OnError = (e: LunaError) => void;
@@ -104,6 +181,66 @@ export const messaging = {
         const r = await call("luna://org.webosports.service.messaging/putMessage", { message });
         return (r as { threadids?: string[] }).threadids ?? [];
     },
+    /**
+     * Send a picture message: a com.palm.mmsmessage:1 in the outbox with
+     * its pictures; the messaging service keeps copies of them (the MMS
+     * store) and the telephony service sends it, as it does texts.
+     */
+    async sendMms(to: MessageAddress, text: string, parts: MessagePart[], threadId?: string): Promise<string[]> {
+        const now = Date.now();
+        const message: Message = {
+            _kind: MMS_KIND,
+            folder: "outbox",
+            status: "pending",
+            serviceName: "mms",
+            messageText: text,
+            parts,
+            to: [to],
+            localTimestamp: now,
+            timestamp: now,
+            flags: { visible: true, read: true },
+            ...(threadId ? { conversations: [threadId] } : {}),
+        };
+        const r = await call("luna://org.webosports.service.messaging/putMessage", { message });
+        return (r as { threadids?: string[] }).threadids ?? [];
+    },
+    /**
+     * Send an instant message from an IM account (its address, `username`)
+     * to a buddy; the account's transport sends it.
+     */
+    async sendIm(service: string, username: string, to: MessageAddress, text: string, threadId?: string): Promise<string[]> {
+        const kind = IM_MESSAGE_KINDS[service];
+        if (!kind) throw new Error(`No IM transport for ${service}`);
+        const now = Date.now();
+        const message: Message = {
+            _kind: kind,
+            folder: "outbox",
+            status: "pending",
+            serviceName: service,
+            username,
+            messageText: text,
+            to: [to],
+            localTimestamp: now,
+            timestamp: now,
+            flags: { visible: true, read: true },
+            ...(threadId ? { conversations: [threadId] } : {}),
+        };
+        const r = await call("luna://org.webosports.service.messaging/putMessage", { message });
+        return (r as { threadids?: string[] }).threadids ?? [];
+    },
+    /** The IM accounts and their state, now and after every change. */
+    watchImAccounts(cb: (states: ImLoginState[]) => void, onError?: OnError): Subscription {
+        return db.watch<ImLoginState>({ from: IM_LOGIN_KIND }, cb, onError);
+    },
+    /** Every buddy of every IM account, with presence. */
+    watchBuddies(cb: (buddies: ImBuddy[]) => void, onError?: OnError): Subscription {
+        return tempdb.watch<ImBuddy>({ from: IM_BUDDY_KIND }, cb, onError);
+    },
+    /** Your own status on an IM account (Phoenix's simulated XMPP transport: setPresence). */
+    async setPresence(accountId: string, availability: number, customMessage?: string): Promise<void> {
+        await call("luna://org.webosphoenix.service.xmpp/setPresence", { accountId, availability,
+            ...(customMessage !== undefined ? { customMessage } : {}) });
+    },
     /** Mark a conversation read: its inbox messages' flags.read and the thread's unreadCount. */
     async markRead(threadId: string): Promise<void> {
         const unread = await db.find<Message>({
@@ -122,11 +259,22 @@ export const messaging = {
     },
 };
 
-/** Transports the webOS 2.x Messaging app offered. Only SMS works in Phoenix so far. */
-export const TRANSPORTS: { id: string; label: string; available: boolean }[] = [
-    { id: "sms", label: "Text (SMS)", available: true },
+/**
+ * IM services webOS Messaging knew, and which Phoenix has a transport for.
+ * Jabber (XMPP) works in the simulator (a simulated server); the closed
+ * networks webOS reached through libpurple are gone or closed.
+ */
+export const IM_SERVICES: { id: string; label: string; available: boolean }[] = [
+    { id: "type_jabber", label: "Jabber (XMPP)", available: true },
     { id: "type_aim", label: "AIM", available: false },
     { id: "type_gtalk", label: "Google Talk", available: false },
     { id: "type_yahoo", label: "Yahoo!", available: false },
     { id: "type_skype", label: "Skype", available: false },
 ];
+
+/** "Jabber (XMPP)" for "type_jabber"; "Text" for SMS, "Picture" for MMS. */
+export function serviceLabel(service: string | undefined): string {
+    if (!service || service === "sms") return "Text";
+    if (service === "mms") return "Picture";
+    return IM_SERVICES.find((s) => s.id === service)?.label ?? service;
+}

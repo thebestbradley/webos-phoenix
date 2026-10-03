@@ -664,13 +664,16 @@
         function isOfKind(db, obj, kind) {
             if (!kind) return true;
             if (obj._kind === kind) return true;
-            // Kinds may extend others (e.g. "com.palm.contact.palmprofile:1" extends "com.palm.person:1").
-            var k = db.kinds[obj._kind];
-            var seen = {};
-            while (k && k.extends && !seen[obj._kind]) {
-                seen[obj._kind] = true;
+            // Kinds may extend others (e.g. "com.palm.contact.palmprofile:1" extends "com.palm.person:1"),
+            // through any number of levels ("com.palm.immessage.xmpp:1" extends "com.palm.immessage:1",
+            // which extends "com.palm.message:1"); a kind seen twice ends the walk.
+            var id = obj._kind, seen = {};
+            while (id && !seen[id]) {
+                seen[id] = true;
+                var k = db.kinds[id];
+                if (!k || !k.extends || !k.extends.length) return false;
                 if (k.extends.indexOf(kind) >= 0) return true;
-                k = db.kinds[k.extends[0]];
+                id = k.extends[0];
             }
             return false;
         }
@@ -4544,6 +4547,33 @@
             dbSvc[method](params, function (r) { if (out === undefined) out = r; }, { cancelled: function () { return true; } });
             return out || {};
         }
+        // Presence lives in tempdb, as on webOS (com.palm.imbuddystatus:1).
+        var tempdbSvc = runtime.services["com.palm.tempdb"];
+        function tempdbCall(method, params) {
+            var out;
+            tempdbSvc[method](params, function (r) { if (out === undefined) out = r; }, { cancelled: function () { return true; } });
+            return out || {};
+        }
+        var MMS_KIND = "com.palm.mmsmessage:1";
+        var IM_KIND = "com.palm.immessage:1";
+        var IM_BUDDY_KIND = "com.palm.imbuddystatus:1";
+        var IM_LOGIN_KIND = "com.palm.imloginstate:1";
+
+        // The kinds MMS and IM add (their own version, so a store seeded
+        // before them gets them too; seeding again puts them back).
+        messagingKinds();
+        function messagingKinds() {
+            var VERSION = 1;
+            if (store.get("messaging:kinds", 0) >= VERSION) return;
+            [["com.palm.message:1", []], ["com.palm.smsmessage:1", ["com.palm.message:1"]],
+             [MMS_KIND, ["com.palm.message:1"]], [IM_KIND, ["com.palm.message:1"]],
+             ["com.palm.immessage.xmpp:1", [IM_KIND]], ["com.palm.chatthread:1", []],
+             [IM_LOGIN_KIND, []]].forEach(function (k) {
+                dbCall("/putKind", { id: k[0], owner: "org.webosphoenix.simulator", extends: k[1] });
+            });
+            tempdbCall("/putKind", { id: IM_BUDDY_KIND, owner: "org.webosphoenix.simulator" });
+            store.set("messaging:kinds", VERSION);
+        }
 
         // db8 watches in this page fire for changes other pages make, too.
         var xWatchers = [];
@@ -4559,15 +4589,20 @@
                 reply(r);
             };
         }
-        var baseFind = dbSvc["/find"], baseWatch = dbSvc["/watch"];
-        dbSvc["/find"] = function (p, reply, ctx) {
-            if (!p.watch) return baseFind(p, reply, ctx);
-            baseFind(p, crossWindow(reply, ctx), ctx);
-        };
-        dbSvc["/watch"] = function (p, reply, ctx) { baseWatch(p, crossWindow(reply, ctx), ctx); };
+        // tempdb too: IM presence (com.palm.imbuddystatus:1) is written by
+        // the page the IM transport runs in, and watched by Messaging and
+        // Contacts in theirs.
+        [dbSvc, tempdbSvc].forEach(function (svc) {
+            var baseFind = svc["/find"], baseWatch = svc["/watch"];
+            svc["/find"] = function (p, reply, ctx) {
+                if (!p.watch) return baseFind(p, reply, ctx);
+                baseFind(p, crossWindow(reply, ctx), ctx);
+            };
+            svc["/watch"] = function (p, reply, ctx) { baseWatch(p, crossWindow(reply, ctx), ctx); };
+        });
         try {
             global.addEventListener("storage", function (e) {
-                if (e.key !== "phoenix:db8:com.palm.db") return;
+                if (e.key !== "phoenix:db8:com.palm.db" && e.key !== "phoenix:db8:com.palm.tempdb") return;
                 var w = xWatchers;
                 xWatchers = [];
                 w.forEach(function (fn) { fn(); });
@@ -4597,12 +4632,33 @@
             return null;
         }
 
+        // Texts (SMS, MMS) go by phone number; instant messages by the
+        // buddy's address on an IM service ("type_jabber", ...), which is
+        // not a phone number, and keep to their own conversations.
+        function isIm(service) { return /^type_/.test(String(service || "")); }
+        // The person an IM buddy is (the transport links its roster to the
+        // address book, as the contacts linker did: imbuddystatus personId).
+        function personForIm(addr, service) {
+            var b = (tempdbCall("/find", { query: { from: IM_BUDDY_KIND } }).results || []).filter(function (x) {
+                return x.serviceName === service && String(x.username).toLowerCase() === String(addr).toLowerCase();
+            })[0];
+            return b && b.personId ? (dbCall("/get", { ids: [b.personId] }).results || [])[0] || null : null;
+        }
+        // What a conversation's last line says of a picture message.
+        function summaryOf(msg) {
+            var pics = (msg.parts || []).filter(function (p) { return /^image\//.test(p.mimeType || ""); }).length;
+            if (!pics && !(msg.parts || []).length) return msg.messageText;
+            var what = pics ? (pics === 1 ? "Picture" : pics + " pictures") : "Attachment";
+            return msg.messageText ? what + ": " + msg.messageText : what;
+        }
+
         // Find or create msg's chat thread, update it (summary, timestamp,
         // unread count) and store msg with conversations = [thread id].
         function assign(msg) {
             var incomingMsg = msg.folder === "inbox";
             var addr = incomingMsg ? (msg.from && msg.from.addr) : (msg.to && msg.to[0] && msg.to[0].addr);
-            var person = addr ? personFor(addr) : null;
+            var im = isIm(msg.serviceName);
+            var person = addr ? (im ? personForIm(addr, msg.serviceName) : personFor(addr)) : null;
             var thread = null;
             if (msg.conversations && msg.conversations.length)
                 thread = (dbCall("/get", { ids: [msg.conversations[0]] }).results || [])[0] || null;
@@ -4610,18 +4666,23 @@
                 var threads = dbCall("/find", { query: { from: "com.palm.chatthread:1" } }).results || [];
                 for (var i = 0; i < threads.length && !thread; ++i) {
                     var t = threads[i];
-                    if ((person && t.personId === person._id) || (!person && t.replyAddress && sameNumber(t.replyAddress, addr)))
+                    if (im !== isIm(t.replyService)) continue;
+                    if (im ? t.replyService === msg.serviceName && String(t.replyAddress).toLowerCase() === String(addr).toLowerCase()
+                              && (!t.username || !msg.username || t.username === msg.username)
+                           : (person && t.personId === person._id) || (!person && t.replyAddress && sameNumber(t.replyAddress, addr)))
                         thread = t;
                 }
             }
             thread = thread || { _kind: "com.palm.chatthread:1", unreadCount: 0, flags: {} };
             thread.displayName = (person && personName(person)) || thread.displayName ||
-                (!incomingMsg && msg.to[0].name) || addr;
+                (!incomingMsg && msg.to[0].name) || (incomingMsg && msg.from.name) || addr;
             if (person) thread.personId = person._id;
-            thread.normalizedAddress = digits(addr);
+            thread.normalizedAddress = im ? String(addr).toLowerCase() : digits(addr);
             thread.replyAddress = addr;
             thread.replyService = msg.serviceName || "sms";
-            thread.summary = msg.messageText;
+            // The IM account the conversation is on (the immessage's username).
+            if (im && msg.username) thread.username = msg.username;
+            thread.summary = summaryOf(msg);
             thread.timestamp = msg.localTimestamp || Date.now();
             thread.flags = thread.flags || {};
             thread.flags.visible = true;
@@ -4634,16 +4695,53 @@
         }
 
         // telephonyd: pending outbox texts -> sending -> successful / failed.
+        // A picture message (MMS, mmsd under oFono) takes longer.
         function sendOutbox() {
-            var pending = dbCall("/find", { query: { from: "com.palm.smsmessage:1", where: [
-                { prop: "folder", op: "=", val: "outbox" }, { prop: "status", op: "=", val: "pending" }] } }).results || [];
-            pending.forEach(function (m) {
-                dbCall("/merge", { objects: [{ _id: m._id, status: "sending" }] });
-                setTimeout(function () {
-                    dbCall("/merge", { objects: [{ _id: m._id, status: offline() ? "failed" : "successful" }] });
-                }, 600);
+            [["com.palm.smsmessage:1", 600], [MMS_KIND, 1500]].forEach(function (k) {
+                var pending = dbCall("/find", { query: { from: k[0], where: [
+                    { prop: "folder", op: "=", val: "outbox" }, { prop: "status", op: "=", val: "pending" }] } }).results || [];
+                pending.forEach(function (m) {
+                    dbCall("/merge", { objects: [{ _id: m._id, status: "sending" }] });
+                    setTimeout(function () {
+                        dbCall("/merge", { objects: [{ _id: m._id, status: offline() ? "failed" : "successful" }] });
+                    }, k[1]);
+                });
             });
         }
+
+        function callP(url, params) {
+            return new Promise(function (resolve) {
+                dispatch(url, params || {}, resolve, { cancelled: function () { return false; }, onCancel: null });
+            });
+        }
+        // A picture message keeps its own copies of its pictures, as the MMS
+        // store does (/media/internal/.mms, which Files and Photos leave out):
+        // the message stays whole when the original goes. parts:
+        // [{path, mimeType, name?}] -> the same with the copies' paths.
+        var MMS_DIR = "/media/internal/.mms";
+        var partSeq = 0;
+        function keepParts(parts) {
+            // The folder first (an error when it is there already is fine).
+            return callP("luna://org.webosphoenix.filemanager/mkdir", { path: MMS_DIR }).then(function () {
+                return copyParts(parts);
+            });
+        }
+        function copyParts(parts) {
+            return Promise.all((parts || []).map(function (part) {
+                var name = String(part.name || part.path || "part").replace(/^.*\//, "");
+                var dest = MMS_DIR + "/" + Date.now().toString(36) + "-" + (++partSeq) + "-" + name;
+                return callP("luna://org.webosphoenix.filemanager/copy", { from: part.path, to: dest }).then(function (r) {
+                    var out = { mimeType: part.mimeType || "", name: name, path: r.returnValue === false ? part.path : dest };
+                    if (r.returnValue === false) console.warn("[phoenix-runtime] MMS: kept the picture where it is: " + r.errorText);
+                    return out;
+                });
+            }));
+        }
+
+        // The IM transports deliver outgoing instant messages
+        // (org.webosphoenix.service.xmpp, block "Instant messaging" below).
+        var imTransports = {};
+        runtime.registerImTransport = function (service, send) { imTransports[service] = send; };
 
         register(["org.webosports.service.messaging"], {
             "/putMessage": function (p, reply) {
@@ -4651,12 +4749,43 @@
                 if (!msg || !msg._kind || (!msg.to && !msg.from))
                     return reply(fail(-1, "Requiring valid message argument with _kind member already set."));
                 msg = JSON.parse(toJson(msg));
-                var r = assign(msg);
-                reply(ok({ threadids: [r.threadId] }));
-                if (msg._kind === "com.palm.smsmessage:1" && msg.folder === "outbox" && msg.status === "pending")
-                    setTimeout(sendOutbox, 250);
+                var mms = msg._kind === MMS_KIND;
+                (mms && msg.parts && msg.parts.length ? keepParts(msg.parts) : Promise.resolve(msg.parts)).then(function (parts) {
+                    if (parts) msg.parts = parts;
+                    var r = assign(msg);
+                    reply(ok({ threadids: [r.threadId] }));
+                    var outgoing = msg.folder === "outbox" && msg.status === "pending";
+                    if (outgoing && (msg._kind === "com.palm.smsmessage:1" || mms))
+                        setTimeout(sendOutbox, 250);
+                    else if (outgoing && isIm(msg.serviceName) && imTransports[msg.serviceName])
+                        setTimeout(function () { imTransports[msg.serviceName](r.messageId); }, 150);
+                });
             }
         });
+        runtime.messaging = { assign: assign, isIm: isIm, personName: personName, tempdbCall: tempdbCall, dbCall: dbCall,
+                              IM_BUDDY_KIND: IM_BUDDY_KIND, IM_LOGIN_KIND: IM_LOGIN_KIND };
+
+        // A picture message arrives (phoenix-sim Shift+F5): its pictures in
+        // the MMS store, then as a text: a thread, unread, a notification.
+        runtime.simulateIncomingMms = function (opts) {
+            opts = opts || {};
+            var from = opts.from || "(408) 555-0142";
+            var text = opts.text === undefined ? "Look where we are!" : opts.text;
+            var image = opts.image || "/media/internal/samples/photos/harbor-dusk.jpg";
+            return keepParts([{ path: image, mimeType: opts.mimeType || "image/jpeg" }]).then(function (parts) {
+                var now = Date.now();
+                var r = assign({
+                    _kind: MMS_KIND, folder: "inbox", status: "successful", serviceName: "mms",
+                    messageText: text, parts: parts, localTimestamp: now, timestamp: now, simId: 0,
+                    from: { addr: from }, flags: { read: false, visible: true }
+                });
+                var person = personFor(from);
+                host.postToHost("notification", { appId: MESSAGING_APP, title: person ? personName(person) : from,
+                                                  body: text ? "Picture: " + text : "Picture message",
+                                                  params: { threadId: r.threadId }, soundClass: "notifications" });
+                return r.threadId;
+            });
+        };
 
         runtime.simulateIncomingSms = function (opts) {
             opts = opts || {};
@@ -4685,6 +4814,8 @@
              ["com.palm.chatthread:1", []], ["com.palm.phonecall:1", []]].forEach(function (k) {
                 dbCall("/putKind", { id: k[0], owner: "org.webosphoenix.simulator", extends: k[1] });
             });
+            store.set("messaging:kinds", 0);
+            messagingKinds();
             // The people are the simulator's sample contacts (runtime/sample-data.js,
             // loaded earlier), so Phone, Messaging and Contacts share one address book.
             var persons = dbCall("/find", { query: { from: "com.palm.person:1" } }).results || [];
@@ -4748,6 +4879,223 @@
         // Ids for the shell (sim.qml F4 / F5).
         runtime.phoneAppId = PHONE_APP;
         runtime.messagingAppId = MESSAGING_APP;
+    })();
+
+    // ================================================================================
+    // Instant messaging (simulated XMPP: org.webosphoenix.service.xmpp)
+    // ================================================================================
+    //
+    // An IM transport as webOS's Synergy ones were (libpurple's AIM and
+    // Google Talk), shaped like the XMPP transport Phoenix plans
+    // (docs/SYNERGY-MODERN.md: template com.webosphoenix.xmpp, MESSAGING
+    // with capabilitySubtype "IM", serviceName "type_jabber"), against a
+    // simulated server, chat.example, whose people are fictional and linked
+    // to the sample contacts.
+    //
+    //   The account: Accounts > Add Account > Jabber (XMPP), with any
+    //   address on chat.example (you@chat.example) and a password; the
+    //   template (runtime/accounts/com.webosphoenix.xmpp/) goes through the
+    //   accounts block of "CardDAV and CalDAV", which calls this service's
+    //   checkCredentials, onCreate, onEnabled and onDelete as Synergy did.
+    //   Signed in, the account's state is a com.palm.imloginstate:1 (db8:
+    //   accountId, username, serviceName, state "online" | "offline",
+    //   availability 0 available, 2 busy, 4 offline, customMessage) and its
+    //   roster com.palm.imbuddystatus:1 objects (tempdb: accountId, username
+    //   (the buddy's address), serviceName, displayName, personId,
+    //   availability, personAvailability, status, group), which Messaging's
+    //   Buddies and Contacts' presence read, as on webOS.
+    //   Messages are com.palm.immessage.xmpp:1 (extends com.palm.immessage:1,
+    //   extends com.palm.message:1: folder, status, serviceName, username =
+    //   the account's address, from / to, messageText), put through
+    //   putMessage like texts and threaded per buddy; the outbox goes out
+    //   here (successful, or failed while signed out or in airplane mode).
+    //   A buddy who is available or busy answers after a moment (the
+    //   simulated server); an offline one does not.
+    //
+    //   setPresence {accountId, availability, customMessage?} (Phoenix): your
+    //   own status; 4 signs out (the roster goes offline), else signs in.
+    //
+    // Simulator helpers (phoenix-sim Ctrl+F5, the tests):
+    //   __phoenixRuntime.simulateIncomingIm({from?, text?}) -> thread id
+    //   __phoenixRuntime.xmpp.setBuddyPresence(jid, availability, status?)
+    (function instantMessaging() {
+        var M = runtime.messaging;
+        if (!M) return;
+        var SERVICE = "org.webosphoenix.service.xmpp";
+        var TEMPLATE = "com.webosphoenix.xmpp";
+        var IM_SERVICE = "type_jabber";
+        var MSG_KIND = "com.palm.immessage.xmpp:1";
+        var SERVER = "chat.example";
+        var MESSAGING_APP = runtime.messagingAppId;
+        var AVAILABLE = 0, BUSY = 2, OFFLINE = 4;
+
+        // The simulated server's people, and how they answer.
+        var ROSTER = [
+            { jid: "ada.palmer@" + SERVER, given: "Ada", family: "Palmer", availability: AVAILABLE, status: "Flashing a Pre 3",
+              replies: ["Ha, yes!", "Cards forever.", "Send me a picture when it boots?", "On my way."] },
+            { jid: "marcus.reyes@" + SERVER, given: "Marcus", family: "Reyes", availability: BUSY, status: "In a meeting until 3",
+              replies: ["In a meeting, will reply after.", "Can't talk now, later?"] },
+            { jid: "lena.okafor@" + SERVER, given: "Lena", family: "Okafor", availability: AVAILABLE, status: "",
+              replies: ["Hi! Just landed.", "Sounds good.", "See you there."] },
+            { jid: "theo.lindqvist@" + SERVER, given: "Theo", family: "Lindqvist", availability: OFFLINE, status: "", replies: [] }
+        ];
+        function rosterEntry(jid) {
+            return ROSTER.filter(function (b) { return b.jid === String(jid).toLowerCase(); })[0] || null;
+        }
+
+        function db(method, params) { return M.dbCall(method, params); }
+        function tdb(method, params) { return M.tempdbCall(method, params); }
+        function account(id) { return (db("/get", { ids: [id] }).results || [])[0] || null; }
+        function loginState(accountId) {
+            return (db("/find", { query: { from: M.IM_LOGIN_KIND, where: [{ prop: "accountId", op: "=", val: accountId }] } }).results || [])[0] || null;
+        }
+        function signedInAccounts() {
+            return (db("/find", { query: { from: M.IM_LOGIN_KIND } }).results || []).filter(function (s) {
+                return s.serviceName === IM_SERVICE && s.state === "online";
+            });
+        }
+        function personByName(given, family) {
+            return (db("/find", { query: { from: "com.palm.person:1" } }).results || []).filter(function (p) {
+                return p.name && p.name.givenName === given && p.name.familyName === family;
+            })[0] || null;
+        }
+
+        // Presence (the buddies' and your own) as stored for the apps.
+        // The server's view of the buddies' presence, per account
+        // ("xmpp:presence:<account>": jid -> {availability, status}); a buddy
+        // not in it has the roster's.
+        function buddyPresence(accountId, b) {
+            return store.get("xmpp:presence:" + accountId, {})[b.jid] || { availability: b.availability, status: b.status };
+        }
+        function writeRoster(accountId, signedIn) {
+            tdb("/del", { purge: true, query: { from: M.IM_BUDDY_KIND, where: [{ prop: "accountId", op: "=", val: accountId }] } });
+            if (!signedIn) return;
+            tdb("/put", { objects: ROSTER.map(function (b) {
+                var person = personByName(b.given, b.family), pr = buddyPresence(accountId, b);
+                var o = { _kind: M.IM_BUDDY_KIND, accountId: accountId, serviceName: IM_SERVICE, username: b.jid,
+                          displayName: b.given + " " + b.family, availability: pr.availability, personAvailability: pr.availability,
+                          status: pr.status || "", group: "Buddies" };
+                if (person) o.personId = person._id;
+                return o;
+            }) });
+        }
+        function setLogin(acc, availability, customMessage) {
+            var cur = loginState(acc._id);
+            var online = availability !== OFFLINE;
+            var o = { _kind: M.IM_LOGIN_KIND, accountId: acc._id, serviceName: IM_SERVICE, username: acc.username,
+                      state: online ? "online" : "offline", availability: availability,
+                      customMessage: customMessage !== undefined ? customMessage : cur && cur.customMessage || "" };
+            if (cur) { o._id = cur._id; db("/merge", { objects: [o] }); }
+            else db("/put", { objects: [o] });
+            writeRoster(acc._id, online);
+        }
+
+        // ---- Messages ----------------------------------------------------------------------
+
+        function deliver(acc, jid, text) {
+            var b = rosterEntry(jid);
+            var now = Date.now();
+            var r = M.assign({ _kind: MSG_KIND, folder: "inbox", status: "successful", serviceName: IM_SERVICE,
+                               username: acc.username, messageText: text, localTimestamp: now, timestamp: now,
+                               from: { addr: jid, name: b ? b.given + " " + b.family : jid }, flags: { read: false, visible: true } });
+            host.postToHost("notification", { appId: MESSAGING_APP, title: b ? b.given + " " + b.family : jid, body: text,
+                                              params: { threadId: r.threadId }, soundClass: "notifications" });
+            return r.threadId;
+        }
+        var replySeq = {};
+        function send(messageId) {
+            var m = (db("/get", { ids: [messageId] }).results || [])[0];
+            if (!m || m.status !== "pending") return;
+            var login = (db("/find", { query: { from: M.IM_LOGIN_KIND, where: [{ prop: "username", op: "=", val: m.username }] } }).results || [])[0];
+            var st = store.get("settings:state", null);
+            var ok_ = login && login.state === "online" && !(st && st.offlineMode);
+            db("/merge", { objects: [{ _id: m._id, status: "sending" }] });
+            setTimeout(function () {
+                db("/merge", { objects: [{ _id: m._id, status: ok_ ? "successful" : "failed" }] });
+                if (!ok_) return;
+                var jid = m.to && m.to[0] && m.to[0].addr, b = rosterEntry(jid);
+                var acc = account(login.accountId);
+                if (!b || !acc || !b.replies.length) return;
+                var pr = buddyPresence(acc._id, b);
+                if (pr.availability === OFFLINE) return;
+                var n = replySeq[b.jid] = (replySeq[b.jid] || 0) + 1;
+                setTimeout(function () {
+                    var still = loginState(acc._id);
+                    if (still && still.state === "online") deliver(acc, b.jid, b.replies[(n - 1) % b.replies.length]);
+                }, 1800);
+            }, 400);
+        }
+        runtime.registerImTransport(IM_SERVICE, send);
+
+        // ---- The transport's service (Synergy callbacks) -------------------------------------
+
+        register([SERVICE], {
+            // Any address on the simulated server with a password signs in.
+            "/checkCredentials": function (p, reply) {
+                var user = String(p.username || "").trim().toLowerCase();
+                if (!/^[^@\s]+@[^@\s]+$/.test(user))
+                    return reply({ returnValue: false, errorCode: "401_UNAUTHORIZED", errorText: "Enter your address, like you@" + SERVER });
+                if (user.split("@")[1] !== SERVER)
+                    return reply({ returnValue: false, errorCode: "HOST_NOT_FOUND", errorText: "Only the simulated server, " + SERVER + ", is reachable here" });
+                if (!p.password)
+                    return reply({ returnValue: false, errorCode: "401_UNAUTHORIZED", errorText: "Enter your password" });
+                reply(ok({ credentials: { common: { password: String(p.password) } }, config: { server: SERVER } }));
+            },
+            "/onCreate": function (p, reply) { reply(ok()); },
+            "/onEnabled": function (p, reply) {
+                var acc = account(p.accountId);
+                if (!acc) return reply(fail(-1, "No such account: " + p.accountId));
+                setLogin(acc, p.enabled ? AVAILABLE : OFFLINE);
+                reply(ok());
+            },
+            // The account goes: its state, roster, messages and conversations.
+            "/onDelete": function (p, reply) {
+                var acc = account(p.accountId) || { _id: p.accountId, username: "" };
+                writeRoster(acc._id, false);
+                db("/del", { query: { from: M.IM_LOGIN_KIND, where: [{ prop: "accountId", op: "=", val: acc._id }] } });
+                var threads = (db("/find", { query: { from: "com.palm.chatthread:1" } }).results || []).filter(function (t) {
+                    return t.replyService === IM_SERVICE && (!acc.username || t.username === acc.username);
+                });
+                threads.forEach(function (t) {
+                    db("/del", { query: { from: "com.palm.message:1", where: [{ prop: "conversations", op: "=", val: t._id }] } });
+                    db("/del", { ids: [t._id] });
+                });
+                reply(ok());
+            },
+            "/setPresence": function (p, reply) {
+                var acc = account(p.accountId);
+                if (!acc) return reply(fail(-1, "No such account: " + p.accountId));
+                var a = Number(p.availability);
+                if ([AVAILABLE, BUSY, OFFLINE].indexOf(a) < 0) return reply(fail(-1, "availability: 0, 2 or 4"));
+                setLogin(acc, a, p.customMessage);
+                reply(ok());
+            }
+        });
+
+        // ---- Helpers for the simulator and the tests ----------------------------------------
+
+        runtime.simulateIncomingIm = function (opts) {
+            opts = opts || {};
+            var login = signedInAccounts()[0];
+            if (!login) return null;
+            var acc = account(login.accountId);
+            return acc ? deliver(acc, opts.from || ROSTER[0].jid, opts.text || "Are you on Phoenix yet?") : null;
+        };
+        runtime.xmpp = {
+            server: SERVER,
+            roster: function () { return ROSTER.map(function (b) { return { jid: b.jid, name: b.given + " " + b.family }; }); },
+            setBuddyPresence: function (jid, availability, status) {
+                var b = rosterEntry(jid);
+                if (!b) return false;
+                signedInAccounts().forEach(function (login) {
+                    var mine = store.get("xmpp:presence:" + login.accountId, {});
+                    mine[b.jid] = { availability: availability, status: status || "" };
+                    store.set("xmpp:presence:" + login.accountId, mine);
+                    writeRoster(login.accountId, true);
+                });
+                return true;
+            }
+        };
     })();
 
     // ================================================================================
@@ -5036,7 +5384,8 @@
                 var idx = loadIndex();
                 var known = {};
                 ["image", "audio", "video"].forEach(function (t) { idx[t].forEach(function (it) { known[it.file_path] = true; }); });
-                var fresh = paths.filter(function (p) { return !known[p] && typeOf(p); });
+                // Not hidden folders' files (a message's pictures, /.mms).
+                var fresh = paths.filter(function (p) { return !known[p] && typeOf(p) && !/\/\./.test(p); });
                 return Promise.all(fresh.map(function (p) {
                     return files.read(p).then(function (blob) {
                         var type = typeOf(p);
@@ -6994,7 +7343,10 @@
     (function davTransport() {
         var SERVICE = "org.webosphoenix.service.dav";
         var SERVICE_DIR = "/usr/palm/applications/org.webosphoenix.dav/service/";
-        var DAV_TEMPLATES = ["/usr/palm/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json"];
+        // And the simulated Jabber (XMPP) account (block "Instant
+        // messaging"), whose accounts need the same handling.
+        var DAV_TEMPLATES = ["/usr/palm/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json",
+                             "/usr/share/phoenix/runtime/accounts/com.webosphoenix.xmpp/com.webosphoenix.xmpp.json"];
         var ACCOUNT_KIND = "com.palm.account:1";
         var LOCK_MS = 5 * 60 * 1000;
 
@@ -8580,6 +8932,10 @@
     //       title, icon, label}]}: the apps whose appinfo.json says they take
     //       all of these types ("phoenix": {"shareTargets": [{"types":
     //       ["image/*"], "label"?}]}), and the legacy apps below.
+    //   org.webosphoenix.filepicker/pick {kinds: ["image"], title?} ->
+    //       {files: [{fullPath, mimeType, name}]} or {canceled: true}: the
+    //       user picks a picture (SF2, pictures only so far; Messaging's
+    //       picture messages).
     //   org.webosphoenix.filepicker/save {name, from?: path, data?: base64,
     //       mimeType?, title?} -> {path} or {canceled: true}: the user picks a
     //       folder of /media/internal (the last one used first) and a name;
@@ -8672,7 +9028,7 @@
                 var id = "sheet" + (++seq) + "_" + Date.now();
                 var frame = doc.createElement("iframe");
                 frame.setAttribute("data-phoenix-sheet", kind);
-                frame.setAttribute("title", kind === "save" ? "Save to Files" : "Share");
+                frame.setAttribute("title", kind === "save" ? "Save to Files" : kind === "pick" ? "Choose a Picture" : "Share");
                 frame.src = SHEET_URL + "?launchParams=" + encodeURIComponent(toJson({ kind: kind, id: id }));
                 var st = frame.style;
                 st.position = "fixed"; st.left = "0"; st.top = "0"; st.width = "100%"; st.height = "100%";
@@ -8782,6 +9138,17 @@
         });
 
         register(["org.webosphoenix.filepicker"], {
+            // SF2 for pictures: the user picks from the pictures Photos has
+            // (by album), as the original picker did for "image".
+            "/pick": function (p, reply) {
+                var kinds = p.kinds || ["image"];
+                if (!kinds.length || kinds.some(function (k) { return k !== "image"; }))
+                    return reply(fail(-1, "Only pictures can be picked so far: kinds [\"image\"]"));
+                showSheet("pick", { title: p.title || "Choose a Picture", kinds: kinds }).then(function (r) {
+                    if (!r || r.action !== "pick" || !r.files || !r.files.length) return reply(ok({ canceled: true }));
+                    reply(ok({ files: r.files.map(function (f) { return { fullPath: f.path, mimeType: f.mimeType || "", name: f.path.replace(/^.*\//, "") }; }) }));
+                });
+            },
             "/save": function (p, reply) {
                 if (!p.name) return reply(fail(-1, "name is required"));
                 if (p.data === undefined && !p.from) return reply(fail(-1, "from (a path) or data (base64) is required"));

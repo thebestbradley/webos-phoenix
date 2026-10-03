@@ -252,7 +252,7 @@ whose maker uses a hardware Home button instead (no gesture bar; tablets
 then take the bottom-edge flick). A big `--size` needs a matching
 `--scale` to look like a real device (2 for most tablets of 2560 px). Keys: **Esc** back, **F1** swipe up, **Home** the Home button,
 **F2** demo notification, **F3** the Power button (the screen off and locked, or on again), **F4** incoming call (rings
-the Phone app), **F5** incoming text message (for Messaging), **F6** low
+the Phone app), **F5** incoming text message (for Messaging; **Shift+F5** a picture message, **Ctrl+F5** an instant message from a buddy once an IM account is set up), **F6** low
 battery, **F7** plug a charger in or out, **F8** battery charged to full,
 **F9** (or **Home**+**F3**, **Print Screen**, **Ctrl+Alt+P**) a screen capture,
 **F10** / **F11** the volume keys (down / up),
@@ -306,7 +306,7 @@ Tests:
 QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -input shell/tests
 (cd apps && npm test && npm run typecheck)
 node tools/test-apps.cjs && node tools/test-settings.cjs   # needs Playwright
-node tools/test-phone-messaging.cjs                        # calls and texts
+node tools/test-phone-messaging.cjs                        # calls, texts, MMS and IM
 node tools/test-media.cjs                                   # Camera, Photos, Music
 node tools/test-files.cjs                                   # Files
 node tools/test-tasks.cjs                                   # Tasks and reminders

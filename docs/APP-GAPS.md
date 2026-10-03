@@ -29,7 +29,7 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | App | Status | Legacy webOS | Priority | Approach |
 | --- | --- | --- | --- | --- |
 | Phone | Phoenix | Phone (dial pad, call log, voicemail, conference) | P0 | Done in the simulator. The lock-screen answer is done. Needs the device telephony service (webos-telephonyd on oFono) and the active-call banner. See [HARDWARE.md](HARDWARE.md#hardware-abstraction-plan) |
-| Messaging | Phoenix | Messaging (SMS, MMS, IM through Synergy) | P0 | Done for SMS in the simulator. Needs MMS (oFono has MMS through `mmsd`), cell broadcast alerts |
+| Messaging | Phoenix | Messaging (SMS, MMS, IM through Synergy) | P0 | Done in the simulator for SMS, MMS (attach from the picture picker, pictures in the balloon, simulated receive) and IM (a Jabber (XMPP) account on a simulated server: buddies, presence, chat). Needs real MMS (oFono has MMS through `mmsd`), a real XMPP transport, cell broadcast alerts |
 | Contacts | Open webOS | Contacts with Synergy linking | P0 | Works. Needs CardDAV sync (below), vCard import/export, contact photos |
 | Email | Open webOS | Email (IMAP, POP, Exchange EAS) | P0 | Works with simulated transports. Needs real IMAP/SMTP transports in the email service (`third_party/app-services`); OAuth2 for Gmail and Outlook is the hard part |
 | Calendar | Open webOS | Calendar with Synergy | P0 | Works. Needs CalDAV sync and reminders that fire (activity manager) |

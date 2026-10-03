@@ -4,7 +4,8 @@
 // Conversation logic that has nothing to do with drawing: how messages are
 // grouped under time stamps, and who the "To:" field suggests.
 
-import { personDisplayName, phoneTypeLabel, type Message, type Person } from "@phoenix/luna";
+import { personDisplayName, phoneTypeLabel, presenceClass, serviceLabel, type ChatThread, type ImBuddy, type ImLoginState,
+         type Message, type Person } from "@phoenix/luna";
 
 /** A new time stamp goes above a message sent this long after the one before (ms). */
 export const TIME_GAP = 15 * 60 * 1000;
@@ -42,6 +43,55 @@ export interface Recipient {
     /** "Mobile", "Work", ... when the address is a contact's. */
     label?: string;
     personId?: string;
+    /** An IM buddy: the service ("type_jabber") and the account's own address. */
+    service?: string;
+    account?: string;
+}
+
+// ---- Instant messaging -----------------------------------------------------------
+
+/** The buddy a conversation is with (its service and address). */
+export function buddyFor(thread: Pick<ChatThread, "replyService" | "replyAddress"> | null | undefined,
+                         buddies: readonly ImBuddy[]): ImBuddy | undefined {
+    if (!thread?.replyAddress) return undefined;
+    const addr = thread.replyAddress.toLowerCase();
+    return buddies.find((b) => b.serviceName === thread.replyService && b.username.toLowerCase() === addr);
+}
+
+/** "Available", "Busy: In a meeting", "Offline". */
+export function presenceText(b: Pick<ImBuddy, "availability" | "status"> | undefined): string {
+    const cls = presenceClass(b?.availability);
+    const word = cls === "available" ? "Available" : cls === "busy" ? "Busy" : "Offline";
+    return b?.status && cls !== "offline" ? `${word}: ${b.status}` : word;
+}
+
+/** Buddies under Available, Busy and Offline, by name, as webOS's buddy list. */
+export function groupBuddies(buddies: readonly ImBuddy[]): { label: string; buddies: ImBuddy[] }[] {
+    const name = (b: ImBuddy) => (b.displayName || b.username).toLowerCase();
+    const groups: { label: string; cls: string }[] = [
+        { label: "Available", cls: "available" }, { label: "Busy", cls: "busy" }, { label: "Offline", cls: "offline" }];
+    return groups.map((g) => ({
+        label: g.label,
+        buddies: buddies.filter((b) => presenceClass(b.availability) === g.cls).sort((a, b) => name(a).localeCompare(name(b))),
+    })).filter((g) => g.buddies.length > 0);
+}
+
+/** A buddy as a message's recipient, from the account they are a buddy of. */
+export function buddyRecipient(b: ImBuddy, accounts: readonly ImLoginState[]): Recipient | null {
+    const account = accounts.find((a) => a.accountId === b.accountId);
+    if (!account) return null;
+    return { addr: b.username, name: b.displayName, personId: b.personId, service: b.serviceName,
+             account: account.username, label: serviceLabel(b.serviceName) };
+}
+
+/** Buddies of signed-in accounts whose name or address starts with what was typed. */
+export function suggestBuddies(buddies: readonly ImBuddy[], accounts: readonly ImLoginState[], typed: string, max = 4): Recipient[] {
+    const q = typed.trim().toLowerCase();
+    if (!q) return [];
+    const online = new Set(accounts.filter((a) => a.state === "online").map((a) => a.accountId));
+    return buddies.filter((b) => online.has(b.accountId) && (b.username.toLowerCase().startsWith(q) ||
+            (b.displayName ?? "").toLowerCase().split(/\s+/).some((w) => w.startsWith(q))))
+        .map((b) => buddyRecipient(b, accounts)).filter((r): r is Recipient => !!r).slice(0, max);
 }
 
 /**
