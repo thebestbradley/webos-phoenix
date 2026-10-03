@@ -66,8 +66,11 @@ Item {
     function finish() {
         if (mode === "")
             return;
-        mode = "";
+        // The transition first: running (and SystemScreens.holdsDisplay)
+        // stays true from the logo to the end of the fade, not false for
+        // the moment between them.
         transition.start();
+        mode = "";
     }
 
     visible: running

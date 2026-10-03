@@ -186,6 +186,12 @@ export interface SystemPreferences {
     keyboardShortcuts?: "ipad" | "desktop";
     /** Text Assist's checks and the user's shortcuts (see TextInputPrefs). */
     x_palm_textinput?: TextInputPrefs;
+    /** Dock mode's own wallpaper (luna-sysmgr Preferences "dockwallpaper"). */
+    dockwallpaper?: { wallpaperName: string; wallpaperFile: string };
+    /** Sounds in dock mode: "systemsettings" (as Sounds & Ringtones) or, Phoenix, "mute". */
+    dockModeSoundPref?: "systemsettings" | "mute";
+    /** Phoenix: Settings > Exhibition. */
+    exhibition?: ExhibitionPrefs;
     [key: string]: unknown;
 }
 
@@ -204,6 +210,31 @@ export interface TextInputPrefs {
     grammarChecking?: "autoCorrect" | "off";
     shortcutChecking?: "autoCorrect" | "off";
     shortcuts?: TextAssistShortcut[];
+}
+
+/** Settings > Exhibition (Phoenix): when dock mode starts and its night mode. */
+export interface ExhibitionPrefs {
+    /** Exhibitions on the Touchstone at all. */
+    enabled: boolean;
+    /** Seconds on the Touchstone with the screen on before one starts; 0: when the screen would turn off. */
+    startAfter: number;
+    /** The night brightness from nightStart to nightEnd ("HH:MM"). */
+    nightMode: boolean;
+    nightStart: string;
+    nightEnd: string;
+}
+
+/** listDockModeLaunchPoints: an app that can be an exhibition (appinfo.json exhibitionMode). */
+export interface DockModeLaunchPoint {
+    id: string;
+    appId: string;
+    launchPointId: string;
+    title: string;
+    icon: string;
+    /** Its row in dock mode's menu (exhibitionModeOptions.title). */
+    exhibitionModeTitle: string;
+    /** Turned on: in dock mode's menu. */
+    enabled: boolean;
 }
 
 /** ringtone/listRingtones: one ringtone; system ones cannot be deleted. */

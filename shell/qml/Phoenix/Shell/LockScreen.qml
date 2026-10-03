@@ -35,6 +35,19 @@ Item {
             lockedAt = Date.now();
         }
     }
+
+    // Dock mode's lock state (LockWindow StateDockMode, LockWindow.h:132):
+    // locked under the exhibition, which hides the lock screen; no padlock,
+    // wallpaper or alerts, no PIN panel (LockWindow::changeState, :1138-1158),
+    // and no unlocking until dock mode ends (the shell then asks to unlock,
+    // as DisplayOnPuck / DisplayOn::enter did, DISPLAY_UNLOCK_SCREEN).
+    property bool dockMode: false
+    onDockModeChanged: {
+        if (dockMode) {
+            unlockPanel.shown = false;
+            helpShown = false;
+        }
+    }
     // "Lock after" (Screen & Lock; system preference lockTimeout, seconds):
     // with a PIN or password, unlocking within this long of locking needs
     // neither (LockWindow::requiresPasscode, :1316-1327). 0: always. A
@@ -174,7 +187,7 @@ Item {
     readonly property bool showAlertsWhenLocked: !system || system.showAlertsWhenLocked !== false
     // The unlock panel or a dialog is up: no padlock, help or alerts.
     readonly property bool _covered: unlockPanel.shown || dialogState !== ""
-    readonly property bool _alertsShown: locked && showAlertsWhenLocked && !alertShown && !_covered
+    readonly property bool _alertsShown: locked && !dockMode && showAlertsWhenLocked && !alertShown && !_covered
     readonly property bool bannerShown: _alertsShown && bannerActive
     readonly property bool dashboardShown: _alertsShown && !bannerActive && notifications !== null && notifications.count > 0
 
@@ -202,8 +215,10 @@ Item {
     // or for a new one when a security policy asks for it
     // (LockWindow::tryUnlock, :1257-1287).
     function requestUnlock() {
+        if (dockMode)
+            return;
         _call("getDeviceLockMode", {}, function (r) {
-            if (!lock.locked)
+            if (!lock.locked || lock.dockMode)
                 return;
             // No lock service, no passcode can have been set.
             if (!r || r.returnValue === false)
@@ -434,7 +449,7 @@ Item {
         id: alertFrame
         objectName: "lockAlert"
         visible: opacity > 0
-        opacity: lock.locked && lock.alertShown && !lock._covered ? 1 : 0
+        opacity: lock.locked && !lock.dockMode && lock.alertShown && !lock._covered ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.alertFadeDuration } }
         anchors.horizontalCenter: parent.horizontalCenter
         readonly property real contentWidth: Math.min(Theme.px(320), lock.width) - 2 * Theme.px(10)
@@ -624,8 +639,8 @@ Item {
     Image {
         id: padlock
         objectName: "padlock"
-        // Not over the unlock panel (LockWindow.cpp:1053).
-        visible: !lock._covered
+        // Not over the unlock panel (LockWindow.cpp:1053), nor in dock mode.
+        visible: !lock._covered && !lock.dockMode
         width: Theme.lockPadlockSize
         height: Theme.lockPadlockSize
         source: Theme.asset((lock.incomingCall ? "screen-lock-incoming-call-" : "screen-lock-padlock-")

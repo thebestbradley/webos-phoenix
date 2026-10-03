@@ -278,3 +278,32 @@ div.license-text { font-family: var(--pui-font); font-size: 13px; }
 .wrap-subtitle .pui-row-subtitle { white-space: normal; overflow-wrap: anywhere; }
 .cert-untrusted .pui-row-subtitle, .cert-expired .pui-row-title { color: #c01e1e; }
 .search-icon { width: 32px; height: 32px; object-fit: contain; }
+
+/* ---- Exhibition (dock mode) ------------------------------------------------------ */
+.exhibition-app-icon { width: 32px; height: 32px; margin-right: 6px; object-fit: contain; }
+/* "None": dock mode on black, the Time exhibition on its own background. */
+.wallpaper-mini.none, .wallpaper-thumb.none {
+    background: radial-gradient(ellipse at 50% 45%, #2a2a2a 0%, #000 75%);
+}
+.exhibition-order { display: inline-flex; margin-right: 10px; }
+.exhibition-move {
+    width: 30px;
+    height: 30px;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    position: relative;
+}
+.exhibition-move::before {
+    content: "";
+    position: absolute;
+    left: 10px;
+    width: 9px;
+    height: 9px;
+    border-left: 3px solid #4a4a4a;
+    border-top: 3px solid #4a4a4a;
+}
+.exhibition-move.up::before { top: 12px; transform: rotate(45deg); }
+.exhibition-move.down::before { top: 7px; transform: rotate(225deg); }
+.exhibition-move:disabled::before { border-color: #c4c4c4; }
+.exhibition-move:not(:disabled):active { background: rgba(0, 0, 0, 0.08); border-radius: 15px; }

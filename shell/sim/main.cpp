@@ -5,13 +5,14 @@
 //
 //   phoenix-sim [--size WxH] [--scale N] [--tablet|--phone] [--scene NAME]
 //               [--orientation up|left|down|right] [--turn ORIENTATION]
-//               [--home-button] [--first-use] [--screenshot FILE [--delay MS]] [--stay-awake] [--low-memory] [--hardware-keyboard] [--no-host-shell]
+//               [--home-button] [--first-use] [--screenshot FILE [--delay MS]] [--stay-awake] [--low-memory] [--hardware-keyboard] [--touchstone] [--no-host-shell]
 //               [--host-shell PATH] [--security-policy SPEC] [--usb] [--usb-busy]
 //               [--boot-animation | --no-boot-animation]
 //
 // Keys: Esc = back gesture, Home/F1 = up gesture, F2 = demo notification,
 //       F3 = Power (screen off and locked / on), F4 = incoming call, F5 = incoming text message,
-//       F6 = low battery, Shift+F6 = battery not reporting, F7 = charger in/out, F10 / F11 = volume down / up, F9 / Print Screen /
+//       F6 = low battery, Shift+F6 = battery not reporting, F7 = charger in/out, F12 = Touchstone (inductive charger: dock mode) on/off, Shift+F12 = onto the other Touchstone,
+//       F10 / F11 = volume down / up, F9 / Print Screen /
 //       Ctrl+Alt+P (Command or Control+Option+P on a Mac) = screen capture,
 //       Ctrl+Shift+K = attach or detach a hardware keyboard,
 //       Home + F3 together = screen capture, Ctrl+Left / Ctrl+Right =
@@ -144,6 +145,7 @@ int main(int argc, char *argv[])
     QCommandLineOption turnOpt(QStringLiteral("turn"), QStringLiteral("Turn the device to this orientation one second after start-up (the UI follows 200 ms later and turns for 300 ms)."), QStringLiteral("orientation"));
     QCommandLineOption homeButtonOpt(QStringLiteral("home-button"), QStringLiteral("The device has a hardware Home button its maker uses instead of the gesture bar (the TouchPad): no gesture bar; the Home key presses the button."));
     QCommandLineOption lowMemoryOpt(QStringLiteral("low-memory"), QStringLiteral("Act as if memory were low: launching an app shows \"Sorry, Too Many Cards\"."));
+    QCommandLineOption touchstoneOpt(QStringLiteral("touchstone"), QStringLiteral("Start on a Touchstone (the inductive charger), in dock mode: its exhibition showing (F12 sets the device on one or lifts it off)."));
     QCommandLineOption hardwareKeyboardOpt(QStringLiteral("hardware-keyboard"), QStringLiteral("Start with a hardware keyboard attached (Ctrl+Shift+K attaches or detaches it): the virtual keyboard stays down unless asked for."));
     QCommandLineOption stayAwakeOpt(QStringLiteral("stay-awake"), QStringLiteral("The screen never dims or turns off by itself (always so with --screenshot)."));
     QCommandLineOption quietOpt(QStringLiteral("quiet"), QStringLiteral("No boot and shutdown sounds (they are off anyway with --screenshot and the offscreen platform)."));
@@ -159,7 +161,7 @@ int main(int argc, char *argv[])
     QCommandLineOption eraseOpt(QStringLiteral("erase-data"), QStringLiteral("Internal: once process PID is gone, erase the simulator's data and start into First Use."), QStringLiteral("pid"));
     updatingOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     eraseOpt.setFlags(QCommandLineOption::HiddenFromHelp);
-    parser.addOptions({ hardwareKeyboardOpt, lowMemoryOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
+    parser.addOptions({ hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
                         noHostShellOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, bootAnimOpt, noBootAnimOpt, updatingOpt, eraseOpt });
     parser.process(app);
 
@@ -313,6 +315,7 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simWebApps"), webApps);
     view.rootContext()->setContextProperty(QStringLiteral("simLaunch"), parser.values(launchOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simLowMemory"), parser.isSet(lowMemoryOpt));
+    view.rootContext()->setContextProperty(QStringLiteral("simTouchstone"), parser.isSet(touchstoneOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simHardwareKeyboard"), parser.isSet(hardwareKeyboardOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simOpen"), parser.value(openOpt));
     RootfsFiles rootfsFiles(&rootfs);

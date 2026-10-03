@@ -417,6 +417,7 @@ def launch_points():
             if dock is True:
                 options = info.get("exhibitionModeOptions") or info.get("dockModeOptions") or {}
                 rec["exhibitionMode"] = True
+                rec["dockMode"] = True
                 rec["exhibitionModeTitle"] = options.get("title") or a["title"]
             rec["universalSearch"] = APPS[app_id][1].get("universalSearch")
             # The types the app opens (appinfo.json "mimeTypes", as on legacy webOS).

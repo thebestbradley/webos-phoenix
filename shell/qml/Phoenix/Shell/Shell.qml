@@ -73,6 +73,9 @@ FocusScope {
     function launch(appId, params) {
         if (!source)
             return "";
+        // An app coming up ends dock mode (cardWindowAdded).
+        if (dockMode)
+            exitDockMode(true);
         launcher.open = false;
         justType.open = false;
         var uid = source.launch(appId, cards.currentUid, params || null);
@@ -114,7 +117,8 @@ FocusScope {
     }
 
     // Not over the lock screen (LockWindow sits above the menus), nor in First Use.
-    function openSystemMenu() { if (!locked && !firstUse) systemMenu.open = true; }
+    // In dock mode it opens over the exhibition (DockModeMenuManager's own).
+    function openSystemMenu() { if ((!locked || dockMode) && !firstUse) systemMenu.open = true; }
 
     function lock() {
         if (firstUse)
@@ -149,6 +153,12 @@ FocusScope {
         // system screens (USB drive mode, a progress animation, booting).
         blocked: (cards.maximized && cards.currentBlocksScreenTimeout) || systemScreens.holdsDisplay
         onTurnedOff: shell.lock()
+        // On the Touchstone it waits for dock mode instead of dimming.
+        onPuck: shell._exhibitionsOnPuck
+        puckTimeout: shell.system && shell.system.exhibitionStartAfter > 0 ? shell.system.exhibitionStartAfter * 1000 : 0
+        dockMode: shell.dockMode
+        night: shell.dockMode && shell.nightModeNow
+        onPuckTimedOut: shell.enterDockMode()
     }
     // Every touch and key resets its timers; while it is off the touch
     // panel takes nothing and only Power, Home and the volume keys get
@@ -195,8 +205,227 @@ FocusScope {
         target: shell.system
         ignoreUnknownSignals: true
         function onChargingChanged() {
-            if (shell.system.charging && backlight.state !== "on")
+            // The Touchstone has its own rules (dock mode, below).
+            if (shell.system.charging && backlight.state !== "on" && !shell.onPuck)
                 backlight.turnOn();
+        }
+    }
+
+    // ---- Dock mode, "Exhibition" (GAPS R5) ------------------------------------------
+    // On a Touchstone, the inductive charger (powerd's DockConnected with
+    // DockPower; system.onPuck), the device shows an exhibition: the Time
+    // clocks, Photos' slideshow, ... (DockMode.qml). When, as DisplayManager's
+    // states had it (Src/base/DisplayStates.cpp):
+    //   - set on it with the screen off: at once (DisplayOff, DisplayEventOnPuck);
+    //   - set on it with the screen on: the screen stays bright, and when it
+    //     would have turned off (or after Settings > Exhibition's "Start
+    //     after") the exhibition starts (DisplayOnPuck); locked, the lock
+    //     screen first asks to unlock, as DisplayOnPuck's lock state did;
+    //   - Power, or the shell locking, while on it (DisplayOn / DisplayOnPuck,
+    //     DisplayEventPowerKeyPress, DisplayEventLockScreen);
+    //   - not on a call, nor with one ringing (DisplayEventOnCall), nor in
+    //     First Use or the emergency window; only with exhibitions on
+    //     (Settings > Exhibition).
+    // In dock mode the device is locked, in the lock screen's dock state
+    // (LockWindow StateDockMode); the screen stays on (DisplayDockMode),
+    // dimmed to the night brightness in night mode. It ends on Home, the
+    // swipe up, Back with nothing to close, the tablet's edge flick
+    // (SystemUiController.cpp:450-453, 529-532, 944-951, 2082-2085), an app
+    // card coming up (a banner or dashboard tapped: cardWindowAdded,
+    // setCardWindowMaximized) or lifting the device off; then the lock screen
+    // asks to unlock (DisplayDockMode -> DisplayOnPuck / DisplayOn, lock state
+    // Unlocked: LockWindow::tryUnlock), unless the screen is off. A call
+    // coming in ends it too, to the lock screen and its call
+    // (DisplayDockMode, DisplayEventOnCall). Power turns the screen off and
+    // on again without leaving it (DisplayDockMode -> DisplayOff -> on the
+    // puck, DisplayDockMode). The transition: the screen shrinks to nothing
+    // as it fades over 900 ms while dock mode grows in from twice its size
+    // over 500 ms after 270 ms, InOutQuad, and the reverse to leave
+    // (WindowServerLuna::initDockModeAnimations; AnimationSettings
+    // dockFade*); with the screen off, at once.
+    readonly property bool onPuck: !!(system && system.onPuck)
+    readonly property bool exhibitionEnabled: !system || system.exhibitionEnabled !== false
+    readonly property bool _exhibitionsOnPuck: onPuck && exhibitionEnabled && !firstUse
+    property bool dockMode: false
+    property bool _dockTransition: false
+    readonly property alias dock: dockLayer
+
+    // Night mode (Settings > Exhibition): between nightStart and nightEnd.
+    property bool nightModeNow: false
+    function _minutesOf(hhmm) {
+        var m = /^(\d\d):(\d\d)$/.exec(hhmm || "");
+        return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : -1;
+    }
+    function _updateNightMode() {
+        var s = system;
+        if (!s || !s.exhibitionNightMode) {
+            nightModeNow = false;
+            return;
+        }
+        var now = s.fixedTime ? s.fixedTime : new Date();
+        var t = now.getHours() * 60 + now.getMinutes();
+        var a = _minutesOf(s.exhibitionNightStart), b = _minutesOf(s.exhibitionNightEnd);
+        nightModeNow = a >= 0 && b >= 0 && a !== b && (a < b ? t >= a && t < b : t >= a || t < b);
+    }
+    Timer {
+        interval: 30000
+        repeat: true
+        running: shell.dockMode
+        triggeredOnStart: true
+        onTriggered: shell._updateNightMode()
+    }
+    Connections {
+        target: shell.system
+        ignoreUnknownSignals: true
+        function onExhibitionNightModeChanged() { shell._updateNightMode(); }
+        function onExhibitionNightStartChanged() { shell._updateNightMode(); }
+        function onExhibitionNightEndChanged() { shell._updateNightMode(); }
+    }
+    // The sound preference: "mute" keeps an exhibition quiet.
+    Binding {
+        target: shell.sounds
+        property: "quiet"
+        value: shell.dockMode && !!shell.system && shell.system.dockModeSound === "mute"
+    }
+
+    function _dockAllowed() {
+        return _exhibitionsOnPuck && !emergencyShown && !notes.incomingCall
+            && !(source && source.activeCallBanner) && !systemScreens.holdsDisplay;
+    }
+    // USB drive mode (brick mode), the boot or progress animation and Full
+    // Erase's countdown take the screen: dock mode ends at once
+    // (SystemUiController::slotEnterBrickMode, SystemUiController.cpp:1900-1903),
+    // and does not start while they do.
+    Connections {
+        target: systemScreens
+        function onHoldsDisplayChanged() {
+            if (systemScreens.holdsDisplay && shell.dockMode)
+                shell.exitDockMode(false);
+        }
+    }
+
+    // Returns whether dock mode is up.
+    function enterDockMode() {
+        if (dockMode)
+            return true;
+        if (!_dockAllowed())
+            return false;
+        var animate = backlight.on;
+        systemMenu.open = false;
+        siteMenu.open = false;
+        notes.dashboardOpen = false;
+        justType.open = false;
+        launcher.open = false;
+        lockScreen.locked = true;
+        lockScreen.dockMode = true;
+        dockMode = true;
+        dockLayer.enter();
+        _dockTransitionTo(true, animate);
+        backlight.turnOn();
+        return true;
+    }
+
+    // unlock: ask to unlock after (the lock screen's passcode if one is
+    // needed), as leaving DisplayDockMode for DisplayOnPuck / DisplayOn did.
+    function exitDockMode(unlock) {
+        if (!dockMode)
+            return;
+        var animate = backlight.on;
+        dockLayer.exit();
+        dockMode = false;
+        lockScreen.dockMode = false;
+        _dockTransitionTo(false, animate);
+        if (unlock && backlight.on)
+            lockScreen.requestUnlock();
+    }
+
+    function _dockTransitionTo(entering, animate) {
+        dockEnterAnimation.stop();
+        dockExitAnimation.stop();
+        if (!animate || Theme.reduceMotion) {
+            _dockTransition = false;
+            screenLayers.opacity = 1;
+            screenLayers.scale = 1;
+            screenLayers.visible = !entering;
+            dockLayer.opacity = 1;
+            dockLayer.scale = 1;
+            return;
+        }
+        _dockTransition = true;
+        screenLayers.visible = true;
+        if (entering) {
+            // From the first frame: not yet there, twice its size.
+            dockLayer.opacity = 0;
+            dockLayer.scale = 2;
+        } else {
+            screenLayers.opacity = 0;
+            screenLayers.scale = 0;
+        }
+        (entering ? dockEnterAnimation : dockExitAnimation).start();
+    }
+    ParallelAnimation {
+        id: dockEnterAnimation
+        NumberAnimation { target: screenLayers; property: "opacity"; from: 1; to: 0; duration: Theme.dockScreenFadeDuration; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: screenLayers; property: "scale"; from: 1; to: 0; duration: Theme.dockScreenFadeDuration; easing.type: Easing.InOutQuad }
+        SequentialAnimation {
+            PauseAnimation { duration: Theme.dockStartDelay }
+            ParallelAnimation {
+                NumberAnimation { target: dockLayer; property: "opacity"; from: 0; to: 1; duration: Theme.dockFadeDuration; easing.type: Easing.InOutQuad }
+                NumberAnimation { target: dockLayer; property: "scale"; from: 2; to: 1; duration: Theme.dockFadeDuration; easing.type: Easing.InOutQuad }
+            }
+        }
+        onFinished: {
+            shell._dockTransition = false;
+            screenLayers.visible = !shell.dockMode;
+            screenLayers.opacity = 1;
+            screenLayers.scale = 1;
+        }
+    }
+    // The same run backwards: the screen grows back over 900 ms, dock mode
+    // shrinks away into twice its size from 130 ms to 630 ms.
+    ParallelAnimation {
+        id: dockExitAnimation
+        NumberAnimation { target: screenLayers; property: "opacity"; from: 0; to: 1; duration: Theme.dockScreenFadeDuration; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: screenLayers; property: "scale"; from: 0; to: 1; duration: Theme.dockScreenFadeDuration; easing.type: Easing.InOutQuad }
+        SequentialAnimation {
+            PauseAnimation { duration: Theme.dockScreenFadeDuration - Theme.dockStartDelay - Theme.dockFadeDuration }
+            ParallelAnimation {
+                NumberAnimation { target: dockLayer; property: "opacity"; from: 1; to: 0; duration: Theme.dockFadeDuration; easing.type: Easing.InOutQuad }
+                NumberAnimation { target: dockLayer; property: "scale"; from: 1; to: 2; duration: Theme.dockFadeDuration; easing.type: Easing.InOutQuad }
+            }
+        }
+        onFinished: {
+            shell._dockTransition = false;
+            dockLayer.opacity = 1;
+            dockLayer.scale = 1;
+        }
+    }
+
+    // Set on or lifted off the Touchstone.
+    on_ExhibitionsOnPuckChanged: {
+        if (_exhibitionsOnPuck) {
+            if (!backlight.on)
+                enterDockMode();
+            else if (locked && !dockMode)
+                lockScreen.requestUnlock();
+        } else if (dockMode) {
+            exitDockMode(true);
+        }
+    }
+    // A call ringing ends it, to the lock screen and the call.
+    Connections {
+        target: notes
+        function onIncomingCallChanged() {
+            if (notes.incomingCall && shell.dockMode)
+                shell.exitDockMode(false);
+        }
+    }
+    // An app's card coming up ends it (a banner tapped, a call answered).
+    Connections {
+        target: shell.source ? shell.source.cards : null
+        function onRowsInserted() {
+            if (shell.dockMode)
+                shell.exitDockMode(true);
         }
     }
 
@@ -363,6 +592,11 @@ FocusScope {
             closeEmergency();
             return;
         }
+        // Dock mode: out (SystemUiController.cpp:450-453).
+        if (dockMode) {
+            exitDockMode(true);
+            return;
+        }
         if (locked)
             return;
         // First Use: card view only to switch to an app it opened.
@@ -470,6 +704,11 @@ FocusScope {
             closeEmergency();
             return;
         }
+        // Dock mode: out (SystemUiController.cpp:529-532).
+        if (dockMode) {
+            exitDockMode(true);
+            return;
+        }
         if (locked || firstUse)
             return;
         if (notes.dashboardOpen) {
@@ -509,6 +748,19 @@ FocusScope {
             source.back(emergencyWindow.windowKey);
             return;
         }
+        // Dock mode (SystemUiController.cpp:424-443, 940-951): the dashboard,
+        // then a menu, close; otherwise Back leaves it.
+        if (dockMode) {
+            if (notes.dashboardOpen)
+                notes.dashboardOpen = false;
+            else if (systemMenu.open)
+                systemMenu.open = false;
+            else if (dockLayer.menuOpen)
+                dockLayer.appMenu.open = false;
+            else
+                exitDockMode(true);
+            return;
+        }
         if (locked) {
             // The back gesture (or Esc) on the passcode panel cancels it.
             if (lockScreen.unlockPanel.shown)
@@ -546,6 +798,13 @@ FocusScope {
     // as is not recorded), so a site or web app goes forward in its history,
     // as Back goes back.
     function gestureForward() {
+        // Dock mode: it closes the dashboard and the menus (Key_CoreNavi_Menu).
+        if (dockMode) {
+            notes.dashboardOpen = false;
+            systemMenu.open = false;
+            dockLayer.appMenu.open = false;
+            return;
+        }
         if (locked || emergencyShown)
             return;
         if (notes.dashboardOpen || siteMenu.open || systemMenu.open) {
@@ -1015,10 +1274,18 @@ FocusScope {
             } else {
                 // Power turns the screen off (and so locks), or on again to
                 // the lock screen (DisplayManager: DisplayEventPowerKeyPress).
-                if (backlight.on)
+                // On the Touchstone it starts dock mode instead of turning
+                // the screen off (DisplayOn / DisplayOnPuck), and on again,
+                // locked, it is back in dock mode (DisplayOff on the puck).
+                if (backlight.on) {
+                    if (!dockMode && _exhibitionsOnPuck && enterDockMode())
+                        return;
                     backlight.turnOff();
-                else
+                } else {
                     backlight.turnOn();
+                    if (!dockMode && _exhibitionsOnPuck && locked)
+                        enterDockMode();
+                }
             }
         }
     }
@@ -1513,409 +1780,441 @@ FocusScope {
             height: uiRotation.uiHeight
             rotation: uiRotation.uiAngle
 
-            // The scene behind the overlays (wallpaper, cards, launcher): what the
-            // translucent surfaces above blur (BackdropBlur).
+            // The screen as it is outside dock mode: everything under the
+            // status bar and the alerts. Dock mode zooms it out and hides it,
+            // as WindowServerLuna::reorderWindowManagersForDockMode hid the
+            // window managers under DockModeWindowManager, and back in after.
             Item {
-                id: sceneBackdrop
+                id: screenLayers
+                objectName: "screenLayers"
                 anchors.fill: parent
 
-                Wallpaper {
+                // The scene behind the overlays (wallpaper, cards, launcher): what the
+                // translucent surfaces above blur (BackdropBlur).
+                Item {
+                    id: sceneBackdrop
                     anchors.fill: parent
-                    source: shell.wallpaper
+
+                    Wallpaper {
+                        anchors.fill: parent
+                        source: shell.wallpaper
+                    }
+
+                    CardView {
+                        id: cards
+                        anchors.fill: parent
+                        source: shell.source
+                        onCardClosing: (uid, byApp) => { if (!byApp) shell.sounds.feedback("appclose"); }
+                        topInset: shell.fullScreen ? 0 : Theme.statusBarHeight
+                        // The app's positive space ends where the notifications' negative space begins.
+                        bottomInset: notes.negativeSpace
+                        uiOrientation: uiRotation.uiOrientation
+                        uiPortrait: uiRotation.uiPortrait
+                        // First Use's card stays until the app closes it.
+                        pinnedUid: shell._firstUseUid
+                    }
+
+                    Launcher {
+                        id: launcher
+                        objectName: "launcher"
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.topMargin: Theme.statusBarHeight
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: notes.negativeSpace
+                        dockHeight: quickLaunch.height
+                        apps: shell.source ? shell.source.apps : null
+                        layout: shell.launcherLayout
+                        draggedId: iconDrag.appId
+                        onLaunchRequested: (appId) => shell.launch(appId)
+                        onCloseRequested: launcher.open = false
+                        onDeleteRequested: (appId) => deleteDialog.ask(appId)
+                        onPendingTapped: (appId) => shell.pendingAppTapped(appId)
+                        // The page edge took the dragged icon to the page beside.
+                        onDragPageChanged: (page) => {
+                            if (iconDrag.appId !== "" && iconDrag.from === "page")
+                                shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, iconDrag.appId, page, -1));
+                            iconDrag.lastIndex = -1;
+                        }
+                        onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, launcher.mapToItem(ui, x, y))
+                        onDragMoved: (x, y) => iconDrag.move(launcher.mapToItem(ui, x, y))
+                        onDragEnded: (x, y) => iconDrag.drop(launcher.mapToItem(ui, x, y))
+                    }
                 }
 
-                CardView {
-                    id: cards
+                SearchPill {
+                    id: searchPill
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Theme.statusBarHeight + Theme.searchPillTopOffset
+                    shown: !locked && !firstUse && cards.maximizeProgress === 0 && !launcher.open && !justType.open
+                    onTapped: shell.startJustType("")
+                    backdrop: sceneBackdrop
+                }
+
+                QuickLaunch {
+                    id: quickLaunch
+                    objectName: "quickLaunch"
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    // Its own show / hide, not the maximize's: a 350 ms OutCubic
+                    // slide and a 200 ms OutCubic fade (slotAnimateShowDock /
+                    // HideDock, OverlayWindowManager.cpp:282-292, 1480-1540).
+                    property real shownProgress: shell.dockShown ? 1 : 0
+                    Behavior on shownProgress { NumberAnimation { duration: Theme.quickLaunchDuration; easing.type: Easing.OutCubic } }
+                    opacity: shell.dockShown ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: Theme.searchPillFadeDuration; easing.type: Easing.OutCubic } }
+                    y: parent.height - notes.negativeSpace - height * shownProgress
+                    visible: shownProgress > 0 || opacity > 0
+                    apps: shell.source ? shell.source.apps : null
+                    launcherOpen: launcher.open
+                    backdrop: sceneBackdrop
+                    dock: shell.launcherLayout ? shell.launcherLayout.dock : []
+                    draggedId: iconDrag.appId
+                    onLaunchRequested: (appId) => shell.launch(appId)
+                    onLauncherToggled: launcher.open = !launcher.open
+                    onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, quickLaunch.mapToItem(ui, x, y))
+                    onDragMoved: (x, y) => iconDrag.move(quickLaunch.mapToItem(ui, x, y))
+                    onDragEnded: (x, y) => iconDrag.drop(quickLaunch.mapToItem(ui, x, y))
+                }
+
+                // ---- Dragging an icon (launcher pages and dock) ----------------------------------
+                // Press and hold picks an icon up; it follows the finger above everything.
+                // Over the current page the others make room; on a tab it moves to that
+                // page; on the dock it joins it (swapping out the app in that slot when
+                // the dock is full); a dock icon dropped anywhere else leaves the dock.
+
+                Item {
+                    id: iconDrag
+                    property string appId: ""
+                    property string from: ""
+                    property int lastIndex: -1
+                    z: 1000
+                    visible: appId !== ""
+                    width: Theme.launcherIconSize
+                    height: Theme.launcherIconSize
+
+                    function entry(id) {
+                        for (var i = 0; shell.source && i < shell.source.apps.count; ++i)
+                            if (shell.source.apps.get(i).appId === id)
+                                return shell.source.apps.get(i);
+                        return null;
+                    }
+                    function place(p) {
+                        x = p.x - width / 2;
+                        y = p.y - height / 2;
+                    }
+                    function start(id, source, p) {
+                        var e = entry(id);
+                        if (!e)
+                            return;
+                        proxy.title = e.title;
+                        proxy.color = e.color;
+                        proxy.glyph = e.glyph;
+                        proxy.source = e.icon || "";
+                        proxy.largeSource = e.largeIcon || "";
+                        from = source;
+                        lastIndex = -1;
+                        appId = id;
+                        place(p);
+                    }
+                    function overDock(p) {
+                        return quickLaunch.visible && p.y >= quickLaunch.y && p.y < quickLaunch.y + quickLaunch.height;
+                    }
+                    function move(p) {
+                        if (appId === "")
+                            return;
+                        place(p);
+                        if (!launcher.open || overDock(p))
+                            return;
+                        var lp = ui.mapToItem(launcher, p.x, p.y);
+                        // At a page's edge: the launcher pans or scrolls.
+                        if (from === "page" && launcher.dragOver(lp.x, lp.y))
+                            return;
+                        var tab = launcher.tabAt(lp.x, lp.y);
+                        if (tab >= 0 && tab !== launcher.currentPage) {
+                            shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, tab, -1));
+                            launcher.showPage(tab);
+                            lastIndex = -1;
+                            return;
+                        }
+                        if (from === "page" && launcher.inPages(lp.x, lp.y)) {
+                            var page = LauncherLayout.pageOf(shell.launcherLayout, appId);
+                            var idx = launcher.indexAt(lp.x, lp.y);
+                            if (page !== launcher.currentPage) {
+                                shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, launcher.currentPage, idx));
+                            } else if (idx >= 0 && idx !== lastIndex
+                                       && shell.launcherLayout.pages[page].indexOf(appId) !== idx) {
+                                shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, page, idx));
+                            }
+                            lastIndex = idx;
+                        }
+                    }
+                    function drop(p) {
+                        if (appId === "")
+                            return;
+                        launcher.dragDone();
+                        var l = shell.launcherLayout;
+                        if (overDock(p)) {
+                            var q = ui.mapToItem(quickLaunch, p.x, p.y);
+                            l = LauncherLayout.addToDock(l, appId, quickLaunch.slotAt(q.x), Theme.quickLaunchMaxItems - 1);
+                        } else if (from === "dock") {
+                            l = LauncherLayout.removeFromDock(l, appId);
+                        }
+                        shell.setLauncherLayout(l);
+                        appId = "";
+                    }
+
+                    AppIcon {
+                        id: proxy
+                        anchors.centerIn: parent
+                        size: Theme.launcherIconSize
+                        showLabel: false
+                        interactive: false
+                        scale: 1.15
+                        opacity: 0.9
+                    }
+                }
+
+                // Deleting an app asks first: the launcher's app info dialog
+                // (uiComponents/AppInfoDialog; LauncherObject::appDeleteDecoratorActivated,
+                // showAppInfoDialog): "Remove Application?", its title and
+                // version, Cancel and Remove (both black: the launcher never set
+                // their type), on popup-bg.png over the scrim, fading in and out
+                // over 300 ms.
+                Item {
+                    id: deleteDialog
+                    objectName: "deleteDialog"
+                    property string appId: ""
+                    // "app": Remove Application?; "shortcut": a launch point an
+                    // app added, Remove Shortcut? (LauncherObject::
+                    // appDeleteDecoratorActivated, dimensionslauncher.cpp:
+                    // 3161-3198); "failed": an install that failed, with Try
+                    // Again when it can be (Phoenix's stand-in for Software
+                    // Manager's list).
+                    property string mode: "app"
+                    property string shownId: ""
                     anchors.fill: parent
-                    source: shell.source
-                    onCardClosing: (uid, byApp) => { if (!byApp) shell.sounds.feedback("appclose"); }
-                    topInset: shell.fullScreen ? 0 : Theme.statusBarHeight
-                    // The app's positive space ends where the notifications' negative space begins.
+                    visible: opacity > 0
+                    opacity: appId !== "" ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 300 } }
+                    z: 1001
+                    // What the dialog says, set when it opens.
+                    property string titleText: ""
+                    property string messageText: ""
+                    property bool canRetry: false
+                    function ask(id) {
+                        var e = iconDrag.entry(id);
+                        mode = e && e.installState === "failed" ? "failed" : e && e.dynamic ? "shortcut" : "app";
+                        shownId = id;
+                        titleText = title();
+                        messageText = message();
+                        var i = info();
+                        canRetry = mode === "failed" && !!(i && i.retry);
+                        appId = id;
+                    }
+                    function info() {
+                        return shell.source && typeof shell.source.installInfo === "function" ? shell.source.installInfo(shownId) : null;
+                    }
+                    function title() {
+                        return mode === "shortcut" ? qsTr("Remove Shortcut?")
+                             : mode === "failed" ? qsTr("Installation Failed") : qsTr("Remove Application?");
+                    }
+                    // "Calculator - v.3.0.5" (the app's title and version);
+                    // "Google (Web)" (the shortcut's title, its app's).
+                    function message() {
+                        var e = iconDrag.entry(shownId);
+                        if (!e)
+                            return shownId;
+                        if (mode === "shortcut") {
+                            var app = iconDrag.entry(e.webAppId);
+                            return qsTr("%1 (%2)").arg(e.title).arg(app ? app.title : e.webAppId);
+                        }
+                        if (mode === "failed") {
+                            var i = info();
+                            return i && i.reason ? qsTr("%1: %2").arg(e.title).arg(i.reason) : e.title;
+                        }
+                        return e.version ? qsTr("%1 - v.%2").arg(e.title).arg(e.version) : e.title;
+                    }
+                    function remove() {
+                        var id = deleteDialog.appId;
+                        deleteDialog.appId = "";
+                        if (mode === "failed") {
+                            if (shell.source && typeof shell.source.dismissInstall === "function")
+                                shell.source.dismissInstall(id);
+                            return;
+                        }
+                        shell.setLauncherLayout(mode === "shortcut" ? LauncherLayout.drop(shell.launcherLayout, id)
+                                                                    : LauncherLayout.remove(shell.launcherLayout, id));
+                        if (shell.source && typeof shell.source.removeApp === "function")
+                            shell.source.removeApp(id);
+                    }
+                    function retry() {
+                        var id = deleteDialog.appId;
+                        deleteDialog.appId = "";
+                        if (shell.source && typeof shell.source.retryInstall === "function")
+                            shell.source.retryInstall(id);
+                    }
+                    Rectangle { anchors.fill: parent; color: "#80000000" }
+                    MouseArea { anchors.fill: parent; enabled: deleteDialog.appId !== ""; onClicked: deleteDialog.appId = "" }
+                    // AppInfoDialog.qml: 320 + 2 x 11 wide; 11 px edge, 6 px margins,
+                    // 4 px top offset; title 18 px bold, message 14 px bold;
+                    // buttons 52 px, the full width.
+                    ArtBorderImage {
+                        id: appInfoDialog
+                        readonly property real edge: Theme.px(11)
+                        readonly property real margin: Theme.px(6)
+                        anchors.centerIn: parent
+                        width: Math.min(parent.width, Theme.px(320) + 2 * edge)
+                        height: dialogColumn.height + 2 * edge + 2 * margin + Theme.px(4)
+                        source: Theme.asset("popup-bg.png")
+                        border { left: Theme.artBorder(35, source); right: Theme.artBorder(35, source); top: Theme.artBorder(40, source); bottom: Theme.artBorder(40, source) }
+                        MouseArea { anchors.fill: parent }
+                        Column {
+                            id: dialogColumn
+                            x: appInfoDialog.edge + appInfoDialog.margin
+                            y: appInfoDialog.edge + appInfoDialog.margin + Theme.px(4)
+                            width: parent.width - 2 * x
+                            spacing: appInfoDialog.margin
+                            Text {
+                                objectName: "deleteDialogTitle"
+                                width: parent.width
+                                wrapMode: Text.Wrap
+                                text: deleteDialog.titleText
+                                color: "#FFFFFF"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.px(18)
+                                font.bold: true
+                            }
+                            Text {
+                                objectName: "deleteDialogMessage"
+                                width: parent.width
+                                wrapMode: Text.Wrap
+                                text: deleteDialog.messageText
+                                color: "#FFFFFF"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.px(14)
+                                font.bold: true
+                            }
+                            Column {
+                                width: parent.width
+                                ActionButton {
+                                    objectName: "deleteDialogCancel"
+                                    width: parent.width
+                                    height: Theme.px(52)
+                                    caption: qsTr("Cancel")
+                                    onAction: deleteDialog.appId = ""
+                                }
+                                ActionButton {
+                                    objectName: "deleteDialogRetry"
+                                    width: parent.width
+                                    height: Theme.px(52)
+                                    visible: deleteDialog.canRetry
+                                    caption: qsTr("Try Again")
+                                    onAction: deleteDialog.retry()
+                                }
+                                ActionButton {
+                                    objectName: "deleteDialogRemove"
+                                    width: parent.width
+                                    height: Theme.px(52)
+                                    caption: qsTr("Remove")
+                                    onAction: deleteDialog.remove()
+                                }
+                            }
+                        }
+                    }
+                }
+
+                JustType {
+                    id: justType
+                    anchors.fill: parent
                     bottomInset: notes.negativeSpace
-                    uiOrientation: uiRotation.uiOrientation
-                    uiPortrait: uiRotation.uiPortrait
-                    // First Use's card stays until the app closes it.
-                    pinnedUid: shell._firstUseUid
+                    apps: shell.source ? shell.source.apps : null
+                    source: shell.source
+                    onLaunchRequested: (appId) => shell.launch(appId)
+                    onCloseRequested: { justType.open = false; shell.forceActiveFocus(); }
                 }
 
-                Launcher {
-                    id: launcher
-                    objectName: "launcher"
+                // Phones round the corners of a maximized app (MenuWindowManager.cpp:126-146).
+                // The phone's screen corners: always at the positive space's
+                // corners (card view, launcher, Just Type too), hidden only while
+                // a full-screen card covers the screen (MenuWindowManager.cpp:
+                // 126-146, 492-517; CardWindow::enableFullScreen /
+                // disableFullScreen, CardWindow.cpp:1274-1312). Under the lock
+                // screen (TopLevelWindowManager), over the overlays.
+                Item {
+                    id: screenCorners
+                    objectName: "screenCorners"
+                    anchors.fill: parent
+                    anchors.topMargin: Theme.statusBarHeight
+                    anchors.bottomMargin: notes.negativeSpace
+                    visible: !Theme.tablet && !shell.fullScreen
+                    Image { anchors.left: parent.left; anchors.top: parent.top; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-top-left.png") }
+                    Image { anchors.right: parent.right; anchors.top: parent.top; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-top-right.png") }
+                    Image { anchors.left: parent.left; anchors.bottom: parent.bottom; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-bottom-left.png") }
+                    Image { anchors.right: parent.right; anchors.bottom: parent.bottom; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-bottom-right.png") }
+                }
+
+                LockScreen {
+                    id: lockScreen
+                    objectName: "lockScreen"
+                    anchors.fill: parent
+                    system: shell.system
+                    source: shell.source
+                    wallpaper: shell.wallpaper
+                    incomingCall: notes.incomingCall
+                    alertShown: notes.alertShown
+                    alertHeight: notes.alertHeight
+                    notifications: notes.model
+                    bannerActive: notes.bannerActive
+                    bannerText: notes.bannerText
+                    bannerColor: notes.bannerColor
+                    bannerGlyph: notes.bannerGlyph
+                    bannerIcon: notes.bannerIcon
+                    bannerOpacity: notes.bannerOpacity
+                    emergencyAvailable: shell.emergencyAvailable
+                    onUnlockRequested: shell.unlock()
+                    onEmergencyRequested: shell.openEmergency()
+                }
+
+                // Over the lock screen, under the status bar and the alerts. The
+                // TouchPad release put the emergency window manager under the
+                // lock window, "temporarily demoted" for full-screen Flash
+                // (WindowServerLuna.cpp:163-169); before that it stood above it,
+                // which an emergency call from the lock screen needs.
+                EmergencyWindow {
+                    id: emergencyWindow
+                    objectName: "emergencyWindow"
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
                     anchors.topMargin: Theme.statusBarHeight
                     anchors.bottom: parent.bottom
-                    anchors.bottomMargin: notes.negativeSpace
-                    dockHeight: quickLaunch.height
-                    apps: shell.source ? shell.source.apps : null
-                    layout: shell.launcherLayout
-                    draggedId: iconDrag.appId
-                    onLaunchRequested: (appId) => shell.launch(appId)
-                    onCloseRequested: launcher.open = false
-                    onDeleteRequested: (appId) => deleteDialog.ask(appId)
-                    onPendingTapped: (appId) => shell.pendingAppTapped(appId)
-                    // The page edge took the dragged icon to the page beside.
-                    onDragPageChanged: (page) => {
-                        if (iconDrag.appId !== "" && iconDrag.from === "page")
-                            shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, iconDrag.appId, page, -1));
-                        iconDrag.lastIndex = -1;
-                    }
-                    onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, launcher.mapToItem(ui, x, y))
-                    onDragMoved: (x, y) => iconDrag.move(launcher.mapToItem(ui, x, y))
-                    onDragEnded: (x, y) => iconDrag.drop(launcher.mapToItem(ui, x, y))
+                    anchors.bottomMargin: shell.locked ? 0 : notes.negativeSpace
+                    source: shell.source
                 }
             }
 
-            SearchPill {
-                id: searchPill
-                anchors.horizontalCenter: parent.horizontalCenter
-                y: Theme.statusBarHeight + Theme.searchPillTopOffset
-                shown: !locked && !firstUse && cards.maximizeProgress === 0 && !launcher.open && !justType.open
-                onTapped: shell.startJustType("")
-                backdrop: sceneBackdrop
-            }
-
-            QuickLaunch {
-                id: quickLaunch
-                objectName: "quickLaunch"
-                anchors.left: parent.left
-                anchors.right: parent.right
-                // Its own show / hide, not the maximize's: a 350 ms OutCubic
-                // slide and a 200 ms OutCubic fade (slotAnimateShowDock /
-                // HideDock, OverlayWindowManager.cpp:282-292, 1480-1540).
-                property real shownProgress: shell.dockShown ? 1 : 0
-                Behavior on shownProgress { NumberAnimation { duration: Theme.quickLaunchDuration; easing.type: Easing.OutCubic } }
-                opacity: shell.dockShown ? 1 : 0
-                Behavior on opacity { NumberAnimation { duration: Theme.searchPillFadeDuration; easing.type: Easing.OutCubic } }
-                y: parent.height - notes.negativeSpace - height * shownProgress
-                visible: shownProgress > 0 || opacity > 0
-                apps: shell.source ? shell.source.apps : null
-                launcherOpen: launcher.open
-                backdrop: sceneBackdrop
-                dock: shell.launcherLayout ? shell.launcherLayout.dock : []
-                draggedId: iconDrag.appId
-                onLaunchRequested: (appId) => shell.launch(appId)
-                onLauncherToggled: launcher.open = !launcher.open
-                onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, quickLaunch.mapToItem(ui, x, y))
-                onDragMoved: (x, y) => iconDrag.move(quickLaunch.mapToItem(ui, x, y))
-                onDragEnded: (x, y) => iconDrag.drop(quickLaunch.mapToItem(ui, x, y))
-            }
-
-            // ---- Dragging an icon (launcher pages and dock) ----------------------------------
-            // Press and hold picks an icon up; it follows the finger above everything.
-            // Over the current page the others make room; on a tab it moves to that
-            // page; on the dock it joins it (swapping out the app in that slot when
-            // the dock is full); a dock icon dropped anywhere else leaves the dock.
-
-            Item {
-                id: iconDrag
-                property string appId: ""
-                property string from: ""
-                property int lastIndex: -1
-                z: 1000
-                visible: appId !== ""
-                width: Theme.launcherIconSize
-                height: Theme.launcherIconSize
-
-                function entry(id) {
-                    for (var i = 0; shell.source && i < shell.source.apps.count; ++i)
-                        if (shell.source.apps.get(i).appId === id)
-                            return shell.source.apps.get(i);
-                    return null;
-                }
-                function place(p) {
-                    x = p.x - width / 2;
-                    y = p.y - height / 2;
-                }
-                function start(id, source, p) {
-                    var e = entry(id);
-                    if (!e)
-                        return;
-                    proxy.title = e.title;
-                    proxy.color = e.color;
-                    proxy.glyph = e.glyph;
-                    proxy.source = e.icon || "";
-                    proxy.largeSource = e.largeIcon || "";
-                    from = source;
-                    lastIndex = -1;
-                    appId = id;
-                    place(p);
-                }
-                function overDock(p) {
-                    return quickLaunch.visible && p.y >= quickLaunch.y && p.y < quickLaunch.y + quickLaunch.height;
-                }
-                function move(p) {
-                    if (appId === "")
-                        return;
-                    place(p);
-                    if (!launcher.open || overDock(p))
-                        return;
-                    var lp = ui.mapToItem(launcher, p.x, p.y);
-                    // At a page's edge: the launcher pans or scrolls.
-                    if (from === "page" && launcher.dragOver(lp.x, lp.y))
-                        return;
-                    var tab = launcher.tabAt(lp.x, lp.y);
-                    if (tab >= 0 && tab !== launcher.currentPage) {
-                        shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, tab, -1));
-                        launcher.showPage(tab);
-                        lastIndex = -1;
-                        return;
-                    }
-                    if (from === "page" && launcher.inPages(lp.x, lp.y)) {
-                        var page = LauncherLayout.pageOf(shell.launcherLayout, appId);
-                        var idx = launcher.indexAt(lp.x, lp.y);
-                        if (page !== launcher.currentPage) {
-                            shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, launcher.currentPage, idx));
-                        } else if (idx >= 0 && idx !== lastIndex
-                                   && shell.launcherLayout.pages[page].indexOf(appId) !== idx) {
-                            shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, page, idx));
-                        }
-                        lastIndex = idx;
-                    }
-                }
-                function drop(p) {
-                    if (appId === "")
-                        return;
-                    launcher.dragDone();
-                    var l = shell.launcherLayout;
-                    if (overDock(p)) {
-                        var q = ui.mapToItem(quickLaunch, p.x, p.y);
-                        l = LauncherLayout.addToDock(l, appId, quickLaunch.slotAt(q.x), Theme.quickLaunchMaxItems - 1);
-                    } else if (from === "dock") {
-                        l = LauncherLayout.removeFromDock(l, appId);
-                    }
-                    shell.setLauncherLayout(l);
-                    appId = "";
-                }
-
-                AppIcon {
-                    id: proxy
-                    anchors.centerIn: parent
-                    size: Theme.launcherIconSize
-                    showLabel: false
-                    interactive: false
-                    scale: 1.15
-                    opacity: 0.9
-                }
-            }
-
-            // Deleting an app asks first: the launcher's app info dialog
-            // (uiComponents/AppInfoDialog; LauncherObject::appDeleteDecoratorActivated,
-            // showAppInfoDialog): "Remove Application?", its title and
-            // version, Cancel and Remove (both black: the launcher never set
-            // their type), on popup-bg.png over the scrim, fading in and out
-            // over 300 ms.
-            Item {
-                id: deleteDialog
-                objectName: "deleteDialog"
-                property string appId: ""
-                // "app": Remove Application?; "shortcut": a launch point an
-                // app added, Remove Shortcut? (LauncherObject::
-                // appDeleteDecoratorActivated, dimensionslauncher.cpp:
-                // 3161-3198); "failed": an install that failed, with Try
-                // Again when it can be (Phoenix's stand-in for Software
-                // Manager's list).
-                property string mode: "app"
-                property string shownId: ""
-                anchors.fill: parent
-                visible: opacity > 0
-                opacity: appId !== "" ? 1 : 0
-                Behavior on opacity { NumberAnimation { duration: 300 } }
-                z: 1001
-                // What the dialog says, set when it opens.
-                property string titleText: ""
-                property string messageText: ""
-                property bool canRetry: false
-                function ask(id) {
-                    var e = iconDrag.entry(id);
-                    mode = e && e.installState === "failed" ? "failed" : e && e.dynamic ? "shortcut" : "app";
-                    shownId = id;
-                    titleText = title();
-                    messageText = message();
-                    var i = info();
-                    canRetry = mode === "failed" && !!(i && i.retry);
-                    appId = id;
-                }
-                function info() {
-                    return shell.source && typeof shell.source.installInfo === "function" ? shell.source.installInfo(shownId) : null;
-                }
-                function title() {
-                    return mode === "shortcut" ? qsTr("Remove Shortcut?")
-                         : mode === "failed" ? qsTr("Installation Failed") : qsTr("Remove Application?");
-                }
-                // "Calculator - v.3.0.5" (the app's title and version);
-                // "Google (Web)" (the shortcut's title, its app's).
-                function message() {
-                    var e = iconDrag.entry(shownId);
-                    if (!e)
-                        return shownId;
-                    if (mode === "shortcut") {
-                        var app = iconDrag.entry(e.webAppId);
-                        return qsTr("%1 (%2)").arg(e.title).arg(app ? app.title : e.webAppId);
-                    }
-                    if (mode === "failed") {
-                        var i = info();
-                        return i && i.reason ? qsTr("%1: %2").arg(e.title).arg(i.reason) : e.title;
-                    }
-                    return e.version ? qsTr("%1 - v.%2").arg(e.title).arg(e.version) : e.title;
-                }
-                function remove() {
-                    var id = deleteDialog.appId;
-                    deleteDialog.appId = "";
-                    if (mode === "failed") {
-                        if (shell.source && typeof shell.source.dismissInstall === "function")
-                            shell.source.dismissInstall(id);
-                        return;
-                    }
-                    shell.setLauncherLayout(mode === "shortcut" ? LauncherLayout.drop(shell.launcherLayout, id)
-                                                                : LauncherLayout.remove(shell.launcherLayout, id));
-                    if (shell.source && typeof shell.source.removeApp === "function")
-                        shell.source.removeApp(id);
-                }
-                function retry() {
-                    var id = deleteDialog.appId;
-                    deleteDialog.appId = "";
-                    if (shell.source && typeof shell.source.retryInstall === "function")
-                        shell.source.retryInstall(id);
-                }
-                Rectangle { anchors.fill: parent; color: "#80000000" }
-                MouseArea { anchors.fill: parent; enabled: deleteDialog.appId !== ""; onClicked: deleteDialog.appId = "" }
-                // AppInfoDialog.qml: 320 + 2 x 11 wide; 11 px edge, 6 px margins,
-                // 4 px top offset; title 18 px bold, message 14 px bold;
-                // buttons 52 px, the full width.
-                ArtBorderImage {
-                    id: appInfoDialog
-                    readonly property real edge: Theme.px(11)
-                    readonly property real margin: Theme.px(6)
-                    anchors.centerIn: parent
-                    width: Math.min(parent.width, Theme.px(320) + 2 * edge)
-                    height: dialogColumn.height + 2 * edge + 2 * margin + Theme.px(4)
-                    source: Theme.asset("popup-bg.png")
-                    border { left: Theme.artBorder(35, source); right: Theme.artBorder(35, source); top: Theme.artBorder(40, source); bottom: Theme.artBorder(40, source) }
-                    MouseArea { anchors.fill: parent }
-                    Column {
-                        id: dialogColumn
-                        x: appInfoDialog.edge + appInfoDialog.margin
-                        y: appInfoDialog.edge + appInfoDialog.margin + Theme.px(4)
-                        width: parent.width - 2 * x
-                        spacing: appInfoDialog.margin
-                        Text {
-                            objectName: "deleteDialogTitle"
-                            width: parent.width
-                            wrapMode: Text.Wrap
-                            text: deleteDialog.titleText
-                            color: "#FFFFFF"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.px(18)
-                            font.bold: true
-                        }
-                        Text {
-                            objectName: "deleteDialogMessage"
-                            width: parent.width
-                            wrapMode: Text.Wrap
-                            text: deleteDialog.messageText
-                            color: "#FFFFFF"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.px(14)
-                            font.bold: true
-                        }
-                        Column {
-                            width: parent.width
-                            ActionButton {
-                                objectName: "deleteDialogCancel"
-                                width: parent.width
-                                height: Theme.px(52)
-                                caption: qsTr("Cancel")
-                                onAction: deleteDialog.appId = ""
-                            }
-                            ActionButton {
-                                objectName: "deleteDialogRetry"
-                                width: parent.width
-                                height: Theme.px(52)
-                                visible: deleteDialog.canRetry
-                                caption: qsTr("Try Again")
-                                onAction: deleteDialog.retry()
-                            }
-                            ActionButton {
-                                objectName: "deleteDialogRemove"
-                                width: parent.width
-                                height: Theme.px(52)
-                                caption: qsTr("Remove")
-                                onAction: deleteDialog.remove()
-                            }
-                        }
-                    }
-                }
-            }
-
-            JustType {
-                id: justType
-                anchors.fill: parent
-                bottomInset: notes.negativeSpace
-                apps: shell.source ? shell.source.apps : null
-                source: shell.source
-                onLaunchRequested: (appId) => shell.launch(appId)
-                onCloseRequested: { justType.open = false; shell.forceActiveFocus(); }
-            }
-
-            // Phones round the corners of a maximized app (MenuWindowManager.cpp:126-146).
-            // The phone's screen corners: always at the positive space's
-            // corners (card view, launcher, Just Type too), hidden only while
-            // a full-screen card covers the screen (MenuWindowManager.cpp:
-            // 126-146, 492-517; CardWindow::enableFullScreen /
-            // disableFullScreen, CardWindow.cpp:1274-1312). Under the lock
-            // screen (TopLevelWindowManager), over the overlays.
-            Item {
-                id: screenCorners
-                objectName: "screenCorners"
-                anchors.fill: parent
-                anchors.topMargin: Theme.statusBarHeight
-                anchors.bottomMargin: notes.negativeSpace
-                visible: !Theme.tablet && !shell.fullScreen
-                Image { anchors.left: parent.left; anchors.top: parent.top; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-top-left.png") }
-                Image { anchors.right: parent.right; anchors.top: parent.top; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-top-right.png") }
-                Image { anchors.left: parent.left; anchors.bottom: parent.bottom; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-bottom-left.png") }
-                Image { anchors.right: parent.right; anchors.bottom: parent.bottom; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-bottom-right.png") }
-            }
-
-            LockScreen {
-                id: lockScreen
-                objectName: "lockScreen"
-                anchors.fill: parent
-                system: shell.system
-                source: shell.source
-                wallpaper: shell.wallpaper
-                incomingCall: notes.incomingCall
-                alertShown: notes.alertShown
-                alertHeight: notes.alertHeight
-                notifications: notes.model
-                bannerActive: notes.bannerActive
-                bannerText: notes.bannerText
-                bannerColor: notes.bannerColor
-                bannerGlyph: notes.bannerGlyph
-                bannerIcon: notes.bannerIcon
-                bannerOpacity: notes.bannerOpacity
-                emergencyAvailable: shell.emergencyAvailable
-                onUnlockRequested: shell.unlock()
-                onEmergencyRequested: shell.openEmergency()
-            }
-
-            // Over the lock screen, under the status bar and the alerts. The
-            // TouchPad release put the emergency window manager under the
-            // lock window, "temporarily demoted" for full-screen Flash
-            // (WindowServerLuna.cpp:163-169); before that it stood above it,
-            // which an emergency call from the lock screen needs.
-            EmergencyWindow {
-                id: emergencyWindow
-                objectName: "emergencyWindow"
+            // Dock mode, over the screen it hides, under the status bar, the
+            // alerts and the menus (DockModeWindowManager; the dashboard
+            // window manager went on top of it, reorderWindowManagersForDockMode).
+            // The exhibition fills the positive space.
+            DockMode {
+                id: dockLayer
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.topMargin: Theme.statusBarHeight
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: shell.locked ? 0 : notes.negativeSpace
+                anchors.bottomMargin: notes.negativeSpace
+                visible: shell.dockMode || shell._dockTransition
                 source: shell.source
+                system: shell.system
+                running: backlight.on
+                wallpaper: shell.system && shell.system.dockWallpaper !== undefined ? shell.system.dockWallpaper : ""
+                puckId: shell.system && shell.system.puckId ? shell.system.puckId : ""
+                fixedTime: shell.system && shell.system.fixedTime ? shell.system.fixedTime : null
+                twelveHourClock: !(shell.system && shell.system.twentyFourHour)
             }
 
             // The volume keys' indicator, centred in the positive space;
@@ -1940,13 +2239,18 @@ FocusScope {
                 // then the maximized app; else the carrier. Just Type's title
                 // opens its app menu (Preferences, Help) when it is the
                 // original page (JustType.js); the built-in stand-in has none.
-                readonly property string _mode: shell.locked || shell.firstUse ? "" : justType.open ? "justtype"
+                // Dock mode (StatusBar::TypeDockMode): the exhibition's
+                // title, "Choose an App" while its menu is open, which the
+                // title opens (DockModeMenuManager::activateAppMenu).
+                readonly property string _mode: shell.dockMode || shell._dockTransition ? "dock" : shell.locked || shell.firstUse ? "" : justType.open ? "justtype"
                     : launcher.open ? "launcher" : cards.maximized ? "app" : ""
-                title: _mode === "justtype" ? qsTr("Just Type") : _mode === "launcher" ? qsTr("Launcher")
+                title: _mode === "dock" ? (dockLayer.menuOpen ? qsTr("Choose an App") : dockLayer.currentTitle)
+                     : _mode === "justtype" ? qsTr("Just Type") : _mode === "launcher" ? qsTr("Launcher")
                      : _mode === "app" ? cards.currentTitle : (shell.system ? shell.system.carrier : "")
                 titleBorder: _mode !== ""
-                titleActionable: _mode === "app" || (_mode === "justtype" && justType.surface !== null
-                                                     && !!shell.source && typeof shell.source.justTypeAppMenu === "function")
+                titleActionable: _mode === "app" || _mode === "dock"
+                                 || (_mode === "justtype" && justType.surface !== null
+                                     && !!shell.source && typeof shell.source.justTypeAppMenu === "function")
                 // A maximized app's own colour (setWindowProperties
                 // statusBarColor; SystemUiController.cpp:820-827), faded to
                 // over 300 ms (StatusBar::setBackgroundColor). Tablets only.
@@ -1954,10 +2258,23 @@ FocusScope {
                          : _mode === "app" && cards.currentStatusBarColor !== "" ? cards.currentStatusBarColor
                          : Theme.statusBarFill
                 systemMenuOpen: systemMenu.open
-                lockScreen: shell.locked
-                filled: cards.maximized || launcher.open || justType.open
-                onSystemMenuRequested: if (!shell.locked && !shell.firstUse) systemMenu.open = !systemMenu.open
+                lockScreen: shell.locked && !shell.dockMode && !shell._dockTransition
+                filled: cards.maximized || launcher.open || justType.open || shell.dockMode || shell._dockTransition
+                onSystemMenuRequested: {
+                    if ((shell.locked && !shell.dockMode) || shell.firstUse)
+                        return;
+                    // One menu at a time (DockModeMenuManager::activateSystemMenu).
+                    dockLayer.appMenu.open = false;
+                    systemMenu.open = !systemMenu.open;
+                }
                 onAppMenuRequested: {
+                    // Dock mode: its app menu (StatusBar::slotAppMenuMenuAction,
+                    // signalDockModeMenuStateChanged); the system menu closes.
+                    if (shell.dockMode) {
+                        systemMenu.open = false;
+                        dockLayer.appMenu.open = !dockLayer.appMenu.open;
+                        return;
+                    }
                     if (_mode === "justtype") {
                         shell.source.justTypeAppMenu();
                         return;
@@ -1985,7 +2302,7 @@ FocusScope {
                 fullScreen: shell.fullScreen
                 // The phone's active-call banner (the window source's).
                 activeCall: shell.source && shell.source.activeCallBanner !== undefined ? shell.source.activeCallBanner : null
-                locked: shell.locked
+                locked: shell.locked && !shell.dockMode
                 lockAlertHost: lockScreen.alertHost
                 id: notes
                 anchors.left: parent.left
@@ -2112,7 +2429,7 @@ FocusScope {
                 anchors.bottom: parent.bottom
                 height: Theme.bezelEdgeHeight
                 // With the gesture bar its swipe up does this.
-                enabled: shell.tablet && !shell.locked && Theme.gestureAreaHeight === 0
+                enabled: shell.tablet && (!shell.locked || shell.dockMode) && Theme.gestureAreaHeight === 0
                 preventStealing: true
                 property real sx
                 property real sy

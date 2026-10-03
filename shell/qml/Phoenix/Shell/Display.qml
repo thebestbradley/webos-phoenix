@@ -17,6 +17,15 @@
 //   it goes back to how it was, unless the user touched it meanwhile.
 // - Off, the shell locks (turnedOff).
 //
+// - On a Touchstone (onPuck) with the screen on, locked or not, it does not
+//   dim: when the screen would have turned off (the dim and off timeouts
+//   together, DisplayOnPuck::startInactivityTimer, DisplayStates.cpp:
+//   1567-1580) it asks for dock mode instead (puckTimeout; the shell starts
+//   the exhibition, DisplayOnPuck::timeout -> DisplayStateDockMode), or
+//   after puckTimeout ms when the user chose a time (Settings > Exhibition).
+// - In dock mode it stays on (DisplayDockMode has no inactivity timer),
+//   at the night brightness while night mode is on (night).
+//
 // The shell gives it the input (activity()); the window source applies the
 // state: on a device the backlight, in the simulator a black veil.
 
@@ -40,8 +49,21 @@ QtObject {
     property bool stayAwake: false
     property int lockedOffTimeout: 5000
     property int alertTimeout: 6000
+    // On a Touchstone, exhibitions on (Settings > Exhibition): the
+    // screen stays bright and puckTimedOut() comes instead of dimming.
+    property bool onPuck: false
+    // How long on the Touchstone before puckTimedOut(), in ms; 0: the
+    // screen timeout (dim and off together).
+    property int puckTimeout: 0
+    // In dock mode: on until Power, whatever the timeouts.
+    property bool dockMode: false
+    // Dock mode's night mode: the backlight at its night brightness
+    // (Settings.cpp:184 DockModeNightBrightness, 1 of 100).
+    property bool night: false
+    readonly property int nightBrightness: 1
 
     signal turnedOff()
+    signal puckTimedOut()
 
     // Input: the screen is the user's again.
     function activity() {
@@ -104,9 +126,13 @@ QtObject {
     // lock screen.
     function _restart() {
         _idle.stop();
-        if (state === "off" || _restoreTo !== "" || stayAwake)
+        if (state === "off" || _restoreTo !== "" || stayAwake || dockMode)
             return;
-        if (locked) {
+        if (onPuck) {
+            // DisplayOnPuck, locked or not (the lock screen there is only
+            // asking for the passcode): to dock mode, not off.
+            _idle.interval = puckTimeout > 0 ? puckTimeout : (timeout > 0 ? timeout : 120) * 1000;
+        } else if (locked) {
             _idle.interval = lockedOffTimeout;
         } else if (blocked) {
             return;
@@ -129,9 +155,26 @@ QtObject {
     }
     onTimeoutChanged: _restart()
     onStayAwakeChanged: _restart()
+    onPuckTimeoutChanged: _restart()
+    onOnPuckChanged: {
+        // Set on the Touchstone dimmed: bright again (DisplayOnPuck::enter).
+        if (onPuck && state === "dim")
+            state = "on";
+        if (state !== "off")
+            _restart();
+    }
+    onDockModeChanged: {
+        if (state !== "off")
+            _restart();
+    }
 
     property Timer _idle: Timer {
         onTriggered: {
+            if (display.onPuck && !display.dockMode) {
+                display.puckTimedOut();
+                display._restart();
+                return;
+            }
             if (display.state === "on" && !display.locked)
                 display.state = "dim";
             else

@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Agenda: a bedside agenda card on a little stand, the day's events as
+     coloured rows under a red date band. Original Phoenix art. -->
+<defs>
+  <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="1" stop-color="#e9edf1"/>
+  </linearGradient>
+  <linearGradient id="band" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#f26a5a"/>
+    <stop offset="0.5" stop-color="#d8392b"/>
+    <stop offset="1" stop-color="#a8231a"/>
+  </linearGradient>
+  <linearGradient id="stand" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#5b6168"/>
+    <stop offset="1" stop-color="#25292d"/>
+  </linearGradient>
+  <linearGradient id="edge" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#c9d0d6"/>
+    <stop offset="1" stop-color="#8a939b"/>
+  </linearGradient>
+  <path id="sheet" d="M54 38H202A10 10 0 0 1 212 48V196A10 10 0 0 1 202 206H54A10 10 0 0 1 44 196V48A10 10 0 0 1 54 38Z"/>
+  <clipPath id="sheetclip"><use href="#sheet"/></clipPath>
+</defs>
+<!-- The stand behind the card. -->
+<path d="M96 196L84 232H172L160 196Z" fill="url(#stand)" stroke="#16191c" stroke-width="2" stroke-linejoin="round"/>
+<rect x="80" y="228" width="96" height="8" rx="3" fill="#1d2023"/>
+<!-- The card's thickness. -->
+<use href="#sheet" y="5" fill="url(#edge)" stroke="#5f6870" stroke-width="2"/>
+<use href="#sheet" fill="url(#card)"/>
+<g clip-path="url(#sheetclip)">
+  <rect x="44" y="38" width="168" height="46" fill="url(#band)"/>
+  <rect x="44" y="38" width="168" height="16" fill="#fff" opacity="0.18"/>
+  <!-- The date: a big day number drawn as strokes. -->
+  <path d="M70 52V74M64 58L70 52" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M82 54H96L86 74" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M112 58H192M112 70H168" stroke="#ffd6d0" stroke-width="5" stroke-linecap="round"/>
+  <!-- The day's events: a calendar colour bar, a time, a title. -->
+  <g stroke-linecap="round">
+    <rect x="58" y="98" width="8" height="26" rx="3" fill="#3d7fd6"/>
+    <path d="M76 104H104" stroke="#7b8792" stroke-width="5"/>
+    <path d="M76 117H186" stroke="#2d3842" stroke-width="6"/>
+    <rect x="58" y="136" width="8" height="26" rx="3" fill="#47a83c"/>
+    <path d="M76 142H104" stroke="#7b8792" stroke-width="5"/>
+    <path d="M76 155H164" stroke="#2d3842" stroke-width="6"/>
+    <rect x="58" y="174" width="8" height="22" rx="3" fill="#e8962a"/>
+    <path d="M76 180H104" stroke="#7b8792" stroke-width="5"/>
+    <path d="M76 192H176" stroke="#2d3842" stroke-width="6"/>
+  </g>
+  <path d="M44 130H212M44 168H212" stroke="#d3d9de" stroke-width="2"/>
+</g>
+<use href="#sheet" fill="none" stroke="#6b747c" stroke-width="2"/>
+<path d="M56 41H200" stroke="#fff" stroke-opacity="0.6" stroke-width="2" stroke-linecap="round"/>
+</svg>

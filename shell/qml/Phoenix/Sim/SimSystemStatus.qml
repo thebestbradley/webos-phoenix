@@ -25,6 +25,29 @@ QtObject {
     property string carrier: "Phoenix"
     property int batteryPercent: 76  // -1: no reading (powerd not answering; the status bar shows battery-error)
     property bool charging: false
+    // What it charges on: "none", "wall" or "pc" (USB), or "inductive", the
+    // Touchstone (powerd's chargerStatus type; phoenix-sim F7, F12,
+    // --touchstone). On a Touchstone, puckId is its serial number
+    // (DockSerialNo), so dock mode remembers which exhibition each one
+    // showed (DockModeWindowManager's m_puckIdToDlpIndex).
+    property string charger: "none"
+    property string puckId: ""
+    readonly property bool onPuck: charger === "inductive"
+
+    // ---- Dock mode (Settings > Exhibition; the runtime's preferences) ----------
+    // Exhibitions on the Touchstone at all; how long on it with the screen
+    // on before one starts (0: when the screen would turn off); the
+    // exhibitions turned on, in the menu's order (after Time); sounds while
+    // one shows ("systemsettings" or "mute"); night mode, its brightness
+    // from nightStart to nightEnd ("HH:MM"); dock mode's own wallpaper.
+    property bool exhibitionEnabled: true
+    property int exhibitionStartAfter: 0
+    property var exhibitionApps: ["org.webosphoenix.photos"]
+    property string dockModeSound: "systemsettings"
+    property bool exhibitionNightMode: false
+    property string exhibitionNightStart: "22:00"
+    property string exhibitionNightEnd: "07:00"
+    property url dockWallpaper: ""
     property int wifiBars: 3          // 0..3 connected, 0 = on but not connected, -1 = off
     property int signalBars: 5        // 0..5, -1 = no modem
     property bool airplaneMode: false
@@ -261,7 +284,9 @@ QtObject {
     // volume, streams, systemSounds, tapSounds, textAssist, keyboards,
     // keyboard, ringtone, alerttone,
     // notificationtone, callForwarding, reduceMotion, keyboardAccess,
-    // vpnProfiles. Missing keys are left alone.
+    // vpnProfiles, exhibitionApps, dockModeSound, exhibition {enabled,
+    // startAfter, nightMode, nightStart, nightEnd}, dockWallpaperUrl.
+    // Missing keys are left alone.
     function applyAppStatus(s) {
         applyingAppStatus = true;
         if (s.wifiEnabled !== undefined)
@@ -322,6 +347,19 @@ QtObject {
             _runtimeVpn = true;
             vpnProfiles = s.vpnProfiles;
         }
+        if (s.exhibitionApps !== undefined && s.exhibitionApps !== null)
+            exhibitionApps = s.exhibitionApps;
+        if (s.dockModeSound !== undefined)
+            dockModeSound = s.dockModeSound === "mute" ? "mute" : "systemsettings";
+        if (s.exhibition !== undefined && s.exhibition !== null) {
+            exhibitionEnabled = s.exhibition.enabled !== false;
+            exhibitionStartAfter = s.exhibition.startAfter > 0 ? s.exhibition.startAfter : 0;
+            exhibitionNightMode = !!s.exhibition.nightMode;
+            exhibitionNightStart = s.exhibition.nightStart || "22:00";
+            exhibitionNightEnd = s.exhibition.nightEnd || "07:00";
+        }
+        if (s.dockWallpaperUrl !== undefined)
+            dockWallpaper = s.dockWallpaperUrl;
         applyingAppStatus = false;
     }
 

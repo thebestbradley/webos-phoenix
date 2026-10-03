@@ -201,7 +201,14 @@ Item {
             compare(boot.glowAlpha, -128);
             tryVerify(function () { return boot.glowAlpha > -100; }, 1000);
             verify(findChild(shell, "bootLogo").visible);
+            // The screen stays held from the logo through the fade, never
+            // let go in between (dock mode would start, then be ended).
+            var drops = 0;
+            var held = function () { if (!screens.holdsDisplay) ++drops; };
+            screens.holdsDisplayChanged.connect(held);
             screens.finishBoot();
+            compare(drops, 0);
+            screens.holdsDisplayChanged.disconnect(held);
             compare(bootDone.count, 1);
             screens.finishBoot();
             compare(bootDone.count, 1, "once");

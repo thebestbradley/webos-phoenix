@@ -107,7 +107,10 @@ async function main() {
         // ---- Sizes, dock mode ---------------------------------------------------------------
         const sizes = await luna(AM + "getSizeOfApps", { appIds: ["com.palm.app.browser", "com.example.none"] });
         check(sizes.returnValue && sizes.subscribed === false && sizes["com.palm.app.browser"] > 10000 && sizes["com.example.none"] === 0, "getSizeOfApps: bytes per app");
-        check((await luna(AM + "listDockModeLaunchPoints", {})).launchPoints.length === 0, "listDockModeLaunchPoints: no app offers a dock mode stage yet");
+        // The exhibitions in detail: tools/test-exhibition.cjs.
+        const dock = await luna(AM + "listDockModeLaunchPoints", {});
+        check(dock.returnValue && dock.maxApps === 3 && dock.launchPoints.some((lp) => lp.id === "org.webosphoenix.photos" && lp.enabled)
+              && dock.launchPoints.every((lp) => lp.exhibitionModeTitle), "listDockModeLaunchPoints: the exhibition apps, Photos on");
         check((await luna(AM + "addDockModeLaunchPoint", { appId: "com.example.none" })).returnValue === false, "addDockModeLaunchPoint: an unknown app is refused");
         check((await luna(AM + "listDockPoints", {})).dockPoints.length === 0, "listDockPoints: empty, as on webOS");
         check((await luna(AM + "running", {})).returnValue === false, "running needs a shell (phoenix-sim answers it)");

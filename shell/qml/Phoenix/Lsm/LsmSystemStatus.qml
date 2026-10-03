@@ -57,6 +57,24 @@ QtObject {
     property bool showAlertsWhenLocked: true
     property real brightness: 1.0
     property var fixedTime: null
+    // The charger, and the Touchstone's serial number while on one (dock
+    // mode). STATUS: placeholders; M1 reads powerd's chargerStatus /
+    // USBDockStatus (DockConnected with DockPower, DockSerialNo) or the
+    // device's charger driver.
+    property string charger: "none"
+    property string puckId: ""
+    readonly property bool onPuck: charger === "inductive"
+    // Settings > Exhibition. STATUS: the defaults; M1 reads the system
+    // service's preferences (exhibition, dockModeSoundPref, dockwallpaper)
+    // and the application manager's exhibitions (listDockModeLaunchPoints).
+    property bool exhibitionEnabled: true
+    property int exhibitionStartAfter: 0
+    property var exhibitionApps: ["org.webosphoenix.photos"]
+    property string dockModeSound: "systemsettings"
+    property bool exhibitionNightMode: false
+    property string exhibitionNightStart: "22:00"
+    property string exhibitionNightEnd: "07:00"
+    property url dockWallpaper: ""
 
     property var wifiNetworks: []
     property bool wifiScanning: false

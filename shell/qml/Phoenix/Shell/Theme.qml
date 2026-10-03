@@ -441,6 +441,11 @@ QtObject {
     readonly property int justTypeFadeDuration: motion(150)                  // conf/lunaAnimations.conf:87-88
     readonly property int searchPillFadeDuration: motion(200)                // conf/lunaAnimations.conf:81 quickLaunchFadeDuration
     readonly property int emergencyFadeDuration: motion(350)                 // EmergencyWindowManager.cpp:49 kFadeAnimDuration (linear)
+
+    // ---- Dock mode (AnimationSettings.cpp:125-131, curve 3 InOutQuad) ----------
+    readonly property int dockScreenFadeDuration: 900                // dockFadeScreenAnimationDuration
+    readonly property int dockFadeDuration: 500                      // dockFadeDockAnimationDuration
+    readonly property int dockStartDelay: 270                        // dockFadeDockStartDelay
     readonly property int reticleDuration: motion(200)                       // conf/lunaAnimations.conf:92-93 (curve 0 Linear)
 
     // lunaAnimations.conf curve numbers map to QEasingCurve types:

@@ -27,3 +27,4 @@ export * from "./marketplace";
 export * from "./share";
 export * from "./search";
 export * from "./certificates";
+export * from "./exhibition";

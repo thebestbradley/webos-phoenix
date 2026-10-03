@@ -1,4 +1,20 @@
 {
+ "apps/agenda/public/icon-128x128.png": {
+  "svg": "35b1ac834dc618216bb22dc3f380c51538d58104c2fc98949815e3e1083bcdab",
+  "png": "c9fd83b38c4e681c75d4a46fb27fc9378e60835dac8d7505adbb008ba4b0dab9"
+ },
+ "apps/agenda/public/icon-256x256.png": {
+  "svg": "3d794aa864c3be77c94fce5e62c8b19729b7491413dbb417004cf43a6ea88ee3",
+  "png": "70ba9c6efba9b55750fdb408094f5630d76d502a4de2b79e88bd488f62206ae7"
+ },
+ "apps/agenda/public/icon-512x512.png": {
+  "svg": "2dde35bb2c3eab372da8d60d1a1422c4a3829c20cd9e5a65d53571fb2a8f52e9",
+  "png": "dc3e626a0134fca6a993a5eb61f5d2e2d34668b4ab4baba6aa22cd024154f212"
+ },
+ "apps/agenda/public/icon.png": {
+  "svg": "0622f348e1d66ce04659ee0003538fa07c32e0e40657379fc40c99f7fec3793e",
+  "png": "1d6eb2d405b0cf44d062d0c67710964f2fa3e42b59566a5b12e55f9d119e9fa2"
+ },
  "apps/authenticator/public/icon-128x128.png": {
   "svg": "62eb08c7e32bf1add46e98ded8b49b0173655edb9f0ce532dbac5795462ac1f2",
   "png": "7c1cbce5bbf25b63184af965d11289f5204ff5d46860ca91e5d783a36242c814"
@@ -558,6 +574,22 @@
  "apps/settings/public/icons/emergency.png": {
   "svg": "dc76204b66c358f687ef2d50cdb3115a1f2049234996a5aafa1fb1c1291629a3",
   "png": "4eb90e4f9201d9bb206d979d9d68453b1ea1e000ebadcdb2b77bcc7cd8f65a39"
+ },
+ "apps/settings/public/icons/exhibition-128x128.png": {
+  "svg": "50c4a6b67f9cf395188d179847303b709f1f570556b910af873edbe993d36939",
+  "png": "922383711f1322cc2d2b6de066b2c9fa13dac206d32ee6fca310195beb6981e3"
+ },
+ "apps/settings/public/icons/exhibition-256x256.png": {
+  "svg": "a66c330194f52a84d67cca377f37bf09411b7a5cea3cc965449a84bc9dc23390",
+  "png": "edcfa9b36bdda546f403236f6d1dea4c8e1018ba1a7701c9d44310bfa1e44b5b"
+ },
+ "apps/settings/public/icons/exhibition-512x512.png": {
+  "svg": "808184b9bdb8b6013382f1d985c1403fa263fd2a16123b2ffad2526169aa6c24",
+  "png": "bff9fddd5546a42773c541db01015f75d897753f583adf2dbe8a5d9a66717ba8"
+ },
+ "apps/settings/public/icons/exhibition.png": {
+  "svg": "2e51edddb9fca240ad3d8bc43e5a034f61e02e175f22be6ede281c675a53dca8",
+  "png": "2e498b06fd5fdaf5b1ce2b2b70a037c46e09576b2b4e71c3592be7dd8c11424f"
  },
  "apps/settings/public/icons/justtype-128x128.png": {
   "svg": "97cb8dd61b45daa489dffe9178e208f96680a797750b5dbfc67ddad77d6ec7f3",

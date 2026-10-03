@@ -254,6 +254,11 @@ void Rootfs::rescan()
         const QString splashBgFile = splashBg.isEmpty() ? QString() : appDir + QLatin1Char('/') + splashBg;
         entry[QStringLiteral("splashBackground")] = !splashBgFile.isEmpty() && QFileInfo::exists(splashBgFile)
             ? QUrl::fromLocalFile(splashBgFile).toString() : QString();
+        // An exhibition (dock mode) app (dock, dockOptions above): the title
+        // of its row in the exhibition menu, else the app's title.
+        entry[QStringLiteral("exhibition")] = dock.toBool(false);
+        entry[QStringLiteral("exhibitionTitle")] = dockOptions.value(QStringLiteral("title"))
+            .toString(entry.value(QStringLiteral("title")).toString());
         // Installed by the user: the launcher may delete it (uninstall).
         entry[QStringLiteral("installed")] = installed;
         // The app's files (getSizeOfApps, getUserInstalledAppSizes).
@@ -285,8 +290,10 @@ void Rootfs::rescan()
         record[QStringLiteral("system")] = system;
         record[QStringLiteral("noWindow")] = app.value(QStringLiteral("noWindow")).toBool();
         if (dock.toBool()) {
+            // For listDockModeLaunchPoints (ApplicationDescription::toJSON, :770-774).
             record[QStringLiteral("exhibitionMode")] = true;
-            record[QStringLiteral("exhibitionModeTitle")] = dockOptions.value(QStringLiteral("title")).toString(entry.value(QStringLiteral("title")).toString());
+            record[QStringLiteral("dockMode")] = true;
+            record[QStringLiteral("exhibitionModeTitle")] = entry.value(QStringLiteral("exhibitionTitle"));
         }
         // The types the app opens (appinfo.json "mimeTypes": [{mime, extension,
         // stream}], luna-sysmgr's resource handlers), for the application
@@ -319,6 +326,8 @@ void Rootfs::rescan()
             if (lp.contains(QStringLiteral("icon")))
                 point[QStringLiteral("largeIcon")] = QString();
             point[QStringLiteral("noWindow")] = false;
+            // The app's own entry is its exhibition, not its launch points.
+            point[QStringLiteral("exhibition")] = false;
             point[QStringLiteral("quickLaunch")] = lp.value(QStringLiteral("quickLaunch")).toInt(0);
             m_apps.append(point);
             QVariantMap pointRecord;

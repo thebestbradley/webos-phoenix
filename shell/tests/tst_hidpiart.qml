@@ -158,6 +158,29 @@ Item {
                 field.focus = false;
                 shell.forceActiveFocus();
                 tryCompare(shell, "keyboardOpen", false, 2000);
+
+                // Dock mode on the Touchstone: the Time exhibition's clocks,
+                // each page in turn, and its menu of exhibitions.
+                sys.charger = "inductive";
+                verify(shell.enterDockMode());
+                var dock = findChild(shell, "dockMode");
+                var time = findChild(dock, "dockModeTime");
+                var dockArt = 0;
+                for (var page = 0; page < 3; ++page) {
+                    time.showClock(page);
+                    wait(50);
+                    dockArt += checkArt(u, "dock mode, clock " + page);
+                }
+                dock.appMenu.open = true;
+                wait(50);
+                dockArt += checkArt(u, "dock mode's menu");
+                checkScaled(u);
+                shell.exitDockMode(false);
+                sys.charger = "none";
+                tryCompare(shell, "_dockTransition", false, 2000);
+                shell.unlock();
+                verify(dockArt > 0);
+                count += dockArt;
                 verify(count > 40, "pictures checked at " + u + ": " + count);
             }
         }
@@ -171,7 +194,12 @@ Item {
                          "pin/button-green.png", "pin/pin-grid.png", "loading-bg.png", "loading-glow.png",
                          "screen-lock-target-scrim.png", "wm-corner-top-left.png", "overlay-banner-bg.png",
                          "dashboard-mask-top.png", "keyboard-phone/key-white.png", "keyboard-phone/key-charcoal.png",
-                         "keyboard-tablet/key-gray-short.png", "keyboard-tablet/popup-bg-2.png"];
+                         "keyboard-tablet/key-gray-short.png", "keyboard-tablet/popup-bg-2.png",
+                         // Dock mode: the Time exhibition and the loading glow.
+                         "dockmode/time/clock_bg.png", "dockmode/time/analog/glass/base.png", "dockmode/time/analog/glass/hour.png",
+                         "dockmode/time/analog/matte/second.png", "dockmode/time/digital/landscape/flippers-time.png",
+                         "dockmode/time/digital/portrait/flippers-date-mask.png", "dockmode/time/indicator/on.png",
+                         "dockmode/time-icon-48x48.png", "dockmode/dock-loading-glow.png"];
             for (var i = 0; i < names.length; ++i) {
                 compare(fileName(HiDpi.variant(Theme.assetUrl(names[i]), 2)), names[i].split("/").pop().replace(".png", "@2x.png"));
                 compare(fileName(HiDpi.variant(Theme.assetUrl(names[i]), 3)), names[i].split("/").pop().replace(".png", "@3x.png"));
