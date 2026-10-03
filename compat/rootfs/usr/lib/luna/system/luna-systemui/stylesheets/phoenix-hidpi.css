@@ -1,0 +1,130 @@
+/* webOS Phoenix overlay (tools/hidpi-art.py): the rules of the stylesheets
+   below that set an image, again, with each image's HiDPI variants
+   (docs/spec/hidpi-art.md). Do not edit; regenerate. */
+
+/* third_party/luna-systemui/stylesheets/dashboard.css */
+body {
+    background-image: none;
+}
+.palm-dashboard-icon-container {
+    -webkit-border-image: -webkit-image-set(url(../images/dashboard-container.png) 1x, url(../images/dashboard-container@2x.png) 2x, url(../images/dashboard-container@3x.png) 3x) 0 12 0 12 repeat stretch;
+}
+.palm-dashboard-text-container {
+    -webkit-border-image: -webkit-image-set(url(../images/dashboard-container.png) 1x, url(../images/dashboard-container@2x.png) 2x, url(../images/dashboard-container@3x.png) 3x) 0 12 0 12 repeat stretch;
+}
+.palm-dashboard-icon-container:active, .palm-dashboard-text-container:active, .palm-dashboard-icon-container.selected, .palm-dashboard-text-container.selected {
+    -webkit-border-image: url(../images/dashboard-container-active.png) 0 12 0 12 repeat stretch;
+}
+.palm-dashboard-icon {
+    background-image: -webkit-image-set(url(../images/notification-large-info.png) 1x, url(../images/notification-large-info@2x.png) 2x, url(../images/notification-large-info@3x.png) 3x);
+}
+.palm-dashboard-icon.alert {
+    background-image: url(../images/notification-alert.png);
+}
+.dashboard-newitem {
+    -webkit-border-image: -webkit-image-set(url(../images/dashboard-newitem-badge.png) 1x, url(../images/dashboard-newitem-badge@2x.png) 2x, url(../images/dashboard-newitem-badge@3x.png) 3x) 0 12 0 12 repeat stretch;
+}
+.palm-dashboard-icon-container:active .dashboard-newitem, .palm-dashboard-icon-container.selected .dashboard-newitem {
+    -webkit-border-image: url(../images/dashboard-newitem-badge-active.png) 0 12 0 12 repeat stretch;
+}
+.single .palm-dashboard-icon-container {
+    -webkit-border-image: url(../images/dashboard-container-sprite.png) 0 1 144 12 repeat stretch;
+}
+.single .palm-dashboard-text-container {
+    -webkit-border-image: url(../images/dashboard-container-sprite.png) 96 12 48 1 repeat stretch;
+}
+.single:active .palm-dashboard-icon-container, .single.selected .palm-dashboard-icon-container {
+    -webkit-border-image: url(../images/dashboard-container-sprite.png) 48 1 96 12 repeat stretch;
+}
+.single:active .palm-dashboard-text-container, .single.selected .palm-dashboard-text-container {
+    -webkit-border-image: url(../images/dashboard-container-sprite.png) 144 12 0 1 repeat stretch;
+}
+.palm-dashboard-icon.charging {
+    background-image: -webkit-image-set(url(../images/notification-large-usb.png) 1x, url(../images/notification-large-usb@2x.png) 2x, url(../images/notification-large-usb@3x.png) 3x);
+}
+.palm-dashboard-icon.dock {
+    background-image: url(../images/notification-large-dock.png);
+}
+.palm-dashboard-icon.dataimport {
+    background-image: -webkit-image-set(url(../images/notification-large-sync.png) 1x, url(../images/notification-large-sync@2x.png) 2x, url(../images/notification-large-sync@3x.png) 3x);
+}
+.palm-dashboard-icon.phonenetworkerror {
+    background-image: -webkit-image-set(url(../images/notification-large-error.png) 1x, url(../images/notification-large-error@2x.png) 2x, url(../images/notification-large-error@3x.png) 3x);
+}
+.palm-dashboard-icon.updateAvailable {
+    background-image: -webkit-image-set(url(../images/notification-large-update.png) 1x, url(../images/notification-large-update@2x.png) 2x, url(../images/notification-large-update@3x.png) 3x);
+}
+.palm-dashboard-icon.tutorial {
+    background-image: -webkit-image-set(url(../images/notification-large-tutorial.png) 1x, url(../images/notification-large-tutorial@2x.png) 2x, url(../images/notification-large-tutorial@3x.png) 3x);
+}
+.palm-dashboard-icon.apprestore {
+    background-image: url(../images/notification-large-appcatalog.png);
+}
+.palm-dashboard-icon.info {
+    background-image: -webkit-image-set(url(../images/notification-large-info.png) 1x, url(../images/notification-large-info@2x.png) 2x, url(../images/notification-large-info@3x.png) 3x);
+}
+.palm-dashboard-icon.opensearch {
+    background-image: -webkit-image-set(url(../images/opensearch-large-icon.png) 1x, url(../images/opensearch-large-icon@2x.png) 2x, url(../images/opensearch-large-icon@3x.png) 3x);
+}
+.palm-dashboard-icon.dashboard-account-icon {
+    background-image: -webkit-image-set(url(../images/notification-large-sync.png) 1x, url(../images/notification-large-sync@2x.png) 2x, url(../images/notification-large-sync@3x.png) 3x);
+}
+.palm-dashboard-icon.dashboard-account-icon.EAS, .palm-dashboard-icon.dashboard-account-icon.eas {
+    background-image: url(../images/notification-large-outlook.png);
+}
+.palm-dashboard-icon.dashboard-account-icon.Google, .palm-dashboard-icon.dashboard-account-icon.gmail {
+    background-image: url(../images/notification-large-google.png);
+}
+.palm-dashboard-icon.dashboard-account-icon.facebook {
+    background-image: url(../images/notification-large-facebook.png);
+}
+.palm-dashboard-icon.dashboard-account-icon.linkedin {
+    background-image: url(../images/notification-large-linkedin.png);
+}
+.palm-dashboard-icon.dashboard-account-icon.yahoo {
+    background-image: url(../images/notification-large-yahoo.png);
+}
+
+/* third_party/luna-systemui/stylesheets/notifications.css */
+body {
+    background-image: none;
+}
+.icon-warning {
+    background-image: -webkit-image-set(url(../images/warning-icon.png) 1x, url(../images/warning-icon@2x.png) 2x, url(../images/warning-icon@3x.png) 3x);
+}
+.icon-drive-mode {
+    background-image: -webkit-image-set(url(../images/drive-mode-icon.png) 1x, url(../images/drive-mode-icon@2x.png) 2x, url(../images/drive-mode-icon@3x.png) 3x);
+}
+.icon-power-off {
+    background-image: -webkit-image-set(url(../images/warning-icon.png) 1x, url(../images/warning-icon@2x.png) 2x, url(../images/warning-icon@3x.png) 3x);
+}
+.icon-flight-mode {
+    background-image: -webkit-image-set(url(../images/flight-mode-icon.png) 1x, url(../images/flight-mode-icon@2x.png) 2x, url(../images/flight-mode-icon@3x.png) 3x);
+}
+.icon-low-battery {
+    background-image: -webkit-image-set(url(../images/system-notification-lowbattery.png) 1x, url(../images/system-notification-lowbattery@2x.png) 2x, url(../images/system-notification-lowbattery@3x.png) 3x);
+}
+.icon-wifi {
+    background-image: -webkit-image-set(url(../images/system-notification-wifi-icon.png) 1x, url(../images/system-notification-wifi-icon@2x.png) 2x, url(../images/system-notification-wifi-icon@3x.png) 3x);
+}
+.icon-bluetooth {
+    background-image: -webkit-image-set(url(../images/system-notification-bluetooth.png) 1x, url(../images/system-notification-bluetooth@2x.png) 2x, url(../images/system-notification-bluetooth@3x.png) 3x);
+}
+.icon-location {
+    background-image: -webkit-image-set(url(../images/system-notification-location-services.png) 1x, url(../images/system-notification-location-services@2x.png) 2x, url(../images/system-notification-location-services@3x.png) 3x);
+}
+.icon-systemupdate {
+    background-image: -webkit-image-set(url(../images/notification-large-update.png) 1x, url(../images/notification-large-update@2x.png) 2x, url(../images/notification-large-update@3x.png) 3x);
+}
+.info-icon {
+    background-image: -webkit-image-set(url(../images/palm-notification-button-affirmative-info.png) 1x, url(../images/palm-notification-button-affirmative-info@2x.png) 2x, url(../images/palm-notification-button-affirmative-info@3x.png) 3x);
+}
+.info-icon.selected {
+    background-image: -webkit-image-set(url(../images/palm-notification-button-affirmative-info.png) 1x, url(../images/palm-notification-button-affirmative-info@2x.png) 2x, url(../images/palm-notification-button-affirmative-info@3x.png) 3x);
+}
+.system-notification.usb-mode .info-icon {
+    background-image: -webkit-image-set(url(../images/palm-notification-button-info.png) 1x, url(../images/palm-notification-button-info@2x.png) 2x, url(../images/palm-notification-button-info@3x.png) 3x);
+}
+.system-notification.usb-mode .info-icon.selected {
+    background-image: -webkit-image-set(url(../images/palm-notification-button-info.png) 1x, url(../images/palm-notification-button-info@2x.png) 2x, url(../images/palm-notification-button-info@3x.png) 3x);
+}

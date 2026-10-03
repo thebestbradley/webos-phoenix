@@ -1294,7 +1294,7 @@ FocusScope {
                 // AppInfoDialog.qml: 320 + 2 x 11 wide; 11 px edge, 6 px margins,
                 // 4 px top offset; title 18 px bold, message 14 px bold;
                 // buttons 52 px, the full width.
-                BorderImage {
+                ArtBorderImage {
                     id: appInfoDialog
                     readonly property real edge: Theme.px(11)
                     readonly property real margin: Theme.px(6)

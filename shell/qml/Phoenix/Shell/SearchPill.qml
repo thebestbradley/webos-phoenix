@@ -33,7 +33,7 @@ Item {
         source: pill.backdrop
         mask: pillShape
     }
-    BorderImage {
+    ArtBorderImage {
         id: pillShape
         visible: false
         anchors.fill: parent
@@ -42,7 +42,7 @@ Item {
     }
 
     // Three-tiled background, 40 px caps (OverlayWindowManager.cpp:1152-1155).
-    BorderImage {
+    ArtBorderImage {
         anchors.fill: parent
         source: Theme.asset("launcher3/search-field-bg-launcher.png")
         border { left: Theme.artBorder(40, source); right: Theme.artBorder(40, source); top: 0; bottom: 0 }

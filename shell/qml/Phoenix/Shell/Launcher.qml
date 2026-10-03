@@ -61,7 +61,7 @@ Item {
     transform: Translate { y: launcher.hidden * (launcher.height + Theme.statusBarHeight) }
 
     // Opaque tiled background (dimensionslauncher.cpp:1290, 1592).
-    Image {
+    ArtTiledImage {
         anchors.fill: parent
         source: Theme.asset("launcher3/launcher-bg.png")
         fillMode: Image.Tile
@@ -72,7 +72,7 @@ Item {
 
     // ---- Tab strip ---------------------------------------------------------
 
-    BorderImage {
+    ArtBorderImage {
         id: tabBar
         width: parent.width
         height: Theme.launcherTabHeight
@@ -90,7 +90,7 @@ Item {
                     width: launcher.tabWidth
                     height: tabBar.height
 
-                    BorderImage {
+                    ArtBorderImage {
                         anchors.fill: parent
                         visible: pages.currentIndex === index
                         source: Theme.asset("launcher3/tab-selected-bg.png")
@@ -112,6 +112,7 @@ Item {
                     Image {
                         visible: index > 0
                         anchors.left: parent.left
+                        width: Theme.artWidth(source)
                         height: parent.height
                         source: Theme.asset("launcher3/tab-divider.png")
                     }
@@ -161,6 +162,7 @@ Item {
     Image {
         anchors.top: tabBar.bottom
         width: parent.width
+        height: Theme.artHeight(source)
         z: 1
         source: Theme.asset("launcher3/tab-shadow.png")
         fillMode: Image.Stretch
@@ -452,6 +454,7 @@ Item {
     Image {
         anchors.bottom: parent.bottom
         width: parent.width
+        height: Theme.artHeight(source)
         source: Theme.asset("launcher3/launcher-scrollfade-bottom.png")
         fillMode: Image.Stretch
     }

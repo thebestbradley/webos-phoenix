@@ -304,7 +304,7 @@ html:has(> body.phone-app), body.phone-app {
 .call-control:nth-child(n+3) { border-bottom: 0; }
 .call-control:active, .call-control.on {
     /* the dial pad's pressed-key highlight */
-    background: url(../../shared/phoenix-ui/assets/enyo/telephony/pin-key-highlight.png) center / 100% 100% no-repeat, #1d4f86;
+    background: -webkit-image-set(url(../../shared/phoenix-ui/assets/enyo/telephony/pin-key-highlight.png) 1x, url(../../shared/phoenix-ui/assets/enyo/telephony/pin-key-highlight@2x.png) 2x, url(../../shared/phoenix-ui/assets/enyo/telephony/pin-key-highlight@3x.png) 3x) center / 100% 100% no-repeat, #1d4f86;
 }
 .call-control:disabled { color: #6c6f73; cursor: default; }
 

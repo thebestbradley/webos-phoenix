@@ -71,7 +71,7 @@ Item {
         Behavior on opacity { NumberAnimation { duration: Theme.statusBarFadeDuration } }
     }
     // Tablet only: tiled bar art over the fill (StatusBar.cpp:227,240-262).
-    Image {
+    ArtTiledImage {
         anchors.fill: parent
         visible: Theme.tablet
         source: Theme.asset("statusBar/status-bar-background.png")
@@ -120,7 +120,7 @@ Item {
         height: bar.height
         width: border ? Theme.px(Theme.statusBarTitleCapLeft) + label.width + Theme.px(Theme.statusBarTitleCapRight)
                       : Theme.statusBarTitlePadding + label.width
-        BorderImage {
+        ArtBorderImage {
             visible: t.border
             anchors.verticalCenter: parent.verticalCenter
             width: parent.width
@@ -219,7 +219,7 @@ Item {
     // fading in and out over 200 ms (StatusBarItemGroup::activate /
     // deactivate and paint, :282-330, 381-396; statusBarMenuFade*,
     // lunaAnimations.conf:124-125).
-    BorderImage {
+    ArtBorderImage {
         id: menuTab
         objectName: "systemMenuTab"
         anchors.right: parent.right

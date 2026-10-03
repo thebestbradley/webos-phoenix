@@ -577,6 +577,16 @@ Item {
     // ---- Art (sizes in pixels, as the plugin read them from the pixmaps) ---------
 
     readonly property string _art: Theme.assetUrl(tablet ? "keyboard-tablet/" : "keyboard-phone/")
+    // An art file at this keyboard's scale: its @2x / @3x variant on a
+    // denser screen (Theme.variant), drawn in the art's pixels like the 1x
+    // file, since Qt reads @2x / @3x files as having that pixel ratio
+    // (sizes, BorderImage borders). Clip rects are in the file's own
+    // pixels: _artRect. (No @1.5x keyboard art: Qt would read it as 1x.)
+    function _artFile(name) { return String(Theme.variant(_art + name, pixelScale)); }
+    function _artRect(file, x, y, w, h) {
+        var k = Theme.artScale(file);
+        return Qt.rect(x * k, y * k, w * k, h * k);
+    }
     // keyboard-bg.png: 3x200 phone, 3x340 tablet.
     readonly property int _bgHeight: tablet ? 340 : 200
     // key-*.png: two states stacked, 48x96 phone, 93x140 tablet;
@@ -737,7 +747,11 @@ Item {
     }
     onAvailableWidthChanged: Qt.callLater(_availableSpaceChanged)
     onAvailableHeightChanged: Qt.callLater(_availableSpaceChanged)
-    onPixelScaleChanged: Qt.callLater(_availableSpaceChanged)
+    onPixelScaleChanged: {
+        Qt.callLater(_availableSpaceChanged);
+        // The caps' glyphs are the art's variant for the scale (_artFile).
+        _triggerRepaint();
+    }
     onKeyboardSizeChanged: if (tablet) { _requestedHeight = _presetHeight(); _setKeyboardHeight(_requestedHeight); }
     Component.onCompleted: {
         _km.setLayoutFamily(layoutName);
@@ -978,7 +992,7 @@ Item {
                         else { h = Math.floor(box.w * s.h / s.w); w = box.w; }
                     }
                     // Its @2x / @3x art on a denser screen (Theme.variant).
-                    ops.push({ icon: String(Theme.variant(_art + icon, pixelScale)), x: box.x + Math.floor((box.w - w) / 2), y: box.y + Math.floor((box.h - h) / 2), w: w, h: h });
+                    ops.push({ icon: _artFile(icon), x: box.x + Math.floor((box.w - w) / 2), y: box.y + Math.floor((box.h - h) / 2), w: w, h: h });
                 }
                 // The emoticon pictures are not in the Apache-2.0 art: their text.
                 if (!emoticonGraphic)
@@ -1858,7 +1872,7 @@ Item {
         // keyboard-bg.png stretched over the keyboard.
         Image {
             anchors.fill: parent
-            source: kb._art + "keyboard-bg.png"
+            source: kb._artFile("keyboard-bg.png")
             fillMode: Image.Stretch
         }
 
@@ -1876,7 +1890,7 @@ Item {
                 height: modelData.h
                 KeyTile {
                     anchors.fill: parent
-                    source: keyItem.modelData.art + keyItem.modelData.background
+                    source: String(Theme.variant(keyItem.modelData.art + keyItem.modelData.background, kb.pixelScale))
                     half: kb._keyHalfFor(keyItem.modelData.background)
                     corner: kb._corner
                     trim: kb.tablet ? kb._trim : kb.cPhoneKeyTrim
@@ -1935,13 +1949,13 @@ Item {
                         y: -pressedItem.modelData.y
                         width: parent.width
                         height: frame.height
-                        source: kb._art + "keyboard-bg.png"
+                        source: kb._artFile("keyboard-bg.png")
                         fillMode: Image.Stretch
                     }
                     KeyTile {
                         anchors.fill: parent
                         objectName: "pressedKey"
-                        source: pressedItem.modelData.art + pressedItem.modelData.background
+                        source: String(Theme.variant(pressedItem.modelData.art + pressedItem.modelData.background, kb.pixelScale))
                         pressed: true
                         half: kb._keyHalfFor(pressedItem.modelData.background)
                         corner: kb._corner
@@ -1960,7 +1974,7 @@ Item {
                     Image {
                         x: pressedItem.modelData.preview ? pressedItem.modelData.preview.x : 0
                         y: pressedItem.modelData.preview ? pressedItem.modelData.preview.y : 0
-                        source: kb._art + "popup-bg.png"
+                        source: kb._artFile("popup-bg.png")
                     }
                     Image {
                         readonly property var d: pressedItem.modelData.preview ? pressedItem.modelData.preview.key : ({ x: 0, y: 0, w: 0, h: 0 })
@@ -1968,8 +1982,8 @@ Item {
                         y: d.y
                         width: d.w
                         height: d.h
-                        source: kb._art + "popup-key.png"
-                        sourceClipRect: Qt.rect(0, kb._popupKeyHalf, kb._popupKeyWidth, kb._popupKeyHalf)
+                        source: kb._artFile("popup-key.png")
+                        sourceClipRect: kb._artRect(source, 0, kb._popupKeyHalf, kb._popupKeyWidth, kb._popupKeyHalf)
                     }
                     Caps { ops: pressedItem.modelData.preview ? pressedItem.modelData.preview.caps : [] }
                 }
@@ -1982,7 +1996,7 @@ Item {
             objectName: "extendedKeys"
             readonly property var p: kb._popup
             visible: p !== null
-            readonly property string img: kb._art + (p && p.twoLines ? "popup-bg-2.png" : "popup-bg.png")
+            readonly property string img: kb._artFile(p && p.twoLines ? "popup-bg-2.png" : "popup-bg.png")
             readonly property int ph: p && p.twoLines ? kb._popup2Height : kb._popupHeight
             readonly property int fillLeft: p ? p.x + kb.cPopupSide : 0
             readonly property int fillRight: p ? p.x + p.w - kb.cPopupSide : 0
@@ -1992,33 +2006,33 @@ Item {
                 x: popup.p ? popup.p.x : 0; y: popup.p ? popup.p.y : 0
                 width: kb.cPopupSide; height: popup.ph
                 source: popup.img
-                sourceClipRect: Qt.rect(0, 0, kb.cPopupSide, popup.ph)
+                sourceClipRect: kb._artRect(popup.img, 0, 0, kb.cPopupSide, popup.ph)
             }
             Image {   // right side
                 x: popup.fillRight; y: popup.p ? popup.p.y : 0
                 width: kb.cPopupSide; height: popup.ph
                 source: popup.img
-                sourceClipRect: Qt.rect(kb._popupWidth - kb.cPopupSide, 0, kb.cPopupSide, popup.ph)
+                sourceClipRect: kb._artRect(popup.img, kb._popupWidth - kb.cPopupSide, 0, kb.cPopupSide, popup.ph)
             }
             Image {   // fill, left of the pointer
                 visible: popup.fillLeft < popup.pointerLeft
                 x: popup.fillLeft; y: popup.p ? popup.p.y : 0
                 width: Math.max(0, popup.pointerLeft - popup.fillLeft); height: popup.ph
                 source: popup.img
-                sourceClipRect: Qt.rect(kb.cPopupSide, 0, 1, popup.ph)
+                sourceClipRect: kb._artRect(popup.img, kb.cPopupSide, 0, 1, popup.ph)
             }
             Image {   // fill, right of the pointer
                 visible: popup.pointerRight < popup.fillRight
                 x: popup.pointerRight; y: popup.p ? popup.p.y : 0
                 width: Math.max(0, popup.fillRight - popup.pointerRight); height: popup.ph
                 source: popup.img
-                sourceClipRect: Qt.rect(kb.cPopupSide, 0, 1, popup.ph)
+                sourceClipRect: kb._artRect(popup.img, kb.cPopupSide, 0, 1, popup.ph)
             }
             Image {   // pointer
                 x: popup.pointerLeft; y: popup.p ? popup.p.y : 0
                 width: kb.cPopupPointerWidth; height: popup.ph
                 source: popup.img
-                sourceClipRect: Qt.rect(kb.cPopupPointerStart, 0, kb.cPopupPointerWidth, popup.ph)
+                sourceClipRect: kb._artRect(popup.img, kb.cPopupPointerStart, 0, kb.cPopupPointerWidth, popup.ph)
             }
             Repeater {
                 model: popup.p ? popup.p.cells : []
@@ -2033,8 +2047,8 @@ Item {
                     height: kb._popupKeyHalf
                     Image {
                         anchors.fill: parent
-                        source: kb._art + "popup-key.png"
-                        sourceClipRect: Qt.rect(0, cell.modelData.highlighted ? kb._popupKeyHalf : 0, kb._popupKeyWidth, kb._popupKeyHalf)
+                        source: kb._artFile("popup-key.png")
+                        sourceClipRect: kb._artRect(source, 0, cell.modelData.highlighted ? kb._popupKeyHalf : 0, kb._popupKeyWidth, kb._popupKeyHalf)
                     }
                     Caps {
                         ops: [{ text: cell.modelData.text, x: 0, y: 0, w: kb._popupKeyWidth - 3, h: kb._popupKeyHalf - 2,

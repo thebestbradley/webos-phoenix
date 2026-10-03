@@ -10,7 +10,7 @@ export { ToggleButton, Slider, Button, Spinner, TextField, CheckBox } from "./co
 export type { ToggleButtonProps, SliderProps, ButtonProps, ButtonVariant, TextFieldProps, CheckBoxProps } from "./controls";
 export { PopupMenu, ListSelector, Picker, Drawer, DividerDrawer, Dialog } from "./popups";
 export type { Option, PopupMenuProps, ListSelectorProps, PickerProps, DrawerProps, DialogProps } from "./popups";
-export { icons } from "./assets";
+export { icons, srcSet, cssImage } from "./assets";
 export { Dialpad, DialButton, BackspaceButton, ToolBar, RadioToolGroup, ToolButton, Avatar, DIALPAD_KEYS, phoneArt } from "./telephony";
 export type { DialpadProps, DialButtonProps, ToolOption, RadioToolGroupProps, ToolButtonProps } from "./telephony";
 export { BackProvider, useBack } from "./back";

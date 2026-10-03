@@ -107,7 +107,7 @@ body.pui-app { overflow: hidden; }
 .tk-field {
     border-style: solid;
     border-width: 14px;
-    border-image: url(../../shared/phoenix-ui/assets/enyo/wifi/bg_field.png) 14 fill;
+    border-image: -webkit-image-set(url(../../shared/phoenix-ui/assets/enyo/wifi/bg_field.png) 1x, url(../../shared/phoenix-ui/assets/enyo/wifi/bg_field@2x.png) 2x, url(../../shared/phoenix-ui/assets/enyo/wifi/bg_field@3x.png) 3x) 14 fill;
     margin: 0 0 6px;
 }
 .tk-summary, .tk-notes {

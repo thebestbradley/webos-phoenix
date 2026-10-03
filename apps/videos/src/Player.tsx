@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import { audioFocus, fileManager, isWebAddress, listFolderPaths, playableUrl, setFullScreen, setWindowOrientation, type Subscription } from "./platform";
-import { IconToolButton, PopupMenu, Slider, Toolbar, ToolSpacer, formatSeconds, icons, type Option } from "@phoenix/ui";
+import { IconToolButton, PopupMenu, Slider, Toolbar, ToolSpacer, cssImage, formatSeconds, icons, type Option } from "@phoenix/ui";
 import { forgetPosition, loadPositions, resumeAt, savePosition, type Prefs } from "./library";
 import { cueText, parseSubtitles, subtitleTracks, type Cue, type SubtitleTrack } from "./subtitles";
 
@@ -199,7 +199,7 @@ export function Player({ target, title, prefs, onPrefs, onClose }: PlayerProps) 
             )}
             {caption && <div className="vi-caption" data-testid="caption">{caption.split("\n").map((l, i) => <span key={i}>{l}</span>)}</div>}
             {!playing && url && !error && (
-                <button type="button" className="vi-bigplay" aria-label="Play" data-testid="big-play" style={{ backgroundImage: `url(${icons.fullscreenPlay})` }}
+                <button type="button" className="vi-bigplay" aria-label="Play" data-testid="big-play" style={{ backgroundImage: cssImage(icons.fullscreenPlay) }}
                         onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} onClick={play} />
             )}
             {error && <div className="vi-error" role="alert">{error}</div>}

@@ -30,6 +30,9 @@ public:
 
     // Device path (e.g. /usr/palm/applications/<id>/index.html) -> file.
     QString resolve(const QString &devicePath) const;
+    // Each mount's directory paired with each overlay's directory at the
+    // same device path, where the overlay has one.
+    QList<QPair<QString, QString>> twinDirectories() const;
 
     // Apps the user installed (com.webos.appInstallService in the runtime,
     // through SimInstaller): a folder laid out like a device's
@@ -92,6 +95,10 @@ public:
 
     // A file URL for a device path (e.g. /usr/lib/luna/system/...png), or "".
     Q_INVOKABLE QString fileUrl(const QString &devicePath) const;
+    // [directory, twin] pairs: a mounted directory (luna-systemui's in
+    // third_party) and the overlay's directory at the same device path,
+    // whose files a device installs beside it (HiDpi.addTwinDirectory).
+    Q_INVOKABLE QVariantList twinDirectories() const;
 
 private:
     const Rootfs *m_rootfs;

@@ -17,7 +17,7 @@ Item {
     readonly property real inactiveOpacity: 0.70
     signal action()
 
-    BorderImage {
+    ArtBorderImage {
         anchors.fill: parent
         source: Theme.asset(actionButton.affirmative
                             ? (actionButton.isPressed ? "pin/button-green-press.png" : "pin/button-green.png")

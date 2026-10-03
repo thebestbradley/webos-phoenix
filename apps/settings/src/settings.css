@@ -10,7 +10,7 @@
 .wifi-connected .pui-row-title { font-weight: bold; }
 .wifi-check, .wifi-check-space { display: inline-block; width: 24px; height: 25px; }
 .wifi-check {
-    background: url(../../shared/phoenix-ui/assets/enyo/wifi/checkmark.png) no-repeat center / 24px auto;
+    background: -webkit-image-set(url(../../shared/phoenix-ui/assets/enyo/wifi/checkmark.png) 1x, url(../../shared/phoenix-ui/assets/enyo/wifi/checkmark@2x.png) 2x, url(../../shared/phoenix-ui/assets/enyo/wifi/checkmark@3x.png) 3x) no-repeat center / 24px auto;
 }
 .wifi-error { color: #c01e1e; }
 .pui-row.tappable:active .wifi-error { color: #ffb4b4; }
@@ -27,7 +27,7 @@
 .dialog-group {
     border-style: solid;
     border-width: 10px;
-    border-image: url(../../shared/phoenix-ui/assets/enyo/bg_rowgroup.png) 10 fill repeat;
+    border-image: -webkit-image-set(url(../../shared/phoenix-ui/assets/enyo/bg_rowgroup.png) 1x, url(../../shared/phoenix-ui/assets/enyo/bg_rowgroup@2x.png) 2x, url(../../shared/phoenix-ui/assets/enyo/bg_rowgroup@3x.png) 3x) 10 fill repeat;
     margin: 4px 0 8px;
     color: var(--pui-text);
 }
@@ -36,8 +36,8 @@
 /* Screen & Lock ------------------------------------------------------------------------ */
 
 .brightness-less, .brightness-more { height: 26px; background: no-repeat center; }
-.brightness-less { background-image: url(../../../shell/assets/openwebos/statusBar/brightness-less.png); }
-.brightness-more { background-image: url(../../../shell/assets/openwebos/statusBar/brightness-more.png); }
+.brightness-less { background-image: -webkit-image-set(url(../../../shell/assets/openwebos/statusBar/brightness-less.png) 1x, url(../../../shell/assets/openwebos/statusBar/brightness-less@2x.png) 2x, url(../../../shell/assets/openwebos/statusBar/brightness-less@3x.png) 3x); }
+.brightness-more { background-image: -webkit-image-set(url(../../../shell/assets/openwebos/statusBar/brightness-more.png) 1x, url(../../../shell/assets/openwebos/statusBar/brightness-more@2x.png) 2x, url(../../../shell/assets/openwebos/statusBar/brightness-more@3x.png) 3x); }
 
 .wallpaper-mini, .wallpaper-thumb {
     display: block;

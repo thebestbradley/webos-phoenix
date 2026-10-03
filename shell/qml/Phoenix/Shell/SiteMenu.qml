@@ -52,7 +52,7 @@ Item {
         width: parent ? parent.width : 0
         height: Theme.systemMenuRowHeight
         objectName: "siteMenu_" + name
-        BorderImage {
+        ArtBorderImage {
             visible: area.pressed && area.containsMouse && entry.available
             source: Theme.asset(entry.last ? "menu-selection-gradient-last.png" : "menu-selection-gradient-default.png")
             x: Theme.px(4)
@@ -98,7 +98,7 @@ Item {
         opacity: menu.open ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.statusBarMenuFadeDuration } }
 
-        BorderImage {
+        ArtBorderImage {
             anchors.fill: parent
             source: Theme.asset("menu-dropdown-bg.png")
             border { left: Theme.artBorder(30, source); top: Theme.artBorder(10, source); right: Theme.artBorder(30, source); bottom: Theme.artBorder(30, source) }

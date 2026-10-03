@@ -558,7 +558,7 @@ Item {
             }
         }
 
-        BorderImage {
+        ArtBorderImage {
             id: tabletAlert
             visible: opacity > 0
             opacity: root.overlay && root.alertShown ? 1 : 0
@@ -579,7 +579,7 @@ Item {
                 source: root.backdrop
                 mask: alertShape
             }
-            BorderImage {
+            ArtBorderImage {
                 id: alertShape
                 visible: false
                 anchors.fill: parent
@@ -597,7 +597,7 @@ Item {
         // luna-sysmgr's (StatusBar m_notifGroup): a separator at its left,
         // and its own tab behind the icons while the drop-down is open (the
         // system menu's tab covers the system group only).
-        BorderImage {
+        ArtBorderImage {
             id: notifTab
             objectName: "notificationTab"
             visible: tabletIcons.visible && opacity > 0

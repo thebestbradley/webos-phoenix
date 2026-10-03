@@ -32,7 +32,7 @@
     pointer-events: none;
 }
 .pui-toolbar > * { pointer-events: auto; }
-.pui-toolbar.fade { background: url(../assets/enyo/bottom-fade.png) left bottom repeat-x; background-size: 8px 56px; }
+.pui-toolbar.fade { background: -webkit-image-set(url(../assets/enyo/bottom-fade.png) 1x, url(../assets/enyo/bottom-fade@2x.png) 2x, url(../assets/enyo/bottom-fade@3x.png) 3x) left bottom repeat-x; background-size: 8px 56px; }
 .pui-toolbar.dark {
     background: linear-gradient(rgba(58, 58, 58, 0.94), rgba(16, 16, 16, 0.96));
     border-top: 1px solid rgba(110, 110, 110, 0.8);
@@ -56,7 +56,7 @@
     background: none;
     border-style: solid;
     border-width: 0 25px;
-    border-image: url(../assets/enyo/palm-menu-button.png) 0 25 200 25 fill stretch;
+    border-image: -webkit-image-set(url(../assets/enyo/palm-menu-button.png) 1x, url(../assets/enyo/palm-menu-button@2x.png) 2x, url(../assets/enyo/palm-menu-button@3x.png) 3x) 0 25 200 25 fill stretch;
     cursor: pointer;
     outline: none;
     -webkit-tap-highlight-color: transparent;
@@ -90,10 +90,10 @@
     outline: none;
     -webkit-tap-highlight-color: transparent;
 }
-.pui-grouped-button.first { padding: 0 13px 0 0; border-width: 0 1px 0 23px; border-image: url(../assets/enyo/grouped-toolbutton.png) 0 1 950 23 fill; }
-.pui-grouped-button.middle { padding: 0 14px; border-width: 0 1px; border-image: url(../assets/enyo/grouped-toolbutton.png) 250 1 700 1 fill; }
-.pui-grouped-button.last { padding: 0 0 0 13px; border-width: 0 23px 0 1px; border-image: url(../assets/enyo/grouped-toolbutton.png) 500 23 450 1 fill; }
-.pui-grouped-button.single { padding: 0 14px; border-width: 0 23px; border-image: url(../assets/enyo/grouped-toolbutton.png) 750 23 200 23 fill; }
+.pui-grouped-button.first { padding: 0 13px 0 0; border-width: 0 1px 0 23px; border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 0 1 950 23 fill; }
+.pui-grouped-button.middle { padding: 0 14px; border-width: 0 1px; border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 250 1 700 1 fill; }
+.pui-grouped-button.last { padding: 0 0 0 13px; border-width: 0 23px 0 1px; border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 500 23 450 1 fill; }
+.pui-grouped-button.single { padding: 0 14px; border-width: 0 23px; border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 750 23 200 23 fill; }
 .pui-grouped-button.first:active { border-image-slice: 50 1 900 23 fill; }
 .pui-grouped-button.middle:active { border-image-slice: 300 1 650 1 fill; }
 .pui-grouped-button.last:active { border-image-slice: 550 23 400 1 fill; }
@@ -112,7 +112,7 @@
     height: 11px;
     margin: 20px 25px 19px;
     border-width: 0 6px;
-    border-image: url(../assets/enyo/progress-bar.png) 0 6 0 6 fill repeat;
+    border-image: -webkit-image-set(url(../assets/enyo/progress-bar.png) 1x, url(../assets/enyo/progress-bar@2x.png) 2x, url(../assets/enyo/progress-bar@3x.png) 3x) 0 6 0 6 fill repeat;
 }
 .pui-slider-fill {
     position: absolute;
@@ -123,7 +123,7 @@
     max-width: calc(100% + 12px);
     border-style: solid;
     border-width: 0 6px;
-    border-image: url(../assets/enyo/progress-bar-inner.png) 0 6 0 6 fill repeat;
+    border-image: -webkit-image-set(url(../assets/enyo/progress-bar-inner.png) 1x, url(../assets/enyo/progress-bar-inner@2x.png) 2x, url(../assets/enyo/progress-bar-inner@3x.png) 3x) 0 6 0 6 fill repeat;
 }
 
 /* ---- Dark cards (Camera, the photo viewer, Now Playing) ----------------------------------- */

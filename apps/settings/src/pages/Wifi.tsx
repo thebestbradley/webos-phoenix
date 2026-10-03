@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { connection, LunaError, wifi, WIFI_ERROR_INVALID_KEY, type WifiNetworkInfo, type WifiStatus } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
 import {
-    Button, Dialog, Divider, ErrorText, Group, icons, ListSelector, Note, Page, PageHeader, Row, Spinner, TextField, ToggleButton,
+    Button, Dialog, Divider, ErrorText, Group, icons, ListSelector, Note, Page, PageHeader, Row, Spinner, srcSet, TextField, ToggleButton,
 } from "@phoenix/ui";
 
 type Security = "none" | "psk" | "wep";
@@ -42,7 +42,8 @@ function securityOf(n: WifiNetworkInfo): Security {
 }
 
 function SignalIcon({ bars }: { bars: number }) {
-    return <img src={icons.wifiSignal[Math.max(0, Math.min(3, bars))]} width={33} height={25} alt={`${bars} bars`} />;
+    const icon = icons.wifiSignal[Math.max(0, Math.min(3, bars))];
+    return <img src={icon} srcSet={srcSet(icon)} width={33} height={25} alt={`${bars} bars`} />;
 }
 
 export function WifiPage() {
@@ -154,13 +155,13 @@ export function WifiPage() {
                                     icon={connected ? <span className="wifi-check" /> : <span className="wifi-check-space" />}
                                 >
                                     {joining && <Spinner />}
-                                    {securityOf(n) !== "none" && <img src={icons.secure} width={14} height={25} alt="secure" />}
+                                    {securityOf(n) !== "none" && <img src={icons.secure} srcSet={srcSet(icons.secure)} width={14} height={25} alt="secure" />}
                                     <SignalIcon bars={n.signalBars} />
                                 </Row>
                             );
                         })}
                         <Row title="Join other network" onClick={() => setJoin({ ssid: "", security: "psk", other: true })}
-                             icon={<img src={icons.joinPlus} width={18} height={18} alt="" style={{ margin: "0 7px" }} />} />
+                             icon={<img src={icons.joinPlus} srcSet={srcSet(icons.joinPlus)} width={18} height={18} alt="" style={{ margin: "0 7px" }} />} />
                     </Group>
                 </>
             )}

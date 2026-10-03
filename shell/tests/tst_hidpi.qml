@@ -39,14 +39,14 @@ Item {
         width: root.width
         system: SimSystemStatus {}
     }
-    BorderImage {
+    ArtBorderImage {
         id: menuBg
         width: Theme.px(300)
         height: Theme.px(200)
         source: Theme.asset("menu-dropdown-bg.png")
         border { left: Theme.artBorder(30, source); top: Theme.artBorder(10, source); right: Theme.artBorder(30, source); bottom: Theme.artBorder(30, source) }
     }
-    BorderImage {
+    ArtBorderImage {
         id: pill
         width: Theme.px(300)
         height: Theme.px(50)
@@ -104,14 +104,16 @@ Item {
             compare(Theme.artScale(Theme.asset("spinner.png")), 1.5);
             Theme.u = 2;
             compare(root.fileName(Theme.asset("spinner.png")), "spinner@2x.png");
-            // The menu art: only its 1.5x original.
+            // The menu art: its 1.5x original at 1.5, enlarged from it above.
+            Theme.u = 1.5;
             compare(root.fileName(Theme.asset("menu-dropdown-bg.png")), "menu-dropdown-bg@1.5x.png");
+            Theme.u = 2;
+            compare(root.fileName(Theme.asset("menu-dropdown-bg.png")), "menu-dropdown-bg@2x.png");
         }
 
-        function test_artWithoutVariantsStaysOneX() {
+        function test_directoriesStayAsTheyAre() {
             Theme.u = 2;
-            compare(String(Theme.asset("launcher3/tab-bg.png")), String(Theme.assetUrl("launcher3/tab-bg.png")));
-            // Directories (the keyboards' art root) come back as they are.
+            // The keyboards' art root.
             compare(String(Theme.asset("keyboard-phone/")), String(Theme.assetUrl("keyboard-phone/")));
         }
 
@@ -155,17 +157,46 @@ Item {
             Theme.u = 1;
             compare(menuBg.border.left, 30);
             compare(pill.border.left, 40);
-            // @1.5x: Qt reads it as 1x, so the borders are scaled here.
+            // A plain BorderImage at 1.0.
+            compare(menuBg.children[0].scale, 1);
+            compare(menuBg.children[0].width, menuBg.width);
+            // @1.5x: Qt reads it as 1x, so the borders are scaled here, and
+            // its pixels are the shell's.
             Theme.u = 1.5;
             compare(root.fileName(menuBg.source), "menu-dropdown-bg@1.5x.png");
             compare(menuBg.border.left, 45);
             compare(menuBg.border.top, 15);
-            // @2x: Qt scales a BorderImage's borders by the file's ratio itself.
+            compare(HiDpi.borderScale(menuBg.source), 1.5);
+            compare(menuBg.artScale, 1);
+            // @2x: Qt scales a BorderImage's borders by the file's ratio
+            // itself; drawn twice the size, its 40 px caps are 80 shell pixels.
             Theme.u = 2;
             compare(root.fileName(pill.source), "search-field-bg-launcher@2x.png");
             compare(pill.border.left, 40);
             compare(HiDpi.borderScale(pill.source), 1);
-            compare(HiDpi.borderScale(menuBg.source), 1.5);
+            compare(pill.artScale, 2);
+            compare(pill.children[0].scale, 2);
+            compare(pill.children[0].width * 2, pill.width);
+            compare(pill.children[0].border.left * pill.children[0].scale, Theme.px(40));
+            // Between variants (2.5: the @3x file), still the 1x art's size
+            // times u.
+            Theme.u = 2.5;
+            compare(root.fileName(menuBg.source), "menu-dropdown-bg@3x.png");
+            compare(menuBg.children[0].border.left * menuBg.children[0].scale, 30 * 2.5);
+        }
+
+        function test_iconVariantsInATwinDirectory() {
+            // luna-systemui's banner icon, from the submodule; its variants
+            // are in the compat overlay at the same device path.
+            var sync = Qt.resolvedUrl("../../third_party/luna-systemui/images/notification-small-sync.png");
+            var overlay = Qt.resolvedUrl("../../compat/rootfs/usr/lib/luna/system/luna-systemui/images/");
+            compare(String(Theme.appIcon(sync, 48)), String(sync));
+            HiDpi.addTwinDirectory(String(Qt.resolvedUrl("../../third_party/luna-systemui")).replace("file://", ""),
+                                   String(Qt.resolvedUrl("../../compat/rootfs/usr/lib/luna/system/luna-systemui")).replace("file://", ""));
+            // Its own 24 px are enough at 22.
+            compare(String(Theme.appIcon(sync, 22)), String(sync));
+            compare(String(Theme.appIcon(sync, 44)), String(overlay) + "notification-small-sync@2x.png");
+            compare(String(Theme.appIcon(sync, 66)), String(overlay) + "notification-small-sync@3x.png");
         }
 
         function test_appIconKeepsTheIconWhileItIsBigEnough() {

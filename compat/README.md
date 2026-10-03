@@ -29,3 +29,11 @@ JSON files cannot say why they are here, so they are listed here:
   settings, accessibility and the emergency information. The wallpaper is
   left out: it is usually a picture on the USB drive, which a backup does
   not hold.
+
+Pictures cannot say why they are here either:
+
+- `rootfs/usr/lib/luna/system/luna-systemui/images/*@2x.png`, `*@3x.png`:
+  HiDPI variants of luna-systemui's own `images/` (Apache-2.0), beside which
+  a device installs them; `stylesheets/phoenix-hidpi.css` asks for them.
+  `tools/hidpi-art.py` writes both and checks them (`--check`); see
+  `docs/spec/hidpi-art.md`.

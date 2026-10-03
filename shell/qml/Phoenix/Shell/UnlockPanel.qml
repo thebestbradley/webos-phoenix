@@ -72,7 +72,7 @@ FocusScope {
     width: Theme.px(320) + 2 * edgeOffset
     height: buttonGrid.y + buttonGrid.height + edgeOffset + margin
 
-    BorderImage {
+    ArtBorderImage {
         anchors.fill: parent
         source: Theme.asset("popup-bg.png")
         border { left: Theme.artBorder(35, source); top: Theme.artBorder(40, source); right: Theme.artBorder(35, source); bottom: Theme.artBorder(40, source) }
@@ -117,7 +117,7 @@ FocusScope {
                 inputField.text = inputField.text.slice(0, -1);
         }
 
-        BorderImage {
+        ArtBorderImage {
             visible: !panel.isPINEntry
             anchors.fill: parent
             source: Theme.asset("pin/password-lock-field.png")
@@ -269,7 +269,7 @@ FocusScope {
         property string imgSource: ""
         signal action(string text)
 
-        BorderImage {
+        ArtBorderImage {
             anchors.fill: parent
             visible: pinButton.isPressed
             source: Theme.asset("pin/pin-key-highlight.png")

@@ -4,6 +4,8 @@ Generated from <https://github.com/openwebos/luna-sysmgr> (commit `1393f0af`) (O
 
 **Licensing note.** Every source and conf file in the repo carries an Apache-2.0 header (`Copyright (c) 2008-2013 LG Electronics, Inc.`, see `README.md:168-185`), and the README states "All content ... except otherwise noted" is Apache-2.0, which covers these binary assets. Apache-2.0 section 6 does **not** grant trademark rights, so anything that is an HP or Palm mark, or that shows HP/Palm hardware trade dress, is marked **NO**. Items marked **review** are product-identifying sounds that we should replace anyway. "yes" means generic UI chrome that we can reuse, keeping attribution and a NOTICE file.
 
+Phoenix ships every image marked "yes" (`shell/assets/openwebos/`) with `@2x` and `@3x` variants beside it for dense screens; how each is made is in [hidpi-art.md](hidpi-art.md).
+
 Column "used by" lists the files that reference the asset's basename. A dash means the basename isn't referenced directly. It may be built at runtime (for example `battery-%d.png`, `wifi-" + n + ".png"`, `dockmode/time/...` directory prefixes) or it's unused.
 
 

@@ -54,7 +54,7 @@ Item {
     opacity: _shown ? 1 : 0
     Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.Linear } }
 
-    BorderImage {
+    ArtBorderImage {
         anchors.fill: parent
         source: Theme.asset("transient-alart-bg.png")
         border.left: Theme.artBorder(20, source)

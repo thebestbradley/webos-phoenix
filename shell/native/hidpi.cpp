@@ -126,7 +126,8 @@ QUrl HiDpi::icon(const QUrl &url, qreal pixels, const QUrl &large) const
     if (ownSide >= pixels)
         return url;
 
-    // icon.png's siblings: icon-256x256.png, icon-256.png, icon@2x.png.
+    // icon.png's siblings: icon-256x256.png, icon-256.png, icon@2x.png,
+    // beside it or in a twin directory.
     QStringList candidates = m_siblings.value(path);
     if (!m_siblings.contains(path)) {
         const QFileInfo fi(path);
@@ -134,11 +135,13 @@ QUrl HiDpi::icon(const QUrl &url, qreal pixels, const QUrl &large) const
         const QRegularExpression re(QLatin1Char('^') + QRegularExpression::escape(stem)
             + QStringLiteral("(?:-\\d+(?:x\\d+)?|@\\d+(?:\\.\\d+)?x)\\.")
             + QRegularExpression::escape(fi.suffix()) + QLatin1Char('$'));
-        const QDir dir = fi.dir();
-        const QStringList names = dir.entryList({ stem + QStringLiteral("*.") + fi.suffix() }, QDir::Files);
-        for (const QString &name : names)
-            if (re.match(name).hasMatch())
-                candidates.append(dir.filePath(name));
+        for (const QString &dirPath : siblingDirs(fi.absolutePath())) {
+            const QDir dir(dirPath);
+            const QStringList names = dir.entryList({ stem + QStringLiteral("*.") + fi.suffix() }, QDir::Files);
+            for (const QString &name : names)
+                if (re.match(name).hasMatch())
+                    candidates.append(dir.filePath(name));
+        }
         m_siblings.insert(path, candidates);
     }
     const QString largePath = pathOf(large);
@@ -168,4 +171,30 @@ QUrl HiDpi::icon(const QUrl &url, qreal pixels, const QUrl &large) const
     if (!biggest.isEmpty())
         return urlOf(url, biggest);
     return url;
+}
+
+void HiDpi::addTwinDirectory(const QString &dir, const QString &twin)
+{
+    const QString d = QDir::cleanPath(dir);
+    const QString t = QDir::cleanPath(twin);
+    if (d.isEmpty() || t.isEmpty() || d == t || m_twins.contains({ d, t }))
+        return;
+    m_twins.append({ d, t });
+    m_siblings.clear();
+}
+
+QStringList HiDpi::siblingDirs(const QString &dir) const
+{
+    QStringList dirs { dir };
+    const QString d = QDir::cleanPath(dir);
+    for (const auto &twin : m_twins) {
+        QString other;
+        if (d == twin.first)
+            other = twin.second;
+        else if (d.startsWith(twin.first + QLatin1Char('/')))
+            other = twin.second + d.mid(twin.first.size());
+        if (!other.isEmpty() && !dirs.contains(other) && QFileInfo(other).isDir())
+            dirs.append(other);
+    }
+    return dirs;
 }

@@ -131,7 +131,7 @@ Item {
         width: parent ? parent.width : 0
         height: Theme.systemMenuRowHeight
 
-        BorderImage {
+        ArtBorderImage {
             visible: (entry.selectable && entry.pressed) || entry.forceSelected
             source: Theme.asset(entry.last ? "menu-selection-gradient-last.png" : "menu-selection-gradient-default.png")
             x: Theme.px(4)
@@ -405,14 +405,14 @@ Item {
                 x: (parent.width - width) / 2
                 y: (parent.height - height) / 2
 
-                BorderImage {
+                ArtBorderImage {
                     width: parent.width
                     height: Theme.artHeight(source)
                     anchors.verticalCenter: parent.verticalCenter
                     source: Theme.asset("statusBar/slider-track.png")
                     border { left: Theme.artBorder(11, source); right: Theme.artBorder(11, source) }
                 }
-                BorderImage {
+                ArtBorderImage {
                     width: Math.max((parent.width - handle.width / 2) * slider.value + handle.width / 2,
                                     2 * slider.railBorderWidth)
                     height: Theme.artHeight(source)
@@ -504,7 +504,7 @@ Item {
         x: menu.width - width + Theme.systemMenuEdgeOffset
         y: Theme.statusBarHeight
 
-        BorderImage {
+        ArtBorderImage {
             id: background
             width: parent.width
             height: Math.min(panel.height, mainMenu.height + Theme.systemMenuBottomMargin)
@@ -520,7 +520,7 @@ Item {
                 source: menu.backdrop
                 mask: panelShape
             }
-            BorderImage {
+            ArtBorderImage {
                 id: panelShape
                 visible: false
                 anchors.fill: parent
@@ -965,7 +965,7 @@ Item {
             x: (parent.width - width) / 2
             opacity: !flick.atYBeginning ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: Theme.systemMenuScrollFadeDuration } }
-            BorderImage {
+            ArtBorderImage {
                 width: parent.width
                 height: Theme.artHeight(source)
                 source: Theme.asset("menu-dropdown-scrollfade-top.png")
@@ -985,7 +985,7 @@ Item {
             y: flick.height - Theme.px(29)
             opacity: !flick.atYEnd ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: Theme.systemMenuScrollFadeDuration } }
-            BorderImage {
+            ArtBorderImage {
                 width: parent.width
                 height: Theme.artHeight(source)
                 source: Theme.asset("menu-dropdown-scrollfade-bottom.png")

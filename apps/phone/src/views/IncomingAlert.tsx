@@ -16,7 +16,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { matchNumber, phoneTypeLabel, ringingCall, primaryCall, subscribe, telephony, type Call, type Person } from "@phoenix/luna";
-import { Button, formatNumber, phoneArt } from "@phoenix/ui";
+import { Button, formatNumber, phoneArt, srcSet } from "@phoenix/ui";
 import { callerName, useCallStatus, usePeople } from "../lib/hooks";
 
 /** Height of the alert, in legacy pixels. */
@@ -121,7 +121,8 @@ export function IncomingAlert() {
     return (
         <div className="incoming-alert" data-testid="incoming-alert">
             <div className="incoming-alert-who">
-                <img className="incoming-alert-glyph" src={pulse ? phoneArt.incomingOn : phoneArt.incomingOff} alt="" />
+                <img className="incoming-alert-glyph" src={pulse ? phoneArt.incomingOn : phoneArt.incomingOff}
+                     srcSet={srcSet(pulse ? phoneArt.incomingOn : phoneArt.incomingOff)} alt="" />
                 <div className="incoming-alert-text">
                     <div className="incoming-alert-label">{waiting ? "Call Waiting" : "Incoming Call"}</div>
                     <div className="incoming-alert-name" data-testid="incoming-name">{name}</div>

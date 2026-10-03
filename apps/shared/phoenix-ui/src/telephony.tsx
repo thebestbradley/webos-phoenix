@@ -7,14 +7,35 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { cx } from "./layout";
+import { art, srcSet } from "./assets";
 import "./telephony.css";
-import avatarUrl from "../assets/contacts/generic-avatar-50x50.png";
-import starUrl from "../assets/contacts/favorites-star-blue.png";
-import voicemailUrl from "../assets/enyo/telephony/voicemail-key.png";
-import incomingOn from "../assets/openwebos/screen-lock-incoming-call-on.png";
-import incomingOff from "../assets/openwebos/screen-lock-incoming-call-off.png";
+import avatar1 from "../assets/contacts/generic-avatar-50x50.png";
+import avatar2 from "../assets/contacts/generic-avatar-50x50@2x.png";
+import avatar3 from "../assets/contacts/generic-avatar-50x50@3x.png";
+import star1 from "../assets/contacts/favorites-star-blue.png";
+import star2 from "../assets/contacts/favorites-star-blue@2x.png";
+import star3 from "../assets/contacts/favorites-star-blue@3x.png";
+import voicemail1 from "../assets/enyo/telephony/voicemail-key.png";
+import voicemail2 from "../assets/enyo/telephony/voicemail-key@2x.png";
+import voicemail3 from "../assets/enyo/telephony/voicemail-key@3x.png";
+import incomingOn1 from "../assets/openwebos/screen-lock-incoming-call-on.png";
+import incomingOn2 from "../assets/openwebos/screen-lock-incoming-call-on@2x.png";
+import incomingOn3 from "../assets/openwebos/screen-lock-incoming-call-on@3x.png";
+import incomingOff1 from "../assets/openwebos/screen-lock-incoming-call-off.png";
+import incomingOff2 from "../assets/openwebos/screen-lock-incoming-call-off@2x.png";
+import incomingOff3 from "../assets/openwebos/screen-lock-incoming-call-off@3x.png";
 
-export const phoneArt = { avatar: avatarUrl, star: starUrl, voicemail: voicemailUrl, incomingOn, incomingOff };
+const avatarUrl = art(avatar1, avatar2, avatar3);
+const voicemailUrl = art(voicemail1, voicemail2, voicemail3);
+
+/** The phone's pictures (1x URLs; srcSet(url) gives their HiDPI variants). */
+export const phoneArt = {
+    avatar: avatarUrl,
+    star: art(star1, star2, star3),
+    voicemail: voicemailUrl,
+    incomingOn: art(incomingOn1, incomingOn2, incomingOn3),
+    incomingOff: art(incomingOff1, incomingOff2, incomingOff3),
+};
 
 // ---- Dial pad ------------------------------------------------------------------------
 
@@ -97,7 +118,7 @@ export function Dialpad({ onKey, onHold, lettersHidden, voicemailKey = true, tes
                     <span className="pui-dialpad-digit">{k.key}</span>
                     {!lettersHidden && (
                         <span className="pui-dialpad-letters">
-                            {k.key === "1" && voicemailKey ? <img src={voicemailUrl} alt="voicemail" /> : k.letters}
+                            {k.key === "1" && voicemailKey ? <img src={voicemailUrl} srcSet={srcSet(voicemailUrl)} alt="voicemail" /> : k.letters}
                         </span>
                     )}
                 </button>
@@ -210,7 +231,7 @@ export function ToolButton({ children, onClick, title, depressed, disabled, test
 export function Avatar({ src, size = 40, className }: { src?: string; size?: number; className?: string }) {
     return (
         <span className={cx("pui-avatar", className)} style={{ width: size, height: size }}>
-            <img src={src || avatarUrl} alt="" />
+            <img src={src || avatarUrl} srcSet={src ? undefined : srcSet(avatarUrl)} alt="" />
         </span>
     );
 }
