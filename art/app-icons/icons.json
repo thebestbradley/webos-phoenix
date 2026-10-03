@@ -65,6 +65,12 @@
             "apps/tasks/public/icon"
         ]
     },
+    "agenda": {
+        "platter": "disc",
+        "out": [
+            "apps/agenda/public/icon"
+        ]
+    },
     "voicememos": {
         "platter": "disc",
         "out": [
@@ -243,6 +249,14 @@
         "foot": 8,
         "out": [
             "apps/settings/public/icons/airplane"
+        ]
+    },
+    "exhibition": {
+        "platter": "diamond",
+        "base": 180,
+        "foot": 62,
+        "out": [
+            "apps/settings/public/icons/exhibition"
         ]
     },
     "screen": {

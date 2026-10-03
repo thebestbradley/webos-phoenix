@@ -160,6 +160,10 @@
         "status": "works",
         "note": "the screen capture preview; without a capture it says how to take one"
     },
+    "org.webosphoenix.agenda": {
+        "status": "works",
+        "note": "Phoenix Agenda (React, apps/agenda), the dock mode exhibition of the calendar's coming days (com.palm.app.agendaview's place); not in the launcher. tools/test-exhibition.cjs drives it"
+    },
     "com.palm.systemui": {
         "status": "works",
         "note": "luna-systemui as the shell's headless page: alerts, dashboards and banners (its services now see com.palm.bus registerServerStatus answer). Tested with the mail account signed out, so it opens its Accounts: Action Needed dashboard",

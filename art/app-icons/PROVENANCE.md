@@ -45,7 +45,8 @@ had HP's logo), the four `notes-*` notebooks, and the system objects
 `terminal`, `bluetooth`, `vpn`, `airplane`, `screen`, `sounds`, `datetime`,
 `language`, `textassist`, `location`, `emergency` (the six-armed star of the
 Phone app's emergency button), `accessibility`, `deviceinfo`, `backup`,
-`devmode`.
+`devmode`, `agenda` (a bedside agenda card) and `exhibition` (a phone on a
+Touchstone, the Time exhibition's glass clock on its screen).
 
 ## The originals' 512 px icons
 

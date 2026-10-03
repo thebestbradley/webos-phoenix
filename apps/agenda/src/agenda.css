@@ -1,0 +1,95 @@
+/* Copyright (c) 2026 webOS Phoenix contributors. SPDX-License-Identifier: Apache-2.0 */
+/* Agenda: dark, as the Time exhibition's clocks (clock_bg.png), its text the clocks' #e1e1e1. */
+
+.ag-body {
+    margin: 0;
+    background: #000;
+    overflow: hidden;
+}
+.ag-root {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    color: #e1e1e1;
+    background: radial-gradient(ellipse at 50% 45%, #1c1c1c 0%, #0b0b0b 60%, #000 100%);
+    user-select: none;
+}
+.ag-date {
+    flex: none;
+    padding: 18px 24px 10px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    column-gap: 14px;
+    align-items: end;
+}
+.ag-day {
+    grid-row: 1 / span 2;
+    grid-column: 1;
+    font-size: 72px;
+    line-height: 0.9;
+    font-weight: 300;
+}
+.ag-weekday { grid-column: 2; font-size: 24px; font-weight: bold; }
+.ag-month { grid-column: 2; font-size: 18px; color: #9c9c9c; }
+.ag-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 24px 24px;
+}
+.ag-section-title {
+    margin: 16px 0 4px;
+    padding-bottom: 4px;
+    font-size: 14px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #8c8c8c;
+    border-bottom: 1px solid #333;
+}
+.ag-event {
+    display: grid;
+    grid-template-columns: 6px 1fr;
+    grid-template-rows: auto auto auto;
+    column-gap: 12px;
+    width: 100%;
+    padding: 9px 0;
+    border: 0;
+    border-bottom: 1px solid #1f1f1f;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    box-sizing: border-box;
+    cursor: pointer;
+}
+.ag-event:active { background: rgba(255, 255, 255, 0.06); }
+.ag-bar { grid-row: 1 / span 3; grid-column: 1; display: block; width: 6px; align-self: stretch; border-radius: 3px; }
+.ag-when { grid-column: 2; font-size: 15px; color: #9c9c9c; }
+.ag-subject { grid-column: 2; font-size: 21px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ag-location { grid-column: 2; font-size: 15px; color: #9c9c9c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ag-note { padding: 10px 0; font-size: 17px; color: #9c9c9c; }
+
+/* Sideways (the TouchPad on its Touchstone): the date on the left, large. */
+@media (orientation: landscape) and (min-width: 560px) {
+    .ag-root { flex-direction: row; }
+    .ag-date {
+        width: 36%;
+        padding: 48px 32px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: flex-start;
+        box-sizing: border-box;
+        border-right: 1px solid #262626;
+    }
+    .ag-weekday { font-size: 34px; }
+    .ag-day { font-size: 160px; line-height: 1; margin: 6px 0; }
+    .ag-month { font-size: 26px; }
+    .ag-list { padding: 28px 40px 32px; }
+    .ag-section-title { font-size: 16px; }
+    .ag-subject { font-size: 26px; }
+    .ag-when, .ag-location { font-size: 17px; }
+}
