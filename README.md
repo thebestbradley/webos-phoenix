@@ -282,7 +282,8 @@ that app's card stack.
 System sounds play as on the original: Open webOS's own sounds
 (notifications, alerts, the ringtone for an incoming call, charging, battery
 full, boot and, when the window closes, shutdown) and Phoenix-made keyboard
-clicks, at the volumes set in Settings > Sounds & Ringtones. The simulator
+clicks, at the volumes and with the ringtone, alert tone and notification
+tone set in Settings > Sounds & Ringtones. The simulator
 plays them with the web engine's audio; `--quiet` leaves out the boot and
 shutdown sounds (so do `--screenshot` and the offscreen platform).
 
