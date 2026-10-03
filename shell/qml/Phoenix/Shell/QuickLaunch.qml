@@ -115,6 +115,30 @@ Item {
         return best;
     }
 
+    // Keyboard navigation (GAPS V8 (3)): the slot with the keyboard's
+    // ring, 0 .. pinned.length (the launcher button), or -1.
+    property int keySlot: -1
+    function activateSlot(i) {
+        if (i >= pinned.length)
+            launcherToggled();
+        else if (i >= 0) {
+            feedbackId = pinned[i].appId;
+            launchRequested(pinned[i].appId);
+        }
+    }
+    Rectangle {
+        objectName: "quickLaunchKeyFocus"
+        visible: ql.keySlot >= 0 && ql.visible
+        x: ql.slotCentre(Math.max(0, ql.keySlot)) - width / 2
+        y: Theme.quickLaunchIconY - Theme.px(6)
+        width: ql.iconSize + Theme.px(12)
+        height: ql.iconSize + Theme.px(12)
+        radius: Theme.px(10)
+        color: "#302c8ce0"
+        border.color: "#2c8ce0"
+        border.width: Theme.px(2)
+    }
+
     Repeater {
         model: ql.pinned
         delegate: AppIcon {
@@ -163,15 +187,7 @@ Item {
         preventStealing: ql.draggedId !== ""
         property int pressedSlot: -1
         onPressed: (mouse) => { pressedSlot = ql.slotAt(mouse.x); }
-        onClicked: (mouse) => {
-            var i = ql.slotAt(mouse.x);
-            if (i >= ql.pinned.length)
-                ql.launcherToggled();
-            else {
-                ql.feedbackId = ql.pinned[i].appId;
-                ql.launchRequested(ql.pinned[i].appId);
-            }
-        }
+        onClicked: (mouse) => ql.activateSlot(ql.slotAt(mouse.x))
         onPressAndHold: (mouse) => {
             var i = ql.slotAt(mouse.x);
             if (i < ql.pinned.length)

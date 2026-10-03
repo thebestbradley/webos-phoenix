@@ -738,6 +738,35 @@ FocusScope {
             event.accepted = true;
             return;
         }
+        // The dock with the keyboard (GAPS V8 (3)): Down from card view
+        // puts a ring on it; Left / Right move along it, Enter launches
+        // (the last slot opens the launcher), Up goes back to the cards.
+        if (!locked && quickLaunch.keySlot >= 0) {
+            var slots = quickLaunch.pinned.length + 1;
+            if (!quickLaunch.visible || cards.maximizeProgress > 0 || justType.open || event.key === Qt.Key_Up) {
+                quickLaunch.keySlot = -1;
+                if (event.key === Qt.Key_Up) {
+                    event.accepted = true;
+                    return;
+                }
+            } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+                quickLaunch.keySlot = Math.max(0, Math.min(slots - 1, quickLaunch.keySlot + (event.key === Qt.Key_Left ? -1 : 1)));
+                event.accepted = true;
+                return;
+            } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                var slot = quickLaunch.keySlot;
+                quickLaunch.keySlot = -1;
+                quickLaunch.activateSlot(slot);
+                event.accepted = true;
+                return;
+            }
+        }
+        if (!locked && event.key === Qt.Key_Down && cards.maximizeProgress === 0 && !launcher.open && !justType.open
+                && quickLaunch.visible && quickLaunch.keySlot < 0) {
+            quickLaunch.keySlot = 0;
+            event.accepted = true;
+            return;
+        }
         // Card view keys (CardWindowManager.cpp:1189-1212).
         if (!locked && cards.maximizeProgress === 0 && !launcher.open && !justType.open) {
             if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {

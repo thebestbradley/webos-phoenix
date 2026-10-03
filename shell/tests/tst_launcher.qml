@@ -246,6 +246,35 @@ Item {
             tryVerify(function() { return !shell.launcherOpen; }, 2000);
         }
 
+        // GAPS V8 (3): in card view Down rings the dock's first icon,
+        // Right moves along, Enter launches it, Up leaves the dock.
+        function test_dockKeyboard() {
+            shell.gestureUp();            // close the launcher: card view
+            tryVerify(function() { return !shell.launcherOpen; }, 2000);
+            shell.forceActiveFocus();
+            var saved = shell.launcherLayout;
+            if (dock.pinned.length === 0)
+                shell.setLauncherLayout(LauncherLayout.addToDock(shell.launcherLayout, shell.launcherLayout.pages[0][0], 0, Theme.quickLaunchMaxItems - 1));
+            tryVerify(function() { return dock.pinned.length >= 1; }, 1000);
+            keyClick(Qt.Key_Down);
+            compare(dock.keySlot, 0);
+            keyClick(Qt.Key_Right);
+            compare(dock.keySlot, 1);
+            keyClick(Qt.Key_Up);
+            compare(dock.keySlot, -1);
+            // Enter on an app launches it.
+            keyClick(Qt.Key_Down);
+            var spy = createTemporaryObject(spyComponent, root, { target: dock, signalName: "launchRequested" });
+            keyClick(Qt.Key_Return);
+            compare(spy.count, 1);
+            compare(spy.signalArguments[0][0], dock.pinned[0].appId);
+            compare(dock.keySlot, -1);
+            shell.setLauncherLayout(saved);
+            while (windows.cards.count > 0)
+                windows.close(windows.cards.get(0).uid);
+            shell.cardView.maximizeProgress = 0;
+        }
+
         // 16 px bold white / #C8C8C8 tabs, at most 150 px each.
         function test_tabs() {
             verify(launcher.tabWidth <= Theme.px(150));
