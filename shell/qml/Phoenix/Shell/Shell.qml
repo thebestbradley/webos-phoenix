@@ -636,8 +636,29 @@ FocusScope {
         function onAlertKeyChanged() { Qt.callLater(shell._updateAlertSound); }
     }
 
+    // An overlay that takes the keys while it is open (the system menu):
+    // the item that had the keyboard gets it back when it closes.
+    property Item _focusBeforeOverlay: null
+    function _overlayFocus(opened) {
+        if (opened) {
+            if (Window.activeFocusItem !== shell)
+                _focusBeforeOverlay = Window.activeFocusItem;
+            shell.forceActiveFocus();
+        } else if (_focusBeforeOverlay) {
+            var f = _focusBeforeOverlay;
+            _focusBeforeOverlay = null;
+            if (Window.activeFocusItem === shell && f.visible)
+                f.forceActiveFocus();
+        }
+    }
+
     // Desktop / hardware keyboard shortcuts.
     Keys.onPressed: (event) => {
+        // The system menu's own keys (GAPS V8 (3)).
+        if (systemMenu.handleKey(event)) {
+            event.accepted = true;
+            return;
+        }
         // Typed while Just Type's page is still taking its first letter.
         if (justType.open && event.text.length === 1 && !(event.modifiers & Qt.ControlModifier)
                 && justType.typeAhead(event.text)) {
@@ -1852,6 +1873,9 @@ FocusScope {
                 availableHeight: ui.height - Theme.statusBarHeight - notes.negativeSpace + Theme.px(10)
                 onCloseRequested: systemMenu.open = false
                 onLaunchRequested: (appId, params) => shell.launch(appId, params)
+                // Keyboard navigation: the menu has the keyboard while open
+                // (the app's page would take the keys), then hands it back.
+                onOpenChanged: shell._overlayFocus(open)
             }
 
             // The virtual keyboard, above everything (InputWindowManager is the
