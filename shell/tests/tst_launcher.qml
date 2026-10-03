@@ -464,6 +464,27 @@ Item {
             verify(!windows.running().some(function (r) { return r.id === "org.webosphoenix.phone"; }));
         }
 
+        // [KeepAliveUntilMemPressure]: the browser stays until memory runs low.
+        function test_browserUntilMemoryPressure() {
+            windows.apps.append(Object.assign(windows._launcherFields(), {
+                appId: "com.palm.app.browser", title: "Web", color: "#2a9bbd", glyph: "W", tab: -1, quickLaunch: 0,
+                icon: "", largeIcon: "", splashIcon: "", splashBackground: "", web: false, main: "", noWindow: false,
+                orientation: "", webAppId: "", params: "", dir: "", removable: false, version: "" }));
+            var uid = windows.launch("com.palm.app.browser");
+            windows.close(uid);
+            verify(windows.running().some(function (r) { return r.id === "com.palm.app.browser"; }), "kept while memory lasts");
+            windows.memory.forceLow = true;
+            verify(!windows.running().some(function (r) { return r.id === "com.palm.app.browser"; }), "closed when memory runs low");
+            // Low already: closing its card closes it.
+            windows.memory.forceLow = false;
+            uid = windows.launch("com.palm.app.browser");
+            windows.memory.forceLow = true;
+            windows.close(uid);
+            verify(!windows.running().some(function (r) { return r.id === "com.palm.app.browser"; }));
+            windows.memory.forceLow = false;
+            windows.apps.remove(windows.apps.count - 1);
+        }
+
         function test_otherAppsClose() {
             var uid = windows.launch("org.webosphoenix.maps");
             windows.close(uid);
