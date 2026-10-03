@@ -235,7 +235,7 @@ Item {
             // A dashboard window shows itself; its app sends its own banner.
             if (n.windowKey)
                 return;
-            root.showBanner(n.title + (n.body ? ": " + n.body : ""), n.icon || "", n.color, n.glyph, n.appId, n.params || "");
+            root.showBanner(n.title + (n.body ? ": " + n.body : ""), n.icon || "", n.color, n.glyph, n.appId, n.params || "", n.key || "");
         }
         function onCountChanged() {
             if (root.model.count === 0)
@@ -255,16 +255,91 @@ Item {
     }
 
     // A banner, with or without a notification behind it
-    // (PalmSystem.addBannerMessage only scrolls a banner by).
-    function showBanner(text, icon, color, glyph, appId, params) {
-        bannerText = text;
-        bannerIcon = icon || "";
-        bannerColor = color || "#666666";
-        bannerGlyph = glyph || "";
-        bannerAppId = appId || "";
-        bannerParams = params || "";
+    // (PalmSystem.addBannerMessage only scrolls a banner by). Banners queue
+    // (BannerMessageHandler::addMessage): one alone shows for 5 s; while
+    // others wait each shows for 2 s, and a new one cuts the one showing
+    // down to 2 s from when it came in. id (with appId) is what
+    // removeBanner and clearBanners find it by; onShow runs as it starts
+    // to show (aboutToShowBanner: its sound).
+    property var _bannerQueue: []
+    property var _bannerShowing: null
+    property double _bannerShownAt: 0
+    property bool _bannerAlone: true
+    readonly property int bannerQueueLength: _bannerQueue.length
+    function showBanner(text, icon, color, glyph, appId, params, id, onShow) {
+        if (!text)
+            return;
+        var b = { text: String(text), icon: icon || "", color: color || "#666666", glyph: glyph || "",
+                  appId: appId || "", params: params || "", id: id || "", onShow: onShow || null };
+        _bannerQueue = _bannerQueue.concat([b]);
+        if (_bannerShowing === null) {
+            _nextBanner();
+        } else if (_bannerAlone) {
+            // The one showing had 5 s; now 2 s from when it was in place,
+            // or none if it has been up longer.
+            _bannerAlone = false;
+            if (bannerHold.running) {
+                bannerHold.interval = Math.max(0, Theme.bannerShowTimeQueued - (Date.now() - _bannerShownAt));
+                bannerHold.restart();
+            }
+        }
+    }
+    function _nextBanner() {
+        if (_bannerQueue.length === 0) {
+            _bannerShowing = null;
+            bannerActive = false;
+            return;
+        }
+        var b = _bannerQueue[0];
+        _bannerQueue = _bannerQueue.slice(1);
+        _bannerShowing = b;
+        bannerText = b.text;
+        bannerIcon = b.icon;
+        bannerColor = b.color;
+        bannerGlyph = b.glyph;
+        bannerAppId = b.appId;
+        bannerParams = b.params;
         bannerActive = true;
-        bannerAnim.restart();
+        bannerHold.stop();
+        _bannerAlone = _bannerQueue.length === 0;
+        bannerHide.stop();
+        bannerContent.opacity = 1;
+        bannerShow.restart();
+        if (b.onShow)
+            b.onShow();
+    }
+    // BannerMessageHandler::removeMessage: the one showing leaves now
+    // (signalHideBanner), a waiting one is dropped.
+    function removeBanner(appId, id) {
+        if (_bannerShowing !== null && _bannerShowing.appId === appId && _bannerShowing.id === id) {
+            _hideBanner();
+            return;
+        }
+        _bannerQueue = _bannerQueue.filter(function (b) { return !(b.appId === appId && b.id === id); });
+    }
+    // BannerMessageHandler::clearMessages: all of an app's banners.
+    function clearBanners(appId) {
+        _bannerQueue = _bannerQueue.filter(function (b) { return b.appId !== appId; });
+        if (_bannerShowing !== null && _bannerShowing.appId === appId)
+            _hideBanner();
+    }
+    function _hideBanner() {
+        bannerHold.stop();
+        if (bannerHide.running)
+            return;
+        bannerShow.stop();
+        bannerHide.restart();
+    }
+    // Clearing bannerActive from outside drops the banner and the queue.
+    onBannerActiveChanged: {
+        if (!bannerActive && _bannerShowing !== null) {
+            _bannerQueue = [];
+            _bannerShowing = null;
+            bannerShow.stop();
+            bannerHold.stop();
+            bannerHide.stop();
+            bannerProgress = 0;
+        }
     }
 
     // BannerWindow::handleTap: while a banner shows, a tap activates it
@@ -290,16 +365,26 @@ Item {
     // the way it came, fading to 0.25 (BannerMessageHandler.cpp:111-131,
     // 315-345, 611-625). progress is posAnimProgress: 0 out, 1 in place.
     property real bannerProgress: 0
-    SequentialAnimation {
-        id: bannerAnim
-        PropertyAction { target: bannerContent; property: "opacity"; value: 1 }
-        NumberAnimation { target: root; property: "bannerProgress"; from: 0; to: 1; duration: Theme.bannerSlideDuration; easing.type: Easing.OutCubic }
-        PauseAnimation { duration: root.model && root.model.count > 1 ? Theme.bannerShowTimeQueued : Theme.bannerShowTime }
-        ParallelAnimation {
-            NumberAnimation { target: root; property: "bannerProgress"; to: 0; duration: Theme.bannerSlideDuration }
-            NumberAnimation { target: bannerContent; property: "opacity"; to: 0.25; duration: Theme.bannerSlideDuration }
+    NumberAnimation {
+        id: bannerShow
+        target: root; property: "bannerProgress"; from: 0; to: 1
+        duration: Theme.bannerSlideDuration; easing.type: Easing.OutCubic
+        onFinished: {
+            root._bannerShownAt = Date.now();
+            bannerHold.interval = root._bannerAlone ? Theme.bannerShowTime : Theme.bannerShowTimeQueued;
+            bannerHold.restart();
         }
-        ScriptAction { script: root.bannerActive = false }
+    }
+    // The show state's timer (5 s, or 2 s with others queued).
+    Timer {
+        id: bannerHold
+        onTriggered: root._hideBanner()
+    }
+    ParallelAnimation {
+        id: bannerHide
+        NumberAnimation { target: root; property: "bannerProgress"; to: 0; duration: Theme.bannerSlideDuration }
+        NumberAnimation { target: bannerContent; property: "opacity"; to: 0.25; duration: Theme.bannerSlideDuration }
+        onFinished: root._nextBanner()
     }
 
     onAlertKeyChanged: Qt.callLater(attachAlert)
@@ -382,6 +467,10 @@ Item {
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
+                        // Too long for the bar: cut off at its end
+                        // (BannerMessage::createElidedMessage, ElideRight).
+                        width: Math.min(implicitWidth, banner.width - Theme.px(5) * 3 - Theme.px(22))
+                        elide: Text.ElideRight
                         text: root.bannerText
                         color: Theme.text
                         font.family: Theme.fontFamily
@@ -434,19 +523,22 @@ Item {
                 }
             }
 
-            // Phones: the waiting notifications' icons, once the banner is gone.
+            // Phones: the waiting notifications' icons, once the banner is
+            // gone: right-aligned, side by side with no gaps, the newest at
+            // the right, each as tall as the bar at most
+            // (BannerWindow::paint, BannerWindow.cpp:90-115).
             Row {
                 id: phoneIcons
+                objectName: "phoneNotificationIcons"
                 anchors.right: parent.right
-                anchors.rightMargin: Theme.px(8)
                 y: (Theme.bannerHeight - height) / 2
-                spacing: Theme.px(4)
+                spacing: 0
                 visible: !root.overlay && !root.bannerActive && !root.dashboardOpen && !root.activeCallShown
                 Repeater {
                     model: root.overlay ? null : root.model
                     delegate: AppIcon {
                         required property var model
-                        size: Theme.px(22)
+                        size: Theme.bannerHeight
                         showLabel: false
                         color: model.color
                         glyph: model.glyph
@@ -642,7 +734,7 @@ Item {
                     model: root.overlay ? root.model : null
                     delegate: AppIcon {
                         required property var model
-                        size: Theme.px(22)
+                        size: Theme.bannerHeight
                         showLabel: false
                         color: model.color
                         glyph: model.glyph

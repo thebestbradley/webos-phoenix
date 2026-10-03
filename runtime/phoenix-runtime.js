@@ -255,6 +255,7 @@
     var launchParams = queryParam("launchParams") || "{}";
     var activated = true;
 
+    var bannerSerial = 0;   // addBannerMessage ids, unique within the app
     var PalmSystem = {
         identifier: appIdFromLocation() + " 1000",
         appIdentifier: appIdFromLocation(),
@@ -359,14 +360,14 @@
         // doNotSuppress): the banner's sound plays as it shows (luna-systemui's
         // "Charging Battery" with charging.mp3).
         addBannerMessage: function (msg, params, icon, soundClass, soundFile, duration) {
-            var id = "b" + Date.now();
+            var id = "b" + (++bannerSerial) + "-" + Date.now();
             host.postToHost("banner", { id: id, appId: PalmSystem.appIdentifier, message: msg, params: params, icon: icon,
                                         soundClass: soundClass ? String(soundClass) : "", soundFile: soundFile ? String(soundFile) : "",
                                         duration: duration | 0 });
             return id;
         },
         removeBannerMessage: function (id) { host.postToHost("removeBanner", { id: id }); },
-        clearBannerMessages: function () {},
+        clearBannerMessages: function () { host.postToHost("clearBanners", {}); },
         addNewContentIndicator: function () { return "nci"; },
         removeNewContentIndicator: function () {},
         // The phone's active-call banner (ActiveCallBanner.cpp): who the call

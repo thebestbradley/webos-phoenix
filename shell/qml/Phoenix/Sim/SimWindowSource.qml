@@ -36,7 +36,8 @@
 //   closeAlert(key)          (optional) close a popup alert window (Home)
 //   activeCallBanner        {appId, icon, message, startTime (s)} or null: the
 //                            phone's active-call banner (PalmSystem.addActiveCallBanner)
-//   bannerRequested(appId, text, icon, params, soundClass, soundFile, soundDuration)
+//   bannerRequested(appId, text, icon, params, soundClass, soundFile, soundDuration, bannerId),
+//   bannerRemoved(appId, bannerId), bannersCleared(appId)
 //                            signal: a transient banner (params: its launch
 //                            params, JSON, or ""), and the sound it asked for
 //   soundRequested(appId, soundClass, soundFile, duration)
@@ -407,7 +408,12 @@ Item {
             var bs = _soundArgs(payload);
             bannerRequested(appId, payload.message || "", _iconUrl(payload.icon, appId),
                             bp === undefined || bp === null ? "" : typeof bp === "string" ? bp : JSON.stringify(bp),
-                            bs[0], bs[1], bs[2]);
+                            bs[0], bs[1], bs[2], payload.id ? String(payload.id) : "");
+        } else if (type === "removeBanner") {
+            // PalmSystem.removeBannerMessage(id) / clearBannerMessages().
+            bannerRemoved(appId, payload.id ? String(payload.id) : "");
+        } else if (type === "clearBanners") {
+            bannersCleared(appId);
         } else if (type === "activeCallBanner") {
             // PalmSystem.add/update/removeActiveCallBanner: one at a time,
             // the app that added it changes or removes it.
@@ -678,7 +684,9 @@ Item {
     // The card the user is in (maximized and focused), set by the shell;
     // apps it launches stack on it.
     property string focusedUid: ""
-    signal bannerRequested(string appId, string text, url icon, string params, string soundClass, string soundFile, int soundDuration)
+    signal bannerRequested(string appId, string text, url icon, string params, string soundClass, string soundFile, int soundDuration, string bannerId)
+    signal bannerRemoved(string appId, string bannerId)
+    signal bannersCleared(string appId)
     property var activeCallBanner: null
 
     // Tell a page when its card comes to the front (maximized) or leaves it

@@ -36,7 +36,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] 28 px status bar: carrier or app title, clock, battery, and signal/connection icons. `Src/lunaui/status-bar/StatusBar.cpp`
 - [x] App-tinted status bar (custom color and title while an app is maximized). `StatusBar.cpp:476-520` *Phoenix: the maximized app's title, and on tablets its setWindowProperties statusBarColor, faded to over 300 ms (GAPS S6).*
 - [x] Tappable title for the app menu (tablet). `StatusBar.cpp:111-116`
-- [ ] Battery gauge with 12 levels, charging variants and error state; "battery full" sound. `StatusBarBattery.cpp` *Phoenix: levels, charging and the "battery full" sound done; no error state yet.*
+- [x] Battery gauge with 12 levels, charging variants and error state; "battery full" sound. `StatusBarBattery.cpp` *Phoenix: `StatusBar.qml` battery; the error battery while there is no reading (simulator Shift+F6; `tst_shell` test_batteryStates).*
 - [x] Clock in 12/24 h, following the locale time-format preference. `StatusBarClock.cpp:198-232`
 - [ ] Icons: RSSI (GSM / 1x / EV-DO dual), WAN type, Bluetooth, Wi-Fi bars, TTY, HAC, call forwarding, roaming (triangle variant), VPN, rotation lock, mute, airplane mode. `StatusBarInfo.cpp:183-326` *Phoenix: airplane, mute, rotation lock, VPN, Wi-Fi, Bluetooth and signal done; not yet WAN type, dual RSSI, TTY, HAC, call forwarding, roaming, connecting states.*
 - [x] Notification icon strip in the status bar (tablet, up to 10). `StatusBarNotificationArea.cpp`; `StatusBar.h:31-32` *Phoenix: Notifications.qml's tablet icons, at most ten icons' width with the leftmost past it cut off.*
@@ -58,7 +58,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 
 ## 4. Notifications [spec §4]
 
-- [ ] Banner notifications: scrolling ticker with icon, queueing (5 s alone, 2 s when queued), sounds. `Src/lunaui/notifications/BannerMessageHandler.cpp` *Phoenix: banners with 5 s / 2 s timing and sounds; no real queue yet, no ticker scroll for long text.*
+- [x] Banner notifications: scrolling ticker with icon, queueing (5 s alone, 2 s when queued), sounds. `Src/lunaui/notifications/BannerMessageHandler.cpp` *Phoenix: `Notifications.qml` banner queue: each waits its turn, 5 s alone, 2 s with others waiting (a new one cuts the one showing to 2 s), its sound as it shows; `removeBannerMessage` / `clearBannerMessages`; long text cut off at the end as the original's (`tst_shell` test_bannerQueue). The "ticker" is the slide in: the original never scrolled a banner's text.*
 - [x] Phone: bottom notification bar with dashboard icons; tap to open dashboards upward. The bar and dashboard are negative space: the app shrinks and moves up (400 ms OutCubic), never covered. `Src/lunaui/notifications/DashboardWindowManager.cpp`; `SystemUiController.cpp:82,1361-1470`
 - [x] Tablet: notification drop-down (320 px) from the status bar. `uiComponents/DashboardMenu/DashboardMenu.qml`; `DashboardWindowManager.cpp:142-170`
 - [ ] Dashboards (persistent app mini-windows, 52 px rows) with swipe-to-dismiss, persistent (non-dismissable) variant, and scrolling after 5.5 rows. `Src/lunaui/notifications/DashboardWindowContainer.cpp` *Phoenix: 52 px rows, swipe to dismiss, scrolling after 5.5 rows done; app dashboards persistent only as live activities (no persistent dashboard variant).*
@@ -109,7 +109,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Up-swipe to card view / launcher toggle. `SystemUiController.cpp:445-497`
 - [x] Down-swipe to re-maximize the active card. `SystemUiController.cpp:499-526`
 - [x] Optional advanced gestures: previous/next app (full-width swipe). `SystemUiController.cpp:308-315,394-408`; `Src/base/settings/Preferences.cpp:66,598-604` *Phoenix: Settings > Screen & Lock > Advanced gestures, where there is a gesture area; a swipe across its centre over half its width.*
-- [ ] Meta key (gesture-area hold) for copy/cut/paste/select-all. `Src/base/MetaKeyManager.cpp`; `SystemUiController.cpp:180-184` *Phoenix: not done (GAPS G8); holding the gesture bar is cursor control while the keyboard is up (GAPS V4), and the Edit menu and long-press popup do the editing (GAPS E1).*
+- [x] Meta key (gesture-area hold) for copy/cut/paste/select-all. `Src/base/MetaKeyManager.cpp`; `SystemUiController.cpp:180-184` *Phoenix: a finger resting on the gesture bar is the meta key (`GestureArea.metaHeld`); A, C, X, V typed on a keyboard or the virtual keyboard are Select All, Copy, Cut, Paste in the app in front or Just Type; the bar glows while held (`tst_gesturebar` test_metaKey).*
 - [x] Home button: minimize, launcher toggle, double-press. `SystemUiController.cpp:528-584`
 - [x] TouchPad bezel edge-flick. `SystemUiController.cpp:2041-2121`; `Src/base/gesture/ScreenEdgeFlickGestureRecognizer.cpp`
 - [x] Light-bar / CoreNavi LED gesture feedback. `Src/base/CoreNaviManager.cpp`; `Src/base/CoreNaviLeds.cpp` *Phoenix: on the on-screen gesture bar: lit while an app is maximized, a drop from the centre for up, its reverse for down, a run left / right for back / forward. A device's own LEDs are not driven yet.*

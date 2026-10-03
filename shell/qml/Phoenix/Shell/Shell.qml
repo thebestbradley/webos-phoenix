@@ -352,6 +352,23 @@ FocusScope {
     // (KeyboardShortcuts.js).
     readonly property string keyboardShortcuts: system && system.keyboardShortcuts === "desktop" ? "desktop" : "ipad"
 
+    // The meta key's Edit commands (SystemUiController::slotCopy and the
+    // rest): to Just Type while it is open, else to the app in front.
+    function metaEdit(action) {
+        if (locked)
+            return;
+        backlight.activity();
+        if (justType.open) {
+            justType.edit(action);
+            return;
+        }
+        if (!cards.maximized || !source || !source.windowFor)
+            return;
+        var w = source.windowFor(cards.currentUid);
+        if (w && typeof w.edit === "function")
+            w.edit(action);
+    }
+
     // A hardware keyboard shortcut's action (GAPS V8). Not over the lock
     // screen (but for nothing), First Use or the emergency window.
     function shortcut(action) {
@@ -538,15 +555,18 @@ FocusScope {
         function onCardFocusRequested(uid) { Qt.callLater(cards.focusLaunched, uid); }
         function onCardCloseRequested(uid) { cards.close(uid, true); }
         function onJustTypeDismissed() { justType.open = false; }
-        function onBannerRequested(appId, text, icon, params, soundClass, soundFile, soundDuration) {
+        function onBannerRequested(appId, text, icon, params, soundClass, soundFile, soundDuration, bannerId) {
             var a = null;
             for (var i = 0; shell.source.apps && i < shell.source.apps.count; ++i)
                 if (shell.source.apps.get(i).appId === appId)
                     a = shell.source.apps.get(i);
-            notes.showBanner(text, icon, a ? a.color : "#666666", a ? a.glyph : "", appId, params || "");
-            // BannerMessageHandler::aboutToShowBanner: its sound as it shows.
-            sounds.notification(appId, soundClass || "", soundFile || "", soundDuration || 0, false);
+            // BannerMessageHandler::aboutToShowBanner: its sound as it shows
+            // (after the ones queued before it).
+            notes.showBanner(text, icon, a ? a.color : "#666666", a ? a.glyph : "", appId, params || "", bannerId || "",
+                             function () { sounds.notification(appId, soundClass || "", soundFile || "", soundDuration || 0, false); });
         }
+        function onBannerRemoved(appId, bannerId) { notes.removeBanner(appId, bannerId); }
+        function onBannersCleared(appId) { notes.clearBanners(appId); }
         // PalmSystem.playSoundNotification, or a notification with a sound.
         function onSoundRequested(appId, soundClass, soundFile, duration) {
             sounds.notification(appId, soundClass, soundFile, duration, false);
@@ -655,7 +675,14 @@ FocusScope {
         readonly property var captureChords: [{ key: Qt.Key_P, modifiers: Qt.ControlModifier | Qt.AltModifier },
                                               { key: Qt.Key_P, modifiers: Qt.MetaModifier | Qt.AltModifier }]
         readonly property var shortcuts: KeyboardShortcuts.scheme(shell.keyboardShortcuts)
+        // With the gesture area held (the meta key), C, X, V and A are the
+        // Edit commands (MetaKeyManager::handleEvent).
+        readonly property var metaChords: [{ key: Qt.Key_C, modifiers: 0, action: "copy" },
+                                           { key: Qt.Key_X, modifiers: 0, action: "cut" },
+                                           { key: Qt.Key_V, modifiers: 0, action: "paste" },
+                                           { key: Qt.Key_A, modifiers: 0, action: "selectAll" }]
         chords: captureChords.concat(shortcuts.map(function (s) { return { key: s.key, modifiers: s.modifiers }; }))
+                             .concat(gesture.metaHeld ? metaChords.map(function (c) { return { key: c.key, modifiers: c.modifiers }; }) : [])
         // Held on its own, the scheme's modifier lists them (ShortcutSheet).
         watchKeys: [KeyboardShortcuts.sheetKey(shell.keyboardShortcuts)]
         onHolding: (key, down) => {
@@ -700,6 +727,8 @@ FocusScope {
         onChord: (index) => {
             if (index < captureChords.length)
                 shell.takeScreenshot();
+            else if (index >= captureChords.length + shortcuts.length)
+                shell.metaEdit(metaChords[index - captureChords.length - shortcuts.length].action);
             else if (backlight.on) {
                 backlight.activity();
                 shell.shortcut(shortcuts[index - captureChords.length].action);
@@ -1695,6 +1724,12 @@ FocusScope {
                         KeyInjector.sendImeKey(t, key, modifiers);
                 }
                 onTextCommitted: (text) => {
+                    // The meta key held: c, x, v and a are Edit commands.
+                    var meta = { c: "copy", x: "cut", v: "paste", a: "selectAll" }[String(text).toLowerCase()];
+                    if (gesture.metaHeld && meta) {
+                        shell.metaEdit(meta);
+                        return;
+                    }
                     var t = shell._imeTarget();
                     if (t)
                         KeyInjector.commitText(t, text);

@@ -117,6 +117,7 @@ Item {
 
         TextInput {
             id: input
+            objectName: "justTypeInput"
             anchors.left: parent.left
             anchors.leftMargin: Theme.px(36)
             anchors.right: parent.right
@@ -154,17 +155,20 @@ Item {
         id: editPopup
         objectName: "justTypeEditPopup"
         anchors.fill: parent
-        onTriggered: (action) => {
-            switch (action) {
-            case "selectAll": input.selectAll(); break;
-            case "cut": input.cut(); break;
-            case "copy": input.copy(); break;
-            case "paste": input.paste(); break;
-            }
-        }
+        onTriggered: (action) => jt.edit(action)
     }
 
     ListModel { id: results }
+
+    // Edit commands on the search field (the edit popup's, the meta key's).
+    function edit(action) {
+        switch (action) {
+        case "selectAll": input.selectAll(); break;
+        case "cut": input.cut(); break;
+        case "copy": input.copy(); break;
+        case "paste": input.paste(); break;
+        }
+    }
 
     function refresh() {
         results.clear();
