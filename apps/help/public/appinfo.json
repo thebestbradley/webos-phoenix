@@ -1,0 +1,40 @@
+{
+    "id": "org.webosphoenix.help",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Help",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "iconColor": "#2f86d6",
+    "uiRevision": 2,
+    "keywords": ["Help", "Tips", "Tutorial", "How to", "Gestures", "Manual"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launcherTab": 0
+    },
+    "universalSearch": {
+        "dbsearch": {
+            "displayName": "Help",
+            "url": "org.webosphoenix.help",
+            "launchParam": "topic",
+            "launchParamDbField": "_id",
+            "displayFields": ["title", "summary"],
+            "dbQuery": {
+                "from": "org.webosphoenix.helptopic:1",
+                "where": [
+                    {
+                        "prop": "searchText",
+                        "op": "?",
+                        "val": "",
+                        "collate": "primary"
+                    }
+                ],
+                "limit": 20
+            }
+        }
+    }
+}

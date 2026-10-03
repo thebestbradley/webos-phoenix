@@ -1,0 +1,12 @@
+{
+    "backup.management": [
+        "org.webosphoenix.service.backup/getStatus",
+        "org.webosphoenix.service.backup/configure",
+        "org.webosphoenix.service.backup/backupNow",
+        "org.webosphoenix.service.backup/listBackups",
+        "org.webosphoenix.service.backup/inspect",
+        "org.webosphoenix.service.backup/restore",
+        "org.webosphoenix.service.backup/deleteBackup",
+        "org.webosphoenix.service.backup/scheduled"
+    ]
+}

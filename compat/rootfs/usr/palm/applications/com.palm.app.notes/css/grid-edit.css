@@ -1,0 +1,67 @@
+/* webOS Phoenix overlay (tools/hidpi-art.py): the original stylesheet, with each
+   picture that has HiDPI variants asked for as an image set of them
+   (docs/spec/hidpi-art.md). Do not edit; regenerate. */
+/* @@@LICENSE
+*
+*      Copyright (c) 2010-2013 LG Electronics, Inc.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+* http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*
+* LICENSE@@@ */
+
+.grid-edit-title {
+  font-size: 18px;
+  line-height: 24px;
+  margin: 7px 10px 4px;
+}
+
+.grid-edit-button,
+.grid-edit-done-button {
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+.edit-mode .memo-preview {
+  padding-left: 0;
+  padding-top: 0;
+}
+
+.edit-mode .memo-preview .memo-preview-content {
+  margin-top: 35px;
+  margin-left: -5px;
+}
+
+.memo-preview .delete-button {
+  display: none;
+}
+
+.edit-mode .memo-preview .delete-button {
+  display: inline-block;
+}
+
+.delete-button {
+  z-index: 10;
+}
+
+.delete-button {
+  background-image: -webkit-image-set(url(../images/grid/delete-up.png) 1x, url(../images/grid/delete-up@2x.png) 2x, url(../images/grid/delete-up@3x.png) 3x);
+  width: 40px;
+  height: 40px;
+  z-index: 10;
+}
+
+.delete-button.enyo-button-down {
+  width: 40px;
+  height: 40px;
+  background-image: -webkit-image-set(url(../images/grid/delete-down.png) 1x, url(../images/grid/delete-down@2x.png) 2x, url(../images/grid/delete-down@3x.png) 3x);
+}

@@ -1,0 +1,3 @@
+{
+    "org.webosphoenix.service.dav": ["database.operation", "activity.operation", "accounts.operation", "accounts.transport"]
+}

@@ -1,0 +1,19 @@
+{
+    "id": "org.webosphoenix.flutternotes",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Notes (Flutter)",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "iconColor": "#0175c2",
+    "uiRevision": 2,
+    "keywords": ["Notes", "Markdown", "Flutter"],
+    "phoenix": {
+        "//": "A 2.0 framework demo (apps/flutter-notes/README.md), in the launcher's Downloads tab with the other demos.",
+        "launcherTab": 1
+    }
+}

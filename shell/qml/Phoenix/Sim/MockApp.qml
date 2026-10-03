@@ -16,11 +16,26 @@ Rectangle {
 
     // Detail page title, or "" on the root page.
     property string detail: ""
+    // The app menu (tap the app name in the status bar).
+    property bool appMenuOpen: false
+    // Loaded (web app windows report this; tests hold it back for a slow app).
+    property bool ready: true
+
+    // Ask the system for another card of this app (e.g. compose).
+    signal newCardRequested
 
     color: "#e9e9e9"
 
+    function appMenuRequested() {
+        appMenuOpen = !appMenuOpen;
+    }
+
     // Returns true if the gesture was consumed.
     function back() {
+        if (appMenuOpen) {
+            appMenuOpen = false;
+            return true;
+        }
         if (detail !== "") {
             detail = "";
             return true;
@@ -47,6 +62,30 @@ Rectangle {
             font.bold: true
             style: Text.Raised
             styleColor: Qt.darker(app.accent, 1.6)
+        }
+
+        // "New" button: opens a second card that stacks with this one.
+        Rectangle {
+            anchors.right: parent.right
+            anchors.rightMargin: parent.height * 0.2
+            anchors.verticalCenter: parent.verticalCenter
+            width: parent.height * 0.7
+            height: width
+            radius: width / 4
+            color: newMouse.pressed ? Qt.darker(app.accent, 1.3) : Qt.lighter(app.accent, 1.15)
+            border.color: Qt.darker(app.accent, 1.4)
+            Text {
+                anchors.centerIn: parent
+                text: "+"
+                color: "white"
+                font.pixelSize: parent.height * 0.7
+                font.bold: true
+            }
+            MouseArea {
+                id: newMouse
+                anchors.fill: parent
+                onClicked: app.newCardRequested()
+            }
         }
     }
 
@@ -104,5 +143,36 @@ Rectangle {
         text: "Swipe left in the gesture area to go back."
         color: "#666666"
         font.pixelSize: app.width * 0.05
+    }
+
+    // A one-item app menu, dropping from the top left like enyo.AppMenu.
+    MouseArea {
+        anchors.fill: parent
+        visible: app.appMenuOpen
+        onClicked: app.appMenuOpen = false
+    }
+    Rectangle {
+        visible: app.appMenuOpen
+        x: 4
+        y: 0
+        width: Math.min(parent.width - 8, 200)
+        height: 48
+        radius: 6
+        color: "#2b2b2b"
+        border.color: "#111111"
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            x: 14
+            text: "New " + app.title
+            color: "white"
+            font.pixelSize: 18
+        }
+        MouseArea {
+            anchors.fill: parent
+            onClicked: {
+                app.appMenuOpen = false;
+                app.newCardRequested();
+            }
+        }
     }
 }

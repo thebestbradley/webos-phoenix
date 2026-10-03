@@ -1,0 +1,29 @@
+{
+    "id": "org.webosphoenix.pdfview",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "PDF View",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "iconColor": "#c8322f",
+    "uiRevision": 2,
+    "keywords": ["PDF", "Reader", "Acrobat", "Documents"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launcherTab": 0
+    },
+    "//mimeTypes": "PDF View opens PDFs from Files, Email attachments and the browser's downloads (declared as legacy webOS apps did; see apps/videos/public/appinfo.json).",
+    "mimeTypes": [
+        { "mime": "application/pdf", "extension": "pdf" }
+    ],
+    "//requiredPermissions": "OSE access control groups for the services the app calls (filemanager.operation is apps/files/service's).",
+    "requiredPermissions": [
+        "application.launcher",
+        "application.operation",
+        "filemanager.operation"
+    ]
+}

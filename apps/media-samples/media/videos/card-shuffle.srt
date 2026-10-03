@@ -1,0 +1,11 @@
+1
+00:00:00,500 --> 00:00:04,000
+Every app is a card.
+
+2
+00:00:05,000 --> 00:00:08,500
+Drag cards together to stack them,
+
+3
+00:00:09,000 --> 00:00:11,500
+and flick one up to close it.

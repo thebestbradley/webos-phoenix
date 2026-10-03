@@ -1,0 +1,17 @@
+{
+    "id": "org.webosphoenix.phone",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Phone",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "uiRevision": 2,
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): quickLaunch puts the app in that quick launch slot (1-4).",
+        "quickLaunch": 1
+    }
+}

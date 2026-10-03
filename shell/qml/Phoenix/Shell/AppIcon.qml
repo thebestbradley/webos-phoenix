@@ -6,17 +6,29 @@
 // original Palm app icons are not part of the open-source release.
 
 import QtQuick
+import Phoenix.Native
 
 Item {
     id: icon
 
     property string title
     property url source: ""
+    // A bigger picture of the same icon, if the app names one (appinfo.json
+    // "splashicon"); Theme.appIcon also finds icon-256x256.png beside it.
+    property url largeSource: ""
     property color color: "#666666"
     property string glyph: ""
     property bool showLabel: true
     property int size: Theme.launcherIconSize
-    property bool pressed: mouse.pressed
+    // false: the icon only draws; its parent handles touches.
+    property bool interactive: true
+    // Launch feedback: launcher-touch-feedback.png behind the icon, centred
+    // on it (icongeometrysettings.cpp:193-195 give the icon and the
+    // feedback the same offset), from the tap until its app is up.
+    property bool feedback: false
+    // Window pixels per point: 2 on a Retina Mac, where Qt draws the
+    // window at twice the size; 1 on a device (the shell scales by Theme.u).
+    property real pixelRatio: Screen.devicePixelRatio
 
     signal clicked
 
@@ -27,13 +39,34 @@ Item {
         id: tile
         width: icon.size
         height: icon.size
-        scale: icon.pressed ? 0.92 : 1
-        Behavior on scale { NumberAnimation { duration: 80 } }
 
         Image {
+            objectName: "launchFeedback"
+            visible: icon.feedback
+            anchors.centerIn: parent
+            width: Theme.launchFeedbackSize
+            height: Theme.launchFeedbackSize
+            source: Theme.asset("launcher3/launcher-touch-feedback.png")
+        }
+
+        Image {
+            objectName: "iconImage"
             anchors.fill: parent
             visible: icon.source != ""
-            source: icon.source
+            // The icon, or a bigger one the app ships once the icon would
+            // be magnified (Theme.appIcon). A file bigger than the drawn
+            // size (that bigger one, or the 64 px icon in a 22 px
+            // notification) is decoded at the drawn size, smoothly scaled
+            // down, rather than shrunk by the scene graph, which aliases.
+            // The drawn size is in the window's pixels (pixelRatio): a
+            // 64 px icon covers 128 on a Retina Mac. Qt takes a PNG's
+            // sourceSize as the file's own pixels, not points.
+            readonly property int pixels: Math.ceil(icon.size * icon.pixelRatio)
+            readonly property url best: icon.source != "" ? Theme.appIcon(icon.source, pixels, icon.largeSource) : ""
+            readonly property size fileSize: best != "" ? HiDpi.imageSize(best) : Qt.size(-1, -1)
+            readonly property bool larger: Math.max(fileSize.width, fileSize.height) > pixels
+            source: best
+            sourceSize: larger ? Qt.size(pixels, pixels) : Qt.size(-1, -1)
             smooth: true
         }
 
@@ -80,9 +113,9 @@ Item {
         id: label
         visible: icon.showLabel
         anchors.top: tile.bottom
-        anchors.topMargin: Theme.px(2)
+        anchors.topMargin: Theme.launcherLabelSpacing
         anchors.horizontalCenter: tile.horizontalCenter
-        width: icon.size * 1.4
+        width: Theme.tablet ? Theme.launcherLabelWidth : icon.size * 1.4
         horizontalAlignment: Text.AlignHCenter
         elide: Text.ElideRight
         maximumLineCount: 2
@@ -91,6 +124,7 @@ Item {
         color: Theme.text
         font.family: Theme.fontFamily
         font.pixelSize: Theme.launcherLabelFontSize
+        font.bold: Theme.launcherLabelBold
         style: Text.Raised
         styleColor: "#000000"
     }
@@ -98,6 +132,7 @@ Item {
     MouseArea {
         id: mouse
         anchors.fill: tile
+        enabled: icon.interactive
         onClicked: icon.clicked()
     }
 }

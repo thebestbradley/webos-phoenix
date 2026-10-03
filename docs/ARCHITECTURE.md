@@ -66,10 +66,12 @@ The shell never talks to the compositor directly. It depends on two objects:
 | Member | Meaning |
 | --- | --- |
 | `apps` | ListModel: `appId`, `title`, `icon`, `color`, `glyph`, `tab`, `quickLaunch` |
-| `cards` | ListModel of running apps in card order: `uid`, `appId`, `title` |
+| `cards` | ListModel of open windows in screen order: `uid`, `appId`, `title`, `groupId`. Consecutive cards with the same `groupId` form a card stack |
 | `windowFor(uid)` | The Item to show inside a card |
 | `launch(appId, afterUid)` | Start or focus an app; new cards go right of `afterUid` |
 | `close(uid)`, `back(uid)` | Close an app; deliver the back gesture |
+| `moveCard(from, to)`, `setCardGroup(uid, groupId)`, `newGroupId()` | Reorder cards and move them between stacks |
+| `cardFocusRequested(uid)` | Signal: show a newly opened window (e.g. a compose card) maximized |
 | `notifications`, `notify()`, `dismissNotification()` | Notification list |
 
 **System status** (`SimSystemStatus` / `LsmSystemStatus`): `carrier`,
@@ -78,6 +80,11 @@ The shell never talks to the compositor directly. It depends on two objects:
 
 This split lets the whole UI be developed, screenshot-tested and unit-tested
 on a laptop, then run unchanged on a device.
+
+In the simulator the web apps' simulated services own this state: Settings
+reports changes through `SimWindowSource.systemStatusReported`, and system
+menu changes go back through `pushSystemStatus()` (wired in `sim.qml`; see
+[APP-RUNTIME.md](APP-RUNTIME.md#the-shell-in-the-simulator)).
 
 ### Legacy pixels
 
@@ -88,6 +95,12 @@ a Pre 3, about 3.4 on a 1080px-wide phone). The UI is identical to the
 original at the reference sizes and scales in proportion elsewhere.
 
 ### Card view model
+
+Stack geometry is in `CardLayout.js`, a direct port of `CardGroup.cpp`'s
+opened and closed layouts: the open stack fans its cards out (tilted,
+right-hand cards dropping slightly), other stacks collapse to a pile with
+7px steps, and stacks sit side by side with a fixed gap. Card view scrolls
+between stacks; long stacks (5+ cards) scroll their fan first.
 
 As in LunaSysMgr's `CardWindowManager`, each card is the app window at full
 size, scaled about its centre. Card view and maximized are one continuous
@@ -100,8 +113,11 @@ animation.
 - **Positive space.** OSE apps assume they fill the screen. Phoenix has a status
   bar and gesture area, so apps must be told the smaller area. For now
   `SurfaceHost` scales the surface down to fit.
-- **Back gesture.** QML cannot inject key events into a client surface, so
-  back needs a small C++ compositor extension.
+- **Back gesture.** Done: the back gesture sends the webOS Back key to the
+  focused app through `Phoenix.Native`'s `KeyInjector`, with the native scan
+  code `WebOSSurfaceItem` forwards by. (QML can also send keys through
+  `QWaylandSeat.sendKeyEvent`, as LuneOS's shell does; see
+  [LUNEOS.md](LUNEOS.md).)
 - **System status.** `LsmSystemStatus` has placeholder values until it is
   wired to OSE Luna services.
 - **GraphicalEffects.** Rounded card corners use `Qt5Compat.GraphicalEffects`.

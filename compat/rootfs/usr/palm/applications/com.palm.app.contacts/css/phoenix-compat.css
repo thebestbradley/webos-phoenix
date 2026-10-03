@@ -1,0 +1,56 @@
+/* Phoenix compat: Contacts on a phone.
+ *
+ * With app/phoenix-phone.js: the split view shows either the contact list
+ * or the details (.phoenix-details) at full width. The details header and
+ * the edit form are laid out for the TouchPad (222 px photo frame, 700 px
+ * edit column); on a phone the photo frames are drawn at half size and the
+ * form takes the card's width. Same artwork, same fields.
+ */
+
+@media (max-width: 480px) {
+	/* One pane at a time. The list pane is styled width:320px inline. */
+	.phoenix-splitpane > .leftpane {
+		width: 100% !important;
+		-webkit-box-flex: 1;
+	}
+
+	.phoenix-splitpane > .enyo-pane {
+		display: none;
+	}
+
+	.phoenix-splitpane.phoenix-details > .leftpane {
+		display: none;
+	}
+
+	.phoenix-splitpane.phoenix-details > .enyo-pane {
+		display: block;
+	}
+
+	/* Details: smaller photo frame, name beside it. */
+	.details .avatar {
+		zoom: 0.5;
+	}
+
+	.details .name {
+		width: auto;
+	}
+
+	/* Edit: the form column is styled width:700px inline. */
+	.edit .enyo-scroller [style*="700px"] {
+		width: auto !important;
+		-webkit-box-flex: 1;
+		/* Room on the right for the type labels (MOBILE, HOME, ...), which
+		   hang outside the fields. */
+		padding: 10px 52px 10px 6px !important;
+	}
+
+	/* Cancel and Done are styled width:15rem inline. */
+	.edit [style*="15rem"] {
+		width: 8.5rem !important;
+	}
+
+	.edit .avatar {
+		zoom: 0.5;
+		margin-right: 8px;
+	}
+}

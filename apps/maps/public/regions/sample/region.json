@@ -1,0 +1,30 @@
+{
+    "id": "sample",
+    "name": "Downtown San Jose (demo)",
+    "bounds": [
+        -121.915,
+        37.32,
+        -121.87,
+        37.35
+    ],
+    "zooms": [
+        0,
+        10,
+        11,
+        12,
+        13,
+        14
+    ],
+    "minzoom": 0,
+    "maxzoom": 14,
+    "center": [
+        -121.89250000000001,
+        37.335
+    ],
+    "tiles": 15,
+    "bytes": 1853185,
+    "schema": "openmaptiles",
+    "source": "https://tiles.openfreemap.org/planet",
+    "attribution": "© OpenMapTiles © OpenStreetMap contributors",
+    "fetched": "2026-09-28"
+}

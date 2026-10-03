@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Lock screen: the large bitmap clock (images/screen-lock-clock-*.png), the
-// date, and the padlock you drag up into the ring to unlock.
+// date, and the padlock you drag up into the ring to unlock. With a PIN or
+// password set, the unlock panel asks for it first (LockWindow.cpp
+// StatePinEntry); the device lock service checks it, so the shell never
+// holds the passcode.
 
 import QtQuick
 
@@ -10,13 +13,329 @@ Item {
     id: lock
 
     property var system
+    // The window source: its lunaCall reaches the device lock service
+    // (com.palm.systemmanager getDeviceLockMode / matchDevicePasscode, the
+    // legacy webOS API Settings sets the passcode with).
+    property var source
     property url wallpaper: ""
     property bool locked: true
+    // Asking for the PIN or password.
+    readonly property bool pinEntry: unlockPanel.shown
+    readonly property alias unlockPanel: unlockPanel
     signal unlockRequested
+    // The PIN pad's Emergency Call (UnlockPanel): the shell opens Phone's
+    // restricted mode in its emergency window, over the lock screen.
+    property bool emergencyAvailable: false
+    signal emergencyRequested
+
+    onLockedChanged: {
+        if (locked) {
+            unlockPanel.shown = false;
+            _resetSecurityStates();
+            lockedAt = Date.now();
+        }
+    }
+
+    // Dock mode's lock state (LockWindow StateDockMode, LockWindow.h:132):
+    // locked under the exhibition, which hides the lock screen; no padlock,
+    // wallpaper or alerts, no PIN panel (LockWindow::changeState, :1138-1158),
+    // and no unlocking until dock mode ends (the shell then asks to unlock,
+    // as DisplayOnPuck / DisplayOn::enter did, DISPLAY_UNLOCK_SCREEN).
+    property bool dockMode: false
+    onDockModeChanged: {
+        if (dockMode) {
+            unlockPanel.shown = false;
+            helpShown = false;
+        }
+    }
+    // "Lock after" (Screen & Lock; system preference lockTimeout, seconds):
+    // with a PIN or password, unlocking within this long of locking needs
+    // neither (LockWindow::requiresPasscode, :1316-1327). 0: always. A
+    // security policy's inactivity limit caps it (LockWindow::setLockTimeout,
+    // :595-612; EASPolicy::clampInactivityInSeconds).
+    readonly property int lockTimeout: system && system.lockTimeout > 0 ? system.lockTimeout : 0
+    property real lockedAt: Date.now()
+    function requiresPasscode() {
+        var timeout = lockTimeout;
+        if (_policy && _policy.password && _policy.password.enabled && timeout >= _policy.inactivityInSeconds)
+            timeout = _policy.inactivityInSeconds;
+        return (Date.now() - lockedAt) / 1000 >= timeout;
+    }
+
+    // ---- Security policy (EASPolicyManager; LockWindow.h:129-137) -------------------
+    // The policy as getSecurityPolicy last gave it (null without one), the
+    // lock screen's dialog ("lastTry": LockWindow's StateLastTryDialog;
+    // "newPin": StateNewPinDialog; "wipe": the last try failed) and the new
+    // passcode being set ("pin" or "password": m_setupNewPin /
+    // m_setupNewPassword, with the first entry in _newPasscode).
+    property var _policy: null
+    property string _lockMode: "none"
+    property string dialogState: ""
+    property string setupNew: ""
+    property string _newPasscode: ""
+    readonly property alias messageDialog: messageDialog
+    function _resetSecurityStates() {
+        dialogState = "";
+        setupNew = "";
+        _newPasscode = "";
+    }
+    function _validMaxRetries() {
+        return !!(_policy && _policy.password && _policy.password.enabled && _policy.password.maxRetries > 1);
+    }
+    function _minLength() {
+        return _policy && _policy.password && _policy.password.enabled && _policy.password.minLength > 1
+            ? _policy.password.minLength : 0;
+    }
+    function _newHint(pin) {
+        var min = _minLength();
+        if (min <= 0)
+            return " ";
+        return pin ? qsTr("Must be at least %1 numbers").arg(min) : qsTr("Must be at least %1 characters").arg(min);
+    }
+
+    // LockWindow::changeState(StateNewPinDialog), :1065-1095.
+    function _showNewPinDialog() {
+        unlockPanel.shown = false;
+        if (_policy && _policy.password && _policy.password.alphaNumeric) {
+            messageDialog.setupDialog(qsTr("Password Required"),
+                qsTr("Your security requirements have changed. To access your device, you must set a new password. This will automatically turn on Secure Unlock"), 3);
+            messageDialog.setButton1("", "disabled");
+            messageDialog.setButton2(qsTr("New Password"), "affirmative");
+            messageDialog.setButton3(qsTr("Cancel"), "normal");
+        } else {
+            messageDialog.setupDialog(qsTr("PIN Required"),
+                qsTr("To access your device, you must first set a PIN or Password for Secure Unlock. This will automatically turn on Secure Unlock"), 3);
+            messageDialog.setButton1(qsTr("New PIN"), "affirmative");
+            messageDialog.setButton2(qsTr("New Password"), "affirmative");
+            messageDialog.setButton3(qsTr("Cancel"), "normal");
+        }
+        dialogState = "newPin";
+    }
+    // LockWindow::changeState(StateLastTryDialog), :1097-1120.
+    function _showLastTryDialog() {
+        unlockPanel.shown = false;
+        if (_lockMode === "pin")
+            messageDialog.setupDialog(qsTr("Warning"), qsTr("PIN incorrect. If you enter an incorrect PIN now your device will be erased"), 1);
+        else
+            messageDialog.setupDialog(qsTr("Warning"), qsTr("Password incorrect. If you enter an incorrect Password now your device will be erased"), 1);
+        messageDialog.setButton1(qsTr("Ok"), "normal");
+        messageDialog.setButton2("", "disabled");
+        messageDialog.setButton3("", "disabled");
+        dialogState = "lastTry";
+    }
+    // The last try failed: the device erases itself (LockWindow.cpp:1394-1409).
+    function _showWipeDialog() {
+        unlockPanel.shown = false;
+        messageDialog.setupDialog(_lockMode === "pin" ? qsTr("PIN Incorrect") : qsTr("Password Incorrect"),
+                                  qsTr("Your device will now be erased."), 0);
+        dialogState = "wipe";
+    }
+    // LockWindow::showPinPanel (:2031-2110).
+    function _showPinPanel() {
+        dialogState = "";
+        if (setupNew !== "") {
+            var pin = setupNew === "pin";
+            unlockPanel.setupDialog(pin, pin ? qsTr("Enter PIN") : qsTr("Enter Password"), _newHint(pin), _minLength() > 0, _minLength());
+        } else {
+            var isPin = _lockMode !== "password";
+            var hint = _retriesLeft === 1 && _validMaxRetries() ? qsTr("Final Try") : isPin ? qsTr("Enter PIN") : qsTr("Enter Password");
+            unlockPanel.setupDialog(isPin, qsTr("Device Locked"), hint, false, 0);
+        }
+        unlockPanel.shown = true;
+        unlockPanel.forceActiveFocus();
+    }
+    property int _retriesLeft: 0
+    // LockWindow::slotDialogButton1..3Pressed (:1556-1586).
+    function _dialogButton(n) {
+        if (dialogState === "newPin") {
+            if (n === 3) {
+                // Cancel: locked again.
+                _resetSecurityStates();
+                return;
+            }
+            setupNew = n === 1 ? "pin" : "password";
+            _newPasscode = "";
+            _showPinPanel();
+        } else if (dialogState === "lastTry" && n === 1) {
+            _showPinPanel();
+        }
+    }
+
+    // The phone is ringing: the padlock is the incoming-call handle and the
+    // help reads "Drag up to answer", shown until the call stops; the call
+    // interrupts PIN entry (LockWindow::activatePopUpAlert, :799-803,
+    // 857-860, 1994). Unlocking answers it: the phone app hears the lock
+    // status change (com.palm.systemmanager getLockStatus).
+    property bool incomingCall: false
+    // The front popup alert (Notifications puts its window in alertHost).
+    property bool alertShown: false
+    property real alertHeight: 0
+    readonly property alias alertHost: alertHost
+    // The dashboard and the banner (Notifications' model and banner): with
+    // "Show notifications when locked" on (showAlertsWhenLocked), the
+    // lock screen shows the banner while one plays and the dashboard
+    // otherwise; neither over a popup alert or the unlock panel
+    // (LockWindow::changeState, slotBannerActivated/Deactivated,
+    // :836-946, 1024-1045).
+    property var notifications: null
+    property bool bannerActive: false
+    property string bannerText: ""
+    property color bannerColor: "#666666"
+    property string bannerGlyph: ""
+    property url bannerIcon: ""
+    property real bannerOpacity: 1
+    readonly property bool showAlertsWhenLocked: !system || system.showAlertsWhenLocked !== false
+    // The unlock panel or a dialog is up: no padlock, help or alerts.
+    readonly property bool _covered: unlockPanel.shown || dialogState !== ""
+    readonly property bool _alertsShown: locked && !dockMode && showAlertsWhenLocked && !alertShown && !_covered
+    readonly property bool bannerShown: _alertsShown && bannerActive
+    readonly property bool dashboardShown: _alertsShown && !bannerActive && notifications !== null && notifications.count > 0
+
+    onIncomingCallChanged: {
+        if (incomingCall) {
+            unlockPanel.shown = false;
+            if (dialogState !== "wipe")
+                _resetSecurityStates();
+            hideHelp.stop();
+            helpShown = true;
+        } else if (!drag.pressed) {
+            hideHelp.restart();
+        }
+    }
+
+    function _call(method, params, callback) {
+        if (!source || !source.lunaCall) {
+            callback(null);
+            return;
+        }
+        source.lunaCall("palm://com.palm.systemmanager/" + method, params, callback);
+    }
+
+    // The padlock reached the ring: unlock, or ask for the passcode first,
+    // or for a new one when a security policy asks for it
+    // (LockWindow::tryUnlock, :1257-1287).
+    function requestUnlock() {
+        if (dockMode)
+            return;
+        _call("getDeviceLockMode", {}, function (r) {
+            if (!lock.locked || lock.dockMode)
+                return;
+            // No lock service, no passcode can have been set.
+            if (!r || r.returnValue === false)
+                console.warn("Phoenix: device lock service unavailable; unlocking");
+            var ok = r && r.returnValue !== false;
+            var mode = ok ? r.lockMode : "none";
+            var pending = ok && r.policyState === "pending";
+            lock._lockMode = mode === "pin" || mode === "password" ? mode : "none";
+            lock._retriesLeft = ok && r.retriesLeft > 0 ? r.retriesLeft : 0;
+            var decide = function () {
+                if (!lock.locked)
+                    return;
+                if (pending && lock._policy && lock._policy.password && lock._policy.password.enabled) {
+                    lock._showNewPinDialog();
+                    return;
+                }
+                if (lock._lockMode === "none" || !lock.requiresPasscode()) {
+                    lock.unlockRequested();
+                    return;
+                }
+                lock.setupNew = "";
+                lock._showPinPanel();
+            };
+            if (ok && r.policyState && r.policyState !== "none") {
+                lock._call("getSecurityPolicy", {}, function (p) {
+                    lock._policy = p && p.returnValue !== false && p.policy ? p.policy : null;
+                    decide();
+                });
+            } else {
+                lock._policy = null;
+                decide();
+            }
+        });
+    }
+
+    // LockWindow::slotPasswordSubmitted (:1341-1534).
+    function _submit(passcode, isPin) {
+        if (setupNew !== "") {
+            _submitNew(passcode);
+            return;
+        }
+        _call("matchDevicePasscode", { passCode: passcode }, function (r) {
+            if (!lock.locked || !unlockPanel.shown)
+                return;
+            if (r && r.returnValue !== false && r.succeeded) {
+                unlockPanel.shown = false;
+                lock.unlockRequested();
+                return;
+            }
+            // The policy's tries left (EASPolicyManager::retriesLeft).
+            lock._call("getDeviceLockMode", {}, function (m) {
+                if (!lock.locked || !unlockPanel.shown)
+                    return;
+                var retries = m && m.returnValue !== false && m.retriesLeft > 0 ? m.retriesLeft : 0;
+                lock._retriesLeft = retries;
+                var message;
+                if (retries > 1) {
+                    message = qsTr("%1 Tries Remaining").arg(retries);
+                } else if (retries === 1) {
+                    lock._showLastTryDialog();
+                    return;
+                } else if (lock._validMaxRetries()) {
+                    // Device Will Be Erased.
+                    lock._showWipeDialog();
+                    return;
+                } else {
+                    message = qsTr("Try Again");
+                }
+                unlockPanel.queueUpTitle(qsTr("Device Locked"), isPin ? qsTr("Enter PIN") : qsTr("Enter Password"));
+                unlockPanel.setupDialog(isPin, isPin ? qsTr("PIN Incorrect") : qsTr("Password Incorrect"), message, false, 0);
+            });
+        });
+    }
+
+    // The new PIN or password, twice, then set (m_setupNewPin /
+    // m_setupNewPassword, :1427-1532).
+    function _submitNew(passcode) {
+        var pin = setupNew === "pin";
+        var min = _minLength();
+        if (_newPasscode === "") {
+            _newPasscode = passcode;
+            unlockPanel.setupDialog(pin, pin ? qsTr("Enter PIN Again") : qsTr("Enter Password Again"), " ", min > 0, min);
+            return;
+        }
+        if (_newPasscode !== passcode) {
+            // They do not match: both again.
+            _newPasscode = "";
+            unlockPanel.setupDialog(pin, pin ? qsTr("PIN Doesn't Match") : qsTr("Password Doesn't Match"), qsTr("Try Again"), min > 0, min);
+            unlockPanel.queueUpTitle(pin ? qsTr("Enter PIN") : qsTr("Enter Password"), _newHint(pin));
+            return;
+        }
+        _call("setDevicePasscode", { lockMode: setupNew, passCode: passcode }, function (r) {
+            if (!lock.locked || !unlockPanel.shown)
+                return;
+            if (r && r.returnValue !== false) {
+                unlockPanel.shown = false;
+                lock._resetSecurityStates();
+                lock.unlockRequested();
+                return;
+            }
+            lock._newPasscode = "";
+            var weak = r && (r.errorCode === -8 || r.errorCode === -9);
+            var title = weak ? (pin ? qsTr("PIN Not Secure") : qsTr("Password Not Secure"))
+                             : (pin ? qsTr("Enter PIN") : qsTr("Enter Password"));
+            unlockPanel.setupDialog(pin, title, r && r.errorText ? r.errorText : " ", min > 0, min);
+            unlockPanel.queueUpTitle(pin ? qsTr("Enter PIN") : qsTr("Enter Password"), lock._newHint(pin));
+        });
+    }
 
     visible: opacity > 0
     opacity: locked ? 1 : 0
-    Behavior on opacity { NumberAnimation { duration: 300 } }
+    // Unlocked, it takes no input while it fades out: the screen under it
+    // is already the user's (the original stops routing input to the lock
+    // window once it unlocks).
+    enabled: locked
+    // LockWindow::fadeWindow: 150 ms InQuad (lunaAnimations.conf:104-105).
+    Behavior on opacity { NumberAnimation { duration: Theme.lockWindowFadeDuration; easing.type: Easing.InQuad } }
 
     property date now: new Date()
     Timer {
@@ -35,19 +354,41 @@ Item {
         source: lock.wallpaper
     }
 
+    // At their own height, full width: the top one under the status bar
+    // (LockWindow.cpp:2559-2565).
     Image {
-        anchors.top: parent.top
+        y: Theme.statusBarHeight
         width: parent.width
-        height: parent.height * 0.4
+        height: Theme.artHeight(source)
         source: Theme.asset("screen-lock-wallpaper-mask-top.png")
-        fillMode: Image.Stretch
     }
     Image {
         anchors.bottom: parent.bottom
         width: parent.width
-        height: parent.height * 0.4
+        height: Theme.artHeight(source)
         source: Theme.asset("screen-lock-wallpaper-mask-bottom.png")
-        fillMode: Image.Stretch
+    }
+
+    // ---- Sideways (Phoenix) --------------------------------------------------
+    // LockWindow placed the clock, the alerts and the padlock by the screen's
+    // height alone; on a phone turned on its side (320 high) the centred
+    // banner or dashboard covered the date and reached the padlock, and the
+    // PIN pad covered the clock. Wider than tall, the alerts keep to the
+    // room between the date and the padlock (the dashboard with as many
+    // rows as fit, the last cut in half as the sixth was), and the clock
+    // steps back while the PIN pad shows. Upright, nothing changes.
+    readonly property bool sideways: width > height
+    // The alerts' frames are 10 px of shadow around what shows: that may
+    // reach over the date and the padlock.
+    readonly property real _alertsTop: dateText.y + dateText.height + Theme.px(4) - Theme.lockAlertsShadow
+    readonly property real _alertsBottom: padlock.homeY - Theme.px(4) + Theme.lockAlertsShadow
+    // Where an alert block h high goes: centred, as the original had it,
+    // or, sideways, into the room above the padlock.
+    function _alertY(h) {
+        var y = (lock.height - h) / 2;
+        if (!sideways)
+            return y;
+        return Math.max(_alertsTop, Math.min(y, _alertsBottom - h));
     }
 
     // ---- Clock --------------------------------------------------------------
@@ -55,13 +396,19 @@ Item {
     Row {
         id: clock
         anchors.horizontalCenter: parent.horizontalCenter
+        opacity: lock.sideways && lock._covered ? 0 : 1
+        Behavior on opacity { NumberAnimation { duration: Theme.lockFadeDuration } }
         // Centred 15% down the screen (LockWindow.cpp:427).
         y: Math.max(Theme.statusBarHeight, lock.height * Theme.lockClockCenterRatio - Theme.lockDigitHeight / 2)
 
+        // ClockWindow::tick: 12 h without a leading zero, or 24 h.
         readonly property string text: {
-            var h = lock.shownTime.getHours() % 12;
-            if (h === 0) h = 12;
             var m = lock.shownTime.getMinutes();
+            var h = lock.shownTime.getHours();
+            if (lock.system && lock.system.twentyFourHour)
+                return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
+            h = h % 12;
+            if (h === 0) h = 12;
             return h + ":" + (m < 10 ? "0" : "") + m;
         }
 
@@ -78,9 +425,12 @@ Item {
     }
 
     Text {
+        id: dateText
+        objectName: "lockDate"
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: clock.bottom
         anchors.topMargin: Theme.px(4)
+        opacity: clock.opacity
         text: Qt.formatDate(lock.shownTime, "dddd, MMMM d")
         color: Theme.text
         font.family: Theme.fontFamily
@@ -91,21 +441,194 @@ Item {
 
     // ---- Unlock target + padlock ----------------------------------------------
 
+    // ---- Popup alert (LockWindow PopUpAlert) ---------------------------------------
+    // Centred, 320 px wide less its 10 px padding, on popup-bg.png; an incoming
+    // call gets the whole height from under the bar to 84 px above the
+    // bottom (adjustAlertBounds, kAlertsFromBottom). Under the padlock.
+    ArtBorderImage {
+        id: alertFrame
+        objectName: "lockAlert"
+        visible: opacity > 0
+        opacity: lock.locked && !lock.dockMode && lock.alertShown && !lock._covered ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: Theme.alertFadeDuration } }
+        anchors.horizontalCenter: parent.horizontalCenter
+        readonly property real contentWidth: Math.min(Theme.px(320), lock.width) - 2 * Theme.px(10)
+        readonly property real contentHeight: lock.incomingCall
+            ? lock.height - Theme.statusBarHeight - Theme.px(84) - 2 * Theme.px(10)
+            : lock.alertHeight
+        width: contentWidth + 2 * Theme.px(20)
+        height: contentHeight + 2 * Theme.px(20)
+        y: lock.incomingCall ? Theme.statusBarHeight - Theme.px(10) : (lock.height - height) / 2
+        source: Theme.asset("popup-bg.png")
+        border { left: Theme.artBorder(20, source); right: Theme.artBorder(20, source); top: Theme.artBorder(20, source); bottom: Theme.artBorder(20, source) }
+        MouseArea { anchors.fill: parent }
+        Item {
+            id: alertHost
+            anchors.fill: parent
+            anchors.margins: Theme.px(20)
+        }
+    }
+
+    // ---- Dashboard (LockWindow DashboardAlerts, :2597-2743) ---------------------
+    // Centred, 320 px wide: the newest first, each 52 px row with a divider
+    // under all but the last; at most 6, the sixth cut in half under
+    // dashboard-scroll-fade.png. A tap reaches a dashboard window only when
+    // it asked for {clickableWhenLocked: true}, and not while the help
+    // saucer shows (:1862-1883; DashboardWindowContainer.cpp:1069).
+    ArtBorderImage {
+        id: lockDashboard
+        objectName: "lockDashboard"
+        readonly property real dividerHeight: Theme.px(2)            // menu-divider.png
+        readonly property real chrome: 2 * Theme.lockAlertsShadow + Theme.lockDashboardTopPadding + Theme.lockDashboardBottomPadding
+        // Six, the last cut in half; sideways, as many as fit, the last cut
+        // in half too while there is room for more than one (a phone on its
+        // side has room for the newest only).
+        readonly property real _room: lock._alertsBottom - lock._alertsTop - chrome
+        readonly property int maxItems: !lock.sideways ? Theme.lockDashboardMaxItems
+            : Math.max(1, Math.min(Theme.lockDashboardMaxItems,
+                1 + Math.floor((_room - Theme.dashboardItemHeight * 1.5) / (Theme.dashboardItemHeight + dividerHeight)) + 1))
+        readonly property bool halfLast: maxItems > 1
+        readonly property int count: lock.notifications ? Math.min(lock.notifications.count, maxItems) : 0
+        readonly property real contentHeight: count * Theme.dashboardItemHeight + Math.max(0, count - 1) * dividerHeight
+            - (count === maxItems && halfLast ? Theme.dashboardItemHeight / 2 : 0)
+        visible: opacity > 0
+        opacity: lock.dashboardShown ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: Theme.lockFadeDuration } }
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: Theme.lockAlertsWidth + 2 * Theme.lockAlertsShadow
+        height: contentHeight + chrome
+        y: lock.sideways ? lock._alertY(height) : (lock.height - contentHeight) / 2 - Theme.lockAlertsShadow - Theme.lockDashboardTopPadding
+        source: Theme.asset("popup-bg.png")
+        border { left: Theme.artBorder(Theme.lockAlertsBorder, source); right: Theme.artBorder(Theme.lockAlertsBorder, source); top: Theme.artBorder(Theme.lockAlertsBorder, source); bottom: Theme.artBorder(Theme.lockAlertsBorder, source) }
+
+        Item {
+            id: dashboardRows
+            x: Theme.lockAlertsShadow
+            y: Theme.lockAlertsShadow + Theme.lockDashboardTopPadding
+            width: Theme.lockAlertsWidth
+            height: lockDashboard.contentHeight
+            clip: true
+
+            Column {
+                width: parent.width
+                Repeater {
+                    // Only while the lock screen shows: a dashboard window is
+                    // one live page, and the notification area has it
+                    // otherwise.
+                    model: lock.visible ? lockDashboard.count : 0
+                    delegate: Column {
+                        id: row
+                        required property int index
+                        readonly property var entry: lock.notifications.get(lock.notifications.count - 1 - index)
+                        width: dashboardRows.width
+                        DashboardItem {
+                            objectName: "lockDashboardItem"
+                            width: parent.width
+                            source: lock.source
+                            windowKey: row.entry.windowKey
+                            title: row.entry.title
+                            body: row.entry.body
+                            color: row.entry.color
+                            glyph: row.entry.glyph
+                            icon: row.entry.icon
+                            progress: row.entry.progress === undefined ? -1 : row.entry.progress
+                            // Taps reach the window only when it allows them.
+                            MouseArea {
+                                anchors.fill: parent
+                                z: 2
+                                enabled: !(row.entry.clickableWhenLocked && row.entry.windowKey !== "" && !lock.helpShown)
+                            }
+                        }
+                        Image {
+                            visible: row.index < lockDashboard.count - 1
+                            width: parent.width
+                            height: lockDashboard.dividerHeight
+                            source: Theme.asset("menu-divider.png")
+                            fillMode: Image.Stretch
+                        }
+                    }
+                }
+            }
+
+            Image {
+                visible: lockDashboard.count === lockDashboard.maxItems && lockDashboard.halfLast
+                anchors.bottom: parent.bottom
+                width: parent.width
+                height: Theme.artHeight(source)
+                source: Theme.asset("dashboard-scroll-fade.png")
+            }
+        }
+    }
+
+    // ---- Banner (LockWindow BannerAlerts, :2745-2811) -----------------------------
+    // Centred, 320 px by the banner's 28 px, 10 px padding inside the
+    // popup-bg.png shadow; the message sits still, icon and text 5 px in
+    // (BannerMessageView::NoScroll; BannerMessageHandler.cpp:410-430).
+    ArtBorderImage {
+        id: lockBanner
+        objectName: "lockBanner"
+        visible: opacity > 0
+        opacity: lock.bannerShown ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: Theme.lockFadeDuration } }
+        anchors.horizontalCenter: parent.horizontalCenter
+        readonly property real inset: Theme.lockAlertsShadow + Theme.lockBannerPadding
+        width: Theme.lockAlertsWidth + 2 * inset
+        height: Theme.bannerHeight + 2 * inset
+        y: lock._alertY(height)
+        source: Theme.asset("popup-bg.png")
+        border { left: Theme.artBorder(Theme.lockAlertsBorder, source); right: Theme.artBorder(Theme.lockAlertsBorder, source); top: Theme.artBorder(Theme.lockAlertsBorder, source); bottom: Theme.artBorder(Theme.lockAlertsBorder, source) }
+
+        Row {
+            x: lockBanner.inset + Theme.px(5)
+            y: lockBanner.inset + (Theme.bannerHeight - height) / 2
+            width: Theme.lockAlertsWidth - Theme.px(5)
+            spacing: Theme.px(5)
+            opacity: lock.bannerOpacity
+            AppIcon {
+                id: lockBannerIcon
+                size: Theme.px(22)
+                showLabel: false
+                color: lock.bannerColor
+                glyph: lock.bannerGlyph
+                source: lock.bannerIcon
+            }
+            Text {
+                objectName: "lockBannerText"
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - lockBannerIcon.width - parent.spacing
+                elide: Text.ElideRight
+                text: lock.bannerText
+                color: Theme.text
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.bannerFontSize
+            }
+        }
+    }
+
+    // The help saucer shows while the padlock is held, until it is dragged
+    // out past the radius; after a release it hides a second later
+    // (LockWindow::showHelp / startHideHelpTimer, kHideHelpTimeoutInMS).
+    property bool helpShown: false
+    Timer {
+        id: hideHelp
+        interval: Theme.lockHideHelpDelay
+        onTriggered: lock.helpShown = false
+    }
+
     Image {
         id: target
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: Theme.gestureAreaHeight
+        // Its bottom level with the padlock's (LockWindow.cpp:449, 454).
+        y: lock.height - lock.height * Theme.lockHandleOffsetRatio - height
         width: Theme.px(320)
         height: Theme.px(190)
         source: Theme.asset("screen-lock-target-scrim.png")
-        opacity: drag.active ? 1 : 0
-        Behavior on opacity { NumberAnimation { duration: 150 } }
+        visible: lock.helpShown && !lock._covered
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
             y: Theme.px(40)
-            text: qsTr("Drag up to unlock")
+            text: lock.incomingCall ? qsTr("Drag up to answer") : qsTr("Drag up to unlock")
             color: Theme.text
             font.family: Theme.fontFamily
             font.pixelSize: Theme.lockHelpFontSize
@@ -115,40 +638,89 @@ Item {
 
     Image {
         id: padlock
+        objectName: "padlock"
+        // Not over the unlock panel (LockWindow.cpp:1053), nor in dock mode.
+        visible: !lock._covered && !lock.dockMode
         width: Theme.lockPadlockSize
         height: Theme.lockPadlockSize
-        source: drag.active ? Theme.asset("screen-lock-padlock-on.png") : Theme.asset("screen-lock-padlock-off.png")
+        source: Theme.asset((lock.incomingCall ? "screen-lock-incoming-call-" : "screen-lock-padlock-")
+                            + (drag.pressed ? "on.png" : "off.png"))
 
         readonly property real homeX: (lock.width - width) / 2
-        // Rests 10% of the screen height above the bottom (LockWindow.cpp:81).
+        // Rests 10% of the screen height above the bottom (LockWindow.cpp:81, 454).
         readonly property real homeY: lock.height - lock.height * Theme.lockHandleOffsetRatio - height
-        x: homeX
-        y: homeY
+        // Centred on the finger while held.
+        property point finger: Qt.point(homeX + width / 2, homeY + height / 2)
+        x: drag.pressed ? finger.x - width / 2 : homeX
+        y: drag.pressed ? finger.y - height / 2 : homeY
 
-        // Unlock once the padlock has been dragged this far up (LockWindow.cpp:89).
-        readonly property real unlockDistance: Theme.lockUnlockDistance
+        // Dragged out of the saucer (146 px, LockWindow.cpp:89) and above
+        // where it rests.
+        function outside(p) {
+            var dx = p.x - (homeX + width / 2), dy = p.y - (homeY + height / 2);
+            return dx * dx + dy * dy > Theme.lockUnlockDistance * Theme.lockUnlockDistance && dy < 0;
+        }
 
         MouseArea {
             id: drag
             anchors.fill: parent
-            readonly property bool active: pressed
-            drag.target: padlock
-            drag.axis: Drag.YAxis
-            drag.minimumY: 0
-            drag.maximumY: padlock.homeY
-            onReleased: {
-                if (padlock.homeY - padlock.y > padlock.unlockDistance)
-                    lock.unlockRequested();
-                padlockReturn.start();
+            preventStealing: true
+            onPressed: { hideHelp.stop(); lock.helpShown = true; }
+            onPositionChanged: (m) => {
+                var p = mapToItem(lock, m.x, m.y);
+                padlock.finger = p;
+                lock.helpShown = lock.incomingCall || !padlock.outside(p);
             }
+            // LockWindow::handlePenUpStateNormal: back home at once.
+            onReleased: (m) => {
+                var p = mapToItem(lock, m.x, m.y);
+                if (padlock.outside(p))
+                    lock.requestUnlock();
+                if (!lock.incomingCall)
+                    hideHelp.restart();
+            }
+            onCanceled: if (!lock.incomingCall) hideHelp.restart()
         }
+    }
 
-        NumberAnimation on y {
-            id: padlockReturn
-            running: false
-            to: padlock.homeY
-            duration: 200
-            easing.type: Easing.OutCubic
-        }
+    // ---- PIN / password (uiComponents/UnlockPanel) -----------------------------
+
+    UnlockPanel {
+        id: unlockPanel
+        objectName: "unlockPanel"
+        property bool shown: false
+        // A password (not a PIN) is typed on the virtual keyboard: faded in,
+        // the panel is its input client (UnlockPanel.qml onOpacityChanged ->
+        // requestFocusChange -> LockWindow::slotPinPanelFocusRequest,
+        // LockWindow.cpp:1540-1554).
+        readonly property bool inputClient: shown && !isPINEntry && opacity === 1
+        anchors.centerIn: parent
+        opacity: shown ? 1 : 0
+        visible: shown || opacity > 0
+        enabled: shown
+        Behavior on opacity { NumberAnimation { duration: Theme.lockFadeDuration } }
+        emergencyAvailable: lock.emergencyAvailable
+        // LockWindow::slotCancelPasswordEntry: locked again, the new
+        // passcode forgotten.
+        onEntryCanceled: { shown = false; lock._resetSecurityStates(); }
+        onPasswordSubmitted: (password, isPIN) => lock._submit(password, isPIN)
+        onEmergencyRequested: lock.emergencyRequested()
+    }
+
+    // ---- The security policy's dialog (uiComponents/MessageDialog) ----------------
+    // Its bottom at the centre of the screen (LockWindow::showDialog,
+    // :2114-2122); faded in and out over lockFadeDuration.
+    MessageDialog {
+        id: messageDialog
+        readonly property bool shown: lock.locked && lock.dialogState !== ""
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Math.max(Theme.statusBarHeight, lock.height / 2 - height)
+        opacity: shown ? 1 : 0
+        visible: opacity > 0
+        enabled: shown
+        Behavior on opacity { NumberAnimation { duration: Theme.lockFadeDuration } }
+        onButton1Pressed: lock._dialogButton(1)
+        onButton2Pressed: lock._dialogButton(2)
+        onButton3Pressed: lock._dialogButton(3)
     }
 }

@@ -1,0 +1,23 @@
+{
+    "id": "org.webosphoenix.podcast:1",
+    "owner": "org.webosphoenix.podcasts",
+    "sync": true,
+    "indexes": [
+        {
+            "name": "title",
+            "props": [
+                {
+                    "name": "title"
+                }
+            ]
+        },
+        {
+            "name": "feedUrl",
+            "props": [
+                {
+                    "name": "feedUrl"
+                }
+            ]
+        }
+    ]
+}

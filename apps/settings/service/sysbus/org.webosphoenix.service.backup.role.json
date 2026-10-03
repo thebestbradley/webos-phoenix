@@ -1,0 +1,12 @@
+{
+    "appId": "org.webosphoenix.service.backup",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": ["org.webosphoenix.service.backup"],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.service.backup",
+            "outbound": ["*"]
+        }
+    ]
+}

@@ -1,0 +1,138 @@
+// Copyright (c) 2026 webOS Phoenix contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// The Marketplace's service, org.webosphoenix.service.packages
+// (apps/marketplace/service/packagesservice.js documents the methods):
+// signed Phoenix catalogs (web apps and .ipk web apps), and the App Museum
+// II and Preware feeds as add-on catalogs of Classics.
+
+import { call, subscribe, LunaError, type Subscription } from "./bridge";
+
+const SERVICE = "luna://org.webosphoenix.service.packages/";
+
+export type CatalogKind = "phoenix" | "appmuseum" | "preware";
+export type AppKind = "pwa" | "ipk" | "classic" | "preware";
+
+export interface CatalogSource {
+    id: string;
+    name: string;
+    kind: CatalogKind;
+    url: string;
+    enabled: boolean;
+    builtin: boolean;
+    /** A Phoenix catalog's key was checked and pinned. */
+    trusted: boolean;
+    fingerprint: string | null;
+    refreshed: string | null;
+    error: { errorCode: string; errorText: string } | null;
+    count: number;
+}
+
+/** A catalog's key, for the user to check before trusting it. */
+export interface PendingKey {
+    url: string;
+    name: string;
+    key: string;
+    fingerprint: string;
+}
+
+export interface MarketApp {
+    id: string;
+    sourceId: string;
+    kind: AppKind;
+    title: string;
+    developer: { name: string; url: string };
+    summary: string;
+    description: string;
+    categories: string[];
+    icon: string;
+    screenshots: string[];
+    license: string;
+    homepage: string;
+    donation: string;
+    featured: boolean;
+    rating: { stars: number; count: number } | null;
+    version: string;
+    adult?: boolean;
+    devices?: string[];
+    pwa?: { manifest: string; origin: string };
+    installed: { version: string; sourceId: string } | null;
+    /** The newer version there is, if installed. */
+    update: string | null;
+    /** Why it cannot be installed here, if known before downloading. */
+    verdict?: { ok: boolean; text: string };
+    museumId?: string;
+    appId?: string;
+}
+
+export interface InstalledApp {
+    id: string;
+    catalogId: string;
+    title: string;
+    icon: string;
+    version: string;
+    sourceId: string;
+    kind: AppKind;
+    installedAt: string;
+    update: string | null;
+}
+
+export interface InstallProgress {
+    id: string;
+    state: "queued" | "downloading" | "checking" | "installing" | "installed" | "failed";
+    progress?: number;
+    appId?: string;
+    errorCode?: string;
+    errorText?: string;
+    /** Installed, but parts of the package were not (the simulator: install scripts, services). */
+    skipped?: string[];
+}
+
+export type Section = "featured" | "web" | "apps" | "classics";
+
+export const marketplace = {
+    async sources(): Promise<CatalogSource[]> {
+        return ((await call(SERVICE + "getSources", {})) as unknown as { sources: CatalogSource[] }).sources;
+    },
+    /** Reads the catalogs; a Phoenix catalog not trusted yet answers UNTRUSTED with its key. */
+    async refresh(id?: string): Promise<{ id: string; ok: boolean; errorCode?: string; errorText?: string; pending?: PendingKey }[]> {
+        return ((await call(SERVICE + "refresh", id ? { id } : {})) as unknown as { results: [] }).results;
+    },
+    async addSource(url: string): Promise<PendingKey> {
+        return ((await call(SERVICE + "addSource", { url })) as unknown as { pending: PendingKey }).pending;
+    },
+    trustSource(pending: PendingKey): Promise<unknown> {
+        return call(SERVICE + "trustSource", { url: pending.url, key: pending.key, name: pending.name });
+    },
+    setSource(id: string, enabled: boolean): Promise<unknown> {
+        return call(SERVICE + "setSource", { id, enabled });
+    },
+    removeSource(id: string): Promise<unknown> {
+        return call(SERVICE + "removeSource", { id });
+    },
+    async browse(section: Section, category?: string, page = 0): Promise<{ apps: MarketApp[]; categories: string[]; more: boolean }> {
+        return (await call(SERVICE + "browse", { section, page, ...(category ? { category } : {}) })) as unknown as
+            { apps: MarketApp[]; categories: string[]; more: boolean };
+    },
+    async search(query: string): Promise<MarketApp[]> {
+        return ((await call(SERVICE + "search", { query })) as unknown as { apps: MarketApp[] }).apps;
+    },
+    async app(sourceId: string, id: string): Promise<MarketApp> {
+        return ((await call(SERVICE + "getApp", { sourceId, id })) as unknown as { app: MarketApp }).app;
+    },
+    /** Installs (or updates); onProgress hears each step, the last one installed or failed. */
+    install(sourceId: string, id: string, onProgress: (p: InstallProgress) => void): Subscription {
+        return subscribe(SERVICE + "install", { sourceId, id, subscribe: true },
+                         (r) => onProgress(r as unknown as InstallProgress),
+                         (e: LunaError) => onProgress({ id, state: "failed", errorCode: String(e.reply.errorCode), errorText: e.errorText }));
+    },
+    remove(id: string): Promise<unknown> {
+        return call(SERVICE + "remove", { id });
+    },
+    async installed(): Promise<InstalledApp[]> {
+        return ((await call(SERVICE + "listInstalled", {})) as unknown as { apps: InstalledApp[] }).apps;
+    },
+    updateAll(): Promise<{ updated: string[]; failed: { id: string; errorText: string }[] }> {
+        return call(SERVICE + "updateAll", {}) as unknown as Promise<{ updated: string[]; failed: { id: string; errorText: string }[] }>;
+    },
+};

@@ -1,0 +1,180 @@
+{
+    "//": "Which web apps must start cleanly in tools/test-apps.cjs. status: works | broken; phone/tablet override per form factor. note says what is limited. tools/smoke-apps.cjs exercises each app.",
+    "com.palm.app.calculator": {
+        "status": "works",
+        "note": "Phone: the TouchPad calculator body fills the card (compat CSS)"
+    },
+    "com.palm.app.notes": {
+        "status": "works",
+        "note": "Phone: one memo per row; the editor's back button shows its arrow only"
+    },
+    "com.palm.app.accounts": {
+        "status": "works",
+        "note": "The released templates (HP webOS profile, email) and Phoenix CardDAV & CalDAV (apps/dav), which signs in and syncs against a real server (tools/test-dav-sync.cjs). Email accounts cannot be signed in: no mail servers to validate against"
+    },
+    "com.palm.app.calendar": {
+        "status": "works",
+        "note": "Local (profile) calendar only; no sync or reminders service. Phone: smaller headings and toolbar, one-letter weekdays in month view"
+    },
+    "com.palm.app.clock": {
+        "status": "works",
+        "note": "Phone: clock faces scaled to fit. Alarms ring through the simulated activity manager (tools/test-alarm.cjs)"
+    },
+    "com.palm.app.contacts": {
+        "status": "works",
+        "note": "Phone: list and details one at a time (back gesture returns). No automatic linking of similar contacts, no photos, no vCard import/export"
+    },
+    "com.palm.app.email": {
+        "status": "works",
+        "note": "Sample IMAP account; no mail server: sending moves the email to Sent, syncing finds nothing new. Phone: folders, list and message one at a time"
+    },
+    "org.webosphoenix.settings": {
+        "status": "works",
+        "note": "Phoenix Settings (React, apps/settings); its launch points org.webosphoenix.settings.* share this entry"
+    },
+    "org.webosphoenix.phone": {
+        "status": "works",
+        "note": "Phoenix Phone (React, apps/phone); tools/test-phone-messaging.cjs drives it"
+    },
+    "org.webosphoenix.messaging": {
+        "status": "works",
+        "note": "Phoenix Messaging (React, apps/messaging); tools/test-phone-messaging.cjs drives it"
+    },
+    "org.webosphoenix.camera": {
+        "status": "works",
+        "note": "Phoenix Camera (React, apps/camera); without a camera it shows its \"No camera found\" state. tools/test-media.cjs drives it with Chromium's fake camera"
+    },
+    "org.webosphoenix.photos": {
+        "status": "works",
+        "note": "Phoenix Photos (React, apps/photos); tools/test-media.cjs drives it"
+    },
+    "org.webosphoenix.music": {
+        "status": "works",
+        "note": "Phoenix Music (React, apps/music); tools/test-media.cjs drives it"
+    },
+    "com.palm.launcher": {
+        "status": "works",
+        "note": "Just Type (luna-applauncher), shown by the shell over the cards. No remote (GAL) contact search or search suggestions offline"
+    },
+    "com.palm.app.browser": {
+        "status": "works",
+        "note": "Pages show in a native Chromium view in phoenix-sim; elsewhere in an iframe (sites that refuse framing stay blank). No downloads, printing or page thumbnails. Phone: the address field has its own toolbar row"
+    },
+    "org.webosphoenix.files": {
+        "status": "works",
+        "note": "Phoenix Files (React, apps/files); tools/test-files.cjs drives it"
+    },
+    "org.webosphoenix.tasks": {
+        "status": "works",
+        "note": "Phoenix Tasks (React, apps/tasks); tools/test-tasks.cjs drives it"
+    },
+    "org.webosphoenix.voicememos": {
+        "status": "works",
+        "note": "Phoenix Voice Memos (React, apps/voicememos); tools/test-voicememos.cjs drives it with Chromium's fake microphone. The simulator transcribes only the demo memos (whisper.cpp runs on the device)"
+    },
+    "org.webosphoenix.flashlight": {
+        "status": "works",
+        "note": "Phoenix Flashlight (React, apps/flashlight) on the simulated org.webosports.service.torch (LuneOS torchd's API); tools/test-flashlight.cjs drives it. The simulated LED lights nothing"
+    },
+    "org.webosphoenix.scanner": {
+        "status": "works",
+        "note": "Phoenix QR Scanner (React, apps/scanner, zxing-wasm); tools/test-scanner.cjs drives it with Chromium's fake camera playing generated codes. Here without a camera it says so"
+    },
+    "org.webosphoenix.weather": {
+        "status": "works",
+        "note": "Phoenix Weather (React, apps/weather) on Open-Meteo, location from the simulated com.webos.service.location; tools/test-weather.cjs drives it with recorded replies. Needs the network for live forecasts"
+    },
+    "org.webosphoenix.maps": {
+        "status": "works",
+        "note": "Phoenix Maps (React, apps/maps); tools/test-maps.cjs drives it with the demo region (downtown San Jose) and stand-in search and routing servers. phoenix-sim's WebEngine has no WebGL 2 under Xvfb, so there it draws with the canvas renderer"
+    },
+    "org.webosphoenix.passwords": {
+        "status": "works",
+        "note": "Phoenix Passwords (React, apps/passwords), a KeePass (KDBX 4) password manager; tools/test-passwords.cjs drives it. No key files or autofill yet"
+    },
+    "org.webosphoenix.authenticator": {
+        "status": "works",
+        "note": "Phoenix Authenticator (React, apps/authenticator), TOTP/HOTP codes encrypted with the device passcode; starts on the 'set a device passcode' screen when there is none. tools/test-authenticator.cjs drives it"
+    },
+    "org.webosphoenix.terminal": {
+        "status": "works",
+        "note": "Phoenix Terminal (React + xterm.js, apps/terminal) on org.webosphoenix.pty (services/pty). phoenix-sim runs a real shell on the host; in a browser tools/serve-rootfs.py --terminal does, else a small simulated shell. tools/test-terminal.cjs drives it"
+    },
+    "org.webosphoenix.videos": {
+        "status": "works",
+        "note": "Phoenix Videos (React, apps/videos); tools/test-videos.cjs drives it with the demo videos (WebM, with WebVTT and SRT subtitles)"
+    },
+    "org.webosphoenix.podcasts": {
+        "status": "works",
+        "note": "Phoenix Podcasts (React, apps/podcasts); starts with no subscriptions. tools/test-podcasts.cjs drives it against a local feed server; in phoenix-sim only feeds that send CORS headers can be fetched"
+    },
+    "org.webosphoenix.pdfview": {
+        "status": "works",
+        "note": "Phoenix PDF View (React on PDF.js, apps/pdfview); tools/test-docs.cjs drives it"
+    },
+    "org.webosphoenix.docview": {
+        "status": "works",
+        "note": "Phoenix Doc View (React, apps/docview): EPUB, Word, Excel, PowerPoint, Markdown and text, read-only; tools/test-docs.cjs drives it"
+    },
+    "org.webosphoenix.dav": {
+        "status": "works",
+        "note": "Hidden: the CardDAV & CalDAV account's sign-in page and service (apps/dav); its main page only points to Accounts. tools/test-dav-sync.cjs drives it"
+    },
+    "org.webosphoenix.help": {
+        "status": "works",
+        "note": "Phoenix Help (React, apps/help): topics in Markdown (apps/help/topics), searchable, found by Just Type; tools/test-help.cjs drives it"
+    },
+    "org.webosphoenix.firstuse": {
+        "status": "works",
+        "note": "Hidden: Phoenix First Use (React, apps/firstuse), run by the shell at first start and from Settings > Device Info; tools/test-firstuse.cjs drives it"
+    },
+    "org.webosphoenix.enyo2demo": {
+        "status": "works",
+        "note": "Temporary Enyo 2.5.2 / Onyx sampler (apps/enyo2demo)"
+    },
+    "org.webosphoenix.enactnotes.limestone": {
+        "status": "works",
+        "note": "Temporary Enact demo (Limestone theme), laid out for tablets: at phone size it starts but its columns do not fit. tools/test-enact-notes.cjs drives it"
+    },
+    "org.webosphoenix.enactnotes.agate": {
+        "status": "works",
+        "note": "Temporary Enact demo (Agate theme), laid out for tablets: at phone size it starts but its columns do not fit. tools/test-enact-notes.cjs drives it"
+    },
+    "org.webosphoenix.ionicnotes": {
+        "status": "works",
+        "note": "2.0 framework demo (Ionic 9, React), for phones and tablets; the same notes as the Enact demos. tools/test-ionic-notes.cjs drives it"
+    },
+    "org.webosphoenix.flutternotes": {
+        "status": "works",
+        "note": "2.0 framework demo (Flutter 3.47 web build, CanvasKit), for phones and tablets; the same notes as the other demos. Built only where Flutter is installed. tools/test-flutter-notes.cjs drives it"
+    },
+    "org.webosphoenix.marketplace": {
+        "status": "works",
+        "note": "Phoenix Marketplace (React, apps/marketplace); tools/test-marketplace.cjs drives it against the catalog service"
+    },
+    "org.webosphoenix.notificationlab": {
+        "status": "works",
+        "note": "Phoenix Notification Lab (React, apps/notificationlab): live activities, banners, dashboards, alerts and background tasks to review the notification area; tools/test-notificationlab.cjs drives it"
+    },
+    "org.webosphoenix.screenshot": {
+        "status": "works",
+        "note": "the screen capture preview; without a capture it says how to take one"
+    },
+    "org.webosphoenix.agenda": {
+        "status": "works",
+        "note": "Phoenix Agenda (React, apps/agenda), the dock mode exhibition of the calendar's coming days (com.palm.app.agendaview's place); not in the launcher. tools/test-exhibition.cjs drives it"
+    },
+    "org.webosphoenix.printmanager": {
+        "status": "works",
+        "note": "Phoenix Print Manager (React, apps/printmanager; com.palm.app.printmanager): the jobs and printers of com.palm.printmgr, whose only printer in the simulator is Save as PDF; tools/test-browser.cjs prints to it"
+    },
+    "org.webosphoenix.voicedial": {
+        "status": "works",
+        "note": "Phoenix Voice Dial (React, apps/voicedial; com.palm.sysapp.voicedial): listens through the shell's dictation (org.webosphoenix.dictation); in a browser without the shell it says it needs the microphone. tools/test-voicedial.cjs drives it"
+    },
+    "com.palm.systemui": {
+        "status": "works",
+        "note": "luna-systemui as the shell's headless page: alerts, dashboards and banners (its services now see com.palm.bus registerServerStatus answer). Tested with the mail account signed out, so it opens its Accounts: Action Needed dashboard",
+        "storage": { "accountCredentials": {} }
+    }
+}

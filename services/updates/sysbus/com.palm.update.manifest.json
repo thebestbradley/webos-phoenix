@@ -1,0 +1,9 @@
+{
+    "id": "com.palm.update",
+    "version": "0.1.0",
+    "roleFiles": ["/usr/share/luna-service2/roles.d/com.palm.update.role.json"],
+    "serviceFiles": ["/usr/share/luna-service2/services.d/com.palm.update.service"],
+    "apiPermissionFiles": ["/usr/share/luna-service2/api-permissions.d/com.palm.update.api.json"],
+    "clientPermissionFiles": ["/usr/share/luna-service2/client-permissions.d/com.palm.update.perm.json"],
+    "groupsFiles": ["/usr/share/luna-service2/groups.d/com.palm.update.groups.json"]
+}

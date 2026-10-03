@@ -1,0 +1,421 @@
+/*
+ * Copyright (c) 2026 webOS Phoenix contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Maps: the map fills the card; a search field floats at the top, the
+ * command menu at the bottom. Results, a place and directions are a sheet
+ * sliding up on a phone and a column on the left on a tablet. Navigation
+ * puts the next turn in a green banner at the top (webOS 2.x's navigation
+ * apps used a strong banner the same way).
+ */
+
+body.pui-app { overflow: hidden; }
+#root { height: 100%; }
+
+.mp-app { position: fixed; inset: 0; overflow: hidden; background: #f2efe6; }
+/* MapLibre and Leaflet make their container position: relative. */
+.mp-app .mp-map { position: absolute; inset: 0; z-index: 0; }  /* its own stacking context: Leaflet panes are z-index 400 */
+.mp-app.has-side .mp-map, .mp-app.has-side .mp-toolbar { left: 340px; }
+.mp-map .maplibregl-canvas { outline: none; }
+.mp-map.leaflet-container { background: #f2efe6; font: inherit; }
+
+/* ---- Search field ------------------------------------------------------------------------ */
+
+.mp-search {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    z-index: 8;
+    display: flex;
+    align-items: center;
+    height: 40px;
+    padding: 0 8px 0 10px;
+    background: linear-gradient(#ffffff, #f0f0ee);
+    border: 1px solid #9c9c9a;
+    border-radius: 20px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), inset 0 1px 0 #fff;
+}
+.mp-app.wide .mp-search { width: 324px; right: auto; }
+.mp-search-icon { flex: none; color: #7a7a78; margin-right: 6px; }
+.mp-search input {
+    flex: 1;
+    min-width: 0;
+    height: 36px;
+    font: inherit;
+    font-size: 17px;
+    color: var(--pui-text);
+    background: none;
+    border: 0;
+    outline: none;
+}
+.mp-search input::placeholder { color: #9a9a98; }
+.mp-search-clear {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    font-size: 20px;
+    line-height: 24px;
+    color: #fff;
+    background: #a9a9a7;
+    border: 0;
+    border-radius: 13px;
+    cursor: pointer;
+}
+
+/* ---- Panels ------------------------------------------------------------------------------ */
+
+.mp-panel { position: absolute; z-index: 7; display: flex; flex-direction: column; background: var(--pui-bg); }
+.mp-panel.sheet {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-height: 58%;
+    border-top: 1px solid #8f8f8d;
+    border-radius: 10px 10px 0 0;
+    box-shadow: 0 -3px 10px rgba(0, 0, 0, 0.35);
+    animation: mp-slide-up 0.18s ease-out;
+}
+.mp-panel.side {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 340px;
+    padding-top: 56px;
+    background: linear-gradient(90deg, #dcdcda, #d0d0ce);
+    border-right: 1px solid #8f8f8d;
+    box-shadow: 2px 0 6px rgba(0, 0, 0, 0.25);
+}
+@keyframes mp-slide-up { from { transform: translateY(40px); opacity: 0.4; } }
+
+.mp-results, .mp-directions { overflow-y: auto; overflow-x: hidden; min-height: 0; flex: 1; padding: 4px 8px 8px; }
+.mp-result { gap: 2px; }
+.mp-result .pui-row-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mp-result .pui-row-subtitle { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mp-result-pin { flex: none; width: 30px; color: #c0392b; display: flex; justify-content: center; }
+.mp-result-dist { flex: none; margin-left: 6px; font-size: 13px; color: var(--pui-text-dim); }
+.mp-busy { display: flex; justify-content: center; padding: 14px 0; }
+.mp-empty, .mp-note, .mp-error, .mp-credit { padding: 8px 10px; font-size: 14px; color: var(--pui-text-dim); }
+.mp-error { color: #b0281c; }
+.mp-credit { font-size: 12px; }
+
+/* The place card. */
+.mp-card { position: relative; padding: 12px 14px 14px; }
+.mp-card-title { padding-right: 34px; font-size: 20px; font-weight: bold; color: var(--pui-text); }
+.mp-card-detail { margin-top: 2px; font-size: 14px; color: var(--pui-text-dim); }
+.mp-card-dist { margin-top: 2px; font-size: 13px; color: var(--pui-label); }
+.mp-card-coords { margin-top: 2px; font-size: 13px; color: var(--pui-text-dim); font-variant-numeric: tabular-nums; }
+.mp-card-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.mp-card-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 30px;
+    height: 30px;
+    font-size: 22px;
+    line-height: 28px;
+    color: #666;
+    background: rgba(0, 0, 0, 0.06);
+    border: 0;
+    border-radius: 15px;
+    cursor: pointer;
+}
+.mp-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 36px;
+    padding: 0 14px;
+    font: inherit;
+    font-size: 15px;
+    font-weight: bold;
+    color: var(--pui-text);
+    background: linear-gradient(#fdfdfd, #dcdcda);
+    border: 1px solid #9a9a98;
+    border-radius: 18px;
+    box-shadow: inset 0 1px 0 #fff, 0 1px 1px rgba(0, 0, 0, 0.15);
+    cursor: pointer;
+}
+.mp-action:active { background: linear-gradient(#cfcfcd, #e6e6e4); }
+.mp-action.primary { color: #fff; background: linear-gradient(#4f9be0, #1f67b5); border-color: #174f8c; text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.35); }
+.mp-action.negative { color: #fff; background: linear-gradient(#e0574b, #b22a1f); border-color: #861d15; }
+.mp-action.on { color: #8a6100; }
+.mp-icon-button {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    color: #555;
+    background: none;
+    border: 0;
+    border-radius: 20px;
+    cursor: pointer;
+}
+.mp-icon-button:active { background: rgba(0, 0, 0, 0.12); }
+
+/* Directions. */
+.mp-dir-head { position: relative; display: flex; align-items: center; gap: 4px; padding: 6px 36px 6px 2px; }
+.mp-dir-ends { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.mp-dir-end {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    padding: 2px 8px;
+    font: inherit;
+    font-size: 15px;
+    text-align: left;
+    color: var(--pui-text);
+    background: #fff;
+    border: 1px solid #b4b4b2;
+    border-radius: 6px;
+}
+button.mp-dir-end { cursor: pointer; }
+.mp-dir-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mp-dot {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+    font-weight: bold;
+    line-height: 20px;
+    text-align: center;
+    color: #fff;
+    border-radius: 10px;
+}
+.mp-dot.start { background: #2f9e44; }
+.mp-dot.end { background: #c0392b; }
+.mp-dir-head .mp-card-close { top: 6px; right: 0; }
+.mp-modes { display: flex; justify-content: center; margin: 4px 0 6px; }
+.mp-modes .pui-grouped-toolbutton { display: flex; align-items: center; gap: 4px; padding: 0 12px; font-size: 14px; }
+.mp-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    margin: 0 0 4px;
+    background: #fff;
+    border: 1px solid #c4c4c2;
+    border-radius: 8px;
+}
+.mp-summary-time { font-size: 20px; font-weight: bold; color: #1b7a2f; margin-right: 8px; }
+.mp-summary-dist { font-size: 15px; color: var(--pui-text-dim); }
+.mp-steps { list-style: none; margin: 0; padding: 0; }
+.mp-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 4px 6px;
+    font-size: 15px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+}
+.mp-step:active { background: rgba(31, 117, 191, 0.15); }
+.mp-step-arrow { flex: none; width: 30px; display: flex; justify-content: center; color: #3b5f86; }
+.mp-step-text { flex: 1; min-width: 0; }
+.mp-step-dist { flex: none; font-size: 13px; color: var(--pui-text-dim); }
+
+/* ---- Markers ----------------------------------------------------------------------------- */
+
+.mp-leaflet-icon { background: none; border: 0; }
+.mp-marker {
+    width: 26px;
+    height: 34px;
+    background: no-repeat center / contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 34'%3E%3Cpath d='M13 1C6.4 1 1 6.3 1 12.8 1 21.6 13 33 13 33s12-11.4 12-20.2C25 6.3 19.6 1 13 1z' fill='%23d8432f' stroke='%238a1d12' stroke-width='1.4'/%3E%3Ccircle cx='13' cy='12.5' r='4.6' fill='%23fff'/%3E%3C/svg%3E");
+    filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35));
+    cursor: pointer;
+}
+.leaflet-marker-icon .mp-marker { transform: translate(-50%, -100%); }
+.mp-marker.result { width: 20px; height: 27px; opacity: 0.9; }
+.mp-marker.saved {
+    width: 22px;
+    height: 22px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%23fff' stroke='%23a07400' stroke-width='1.5'/%3E%3Cpath d='M16 5l3.2 6.8 7.4.9-5.5 5.1 1.4 7.3L16 21.5l-6.5 3.6 1.4-7.3-5.5-5.1 7.4-.9z' fill='%23f2b51b'/%3E%3C/svg%3E");
+}
+.mp-marker.start, .mp-marker.end {
+    width: 26px;
+    height: 26px;
+    font-size: 13px;
+    font-weight: bold;
+    line-height: 22px;
+    text-align: center;
+    color: #fff;
+    background: #c0392b;
+    border: 2px solid #fff;
+    border-radius: 13px;
+}
+.mp-marker.start { background: #2f9e44; }
+
+.mp-me { position: relative; width: 0; height: 0; pointer-events: none; }
+.mp-me-dot {
+    position: absolute;
+    left: -8px;
+    top: -8px;
+    width: 16px;
+    height: 16px;
+    background: #2f7fd6;
+    border: 3px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+    box-sizing: border-box;
+}
+.mp-me-halo {
+    position: absolute;
+    left: -22px;
+    top: -22px;
+    width: 44px;
+    height: 44px;
+    background: rgba(47, 127, 214, 0.18);
+    border: 1px solid rgba(47, 127, 214, 0.4);
+    border-radius: 50%;
+    animation: mp-pulse 2.4s ease-in-out infinite;
+}
+.mp-me-heading { display: none; position: absolute; left: -9px; top: -26px; border: 9px solid transparent; border-bottom: 14px solid #2f7fd6; }
+.mp-me.has-heading .mp-me-heading { display: block; }
+@keyframes mp-pulse { 50% { transform: scale(1.35); opacity: 0.55; } }
+
+/* ---- Attribution, compass, toasts -------------------------------------------------------- */
+
+.mp-attribution {
+    position: absolute;
+    right: 0;
+    bottom: 56px;
+    z-index: 4;
+    max-width: 100%;
+    padding: 1px 6px;
+    font-size: 10px;
+    color: #333;
+    background: rgba(255, 255, 255, 0.75);
+    border-top-left-radius: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+.mp-app.has-sheet .mp-attribution { display: none; }
+.mp-panel.sheet::after {
+    content: "© OpenStreetMap contributors";
+    display: block;
+    padding: 0 8px 2px;
+    font-size: 10px;
+    text-align: right;
+    color: #777;
+}
+.mp-app.navigating .mp-attribution { bottom: 64px; }
+.mp-compass {
+    position: absolute;
+    top: 56px;
+    right: 10px;
+    z-index: 6;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid #9c9c9a;
+    border-radius: 20px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+}
+.mp-compass-glyph { color: #c0392b; }
+.mp-toolbar .pui-icon-tool-button .pui-glyph { margin: 0 -14px; }
+.mp-toast, .mp-locstatus {
+    position: absolute;
+    left: 50%;
+    bottom: 72px;
+    z-index: 20;
+    max-width: 86%;
+    padding: 8px 14px;
+    font-size: 15px;
+    color: #fff;
+    text-align: center;
+    background: rgba(20, 20, 20, 0.85);
+    border-radius: 16px;
+    transform: translateX(-50%);
+}
+.mp-locstatus { top: 56px; bottom: auto; font-size: 13px; padding: 4px 10px; background: rgba(120, 30, 20, 0.8); }
+
+/* ---- Navigation -------------------------------------------------------------------------- */
+
+.mp-nav-banner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 8;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 76px;
+    padding: 8px 12px;
+    color: #fff;
+    background: linear-gradient(#2e8a3e, #1d6a2c);
+    border-bottom: 1px solid #0f4419;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+}
+.mp-nav-banner.off { background: linear-gradient(#b8741f, #8a5412); }
+.mp-app.wide .mp-nav-banner { right: auto; width: 420px; border-bottom-right-radius: 10px; }
+.mp-nav-arrow { flex: none; width: 52px; display: flex; justify-content: center; }
+.mp-nav-body { flex: 1; min-width: 0; }
+.mp-nav-dist { font-size: 26px; font-weight: bold; line-height: 1.1; }
+.mp-nav-text { font-size: 16px; line-height: 1.2; text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.3); }
+.mp-nav-bottom {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 8;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 64px;
+    padding: 0 12px;
+    background: linear-gradient(#f7f7f5, #dcdcda);
+    border-top: 1px solid #9a9a98;
+}
+.mp-nav-eta { flex: 1; display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+.mp-nav-eta-time { font-size: 20px; font-weight: bold; color: #1b7a2f; }
+.mp-nav-eta-rest { font-size: 13px; color: var(--pui-text-dim); }
+
+/* ---- Pages ------------------------------------------------------------------------------- */
+
+.mp-page-layer { position: absolute; inset: 0; z-index: 12; background: var(--pui-bg); }
+.mp-page { --pui-gutter: 0px; position: absolute; inset: 0; display: flex; flex-direction: column; }
+.mp-page > .pui-header { margin-bottom: 0; }
+.mp-page-scroll { flex: 1; overflow-y: auto; padding: 4px 8px 24px; }
+.mp-app.wide .mp-page-scroll { padding-left: max(8px, calc(50% - 300px)); padding-right: max(8px, calc(50% - 300px)); }
+.mp-header-button {
+    height: 32px;
+    margin: -4px -6px -4px 0;
+    padding: 0 10px;
+    font: inherit;
+    font-size: 16px;
+    font-weight: bold;
+    color: var(--pui-label);
+    background: none;
+    border: 0;
+    border-radius: 6px;
+    text-shadow: 0 1px 0 #fff;
+    cursor: pointer;
+}
+.mp-header-button:active { background: rgba(0, 0, 0, 0.12); }
+.mp-page-buttons, .mp-dialog-buttons { display: flex; flex-direction: column; gap: 8px; margin: 10px 4px; }
+.mp-row-delete {
+    flex: none;
+    height: 30px;
+    padding: 0 10px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: bold;
+    color: #fff;
+    background: linear-gradient(#e0574b, #b22a1f);
+    border: 1px solid #861d15;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.mp-progress { display: flex; flex-direction: column; gap: 6px; margin: 10px 8px; font-size: 14px; color: var(--pui-text-dim); }

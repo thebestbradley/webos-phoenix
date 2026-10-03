@@ -1,0 +1,170 @@
+/* webOS Phoenix overlay (tools/hidpi-art.py): the original stylesheet, with each
+   picture that has HiDPI variants asked for as an image set of them
+   (docs/spec/hidpi-art.md). Do not edit; regenerate. */
+/* Dashboard module */
+
+body {
+	font-family: Prelude, 'Prelude Medium', 'Segoe UI', Arial, Helvetica, sans-serif;
+	margin: 0;
+	background:transparent;
+}
+
+.dashboard-notification-module {
+	height: 50px;
+	display: -webkit-box;
+	/*background-color:#F9D;*/
+/*	-webkit-box-orient: horizontal;
+	-webkit-box-align: stretch;*/
+}
+
+/* individual targets */
+
+.palm-dashboard-icon-container {
+	width: 50px;
+	margin-right: 4px;
+	margin-left: 6px;
+	margin-top: 2px;
+	position: relative;
+}
+
+.palm-dashboard-text-container {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-box-pack: center;
+	-webkit-box-flex: 1;
+	
+	background: -webkit-image-set(url(images/notification-divider.png) 1x, url(images/notification-divider@2x.png) 2x, url(images/notification-divider@3x.png) 3x) left top no-repeat;
+	color: #FFF;
+	margin-top: -1px;
+	margin-left: -7px;
+	border: none;
+	overflow: hidden;
+	font-size: 16px;
+	width: 270px;
+	min-height: 53px;
+}
+
+.palm-dashboard-text-container > div {
+	padding-left: 21px;
+	padding-right:10px;
+}
+
+.layer-0 > .palm-dashboard-text-container {
+	left: -4px;
+	background:none;
+}
+
+.layer-1 {
+	position:absolute;
+	left:58px;
+}
+
+.layer-2 {
+	position:absolute;
+	-webkit-transition: left 0.2s ease;
+	left:70px;
+}
+
+.dashboard-layer {
+	overflow:hidden;
+}
+
+
+/* items within the containers */
+
+.palm-dashboard-icon {
+	width: 48px;
+	height: 48px;
+	background: -webkit-image-set(url(images/notification-large-info.png) 1x, url(images/notification-large-info@2x.png) 2x, url(images/notification-large-info@3x.png) 3x) center center no-repeat;
+}
+
+.palm-dashboard-icon.alert {
+	background: -webkit-image-set(url(images/notification-alert.png) 1x, url(images/notification-alert@2x.png) 2x, url(images/notification-alert@3x.png) 3x) center left no-repeat;
+}
+
+.dashboard-count { /* was dashboard-newitem */
+	position: absolute;
+	right: -3px;
+	top: -3px;
+
+	line-height: 24px;
+	font-weight: bold;
+	height: 28px;
+	-webkit-border-image: -webkit-image-set(url(images/dashboard-newitem-badge.png) 1x, url(images/dashboard-newitem-badge@2x.png) 2x, url(images/dashboard-newitem-badge@3x.png) 3x) 0 12 28 12 repeat stretch;
+	-webkit-box-sizing: border-box;
+	border-width: 0px 12px 0px 12px;
+}
+
+.palm-dashboard-icon-container:active .dashboard-newitem,
+.palm-dashboard-icon-container.selected .dashboard-newitem {
+	-webkit-border-image: -webkit-image-set(url(images/dashboard-newitem-badge.png) 1x, url(images/dashboard-newitem-badge@2x.png) 2x, url(images/dashboard-newitem-badge@3x.png) 3x) 28 12 0 12 repeat stretch;
+}
+
+.dashboard-count-label {
+	margin: 0 -4px;
+	font-size: 16px;
+	color: #FFF;
+}
+
+.dashboard-title,
+.palm-dashboard-text {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.dashboard-title {
+	font-weight: bold;
+}
+
+.palm-dashboard-text {
+	font-size: 14px;
+	margin-top: -2px;
+}
+
+/* single version of the notification */
+
+.single .dashboard-newitem {
+	display: none;
+}
+
+
+.enyo-swipeableitem {
+	padding: 0px;
+	border: none;
+}
+
+
+.swipe-shadow {
+	position: absolute; 
+	width: 500px; 
+	background: -webkit-image-set(url(images/repeatable-db-swipe-bg.png) 1x, url(images/repeatable-db-swipe-bg@2x.png) 2x, url(images/repeatable-db-swipe-bg@3x.png) 3x) repeat-x;
+	height: 52px;
+}
+
+.swipe-shadow.left {
+	left: -500px; 
+}
+.swipe-shadow.right {
+	left: 320px;
+	width:700px;
+}
+
+.swipe-highlight {
+	width:1px;
+	height:52px;
+	position: absolute; 
+	background: -webkit-image-set(url(images/menu-dropdown-swipe-highlight.png) 1x, url(images/menu-dropdown-swipe-highlight@2x.png) 2x, url(images/menu-dropdown-swipe-highlight@3x.png) 3x)
+}
+
+.swipe-highlight.left {
+	left:0px;
+	margin-left: -1px;
+}
+
+.swipe-highlight.right {
+	left:320px;
+}
+
+
+

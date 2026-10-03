@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- PDF View: a page with a red PDF label across it. Original Phoenix art,
+     drawn like Doc View's page. -->
+<defs>
+  <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="1" stop-color="#e6eaee"/>
+  </linearGradient>
+  <linearGradient id="fold" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="1" stop-color="#bfc6cd"/>
+  </linearGradient>
+  <linearGradient id="label" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#f05a4a"/>
+    <stop offset="0.5" stop-color="#d42a1c"/>
+    <stop offset="1" stop-color="#9c160d"/>
+  </linearGradient>
+  <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#fff" stop-opacity="0.5"/>
+    <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+  </linearGradient>
+</defs>
+<g filter="url(#c-lift)" transform="rotate(4 128 128)">
+  <path d="M54 24H174L214 64V232H54Z" fill="url(#page)" stroke="#8a939c" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M174 24V64H214Z" fill="url(#fold)" stroke="#8a939c" stroke-width="2" stroke-linejoin="round"/>
+  <g stroke="#9aa6b2" stroke-width="5" stroke-linecap="round">
+    <path d="M72 48H154M72 64H160M72 80H196M72 96H196"/>
+    <path d="M72 184H196M72 200H196M72 216H150"/>
+  </g>
+</g>
+<!-- The label, lying across the page. -->
+<g filter="url(#c-lift)">
+  <rect x="26" y="112" width="168" height="62" rx="8" fill="url(#label)" stroke="#6e0d06" stroke-width="2.5"/>
+  <rect x="29" y="115" width="162" height="26" rx="6" fill="url(#gloss)"/>
+  <!-- The letters as strokes, not text, so no font is needed. -->
+  <g fill="none" stroke-linejoin="round" stroke-linecap="round">
+    <path id="pdf" d="M58 162V128H72A10 10 0 0 1 72 148H58M100 162V128H106A17 17 0 0 1 106 162ZM140 162V128H162M140 145H157"/>
+    <use href="#pdf" stroke="#6e0d06" stroke-width="13"/>
+    <use href="#pdf" stroke="#fff" stroke-width="9"/>
+  </g>
+</g>
+</svg>

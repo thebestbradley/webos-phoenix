@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Tasks: a cream legal pad with red ticks and a curled corner, after the
+     Open webOS launcher's tasks-list.png (luna-applauncher, Apache-2.0). -->
+<defs>
+  <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#fffbef"/>
+    <stop offset="1" stop-color="#f7ebcb"/>
+  </linearGradient>
+  <linearGradient id="under" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#f1e4c2"/>
+    <stop offset="1" stop-color="#e2d2a8"/>
+  </linearGradient>
+  <linearGradient id="edge" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#e9dcb9"/>
+    <stop offset="1" stop-color="#a99a72"/>
+  </linearGradient>
+  <linearGradient id="band" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#6b6b6b"/>
+    <stop offset="0.45" stop-color="#3d3d3d"/>
+    <stop offset="1" stop-color="#1f1f1f"/>
+  </linearGradient>
+  <linearGradient id="flap" x1="1" y1="1" x2="0.3" y2="0.3">
+    <stop offset="0" stop-color="#fffdf6"/>
+    <stop offset="0.55" stop-color="#ece5d2"/>
+    <stop offset="1" stop-color="#bdb294"/>
+  </linearGradient>
+  <linearGradient id="tick" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#f04a3a"/>
+    <stop offset="1" stop-color="#b3150f"/>
+  </linearGradient>
+  <path id="sheet" d="M38 56H218V150C204 170 180 196 146 222H38Z"/>
+  <clipPath id="sheetclip"><use href="#sheet"/></clipPath>
+</defs>
+<!-- The pad's thickness, pages showing at its foot. -->
+<rect x="38" y="210" width="180" height="22" rx="3" fill="url(#edge)" stroke="#857652" stroke-width="1.5"/>
+<path d="M40 217H216M40 222H216M40 227H216" stroke="#c9b991" stroke-width="1.2"/>
+<!-- The page below the top one, seen under the curl. -->
+<rect x="38" y="56" width="180" height="166" fill="url(#under)" stroke="#a6966b" stroke-width="1.5"/>
+<!-- The top sheet. -->
+<use href="#sheet" fill="url(#paper)"/>
+<g clip-path="url(#sheetclip)" stroke="#bfd0d8" stroke-width="2">
+  <path d="M38 92H218M38 112H218M38 132H218M38 152H218M38 172H218M38 192H218M38 212H218"/>
+</g>
+<use href="#sheet" fill="none" stroke="#a6966b" stroke-width="1.5"/>
+<!-- The curled corner: the back of the sheet, shading the page under it. -->
+<g filter="url(#c-lift)">
+  <path d="M218 150C202 174 176 200 146 222C150 202 154 184 166 174C180 164 198 158 218 150Z" fill="url(#flap)" stroke="#9c9175" stroke-width="1.2" stroke-linejoin="round"/>
+  <path d="M212 158C196 178 176 198 154 214" fill="none" stroke="#fff" stroke-width="3" opacity="0.8" stroke-linecap="round"/>
+</g>
+<!-- Binding across the top. -->
+<rect x="34" y="40" width="188" height="24" rx="4" fill="url(#band)"/>
+<rect x="35" y="41" width="186" height="5" rx="2.5" fill="#fff" opacity="0.25"/>
+<!-- Two red ticks, written quickly: a short heavy stroke, a long thin one. -->
+<g fill="url(#tick)" stroke="#7d0d08" stroke-width="1.5" stroke-linejoin="round">
+  <path d="M56 98C62 100 68 108 72 116C86 96 104 80 128 70C108 86 90 108 76 132C74 134 70 134 68 132C64 120 60 110 52 104C52 100 53 98 56 98Z"/>
+  <path d="M56 158C62 160 68 168 72 176C86 156 104 140 128 130C108 146 90 168 76 192C74 194 70 194 68 192C64 180 60 170 52 164C52 160 53 158 56 158Z"/>
+</g>
+</svg>

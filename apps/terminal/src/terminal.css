@@ -1,0 +1,106 @@
+/*
+ * Copyright (c) 2026 webOS Phoenix contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The Terminal: the terminal fills the card, the extras row sits at the
+ * bottom (above the keyboard, which shrinks the card), drawn like the
+ * webOS keyboard's dark keys.
+ */
+
+html, body, #root { height: 100%; overflow: hidden; }
+body.pui-app { background: #1f2023; }
+
+.term-app {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    transition: filter 0.1s;
+}
+.term-app.bell { filter: brightness(1.6); }
+
+.term-host {
+    flex: 1;
+    min-height: 0;
+    /* Clear of the card's rounded corners. */
+    padding: 5px 2px 0 6px;
+    overflow: hidden;
+}
+.term-host .xterm { height: 100%; }
+.term-host .xterm-viewport { overscroll-behavior: contain; }
+
+/* ---- The extras row ------------------------------------------------------------ */
+
+.term-extras {
+    flex: none;
+    background: linear-gradient(#3a3b3e, #232427);
+    border-top: 1px solid #000;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    padding: 3px 2px 1px;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+.term-extras-keys {
+    display: flex;
+    gap: 2px;
+}
+.term-key {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 30px;
+    padding: 0;
+    border: 1px solid #0d0d0e;
+    border-radius: 4px;
+    background: linear-gradient(#56585c, #3b3d40);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 1px rgba(0, 0, 0, 0.5);
+    color: #f2f2f0;
+    font: 600 12px var(--pui-font);
+    text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.6);
+    white-space: nowrap;
+    overflow: hidden;
+    cursor: default;
+}
+.term-key:active { background: linear-gradient(#2c2d30, #45474a); }
+.term-key.mod { font-size: 10px; }
+/* A sticky modifier: on for the next key, then locked (the keyboard's shift). */
+.term-key.once { background: linear-gradient(#4aa3df, #1f75bf); border-color: #0e3f69; }
+.term-key.locked { background: linear-gradient(#1f75bf, #0f4f8a); border-color: #06294a; box-shadow: inset 0 -3px 0 #9fd3ff; }
+
+.term-extras-dots {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    height: 9px;
+    align-items: center;
+}
+.term-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #6b6d71;
+}
+.term-dot.on { background: #e8e8e6; }
+
+@media (min-width: 600px) {
+    .term-key { height: 34px; font-size: 15px; }
+    .term-key.mod { font-size: 13px; }
+    .term-extras-keys { gap: 4px; padding: 0 4px; }
+}
+
+/* ---- Popups -------------------------------------------------------------------- */
+
+.term-anchor {
+    position: fixed;
+    width: 1px;
+    height: 1px;
+    pointer-events: none;
+}
+
+.term-dialog-buttons { display: flex; gap: 8px; margin-top: 10px; }
+.term-dialog-buttons > * { flex: 1; }
+
+.term-help-scroll { max-height: 55vh; overflow-y: auto; }
+.term-help { width: 100%; border-collapse: collapse; font-size: 14px; color: var(--pui-text); }
+.term-help th { text-align: left; font-weight: 600; padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap; }
+.term-help td { padding: 4px 0; color: var(--pui-text-dim); }

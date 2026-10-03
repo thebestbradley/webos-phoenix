@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Enyo 2 Demo: three jigsaw pieces fitted together, after the Enyo 1.0
+     framework's icon.png (enyojs/enyo-1.0, Apache-2.0). -->
+<defs>
+  <!-- A piece 80 units square: knobs out at the top and right, holes in
+       at the bottom and left, so pieces side by side fit. -->
+  <path id="piece" d="M0 0H30C28 -16 52 -16 50 0H80V30C96 28 96 52 80 50V80H50C52 64 28 64 30 80H0V50C16 52 16 28 0 30Z"/>
+  <linearGradient id="yellow" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#fff2a0"/>
+    <stop offset="0.5" stop-color="#f7cf2a"/>
+    <stop offset="1" stop-color="#c79a08"/>
+  </linearGradient>
+  <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#9fd2ff"/>
+    <stop offset="0.5" stop-color="#2a8de6"/>
+    <stop offset="1" stop-color="#145aa8"/>
+  </linearGradient>
+  <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#c3f09a"/>
+    <stop offset="0.5" stop-color="#5cbf2a"/>
+    <stop offset="1" stop-color="#2f7d12"/>
+  </linearGradient>
+  <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#fff" stop-opacity="0.55"/>
+    <stop offset="0.5" stop-color="#fff" stop-opacity="0"/>
+  </linearGradient>
+</defs>
+<g transform="translate(4 52) rotate(-12 110 80) scale(1.1)">
+  <!-- Each piece: its edge (thickness) below, then its face. -->
+  <g filter="url(#c-lift)">
+    <use href="#piece" x="0" y="74" fill="#7a5d04"/>
+    <use href="#piece" x="0" y="68" fill="url(#yellow)" stroke="#6b5203" stroke-width="2"/>
+    <use href="#piece" x="0" y="68" fill="url(#gloss)"/>
+  </g>
+  <g filter="url(#c-lift)">
+    <use href="#piece" x="82" y="74" fill="#0d3c72"/>
+    <use href="#piece" x="82" y="68" fill="url(#blue)" stroke="#0b3462" stroke-width="2"/>
+    <use href="#piece" x="82" y="68" fill="url(#gloss)"/>
+  </g>
+  <g filter="url(#c-lift)">
+    <use href="#piece" x="84" y="-8" fill="#1f560a"/>
+    <use href="#piece" x="84" y="-14" fill="url(#green)" stroke="#1d4f0a" stroke-width="2"/>
+    <use href="#piece" x="84" y="-14" fill="url(#gloss)"/>
+  </g>
+</g>
+</svg>

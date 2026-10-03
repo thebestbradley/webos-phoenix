@@ -1,0 +1,267 @@
+/* webOS Phoenix overlay (tools/hidpi-art.py): the original stylesheet, with each
+   picture that has HiDPI variants asked for as an image set of them
+   (docs/spec/hidpi-art.md). Do not edit; regenerate. */
+/* @@@LICENSE
+*
+*      Copyright (c) 2010-2013 LG Electronics, Inc.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+* http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*
+* LICENSE@@@ */
+
+/* Attachments */
+
+.mail-attachment {
+    font-size: 16px;
+    padding: 0px;
+    min-height: 48px;
+    line-height: 40px;
+    /*background-color: #eee;*/
+    border-bottom: 1px #ccc solid;
+    /*	border-bottom: #666;*/
+    /*background: -webkit-image-set(url(../images/attachments-bg-tile.png) 1x, url(../images/attachments-bg-tile@2x.png) 2x, url(../images/attachments-bg-tile@3x.png) 3x) repeat-x;*/
+    position: relative;
+}
+
+.outer-controls:active {
+    color: #fff !important;
+    background: -webkit-image-set(url(../images/selection-gradient-default.png) 1x, url(../images/selection-gradient-default@2x.png) 2x, url(../images/selection-gradient-default@3x.png) 3x) repeat-x;
+}
+
+.attachment-count {
+    /* copied from dashboard-count */
+    position: absolute;
+    right: -3px;
+    top: -3px;
+
+    line-height: 24px;
+    font-weight: bold;
+    height: 28px;
+    -webkit-border-image: -webkit-image-set(url(../images/attachment-count-badge.png) 1x, url(../images/attachment-count-badge@2x.png) 2x, url(../images/attachment-count-badge@3x.png) 3x) 0 12 28 12;
+    -webkit-box-sizing: border-box;
+    border-width: 0px 12px 0px 12px;
+}
+
+.attachment-count-label {
+    margin: 0px -4px;
+    font-size: 16px;
+    color: #fff;
+}
+
+.grayed-out {
+    color: #777;
+}
+
+.mail-attachment:active .grayed-out {
+    color: #fff;
+}
+
+.attachment-icon-label {
+    padding-top: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    position: relative;
+}
+
+.attachment-icon {
+    position: relative;
+    height: 41px;
+    width: 41px;
+    float: left;
+    /*margin: 0px 7px 0px 1px;*/
+    margin: 4px 7px 3px 10px;
+    /*	background: -webkit-image-set(url(../images/icon_unknown.png) 1x, url(../images/icon_unknown@2x.png) 2x, url(../images/icon_unknown@3x.png) 3x) center center no-repeat;*/
+    background: -webkit-image-set(url(../images/icon_generic_attch.png) 1x, url(../images/icon_generic_attch@2x.png) 2x, url(../images/icon_generic_attch@3x.png) 3x) center center no-repeat;
+}
+
+.attachment-icon-thumbnail {
+    width: 31px;
+    height: 31px;
+    margin: 3px 5px 7px 5px;
+}
+
+.enyo-progress-button-client > .audio-info-box {
+    position: relative;
+    top: -6px;
+    left: 0px;
+    margin: 0 0 0 -10px;
+}
+
+.download-icon {
+    display: inline;
+    margin-left: -48px;
+    background: -webkit-image-set(url(../images/icon_download.png) 1x, url(../images/icon_download@2x.png) 2x, url(../images/icon_download@3x.png) 3x) center center no-repeat;
+}
+
+/*.attachment-icon.generic 	{ background: -webkit-image-set(url(../images/icon_generic_attch.png) 1x, url(../images/icon_generic_attch@2x.png) 2x, url(../images/icon_generic_attch@3x.png) 3x) center center no-repeat; }*/
+.attachment-icon.image {
+    background: -webkit-image-set(url(../images/icon_image.png) 1x, url(../images/icon_image@2x.png) 2x, url(../images/icon_image@3x.png) 3x) center center no-repeat;
+}
+
+.attachment-icon.audio {
+    background: -webkit-image-set(url(../images/icon_music.png) 1x, url(../images/icon_music@2x.png) 2x, url(../images/icon_music@3x.png) 3x) center center no-repeat;
+}
+
+.attachment-icon.pdf {
+    background: -webkit-image-set(url(../images/icon_pdf.png) 1x, url(../images/icon_pdf@2x.png) 2x, url(../images/icon_pdf@3x.png) 3x) center center no-repeat;
+}
+
+.attachment-icon.ppt {
+    background: -webkit-image-set(url(../images/icon_ppt.png) 1x, url(../images/icon_ppt@2x.png) 2x, url(../images/icon_ppt@3x.png) 3x) center center no-repeat;
+}
+
+.attachment-icon.txt {
+    background: -webkit-image-set(url(../images/icon_txt.png) 1x, url(../images/icon_txt@2x.png) 2x, url(../images/icon_txt@3x.png) 3x) center center no-repeat;
+}
+
+.attachment-icon.video {
+    background: -webkit-image-set(url(../images/icon_video.png) 1x, url(../images/icon_video@2x.png) 2x, url(../images/icon_video@3x.png) 3x) center center no-repeat;
+}
+
+.attachment-icon.msword {
+    background: -webkit-image-set(url(../images/icon_word.png) 1x, url(../images/icon_word@2x.png) 2x, url(../images/icon_word@3x.png) 3x) center center no-repeat;
+}
+
+.attachment-icon.vcard {
+    background: -webkit-image-set(url(../images/icon_vcard.png) 1x, url(../images/icon_vcard@2x.png) 2x, url(../images/icon_vcard@3x.png) 3x) center center no-repeat;
+}
+
+.attachment-icon.xls {
+    background: -webkit-image-set(url(../images/icon_xls.png) 1x, url(../images/icon_xls@2x.png) 2x, url(../images/icon_xls@3x.png) 3x) center center no-repeat;
+}
+
+.download-background {
+    z-index: -1;
+    position: absolute;
+    /*	min-height: 33px;*/
+    height: 18px;
+    margin: 0px 0px -15px 0px;
+    width: 252px;
+    right: 0px;
+    background-color: #dedede;
+    border-width: 15px;
+    -webkit-border-image: -webkit-image-set(url(../images/download-background.png) 1x, url(../images/download-background@2x.png) 2x, url(../images/download-background@3x.png) 3x) 15 15 15 15 repeat repeat;
+    border-image-width: auto;
+}
+
+.download-progress {
+    z-index: -1;
+    position: absolute;
+    height: 14px;
+    width: 10px;
+    left: 0px;
+    background-color: #ececec;
+    border-width: 15px;
+    -webkit-border-image: -webkit-image-set(url(../images/download-progress.png) 1x, url(../images/download-progress@2x.png) 2x, url(../images/download-progress@3x.png) 3x) 15 15 15 15 repeat repeat;
+}
+
+.download-cancel {
+    position: relative;
+    float: right;
+    padding: 0px 10px;
+    width: 36px;
+    height: 48px;
+    background: -webkit-image-set(url(../images/download-cancel.png) 1x, url(../images/download-cancel@2x.png) 2x, url(../images/download-cancel@3x.png) 3x) center 60% no-repeat;
+}
+
+.attachment-progress {
+    position: absolute;
+    background-color: #dedede;
+    border-width: 15px;
+    height: 51px;
+    width: 100%;
+    top: 0px;
+    z-index: 0;
+
+    -webkit-border-image: -webkit-image-set(url(../images/download-background.png) 1x, url(../images/download-background@2x.png) 2x, url(../images/download-background@3x.png) 3x) 15 15 15 15 repeat repeat;
+}
+
+.attachment-progress > .enyo-progress-bar-inner {
+    height: 21px;
+    margin-top: -15px;
+    margin-left: -15px;
+    left: 0px;
+    background-color: #ececec;
+    border-width: 15px;
+    -webkit-border-image: -webkit-image-set(url(../images/download-progress.png) 1x, url(../images/download-progress@2x.png) 2x, url(../images/download-progress@3x.png) 3x) 15 15 15 15 repeat repeat;
+}
+
+.attachment-preview {
+    height: 600px;
+    width: 600px;
+}
+
+.megaaudio-progress {
+    position: absolute;
+    background-color: #dedede;
+    border-width: 15px;
+    height: 51px;
+    width: 100%;
+    top: 0px;
+    z-index: 0;
+
+    -webkit-border-image: -webkit-image-set(url(../images/download-background.png) 1x, url(../images/download-background@2x.png) 2x, url(../images/download-background@3x.png) 3x) 15 15 15 15 repeat repeat;
+}
+
+.megaaudio-progress > .enyo-progress-bar-inner {
+    height: 21px;
+    margin-top: -15px;
+    margin-left: -15px;
+    left: 0px;
+    background-color: #ececec;
+    border-width: 15px;
+    -webkit-border-image: -webkit-image-set(url(../images/download-progress.png) 1x, url(../images/download-progress@2x.png) 2x, url(../images/download-progress@3x.png) 3x) 15 15 15 15 repeat repeat;
+}
+
+.inline-megaaudio-playbutton {
+    width: 32px;
+    height: 32px;
+    background: -webkit-image-set(url(../images/btn_controls_play.png) 1x, url(../images/btn_controls_play@2x.png) 2x, url(../images/btn_controls_play@3x.png) 3x) top left no-repeat;
+    position: relative;
+    float: right;
+    margin: 8px 0 0 8px;
+}
+
+.inline-megaaudio-playbutton.enyo-button-depressed {
+    background: -webkit-image-set(url(../images/btn_controls_play.png) 1x, url(../images/btn_controls_play@2x.png) 2x, url(../images/btn_controls_play@3x.png) 3x) center -32px no-repeat;
+}
+
+/* ErrorDialog */
+
+.error-details-toggle {
+    margin-top: 10px;
+    font-size: 15px;
+    color: #2D6C94;
+    text-transform: capitalize;
+}
+
+.error-details-text {
+}
+
+.error-details-raw {
+    font-style: italic;
+}
+
+/* Setup error dialog */
+.server-message {
+    font-style: italic;
+}
+
+.ringtoneSelected {
+    color: rgb(31, 117, 191);
+    text-transform: uppercase;
+    text-align: right;
+    font-size: 13px;
+    min-width: 200px;
+}

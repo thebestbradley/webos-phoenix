@@ -1,0 +1,261 @@
+/* Copyright (c) 2026 webOS Phoenix contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Layout and the note's Markdown in Ionic's colours (its --ion-* variables,
+ * so both modes and the dark palette apply). */
+
+/* Tablet: the list and the note side by side inside the page. */
+.columns {
+    display: flex;
+    height: 100%;
+}
+
+.pane {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    height: 100%;
+    contain: layout size style;
+}
+
+.list-pane {
+    flex: 0 0 min(360px, 40%);
+    border-inline-end: 1px solid var(--ion-border-color, var(--ion-color-step-150, #d7d8da));
+}
+
+.note-pane {
+    flex: 1;
+}
+
+.folder-menu ion-item.selected,
+.note-row.selected {
+    --background: rgba(var(--ion-color-primary-rgb), 0.14);
+}
+
+.note-row h2 {
+    font-weight: 600;
+}
+
+.row-pin {
+    color: var(--ion-color-warning);
+    margin-inline-end: 4px;
+    vertical-align: -2px;
+}
+
+.row-date {
+    font-weight: 600;
+}
+
+.row-folder ion-icon {
+    vertical-align: -2px;
+}
+
+.filters {
+    display: flex;
+    flex-wrap: wrap;
+    padding: 0 12px;
+}
+
+.deleted-note {
+    margin: 4px 24px;
+    font-size: 0.85em;
+}
+
+.empty {
+    padding-top: 30%;
+}
+
+.count {
+    font-size: 0.8em;
+}
+
+.mode-segment {
+    max-width: 280px;
+    margin: 0 auto;
+}
+
+ion-toolbar.progress {
+    --min-height: 32px;
+}
+
+.progress-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+}
+
+.progress-row ion-note {
+    flex: none;
+    font-size: 0.85em;
+}
+
+.aa {
+    font-weight: 600;
+    font-size: 1.1em;
+}
+
+/* The note fills the content; the editor scrolls itself. */
+.note-content::part(scroll) {
+    display: flex;
+    flex-direction: column;
+}
+
+.note-date,
+.note-banner {
+    margin: 8px 16px 0;
+    font-size: 0.8em;
+    color: var(--ion-color-medium);
+}
+
+.note-banner {
+    padding: 8px;
+    border-radius: 8px;
+    background: var(--ion-color-light);
+}
+
+.note-editor {
+    flex: 1;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 0;
+    margin: 0;
+    padding: 12px 20px 40px;
+    border: none;
+    outline: none;
+    resize: none;
+    background: transparent;
+    color: var(--ion-text-color);
+    font-family: "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+    font-size: calc(16px * var(--note-text-scale, 1));
+    line-height: 1.55;
+    caret-color: var(--ion-color-primary);
+}
+
+.note-preview {
+    padding: 8px 20px 48px;
+    color: var(--ion-text-color);
+    font-size: calc(17px * var(--note-text-scale, 1));
+    line-height: 1.5;
+    user-select: text;
+}
+
+.note-preview h1, .note-preview h2, .note-preview h3,
+.note-preview h4, .note-preview h5, .note-preview h6 {
+    font-weight: 700;
+    line-height: 1.2;
+    margin: 1em 0 0.4em;
+}
+.note-preview h1 { font-size: 1.8em; margin-top: 0.3em; }
+.note-preview h2 { font-size: 1.4em; }
+.note-preview h3 { font-size: 1.15em; }
+.note-preview h4, .note-preview h5, .note-preview h6 { font-size: 1em; }
+
+.note-preview p, .note-preview ul, .note-preview ol,
+.note-preview blockquote, .note-preview pre, .note-preview table {
+    margin: 0 0 0.8em;
+}
+
+.note-preview a {
+    color: var(--ion-color-primary);
+}
+
+.note-preview ul, .note-preview ol {
+    padding-inline-start: 1.6em;
+}
+
+.note-preview li.task {
+    list-style: none;
+    margin-inline-start: -1.4em;
+}
+
+.note-preview li.task.done {
+    color: var(--ion-color-medium);
+}
+
+.note-preview input[type="checkbox"] {
+    width: 1.1em;
+    height: 1.1em;
+    margin: 0 0.4em 0 0;
+    vertical-align: -0.15em;
+    accent-color: var(--ion-color-primary);
+}
+
+.note-preview blockquote {
+    margin-inline-start: 0;
+    padding-inline-start: 0.8em;
+    border-inline-start: 3px solid var(--ion-color-primary);
+    color: var(--ion-color-medium);
+}
+
+.note-preview code, .note-preview pre {
+    font-family: "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+    font-size: 0.9em;
+    background: var(--ion-color-light);
+    border-radius: 6px;
+}
+
+.note-preview code {
+    padding: 0.1em 0.3em;
+}
+
+.note-preview pre {
+    padding: 0.6em 0.8em;
+    overflow-x: auto;
+}
+
+.note-preview pre code {
+    padding: 0;
+    background: none;
+}
+
+.note-preview table {
+    border-collapse: collapse;
+}
+
+.note-preview th, .note-preview td {
+    padding: 0.3em 0.8em;
+    border: 1px solid var(--ion-color-step-250, #c8c7cc);
+}
+
+.note-preview th {
+    background: var(--ion-color-light);
+}
+
+.note-preview hr {
+    border: none;
+    border-top: 1px solid var(--ion-color-step-250, #c8c7cc);
+}
+
+.note-preview img {
+    max-width: 100%;
+}
+
+/* The Aa panel (bottom sheet on a phone, popover on a tablet). */
+.format-panel {
+    padding: 12px 12px 16px;
+}
+
+.format-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 12px;
+}
+
+.format-row ion-button {
+    margin: 0;
+    text-transform: none;
+}
+
+.inline-bold { font-weight: 800; }
+.inline-italic { font-style: italic; }
+.inline-strikethrough { text-decoration: line-through; }
+
+.format-popover {
+    --width: 380px;
+}
+
+.size-small { font-size: 0.8em; }
+.size-large { font-size: 1.3em; }

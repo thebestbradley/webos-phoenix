@@ -16,6 +16,7 @@ import WebOSCompositorBase 1.0
 import WebOSCompositor 1.0
 import Phoenix.Shell
 import Phoenix.Lsm
+import Phoenix.Native
 
 FocusScope {
     id: root
@@ -38,14 +39,16 @@ FocusScope {
         anchors.fill: parent
         focus: true
         formFactor: "auto"
+        hardwareHomeButton: DeviceConfig.hardwareHomeButton
         source: LsmWindowSource { id: windows }
         system: LsmSystemStatus {}
+        // OSE's own keyboard (Maliit through com.webos.service.ime, drawn in
+        // the stock KeyboardView below) stays the device's IME for now; the
+        // shell makes room for its panel as it did for its own keyboard
+        // (positive space, the tablet's bezel flick). BaseView.isOpen
+        // (luna-surfacemanager views/base/BaseView.qml:29).
+        platformKeyboardHeight: keyboardViewId.isOpen ? keyboardViewId.height : 0
         Component.onCompleted: phoenix.unlock()
-    }
-
-    Connections {
-        target: windows
-        function onCardFocusRequested(uid) { phoenix.cardView.focusLaunched(uid); }
     }
 
     // Kept for controller compatibility; Phoenix owns card surfaces.

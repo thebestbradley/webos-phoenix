@@ -1,0 +1,12 @@
+{
+    "appId": "org.webosphoenix.filemanager",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": ["org.webosphoenix.filemanager"],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.filemanager",
+            "outbound": []
+        }
+    ]
+}

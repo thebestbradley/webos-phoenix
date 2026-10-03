@@ -1,0 +1,390 @@
+{
+    "//": [
+        "Phoenix's launcher icons (docs/spec/app-icons.md), drawn by tools/render-app-icons.cjs.",
+        "platter: disc (user apps) or diamond (system apps); object: objects/<name>.svg (default: the icon's name);",
+        "out: where the PNGs go, without .png (icon.png is 64 px; icon-128x128.png, icon-256x256.png, icon-512x512.png beside it);",
+        "base, foot (diamond only): the y where the object's foot meets the glass, and half its width there."
+    ],
+    "phone": {
+        "platter": "disc",
+        "out": [
+            "apps/phone/public/icon"
+        ]
+    },
+    "messaging": {
+        "platter": "disc",
+        "out": [
+            "apps/messaging/public/icon"
+        ]
+    },
+    "camera": {
+        "platter": "disc",
+        "out": [
+            "apps/camera/public/icon"
+        ]
+    },
+    "photos": {
+        "platter": "disc",
+        "out": [
+            "apps/photos/public/icon"
+        ]
+    },
+    "music": {
+        "platter": "disc",
+        "out": [
+            "apps/music/public/icon"
+        ]
+    },
+    "videos": {
+        "platter": "disc",
+        "out": [
+            "apps/videos/public/icon"
+        ]
+    },
+    "podcasts": {
+        "platter": "disc",
+        "out": [
+            "apps/podcasts/public/icon"
+        ]
+    },
+    "maps": {
+        "platter": "disc",
+        "out": [
+            "apps/maps/public/icon"
+        ]
+    },
+    "weather": {
+        "platter": "disc",
+        "out": [
+            "apps/weather/public/icon"
+        ]
+    },
+    "tasks": {
+        "platter": "disc",
+        "out": [
+            "apps/tasks/public/icon"
+        ]
+    },
+    "agenda": {
+        "platter": "disc",
+        "out": [
+            "apps/agenda/public/icon"
+        ]
+    },
+    "voicememos": {
+        "platter": "disc",
+        "out": [
+            "apps/voicememos/public/icon"
+        ]
+    },
+    "docview": {
+        "platter": "disc",
+        "out": [
+            "apps/docview/public/icon"
+        ]
+    },
+    "pdfview": {
+        "platter": "disc",
+        "out": [
+            "apps/pdfview/public/icon"
+        ]
+    },
+    "passwords": {
+        "platter": "disc",
+        "out": [
+            "apps/passwords/public/icon"
+        ]
+    },
+    "authenticator": {
+        "platter": "disc",
+        "out": [
+            "apps/authenticator/public/icon"
+        ]
+    },
+    "flashlight": {
+        "platter": "disc",
+        "out": [
+            "apps/flashlight/public/icon"
+        ]
+    },
+    "scanner": {
+        "platter": "disc",
+        "out": [
+            "apps/scanner/public/icon"
+        ]
+    },
+    "files": {
+        "platter": "disc",
+        "out": [
+            "apps/files/public/icon"
+        ]
+    },
+    "marketplace": {
+        "platter": "disc",
+        "out": [
+            "apps/marketplace/public/icon"
+        ]
+    },
+    "notes-agate": {
+        "platter": "disc",
+        "out": [
+            "apps/enact-notes-agate/webos-meta/icon"
+        ]
+    },
+    "notes-limestone": {
+        "platter": "disc",
+        "out": [
+            "apps/enact-notes-limestone/webos-meta/icon"
+        ]
+    },
+    "notes-flutter": {
+        "platter": "disc",
+        "out": [
+            "apps/flutter-notes/web/icon"
+        ]
+    },
+    "notes-ionic": {
+        "platter": "disc",
+        "out": [
+            "apps/ionic-notes/public/icon"
+        ]
+    },
+    "enyo2demo": {
+        "platter": "disc",
+        "out": [
+            "apps/enyo2demo/icon"
+        ]
+    },
+    "settings": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 22,
+        "out": [
+            "apps/settings/public/icon"
+        ]
+    },
+    "firstuse": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 46,
+        "out": [
+            "apps/firstuse/public/icon"
+        ]
+    },
+    "help": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 24,
+        "out": [
+            "apps/help/public/icon"
+        ]
+    },
+    "sharesheet": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 58,
+        "out": [
+            "apps/sharesheet/public/icon"
+        ]
+    },
+    "screenshot": {
+        "platter": "diamond",
+        "base": 178,
+        "foot": 50,
+        "out": [
+            "apps/screenshot/public/icon"
+        ]
+    },
+    "printmanager": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 66,
+        "out": [
+            "apps/printmanager/public/icon"
+        ]
+    },
+    "notificationlab": {
+        "platter": "diamond",
+        "base": 178,
+        "foot": 60,
+        "out": [
+            "apps/notificationlab/public/icon"
+        ]
+    },
+    "terminal": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 40,
+        "out": [
+            "apps/terminal/public/icon"
+        ]
+    },
+    "dav": {
+        "platter": "diamond",
+        "base": 172,
+        "foot": 30,
+        "out": [
+            "apps/dav/icon"
+        ]
+    },
+    "wifi": {
+        "platter": "diamond",
+        "base": 172,
+        "foot": 16,
+        "out": [
+            "apps/settings/public/icons/wifi"
+        ]
+    },
+    "bluetooth": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 30,
+        "out": [
+            "apps/settings/public/icons/bluetooth"
+        ]
+    },
+    "vpn": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 14,
+        "out": [
+            "apps/settings/public/icons/vpn"
+        ]
+    },
+    "airplane": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 8,
+        "out": [
+            "apps/settings/public/icons/airplane"
+        ]
+    },
+    "exhibition": {
+        "platter": "diamond",
+        "base": 180,
+        "foot": 62,
+        "out": [
+            "apps/settings/public/icons/exhibition"
+        ]
+    },
+    "screen": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 52,
+        "out": [
+            "apps/settings/public/icons/screen"
+        ]
+    },
+    "sounds": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 48,
+        "out": [
+            "apps/settings/public/icons/sounds"
+        ]
+    },
+    "datetime": {
+        "platter": "diamond",
+        "base": 178,
+        "foot": 44,
+        "out": [
+            "apps/settings/public/icons/datetime"
+        ]
+    },
+    "language": {
+        "platter": "diamond",
+        "base": 178,
+        "foot": 42,
+        "out": [
+            "apps/settings/public/icons/language"
+        ]
+    },
+    "textassist": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 70,
+        "out": [
+            "apps/settings/public/icons/textassist"
+        ]
+    },
+    "justtype": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 14,
+        "out": [
+            "apps/settings/public/icons/justtype"
+        ]
+    },
+    "certificates": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 58,
+        "out": [
+            "apps/settings/public/icons/certificates"
+        ]
+    },
+    "phoneprefs": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 46,
+        "out": [
+            "apps/settings/public/icons/phoneprefs"
+        ]
+    },
+    "location": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 12,
+        "out": [
+            "apps/settings/public/icons/location"
+        ]
+    },
+    "emergency": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 62,
+        "out": [
+            "apps/settings/public/icons/emergency"
+        ]
+    },
+    "accessibility": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 20,
+        "out": [
+            "apps/settings/public/icons/accessibility"
+        ]
+    },
+    "deviceinfo": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 50,
+        "out": [
+            "apps/settings/public/icons/deviceinfo"
+        ]
+    },
+    "backup": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 52,
+        "out": [
+            "apps/settings/public/icons/backup"
+        ]
+    },
+    "updates": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 60,
+        "out": [
+            "apps/settings/public/icons/updates"
+        ]
+    },
+    "devmode": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 68,
+        "out": [
+            "apps/settings/public/icons/devmode"
+        ]
+    }
+}

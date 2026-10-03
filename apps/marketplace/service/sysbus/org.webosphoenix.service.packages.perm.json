@@ -1,0 +1,3 @@
+{
+    "org.webosphoenix.service.packages": ["applicationinstall.management", "activity.operation"]
+}

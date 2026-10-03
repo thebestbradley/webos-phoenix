@@ -1,0 +1,13 @@
+{
+    "//": "Phoenix compat: the system's URL handlers, which luna-sysmgr kept in this file. enyo.WebView (the browser) reads it to hand these links to their apps instead of loading them.",
+    "redirects": [
+        { "url": "^mailto:", "appId": "com.palm.app.email" },
+        { "url": "^tel:", "appId": "org.webosphoenix.phone" },
+        { "url": "^sms:", "appId": "org.webosphoenix.messaging" },
+        { "url": "^im:", "appId": "org.webosphoenix.messaging" },
+        { "url": "^geo:", "appId": "org.webosphoenix.maps" },
+        { "url": "^maploc:", "appId": "org.webosphoenix.maps" },
+        { "url": "^mapto:", "appId": "org.webosphoenix.maps" }
+    ],
+    "commands": []
+}

@@ -1,0 +1,26 @@
+{
+    "id": "org.webosphoenix.messaging",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Messaging",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "uiRevision": 2,
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): quickLaunch puts the app in that quick launch slot (1-4). shareTargets: what it takes from the share sheet (docs/SHARE-AND-FILES.md): text, links and a picture (a picture message).",
+        "quickLaunch": 3,
+        "shareTargets": [
+            {
+                "types": [
+                    "text/plain",
+                    "text/uri-list",
+                    "image/*"
+                ]
+            }
+        ]
+    }
+}

@@ -1,0 +1,23 @@
+{
+    "id": "org.webosphoenix.camera",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Camera",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "iconColor": "#555c66",
+    "uiRevision": 2,
+    "//requiredPermissions": "OSE access control groups for the services the app calls (the groups in each service's sysbus api.json).",
+    "requiredPermissions": [
+        "application.launcher",
+        "application.operation",
+        "mediaindexer.operation",
+        "camera.query",
+        "camera.operation",
+        "media.operation"
+    ]
+}

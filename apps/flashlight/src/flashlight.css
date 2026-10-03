@@ -1,0 +1,94 @@
+/*
+ * Copyright (c) 2026 webOS Phoenix contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Flashlight: a dark card like the webOS 2.x Camera, one big brushed-metal
+ * button that glows warm white when the light is on, the Heritage slider
+ * for the LED's brightness and a dark command menu to pick LED or screen.
+ */
+
+html:has(> body.fl-body), body.pui-app.fl-body { background: #000; }
+body.pui-app { overflow: hidden; }
+#root { height: 100%; }
+
+.fl-app {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    color: #d8d8d8;
+    background: radial-gradient(ellipse at 50% 40%, #3a3a3a 0%, #1b1b1b 55%, #050505 100%);
+    transition: background 0.3s;
+    user-select: none;
+}
+.fl-app.lit.led { background: radial-gradient(ellipse at 50% 40%, #5a5241 0%, #26221b 55%, #070605 100%); }
+
+.fl-stage {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 0 24px 64px;
+}
+
+/* ---- The button ------------------------------------------------------------------------ */
+
+.fl-power {
+    position: relative;
+    width: 176px;
+    height: 176px;
+    padding: 9px;
+    border: 0;
+    border-radius: 50%;
+    background: linear-gradient(#8c8c8c, #2b2b2b 55%, #5a5a5a);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+}
+.fl-power:disabled { opacity: 0.5; }
+.fl-power-face {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: #6d6d6d;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 30%, #4a4a4a, #1e1e1e 70%);
+    box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.9), 0 1px 0 rgba(255, 255, 255, 0.15);
+    transition: background 0.2s, box-shadow 0.2s;
+}
+.fl-power:active .fl-power-face { background: radial-gradient(circle at 50% 30%, #3a3a3a, #141414 70%); }
+.fl-power.on .fl-power-face {
+    color: #fff8e6;
+    background: radial-gradient(circle at 50% 35%, #fffdf3 0%, #ffe9a8 38%, #d99b2b 78%, #8a5a12 100%);
+    box-shadow: inset 0 2px 6px rgba(120, 70, 0, 0.6), 0 0 38px 10px rgba(255, 226, 150, 0.55);
+}
+.fl-power.on .fl-power-face svg { filter: drop-shadow(0 1px 1px rgba(120, 70, 0, 0.8)); }
+
+.fl-status { min-height: 22px; font-size: 18px; text-align: center; color: #bdbdbd; text-shadow: 0 1px 0 #000; }
+.fl-error { color: #ff8a80; font-size: 15px; text-align: center; }
+
+/* ---- Brightness ------------------------------------------------------------------------- */
+
+.fl-brightness { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 320px; }
+.fl-brightness .pui-slider { flex: 1; }
+.fl-brightness-icon {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #fff 0 35%, transparent 36%),
+                repeating-conic-gradient(#ddd 0 10deg, transparent 10deg 45deg);
+    opacity: 0.85;
+}
+.fl-brightness-icon.small { width: 14px; height: 14px; opacity: 0.55; }
+
+/* ---- Screen light --------------------------------------------------------------------- */
+
+.fl-screen { position: fixed; inset: 0; z-index: 20; background: #fff; cursor: pointer; }
+
+.fl-toolbar .pui-grouped-button { min-width: 88px; }

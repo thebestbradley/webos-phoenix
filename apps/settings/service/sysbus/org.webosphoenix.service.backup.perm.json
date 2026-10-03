@@ -1,0 +1,3 @@
+{
+    "org.webosphoenix.service.backup": ["database.operation", "activity.operation"]
+}

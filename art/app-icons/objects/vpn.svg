@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- VPN: a steel-blue shield with a gold padlock. Original Phoenix art. -->
+<defs>
+  <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9cc0e4"/><stop offset="0.45" stop-color="#3f6fa6"/><stop offset="1" stop-color="#1d3b66"/></linearGradient>
+  <path id="s2" d="M128 30L188 50V98C188 136 164 160 128 176C92 160 68 136 68 98V50Z"/>
+  <linearGradient id="g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.6"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.12"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <linearGradient id="g4" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff1b0"/><stop offset="0.5" stop-color="#e8b73a"/><stop offset="1" stop-color="#a8740e"/></linearGradient>
+</defs>
+<g>
+<use href="#s2" y="-8" fill="#c3d9ef" stroke="#0f2443" stroke-width="2.5"/>
+<use href="#s2" y="-7" fill="#c3d9ef" stroke="#0f2443" stroke-width="2.5"/>
+<use href="#s2" y="-6" fill="#c3d9ef" stroke="#0f2443" stroke-width="2.5"/>
+<use href="#s2" y="-5" fill="#c3d9ef" stroke="#0f2443" stroke-width="2.5"/>
+<use href="#s2" y="-4" fill="#c3d9ef" stroke="#0f2443" stroke-width="2.5"/>
+<use href="#s2" y="-3" fill="#c3d9ef" stroke="#0f2443" stroke-width="2.5"/>
+<use href="#s2" y="-2" fill="#c3d9ef" stroke="#0f2443" stroke-width="2.5"/>
+<use href="#s2" y="-1" fill="#c3d9ef" stroke="#0f2443" stroke-width="2.5"/>
+<use href="#s2" fill="url(#g1)" stroke="#0f2443" stroke-width="2.5" stroke-linejoin="round"/>
+<use href="#s2" fill="url(#g3)"/>
+</g>
+<path d="M128 40L180 57V98C180 130 160 152 128 166Z" fill="#fff" opacity="0.1"/>
+<path d="M112 108V96A16 16 0 0 1 144 96V108" fill="none" stroke="#33393f" stroke-width="10"/><path d="M112 108V96A16 16 0 0 1 144 96V108" fill="none" stroke="#dfe3e7" stroke-width="5.5"/>
+<rect x="102" y="104" width="52" height="42" rx="6" fill="url(#g4)" stroke="#5e3f06" stroke-width="2.5"/>
+<circle cx="128" cy="121" r="6" fill="#4a3205"/><path d="M128 124V136" stroke="#4a3205" stroke-width="5" stroke-linecap="round"/>
+</svg>

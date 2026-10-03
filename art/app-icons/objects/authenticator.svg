@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Authenticator: a security token, its display showing a one-time code.
+     Original Phoenix art (legacy webOS had no authenticator). -->
+<defs>
+  <linearGradient id="shell" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#5f7fa8"/>
+    <stop offset="0.5" stop-color="#2f4e7a"/>
+    <stop offset="1" stop-color="#18304f"/>
+  </linearGradient>
+  <linearGradient id="lcd" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#c9d8b4"/>
+    <stop offset="1" stop-color="#a3b78a"/>
+  </linearGradient>
+  <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#fff" stop-opacity="0.6"/>
+    <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="0.5" stop-color="#a9afb5"/>
+    <stop offset="1" stop-color="#60676e"/>
+  </linearGradient>
+  <!-- One seven-segment digit cell, 18 x 32; segments a-g. -->
+  <g id="sa"><path d="M3 0H15L12 3H6Z"/></g>
+  <g id="sb"><path d="M15.5 1V15L12.5 13V4Z"/></g>
+  <g id="sc"><path d="M15.5 17V31L12.5 28V19Z"/></g>
+  <g id="sd"><path d="M3 32H15L12 29H6Z"/></g>
+  <g id="se"><path d="M2.5 17V31L5.5 28V19Z"/></g>
+  <g id="sf"><path d="M2.5 1V15L5.5 13V4Z"/></g>
+  <g id="sg"><path d="M4 16L6 14.5H12L14 16L12 17.5H6Z"/></g>
+</defs>
+<g filter="url(#c-lift)" transform="rotate(-10 128 128)">
+  <!-- Key ring through the lanyard hole. -->
+  <circle cx="44" cy="92" r="26" fill="none" stroke="#3d4248" stroke-width="9"/>
+  <circle cx="44" cy="92" r="26" fill="none" stroke="url(#ring)" stroke-width="5"/>
+  <!-- The fob. -->
+  <path d="M54 76C54 64 62 58 74 58H214C228 58 236 66 236 80V176C236 190 228 198 214 198H74C62 198 54 190 54 178V148C46 144 42 136 42 128C42 120 46 112 54 108Z" fill="url(#shell)" stroke="#0e1d31" stroke-width="2.5"/>
+  <path d="M60 78C60 68 66 64 76 64H212C224 64 230 70 230 80V108H60Z" fill="url(#gloss)" opacity="0.7"/>
+  <circle cx="62" cy="128" r="8" fill="#0e1d31"/>
+  <!-- Display: 482 913. -->
+  <rect x="84" y="94" width="134" height="62" rx="6" fill="url(#lcd)" stroke="#0e1d31" stroke-width="2.5"/>
+  <rect x="86" y="96" width="130" height="18" rx="4" fill="#fff" opacity="0.3"/>
+  <g fill="#1f2a18" transform="translate(94 109)">
+    <g><use href="#sb"/><use href="#sc"/><use href="#sf"/><use href="#sg"/></g>
+    <g transform="translate(19 0)"><use href="#sa"/><use href="#sb"/><use href="#sc"/><use href="#sd"/><use href="#se"/><use href="#sf"/><use href="#sg"/></g>
+    <g transform="translate(38 0)"><use href="#sa"/><use href="#sb"/><use href="#sd"/><use href="#se"/><use href="#sg"/></g>
+    <g transform="translate(62 0)"><use href="#sa"/><use href="#sb"/><use href="#sc"/><use href="#sd"/><use href="#sf"/><use href="#sg"/></g>
+    <g transform="translate(81 0)"><use href="#sb"/><use href="#sc"/></g>
+    <g transform="translate(100 0)"><use href="#sa"/><use href="#sb"/><use href="#sc"/><use href="#sd"/><use href="#sg"/></g>
+  </g>
+  <!-- Time left: a row of bars. -->
+  <g fill="#c6e3ff" opacity="0.85">
+    <rect x="96" y="170" width="16" height="8" rx="2"/>
+    <rect x="118" y="170" width="16" height="8" rx="2"/>
+    <rect x="140" y="170" width="16" height="8" rx="2"/>
+    <rect x="162" y="170" width="16" height="8" rx="2" opacity="0.35"/>
+    <rect x="184" y="170" width="16" height="8" rx="2" opacity="0.35"/>
+  </g>
+</g>
+</svg>

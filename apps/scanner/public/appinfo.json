@@ -1,0 +1,27 @@
+{
+    "id": "org.webosphoenix.scanner",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "QR Scanner",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "iconColor": "#333333",
+    "uiRevision": 2,
+    "keywords": ["QR Code", "Barcode", "Scan", "Wi-Fi Code", "Reader"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launcherTab": 0
+    },
+    "//requiredPermissions": "OSE access control groups for the services the app calls: the camera, the application manager (open, launch, getAppInfo) and LuneOS torchd's torch.operation.",
+    "requiredPermissions": [
+        "camera.query",
+        "camera.operation",
+        "application.launcher",
+        "application.operation",
+        "torch.operation"
+    ]
+}

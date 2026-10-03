@@ -1,0 +1,59 @@
+/* Phoenix compat: Clock on a phone.
+ *
+ * The clock faces are TouchPad artwork at fixed sizes: the analog faces
+ * are 514x514 px, the digital flip clock 745 px wide. In a 320 px phone
+ * card they are cropped, and the analog hands (z-index 913) cover the
+ * toolbar so its Clock/Alarms buttons cannot be tapped. Scale the faces
+ * down to fit the space above the toolbar, keeping the same artwork, and
+ * let the 500 px alarm list and its 320 px button use the card's width.
+ */
+
+.clockContainer {
+	overflow: hidden;
+	position: relative;
+}
+
+@media (max-width: 560px), (max-height: 560px) {
+	/* Centre explicitly: auto margins cannot go negative when the face is
+	   larger than the card. */
+	.analog {
+		left: 50%;
+		top: 50%;
+		right: auto;
+		bottom: auto;
+		margin: -257px 0 0 -257px;
+		-webkit-transform: scale(0.58);
+		transform: scale(0.58);
+	}
+
+	.digitalClock {
+		position: absolute;
+		left: 50%;
+		top: 0;
+		bottom: 0;
+		margin: 0 0 0 -372px;
+		-webkit-transform: scale(0.41);
+		transform: scale(0.41);
+	}
+
+	/* The list is 70% of the pane with the button below it; leave room
+	   for the button above the toolbar. */
+	.alarms {
+		width: auto !important;
+		height: 55% !important;
+		margin: 60px 8px 0 8px;
+	}
+
+	.alarms .enyo-button {
+		width: auto !important;
+		max-width: 320px;
+	}
+}
+
+/* Landscape phone: less height than width. */
+@media (max-height: 360px) {
+	.analog {
+		-webkit-transform: scale(0.48);
+		transform: scale(0.48);
+	}
+}

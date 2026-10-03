@@ -1,0 +1,43 @@
+{
+    "id": "com.palm.chatthread:1",
+    "owner": "org.webosphoenix.messaging",
+    "sync": true,
+    "indexes": [
+        {
+            "name": "byperson",
+            "props": [
+                {
+                    "name": "personId"
+                }
+            ]
+        },
+        {
+            "name": "bytimestamp",
+            "props": [
+                {
+                    "name": "flags.visible",
+                    "default": true
+                },
+                {
+                    "name": "timestamp"
+                }
+            ]
+        },
+        {
+            "name": "byunread",
+            "props": [
+                {
+                    "name": "unreadCount"
+                }
+            ]
+        },
+        {
+            "name": "byNormalizedAddress",
+            "props": [
+                {
+                    "name": "normalizedAddress"
+                }
+            ]
+        }
+    ]
+}

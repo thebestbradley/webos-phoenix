@@ -1,0 +1,182 @@
+/*
+ * Copyright (c) 2026 webOS Phoenix contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Camera: black card, viewfinder, dark control bar (webOS 2.x Camera).
+ */
+
+body.pui-app { overflow: hidden; }
+#root { height: 100%; }
+
+.cam { position: fixed; inset: 0; display: flex; flex-direction: column; background: #000; color: #fff; }
+
+.cam-view { position: relative; flex: 1; overflow: hidden; background: #000; }
+.cam-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
+
+.cam-message {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0 30px 20px;
+    text-align: center;
+    background: radial-gradient(ellipse at center, #262626, #050505 70%);
+}
+.cam-message-glyph { color: #555; filter: none; margin-bottom: 12px; }
+.cam-message-title { font-size: 20px; font-weight: bold; }
+.cam-message-text { margin-top: 6px; font-size: 15px; color: #999; line-height: 1.35; }
+
+/* ---- Top overlay ------------------------------------------------------------------ */
+
+.cam-top {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    pointer-events: none;
+}
+.cam-top > * { pointer-events: auto; }
+
+.cam-flash, .cam-switch {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 36px;
+    padding: 0 10px 0 6px;
+    color: #fff;
+    font: inherit;
+    font-size: 14px;
+    font-weight: bold;
+    background: linear-gradient(rgba(70, 70, 70, 0.75), rgba(20, 20, 20, 0.75));
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 18px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+    cursor: pointer;
+}
+.cam-flash:active, .cam-switch:active { background: linear-gradient(#1f5f9e, #174876); }
+.cam-flash.on { color: #ffd34d; }
+.cam-flash.off .pui-glyph { opacity: 0.45; }
+.cam-switch { margin-left: auto; padding: 0 8px; }
+
+.cam-rec {
+    position: absolute;
+    left: 50%;
+    top: 12px;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    font-size: 15px;
+    font-weight: bold;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 14px;
+}
+.cam-rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #e0302a; animation: cam-blink 1s steps(2) infinite; }
+@keyframes cam-blink { 50% { opacity: 0.2; } }
+
+/* ---- Capture animation ------------------------------------------------------------ */
+
+.cam-shutter { position: absolute; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
+.cam-shutter span {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 50.5%;
+    background: #000;
+}
+.cam-shutter span:first-child {
+    top: 0;
+    background: linear-gradient(#111, #000 85%, #333);
+    animation: cam-shutter-top 380ms ease-in-out both;
+}
+.cam-shutter span:last-child {
+    bottom: 0;
+    background: linear-gradient(#333, #000 15%, #111);
+    animation: cam-shutter-bottom 380ms ease-in-out both;
+}
+@keyframes cam-shutter-top { 0% { transform: translateY(-100%); } 40%, 55% { transform: none; } 100% { transform: translateY(-100%); } }
+@keyframes cam-shutter-bottom { 0% { transform: translateY(100%); } 40%, 55% { transform: none; } 100% { transform: translateY(100%); } }
+
+.cam-flyer {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border: 3px solid #fff;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.8);
+    pointer-events: none;
+    transform-origin: center;
+    opacity: 0;
+}
+
+/* ---- Control bar ------------------------------------------------------------------ */
+
+.cam-bar {
+    position: relative;
+    z-index: 6;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 66px;
+    padding: 0 8px;
+    background: linear-gradient(#3b3b3b, #1b1b1b 60%, #0e0e0e);
+    border-top: 1px solid #5a5a5a;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 -2px 6px rgba(0, 0, 0, 0.6);
+}
+
+.cam-thumb {
+    flex: none;
+    width: 50px;
+    height: 50px;
+    padding: 0;
+    overflow: hidden;
+    background: #222;
+    border: 2px solid #ddd;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+    cursor: pointer;
+}
+.cam-thumb.empty { border-color: #555; background: linear-gradient(#2c2c2c, #1a1a1a); }
+.cam-thumb img, .cam-thumb video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cam-thumb:active { filter: brightness(0.6); }
+
+.cam-shoot {
+    /* ToolButton art (palm-menu-button.png), wide like the webOS capture button */
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 104px;
+    height: 50px;
+    padding: 0;
+    color: #fff;
+    background: none;
+    border-style: solid;
+    border-width: 0 25px;
+    border-image: -webkit-image-set(url(../../shared/phoenix-ui/assets/enyo/palm-menu-button.png) 1x, url(../../shared/phoenix-ui/assets/enyo/palm-menu-button@2x.png) 2x, url(../../shared/phoenix-ui/assets/enyo/palm-menu-button@3x.png) 3x) 0 25 200 25 fill stretch;
+    cursor: pointer;
+}
+.cam-shoot .pui-glyph { margin: 0 -20px; }
+.cam-shoot:active { border-image-slice: 50 25 150 25 fill; }
+.cam-shoot:disabled { opacity: 0.4; cursor: default; }
+.cam-rec-button { display: block; width: 22px; height: 22px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #ff7a70, #d2261f 60%, #8e110c); box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85); }
+.cam-shoot.stop .cam-rec-button { border-radius: 4px; width: 18px; height: 18px; }
+
+.cam-mode .pui-grouped-button { height: 50px; }
+.cam-mode.locked { opacity: 0.5; }
+
+@media (min-width: 600px) {
+    .cam-bar { height: 74px; padding: 0 24px; }
+    .cam-thumb { width: 58px; height: 58px; }
+    .cam-shoot { width: 140px; }
+}

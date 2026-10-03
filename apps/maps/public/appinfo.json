@@ -1,0 +1,56 @@
+{
+    "id": "org.webosphoenix.maps",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Maps",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "iconColor": "#3f8f3a",
+    "uiRevision": 2,
+    "keywords": ["Map", "Directions", "Navigation", "Navigate", "GPS", "Route", "Location", "OpenStreetMap"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launcherTab": 0
+    },
+    "//universalSearch": "Just Type (com.palm.universalsearch): the \"Search Maps\" action searches for the typed text; the content search finds saved places (searchText, see the kind) and opens them.",
+    "universalSearch": {
+        "action": {
+            "displayName": "Search Maps",
+            "url": "org.webosphoenix.maps",
+            "launchParam": "query"
+        },
+        "dbsearch": {
+            "displayName": "Saved Places",
+            "url": "org.webosphoenix.maps",
+            "launchParam": "placeId",
+            "launchParamDbField": "_id",
+            "displayFields": ["name", "detail"],
+            "dbQuery": {
+                "from": "org.webosphoenix.maps.place:1",
+                "where": [
+                    {
+                        "prop": "searchText",
+                        "op": "?",
+                        "val": "",
+                        "collate": "primary"
+                    }
+                ],
+                "orderBy": "searchText",
+                "desc": false,
+                "limit": 20
+            }
+        }
+    },
+    "//requiredPermissions": "OSE access control groups for the services the app calls (the groups in each service's sysbus api.json).",
+    "requiredPermissions": [
+        "location.query",
+        "database.operation",
+        "application.launcher",
+        "application.operation",
+        "tts.operation"
+    ]
+}

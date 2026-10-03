@@ -1,0 +1,62 @@
+/* Phoenix compat: Just Type on a phone.
+ *
+ * The TouchPad layout centres four fixed-width tabs between two empty
+ * spacer tabs, which leaves no room at 320 px: drop the spacers and let
+ * the four tabs share the width. The search field (570 px) and result
+ * groups (708 px) take the card's width instead.
+ */
+/* Narrower than the TouchPad layout needs (a small tablet, a phone on its
+ * side, a narrowed window): the search field (570 px, border-box) and the
+ * result groups (708 px and 28 px of border) take the width there is, and
+ * never more, so nothing runs off the right edge. Where they fit, the
+ * TouchPad layout is unchanged.
+ */
+.enyo-input, .enyo-input.enyo-input-focus {
+	max-width: calc(100% - 16px);
+}
+.enyo-group, .enyo-group.labeled {
+	max-width: calc(100% - 44px);
+}
+.dbcontent-display1, .dbcontent-display2, .dbcontent-display3 {
+	max-width: 100%;
+}
+
+/* The tabs: under the TouchPad's width, the four share the row without
+ * the spacers (which would clip their names); the smaller type is for
+ * phones. */
+@media (max-width: 767px) {
+	.enyo-radiogroup > .enyo-radiobutton.enyo-button-disabled {
+		display: none;
+	}
+	.enyo-radiogroup {
+		display: -webkit-box;
+		display: flex;
+	}
+	.enyo-radiogroup > .enyo-radiobutton {
+		-webkit-box-flex: 1;
+		flex: 1 1 0;
+		min-width: 0;
+		padding-left: 0;
+		padding-right: 0;
+		border-left-width: 4px;
+		border-right-width: 4px;
+	}
+}
+
+@media (max-width: 480px) {
+	.enyo-radiogroup > .enyo-radiobutton {
+		font-size: 11px;
+	}
+	.enyo-input, .enyo-input.enyo-input-focus {
+		width: auto;
+		margin: 13px 8px;
+	}
+	.enyo-group, .enyo-group.labeled {
+		width: auto;
+		margin: 8px;
+	}
+	.dbcontent-display1, .dbcontent-display2, .dbcontent-display3 {
+		width: auto;
+		max-width: 100%;
+	}
+}

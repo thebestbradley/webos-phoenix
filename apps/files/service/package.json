@@ -1,0 +1,8 @@
+{
+  "name": "org.webosphoenix.filemanager",
+  "version": "0.1.0",
+  "private": true,
+  "description": "webOS Phoenix file manager service (Luna): list, stat, mkdir, copy, move, remove, read, write",
+  "license": "Apache-2.0",
+  "main": "service.js"
+}

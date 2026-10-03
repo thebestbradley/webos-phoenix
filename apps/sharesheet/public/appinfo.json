@@ -1,0 +1,18 @@
+{
+    "id": "org.webosphoenix.sharesheet",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Share",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "uiRevision": 2,
+    "phoenix": {
+        "//": "The system's share sheet and save picker, shown over the app that asks (org.webosphoenix.share/open, org.webosphoenix.filepicker/save); never launched by itself. docs/SHARE-AND-FILES.md.",
+        "launcherTab": 0,
+        "hidden": true
+    }
+}

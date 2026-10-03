@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Exhibition: a phone resting upright on a round Touchstone charger, a
+     clock on its screen. Original Phoenix art. -->
+<defs>
+  <linearGradient id="puck" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#4c5157"/>
+    <stop offset="1" stop-color="#16181b"/>
+  </linearGradient>
+  <linearGradient id="pucktop" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#6f757c"/>
+    <stop offset="1" stop-color="#2c3035"/>
+  </linearGradient>
+  <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#4a4f55"/>
+    <stop offset="0.08" stop-color="#202326"/>
+    <stop offset="1" stop-color="#0c0d0f"/>
+  </linearGradient>
+  <radialGradient id="face" cx="0.5" cy="0.35" r="0.7">
+    <stop offset="0" stop-color="#6a4a8c"/>
+    <stop offset="0.55" stop-color="#26324a"/>
+    <stop offset="1" stop-color="#1d5e93"/>
+  </radialGradient>
+  <linearGradient id="gloss" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#fff" stop-opacity="0.35"/>
+    <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+  </linearGradient>
+  <path id="phone" d="M100 26H156A14 14 0 0 1 170 40V150A14 14 0 0 1 156 164H100A14 14 0 0 1 86 150V40A14 14 0 0 1 100 26Z"/>
+  <clipPath id="screen"><rect x="94" y="42" width="68" height="104" rx="3"/></clipPath>
+</defs>
+<!-- The Touchstone: a dark puck, its top lit faintly blue where it charges. -->
+<ellipse cx="128" cy="168" rx="62" ry="14" fill="url(#puck)" stroke="#08090a" stroke-width="2"/>
+<rect x="66" y="156" width="124" height="12" fill="url(#puck)"/>
+<path d="M66 156V168M190 156V168" stroke="#08090a" stroke-width="2"/>
+<ellipse cx="128" cy="156" rx="62" ry="14" fill="url(#pucktop)" stroke="#08090a" stroke-width="2"/>
+<ellipse cx="128" cy="156" rx="44" ry="8" fill="#5fb8ff" opacity="0.35"/>
+<!-- The phone, resting on it. -->
+<g>
+  <use href="#phone" y="-3" fill="#9aa1a8" stroke="#050607" stroke-width="2.5"/>
+  <use href="#phone" y="-2" fill="#9aa1a8" stroke="#050607" stroke-width="2.5"/>
+  <use href="#phone" y="-1" fill="#9aa1a8" stroke="#050607" stroke-width="2.5"/>
+  <use href="#phone" fill="url(#body)" stroke="#050607" stroke-width="2.5" stroke-linejoin="round"/>
+</g>
+<g clip-path="url(#screen)">
+  <rect x="94" y="42" width="68" height="104" fill="#060708"/>
+  <!-- The Time exhibition's glass clock. -->
+  <circle cx="128" cy="90" r="27" fill="url(#face)" stroke="#9fb4c8" stroke-width="1.5"/>
+  <path d="M128 66V71M128 109V114M104 90H109M147 90H152" stroke="#d5dde5" stroke-width="2" stroke-linecap="round"/>
+  <path d="M128 90L140 80" stroke="#f2f4f6" stroke-width="4" stroke-linecap="round"/>
+  <path d="M128 90L121 107" stroke="#f2f4f6" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="128" cy="90" r="3.5" fill="#f2f4f6"/>
+  <path d="M110 128H146" stroke="#c9d1d9" stroke-width="3" stroke-linecap="round"/>
+  <path d="M94 42H162L94 100Z" fill="url(#gloss)"/>
+</g>
+<rect x="94" y="42" width="68" height="104" rx="3" fill="none" stroke="#000" stroke-width="1.5"/>
+<rect x="117" y="32" width="22" height="4" rx="2" fill="#3a3f44"/>
+<path d="M98 28H158" stroke="#fff" stroke-opacity="0.35" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

@@ -12,6 +12,8 @@ import QtQuick
 import WebOSCoreCompositor 1.0
 import WebOSCompositorBase 1.0
 import WebOSServices 1.0
+import WebOS.Global 1.0
+import Phoenix.Native
 
 Item {
     id: source
@@ -27,7 +29,20 @@ Item {
     property var _hosts: ({})       // uid -> SurfaceHost
     property var _surfaces: []      // [{ uid, item }]
     property int _nextUid: 1
+    property int _nextGroup: 1
     property string _pendingAfterUid: ""
+
+    function newGroupId() {
+        return "g" + (_nextGroup++);
+    }
+
+    // Index just past the stack that holds card index i.
+    function _groupEnd(i) {
+        var gid = cards.get(i).groupId;
+        while (i < cards.count && cards.get(i).groupId === gid)
+            ++i;
+        return i;
+    }
 
     // ---- Apps ------------------------------------------------------------------
 
@@ -59,7 +74,7 @@ Item {
                 if (!lp)
                     continue;
                 source.apps.append({
-                    appId: lp.id, title: lp.title, icon: lp.icon,
+                    appId: lp.id, title: lp.title, icon: lp.icon, largeIcon: "",
                     color: "#666666", glyph: lp.title.charAt(0),
                     tab: 0, quickLaunch: i < 4 ? i + 1 : 0
                 });
@@ -96,10 +111,20 @@ Item {
         _surfaces.push({ uid: uid, item: item });
         _hosts[uid] = hostComponent.createObject(source, { surface: item });
         item.state = Qt.WindowFullScreen;
-        var at = _pendingAfterUid !== "" ? cardIndex(_pendingAfterUid) + 1 : cards.count;
-        if (at <= 0 || at > cards.count)
-            at = cards.count;
-        cards.insert(at, { uid: uid, appId: item.appId, title: item.title || item.appId });
+        // A further window of an app that already has a card joins that
+        // card's stack; anything else starts a new stack to the right of the
+        // active one (CardWindowManager.cpp:556-599).
+        var sibling = cardIndex(runningUid(item.appId));
+        var at, groupId;
+        if (sibling >= 0) {
+            at = _groupEnd(sibling);
+            groupId = cards.get(sibling).groupId;
+        } else {
+            var after = cardIndex(_pendingAfterUid);
+            at = after >= 0 ? _groupEnd(after) : cards.count;
+            groupId = newGroupId();
+        }
+        cards.insert(at, { uid: uid, appId: item.appId, title: item.title || item.appId, groupId: groupId });
         _pendingAfterUid = "";
         cardFocusRequested(uid);
     }
@@ -148,14 +173,27 @@ Item {
 
     // Launching is asynchronous: the card appears when the surface maps and
     // cardFocusRequested() fires. Returns the uid only if already running.
-    function launch(appId, afterUid) {
+    // params: launch params (a tapped notification's); SAM relaunches a
+    // running app with them.
+    function launch(appId, afterUid, params) {
         var running = runningUid(appId);
-        if (running !== "")
+        if (running !== "" && !params)
             return running;
         _pendingAfterUid = afterUid || "";
         LS.adhoc.call("luna://com.webos.applicationManager", "/launch",
-                      JSON.stringify({ id: appId, params: {} }));
-        return "";
+                      JSON.stringify({ id: appId, params: params || {} }));
+        return running;
+    }
+
+    function moveCard(from, to) {
+        if (from !== to && from >= 0 && to >= 0 && from < cards.count && to < cards.count)
+            cards.move(from, to, 1);
+    }
+
+    function setCardGroup(uid, groupId) {
+        var i = cardIndex(uid);
+        if (i >= 0)
+            cards.setProperty(i, "groupId", groupId);
     }
 
     function close(uid) {
@@ -166,21 +204,94 @@ Item {
             }
     }
 
-    // TODO(M1): deliver the webOS back key to the focused surface. This
-    // needs a small C++ hook in the compositor extension; QML cannot
-    // synthesize key events for a client surface.
+    // One reply from a service on the bus: lunaCall(uri, params, callback);
+    // callback(null) when the call cannot be made. The lock screen asks
+    // com.palm.systemmanager for the device lock through this.
+    Service {
+        id: lunaBus
+        appId: LS.appId
+        property var pending: ({})
+        onResponse: (method, payload, token) => {
+            var cb = pending[token];
+            if (!cb)
+                return;
+            delete pending[token];
+            var r = null;
+            try { r = JSON.parse(payload); } catch (e) { /* not JSON */ }
+            cb(r);
+        }
+    }
+    function lunaCall(uri, params, callback) {
+        var m = /^(?:palm|luna):\/\/([^\/]+)(\/.*)$/.exec(uri);
+        var token = m ? lunaBus.call("luna://" + m[1], m[2], JSON.stringify(params || {})) : 0;
+        if (token > 0)
+            lunaBus.pending[token] = callback;
+        else
+            callback(null);
+    }
+
+    // The back gesture is the webOS Back key, delivered to the card's
+    // surface, which forwards it to the app by its native scan code
+    // (WebOSSurfaceItem::processKeyEvent). webOS reads evdev 412 as Back;
+    // on the wire that is XKB keycode 412 + 8. Web apps get it as keyCode
+    // 461, Enyo 1.0 and Mojo apps as their back event.
+    readonly property int backScanCode: 412 + 8
     function back(uid) {
-        console.warn("Phoenix: back gesture not yet delivered to apps");
+        for (var i = 0; i < _surfaces.length; ++i)
+            if (_surfaces[i].uid === uid)
+                return KeyInjector.sendKey(_surfaces[i].item, WebOS.Key_webOS_Back, backScanCode);
         return false;
     }
 
-    function notify(appId, title, body) {
+    function notify(appId, title, body, params) {
         notifications.append({ id: "n" + Date.now(), appId: appId, title: title, body: body || "",
-                               color: "#666666", glyph: "!" });
+                               color: "#666666", glyph: "!", icon: "", params: params ? JSON.stringify(params) : "",
+                               windowKey: "", clickableWhenLocked: false, ongoing: false, progress: -1 });
     }
 
     function dismissNotification(index) {
         if (index >= 0 && index < notifications.count)
             notifications.remove(index);
+    }
+
+    // ---- System sounds (SystemSounds.qml decides; audiod plays) ------------------------
+    // OSE's audiod-pro plays files by path: playSound {fileName, sink}
+    // (PlaybackManager), stopped with controlPlayback {playbackId,
+    // requestType: "stop"}. It takes .wav and .pcm only, so the MP3 sounds
+    // (ringtone.mp3, boot.mp3, charging.mp3, ...) stay silent on a device
+    // until the image carries WAV copies. Loops, durations and per-sound
+    // volume are not in its API: a ringtone plays once, at the stream's volume.
+    // STATUS: not yet run on a device.
+    property var _playback: ({})     // handle -> playbackId
+    property int _nextSound: 1
+
+    function playSound(path, stream, loop, duration, volume, fallback) {
+        var handle = "snd" + (_nextSound++);
+        var file = /\.(wav|pcm)$/i.test(path) ? path : (fallback && /\.(wav|pcm)$/i.test(fallback) ? fallback : "");
+        if (file === "")
+            return handle;
+        var sink = stream === "ringtones" ? "pringtones" : stream === "feedback" ? "pfeedback" : "palerts";
+        lunaCall("luna://com.webos.service.audio/playSound", { fileName: file, sink: sink }, function(r) {
+            if (r && r.playbackId)
+                source._playback[handle] = r.playbackId;
+        });
+        return handle;
+    }
+
+    function stopSound(handle) {
+        var id = _playback[handle];
+        delete _playback[handle];
+        if (id)
+            lunaCall("luna://com.webos.service.audio/controlPlayback", { playbackId: id, requestType: "stop" }, function() {});
+    }
+
+    // The sounds that ship (tools/install-rootfs.py installs them); anything
+    // else is taken on trust, and audiod reports a missing file.
+    function soundExists(path) {
+        return !!path;
+    }
+
+    function appDir(appId) {
+        return "/usr/palm/applications/" + appId;
     }
 }

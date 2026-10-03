@@ -1,0 +1,8 @@
+{
+  "name": "org.webosphoenix.transcriber",
+  "version": "0.1.0",
+  "private": true,
+  "description": "webOS Phoenix speech-to-text service (Luna): transcribes audio files with whisper.cpp",
+  "license": "Apache-2.0",
+  "main": "service.js"
+}

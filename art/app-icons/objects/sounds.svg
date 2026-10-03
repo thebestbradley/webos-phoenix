@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Sounds &amp; Ringtones: a loudspeaker cabinet, sound coming from it. Original Phoenix art. -->
+<defs>
+  <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4b4f55"/><stop offset="1" stop-color="#16181a"/></linearGradient>
+  <path id="s2" d="M80 30H176V176H80Z"/>
+  <radialGradient id="g3" cx="0.45" cy="0.4" r="0.6"><stop offset="0" stop-color="#9aa1a8"/><stop offset="0.55" stop-color="#3a3f44"/><stop offset="0.8" stop-color="#1c1f22"/><stop offset="1" stop-color="#6b7178"/></radialGradient>
+  <linearGradient id="g4" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="0.45" stop-color="#cfd3d7"/><stop offset="0.55" stop-color="#9aa0a6"/><stop offset="1" stop-color="#dfe2e5"/></linearGradient>
+  <radialGradient id="g5" cx="0.4" cy="0.35" r="0.7"><stop offset="0" stop-color="#e6e9ec"/><stop offset="1" stop-color="#5d636a"/></radialGradient>
+  <linearGradient id="g6" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="0.45" stop-color="#cfd3d7"/><stop offset="0.55" stop-color="#9aa0a6"/><stop offset="1" stop-color="#dfe2e5"/></linearGradient>
+  <radialGradient id="g7" cx="0.4" cy="0.35" r="0.7"><stop offset="0" stop-color="#c9ced3"/><stop offset="1" stop-color="#2a2d31"/></radialGradient>
+  <linearGradient id="g8" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a9dcff"/><stop offset="1" stop-color="#2a7fd6"/></linearGradient>
+  <path id="s9" d="M190 104A30 30 0 0 1 190 152M206 88A52 52 0 0 1 206 168"/>
+</defs>
+<g>
+<use href="#s2" y="-8" fill="#7d848b" stroke="#050607" stroke-width="2.5"/>
+<use href="#s2" y="-7" fill="#7d848b" stroke="#050607" stroke-width="2.5"/>
+<use href="#s2" y="-6" fill="#7d848b" stroke="#050607" stroke-width="2.5"/>
+<use href="#s2" y="-5" fill="#7d848b" stroke="#050607" stroke-width="2.5"/>
+<use href="#s2" y="-4" fill="#7d848b" stroke="#050607" stroke-width="2.5"/>
+<use href="#s2" y="-3" fill="#7d848b" stroke="#050607" stroke-width="2.5"/>
+<use href="#s2" y="-2" fill="#7d848b" stroke="#050607" stroke-width="2.5"/>
+<use href="#s2" y="-1" fill="#7d848b" stroke="#050607" stroke-width="2.5"/>
+<use href="#s2" fill="url(#g1)" stroke="#050607" stroke-width="2.5" stroke-linejoin="round"/>
+</g>
+<circle cx="128" cy="128" r="38" fill="url(#g4)" stroke="#000" stroke-width="2"/>
+<circle cx="128" cy="128" r="32" fill="url(#g3)"/>
+<circle cx="128" cy="128" r="11" fill="url(#g5)" stroke="#000" stroke-width="1.5"/>
+<circle cx="128" cy="62" r="18" fill="url(#g6)" stroke="#000" stroke-width="2"/>
+<circle cx="128" cy="62" r="12" fill="url(#g7)"/>
+<path d="M82 32H174" stroke="#fff" stroke-opacity="0.3" stroke-width="2"/>
+<g fill="none" stroke-linecap="round" stroke-linejoin="round">
+<use href="#s9" y="-3" stroke="#0c3466" stroke-width="13"/>
+<use href="#s9" y="-2" stroke="#0c3466" stroke-width="13"/>
+<use href="#s9" y="-1" stroke="#0c3466" stroke-width="13"/>
+<use href="#s9" y="-3" stroke="#cfe9ff" stroke-width="8"/>
+<use href="#s9" y="-2" stroke="#cfe9ff" stroke-width="8"/>
+<use href="#s9" y="-1" stroke="#cfe9ff" stroke-width="8"/>
+<use href="#s9" stroke="#0c3466" stroke-width="13"/>
+<use href="#s9" stroke="url(#g8)" stroke-width="8"/>
+</g>
+</svg>

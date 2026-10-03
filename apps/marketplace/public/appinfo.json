@@ -1,0 +1,24 @@
+{
+    "id": "org.webosphoenix.marketplace",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Marketplace",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "iconColor": "#2f6fb3",
+    "uiRevision": 2,
+    "keywords": ["App Catalog", "Apps", "Store", "Download", "Install", "Web Apps", "PWA", "Updates", "App Museum", "Preware"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 1 = Downloads, where the App Catalog was.",
+        "launcherTab": 1
+    },
+    "requiredPermissions": [
+        "application.launcher",
+        "application.operation",
+        "marketplace.management"
+    ]
+}

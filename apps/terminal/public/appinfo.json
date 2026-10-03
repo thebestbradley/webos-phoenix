@@ -1,0 +1,25 @@
+{
+    "id": "org.webosphoenix.terminal",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Terminal",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "iconColor": "#1f2023",
+    "uiRevision": 2,
+    "keywords": ["Shell", "Console", "Command Line", "bash", "zsh", "SSH"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launcherTab": 0
+    },
+    "//requiredPermissions": "OSE access control groups for the services the app calls. pty.operation is services/pty's; the service also checks that the caller is this app.",
+    "requiredPermissions": [
+        "pty.operation",
+        "application.launcher",
+        "application.operation"
+    ]
+}

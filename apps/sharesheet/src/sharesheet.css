@@ -1,0 +1,157 @@
+/* Copyright (c) 2026 webOS Phoenix contributors. SPDX-License-Identifier: Apache-2.0 */
+
+/* The page lies over the app's card: see-through but for the sheet. */
+html:has(> body.ss-body), body.pui-app.ss-body { background: transparent; }
+
+.ss-overlay { position: fixed; inset: 0; }
+/* A tap outside the sheet cancels. (The dimming is the page under it:
+   the runtime's frame background.) */
+.ss-scrim { position: fixed; inset: 0; }
+
+/* The webOS popup art (Popup.css: popup-heritage.png 24), at the foot of
+   the screen; it rises as the iOS sheet does. */
+.ss-sheet {
+    position: fixed;
+    left: 50%;
+    bottom: 6px;
+    width: min(calc(100% - 12px), 480px);
+    max-height: calc(100% - 40px);
+    box-sizing: border-box;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-style: solid;
+    border-width: 24px;
+    border-image: -webkit-image-set(url(../../shared/phoenix-ui/assets/enyo/popup-heritage.png) 1x, url(../../shared/phoenix-ui/assets/enyo/popup-heritage@2x.png) 2x, url(../../shared/phoenix-ui/assets/enyo/popup-heritage@3x.png) 3x) 24 fill stretch;
+    border-radius: 14px;
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    animation: ss-rise 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ss-sheet > * { margin-left: -10px; margin-right: -10px; }
+.ss-overlay.leaving .ss-sheet { transform: translate(-50%, 110%); transition: transform 0.18s ease-in; }
+@keyframes ss-rise { from { transform: translate(-50%, 110%); } to { transform: translate(-50%, 0); } }
+
+/* What is shared. */
+.ss-head { display: flex; align-items: center; gap: 12px; margin-top: -10px; }
+.ss-thumb {
+    width: 52px;
+    height: 52px;
+    flex: none;
+    object-fit: cover;
+    border: 2px solid #fff;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    background: #fff;
+}
+.ss-thumb-icon { display: flex; align-items: center; justify-content: center; }
+.ss-head-text { min-width: 0; flex: 1; }
+.ss-title { font-weight: bold; font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ss-subtitle { color: var(--pui-text-dim); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The apps: a row of launcher icons (two when there are many), sideways. */
+.ss-apps {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 74px;
+    gap: 4px 2px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 6px 0 4px;
+    border-top: 1px solid rgba(0, 0, 0, 0.12);
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+}
+.ss-apps::-webkit-scrollbar { display: none; }
+.ss-app {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 4px 2px;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    font: inherit;
+    color: var(--pui-text);
+    cursor: pointer;
+    scroll-snap-align: start;
+}
+.ss-app:active { background: rgba(31, 117, 191, 0.2); }
+.ss-app img { width: 48px; height: 48px; object-fit: contain; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35)); }
+.ss-app span { font-size: 12px; max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The system's actions: menu rows (Popup.css menu items). */
+.ss-actions {
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.55);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+.ss-action-icon { width: 28px; height: 28px; flex: none; display: flex; align-items: center; justify-content: center; object-fit: contain; }
+
+/* Save to Files. */
+.ss-save { height: min(560px, calc(100% - 40px)); }
+.ss-save-head { display: flex; align-items: center; gap: 8px; margin-top: -10px; }
+.ss-save-head .ss-title { flex: 1; text-align: center; }
+.ss-up {
+    width: 32px;
+    height: 32px;
+    flex: none;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    position: relative;
+}
+.ss-up::before {
+    content: "";
+    position: absolute;
+    left: 11px;
+    top: 9px;
+    width: 12px;
+    height: 12px;
+    border-left: 3px solid var(--pui-label);
+    border-bottom: 3px solid var(--pui-label);
+    transform: rotate(45deg);
+}
+.ss-up:disabled { opacity: 0.25; cursor: default; }
+.ss-link { border: 0; background: none; font: inherit; font-size: 15px; color: var(--pui-label); cursor: pointer; padding: 4px; }
+.ss-link:disabled { color: var(--pui-text-dim); cursor: default; }
+.ss-folders {
+    flex: 1;
+    min-height: 120px;
+    overflow-y: auto;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.55);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+.ss-loading, .ss-empty { display: flex; justify-content: center; padding: 24px; color: var(--pui-text-dim); font-size: 15px; }
+.ss-error { color: #b0291f; font-size: 14px; }
+.ss-buttons { display: flex; gap: 8px; }
+.ss-buttons > * { flex: 1; }
+
+/* Choose a Picture: albums of square thumbnails, as the original picker. */
+.ss-pick { height: min(600px, calc(100% - 40px)); }
+.ss-pick-title { text-align: center; margin-top: -10px; }
+.ss-pick-albums {
+    flex: 1;
+    min-height: 120px;
+    overflow-y: auto;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.55);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+    padding: 4px 6px 8px;
+}
+.ss-pick-album-name { font-size: 14px; font-weight: bold; color: var(--pui-label); margin: 6px 2px 4px; }
+.ss-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); gap: 4px; }
+.ss-pick-thumb {
+    aspect-ratio: 1;
+    border: 2px solid #fff;
+    border-radius: 3px;
+    padding: 0;
+    background: #ccc center / cover no-repeat;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+}
+.ss-pick-thumb:active { outline: 3px solid var(--pui-label); }

@@ -1,0 +1,126 @@
+.demo-app {
+	background: #eaeaea;
+	font-family: "Prelude", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+.demo-nav {
+	width: 280px;
+	background: #d8d8d8;
+	box-shadow: 1px 0 4px rgba(0, 0, 0, 0.25);
+}
+.demo-nav-item {
+	padding: 14px 16px;
+	font-size: 17px;
+}
+.demo-nav-item.onyx-selected {
+	background: #c4d9f3;
+}
+.demo-note {
+	padding: 16px;
+	font-size: 13px;
+	color: #666;
+}
+
+.demo-content {
+	background: #eaeaea;
+}
+.demo-back {
+	margin-right: 8px;
+}
+.demo-page {
+	padding: 10px;
+}
+.demo-page-pad {
+	padding: 10px;
+}
+
+.demo-section {
+	margin-bottom: 14px;
+}
+.demo-section-body {
+	padding: 10px;
+	background: #fff;
+}
+.demo-section-body > .onyx-button,
+.demo-section-body > .onyx-menu-decorator,
+.demo-section-body > .onyx-tooltip-decorator,
+.demo-section-body > .onyx-picker-decorator {
+	margin: 4px 6px 4px 0;
+}
+.demo-section-body > .onyx-progress-bar,
+.demo-section-body > .onyx-progress-button,
+.demo-section-body > .onyx-slider,
+.demo-section-body > .onyx-range-slider {
+	margin: 14px 8px;
+}
+.demo-section-body > .onyx-spinner {
+	background-color: #555;
+	border-radius: 30px;
+}
+.demo-row {
+	display: flex;
+	align-items: center;
+	margin-bottom: 10px;
+}
+.demo-label {
+	flex: 1;
+}
+.demo-wide {
+	display: block;
+	margin-bottom: 8px;
+}
+.demo-wide > * {
+	width: 100%;
+}
+.demo-textarea {
+	height: 80px;
+}
+
+.demo-result {
+	padding: 10px;
+	color: #444;
+	font-style: italic;
+}
+.demo-mono {
+	margin-top: 8px;
+	font-family: Menlo, "DejaVu Sans Mono", monospace;
+	font-size: 12px;
+	word-break: break-all;
+}
+
+.demo-popup {
+	padding: 14px;
+	text-align: center;
+}
+.demo-popup-title {
+	margin-bottom: 12px;
+	font-size: 18px;
+}
+
+.demo-fill > * {
+	height: 100%;
+}
+.demo-item-name {
+	display: inline-block;
+	font-size: 17px;
+}
+.demo-item-index {
+	float: right;
+	color: #888;
+}
+.demo-drawer {
+	margin-top: 10px;
+	padding: 12px;
+	background: #fff;
+	border-radius: 4px;
+}
+
+/* Phones: one panel at a time, full width. */
+@media (max-width: 800px) {
+	.demo-nav {
+		width: 100%;
+	}
+}
+.demo-fill {
+	position: relative;
+}

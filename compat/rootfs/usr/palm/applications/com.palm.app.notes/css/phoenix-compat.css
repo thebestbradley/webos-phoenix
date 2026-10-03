@@ -1,0 +1,66 @@
+/* Phoenix compat: Memos on a phone.
+ *
+ * memos.css sizes the memo wall for a portrait TouchPad (943 px tall) at
+ * any width of 320 px or more, so on a 452 px phone card the list runs
+ * off the bottom. The editor is a 768x685 px sticky note with a 648 px
+ * wide text area. Here the wall fills the card, one memo per row centred,
+ * and the editor's note is drawn at card width (same artwork, scaled).
+ */
+
+@media (max-width: 480px), (max-height: 480px) {
+	#app-container:before {
+		height: 100%;
+	}
+
+	.memo-list {
+		height: -webkit-calc(100vh - 55px);
+		height: calc(100vh - 55px);
+		margin: 0 8px;
+	}
+
+	/* Rows set their packing inline (start). */
+	.memo-list .enyo-hflexbox {
+		-webkit-box-pack: center !important;
+	}
+
+	/* Editor title bar: back button, five colour swatches, email and delete
+	   do not fit in 320 px with the "All Memos" label; show its arrow only. */
+	.back-button {
+		font-size: 0;
+		width: 12px;
+		background-position: 8px 6px;
+	}
+
+	/* Editor: the note fills the card width. */
+	.edit-background {
+		-webkit-box-flex: 100;
+		padding: 6px 22px 0 22px;
+		/* !important: the per-colour rules reset it with "background:". */
+		-webkit-background-size: 100% 100% !important;
+		background-size: 100% 100% !important;
+	}
+
+	.edit-scroller {
+		width: auto;
+		max-height: none;
+	}
+
+	.memo-input {
+		width: auto;
+		padding: 16px 12px;
+	}
+}
+
+/* Tablets taller than the TouchPad: memos.css fixes the wall at the
+ * TouchPad's 768 px (739 and 687 px), so on a bigger screen it stops two
+ * thirds of the way down. Grow it with the window; never below the
+ * original sizes, so the TouchPad is drawn exactly as before. */
+@media only screen and (min-width: 769px) {
+	#app-container:before {
+		height: max(739px, calc(100vh - 29px));
+	}
+
+	.memo-list {
+		height: max(687px, calc(100vh - 81px));
+	}
+}

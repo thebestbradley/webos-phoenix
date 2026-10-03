@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Files: a manila folder holding papers. Original Phoenix art. -->
+<defs>
+  <linearGradient id="back" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#e9c46a"/>
+    <stop offset="1" stop-color="#b98a2a"/>
+  </linearGradient>
+  <linearGradient id="front" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffe7a3"/>
+    <stop offset="0.5" stop-color="#f4cd6a"/>
+    <stop offset="1" stop-color="#d9a93e"/>
+  </linearGradient>
+  <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="1" stop-color="#e3e7ea"/>
+  </linearGradient>
+  <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#fff" stop-opacity="0.55"/>
+    <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+  </linearGradient>
+</defs>
+<!-- Back of the folder, with its tab. -->
+<path d="M26 64C26 56 30 52 38 52H96L110 68H218C226 68 230 72 230 80V210H26Z" fill="url(#back)" stroke="#7e5a14" stroke-width="2.5" stroke-linejoin="round"/>
+<!-- Papers. -->
+<g filter="url(#c-lift)">
+  <g transform="rotate(-5 128 120)">
+    <rect x="50" y="56" width="146" height="120" fill="url(#paper)" stroke="#97a0a8" stroke-width="1.5"/>
+    <path d="M64 76H170M64 90H182M64 104H150" stroke="#b3bcc4" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <g transform="rotate(4 128 120)">
+    <rect x="62" y="66" width="146" height="120" fill="url(#paper)" stroke="#97a0a8" stroke-width="1.5"/>
+    <path d="M76 86H186M76 100H190M76 114H160" stroke="#b3bcc4" stroke-width="4" stroke-linecap="round"/>
+  </g>
+</g>
+<!-- Front flap, opened slightly towards us. -->
+<g filter="url(#c-lift)">
+  <path d="M18 112C18 106 22 102 28 102H228C234 102 238 106 237 112L226 214C225 220 221 224 215 224H41C35 224 31 220 30 214Z" fill="url(#front)" stroke="#7e5a14" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M24 112C24 108 26 107 30 107H226C230 107 232 108 232 112L229 138H27Z" fill="url(#gloss)"/>
+</g>
+</svg>

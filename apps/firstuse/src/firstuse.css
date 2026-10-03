@@ -1,0 +1,266 @@
+/*
+ * Copyright (c) 2026 webOS Phoenix contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * First Use: white on the dark blue of webOS's setup screens, the Heritage
+ * groups and buttons of @phoenix/ui, and the tutorial's little animated
+ * device.
+ */
+
+html:has(> body.pui-app), body.pui-app { background: #06101c; }
+
+html:has(> body.pui-app), body.pui-app { overflow: hidden; }
+
+.fu-root {
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    color: #fff;
+    background: radial-gradient(ellipse at 50% -10%, #2d5582 0%, #13263d 45%, #06101c 100%);
+}
+.fu-root.wide .fu-step { width: 100%; max-width: 580px; margin: 0 auto; }
+
+.fu-progress { display: flex; justify-content: center; gap: 6px; padding: 10px 0 2px; }
+.fu-pip { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.25); }
+.fu-pip.done { background: rgba(255, 255, 255, 0.6); }
+.fu-pip.on { background: #6fb6f3; box-shadow: 0 0 6px #6fb6f3; }
+
+.fu-step {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: calc(100vh - 19px);
+    padding: 0 10px;
+}
+.fu-head { display: flex; align-items: center; padding: 8px 4px 2px; }
+.fu-title { flex: 1; font-size: 26px; font-weight: bold; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }
+.fu-skip, .fu-link {
+    border: 0;
+    background: transparent;
+    color: #8cc4f5;
+    font: inherit;
+    font-size: 16px;
+    padding: 6px 4px;
+    cursor: pointer;
+}
+.fu-link { display: block; margin: 6px auto 10px; }
+.fu-intro { font-size: 16px; line-height: 1.4; color: #c9d6e2; padding: 2px 4px 8px; }
+.fu-body { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 8px; }
+.fu-buttons { flex: none; display: flex; justify-content: space-between; gap: 10px; padding: 8px 0 10px; }
+.fu-buttons .pui-button { width: 46%; margin: 0; }
+
+.fu-root .pui-note { color: #a9bccd; }
+.fu-root .pui-group-label { color: #fff; }
+.fu-root .pui-dialog .pui-note { color: inherit; }
+
+.fu-hello { display: flex; justify-content: center; padding: 4px 0 10px; }
+.fu-hello img { width: 96px; height: 96px; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6)); }
+.fu-check-space { display: inline-block; width: 24px; }
+.fu-clock { text-align: center; font-size: 20px; padding: 6px 4px 12px; color: #e6eef6; }
+.fu-fields { padding: 4px 2px; }
+.fu-done .pui-group { margin-top: 4px; }
+
+/* ---- Tutorial ----------------------------------------------------------------------- */
+
+.tutorial { display: flex; flex-direction: column; align-items: center; min-height: 100%; }
+.tut-text { text-align: center; padding: 10px 6px 4px; min-height: 84px; }
+.tut-title { font-size: 20px; font-weight: bold; }
+.tut-body { font-size: 16px; color: #c9d6e2; margin-top: 4px; line-height: 1.35; }
+.tut-dots { display: flex; gap: 8px; padding: 6px 0; }
+.tut-dot { width: 10px; height: 10px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.3); padding: 0; cursor: pointer; }
+.tut-dot.on { background: #6fb6f3; }
+.tut-buttons { display: flex; gap: 10px; width: 100%; padding: 6px 0 10px; margin-top: auto; }
+.tut-buttons .pui-button { flex: 1; margin: 0; }
+
+/* The device: a phone with its gesture area, or a tablet on its side. */
+.tut-device {
+    position: relative;
+    flex: none;
+    width: 132px;
+    padding: 9px 8px 0;
+    margin-top: 6px;
+    border-radius: 20px;
+    background: linear-gradient(#3a3d41, #111214);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+.tut-device.tablet { width: 250px; padding: 10px; border-radius: 14px; }
+.tut-screen {
+    position: relative;
+    height: 180px;
+    border-radius: 3px;
+    background: linear-gradient(#10243d, #2f5a86 70%, #c0703f);
+}
+.tut-device.tablet .tut-screen { height: 150px; }
+.tut-clip { position: absolute; inset: 0; overflow: hidden; border-radius: 3px; }
+.tut-gesture-area { height: 26px; display: flex; align-items: center; justify-content: center; }
+.tut-lightbar { width: 34px; height: 3px; border-radius: 2px; background: rgba(140, 200, 255, 0.35); }
+.tut-statusbar { position: absolute; left: 0; right: 0; top: 0; height: 7px; background: #000; z-index: 3; }
+
+.tut-cards { position: absolute; left: 0; right: 0; top: 7px; bottom: 0; overflow: hidden; }
+.tut-card {
+    position: absolute;
+    top: 14%;
+    left: 22%;
+    width: 56%;
+    height: 72%;
+    border-radius: 6px;
+    background: linear-gradient(#f1f1ef 0 12%, #d9d9d7 12% 13%, #e8e8e6 13%);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.55);
+    overflow: hidden;
+}
+.tut-card::after {
+    /* A few lines of text. */
+    content: "";
+    position: absolute;
+    left: 10%;
+    right: 18%;
+    top: 22%;
+    height: 40%;
+    background: repeating-linear-gradient(#bfc3c7 0 3px, transparent 3px 9px);
+}
+.tut-card.left { left: -44%; }
+.tut-card.right { left: 88%; }
+.tut-card.far { display: none; }
+.tut-page.two {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(#dfeaf5 0 12%, #c5d3e0 12% 13%, #eef3f8 13%);
+    z-index: 1;
+    opacity: 0;
+}
+
+.tut-launcher {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 7px;
+    bottom: 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    align-content: start;
+    gap: 10px;
+    padding: 16px 14px;
+    background: rgba(0, 0, 0, 0.72);
+    transform: translateY(105%);
+    z-index: 2;
+}
+.tut-device.tablet .tut-launcher { grid-template-columns: repeat(6, 1fr); }
+.tut-icon { height: 22px; border-radius: 6px; background: linear-gradient(#78b6ec, #2c69a8); }
+.tut-icon:nth-child(3n + 2) { background: linear-gradient(#8fd17b, #3b8a2a); }
+.tut-icon:nth-child(4n + 3) { background: linear-gradient(#f4b25f, #c0621c); }
+
+.tut-justtype { position: absolute; left: 8%; right: 8%; top: 18px; z-index: 2; opacity: 0; }
+.tut-field { height: 18px; border-radius: 9px; background: #fff; padding: 0 8px; display: flex; align-items: center; }
+.tut-typed { display: block; height: 7px; width: 0; background: #444; border-radius: 2px; }
+.tut-result { height: 16px; margin-top: 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.85); opacity: 0; }
+.tut-result.short { width: 70%; }
+
+.tut-finger {
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    margin: -11px 0 0 -11px;
+    border-radius: 50%;
+    background: radial-gradient(rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.35) 60%, rgba(255, 255, 255, 0));
+    box-shadow: 0 0 10px rgba(140, 200, 255, 0.8);
+    opacity: 0;
+    left: 50%;
+    top: 112%;
+    z-index: 5;
+    pointer-events: none;
+}
+.tut-device.tablet .tut-finger { top: 96%; }
+
+.tut-screen * { animation-duration: 3.4s; animation-iteration-count: infinite; animation-timing-function: ease-in-out; }
+
+/* Swipe up: the app shrinks into its card, the others come in. */
+.lesson-cardview .tut-card.mid { animation-name: tut-shrink; }
+.lesson-cardview .tut-card.left, .lesson-cardview .tut-card.right { animation-name: tut-appear; }
+.lesson-cardview .tut-finger, .lesson-launcher .tut-finger { animation-name: tut-swipe-up; }
+.tut-device.tablet .lesson-cardview .tut-finger, .tut-device.tablet .lesson-launcher .tut-finger { animation-name: tut-edge-up; }
+
+/* Tap a card: it opens. */
+.lesson-open .tut-card.mid { animation-name: tut-grow; }
+.lesson-open .tut-finger { animation-name: tut-tap; }
+
+/* Flick up: the card flies away, the next one slides in. */
+.lesson-close .tut-card.mid { animation-name: tut-fly; }
+.lesson-close .tut-card.right { animation-name: tut-slide-in; }
+.lesson-close .tut-finger { animation-name: tut-flick; }
+
+/* Swipe left in the gesture area: back to the page before. */
+.lesson-back .tut-card.mid { top: 0; left: 0; width: 100%; height: 100%; border-radius: 0; }
+.lesson-back .tut-card.left, .lesson-back .tut-card.right { display: none; }
+.lesson-back .tut-page.two { animation-name: tut-page-back; }
+.lesson-back .tut-finger { animation-name: tut-swipe-left; }
+
+/* Swipe up again: the launcher. */
+.lesson-launcher .tut-launcher { animation-name: tut-launcher-up; }
+
+/* Type: Just Type finds things. */
+.lesson-justtype .tut-justtype { animation-name: tut-fade-in; }
+.lesson-justtype .tut-typed { animation-name: tut-type; animation-timing-function: steps(4); }
+.lesson-justtype .tut-result { animation-name: tut-results; }
+.lesson-justtype .tut-cards { animation-name: tut-dim; }
+
+@keyframes tut-shrink {
+    0%, 25% { top: 0; left: 0; width: 100%; height: 100%; border-radius: 0; }
+    55%, 100% { top: 14%; left: 22%; width: 56%; height: 72%; border-radius: 6px; }
+}
+@keyframes tut-appear { 0%, 40% { opacity: 0; } 60%, 100% { opacity: 1; } }
+@keyframes tut-swipe-up {
+    0% { opacity: 0; top: 114%; }
+    12% { opacity: 1; top: 114%; }
+    38% { opacity: 1; top: 90%; }
+    46%, 100% { opacity: 0; top: 86%; }
+}
+@keyframes tut-edge-up {
+    0% { opacity: 0; top: 100%; }
+    12% { opacity: 1; top: 100%; }
+    38% { opacity: 1; top: 78%; }
+    46%, 100% { opacity: 0; top: 74%; }
+}
+@keyframes tut-grow {
+    0%, 42% { top: 14%; left: 22%; width: 56%; height: 72%; border-radius: 6px; }
+    65%, 100% { top: 0; left: 0; width: 100%; height: 100%; border-radius: 0; }
+}
+@keyframes tut-tap {
+    0%, 15% { opacity: 0; top: 55%; transform: scale(1.4); }
+    30% { opacity: 1; top: 55%; transform: scale(1); }
+    40% { opacity: 1; top: 55%; transform: scale(0.8); }
+    50%, 100% { opacity: 0; top: 55%; transform: scale(1); }
+}
+@keyframes tut-fly {
+    0%, 20% { transform: none; opacity: 1; }
+    48% { transform: translateY(-130%); opacity: 0.2; }
+    49%, 100% { transform: translateY(-130%); opacity: 0; }
+}
+@keyframes tut-slide-in { 0%, 50% { left: 88%; } 72%, 100% { left: 22%; } }
+@keyframes tut-flick {
+    0%, 8% { opacity: 0; top: 60%; }
+    20% { opacity: 1; top: 60%; }
+    45% { opacity: 1; top: 12%; }
+    52%, 100% { opacity: 0; top: 8%; }
+}
+@keyframes tut-page-back {
+    0%, 30% { opacity: 1; transform: none; }
+    55% { opacity: 1; transform: translateX(100%); }
+    56%, 100% { opacity: 0; transform: translateX(100%); }
+}
+@keyframes tut-swipe-left {
+    0% { opacity: 0; top: 114%; left: 78%; }
+    14% { opacity: 1; top: 114%; left: 78%; }
+    42% { opacity: 1; top: 114%; left: 22%; }
+    50%, 100% { opacity: 0; top: 114%; left: 18%; }
+}
+@keyframes tut-launcher-up { 0%, 35% { transform: translateY(105%); } 60%, 100% { transform: none; } }
+@keyframes tut-fade-in { 0%, 12% { opacity: 0; } 25%, 100% { opacity: 1; } }
+@keyframes tut-type { 0%, 22% { width: 0; } 50%, 100% { width: 60%; } }
+@keyframes tut-results { 0%, 52% { opacity: 0; } 65%, 100% { opacity: 1; } }
+@keyframes tut-dim { 0%, 12% { opacity: 1; } 25%, 100% { opacity: 0.35; } }
+
+@media (prefers-reduced-motion: reduce) {
+    .tut-screen * { animation-duration: 0s; animation-iteration-count: 1; animation-fill-mode: forwards; }
+}

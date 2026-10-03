@@ -1,0 +1,65 @@
+{
+    "//": [
+        "Virtual webOS filesystem: where each device path comes from in this repository.",
+        "Longest matching prefix wins. Paths follow the Open webOS layout",
+        "(openwebos/build-desktop build-webos-desktop.sh), so the original apps run unmodified.",
+        "Used by phoenix-sim's phoenix:// scheme and by tools/serve-rootfs.py; the",
+        "meta-phoenix recipes install the same files at the same device paths.",
+        "overlays: directories laid out like the device filesystem whose files win over everything else (patched or missing files for the original apps).",
+        "systemApps: single app directories for system UI apps (Just Type, the system alerts), never shown in the launcher.",
+        "applicationDirs: each child with an appinfo.json is an app; a child whose built output is in dist/ (e.g. React apps) is used from there.",
+        "exclude: device paths that are never served or installed (files of the original apps we do not redistribute; see docs/LEGAL.md)."
+    ],
+    "overlays": [
+        "compat/rootfs"
+    ],
+    "mounts": {
+        "/usr/palm/frameworks/enyo/0.10/framework/": "third_party/enyo-1.0/framework/",
+        "/usr/palm/frameworks/enyo/1.0/framework/": "third_party/enyo-1.0/framework/",
+        "/usr/palm/frameworks/mojoloader.js": "third_party/mojoloader/mojoloader.js",
+        "/usr/palm/frameworks/enyo2/enyo/": "third_party/enyo-2/enyo/",
+        "/usr/palm/frameworks/enyo2/lib/onyx/": "third_party/enyo-2/onyx/",
+        "/usr/palm/frameworks/enyo2/lib/layout/": "third_party/enyo-2/layout/",
+        "/usr/palm/frameworks/enyo2/webOS/": "third_party/enyo-webos/webOS/",
+        "/usr/palm/frameworks/underscore/version/1.0/": "third_party/underscore/",
+        "/usr/palm/frameworks/foundations/version/1.0/": "third_party/foundation-frameworks/foundations/",
+        "/usr/palm/frameworks/foundations.crypto/version/1.0/": "third_party/foundation-frameworks/foundations.crypto/",
+        "/usr/palm/frameworks/foundations.io/version/1.0/": "third_party/foundation-frameworks/foundations.io/",
+        "/usr/palm/frameworks/foundations.json/version/1.0/": "third_party/foundation-frameworks/foundations.json/",
+        "/usr/palm/frameworks/foundations.mojo/version/1.0/": "third_party/foundation-frameworks/foundations.mojo/",
+        "/usr/palm/frameworks/foundations.xml/version/1.0/": "third_party/foundation-frameworks/foundations.xml/",
+        "/usr/palm/frameworks/calendar/version/1.0/": "third_party/loadable-frameworks/calendar/",
+        "/usr/palm/frameworks/calendar.io/version/1.0/": "third_party/loadable-frameworks/calendar.io/",
+        "/usr/palm/frameworks/contacts/version/1.0/": "third_party/loadable-frameworks/contacts/",
+        "/usr/palm/frameworks/globalization/version/1.0/": "third_party/loadable-frameworks/globalization/",
+        "/usr/palm/public/accounts/com.palm.palmprofile/": "third_party/app-services/account-templates/palmprofile/com.palm.palmprofile/",
+        "/usr/palm/public/accounts/com.palm.imap/": "third_party/app-services/mojomail/imap/files/usr/palm/public/accounts/com.palm.imap/",
+        "/usr/palm/public/accounts/com.palm.othermail/": "third_party/app-services/mojomail/imap/files/usr/palm/public/accounts/com.palm.othermail/",
+        "/usr/palm/public/accounts/com.palm.pop/": "third_party/app-services/mojomail/pop/files/usr/palm/public/accounts/com.palm.pop/",
+        "/usr/palm/public/accounts/com.webosphoenix.dav/": "apps/dav/public/accounts/com.webosphoenix.dav/",
+        "/usr/share/phoenix/runtime/": "runtime/",
+        "/usr/palm/services/org.webosphoenix.service.backup/": "apps/settings/service/",
+        "/usr/palm/services/org.webosphoenix.service.packages/": "apps/marketplace/service/",
+        "/usr/palm/services/com.palm.update/": "services/updates/",
+        "/etc/palm/marketplace/": "apps/marketplace/service/etc/palm/marketplace/",
+        "/etc/palm/backup/": "apps/settings/service/etc/palm/backup/",
+        "/usr/lib/luna/system/luna-applauncher/": "third_party/luna-applauncher/",
+        "/usr/lib/luna/system/luna-systemui/": "third_party/luna-systemui/",
+        "/media/internal/samples/": "apps/media-samples/media/",
+        "/usr/share/fonts/open-sans/": "shell/assets/fonts/open-sans/",
+        "/usr/palm/sounds/": "shell/assets/sounds/openwebos/",
+        "/usr/share/phoenix/sounds/": "shell/assets/sounds/phoenix/"
+    },
+    "exclude": [
+        "/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3"
+    ],
+    "applicationDirs": [
+        "third_party/core-apps",
+        "third_party/isis",
+        "apps"
+    ],
+    "systemApps": [
+        "third_party/luna-applauncher",
+        "third_party/luna-systemui"
+    ]
+}

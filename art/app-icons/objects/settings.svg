@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Settings: a chrome gear standing on its teeth. Original Phoenix art. -->
+<defs>
+  <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="0.45" stop-color="#cfd3d7"/><stop offset="0.55" stop-color="#9aa0a6"/><stop offset="1" stop-color="#dfe2e5"/></linearGradient>
+  <path id="s2" d="M-7.3 -55.5L-6.1 -71.7L6.1 -71.7L7.3 -55.5L26.8 -49.2L37.2 -61.6L47.1 -54.4L38.5 -40.7L50.6 -24.1L66.3 -28.0L70.1 -16.4L55.1 -10.3L55.1 10.3L70.1 16.4L66.3 28.0L50.6 24.1L38.5 40.7L47.1 54.4L37.2 61.6L26.8 49.2L7.3 55.5L6.1 71.7L-6.1 71.7L-7.3 55.5L-26.8 49.2L-37.2 61.6L-47.1 54.4L-38.5 40.7L-50.6 24.1L-66.3 28.0L-70.1 16.4L-55.1 10.3L-55.1 -10.3L-70.1 -16.4L-66.3 -28.0L-50.6 -24.1L-38.5 -40.7L-47.1 -54.4L-37.2 -61.6L-26.8 -49.2ZM-22 0A22 22 0 1 0 22 0A22 22 0 1 0 -22 0Z" fill-rule="evenodd"/>
+  <linearGradient id="g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.6"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.12"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+</defs>
+<g transform="translate(128 98) scale(1.08)">
+<use href="#s2" y="-9" fill="#7d848b" stroke="#3a3f44" stroke-width="2.5"/>
+<use href="#s2" y="-8" fill="#7d848b" stroke="#3a3f44" stroke-width="2.5"/>
+<use href="#s2" y="-7" fill="#7d848b" stroke="#3a3f44" stroke-width="2.5"/>
+<use href="#s2" y="-6" fill="#7d848b" stroke="#3a3f44" stroke-width="2.5"/>
+<use href="#s2" y="-5" fill="#7d848b" stroke="#3a3f44" stroke-width="2.5"/>
+<use href="#s2" y="-4" fill="#7d848b" stroke="#3a3f44" stroke-width="2.5"/>
+<use href="#s2" y="-3" fill="#7d848b" stroke="#3a3f44" stroke-width="2.5"/>
+<use href="#s2" y="-2" fill="#7d848b" stroke="#3a3f44" stroke-width="2.5"/>
+<use href="#s2" y="-1" fill="#7d848b" stroke="#3a3f44" stroke-width="2.5"/>
+<use href="#s2" fill="url(#g1)" stroke="#3a3f44" stroke-width="2.5" stroke-linejoin="round"/>
+<use href="#s2" fill="url(#g3)"/>
+</g>
+<circle cx="128" cy="98" r="39" fill="none" stroke="#7d848b" stroke-width="3" opacity="0.6"/>
+</svg>

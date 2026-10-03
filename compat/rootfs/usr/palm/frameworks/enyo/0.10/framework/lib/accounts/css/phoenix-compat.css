@@ -1,0 +1,30 @@
+/* Phoenix compat: the Enyo accounts library on a phone.
+ *
+ * The library's pages (account list, add account, account settings, first
+ * launch) are laid out in a 500 px column (.box-center, .error-box) and
+ * each account row in a 420 px box, which a 320 px phone card crops. On
+ * narrow cards use the card's width instead.
+ */
+
+@media (max-width: 480px) {
+	.box-center {
+		width: auto;
+		margin: 12px 8px 0 8px;
+	}
+
+	.error-box {
+		width: auto;
+	}
+
+	/* Account rows: icon, name and address in a box styled width:420px. */
+	.accounts-list-item > .enyo-hflexbox {
+		width: auto !important;
+		-webkit-box-flex: 1;
+		min-width: 0;
+	}
+
+	.accounts-toolbar-btn {
+		width: auto;
+		min-width: 150px;
+	}
+}

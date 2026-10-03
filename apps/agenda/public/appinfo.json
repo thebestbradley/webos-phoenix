@@ -1,0 +1,27 @@
+{
+    "id": "org.webosphoenix.agenda",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Agenda",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "iconColor": "#d8392b",
+    "uiRevision": 2,
+    "//exhibitionMode": "An exhibition in dock mode (luna-sysmgr ApplicationDescription.cpp:369-398), as com.palm.app.agendaview was; dock mode launches it with {dockMode: true}.",
+    "exhibitionMode": true,
+    "exhibitionModeOptions": { "title": "Agenda" },
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md). Like com.palm.app.agendaview, an exhibition only: not in the launcher.",
+        "hidden": true
+    },
+    "//requiredPermissions": "OSE access control groups for the services the app calls (the groups in each service's sysbus api.json).",
+    "requiredPermissions": [
+        "database.operation",
+        "application.launcher",
+        "settings.read"
+    ]
+}

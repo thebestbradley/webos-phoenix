@@ -1,0 +1,24 @@
+{
+    "id": "com.palm.mmsmessage:1",
+    "extends": [
+        "com.palm.message:1"
+    ],
+    "owner": "org.webosphoenix.messaging",
+    "sync": true,
+    "indexes": [
+        {
+            "name": "outgoing",
+            "props": [
+                {
+                    "name": "folder"
+                },
+                {
+                    "name": "status"
+                },
+                {
+                    "name": "localTimestamp"
+                }
+            ]
+        }
+    ]
+}

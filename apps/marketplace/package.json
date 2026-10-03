@@ -1,0 +1,19 @@
+{
+  "name": "@phoenix/marketplace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "webOS Phoenix Marketplace: web apps, Phoenix apps and the webOS classics",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@phoenix/luna": "*",
+    "@phoenix/ui": "*",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  }
+}

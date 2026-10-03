@@ -1,0 +1,7 @@
+{
+  "extends": "../tsconfig.base.json",
+  // vite.config.ts imports src/lib/topics.ts with its extension, as Node
+  // needs when Vite loads the config natively.
+  "compilerOptions": { "allowImportingTsExtensions": true },
+  "include": ["src", "vite.config.ts"]
+}

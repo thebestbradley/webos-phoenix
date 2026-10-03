@@ -1,0 +1,86 @@
+/* webOS Phoenix overlay (tools/hidpi-art.py): the original stylesheet, with each
+   picture that has HiDPI variants asked for as an image set of them
+   (docs/spec/hidpi-art.md). Do not edit; regenerate. */
+/* @@@LICENSE
+*
+*      Copyright (c) 2010-2013 LG Electronics, Inc.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+* http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*
+* LICENSE@@@ */
+
+.prefs .prefs-header {
+	font-size				: 20px;
+	text-align			 	: center;
+}
+
+.prefs .enyo-header-inner {
+	margin					: 0px;
+	padding					: 0px;
+	text-align				: center;
+}
+
+.prefsIcon {
+	margin-right			: 5px;
+}
+
+.calendar-color-image {
+	width: 30px;
+	height: 30px;
+	padding-right: 15px;
+}
+
+.prefs .legend	{
+	background-image		: -webkit-image-set(url(../../images/glossy-top-highlight.png) 1x, url(../../images/glossy-top-highlight@2x.png) 2x, url(../../images/glossy-top-highlight@3x.png) 3x);
+	background-repeat		: repeat-x;
+	height					: 26px;
+	width					: 26px;
+	padding					: 0;
+	-webkit-border-radius	: 4px;
+	margin-top: 4px;
+}
+
+.prefs .color-space {
+	margin-left: 8px;
+}
+
+.prefs .icon-image {
+	width: 32px;
+	height: 32px;
+}
+
+.accounts-header img {
+    display:block;
+    margin-right: 10px;
+}
+.accounts-header-shadow,
+.accounts-footer-shadow {
+    position: absolute;
+    z-index: 100;
+    height: 6px;
+    width: 100%;
+    pointer-events: none;
+}
+.accounts-header-shadow {
+    top: 54px;
+    background:transparent -webkit-image-set(url(../../images/light_chrome_drop_shadow_header.png) 1x, url(../../images/light_chrome_drop_shadow_header@2x.png) 2x, url(../../images/light_chrome_drop_shadow_header@3x.png) 3x) bottom repeat-x;
+}
+.accounts-footer-shadow {
+    bottom: 0;
+    height: 57px;
+    background:transparent -webkit-image-set(url(../../images/light_chrome_drop_shadow_footer.png) 1x, url(../../images/light_chrome_drop_shadow_footer@2x.png) 2x, url(../../images/light_chrome_drop_shadow_footer@3x.png) 3x) top repeat-x;
+}
+#appView_prefsView_defaultCalendar_menuCheckItem_caption {
+	padding: 8px 0px;
+	width: 60%;
+}

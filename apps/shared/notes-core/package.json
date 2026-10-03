@@ -1,0 +1,29 @@
+{
+  "name": "@phoenix/notes-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Enact Notes demos' shared model: notes and folders in db8, Markdown (CommonMark + GFM) rendering and editing commands, Apple Notes-style date groups. Built to lib/ for the Enact apps, which are separate npm projects",
+  "license": "Apache-2.0",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "dompurify": "^3.4.16",
+    "marked": "^18.0.14"
+  },
+  "files": [
+    "lib"
+  ],
+  "peerDependencies": {
+    "react": ">=18"
+  }
+}

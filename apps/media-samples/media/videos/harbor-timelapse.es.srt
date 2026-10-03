@@ -1,0 +1,15 @@
+1
+00:00:01,000 --> 00:00:04,500
+El puerto al atardecer.
+
+2
+00:00:05,500 --> 00:00:09,500
+El sol se esconde bajo el agua,
+
+3
+00:00:10,000 --> 00:00:14,000
+y se encienden las farolas del muelle.
+
+4
+00:00:15,000 --> 00:00:19,500
+Un último barco sale de noche.

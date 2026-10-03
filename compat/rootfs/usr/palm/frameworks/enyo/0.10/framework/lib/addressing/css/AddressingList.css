@@ -1,0 +1,67 @@
+/* webOS Phoenix overlay (tools/hidpi-art.py): the original stylesheet, with each
+   picture that has HiDPI variants asked for as an image set of them
+   (docs/spec/hidpi-art.md). Do not edit; regenerate. */
+.enyo-addressing-list {
+}
+
+.enyo-addressing-item-divider {
+	text-transform:uppercase;
+}
+
+.enyo-addressing-item-addresses {
+}
+
+.enyo-addressing-padding {
+	margin-top:5px;
+	margin-bottom:5px;
+}
+
+.enyo-addressing-address {
+	margin-left:20px;
+}
+
+.enyo-addressing-item-selected {
+	background: lightblue;
+}
+
+.enyo-addressing-type {
+	float: right;
+	margin-right: 14px;
+	font-size: 14px;
+}
+
+.enyo-addressing-favorite {
+	display: inline-block;
+	background: -webkit-image-set(url(../images/addressing-favorite.png) 1x, url(../images/addressing-favorite@2x.png) 2x, url(../images/addressing-favorite@3x.png) 3x);
+	width: 16px;
+	height: 16px;
+	top: 2px;
+	margin-left: 4px;
+}
+
+.enyo-addressing-GAL {
+	border-top: 1px solid rgba(0,0,0,0.2);
+}
+.enyo-addressing-GAL-message {
+	margin-left:14px;
+	color:gray;
+}
+
+.enyo-addressing-GAL-message:after {
+	color:gray;
+	content:"...";
+}
+
+.enyo-addressing-GAL-padding {
+	margin-top:10px;
+	margin-bottom:10px;
+}
+
+.enyo-addressing-GAL-spinner {
+	margin-right:14px;
+}
+
+.enyo-addressing-noresults {
+	color: gray;
+	text-align: center;
+}

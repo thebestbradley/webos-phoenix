@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!--
+  The grey diamond a system app's object stands on, after the platter of the
+  Open webOS Accounts icon (com.palm.app.accounts icon-256x256.png,
+  Apache-2.0), measured there: a square slab of dark slate glass seen from
+  the front and above, its top face a rhombus 228 of 256 wide, the near half
+  taller than the far one (perspective); the glass lighter at the back and
+  slightly translucent; a pale bevel on the two near edges; a near-black edge
+  8 units thick below them; a soft shadow under it. Drawn anew for Phoenix
+  (no pixels copied).
+
+  Top face: back (128,34), right (242,124), front (128,226), left (14,124).
+-->
+<defs>
+  <linearGradient id="pl-face" gradientUnits="userSpaceOnUse" x1="0" y1="34" x2="0" y2="226">
+    <stop offset="0" stop-color="#8d969e"/>
+    <stop offset="0.25" stop-color="#6c757d"/>
+    <stop offset="0.48" stop-color="#4a525a"/>
+    <stop offset="0.75" stop-color="#3a4148"/>
+    <stop offset="1" stop-color="#30363c"/>
+  </linearGradient>
+  <!-- A broad sheen across the far half, as on a glass table top. -->
+  <radialGradient id="pl-sheen" gradientUnits="userSpaceOnUse" cx="128" cy="40" r="150" gradientTransform="translate(0 40) scale(1 0.62) translate(0 -40)">
+    <stop offset="0" stop-color="#fff" stop-opacity="0.22"/>
+    <stop offset="0.55" stop-color="#fff" stop-opacity="0.06"/>
+    <stop offset="0.75" stop-color="#fff" stop-opacity="0"/>
+  </radialGradient>
+  <linearGradient id="pl-side-l" gradientUnits="userSpaceOnUse" x1="14" y1="0" x2="128" y2="0">
+    <stop offset="0" stop-color="#2c3034"/>
+    <stop offset="1" stop-color="#16181a"/>
+  </linearGradient>
+  <linearGradient id="pl-side-r" gradientUnits="userSpaceOnUse" x1="128" y1="0" x2="242" y2="0">
+    <stop offset="0" stop-color="#1b1d20"/>
+    <stop offset="1" stop-color="#2e3236"/>
+  </linearGradient>
+  <linearGradient id="pl-bevel" gradientUnits="userSpaceOnUse" x1="14" y1="0" x2="242" y2="0">
+    <stop offset="0" stop-color="#b5c6d3" stop-opacity="0.35"/>
+    <stop offset="0.5" stop-color="#c3d4e0" stop-opacity="0.9"/>
+    <stop offset="1" stop-color="#b5c6d3" stop-opacity="0.35"/>
+  </linearGradient>
+  <clipPath id="pl-top">
+    <polygon points="128,34 242,124 128,226 14,124"/>
+  </clipPath>
+  <filter id="pl-shadow" x="-20%" y="-20%" width="140%" height="140%">
+    <feGaussianBlur stdDeviation="5"/>
+  </filter>
+  <filter id="pl-soft" x="-50%" y="-50%" width="200%" height="200%">
+    <feGaussianBlur stdDeviation="9"/>
+  </filter>
+  <filter id="pl-contact" x="-50%" y="-50%" width="200%" height="200%">
+    <feGaussianBlur stdDeviation="2.5"/>
+  </filter>
+</defs>
+<!-- Shadow on whatever is below. -->
+<polygon points="128,40 244,130 128,240 12,130" fill="#000" opacity="0.55" filter="url(#pl-shadow)"/>
+<!-- The near edges' thickness. -->
+<polygon points="14,124 128,226 128,234 14,131" fill="url(#pl-side-l)"/>
+<polygon points="128,226 242,124 242,131 128,234" fill="url(#pl-side-r)"/>
+<!-- The glass top. -->
+<polygon points="128,34 242,124 128,226 14,124" fill="url(#pl-face)" fill-opacity="0.96"/>
+<polygon points="128,34 242,124 128,226 14,124" fill="url(#pl-sheen)"/>
+<!-- Edges: the far ones catch a little light, the near ones a bright bevel. -->
+<polyline points="14,124 128,34 242,124" fill="none" stroke="#aab4bc" stroke-opacity="0.55" stroke-width="1.2" stroke-linejoin="round"/>
+<polyline points="14.8,124.6 128,225.4 241.2,124.6" fill="none" stroke="url(#pl-bevel)" stroke-width="1.6" stroke-linejoin="round"/>
+</svg>

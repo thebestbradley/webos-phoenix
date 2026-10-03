@@ -1,0 +1,71 @@
+/*
+ * Copyright (c) 2026 webOS Phoenix contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Help: the topic list on the Heritage grey, a topic as a white page.
+ */
+
+.help-search { padding: 2px 4px 6px; }
+.help-search input {
+    display: block;
+    width: 100%;
+    height: 40px;
+    padding: 0 14px 0 36px;
+    border: 1px solid #a8a8a6;
+    border-radius: 20px;
+    background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='10' cy='10' r='6.5' fill='none' stroke='%23888' stroke-width='2.4'/%3E%3Cpath d='M15 15l5.5 5.5' stroke='%23888' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E") 11px center / 18px no-repeat;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25);
+    font: inherit;
+    font-size: 17px;
+    color: #000;
+    outline: none;
+    -webkit-user-select: text;
+    user-select: text;
+}
+.help-search input:focus { border-color: #2f86d6; box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25), 0 0 0 2px rgba(47, 134, 214, 0.35); }
+
+.help-list .pui-row-subtitle { white-space: normal; }
+.help-current { background: rgba(47, 134, 214, 0.18); }
+
+.help-article {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    padding: 4px 14px 10px;
+    margin: 4px 0 10px;
+    font-size: 17px;
+    line-height: 1.45;
+    color: #1d1d1d;
+    -webkit-user-select: text;
+    user-select: text;
+}
+.help-article h2 { font-size: 18px; margin: 14px 0 4px; color: #2d6c94; }
+.help-article h3 { font-size: 16px; margin: 12px 0 2px; }
+.help-article p { margin: 8px 0; }
+.help-article ul, .help-article ol { margin: 8px 0; padding-left: 22px; }
+.help-article li { margin: 4px 0; }
+.help-article code {
+    font-family: inherit;
+    font-weight: bold;
+    background: #eef1f4;
+    border-radius: 4px;
+    padding: 0 4px;
+}
+.help-article a { color: #1f75bf; text-decoration: none; font-weight: bold; }
+.help-tip {
+    margin: 10px 0;
+    padding: 8px 10px;
+    border-left: 4px solid #2f86d6;
+    background: #eef5fc;
+    border-radius: 0 6px 6px 0;
+    font-size: 16px;
+}
+.help-open-app { width: 100%; }
+
+.help-wide { display: flex; height: 100vh; }
+.help-left { flex: none; width: 340px; overflow-y: auto; border-right: 1px solid #b9b9b7; }
+.help-right { flex: 1; min-width: 0; overflow-y: auto; }
+.help-wide .pui-page.narrow { --pui-gutter: 10px; }
+.help-right .pui-page { max-width: 680px; margin: 0 auto; }
+
+html.phoenix-high-contrast .help-article { color: #000; box-shadow: 0 0 0 2px #000; }

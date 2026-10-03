@@ -1,0 +1,22 @@
+/* Phoenix compat: the browser on a phone.
+ *
+ * The TouchPad toolbar is one 54 px row: back, forward, the address field
+ * and three buttons. At 320 px the buttons leave the address field no room,
+ * so on a phone the field gets a row of its own above the buttons, like
+ * the address bar over the command menu in the Pre's browser.
+ */
+@media (max-width: 480px) {
+	.actionbar.enyo-toolbar {
+		height: auto;
+	}
+	.actionbar .menu-container {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-between;
+	}
+	.actionbar .menu-container > .addressbar {
+		order: -1;
+		flex: 1 0 100%;
+		margin: 4px 0 2px;
+	}
+}

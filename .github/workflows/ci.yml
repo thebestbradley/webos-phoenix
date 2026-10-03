@@ -9,6 +9,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install Qt 6
         run: |
@@ -17,25 +19,220 @@ jobs:
             qt6-base-dev qt6-declarative-dev qt6-declarative-dev-tools \
             qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtqml-workerscript \
             qml6-module-qttest qml6-module-qt5compat-graphicaleffects \
-            xvfb xauth libgl1-mesa-dri fonts-dejavu-core
+            qt6-webengine-dev qml6-module-qtwebengine qml6-module-qtwebchannel \
+            qt6-multimedia-dev \
+            xvfb xauth libgl1-mesa-dri fonts-dejavu-core \
+            pkg-config libglib2.0-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            apps/package-lock.json
+            apps/enact-notes-limestone/package-lock.json
+            apps/enact-notes-agate/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Radicale and WsgiDAV (CardDAV / CalDAV and WebDAV servers for the DAV sync and backup tests)
+        run: python3 -m pip install radicale wsgidav cheroot
+
+      # The Marketplace's catalog service (server/marketplace): PHP 8 with
+      # libsodium and SQLite. The web apps' tests use it too (the
+      # Marketplace's device service against the real server).
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: sodium, pdo_sqlite, pdo_mysql, zlib
+          coverage: none
+
+      - name: Marketplace catalog service (PHP) - tests
+        run: php server/marketplace/tests/run.php
+
+      - name: Update feed publisher (server/updates)
+        run: php server/updates/tests/run.php
+
+      - name: Web apps (React + TypeScript) - typecheck, unit tests, build
+        working-directory: apps
+        run: |
+          # Every platform's native packages in the lock, or npm ci fails on Macs.
+          node ../tools/check-lockfile.cjs
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+          # The device services (Node.js, not bundled): syntax only. The DAV
+          # service's own tests ran above (vitest, against Radicale).
+          for f in files/service/*.js voicememos/service/*.js dav/service/*.js dav/service/lib/*.js \
+                   settings/service/*.js settings/service/lib/*.js marketplace/service/*.js marketplace/service/lib/*.js \
+                   ../services/updates/*.js ../services/updates/lib/*.js; do node --check "$f"; done
+
+      # The Enact demos are npm projects of their own (apps/enact-notes-*/
+      # README.md); `npm ci` copies in @phoenix/notes-core as built above.
+      - name: Enact demo apps - typecheck, build
+        working-directory: apps
+        run: |
+          for app in enact-notes-limestone enact-notes-agate; do
+            node ../tools/check-lockfile.cjs $app/package-lock.json
+            (cd $app && npm ci --no-audit --no-fund && npm run typecheck && npm run build)
+          done
+
+      # The Flutter demo (apps/flutter-notes/README.md): the Flutter release
+      # its pubspec.lock was resolved with.
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.5
+          channel: stable
+          cache: true
+
+      - name: Flutter demo app - analyze, unit tests, build
+        working-directory: apps/flutter-notes
+        run: |
+          flutter pub get --enforce-lockfile
+          dart analyze --fatal-infos
+          flutter test
+          tool/build.sh
 
       - name: Build simulator
         run: |
-          cmake -S shell -B build -DCMAKE_BUILD_TYPE=Release
+          # The apps were built above; skip the CMake npm step.
+          cmake -S shell -B build -DCMAKE_BUILD_TYPE=Release -DPHOENIX_BUILD_APPS=OFF
           cmake --build build -j
 
       - name: Behaviour tests
-        run: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import shell/qml -input shell/tests
+        run: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import shell/qml -import build/qml -input shell/tests
+
+      # A device pixel ratio of 2 (a Retina Mac): Qt then loads name@2x.png
+      # for name.png by itself, which must not change the art's size, and
+      # app icons come from the file that covers 2 pixels per point.
+      - name: HiDPI art at a device pixel ratio of 2
+        run: QT_SCALE_FACTOR=2 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import shell/qml -import build/qml -input shell/tests/tst_hidpi.qml
+
+      - name: Terminal PTY service (core and Luna methods, services/pty)
+        run: build/pty/pty-test
+
+      - name: The simulator's installed apps (SimInstaller)
+        run: build/siminstaller-test
+
+      - name: The keyboard's dictation (recording format, transcriber replies)
+        run: build/dictation-test
+
+      - name: Trademark overlays up to date
+        run: python3 tools/debrand-overlays.py --check
+
+      - name: HiDPI art present and true to its 1x art
+        run: |
+          python3 -m pip install pillow numpy
+          python3 tools/hidpi-art.py --check
+          python3 tools/keyboard-charcoal.py --check
+
+      - name: App icons match their SVG sources; the originals' 512 px icons are present
+        run: |
+          node tools/render-app-icons.cjs --check
+          python3 tools/upscale-app-icons.py --check
+
+      - name: Feedback sounds match their generator
+        run: python3 tools/make-feedback-sounds.py --check
+
+      - name: Web app tests (original webOS apps in headless Chromium)
+        run: |
+          npm install -g playwright@1
+          playwright install --with-deps chromium
+          export NODE_PATH="$(npm root -g)"
+          node tools/test-apps.cjs --out app-tests/phone
+          node tools/test-apps.cjs --tablet --out app-tests/tablet
+          node tools/test-hidpi.cjs
+          node tools/test-settings.cjs --out app-tests/settings-phone
+          node tools/test-settings.cjs --tablet --out app-tests/settings-tablet
+          node tools/test-backup.cjs --out app-tests/backup-phone
+          node tools/test-backup.cjs --tablet --out app-tests/backup-tablet
+          node tools/test-marketplace.cjs --out app-tests/marketplace-phone
+          node tools/test-marketplace.cjs --tablet --out app-tests/marketplace-tablet
+          node tools/test-appmanager.cjs
+          node tools/test-updates.cjs --out app-tests/updates-phone
+          node tools/test-updates.cjs --tablet --out app-tests/updates-tablet
+          node tools/test-phone-messaging.cjs --out app-tests/phone-messaging-phone
+          node tools/test-phone-messaging.cjs --tablet --out app-tests/phone-messaging-tablet
+          node tools/test-media.cjs --out app-tests/media-phone
+          node tools/test-media.cjs --tablet --out app-tests/media-tablet
+          node tools/test-justtype.cjs --out app-tests/justtype-phone
+          node tools/test-justtype.cjs --tablet --out app-tests/justtype-tablet
+          node tools/test-browser.cjs --out app-tests/browser-phone
+          node tools/test-browser.cjs --tablet --out app-tests/browser-tablet
+          node tools/test-files.cjs --out app-tests/files-phone
+          node tools/test-files.cjs --tablet --out app-tests/files-tablet
+          node tools/test-tasks.cjs --out app-tests/tasks-phone
+          node tools/test-tasks.cjs --tablet --out app-tests/tasks-tablet
+          node tools/test-db8-pages.cjs --out app-tests/db8-pages
+          node tools/test-alarm.cjs --out app-tests/alarm
+          node tools/test-voicememos.cjs --out app-tests/voicememos-phone
+          node tools/test-voicememos.cjs --tablet --out app-tests/voicememos-tablet
+          node tools/test-flashlight.cjs --out app-tests/flashlight-phone
+          node tools/test-flashlight.cjs --tablet --out app-tests/flashlight-tablet
+          node tools/test-screenshot.cjs --out app-tests/screenshot-phone
+          node tools/test-screenshot.cjs --tablet --out app-tests/screenshot-tablet
+          node tools/test-notificationlab.cjs --out app-tests/notificationlab-phone
+          node tools/test-notificationlab.cjs --tablet --out app-tests/notificationlab-tablet
+          node tools/test-scanner.cjs --out app-tests/scanner-phone
+          node tools/test-scanner.cjs --tablet --out app-tests/scanner-tablet
+          node tools/test-weather.cjs --out app-tests/weather-phone
+          node tools/test-weather.cjs --tablet --out app-tests/weather-tablet
+          node tools/test-maps.cjs --out app-tests/maps-phone
+          node tools/test-maps.cjs --tablet --out app-tests/maps-tablet
+          node tools/test-passwords.cjs --out app-tests/passwords-phone
+          node tools/test-passwords.cjs --tablet --out app-tests/passwords-tablet
+          node tools/test-authenticator.cjs --out app-tests/authenticator-phone
+          node tools/test-authenticator.cjs --tablet --out app-tests/authenticator-tablet
+          node tools/test-terminal.cjs --out app-tests/terminal-phone
+          node tools/test-terminal.cjs --tablet --out app-tests/terminal-tablet
+          node tools/test-videos.cjs --out app-tests/videos-phone
+          node tools/test-videos.cjs --tablet --out app-tests/videos-tablet
+          node tools/test-podcasts.cjs --out app-tests/podcasts-phone
+          node tools/test-podcasts.cjs --tablet --out app-tests/podcasts-tablet
+          node tools/test-docs.cjs --out app-tests/docs-phone
+          node tools/test-docs.cjs --tablet --out app-tests/docs-tablet
+          node tools/test-dav-sync.cjs --out app-tests/dav-phone
+          node tools/test-dav-sync.cjs --tablet --out app-tests/dav-tablet
+          node tools/test-orientation.cjs --out app-tests/orientation-phone
+          node tools/test-orientation.cjs --tablet --out app-tests/orientation-tablet
+          node tools/test-keyboard.cjs --out app-tests/keyboard-phone
+          node tools/test-keyboard.cjs --tablet --out app-tests/keyboard-tablet
+          node tools/test-editing.cjs --out app-tests/editing-phone
+          node tools/test-editing.cjs --tablet --out app-tests/editing-tablet
+          node tools/test-firstuse.cjs --out app-tests/firstuse-phone
+          node tools/test-firstuse.cjs --tablet --out app-tests/firstuse-tablet
+          node tools/test-help.cjs --out app-tests/help-phone
+          node tools/test-help.cjs --tablet --out app-tests/help-tablet
+          node tools/test-emergency.cjs --out app-tests/emergency-phone
+          node tools/test-emergency.cjs --tablet --out app-tests/emergency-tablet
+          node tools/test-location.cjs --out app-tests/location-phone
+          node tools/test-location.cjs --tablet --out app-tests/location-tablet
+          node tools/test-enact-notes.cjs --out app-tests/enact-notes
+          node tools/test-ionic-notes.cjs --out app-tests/ionic-notes
+          node tools/test-flutter-notes.cjs --out app-tests/flutter-notes
 
       - name: Screenshots
         run: |
           mkdir -p screenshots/phone screenshots/tablet
-          for s in locked cards maximized launcher dashboard justtype systemmenu; do
+          for s in locked cards stacks reorder maximized launcher launcheredit lowbattery banner notified dashboard drawer justtype keyboard systemmenu pin emergency firstuse; do
             xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --scene $s --screenshot screenshots/phone/$s.png
             xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --tablet --scene $s --screenshot screenshots/tablet/$s.png
           done
+          # Turned: the phone on its side, the TouchPad upright.
+          mkdir -p screenshots/phone-landscape screenshots/tablet-portrait
+          for s in locked cards heldcard maximized launcher dashboard keyboard; do
+            xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --scene $s --orientation left --screenshot screenshots/phone-landscape/$s.png
+            xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --tablet --scene $s --orientation right --screenshot screenshots/tablet-portrait/$s.png
+          done
 
+      # Also when a step fails: the app tests' screenshots show what went wrong.
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: screenshots
-          path: screenshots
+          path: |
+            screenshots
+            app-tests

@@ -1,0 +1,12 @@
+{
+    "appId": "com.palm.update",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": ["com.palm.update"],
+    "permissions": [
+        {
+            "service": "com.palm.update",
+            "outbound": ["com.palm.activitymanager", "com.palm.connectionmanager", "com.palm.power", "com.webos.notification"]
+        }
+    ]
+}

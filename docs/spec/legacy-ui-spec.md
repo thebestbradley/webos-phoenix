@@ -165,6 +165,10 @@ scale = activeScale                                                  // :723
 
 * All cards use **nonActiveScale**. Cards stack with a **7 px** x-step, applied only to the top 3 cards
   (`kMaxClosedSpacedCards`). Deeper cards sit exactly underneath (`:757-764`).
+* This layout is only used by `layoutAllGroups` (relayouts without animation: rotation, loading). After a slide
+  (`slideAllGroups`, including the minimize) and while dragging (`slideAllGroupsOnTouchUpdate`) every other group is
+  `calculateOpenedPositions(xOffset)` with its offset (`animateClose`: the card width, fully folded), so resting
+  neighbours show the 10 px collapse above. Phoenix lays every stack out that way.
 * Groups are laid out left and right of the active group with `GapBetweenCardGroups` between their bounding widths
   (`CardWindowManager.cpp:2501-2537`).
 
@@ -172,7 +176,7 @@ scale = activeScale                                                  // :723
 
 | property | value | source |
 |---|---|---|
-| rounded-corner radius | **40 px** in buffer coordinates (GL shader) | `Src/lunaui/cards/CardWindow.cpp:2515-2529` |
+| rounded-corner radius | **40 px** passed to the GL shader, which for a radius of 45 or less uses fixed factors: quarter ellipses 0.009 W × 0.022 H (0.027 H wider than tall), feathered 30 % while scaled, 1 % at full size (`CardRoundedCornerShaderStage.h:64-127`); the software path is a 25 px circle (`m_paintPath`) | `Src/lunaui/cards/CardWindow.cpp:2515-2529` |
 | corner radius vs scale | above scale 0.5 the radius factor is interpolated toward square, with the factor clamped at 0.48 | `Src/lunaui/cards/CardRoundedCornerShaderStage.h:112-116` |
 | drop shadow | 9-tile `card-shadow-tile.png` (87x87), extends **20 px** on every side, offset **+5 px** down | `Src/base/visual/CardDropShadowEffect.cpp:34-35,44,75-81` |
 | shadows off | while the launcher is fully visible ("low-res mode") and on the card being reordered | `CardWindowManager.cpp:3053-3067, 1893` |
@@ -663,7 +667,6 @@ is config-only (`conf/luna-tuna.conf:53-55`).
 | property | value | source |
 |---|---|---|
 | trigger | on an inductive charger (Touchstone) with `DockConnected`. Puck serial tracked | `Src/base/DisplayManager.cpp:544-547,1000-1022,1098` |
-| exit | Home, launcher gesture, screen-edge flick | `SystemUiController.cpp:450-453,529-532,2082-2085` |
 | max apps | 3 (chile 6). Default exhibition app `com.palm.app.photos`. Built-in **Time** app `com.palm.app.dockmodetime` | `Settings.cpp:183`; `conf/default-exhibition-apps.json`; `Src/lunaui/dock/DockModeClock.cpp:67,123` |
 | status bar | TypeDockMode, clock padding 5, title group opens the dock app menu | `StatusBar.cpp:80-83,282-290` |
 | app menu | width 320. Rows **70 px**, 5.5 visible. Icon 48, padding 10. Fonts 18 / 21 px. Highlight `menu-selection-gradient-default.png`, divider `menu-divider.png` | `DockModeAppMenuContainer.cpp:54-58,95,182,209-221`; `DockModeMenuManager.cpp:60` |
@@ -673,6 +676,14 @@ is config-only (`conf/luna-tuna.conf:53-55`).
 | animations | screen fade 900, dock fade 500, dock start delay 270, curve 3 InOutQuad, rotation 600, card slide 300 curve 7 InOutCubic, menu scroll 150 curve 10 | `AnimationSettings.cpp:125-131`; `DockModeWindowManager.cpp:190-195` |
 | night brightness | 1 | `Settings.cpp:184` |
 | Time app (QML) | 1024x768 canvas, `clock_bg.png`. Three pages swipe horizontally (snap one item): **analog glass**, **digital flip**, **analog matte**. Page dots `indicator/on|off.png`, spacing 10, at +340 (landscape) / +400 (portrait) from center | `uiComponents/DockModeTime/Clocks.qml:3-40` |
+| analog clocks | face `analog/<glass\|matte>/base.png` (508 / 488 px) centred; hands the face's size (glass) or 30x488 (matte), turned about their centre, clockwise; hour `h·30 + m·0.5`°, minute `m·6`°; second hand matte only, OutBack 300 ms. Glass: the locale's long date 300 px under the centre. Matte: short weekday (`QLocale::dayName ShortFormat`) and day of month 108 px left / right of the centre. Prelude point size 30, `#e1e1e1`. Read every 100 ms while in front (`mainTimerRunning`) | `AnalogClock.qml`; `WindowServer.cpp:306-326` |
+| flip clock | `digital/<portrait\|landscape>/flippers-time.png` x4 (178x249 / 150x209), gaps 4, 22, dots, 22, 4, row 48 px above the centre; hours with a leading zero, 12 h unless HH24, AM/PM (point size 20 / 15) in the first flipper's corner (-42,-95 / -38,-80). Date row of 11 `flippers-date.png` (70x104 / 60x88), spacing 2, 136 px under the centre: month (`ShortFormat`, upper case), blank, day, blank, year. Digits point size 158 / 132 (date 52 / 44), 4 px above each flipper's centre; `-mask.png` over them | `DigitalClock.qml` |
+| when (display states) | screen off on the puck: dock mode at once (locked) or OnPuck (unlocked / on a call). Screen on: OnPuck, lock state unlocked (the lock screen tries to unlock), no dimming; dock mode after dim + off timeouts (`DisplayOnPuck::timeout`), on Power, or on a lock request. Dock mode: no timeout; Power -> off (still docked on the puck); Home / undock -> OnPuck or On (lock state unlocked); off the puck -> On; a call -> OnPuck | `DisplayStates.cpp:307-370, 953-1070, 1545-1890` |
+| lock state | `StateDockMode`: no padlock, background or alerts, PIN panel hidden; the lock window itself hidden in dock mode (`reorderWindowManagersForDockMode`) | `LockWindow.cpp:1138-1158`; `WindowServerLuna.cpp:569-615` |
+| exit | Home, launcher gesture, Back rejected by the window, screen-edge flick, a card added or maximized, brick mode | `SystemUiController.cpp:450-453, 529-532, 694-720, 944-951, 2082-2085` |
+| exhibition apps | appinfo `exhibitionMode` (or `dockMode`) true; menu title `exhibitionModeOptions.title` (or `dockModeOptions`), else `appmenu`. Launched with `{"windowType": "dockModeWindow", "dockMode": true}` by `com.palm.launcher`. Enabled list and per-puck app (`knownPucks`) in `/var/palm/user-exhibition-apps.json`; non-default windows closed on exit (`DockModeCloseAppsOnExit` true) | `ApplicationDescription.cpp:369-398`; `DockModeWindowManager.cpp:509-603`; `DockModePositionManager.cpp` |
+| services | `com.palm.systemmanager/getDockModeStatus {subscribe}` -> `{enabled}`; `com.palm.applicationManager/listDockModeLaunchPoints`, `addDockModeLaunchPoint {appId}`, `removeDockModeLaunchPoint {appId}`; deviceInfo `dockModeEnabled` | `SystemService.cpp:1913-1990`; `ApplicationManagerService.cpp:2486-2985`; `DeviceInfo.cpp:315` |
+| preferences | `dockModeSoundPref` "systemsettings"; `dockwallpaper {wallpaperFile}` | `conf/defaultPreferences.txt:32`; `Preferences.cpp:560-568` |
 
 ---
 

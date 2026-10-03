@@ -1,0 +1,23 @@
+{
+    "id": "com.palm.tasklist:1",
+    "owner": "org.webosphoenix.tasks",
+    "sync": true,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "name": { "type": "string", "description": "The list's name (a CalDAV calendar's displayname)" },
+            "accountId": { "type": "string", "description": "_id of the com.palm.account:1 it syncs with; empty on this device" },
+            "sortOrder": { "type": "integer", "optional": true },
+            "isDefault": { "type": "boolean", "optional": true, "description": "The Inbox; it cannot be deleted" }
+        }
+    },
+    "indexes": [
+        {
+            "name": "byaccount",
+            "props": [
+                { "name": "accountId" },
+                { "name": "sortOrder", "default": 0 }
+            ]
+        }
+    ]
+}

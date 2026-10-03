@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Voice Memos: a chrome studio microphone on a short stand, its red
+     recording light on. Original Phoenix art (the webOS Voice Memos icon was
+     not open-sourced). -->
+<defs>
+  <linearGradient id="chromeh" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#7c838a"/>
+    <stop offset="0.18" stop-color="#e9ecef"/>
+    <stop offset="0.35" stop-color="#ffffff"/>
+    <stop offset="0.6" stop-color="#a7adb3"/>
+    <stop offset="0.85" stop-color="#5b6168"/>
+    <stop offset="1" stop-color="#8c939a"/>
+  </linearGradient>
+  <pattern id="mesh" width="8" height="8" patternUnits="userSpaceOnUse">
+    <path d="M0 4H8M4 0V8" stroke="#3a3f44" stroke-width="1.4" opacity="0.55"/>
+  </pattern>
+  <radialGradient id="led" cx="0.4" cy="0.35" r="0.6">
+    <stop offset="0" stop-color="#ffb3a8"/>
+    <stop offset="0.5" stop-color="#ee2a1a"/>
+    <stop offset="1" stop-color="#8a0d05"/>
+  </radialGradient>
+  <linearGradient id="base" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#5a6066"/>
+    <stop offset="1" stop-color="#1c1f22"/>
+  </linearGradient>
+  <clipPath id="head"><rect x="84" y="20" width="88" height="128" rx="44"/></clipPath>
+</defs>
+<!-- Stand. -->
+<ellipse cx="128" cy="222" rx="62" ry="14" fill="url(#base)" stroke="#111" stroke-width="2"/>
+<ellipse cx="128" cy="218" rx="58" ry="10" fill="#6d747b" opacity="0.6"/>
+<rect x="120" y="164" width="16" height="56" fill="url(#chromeh)" stroke="#3a3f44" stroke-width="2"/>
+<!-- Yoke. -->
+<path d="M70 92V112C70 146 96 170 128 170C160 170 186 146 186 112V92" fill="none" stroke="#3a3f44" stroke-width="15" stroke-linecap="round"/>
+<path d="M70 92V112C70 146 96 170 128 170C160 170 186 146 186 112V92" fill="none" stroke="url(#chromeh)" stroke-width="10" stroke-linecap="round"/>
+<!-- The capsule: a chrome mesh head over a dark collar. -->
+<g filter="url(#c-lift)">
+  <rect x="84" y="20" width="88" height="128" rx="44" fill="url(#chromeh)" stroke="#3a3f44" stroke-width="2.5"/>
+  <g clip-path="url(#head)">
+    <rect x="84" y="20" width="88" height="128" fill="url(#mesh)"/>
+    <rect x="84" y="96" width="88" height="14" fill="#2b2f33"/>
+    <rect x="84" y="97" width="88" height="3" fill="#fff" opacity="0.35"/>
+    <ellipse cx="112" cy="46" rx="12" ry="20" fill="#fff" opacity="0.55"/>
+  </g>
+  <rect x="84" y="20" width="88" height="128" rx="44" fill="none" stroke="#3a3f44" stroke-width="2.5"/>
+  <circle cx="128" cy="126" r="8" fill="url(#led)" stroke="#5a0a04" stroke-width="1.5"/>
+</g>
+</svg>

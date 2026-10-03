@@ -1,0 +1,85 @@
+/* webOS Phoenix overlay (tools/hidpi-art.py): the original stylesheet, with each
+   picture that has HiDPI variants asked for as an image set of them
+   (docs/spec/hidpi-art.md). Do not edit; regenerate. */
+/* @@@LICENSE
+* Copyright (c) 2011-2013 LG Electronics, Inc.
+* Use of this file is subject to the license terms as set forth in the
+* file README.md found in the root directory of this repository.
+* LICENSE@@@   */
+
+.enyo-image-album-thumbnails-frame {
+	width: 120px;
+	height: 79px;
+	z-index: 2;
+}
+
+.enyo-image-album-thumbnails-show-thumb-1 {
+	background-image: -webkit-image-set(url(../images/thumbnails-overlay-set1-show1.png) 1x, url(../images/thumbnails-overlay-set1-show1@2x.png) 2x, url(../images/thumbnails-overlay-set1-show1@3x.png) 3x);
+}
+
+.enyo-image-album-thumbnails-show-thumb-2 {
+	background-image: -webkit-image-set(url(../images/thumbnails-overlay-set1-show2.png) 1x, url(../images/thumbnails-overlay-set1-show2@2x.png) 2x, url(../images/thumbnails-overlay-set1-show2@3x.png) 3x);
+}
+.enyo-image-album-thumbnails-show-thumb-3 {
+	background-image: -webkit-image-set(url(../images/thumbnails-overlay-set1-show3.png) 1x, url(../images/thumbnails-overlay-set1-show3@2x.png) 2x, url(../images/thumbnails-overlay-set1-show3@3x.png) 3x);
+}
+
+.enyo-image-album-thumbnails-image {
+	position: absolute;
+	z-index: 1;
+	-webkit-border-radius: 4px;
+	margin-top: 7px;
+	margin-left: 56px;
+}
+
+.enyo-image-album-thumbnails-client img:nth-child(2) {
+	top: 5px;
+	right: 28px;
+}
+
+.enyo-image-album-thumbnails-client img:nth-child(3) {
+	top: -4px;
+	right: 55px;
+}
+
+.enyo-image-album-thumbnails-counter-holder {
+	position: absolute;
+	height: 26px;
+	z-index: 3;
+	border-width: 0px 11px;
+	-webkit-border-image: -webkit-image-set(url(../images/album-count-9tile.png) 1x, url(../images/album-count-9tile@2x.png) 2x, url(../images/album-count-9tile@3x.png) 3x) 0 11 0 11 repeat repeat;
+	-webkit-box-sizing: border-box;
+	text-align: center;
+	margin-top: 5px;
+}
+
+.enyo-image-album-thumbnails-counter-holder-show-thumb-1 {
+	top: -2px;
+	right: 54px;
+}
+
+.enyo-image-album-thumbnails-counter-holder-show-thumb-2 {
+	top: 4px;
+	right: 74px;
+
+}
+
+.enyo-image-album-thumbnails-counter-holder-show-thumb-3 {
+	top: -5px;
+	right: 98px;
+}
+
+.enyo-image-album-thumbnails-counter {
+	font-size: 16px;
+	margin: 2px -2px;
+	color: white;
+}
+
+.enyo-imagepicker-attach-icon {
+    top: 50%;
+    position: absolute;
+    margin-top: -16px; /* Half the height of the icon to vertically center */
+  	width: 32px;
+  	height: 32px;
+    background: -webkit-image-set(url(../images/attach-icon.png) 1x, url(../images/attach-icon@2x.png) 2x, url(../images/attach-icon@3x.png) 3x) no-repeat;
+}

@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Photos: a pile of prints, a sunset on top, after the Open webOS file
+     picker's empty-photo-library.png (luna-systemui, Apache-2.0). -->
+<defs>
+  <linearGradient id="border" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="1" stop-color="#e4e6e8"/>
+  </linearGradient>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#3b4a7a"/>
+    <stop offset="0.35" stop-color="#b9605a"/>
+    <stop offset="0.62" stop-color="#f08a3a"/>
+    <stop offset="0.72" stop-color="#ffcf6a"/>
+    <stop offset="0.78" stop-color="#e98a3d"/>
+    <stop offset="1" stop-color="#4a2a2a"/>
+  </linearGradient>
+  <radialGradient id="sun" cx="0.5" cy="0.5" r="0.5">
+    <stop offset="0" stop-color="#fffbe0"/>
+    <stop offset="0.4" stop-color="#ffe27a"/>
+    <stop offset="1" stop-color="#ffb347" stop-opacity="0"/>
+  </radialGradient>
+  <linearGradient id="green" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#9ad15a"/>
+    <stop offset="1" stop-color="#3f7d22"/>
+  </linearGradient>
+  <linearGradient id="blue" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#9fd0f2"/>
+    <stop offset="1" stop-color="#2f6ea8"/>
+  </linearGradient>
+  <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#fff" stop-opacity="0.35"/>
+    <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+  </linearGradient>
+</defs>
+<!-- Two prints underneath. -->
+<g filter="url(#c-lift)" transform="rotate(-14 128 136)">
+  <rect x="34" y="52" width="172" height="150" fill="url(#border)" stroke="#a7abb0" stroke-width="1.5"/>
+  <rect x="46" y="64" width="148" height="114" fill="url(#green)"/>
+</g>
+<g filter="url(#c-lift)" transform="rotate(9 128 136)">
+  <rect x="40" y="54" width="172" height="150" fill="url(#border)" stroke="#a7abb0" stroke-width="1.5"/>
+  <rect x="52" y="66" width="148" height="114" fill="url(#blue)"/>
+  <path d="M52 150L96 120L130 142L160 124L200 152V180H52Z" fill="#2c5d34"/>
+</g>
+<!-- The sunset on top. -->
+<g filter="url(#c-lift)" transform="rotate(-3 128 128)">
+  <rect x="38" y="40" width="180" height="168" fill="url(#border)" stroke="#9fa4a9" stroke-width="1.5"/>
+  <rect x="50" y="52" width="156" height="128" fill="url(#sky)"/>
+  <circle cx="160" cy="138" r="22" fill="url(#sun)"/>
+  <circle cx="160" cy="138" r="7" fill="#fffbe6"/>
+  <path d="M50 92C80 88 110 96 140 90C170 86 190 94 206 90V96C180 100 150 94 120 100C90 104 70 96 50 100Z" fill="#7b3f4f" opacity="0.45"/>
+  <!-- The far shore and dark trees in front. -->
+  <path d="M50 146C70 140 90 146 110 142C130 140 140 146 150 144V150H50Z" fill="#4a2b34" opacity="0.8"/>
+  <path d="M50 160C58 150 62 146 70 152C76 140 84 142 88 152C96 146 104 150 110 158C120 154 130 160 140 162C156 158 176 164 206 162V180H50Z" fill="#1a1416"/>
+  <rect x="50" y="52" width="156" height="58" fill="url(#gloss)"/>
+</g>
+</svg>
