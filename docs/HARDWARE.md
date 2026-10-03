@@ -436,17 +436,43 @@ Verizon Pixels) cannot be unlocked and are out.
   wrynose. Pin scarthgap branches where they exist, and carry backports in a
   `meta-phoenix-bsp` layer where they do not.
 - **Build host:** x86-64 only, as today (see [BUILDING-MAC.md](BUILDING-MAC.md)).
+- **Parse check, no build host needed:** `scripts/parse-check.sh [MACHINE...]`
+  (default `qemux86-64 raspberrypi4-64`) sets up `build-webos` at the pinned
+  commit, clones its layers without history (about 200 MB), adds `meta-phoenix`, and for each machine runs `bitbake -p`
+  (parse every recipe) and `bitbake -n webos-phoenix-image` (a dry run that
+  resolves the whole task graph, including every `RDEPENDS`, and runs
+  nothing; the `torchd` and `whisper-cpp` stubs are resolved too). Nothing
+  is fetched (`BB_NO_NETWORK`) or built. Each machine adds about 300 MB
+  and about 12 minutes on 4 cores. The build directory is
+  `${TMPDIR:-/tmp}/webos-phoenix-parse` unless `PHOENIX_PARSE_DIR` says
+  otherwise; delete it afterwards. Host packages beyond a stock Ubuntu
+  24.04: `gawk diffstat chrpath cpio zstd lz4` and the `en_US.UTF-8`
+  locale. bitbake will not run as root; in a root-only container use
+  `unshare --user --map-user=1000 --map-group=1000 scripts/parse-check.sh`.
 
 ### Device CI matrix
 
 | Job | Machines | When |
 | --- | --- | --- |
-| Parse and resolve (`bitbake -p`, `--check`) | All Reference and Supported machines | Every PR |
+| Parse and resolve (`bitbake -p`, `bitbake -n`): **exists**, `.github/workflows/parse.yml` | `qemux86-64`, `raspberrypi4-64` today; every Reference and Supported machine as its BSP layers are added | Every PR |
 | Full image build (shared sstate) | `qemux86-64`, `raspberrypi4-64` | Every merge to main |
 | Boot test in QEMU (reach the card view, run app smoke tests) | `qemux86-64` | Every merge |
 | Full image build | Phone machines (Pixel 3a mainline and Halium, OnePlus 6, PinePhone Pro) | Nightly |
 | Hardware-in-the-loop boot test | Reference devices on a USB relay / fastboot rig, as postmarketOS is building | Nightly, once we have the rig (M3) |
 | Release images, signed RAUC bundles | All Reference and Supported | Each release |
+
+The parse job (`scripts/parse-check.sh`, see Build above) catches recipes
+that do not parse, missing `DEPENDS`/`RDEPENDS` providers, wrong
+`bbappend` targets and layer-series mismatches. It cannot catch what only
+shows when sources arrive: a wrong `LIC_FILES_CHKSUM` md5, a `SRC_URI` or
+`SRCREV` that does not exist upstream, a missing `file://` file (bitbake
+only notes its absence while parsing) or a compile error. Those wait for the
+full build. PinePhone Pro, the one Supported phone, is not in it yet: its
+BSP (`meta-pine64-luneos`, scarthgap branch) needs `meta-rockchip` and
+`meta-arm`, and its machine pulls `sensorfw`, `qtsensors-sensorfw-plugin`,
+`eg25-manager`, `linux-firmware-pine64` and `initramfs-uboot-image` from
+LuneOS's own layers (`meta-webos-ports`), which are built for the `luneos`
+distro rather than OSE's `webos`.
 
 ## Community and adoption
 
