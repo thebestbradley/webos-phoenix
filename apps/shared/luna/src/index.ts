@@ -13,6 +13,7 @@ export * from "./media";
 export * from "./files";
 export * from "./tasks";
 export * from "./transcriber";
+export * from "./dictation";
 export * from "./torch";
 export * from "./location";
 export * from "./pty";

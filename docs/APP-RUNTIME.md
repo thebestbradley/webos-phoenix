@@ -457,6 +457,7 @@ New Phoenix apps live in `apps/`, an npm workspace:
 
 | `apps/firstuse` | First Use (see [below](#first-use)) |
 | `apps/printmanager` | Print Manager (see [below](#printing)); `@phoenix/luna`'s `print.ts` is the print manager's client and `@phoenix/ui`'s `PrintDialog` the print dialog for Phoenix apps |
+| `apps/voicedial` | Voice Dial (see [below](#voice-dial)); `@phoenix/luna`'s `dictation.ts` is the client of `org.webosphoenix.dictation`, the shell's microphone and transcriber |
 | `apps/help` | Help (see [below](#help)); its topics are Markdown files in `apps/help/topics` |
 
 | `apps/dav` | The CardDAV & CalDAV account (see [below](#carddav-and-caldav)): a hidden Enyo 1.0 app with the account's sign-in page, its db8 kinds and account template, and `apps/dav/service`, its Node.js Luna service and sync engine |
@@ -624,7 +625,8 @@ framework's avatar.
   listed as not available (closed networks). Tablet: conversations on the
   left, the conversation on the right.
 
-Launch params: Phone `{number}` fills in the dial pad; Messaging
+Launch params: Phone `{number}` fills in the dial pad, `{number, dial: true}`
+calls it at once (Voice Dial); Messaging
 `{threadId}` opens a conversation, `{to, name}` starts a message,
 `{attachment}` or a share's `{share: {files}}` with a picture starts a
 picture message (Messaging is a share target for `image/*`).
@@ -1100,6 +1102,65 @@ placeholder), searches in the app and through Just Type's content search,
 renames, shares by Email, deletes, "transcribe automatically", and the
 `{memoId}` and `{newMemo}` launch params, with screenshots in
 `build/voicememos-tests/`.
+
+## Voice Dial
+
+`apps/voicedial` (`org.webosphoenix.voicedial`, Apps tab, with the original
+generic microphone icon of luna-sysmgr's
+`sysapps/com.palm.sysapp.voicedial`) is the Voice Dial system app.
+`com.palm.sysapp.voicedial` is an alias of it, and
+`com.palm.pmvoicecommand/startVoiceCommand {source}`, the only thing the
+original's launcher icon did (`ApplicationManager.cpp`
+`slotBuiltInAppEntryPoint_VoiceDial`; that service was never released),
+opens it.
+
+- It listens as soon as it opens: "Call Ada Palmer", "Call Marcus at work",
+  "Dial 4 0 8 5 5 5 0 1 4 2" (digits or words, "double five"). It stops by
+  itself a second after you finish speaking; a tap on the microphone stops
+  it sooner, or listens again.
+- What was said is matched to the contacts with a phone number
+  (`com.palm.person:1`; `src/lib/match.ts`): word by word, letter by letter,
+  so a name heard wrong still finds them ("Call either Palmer" is Ada
+  Palmer). A number is matched to its contact. "at work", "home", "mobile"
+  pick the number. When two people are about as likely (two Marcuses), it
+  asks which one; no match, or nothing heard, says so with Try Again.
+- The confirmation ("Call Ada Palmer?", the number and its type) listens
+  for "Yes" or "No", or takes a tap on Call or No. Yes launches Phone with
+  `{number, dial: true}` (a Phoenix launch param: Phone places the call at
+  once and shows it), and Voice Dial closes.
+
+**Listening** is the keyboard's dictation, lent to the app: the runtime's
+`org.webosphoenix.dictation` (`start {prompt, autoStop, subscribe}`,
+`stop`, `getStatus`; `@phoenix/luna`'s `dictation.ts`) sends "dictation"
+host messages to the shell, whose `Dictation` (`shell/native/dictation.cpp`)
+records the microphone and runs `org.webosphoenix.transcriber`
+(whisper.cpp) on it, and `SimWindowSource` passes its states back to the
+window. One microphone: the window that started a recording owns it
+(`Dictation.owner`) and only it gets the transcript; the keyboard ignores
+it. Voice Dial passes the contacts' names as `prompt`, which goes to
+whisper as its initial prompt (`transcribe {prompt}`, `whisper-cli
+--prompt`): with it whisper.cpp writes the names as they are spelled
+(espeak-ng saying "Call Lena Okafor mobile" came back as "Call the Iraq
+Affirmal" without it, "Call Lena Okafor Mobile." with it). `autoStop` ends
+the recording after speech and a second of quiet (`Dictation::EndOfSpeech`),
+or with "Nothing was heard." after 7 seconds without speech. In a browser
+without the shell there is no microphone to lend, and Voice Dial says so.
+
+**In phoenix-sim**, dictation runs `apps/voicememos/service/transcribe-cli.js`
+on the computer (whisper.cpp from `PHOENIX_WHISPER_CLI` /
+`PHOENIX_WHISPER_MODEL`, or the PATH). A computer without a microphone (or
+a test) can play WAV files as the microphone: `--microphone-file
+call.wav --microphone-file yes.wav` plays one per recording, each followed
+by quiet.
+
+`node tools/test-voicedial.cjs [--tablet]` drives it with the script in the
+shell's place (the dictation host messages, answered with the transcripts
+whisper.cpp made of espeak-ng's speech): the prompt, a misheard name, Yes
+and Phone's call, No, a number, a choice, no match, nothing heard, the
+microphone button, no microphone, and the original ids;
+`apps/voicedial/src/lib/match.test.ts` the matching;
+`build/dictation-test` the end of speech, the prompt and the file
+microphone.
 
 ## Flashlight
 

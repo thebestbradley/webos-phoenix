@@ -7197,6 +7197,115 @@
         runtime.voiceMemos = { placeholder: PLACEHOLDER, errors: E };
     })();
 
+    // ================================================================================
+    // Dictation for the apps (org.webosphoenix.dictation; Voice Dial)
+    // ================================================================================
+    //
+    // The shell's microphone and transcriber, the keyboard's dictation (shell/
+    // native/dictation.cpp: it records, writes a 16 kHz WAV and runs
+    // org.webosphoenix.transcriber's whisper.cpp on it), lent to an app that
+    // listens without a text field. A Phoenix service; the original Voice
+    // Dial called com.palm.pmvoicecommand, which was never released.
+    //
+    //   start {prompt?, autoStop?, subscribe: true}
+    //       -> {subscribed: true, state: "listening"}, {state: "transcribing"},
+    //          then {state: "done", text}, or an error (DICTATION_ERRORS in
+    //          apps/shared/luna/src/dictation.ts). prompt: words to expect,
+    //          e.g. the contacts' names (whisper's initial prompt); autoStop:
+    //          end by itself when the speaker is done. Cancelling the
+    //          subscription stops listening without a transcript.
+    //   stop {}      the speaker is done: transcribe what was heard
+    //   getStatus {} -> {available}
+    //
+    // One microphone: one recording at a time, for one window; the keyboard
+    // and other windows get NOT_AVAILABLE / IN_USE meanwhile.
+    //
+    // The shell does the work when /usr/share/phoenix/host.json says
+    // {"dictation": true} (phoenix-sim; a device's shell): "dictation" host
+    // messages ({op: "start" | "stop" | "cancel", prompt, autoStop}) go out,
+    // and the states come back through __phoenixRuntime.dictationEvent({state,
+    // text?, errorText?}). Anywhere else (a browser) there is no microphone
+    // to lend: start fails with NOT_AVAILABLE.
+    (function dictationServices() {
+        var E = { BAD_PARAMS: -1, NOT_AVAILABLE: 1, IN_USE: 2, NOTHING_HEARD: 3, FAILED: 4 };
+        var hostInfo = null;
+        function available() {
+            if (hostInfo === null) {
+                try { hostInfo = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/host.json") || "{}") || {}; }
+                catch (e) { hostInfo = {}; }
+            }
+            return hostInfo.dictation === true;
+        }
+        var current = null;           // {reply, ctx} of the listening start call
+        function finish(r) {
+            var c = current;
+            current = null;
+            if (c && !c.ctx.cancelled()) c.reply(r);
+        }
+        runtime.dictationEvent = function (ev) {
+            if (!current || !ev) return;
+            if (ev.state === "listening" || ev.state === "transcribing") {
+                if (!current.ctx.cancelled()) current.reply(ok({ subscribed: true, state: ev.state }));
+            } else if (ev.state === "done") {
+                var text = String(ev.text || "").trim();
+                finish(text ? ok({ state: "done", text: text }) : fail(E.NOTHING_HEARD, "Nothing was heard."));
+            } else if (ev.state === "error") {
+                var why = String(ev.errorText || "Dictation failed.");
+                finish(fail(/^Nothing was heard/.test(why) ? E.NOTHING_HEARD
+                            : /in use/.test(why) ? E.IN_USE
+                            : /not available|no microphone|not installed/i.test(why) ? E.NOT_AVAILABLE : E.FAILED, why));
+            }
+        };
+        register(["org.webosphoenix.dictation"], {
+            "/start": function (p, reply, ctx) {
+                if (p.prompt !== undefined && (typeof p.prompt !== "string" || p.prompt.length > 1000))
+                    return reply(fail(E.BAD_PARAMS, "prompt must be text of up to 1000 characters"));
+                if (!available())
+                    return reply(fail(E.NOT_AVAILABLE, "Dictation needs the Phoenix shell's microphone."));
+                if (current) return reply(fail(E.IN_USE, "This app is already listening."));
+                current = { reply: reply, ctx: ctx };
+                var mine = current;
+                ctx.onCancel = function () {
+                    if (current !== mine) return;
+                    current = null;
+                    host.postToHost("dictation", { op: "cancel" });
+                };
+                host.postToHost("dictation", { op: "start", prompt: p.prompt || "", autoStop: !!p.autoStop });
+            },
+            "/stop": function (p, reply) {
+                if (!current) return reply(fail(E.BAD_PARAMS, "Not listening."));
+                host.postToHost("dictation", { op: "stop" });
+                reply(ok());
+            },
+            "/getStatus": function (p, reply) { reply(ok({ available: available() })); }
+        });
+        // A page that goes away stops listening.
+        global.addEventListener("pagehide", function () {
+            if (current) { current = null; host.postToHost("dictation", { op: "cancel" }); }
+        });
+        runtime.dictation = { errors: E };
+    })();
+
+    // ================================================================================
+    // Voice Dial (com.palm.sysapp.voicedial)
+    // ================================================================================
+    //
+    // luna-sysmgr's Voice Dial launcher icon only called
+    // palm://com.palm.pmvoicecommand/startVoiceCommand {source: "appicon"}
+    // (ApplicationManager.cpp slotBuiltInAppEntryPoint_VoiceDial), a service
+    // that was never released. Phoenix Voice Dial (apps/voicedial,
+    // org.webosphoenix.voicedial) answers to that id and that call.
+    (function voiceDial() {
+        var VOICE_DIAL = "org.webosphoenix.voicedial";
+        runtime.appAliases["com.palm.sysapp.voicedial"] = VOICE_DIAL;
+        register(["com.palm.pmvoicecommand"], {
+            "/startVoiceCommand": function (p, reply) {
+                host.postToHost("launch", { id: VOICE_DIAL, params: { source: p.source || "service" } });
+                reply(ok());
+            }
+        });
+    })();
+
     // ---- Node.js device services in the page --------------------------------------
     //
     // Some Phoenix services are Node.js modules a device runs with

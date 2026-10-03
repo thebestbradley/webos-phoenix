@@ -64,6 +64,7 @@ Item {
             // ([VirtualKeyboard] VirtualKeyboardEnabled).
             virtualKeyboard: true
             dictationCommand: typeof simTranscriberCommand !== "undefined" ? simTranscriberCommand : []
+            dictationInputFiles: typeof simMicrophoneFiles !== "undefined" ? simMicrophoneFiles : []
             bootSound: typeof simBootSounds !== "undefined" && simBootSounds
             stayAwake: typeof simStayAwake !== "undefined" && simStayAwake
             // A desktop window has no Power button a Mac keyboard reaches

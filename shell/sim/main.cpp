@@ -140,9 +140,10 @@ int main(int argc, char *argv[])
     QCommandLineOption stayAwakeOpt(QStringLiteral("stay-awake"), QStringLiteral("The screen never dims or turns off by itself (always so with --screenshot)."));
     QCommandLineOption quietOpt(QStringLiteral("quiet"), QStringLiteral("No boot and shutdown sounds (they are off anyway with --screenshot and the offscreen platform)."));
     QCommandLineOption noHostShellOpt(QStringLiteral("no-host-shell"), QStringLiteral("Do not give the Terminal app a real shell on this computer (it gets the runtime's simulated shell)."));
+    QCommandLineOption microphoneFileOpt(QStringLiteral("microphone-file"), QStringLiteral("Play this WAV file as the microphone when dictation or Voice Dial listens, followed by quiet; for computers without one and for tests. Repeat it for the following recordings (the last one plays again after that)."), QStringLiteral("file"));
     QCommandLineOption hostShellOpt(QStringLiteral("host-shell"), QStringLiteral("Run this program in the Terminal instead of the shell it asks for."), QStringLiteral("path"));
     parser.addOptions({ lowMemoryOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
-                        noHostShellOpt, hostShellOpt });
+                        noHostShellOpt, hostShellOpt, microphoneFileOpt });
     parser.process(app);
 
     const QStringList orientations = { QStringLiteral("up"), QStringLiteral("left"), QStringLiteral("down"), QStringLiteral("right") };
@@ -193,7 +194,7 @@ int main(int argc, char *argv[])
     // code (whisper.cpp) on this computer.
     const QStringList transcriberCommand = { QStringLiteral("node"),
         QDir(repoDir).filePath(QStringLiteral("apps/voicememos/service/transcribe-cli.js")),
-        QStringLiteral("%f"), QStringLiteral("%l") };
+        QStringLiteral("%f"), QStringLiteral("%l"), QStringLiteral("%p") };
     if (!rootfs.isValid())
         qWarning("phoenix-sim: web apps disabled: %s", qPrintable(rootfs.error()));
     // Apps the user installs (the Marketplace, Files' .ipk sheet) live with
@@ -205,11 +206,15 @@ int main(int argc, char *argv[])
 
     // The Terminal's shells: real ones on this computer (docs/TERMINAL.md),
     // unless turned off. The runtime learns which from /usr/share/phoenix/host.json.
+    // The shell's dictation (the microphone and the transcriber) serves the
+    // apps too: org.webosphoenix.dictation (Voice Dial).
     SimPty *simPty = nullptr;
     if (!parser.isSet(noHostShellOpt)) {
         simPty = new SimPty(&app);
         simPty->setShellOverride(parser.value(hostShellOpt));
-        rootfs.setHostInfo(QByteArrayLiteral("{\"pty\":\"host\"}"));
+        rootfs.setHostInfo(QByteArrayLiteral("{\"pty\":\"host\",\"dictation\":true}"));
+    } else {
+        rootfs.setHostInfo(QByteArrayLiteral("{\"dictation\":true}"));
     }
 
     QQuickView view;
@@ -252,6 +257,10 @@ int main(int argc, char *argv[])
     SimProcess simProcess;
     view.rootContext()->setContextProperty(QStringLiteral("simProcess"), &simProcess);
     view.rootContext()->setContextProperty(QStringLiteral("simTranscriberCommand"), transcriberCommand);
+    QStringList microphoneFiles;
+    for (const QString &f : parser.values(microphoneFileOpt))
+        microphoneFiles << QFileInfo(f).absoluteFilePath();
+    view.rootContext()->setContextProperty(QStringLiteral("simMicrophoneFiles"), microphoneFiles);
     view.rootContext()->setContextProperty(QStringLiteral("simSettings"), &settings);
     view.rootContext()->setContextProperty(QStringLiteral("simPty"), simPty);
     view.rootContext()->setContextProperty(QStringLiteral("simInstaller"), rootfs.isValid() ? &installer : nullptr);

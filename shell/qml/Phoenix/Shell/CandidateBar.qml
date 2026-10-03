@@ -18,8 +18,8 @@ Item {
     required property Item keyboard
 
     readonly property var dictation: keyboard.dictation
-    readonly property bool listening: dictation !== null && dictation.listening === true
-    readonly property bool transcribing: dictation !== null && dictation.busy === true
+    readonly property bool listening: dictation !== null && dictation.listening === true && !dictation.owner
+    readonly property bool transcribing: dictation !== null && dictation.busy === true && !dictation.owner
     readonly property real micWidth: dictation !== null ? height * 1.2 : 0
     readonly property color textColor: "#e2e2e2"
     readonly property color strongColor: "#ffffff"

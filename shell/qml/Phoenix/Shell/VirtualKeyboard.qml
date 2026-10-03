@@ -334,15 +334,21 @@ Item {
             return;
         _makeSound(KM.Key.A);
         dictationMessage = "";
-        if (dictation.listening)
-            dictation.stop();
-        else
+        if (dictation.listening) {
+            if (dictation.owner === "")
+                dictation.stop();
+        } else {
+            dictation.owner = "";
             dictation.start();
+        }
     }
     Connections {
         target: kb.dictation
         ignoreUnknownSignals: true
         function onTranscribed(text, error) {
+            // An app's (Voice Dial's) recording is not for typing.
+            if (kb.dictation.owner !== "")
+                return;
             if (error) {
                 kb.dictationMessage = error;
                 dictationMessageTimer.restart();
@@ -813,7 +819,7 @@ Item {
             // visibleChanged(false): back to plain letters.
             closeEmoji();
             _cancelSwipe();
-            if (dictation && dictation.listening)
+            if (dictation && dictation.listening && dictation.owner === "")
                 dictation.cancel();
             _km.setSymbolMode(KM.SymbolMode.Off);
             _km.setShiftMode(KM.ShiftMode.Off);
