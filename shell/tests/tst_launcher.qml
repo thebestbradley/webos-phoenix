@@ -34,29 +34,71 @@ Item {
             { id: "h", title: "Hidden", tab: -1, quickLaunch: 0 }
         ]
 
+        // Pages: apps, downloads, favorites, prefs ("Settings").
         function test_buildSortsNewAppsAndFillsTheDock() {
-            var l = LauncherLayout.build(entries, 3, null);
-            compare(l.pages, [["a", "b"], [], ["s"]]);
+            var l = LauncherLayout.build(entries, null);
+            compare(l.pages, [["a", "b"], [], [], ["s"]]);
+            compare(l.designators, ["apps", "downloads", "favorites", "prefs"]);
             compare(l.dock, ["a", "b"]);
         }
 
         function test_buildKeepsTheSavedOrderAndAddsNewApps() {
-            var saved = { pages: [["b"], ["a"], []], dock: ["b"], removed: [] };
-            var l = LauncherLayout.build(entries, 3, saved);
-            compare(l.pages, [["b"], ["a"], ["s"]]);
+            var saved = { pages: [["b"], ["a"], [], []], dock: ["b"], removed: [] };
+            var l = LauncherLayout.build(entries, saved);
+            compare(l.pages, [["b"], ["a"], [], ["s"]]);
             compare(l.dock, ["b"]);
             // An app that is gone drops out; a deleted one stays deleted.
-            l = LauncherLayout.build(entries.slice(1), 3, { pages: [["b", "a"], [], ["s"]], dock: ["b"], removed: ["s"] });
-            compare(l.pages, [["a"], [], []]);
+            l = LauncherLayout.build(entries.slice(1), { pages: [["b", "a"], [], [], ["s"]], dock: ["b"], removed: ["s"] });
+            compare(l.pages, [["a"], [], [], []]);
             compare(l.dock, []);
         }
 
+        // A layout saved before Favorites (three pages: apps, downloads,
+        // prefs) keeps its pages; Favorites joins empty.
+        function test_buildReadsAThreePageLayout() {
+            var l = LauncherLayout.build(entries, { pages: [["b"], ["a"], ["s"]], dock: [], removed: [] });
+            compare(l.pages, [["b"], ["a"], [], ["s"]]);
+        }
+
+        // Where a new app goes (LauncherLayout.pageFor): Favorites for a
+        // launch point an app added; the page appinfo.json names; the page
+        // its category or keywords name (the keyword map); the app catalog
+        // and apps the user installed to Downloads; built-in Settings
+        // category apps to Settings; the rest to Apps.
+        function test_newAppPlacement() {
+            compare(LauncherLayout.pageFor({ id: "00123456", dynamic: true }), "favorites");
+            compare(LauncherLayout.pageFor({ id: "x", page: "downloads", installed: false }), "downloads");
+            compare(LauncherLayout.pageFor({ id: "x", page: "apps", installed: true }), "apps");
+            compare(LauncherLayout.pageFor({ id: "x", installed: true, keywords: ["Tools", "Preferences"] }), "prefs");
+            compare(LauncherLayout.pageFor({ id: "x", installed: true, category: "settings" }), "prefs");
+            compare(LauncherLayout.pageFor({ id: "x", installed: true, keywords: ["example_dummy"] }), "downloads",
+                    "a keyword for a page that does not exist is passed over");
+            compare(LauncherLayout.pageFor({ id: "org.webosphoenix.marketplace" }), "downloads");
+            compare(LauncherLayout.pageFor({ id: "x", installed: true }), "downloads");
+            compare(LauncherLayout.pageFor({ id: "x", category: "Settings" }), "prefs");
+            compare(LauncherLayout.pageFor({ id: "x" }), "apps");
+            compare(LauncherLayout.pageFor({ id: "x", tab: 1 }), "downloads");
+            var l = LauncherLayout.build(entries.concat([
+                { id: "00000042", appId: "a", title: "Shortcut", tab: 0, quickLaunch: 0, dynamic: true },
+                { id: "dl", title: "Downloaded", tab: 0, quickLaunch: 0, installed: true }]), null);
+            compare(l.pages, [["a", "b"], ["dl"], ["00000042"], ["s"]]);
+        }
+
+        // app_blacklist.conf: never in the launcher, nor in the dock.
+        function test_blacklist() {
+            verify(LauncherLayout.isBlacklisted("com.palm.sysapp.launchermode0"));
+            var l = LauncherLayout.build(entries.concat([
+                { id: "com.palm.sysapp.launchermode0", title: "Anger My Cards", tab: 0, quickLaunch: 5 }]), null);
+            compare(LauncherLayout.pageOf(l, "com.palm.sysapp.launchermode0"), -1);
+            compare(l.dock.indexOf("com.palm.sysapp.launchermode0"), -1);
+        }
+
         function test_moveAndDock() {
-            var l = LauncherLayout.build(entries, 3, null);
+            var l = LauncherLayout.build(entries, null);
             l = LauncherLayout.move(l, "a", 0, 1);
             compare(l.pages[0], ["b", "a"]);
             l = LauncherLayout.move(l, "a", 1, -1);
-            compare(l.pages, [["b"], ["a"], ["s"]]);
+            compare(l.pages, [["b"], ["a"], [], ["s"]]);
             // A full dock swaps out the app in the slot dropped on.
             l = LauncherLayout.addToDock(l, "s", 0, 2);
             compare(l.dock, ["s", "b"]);
@@ -66,8 +108,12 @@ Item {
             l = LauncherLayout.removeFromDock(l, "b");
             compare(l.dock, ["s"]);
             l = LauncherLayout.remove(l, "s");
-            compare(l.pages, [["b"], ["a"], []]);
+            compare(l.pages, [["b"], ["a"], [], []]);
             compare(l.dock, []);
+            compare(l.removed, ["s"]);
+            // A launch point removed is simply gone.
+            l = LauncherLayout.drop(l, "a");
+            compare(l.pages, [["b"], [], [], []]);
             compare(l.removed, ["s"]);
         }
     }
@@ -107,6 +153,14 @@ Item {
             tryCompare(launcher, "hidden", 0, 2000);
             // Let the page slide back into place.
             wait(Theme.cardSlideDuration + 100);
+            // Pages scrolled by an earlier drag (the page's bottom edge, on
+            // the way to the dock) start at the top again.
+            var pagesView = findChild(launcher, function(o) { return o.orientation === ListView.Horizontal; });
+            for (var i = 0; pagesView && i < pagesView.contentItem.children.length; ++i) {
+                var page = pagesView.contentItem.children[i];
+                if (page.hasOwnProperty("contentY"))
+                    page.contentY = 0;
+            }
         }
 
         function cleanup() {
@@ -260,6 +314,205 @@ Item {
             compare(JSON.parse(windows.savedLauncherLayout()).dock, [ids[0]]);
             windows.launcherLayoutRestored("not json");
             compare(shell.launcherLayout.dock, [ids[0]]);
+        }
+
+        // Apps, Downloads, Favorites, Settings (the TouchPad's pages); an
+        // empty Favorites page says how to fill it.
+        function test_favoritesTab() {
+            compare(launcher.tabs, ["Apps", "Downloads", "Favorites", "Settings"]);
+            compare(shell.launcherLayout.designators[2], "favorites");
+            var tab = launcher.mapToItem(shell, launcher.tabWidth * 2.5, Theme.launcherTabHeight / 2);
+            mouseClick(shell, tab.x, tab.y);
+            compare(launcher.currentPage, 2);
+        }
+
+        // Held at a page's right edge, the icon goes to the next page at
+        // once, and again after 1500 ms there (not before); let go inside
+        // the page, it stays there.
+        function test_edgeDragMovesToTheNextPage() {
+            var id = shell.launcherLayout.pages[0][0];
+            var from = iconPoint(0);
+            var edge = launcher.mapToItem(shell, launcher.width - Theme.launcherEdgeWidth / 2, Theme.launcherTabHeight + launcher.pageTopMargin + 100);
+            mousePress(shell, from.x, from.y);
+            wait(Theme.tapAndHoldInterval + 150);
+            for (var i = 1; i <= 8; ++i)
+                mouseMove(shell, from.x + (edge.x - from.x) * i / 8, from.y + (edge.y - from.y) * i / 8, 10);
+            tryCompare(launcher, "currentPage", 1, 1000);
+            compare(LauncherLayout.pageOf(shell.launcherLayout, id), 1);
+            wait(1000);
+            compare(launcher.currentPage, 1, "not again before 1500 ms");
+            tryCompare(launcher, "currentPage", 2, 1500);
+            compare(LauncherLayout.pageOf(shell.launcherLayout, id), 2);
+            // Back inside the page and let go: it stays on Favorites.
+            var inside = launcher.mapToItem(shell, launcher.width / 2, Theme.launcherTabHeight + launcher.pageTopMargin + 40);
+            mouseMove(shell, inside.x, inside.y, 10);
+            mouseRelease(shell, inside.x, inside.y);
+            wait(Theme.launcherReorderDuration + 50);
+            compare(LauncherLayout.pageOf(shell.launcherLayout, id), 2);
+            shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, id, 0, 0));
+        }
+
+        function cellOf(id) {
+            var page = LauncherLayout.pageOf(shell.launcherLayout, id);
+            var index = shell.launcherLayout.pages[page].indexOf(id);
+            return findChild(launcher, function(o) { return o.hasOwnProperty("notReady") && o.appId === id; });
+        }
+
+        // An app being installed: its icon (on Downloads) at half opacity
+        // with the progress strip's frame for its progress; a tap does not
+        // launch it. Failed: the warning badge; a tap asks to try again or
+        // remove it (as Software Manager did).
+        function test_installBadges() {
+            windows._installStatus({ appId: "com.example.newapp", state: "installing", progress: 50, title: "New App" });
+            tryVerify(function() { return LauncherLayout.pageOf(shell.launcherLayout, "com.example.newapp") === 1; }, 1000);
+            launcher.showPage(1);
+            wait(Theme.cardSlideDuration + 100);
+            var cell = cellOf("com.example.newapp");
+            verify(cell, "a pending icon");
+            verify(cell.notReady);
+            var badge = findChild(cell, function(o) { return o.objectName === "launcherInstallBadge"; });
+            verify(badge.visible);
+            compare(badge.frame, 9);
+            windows._installStatus({ appId: "com.example.newapp", state: "installing", progress: 100 });
+            tryCompare(badge, "frame", 18);
+            // A tap does not launch it.
+            var cards = windows.cards.count;
+            var p = badge.mapToItem(shell, -10, 30);
+            mouseClick(shell, p.x, p.y);
+            wait(100);
+            compare(windows.cards.count, cards);
+            // It fails: the warning badge; a tap asks.
+            windows._installStatus({ appId: "com.example.newapp", state: "failed", reason: "The package has no app",
+                                     retry: { uri: "luna://com.webos.appInstallService/install", params: { id: "com.example.newapp", ipkUrl: "/media/internal/new.ipk" } } });
+            tryCompare(cell, "installState", "failed");
+            mouseClick(shell, p.x, p.y);
+            var dialog = findChild(shell, function(o) { return o.objectName === "deleteDialog"; });
+            tryCompare(dialog, "opacity", 1, 1000);
+            compare(findChild(shell, function(o) { return o.objectName === "deleteDialogTitle"; }).text, "Installation Failed");
+            compare(findChild(shell, function(o) { return o.objectName === "deleteDialogMessage"; }).text, "New App: The package has no app");
+            var retry = findChild(shell, function(o) { return o.objectName === "deleteDialogRetry"; });
+            verify(retry.visible, "it can be tried again");
+            // Try Again: installing again; with no page to install it here,
+            // it fails again.
+            mouseClick(retry);
+            tryCompare(dialog, "visible", false, 1000);
+            tryCompare(cell, "installState", "failed", 2000);
+            mouseClick(shell, p.x, p.y);
+            tryCompare(dialog, "opacity", 1, 1000);
+            mouseClick(findChild(shell, function(o) { return o.objectName === "deleteDialogRemove"; }));
+            tryVerify(function() { return LauncherLayout.pageOf(shell.launcherLayout, "com.example.newapp") < 0; }, 1000);
+            compare(windows.installInfo("com.example.newapp"), null);
+        }
+
+        // A launch point an app added (addLaunchPoint) is on Favorites; in
+        // edit mode it has the remove decorator, and asks "Remove Shortcut?".
+        function test_shortcutOnFavorites() {
+            windows.apps.append(Object.assign(windows._launcherFields(), {
+                appId: "00000042", title: "Example", color: "#555c66", glyph: "E", tab: 0, quickLaunch: 0,
+                icon: "", largeIcon: "", splashIcon: "", splashBackground: "", web: false, main: "", noWindow: false,
+                orientation: "", webAppId: "org.webosphoenix.browser", params: "{\"url\":\"https://example.com\"}", dir: "",
+                removable: true, version: "", dynamic: true }));
+            tryVerify(function() { return LauncherLayout.pageOf(shell.launcherLayout, "00000042") === 2; }, 1000);
+            launcher.showPage(2);
+            wait(Theme.cardSlideDuration + 100);
+            launcher.editMode = true;
+            var cell = cellOf("00000042");
+            var decorator = findChild(cell, function(o) { return o.objectName === "launcherRemoveDecorator"; });
+            verify(decorator.visible);
+            verify(String(decorator.children[0].source).indexOf("edit-button-remove") >= 0);
+            var c = decorator.mapToItem(shell, decorator.width / 2 + Theme.px(4), decorator.height / 2 + Theme.px(4));
+            mouseClick(shell, c.x, c.y);
+            var dialog = findChild(shell, function(o) { return o.objectName === "deleteDialog"; });
+            tryCompare(dialog, "opacity", 1, 1000);
+            compare(findChild(shell, function(o) { return o.objectName === "deleteDialogTitle"; }).text, "Remove Shortcut?");
+            compare(findChild(shell, function(o) { return o.objectName === "deleteDialogMessage"; }).text, "Example (Web)");
+            mouseClick(findChild(shell, function(o) { return o.objectName === "deleteDialogRemove"; }));
+            compare(LauncherLayout.pageOf(shell.launcherLayout, "00000042"), -1);
+            verify(shell.launcherLayout.removed.indexOf("00000042") < 0, "a launch point is not remembered as deleted");
+            windows.apps.remove(windows.apps.count - 1);
+        }
+    }
+
+    // Keep-alive (luna.conf [KeepAlive]): the phone's Phone app stays
+    // running when its last card closes, and its card comes back on the
+    // next launch; the angry card closes it for good. The running apps
+    // have process ids (applicationManager/running, close).
+    TestCase {
+        name: "KeepAlive"
+        when: windowShown
+
+        function test_keepAliveLists() {
+            // Phones: luna.conf; the Phoenix apps for the original ids.
+            compare(windows.keepAliveApps, ["org.webosphoenix.phone"]);
+            compare(windows.launchAtBootApps, ["org.webosphoenix.phone", "com.palm.app.email", "com.palm.app.calendar",
+                                               "org.webosphoenix.messaging", "org.webosphoenix.camera"]);
+            compare(windows.keepAliveUntilMemoryPressureApps, ["com.palm.app.browser"]);
+        }
+
+        function test_phoneStaysAlive() {
+            var uid = windows.launch("org.webosphoenix.phone");
+            verify(uid !== "");
+            var pid = windows._pidOf("org.webosphoenix.phone");
+            windows.close(uid);
+            compare(windows.runningUid("org.webosphoenix.phone"), "");
+            verify(windows.running().some(function (r) { return r.id === "org.webosphoenix.phone" && r.processid === pid; }),
+                   "still running, without a card");
+            compare(windows.launch("org.webosphoenix.phone"), uid, "the same window comes back");
+            verify(windows.windowFor(uid) !== null);
+            // Thrown away angrily: closed for good.
+            windows.close(uid, true);
+            verify(!windows.running().some(function (r) { return r.id === "org.webosphoenix.phone"; }));
+        }
+
+        // [KeepAliveUntilMemPressure]: the browser stays until memory runs low.
+        function test_browserUntilMemoryPressure() {
+            windows.apps.append(Object.assign(windows._launcherFields(), {
+                appId: "com.palm.app.browser", title: "Web", color: "#2a9bbd", glyph: "W", tab: -1, quickLaunch: 0,
+                icon: "", largeIcon: "", splashIcon: "", splashBackground: "", web: false, main: "", noWindow: false,
+                orientation: "", webAppId: "", params: "", dir: "", removable: false, version: "" }));
+            var uid = windows.launch("com.palm.app.browser");
+            windows.close(uid);
+            verify(windows.running().some(function (r) { return r.id === "com.palm.app.browser"; }), "kept while memory lasts");
+            windows.memory.forceLow = true;
+            verify(!windows.running().some(function (r) { return r.id === "com.palm.app.browser"; }), "closed when memory runs low");
+            // Low already: closing its card closes it.
+            windows.memory.forceLow = false;
+            uid = windows.launch("com.palm.app.browser");
+            windows.memory.forceLow = true;
+            windows.close(uid);
+            verify(!windows.running().some(function (r) { return r.id === "com.palm.app.browser"; }));
+            windows.memory.forceLow = false;
+            windows.apps.remove(windows.apps.count - 1);
+        }
+
+        function test_otherAppsClose() {
+            var uid = windows.launch("org.webosphoenix.maps");
+            windows.close(uid);
+            verify(!windows.running().some(function (r) { return r.id === "org.webosphoenix.maps"; }));
+        }
+
+        // The runtime's applicationManager running and close, answered
+        // through the pages' status (installerResult for the request).
+        function test_runningAndCloseForTheRuntime() {
+            var uid = windows.launch("org.webosphoenix.maps");
+            windows._appManagerOp({ requestId: "r1", op: "running" });
+            var r = windows._pendingStatus.installerResult;
+            compare(r.requestId, "r1");
+            var maps = r.running.filter(function (x) { return x.id === "org.webosphoenix.maps"; })[0];
+            verify(maps && /^\d+$/.test(maps.processid), "running: {id, processid}");
+            windows._appManagerOp({ requestId: "r2", op: "close", processId: maps.processid });
+            compare(windows._pendingStatus.installerResult.ok, true);
+            compare(windows.cardIndex(uid), -1, "close: the app's card is gone");
+            windows._appManagerOp({ requestId: "r3", op: "nonsense" });
+            compare(windows._pendingStatus.installerResult.ok, false);
+        }
+
+        function test_closeProcess() {
+            var uid = windows.launch("org.webosphoenix.maps");
+            var pid = windows._pidOf("org.webosphoenix.maps");
+            windows.closeProcess(pid);
+            compare(windows.cardIndex(uid), -1);
+            verify(!windows.running().some(function (r) { return r.id === "org.webosphoenix.maps"; }));
         }
     }
 }

@@ -94,6 +94,11 @@ function clone(o) { return JSON.parse(JSON.stringify(o)); }
 //   temp.write(name, bytes) -> path; temp.remove(path)
 //   defaultSources() -> [{id, name, kind, url, key?, enabled}]
 //   now(), log(msg) (optional)
+//   pending({appId, catalogId, sourceId, title, icon, state, progress,
+//            errorText}) (optional): an install as it goes, for the
+//            launcher's pending icon (its progress and error badges), as
+//            the App Catalog's downloads reached LunaSysMgr's launcher
+//            (ApplicationDescription Status_Installing / Status_Failed)
 function createPackagesService(deps) {
     var log = deps.log || function () {};
     var now = deps.now || function () { return new Date(); };
@@ -459,8 +464,21 @@ function createPackagesService(deps) {
                 body: words[st.state] || "", progress: st.progress, params: { sourceId: p.sourceId, id: p.id }
             }).then(null, function () {});
         };
+        // Only an install that got going has an icon to mark failed.
+        var pendingShown = false;
+        var pending = function (st) {
+            if (!deps.pending || (st.state === "failed" && !pendingShown)) return;
+            pendingShown = true;
+            try {
+                deps.pending(Object.assign({
+                    appId: appId || (entry && (entry.appId || entry.id)) || p.id, catalogId: p.id, sourceId: p.sourceId,
+                    title: (entry && entry.title) || "", icon: (entry && entry.icon) || ""
+                }, st));
+            } catch (e) { log("pending: " + e.message); }
+        };
         var progress = function (st) {
             ongoing(st);
+            pending(st);
             push(Object.assign({ returnValue: true, id: p.id }, st));
         };
         return findApp(s, p.sourceId, p.id).then(function (e) {
@@ -500,6 +518,7 @@ function createPackagesService(deps) {
                     var skipped = (r.skipped || []).concat(c.plugins && c.plugins.length
                         ? ["native " + (c.plugins.length > 1 ? "plugins" : "plugin") + " (" + c.plugins.join(", ") + ")"] : []);
                     if (skipped.length) done.skipped = skipped;
+                    pending({ state: "installed", progress: 100 });
                     push(done);
                     return done;
                 });
@@ -508,6 +527,7 @@ function createPackagesService(deps) {
             var r = errorReply(e);
             r.id = p.id;
             r.state = "failed";
+            pending({ state: "failed", errorCode: r.errorCode, errorText: r.errorText });
             push(r);
             log("install " + p.id + ": " + r.errorText);
             return r;

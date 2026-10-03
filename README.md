@@ -289,10 +289,11 @@ shutdown sounds (so do `--screenshot` and the offscreen platform).
 `--launch com.palm.app.notes` opens an app at start-up (repeatable);
 `--launch org.webosphoenix.settings.wifi` opens a Settings pane.
 
-`--scene locked|cards|stacks|reorder|maximized|heldcard|launcher|dashboard|justtype|keyboard|systemmenu|pin|emergency|firstuse` opens
+`--scene locked|cards|stacks|reorder|maximized|heldcard|launcher|launcherinstall|dashboard|justtype|keyboard|systemmenu|pin|emergency|firstuse` opens
 a demo state (`keyboard`: Just Type with the virtual keyboard up; `heldcard`: a card that keeps the upright orientation, drawn
 turned in card view with `--orientation left`; `emergency`: the PIN pad's
-Emergency Call; `firstuse`: First Use); add `--screenshot out.png`
+Emergency Call; `firstuse`: First Use; `launcherinstall`: the launcher's
+Downloads page with an app being installed and one whose install failed); add `--screenshot out.png`
 to save a PNG and exit.
 
 **First Use** runs at start-up, as on a new device, until it has been
@@ -326,6 +327,7 @@ node tools/test-firstuse.cjs                                # First Use, every s
 node tools/test-help.cjs                                    # Help, and Just Type finding it
 node tools/test-emergency.cjs                               # Emergency Info, restricted Phone, Accessibility
 node tools/test-location.cjs                                # Location Services and permissions
+node tools/test-appmanager.cjs                              # launch points apps add, handlers, the installer's queries
 ```
 
 ## Build a webOS OSE image (experimental)

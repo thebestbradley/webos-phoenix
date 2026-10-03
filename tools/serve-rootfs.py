@@ -23,7 +23,12 @@ com.webos.appInstallService (runtime/phoenix-runtime.js, which unpacks the
 "remove", appId} -> {ok, error}. Installed apps live in --installed-dir (a
 new temporary folder by default), laid out like a device's
 /media/cryptofs/apps, and are served and listed like the others, as
-phoenix-sim's SimInstaller does.
+phoenix-sim's SimInstaller does. It also does the application manager's
+host work (runtime.hostOp): {op: "addLaunchPoint", launchPoint} ->
+{launchPointId}, {op: "removeLaunchPoint", launchPointId}, {op:
+"rescan"}, {op: "capacity"} -> {freeKB}; "running" and "close" need a
+shell and are refused. /var/luna/ (the launch points apps add, as
+/var/luna/launchpoints/<id>) is the folder "data" in --installed-dir.
 
 --terminal gives the Terminal app (apps/terminal) a real shell on this
 computer, as phoenix-sim does: a WebSocket per session at /__phoenix/pty
@@ -175,6 +180,118 @@ def remove_app(app_id):
     return ""
 
 
+def data_path(path):
+    """A device path under /var/luna/ -> its file here, or None."""
+    path = re.sub(r"/{2,}", "/", path or "")
+    if not INSTALLED_DIR or not path.startswith("/var/luna/") or ".." in path.split("/"):
+        return None
+    return os.path.join(INSTALLED_DIR, "data", path.lstrip("/"))
+
+
+def launch_points_dir():
+    return data_path("/var/luna/launchpoints/x")[:-2]
+
+
+def dynamic_launch_points():
+    """The launch points apps added (as shell/sim/rootfs.cpp reads them)."""
+    out = []
+    d = launch_points_dir()
+    if not os.path.isdir(d):
+        return out
+    for name in sorted(os.listdir(d)):
+        try:
+            with open(os.path.join(d, name), encoding="utf-8") as f:
+                lp = json.load(f)
+        except (ValueError, OSError):
+            continue
+        if lp.get("launchPointId") == name and lp.get("id") in APPS:
+            out.append(lp)
+    return out
+
+
+def add_launch_point(lp):
+    """What SimInstaller::addLaunchPoint does: ({launchPointId} | {error})."""
+    app_id = lp.get("id") or ""
+    if app_id not in APPS:
+        return {"error": "Unable to find id: %s" % app_id}
+    if not lp.get("title"):
+        return {"error": "Invalid arguments"}
+    icon = lp.get("icon") or ""
+    if icon.startswith("file://"):
+        icon = urllib.parse.urlparse(icon).path
+    if icon and not icon.startswith("/"):
+        icon = "/usr/palm/applications/%s/%s" % (app_id, icon)
+    params = lp.get("params") or {}
+    if isinstance(params, str):
+        params = json.loads(params or "{}")
+    d = launch_points_dir()
+    os.makedirs(d, exist_ok=True)
+    while True:
+        lp_id = "%08d" % (1 + secrets.randbelow(1000000))
+        if not os.path.exists(os.path.join(d, lp_id)):
+            break
+    rec = {"id": app_id, "launchPointId": lp_id, "title": lp["title"], "appmenu": lp.get("appmenu") or lp["title"],
+           "icon": icon, "params": params, "removable": lp.get("removable", True) is not False}
+    with open(os.path.join(d, lp_id), "w", encoding="utf-8") as f:
+        json.dump(rec, f)
+    return {"launchPointId": lp_id}
+
+
+def remove_launch_point(lp_id):
+    lp = next((x for x in dynamic_launch_points() if x["launchPointId"] == lp_id), None) if re.match(r"^[0-9]+$", lp_id or "") else None
+    if not lp:
+        return "launch point [%s] not found" % lp_id
+    if lp.get("removable") is False:
+        return "launch point [%s] not marked non-removable" % lp_id
+    os.remove(os.path.join(launch_points_dir(), lp_id))
+    return ""
+
+
+def dir_size(path):
+    total = 0
+    for root, _, files in os.walk(path):
+        for name in files:
+            p = os.path.join(root, name)
+            if not os.path.islink(p):
+                total += os.path.getsize(p)
+    return total
+
+
+SIZES = {}
+
+
+def app_size(app_id):
+    """The bytes of an app's files (getSizeOfApps), read once per folder."""
+    app_dir = APPS[app_id][0]
+    if app_dir not in SIZES:
+        SIZES[app_dir] = dir_size(app_dir)
+    return SIZES[app_dir]
+
+
+def installer_op(req):
+    """POST /__phoenix/installer: one request of runtime.hostOp."""
+    op = req.get("op")
+    if op == "install":
+        SIZES.pop(os.path.join(installed_apps_dir(), req.get("appId") or ""), None)
+        error = install_app(req.get("appId"), req.get("files") or [])
+        return {"ok": not error, "error": error}
+    if op == "remove":
+        error = remove_app(req.get("appId"))
+        return {"ok": not error, "error": error, "cause": req.get("cause") or "USER"}
+    if op == "addLaunchPoint":
+        r = add_launch_point(req.get("launchPoint") or {})
+        return {"ok": "error" not in r, "error": r.get("error", ""), "launchPointId": r.get("launchPointId", "")}
+    if op == "removeLaunchPoint":
+        error = remove_launch_point(req.get("launchPointId"))
+        return {"ok": not error, "error": error}
+    if op == "rescan":
+        rescan_installed()
+        return {"ok": True, "error": ""}
+    if op == "capacity":
+        return {"ok": True, "error": "", "freeKB": shutil.disk_usage(INSTALLED_DIR).free // 1024}
+    return {"ok": False, "error": "Not available without the shell: %s" % op}
+
+
 def resolve(path):
     """Device path -> file in this repository, or None."""
     # Like QDir::cleanPath in phoenix-sim: apps build paths such as
@@ -189,6 +306,9 @@ def resolve(path):
     for prefix, target in MOUNTS:
         if path == prefix.rstrip("/") or path.startswith(prefix):
             return os.path.join(REPO, target + path[len(prefix):])
+    data = data_path(path)
+    if data:
+        return data
     pre = "/usr/palm/applications/"
     if path.startswith(pre):
         rest = path[len(pre):]
@@ -209,6 +329,7 @@ def app_list():
     the same fields.
     """
     out = []
+    pages = ["apps", "downloads", "prefs", "favorites"]
     for app_id, (_, info) in sorted(APPS.items()):
         base = "/usr/palm/applications/%s/" % app_id
         main = info.get("main", "index.html")
@@ -217,6 +338,7 @@ def app_list():
             main = base + main
         phoenix = info.get("phoenix") or {}
         tab = phoenix.get("launcherTab", 0)
+        page = pages[tab] if "launcherTab" in phoenix and 0 <= tab < len(pages) else ""
         out.append({
             "id": app_id,
             "title": info.get("title", app_id),
@@ -224,12 +346,17 @@ def app_list():
             "main": main,
             "icon": base + info.get("icon", "icon.png"),
             "tab": tab,
+            "page": page,
+            "category": info.get("category", ""),
+            "keywords": info.get("keywords", []),
+            "installed": app_id in INSTALLED,
             "hidden": bool(phoenix.get("hidden", False)),
             "quickLaunch": int(phoenix.get("quickLaunch", 0)),
             "noWindow": bool(info.get("noWindow", False)),
         })
         for lp in phoenix.get("launchPoints", []):
             params = lp.get("params", {})
+            lp_tab = lp.get("launcherTab", tab)
             out.append({
                 "id": lp["id"],
                 "appId": app_id,
@@ -237,9 +364,23 @@ def app_list():
                 "type": info.get("type", "web"),
                 "main": main + "?launchParams=" + urllib.parse.quote(json.dumps(params, separators=(",", ":"))),
                 "icon": base + lp.get("icon", info.get("icon", "icon.png")),
-                "tab": lp.get("launcherTab", tab),
+                "tab": lp_tab,
+                "page": pages[lp_tab] if "launcherTab" in lp and 0 <= lp_tab < len(pages) else page,
                 "params": params,
             })
+    # Launch points apps added (addLaunchPoint): on Favorites.
+    for lp in dynamic_launch_points():
+        params = lp.get("params") or {}
+        info = APPS[lp["id"]][1]
+        main = info.get("main", "index.html")
+        if not re.match(r"^https?://", main):
+            main = "/usr/palm/applications/%s/%s" % (lp["id"], main)
+        out.append({
+            "id": lp["launchPointId"], "appId": lp["id"], "title": lp["title"], "type": info.get("type", "web"),
+            "main": main + "?launchParams=" + urllib.parse.quote(json.dumps(params, separators=(",", ":"))),
+            "icon": lp.get("icon") or "/usr/palm/applications/%s/%s" % (lp["id"], info.get("icon", "icon.png")),
+            "tab": 0, "page": "favorites", "dynamic": True, "params": params, "removable": lp.get("removable", True),
+        })
     return out
 
 
@@ -250,17 +391,33 @@ def launch_points():
     out = []
     for a in app_list():
         app_id = a.get("appId", a["id"])
+        info = APPS[app_id][1] if app_id in APPS else {}
         rec = {
             "id": app_id,
+            "appId": app_id,
             "launchPointId": a["id"] if "appId" in a else app_id + "_default",
             "title": a["title"],
+            "appmenu": a["title"],
             "icon": a["icon"],
             "params": a.get("params", {}),
             "hidden": a.get("hidden", False),
-            "removable": app_id in INSTALLED,
-            "version": APPS[app_id][1].get("version", "") if app_id in APPS else "",
+            "removable": a.get("removable", True) if a.get("dynamic") else (app_id in INSTALLED and "appId" not in a),
+            "version": info.get("version", ""),
         }
+        if a.get("dynamic"):
+            rec["dynamic"] = True
         if "appId" not in a:
+            # LaunchPoint::toJSON: the vendor, the package and its size
+            # (user-installed apps; 0 for the built-in ones).
+            size = app_size(app_id)
+            rec.update({"vendor": info.get("vendor", ""), "vendorUrl": info.get("vendorurl", ""), "packageId": app_id,
+                        "size": size if app_id in INSTALLED else 0, "appSize": size,
+                        "noWindow": bool(info.get("noWindow", False))})
+            dock = info.get("exhibitionMode", info.get("dockMode"))
+            if dock is True:
+                options = info.get("exhibitionModeOptions") or info.get("dockModeOptions") or {}
+                rec["exhibitionMode"] = True
+                rec["exhibitionModeTitle"] = options.get("title") or a["title"]
             rec["universalSearch"] = APPS[app_id][1].get("universalSearch")
             # The types the app opens (appinfo.json "mimeTypes", as on legacy webOS).
             if APPS[app_id][1].get("mimeTypes"):
@@ -342,11 +499,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path.split("?", 1)[0] == "/__phoenix/installer":
             try:
                 req = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
-                error = install_app(req.get("appId"), req.get("files") or []) if req.get("op") == "install" \
-                    else remove_app(req.get("appId")) if req.get("op") == "remove" else "op: install or remove"
+                reply = installer_op(req)
             except (ValueError, OSError) as e:
-                error = "bad installer request: %s" % e
-            return self.send(200, "application/json", json.dumps({"ok": not error, "error": error}).encode())
+                reply = {"ok": False, "error": "bad installer request: %s" % e}
+            return self.send(200, "application/json", json.dumps(reply).encode())
         if self.path.split("?", 1)[0] != "/__phoenix/proxy":
             return self.send(404, "text/plain", b"not found")
         try:

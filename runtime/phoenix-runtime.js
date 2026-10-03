@@ -1070,20 +1070,34 @@
         return launchPointCache;
     }
     // The installed apps changed (the shell says so, applyHostStatus
-    // {appsVersion}): read the list again and tell launchPointChanges.
-    function appsChanged() {
+    // {appsVersion}): read the list again and tell launchPointChanges
+    // (ApplicationManager::postLaunchPointChange: the launch point's record
+    // and change "added" | "removed" | "updated") and whoever else listens
+    // (runtime.onAppsChanged(fn(before, after, info))). info: {appId, cause}
+    // when an app was removed, for notifyOnChange.
+    var appsChangedListeners = [];
+    runtime.onAppsChanged = function (fn) { appsChangedListeners.push(fn); };
+    function appsChanged(info) {
         var before = launchPoints();
         launchPointCache = null;
         var after = launchPoints(), was = {}, now = {};
         before.forEach(function (lp) { was[lp.launchPointId] = lp; });
         after.forEach(function (lp) { now[lp.launchPointId] = lp; });
         var changes = [];
-        after.forEach(function (lp) { if (!was[lp.launchPointId]) changes.push(Object.assign({ change: "added" }, lp)); });
+        after.forEach(function (lp) {
+            var old = was[lp.launchPointId];
+            if (!old) changes.push(Object.assign({ change: "added" }, lp));
+            else if (old.icon !== lp.icon || old.title !== lp.title || old.version !== lp.version)
+                changes.push(Object.assign({ change: "updated" }, lp));
+        });
         before.forEach(function (lp) {
-            if (!now[lp.launchPointId]) changes.push({ change: "removed", id: lp.id, launchPointId: lp.launchPointId });
+            if (!now[lp.launchPointId]) changes.push(Object.assign({ change: "removed" }, lp));
         });
         changes.forEach(function (c) {
             launchPointWatchers = launchPointWatchers.filter(function (w) { return w(c) !== false; });
+        });
+        appsChangedListeners.forEach(function (fn) {
+            try { fn(before, after, info || null); } catch (e) { console.error("[phoenix-runtime] apps changed", e); }
         });
     }
     runtime.appsChanged = appsChanged;
@@ -1093,15 +1107,35 @@
     }
 
     var resourceHandlers = null;
-    function resourceHandler(target) {
+    function redirectList() {
         if (!resourceHandlers) {
             try { resourceHandlers = JSON.parse(PalmSystem.getResource("/usr/palm/command-resource-handlers.json") || "{}").redirects || []; }
             catch (e) { resourceHandlers = []; }
         }
-        for (var i = 0; i < resourceHandlers.length; i++)
-            if (new RegExp(resourceHandlers[i].url, "i").test(target)) return resourceHandlers[i].appId;
-        return /^https?:/i.test(target) ? "com.palm.app.browser" : null;
+        return resourceHandlers;
     }
+    // The app for a web address or scheme (the redirect handlers below:
+    // the active one of the first pattern that matches).
+    function resourceHandler(target) {
+        return runtime.redirectHandlerFor(target);
+    }
+
+    // The handler registry apps add to (addResourceHandler,
+    // addRedirectHandler), and the handlers made active
+    // (swapResourceHandler, swapRedirectHandler), in the shared store, as
+    // MimeSystem kept its table in a file (saveMimeTableToActiveFile).
+    // Indexes of handlers added at run time start at 1000.
+    var HANDLER_REGISTRY = "appManager:handlers";
+    runtime.handlerRegistry = function () {
+        var r = store.get(HANDLER_REGISTRY, null) || {};
+        r.resources = r.resources || [];
+        r.redirects = r.redirects || [];
+        r.activeResource = r.activeResource || {};
+        r.activeRedirect = r.activeRedirect || {};
+        r.next = r.next || 1000;
+        return r;
+    };
+    runtime.saveHandlerRegistry = function (r) { store.set(HANDLER_REGISTRY, r); };
 
     // Apps the original webOS apps launch by id that Phoenix replaces:
     // Contacts' and Calendar's addresses open "com.palm.app.maps" (Google
@@ -1144,7 +1178,6 @@
                 host.postToHost("open", { target: p.target, params: p.params || {} });
             reply(ok({ processId: String(Date.now()) }));
         },
-        "/running": function (p, reply) { reply(ok({ running: [] })); },
         "/listApps": function (p, reply) {
             reply(ok({ apps: launchPoints().filter(function (lp) { return /_default$/.test(lp.launchPointId); }) }));
         },
@@ -1176,10 +1209,219 @@
             })[0];
             reply(app ? ok({ appInfo: app }) : fail(-1, "app not found"));
         },
-        "/addLaunchPoint": function (p, reply) { reply(ok({ launchPointId: "lp" + Date.now() })); },
         "/getHandlerForMimeType": function (p, reply) { reply(fail(-1, "no handler")); },
         "/listAllHandlersForMime": function (p, reply) { reply(ok({ resources: [] })); }
     });
+
+    // ---- Application manager: launch points apps add, processes, dock mode ----------------
+    // (luna-sysmgr Src/base/application/ApplicationManagerService.cpp; the
+    // host does what needs it through runtime.hostOp, "Installing apps".)
+    (function appManagerMore() {
+        var am = runtime.services["com.palm.applicationManager"];
+        function app(id) {
+            return launchPoints().filter(function (lp) { return /_default$/.test(lp.launchPointId) && lp.id === id; })[0] || null;
+        }
+        function hostOp(op, payload) {
+            return runtime.hostOp ? runtime.hostOp(op, payload) : Promise.resolve({ ok: false, error: "No host" });
+        }
+
+        // addLaunchPoint {id, title, icon, params, removable, appmenu}: a
+        // launcher icon of the app's own, starting it with these launch
+        // params (the browser's Share > Add to Launcher). It goes on the
+        // launcher's Favorites page. -> {launchPointId} (eight digits, as
+        // LunaSysMgr's). The icon is a path; a relative one is the app's.
+        am["/addLaunchPoint"] = function (p, reply) {
+            var id = typeof p.id === "string" ? p.id : "";
+            if (!id || typeof p.title !== "string" || !p.title) return reply(fail(-1, "Invalid arguments"));
+            if (!app(id)) return reply(fail(-1, "Unable to find id: " + id));
+            var params = p.params;
+            if (typeof params === "string") {
+                try { params = params ? JSON.parse(params) : {}; } catch (e) { return reply(fail(-1, "Invalid arguments")); }
+            }
+            if (params !== undefined && (typeof params !== "object" || params === null || Array.isArray(params)))
+                return reply(fail(-1, "Invalid arguments"));
+            hostOp("addLaunchPoint", { appId: id, launchPoint: {
+                id: id, title: p.title, appmenu: p.appmenu || p.appMenu || p.title,
+                icon: typeof p.icon === "string" ? p.icon : "", params: params || {}, removable: p.removable !== false } }).then(function (r) {
+                if (!r.ok || !r.launchPointId) return reply(fail(-1, r.error || "Failed to save launch point"));
+                reply(ok({ launchPointId: r.launchPointId }));
+            });
+        };
+        // removeLaunchPoint {launchPointId}: one an app added (never an
+        // app's own default one).
+        am["/removeLaunchPoint"] = function (p, reply) {
+            if (typeof p.launchPointId !== "string" || !p.launchPointId) return reply(fail(-1, "Must provide a launchPointId"));
+            hostOp("removeLaunchPoint", { launchPointId: p.launchPointId }).then(function (r) {
+                reply(r.ok ? ok() : fail(-1, r.error || "launch point [" + p.launchPointId + "] not found"));
+            });
+        };
+        // The apps running, with their process ids ({running: [{id,
+        // processid}]}; system and headless ones too).
+        am["/running"] = function (p, reply) {
+            hostOp("running", {}).then(function (r) {
+                reply(r.ok ? ok({ running: r.running || [] }) : fail(-1, r.error || "Not available"));
+            });
+        };
+        // close {processId}: closes the app (its cards and its headless
+        // page), keep-alive or not. True whenever the call is well formed,
+        // as on webOS.
+        am["/close"] = function (p, reply) {
+            if (typeof p.processId !== "string" || !p.processId) return reply(fail(-1, "Must provide a valid processId to close"));
+            hostOp("close", { processId: p.processId }).then(function () { reply(ok()); });
+        };
+        // install {target}: a package file, as com.palm.appinstaller's
+        // install (LunaSysMgr downloaded web addresses first; here only
+        // files on the device).
+        am["/install"] = function (p, reply) {
+            var target = String(p.target || "").replace(/^file:\/\//, "");
+            if (!target || !/\.ipk$/i.test(target)) return reply(fail(-1, "Not a valid install target"));
+            var l = runtime.legacyInstall;
+            if (!l) return reply(fail(-1, "Installing apps is not available"));
+            var first = true;
+            l({ target: target }, function (r) {
+                if (!first) return;
+                first = false;
+                reply(r.returnValue === false ? fail(-1, "Not a valid install target") : ok());
+            }, { cancelled: function () { return !first; }, onCancel: null });
+        };
+        // rescan: read the installed apps again.
+        am["/rescan"] = function (p, reply) {
+            hostOp("rescan", {}).then(function (r) { reply(r.ok ? ok() : fail(-1, r.error || "Rescan failed")); });
+        };
+        // getSizeOfApps {appIds, includeDbSize} -> {<appId>: bytes, ...}
+        // (subscribed false, as the original). Apps keep their data in the
+        // shared store here, so includeDbSize adds nothing.
+        am["/getSizeOfApps"] = function (p, reply) {
+            if (!Array.isArray(p.appIds)) return reply({ subscribed: false, returnValue: false, errorCode: "Missing appIds parameter" });
+            var r = { subscribed: false, returnValue: true };
+            p.appIds.forEach(function (id) {
+                var a = app(String(id));
+                r[String(id)] = a ? Number(a.appSize || a.size || 0) : 0;
+            });
+            reply(r);
+        };
+        // The apps being installed, as launch points (listPendingLaunchPoints).
+        am["/listPendingLaunchPoints"] = function (p, reply) {
+            var pending = runtime.pendingInstalls ? runtime.pendingInstalls() : {};
+            reply(ok({ launchPoints: Object.keys(pending).map(function (id) {
+                var st = pending[id];
+                return { id: id, appId: id, launchPointId: id + "_default", title: st.title || id, icon: st.icon || "",
+                         progress: st.progress || 0, state: st.state, removable: true };
+            }) }));
+        };
+
+        // ---- Dock (Exhibition) mode launch points: just the data -------------------------
+        // Apps that offer a dock mode stage say so in appinfo.json
+        // ("exhibitionMode", or the older "dockMode"); which of them the
+        // dock mode shows is a set, by default conf/default-exhibition-apps.json
+        // (Photos), kept in the shared store.
+        var DOCK_KEY = "appManager:dockMode";
+        var DEFAULT_EXHIBITION_APPS = ["com.palm.app.photos", "org.webosphoenix.photos"];
+        function dockEnabled() { return store.get(DOCK_KEY, DEFAULT_EXHIBITION_APPS); }
+        function dockApps() { return launchPoints().filter(function (lp) { return /_default$/.test(lp.launchPointId) && lp.exhibitionMode; }); }
+        am["/listDockModeLaunchPoints"] = function (p, reply) {
+            var on = dockEnabled();
+            reply(ok({ launchPoints: dockApps().map(function (lp) {
+                return Object.assign({}, lp, { enabled: on.indexOf(lp.id) >= 0 });
+            }) }));
+        };
+        // LunaSysMgr's own list was empty (dockLaunchPoints, ApplicationManager.cpp:785-789).
+        am["/listDockPoints"] = function (p, reply) { reply(ok({ dockPoints: [] })); };
+        am["/addDockModeLaunchPoint"] = function (p, reply) {
+            if (typeof p.appId !== "string" || !app(p.appId)) return reply({ returnValue: false });
+            var on = dockEnabled();
+            if (on.indexOf(p.appId) < 0) { on = on.concat([p.appId]); store.set(DOCK_KEY, on); }
+            reply(ok());
+        };
+        // As on webOS it disables the launch point and answers false
+        // (disableDockModeLaunchPoint always returned false).
+        am["/removeDockModeLaunchPoint"] = function (p, reply) {
+            if (typeof p.appId === "string") store.set(DOCK_KEY, dockEnabled().filter(function (id) { return id !== p.appId; }));
+            reply({ returnValue: false });
+        };
+
+        // ---- Redirect handlers: apps for web addresses and schemes -----------------------
+        // From /usr/palm/command-resource-handlers.json and http(s) to the
+        // browser (tag "system-default"), and those apps add
+        // (addRedirectHandler; tag "user"), kept in the shared store as
+        // MimeSystem saved its table. The first for a pattern is active
+        // until swapRedirectHandler picks another; each has an index.
+        function urlHandlers() {
+            var reg = runtime.handlerRegistry(), out = [], i = 0;
+            redirectList().forEach(function (h) {
+                out.push({ url: h.url, appId: h.appId, index: ++i, tag: "system-default", schemeForm: /^\^[a-z][a-z0-9+.-]*[:?]/i.test(h.url) });
+            });
+            out.push({ url: "^https?:", appId: "com.palm.app.browser", index: ++i, tag: "system-default", schemeForm: true });
+            reg.redirects.forEach(function (h) { out.push(Object.assign({ tag: "user" }, h)); });
+            return out;
+        }
+        function urlMatches(url) {
+            var reg = runtime.handlerRegistry(), groups = {}, order = [];
+            urlHandlers().forEach(function (h) {
+                var re;
+                try { re = new RegExp(h.url, "i"); } catch (e) { return; }
+                if (!re.test(url)) return;
+                if (!groups[h.url]) { groups[h.url] = []; order.push(h.url); }
+                groups[h.url].push(h);
+            });
+            return order.map(function (pattern) {
+                var list = groups[pattern], active = reg.activeRedirect[pattern];
+                var a = list.filter(function (h) { return h.index === active; })[0] || list[0];
+                return { pattern: pattern, active: a, alternates: list.filter(function (h) { return h !== a; }) };
+            });
+        }
+        function withName(h) {
+            var a = app(h.appId);
+            return Object.assign({}, h, { appName: a ? a.title : h.appId });
+        }
+        runtime.redirectHandlerFor = function (url) {
+            var m = urlMatches(String(url || ""))[0];
+            return m ? m.active.appId : null;
+        };
+        am["/addRedirectHandler"] = function (p, reply) {
+            if (typeof p.appId !== "string" || !p.appId) return reply({ subscribed: false, returnValue: false, errorCode: "Missing appId parameter" });
+            if (typeof p.urlPattern !== "string" || !p.urlPattern) return reply({ subscribed: false, returnValue: false, errorCode: "Missing urlPattern parameter" });
+            if (p.schemeForm !== undefined && typeof p.schemeForm !== "boolean")
+                return reply({ subscribed: false, returnValue: false, errorCode: "schemeForm parameter incorrectly specified (should be a boolean value)" });
+            try { new RegExp(p.urlPattern); } catch (e) { return reply({ subscribed: false, returnValue: false, errorCode: "adding handler failed" }); }
+            if (!app(p.appId)) return reply({ subscribed: false, returnValue: false, errorCode: "adding handler failed" });
+            var reg = runtime.handlerRegistry();
+            if (!reg.redirects.some(function (h) { return h.appId === p.appId && h.url === p.urlPattern; })) {
+                reg.redirects.push({ url: p.urlPattern, appId: p.appId, schemeForm: !!p.schemeForm, index: reg.next++ });
+                runtime.saveHandlerRegistry(reg);
+            }
+            reply({ subscribed: false, returnValue: true });
+        };
+        am["/swapRedirectHandler"] = function (p, reply) {
+            var pattern = String(p.url || ""), index = Number(p.index);
+            var h = urlHandlers().filter(function (x) { return x.url === pattern && x.index === index; })[0];
+            if (!h) return reply({ subscribed: false, returnValue: false, errorCode: "swap failed (incorrect index for url, perhaps?)" });
+            var reg = runtime.handlerRegistry();
+            reg.activeRedirect[pattern] = index;
+            runtime.saveHandlerRegistry(reg);
+            reply({ subscribed: false, returnValue: true });
+        };
+        am["/listAllHandlersForUrl"] = function (p, reply) {
+            var url = String(p.url || ""), m = urlMatches(url)[0];
+            if (!m) return reply({ subscribed: false, url: url, returnValue: false, errorCode: "No handlers found for " + url });
+            var r = { activeHandler: withName(m.active) };
+            if (m.alternates.length) r.alternates = m.alternates.map(withName);
+            reply({ subscribed: false, url: url, returnValue: true, redirectHandlers: r });
+        };
+        am["/listAllHandlersForUrlPattern"] = function (p, reply) {
+            var pattern = String(p.urlPattern || p.url || "");
+            var list = urlHandlers().filter(function (h) { return h.url === pattern; });
+            if (!list.length) return reply({ subscribed: false, returnValue: false, errorCode: "No handlers found for " + pattern });
+            var reg = runtime.handlerRegistry(), active = list.filter(function (h) { return h.index === reg.activeRedirect[pattern]; })[0] || list[0];
+            var r = { activeHandler: withName(active) };
+            var alt = list.filter(function (h) { return h !== active; });
+            if (alt.length) r.alternates = alt.map(withName);
+            reply({ subscribed: false, urlPattern: pattern, returnValue: true, redirectHandlers: r });
+        };
+        am["/listRedirectHandlers"] = function (p, reply) {
+            reply(ok({ redirectHandlers: urlHandlers().map(withName) }));
+        };
+    })();
 
     // ---- Just Type (com.palm.universalsearch) ---------------------------------------------
     // Modelled on openwebos/luna-universalsearchmgr: web search engines from
@@ -1292,10 +1534,12 @@
     var nativeWebViews = global.location && global.location.protocol === "phoenix:";
     var webViews = {};      // id -> adapter
     var nextWebView = 1;
+    // Ids unique across pages, so the shell finds the view a picture is of.
+    var webViewPrefix = "wv" + Math.random().toString(36).slice(2, 8) + "-";
 
     function WebViewAdapter(node) {
         this.node = node;
-        this.id = "wv" + (nextWebView++);
+        this.id = webViewPrefix + (nextWebView++);
         this.url = "";
         this.title = "";
         this.back = [];         // iframe engine history
@@ -1314,6 +1558,21 @@
             var p = { id: this.id, op: op }, k;
             for (k in extra || {}) p[k] = extra[k];
             host.postToHost("webView", p);
+        },
+        // A picture request (saveViewToFile and friends), answered at once.
+        picture: function (req) {
+            if (!nativeWebViews) return false;
+            try {
+                var x = new XMLHttpRequest();
+                x.open("GET", "/__phoenix/snapshot?req=" + encodeURIComponent(toJson(req)), false);
+                x.send();
+                var r = JSON.parse(x.responseText || "{}");
+                if (r.returnValue === false) console.warn("[phoenix-runtime] " + req.op + ": " + r.errorText);
+                return r.returnValue !== false;
+            } catch (e) {
+                console.warn("[phoenix-runtime] " + req.op + ": " + e.message);
+                return false;
+            }
         },
         connect: function () {
             var self = this;
@@ -1461,10 +1720,22 @@
             inspectUrlAtPoint: function () {},
             getImageInfoAtPoint: function () {},
             saveImageAtPoint: function () {},
-            saveViewToFile: function () {},
-            generateIconFromFile: function () {},
-            resizeImage: function () {},
-            deleteImage: function () {},
+            // Pictures of the page (BrowserServer's): the browser's bookmark
+            // thumbnail and the icon of a launcher shortcut. phoenix-sim
+            // makes them (/__phoenix/snapshot); they return at once, as the
+            // plugin's calls did, and the files are there when the page
+            // shows them. In a desktop browser the page is an <iframe>
+            // nothing can take a picture of, and there are none.
+            saveViewToFile: function (path, left, top, width, height) {
+                this.picture({ op: "save", view: this.id, path: path, rect: [left || 0, top || 0, width, height] });
+            },
+            generateIconFromFile: function (src, path, left, top, right, bottom) {
+                this.picture({ op: "icon", src: src, path: path, rect: [left || 0, top || 0, (right || 0) - (left || 0), (bottom || 0) - (top || 0)] });
+            },
+            resizeImage: function (src, path, width, height) {
+                this.picture({ op: "resize", src: src, path: path, width: width, height: height });
+            },
+            deleteImage: function (path) { this.picture({ op: "delete", path: path }); },
             printFrame: function () {}
         }
     };
@@ -1649,8 +1920,12 @@
             host.postToHost("launchPointIcon", { appId: PalmSystem.appIdentifier, launchPointId: p.launchPointId, icon: icon });
             reply(ok({}));
         };
-        // Headless apps (Calendar) ask to stay loaded when their windows close.
-        if (!PalmSystem.keepAlive) PalmSystem.keepAlive = function () {};
+        // Headless apps (Calendar) ask to stay loaded when their windows
+        // close: the shell keeps the app's page running when its last card
+        // closes (as the apps LunaSysMgr kept alive, luna.conf [KeepAlive]).
+        if (!PalmSystem.keepAlive) PalmSystem.keepAlive = function (on) {
+            host.postToHost("keepAlive", { on: on === undefined ? true : !!on });
+        };
         // Enyo reads window params from PalmSystem.launchParams, and from the
         // URL's enyoWindowParams only when there are no launch params. Pages
         // opened with enyoWindowParams (CrossAppUI iframes such as Email's
@@ -5858,19 +6133,39 @@
             if (!pattern || !mime) return false;
             return pattern === mime || (/\/\*$/.test(pattern) && mime.indexOf(pattern.slice(0, -1)) === 0);
         }
+        // Every resource handler, each with its index: the apps' appinfo.json
+        // types, the built-in ones (HANDLERS), then those added at run time
+        // (addResourceHandler: {appId, mime, extension, shouldDownload}).
+        function resourceTable() {
+            var out = [], i = 0;
+            registeredTypes().forEach(function (r) {
+                out.push({ appId: r.appId, title: r.title, mime: r.mime, extension: r.extension, stream: r.stream, index: ++i, tag: "system-default" });
+            });
+            HANDLERS.forEach(function (h) {
+                out.push({ appId: h.appId, title: h.title, mime: h.prefix, prefix: true, extension: "", index: ++i, tag: "system-default" });
+            });
+            runtime.handlerRegistry().resources.forEach(function (r) {
+                var a = launchPoints().filter(function (lp) { return /_default$/.test(lp.launchPointId) && lp.id === r.appId; })[0];
+                if (a) out.push({ appId: r.appId, title: a.title, mime: r.mime, extension: r.extension || "", stream: !r.shouldDownload,
+                                  shouldDownload: !!r.shouldDownload, index: r.index, tag: "user" });
+            });
+            return out;
+        }
+        // The handlers for a type (and extension), the active one first
+        // (swapResourceHandler), one per app.
         function handlersFor(mime, ext) {
             mime = String(mime || "").toLowerCase();
             ext = String(ext || "").toLowerCase();
             var seen = {}, out = [];
-            function add(appId, title) {
-                if (seen[appId]) return;
-                seen[appId] = true;
-                out.push({ appId: appId, title: title, mime: mime, index: out.length });
-            }
-            registeredTypes().forEach(function (r) {
-                if (typeMatches(r.mime, mime) || (ext && r.extension === ext)) add(r.appId, r.title);
+            resourceTable().forEach(function (r) {
+                var hit = r.prefix ? mime.indexOf(r.mime) === 0 : (typeMatches(r.mime, mime) || (ext && r.extension === ext));
+                if (!hit || seen[r.appId]) return;
+                seen[r.appId] = true;
+                out.push({ appId: r.appId, title: r.title, mime: mime, index: r.index, tag: r.tag, stream: !!r.stream });
             });
-            HANDLERS.forEach(function (h) { if (mime.indexOf(h.prefix) === 0) add(h.appId, h.title); });
+            var active = runtime.handlerRegistry().activeResource[mime];
+            var a = out.filter(function (h) { return h.index === active; })[0];
+            if (a) out = [a].concat(out.filter(function (h) { return h !== a; }));
             return out;
         }
         // A file path, file:// uri or web address -> the first app that opens it.
@@ -5893,7 +6188,6 @@
         runtime.handlerForTarget = handlerForTarget;
         var am = runtime.services["com.palm.applicationManager"];
         if (am) {
-            am["/listAllHandlersForMime"] = function (p, reply) { reply(ok({ mime: p.mime, resources: handlersFor(p.mime) })); };
             am["/getHandlerForMimeType"] = function (p, reply) {
                 var h = handlersFor(p.mimeType || p.mime)[0];
                 reply(h ? ok({ appId: h.appId, mimeType: p.mimeType || p.mime }) : fail(-1, "no handler"));
@@ -5914,6 +6208,104 @@
                 });
                 reply(ok({ uri: uri, appIdByExtension: h.appId, mimeByExtension: mime, canStream: streams && /^https?:/i.test(uri) }));
             };
+            // ---- The resource handler registry (MimeSystem) --------------------------
+            // listAllHandlersForMime also answers as LunaSysMgr did:
+            // resourceHandlers {activeHandler, alternates}.
+            function asResource(h, mime) {
+                var a = launchPoints().filter(function (lp) { return /_default$/.test(lp.launchPointId) && lp.id === h.appId; })[0];
+                return { mime: mime, extension: "", appId: h.appId, streamable: !!h.stream, index: h.index, tag: h.tag || "system-default",
+                         appName: a ? a.title : h.title || h.appId };
+            }
+            am["/listAllHandlersForMime"] = function (p, reply) {
+                var mime = String(p.mime || p.mimeType || "").toLowerCase();
+                var list = handlersFor(mime);
+                var r = ok({ subscribed: false, mime: p.mime, resources: list });
+                if (list.length) {
+                    r.resourceHandlers = { activeHandler: asResource(list[0], mime) };
+                    if (list.length > 1) r.resourceHandlers.alternates = list.slice(1).map(function (h) { return asResource(h, mime); });
+                }
+                reply(r);
+            };
+            // mimeTypeForExtension {extension} -> {mimeType, extension}.
+            am["/mimeTypeForExtension"] = function (p, reply) {
+                var ext = String(p.extension || "").replace(/^\./, "").toLowerCase();
+                var mime = MIME[ext] || (resourceTable().filter(function (r) { return r.extension === ext && r.mime; })[0] || {}).mime;
+                reply(mime ? { subscribed: false, returnValue: true, mimeType: mime, extension: ext }
+                           : { subscribed: false, returnValue: false, errorCode: "No mime mapped to this extension" });
+            };
+            // getHandlerForExtension {extension} -> {mimeType, appId, download}.
+            am["/getHandlerForExtension"] = function (p, reply) {
+                var ext = String(p.extension || "").replace(/^\./, "").toLowerCase();
+                var mime = MIME[ext] || (resourceTable().filter(function (r) { return r.extension === ext && r.mime; })[0] || {}).mime;
+                if (!mime) return reply({ subscribed: false, returnValue: false, errorCode: "No mime type mapped to extension " + ext });
+                var h = handlersFor(mime, ext)[0];
+                reply(h ? { subscribed: false, returnValue: true, mimeType: mime, appId: h.appId, download: !h.stream }
+                        : { subscribed: false, returnValue: false, errorCode: "No handler found for extension " + ext });
+            };
+            // getHandlerForUrl {url}: a scheme or web address to its
+            // redirect handler, else a file to the app for its type.
+            am["/getHandlerForUrl"] = function (p, reply) {
+                var url = String(p.url || "");
+                var path = url.replace(/^file:\/\//, "").replace(/[?#].*$/, "");
+                var ext = extOf(path);
+                var typed = ext && (!/^https?:/i.test(url) || registeredTypes().some(function (r) { return r.extension === ext; }));
+                if (typed) {
+                    var mime = MIME[ext] || "application/octet-stream", h = handlersFor(mime, ext)[0];
+                    if (h) return reply({ subscribed: false, returnValue: true, mimeType: mime, appId: h.appId, download: !/^https?:/i.test(url) || !h.stream });
+                }
+                var app = runtime.redirectHandlerFor(url);
+                reply(app ? { subscribed: false, returnValue: true, appId: app, download: false }
+                          : { subscribed: false, returnValue: false, errorCode: "No handler found for url [" + url + "]" });
+            };
+            // addResourceHandler {appId, shouldDownload, mimeType | extension}.
+            am["/addResourceHandler"] = function (p, reply) {
+                function no(text) { reply({ subscribed: false, returnValue: false, errorCode: text }); }
+                if (typeof p.appId !== "string" || !p.appId) return no("Missing appId parameter");
+                var mime = String(p.mimeType || "").toLowerCase(), ext = String(p.extension || "").replace(/^\./, "").toLowerCase();
+                if (!mime && !ext) return no("Neither extension or mime type provided");
+                if (!mime) {
+                    mime = MIME[ext] || "";
+                    if (!mime) return no("Cannot find mime type for extension [" + ext + "]");
+                }
+                if (!launchPoints().some(function (lp) { return lp.id === p.appId; })) return no("adding handler failed");
+                var reg = runtime.handlerRegistry();
+                if (!reg.resources.some(function (r) { return r.appId === p.appId && r.mime === mime && (r.extension || "") === ext; })) {
+                    reg.resources.push({ appId: p.appId, mime: mime, extension: ext, shouldDownload: !!p.shouldDownload, index: reg.next++ });
+                    runtime.saveHandlerRegistry(reg);
+                }
+                reply({ subscribed: false, returnValue: true });
+            };
+            // swapResourceHandler {mimeType, index}: that handler is active.
+            am["/swapResourceHandler"] = function (p, reply) {
+                var mime = String(p.mimeType || "").toLowerCase(), index = Number(p.index);
+                if (!handlersFor(mime).some(function (h) { return h.index === index; }))
+                    return reply({ subscribed: false, returnValue: false, errorCode: "swap failed (incorrect index for mime type, perhaps?)" });
+                var reg = runtime.handlerRegistry();
+                reg.activeResource[mime] = index;
+                runtime.saveHandlerRegistry(reg);
+                reply({ subscribed: false, returnValue: true });
+            };
+            // removeHandlersForAppId {appId}: the handlers it added go.
+            am["/removeHandlersForAppId"] = function (p, reply) {
+                if (typeof p.appId !== "string" || !p.appId) return reply({ subscribed: false, returnValue: false, errorCode: "Missing appId parameter" });
+                var reg = runtime.handlerRegistry();
+                reg.resources = reg.resources.filter(function (r) { return r.appId !== p.appId; });
+                reg.redirects = reg.redirects.filter(function (r) { return r.appId !== p.appId; });
+                runtime.saveHandlerRegistry(reg);
+                reply({ subscribed: false, returnValue: true });
+            };
+            // LunaSysMgr registered listResourceHandlers but never answered
+            // it; Phoenix lists them.
+            am["/listResourceHandlers"] = function (p, reply) {
+                reply(ok({ resourceHandlers: resourceTable().map(function (r) { return asResource(r, r.mime); }) }));
+            };
+            am["/listExtensionMap"] = function (p, reply) {
+                var map = {};
+                Object.keys(MIME).forEach(function (e) { map[e] = MIME[e]; });
+                resourceTable().forEach(function (r) { if (r.extension && r.mime && !map[r.extension]) map[r.extension] = r.mime; });
+                reply(ok({ extensionMap: map }));
+            };
+
             // open {target}: a file goes to the app that handles its type
             // (the browser's finished downloads, "Open by Type" in Files).
             var baseOpen = am["/open"];
@@ -7389,18 +7781,30 @@
             if (st && typeof st.appsVersion === "number" && st.appsVersion !== lastAppsVersion) {
                 var first = lastAppsVersion < 0;
                 lastAppsVersion = st.appsVersion;
-                if (!first || st.appsVersion > 0) appsChanged();
+                if (!first || st.appsVersion > 0) appsChanged(st.appsCause || null);
+            }
+            // What the shell knows is being installed, from every page.
+            if (st && st.installs && typeof st.installs === "object") {
+                installs = st.installs;
+                installWatchers = installWatchers.filter(function (w) { return w() !== false; });
             }
             baseApply(st);
         };
-        function hostInstall(op, appId, files) {
-            launchPoints();   // the list before, for launchPointChanges
+        // One request to the host, answered with {ok, error, ...}: install
+        // and remove (an app's files), and the application manager's work
+        // that needs the host: addLaunchPoint, removeLaunchPoint, rescan,
+        // running, close, capacity (free space). phoenix-sim's
+        // SimWindowSource answers through applyHostStatus {installerResult};
+        // tools/serve-rootfs.py at POST /__phoenix/installer.
+        var CHANGES_APPS = { install: true, remove: true, addLaunchPoint: true, removeLaunchPoint: true, rescan: true };
+        function hostOp(op, payload) {
+            if (CHANGES_APPS[op]) launchPoints();   // the list before, for launchPointChanges
+            var body = Object.assign({ op: op }, payload || {});
             if (/^https?:$/.test(global.location.protocol)) {
                 return fetch("/__phoenix/installer", {
-                    method: "POST", headers: { "Content-Type": "application/json" },
-                    body: toJson({ op: op, appId: appId, files: files || [] })
+                    method: "POST", headers: { "Content-Type": "application/json" }, body: toJson(body)
                 }).then(function (res) { return res.json(); }).then(function (r) {
-                    if (r.ok) appsChanged();
+                    if (r.ok && CHANGES_APPS[op]) appsChanged(r.cause ? { cause: r.cause, appId: body.appId } : null);
                     return r;
                 });
             }
@@ -7411,20 +7815,73 @@
                     resolve({ ok: false, error: "The shell did not answer" });
                 }, 60000);
                 pending[id] = function (r) { clearTimeout(timer); resolve(r); };
-                host.postToHost(op === "install" ? "installApp" : "removeApp", { requestId: id, appId: appId, files: files || [] });
+                body.requestId = id;
+                if (op === "install" || op === "remove")
+                    host.postToHost(op === "install" ? "installApp" : "removeApp", body);
+                else
+                    host.postToHost("appManagerOp", body);
             });
         }
+        runtime.hostOp = hostOp;
+        function hostInstall(op, appId, files, cause) {
+            return hostOp(op, { appId: appId, files: files || [], cause: cause || "" });
+        }
+
+        // ---- Installs as they go, for the launcher -----------------------------------
+        // The launcher shows an app being installed as a faded icon with a
+        // progress strip, and one that failed with a warning badge
+        // (LunaSysMgr: ApplicationDescription Status_Installing /
+        // Status_Failed, AppMonitor's install status decorators). Whoever
+        // installs tells the shell ("installStatus" host message):
+        // {appId, state: "installing" | "failed" | "installed", progress
+        // (0-100), title, icon, reason, retry: {uri, params} (how to try
+        // again), open: {id, params} (what a tap opens meanwhile)}. The
+        // shell tells every page what is pending (applyHostStatus
+        // {installs}), for installProgressQuery.
+        var installs = {};
+        runtime.installStatus = function (appId, st) {
+            if (!appId) return;
+            var was = installs[appId] || {}, now = Object.assign({}, was, { appId: appId });
+            for (var k in st) if (st[k] !== undefined) now[k] = st[k];
+            // Several report the same install (the Marketplace, then the
+            // installer): progress only goes forward.
+            if (now.state === "installing" && was.state === "installing" && (was.progress || 0) > (st.progress || 0))
+                now.progress = was.progress;
+            if (now.state === "installed") delete installs[appId];
+            else installs[appId] = now;
+            host.postToHost("installStatus", now);
+        };
+        runtime.pendingInstalls = function () { return installs; };
 
         // ---- Install and remove ---------------------------------------------------------
 
-        var statuses = {}, statusWatchers = [];
-        function report(id, statusValue, details, each) {
+        var statuses = {}, statusWatchers = [], installWatchers = [];
+        // launcher: what the launcher's pending icon shows ({progress,
+        // title, icon, retry}); null for removals.
+        function report(id, statusValue, details, each, launcher) {
             var d = Object.assign({ packageId: id }, details || {});
             statuses[id] = d;
             var msg = ok({ id: id, statusValue: statusValue, details: d });
             if (each) each(msg);
             statusWatchers = statusWatchers.filter(function (w) { return w(msg) !== false; });
             if (/^(installed|install failed|removed|remove failed)$/.test(d.state)) delete statuses[id];
+            if (launcher && id) {
+                var st = d.state === "installed" ? { state: "installed", progress: 100 }
+                       : d.state === "install failed" ? { state: "failed", reason: d.reason || "" }
+                       : { state: "installing", progress: d.state === "installing" ? 50 : 0 };
+                for (var k in launcher) if (launcher[k] !== undefined && launcher[k] !== null) st[k] = launcher[k];
+                runtime.installStatus(id, st);
+            }
+        }
+
+        // The app's title and icon from its package, for the pending icon.
+        function packageLooks(pkg, app) {
+            var info = app.appinfo || {}, out = { title: info.title || app.id };
+            var iconPath = app.dir + (info.icon || "icon.png");
+            var f = pkg.files.filter(function (x) { return x.path === iconPath; })[0];
+            if (f && f.data && f.data.length < 512 * 1024)
+                out.icon = "data:image/png;base64," + b64(f.data);
+            return out;
         }
 
         // -> Promise<{appId, version, skipped}>; rejects with an Error (code, message).
@@ -7432,8 +7889,15 @@
         // package with install scripts, services or files outside its app
         // installs its app; the rest is skipped here (the simulator cannot
         // run scripts or a 2011 service) and listed in `skipped`.
-        function installPackage(id, path, each, developer) {
-            report(id || "", 11, { state: "install needed", ipkUrl: path }, each);
+        // retry: how the launcher's failed icon tries again ({uri, params});
+        // by default the same install, unless the package was only in this
+        // page's memory (/tmp).
+        function installPackage(id, path, each, developer, retry) {
+            if (retry === undefined)
+                retry = /^\/tmp\//.test(path) ? null
+                      : { uri: "luna://com.webos.appInstallService/install", params: { id: id || "", ipkUrl: path, developerMode: !!developer } };
+            var looks = { retry: retry };
+            report(id || "", 11, { state: "install needed", ipkUrl: path }, each, id ? looks : null);
             return readPackage(path).then(function (bytes) {
                 return ipk().read(bytes);
             }).then(function (pkg) {
@@ -7441,6 +7905,8 @@
                 if (!app) throw Object.assign(new Error("The package has no app"), { code: "NO_APP" });
                 if (id && app.id !== id) throw Object.assign(new Error("The package is " + app.id + ", not " + id), { code: "WRONG_ID" });
                 id = app.id;
+                looks = Object.assign(packageLooks(pkg, app), { retry: retry && retry.params && retry.params.id === "" ?
+                    { uri: retry.uri, params: Object.assign({}, retry.params, { id: id }) } : retry });
                 var outside = pkg.files.filter(function (f) { return f.path.indexOf(app.dir) !== 0; });
                 var dev = !!developer && store.get("devMode", false);
                 var skipped = [];
@@ -7461,15 +7927,15 @@
                     var others = outside.filter(function (f) { return pkg.services.indexOf(f.path) < 0; });
                     if (others.length) skipped.push(others.length + " files outside the app");
                 }
-                report(id, 13, { state: "installing", ipkUrl: path }, each);
+                report(id, 13, { state: "installing", ipkUrl: path }, each, looks);
                 var files = pkg.files.map(function (f) { return { path: f.path.slice(app.dir.length), data: b64(f.data) }; });
                 return hostInstall("install", id, files).then(function (r) {
                     if (!r.ok) throw Object.assign(new Error(r.error || "Install failed"), { code: "HOST" });
-                    report(id, 30, { state: "installed", installBasePath: "/media/cryptofs/apps", skipped: skipped }, each);
+                    report(id, 30, { state: "installed", installBasePath: "/media/cryptofs/apps", skipped: skipped }, each, {});
                     return { appId: id, version: app.appinfo.version || pkg.control.Version || "", skipped: skipped };
                 });
             }).then(null, function (e) {
-                report(id || "", 24, { state: "install failed", errorCode: -1, reason: e.message }, each);
+                report(id || "", 24, { state: "install failed", errorCode: -1, reason: e.message }, each, id ? looks : null);
                 throw e;
             });
         }
@@ -7478,10 +7944,11 @@
         function installed(id) {
             return launchPoints().some(function (lp) { return lp.id === id && lp.removable; });
         }
-        function removeApp(id, each) {
+        // cause: why, for notifyOnChange ("USER", the default; "REVOKED").
+        function removeApp(id, each, cause) {
             if (!installed(id)) return Promise.reject(Object.assign(new Error("No such id"), { code: -2 }));
             report(id, 41, { state: "remove needed" }, each);
-            return hostInstall("remove", id).then(function (r) {
+            return hostInstall("remove", id, [], cause || "USER").then(function (r) {
                 if (!r.ok) {
                     report(id, 25, { state: "remove failed", reason: r.error }, each);
                     throw Object.assign(new Error(r.error || "Remove failed"), { code: -7 });
@@ -7534,20 +8001,178 @@
                 send("STARTING");
                 installPackage(null, path, function (m) {
                     if (m.details.state === "installing") send("IPKG_INSTALL");
-                }).then(function (r) {
+                }, false, /^\/tmp\//.test(path) ? null : { uri: "luna://com.palm.appinstaller/installNoVerify", params: { target: path } }).then(function (r) {
                     send("SUCCESS", { appId: r.appId });
                 }, function (e) {
                     send("FAILED_IPKG_INSTALL", { details: { reason: e.message } });
                 });
             });
         }
+        runtime.legacyInstall = legacyInstall;
+
+        // ---- notifyOnChange: apps installed and removed -------------------------------
+        // {appId} (or none: every app, "*"), as ApplicationInstaller's
+        // subscriptions (cbNotifyOnChange, notifyAppInstalled,
+        // notifyAppRemoved: {appId, version, statusChange: "INSTALLED" |
+        // "REMOVED", cause: "USER" | "REVOKED" | "UNKNOWN"}; system apps,
+        // com.palm.sysapp.*, are not told).
+        var changeWatchers = [];
+        runtime.onAppsChanged(function (before, after, info) {
+            var was = {}, now = {};
+            before.forEach(function (lp) { if (/_default$/.test(lp.launchPointId)) was[lp.id] = lp; });
+            after.forEach(function (lp) { if (/_default$/.test(lp.launchPointId)) now[lp.id] = lp; });
+            var changes = [];
+            Object.keys(now).forEach(function (id) {
+                if (!was[id] || (was[id].version || "") !== (now[id].version || ""))
+                    changes.push({ appId: id, version: now[id].version || "", statusChange: "INSTALLED" });
+            });
+            Object.keys(was).forEach(function (id) {
+                if (!now[id] && id.indexOf("com.palm.sysapp") !== 0)
+                    changes.push({ appId: id, version: was[id].version || "", statusChange: "REMOVED",
+                                   cause: info && info.appId === id && info.cause ? info.cause : "USER" });
+            });
+            changes.forEach(function (c) {
+                changeWatchers = changeWatchers.filter(function (w) { return w(c) !== false; });
+            });
+        });
+
+        // ---- Sizes and capacity -------------------------------------------------------
+        function kb(bytes) { return Math.ceil((Number(bytes) || 0) / 1024); }
+        function userApps() {
+            return launchPoints().filter(function (lp) { return /_default$/.test(lp.launchPointId) && lp.removable; });
+        }
+
+        // queryInstallCapacity result bits (ApplicationInstaller.cpp:844-845,
+        // the App Catalog's codes); an unpacked size not given is twice the
+        // package's (INSTALLER_DEFV__MIN_FREE_MULT, :75).
+        var DOWNLOAD_SPACE_INSUFFICIENT = 1, INSTALL_SPACE_INSUFFICIENT = 2, MIN_FREE_MULT = 2;
+
+        // revoke: the apps a trusted Marketplace catalog withdrew. LunaSysMgr
+        // checked the signature over the app ids, one after the other,
+        // with Palm's revocation certificate (cbRevoke, :3386-3505); Phoenix
+        // checks it with the Ed25519 keys of the catalogs the device trusts.
+        function trustedKeys() {
+            var keys = [], st = store.get("marketplace:state", null) || {};
+            (st.sources || []).forEach(function (s) { if (s.key && s.enabled !== false) keys.push(s.key); });
+            try {
+                (JSON.parse(PalmSystem.getResource("/etc/palm/marketplace/sources.json") || "{}").sources || []).forEach(function (s) {
+                    if (s.key && keys.indexOf(s.key) < 0) keys.push(s.key);
+                });
+            } catch (e) { /* none */ }
+            return keys;
+        }
+        function verifyRevocation(appIds, signatureB64) {
+            var ed = loadModule("lib/ed25519.js");
+            var sig, msg = new TextEncoder().encode(appIds.join(""));
+            try { sig = unb64(String(signatureB64 || "")); } catch (e) { return Promise.resolve(false); }
+            var sha512 = function (bytes) { return global.crypto.subtle.digest("SHA-512", bytes); };
+            return trustedKeys().reduce(function (chain, k) {
+                return chain.then(function (good) {
+                    if (good) return true;
+                    var key;
+                    try { key = unb64(k); } catch (e) { return false; }
+                    return ed.verify(sig, msg, key, sha512);
+                });
+            }, Promise.resolve(false));
+        }
+
         register(["com.palm.appinstaller"], {
             "/installNoVerify": legacyInstall,
             "/install": legacyInstall,
             "/remove": function (p, reply) {
                 removeApp(p.packageName || p.id).then(function () { reply(ok()); }, function (e) { reply(fail(-1, e.message)); });
             },
-            "/isInstalled": function (p, reply) { reply(ok({ installed: launchPoints().some(function (lp) { return lp.id === (p.appId || p.packageName); }) })); }
+            "/isInstalled": function (p, reply) { reply(ok({ installed: launchPoints().some(function (lp) { return lp.id === (p.appId || p.packageName); }) })); },
+            "/notifyOnChange": function (p, reply, ctx) {
+                var id = typeof p.appId === "string" && p.appId ? p.appId : "*";
+                reply(ok({ subscribed: true, appId: id }));
+                launchPoints();   // what there is now, to tell changes from
+                changeWatchers.push(function (c) {
+                    if (ctx.cancelled()) return false;
+                    if (id === "*" || id === c.appId) reply(c);
+                    return true;
+                });
+            },
+            // An install as it goes: {appId} -> {appId, state ("installing"
+            // | "failed"), progress (0-100), title, reason}; {subscribe:
+            // true}: each change, until it is installed (state "none",
+            // progress 100) or fails. LunaSysMgr registered the method but
+            // never answered it (lunasvcInstallProgressQuery returned
+            // false); Phoenix answers from the launcher's pending icons.
+            "/installProgressQuery": function (p, reply, ctx) {
+                var id = p.appId || p.id || p.packageName;
+                if (!id) return reply(fail("appinstaller_error", "missing appId"));
+                function now() {
+                    var st = installs[id];
+                    return st ? ok({ appId: id, state: st.state, progress: st.progress || 0, title: st.title || "", reason: st.reason || "" })
+                              : ok({ appId: id, state: "none", progress: launchPoints().some(function (lp) { return lp.id === id; }) ? 100 : 0 });
+                }
+                var first = now();
+                if (first.state === "none")
+                    return reply(Object.assign(first, { returnValue: false, errorText: "No install of " + id + " in progress" }));
+                reply(Object.assign(first, { subscribed: !!p.subscribe }));
+                if (!p.subscribe) return;
+                var last = toJson(now());
+                installWatchers.push(function () {
+                    if (ctx.cancelled()) return false;
+                    var r = now(), text = toJson(r);
+                    if (text !== last) { last = text; reply(r); }
+                    return r.state === "installing";
+                });
+            },
+            // {appId | packageId, size, uncompressedSize} in KB ->
+            // {result (0, or DOWNLOAD 1 | INSTALL 2 space insufficient),
+            // spaceNeededInKB} (lunasvcQueryInstallCapacity: the package
+            // and its unpacked files on one filesystem, less what an
+            // installed copy frees).
+            "/queryInstallCapacity": function (p, reply) {
+                var id = p.appId || p.packageId;
+                if (!id) return reply({ returnValue: false, errorCode: "appinstaller_error", errorText: "missing appId or packageId parameter" });
+                if (p.size === undefined || p.size === null || p.size === "") return reply({ returnValue: false, errorCode: "appinstaller_error", errorText: "missing size parameter" });
+                var size = Number(p.size), unpacked = Number(p.uncompressedSize) || 0;
+                if (!(size >= 0)) return reply({ returnValue: false, errorCode: "appinstaller_error", errorText: "bad size parameter" });
+                if (!unpacked) unpacked = size * MIN_FREE_MULT;
+                hostOp("capacity", {}).then(function (r) {
+                    if (!r.ok || typeof r.freeKB !== "number" || r.freeKB < 0)
+                        return reply({ returnValue: false, errorCode: "appinstaller_error", errorText: r.error || "free space unknown" });
+                    var have = userApps().filter(function (lp) { return lp.id === id; })[0];
+                    var freed = have ? Math.min(kb(have.appSize || have.size), unpacked) : 0;
+                    var needed = Math.max(0, size + unpacked - freed), result = 0;
+                    if (size > r.freeKB) result |= DOWNLOAD_SPACE_INSUFFICIENT;
+                    if (needed > r.freeKB) result |= INSTALL_SPACE_INSUFFICIENT;
+                    reply(ok({ result: result, spaceNeededInKB: String(needed) }));
+                });
+            },
+            // {apps: [{appName (the app id), size (KB)}], totalSize (KB)}.
+            "/getUserInstalledAppSizes": function (p, reply) {
+                var apps = userApps().map(function (lp) { return { appName: lp.id, size: kb(lp.appSize || lp.size) }; });
+                reply(ok({ apps: apps, totalSize: apps.reduce(function (t, a) { return t + a.size; }, 0) }));
+            },
+            // {item: '{"payload": {"signature": base64, "appId": [ids]}}'}
+            // (item is JSON text, as the pubsub message carried it; an
+            // object is taken too).
+            "/revoke": function (p, reply) {
+                var item = p.item, payload;
+                if (item === undefined) return reply({ returnValue: false, errorCode: "missing item key" });
+                if (typeof item === "string") {
+                    try { item = JSON.parse(item); } catch (e) { return reply({ returnValue: false, errorCode: "item payload parse error" }); }
+                }
+                payload = item && item.payload;
+                if (!payload) return reply({ returnValue: false, errorCode: "payload key missing" });
+                if (typeof payload.signature !== "string") return reply({ returnValue: false, errorCode: "missing signature key" });
+                if (!Array.isArray(payload.appId))
+                    return reply({ returnValue: false, errorCode: payload.appId === undefined ? "missing appId key" : "appId key does not represent a json array object" });
+                var ids = payload.appId.map(String);
+                verifyRevocation(ids, payload.signature).then(function (good) {
+                    if (!good) return reply({ returnValue: false, errorCode: "verify failed" });
+                    reply(ok());
+                    ids.reduce(function (chain, id) {
+                        return chain.then(function () {
+                            return installed(id) ? removeApp(id, null, "REVOKED").then(null, function () {}) : null;
+                        });
+                    }, Promise.resolve());
+                });
+            }
         });
     })();
 
@@ -7596,7 +8221,21 @@
                         try { return JSON.parse(PalmSystem.getResource("/etc/palm/marketplace/sources.json") || "{}").sources || []; }
                         catch (e) { return []; }
                     },
-                    log: function (m) { console.info("[marketplace] " + m); }
+                    log: function (m) { console.info("[marketplace] " + m); },
+                    // The launcher's pending icon: a tap opens the app's page
+                    // in the Marketplace meanwhile; a failed one tries the
+                    // Marketplace's install again.
+                    pending: function (st) {
+                        var params = { sourceId: st.sourceId, id: st.catalogId };
+                        if (!runtime.installStatus) return;
+                        runtime.installStatus(st.appId, {
+                            state: st.state === "failed" || st.state === "installed" ? st.state : "installing",
+                            progress: typeof st.progress === "number" ? st.progress : 0,
+                            title: st.title || undefined, icon: st.icon || undefined, reason: st.errorText || "",
+                            retry: { uri: "luna://" + SERVICE + "/install", params: params },
+                            open: { id: "org.webosphoenix.marketplace", params: params }
+                        });
+                    }
                 });
             }
             return methods;

@@ -37,6 +37,9 @@ FocusScope {
     readonly property bool launcherOpen: launcher.open
     readonly property bool justTypeOpen: justType.open
     property alias launcherEditMode: launcher.editMode
+    // The launcher page shown (LauncherLayout.PAGES: apps 0, downloads 1,
+    // favorites 2, prefs 3).
+    function showLauncherPage(i) { launcher.showPage(i); }
     property alias cardView: cards
     property alias notifications: notes
     property alias searchPill: searchPill
@@ -76,6 +79,25 @@ FocusScope {
         if (uid !== "")
             Qt.callLater(cards.focusLaunched, uid);
         return uid;
+    }
+
+    // A tap on an app the launcher shows as being installed: the original
+    // sent the launch of an app not ready to Software Manager
+    // (WebAppMgrProxy.cpp:544-559), where a failed install could be tried
+    // again or removed. Here a failed one asks (Try Again, Remove); one
+    // still installing opens what installs it (the Marketplace's page for
+    // the app), when the window source says.
+    function pendingAppTapped(appId) {
+        var e = launcher.entry(appId);
+        if (!e)
+            return;
+        if (e.installState === "failed") {
+            deleteDialog.ask(appId);
+            return;
+        }
+        var info = source && typeof source.installInfo === "function" ? source.installInfo(appId) : null;
+        if (info && info.open && info.open.id)
+            launch(info.open.id, info.open.params || null);
     }
 
     function startJustType(text) {
@@ -919,7 +941,14 @@ FocusScope {
         var entries = [];
         for (var i = 0; source && source.apps && i < source.apps.count; ++i) {
             var a = source.apps.get(i);
-            entries.push({ id: a.appId, title: a.title, tab: a.tab, quickLaunch: a.quickLaunch });
+            // page: the page the app's appinfo.json names ("" for none);
+            // dynamic: a launch point an app added (addLaunchPoint), for
+            // Favorites; category, keywords and installed place the rest
+            // (LauncherLayout.pageFor).
+            entries.push({ id: a.appId, appId: a.webAppId || a.appId, title: a.title, tab: a.tab, quickLaunch: a.quickLaunch,
+                           page: a.page || "", dynamic: !!a.dynamic, category: a.category || "",
+                           keywords: a.keywords ? String(a.keywords).split("\n").filter(function(k) { return k !== ""; }) : [],
+                           installed: !!a.installed });
         }
         return entries;
     }
@@ -932,7 +961,7 @@ FocusScope {
         if (!saved && typeof source.savedLauncherLayout === "function") {
             try { saved = JSON.parse(source.savedLauncherLayout() || "null"); } catch (e) { saved = null; }
         }
-        launcherLayout = LauncherLayout.build(entries, launcher.tabs.length, saved);
+        launcherLayout = LauncherLayout.build(entries, saved);
     }
 
     function setLauncherLayout(l) {
@@ -948,7 +977,7 @@ FocusScope {
         try { l = JSON.parse(json); } catch (e) { return; }
         if (!l || typeof l !== "object" || !source || !source.apps)
             return;
-        setLauncherLayout(LauncherLayout.build(_launcherEntries(), launcher.tabs.length, l));
+        setLauncherLayout(LauncherLayout.build(_launcherEntries(), l));
     }
 
     Connections {
@@ -1356,6 +1385,13 @@ FocusScope {
                     onLaunchRequested: (appId) => shell.launch(appId)
                     onCloseRequested: launcher.open = false
                     onDeleteRequested: (appId) => deleteDialog.ask(appId)
+                    onPendingTapped: (appId) => shell.pendingAppTapped(appId)
+                    // The page edge took the dragged icon to the page beside.
+                    onDragPageChanged: (page) => {
+                        if (iconDrag.appId !== "" && iconDrag.from === "page")
+                            shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, iconDrag.appId, page, -1));
+                        iconDrag.lastIndex = -1;
+                    }
                     onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, launcher.mapToItem(ui, x, y))
                     onDragMoved: (x, y) => iconDrag.move(launcher.mapToItem(ui, x, y))
                     onDragEnded: (x, y) => iconDrag.drop(launcher.mapToItem(ui, x, y))
@@ -1447,6 +1483,9 @@ FocusScope {
                     if (!launcher.open || overDock(p))
                         return;
                     var lp = ui.mapToItem(launcher, p.x, p.y);
+                    // At a page's edge: the launcher pans or scrolls.
+                    if (from === "page" && launcher.dragOver(lp.x, lp.y))
+                        return;
                     var tab = launcher.tabAt(lp.x, lp.y);
                     if (tab >= 0 && tab !== launcher.currentPage) {
                         shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, tab, -1));
@@ -1469,6 +1508,7 @@ FocusScope {
                 function drop(p) {
                     if (appId === "")
                         return;
+                    launcher.dragDone();
                     var l = shell.launcherLayout;
                     if (overDock(p)) {
                         var q = ui.mapToItem(quickLaunch, p.x, p.y);
@@ -1501,25 +1541,74 @@ FocusScope {
                 id: deleteDialog
                 objectName: "deleteDialog"
                 property string appId: ""
+                // "app": Remove Application?; "shortcut": a launch point an
+                // app added, Remove Shortcut? (LauncherObject::
+                // appDeleteDecoratorActivated, dimensionslauncher.cpp:
+                // 3161-3198); "failed": an install that failed, with Try
+                // Again when it can be (Phoenix's stand-in for Software
+                // Manager's list).
+                property string mode: "app"
+                property string shownId: ""
                 anchors.fill: parent
                 visible: opacity > 0
                 opacity: appId !== "" ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: 300 } }
                 z: 1001
-                function ask(id) { appId = id; }
-                // "Calculator - v.3.0.5" (the app's title and version).
+                // What the dialog says, set when it opens.
+                property string titleText: ""
+                property string messageText: ""
+                property bool canRetry: false
+                function ask(id) {
+                    var e = iconDrag.entry(id);
+                    mode = e && e.installState === "failed" ? "failed" : e && e.dynamic ? "shortcut" : "app";
+                    shownId = id;
+                    titleText = title();
+                    messageText = message();
+                    var i = info();
+                    canRetry = mode === "failed" && !!(i && i.retry);
+                    appId = id;
+                }
+                function info() {
+                    return shell.source && typeof shell.source.installInfo === "function" ? shell.source.installInfo(shownId) : null;
+                }
+                function title() {
+                    return mode === "shortcut" ? qsTr("Remove Shortcut?")
+                         : mode === "failed" ? qsTr("Installation Failed") : qsTr("Remove Application?");
+                }
+                // "Calculator - v.3.0.5" (the app's title and version);
+                // "Google (Web)" (the shortcut's title, its app's).
                 function message() {
-                    var e = iconDrag.entry(appId);
+                    var e = iconDrag.entry(shownId);
                     if (!e)
-                        return appId;
+                        return shownId;
+                    if (mode === "shortcut") {
+                        var app = iconDrag.entry(e.webAppId);
+                        return qsTr("%1 (%2)").arg(e.title).arg(app ? app.title : e.webAppId);
+                    }
+                    if (mode === "failed") {
+                        var i = info();
+                        return i && i.reason ? qsTr("%1: %2").arg(e.title).arg(i.reason) : e.title;
+                    }
                     return e.version ? qsTr("%1 - v.%2").arg(e.title).arg(e.version) : e.title;
                 }
                 function remove() {
                     var id = deleteDialog.appId;
                     deleteDialog.appId = "";
-                    shell.setLauncherLayout(LauncherLayout.remove(shell.launcherLayout, id));
+                    if (mode === "failed") {
+                        if (shell.source && typeof shell.source.dismissInstall === "function")
+                            shell.source.dismissInstall(id);
+                        return;
+                    }
+                    shell.setLauncherLayout(mode === "shortcut" ? LauncherLayout.drop(shell.launcherLayout, id)
+                                                                : LauncherLayout.remove(shell.launcherLayout, id));
                     if (shell.source && typeof shell.source.removeApp === "function")
                         shell.source.removeApp(id);
+                }
+                function retry() {
+                    var id = deleteDialog.appId;
+                    deleteDialog.appId = "";
+                    if (shell.source && typeof shell.source.retryInstall === "function")
+                        shell.source.retryInstall(id);
                 }
                 Rectangle { anchors.fill: parent; color: "#80000000" }
                 MouseArea { anchors.fill: parent; enabled: deleteDialog.appId !== ""; onClicked: deleteDialog.appId = "" }
@@ -1543,9 +1632,10 @@ FocusScope {
                         width: parent.width - 2 * x
                         spacing: appInfoDialog.margin
                         Text {
+                            objectName: "deleteDialogTitle"
                             width: parent.width
                             wrapMode: Text.Wrap
-                            text: qsTr("Remove Application?")
+                            text: deleteDialog.titleText
                             color: "#FFFFFF"
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.px(18)
@@ -1555,7 +1645,7 @@ FocusScope {
                             objectName: "deleteDialogMessage"
                             width: parent.width
                             wrapMode: Text.Wrap
-                            text: deleteDialog.message()
+                            text: deleteDialog.messageText
                             color: "#FFFFFF"
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.px(14)
@@ -1569,6 +1659,14 @@ FocusScope {
                                 height: Theme.px(52)
                                 caption: qsTr("Cancel")
                                 onAction: deleteDialog.appId = ""
+                            }
+                            ActionButton {
+                                objectName: "deleteDialogRetry"
+                                width: parent.width
+                                height: Theme.px(52)
+                                visible: deleteDialog.canRetry
+                                caption: qsTr("Try Again")
+                                onAction: deleteDialog.retry()
                             }
                             ActionButton {
                                 objectName: "deleteDialogRemove"
