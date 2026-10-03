@@ -65,6 +65,9 @@ Item {
             dictationCommand: typeof simTranscriberCommand !== "undefined" ? simTranscriberCommand : []
             bootSound: typeof simBootSounds !== "undefined" && simBootSounds
             stayAwake: typeof simStayAwake !== "undefined" && simStayAwake
+            // A desktop window has no Power button a Mac keyboard reaches
+            // (F3 is Mission Control there): a click wakes the dark screen.
+            tapToWake: true
             source: SimWindowSource { id: windows }
             system: SimSystemStatus {
                 id: status
@@ -84,6 +87,20 @@ Item {
         opacity: shell.display.state === "off" ? 1 : shell.display.state === "dim" ? 0.9 : 0
         visible: opacity > 0
         Behavior on opacity { enabled: shell.display.state !== "off"; NumberAnimation { duration: 300 } }
+        // The simulator says what a dark device would not.
+        Text {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.margins: 16
+            visible: shell.display.state === "off"
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+            text: qsTr("Screen off. Click to wake it (or F3, Power).")
+            color: "#777777"
+            font.family: Theme.fontFamily
+            font.pixelSize: 13
+        }
     }
 
     // Turn the device a quarter turn (steps: 1 counter-clockwise, -1

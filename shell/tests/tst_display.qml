@@ -158,6 +158,17 @@ Item {
             verify(shell.locked);
         }
 
+        // phoenix-sim: a click on the dark screen wakes it (to the lock
+        // screen), as F3 would; the click itself goes nowhere.
+        function test_tapToWake() {
+            shell.tapToWake = true;
+            shell.display.turnOff();
+            mouseClick(shell, 160, 240);
+            compare(shell.display.state, "on");
+            verify(shell.locked);
+            shell.tapToWake = false;
+        }
+
         function test_screenTimeoutLocks() {
             status.screenTimeout = 1;
             tryCompare(shell.display, "state", "dim", 1000);

@@ -108,6 +108,8 @@ FocusScope {
     // backlight; the simulator's veil).
     readonly property alias display: backlight
     property alias stayAwake: backlight.stayAwake
+    // A click on the dark screen wakes it (phoenix-sim; see UserActivity).
+    property alias tapToWake: userActivity.tapToWake
     Display {
         id: backlight
         timeout: shell.system && shell.system.screenTimeout > 0 ? shell.system.screenTimeout : 60
@@ -120,7 +122,9 @@ FocusScope {
     // panel takes nothing and only Power, Home and the volume keys get
     // through.
     UserActivity {
+        id: userActivity
         asleep: !backlight.on
+        onWakeRequested: backlight.turnOn()
         passKeys: [Qt.Key_Home, Qt.Key_F3, Qt.Key_PowerOff, Qt.Key_VolumeUp, Qt.Key_VolumeDown, Qt.Key_F10, Qt.Key_F11]
         onActivity: backlight.activity()
     }

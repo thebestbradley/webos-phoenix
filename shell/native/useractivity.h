@@ -25,6 +25,10 @@ class UserActivity : public QObject
     Q_PROPERTY(bool asleep READ asleep WRITE setAsleep NOTIFY asleepChanged)
     // Qt key codes that still go through while asleep.
     Q_PROPERTY(QVariantList passKeys READ passKeys WRITE setPassKeys NOTIFY passKeysChanged)
+    // While asleep, a press or click asks to wake (wakeRequested) instead of
+    // going nowhere: phoenix-sim's window, whose Power button (F3) a Mac
+    // keyboard keeps for itself. A device's touch panel is off: false.
+    Q_PROPERTY(bool tapToWake READ tapToWake WRITE setTapToWake NOTIFY tapToWakeChanged)
 
 public:
     explicit UserActivity(QObject *parent = nullptr);
@@ -34,12 +38,16 @@ public:
     void setAsleep(bool asleep);
     QVariantList passKeys() const { return m_passKeys; }
     void setPassKeys(const QVariantList &keys);
+    bool tapToWake() const { return m_tapToWake; }
+    void setTapToWake(bool on);
 
 signals:
     // At most every 250 ms while a finger moves; at once for a press or key.
     void activity();
     void asleepChanged();
     void passKeysChanged();
+    void wakeRequested();
+    void tapToWakeChanged();
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -47,5 +55,6 @@ protected:
 private:
     bool m_asleep = false;
     QVariantList m_passKeys;
+    bool m_tapToWake = false;
     QElapsedTimer m_lastMove;
 };

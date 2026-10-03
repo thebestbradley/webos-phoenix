@@ -259,8 +259,9 @@ battery, **F7** plug a charger in or out, **F8** battery charged to full,
 **Ctrl+Left** / **Ctrl+Right**
 turn the device a quarter turn counter-clockwise / clockwise, type in card
 view for Just Type. Left alone the screen dims and turns off as on a device
-(Settings > Screen & Lock > Turn off after; 5 s on the lock screen); **F3**
-or **Home** turns it on. `--stay-awake` keeps it on (as `--screenshot`
+(Settings > Screen & Lock > Turn off after; 5 s on the lock screen); a
+click, **F3** or **Home** turns it on (on a Mac, F3 to F11 need **fn**:
+macOS keeps them for itself). `--stay-awake` keeps it on (as `--screenshot`
 does). `./build/phoenix-sim --open https://example.com` opens a
 page in the browser. A text field taking the focus brings up the virtual
 keyboard (the Open webOS phone and TouchPad keyboards); click its keys, or

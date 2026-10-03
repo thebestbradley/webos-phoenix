@@ -37,6 +37,14 @@ void UserActivity::setPassKeys(const QVariantList &keys)
     emit passKeysChanged();
 }
 
+void UserActivity::setTapToWake(bool on)
+{
+    if (on == m_tapToWake)
+        return;
+    m_tapToWake = on;
+    emit tapToWakeChanged();
+}
+
 bool UserActivity::eventFilter(QObject *watched, QEvent *event)
 {
     // Each input event reaches the window first, then the item: count it
@@ -77,8 +85,12 @@ bool UserActivity::eventFilter(QObject *watched, QEvent *event)
     default:
         return false;
     }
-    if (m_asleep)
+    if (m_asleep) {
+        // The press itself is eaten either way; it only wakes the screen.
+        if (m_tapToWake && (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::TouchBegin))
+            emit wakeRequested();
         return true;
+    }
     if (move && m_lastMove.isValid() && m_lastMove.elapsed() < 250)
         return false;
     if (move)
