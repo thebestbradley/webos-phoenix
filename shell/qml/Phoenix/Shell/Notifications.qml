@@ -40,6 +40,61 @@ Item {
     // The scene behind, for the blur under the tablet panels.
     property Item backdrop: null
     property bool dashboardOpen: false
+
+    // ---- Keyboard navigation (GAPS V8 (3)) -------------------------------------------
+    // With the dashboard open: Up / Down (and Tab) move a highlight over the
+    // rows in the order they are shown (tablets: newest at the top), Enter
+    // opens the row as a tap would, Delete or Backspace dismisses it (not a
+    // live activity), Esc closes the dashboard.
+    property int keyRow: -1
+    function _rowOrder() {
+        var n = model ? model.count : 0, out = [];
+        for (var i = 0; i < n; ++i)
+            out.push(i);
+        if (overlay)
+            out.sort(function (a, b) { return dropDown.posOf(a) - dropDown.posOf(b); });
+        return out;
+    }
+    function handleKey(event) {
+        if (!dashboardOpen || !model)
+            return false;
+        var k = event.key;
+        if (k === Qt.Key_Escape) {
+            dashboardOpen = false;
+            return true;
+        }
+        var order = _rowOrder();
+        if (k === Qt.Key_Down || k === Qt.Key_Up || k === Qt.Key_Tab || k === Qt.Key_Backtab) {
+            if (!order.length)
+                return true;
+            var up = k === Qt.Key_Up || k === Qt.Key_Backtab;
+            var at = order.indexOf(keyRow);
+            at = at < 0 ? (up ? order.length - 1 : 0) : Math.max(0, Math.min(order.length - 1, at + (up ? -1 : 1)));
+            keyRow = order[at];
+            return true;
+        }
+        if (keyRow < 0 || keyRow >= model.count)
+            return false;
+        var n = model.get(keyRow);
+        if (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space) {
+            activated(n.appId, n.params || "");
+            if (!n.ongoing)
+                dismissRequested(keyRow);
+            keyRow = -1;
+            return true;
+        }
+        if ((k === Qt.Key_Delete || k === Qt.Key_Backspace) && !n.ongoing) {
+            var at2 = order.indexOf(keyRow);
+            dismissRequested(keyRow);
+            // The row after it (or before, at the end) keeps the highlight.
+            var left = model.count;
+            keyRow = left === 0 ? -1 : Math.min(at2, left - 1);
+            if (keyRow >= 0)
+                keyRow = _rowOrder()[keyRow];
+            return true;
+        }
+        return false;
+    }
     // Tablet: where the status bar's system indicators begin (from the right).
     property real statusBarRightInset: 0
     // Height of the whole screen, for the dashboard's maximum size.
@@ -124,6 +179,7 @@ Item {
         drawerExpanded = on;
     }
     onDashboardOpenChanged: {
+        keyRow = -1;
         if (!dashboardOpen) {
             liftAnim.stop();
             drawerLift = 0;
@@ -813,6 +869,18 @@ Item {
                 width: list.width
                 height: Theme.dashboardItemHeight
 
+                // The keyboard's highlight.
+                Rectangle {
+                    objectName: "dashboardKeyFocus"
+                    visible: root.keyRow === item.index
+                    anchors.fill: parent
+                    anchors.margins: Theme.px(2)
+                    radius: Theme.px(6)
+                    color: "#302c8ce0"
+                    border.color: "#2c8ce0"
+                    border.width: Theme.px(2)
+                    z: 3
+                }
                 // A faint rule between the live activities and the
                 // notifications (Phoenix).
                 Rectangle {

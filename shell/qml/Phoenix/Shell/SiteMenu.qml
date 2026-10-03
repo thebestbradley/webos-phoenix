@@ -36,6 +36,44 @@ Item {
         id: clip
         visible: false
     }
+    // Keyboard navigation (GAPS V8 (3)), as the system menu's: Up / Down
+    // and Tab over the rows that can be chosen, Enter chooses, Esc closes.
+    property Item keyItem: null
+    onOpenChanged: keyItem = null
+    function handleKey(event) {
+        if (!open)
+            return false;
+        var k = event.key;
+        if (k === Qt.Key_Escape) {
+            closeRequested();
+            return true;
+        }
+        if (k === Qt.Key_Down || k === Qt.Key_Up || k === Qt.Key_Tab || k === Qt.Key_Backtab) {
+            var items = [];
+            (function walk(o) {
+                for (var i = 0; i < o.children.length; ++i) {
+                    var c = o.children[i];
+                    if (c.siteMenuEntry === true && c.visible && c.available)
+                        items.push(c);
+                    walk(c);
+                }
+            })(panel);
+            items.sort(function (a, b) { return a.mapToItem(menu, 0, 0).y - b.mapToItem(menu, 0, 0).y; });
+            if (!items.length)
+                return true;
+            var up = k === Qt.Key_Up || k === Qt.Key_Backtab;
+            var i = items.indexOf(keyItem);
+            i = i < 0 ? (up ? items.length - 1 : 0) : (i + (up ? -1 : 1) + items.length) % items.length;
+            keyItem = items[i];
+            return true;
+        }
+        if ((k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space) && keyItem) {
+            keyItem.choose();
+            return true;
+        }
+        return false;
+    }
+
     function copyLink() {
         clip.text = url;
         clip.selectAll();
@@ -52,8 +90,16 @@ Item {
         width: parent ? parent.width : 0
         height: Theme.systemMenuRowHeight
         objectName: "siteMenu_" + name
+        readonly property bool siteMenuEntry: true
+        function choose() {
+            if (entry.name === "copy")
+                menu.copyLink();
+            else
+                menu.action(entry.name);
+            menu.closeRequested();
+        }
         ArtBorderImage {
-            visible: area.pressed && area.containsMouse && entry.available
+            visible: (area.pressed && area.containsMouse && entry.available) || menu.keyItem === entry
             source: Theme.asset(entry.last ? "menu-selection-gradient-last.png" : "menu-selection-gradient-default.png")
             x: Theme.px(4)
             width: parent.width - Theme.px(8)
@@ -73,13 +119,7 @@ Item {
             id: area
             anchors.fill: parent
             enabled: entry.available && menu.open
-            onClicked: {
-                if (entry.name === "copy")
-                    menu.copyLink();
-                else
-                    menu.action(entry.name);
-                menu.closeRequested();
-            }
+            onClicked: entry.choose()
         }
     }
     component Divider: Image {

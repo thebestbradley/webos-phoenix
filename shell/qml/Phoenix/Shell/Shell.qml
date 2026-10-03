@@ -755,7 +755,11 @@ FocusScope {
                 lockScreen.unlockPanel.entryCanceled();
             return;
         }
-        if (notes.dashboardOpen)
+        // The launcher's app dialog first: Back (or Esc) cancels it.
+        if (deleteDialog.appId !== "") {
+            _setKeyButton(null);
+            deleteDialog.appId = "";
+        } else if (notes.dashboardOpen)
             notes.dashboardOpen = false;
         else if (siteMenu.open)
             siteMenu.open = false;
@@ -912,16 +916,113 @@ FocusScope {
         }
     }
 
+    Connections {
+        target: notes
+        function onDashboardOpenChanged() { shell._overlayFocus(notes.dashboardOpen); }
+    }
+
+    // The shell's own dialogs with the keyboard (GAPS V8 (3)): the
+    // launcher's app dialog, and the popup alerts the shell draws (Too Many
+    // Cards, USB Drive failed). Tab / Shift+Tab and the arrows move a ring
+    // over the buttons, starting on the first (Cancel, where there is
+    // one); Enter or Space presses it; Esc cancels (or, with one button,
+    // presses it).
+    property Item _keyButton: null
+    function _setKeyButton(b) {
+        if (_keyButton)
+            _keyButton.keyFocused = false;
+        _keyButton = b;
+        if (b)
+            b.keyFocused = true;
+    }
+    function _keyButtons(root) {
+        var out = [];
+        (function walk(o) {
+            for (var i = 0; i < o.children.length; ++i) {
+                var c = o.children[i];
+                if (c.keyFocused !== undefined && c.caption !== undefined && c.visible && c.active)
+                    out.push(c);
+                else if (c.visible)
+                    walk(c);
+            }
+        })(root);
+        out.sort(function (a, b) { var p = a.mapToItem(shell, 0, 0), q = b.mapToItem(shell, 0, 0); return p.y - q.y || p.x - q.x; });
+        return out;
+    }
+    function _dialogKey(event) {
+        var host = deleteDialog.appId !== "" ? deleteDialog
+            : notes.alertShown && notes.alertKey !== "" && source && source.windowFor ? source.windowFor(notes.alertKey) : null;
+        if (!host) {
+            _setKeyButton(null);
+            return false;
+        }
+        var buttons = _keyButtons(host);
+        if (!buttons.length)
+            return false;
+        var k = event.key;
+        var i = buttons.indexOf(_keyButton);
+        if (k === Qt.Key_Tab || k === Qt.Key_Backtab || k === Qt.Key_Down || k === Qt.Key_Up || k === Qt.Key_Left || k === Qt.Key_Right) {
+            var back = k === Qt.Key_Backtab || k === Qt.Key_Up || k === Qt.Key_Left;
+            i = i < 0 ? 0 : (i + (back ? -1 : 1) + buttons.length) % buttons.length;
+            _setKeyButton(buttons[i]);
+            return true;
+        }
+        if (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space) {
+            var b = i >= 0 ? buttons[i] : buttons[0];
+            _setKeyButton(null);
+            b.action();
+            return true;
+        }
+        if (k === Qt.Key_Escape) {
+            _setKeyButton(null);
+            if (host === deleteDialog)
+                deleteDialog.appId = "";
+            else if (buttons.length === 1)
+                buttons[0].action();
+            return true;
+        }
+        return false;
+    }
+
     // Desktop / hardware keyboard shortcuts.
     Keys.onPressed: (event) => {
         // The system menu's and the launcher's own keys (GAPS V8 (3)).
-        if (systemMenu.handleKey(event) || (!locked && launcher.handleKey(event))) {
+        if (systemMenu.handleKey(event) || (!locked && (_dialogKey(event) || siteMenu.handleKey(event) || launcher.handleKey(event) || notes.handleKey(event)))) {
             event.accepted = true;
             return;
         }
         // Typed while Just Type's page is still taking its first letter.
         if (justType.open && event.text.length === 1 && !(event.modifiers & Qt.ControlModifier)
                 && justType.typeAhead(event.text)) {
+            event.accepted = true;
+            return;
+        }
+        // The dock with the keyboard (GAPS V8 (3)): Down from card view
+        // puts a ring on it; Left / Right move along it, Enter launches
+        // (the last slot opens the launcher), Up goes back to the cards.
+        if (!locked && quickLaunch.keySlot >= 0) {
+            var slots = quickLaunch.pinned.length + 1;
+            if (!quickLaunch.visible || cards.maximizeProgress > 0 || justType.open || event.key === Qt.Key_Up) {
+                quickLaunch.keySlot = -1;
+                if (event.key === Qt.Key_Up) {
+                    event.accepted = true;
+                    return;
+                }
+            } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+                quickLaunch.keySlot = Math.max(0, Math.min(slots - 1, quickLaunch.keySlot + (event.key === Qt.Key_Left ? -1 : 1)));
+                event.accepted = true;
+                return;
+            } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                var slot = quickLaunch.keySlot;
+                quickLaunch.keySlot = -1;
+                quickLaunch.activateSlot(slot);
+                event.accepted = true;
+                return;
+            }
+        }
+        if (!locked && event.key === Qt.Key_Down && cards.maximizeProgress === 0 && !launcher.open && !justType.open
+                && quickLaunch.visible && quickLaunch.keySlot < 0) {
+            quickLaunch.keySlot = 0;
             event.accepted = true;
             return;
         }
@@ -2204,6 +2305,7 @@ FocusScope {
                 anchors.fill: parent
                 onCloseRequested: siteMenu.open = false
                 onAction: (name) => shell.source.siteAction(cards.currentUid, name)
+                onOpenChanged: shell._overlayFocus(open)
                 Connections {
                     target: cards
                     function onMaximizedChanged() { if (!cards.maximized) siteMenu.open = false; }

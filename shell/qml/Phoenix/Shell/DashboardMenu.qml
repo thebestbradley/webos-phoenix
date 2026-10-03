@@ -158,6 +158,21 @@ Item {
         readonly property real slotY: pos * (menu.rowHeight + menu.dividerHeight)
                                       + (pos >= menu.ongoingCount ? menu.groupGap : 0)
         readonly property bool isTop: pos === 0
+
+        // The keyboard's highlight (Notifications.keyRow).
+        Rectangle {
+            objectName: "dashboardKeyFocus"
+            visible: !!menu.drawer && menu.drawer.keyRow === row.index
+            x: Theme.px(2)
+            y: Theme.px(2)
+            width: row.width - Theme.px(4)
+            height: menu.rowHeight - Theme.px(4)
+            radius: Theme.px(6)
+            color: "#302c8ce0"
+            border.color: "#2c8ce0"
+            border.width: Theme.px(2)
+            z: 10
+        }
         readonly property bool isBottom: pos === menu.count - 1
         readonly property bool firstNotification: menu.groupGap > 0 && pos === menu.ongoingCount
         readonly property bool selectable: menu.drawer !== null && menu.drawer.selecting && !persistent
