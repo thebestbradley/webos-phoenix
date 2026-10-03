@@ -11,9 +11,11 @@
 # 2 October 2026). Here the face is charcoal, near black, and the rim
 # only a shade lighter, so a key reads as one dark shape. The black edge, the corners'
 # alpha and the pressed half (the blue glow, below the middle) are kept.
+# Its HiDPI variants (key-charcoal@2x.png, @3x) are made the same way from
+# key-gray's (tools/hidpi-art.py, docs/spec/hidpi-art.md).
 #
-#   python3 tools/keyboard-charcoal.py           write it
-#   python3 tools/keyboard-charcoal.py --check   fail if it is out of date
+#   python3 tools/keyboard-charcoal.py           write them
+#   python3 tools/keyboard-charcoal.py --check   fail if one is out of date
 
 import io
 import sys
@@ -22,8 +24,9 @@ from pathlib import Path
 from PIL import Image
 
 ART = Path(__file__).resolve().parent.parent / "shell/assets/openwebos/keyboard-phone"
-SOURCE = ART / "key-gray.png"
-OUT = ART / "key-charcoal.png"
+# key-gray.png -> key-charcoal.png, and each variant of it.
+VARIANTS = ["", "@2x", "@3x"]
+PAIRS = [(ART / f"key-gray{v}.png", ART / f"key-charcoal{v}.png") for v in VARIANTS]
 
 # The original's greys (r = g = b) and what they become, by level:
 # 0 the black edge, 26 the face, 64 the rim. In between, linear.
@@ -39,8 +42,8 @@ def remap(v):
     return tuple(round(f + (r - f) * t) for f, r in zip(FACE, RIM))
 
 
-def make():
-    im = Image.open(SOURCE).convert("RGBA")
+def make(source):
+    im = Image.open(source).convert("RGBA")
     w, h = im.size
     out = im.copy()
     px = out.load()
@@ -55,15 +58,21 @@ def make():
 
 
 def main():
-    data = make()
+    stale = []
+    for source, out in PAIRS:
+        data = make(source)
+        if "--check" in sys.argv:
+            if not out.exists() or Image.open(out).convert("RGBA").tobytes() != Image.open(io.BytesIO(data)).convert("RGBA").tobytes():
+                stale.append(out)
+            continue
+        out.write_bytes(data)
+        print("wrote", out.relative_to(Path.cwd()) if out.is_relative_to(Path.cwd()) else out)
+    for out in stale:
+        print(f"{out} is out of date: run tools/keyboard-charcoal.py", file=sys.stderr)
+    if stale:
+        return 1
     if "--check" in sys.argv:
-        if not OUT.exists() or Image.open(OUT).convert("RGBA").tobytes() != Image.open(io.BytesIO(data)).convert("RGBA").tobytes():
-            print(f"{OUT} is out of date: run tools/keyboard-charcoal.py", file=sys.stderr)
-            return 1
-        print("key-charcoal.png is up to date")
-        return 0
-    OUT.write_bytes(data)
-    print("wrote", OUT.relative_to(Path.cwd()) if OUT.is_relative_to(Path.cwd()) else OUT)
+        print("key-charcoal.png and its variants are up to date")
     return 0
 
 
