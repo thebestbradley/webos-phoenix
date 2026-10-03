@@ -181,9 +181,37 @@
                 }
             },
             set: function (key, value) {
-                var s = toJson(value);
-                if (ls) ls.setItem("phoenix:" + key, s);
-                else mem[key] = s;
+                this.setRaw(key, toJson(value));
+            },
+            // The stored JSON text itself (null when there is none).
+            raw: function (key) {
+                try {
+                    var v = ls ? ls.getItem("phoenix:" + key) : mem[key];
+                    return v === undefined ? null : v;
+                } catch (e) {
+                    return null;
+                }
+            },
+            setRaw: function (key, text) {
+                if (ls) ls.setItem("phoenix:" + key, text);
+                else mem[key] = text;
+            },
+            remove: function (key) {
+                if (ls) ls.removeItem("phoenix:" + key);
+                else delete mem[key];
+            },
+            // The keys that start with prefix.
+            keys: function (prefix) {
+                var out = [], k, i;
+                if (ls) {
+                    for (i = 0; i < ls.length; ++i) {
+                        k = ls.key(i);
+                        if (k && k.indexOf("phoenix:" + prefix) === 0) out.push(k.slice(8));
+                    }
+                } else {
+                    for (k in mem) if (k.indexOf(prefix) === 0) out.push(k);
+                }
+                return out;
             }
         };
     })();
@@ -580,16 +608,107 @@
     // A small in-page db8: kinds, put/get/merge/del, find with where/orderBy/
     // limit/select, counts and watches. Enough for the core apps to store and
     // read their data; not a complete implementation of db8's query language.
+    //
+    // Every page (the shell's system UI and launcher, Just Type, each app)
+    // has its own copy of this db8 on the one shared store, as the processes
+    // of a device share the one db8 daemon. So the store keeps each object
+    // and each kind under a key of its own, and a page writes only those it
+    // changed:
+    //
+    //   db8:<name>                {rev, nextId, nextSubId, write}
+    //   db8:<name>/kind/<id>      a kind
+    //   db8:<name>/obj/<_id>      an object
+    //
+    // (The whole database used to be the one value "db8:<name>", read,
+    // changed and written back by each page. A browser's localStorage
+    // is not a transaction: each page reads from its own copy, which hears
+    // of other pages' writes a moment later, longer when the page is busy.
+    // A page that wrote then put back its older copy of everything, and
+    // what other pages had stored in the meantime was lost: on a loaded
+    // machine the Tasks app's Inbox, which it creates on first start while
+    // the system UI and launcher are still filling in the sample data.)
+    // Two pages that change the same object at the same moment still leave
+    // the last one's, as db8 does. Watches in a page fire for other pages'
+    // changes too: every write changes db8:<name> ("write" names the page
+    // and its write), whose "storage" event reaches the other pages after
+    // the objects' own.
+    var PAGE_TAG = Math.random().toString(36).slice(2, 6), db8Writes = 0;
+    // name -> {load, save}, for the runtime's own changes to the kinds.
+    var db8Stores = {};
     function makeDb(name) {
         var key = "db8:" + name;
+        var OBJ = key + "/obj/", KIND = key + "/kind/";
         var watchers = [];
 
-        function load() { return store.get(key, { objects: {}, kinds: {}, rev: 1, nextId: 1 }); }
-        function save(db) { store.set(key, db); }
-
-        function newId(db) {
-            return (name === "com.palm.tempdb" ? "t" : "") + "++" + (db.nextId++).toString(36) + Date.now().toString(36);
+        // The single value of earlier versions, split into keys once. Objects
+        // another page has already stored under their own key stay as they are.
+        function migrate(old) {
+            [[OBJ, old.objects], [KIND, old.kinds]].forEach(function (part) {
+                Object.keys(part[1] || {}).forEach(function (id) {
+                    if (store.raw(part[0] + id) === null) store.setRaw(part[0] + id, toJson(part[1][id]));
+                });
+            });
+            var meta = { rev: old.rev || 1, nextId: old.nextId || 1, nextSubId: old.nextSubId, write: PAGE_TAG + ":" + (++db8Writes) };
+            store.set(key, meta);
+            return meta;
         }
+
+        // {objects, kinds, rev, nextId, nextSubId}, as stored now. db.stored
+        // (not enumerable) holds the JSON each key had, for save.
+        function load() {
+            var meta = store.get(key, null) || {};
+            if (meta.objects) meta = migrate(meta);
+            var db = { objects: {}, kinds: {}, rev: meta.rev || 1, nextId: meta.nextId || 1, nextSubId: meta.nextSubId };
+            var stored = {};
+            store.keys(key + "/").forEach(function (k) {
+                var isObj = k.indexOf(OBJ) === 0;
+                if (!isObj && k.indexOf(KIND) !== 0) return;
+                var text = store.raw(k), v;
+                if (text === null) return;
+                try { v = JSON.parse(text); } catch (e) { return; }
+                stored[k] = text;
+                (isObj ? db.objects : db.kinds)[k.slice((isObj ? OBJ : KIND).length)] = v;
+                // Revisions go on from the newest this page has seen.
+                if (isObj && v && v._rev > db.rev) db.rev = v._rev;
+            });
+            stored[key] = toJson({ rev: db.rev, nextId: db.nextId, nextSubId: db.nextSubId });
+            Object.defineProperty(db, "stored", { value: stored });
+            return db;
+        }
+
+        // Writes the objects and kinds that changed (and removes those that
+        // went), then the revision counters if anything did.
+        function save(db) {
+            var stored = db.stored || {}, changed = false, now = {};
+            [[OBJ, db.objects], [KIND, db.kinds]].forEach(function (part) {
+                Object.keys(part[1]).forEach(function (id) {
+                    var k = part[0] + id, text = toJson(part[1][id]);
+                    now[k] = true;
+                    if (stored[k] === text) return;
+                    store.setRaw(k, text);
+                    stored[k] = text;
+                    changed = true;
+                });
+            });
+            Object.keys(stored).forEach(function (k) {
+                if (k === key || now[k]) return;
+                store.remove(k);
+                delete stored[k];
+                changed = true;
+            });
+            var counters = toJson({ rev: db.rev, nextId: db.nextId, nextSubId: db.nextSubId });
+            if (changed || stored[key] !== counters) {
+                store.set(key, { rev: db.rev, nextId: db.nextId, nextSubId: db.nextSubId, write: PAGE_TAG + ":" + (++db8Writes) });
+                stored[key] = counters;
+            }
+        }
+
+        // The page's tag keeps two pages that count from the same nextId
+        // from making the same _id.
+        function newId(db) {
+            return (name === "com.palm.tempdb" ? "t" : "") + "++" + (db.nextId++).toString(36) + Date.now().toString(36) + PAGE_TAG;
+        }
+        db8Stores[name] = { load: load, save: save };
 
         // Properties that only exist in db8 indexes: a "multi" index property
         // is the union of other fields (the core apps' kinds: com.palm.person
@@ -715,6 +834,13 @@
             watchers = [];
             w.forEach(function (cb) { cb(); });
         }
+
+        // Another page wrote (see above), or the store was cleared.
+        try {
+            global.addEventListener("storage", function (e) {
+                if (e.key === null || e.key === "phoenix:" + key) notify();
+            });
+        } catch (x) { /* no window events */ }
 
         // db8 gives every object inside an array property its own _id
         // (e.g. account capabilityProviders, contact emails); apps rely on it.
@@ -2588,8 +2714,7 @@
     (function backupKinds() {
         var VERSION = 1;
         if (store.get("db8BackupKinds", 0) >= VERSION) return;
-        var key = "db8:com.palm.db";
-        var db = store.get(key, { objects: {}, kinds: {}, rev: 1, nextId: 1 });
+        var db = db8Stores["com.palm.db"].load();
         ["com.palm.person:1", "com.palm.contact.palmprofile:1", "com.palm.calendar:1", "com.palm.calendarevent:1",
          "com.palm.task:1", "com.palm.tasklist:1", "com.palm.note:1", "com.palm.smsmessage:1", "com.palm.chatthread:1",
          "com.palm.phonecall:1", "com.palm.clock.alarm:1", "com.palm.clock.prefs:1", "com.palm.app.contacts.prefs:1",
@@ -2598,7 +2723,7 @@
             k.sync = true;
             db.kinds[id] = k;
         });
-        store.set(key, db);
+        db8Stores["com.palm.db"].save(db);
         store.set("db8BackupKinds", VERSION);
     })();
 
@@ -5090,8 +5215,8 @@
     //
     // Call state lives in the shared store ("telephony:state"), so the Phone
     // card and any other page see the same calls; other windows' changes
-    // arrive as "storage" events. db8 watches also fire across windows here,
-    // so Messaging updates when a text arrives through another page.
+    // arrive as "storage" events. db8 watches also fire across windows (see
+    // makeDb), so Messaging updates when a text arrives through another page.
     //
     // Simulator helpers (phoenix-sim F4 / F5, tools/test-phone-messaging.cjs):
     //   __phoenixRuntime.simulateIncomingCall({number?, name?}) -> call id
@@ -5375,7 +5500,9 @@
             return true;
         };
 
-        // ---- db8 helpers and cross-window watches ------------------------------------
+        // ---- db8 helpers ---------------------------------------------------------------
+        //
+        // (db8 watches fire for changes other pages make: see makeDb.)
 
         var dbSvc = runtime.services["com.palm.db"];
         function dbCall(method, params) {
@@ -5383,35 +5510,6 @@
             dbSvc[method](params, function (r) { if (out === undefined) out = r; }, { cancelled: function () { return true; } });
             return out || {};
         }
-
-        // db8 watches in this page fire for changes other pages make, too.
-        var xWatchers = [];
-        function crossWindow(reply, ctx) {
-            var done = false;
-            xWatchers.push(function () {
-                if (done || ctx.cancelled()) return;
-                done = true;
-                reply(ok({ fired: true }));
-            });
-            return function (r) {
-                if (r && r.fired) { if (done) return; done = true; }
-                reply(r);
-            };
-        }
-        var baseFind = dbSvc["/find"], baseWatch = dbSvc["/watch"];
-        dbSvc["/find"] = function (p, reply, ctx) {
-            if (!p.watch) return baseFind(p, reply, ctx);
-            baseFind(p, crossWindow(reply, ctx), ctx);
-        };
-        dbSvc["/watch"] = function (p, reply, ctx) { baseWatch(p, crossWindow(reply, ctx), ctx); };
-        try {
-            global.addEventListener("storage", function (e) {
-                if (e.key !== "phoenix:db8:com.palm.db") return;
-                var w = xWatchers;
-                xWatchers = [];
-                w.forEach(function (fn) { fn(); });
-            });
-        } catch (x) { /* no window events */ }
 
         // ---- Messaging: thread assignment (LuneOS MessageAssigner.js) ----------------
 

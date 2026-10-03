@@ -165,6 +165,7 @@ jobs:
           node tools/test-files.cjs --tablet --out app-tests/files-tablet
           node tools/test-tasks.cjs --out app-tests/tasks-phone
           node tools/test-tasks.cjs --tablet --out app-tests/tasks-tablet
+          node tools/test-db8-pages.cjs --out app-tests/db8-pages
           node tools/test-alarm.cjs --out app-tests/alarm
           node tools/test-voicememos.cjs --out app-tests/voicememos-phone
           node tools/test-voicememos.cjs --tablet --out app-tests/voicememos-tablet

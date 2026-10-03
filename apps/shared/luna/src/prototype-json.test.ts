@@ -68,7 +68,10 @@ describe("arrays saved by a page with Prototype.js", () => {
         await call("luna://com.palm.db/merge", { query: { from: "org.example.proto:1" }, props: { title: "x" } });
         const found = await call("luna://com.palm.db/find", { query: { from: "org.example.proto:1" } });
         expect((found.results as { tags: unknown }[])[0].tags).toEqual(["a", "b"]);
-        expect(localStorage.getItem("phoenix:db8:com.palm.db")).toContain('"tags":["a","b"]');
+        const stored = Object.keys(localStorage).filter((k) => k.startsWith("phoenix:db8:com.palm.db/obj/"))
+            .map((k) => localStorage.getItem(k)!).filter((v) => v.includes("org.example.proto:1"));
+        expect(stored).toHaveLength(1);
+        expect(stored[0]).toContain('"tags":["a","b"]');
         expect(typeof (Array.prototype as unknown as { toJSON?: unknown }).toJSON).toBe("function");   // and the page keeps it
     });
 });

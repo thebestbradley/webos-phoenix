@@ -61,7 +61,9 @@ service bus). `runtime/phoenix-runtime.js` runs before the app's own scripts:
   services that store their data in localStorage: db8 (`put`, `get`, `merge`,
   `del`, `find`/`search` with `where`/`orderBy`/`limit`, `watch`, kind
   inheritance, revision sets, `_id`s for objects in arrays, the core apps'
-  search index properties), system service (time, preferences), application
+  search index properties; each object and kind under a localStorage key of
+  its own, so pages writing at once keep each other's changes, and watches
+  fire for other pages' writes), system service (time, preferences), application
   manager (launch, open), connection manager, power, and harmless stubs for
   the rest. Calls to a service it doesn't know return an error and are logged
   once. For the core apps it also simulates, modelled on
