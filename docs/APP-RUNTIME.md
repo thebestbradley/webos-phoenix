@@ -296,6 +296,23 @@ phoenix-sim keeps its web storage (and so the sample data) in its Qt
 WebEngine profile, `~/.local/share/phoenix-sim/`. Delete it, or point
 `XDG_DATA_HOME` elsewhere, to start from fresh sample data.
 
+**Log lines you can ignore.** phoenix-sim prints each page's console. A few
+lines come from the original code doing what it always did:
+
+- `enyo.xhr.request() exception: NetworkError ... tellurium_config.json`, once
+  per Enyo 1.0 page. Enyo's startup looks for the config of Tellurium, Palm's
+  test automation, at `/usr/palm/frameworks/tellurium/`. Phoenix doesn't ship
+  it, so the read fails, Enyo logs it and Tellurium stays off, as on a device
+  without it. (Qt's scheme handlers can only fail a request, not answer 404,
+  so a missing file is a network error.)
+- `AppPrefs: Access to pref listSortOrder before prefs object is ready` in
+  Contacts: the contacts framework reads a pref while its prefs are still
+  loading from db8, and uses the default.
+- `errorHandler({"errorId":"PDK error","msg":"plugin failed to load"})` in
+  Quickoffice: its native plugin can't run yet ([PDK.md](PDK.md)).
+- `tile memory limits exceeded, some content may not draw`: Chromium's
+  compositor on a very tall page; the page draws as it scrolls.
+
 ## Phone layouts
 
 The core apps are the TouchPad (1024×768) versions. On a phone card (320
@@ -384,6 +401,10 @@ All seven start cleanly and are usable on phone and tablet
 - The Contacts and Accounts sources listed in `depends.js` but missing from the
   Open webOS release (`Ringtones.js`, `NameDetails.js`, `FirstLaunch.js`) are
   empty stand-ins; nothing in the released apps uses them.
+- **Memos** has one bug fix (overlay `app/views/EditView.js`): its hidden
+  editor saved on every card deactivation, even with no memo open, and after
+  one minimize no memo could be opened. It now saves on deactivation only while
+  a memo is open; `tools/smoke-apps.cjs` minimizes it before and during an edit.
 
 Phoenix Settings (`org.webosphoenix.settings` and its launch points) starts
 cleanly on phone and tablet; `node tools/test-settings.cjs [--tablet]` also

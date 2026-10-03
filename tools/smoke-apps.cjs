@@ -92,9 +92,21 @@ const SCENARIOS = {
 
     "com.palm.app.notes": async (h) => {
         const before = (await h.db("com\\.palm\\.note:1")).length;
+        // Minimized and brought back first (LunaSysMgr deactivates the
+        // card): the hidden editor, with no memo, must not try to save one,
+        // and a memo still opens afterwards.
+        const minimize = () => h.page.evaluate(() => { Mojo.stageDeactivated(); Mojo.stageActivated(); });
+        await minimize();
         await h.tap(".new-memo");
+        await h.expect("the editor to open after a minimize", async () =>
+            h.page.locator(".edit-view").isVisible());
         await h.type("Smoke test: buy a new phone case");
         await h.screenshot("editing");
+        // Minimized while editing: the memo is saved.
+        await minimize();
+        await h.wait(800);
+        await h.expect("the memo saved on a minimize", async () =>
+            (await h.db("com\\.palm\\.note:1")).some((n) => /buy a new phone case/.test(n.text || "")));
         await h.tap(".back-button:visible");
         await h.screenshot("wall");
         await h.expectText("Smoke test: buy a new phone case");
