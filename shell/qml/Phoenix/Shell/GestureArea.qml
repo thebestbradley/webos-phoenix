@@ -6,6 +6,8 @@
 //   swipe up        -> card view (or launcher when already in card view)
 //   swipe down      -> the active card, maximized, from card view
 //   swipe left      -> back
+//   swipe right     -> forward (Key_CoreNavi_Menu): closes the dashboard
+//                      and menus; a site goes forward
 //   tap             -> toggle between the app and card view
 //   hold and slide  -> with the keyboard up, moves the cursor a character
 //                      per step (Phoenix, GAPS V4); with it down the hold

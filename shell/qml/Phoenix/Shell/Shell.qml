@@ -412,6 +412,32 @@ FocusScope {
             source.back(cards.currentUid);
     }
 
+    // The forward swipe (left to right; Key_CoreNavi_Menu, or Next turned
+    // into Menu while advanced gestures are off): on its release it closes
+    // the dashboard and the menus, and is eaten while they or the launcher
+    // are up (SystemUiController::handleKeyEvent, SystemUiController.cpp:
+    // 306-337, 410-422). Otherwise it goes to the app; webOS apps had no
+    // forward of their own (Enyo 1.0 has none, and the key it reached Mojo
+    // as is not recorded), so a site or web app goes forward in its history,
+    // as Back goes back.
+    function gestureForward() {
+        if (locked || emergencyShown)
+            return;
+        if (notes.dashboardOpen || siteMenu.open || systemMenu.open) {
+            notes.dashboardOpen = false;
+            siteMenu.open = false;
+            systemMenu.open = false;
+            return;
+        }
+        if (justType.open || launcher.open || !cards.maximized || !source)
+            return;
+        if (typeof source.siteState !== "function")
+            return;
+        var st = source.siteState(cards.currentUid);
+        if (st && st.canGoForward)
+            source.siteAction(cards.currentUid, "forward");
+    }
+
     function gestureTap() {
         if (locked || emergencyShown || (firstUse && cards.count < 2))
             return;
@@ -1649,6 +1675,7 @@ FocusScope {
             onUp: shell.gestureUp()
             onDown: shell.gestureDown()
             onBack: shell.gestureBack()
+            onForward: shell.gestureForward()
             onTapped: shell.gestureTap()
             // With the keyboard up, hold and slide to move the cursor.
             cursorControl: ime.visible

@@ -924,6 +924,30 @@ Item {
             verify(!shell.launcherOpen);
         }
 
+        // G4: the forward swipe closes the dashboard and the menus at once
+        // and is eaten while the launcher is up (SystemUiController.cpp:
+        // 410-422); it never closes the launcher, as Back does.
+        function test_forwardSwipe() {
+            windows.notify("org.webosphoenix.messaging", "Palm Pre", "Hi");
+            shell.notifications.bannerActive = false;
+            shell.gestureUp();
+            verify(shell.launcherOpen);
+            shell.notifications.dashboardOpen = true;
+            var menu = findChild(shell, "systemMenu");
+            menu.open = true;
+            var area = findChild(shell, "gestureMouse");
+            // A swipe left to right in the gesture area.
+            mouseDrag(area, area.width * 0.3, area.height / 2, area.width * 0.4, 0);
+            verify(!shell.notifications.dashboardOpen);
+            verify(!menu.open);
+            verify(shell.launcherOpen);
+            shell.gestureForward();
+            verify(shell.launcherOpen);
+            shell.gestureBack();
+            verify(!shell.launcherOpen);
+            windows.dismissNotification(0);
+        }
+
         // The dock's own show / hide (OverlayWindowManager dock states).
         function test_dockShowHide() {
             var dock = findChild(shell, "quickLaunch");
