@@ -653,10 +653,15 @@ FocusScope {
         }
     }
 
+    Connections {
+        target: notes
+        function onDashboardOpenChanged() { shell._overlayFocus(notes.dashboardOpen); }
+    }
+
     // Desktop / hardware keyboard shortcuts.
     Keys.onPressed: (event) => {
         // The system menu's and the launcher's own keys (GAPS V8 (3)).
-        if (systemMenu.handleKey(event) || (!locked && launcher.handleKey(event))) {
+        if (systemMenu.handleKey(event) || (!locked && (launcher.handleKey(event) || notes.handleKey(event)))) {
             event.accepted = true;
             return;
         }

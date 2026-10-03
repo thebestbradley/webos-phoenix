@@ -521,6 +521,39 @@ Item {
             notes.dashboardOpen = false;
         }
 
+        // GAPS V8 (3): with the dashboard open, Down / Up move a highlight
+        // over the rows, Delete dismisses one, Enter opens one, Esc closes.
+        function test_dashboardKeyboard() {
+            var notes = shell.notifications;
+            windows.notify("org.webosphoenix.messaging", "One", "");
+            windows.notify("org.webosphoenix.email", "Two", "");
+            windows.notify("org.webosphoenix.messaging", "Three", "");
+            notes.bannerActive = false;
+            notes.dashboardOpen = true;
+            tryCompare(notes, "negativeSpace", notes.dashboardHeight, 2000);
+            verify(shell.activeFocus);
+            keyClick(Qt.Key_Down);
+            compare(notes.keyRow, 0);
+            verify(findChild(notes, "dashboardKeyFocus").visible);
+            keyClick(Qt.Key_Down);
+            compare(notes.keyRow, 1);
+            keyClick(Qt.Key_Delete);
+            tryCompare(windows.notifications, "count", 2, 1000);
+            verify(notes.keyRow >= 0);
+            var spy = createTemporaryObject(spyComponent, root, { target: notes, signalName: "activated" });
+            var expected = windows.notifications.get(notes.keyRow).appId;
+            keyClick(Qt.Key_Return);
+            compare(spy.count, 1);
+            compare(spy.signalArguments[0][0], expected);
+            notes.dashboardOpen = true;
+            keyClick(Qt.Key_Escape);
+            verify(!notes.dashboardOpen);
+            while (windows.notifications.count > 0)
+                windows.dismissNotification(0);
+            notes.bannerActive = false;
+            tryCompare(notes, "negativeSpace", 0, 2000);
+        }
+
         // An ongoing activity (a download, an install: org.webosphoenix.ongoing)
         // is one row per id with its progress; swiping does not dismiss it, a
         // tap opens its app and leaves it; it goes when cleared.
