@@ -169,9 +169,10 @@ simulator, the P2 rows are listed there.
 - [x] The shell resizes to any window or screen, from Pre size to large tablets
 - [x] Trackpad and mouse-wheel gestures in card view (swipe through cards, throw them away)
 - [x] Sharp art at every pixel density ([spec/hidpi-art.md](spec/hidpi-art.md))
-- [ ] Phone in landscape: the launcher keeps 3 columns, the lock screen banner
-      covers the date, the PIN pad covers the clock, the system menu is taller
-      than the screen
+- [x] Phone in landscape: the launcher has as many columns as fit (4 on a
+      Pre's side), the lock screen's banner and dashboard keep between the
+      date and the padlock, the clock steps back behind the PIN pad, and the
+      system menu scrolls within the screen (`tst_rotation.qml`)
 - [ ] Check Just Type in tablet portrait (an overlap was seen once, perhaps mid-rotation)
 - [ ] Advanced gestures: long swipe to switch apps while maximized (G5)
 - [ ] Exhibition / dock mode (clock, slideshow while charging) (R5)

@@ -1376,6 +1376,7 @@ FocusScope {
 
             LockScreen {
                 id: lockScreen
+                objectName: "lockScreen"
                 anchors.fill: parent
                 system: shell.system
                 source: shell.source

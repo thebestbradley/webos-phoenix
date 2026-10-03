@@ -167,11 +167,35 @@ Item {
         source: Theme.asset("screen-lock-wallpaper-mask-bottom.png")
     }
 
+    // ---- Sideways (Phoenix) --------------------------------------------------
+    // LockWindow placed the clock, the alerts and the padlock by the screen's
+    // height alone; on a phone turned on its side (320 high) the centred
+    // banner or dashboard covered the date and reached the padlock, and the
+    // PIN pad covered the clock. Wider than tall, the alerts keep to the
+    // room between the date and the padlock (the dashboard with as many
+    // rows as fit, the last cut in half as the sixth was), and the clock
+    // steps back while the PIN pad shows. Upright, nothing changes.
+    readonly property bool sideways: width > height
+    // The alerts' frames are 10 px of shadow around what shows: that may
+    // reach over the date and the padlock.
+    readonly property real _alertsTop: dateText.y + dateText.height + Theme.px(4) - Theme.lockAlertsShadow
+    readonly property real _alertsBottom: padlock.homeY - Theme.px(4) + Theme.lockAlertsShadow
+    // Where an alert block h high goes: centred, as the original had it,
+    // or, sideways, into the room above the padlock.
+    function _alertY(h) {
+        var y = (lock.height - h) / 2;
+        if (!sideways)
+            return y;
+        return Math.max(_alertsTop, Math.min(y, _alertsBottom - h));
+    }
+
     // ---- Clock --------------------------------------------------------------
 
     Row {
         id: clock
         anchors.horizontalCenter: parent.horizontalCenter
+        opacity: lock.sideways && unlockPanel.shown ? 0 : 1
+        Behavior on opacity { NumberAnimation { duration: Theme.lockFadeDuration } }
         // Centred 15% down the screen (LockWindow.cpp:427).
         y: Math.max(Theme.statusBarHeight, lock.height * Theme.lockClockCenterRatio - Theme.lockDigitHeight / 2)
 
@@ -199,9 +223,12 @@ Item {
     }
 
     Text {
+        id: dateText
+        objectName: "lockDate"
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: clock.bottom
         anchors.topMargin: Theme.px(4)
+        opacity: clock.opacity
         text: Qt.formatDate(lock.shownTime, "dddd, MMMM d")
         color: Theme.text
         font.family: Theme.fontFamily
@@ -249,17 +276,26 @@ Item {
     BorderImage {
         id: lockDashboard
         objectName: "lockDashboard"
-        readonly property int count: lock.notifications ? Math.min(lock.notifications.count, Theme.lockDashboardMaxItems) : 0
         readonly property real dividerHeight: Theme.px(2)            // menu-divider.png
+        readonly property real chrome: 2 * Theme.lockAlertsShadow + Theme.lockDashboardTopPadding + Theme.lockDashboardBottomPadding
+        // Six, the last cut in half; sideways, as many as fit, the last cut
+        // in half too while there is room for more than one (a phone on its
+        // side has room for the newest only).
+        readonly property real _room: lock._alertsBottom - lock._alertsTop - chrome
+        readonly property int maxItems: !lock.sideways ? Theme.lockDashboardMaxItems
+            : Math.max(1, Math.min(Theme.lockDashboardMaxItems,
+                1 + Math.floor((_room - Theme.dashboardItemHeight * 1.5) / (Theme.dashboardItemHeight + dividerHeight)) + 1))
+        readonly property bool halfLast: maxItems > 1
+        readonly property int count: lock.notifications ? Math.min(lock.notifications.count, maxItems) : 0
         readonly property real contentHeight: count * Theme.dashboardItemHeight + Math.max(0, count - 1) * dividerHeight
-            - (count === Theme.lockDashboardMaxItems ? Theme.dashboardItemHeight / 2 : 0)
+            - (count === maxItems && halfLast ? Theme.dashboardItemHeight / 2 : 0)
         visible: opacity > 0
         opacity: lock.dashboardShown ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.lockFadeDuration } }
         anchors.horizontalCenter: parent.horizontalCenter
         width: Theme.lockAlertsWidth + 2 * Theme.lockAlertsShadow
-        height: contentHeight + 2 * Theme.lockAlertsShadow + Theme.lockDashboardTopPadding + Theme.lockDashboardBottomPadding
-        y: (lock.height - contentHeight) / 2 - Theme.lockAlertsShadow - Theme.lockDashboardTopPadding
+        height: contentHeight + chrome
+        y: lock.sideways ? lock._alertY(height) : (lock.height - contentHeight) / 2 - Theme.lockAlertsShadow - Theme.lockDashboardTopPadding
         source: Theme.asset("popup-bg.png")
         border { left: Theme.artBorder(Theme.lockAlertsBorder, source); right: Theme.artBorder(Theme.lockAlertsBorder, source); top: Theme.artBorder(Theme.lockAlertsBorder, source); bottom: Theme.artBorder(Theme.lockAlertsBorder, source) }
 
@@ -313,7 +349,7 @@ Item {
             }
 
             Image {
-                visible: lockDashboard.count === Theme.lockDashboardMaxItems
+                visible: lockDashboard.count === lockDashboard.maxItems && lockDashboard.halfLast
                 anchors.bottom: parent.bottom
                 width: parent.width
                 height: Theme.artHeight(source)
@@ -336,7 +372,7 @@ Item {
         readonly property real inset: Theme.lockAlertsShadow + Theme.lockBannerPadding
         width: Theme.lockAlertsWidth + 2 * inset
         height: Theme.bannerHeight + 2 * inset
-        y: (lock.height - height) / 2
+        y: lock._alertY(height)
         source: Theme.asset("popup-bg.png")
         border { left: Theme.artBorder(Theme.lockAlertsBorder, source); right: Theme.artBorder(Theme.lockAlertsBorder, source); top: Theme.artBorder(Theme.lockAlertsBorder, source); bottom: Theme.artBorder(Theme.lockAlertsBorder, source) }
 

@@ -116,6 +116,28 @@ Item {
             compare(ui.height, 320 - Theme.gestureAreaHeight);
         }
 
+        // Sideways the phone's launcher has room for a fourth column, and the
+        // lock screen keeps its alerts between the date and the padlock.
+        function test_sidewaysLayouts() {
+            var launcher = findChild(shell, "launcher");
+            compare(launcher.columns, 3);
+            sys.deviceOrientation = "left";
+            tryCompare(shell, "uiOrientation", "left", 1000);
+            settle();
+            compare(launcher.columns, 4);
+            shell.lock();
+            var lock = findChild(shell, "lockScreen");
+            verify(lock.sideways);
+            var date = findChild(lock, "lockDate");
+            var dash = findChild(lock, "lockDashboard");
+            verify(dash.y + Theme.lockAlertsShadow >= date.y + date.height, "under the date");
+            shell.unlock();
+            sys.deviceOrientation = "up";
+            tryCompare(shell, "uiOrientation", "up", 1000);
+            settle();
+            compare(launcher.columns, 3);
+        }
+
         function test_faceUpDoesNotTurn() {
             sys.deviceOrientation = "faceup";
             wait(400);

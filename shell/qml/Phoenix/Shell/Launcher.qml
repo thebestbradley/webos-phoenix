@@ -224,9 +224,12 @@ Item {
     // rows are centred. The original kept 7 and spread them apart
     // (calculateAndSetHorizontalSpaceParameters), which leaves wide gaps on
     // a big tablet.
+    // Phones: 3 across the Pre's 320 upright, and as many of those cells as
+    // fit when it is turned or wider (4 on its side); the original never
+    // turned the phone's launcher.
     readonly property int columns: Theme.tablet
         ? Math.max(1, Math.floor((pages.width - Theme.launcherRowLeftMargin) / Theme.launcherCellPitch))
-        : Theme.launcherColumns
+        : Math.max(Theme.launcherColumns, Math.floor(pages.width / (Theme.px(320) / Theme.launcherColumns) + 0.001))
     readonly property real cellWidth: Theme.tablet ? Theme.launcherCellPitch : pages.width / columns
     readonly property real cellHeight: Theme.tablet ? Theme.launcherRowPitch : Theme.launcherIconSize + Theme.px(48)
     readonly property real rowLeft: Theme.tablet
