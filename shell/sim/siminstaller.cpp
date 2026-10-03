@@ -9,7 +9,10 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRandomGenerator>
 #include <QRegularExpression>
+#include <QStorageInfo>
+#include <QUrl>
 
 bool SimInstaller::validId(const QString &appId)
 {
@@ -92,4 +95,86 @@ QString SimInstaller::remove(const QString &appId)
 QVariantList SimInstaller::apps() const
 {
     return m_rootfs->apps();
+}
+
+void SimInstaller::rescan()
+{
+    m_rootfs->rescan();
+}
+
+QVariantMap SimInstaller::addLaunchPoint(const QVariantMap &lp)
+{
+    const QString appId = lp.value(QStringLiteral("id")).toString();
+    const QString dir = m_rootfs->launchPointsDir();
+    if (dir.isEmpty())
+        return { { QStringLiteral("error"), QStringLiteral("Failed to save launch point") } };
+    const QString appDir = m_rootfs->appDir(appId);
+    if (appId.isEmpty() || appDir.isEmpty())
+        return { { QStringLiteral("error"), QStringLiteral("Unable to find id: ") + appId } };
+    const QString title = lp.value(QStringLiteral("title")).toString();
+    if (title.isEmpty())
+        return { { QStringLiteral("error"), QStringLiteral("Invalid arguments") } };
+    // The icon, absolute (getAbsolutePath against the app's folder,
+    // ApplicationManagerService.cpp:3266-3269).
+    QString icon = lp.value(QStringLiteral("icon")).toString();
+    if (icon.startsWith(QLatin1String("file://")))
+        icon = QUrl(icon).path();
+    if (!icon.isEmpty() && !icon.startsWith(QLatin1Char('/')))
+        icon = QStringLiteral("/usr/palm/applications/") + appId + QLatin1Char('/') + icon;
+    QVariant params = lp.value(QStringLiteral("params"));
+    if (params.typeId() == QMetaType::QString)
+        params = QJsonDocument::fromJson(params.toString().toUtf8()).object().toVariantMap();
+    if (!QDir().mkpath(dir))
+        return { { QStringLiteral("error"), QStringLiteral("Failed to save launch point") } };
+    QString id;
+    for (int tries = 0; tries < 1000 && id.isEmpty(); ++tries) {
+        const QString candidate = QStringLiteral("%1").arg(1 + QRandomGenerator::global()->bounded(1000000), 8, 10, QLatin1Char('0'));
+        if (!QFileInfo::exists(QDir(dir).filePath(candidate)))
+            id = candidate;
+    }
+    if (id.isEmpty())
+        return { { QStringLiteral("error"), QStringLiteral("Failed to save launch point") } };
+    QJsonObject record;
+    record[QStringLiteral("id")] = appId;
+    record[QStringLiteral("launchPointId")] = id;
+    record[QStringLiteral("title")] = title;
+    const QString appmenu = lp.value(QStringLiteral("appmenu")).toString();
+    record[QStringLiteral("appmenu")] = appmenu.isEmpty() ? title : appmenu;
+    record[QStringLiteral("icon")] = icon;
+    record[QStringLiteral("params")] = QJsonObject::fromVariantMap(params.toMap());
+    record[QStringLiteral("removable")] = lp.value(QStringLiteral("removable"), true).toBool();
+    QFile out(QDir(dir).filePath(id));
+    const QByteArray json = QJsonDocument(record).toJson(QJsonDocument::Compact);
+    if (!out.open(QIODevice::WriteOnly) || out.write(json) != json.size())
+        return { { QStringLiteral("error"), QStringLiteral("Failed to save launch point") } };
+    out.close();
+    m_rootfs->rescan();
+    return { { QStringLiteral("launchPointId"), id } };
+}
+
+QString SimInstaller::removeLaunchPoint(const QString &launchPointId)
+{
+    // Only the numbered ones apps added; never an app's default
+    // (ApplicationManager::removeLaunchPoint, :2048-2093).
+    static const QRegularExpression number(QStringLiteral("^[0-9]+$"));
+    const QVariantMap lp = m_rootfs->dynamicLaunchPoint(launchPointId);
+    if (!number.match(launchPointId).hasMatch() || lp.isEmpty())
+        return QStringLiteral("launch point [") + launchPointId + QStringLiteral("] not found");
+    if (!lp.value(QStringLiteral("removable"), true).toBool())
+        return QStringLiteral("launch point [") + launchPointId + QStringLiteral("] not marked non-removable");
+    if (!QFile::remove(QDir(m_rootfs->launchPointsDir()).filePath(launchPointId)))
+        return QStringLiteral("launch point deletion failed");
+    m_rootfs->rescan();
+    return {};
+}
+
+qint64 SimInstaller::freeSpaceKB() const
+{
+    QString dir = m_rootfs->installedDir();
+    while (!dir.isEmpty() && !QFileInfo::exists(dir))
+        dir = QFileInfo(dir).path() == dir ? QString() : QFileInfo(dir).path();
+    if (dir.isEmpty())
+        return -1;
+    const QStorageInfo info(dir);
+    return info.isValid() ? info.bytesAvailable() / 1024 : -1;
 }

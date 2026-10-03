@@ -4,16 +4,37 @@
 import { useEffect, useState } from "react";
 import { tasks, type Task, type TaskList } from "@phoenix/luna";
 
-/** Every list (null until loaded); makes the Inbox on first use. */
-export function useLists(): TaskList[] | null {
+export interface ListsState {
+    /** Every list, the Inbox first (null until loaded). */
+    lists: TaskList[] | null;
+    /** Why the lists or the Inbox could not be had (the app says so instead of waiting). */
+    error: string;
+    retry: () => void;
+}
+
+/**
+ * Every list. The Inbox is made on first use, and again whenever the lists
+ * come without it: the app cannot work without its default list.
+ */
+export function useLists(): ListsState {
     const [l, setL] = useState<TaskList[] | null>(null);
+    const [error, setError] = useState("");
+    const [attempt, setAttempt] = useState(0);
     useEffect(() => {
         let live = true;
-        void tasks.ensureInbox().catch(() => {});
-        const sub = tasks.watchLists((all) => { if (live) setL(all); });
+        const fail = (e: unknown) => { if (live) setError(errorText(e)); };
+        const sub = tasks.watchLists((all) => {
+            if (!live) return;
+            setL(all);
+            if (!all.some((x) => x.isDefault)) tasks.ensureInbox().catch(fail);
+        }, fail);
         return () => { live = false; sub.cancel(); };
-    }, []);
-    return l;
+    }, [attempt]);
+    return { lists: l, error, retry: () => { setError(""); setAttempt((n) => n + 1); } };
+}
+
+function errorText(e: unknown): string {
+    return (e as { errorText?: string }).errorText ?? (e instanceof Error ? e.message : String(e));
 }
 
 export function useTasks(): Task[] | null {

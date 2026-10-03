@@ -131,6 +131,15 @@ async function main() {
               && fs.existsSync(path.join(installedDir, "usr/palm/applications/org.webosphoenix.pwa.tides/icon.png")),
               "installed: an app in the launcher that opens the site, with the site's icon");
         await shot("5-installed");
+        // The launcher's pending icon followed it: the Marketplace's progress
+        // (downloading, checking, installing), then installed; a tap on it
+        // meanwhile opens the app's page here.
+        const pending = host.filter((m) => m.type === "installStatus" && m.payload.appId === "org.webosphoenix.pwa.tides").map((m) => m.payload);
+        const steps = pending.filter((s) => s.state === "installing").map((s) => s.progress);
+        check(steps.length >= 3 && steps.every((p, i) => i === 0 || p >= steps[i - 1]) && pending[0].title === "Tides"
+              && pending[0].open && pending[0].open.id === "org.webosphoenix.marketplace" && pending[0].retry
+              && pending[pending.length - 1].state === "installed",
+              "the launcher hears the install as it goes (its progress only rising), then installed");
         host.length = 0;
         await page.click("[data-testid=open-app]");
         await page.waitForTimeout(300);

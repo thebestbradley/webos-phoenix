@@ -236,7 +236,6 @@ QtObject {
     readonly property int launchFeedbackTimeout: 3000
     readonly property int tapAndHoldInterval: 700                             // WebosTapAndHoldGestureRecognizer.cpp:52
     // Radius in window (buffer) coordinates, i.e. before the card is scaled.
-    readonly property int cardCornerRadius: px(40)                   // CardWindow.cpp:2515-2529
     readonly property int cardShadowOutset: px(20)                   // CardDropShadowEffect.cpp:34-35
     readonly property int cardShadowOffsetY: px(5)                   // CardDropShadowEffect.cpp:44
     // The card that just lost focus dims to this brightness.
@@ -422,11 +421,32 @@ QtObject {
     readonly property int cardGroupReorderDuration: motion(500)              // conf/lunaAnimations.conf:43-46
     readonly property int cardDimmingDuration: motion(300)
     readonly property int launcherReorderDuration: 300               // dynamicssettings.cpp:92-93 iconReorderIconMoveAnimTime, InQuad
+    // Dragging an icon to a page's left or right edge (the 50 px border,
+    // layoutsettings.cpp:61) takes it to the page beside at once; held
+    // there, again every 1500 ms (PageMovementControl's restriction,
+    // dynamicssettings.cpp:104 pagePanForIconMoveDelayMs). The 1000 ms
+    // border timeouts of layoutsettings.cpp:62-65 are read but nothing
+    // uses them. To the top or bottom 20 px it scrolls the page 150 px over
+    // 300 ms, at most once every 800 ms (pageScrollDelayMs, :101-103).
+    readonly property int launcherPagePanDelay: 1500
+    readonly property int launcherEdgeWidth: px(tablet ? 50 : 25)    // phones: half, for their 3 narrow columns
+    readonly property int launcherEdgeHeight: px(20)
+    readonly property int launcherScrollDelay: 800
+    readonly property int launcherScrollAmount: px(150)
+    readonly property int launcherScrollDuration: motion(300)
+    readonly property real launcherInstallingOpacity: 0.5            // dynamicssettings.cpp:105 iconInstallModeOpacity
+    readonly property int launcherProgressFrames: 19                 // iconheap.cpp:47 loading-strip.png's frames
     readonly property int launcherDuration: motion(350)                      // conf/lunaAnimations.conf:83-84 (curve 15 InOutQuint)
     readonly property int quickLaunchDuration: motion(350)                   // conf/lunaAnimations.conf:77-82
     readonly property int justTypeFadeDuration: motion(150)                  // conf/lunaAnimations.conf:87-88
     readonly property int searchPillFadeDuration: motion(200)                // conf/lunaAnimations.conf:81 quickLaunchFadeDuration
     readonly property int emergencyFadeDuration: motion(350)                 // EmergencyWindowManager.cpp:49 kFadeAnimDuration (linear)
+
+    // ---- Dock mode (AnimationSettings.cpp:125-131, curve 3 InOutQuad) ----------
+    readonly property int dockScreenFadeDuration: 900                // dockFadeScreenAnimationDuration
+    readonly property int dockFadeDuration: 500                      // dockFadeDockAnimationDuration
+    readonly property int dockStartDelay: 270                        // dockFadeDockStartDelay
+    readonly property int reticleDuration: motion(200)                       // conf/lunaAnimations.conf:92-93 (curve 0 Linear)
 
     // lunaAnimations.conf curve numbers map to QEasingCurve types:
     // 6 = OutCubic, 10 = OutQuart.

@@ -1,9 +1,10 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// The launcher: tabbed pages of app icons ("Apps", "Downloads", "Settings",
-// from conf/default-launcher-page-layout.json) over a dark translucent
-// backdrop, swiped sideways between pages.
+// The launcher: tabbed pages of app icons ("Apps", "Downloads",
+// "Favorites", "Settings": conf/default-launcher-page-layout.json and the
+// Favorites page LauncherObject::initPages adds; LauncherLayout.PAGES)
+// over a dark translucent backdrop, swiped sideways between pages.
 //
 // It slides up from below the screen, behind the quick launch dock
 // (OverlayWindowManager.cpp:102-104 Z_LAUNCHER_WIN 0 < Z_DOCK_WIN 20;
@@ -11,6 +12,7 @@
 // (conf/lunaAnimations.conf:83-84). The dock stays where it is, on top.
 
 import QtQuick
+import "LauncherLayout.js" as LauncherLayout
 
 Item {
     id: launcher
@@ -29,12 +31,96 @@ Item {
     signal launchRequested(string appId)
     signal closeRequested
     signal deleteRequested(string appId)
+    // A tap on an app still being installed, or whose install failed (the
+    // original sent the launch of an app not ready to Software Manager,
+    // WebAppMgrProxy.cpp:544-559).
+    signal pendingTapped(string appId)
+    // The dragged icon was taken to another page by the page edges.
+    signal dragPageChanged(int page)
     // Press and hold picked an icon up; positions are in launcher coordinates.
     signal dragStarted(string appId, string from, real x, real y)
     signal dragMoved(real x, real y)
     signal dragEnded(real x, real y)
 
-    onOpenChanged: if (!open) editMode = false
+    onOpenChanged: {
+        if (!open)
+            editMode = false;
+        keyIndex = -1;
+    }
+    onCurrentPageChanged: if (keyIndex >= 0) keyIndex = Math.min(keyIndex, Math.max(0, _pageCount(currentPage) - 1))
+
+    // ---- Keyboard navigation (GAPS V8 (3)) -----------------------------------------
+    // The arrows move a focus ring over the page's icons (past its left or
+    // right edge to the page beside), Tab / Shift+Tab go to the next /
+    // previous page (Home is the device's Home button), Enter or Space
+    // opens the icon as a tap would, Esc closes the launcher.
+    property int keyIndex: -1
+    function _pageCount(i) {
+        var m = pageModels[i];
+        return m ? m.count : 0;
+    }
+    function _keyActivate() {
+        var m = pageModels[currentPage];
+        if (!m || keyIndex < 0 || keyIndex >= m.count)
+            return;
+        var item = m.get(keyIndex);
+        if (editMode)
+            return;
+        if (item.installState !== "") {
+            pendingTapped(item.appId);
+            return;
+        }
+        feedbackId = item.appId;
+        launchRequested(item.appId);
+    }
+    function handleKey(event) {
+        if (!open || dragging)
+            return false;
+        var k = event.key, n = _pageCount(currentPage), cols = columns;
+        var shift = (event.modifiers & Qt.ShiftModifier) || k === Qt.Key_Backtab;
+        if (k === Qt.Key_Escape) {
+            if (editMode)
+                editMode = false;
+            else
+                closeRequested();
+            return true;
+        }
+        if (k === Qt.Key_Tab || k === Qt.Key_Backtab) {
+            showPage((currentPage + (shift ? tabs.length - 1 : 1)) % tabs.length);
+            keyIndex = _pageCount(currentPage) > 0 ? 0 : -1;
+            return true;
+        }
+        if (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space) {
+            _keyActivate();
+            return true;
+        }
+        if ([Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down].indexOf(k) < 0)
+            return false;
+        if (keyIndex < 0) {
+            keyIndex = n > 0 ? 0 : -1;
+            return true;
+        }
+        var i = keyIndex;
+        if (k === Qt.Key_Up) i = i - cols >= 0 ? i - cols : i;
+        else if (k === Qt.Key_Down) i = i + cols < n ? i + cols : i;
+        else if (k === Qt.Key_Left) {
+            if (i % cols === 0 && currentPage > 0) {
+                showPage(currentPage - 1);
+                keyIndex = Math.max(0, _pageCount(currentPage) - 1);
+                return true;
+            }
+            i = Math.max(0, i - 1);
+        } else if (k === Qt.Key_Right) {
+            if ((i % cols === cols - 1 || i === n - 1) && currentPage < tabs.length - 1) {
+                showPage(currentPage + 1);
+                keyIndex = _pageCount(currentPage) > 0 ? 0 : -1;
+                return true;
+            }
+            i = Math.min(n - 1, i + 1);
+        }
+        keyIndex = i;
+        return true;
+    }
 
     // The icon showing launch feedback, until the launcher has finished
     // hiding or the timeout (LauncherObject::setAppLaunchFeedback /
@@ -48,7 +134,9 @@ Item {
         onTriggered: launcher.feedbackId = ""
     }
 
-    readonly property var tabs: ["Apps", "Downloads", "Settings"]
+    // The page titles, in LauncherLayout.PAGES order (apps, downloads,
+    // favorites, prefs).
+    readonly property var tabs: [qsTr("Apps"), qsTr("Downloads"), qsTr("Favorites"), qsTr("Settings")]
 
     // Room left at the bottom for the dock, which sits on top of the launcher.
     property real dockHeight: 0
@@ -105,8 +193,13 @@ Item {
                         color: pages.currentIndex === index ? Theme.launcherTabSelectedColor : Theme.launcherTabColor
                         font.family: Theme.fontFamily
                         // Phones in edit mode: smaller, to leave Done its room
-                        // (the phone launcher is not in the open source).
+                        // (the phone launcher is not in the open source);
+                        // and on phones a title that does not fit its quarter
+                        // of the bar ("Downloads") is made smaller to fit,
+                        // down to 12 px (9 px beside Done).
                         font.pixelSize: !Theme.tablet && launcher.editMode ? Theme.px(12) : Theme.launcherTabFontSize
+                        fontSizeMode: Theme.tablet ? Text.FixedSize : Text.HorizontalFit
+                        minimumPixelSize: launcher.editMode ? Theme.px(9) : Theme.px(12)
                         font.bold: true
                     }
                     Image {
@@ -184,6 +277,11 @@ Item {
     }
     onLayoutChanged: syncPages()
     onAppsChanged: syncPages()
+    // An entry's title, icon or install state changed in place.
+    Connections {
+        target: launcher.apps
+        function onDataChanged() { Qt.callLater(launcher.syncPages); }
+    }
 
     function entry(id) {
         if (!apps)
@@ -194,26 +292,43 @@ Item {
         return null;
     }
 
+    // What a page's icon shows of its entry.
+    function _cellData(id) {
+        var e = entry(id);
+        return { appId: id, title: e ? e.title : id, color: e ? String(e.color) : "#666666",
+                 glyph: e ? e.glyph : "", icon: e ? String(e.icon || "") : "",
+                 largeIcon: e ? String(e.largeIcon || "") : "",
+                 removable: e ? !!e.removable : false,
+                 // A launch point an app added: the (x) remove decorator.
+                 shortcut: e ? !!e.dynamic : false,
+                 installState: e && e.installState ? String(e.installState) : "",
+                 progress: e && typeof e.progress === "number" ? e.progress : -1 };
+    }
+
     function syncPages() {
         if (!layout || pageModels.length === 0)
             return;
         for (var p = 0; p < pageModels.length; ++p) {
             var m = pageModels[p], ids = layout.pages[p] || [];
             for (var i = 0; i < ids.length; ++i) {
-                if (i < m.count && m.get(i).appId === ids[i])
+                if (i < m.count && m.get(i).appId === ids[i]) {
+                    var now = _cellData(ids[i]), was = m.get(i);
+                    for (var key in now)
+                        if (was[key] !== now[key])
+                            m.setProperty(i, key, now[key]);
                     continue;
+                }
                 var j = -1;
                 for (var k = i + 1; k < m.count; ++k)
                     if (m.get(k).appId === ids[i]) { j = k; break; }
-                if (j >= 0) {
+                if (j >= 0)
                     m.move(j, i, 1);
-                } else {
-                    var e = entry(ids[i]);
-                    m.insert(i, { appId: ids[i], title: e ? e.title : ids[i], color: e ? String(e.color) : "#666666",
-                                  glyph: e ? e.glyph : "", icon: e ? String(e.icon || "") : "",
-                                  largeIcon: e ? String(e.largeIcon || "") : "",
-                                  removable: e ? !!e.removable : false });
-                }
+                else
+                    m.insert(i, _cellData(ids[i]));
+                var d = _cellData(ids[i]), cur = m.get(i);
+                for (var key2 in d)
+                    if (cur[key2] !== d[key2])
+                        m.setProperty(i, key2, d[key2]);
             }
             while (m.count > ids.length)
                 m.remove(m.count - 1);
@@ -268,6 +383,121 @@ Item {
     readonly property int currentPage: pages.currentIndex
     function showPage(i) { pages.currentIndex = i; }
 
+    // ---- Page edges while an icon is dragged ------------------------------------
+    // ReorderablePage::detectAndHandleSpecialMoveAreas: the icon at a page's
+    // left or right border (Page::areaLeftBorder, 50 px) is handed to the
+    // launcher, which pans to the page beside as soon as the page is still
+    // (LauncherObject's redirected moves, dimensionslauncher.cpp:1775-1845);
+    // the icon goes with it. Another pan the same way waits 1500 ms
+    // (PageMovementControl, pagemovement.cpp: restrict_left / restrict_right
+    // until pagePanForIconMoveDelayMs), and coming back inside the page lifts
+    // that (signalPageMovementEnd). The original panned again on the next
+    // move of the finger after that; a finger held on a screen always moves
+    // a little, a mouse does not, so here the held icon pans again when the
+    // 1500 ms are up. At the page's top or bottom border (20 px) it scrolls
+    // the page 150 px over 300 ms (autoScrollUp / autoScrollDown), then not
+    // for 800 ms (Page's scroll delay FSM).
+    property string dragEdge: ""
+    property bool _panLeftRestricted: false
+    property bool _panRightRestricted: false
+    property bool _scrollOk: true
+
+    function edgeAt(lx, ly) {
+        if (ly < pages.y || ly >= pages.y + pages.height)
+            return "";
+        if (lx < Theme.launcherEdgeWidth)
+            return "left";
+        if (lx >= width - Theme.launcherEdgeWidth)
+            return "right";
+        if (ly < pages.y + Theme.launcherEdgeHeight)
+            return "top";
+        if (ly >= pages.y + pages.height - Theme.launcherEdgeHeight)
+            return "bottom";
+        return "";
+    }
+    // The dragged icon is at (lx, ly), launcher coordinates: true when a
+    // page edge has it (it is not dropped into the page meanwhile).
+    function dragOver(lx, ly) {
+        dragEdge = edgeAt(lx, ly);
+        if (dragEdge === "") {
+            _panLeftRestricted = false;
+            _panRightRestricted = false;
+            panTimer.stop();
+            return false;
+        }
+        _edgeAction();
+        return true;
+    }
+    function dragDone() {
+        dragEdge = "";
+        _panLeftRestricted = false;
+        _panRightRestricted = false;
+        panTimer.stop();
+    }
+    function _edgeAction() {
+        if (dragEdge === "left" || dragEdge === "right") {
+            // Only from a page at rest (centerPageIndex() >= 0).
+            if (Math.abs(pages.contentX - pages.currentIndex * pages.width) > 1)
+                return;
+            var left = dragEdge === "left";
+            if (left ? _panLeftRestricted : _panRightRestricted)
+                return;
+            var to = pages.currentIndex + (left ? -1 : 1);
+            if (to < 0 || to >= tabs.length)
+                return;
+            showPage(to);
+            dragPageChanged(to);
+            _panLeftRestricted = left;
+            _panRightRestricted = !left;
+            panTimer.restart();
+        } else if (dragEdge === "top" || dragEdge === "bottom") {
+            var page = pages.currentItem;
+            if (!_scrollOk || !page)
+                return;
+            var maxY = Math.max(0, page.contentHeight - page.height);
+            var y = Math.max(0, Math.min(maxY, page.contentY + (dragEdge === "top" ? -1 : 1) * Theme.launcherScrollAmount));
+            if (y === page.contentY)
+                return;
+            pageScroll.target = page;
+            pageScroll.to = y;
+            pageScroll.restart();
+            _scrollOk = false;
+            scrollTimer.restart();
+        }
+    }
+    Timer {
+        id: panTimer
+        interval: Theme.launcherPagePanDelay
+        onTriggered: {
+            launcher._panLeftRestricted = false;
+            launcher._panRightRestricted = false;
+            if (launcher.dragging && launcher.dragEdge !== "")
+                launcher._edgeAction();
+        }
+    }
+    // Waits for the page to come to rest after a pan, then tries again.
+    Timer {
+        interval: 50
+        repeat: true
+        running: launcher.dragging && (launcher.dragEdge === "left" || launcher.dragEdge === "right") && !panTimer.running
+        onTriggered: launcher._edgeAction()
+    }
+    Timer {
+        id: scrollTimer
+        interval: Theme.launcherScrollDelay
+        onTriggered: {
+            launcher._scrollOk = true;
+            if (launcher.dragging && (launcher.dragEdge === "top" || launcher.dragEdge === "bottom"))
+                launcher._edgeAction();
+        }
+    }
+    NumberAnimation {
+        id: pageScroll
+        property: "contentY"
+        duration: Theme.launcherScrollDuration
+        easing.type: Easing.OutCubic
+    }
+
     ListView {
         id: pages
         anchors.top: tabBar.bottom
@@ -281,6 +511,9 @@ Item {
         boundsBehavior: Flickable.StopAtBounds
         interactive: !launcher.dragging
         clip: true
+        // Every page stays made: an icon dragged to an edge goes to the
+        // page beside at once.
+        cacheBuffer: width * launcher.tabs.length
         model: launcher.tabs.length
 
         delegate: Flickable {
@@ -336,6 +569,13 @@ Item {
                     required property string icon
                     required property string largeIcon
                     required property bool removable
+                    required property bool shortcut
+                    required property string installState
+                    required property real progress
+                    // Being installed, or the install failed: the icon and
+                    // its label at half opacity under the status decorator
+                    // (IconBase::paint, iconInstallModeOpacity 0.5).
+                    readonly property bool notReady: installState !== ""
                     width: Theme.tablet ? Theme.launcherCellSize : launcher.cellWidth
                     height: launcher.cellHeight
                     x: launcher.rowLeft + (index % launcher.columns) * launcher.cellWidth
@@ -344,6 +584,21 @@ Item {
                     Behavior on y { NumberAnimation { duration: Theme.launcherReorderDuration; easing.type: Easing.InQuad } }
                     // The dragged icon travels under the finger (the shell's drag proxy).
                     opacity: launcher.draggedId === appId ? 0 : 1
+
+                    // The keyboard's focus ring.
+                    Rectangle {
+                        objectName: "launcherFocusRing"
+                        readonly property bool on: launcher.keyIndex === cell.index && page.index === launcher.currentPage
+                        visible: on
+                        anchors.horizontalCenter: iconItem.horizontalCenter
+                        y: iconItem.y - Theme.px(6)
+                        width: Math.min(parent.width - Theme.px(4), Theme.launcherIconSize + Theme.px(36))
+                        height: iconItem.height + Theme.px(10)
+                        radius: Theme.px(10)
+                        color: "#302c8ce0"
+                        border.color: "#2c8ce0"
+                        border.width: Theme.px(2)
+                    }
 
                     // Edit mode: the icon sits on the edit tile (edit-icon-bg.png).
                     Image {
@@ -366,12 +621,17 @@ Item {
                         largeSource: cell.largeIcon
                         interactive: false
                         feedback: launcher.feedbackId === cell.appId
+                        opacity: cell.notReady ? Theme.launcherInstallingOpacity : 1
                     }
                     // Delete decorator at the icon's top left for apps that can
-                    // be deleted (icongeometrysettings.cpp:190-197; the sprite's
-                    // top half is the normal state).
+                    // be deleted, the remove decorator for launch points apps
+                    // added (iconheap.cpp:35-39; icongeometrysettings.cpp:
+                    // 190-197; the sprite's top half is the normal state).
+                    // Never on an app being installed or whose install failed
+                    // (LauncherObject::canShowRemoveDeleteDecoratorOnIcon).
                     Item {
-                        visible: launcher.editMode && cell.removable
+                        objectName: "launcherRemoveDecorator"
+                        visible: launcher.editMode && (cell.removable || cell.shortcut) && !cell.notReady
                         x: iconItem.x - Theme.px(8)
                         y: iconItem.y - Theme.px(8)
                         width: Theme.px(28)
@@ -380,7 +640,41 @@ Item {
                         Image {
                             width: parent.width
                             height: parent.height * 2
-                            source: Theme.asset("launcher3/edit-button-delete.png")
+                            source: Theme.asset(cell.shortcut ? "launcher3/edit-button-remove.png" : "launcher3/edit-button-delete.png")
+                        }
+                    }
+                    // The install status decorator, 32 x 32 (iconheap.cpp:44-51;
+                    // icongeometrysettings.cpp:198-202): while installing, a
+                    // frame of loading-strip.png's 19 (32 x 32, top to
+                    // bottom) for the progress; after a failure,
+                    // warning-icon.png. Tablets: 50 px right of and above
+                    // the cell's centre (launcher_icon_geom_settings.conf);
+                    // phones: at the icon's top right, as the delete
+                    // decorator is at its top left.
+                    Item {
+                        id: installBadge
+                        objectName: "launcherInstallBadge"
+                        readonly property int frame: Math.max(0, Math.min(Theme.launcherProgressFrames - 1,
+                            Math.floor(Theme.launcherProgressFrames * Math.max(0, cell.progress) / 100)))
+                        visible: cell.notReady
+                        width: Theme.px(32)
+                        height: width
+                        x: Theme.tablet ? Theme.launcherCellSize / 2 + Theme.px(50) - width / 2
+                                        : iconItem.x + iconItem.width - Theme.px(22)
+                        y: Theme.tablet ? Theme.launcherCellSize / 2 - Theme.px(50) - height / 2
+                                        : iconItem.y - Theme.px(10)
+                        clip: true
+                        Image {
+                            visible: cell.installState === "installing"
+                            y: -installBadge.frame * installBadge.height
+                            width: installBadge.width
+                            height: installBadge.height * Theme.launcherProgressFrames
+                            source: Theme.asset("loading-strip.png")
+                        }
+                        Image {
+                            visible: cell.installState === "failed"
+                            anchors.fill: parent
+                            source: Theme.asset("warning-icon.png")
                         }
                     }
                 }
@@ -438,9 +732,14 @@ Item {
                         var cellW = Theme.tablet ? Theme.launcherCellSize : launcher.cellWidth;
                         var iconLeft = (cellW - Theme.launcherIconSize) / 2;
                         var iconTop = Theme.tablet ? Theme.launcherCellSize / 2 + Theme.launcherIconOffsetY - Theme.launcherIconSize / 2 : 0;
-                        if (item.removable && c.x < iconLeft + Theme.px(24) && c.x > iconLeft - Theme.px(12)
+                        if ((item.removable || item.shortcut) && item.installState === ""
+                                && c.x < iconLeft + Theme.px(24) && c.x > iconLeft - Theme.px(12)
                                 && c.y < iconTop + Theme.px(24) && c.y > iconTop - Theme.px(12))
                             launcher.deleteRequested(item.appId);
+                        return;
+                    }
+                    if (item.installState !== "") {
+                        launcher.pendingTapped(item.appId);
                         return;
                     }
                     launcher.feedbackId = item.appId;

@@ -91,7 +91,11 @@ async function main() {
             const at = await page.waitForFunction(([t, from]) => {
                 const i = window.__toasts.findIndex((s, n) => n >= from && s.includes(t));
                 return i >= 0 ? i + 1 : false;
-            }, [text, toastsSeen]);
+            }, [text, toastsSeen]).catch(async (e) => {
+                // Say what was shown instead.
+                const seen = await page.evaluate(() => window.__toasts).catch(() => []);
+                throw new Error(`no "${text}" toast; shown: ${JSON.stringify(seen)}; page errors: ${JSON.stringify(errors)}\n${e.message}`);
+            });
             toastsSeen = await at.jsonValue();
         };
         const luna = (uri, params) => page.evaluate(([u, p]) => new Promise((res) => {
@@ -199,8 +203,8 @@ async function main() {
         check((await f.textContent("[data-testid=share-title]")).includes("Email 2026-10-01 at 21.05.09"), "the sheet names what is shared");
         check(await f.locator("[data-testid=share-thumb]").count() === 1, "... with its thumbnail");
         const apps = await f.$$eval(".ss-app", (els) => els.map((e) => e.getAttribute("data-testid")));
-        check(apps.includes("share-app-com.palm.app.email") && !apps.includes("share-app-org.webosphoenix.messaging"),
-              `the apps that take a picture: Email, not Messaging (${apps.join(", ")})`);
+        check(apps.includes("share-app-com.palm.app.email") && apps.includes("share-app-org.webosphoenix.messaging"),
+              `the apps that take a picture: Email, and Messaging as a picture message (${apps.join(", ")})`);
         check(await f.locator("[data-testid=share-photos]").count() === 1 && await f.locator("[data-testid=share-files]").count() === 1,
               "Save to Photos and Save to Files");
         await shot("5-share-sheet");

@@ -132,6 +132,27 @@ async function main() {
         check(web && /google\.com\/search\?q=webos(%20|\+)phoenix/.test(web.params && web.params.target || ""),
               "web: Search Google opens the browser on the query");
 
+        // Its preferences (Settings > Just Type, com.palm.universalsearch):
+        // the default engine, the engines turned on and their order, and
+        // contacts turned off, are followed as soon as they change.
+        const us = (method, params) => page.evaluate(([m, p]) => new Promise((resolve) => {
+            __phoenixRuntime.dispatch("luna://com.palm.universalsearch/" + m, p, resolve, { cancelled: () => false, onCancel: null });
+        }), [method, params]);
+        await us("updateSearchItem", { category: "search", id: "wikipedia", enabled: true, setDefault: true });
+        await us("updateSearchItem", { category: "search", id: "imdb", enabled: true });
+        await us("reorderSearchItem", { category: "search", id: "imdb", toIndex: 0 });
+        await us("setSearchPreference", { key: "ContactSearch", value: "false" });
+        await search("ada");
+        t = await text();
+        check(/Search Wikipedia/.test(t) && !/Search Google/.test(t.split("IMDb")[0]), "preferences: Wikipedia is the default search");
+        check(t.indexOf("IMDb") >= 0 && t.indexOf("IMDb") < t.indexOf("Google"), "preferences: IMDb, turned on and moved up, comes before Google");
+        check(!/Ada Palmer/.test(t), "preferences: with contacts off, \"ada\" finds no contact");
+        await shot("preferences");
+        await us("setSearchPreference", { key: "ContactSearch", value: "true" });
+        await us("updateSearchItem", { category: "search", id: "google", enabled: true, setDefault: true });
+        await us("updateSearchItem", { category: "search", id: "imdb", enabled: false });
+        await us("reorderSearchItem", { category: "search", id: "imdb", toIndex: 3 });
+
         // Any width, and resized while it shows (the page stays loaded): nothing
         // runs off the right edge (a TouchPad-sized field or group at 600 px did).
         await search("m");

@@ -16,6 +16,9 @@
 //   correction(word)      the word the space bar puts in its place, or ""
 //   swipe(path, keys)     the words a swipe across the keys may be
 //   learn(prev, word)     a word the user typed (after `prev`)
+//   setUserShortcuts(map), shortcut(word)
+//                         the user's own shortcuts (Settings > Text Assist >
+//                         Shortcuts): "omw" for "On my way"
 //
 // Corrections are words one edit away (a letter added, missing, swapped
 // with its neighbour, or another letter, cheaper when the keys are
@@ -348,6 +351,29 @@ function correction(word) {
     if (best.length > 1 && best[0].score - best[1].score < 5 && best[0].lw.length !== lw.length)
         return "";
     return _match(word, _written(best[0].lw));
+}
+
+// ---- The user's shortcuts ---------------------------------------------------------
+
+// Settings > Text Assist > Shortcuts (the preference x_palm_textinput, whose
+// shortcutChecking says whether they are used): what is typed, in any case,
+// -> what the space bar puts in for it. Unlike corrections they apply in any
+// language (and with none), and to real words too: the user asked for them.
+var _userShortcuts = {};
+function setUserShortcuts(map) {
+    _userShortcuts = {};
+    Object.keys(map || {}).forEach(function (k) {
+        var v = map[k];
+        if (k && typeof v === "string" && v !== "")
+            _userShortcuts[String(k).toLowerCase()] = v;
+    });
+}
+// What `word` stands for, capitalized as typed ("Omw": "On my way"), or "".
+function shortcut(word) {
+    if (!word)
+        return "";
+    var s = _userShortcuts[String(word).toLowerCase()];
+    return s ? _match(word, s) : "";
 }
 
 // ---- Suggestions -----------------------------------------------------------------

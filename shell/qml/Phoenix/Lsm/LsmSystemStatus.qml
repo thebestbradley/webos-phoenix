@@ -34,6 +34,11 @@ QtObject {
     // QOrientationSensor where the device provides one).
     property string deviceOrientation: "up"
     property bool muted: false
+    // Unconditional call forwarding on, for the status bar's icon.
+    // STATUS: placeholder; M1 subscribes to com.palm.telephony forwardQuery
+    // {condition: "unconditional", subscribe: true}, as LunaSysMgr's
+    // StatusBarServicesConnector::requestCallForwardStatus did.
+    property bool callForwarding: false
     // System sounds (SystemSounds.qml): volumes 0..100, "System Sounds",
     // the keyboard's clicks and the tones.
     // STATUS: placeholders; M1 reads them from com.webos.service.audio
@@ -52,6 +57,24 @@ QtObject {
     property bool showAlertsWhenLocked: true
     property real brightness: 1.0
     property var fixedTime: null
+    // The charger, and the Touchstone's serial number while on one (dock
+    // mode). STATUS: placeholders; M1 reads powerd's chargerStatus /
+    // USBDockStatus (DockConnected with DockPower, DockSerialNo) or the
+    // device's charger driver.
+    property string charger: "none"
+    property string puckId: ""
+    readonly property bool onPuck: charger === "inductive"
+    // Settings > Exhibition. STATUS: the defaults; M1 reads the system
+    // service's preferences (exhibition, dockModeSoundPref, dockwallpaper)
+    // and the application manager's exhibitions (listDockModeLaunchPoints).
+    property bool exhibitionEnabled: true
+    property int exhibitionStartAfter: 0
+    property var exhibitionApps: ["org.webosphoenix.photos"]
+    property string dockModeSound: "systemsettings"
+    property bool exhibitionNightMode: false
+    property string exhibitionNightStart: "22:00"
+    property string exhibitionNightEnd: "07:00"
+    property url dockWallpaper: ""
 
     property var wifiNetworks: []
     property bool wifiScanning: false

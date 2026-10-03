@@ -262,7 +262,7 @@ Item {
         // Bluetooth, Wi-Fi, TTY, HAC, call forward, roaming, VPN, rotation
         // lock, mute, airplane (StatusBarInfo.cpp:143-275). This Row runs
         // left to right, so the reverse. Not shown yet, for want of the
-        // state: WAN, TTY, HAC, call forward, roaming.
+        // state: WAN, TTY, HAC, roaming.
         Indicator {
             objectName: "airplaneIcon"
             shown: bar.system !== null && bar.system !== undefined && bar.system.airplaneMode
@@ -284,6 +284,13 @@ Item {
             objectName: "vpnIcon"
             shown: !!bar.system && !!bar.system.vpnProfile
             source: Theme.asset("statusBar/vpn-status-icon.png")
+        }
+        // Unconditional call forwarding on (StatusBarInfo::setCallForward,
+        // from com.palm.telephony forwardQuery; off with the radio).
+        Indicator {
+            objectName: "callForwardIcon"
+            shown: !!bar.system && !bar.system.airplaneMode && !!bar.system.callForwarding
+            source: Theme.asset("statusBar/call-forward.png")
         }
         Indicator {
             objectName: "wifiIcon"
@@ -308,7 +315,10 @@ Item {
             readonly property int step: bar.system ? Theme.batteryState(bar.system.batteryPercent) : 0
             // States 0-11 are battery-N; the full one reuses battery-11, or
             // battery-charged while charging (StatusBarBattery.cpp:150-172).
+            // No level (powerd not reporting: batteryPercent < 0) is
+            // battery-error.png (StatusBarBattery.cpp:106-110).
             source: !bar.system ? ""
+                    : bar.system.batteryPercent < 0 ? Theme.asset("statusBar/battery-error.png")
                     : bar.system.charging && step === 12 ? Theme.asset("statusBar/battery-charged.png")
                     : bar.system.charging ? Theme.asset("statusBar/battery-charging-" + step + ".png")
                     : Theme.asset("statusBar/battery-" + Math.min(step, 11) + ".png")

@@ -61,5 +61,25 @@ Item {
             tapEntry("browser");
             compare(menu.actions, ["forward", "reload", "browser"]);
         }
+
+        // GAPS V8 (3): Down skips Back (no history), Enter chooses, Esc closes.
+        function test_keyboard() {
+            menu.actions = [];
+            menu.canGoBack = false;
+            menu.canGoForward = true;
+            menu.open = true;
+            function key(k) { menu.handleKey({ key: k, modifiers: 0 }); }
+            key(Qt.Key_Down);
+            compare(menu.keyItem.name, "forward");
+            key(Qt.Key_Down);
+            compare(menu.keyItem.name, "reload");
+            key(Qt.Key_Return);
+            compare(menu.actions, ["reload"]);
+            verify(!menu.open);
+            menu.open = true;
+            compare(menu.keyItem, null);
+            key(Qt.Key_Escape);
+            verify(!menu.open);
+        }
     }
 }

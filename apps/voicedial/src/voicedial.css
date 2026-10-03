@@ -1,0 +1,122 @@
+/* Copyright (c) 2026 webOS Phoenix contributors */
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* Voice Dial: the microphone in the middle, what was heard under it, then
+   whom to call. */
+
+.vd-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 18px 0 24px;
+    text-align: center;
+}
+.vd-body > .pui-group,
+.vd-confirm {
+    align-self: stretch;
+    text-align: left;
+}
+
+.vd-mic {
+    position: relative;
+    width: 112px;
+    height: 112px;
+    margin: 8px 0 14px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 35%, #8a9199, #4c535b 70%);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.vd-mic svg {
+    position: relative;
+    width: 56px;
+    height: 56px;
+    fill: #fff;
+    stroke: #fff;
+}
+.vd-mic.vd-small {
+    width: 64px;
+    height: 64px;
+    margin: 0 0 8px;
+}
+.vd-small svg {
+    width: 34px;
+    height: 34px;
+}
+.vd-mic.vd-listening {
+    background: radial-gradient(circle at 50% 35%, #6fb3ec, #1f6fb5 70%);
+}
+.vd-mic:active {
+    transform: scale(0.97);
+}
+.vd-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+}
+.vd-listening .vd-ring {
+    animation: vd-pulse 1.4s ease-out infinite;
+    border: 3px solid rgba(31, 111, 181, 0.6);
+}
+@keyframes vd-pulse {
+    from { transform: scale(1); opacity: 1; }
+    to { transform: scale(1.45); opacity: 0; }
+}
+.vd-transcribing svg {
+    opacity: 0.35;
+}
+.vd-mic-spinner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.vd-status {
+    font-size: 22px;
+    color: #333;
+}
+.vd-heard {
+    margin: 6px 16px 0;
+    font-size: 17px;
+    font-style: italic;
+    color: #666;
+}
+.vd-hint {
+    margin: 14px 24px 0;
+    font-size: 14px;
+    line-height: 1.4;
+    color: #777;
+}
+.vd-confirm {
+    margin-top: 14px;
+}
+.vd-say {
+    margin: 2px 0 8px;
+    text-align: center;
+    font-size: 14px;
+    color: #777;
+}
+.vd-buttons {
+    display: flex;
+    gap: 10px;
+    align-self: stretch;
+    padding: 0 10px;
+}
+.vd-buttons > .pui-button {
+    flex: 1;
+}
+.vd-buttons.single {
+    flex-direction: column;
+    margin-top: 16px;
+}
+.vd-error {
+    color: #b8261b;
+    font-size: 15px;
+    text-align: center;
+}
+

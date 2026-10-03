@@ -191,7 +191,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `shell/qml/Phoenix/Sim` | Mock apps and device status for the desktop simulator |
 | `shell/qml/Phoenix/Lsm`, `shell/qml/WebOSCompositor` | Adapter that plugs the shell into webOS OSE's `luna-surfacemanager` |
 | `shell/sim` | `phoenix-sim`, the desktop runner (also takes screenshots) |
-| `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Tasks, Voice Memos, Flashlight, QR Scanner, Weather, Maps, Passwords, Authenticator, Terminal, Videos, Podcasts, PDF View, Doc View, First Use, Help), with the shared `@phoenix/ui` components, `@phoenix/luna` service client and `@phoenix/secrets` (TOTP, sealing, auto-lock), generated demo media (`apps/media-samples`), the Node.js Luna services of Files (`apps/files/service`) and Voice Memos (`apps/voicememos/service`, speech to text with whisper.cpp), and the CardDAV & CalDAV Synergy account with its sync service (`apps/dav`, see [docs/SYNERGY.md](docs/SYNERGY.md)) |
+| `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Tasks, Voice Memos, Flashlight, QR Scanner, Weather, Maps, Passwords, Authenticator, Terminal, Videos, Podcasts, PDF View, Doc View, First Use, Help, Print Manager, Voice Dial), with the shared `@phoenix/ui` components, `@phoenix/luna` service client and `@phoenix/secrets` (TOTP, sealing, auto-lock), generated demo media (`apps/media-samples`), the Node.js Luna services of Files (`apps/files/service`) and Voice Memos (`apps/voicememos/service`, speech to text with whisper.cpp), and the CardDAV & CalDAV Synergy account with its sync service (`apps/dav`, see [docs/SYNERGY.md](docs/SYNERGY.md)) |
 | `services/pty` | `org.webosphoenix.pty`, the Terminal's PTY Luna service (C++), whose core phoenix-sim also uses |
 | `runtime/` | The webOS web app runtime for the simulator and browsers (`PalmSystem`, simulated Luna services) |
 | `shell/tests` | Behaviour tests (`qmltestrunner`) |
@@ -250,19 +250,41 @@ bottom is the gesture bar, on phones and tablets alike; it moves to the
 bottom of the screen as you hold it. `--home-button` simulates a device
 whose maker uses a hardware Home button instead (no gesture bar; tablets
 then take the bottom-edge flick). A big `--size` needs a matching
-`--scale` to look like a real device (2 for most tablets of 2560 px). Keys: **Esc** back, **F1** swipe up, **Home** the Home button,
+`--scale` to look like a real device (2 for most tablets of 2560 px). The
+keyboard's microphone and Voice Dial transcribe with whisper.cpp on your
+computer (`PHOENIX_WHISPER_CLI`, `PHOENIX_WHISPER_MODEL`); without a
+microphone, `--microphone-file call.wav --microphone-file yes.wav` plays
+WAV files as one, one per recording. Keys: **Esc** back, **F1** swipe up, **Home** the Home button,
 **F2** demo notification, **F3** the Power button (the screen off and locked, or on again), **F4** incoming call (rings
-the Phone app), **F5** incoming text message (for Messaging), **F6** low
-battery, **F7** plug a charger in or out, **F8** battery charged to full,
+the Phone app), **F5** incoming text message (for Messaging; **Shift+F5** a picture message, **Ctrl+F5** an instant message from a buddy once an IM account is set up), **F6** low
+battery, **Shift+F6** the battery stops reporting (or reports again), **F7** plug a charger in or out, **F8** battery charged to full,
+**F12** set the device on a Touchstone (the inductive charger) or lift it off,
+**Shift+F12** onto another Touchstone,
 **F9** (or **Home**+**F3**, **Print Screen**, **Ctrl+Alt+P**) a screen capture,
 **F10** / **F11** the volume keys (down / up),
 **Ctrl+Left** / **Ctrl+Right**
 turn the device a quarter turn counter-clockwise / clockwise, type in card
-view for Just Type. Left alone the screen dims and turns off as on a device
+view for Just Type. The original's key chords: hold **F3** and **F11**
+(Power and Volume Up), then press **Home**: Full Erase's six-second
+countdown; keep holding and the device is erased and starts again into
+First Use (let go to stop it). **F3** with **F10** (Power and Volume Down)
+on a USB cable: USB drive mode. **Shift+F8** plugs a USB cable from a
+computer in or out (`--usb` starts with it in): luna-systemui asks
+"Connected"; "USB Drive" puts the device into USB drive mode, until the
+computer ejects it (**Ctrl+F8**) or the cable is pulled (then the drive is
+checked: "OWWW! That hurts!"). `--usb-busy` makes it fail ("USB Drive
+connection failed"). Left alone the screen dims and turns off as on a device
 (Settings > Screen & Lock > Turn off after; 5 s on the lock screen); a
 click, **F3** or **Home** turns it on (on a Mac, F3 to F11 need **fn**:
 macOS keeps them for itself). `--stay-awake` keeps it on (as `--screenshot`
-does). `./build/phoenix-sim --open https://example.com` opens a
+does). `--hardware-keyboard` starts with a hardware keyboard attached, and **Ctrl+Shift+K** attaches or detaches one: the virtual keyboard then stays down when a field takes the focus, a keyboard button above the gesture bar brings it up, and typing on the keyboard puts it away. `--low-memory` acts as if memory were low: launching an app shows
+"Sorry, Too Many Cards" instead. On a Touchstone the device goes into dock
+mode, "Exhibition", as on webOS: at once with the screen off (or Power), or
+when the screen would have turned off; an exhibition shows full screen (the
+Time clocks, Photos' slideshow, the Agenda, any app that declares
+`exhibitionMode`), picked from the status bar's title; Home, the swipe up
+or lifting it off leaves (Settings > Exhibition). `--touchstone` starts on
+one, in dock mode. `./build/phoenix-sim --open https://example.com` opens a
 page in the browser. A text field taking the focus brings up the virtual
 keyboard (the Open webOS phone and TouchPad keyboards); click its keys, or
 keep typing on the desktop keyboard.
@@ -281,17 +303,31 @@ that app's card stack.
 System sounds play as on the original: Open webOS's own sounds
 (notifications, alerts, the ringtone for an incoming call, charging, battery
 full, boot and, when the window closes, shutdown) and Phoenix-made keyboard
-clicks, at the volumes set in Settings > Sounds & Ringtones. The simulator
+clicks, at the volumes and with the ringtone, alert tone and notification
+tone set in Settings > Sounds & Ringtones. The simulator
 plays them with the web engine's audio; `--quiet` leaves out the boot and
 shutdown sounds (so do `--screenshot` and the offscreen platform).
+
+The boot animation shows at start-up, as on a device, until the system UI
+has loaded (not with `--screenshot` or `--no-boot-animation`;
+`--boot-animation` shows it anyway, e.g. for a screenshot). After a system
+update's Install Now it says "Updating the system" first.
+
+`--security-policy minLength=6,maxRetries=4,alphaNumeric,noSimple,inactivity=300`
+sets a device security policy, as an Exchange account did (any of the
+parts; `none` removes it): the lock screen asks for a PIN or password that
+meets it, counts the tries left, warns before the last one and erases the
+device after it. Settings > Developer Mode (when on) has switches for the
+frame rate counter and the touch plot.
 
 `--launch com.palm.app.notes` opens an app at start-up (repeatable);
 `--launch org.webosphoenix.settings.wifi` opens a Settings pane.
 
-`--scene locked|cards|stacks|reorder|maximized|heldcard|launcher|dashboard|justtype|keyboard|systemmenu|pin|emergency|firstuse` opens
+`--scene locked|cards|stacks|reorder|maximized|heldcard|launcher|launcherinstall|dashboard|justtype|keyboard|systemmenu|pin|emergency|firstuse` opens
 a demo state (`keyboard`: Just Type with the virtual keyboard up; `heldcard`: a card that keeps the upright orientation, drawn
 turned in card view with `--orientation left`; `emergency`: the PIN pad's
-Emergency Call; `firstuse`: First Use); add `--screenshot out.png`
+Emergency Call; `firstuse`: First Use; `launcherinstall`: the launcher's
+Downloads page with an app being installed and one whose install failed); add `--screenshot out.png`
 to save a PNG and exit.
 
 **First Use** runs at start-up, as on a new device, until it has been
@@ -305,10 +341,12 @@ Tests:
 QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -input shell/tests
 (cd apps && npm test && npm run typecheck)
 node tools/test-apps.cjs && node tools/test-settings.cjs   # needs Playwright
-node tools/test-phone-messaging.cjs                        # calls and texts
+node tools/test-phone-messaging.cjs                        # calls, texts, MMS and IM
+node tools/test-voicedial.cjs                              # Voice Dial
 node tools/test-media.cjs                                   # Camera, Photos, Music
 node tools/test-files.cjs                                   # Files
 node tools/test-tasks.cjs                                   # Tasks and reminders
+node tools/test-db8-pages.cjs                               # db8 shared by pages writing at once
 node tools/test-alarm.cjs                                   # a Clock alarm rings as a popup alert
 node tools/test-keyboard.cjs                                # web fields and the virtual keyboard
 node tools/test-voicememos.cjs                              # Voice Memos
@@ -325,6 +363,9 @@ node tools/test-firstuse.cjs                                # First Use, every s
 node tools/test-help.cjs                                    # Help, and Just Type finding it
 node tools/test-emergency.cjs                               # Emergency Info, restricted Phone, Accessibility
 node tools/test-location.cjs                                # Location Services and permissions
+node tools/test-appmanager.cjs                              # launch points apps add, handlers, the installer's queries
+node tools/test-security.cjs                                # security policy, erase, USB drive mode, debugging
+node tools/test-browser.cjs                                 # the browser: pages, downloads, printing (Save as PDF)
 ```
 
 ## Build a webOS OSE image (experimental)

@@ -11,13 +11,14 @@
     "extraLargeIcon": "icon-512x512.png",
     "uiRevision": 2,
     "phoenix": {
-        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): quickLaunch puts the app in that quick launch slot (1-4). shareTargets: what it takes from the share sheet (docs/SHARE-AND-FILES.md): text and links (no picture messages yet).",
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): quickLaunch puts the app in that quick launch slot (1-4). shareTargets: what it takes from the share sheet (docs/SHARE-AND-FILES.md): text, links and a picture (a picture message).",
         "quickLaunch": 3,
         "shareTargets": [
             {
                 "types": [
                     "text/plain",
-                    "text/uri-list"
+                    "text/uri-list",
+                    "image/*"
                 ]
             }
         ]

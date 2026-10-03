@@ -9,7 +9,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { call, subscribe } from "./bridge";
 import { findFiles, isWebAddress, openTarget, readTarget, targetName } from "./documents";
 import { openWith } from "./files";
@@ -101,9 +101,14 @@ describe("launch targets", () => {
 });
 
 describe("HTTP and downloads (through serve-rootfs.py's proxy)", () => {
-    const proxy = (answer: (req: Record<string, unknown>) => Record<string, unknown>) => {
+    // The dev server's proxy; progress answers GET /__phoenix/proxy/progress
+    // (the download manager asks while a body comes).
+    const proxy = (answer: (req: Record<string, unknown>) => Record<string, unknown>,
+                   progress: () => Record<string, unknown> = () => ({})) => {
         const seen: Record<string, unknown>[] = [];
         vi.stubGlobal("fetch", vi.fn(async (url: string, init: { body: string }) => {
+            if (url.startsWith("/__phoenix/proxy/progress?id="))
+                return { json: async () => progress() } as unknown as Response;
             expect(url).toBe("/__phoenix/proxy");
             const req = JSON.parse(init.body) as Record<string, unknown>;
             seen.push(req);
@@ -139,6 +144,43 @@ describe("HTTP and downloads (through serve-rootfs.py's proxy)", () => {
         expect(blob.size).toBe("OggS-episode-bytes".length);
         const hist = await call("luna://com.webos.service.downloadmanager/getAllHistory", {}) as unknown as { items: { destFile: string; completed: boolean }[] };
         expect(hist.items[0]).toMatchObject({ destFile: "ep1.ogg", completed: true });
+    });
+
+    it("shows a download as an ongoing activity with the proxy's progress, and lists it as the browser reads it", async () => {
+        // The body takes a while; meanwhile the proxy says how far it is.
+        let release: () => void = () => {};
+        const arrived = new Promise<void>((r) => { release = r; });
+        let received = 0;
+        vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+            if (url.startsWith("/__phoenix/proxy/progress?id="))
+                return { json: async () => ({ received, total: 8192 }) } as unknown as Response;
+            await arrived;
+            return { json: async () => ({ status: 200, headers: { "content-type": "application/pdf" }, bodyBase64: btoa("%PDF".padEnd(8192, "x")), url: "https://example.org/r.pdf" }) } as unknown as Response;
+        }));
+        const progress: { amountReceived?: number; amountTotal?: number; completed?: boolean }[] = [];
+        // As the browser asks (its ongoing activity opens its Downloads drawer).
+        const ps = (window as unknown as { PalmSystem: { appIdentifier: string } }).PalmSystem;
+        const appId = ps.appIdentifier;
+        ps.appIdentifier = "com.palm.app.browser";
+        onTestFinished(() => { ps.appIdentifier = appId; });
+        const sub = subscribe("luna://com.palm.downloadmanager/download", { target: "https://example.org/r.pdf", mime: "application/pdf" },
+            (r) => progress.push(r as never));
+        await new Promise((r) => setTimeout(r, 20));
+        expect(lastHost("ongoing")?.payload).toMatchObject({ id: "download-" + String((progress[0] as { ticket?: number }).ticket), title: "r.pdf", appId: "com.palm.app.browser", params: { toasterOpen: "downloads" } });
+        received = 2048;
+        await vi.waitFor(() => expect(lastHost("ongoing")?.payload).toMatchObject({ progress: 25, body: "Downloading 2 KB of 8 KB" }), { timeout: 2000 });
+        expect(progress.some((p) => p.amountReceived === 2048 && p.amountTotal === 8192)).toBe(true);
+        release();
+        await vi.waitFor(() => expect(progress[progress.length - 1]).toMatchObject({ completed: true, completionStatusCode: 200,
+            destPath: "/media/internal/Downloads/", destFile: "r.pdf" }), { timeout: 2000 });
+        expect(lastHost("ongoing")?.payload).toMatchObject({ clear: true });
+        sub.cancel();
+        // Isis lists finished downloads from the history: state, fileExistsOnFilesys and the record.
+        const hist = await call("luna://com.palm.downloadmanager/getAllHistory", {}) as unknown as
+            { items: { state: string; fileExistsOnFilesys: boolean; recordString: string }[] };
+        const item = hist.items[hist.items.length - 1];
+        expect(item).toMatchObject({ state: "completed", fileExistsOnFilesys: true });
+        expect(JSON.parse(item.recordString)).toMatchObject({ destFile: "r.pdf", destPath: "/media/internal/Downloads/" });
     });
 
     it("fails a download outside /media/internal, or of a missing file", async () => {

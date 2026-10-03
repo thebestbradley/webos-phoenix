@@ -23,7 +23,7 @@ PHOENIX_BRANCH ?= "main"
 # gitsm: the original apps and frameworks are git submodules (third_party/).
 SRC_URI = "gitsm://github.com/thebestbradley/webos-phoenix.git;protocol=https;branch=${PHOENIX_BRANCH}"
 SRCREV = "${PHOENIX_SRCREV}"
-PV = "0.1.0+git${SRCPV}"
+PV = "0.1.0+git"
 
 S = "${WORKDIR}/git"
 

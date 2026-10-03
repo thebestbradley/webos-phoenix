@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Phone: a phone standing, a green badge with a call forwarding arrow in front of it. Original Phoenix art. -->
+<defs>
+  <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a4f55"/><stop offset="0.08" stop-color="#202326"/><stop offset="1" stop-color="#0c0d0f"/></linearGradient>
+  <path id="s2" d="M86 22H146A16 16 0 0 1 162 38V160A16 16 0 0 1 146 176H86A16 16 0 0 1 70 160V38A16 16 0 0 1 86 22Z"/>
+  <clipPath id="c3"><rect x="78" y="40" width="76" height="118" rx="3"/></clipPath>
+  <linearGradient id="g4" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b2f35"/><stop offset="1" stop-color="#121416"/></linearGradient>
+  <linearGradient id="g5" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.35"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <linearGradient id="g6" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b6f08a"/><stop offset="0.5" stop-color="#3fae24"/><stop offset="1" stop-color="#1c6a10"/></linearGradient>
+  <path id="s7" d="M134 140A32 32 0 1 0 198 140A32 32 0 1 0 134 140Z"/>
+  <linearGradient id="g8" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.6"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.12"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+</defs>
+<g>
+<use href="#s2" y="-6" fill="#9aa1a8" stroke="#050607" stroke-width="2.5"/>
+<use href="#s2" y="-5" fill="#9aa1a8" stroke="#050607" stroke-width="2.5"/>
+<use href="#s2" y="-4" fill="#9aa1a8" stroke="#050607" stroke-width="2.5"/>
+<use href="#s2" y="-3" fill="#9aa1a8" stroke="#050607" stroke-width="2.5"/>
+<use href="#s2" y="-2" fill="#9aa1a8" stroke="#050607" stroke-width="2.5"/>
+<use href="#s2" y="-1" fill="#9aa1a8" stroke="#050607" stroke-width="2.5"/>
+<use href="#s2" fill="url(#g1)" stroke="#050607" stroke-width="2.5" stroke-linejoin="round"/>
+</g>
+<g clip-path="url(#c3)">
+<rect x="78" y="40" width="76" height="118" fill="url(#g4)"/>
+<path d="M98 66C98 62 102 58 106 60L112 64C114 66 114 69 112 71L108 75C110 82 116 88 123 90L127 86C129 84 132 84 134 86L138 92C140 96 136 100 132 100C112 100 98 86 98 66Z" fill="#5fc23c"/>
+<path d="M78 40H154L78 104H78Z" fill="url(#g5)"/>
+</g>
+<rect x="78" y="40" width="76" height="118" rx="3" fill="none" stroke="#000" stroke-width="1.5"/>
+<rect x="104" y="30" width="24" height="4" rx="2" fill="#3a3f44"/>
+<path d="M84 24H148" stroke="#fff" stroke-opacity="0.35" stroke-width="1.5" stroke-linecap="round"/>
+<g filter="url(#c-lift)">
+<g>
+<use href="#s7" y="-5" fill="#d6f7bd" stroke="#14480b" stroke-width="2.5"/>
+<use href="#s7" y="-4" fill="#d6f7bd" stroke="#14480b" stroke-width="2.5"/>
+<use href="#s7" y="-3" fill="#d6f7bd" stroke="#14480b" stroke-width="2.5"/>
+<use href="#s7" y="-2" fill="#d6f7bd" stroke="#14480b" stroke-width="2.5"/>
+<use href="#s7" y="-1" fill="#d6f7bd" stroke="#14480b" stroke-width="2.5"/>
+<use href="#s7" fill="url(#g6)" stroke="#14480b" stroke-width="2.5" stroke-linejoin="round"/>
+</g>
+<path d="M150 152C150 138 158 130 172 130H178" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
+<path d="M174 120L186 130L174 140Z" fill="#fff" stroke="#fff" stroke-width="3" stroke-linejoin="round"/>
+<use href="#s7" fill="url(#g8)"/>
+</g>
+</svg>

@@ -82,7 +82,80 @@ Item {
     opacity: open ? 1 : 0
     Behavior on opacity { NumberAnimation { duration: Theme.systemMenuFadeDuration } }
 
-    onOpenChanged: if (open) { closeTimer.stop(); date.refresh(); }
+    onOpenChanged: {
+        if (open) { closeTimer.stop(); date.refresh(); }
+        _setKeyItem(null);
+    }
+
+    // ---- Keyboard navigation (GAPS V8 (3)) -----------------------------------------
+    // Up / Down (and Tab / Shift+Tab) move through the rows on show, top
+    // to bottom, including an open drawer's; Enter or Space acts on the
+    // row, Left / Right move a slider, Esc closes the menu.
+    property Item keyItem: null
+    function _setKeyItem(item) {
+        if (keyItem)
+            keyItem.keyFocused = false;
+        keyItem = item;
+        if (item) {
+            item.keyFocused = true;
+            // Scrolled into view.
+            var y = item.mapToItem(flick.contentItem, 0, 0).y;
+            if (y < flick.contentY)
+                flick.contentY = y;
+            else if (y + item.height > flick.contentY + flick.height)
+                flick.contentY = y + item.height - flick.height;
+        }
+    }
+    function _shown(item) {
+        for (var p = item; p && p !== menu; p = p.parent)
+            if (!p.visible || p.height <= 0 || p.opacity <= 0)
+                return false;
+        return true;
+    }
+    function keyItems() {
+        var out = [];
+        (function walk(o) {
+            for (var i = 0; i < o.children.length; ++i) {
+                var c = o.children[i];
+                if (c.keyNavigable === true && _shown(c))
+                    out.push(c);
+                walk(c);
+            }
+        })(flick.contentItem);
+        out.sort(function (a, b) {
+            return a.mapToItem(menu, 0, 0).y - b.mapToItem(menu, 0, 0).y;
+        });
+        return out;
+    }
+    function handleKey(event) {
+        if (!open)
+            return false;
+        var k = event.key, back = event.key === Qt.Key_Backtab || (k === Qt.Key_Tab && (event.modifiers & Qt.ShiftModifier));
+        if (k === Qt.Key_Escape) {
+            closeRequested();
+            return true;
+        }
+        if (k === Qt.Key_Down || k === Qt.Key_Up || k === Qt.Key_Tab || k === Qt.Key_Backtab) {
+            var items = keyItems();
+            if (!items.length)
+                return true;
+            var i = items.indexOf(keyItem);
+            var up = k === Qt.Key_Up || back;
+            i = i < 0 ? (up ? items.length - 1 : 0) : (i + (up ? -1 : 1) + items.length) % items.length;
+            _setKeyItem(items[i]);
+            return true;
+        }
+        if ((k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space) && keyItem) {
+            if (keyItem.selectable)
+                keyItem.action();
+            return true;
+        }
+        if ((k === Qt.Key_Left || k === Qt.Key_Right) && keyItem && keyItem.adjustable) {
+            keyItem.adjust(k === Qt.Key_Left ? -0.1 : 0.1);
+            return true;
+        }
+        return false;
+    }
     // Put back on close, once faded out (SystemMenu.qml:345-366): drawers
     // shut, and the rotation lock and mute rows show the state they set.
     onVisibleChanged: {
@@ -123,6 +196,12 @@ Item {
         id: entry
         property bool selectable: true
         property bool forceSelected: false
+        // Keyboard navigation (GAPS V8 (3)): reached with the arrows and
+        // Tab, highlighted as when pressed; Enter acts.
+        readonly property bool keyNavigable: selectable || adjustable
+        property bool adjustable: false
+        property bool keyFocused: false
+        function adjust(step) {}
         // The bottom row's highlight follows the art's rounded foot
         // (menuPosition 2, MenuListEntry.qml:19-20).
         property bool last: false
@@ -132,7 +211,7 @@ Item {
         height: Theme.systemMenuRowHeight
 
         ArtBorderImage {
-            visible: (entry.selectable && entry.pressed) || entry.forceSelected
+            visible: (entry.selectable && entry.pressed) || entry.forceSelected || entry.keyFocused
             source: Theme.asset(entry.last ? "menu-selection-gradient-last.png" : "menu-selection-gradient-default.png")
             x: Theme.px(4)
             width: parent.width - Theme.px(8)
@@ -356,6 +435,9 @@ Item {
         property Component moreIcon: null
         signal moved(real v)
         selectable: false
+        // Left and Right move it a tenth.
+        adjustable: true
+        function adjust(step) { moved(Math.max(0, Math.min(1, value + step))); }
         Item {
             id: brightnessContent
             x: Theme.px(4)

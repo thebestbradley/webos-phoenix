@@ -60,3 +60,20 @@ Not used: LuneOS's larger versions of some of this art
 to charcoal, the rest unchanged; `key-charcoal@2x.png` and `@3x` the same of
 `key-gray@2x.png` and `@3x`. `tools/keyboard-charcoal.py` makes them and
 checks them (`--check`, in CI).
+
+## Phoenix system screens art
+
+Drawn for Phoenix (Apache-2.0, like the rest of the repository) by
+`tools/draw-system-art.py`, at 1x, 2x and 3x from the same shapes, in place
+of the pictures removed above; `--check` (in CI) makes sure they are up to
+date:
+
+- `boot-logo.png`, `boot-logo-bright.png` (200 x 200): the boot animation's
+  logo and its lit state, where luna-sysmgr drew `hp-logo.png` /
+  `hp-logo-bright.png` (`BootupAnimation.cpp`, `ProgressAnimation.cpp`). A
+  Phoenix mark, three flames rising from a dark disc; no HP or Palm logo.
+- `msm-usb.png`, `msm-fsck-usb.png` (768 x 768): USB drive mode and the check
+  of the drive after it was pulled out, where luna-sysmgr drew
+  `normal-usb.png` / `fsck-usb.png` (`TopLevelWindowManager.cpp`,
+  `ProgressAnimation.cpp`). A plain device with the USB symbol, not the
+  TouchPad.

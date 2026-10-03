@@ -8,6 +8,7 @@
 import QtQuick
 import Phoenix.Native
 import "LauncherLayout.js" as LauncherLayout
+import "KeyboardShortcuts.js" as KeyboardShortcuts
 
 FocusScope {
     id: shell
@@ -36,6 +37,9 @@ FocusScope {
     readonly property bool launcherOpen: launcher.open
     readonly property bool justTypeOpen: justType.open
     property alias launcherEditMode: launcher.editMode
+    // The launcher page shown (LauncherLayout.PAGES: apps 0, downloads 1,
+    // favorites 2, prefs 3).
+    function showLauncherPage(i) { launcher.showPage(i); }
     property alias cardView: cards
     property alias notifications: notes
     property alias searchPill: searchPill
@@ -69,6 +73,9 @@ FocusScope {
     function launch(appId, params) {
         if (!source)
             return "";
+        // An app coming up ends dock mode (cardWindowAdded).
+        if (dockMode)
+            exitDockMode(true);
         launcher.open = false;
         justType.open = false;
         var uid = source.launch(appId, cards.currentUid, params || null);
@@ -77,13 +84,41 @@ FocusScope {
         return uid;
     }
 
+    // A tap on an app the launcher shows as being installed: the original
+    // sent the launch of an app not ready to Software Manager
+    // (WebAppMgrProxy.cpp:544-559), where a failed install could be tried
+    // again or removed. Here a failed one asks (Try Again, Remove); one
+    // still installing opens what installs it (the Marketplace's page for
+    // the app), when the window source says.
+    function pendingAppTapped(appId) {
+        var e = launcher.entry(appId);
+        if (!e)
+            return;
+        if (e.installState === "failed") {
+            deleteDialog.ask(appId);
+            return;
+        }
+        var info = source && typeof source.installInfo === "function" ? source.installInfo(appId) : null;
+        if (info && info.open && info.open.id)
+            launch(info.open.id, info.open.params || null);
+    }
+
+    // Whether the window's keyboard focus is in item (or below it).
+    function _hasFocusInside(item) {
+        for (var it = shell.Window.activeFocusItem; it; it = it.parent)
+            if (it === item)
+                return true;
+        return false;
+    }
+
     function startJustType(text) {
         launcher.open = false;
         justType.start(text);
     }
 
     // Not over the lock screen (LockWindow sits above the menus), nor in First Use.
-    function openSystemMenu() { if (!locked && !firstUse) systemMenu.open = true; }
+    // In dock mode it opens over the exhibition (DockModeMenuManager's own).
+    function openSystemMenu() { if ((!locked || dockMode) && !firstUse) systemMenu.open = true; }
 
     function lock() {
         if (firstUse)
@@ -114,9 +149,16 @@ FocusScope {
         id: backlight
         timeout: shell.system && shell.system.screenTimeout > 0 ? shell.system.screenTimeout : 60
         locked: shell.locked
-        // An app in front keeping the screen on (blockScreenTimeout).
-        blocked: cards.maximized && cards.currentBlocksScreenTimeout
+        // An app in front keeping the screen on (blockScreenTimeout); the
+        // system screens (USB drive mode, a progress animation, booting).
+        blocked: (cards.maximized && cards.currentBlocksScreenTimeout) || systemScreens.holdsDisplay
         onTurnedOff: shell.lock()
+        // On the Touchstone it waits for dock mode instead of dimming.
+        onPuck: shell._exhibitionsOnPuck
+        puckTimeout: shell.system && shell.system.exhibitionStartAfter > 0 ? shell.system.exhibitionStartAfter * 1000 : 0
+        dockMode: shell.dockMode
+        night: shell.dockMode && shell.nightModeNow
+        onPuckTimedOut: shell.enterDockMode()
     }
     // Every touch and key resets its timers; while it is off the touch
     // panel takes nothing and only Power, Home and the volume keys get
@@ -127,6 +169,16 @@ FocusScope {
         onWakeRequested: backlight.turnOn()
         passKeys: [Qt.Key_Home, Qt.Key_F3, Qt.Key_PowerOff, Qt.Key_VolumeUp, Qt.Key_VolumeDown, Qt.Key_F10, Qt.Key_F11]
         onActivity: backlight.activity()
+        tapRadius: Theme.tapRadius
+        onTapped: (pos) => {
+            var p = shell.mapFromItem(null, pos.x, pos.y);
+            // Not over the keyboard, whose keys show their own
+            // (InputWindowManager::doReticle).
+            var k = ime.mapFromItem(shell, p.x, p.y);
+            if (ime.visible && ime.contains(k))
+                return;
+            reticle.startAt(p.x, p.y);
+        }
     }
     Connections {
         target: notes
@@ -153,8 +205,227 @@ FocusScope {
         target: shell.system
         ignoreUnknownSignals: true
         function onChargingChanged() {
-            if (shell.system.charging && backlight.state !== "on")
+            // The Touchstone has its own rules (dock mode, below).
+            if (shell.system.charging && backlight.state !== "on" && !shell.onPuck)
                 backlight.turnOn();
+        }
+    }
+
+    // ---- Dock mode, "Exhibition" (GAPS R5) ------------------------------------------
+    // On a Touchstone, the inductive charger (powerd's DockConnected with
+    // DockPower; system.onPuck), the device shows an exhibition: the Time
+    // clocks, Photos' slideshow, ... (DockMode.qml). When, as DisplayManager's
+    // states had it (Src/base/DisplayStates.cpp):
+    //   - set on it with the screen off: at once (DisplayOff, DisplayEventOnPuck);
+    //   - set on it with the screen on: the screen stays bright, and when it
+    //     would have turned off (or after Settings > Exhibition's "Start
+    //     after") the exhibition starts (DisplayOnPuck); locked, the lock
+    //     screen first asks to unlock, as DisplayOnPuck's lock state did;
+    //   - Power, or the shell locking, while on it (DisplayOn / DisplayOnPuck,
+    //     DisplayEventPowerKeyPress, DisplayEventLockScreen);
+    //   - not on a call, nor with one ringing (DisplayEventOnCall), nor in
+    //     First Use or the emergency window; only with exhibitions on
+    //     (Settings > Exhibition).
+    // In dock mode the device is locked, in the lock screen's dock state
+    // (LockWindow StateDockMode); the screen stays on (DisplayDockMode),
+    // dimmed to the night brightness in night mode. It ends on Home, the
+    // swipe up, Back with nothing to close, the tablet's edge flick
+    // (SystemUiController.cpp:450-453, 529-532, 944-951, 2082-2085), an app
+    // card coming up (a banner or dashboard tapped: cardWindowAdded,
+    // setCardWindowMaximized) or lifting the device off; then the lock screen
+    // asks to unlock (DisplayDockMode -> DisplayOnPuck / DisplayOn, lock state
+    // Unlocked: LockWindow::tryUnlock), unless the screen is off. A call
+    // coming in ends it too, to the lock screen and its call
+    // (DisplayDockMode, DisplayEventOnCall). Power turns the screen off and
+    // on again without leaving it (DisplayDockMode -> DisplayOff -> on the
+    // puck, DisplayDockMode). The transition: the screen shrinks to nothing
+    // as it fades over 900 ms while dock mode grows in from twice its size
+    // over 500 ms after 270 ms, InOutQuad, and the reverse to leave
+    // (WindowServerLuna::initDockModeAnimations; AnimationSettings
+    // dockFade*); with the screen off, at once.
+    readonly property bool onPuck: !!(system && system.onPuck)
+    readonly property bool exhibitionEnabled: !system || system.exhibitionEnabled !== false
+    readonly property bool _exhibitionsOnPuck: onPuck && exhibitionEnabled && !firstUse
+    property bool dockMode: false
+    property bool _dockTransition: false
+    readonly property alias dock: dockLayer
+
+    // Night mode (Settings > Exhibition): between nightStart and nightEnd.
+    property bool nightModeNow: false
+    function _minutesOf(hhmm) {
+        var m = /^(\d\d):(\d\d)$/.exec(hhmm || "");
+        return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : -1;
+    }
+    function _updateNightMode() {
+        var s = system;
+        if (!s || !s.exhibitionNightMode) {
+            nightModeNow = false;
+            return;
+        }
+        var now = s.fixedTime ? s.fixedTime : new Date();
+        var t = now.getHours() * 60 + now.getMinutes();
+        var a = _minutesOf(s.exhibitionNightStart), b = _minutesOf(s.exhibitionNightEnd);
+        nightModeNow = a >= 0 && b >= 0 && a !== b && (a < b ? t >= a && t < b : t >= a || t < b);
+    }
+    Timer {
+        interval: 30000
+        repeat: true
+        running: shell.dockMode
+        triggeredOnStart: true
+        onTriggered: shell._updateNightMode()
+    }
+    Connections {
+        target: shell.system
+        ignoreUnknownSignals: true
+        function onExhibitionNightModeChanged() { shell._updateNightMode(); }
+        function onExhibitionNightStartChanged() { shell._updateNightMode(); }
+        function onExhibitionNightEndChanged() { shell._updateNightMode(); }
+    }
+    // The sound preference: "mute" keeps an exhibition quiet.
+    Binding {
+        target: shell.sounds
+        property: "quiet"
+        value: shell.dockMode && !!shell.system && shell.system.dockModeSound === "mute"
+    }
+
+    function _dockAllowed() {
+        return _exhibitionsOnPuck && !emergencyShown && !notes.incomingCall
+            && !(source && source.activeCallBanner) && !systemScreens.holdsDisplay;
+    }
+    // USB drive mode (brick mode), the boot or progress animation and Full
+    // Erase's countdown take the screen: dock mode ends at once
+    // (SystemUiController::slotEnterBrickMode, SystemUiController.cpp:1900-1903),
+    // and does not start while they do.
+    Connections {
+        target: systemScreens
+        function onHoldsDisplayChanged() {
+            if (systemScreens.holdsDisplay && shell.dockMode)
+                shell.exitDockMode(false);
+        }
+    }
+
+    // Returns whether dock mode is up.
+    function enterDockMode() {
+        if (dockMode)
+            return true;
+        if (!_dockAllowed())
+            return false;
+        var animate = backlight.on;
+        systemMenu.open = false;
+        siteMenu.open = false;
+        notes.dashboardOpen = false;
+        justType.open = false;
+        launcher.open = false;
+        lockScreen.locked = true;
+        lockScreen.dockMode = true;
+        dockMode = true;
+        dockLayer.enter();
+        _dockTransitionTo(true, animate);
+        backlight.turnOn();
+        return true;
+    }
+
+    // unlock: ask to unlock after (the lock screen's passcode if one is
+    // needed), as leaving DisplayDockMode for DisplayOnPuck / DisplayOn did.
+    function exitDockMode(unlock) {
+        if (!dockMode)
+            return;
+        var animate = backlight.on;
+        dockLayer.exit();
+        dockMode = false;
+        lockScreen.dockMode = false;
+        _dockTransitionTo(false, animate);
+        if (unlock && backlight.on)
+            lockScreen.requestUnlock();
+    }
+
+    function _dockTransitionTo(entering, animate) {
+        dockEnterAnimation.stop();
+        dockExitAnimation.stop();
+        if (!animate || Theme.reduceMotion) {
+            _dockTransition = false;
+            screenLayers.opacity = 1;
+            screenLayers.scale = 1;
+            screenLayers.visible = !entering;
+            dockLayer.opacity = 1;
+            dockLayer.scale = 1;
+            return;
+        }
+        _dockTransition = true;
+        screenLayers.visible = true;
+        if (entering) {
+            // From the first frame: not yet there, twice its size.
+            dockLayer.opacity = 0;
+            dockLayer.scale = 2;
+        } else {
+            screenLayers.opacity = 0;
+            screenLayers.scale = 0;
+        }
+        (entering ? dockEnterAnimation : dockExitAnimation).start();
+    }
+    ParallelAnimation {
+        id: dockEnterAnimation
+        NumberAnimation { target: screenLayers; property: "opacity"; from: 1; to: 0; duration: Theme.dockScreenFadeDuration; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: screenLayers; property: "scale"; from: 1; to: 0; duration: Theme.dockScreenFadeDuration; easing.type: Easing.InOutQuad }
+        SequentialAnimation {
+            PauseAnimation { duration: Theme.dockStartDelay }
+            ParallelAnimation {
+                NumberAnimation { target: dockLayer; property: "opacity"; from: 0; to: 1; duration: Theme.dockFadeDuration; easing.type: Easing.InOutQuad }
+                NumberAnimation { target: dockLayer; property: "scale"; from: 2; to: 1; duration: Theme.dockFadeDuration; easing.type: Easing.InOutQuad }
+            }
+        }
+        onFinished: {
+            shell._dockTransition = false;
+            screenLayers.visible = !shell.dockMode;
+            screenLayers.opacity = 1;
+            screenLayers.scale = 1;
+        }
+    }
+    // The same run backwards: the screen grows back over 900 ms, dock mode
+    // shrinks away into twice its size from 130 ms to 630 ms.
+    ParallelAnimation {
+        id: dockExitAnimation
+        NumberAnimation { target: screenLayers; property: "opacity"; from: 0; to: 1; duration: Theme.dockScreenFadeDuration; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: screenLayers; property: "scale"; from: 0; to: 1; duration: Theme.dockScreenFadeDuration; easing.type: Easing.InOutQuad }
+        SequentialAnimation {
+            PauseAnimation { duration: Theme.dockScreenFadeDuration - Theme.dockStartDelay - Theme.dockFadeDuration }
+            ParallelAnimation {
+                NumberAnimation { target: dockLayer; property: "opacity"; from: 1; to: 0; duration: Theme.dockFadeDuration; easing.type: Easing.InOutQuad }
+                NumberAnimation { target: dockLayer; property: "scale"; from: 1; to: 2; duration: Theme.dockFadeDuration; easing.type: Easing.InOutQuad }
+            }
+        }
+        onFinished: {
+            shell._dockTransition = false;
+            dockLayer.opacity = 1;
+            dockLayer.scale = 1;
+        }
+    }
+
+    // Set on or lifted off the Touchstone.
+    on_ExhibitionsOnPuckChanged: {
+        if (_exhibitionsOnPuck) {
+            if (!backlight.on)
+                enterDockMode();
+            else if (locked && !dockMode)
+                lockScreen.requestUnlock();
+        } else if (dockMode) {
+            exitDockMode(true);
+        }
+    }
+    // A call ringing ends it, to the lock screen and the call.
+    Connections {
+        target: notes
+        function onIncomingCallChanged() {
+            if (notes.incomingCall && shell.dockMode)
+                shell.exitDockMode(false);
+        }
+    }
+    // An app's card coming up ends it (a banner tapped, a call answered).
+    Connections {
+        target: shell.source ? shell.source.cards : null
+        function onRowsInserted() {
+            if (shell.dockMode)
+                shell.exitDockMode(true);
         }
     }
 
@@ -283,6 +554,10 @@ FocusScope {
                 shell.dockShown = false;
             else if (!cards.maximized)
                 shell._showDock();
+            // Its page had the keys: they come back to the shell, so typing
+            // in card view starts Just Type again.
+            if (!justType.open && shell._hasFocusInside(justType))
+                shell.forceActiveFocus();
         }
     }
     Connections {
@@ -317,6 +592,11 @@ FocusScope {
             closeEmergency();
             return;
         }
+        // Dock mode: out (SystemUiController.cpp:450-453).
+        if (dockMode) {
+            exitDockMode(true);
+            return;
+        }
         if (locked)
             return;
         // First Use: card view only to switch to an app it opened.
@@ -337,6 +617,77 @@ FocusScope {
             launcher.open = true;
     }
 
+    // Settings > Text Assist > Hardware keyboard: "ipad" or "desktop"
+    // (KeyboardShortcuts.js).
+    readonly property string keyboardShortcuts: system && system.keyboardShortcuts === "desktop" ? "desktop" : "ipad"
+
+    // The meta key's Edit commands (SystemUiController::slotCopy and the
+    // rest): to Just Type while it is open, else to the app in front.
+    function metaEdit(action) {
+        if (locked)
+            return;
+        backlight.activity();
+        if (justType.open) {
+            justType.edit(action);
+            return;
+        }
+        if (!cards.maximized || !source || !source.windowFor)
+            return;
+        var w = source.windowFor(cards.currentUid);
+        if (w && typeof w.edit === "function")
+            w.edit(action);
+    }
+
+    // A hardware keyboard shortcut's action (GAPS V8). Not over the lock
+    // screen (but for nothing), First Use or the emergency window.
+    function shortcut(action) {
+        if (locked || firstUse || emergencyShown)
+            return;
+        shortcutSheet.shown = false;
+        if (action === "next" || action === "previous") {
+            justType.open = false;
+            launcher.open = false;
+            cards.switchApp(action === "next");
+        } else if (action === "cardView") {
+            justType.open = false;
+            launcher.open = false;
+            if (cards.maximizeProgress > 0 && !cards.minimizing)
+                cards.minimize();
+        } else if (action === "justType") {
+            searchKey();
+        } else if (action === "close") {
+            if (cards.count > 0 && !launcher.open && !justType.open)
+                cards.close(cards.currentUid, false);
+        } else if (action === "launcher") {
+            if (launcher.open) {
+                launcher.open = false;
+            } else {
+                justType.open = false;
+                if (cards.maximizeProgress > 0)
+                    cards.minimize();
+                launcher.open = true;
+            }
+        } else if (action === "maximize") {
+            gestureDown();
+        } else if (action === "notifications") {
+            notes.dashboardOpen = !notes.dashboardOpen;
+        } else if (action === "lock") {
+            lock();
+        }
+    }
+
+    // A keyboard's Search key: Just Type opens, or closes if it is open;
+    // not over the lock screen or the emergency window (Qt::Key_Search,
+    // SystemUiController.cpp:607-618).
+    function searchKey() {
+        if (locked || emergencyShown || firstUse)
+            return;
+        if (justType.open)
+            justType.open = false;
+        else
+            startJustType("");
+    }
+
     // The Home button, Key_CoreNavi_Home (:527-583): one thing per press -
     // the dashboard, the popup alert (closed, as signalCloseAlert did), the
     // menu, the launcher, Just Type - then the app minimizes; with nothing
@@ -351,6 +702,11 @@ FocusScope {
         }
         if (emergencyShown) {
             closeEmergency();
+            return;
+        }
+        // Dock mode: out (SystemUiController.cpp:529-532).
+        if (dockMode) {
+            exitDockMode(true);
             return;
         }
         if (locked || firstUse)
@@ -392,24 +748,95 @@ FocusScope {
             source.back(emergencyWindow.windowKey);
             return;
         }
+        // Dock mode (SystemUiController.cpp:424-443, 940-951): the dashboard,
+        // then a menu, close; otherwise Back leaves it.
+        if (dockMode) {
+            if (notes.dashboardOpen)
+                notes.dashboardOpen = false;
+            else if (systemMenu.open)
+                systemMenu.open = false;
+            else if (dockLayer.menuOpen)
+                dockLayer.appMenu.open = false;
+            else
+                exitDockMode(true);
+            return;
+        }
         if (locked) {
             // The back gesture (or Esc) on the passcode panel cancels it.
             if (lockScreen.unlockPanel.shown)
                 lockScreen.unlockPanel.entryCanceled();
             return;
         }
-        if (notes.dashboardOpen)
+        // The launcher's app dialog first: Back (or Esc) cancels it.
+        if (deleteDialog.appId !== "") {
+            _setKeyButton(null);
+            deleteDialog.appId = "";
+        } else if (notes.dashboardOpen)
             notes.dashboardOpen = false;
         else if (siteMenu.open)
             siteMenu.open = false;
         else if (systemMenu.open)
             systemMenu.open = false;
-        else if (justType.open)
-            justType.open = false;
-        else if (launcher.open)
+        else if (justType.open) {
+            // The original's page gets it (its app menu closes first).
+            if (justType.surface && source && typeof source.justTypeBack === "function")
+                source.justTypeBack();
+            else
+                justType.open = false;
+        } else if (launcher.open)
             launcher.open = false;
         else if (cards.maximized)
             source.back(cards.currentUid);
+    }
+
+    // The forward swipe (left to right; Key_CoreNavi_Menu, or Next turned
+    // into Menu while advanced gestures are off): on its release it closes
+    // the dashboard and the menus, and is eaten while they or the launcher
+    // are up (SystemUiController::handleKeyEvent, SystemUiController.cpp:
+    // 306-337, 410-422). Otherwise it goes to the app; webOS apps had no
+    // forward of their own (Enyo 1.0 has none, and the key it reached Mojo
+    // as is not recorded), so a site or web app goes forward in its history,
+    // as Back goes back.
+    function gestureForward() {
+        // Dock mode: it closes the dashboard and the menus (Key_CoreNavi_Menu).
+        if (dockMode) {
+            notes.dashboardOpen = false;
+            systemMenu.open = false;
+            dockLayer.appMenu.open = false;
+            return;
+        }
+        if (locked || emergencyShown)
+            return;
+        if (notes.dashboardOpen || siteMenu.open || systemMenu.open) {
+            notes.dashboardOpen = false;
+            siteMenu.open = false;
+            systemMenu.open = false;
+            return;
+        }
+        if (justType.open || launcher.open || !cards.maximized || !source)
+            return;
+        if (typeof source.siteState !== "function")
+            return;
+        var st = source.siteState(cards.currentUid);
+        if (st && st.canGoForward)
+            source.siteAction(cards.currentUid, "forward");
+    }
+
+    // Advanced gestures' long swipes (Key_CoreNavi_Previous / Next): on
+    // the release they close the dashboard and the menus and, unless the
+    // launcher is up, show the app beside this one, maximized if this one
+    // was (SystemUiController.cpp:394-408; MaximizeState / MinimizeState::
+    // changeCardWindow, CardWindowManagerStates.cpp:173-179, 443-449: Next,
+    // rightward, is the card to the left). toRight: the card to the right.
+    function gestureSwitchApp(toRight) {
+        if (locked || emergencyShown)
+            return;
+        notes.dashboardOpen = false;
+        siteMenu.open = false;
+        systemMenu.open = false;
+        if (launcher.open || justType.open)
+            return;
+        cards.switchApp(toRight);
     }
 
     function gestureTap() {
@@ -430,15 +857,18 @@ FocusScope {
         function onCardFocusRequested(uid) { Qt.callLater(cards.focusLaunched, uid); }
         function onCardCloseRequested(uid) { cards.close(uid, true); }
         function onJustTypeDismissed() { justType.open = false; }
-        function onBannerRequested(appId, text, icon, params, soundClass, soundFile, soundDuration) {
+        function onBannerRequested(appId, text, icon, params, soundClass, soundFile, soundDuration, bannerId) {
             var a = null;
             for (var i = 0; shell.source.apps && i < shell.source.apps.count; ++i)
                 if (shell.source.apps.get(i).appId === appId)
                     a = shell.source.apps.get(i);
-            notes.showBanner(text, icon, a ? a.color : "#666666", a ? a.glyph : "", appId, params || "");
-            // BannerMessageHandler::aboutToShowBanner: its sound as it shows.
-            sounds.notification(appId, soundClass || "", soundFile || "", soundDuration || 0, false);
+            // BannerMessageHandler::aboutToShowBanner: its sound as it shows
+            // (after the ones queued before it).
+            notes.showBanner(text, icon, a ? a.color : "#666666", a ? a.glyph : "", appId, params || "", bannerId || "",
+                             function () { sounds.notification(appId, soundClass || "", soundFile || "", soundDuration || 0, false); });
         }
+        function onBannerRemoved(appId, bannerId) { notes.removeBanner(appId, bannerId); }
+        function onBannersCleared(appId) { notes.clearBanners(appId); }
         // PalmSystem.playSoundNotification, or a notification with a sound.
         function onSoundRequested(appId, soundClass, soundFile, duration) {
             sounds.notification(appId, soundClass, soundFile, duration, false);
@@ -486,8 +916,132 @@ FocusScope {
         function onAlertKeyChanged() { Qt.callLater(shell._updateAlertSound); }
     }
 
+    // An overlay that takes the keys while it is open (the system menu):
+    // the item that had the keyboard gets it back when it closes.
+    property Item _focusBeforeOverlay: null
+    function _overlayFocus(opened) {
+        if (opened) {
+            if (Window.activeFocusItem !== shell)
+                _focusBeforeOverlay = Window.activeFocusItem;
+            shell.forceActiveFocus();
+        } else if (_focusBeforeOverlay) {
+            var f = _focusBeforeOverlay;
+            _focusBeforeOverlay = null;
+            if (Window.activeFocusItem === shell && f.visible)
+                f.forceActiveFocus();
+        }
+    }
+
+    Connections {
+        target: notes
+        function onDashboardOpenChanged() { shell._overlayFocus(notes.dashboardOpen); }
+    }
+
+    // The shell's own dialogs with the keyboard (GAPS V8 (3)): the
+    // launcher's app dialog, and the popup alerts the shell draws (Too Many
+    // Cards, USB Drive failed). Tab / Shift+Tab and the arrows move a ring
+    // over the buttons, starting on the first (Cancel, where there is
+    // one); Enter or Space presses it; Esc cancels (or, with one button,
+    // presses it).
+    property Item _keyButton: null
+    function _setKeyButton(b) {
+        if (_keyButton)
+            _keyButton.keyFocused = false;
+        _keyButton = b;
+        if (b)
+            b.keyFocused = true;
+    }
+    function _keyButtons(root) {
+        var out = [];
+        (function walk(o) {
+            for (var i = 0; i < o.children.length; ++i) {
+                var c = o.children[i];
+                if (c.keyFocused !== undefined && c.caption !== undefined && c.visible && c.active)
+                    out.push(c);
+                else if (c.visible)
+                    walk(c);
+            }
+        })(root);
+        out.sort(function (a, b) { var p = a.mapToItem(shell, 0, 0), q = b.mapToItem(shell, 0, 0); return p.y - q.y || p.x - q.x; });
+        return out;
+    }
+    function _dialogKey(event) {
+        var host = deleteDialog.appId !== "" ? deleteDialog
+            : notes.alertShown && notes.alertKey !== "" && source && source.windowFor ? source.windowFor(notes.alertKey) : null;
+        if (!host) {
+            _setKeyButton(null);
+            return false;
+        }
+        var buttons = _keyButtons(host);
+        if (!buttons.length)
+            return false;
+        var k = event.key;
+        var i = buttons.indexOf(_keyButton);
+        if (k === Qt.Key_Tab || k === Qt.Key_Backtab || k === Qt.Key_Down || k === Qt.Key_Up || k === Qt.Key_Left || k === Qt.Key_Right) {
+            var back = k === Qt.Key_Backtab || k === Qt.Key_Up || k === Qt.Key_Left;
+            i = i < 0 ? 0 : (i + (back ? -1 : 1) + buttons.length) % buttons.length;
+            _setKeyButton(buttons[i]);
+            return true;
+        }
+        if (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space) {
+            var b = i >= 0 ? buttons[i] : buttons[0];
+            _setKeyButton(null);
+            b.action();
+            return true;
+        }
+        if (k === Qt.Key_Escape) {
+            _setKeyButton(null);
+            if (host === deleteDialog)
+                deleteDialog.appId = "";
+            else if (buttons.length === 1)
+                buttons[0].action();
+            return true;
+        }
+        return false;
+    }
+
     // Desktop / hardware keyboard shortcuts.
     Keys.onPressed: (event) => {
+        // The system menu's and the launcher's own keys (GAPS V8 (3)).
+        if (systemMenu.handleKey(event) || (!locked && (_dialogKey(event) || siteMenu.handleKey(event) || launcher.handleKey(event) || notes.handleKey(event)))) {
+            event.accepted = true;
+            return;
+        }
+        // Typed while Just Type's page is still taking its first letter.
+        if (justType.open && event.text.length === 1 && !(event.modifiers & Qt.ControlModifier)
+                && justType.typeAhead(event.text)) {
+            event.accepted = true;
+            return;
+        }
+        // The dock with the keyboard (GAPS V8 (3)): Down from card view
+        // puts a ring on it; Left / Right move along it, Enter launches
+        // (the last slot opens the launcher), Up goes back to the cards.
+        if (!locked && quickLaunch.keySlot >= 0) {
+            var slots = quickLaunch.pinned.length + 1;
+            if (!quickLaunch.visible || cards.maximizeProgress > 0 || justType.open || event.key === Qt.Key_Up) {
+                quickLaunch.keySlot = -1;
+                if (event.key === Qt.Key_Up) {
+                    event.accepted = true;
+                    return;
+                }
+            } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+                quickLaunch.keySlot = Math.max(0, Math.min(slots - 1, quickLaunch.keySlot + (event.key === Qt.Key_Left ? -1 : 1)));
+                event.accepted = true;
+                return;
+            } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                var slot = quickLaunch.keySlot;
+                quickLaunch.keySlot = -1;
+                quickLaunch.activateSlot(slot);
+                event.accepted = true;
+                return;
+            }
+        }
+        if (!locked && event.key === Qt.Key_Down && cards.maximizeProgress === 0 && !launcher.open && !justType.open
+                && quickLaunch.visible && quickLaunch.keySlot < 0) {
+            quickLaunch.keySlot = 0;
+            event.accepted = true;
+            return;
+        }
         // Card view keys (CardWindowManager.cpp:1189-1212).
         if (!locked && cards.maximizeProgress === 0 && !launcher.open && !justType.open) {
             if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
@@ -527,10 +1081,56 @@ FocusScope {
         // (or Back) the back gesture, F1 the up gesture, F2 a notification.
         keys: [Qt.Key_Home, Qt.Key_F3, Qt.Key_PowerOff, Qt.Key_Print, Qt.Key_F9,
                Qt.Key_VolumeUp, Qt.Key_VolumeDown, Qt.Key_F10, Qt.Key_F11,
-               Qt.Key_Escape, Qt.Key_Back, Qt.Key_F1, Qt.Key_F2]
-        chords: [{ key: Qt.Key_P, modifiers: Qt.ControlModifier | Qt.AltModifier },
-                 { key: Qt.Key_P, modifiers: Qt.MetaModifier | Qt.AltModifier }]
+               Qt.Key_Escape, Qt.Key_Back, Qt.Key_F1, Qt.Key_F2,
+               // A Bluetooth keyboard's (the TouchPad keyboard's): Search
+               // opens or closes Just Type (SystemUiController.cpp:607-618).
+               Qt.Key_Search]
+        // Its card-view key, Super (Qt's Meta on Linux), is the swipe up
+        // (Key_Super_L, :338-343) when pressed on its own; with another key
+        // it is a modifier. On a Mac Meta is Control: not there.
+        soloKeys: Qt.platform.os === "osx" ? [Qt.Key_Super_L, Qt.Key_Super_R]
+                                           : [Qt.Key_Super_L, Qt.Key_Super_R, Qt.Key_Meta]
+        onTapped: (key) => {
+            if (!backlight.on)
+                return;
+            backlight.activity();
+            shell.gestureUp();
+        }
+        // The screen capture's two, then the shortcut scheme's
+        // (KeyboardShortcuts.js; Settings > Text Assist > Hardware keyboard).
+        readonly property var captureChords: [{ key: Qt.Key_P, modifiers: Qt.ControlModifier | Qt.AltModifier },
+                                              { key: Qt.Key_P, modifiers: Qt.MetaModifier | Qt.AltModifier }]
+        readonly property var shortcuts: KeyboardShortcuts.scheme(shell.keyboardShortcuts)
+        // With the gesture area held (the meta key), C, X, V and A are the
+        // Edit commands (MetaKeyManager::handleEvent).
+        readonly property var metaChords: [{ key: Qt.Key_C, modifiers: 0, action: "copy" },
+                                           { key: Qt.Key_X, modifiers: 0, action: "cut" },
+                                           { key: Qt.Key_V, modifiers: 0, action: "paste" },
+                                           { key: Qt.Key_A, modifiers: 0, action: "selectAll" }]
+        chords: captureChords.concat(shortcuts.map(function (s) { return { key: s.key, modifiers: s.modifiers }; }))
+                             .concat(gesture.metaHeld ? metaChords.map(function (c) { return { key: c.key, modifiers: c.modifiers }; }) : [])
+        // Held on its own, the scheme's modifier lists them (ShortcutSheet).
+        watchKeys: [KeyboardShortcuts.sheetKey(shell.keyboardShortcuts)]
+        onHolding: (key, down) => {
+            if (down && !shell.locked && !shell.firstUse && backlight.on)
+                sheetDelay.restart();
+            else {
+                sheetDelay.stop();
+                shortcutSheet.shown = false;
+            }
+        }
         onPressed: (key, autoRepeat) => {
+            // Power with a volume key: the Full Erase and USB drive chords
+            // (SystemScreens.systemKey); their keys do nothing else.
+            if (autoRepeat ? systemScreens.comboDown && systemScreens.isChordKey(key)
+                           : systemScreens.systemKey(key, true))
+                return;
+            // A system screen (USB drive mode, Full Erase...) takes the
+            // keys, but for Power and the volume.
+            if (systemScreens.blocksInput && (key === Qt.Key_Home || key === Qt.Key_Escape || key === Qt.Key_Back
+                                              || key === Qt.Key_F1 || key === Qt.Key_F2 || key === Qt.Key_Search
+                                              || key === Qt.Key_Print || key === Qt.Key_F9))
+                return;
             // The volume keys repeat while held (the simulator's F10, F11).
             if (key === Qt.Key_VolumeUp || key === Qt.Key_VolumeDown || key === Qt.Key_F10 || key === Qt.Key_F11) {
                 backlight.activity();
@@ -549,6 +1149,8 @@ FocusScope {
                 shell.gestureBack();
             else if (key === Qt.Key_F1)
                 shell.gestureUp();
+            else if (key === Qt.Key_Search)
+                shell.searchKey();
             else if (key === Qt.Key_F2) {
                 if (shell.source)
                     shell.source.notify("org.webosphoenix.messaging", "Palm Pre", "It's good to be back.");
@@ -556,10 +1158,50 @@ FocusScope {
                 shell._buttonDown(key === Qt.Key_Home);
         }
         onReleased: (key, autoRepeat) => {
-            if (!autoRepeat && (key === Qt.Key_Home || shell._isPowerKey(key)))
+            if (autoRepeat)
+                return;
+            if (systemScreens.systemKey(key, false)) {
+                // A chord's key: let go of, and nothing else.
+                if (key === Qt.Key_Home)
+                    shell._homeDown = false;
+                else if (shell._isPowerKey(key))
+                    shell._powerDown = false;
+                return;
+            }
+            if (systemScreens.blocksInput && key === Qt.Key_Home) {
+                shell._homeDown = false;
+                return;
+            }
+            if (key === Qt.Key_Home || shell._isPowerKey(key))
                 shell._buttonUp(key === Qt.Key_Home);
         }
-        onChord: shell.takeScreenshot()
+        onChord: (index) => {
+            if (index < captureChords.length)
+                shell.takeScreenshot();
+            else if (index >= captureChords.length + shortcuts.length)
+                shell.metaEdit(metaChords[index - captureChords.length - shortcuts.length].action);
+            else if (backlight.on) {
+                backlight.activity();
+                shell.shortcut(shortcuts[index - captureChords.length].action);
+            }
+        }
+    }
+
+    // ---- Keyboard accessibility (GAPS V8 (4)) ------------------------------------
+    // Settings > Accessibility > Keyboard: sticky, slow and bounce keys and
+    // the key repeat, on the hardware keyboard's keys before SystemKeys
+    // and the apps see them (created after SystemKeys, so its filter runs
+    // first). Not over the lock screen's latches: locking drops them.
+    readonly property KeyboardAccess keyboardAccess: KeyboardAccess {
+        readonly property var prefs: shell.system && shell.system.keyboardAccess ? shell.system.keyboardAccess : ({})
+        stickyKeys: !!prefs.stickyKeys
+        slowKeys: (prefs.slowKeys || 0) > 0
+        slowKeysDelay: prefs.slowKeys || 300
+        bounceKeys: (prefs.bounceKeys || 0) > 0
+        bounceKeysDelay: prefs.bounceKeys || 300
+        customRepeat: !!prefs.customRepeat
+        repeatDelay: prefs.repeatDelay !== undefined ? prefs.repeatDelay : 500
+        repeatInterval: prefs.repeatInterval || 50
     }
 
     // ---- The volume keys ----------------------------------------------------------
@@ -632,10 +1274,18 @@ FocusScope {
             } else {
                 // Power turns the screen off (and so locks), or on again to
                 // the lock screen (DisplayManager: DisplayEventPowerKeyPress).
-                if (backlight.on)
+                // On the Touchstone it starts dock mode instead of turning
+                // the screen off (DisplayOn / DisplayOnPuck), and on again,
+                // locked, it is back in dock mode (DisplayOff on the puck).
+                if (backlight.on) {
+                    if (!dockMode && _exhibitionsOnPuck && enterDockMode())
+                        return;
                     backlight.turnOff();
-                else
+                } else {
                     backlight.turnOn();
+                    if (!dockMode && _exhibitionsOnPuck && locked)
+                        enterDockMode();
+                }
             }
         }
     }
@@ -722,7 +1372,14 @@ FocusScope {
         var entries = [];
         for (var i = 0; source && source.apps && i < source.apps.count; ++i) {
             var a = source.apps.get(i);
-            entries.push({ id: a.appId, title: a.title, tab: a.tab, quickLaunch: a.quickLaunch });
+            // page: the page the app's appinfo.json names ("" for none);
+            // dynamic: a launch point an app added (addLaunchPoint), for
+            // Favorites; category, keywords and installed place the rest
+            // (LauncherLayout.pageFor).
+            entries.push({ id: a.appId, appId: a.webAppId || a.appId, title: a.title, tab: a.tab, quickLaunch: a.quickLaunch,
+                           page: a.page || "", dynamic: !!a.dynamic, category: a.category || "",
+                           keywords: a.keywords ? String(a.keywords).split("\n").filter(function(k) { return k !== ""; }) : [],
+                           installed: !!a.installed });
         }
         return entries;
     }
@@ -735,7 +1392,7 @@ FocusScope {
         if (!saved && typeof source.savedLauncherLayout === "function") {
             try { saved = JSON.parse(source.savedLauncherLayout() || "null"); } catch (e) { saved = null; }
         }
-        launcherLayout = LauncherLayout.build(entries, launcher.tabs.length, saved);
+        launcherLayout = LauncherLayout.build(entries, saved);
     }
 
     function setLauncherLayout(l) {
@@ -751,7 +1408,7 @@ FocusScope {
         try { l = JSON.parse(json); } catch (e) { return; }
         if (!l || typeof l !== "object" || !source || !source.apps)
             return;
-        setLauncherLayout(LauncherLayout.build(_launcherEntries(), launcher.tabs.length, l));
+        setLauncherLayout(LauncherLayout.build(_launcherEntries(), l));
     }
 
     Connections {
@@ -771,6 +1428,33 @@ FocusScope {
     // luna-pyramid.conf:99-100, ...). The simulator turns it on; a device
     // leaves it off and reports OSE's own keyboard (platformKeyboardHeight).
     property bool virtualKeyboard: false
+    // A hardware keyboard is attached (the TouchPad's Bluetooth keyboard;
+    // system.hardwareKeyboard): the virtual keyboard stays down when a
+    // field takes the focus, as with webOS's keyboard-open state, and comes
+    // up only when asked for (the keyboard button above the gesture bar,
+    // the keyboard's own keyboard key); typing on the hardware keyboard
+    // puts it away again (GAPS V8 (1)).
+    readonly property bool hardwareKeyboard: !!(system && system.hardwareKeyboard)
+    property bool _keyboardAskedFor: false
+    function showVirtualKeyboard() {
+        if (!imeClient)
+            return;
+        _keyboardAskedFor = true;
+        _showIMEInternal(true);
+    }
+    onHardwareKeyboardChanged: {
+        _keyboardAskedFor = false;
+        Qt.callLater(_updateImeClient);
+    }
+    Connections {
+        target: shell.keyboardAccess
+        function onHardwareKeyPressed(key) {
+            if (shell.hardwareKeyboard && shell._imeOpened && shell._keyboardAskedFor) {
+                shell._keyboardAskedFor = false;
+                shell._hideIMEInternal();
+            }
+        }
+    }
     // The height of a keyboard the platform draws (OSE's IME panel on a
     // device, PhoenixViewsRoot): the shell makes room for it the same way.
     property real platformKeyboardHeight: 0
@@ -778,6 +1462,19 @@ FocusScope {
     // device's (luna-send to org.webosphoenix.transcriber); phoenix-sim runs
     // the same code on the computer.
     property var dictationCommand: []
+    // WAV files dictation hears instead of the microphone, one per
+    // recording (phoenix-sim --microphone-file); [] for the microphone.
+    property var dictationInputFiles: []
+    // The microphone, for the keyboard and for the apps (the window source
+    // routes org.webosphoenix.dictation to it, e.g. Voice Dial); null when
+    // the device cannot record.
+    readonly property var dictation: dictationEngine.available || dictationInputFiles.length > 0 ? dictationEngine : null
+    Binding {
+        target: shell.source
+        property: "dictation"
+        value: shell.dictation
+        when: !!shell.source && ("dictation" in shell.source)
+    }
     // IMEController::isIMEOpened (or the platform's keyboard is up). With
     // it the tablet's bezel flick must travel further.
     readonly property bool keyboardOpen: _imeOpened || platformKeyboardHeight > 0
@@ -838,7 +1535,12 @@ FocusScope {
         var old = imeClient;
         var same = old !== null && c !== null && old.kind === c.kind && old.item === c.item && old.uid === c.uid;
         imeClient = c;
-        if (c)
+        if (!same)
+            _keyboardAskedFor = false;
+        if (c && hardwareKeyboard && !_keyboardAskedFor) {
+            ime.editorState = c.state;
+            _hideIMEInternal();
+        } else if (c)
             _showIMEInternal(!same || JSON.stringify(old.state) !== JSON.stringify(c.state));
         else if (old)
             _hideIMEInternal();
@@ -1025,6 +1727,9 @@ FocusScope {
     // Unlocked over a card that is held the other way: back to its
     // orientation (CardWindow::setMaximized, CardWindow.cpp:1756-1760).
     onLockedChanged: {
+        // Sticky keys' latched modifiers do not outlive the lock.
+        if (locked)
+            keyboardAccess.clearModifiers();
         var o = maximizedCardOrientation();
         if (!locked && o !== "free")
             uiRotation.setRotationMode(o, true);
@@ -1041,13 +1746,18 @@ FocusScope {
         && notes.negativeSpace === notes.negativeSpaceTarget
 
     Component.onCompleted: {
+        // The boot animation from the first frame.
+        if (bootAnimation)
+            systemScreens.startBoot(bootUpdating);
         Qt.callLater(rebuildLauncherLayout);
         // WindowServer::bootupFinished: straight to how the device is held.
         Qt.callLater(function() {
             shell._followRotationLock();
             uiRotation.bootupFinished(shell.system && shell.system.deviceOrientation ? shell.system.deviceOrientation : "up");
-            // WindowServer::bootupFinished: the boot sound.
-            sounds.bootFinished();
+            // WindowServer::bootupFinished: the boot sound; with the boot
+            // animation, when it ends (systemScreens.finishBoot).
+            if (!shell.bootAnimation)
+                sounds.bootFinished();
         });
     }
 
@@ -1083,333 +1793,441 @@ FocusScope {
             height: uiRotation.uiHeight
             rotation: uiRotation.uiAngle
 
-            // The scene behind the overlays (wallpaper, cards, launcher): what the
-            // translucent surfaces above blur (BackdropBlur).
+            // The screen as it is outside dock mode: everything under the
+            // status bar and the alerts. Dock mode zooms it out and hides it,
+            // as WindowServerLuna::reorderWindowManagersForDockMode hid the
+            // window managers under DockModeWindowManager, and back in after.
             Item {
-                id: sceneBackdrop
+                id: screenLayers
+                objectName: "screenLayers"
                 anchors.fill: parent
 
-                Wallpaper {
+                // The scene behind the overlays (wallpaper, cards, launcher): what the
+                // translucent surfaces above blur (BackdropBlur).
+                Item {
+                    id: sceneBackdrop
                     anchors.fill: parent
-                    source: shell.wallpaper
+
+                    Wallpaper {
+                        anchors.fill: parent
+                        source: shell.wallpaper
+                    }
+
+                    CardView {
+                        id: cards
+                        anchors.fill: parent
+                        source: shell.source
+                        onCardClosing: (uid, byApp) => { if (!byApp) shell.sounds.feedback("appclose"); }
+                        topInset: shell.fullScreen ? 0 : Theme.statusBarHeight
+                        // The app's positive space ends where the notifications' negative space begins.
+                        bottomInset: notes.negativeSpace
+                        uiOrientation: uiRotation.uiOrientation
+                        uiPortrait: uiRotation.uiPortrait
+                        // First Use's card stays until the app closes it.
+                        pinnedUid: shell._firstUseUid
+                    }
+
+                    Launcher {
+                        id: launcher
+                        objectName: "launcher"
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.topMargin: Theme.statusBarHeight
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: notes.negativeSpace
+                        dockHeight: quickLaunch.height
+                        apps: shell.source ? shell.source.apps : null
+                        layout: shell.launcherLayout
+                        draggedId: iconDrag.appId
+                        onLaunchRequested: (appId) => shell.launch(appId)
+                        onCloseRequested: launcher.open = false
+                        onDeleteRequested: (appId) => deleteDialog.ask(appId)
+                        onPendingTapped: (appId) => shell.pendingAppTapped(appId)
+                        // The page edge took the dragged icon to the page beside.
+                        onDragPageChanged: (page) => {
+                            if (iconDrag.appId !== "" && iconDrag.from === "page")
+                                shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, iconDrag.appId, page, -1));
+                            iconDrag.lastIndex = -1;
+                        }
+                        onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, launcher.mapToItem(ui, x, y))
+                        onDragMoved: (x, y) => iconDrag.move(launcher.mapToItem(ui, x, y))
+                        onDragEnded: (x, y) => iconDrag.drop(launcher.mapToItem(ui, x, y))
+                    }
                 }
 
-                CardView {
-                    id: cards
+                SearchPill {
+                    id: searchPill
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Theme.statusBarHeight + Theme.searchPillTopOffset
+                    shown: !locked && !firstUse && cards.maximizeProgress === 0 && !launcher.open && !justType.open
+                    onTapped: shell.startJustType("")
+                    backdrop: sceneBackdrop
+                }
+
+                QuickLaunch {
+                    id: quickLaunch
+                    objectName: "quickLaunch"
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    // Its own show / hide, not the maximize's: a 350 ms OutCubic
+                    // slide and a 200 ms OutCubic fade (slotAnimateShowDock /
+                    // HideDock, OverlayWindowManager.cpp:282-292, 1480-1540).
+                    property real shownProgress: shell.dockShown ? 1 : 0
+                    Behavior on shownProgress { NumberAnimation { duration: Theme.quickLaunchDuration; easing.type: Easing.OutCubic } }
+                    opacity: shell.dockShown ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: Theme.searchPillFadeDuration; easing.type: Easing.OutCubic } }
+                    y: parent.height - notes.negativeSpace - height * shownProgress
+                    visible: shownProgress > 0 || opacity > 0
+                    apps: shell.source ? shell.source.apps : null
+                    launcherOpen: launcher.open
+                    backdrop: sceneBackdrop
+                    dock: shell.launcherLayout ? shell.launcherLayout.dock : []
+                    draggedId: iconDrag.appId
+                    onLaunchRequested: (appId) => shell.launch(appId)
+                    onLauncherToggled: launcher.open = !launcher.open
+                    onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, quickLaunch.mapToItem(ui, x, y))
+                    onDragMoved: (x, y) => iconDrag.move(quickLaunch.mapToItem(ui, x, y))
+                    onDragEnded: (x, y) => iconDrag.drop(quickLaunch.mapToItem(ui, x, y))
+                }
+
+                // ---- Dragging an icon (launcher pages and dock) ----------------------------------
+                // Press and hold picks an icon up; it follows the finger above everything.
+                // Over the current page the others make room; on a tab it moves to that
+                // page; on the dock it joins it (swapping out the app in that slot when
+                // the dock is full); a dock icon dropped anywhere else leaves the dock.
+
+                Item {
+                    id: iconDrag
+                    property string appId: ""
+                    property string from: ""
+                    property int lastIndex: -1
+                    z: 1000
+                    visible: appId !== ""
+                    width: Theme.launcherIconSize
+                    height: Theme.launcherIconSize
+
+                    function entry(id) {
+                        for (var i = 0; shell.source && i < shell.source.apps.count; ++i)
+                            if (shell.source.apps.get(i).appId === id)
+                                return shell.source.apps.get(i);
+                        return null;
+                    }
+                    function place(p) {
+                        x = p.x - width / 2;
+                        y = p.y - height / 2;
+                    }
+                    function start(id, source, p) {
+                        var e = entry(id);
+                        if (!e)
+                            return;
+                        proxy.title = e.title;
+                        proxy.color = e.color;
+                        proxy.glyph = e.glyph;
+                        proxy.source = e.icon || "";
+                        proxy.largeSource = e.largeIcon || "";
+                        from = source;
+                        lastIndex = -1;
+                        appId = id;
+                        place(p);
+                    }
+                    function overDock(p) {
+                        return quickLaunch.visible && p.y >= quickLaunch.y && p.y < quickLaunch.y + quickLaunch.height;
+                    }
+                    function move(p) {
+                        if (appId === "")
+                            return;
+                        place(p);
+                        if (!launcher.open || overDock(p))
+                            return;
+                        var lp = ui.mapToItem(launcher, p.x, p.y);
+                        // At a page's edge: the launcher pans or scrolls.
+                        if (from === "page" && launcher.dragOver(lp.x, lp.y))
+                            return;
+                        var tab = launcher.tabAt(lp.x, lp.y);
+                        if (tab >= 0 && tab !== launcher.currentPage) {
+                            shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, tab, -1));
+                            launcher.showPage(tab);
+                            lastIndex = -1;
+                            return;
+                        }
+                        if (from === "page" && launcher.inPages(lp.x, lp.y)) {
+                            var page = LauncherLayout.pageOf(shell.launcherLayout, appId);
+                            var idx = launcher.indexAt(lp.x, lp.y);
+                            if (page !== launcher.currentPage) {
+                                shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, launcher.currentPage, idx));
+                            } else if (idx >= 0 && idx !== lastIndex
+                                       && shell.launcherLayout.pages[page].indexOf(appId) !== idx) {
+                                shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, page, idx));
+                            }
+                            lastIndex = idx;
+                        }
+                    }
+                    function drop(p) {
+                        if (appId === "")
+                            return;
+                        launcher.dragDone();
+                        var l = shell.launcherLayout;
+                        if (overDock(p)) {
+                            var q = ui.mapToItem(quickLaunch, p.x, p.y);
+                            l = LauncherLayout.addToDock(l, appId, quickLaunch.slotAt(q.x), Theme.quickLaunchMaxItems - 1);
+                        } else if (from === "dock") {
+                            l = LauncherLayout.removeFromDock(l, appId);
+                        }
+                        shell.setLauncherLayout(l);
+                        appId = "";
+                    }
+
+                    AppIcon {
+                        id: proxy
+                        anchors.centerIn: parent
+                        size: Theme.launcherIconSize
+                        showLabel: false
+                        interactive: false
+                        scale: 1.15
+                        opacity: 0.9
+                    }
+                }
+
+                // Deleting an app asks first: the launcher's app info dialog
+                // (uiComponents/AppInfoDialog; LauncherObject::appDeleteDecoratorActivated,
+                // showAppInfoDialog): "Remove Application?", its title and
+                // version, Cancel and Remove (both black: the launcher never set
+                // their type), on popup-bg.png over the scrim, fading in and out
+                // over 300 ms.
+                Item {
+                    id: deleteDialog
+                    objectName: "deleteDialog"
+                    property string appId: ""
+                    // "app": Remove Application?; "shortcut": a launch point an
+                    // app added, Remove Shortcut? (LauncherObject::
+                    // appDeleteDecoratorActivated, dimensionslauncher.cpp:
+                    // 3161-3198); "failed": an install that failed, with Try
+                    // Again when it can be (Phoenix's stand-in for Software
+                    // Manager's list).
+                    property string mode: "app"
+                    property string shownId: ""
                     anchors.fill: parent
-                    source: shell.source
-                    onCardClosing: (uid, byApp) => { if (!byApp) shell.sounds.feedback("appclose"); }
-                    topInset: shell.fullScreen ? 0 : Theme.statusBarHeight
-                    // The app's positive space ends where the notifications' negative space begins.
+                    visible: opacity > 0
+                    opacity: appId !== "" ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 300 } }
+                    z: 1001
+                    // What the dialog says, set when it opens.
+                    property string titleText: ""
+                    property string messageText: ""
+                    property bool canRetry: false
+                    function ask(id) {
+                        var e = iconDrag.entry(id);
+                        mode = e && e.installState === "failed" ? "failed" : e && e.dynamic ? "shortcut" : "app";
+                        shownId = id;
+                        titleText = title();
+                        messageText = message();
+                        var i = info();
+                        canRetry = mode === "failed" && !!(i && i.retry);
+                        appId = id;
+                    }
+                    function info() {
+                        return shell.source && typeof shell.source.installInfo === "function" ? shell.source.installInfo(shownId) : null;
+                    }
+                    function title() {
+                        return mode === "shortcut" ? qsTr("Remove Shortcut?")
+                             : mode === "failed" ? qsTr("Installation Failed") : qsTr("Remove Application?");
+                    }
+                    // "Calculator - v.3.0.5" (the app's title and version);
+                    // "Google (Web)" (the shortcut's title, its app's).
+                    function message() {
+                        var e = iconDrag.entry(shownId);
+                        if (!e)
+                            return shownId;
+                        if (mode === "shortcut") {
+                            var app = iconDrag.entry(e.webAppId);
+                            return qsTr("%1 (%2)").arg(e.title).arg(app ? app.title : e.webAppId);
+                        }
+                        if (mode === "failed") {
+                            var i = info();
+                            return i && i.reason ? qsTr("%1: %2").arg(e.title).arg(i.reason) : e.title;
+                        }
+                        return e.version ? qsTr("%1 - v.%2").arg(e.title).arg(e.version) : e.title;
+                    }
+                    function remove() {
+                        var id = deleteDialog.appId;
+                        deleteDialog.appId = "";
+                        if (mode === "failed") {
+                            if (shell.source && typeof shell.source.dismissInstall === "function")
+                                shell.source.dismissInstall(id);
+                            return;
+                        }
+                        shell.setLauncherLayout(mode === "shortcut" ? LauncherLayout.drop(shell.launcherLayout, id)
+                                                                    : LauncherLayout.remove(shell.launcherLayout, id));
+                        if (shell.source && typeof shell.source.removeApp === "function")
+                            shell.source.removeApp(id);
+                    }
+                    function retry() {
+                        var id = deleteDialog.appId;
+                        deleteDialog.appId = "";
+                        if (shell.source && typeof shell.source.retryInstall === "function")
+                            shell.source.retryInstall(id);
+                    }
+                    Rectangle { anchors.fill: parent; color: "#80000000" }
+                    MouseArea { anchors.fill: parent; enabled: deleteDialog.appId !== ""; onClicked: deleteDialog.appId = "" }
+                    // AppInfoDialog.qml: 320 + 2 x 11 wide; 11 px edge, 6 px margins,
+                    // 4 px top offset; title 18 px bold, message 14 px bold;
+                    // buttons 52 px, the full width.
+                    ArtBorderImage {
+                        id: appInfoDialog
+                        readonly property real edge: Theme.px(11)
+                        readonly property real margin: Theme.px(6)
+                        anchors.centerIn: parent
+                        width: Math.min(parent.width, Theme.px(320) + 2 * edge)
+                        height: dialogColumn.height + 2 * edge + 2 * margin + Theme.px(4)
+                        source: Theme.asset("popup-bg.png")
+                        border { left: Theme.artBorder(35, source); right: Theme.artBorder(35, source); top: Theme.artBorder(40, source); bottom: Theme.artBorder(40, source) }
+                        MouseArea { anchors.fill: parent }
+                        Column {
+                            id: dialogColumn
+                            x: appInfoDialog.edge + appInfoDialog.margin
+                            y: appInfoDialog.edge + appInfoDialog.margin + Theme.px(4)
+                            width: parent.width - 2 * x
+                            spacing: appInfoDialog.margin
+                            Text {
+                                objectName: "deleteDialogTitle"
+                                width: parent.width
+                                wrapMode: Text.Wrap
+                                text: deleteDialog.titleText
+                                color: "#FFFFFF"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.px(18)
+                                font.bold: true
+                            }
+                            Text {
+                                objectName: "deleteDialogMessage"
+                                width: parent.width
+                                wrapMode: Text.Wrap
+                                text: deleteDialog.messageText
+                                color: "#FFFFFF"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.px(14)
+                                font.bold: true
+                            }
+                            Column {
+                                width: parent.width
+                                ActionButton {
+                                    objectName: "deleteDialogCancel"
+                                    width: parent.width
+                                    height: Theme.px(52)
+                                    caption: qsTr("Cancel")
+                                    onAction: deleteDialog.appId = ""
+                                }
+                                ActionButton {
+                                    objectName: "deleteDialogRetry"
+                                    width: parent.width
+                                    height: Theme.px(52)
+                                    visible: deleteDialog.canRetry
+                                    caption: qsTr("Try Again")
+                                    onAction: deleteDialog.retry()
+                                }
+                                ActionButton {
+                                    objectName: "deleteDialogRemove"
+                                    width: parent.width
+                                    height: Theme.px(52)
+                                    caption: qsTr("Remove")
+                                    onAction: deleteDialog.remove()
+                                }
+                            }
+                        }
+                    }
+                }
+
+                JustType {
+                    id: justType
+                    anchors.fill: parent
                     bottomInset: notes.negativeSpace
-                    uiOrientation: uiRotation.uiOrientation
-                    uiPortrait: uiRotation.uiPortrait
-                    // First Use's card stays until the app closes it.
-                    pinnedUid: shell._firstUseUid
+                    apps: shell.source ? shell.source.apps : null
+                    source: shell.source
+                    onLaunchRequested: (appId) => shell.launch(appId)
+                    onCloseRequested: { justType.open = false; shell.forceActiveFocus(); }
                 }
 
-                Launcher {
-                    id: launcher
-                    objectName: "launcher"
+                // Phones round the corners of a maximized app (MenuWindowManager.cpp:126-146).
+                // The phone's screen corners: always at the positive space's
+                // corners (card view, launcher, Just Type too), hidden only while
+                // a full-screen card covers the screen (MenuWindowManager.cpp:
+                // 126-146, 492-517; CardWindow::enableFullScreen /
+                // disableFullScreen, CardWindow.cpp:1274-1312). Under the lock
+                // screen (TopLevelWindowManager), over the overlays.
+                Item {
+                    id: screenCorners
+                    objectName: "screenCorners"
+                    anchors.fill: parent
+                    anchors.topMargin: Theme.statusBarHeight
+                    anchors.bottomMargin: notes.negativeSpace
+                    visible: !Theme.tablet && !shell.fullScreen
+                    Image { anchors.left: parent.left; anchors.top: parent.top; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-top-left.png") }
+                    Image { anchors.right: parent.right; anchors.top: parent.top; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-top-right.png") }
+                    Image { anchors.left: parent.left; anchors.bottom: parent.bottom; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-bottom-left.png") }
+                    Image { anchors.right: parent.right; anchors.bottom: parent.bottom; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-bottom-right.png") }
+                }
+
+                LockScreen {
+                    id: lockScreen
+                    objectName: "lockScreen"
+                    anchors.fill: parent
+                    system: shell.system
+                    source: shell.source
+                    wallpaper: shell.wallpaper
+                    incomingCall: notes.incomingCall
+                    alertShown: notes.alertShown
+                    alertHeight: notes.alertHeight
+                    notifications: notes.model
+                    bannerActive: notes.bannerActive
+                    bannerText: notes.bannerText
+                    bannerColor: notes.bannerColor
+                    bannerGlyph: notes.bannerGlyph
+                    bannerIcon: notes.bannerIcon
+                    bannerOpacity: notes.bannerOpacity
+                    emergencyAvailable: shell.emergencyAvailable
+                    onUnlockRequested: shell.unlock()
+                    onEmergencyRequested: shell.openEmergency()
+                }
+
+                // Over the lock screen, under the status bar and the alerts. The
+                // TouchPad release put the emergency window manager under the
+                // lock window, "temporarily demoted" for full-screen Flash
+                // (WindowServerLuna.cpp:163-169); before that it stood above it,
+                // which an emergency call from the lock screen needs.
+                EmergencyWindow {
+                    id: emergencyWindow
+                    objectName: "emergencyWindow"
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
                     anchors.topMargin: Theme.statusBarHeight
                     anchors.bottom: parent.bottom
-                    anchors.bottomMargin: notes.negativeSpace
-                    dockHeight: quickLaunch.height
-                    apps: shell.source ? shell.source.apps : null
-                    layout: shell.launcherLayout
-                    draggedId: iconDrag.appId
-                    onLaunchRequested: (appId) => shell.launch(appId)
-                    onCloseRequested: launcher.open = false
-                    onDeleteRequested: (appId) => deleteDialog.ask(appId)
-                    onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, launcher.mapToItem(ui, x, y))
-                    onDragMoved: (x, y) => iconDrag.move(launcher.mapToItem(ui, x, y))
-                    onDragEnded: (x, y) => iconDrag.drop(launcher.mapToItem(ui, x, y))
+                    anchors.bottomMargin: shell.locked ? 0 : notes.negativeSpace
+                    source: shell.source
                 }
             }
 
-            SearchPill {
-                id: searchPill
-                anchors.horizontalCenter: parent.horizontalCenter
-                y: Theme.statusBarHeight + Theme.searchPillTopOffset
-                shown: !locked && !firstUse && cards.maximizeProgress === 0 && !launcher.open && !justType.open
-                onTapped: shell.startJustType("")
-                backdrop: sceneBackdrop
-            }
-
-            QuickLaunch {
-                id: quickLaunch
-                objectName: "quickLaunch"
-                anchors.left: parent.left
-                anchors.right: parent.right
-                // Its own show / hide, not the maximize's: a 350 ms OutCubic
-                // slide and a 200 ms OutCubic fade (slotAnimateShowDock /
-                // HideDock, OverlayWindowManager.cpp:282-292, 1480-1540).
-                property real shownProgress: shell.dockShown ? 1 : 0
-                Behavior on shownProgress { NumberAnimation { duration: Theme.quickLaunchDuration; easing.type: Easing.OutCubic } }
-                opacity: shell.dockShown ? 1 : 0
-                Behavior on opacity { NumberAnimation { duration: Theme.searchPillFadeDuration; easing.type: Easing.OutCubic } }
-                y: parent.height - notes.negativeSpace - height * shownProgress
-                visible: shownProgress > 0 || opacity > 0
-                apps: shell.source ? shell.source.apps : null
-                launcherOpen: launcher.open
-                backdrop: sceneBackdrop
-                dock: shell.launcherLayout ? shell.launcherLayout.dock : []
-                draggedId: iconDrag.appId
-                onLaunchRequested: (appId) => shell.launch(appId)
-                onLauncherToggled: launcher.open = !launcher.open
-                onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, quickLaunch.mapToItem(ui, x, y))
-                onDragMoved: (x, y) => iconDrag.move(quickLaunch.mapToItem(ui, x, y))
-                onDragEnded: (x, y) => iconDrag.drop(quickLaunch.mapToItem(ui, x, y))
-            }
-
-            // ---- Dragging an icon (launcher pages and dock) ----------------------------------
-            // Press and hold picks an icon up; it follows the finger above everything.
-            // Over the current page the others make room; on a tab it moves to that
-            // page; on the dock it joins it (swapping out the app in that slot when
-            // the dock is full); a dock icon dropped anywhere else leaves the dock.
-
-            Item {
-                id: iconDrag
-                property string appId: ""
-                property string from: ""
-                property int lastIndex: -1
-                z: 1000
-                visible: appId !== ""
-                width: Theme.launcherIconSize
-                height: Theme.launcherIconSize
-
-                function entry(id) {
-                    for (var i = 0; shell.source && i < shell.source.apps.count; ++i)
-                        if (shell.source.apps.get(i).appId === id)
-                            return shell.source.apps.get(i);
-                    return null;
-                }
-                function place(p) {
-                    x = p.x - width / 2;
-                    y = p.y - height / 2;
-                }
-                function start(id, source, p) {
-                    var e = entry(id);
-                    if (!e)
-                        return;
-                    proxy.title = e.title;
-                    proxy.color = e.color;
-                    proxy.glyph = e.glyph;
-                    proxy.source = e.icon || "";
-                    proxy.largeSource = e.largeIcon || "";
-                    from = source;
-                    lastIndex = -1;
-                    appId = id;
-                    place(p);
-                }
-                function overDock(p) {
-                    return quickLaunch.visible && p.y >= quickLaunch.y && p.y < quickLaunch.y + quickLaunch.height;
-                }
-                function move(p) {
-                    if (appId === "")
-                        return;
-                    place(p);
-                    if (!launcher.open || overDock(p))
-                        return;
-                    var lp = ui.mapToItem(launcher, p.x, p.y);
-                    var tab = launcher.tabAt(lp.x, lp.y);
-                    if (tab >= 0 && tab !== launcher.currentPage) {
-                        shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, tab, -1));
-                        launcher.showPage(tab);
-                        lastIndex = -1;
-                        return;
-                    }
-                    if (from === "page" && launcher.inPages(lp.x, lp.y)) {
-                        var page = LauncherLayout.pageOf(shell.launcherLayout, appId);
-                        var idx = launcher.indexAt(lp.x, lp.y);
-                        if (page !== launcher.currentPage) {
-                            shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, launcher.currentPage, idx));
-                        } else if (idx >= 0 && idx !== lastIndex
-                                   && shell.launcherLayout.pages[page].indexOf(appId) !== idx) {
-                            shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, page, idx));
-                        }
-                        lastIndex = idx;
-                    }
-                }
-                function drop(p) {
-                    if (appId === "")
-                        return;
-                    var l = shell.launcherLayout;
-                    if (overDock(p)) {
-                        var q = ui.mapToItem(quickLaunch, p.x, p.y);
-                        l = LauncherLayout.addToDock(l, appId, quickLaunch.slotAt(q.x), Theme.quickLaunchMaxItems - 1);
-                    } else if (from === "dock") {
-                        l = LauncherLayout.removeFromDock(l, appId);
-                    }
-                    shell.setLauncherLayout(l);
-                    appId = "";
-                }
-
-                AppIcon {
-                    id: proxy
-                    anchors.centerIn: parent
-                    size: Theme.launcherIconSize
-                    showLabel: false
-                    interactive: false
-                    scale: 1.15
-                    opacity: 0.9
-                }
-            }
-
-            // Deleting an app asks first: the launcher's app info dialog
-            // (uiComponents/AppInfoDialog; LauncherObject::appDeleteDecoratorActivated,
-            // showAppInfoDialog): "Remove Application?", its title and
-            // version, Cancel and Remove (both black: the launcher never set
-            // their type), on popup-bg.png over the scrim, fading in and out
-            // over 300 ms.
-            Item {
-                id: deleteDialog
-                objectName: "deleteDialog"
-                property string appId: ""
-                anchors.fill: parent
-                visible: opacity > 0
-                opacity: appId !== "" ? 1 : 0
-                Behavior on opacity { NumberAnimation { duration: 300 } }
-                z: 1001
-                function ask(id) { appId = id; }
-                // "Calculator - v.3.0.5" (the app's title and version).
-                function message() {
-                    var e = iconDrag.entry(appId);
-                    if (!e)
-                        return appId;
-                    return e.version ? qsTr("%1 - v.%2").arg(e.title).arg(e.version) : e.title;
-                }
-                function remove() {
-                    var id = deleteDialog.appId;
-                    deleteDialog.appId = "";
-                    shell.setLauncherLayout(LauncherLayout.remove(shell.launcherLayout, id));
-                    if (shell.source && typeof shell.source.removeApp === "function")
-                        shell.source.removeApp(id);
-                }
-                Rectangle { anchors.fill: parent; color: "#80000000" }
-                MouseArea { anchors.fill: parent; enabled: deleteDialog.appId !== ""; onClicked: deleteDialog.appId = "" }
-                // AppInfoDialog.qml: 320 + 2 x 11 wide; 11 px edge, 6 px margins,
-                // 4 px top offset; title 18 px bold, message 14 px bold;
-                // buttons 52 px, the full width.
-                ArtBorderImage {
-                    id: appInfoDialog
-                    readonly property real edge: Theme.px(11)
-                    readonly property real margin: Theme.px(6)
-                    anchors.centerIn: parent
-                    width: Math.min(parent.width, Theme.px(320) + 2 * edge)
-                    height: dialogColumn.height + 2 * edge + 2 * margin + Theme.px(4)
-                    source: Theme.asset("popup-bg.png")
-                    border { left: Theme.artBorder(35, source); right: Theme.artBorder(35, source); top: Theme.artBorder(40, source); bottom: Theme.artBorder(40, source) }
-                    MouseArea { anchors.fill: parent }
-                    Column {
-                        id: dialogColumn
-                        x: appInfoDialog.edge + appInfoDialog.margin
-                        y: appInfoDialog.edge + appInfoDialog.margin + Theme.px(4)
-                        width: parent.width - 2 * x
-                        spacing: appInfoDialog.margin
-                        Text {
-                            width: parent.width
-                            wrapMode: Text.Wrap
-                            text: qsTr("Remove Application?")
-                            color: "#FFFFFF"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.px(18)
-                            font.bold: true
-                        }
-                        Text {
-                            objectName: "deleteDialogMessage"
-                            width: parent.width
-                            wrapMode: Text.Wrap
-                            text: deleteDialog.message()
-                            color: "#FFFFFF"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.px(14)
-                            font.bold: true
-                        }
-                        Column {
-                            width: parent.width
-                            ActionButton {
-                                objectName: "deleteDialogCancel"
-                                width: parent.width
-                                height: Theme.px(52)
-                                caption: qsTr("Cancel")
-                                onAction: deleteDialog.appId = ""
-                            }
-                            ActionButton {
-                                objectName: "deleteDialogRemove"
-                                width: parent.width
-                                height: Theme.px(52)
-                                caption: qsTr("Remove")
-                                onAction: deleteDialog.remove()
-                            }
-                        }
-                    }
-                }
-            }
-
-            JustType {
-                id: justType
-                anchors.fill: parent
-                bottomInset: notes.negativeSpace
-                apps: shell.source ? shell.source.apps : null
-                source: shell.source
-                onLaunchRequested: (appId) => shell.launch(appId)
-                onCloseRequested: { justType.open = false; shell.forceActiveFocus(); }
-            }
-
-            // Phones round the corners of a maximized app (MenuWindowManager.cpp:126-146).
-            Item {
-                id: screenCorners
-                anchors.fill: parent
-                anchors.topMargin: Theme.statusBarHeight
-                anchors.bottomMargin: notes.negativeSpace
-                visible: !Theme.tablet && cards.maximized
-                Image { anchors.left: parent.left; anchors.top: parent.top; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-top-left.png") }
-                Image { anchors.right: parent.right; anchors.top: parent.top; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-top-right.png") }
-                Image { anchors.left: parent.left; anchors.bottom: parent.bottom; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-bottom-left.png") }
-                Image { anchors.right: parent.right; anchors.bottom: parent.bottom; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-bottom-right.png") }
-            }
-
-            LockScreen {
-                id: lockScreen
-                objectName: "lockScreen"
-                anchors.fill: parent
-                system: shell.system
-                source: shell.source
-                wallpaper: shell.wallpaper
-                incomingCall: notes.incomingCall
-                alertShown: notes.alertShown
-                alertHeight: notes.alertHeight
-                notifications: notes.model
-                bannerActive: notes.bannerActive
-                bannerText: notes.bannerText
-                bannerColor: notes.bannerColor
-                bannerGlyph: notes.bannerGlyph
-                bannerIcon: notes.bannerIcon
-                bannerOpacity: notes.bannerOpacity
-                emergencyAvailable: shell.emergencyAvailable
-                onUnlockRequested: shell.unlock()
-                onEmergencyRequested: shell.openEmergency()
-            }
-
-            // Over the lock screen, under the status bar and the alerts. The
-            // TouchPad release put the emergency window manager under the
-            // lock window, "temporarily demoted" for full-screen Flash
-            // (WindowServerLuna.cpp:163-169); before that it stood above it,
-            // which an emergency call from the lock screen needs.
-            EmergencyWindow {
-                id: emergencyWindow
-                objectName: "emergencyWindow"
+            // Dock mode, over the screen it hides, under the status bar, the
+            // alerts and the menus (DockModeWindowManager; the dashboard
+            // window manager went on top of it, reorderWindowManagersForDockMode).
+            // The exhibition fills the positive space.
+            DockMode {
+                id: dockLayer
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.topMargin: Theme.statusBarHeight
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: shell.locked ? 0 : notes.negativeSpace
+                anchors.bottomMargin: notes.negativeSpace
+                visible: shell.dockMode || shell._dockTransition
                 source: shell.source
+                system: shell.system
+                running: backlight.on
+                wallpaper: shell.system && shell.system.dockWallpaper !== undefined ? shell.system.dockWallpaper : ""
+                puckId: shell.system && shell.system.puckId ? shell.system.puckId : ""
+                fixedTime: shell.system && shell.system.fixedTime ? shell.system.fixedTime : null
+                twelveHourClock: !(shell.system && shell.system.twentyFourHour)
             }
 
             // The volume keys' indicator, centred in the positive space;
@@ -1431,20 +2249,49 @@ FocusScope {
                 system: shell.system
                 // SystemUiController::updateStatusBarTitle: Just Type, then the
                 // launcher ("Launcher", com.palm.launcher's title; not actionable),
-                // then the maximized app; else the carrier. Our Just Type has no
-                // app menu yet (the original's: Preferences, Help), so no arrow.
-                readonly property string _mode: shell.locked || shell.firstUse ? "" : justType.open ? "justtype"
+                // then the maximized app; else the carrier. Just Type's title
+                // opens its app menu (Preferences, Help) when it is the
+                // original page (JustType.js); the built-in stand-in has none.
+                // Dock mode (StatusBar::TypeDockMode): the exhibition's
+                // title, "Choose an App" while its menu is open, which the
+                // title opens (DockModeMenuManager::activateAppMenu).
+                readonly property string _mode: shell.dockMode || shell._dockTransition ? "dock" : shell.locked || shell.firstUse ? "" : justType.open ? "justtype"
                     : launcher.open ? "launcher" : cards.maximized ? "app" : ""
-                title: _mode === "justtype" ? qsTr("Just Type") : _mode === "launcher" ? qsTr("Launcher")
+                title: _mode === "dock" ? (dockLayer.menuOpen ? qsTr("Choose an App") : dockLayer.currentTitle)
+                     : _mode === "justtype" ? qsTr("Just Type") : _mode === "launcher" ? qsTr("Launcher")
                      : _mode === "app" ? cards.currentTitle : (shell.system ? shell.system.carrier : "")
                 titleBorder: _mode !== ""
-                titleActionable: _mode === "app"
-                fillColor: _mode === "justtype" || _mode === "launcher" ? Theme.statusBarLauncherFill : Theme.statusBarFill
+                titleActionable: _mode === "app" || _mode === "dock"
+                                 || (_mode === "justtype" && justType.surface !== null
+                                     && !!shell.source && typeof shell.source.justTypeAppMenu === "function")
+                // A maximized app's own colour (setWindowProperties
+                // statusBarColor; SystemUiController.cpp:820-827), faded to
+                // over 300 ms (StatusBar::setBackgroundColor). Tablets only.
+                fillColor: _mode === "justtype" || _mode === "launcher" ? Theme.statusBarLauncherFill
+                         : _mode === "app" && cards.currentStatusBarColor !== "" ? cards.currentStatusBarColor
+                         : Theme.statusBarFill
                 systemMenuOpen: systemMenu.open
-                lockScreen: shell.locked
-                filled: cards.maximized || launcher.open || justType.open
-                onSystemMenuRequested: if (!shell.locked && !shell.firstUse) systemMenu.open = !systemMenu.open
+                lockScreen: shell.locked && !shell.dockMode && !shell._dockTransition
+                filled: cards.maximized || launcher.open || justType.open || shell.dockMode || shell._dockTransition
+                onSystemMenuRequested: {
+                    if ((shell.locked && !shell.dockMode) || shell.firstUse)
+                        return;
+                    // One menu at a time (DockModeMenuManager::activateSystemMenu).
+                    dockLayer.appMenu.open = false;
+                    systemMenu.open = !systemMenu.open;
+                }
                 onAppMenuRequested: {
+                    // Dock mode: its app menu (StatusBar::slotAppMenuMenuAction,
+                    // signalDockModeMenuStateChanged); the system menu closes.
+                    if (shell.dockMode) {
+                        systemMenu.open = false;
+                        dockLayer.appMenu.open = !dockLayer.appMenu.open;
+                        return;
+                    }
+                    if (_mode === "justtype") {
+                        shell.source.justTypeAppMenu();
+                        return;
+                    }
                     if (!cards.maximized || !shell.source || typeof shell.source.appMenu !== "function")
                         return;
                     if (siteMenu.open) {
@@ -1468,7 +2315,7 @@ FocusScope {
                 fullScreen: shell.fullScreen
                 // The phone's active-call banner (the window source's).
                 activeCall: shell.source && shell.source.activeCallBanner !== undefined ? shell.source.activeCallBanner : null
-                locked: shell.locked
+                locked: shell.locked && !shell.dockMode
                 lockAlertHost: lockScreen.alertHost
                 id: notes
                 anchors.left: parent.left
@@ -1494,6 +2341,7 @@ FocusScope {
                 anchors.fill: parent
                 onCloseRequested: siteMenu.open = false
                 onAction: (name) => shell.source.siteAction(cards.currentUid, name)
+                onOpenChanged: shell._overlayFocus(open)
                 Connections {
                     target: cards
                     function onMaximizedChanged() { if (!cards.maximized) siteMenu.open = false; }
@@ -1510,6 +2358,9 @@ FocusScope {
                 availableHeight: ui.height - Theme.statusBarHeight - notes.negativeSpace + Theme.px(10)
                 onCloseRequested: systemMenu.open = false
                 onLaunchRequested: (appId, params) => shell.launch(appId, params)
+                // Keyboard navigation: the menu has the keyboard while open
+                // (the app's page would take the keys), then hands it back.
+                onOpenChanged: shell._overlayFocus(open)
             }
 
             // The virtual keyboard, above everything (InputWindowManager is the
@@ -1518,13 +2369,14 @@ FocusScope {
             // slotNegativeSpaceChanged, InputWindowManager.cpp:131-139).
             // The keyboard's microphone (Text Assist, GAPS V2).
             Dictation {
-                id: dictation
+                id: dictationEngine
                 command: shell.dictationCommand
+                inputFiles: shell.dictationInputFiles
             }
             VirtualKeyboard {
                 id: ime
                 objectName: "virtualKeyboard"
-                dictation: dictation.available ? dictation : null
+                dictation: shell.dictation
                 tablet: shell.tablet
                 pixelScale: Theme.keyboardScale
                 availableWidth: ui.width
@@ -1538,6 +2390,12 @@ FocusScope {
                         KeyInjector.sendImeKey(t, key, modifiers);
                 }
                 onTextCommitted: (text) => {
+                    // The meta key held: c, x, v and a are Edit commands.
+                    var meta = { c: "copy", x: "cut", v: "paste", a: "selectAll" }[String(text).toLowerCase()];
+                    if (gesture.metaHeld && meta) {
+                        shell.metaEdit(meta);
+                        return;
+                    }
                     var t = shell._imeTarget();
                     if (t)
                         KeyInjector.commitText(t, text);
@@ -1550,6 +2408,8 @@ FocusScope {
                 textSuggestions: _assistPrefs.suggestions !== false
                 autoCorrect: _assistPrefs.autoCorrect !== false
                 swipeTyping: _assistPrefs.swipe !== false
+                userShortcuts: _assistPrefs.shortcuts || ({})
+                shortcutsOn: _assistPrefs.shortcutsOn !== false
                 spaces2period: _assistPrefs.spaces2period !== false
                 forgetWordsAt: _assistPrefs.forgetWords || 0
                 // Settings > Text Assist > Keyboards, and the one in use: the
@@ -1583,7 +2443,7 @@ FocusScope {
                 anchors.bottom: parent.bottom
                 height: Theme.bezelEdgeHeight
                 // With the gesture bar its swipe up does this.
-                enabled: shell.tablet && !shell.locked && Theme.gestureAreaHeight === 0
+                enabled: shell.tablet && (!shell.locked || shell.dockMode) && Theme.gestureAreaHeight === 0
                 preventStealing: true
                 property real sx
                 property real sy
@@ -1642,6 +2502,11 @@ FocusScope {
             onUp: shell.gestureUp()
             onDown: shell.gestureDown()
             onBack: shell.gestureBack()
+            onForward: shell.gestureForward()
+            onPrevious: shell.gestureSwitchApp(true)
+            onNext: shell.gestureSwitchApp(false)
+            advancedGestures: !!(shell.system && shell.system.advancedGestures)
+            lit: cards.maximized && !shell.locked
             onTapped: shell.gestureTap()
             // With the keyboard up, hold and slide to move the cursor.
             cursorControl: ime.visible
@@ -1664,6 +2529,127 @@ FocusScope {
         }
     }
 
+    // The shortcuts, listed while their modifier is held a second.
+    Timer {
+        id: sheetDelay
+        interval: 1000
+        onTriggered: shortcutSheet.shown = true
+    }
+    ShortcutSheet {
+        id: shortcutSheet
+        z: 99997
+        scheme: shell.keyboardShortcuts
+        anchors.centerIn: parent
+    }
+
+    // A hardware keyboard attached and a field with the focus: the button
+    // that brings the virtual keyboard up (the iPad's keyboard bar), at the
+    // bottom right above the gesture bar.
+    Rectangle {
+        id: keyboardButton
+        objectName: "showKeyboardButton"
+        z: 99996
+        visible: shell.virtualKeyboard && shell.hardwareKeyboard && shell.imeClient !== null && !shell._imeOpened && !shell.locked
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.rightMargin: Theme.px(12)
+        anchors.bottomMargin: Theme.gestureAreaHeight + Theme.px(10)
+        width: Theme.px(56)
+        height: Theme.px(40)
+        radius: Theme.px(8)
+        color: keyboardButtonArea.pressed ? "#e0505050" : "#d0202020"
+        border.color: "#60ffffff"
+        Item {
+            anchors.centerIn: parent
+            width: Theme.px(36)
+            height: Theme.px(22)
+            clip: true
+            // icon-hide-keyboard.png without its arrow: just the keyboard.
+            Image {
+                source: Theme.asset("keyboard-tablet/icon-hide-keyboard.png")
+                width: Theme.px(36)
+                height: Theme.px(36) * Theme.artHeight(source) / Math.max(1, Theme.artWidth(source))
+            }
+        }
+        MouseArea {
+            id: keyboardButtonArea
+            anchors.fill: parent
+            onClicked: shell.showVirtualKeyboard()
+        }
+    }
+
+    // Sticky keys: the modifiers waiting for the next key, and in bold
+    // the ones locked down, in a chip above the gesture bar.
+    Rectangle {
+        id: stickyChip
+        objectName: "stickyModifiers"
+        readonly property int mods: shell.keyboardAccess.latchedModifiers | shell.keyboardAccess.lockedModifiers
+        function names(m) {
+            var out = [];
+            if (m & Qt.ShiftModifier) out.push("Shift");
+            if (m & Qt.ControlModifier) out.push(Qt.platform.os === "osx" ? "⌘" : "Ctrl");
+            if (m & Qt.AltModifier) out.push(Qt.platform.os === "osx" ? "Option" : "Alt");
+            if (m & Qt.MetaModifier) out.push(Qt.platform.os === "osx" ? "Control" : "Super");
+            return out;
+        }
+        z: 99996
+        visible: mods !== 0
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Theme.gestureAreaHeight + Theme.px(12)
+        width: chipText.implicitWidth + Theme.px(24)
+        height: Theme.px(30)
+        radius: height / 2
+        color: "#d0202020"
+        border.color: "#60ffffff"
+        Text {
+            id: chipText
+            objectName: "stickyModifiersText"
+            anchors.centerIn: parent
+            textFormat: Text.StyledText
+            color: Theme.text
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.px(15)
+            text: {
+                var locked = shell.keyboardAccess.lockedModifiers;
+                return stickyChip.names(stickyChip.mods).map(function (n, i) {
+                    var all = stickyChip.names(locked);
+                    return all.indexOf(n) >= 0 ? "<b><u>" + n + "</u></b>" : n;
+                }).join("  ");
+            }
+        }
+    }
+
+    // The reticle: penindicator-ripple.png where a tap lands, growing to
+    // one and a half times as it fades over 200 ms (WindowServer::
+    // gestureEvent, ReticleItem::startAt; lunaAnimations.conf Reticle).
+    Image {
+        id: reticle
+        objectName: "reticle"
+        z: 99998
+        source: Theme.asset("penindicator-ripple.png")
+        width: Theme.artWidth(source)
+        height: Theme.artHeight(source)
+        visible: false
+        function startAt(x, y) {
+            reticleAnim.stop();
+            reticle.x = x - width / 2;
+            reticle.y = y - height / 2;
+            reticle.opacity = 1;
+            reticle.scale = 1;
+            reticle.visible = true;
+            reticleAnim.start();
+        }
+        SequentialAnimation {
+            id: reticleAnim
+            ParallelAnimation {
+                NumberAnimation { target: reticle; property: "opacity"; from: 1; to: 0; duration: Theme.reticleDuration }
+                NumberAnimation { target: reticle; property: "scale"; from: 1; to: 1.5; duration: Theme.reticleDuration }
+            }
+            PropertyAction { target: reticle; property: "visible"; value: false }
+        }
+    }
+
     // The capture's thumbnail, in the corner above the gesture area; a tap
     // opens it in the preview.
     ScreenCaptureThumbnail {
@@ -1680,5 +2666,33 @@ FocusScope {
         id: captureFlash
         anchors.fill: parent
         z: 100000
+    }
+
+    // ---- The system's full-screen states (SystemScreens.qml) ---------------------
+    // Boot animation, progress animation, USB drive mode, Full Erase's
+    // countdown, the frame rate counter and touch plot; over everything.
+    readonly property alias systemScreens: systemScreens
+    // Start with the boot animation (phoenix-sim when someone is watching):
+    // the boot sound then waits for it (WindowServer::bootupFinished).
+    property bool bootAnimation: false
+    // ... showing "Updating the system" first: the system was updated.
+    property bool bootUpdating: false
+    SystemScreens {
+        id: systemScreens
+        anchors.fill: parent
+        z: 100001
+        source: shell.source
+        system: shell.system
+        locked: shell.locked
+        onCall: notes.incomingCall || !!(shell.source && shell.source.activeCallBanner)
+        displayOn: backlight.on
+        onBootFinished: sounds.bootFinished()
+        // storaged could not take the drive: "USB Drive connection failed".
+        onBrickModeFailed: if (shell.source && shell.source.showMsmEntryFailedAlert) shell.source.showMsmEntryFailedAlert()
+    }
+    // A storage daemon /storaged signal (MSMAvail, MSMProgress, MSMEntry,
+    // MSMFscking), as LunaSysMgr's SystemService heard them.
+    function storagedSignal(method, payload) {
+        systemScreens.storagedSignal(method, payload);
     }
 }

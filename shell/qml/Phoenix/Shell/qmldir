@@ -2,6 +2,9 @@ module Phoenix.Shell
 singleton Theme 1.0 Theme.qml
 Shell 1.0 Shell.qml
 ActionButton 1.0 ActionButton.qml
+MemoryAlert 1.0 MemoryAlert.qml
+CardCornerMask 1.0 CardCornerMask.qml
+ShortcutSheet 1.0 ShortcutSheet.qml
 ArtBorderImage 1.0 ArtBorderImage.qml
 ArtTiledImage 1.0 ArtTiledImage.qml
 AppIcon 1.0 AppIcon.qml
@@ -39,3 +42,16 @@ DrawerHeader 1.0 DrawerHeader.qml
 SelectMark 1.0 SelectMark.qml
 ScreenCaptureFlash 1.0 ScreenCaptureFlash.qml
 ScreenCaptureThumbnail 1.0 ScreenCaptureThumbnail.qml
+DockMode 1.0 DockMode.qml
+DockModeAppMenu 1.0 DockModeAppMenu.qml
+DockModeTime 1.0 DockModeTime.qml
+DockModeAnalogClock 1.0 DockModeAnalogClock.qml
+DockModeDigitalClock 1.0 DockModeDigitalClock.qml
+MessageDialog 1.0 MessageDialog.qml
+MsmEntryFailedAlert 1.0 MsmEntryFailedAlert.qml
+BootAnimation 1.0 BootAnimation.qml
+ProgressAnimation 1.0 ProgressAnimation.qml
+FullEraseConfirmation 1.0 FullEraseConfirmation.qml
+FpsCounter 1.0 FpsCounter.qml
+TouchPlot 1.0 TouchPlot.qml
+SystemScreens 1.0 SystemScreens.qml

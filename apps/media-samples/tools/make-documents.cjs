@@ -14,6 +14,11 @@
 //                            cached values), a date, and notes
 //   roadmap.pptx             three slides with titles, bullets and a picture
 //   reading-notes.md         Markdown
+//   phoenix-lab-root-ca.crt  a CA certificate for Settings > Certificate
+//                            Manager to import: a fictional "Phoenix Lab
+//                            Root CA" (EC P-256, self-signed, until 2036),
+//                            made once with openssl and its key thrown
+//                            away; kept as it is, not made again
 //
 // All of the text and pictures are written or drawn by this script and are
 // dedicated to the public domain (CC0 1.0). The Office files are written by
@@ -583,6 +588,7 @@ async function main() {
     write("trip-budget.xlsx", xlsx(), "Trip budget");
     write("roadmap.pptx", pptx(slidePic), "webOS Phoenix roadmap");
     write("reading-notes.md", Buffer.from(NOTES_MD), "Reading notes");
+    write("phoenix-lab-root-ca.crt", fs.readFileSync(path.join(OUT, "phoenix-lab-root-ca.crt")), "Phoenix Lab Root CA");
 
     await browser.close();
     const indexFile = path.join(__dirname, "..", "media", "index.json");

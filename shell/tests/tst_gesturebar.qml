@@ -24,6 +24,11 @@ Item {
         system: SimSystemStatus { id: sys }
     }
 
+    Component {
+        id: spyComponent
+        SignalSpy {}
+    }
+
     TestCase {
         name: "GestureBar"
         when: windowShown
@@ -36,6 +41,64 @@ Item {
             while (windows.cards.count > 0)
                 windows.close(windows.cards.get(0).uid);
             shell.cardView.maximizeProgress = 0;
+        }
+
+        // G8: the bar is lit while an app is maximized; each gesture runs
+        // its own light (CoreNaviManager::renderGestureOnLightbar).
+        function test_lightBar() {
+            var g = findChild(shell, "gestureBar");
+            var m = findChild(shell, "gestureMouse");
+            verify(!g.lit);
+            var uid = windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximize(uid);
+            tryVerify(function() { return shell.maximized; }, 2000);
+            verify(g.lit);
+            mouseDrag(m, m.width * 0.6, m.height / 2, -m.width * 0.2, 0);
+            compare(g.lastLight, "left");
+            var sweep = findChild(g, "lightSweep");
+            tryCompare(sweep, "opacity", 1, 500);
+            tryCompare(sweep, "opacity", 0, 2000);
+            mouseDrag(m, m.width * 0.4, m.height / 2, m.width * 0.2, 0);
+            compare(g.lastLight, "right");
+            mouseDrag(m, m.width / 2, m.height - 1, 0, -60);
+            compare(g.lastLight, "waterdrop");
+            tryVerify(function() { return !shell.maximized; }, 2000);
+            verify(!g.lit);
+            windows.close(uid);
+        }
+
+        // G8: a finger resting on the area is the meta key: held a moment
+        // the bar glows until it lifts, and that is not a tap; with it
+        // down, A, C, X and V typed are Select All, Copy, Cut and Paste
+        // (MetaKeyManager::handleEvent), here in Just Type's field.
+        function test_metaKey() {
+            shell.unlock();
+            var g = findChild(shell, "gestureBar");
+            var m = findChild(shell, "gestureMouse");
+            shell.startJustType("palm");
+            var input = findChild(shell, "justTypeInput");
+            tryCompare(input, "text", "palm", 2000);
+            var taps = createTemporaryObject(spyComponent, root, { target: g, signalName: "tapped" });
+            mousePress(m, m.width / 2, m.height / 2);
+            verify(g.metaHeld);
+            wait(g.holdDelay + 100);
+            compare(g.glow, 1);
+            keyClick(Qt.Key_A);
+            compare(input.selectedText, "palm");
+            keyClick(Qt.Key_C);
+            keyClick(Qt.Key_X);
+            compare(input.text, "");
+            keyClick(Qt.Key_V);
+            compare(input.text, "palm");
+            mouseRelease(m, m.width / 2, m.height / 2);
+            verify(!g.metaHeld);
+            compare(taps.count, 0);
+            tryCompare(g, "glow", 0, 2000);
+            // Without the meta key the letters are typed as usual.
+            input.forceActiveFocus();
+            keyClick(Qt.Key_A);
+            compare(input.text, "palma");
+            shell.gestureBack();
         }
 
         function test_tabletHasTheBarByDefault() {

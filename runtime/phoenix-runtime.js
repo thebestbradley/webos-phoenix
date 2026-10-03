@@ -75,6 +75,23 @@
         }
     };
 
+    // A JSON answer from the host at a path of its own (phoenix-sim's
+    // /__phoenix/proxy?req=..., /__phoenix/proxy/progress?id=...). With
+    // XMLHttpRequest: before Qt 6.6 Chromium refuses fetch() on a custom
+    // scheme such as phoenix: (QWebEngineUrlScheme::FetchApiAllowed is 6.6),
+    // and XHR is how the apps' own pages read files there anyway.
+    function hostGetJson(path) {
+        return new Promise(function (resolve, reject) {
+            var x = new global.XMLHttpRequest();
+            x.open("GET", path, true);
+            x.onload = function () {
+                try { resolve(JSON.parse(x.responseText)); } catch (e) { reject(e); }
+            };
+            x.onerror = function () { reject(new Error("The host did not answer " + path.replace(/\?.*$/, ""))); };
+            x.send();
+        });
+    }
+
     // ---- App identity ------------------------------------------------------------
 
     function appIdFromLocation() {
@@ -181,9 +198,37 @@
                 }
             },
             set: function (key, value) {
-                var s = toJson(value);
-                if (ls) ls.setItem("phoenix:" + key, s);
-                else mem[key] = s;
+                this.setRaw(key, toJson(value));
+            },
+            // The stored JSON text itself (null when there is none).
+            raw: function (key) {
+                try {
+                    var v = ls ? ls.getItem("phoenix:" + key) : mem[key];
+                    return v === undefined ? null : v;
+                } catch (e) {
+                    return null;
+                }
+            },
+            setRaw: function (key, text) {
+                if (ls) ls.setItem("phoenix:" + key, text);
+                else mem[key] = text;
+            },
+            remove: function (key) {
+                if (ls) ls.removeItem("phoenix:" + key);
+                else delete mem[key];
+            },
+            // The keys that start with prefix.
+            keys: function (prefix) {
+                var out = [], k, i;
+                if (ls) {
+                    for (i = 0; i < ls.length; ++i) {
+                        k = ls.key(i);
+                        if (k && k.indexOf("phoenix:" + prefix) === 0) out.push(k.slice(8));
+                    }
+                } else {
+                    for (k in mem) if (k.indexOf(prefix) === 0) out.push(k);
+                }
+                return out;
             }
         };
     })();
@@ -255,6 +300,7 @@
     var launchParams = queryParam("launchParams") || "{}";
     var activated = true;
 
+    var bannerSerial = 0;   // addBannerMessage ids, unique within the app
     var PalmSystem = {
         identifier: appIdFromLocation() + " 1000",
         appIdentifier: appIdFromLocation(),
@@ -289,7 +335,9 @@
             keyboardType: "QWERTY",
             wifiAvailable: true,
             bluetoothAvailable: true,
-            coreNaviButton: false
+            coreNaviButton: false,
+            // Exhibitions on the Touchstone (DeviceInfo.cpp:315).
+            dockModeEnabled: true
         }),
         isActivated: function () { return activated; },
         get isMinimal() { return false; },
@@ -307,11 +355,20 @@
             host.postToHost("windowOrientation", { appId: PalmSystem.appIdentifier, orientation: String(o) });
         },
         // enyo.windows.setWindowProperties: blockScreenTimeout keeps the
-        // screen on while the card is in front (a video, a flashlight).
-        // setSubtleLightbar and fastAccelerometer have nothing to act on.
+        // screen on while the card is in front (a video, a flashlight);
+        // statusBarColor (0xRRGGBB) tints the tablet's status bar while the
+        // card is maximized (IpcClientHost.cpp:294-296). setSubtleLightbar
+        // and fastAccelerometer have nothing to act on.
         setWindowProperties: function (props) {
-            if (props && typeof props === "object" && "blockScreenTimeout" in props)
-                host.postToHost("windowProperties", { appId: PalmSystem.appIdentifier, blockScreenTimeout: !!props.blockScreenTimeout });
+            if (!props || typeof props !== "object")
+                return;
+            var out = { appId: PalmSystem.appIdentifier };
+            if ("blockScreenTimeout" in props)
+                out.blockScreenTimeout = !!props.blockScreenTimeout;
+            if (typeof props.statusBarColor === "number" && isFinite(props.statusBarColor))
+                out.statusBarColor = props.statusBarColor & 0xFFFFFF;
+            if (Object.keys(out).length > 1)
+                host.postToHost("windowProperties", out);
         },
         enableFullScreenMode: function (on) { host.postToHost("fullScreen", { appId: PalmSystem.appIdentifier, on: !!on }); },
         allowResizeOnPositiveSpaceChange: function () {},
@@ -329,7 +386,17 @@
         // nothing to do here.
         copiedToClipboard: function () {},
         pastedFromClipboard: function () {},
-        printFrame: function () { global.print && global.print(); },
+        // Puts this window (frameName "": the app's own document) on paper
+        // for a print job of com.palm.printmgr (PrintDialog's frameToPrint):
+        // in phoenix-sim the shell renders the window ("print" host
+        // message); elsewhere its text is printed. See "Printing" below.
+        printFrame: function (frameName, jobID) {
+            if (!jobID || !runtime.print) return;
+            var doc = global.document;
+            runtime.print.render(jobID, global.location.protocol === "phoenix:"
+                ? { title: doc.title, host: { type: "print", id: "" } }
+                : { title: doc.title, text: doc.body ? doc.body.innerText : "" });
+        },
         // The TouchPad launcher's glow on a tapped icon (Just Type).
         applyLaunchFeedback: function () {},
         simulateMouseClick: function () {},
@@ -350,14 +417,14 @@
         // doNotSuppress): the banner's sound plays as it shows (luna-systemui's
         // "Charging Battery" with charging.mp3).
         addBannerMessage: function (msg, params, icon, soundClass, soundFile, duration) {
-            var id = "b" + Date.now();
+            var id = "b" + (++bannerSerial) + "-" + Date.now();
             host.postToHost("banner", { id: id, appId: PalmSystem.appIdentifier, message: msg, params: params, icon: icon,
                                         soundClass: soundClass ? String(soundClass) : "", soundFile: soundFile ? String(soundFile) : "",
                                         duration: duration | 0 });
             return id;
         },
         removeBannerMessage: function (id) { host.postToHost("removeBanner", { id: id }); },
-        clearBannerMessages: function () {},
+        clearBannerMessages: function () { host.postToHost("clearBanners", {}); },
         addNewContentIndicator: function () { return "nci"; },
         removeNewContentIndicator: function () {},
         // The phone's active-call banner (ActiveCallBanner.cpp): who the call
@@ -494,17 +561,33 @@
     // listener is a capture one so that it runs before the page's own
     // pagehide handlers.
     var unsent = {}, nextUnsent = 1, unloading = false;
+    function sendUnsent() {
+        Object.keys(unsent).forEach(function (k) {
+            var u = unsent[k];
+            if (!u) return;
+            clearTimeout(u.timer);
+            u.run();
+        });
+    }
     try {
         global.addEventListener("pagehide", function () {
             unloading = true;
-            Object.keys(unsent).forEach(function (k) {
-                var u = unsent[k];
-                if (!u) return;
-                clearTimeout(u.timer);
-                u.run();
-            });
+            sendUnsent();
         }, true);
         global.addEventListener("pageshow", function () { unloading = false; });
+    } catch (e) { /* ignore */ }
+    // window.close(): phoenix-sim takes a closed alert or dashboard window
+    // away without a pagehide, so what the page asked for just before
+    // (luna-systemui's USB warning: enterMSM, then close()) goes out first.
+    try {
+        var nativeClose = global.close;
+        if (typeof nativeClose === "function") {
+            global.close = function () {
+                unloading = true;
+                sendUnsent();
+                return nativeClose.apply(global, arguments);
+            };
+        }
     } catch (e) { /* ignore */ }
 
     runtime.dispatch = dispatch;
@@ -552,16 +635,107 @@
     // A small in-page db8: kinds, put/get/merge/del, find with where/orderBy/
     // limit/select, counts and watches. Enough for the core apps to store and
     // read their data; not a complete implementation of db8's query language.
+    //
+    // Every page (the shell's system UI and launcher, Just Type, each app)
+    // has its own copy of this db8 on the one shared store, as the processes
+    // of a device share the one db8 daemon. So the store keeps each object
+    // and each kind under a key of its own, and a page writes only those it
+    // changed:
+    //
+    //   db8:<name>                {rev, nextId, nextSubId, write}
+    //   db8:<name>/kind/<id>      a kind
+    //   db8:<name>/obj/<_id>      an object
+    //
+    // (The whole database used to be the one value "db8:<name>", read,
+    // changed and written back by each page. A browser's localStorage
+    // is not a transaction: each page reads from its own copy, which hears
+    // of other pages' writes a moment later, longer when the page is busy.
+    // A page that wrote then put back its older copy of everything, and
+    // what other pages had stored in the meantime was lost: on a loaded
+    // machine the Tasks app's Inbox, which it creates on first start while
+    // the system UI and launcher are still filling in the sample data.)
+    // Two pages that change the same object at the same moment still leave
+    // the last one's, as db8 does. Watches in a page fire for other pages'
+    // changes too: every write changes db8:<name> ("write" names the page
+    // and its write), whose "storage" event reaches the other pages after
+    // the objects' own.
+    var PAGE_TAG = Math.random().toString(36).slice(2, 6), db8Writes = 0;
+    // name -> {load, save}, for the runtime's own changes to the kinds.
+    var db8Stores = {};
     function makeDb(name) {
         var key = "db8:" + name;
+        var OBJ = key + "/obj/", KIND = key + "/kind/";
         var watchers = [];
 
-        function load() { return store.get(key, { objects: {}, kinds: {}, rev: 1, nextId: 1 }); }
-        function save(db) { store.set(key, db); }
-
-        function newId(db) {
-            return (name === "com.palm.tempdb" ? "t" : "") + "++" + (db.nextId++).toString(36) + Date.now().toString(36);
+        // The single value of earlier versions, split into keys once. Objects
+        // another page has already stored under their own key stay as they are.
+        function migrate(old) {
+            [[OBJ, old.objects], [KIND, old.kinds]].forEach(function (part) {
+                Object.keys(part[1] || {}).forEach(function (id) {
+                    if (store.raw(part[0] + id) === null) store.setRaw(part[0] + id, toJson(part[1][id]));
+                });
+            });
+            var meta = { rev: old.rev || 1, nextId: old.nextId || 1, nextSubId: old.nextSubId, write: PAGE_TAG + ":" + (++db8Writes) };
+            store.set(key, meta);
+            return meta;
         }
+
+        // {objects, kinds, rev, nextId, nextSubId}, as stored now. db.stored
+        // (not enumerable) holds the JSON each key had, for save.
+        function load() {
+            var meta = store.get(key, null) || {};
+            if (meta.objects) meta = migrate(meta);
+            var db = { objects: {}, kinds: {}, rev: meta.rev || 1, nextId: meta.nextId || 1, nextSubId: meta.nextSubId };
+            var stored = {};
+            store.keys(key + "/").forEach(function (k) {
+                var isObj = k.indexOf(OBJ) === 0;
+                if (!isObj && k.indexOf(KIND) !== 0) return;
+                var text = store.raw(k), v;
+                if (text === null) return;
+                try { v = JSON.parse(text); } catch (e) { return; }
+                stored[k] = text;
+                (isObj ? db.objects : db.kinds)[k.slice((isObj ? OBJ : KIND).length)] = v;
+                // Revisions go on from the newest this page has seen.
+                if (isObj && v && v._rev > db.rev) db.rev = v._rev;
+            });
+            stored[key] = toJson({ rev: db.rev, nextId: db.nextId, nextSubId: db.nextSubId });
+            Object.defineProperty(db, "stored", { value: stored });
+            return db;
+        }
+
+        // Writes the objects and kinds that changed (and removes those that
+        // went), then the revision counters if anything did.
+        function save(db) {
+            var stored = db.stored || {}, changed = false, now = {};
+            [[OBJ, db.objects], [KIND, db.kinds]].forEach(function (part) {
+                Object.keys(part[1]).forEach(function (id) {
+                    var k = part[0] + id, text = toJson(part[1][id]);
+                    now[k] = true;
+                    if (stored[k] === text) return;
+                    store.setRaw(k, text);
+                    stored[k] = text;
+                    changed = true;
+                });
+            });
+            Object.keys(stored).forEach(function (k) {
+                if (k === key || now[k]) return;
+                store.remove(k);
+                delete stored[k];
+                changed = true;
+            });
+            var counters = toJson({ rev: db.rev, nextId: db.nextId, nextSubId: db.nextSubId });
+            if (changed || stored[key] !== counters) {
+                store.set(key, { rev: db.rev, nextId: db.nextId, nextSubId: db.nextSubId, write: PAGE_TAG + ":" + (++db8Writes) });
+                stored[key] = counters;
+            }
+        }
+
+        // The page's tag keeps two pages that count from the same nextId
+        // from making the same _id.
+        function newId(db) {
+            return (name === "com.palm.tempdb" ? "t" : "") + "++" + (db.nextId++).toString(36) + Date.now().toString(36) + PAGE_TAG;
+        }
+        db8Stores[name] = { load: load, save: save };
 
         // Properties that only exist in db8 indexes: a "multi" index property
         // is the union of other fields (the core apps' kinds: com.palm.person
@@ -628,13 +802,16 @@
         function isOfKind(db, obj, kind) {
             if (!kind) return true;
             if (obj._kind === kind) return true;
-            // Kinds may extend others (e.g. "com.palm.contact.palmprofile:1" extends "com.palm.person:1").
-            var k = db.kinds[obj._kind];
-            var seen = {};
-            while (k && k.extends && !seen[obj._kind]) {
-                seen[obj._kind] = true;
+            // Kinds may extend others (e.g. "com.palm.contact.palmprofile:1" extends "com.palm.person:1"),
+            // through any number of levels ("com.palm.immessage.xmpp:1" extends "com.palm.immessage:1",
+            // which extends "com.palm.message:1"); a kind seen twice ends the walk.
+            var id = obj._kind, seen = {};
+            while (id && !seen[id]) {
+                seen[id] = true;
+                var k = db.kinds[id];
+                if (!k || !k.extends || !k.extends.length) return false;
                 if (k.extends.indexOf(kind) >= 0) return true;
-                k = db.kinds[k.extends[0]];
+                id = k.extends[0];
             }
             return false;
         }
@@ -687,6 +864,13 @@
             watchers = [];
             w.forEach(function (cb) { cb(); });
         }
+
+        // Another page wrote (see above), or the store was cleared.
+        try {
+            global.addEventListener("storage", function (e) {
+                if (e.key === null || e.key === "phoenix:" + key) notify();
+            });
+        } catch (x) { /* no window events */ }
 
         // db8 gives every object inside an array property its own _id
         // (e.g. account capabilityProviders, contact emails); apps rely on it.
@@ -917,6 +1101,21 @@
         timeZone: { ZoneID: PalmSystem.TZ, City: "", Country: "" },
         useNetworkTime: true,
         wallpaper: { wallpaperName: "", wallpaperFile: "" },
+        // Dock mode's own wallpaper (Preferences.cpp "dockwallpaper"), behind
+        // the exhibitions; none: dock mode is black, the Time exhibition on
+        // its clock_bg.png.
+        dockwallpaper: { wallpaperName: "", wallpaperFile: "" },
+        // Sounds in dock mode (conf/defaultPreferences.txt): "systemsettings"
+        // follows Sounds & Ringtones; "mute" (Phoenix) keeps notifications
+        // and alerts quiet while an exhibition shows (calls still ring).
+        dockModeSoundPref: "systemsettings",
+        // Settings > Exhibition (Phoenix): exhibitions on the Touchstone at
+        // all; startAfter, seconds on the charger with the screen on before
+        // the exhibition starts (0: when the screen would turn off, as
+        // DisplayOnPuck waited); night mode, the screen at its night
+        // brightness (Settings.cpp:184 DockModeNightBrightness) from
+        // nightStart to nightEnd ("HH:MM").
+        exhibition: { enabled: true, startAfter: 0, nightMode: false, nightStart: "22:00", nightEnd: "07:00" },
         // The tones LunaSysMgr fell back on (conf/defaultPreferences.txt; the
         // Pre's own Pre.mp3 ringtone was not open-sourced, so the ringtone is
         // Open webOS's ringtone.mp3, as luna-sysservice's examples add it).
@@ -936,8 +1135,32 @@
         // after"; 0: as soon as the screen is off).
         screenTimeout: 60,
         lockTimeout: 0,
+        // Screen & Lock > Advanced gestures: LunaSysMgr's key. A long swipe
+        // across the gesture area switches apps (phones).
+        sysUiEnableNextPrevGestures: false,
+        // Settings > Text Assist > Hardware keyboard: the shell's shortcut
+        // scheme, "ipad" or "desktop" (Phoenix).
+        keyboardShortcuts: "ipad",
+        // Text Assist (conf/defaultPreferences.txt x_palm_textinput): the
+        // original's checks, and Phoenix's list of the user's shortcuts
+        // (Settings > Text Assist > Shortcuts), [{shortcut, text}], which
+        // the keyboard's space bar puts in while shortcutChecking is not "off".
+        x_palm_textinput: { spellChecking: "autoCorrect", grammarChecking: "autoCorrect", shortcutChecking: "autoCorrect", shortcuts: [] },
         firstUse: false
     };
+
+    // Settings > Accessibility's keyboard options, as the shell takes them.
+    function keyboardAccess(a) {
+        var ms = function (v) { return typeof v === "number" && v > 0 ? Math.round(v) : 0; };
+        return {
+            stickyKeys: !!a.stickyKeys,
+            slowKeys: ms(a.slowKeys),
+            bounceKeys: ms(a.bounceKeys),
+            customRepeat: typeof a.keyRepeatDelay === "number",
+            repeatDelay: typeof a.keyRepeatDelay === "number" ? Math.max(0, Math.round(a.keyRepeatDelay)) : 500,
+            repeatInterval: ms(a.keyRepeatInterval) || 50
+        };
+    }
 
     function prefs() {
         var p = store.get("prefs", {});
@@ -1041,20 +1264,34 @@
         return launchPointCache;
     }
     // The installed apps changed (the shell says so, applyHostStatus
-    // {appsVersion}): read the list again and tell launchPointChanges.
-    function appsChanged() {
+    // {appsVersion}): read the list again and tell launchPointChanges
+    // (ApplicationManager::postLaunchPointChange: the launch point's record
+    // and change "added" | "removed" | "updated") and whoever else listens
+    // (runtime.onAppsChanged(fn(before, after, info))). info: {appId, cause}
+    // when an app was removed, for notifyOnChange.
+    var appsChangedListeners = [];
+    runtime.onAppsChanged = function (fn) { appsChangedListeners.push(fn); };
+    function appsChanged(info) {
         var before = launchPoints();
         launchPointCache = null;
         var after = launchPoints(), was = {}, now = {};
         before.forEach(function (lp) { was[lp.launchPointId] = lp; });
         after.forEach(function (lp) { now[lp.launchPointId] = lp; });
         var changes = [];
-        after.forEach(function (lp) { if (!was[lp.launchPointId]) changes.push(Object.assign({ change: "added" }, lp)); });
+        after.forEach(function (lp) {
+            var old = was[lp.launchPointId];
+            if (!old) changes.push(Object.assign({ change: "added" }, lp));
+            else if (old.icon !== lp.icon || old.title !== lp.title || old.version !== lp.version)
+                changes.push(Object.assign({ change: "updated" }, lp));
+        });
         before.forEach(function (lp) {
-            if (!now[lp.launchPointId]) changes.push({ change: "removed", id: lp.id, launchPointId: lp.launchPointId });
+            if (!now[lp.launchPointId]) changes.push(Object.assign({ change: "removed" }, lp));
         });
         changes.forEach(function (c) {
             launchPointWatchers = launchPointWatchers.filter(function (w) { return w(c) !== false; });
+        });
+        appsChangedListeners.forEach(function (fn) {
+            try { fn(before, after, info || null); } catch (e) { console.error("[phoenix-runtime] apps changed", e); }
         });
     }
     runtime.appsChanged = appsChanged;
@@ -1064,15 +1301,35 @@
     }
 
     var resourceHandlers = null;
-    function resourceHandler(target) {
+    function redirectList() {
         if (!resourceHandlers) {
             try { resourceHandlers = JSON.parse(PalmSystem.getResource("/usr/palm/command-resource-handlers.json") || "{}").redirects || []; }
             catch (e) { resourceHandlers = []; }
         }
-        for (var i = 0; i < resourceHandlers.length; i++)
-            if (new RegExp(resourceHandlers[i].url, "i").test(target)) return resourceHandlers[i].appId;
-        return /^https?:/i.test(target) ? "com.palm.app.browser" : null;
+        return resourceHandlers;
     }
+    // The app for a web address or scheme (the redirect handlers below:
+    // the active one of the first pattern that matches).
+    function resourceHandler(target) {
+        return runtime.redirectHandlerFor(target);
+    }
+
+    // The handler registry apps add to (addResourceHandler,
+    // addRedirectHandler), and the handlers made active
+    // (swapResourceHandler, swapRedirectHandler), in the shared store, as
+    // MimeSystem kept its table in a file (saveMimeTableToActiveFile).
+    // Indexes of handlers added at run time start at 1000.
+    var HANDLER_REGISTRY = "appManager:handlers";
+    runtime.handlerRegistry = function () {
+        var r = store.get(HANDLER_REGISTRY, null) || {};
+        r.resources = r.resources || [];
+        r.redirects = r.redirects || [];
+        r.activeResource = r.activeResource || {};
+        r.activeRedirect = r.activeRedirect || {};
+        r.next = r.next || 1000;
+        return r;
+    };
+    runtime.saveHandlerRegistry = function (r) { store.set(HANDLER_REGISTRY, r); };
 
     // Apps the original webOS apps launch by id that Phoenix replaces:
     // Contacts' and Calendar's addresses open "com.palm.app.maps" (Google
@@ -1085,8 +1342,26 @@
         "com.palm.app.backup": { id: "org.webosphoenix.settings", params: { page: "backup" } },
         // System Updates (luna-systemui opens it from its update alerts).
         "com.palm.app.updates": { id: "org.webosphoenix.settings", params: { page: "updates" } },
-        "com.palm.app.textassist": { id: "org.webosphoenix.settings", params: { page: "textassist" } }
+        "com.palm.app.textassist": { id: "org.webosphoenix.settings", params: { page: "textassist" } },
+        // Just Type's preferences (luna-applauncher AppLauncher.js
+        // launchPreferences, from Just Type's app menu).
+        "com.palm.app.searchpreferences": { id: "org.webosphoenix.settings", params: { page: "justtype" } },
+        // The Certificate Manager (Device Info's menu, Email's "Open
+        // Certificate Manager", ApplicationManagerService.cpp:3822).
+        "com.palm.app.certificate": { id: "org.webosphoenix.settings", params: { page: "certificates" } },
+        // Help: Enyo 1.0's HelpMenu (every original app's "Help", Just
+        // Type's too) opens com.palm.app.help with {target:
+        // "http://help.palm.com/<area>/index.html"}; Phoenix's Help opens the
+        // matching topic (HELP_TOPICS), else its list.
+        "com.palm.app.help": "org.webosphoenix.help",
+        // Photos & Videos, the default exhibition (conf/default-exhibition-apps.json),
+        // the Agenda exhibition, and Exhibition preferences, a Settings page now.
+        "com.palm.app.photos": "org.webosphoenix.photos",
+        "com.palm.app.agendaview": "org.webosphoenix.agenda",
+        "com.palm.app.exhibitionpreferences": { id: "org.webosphoenix.settings", params: { page: "exhibition" } }
     };
+    var HELP_TOPICS = { universalsearch: "justtype", accountsmgr: "accounts", phone: "phone", messaging: "messaging",
+                        camera: "camera", photos: "photos", music: "music", launcher: "launcher", notifications: "notifications" };
     function appId(id) {
         var a = APP_ALIASES[id];
         return a ? (typeof a === "string" ? a : a.id) : id;
@@ -1095,9 +1370,50 @@
         var a = APP_ALIASES[id], out = {};
         if (a && typeof a === "object") for (var k in a.params) out[k] = a.params[k];
         for (var j in params || {}) out[j] = params[j];
+        if (id === "com.palm.app.help" && typeof out.target === "string") {
+            var m = /^https?:\/\/help\.palm\.com\/([^\/]+)\//i.exec(out.target);
+            delete out.target;
+            if (m && HELP_TOPICS[m[1].toLowerCase()]) out.topic = HELP_TOPICS[m[1].toLowerCase()];
+        }
         return out;
     }
     runtime.appAliases = APP_ALIASES;
+
+    // Exhibition (dock mode) apps: the ones that can be (appinfo.json
+    // "exhibitionMode" / "dockMode", from the app list) and the ones the user
+    // turned on, in the order dock mode's menu lists them after Time
+    // (DockModePositionManager's exhibitionApps; default Photos, as
+    // conf/default-exhibition-apps.json). At most dockModeMaxApps
+    // (Settings.cpp:183). The shell hears the list in systemStatus
+    // {exhibitionApps}.
+    var DOCK_MODE_MAX_APPS = 3;
+    var DEFAULT_EXHIBITION_APPS = ["org.webosphoenix.photos"];
+    var dockModeWatchers = [];
+    function exhibitionApps() {
+        var list = store.get("exhibitionApps", null);
+        return Array.isArray(list) ? list : DEFAULT_EXHIBITION_APPS.slice();
+    }
+    function setExhibitionApps(list) {
+        store.set("exhibitionApps", list);
+        dockModeWatchers = dockModeWatchers.filter(function (w) { return w() !== false; });
+        if (runtime.hostStatus) host.postToHost("systemStatus", runtime.hostStatus());
+    }
+    function dockModeLaunchPoints() {
+        var on = exhibitionApps();
+        return launchPoints().filter(function (lp) {
+            return lp.exhibitionMode === true && /_default$/.test(lp.launchPointId);
+        }).map(function (lp) {
+            var r = {}, k;
+            for (k in lp) r[k] = lp[k];
+            r.appId = lp.id;
+            r.exhibitionModeTitle = lp.exhibitionModeTitle || lp.title;
+            r.enabled = on.indexOf(lp.id) >= 0;
+            return r;
+        });
+    }
+    // Those turned on, in order (the shell shows the ones it has as
+    // exhibitions: an app removed since drops out there).
+    runtime.exhibitionApps = exhibitionApps;
 
     register(["com.palm.applicationManager", "com.webos.applicationManager"], {
         "/launch": function (p, reply) {
@@ -1115,7 +1431,6 @@
                 host.postToHost("open", { target: p.target, params: p.params || {} });
             reply(ok({ processId: String(Date.now()) }));
         },
-        "/running": function (p, reply) { reply(ok({ running: [] })); },
         "/listApps": function (p, reply) {
             reply(ok({ apps: launchPoints().filter(function (lp) { return /_default$/.test(lp.launchPointId); }) }));
         },
@@ -1147,16 +1462,254 @@
             })[0];
             reply(app ? ok({ appInfo: app }) : fail(-1, "app not found"));
         },
-        "/addLaunchPoint": function (p, reply) { reply(ok({ launchPointId: "lp" + Date.now() })); },
+        // ---- Exhibition (dock mode) apps (ApplicationManagerService.cpp:2486-2985) ----
+        // Every app whose appinfo.json says "exhibitionMode" (or "dockMode")
+        // true, each with exhibitionModeTitle and whether the user turned it
+        // on ("enabled"); the built-in Time exhibition is the shell's own and
+        // always there, so it is not listed.
+        "/listDockModeLaunchPoints": function (p, reply, ctx) {
+            var send = function () { reply(ok({ launchPoints: dockModeLaunchPoints(), maxApps: DOCK_MODE_MAX_APPS })); };
+            send();
+            // Phoenix: {subscribe: true} hears every change of the list.
+            if (p.subscribe) dockModeWatchers.push(function () {
+                if (ctx.cancelled()) return false;
+                send();
+                return true;
+            });
+        },
+        // {appId}: shown in dock mode's menu from now on, after the others.
+        "/addDockModeLaunchPoint": function (p, reply) {
+            var id = appId(String(p.appId || "")), list = exhibitionApps();
+            if (!dockModeLaunchPoints().some(function (lp) { return lp.id === id; }))
+                return reply(fail(-1, "Not an exhibition app: " + id));
+            if (list.indexOf(id) < 0 && list.length >= DOCK_MODE_MAX_APPS)
+                return reply(fail(-2, "At most " + DOCK_MODE_MAX_APPS + " exhibition apps can be on"));
+            setExhibitionApps(list.filter(function (a) { return a !== id; }).concat([id]));
+            reply(ok());
+        },
+        "/removeDockModeLaunchPoint": function (p, reply) {
+            var id = appId(String(p.appId || ""));
+            setExhibitionApps(exhibitionApps().filter(function (a) { return a !== id; }));
+            reply(ok());
+        },
+        // Phoenix: {appIds}: the exhibitions that are on, in the menu's order
+        // (Settings > Exhibition reorders them).
+        "/setDockModeLaunchPoints": function (p, reply) {
+            var ids = (Array.isArray(p.appIds) ? p.appIds : []).map(function (a) { return appId(String(a)); });
+            var known = dockModeLaunchPoints().map(function (lp) { return lp.id; });
+            var bad = ids.filter(function (a) { return known.indexOf(a) < 0; });
+            if (bad.length) return reply(fail(-1, "Not an exhibition app: " + bad[0]));
+            if (ids.length > DOCK_MODE_MAX_APPS) return reply(fail(-2, "At most " + DOCK_MODE_MAX_APPS + " exhibition apps can be on"));
+            setExhibitionApps(ids.filter(function (a, i) { return ids.indexOf(a) === i; }));
+            reply(ok());
+        },
         "/getHandlerForMimeType": function (p, reply) { reply(fail(-1, "no handler")); },
         "/listAllHandlersForMime": function (p, reply) { reply(ok({ resources: [] })); }
     });
+
+    // ---- Application manager: launch points apps add, processes, dock mode ----------------
+    // (luna-sysmgr Src/base/application/ApplicationManagerService.cpp; the
+    // host does what needs it through runtime.hostOp, "Installing apps".)
+    (function appManagerMore() {
+        var am = runtime.services["com.palm.applicationManager"];
+        function app(id) {
+            return launchPoints().filter(function (lp) { return /_default$/.test(lp.launchPointId) && lp.id === id; })[0] || null;
+        }
+        function hostOp(op, payload) {
+            return runtime.hostOp ? runtime.hostOp(op, payload) : Promise.resolve({ ok: false, error: "No host" });
+        }
+
+        // addLaunchPoint {id, title, icon, params, removable, appmenu}: a
+        // launcher icon of the app's own, starting it with these launch
+        // params (the browser's Share > Add to Launcher). It goes on the
+        // launcher's Favorites page. -> {launchPointId} (eight digits, as
+        // LunaSysMgr's). The icon is a path; a relative one is the app's.
+        am["/addLaunchPoint"] = function (p, reply) {
+            var id = typeof p.id === "string" ? p.id : "";
+            if (!id || typeof p.title !== "string" || !p.title) return reply(fail(-1, "Invalid arguments"));
+            if (!app(id)) return reply(fail(-1, "Unable to find id: " + id));
+            var params = p.params;
+            if (typeof params === "string") {
+                try { params = params ? JSON.parse(params) : {}; } catch (e) { return reply(fail(-1, "Invalid arguments")); }
+            }
+            if (params !== undefined && (typeof params !== "object" || params === null || Array.isArray(params)))
+                return reply(fail(-1, "Invalid arguments"));
+            hostOp("addLaunchPoint", { appId: id, launchPoint: {
+                id: id, title: p.title, appmenu: p.appmenu || p.appMenu || p.title,
+                icon: typeof p.icon === "string" ? p.icon : "", params: params || {}, removable: p.removable !== false } }).then(function (r) {
+                if (!r.ok || !r.launchPointId) return reply(fail(-1, r.error || "Failed to save launch point"));
+                reply(ok({ launchPointId: r.launchPointId }));
+            });
+        };
+        // removeLaunchPoint {launchPointId}: one an app added (never an
+        // app's own default one).
+        am["/removeLaunchPoint"] = function (p, reply) {
+            if (typeof p.launchPointId !== "string" || !p.launchPointId) return reply(fail(-1, "Must provide a launchPointId"));
+            hostOp("removeLaunchPoint", { launchPointId: p.launchPointId }).then(function (r) {
+                reply(r.ok ? ok() : fail(-1, r.error || "launch point [" + p.launchPointId + "] not found"));
+            });
+        };
+        // The apps running, with their process ids ({running: [{id,
+        // processid}]}; system and headless ones too).
+        am["/running"] = function (p, reply) {
+            hostOp("running", {}).then(function (r) {
+                reply(r.ok ? ok({ running: r.running || [] }) : fail(-1, r.error || "Not available"));
+            });
+        };
+        // close {processId}: closes the app (its cards and its headless
+        // page), keep-alive or not. True whenever the call is well formed,
+        // as on webOS.
+        am["/close"] = function (p, reply) {
+            if (typeof p.processId !== "string" || !p.processId) return reply(fail(-1, "Must provide a valid processId to close"));
+            hostOp("close", { processId: p.processId }).then(function () { reply(ok()); });
+        };
+        // install {target}: a package file, as com.palm.appinstaller's
+        // install (LunaSysMgr downloaded web addresses first; here only
+        // files on the device).
+        am["/install"] = function (p, reply) {
+            var target = String(p.target || "").replace(/^file:\/\//, "");
+            if (!target || !/\.ipk$/i.test(target)) return reply(fail(-1, "Not a valid install target"));
+            var l = runtime.legacyInstall;
+            if (!l) return reply(fail(-1, "Installing apps is not available"));
+            var first = true;
+            l({ target: target }, function (r) {
+                if (!first) return;
+                first = false;
+                reply(r.returnValue === false ? fail(-1, "Not a valid install target") : ok());
+            }, { cancelled: function () { return !first; }, onCancel: null });
+        };
+        // rescan: read the installed apps again.
+        am["/rescan"] = function (p, reply) {
+            hostOp("rescan", {}).then(function (r) { reply(r.ok ? ok() : fail(-1, r.error || "Rescan failed")); });
+        };
+        // getSizeOfApps {appIds, includeDbSize} -> {<appId>: bytes, ...}
+        // (subscribed false, as the original). Apps keep their data in the
+        // shared store here, so includeDbSize adds nothing.
+        am["/getSizeOfApps"] = function (p, reply) {
+            if (!Array.isArray(p.appIds)) return reply({ subscribed: false, returnValue: false, errorCode: "Missing appIds parameter" });
+            var r = { subscribed: false, returnValue: true };
+            p.appIds.forEach(function (id) {
+                var a = app(String(id));
+                r[String(id)] = a ? Number(a.appSize || a.size || 0) : 0;
+            });
+            reply(r);
+        };
+        // The apps being installed, as launch points (listPendingLaunchPoints).
+        am["/listPendingLaunchPoints"] = function (p, reply) {
+            var pending = runtime.pendingInstalls ? runtime.pendingInstalls() : {};
+            reply(ok({ launchPoints: Object.keys(pending).map(function (id) {
+                var st = pending[id];
+                return { id: id, appId: id, launchPointId: id + "_default", title: st.title || id, icon: st.icon || "",
+                         progress: st.progress || 0, state: st.state, removable: true };
+            }) }));
+        };
+
+        // Exhibition launch points: listDockModeLaunchPoints and the others
+        // are with the application manager's own methods above.
+        // LunaSysMgr's own dock list was empty (dockLaunchPoints, ApplicationManager.cpp:785-789).
+        am["/listDockPoints"] = function (p, reply) { reply(ok({ dockPoints: [] })); };
+
+        // ---- Redirect handlers: apps for web addresses and schemes -----------------------
+        // From /usr/palm/command-resource-handlers.json and http(s) to the
+        // browser (tag "system-default"), and those apps add
+        // (addRedirectHandler; tag "user"), kept in the shared store as
+        // MimeSystem saved its table. The first for a pattern is active
+        // until swapRedirectHandler picks another; each has an index.
+        function urlHandlers() {
+            var reg = runtime.handlerRegistry(), out = [], i = 0;
+            redirectList().forEach(function (h) {
+                out.push({ url: h.url, appId: h.appId, index: ++i, tag: "system-default", schemeForm: /^\^[a-z][a-z0-9+.-]*[:?]/i.test(h.url) });
+            });
+            out.push({ url: "^https?:", appId: "com.palm.app.browser", index: ++i, tag: "system-default", schemeForm: true });
+            reg.redirects.forEach(function (h) { out.push(Object.assign({ tag: "user" }, h)); });
+            return out;
+        }
+        function urlMatches(url) {
+            var reg = runtime.handlerRegistry(), groups = {}, order = [];
+            urlHandlers().forEach(function (h) {
+                var re;
+                try { re = new RegExp(h.url, "i"); } catch (e) { return; }
+                if (!re.test(url)) return;
+                if (!groups[h.url]) { groups[h.url] = []; order.push(h.url); }
+                groups[h.url].push(h);
+            });
+            return order.map(function (pattern) {
+                var list = groups[pattern], active = reg.activeRedirect[pattern];
+                var a = list.filter(function (h) { return h.index === active; })[0] || list[0];
+                return { pattern: pattern, active: a, alternates: list.filter(function (h) { return h !== a; }) };
+            });
+        }
+        function withName(h) {
+            var a = app(h.appId);
+            return Object.assign({}, h, { appName: a ? a.title : h.appId });
+        }
+        runtime.redirectHandlerFor = function (url) {
+            var m = urlMatches(String(url || ""))[0];
+            return m ? m.active.appId : null;
+        };
+        am["/addRedirectHandler"] = function (p, reply) {
+            if (typeof p.appId !== "string" || !p.appId) return reply({ subscribed: false, returnValue: false, errorCode: "Missing appId parameter" });
+            if (typeof p.urlPattern !== "string" || !p.urlPattern) return reply({ subscribed: false, returnValue: false, errorCode: "Missing urlPattern parameter" });
+            if (p.schemeForm !== undefined && typeof p.schemeForm !== "boolean")
+                return reply({ subscribed: false, returnValue: false, errorCode: "schemeForm parameter incorrectly specified (should be a boolean value)" });
+            try { new RegExp(p.urlPattern); } catch (e) { return reply({ subscribed: false, returnValue: false, errorCode: "adding handler failed" }); }
+            if (!app(p.appId)) return reply({ subscribed: false, returnValue: false, errorCode: "adding handler failed" });
+            var reg = runtime.handlerRegistry();
+            if (!reg.redirects.some(function (h) { return h.appId === p.appId && h.url === p.urlPattern; })) {
+                reg.redirects.push({ url: p.urlPattern, appId: p.appId, schemeForm: !!p.schemeForm, index: reg.next++ });
+                runtime.saveHandlerRegistry(reg);
+            }
+            reply({ subscribed: false, returnValue: true });
+        };
+        am["/swapRedirectHandler"] = function (p, reply) {
+            var pattern = String(p.url || ""), index = Number(p.index);
+            var h = urlHandlers().filter(function (x) { return x.url === pattern && x.index === index; })[0];
+            if (!h) return reply({ subscribed: false, returnValue: false, errorCode: "swap failed (incorrect index for url, perhaps?)" });
+            var reg = runtime.handlerRegistry();
+            reg.activeRedirect[pattern] = index;
+            runtime.saveHandlerRegistry(reg);
+            reply({ subscribed: false, returnValue: true });
+        };
+        am["/listAllHandlersForUrl"] = function (p, reply) {
+            var url = String(p.url || ""), m = urlMatches(url)[0];
+            if (!m) return reply({ subscribed: false, url: url, returnValue: false, errorCode: "No handlers found for " + url });
+            var r = { activeHandler: withName(m.active) };
+            if (m.alternates.length) r.alternates = m.alternates.map(withName);
+            reply({ subscribed: false, url: url, returnValue: true, redirectHandlers: r });
+        };
+        am["/listAllHandlersForUrlPattern"] = function (p, reply) {
+            var pattern = String(p.urlPattern || p.url || "");
+            var list = urlHandlers().filter(function (h) { return h.url === pattern; });
+            if (!list.length) return reply({ subscribed: false, returnValue: false, errorCode: "No handlers found for " + pattern });
+            var reg = runtime.handlerRegistry(), active = list.filter(function (h) { return h.index === reg.activeRedirect[pattern]; })[0] || list[0];
+            var r = { activeHandler: withName(active) };
+            var alt = list.filter(function (h) { return h !== active; });
+            if (alt.length) r.alternates = alt.map(withName);
+            reply({ subscribed: false, urlPattern: pattern, returnValue: true, redirectHandlers: r });
+        };
+        am["/listRedirectHandlers"] = function (p, reply) {
+            reply(ok({ redirectHandlers: urlHandlers().map(withName) }));
+        };
+    })();
 
     // ---- Just Type (com.palm.universalsearch) ---------------------------------------------
     // Modelled on openwebos/luna-universalsearchmgr: web search engines from
     // its UniversalSearchList.json, and the "action" (New Memo, New Event...)
     // and "dbsearch" (content search) providers the installed apps declare
     // in their appinfo.json "universalSearch" field. Preferences persist.
+    // The Just Type preferences (Settings > Just Type, in place of
+    // com.palm.app.searchpreferences) change them with its methods
+    // (UniversalSearchService.cpp:75-92):
+    //   updateSearchItem {category, id, enabled, setDefault?}
+    //   updateAllSearchItems {category, enabled}
+    //   reorderSearchItem {category, id, toIndex}: toIndex is the item's new
+    //       place in its category's list (the original counted it in the
+    //       list below the default engine, SearchItemsManager.cpp:766-775;
+    //       Settings shows every engine in one list)
+    //   get/getAll/setSearchPreference {key, value}: defaultSearchEngine,
+    //       defaultSearch (the default engine's row in Just Type),
+    //       ContactSearch, AppSearch, GAL (strings "true" / "false")
+    // getUniversalSearchList lists each category in the user's order.
 
     var US_ICONS = "/usr/lib/luna/system/luna-applauncher/images/";
     var US_ENGINES = [
@@ -1171,7 +1724,13 @@
     var US_DEFAULT_PREFS = { defaultSearchEngine: "google", defaultSearch: "true", ContactSearch: "true", AppSearch: "true", GAL: "false" };
     var usWatchers = [];
 
-    function usState() { return store.get("universalsearch", { prefs: {}, enabled: {} }); }
+    function usState() {
+        var st = store.get("universalsearch", null) || {};
+        st.prefs = st.prefs || {};
+        st.enabled = st.enabled || {};
+        st.order = st.order || {};
+        return st;
+    }
     function usSave(st) {
         store.set("universalsearch", st);
         usWatchers = usWatchers.filter(function (w) { return w(); });
@@ -1199,16 +1758,33 @@
             if (kind === "dbsearch" && !x.url) x.url = lp.id;
             out.push(x);
         });
-        return out;
+        return usOrdered(kind, out);
+    }
+    function usEngines() {
+        return usOrdered("search", US_ENGINES.map(function (e) {
+            var x = { category: "search", type: "web", iconFilePath: US_ICONS + "search-icon-" + e.id + ".png" }, k;
+            for (k in e) x[k] = e[k];
+            x.enabled = usEnabled("search:" + e.id, e.enabled);
+            return x;
+        }));
+    }
+    // The items of a category in the user's order (reorderSearchItem); new
+    // ones keep their place after those.
+    function usOrdered(category, items) {
+        var order = usState().order[category] || [];
+        return items.map(function (x, i) { return { x: x, i: i, o: order.indexOf(x.id) }; }).sort(function (a, b) {
+            if (a.o >= 0 && b.o >= 0) return a.o - b.o;
+            if (a.o >= 0 || b.o >= 0) return a.o >= 0 ? -1 : 1;
+            return a.i - b.i;
+        }).map(function (e) { return e.x; });
+    }
+    function usItems(category) {
+        return category === "search" ? usEngines() : category === "action" ? usProviders("action")
+             : category === "dbsearch" ? usProviders("dbsearch") : null;
     }
     function usList() {
         return ok({
-            UniversalSearchList: US_ENGINES.map(function (e) {
-                var x = { category: "search", type: "web", iconFilePath: US_ICONS + "search-icon-" + e.id + ".png" }, k;
-                for (k in e) x[k] = e[k];
-                x.enabled = usEnabled("search:" + e.id, e.enabled);
-                return x;
-            }),
+            UniversalSearchList: usEngines(),
             ActionList: usProviders("action"),
             DBSearchItemList: usProviders("dbsearch"),
             defaultSearchEngine: usPrefs().defaultSearchEngine
@@ -1235,10 +1811,38 @@
             usSave(st);
             reply(ok());
         },
-        // {id, category: "search" | "action" | "dbsearch", enabled}
+        // {id, category: "search" | "action" | "dbsearch", enabled, setDefault}
         "/updateSearchItem": function (p, reply) {
+            var category = p.category || "search", items = usItems(category);
+            if (!items) return reply(fail(-1, "Invalid category"));
+            if (!items.some(function (x) { return x.id === p.id; })) return reply(fail(-1, "Unable to update item"));
             var st = usState();
-            st.enabled[(p.category || "search") + ":" + p.id] = !!p.enabled;
+            if (p.enabled !== undefined) st.enabled[category + ":" + p.id] = !!p.enabled;
+            // The default engine (SearchItemsManager::updateSearchItem).
+            if (p.setDefault && category === "search") st.prefs.defaultSearchEngine = String(p.id);
+            usSave(st);
+            reply(ok());
+        },
+        // {category, enabled}: every item of the category on or off.
+        "/updateAllSearchItems": function (p, reply) {
+            var category = p.category || "search", items = usItems(category);
+            if (!items) return reply(fail(-1, "Invalid category"));
+            var st = usState();
+            items.forEach(function (x) { st.enabled[category + ":" + x.id] = !!p.enabled; });
+            usSave(st);
+            reply(ok());
+        },
+        // {category, id, toIndex}
+        "/reorderSearchItem": function (p, reply) {
+            var category = p.category || "search", items = usItems(category);
+            if (!items) return reply(fail(-1, "Invalid category"));
+            var ids = items.map(function (x) { return x.id; });
+            var from = ids.indexOf(p.id), to = Number(p.toIndex);
+            if (from < 0 || !(to >= 0)) return reply(fail(-1, "Unable to reorder item"));
+            ids.splice(from, 1);
+            ids.splice(Math.min(to, ids.length), 0, p.id);
+            var st = usState();
+            st.order[category] = ids;
             usSave(st);
             reply(ok());
         },
@@ -1263,10 +1867,12 @@
     var nativeWebViews = global.location && global.location.protocol === "phoenix:";
     var webViews = {};      // id -> adapter
     var nextWebView = 1;
+    // Ids unique across pages, so the shell finds the view a picture is of.
+    var webViewPrefix = "wv" + Math.random().toString(36).slice(2, 8) + "-";
 
     function WebViewAdapter(node) {
         this.node = node;
-        this.id = "wv" + (nextWebView++);
+        this.id = webViewPrefix + (nextWebView++);
         this.url = "";
         this.title = "";
         this.back = [];         // iframe engine history
@@ -1285,6 +1891,21 @@
             var p = { id: this.id, op: op }, k;
             for (k in extra || {}) p[k] = extra[k];
             host.postToHost("webView", p);
+        },
+        // A picture request (saveViewToFile and friends), answered at once.
+        picture: function (req) {
+            if (!nativeWebViews) return false;
+            try {
+                var x = new XMLHttpRequest();
+                x.open("GET", "/__phoenix/snapshot?req=" + encodeURIComponent(toJson(req)), false);
+                x.send();
+                var r = JSON.parse(x.responseText || "{}");
+                if (r.returnValue === false) console.warn("[phoenix-runtime] " + req.op + ": " + r.errorText);
+                return r.returnValue !== false;
+            } catch (e) {
+                console.warn("[phoenix-runtime] " + req.op + ": " + e.message);
+                return false;
+            }
         },
         connect: function () {
             var self = this;
@@ -1306,10 +1927,34 @@
         track: function () {
             var self = this;
             if (this.destroyed) return;
-            var n = this.node, r = n.getBoundingClientRect();
+            var n = this.node, b = n.getBoundingClientRect();
+            var r = { left: b.left, top: b.top, right: b.right, bottom: b.bottom };
+            // Shown: laid out and not hidden. Not offsetParent, which is null
+            // for position: fixed, as the app menu is.
+            function shown(e) {
+                if (!e.getClientRects().length) return false;
+                var cs = global.getComputedStyle(e);
+                return cs.visibility !== "hidden" && cs.display !== "none";
+            }
             var popup = Array.prototype.some.call(global.document.querySelectorAll(".enyo-popup"), function (e) {
-                return e.offsetParent !== null && e.getBoundingClientRect().height > 0;
+                return shown(e) && e.getBoundingClientRect().height > 0;
             });
+            // A drawer flown in from a side (enyo.Toaster, class enyo-toaster:
+            // the browser's bookmarks, history and downloads) covers part of
+            // the page: the view keeps to the part it leaves, since nothing in
+            // the page can draw over a native view.
+            Array.prototype.forEach.call(global.document.querySelectorAll(".enyo-toaster"), function (e) {
+                if (!shown(e)) return;
+                var t = e.getBoundingClientRect();
+                if (t.width === 0 || t.height === 0 || t.right <= r.left || t.left >= r.right || t.bottom <= r.top || t.top >= r.bottom) return;
+                if (t.top <= r.top && t.bottom >= r.bottom) {
+                    if (t.left > r.left) r.right = Math.min(r.right, t.left);
+                    else r.left = Math.max(r.left, t.right);
+                } else if (t.top > r.top) r.bottom = Math.min(r.bottom, t.top);
+                else r.top = Math.max(r.top, t.bottom);
+            });
+            r.width = Math.max(0, r.right - r.left);
+            r.height = Math.max(0, r.bottom - r.top);
             var hidden = !n.isConnected || n.offsetParent === null || r.width === 0 || r.height === 0 || popup;
             var rect = [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)].join(",");
             if (rect !== this.rect || hidden !== this.hidden) {
@@ -1432,11 +2077,36 @@
             inspectUrlAtPoint: function () {},
             getImageInfoAtPoint: function () {},
             saveImageAtPoint: function () {},
-            saveViewToFile: function () {},
-            generateIconFromFile: function () {},
-            resizeImage: function () {},
-            deleteImage: function () {},
-            printFrame: function () {}
+            // Pictures of the page (BrowserServer's): the browser's bookmark
+            // thumbnail and the icon of a launcher shortcut. phoenix-sim
+            // makes them (/__phoenix/snapshot); they return at once, as the
+            // plugin's calls did, and the files are there when the page
+            // shows them. In a desktop browser the page is an <iframe>
+            // nothing can take a picture of, and there are none.
+            saveViewToFile: function (path, left, top, width, height) {
+                this.picture({ op: "save", view: this.id, path: path, rect: [left || 0, top || 0, width, height] });
+            },
+            generateIconFromFile: function (src, path, left, top, right, bottom) {
+                this.picture({ op: "icon", src: src, path: path, rect: [left || 0, top || 0, (right || 0) - (left || 0), (bottom || 0) - (top || 0)] });
+            },
+            resizeImage: function (src, path, width, height) {
+                this.picture({ op: "resize", src: src, path: path, width: width, height: height });
+            },
+            deleteImage: function (path) { this.picture({ op: "delete", path: path }); },
+            // (frameName, jobID, width, height, dpi, landscape, reverse): the
+            // page shown here, for a com.palm.printmgr job (the browser's and
+            // Email's Print). The native view renders it with Chromium; the
+            // iframe engine prints the page's text (all it can read of a
+            // same-origin page).
+            printFrame: function (frameName, jobID) {
+                if (!jobID || !runtime.print) return;
+                if (nativeWebViews)
+                    return runtime.print.render(jobID, { title: this.title, host: { type: "webView", id: this.id } });
+                var doc = null;
+                try { doc = this.frame && this.frame.contentDocument; } catch (e) { doc = null; }
+                runtime.print.render(jobID, { title: (doc && doc.title) || this.title || this.url,
+                                              text: doc && doc.body ? doc.body.innerText : this.url });
+            }
         }
     };
 
@@ -1471,6 +2141,29 @@
         if (name === "urlTitleChanged") { a.url = args[0]; a.title = args[1]; }
         a.listener.apply(a, [name].concat(args || []));
     };
+
+    // A page view nobody sees, showing some HTML: what Email prints its
+    // message from (the message itself is a div of its window). In
+    // phoenix-sim only; loaded(id) once the page has loaded, then the view
+    // can be printed by its id and must be destroyed.
+    runtime.offscreenWebView = nativeWebViews ? function (html, loaded) {
+        var a = { id: "wv" + (nextWebView++), fired: false };
+        a.listener = function (name) {
+            if (name === "documentLoadFinished" && !a.fired) { a.fired = true; loaded(a.id); }
+        };
+        webViews[a.id] = a;
+        host.postToHost("webView", { id: a.id, op: "create" });
+        // Letter width at 96 dpi; the PDF is laid out for its paper anyway.
+        host.postToHost("webView", { id: a.id, op: "geometry", x: 0, y: 0, width: 816, height: 1056, visible: false });
+        host.postToHost("webView", { id: a.id, op: "html", url: "", html: html });
+        return {
+            destroy: function () {
+                if (!webViews[a.id]) return;
+                delete webViews[a.id];
+                host.postToHost("webView", { id: a.id, op: "destroy" });
+            }
+        };
+    } : null;
 
     // ---- Connectivity, power, accounts and friends -------------------------------------
 
@@ -1523,17 +2216,21 @@
         "*": function (p, reply) { reply(ok()); }
     });
 
-    // charger: "none", "wall" (a wall charger on the USB port) or "pc"; as
-    // on the Pre, both charge over USB (luna-systemui PowerdService.js).
+    // charger: "none", "wall" (a wall charger on the USB port), "pc", or
+    // "inductive", the Touchstone (puckId: its serial number). The first two
+    // charge over USB, as on the Pre (luna-systemui PowerdService.js); on the
+    // Touchstone powerd said DockConnected with DockPower and DockSerialNo
+    // (DisplayManager::usbDockCallback, :967-1060).
     function powerState() { return store.get("power", { percent: 76, charger: "none" }); }
     function batteryPayload(st) {
         return { percent: st.percent, percent_ui: st.percent, temperature_C: 28,
                  current_mA: st.charger !== "none" ? 800 : -250, capacity_mAh: 1150, voltage_mV: 3900 };
     }
     function chargerPayload(st) {
-        var on = st.charger !== "none";
-        return { Charging: on, Connected: on, USBConnected: on, USBName: on ? st.charger : "",
-                 DockConnected: false, DockPower: false, type: st.charger };
+        var on = st.charger !== "none", dock = st.charger === "inductive";
+        return { Charging: on, Connected: on, USBConnected: on && !dock, USBName: on && !dock ? st.charger : "",
+                 DockConnected: dock, DockPower: dock, DockSerialNo: dock ? (st.puckId || "NULL") : "",
+                 type: st.charger };
     }
     // {percent, charger}: change the battery and tell the listeners.
     runtime.setPower = function (changes) {
@@ -1620,8 +2317,12 @@
             host.postToHost("launchPointIcon", { appId: PalmSystem.appIdentifier, launchPointId: p.launchPointId, icon: icon });
             reply(ok({}));
         };
-        // Headless apps (Calendar) ask to stay loaded when their windows close.
-        if (!PalmSystem.keepAlive) PalmSystem.keepAlive = function () {};
+        // Headless apps (Calendar) ask to stay loaded when their windows
+        // close: the shell keeps the app's page running when its last card
+        // closes (as the apps LunaSysMgr kept alive, luna.conf [KeepAlive]).
+        if (!PalmSystem.keepAlive) PalmSystem.keepAlive = function (on) {
+            host.postToHost("keepAlive", { on: on === undefined ? true : !!on });
+        };
         // Enyo reads window params from PalmSystem.launchParams, and from the
         // URL's enyoWindowParams only when there are no launch params. Pages
         // opened with enyoWindowParams (CrossAppUI iframes such as Email's
@@ -2103,8 +2804,7 @@
     (function backupKinds() {
         var VERSION = 1;
         if (store.get("db8BackupKinds", 0) >= VERSION) return;
-        var key = "db8:com.palm.db";
-        var db = store.get(key, { objects: {}, kinds: {}, rev: 1, nextId: 1 });
+        var db = db8Stores["com.palm.db"].load();
         ["com.palm.person:1", "com.palm.contact.palmprofile:1", "com.palm.calendar:1", "com.palm.calendarevent:1",
          "com.palm.task:1", "com.palm.tasklist:1", "com.palm.note:1", "com.palm.smsmessage:1", "com.palm.chatthread:1",
          "com.palm.phonecall:1", "com.palm.clock.alarm:1", "com.palm.clock.prefs:1", "com.palm.app.contacts.prefs:1",
@@ -2113,7 +2813,7 @@
             k.sync = true;
             db.kinds[id] = k;
         });
-        store.set(key, db);
+        db8Stores["com.palm.db"].save(db);
         store.set("db8BackupKinds", VERSION);
     })();
 
@@ -3068,6 +3768,9 @@
                 keyboards: keyboardCombos(p),
                 keyboard: keyboardInUse(p),
                 ringtone: (p.ringtone && p.ringtone.fullPath) || "",
+                // Phone preferences: unconditional call forwarding on (the
+                // status bar's call-forward icon, StatusBarInfo::setCallForward).
+                callForwarding: runtime.callForwarding ? runtime.callForwarding() : false,
                 alerttone: (p.alerttone && p.alerttone.fullPath) || "",
                 notificationtone: (p.notificationtone && p.notificationtone.fullPath) || "",
                 showAlertsWhenLocked: p.showAlertsWhenLocked !== false,
@@ -3077,9 +3780,21 @@
                 audioScenario: audioScenario(),
                 screenTimeout: typeof p.screenTimeout === "number" ? p.screenTimeout : 60,
                 lockTimeout: typeof p.lockTimeout === "number" ? p.lockTimeout : 0,
+                advancedGestures: !!p.sysUiEnableNextPrevGestures,
+                keyboardShortcuts: p.keyboardShortcuts === "desktop" ? "desktop" : "ipad",
                 // Settings > Accessibility: the shell's animations.
                 reduceMotion: !!(p.accessibility && p.accessibility.reduceMotion),
+                // ... and the hardware keyboard's sticky, slow and bounce
+                // keys and key repeat (the shell's KeyboardAccess).
+                keyboardAccess: keyboardAccess(p.accessibility || {}),
                 wallpaperFile: (p.wallpaper && p.wallpaper.wallpaperFile) || "",
+                // Dock mode (Settings > Exhibition): its wallpaper, the
+                // exhibitions that are on (after the built-in Time), its
+                // sounds and when it starts; night mode.
+                dockWallpaperFile: (p.dockwallpaper && p.dockwallpaper.wallpaperFile) || "",
+                exhibitionApps: runtime.exhibitionApps ? runtime.exhibitionApps() : [],
+                dockModeSound: p.dockModeSoundPref === "mute" ? "mute" : "systemsettings",
+                exhibition: exhibitionPrefs(p),
                 // The system menu's VPN drawer: each profile's name, its state
                 // (disconnected, connecting, connected) and whether connecting
                 // asks for a user name and password (then the drawer opens
@@ -3090,6 +3805,15 @@
                              needsCredentials: vpnNeedsCredentials(c) };
                 })
             };
+        }
+
+        // Settings > Exhibition, with the defaults filled in and the times
+        // checked ("HH:MM").
+        function exhibitionPrefs(p) {
+            var e = p.exhibition && typeof p.exhibition === "object" ? p.exhibition : {};
+            var time = function (v, d) { return /^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(v) ? v : d; };
+            return { enabled: e.enabled !== false, startAfter: typeof e.startAfter === "number" && e.startAfter > 0 ? e.startAfter : 0,
+                     nightMode: !!e.nightMode, nightStart: time(e.nightStart, "22:00"), nightEnd: time(e.nightEnd, "07:00") };
         }
 
         // The keyboard's "Keyboard clicks": x_palm_virtualkeyboard_prefs
@@ -3143,9 +3867,17 @@
         }
         function textAssist(p) {
             var kb = keyboardPrefs(p);
+            var ti = p.x_palm_textinput && typeof p.x_palm_textinput === "object" ? p.x_palm_textinput : {};
+            // The user's shortcuts, typed (lower case) -> text.
+            var shortcuts = {};
+            (Array.isArray(ti.shortcuts) ? ti.shortcuts : []).forEach(function (s) {
+                if (s && typeof s.shortcut === "string" && s.shortcut && typeof s.text === "string" && s.text)
+                    shortcuts[s.shortcut.toLowerCase()] = s.text;
+            });
             return { suggestions: kb.WordSuggestions !== false, autoCorrect: kb.AutoCorrect !== false,
                      swipe: kb.SwipeTyping !== false, spaces2period: kb.spaces2period !== false,
-                     forgetWords: typeof kb.ForgetWords === "number" ? kb.ForgetWords : 0 };
+                     forgetWords: typeof kb.ForgetWords === "number" ? kb.ForgetWords : 0,
+                     shortcuts: shortcuts, shortcutsOn: ti.shortcutChecking !== "off" };
         }
 
         function changed() {
@@ -3163,7 +3895,7 @@
         // Another window changed the shared state.
         try {
             global.addEventListener("storage", function (e) {
-                if (e.key === "phoenix:" + KEY || e.key === "phoenix:prefs" || e.key === "phoenix:deviceLocked") changed();
+                if (e.key === "phoenix:" + KEY || e.key === "phoenix:prefs" || e.key === "phoenix:deviceLocked" || e.key === "phoenix:dockMode") changed();
             });
         } catch (e) { /* ignore */ }
 
@@ -3686,8 +4418,9 @@
         };
         sys["/setPreferences"] = function (p, reply, ctx) {
             baseSetPreferences(p, reply, ctx);
-            if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "screenTimeout", "lockTimeout", "systemSounds", "ringtone", "alerttone",
-                 "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "accessibility"].some(function (k) { return k in p; })) {
+            if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "screenTimeout", "lockTimeout", "sysUiEnableNextPrevGestures", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
+                 "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "x_palm_textinput", "accessibility",
+                 "dockwallpaper", "dockModeSoundPref", "exhibition"].some(function (k) { return k in p; })) {
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
                 changed();
             }
@@ -3748,6 +4481,41 @@
         };
 
         // ---- com.palm.systemmanager: device lock (legacy webOS API) ----------------
+        //
+        // luna-sysmgr's Security.cpp and EASPolicyManager.cpp, ported:
+        //   getDeviceLockMode {subscribe} -> {lockMode: "none" | "pin" | "password",
+        //       policyState: "none" | "active" | "pending", retriesLeft}
+        //   getSecurityPolicy {} -> {policy: {password: {enabled, minLength,
+        //       maxRetries, alphaNumeric, allowSimplePassword?}, inactivityInSeconds,
+        //       id, status: {enforced, retriesLeft}}}, or returnValue false
+        //       without a policy (SystemService.cpp:2295-2400)
+        //   setDevicePasscode {lockMode, passCode, oldPasscode}: Phoenix asks for
+        //       the old passcode when one is set, except while a security
+        //       policy is pending: the lock screen then sets the one the policy
+        //       asks for, as LockWindow did (LockWindow.cpp:1427-1530). Against
+        //       a policy that requires a passcode, the original's checks and
+        //       errors (Security::validatePasscode, Security.cpp:466-512;
+        //       errorCode -1 to -9); without one, Phoenix's (4 digits or
+        //       characters at least).
+        //   matchDevicePasscode {passCode} -> {succeeded}, and when it is not
+        //       {lockedOut, retriesLeft} (Security::matchPasscode, :325-385).
+        //       Phoenix answers returnValue true with succeeded; the original
+        //       answered returnValue false for a wrong passcode.
+        //
+        // The security policy (EAS: an Exchange account asks the device for a
+        // passcode) is what the accounts put in db8 as com.palm.securitypolicy:1
+        // objects, with EAS's field names (devicePasswordEnabled,
+        // minDevicePasswordLength, maxDevicePasswordFailedAttempts,
+        // alphanumericDevicePasswordRequired, allowSimpleDevicePassword,
+        // maxInactivityTimeDeviceLock), merged into the strictest of them
+        // (EASPolicyManager.cpp:300-384, EASPolicy::merge :968-1012).
+        // phoenix-sim --security-policy puts one there. A policy that asks for
+        // a passcode the device does not have (or one too weak for it) is
+        // "pending" until one is set, then "active": each wrong passcode then
+        // costs one of its maxRetries, and the last wipes the device
+        // (com.palm.storage/erase/Wipe). Without a policy, three wrong
+        // passcodes in a row hold the next try off for 15 s
+        // (Security.cpp:43-44, s_defaultMaxRetries, s_deviceLockOutDuration).
 
         function hash(s) {
             // Not a secure hash: the simulator only needs to avoid storing the
@@ -3756,6 +4524,136 @@
             for (var i = 0; i < s.length; ++i) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
             return "djb2:" + (h >>> 0).toString(16);
         }
+        var DEFAULT_RETRIES = 3, LOCKOUT_MS = 15000;
+        var POLICY_KIND = "com.palm.securitypolicy:1";
+        function dbSecurity(method, params) {
+            var out, db = runtime.services["com.palm.db"];
+            db[method](params, function (r) { if (out === undefined) out = r; }, { cancelled: function () { return true; } });
+            return out || {};
+        }
+        if (dbSecurity("/find", { query: { from: POLICY_KIND } }).returnValue === false)
+            dbSecurity("/putKind", { id: POLICY_KIND, owner: "com.palm.systemmanager" });
+
+        // EASPolicy::fromNewJSON (:867-938) for each, merged into an
+        // aggregate that starts as EASPolicy(true) (EASPolicyManager.h:40-46).
+        // maxInactivityInSeconds (:943-956): down to 30 s steps under a
+        // minute, minute steps under 9999 s, else 0.
+        function maxInactivity(sec) {
+            if (sec < 60) return sec - sec % 30;
+            if (sec < 9999) return sec - sec % 60;
+            return 0;
+        }
+        function aggregatePolicy() {
+            var docs = (dbSecurity("/find", { query: { from: POLICY_KIND } }).results || []).filter(function (d) { return !d._del; });
+            if (!docs.length) return null;
+            var a = { passwordRequired: false, maxRetries: 0, minLength: 1, alphaNumeric: false, allowSimple: true,
+                      inactivity: 9998, id: "" };
+            docs.forEach(function (d) {
+                var n = { passwordRequired: !!d.devicePasswordEnabled, alphaNumeric: !!d.alphanumericDevicePasswordRequired,
+                          minLength: d.minDevicePasswordLength !== undefined ? d.minDevicePasswordLength | 0 : 1,
+                          maxRetries: d.maxDevicePasswordFailedAttempts !== undefined ? d.maxDevicePasswordFailedAttempts | 0 : 1,
+                          inactivity: d.maxInactivityTimeDeviceLock !== undefined ? d.maxInactivityTimeDeviceLock | 0 : 0,
+                          allowSimple: d.allowSimpleDevicePassword !== undefined ? !!d.allowSimpleDevicePassword : true };
+                if (!a.passwordRequired && n.passwordRequired) {
+                    a.passwordRequired = true;
+                    a.maxRetries = n.maxRetries;
+                    a.minLength = n.minLength;
+                    a.alphaNumeric = n.alphaNumeric;
+                    a.allowSimple = n.allowSimple;
+                    a.inactivity = maxInactivity(n.inactivity);
+                } else if (a.passwordRequired && n.passwordRequired) {
+                    if (n.inactivity < a.inactivity) a.inactivity = maxInactivity(n.inactivity);
+                    if (n.maxRetries > 1 && (!(a.maxRetries > 1) || n.maxRetries < a.maxRetries)) a.maxRetries = n.maxRetries;
+                    if (n.alphaNumeric) a.alphaNumeric = true;
+                    if (!n.allowSimple) a.allowSimple = false;
+                    if (n.minLength > 1 && n.minLength > a.minLength) a.minLength = n.minLength;
+                }
+                if (!a.id && d._id) a.id = String(d._id);
+            });
+            return a;
+        }
+        // EASPolicy::validMaxRetries / validMinLength (EASPolicyManager.h:70-71).
+        function validMaxRetries(a) { return !!a && a.passwordRequired && a.maxRetries > 1; }
+        function validMinLength(a) { return !!a && a.passwordRequired && a.minLength > 1; }
+
+        // Security::validateStrength (:540-590): no run of repeated or
+        // consecutive characters longer than half the passcode.
+        function strength(pass) {
+            var max = Math.floor(pass.length / 2), j = 0;
+            for (var i = 0; i < pass.length - 1; i++) {
+                var cur = pass.charCodeAt(i), next = pass.charCodeAt(i + 1), dir = next - cur;
+                if (dir > -2 && dir < 2) {
+                    var n = 2;
+                    cur = next;
+                    for (j = i + 2; j < pass.length; j++) {
+                        next = pass.charCodeAt(j);
+                        if (next - cur !== dir) break;
+                        if (++n > max) return dir === 0 ? -8 : -9;
+                        cur = next;
+                    }
+                    i = j - 1;
+                }
+            }
+            return 0;
+        }
+        // What a policy needs to know of a passcode, kept when it is set: on
+        // a device Security::passcodeSatisfiesPolicy (:400-418) decrypts the
+        // passcode itself; the simulator keeps only its hash.
+        function traits(mode, pass) {
+            return { mode: mode, length: pass.length, letters: /[A-Za-zÀ-￿]/.test(pass), digits: /[0-9]/.test(pass),
+                     digitsOnly: /^[0-9]*$/.test(pass), strength: strength(pass) };
+        }
+        // Security::validatePasscode (:466-512), on those.
+        function validate(a, t) {
+            if (!a || !a.passwordRequired) return 0;
+            if (t.mode === "none" || !t.length) return -1;
+            if (validMinLength(a) && t.length < a.minLength) return -2;
+            if (a.alphaNumeric) {
+                if (t.mode !== "password") return -3;
+                if (!t.letters || !t.digits) return -4;
+            } else if (t.mode === "pin" && !t.digitsOnly) {
+                return -5;
+            }
+            return a.allowSimple ? 0 : t.strength || 0;
+        }
+        // Security::setPasscode's texts (:180-205).
+        function passcodeError(code, mode) {
+            return { "-1": "Passcode is empty", "-2": "Passcode not minimum length", "-3": "Alphanumeric characters required",
+                     "-4": "Alphanumeric characters required", "-5": "Pin invalid",
+                     "-8": mode === "pin" ? "No repeating numbers (3333)" : "No repeating characters (aaaa)",
+                     "-9": mode === "pin" ? "No sequential numbers (1234)" : "No sequential characters (abcd)" }[String(code)]
+                || "Passcode general failure";
+        }
+
+        // The lock, with the policy brought up to date: a new or changed
+        // policy is enforced at once when the passcode satisfies it
+        // (EASPolicyManager::notifyPolicyChanged, :692-700), and its retries
+        // start again when it allows another number (:358-372).
+        function lockState(s) {
+            var l = s.lock, a = aggregatePolicy();
+            if (l.numRetries === undefined) l.numRetries = DEFAULT_RETRIES;
+            var sig = a ? toJson(a) : "";
+            if (sig !== (l.policy ? l.policy.sig : "")) {
+                var old = l.policy;
+                if (!a) {
+                    l.policy = null;
+                    l.numRetries = DEFAULT_RETRIES;   // Security::slotPolicyChanged (:387-397)
+                } else {
+                    var enforced = validate(a, l.traits || traits(l.lockMode, "")) === 0;
+                    l.policy = { sig: sig, enforced: enforced, maxRetries: a.maxRetries,
+                                 retriesLeft: old && old.maxRetries === a.maxRetries ? old.retriesLeft : a.maxRetries };
+                    if (!validMaxRetries(a) && enforced) l.numRetries = 0;
+                }
+                save(s);
+            }
+            return { a: a, l: l, pending: !!(a && !l.policy.enforced) };
+        }
+        function policyState(st) { return !st.a ? "none" : st.pending ? "pending" : "active"; }
+        // EASPolicyManager::retriesLeft (:741-746).
+        function easRetriesLeft(st) {
+            return validMaxRetries(st.a) && !st.pending ? st.l.policy.retriesLeft : 0;
+        }
+
         var stub = runtime.services["com.palm.systemmanager"] || { "*": function (p, reply) { reply(ok()); } };
         register(["com.palm.systemmanager"], {
             // The lock screen is up, as the shell last said (SystemService
@@ -3764,33 +4662,90 @@
             "/getLockStatus": function (p, reply, ctx) {
                 watch(p, reply, ctx, function () { return ok({ locked: !!store.get("deviceLocked", false) }); });
             },
+            // Dock mode (an exhibition on the Touchstone) is up, as the shell
+            // last said (SystemService.cpp:1913-1990 getDockModeStatus
+            // {enabled}); subscribe to hear it start and end.
+            "/getDockModeStatus": function (p, reply, ctx) {
+                watch(p, reply, ctx, function () { return ok({ enabled: !!store.get("dockMode", false) }); });
+            },
             // How the UI and the device are turned, as the shell last said
             // ({ orientation: { ui, device } }); subscribe to follow them.
             // ime.visible: the virtual keyboard is up, as the shell last said.
             "/getSystemStatus": function (p, reply, ctx) {
                 watch(p, reply, ctx, function () {
                     var o = store.get("orientation", null) || {};
-                    return ok({ ime: { visible: !!store.get("imeVisible", false) }, orientation: { ui: o.ui || "up", device: o.device || "up" } });
+                    // gestureArea (Phoenix): the shell says whether there is one.
+                    return ok({ ime: { visible: !!store.get("imeVisible", false) }, orientation: { ui: o.ui || "up", device: o.device || "up" },
+                                gestureArea: !!store.get("gestureArea", false) });
                 });
             },
-            "/getDeviceLockMode": function (p, reply) {
-                var l = load().lock;
-                reply(ok({ lockMode: l.lockMode, policyState: "none", retriesLeft: 10 }));
+            "/getDeviceLockMode": function (p, reply, ctx) {
+                watch(p, reply, ctx, function () {
+                    var st = lockState(load());
+                    return ok({ lockMode: st.l.lockMode, policyState: policyState(st), retriesLeft: easRetriesLeft(st) });
+                });
+            },
+            "/getSecurityPolicy": function (p, reply) {
+                var st = lockState(load()), a = st.a;
+                if (!a) return reply({ returnValue: false });
+                var password = { enabled: a.passwordRequired, minLength: a.minLength, maxRetries: a.maxRetries, alphaNumeric: a.alphaNumeric };
+                if (a.passwordRequired && !a.alphaNumeric) password.allowSimplePassword = a.allowSimple;
+                reply(ok({ policy: { password: password, inactivityInSeconds: a.inactivity, id: a.id,
+                                     status: { enforced: !st.pending, retriesLeft: st.l.policy.retriesLeft } } }));
             },
             "/setDevicePasscode": function (p, reply) {
-                var s = load();
-                if (s.lock.lockMode !== "none" && hash(p.oldPasscode || "") !== s.lock.hash)
+                var s = load(), st = lockState(s), mode = p.lockMode, pass = typeof p.passCode === "string" ? p.passCode : "";
+                if (st.l.lockMode !== "none" && !st.pending && hash(p.oldPasscode || "") !== st.l.hash)
                     return reply(fail(-1, "Incorrect passcode"));
-                if (["none", "pin", "password"].indexOf(p.lockMode) < 0) return reply(fail(-1, "Invalid lock mode"));
-                if (p.lockMode === "pin" && !/^[0-9]{4,}$/.test(p.passCode || "")) return reply(fail(-1, "A PIN needs at least 4 digits"));
-                if (p.lockMode === "password" && (p.passCode || "").length < 4) return reply(fail(-1, "Passwords need at least 4 characters"));
-                s.lock = { lockMode: p.lockMode, hash: p.lockMode === "none" ? "" : hash(p.passCode) };
+                if (["none", "pin", "password"].indexOf(mode) < 0) return reply(fail(-1, "Invalid lock mode"));
+                var t = traits(mode, mode === "none" ? "" : pass);
+                if (st.a && st.a.passwordRequired) {
+                    var code = validate(st.a, t);
+                    if (code < 0) return reply(fail(code, passcodeError(code, mode)));
+                } else {
+                    if (mode === "pin" && !/^[0-9]{4,}$/.test(pass)) return reply(fail(-1, "A PIN needs at least 4 digits"));
+                    if (mode === "password" && pass.length < 4) return reply(fail(-1, "Passwords need at least 4 characters"));
+                }
+                s.lock.lockMode = mode;
+                s.lock.hash = mode === "none" ? "" : hash(pass);
+                s.lock.traits = t;
+                // EASPolicyManager::passwordEnforced (:728-738).
+                if (st.pending && mode !== "none") {
+                    s.lock.policy.enforced = true;
+                    s.lock.policy.retriesLeft = st.a.maxRetries;
+                }
                 save(s);
                 reply(ok());
             },
             "/matchDevicePasscode": function (p, reply) {
-                var l = load().lock;
-                reply(ok({ succeeded: l.lockMode === "none" || hash(p.passCode || "") === l.hash }));
+                var s = load(), st = lockState(s), l = s.lock, now = Date.now();
+                var counted = validMaxRetries(st.a) && !st.pending;
+                if ((!st.a || st.pending) && l.numRetries === 0) {
+                    if (now - (l.lastFailure || 0) < LOCKOUT_MS)
+                        return reply(ok({ succeeded: false, lockedOut: true, retriesLeft: 0 }));
+                    l.numRetries = DEFAULT_RETRIES;
+                }
+                var good = l.lockMode === "none" || hash(p.passCode || "") === l.hash;
+                var wipe = false;
+                if (!good) {
+                    if (l.numRetries > 0) l.numRetries--;
+                    if (counted) {
+                        if (l.policy.retriesLeft > 0) l.policy.retriesLeft--;
+                        l.numRetries = l.policy.retriesLeft;
+                        wipe = l.numRetries === 0;
+                    }
+                    l.lastFailure = now;
+                } else if (st.a && !st.pending) {
+                    if (counted) l.policy.retriesLeft = st.a.maxRetries;
+                    l.numRetries = counted ? st.a.maxRetries : 0;
+                } else {
+                    l.numRetries = DEFAULT_RETRIES;
+                }
+                save(s);
+                reply(good ? ok({ succeeded: true }) : ok({ succeeded: false, lockedOut: false, retriesLeft: l.numRetries }));
+                // Boom (Security::eraseDevice, :420-432).
+                if (wipe)
+                    dispatch("palm://com.palm.storage/erase/Wipe", {}, function () {}, { cancelled: function () { return false; } });
             },
             "*": stub["*"]
         });
@@ -3851,12 +4806,87 @@
                 reply(ok());
             },
             "/fullErase": function (p, reply) {
-                eraseStore(false);
-                var media = runtime.mediaFiles;
-                (media ? media.clear() : Promise.resolve()).then(function () { reply(ok()); },
-                    function (e) { reply(fail(-1, "Could not erase the files: " + e)); });
+                fullErase().then(function () {
+                    reply(ok());
+                    restartErased();
+                }, function (e) { reply(fail(-1, "Could not erase the files: " + e)); });
             }
         });
+        function fullErase() {
+            eraseStore(false);
+            var media = runtime.mediaFiles;
+            return media ? media.clear() : Promise.resolve();
+        }
+        // The device restarts into First Use. phoenix-sim also removes its
+        // data folder and settings (SimProcess::eraseAndRestart); a page in a
+        // browser has nothing more to erase.
+        function restartErased() {
+            if (!/^https?:$/.test(global.location.protocol))
+                host.postToHost("erase", {});
+        }
+
+        // ---- com.palm.storage: erase and USB drive mode (storaged) -------------------
+        //
+        // The legacy storage daemon's methods LunaSysMgr and luna-systemui call:
+        //   erase/EraseAll {}   Full Erase (WindowServerLuna::slotFullEraseDevice,
+        //                       the Full Erase key chord): the apps' data and the
+        //                       USB drive's files, then the device restarts
+        //   erase/Wipe {}       the same, when a security policy's last try
+        //                       failed (Security::eraseDevice)
+        //   diskmode/hostIsConnected {} -> {result, hostIsConnected}: a cable
+        //                       from a computer is in (luna-systemui
+        //                       StoragedService.js, StoragedAlerts.js)
+        //   diskmode/enterMSM {"user-confirmed", enterIMasq}: USB drive mode
+        // and its /storaged signals (com.palm.bus/signal/addmatch): MSMAvail
+        // {mode-avail}, MSMProgress {stage, enterIMasq}, MSMEntry {new-mode,
+        // enterIMasq}, MSMFscking {}, PartitionAvail {fscked | reformatted}.
+        // The simulator's storaged is phoenix-sim's (SimStorage.qml, F12 and
+        // Shift+F12): a page asks it with an "enterMSM" host message, and it
+        // signals every page through runtime.storagedSignal and the shell
+        // directly. The cable's state reaches the pages as host status
+        // ({usbHost: true | false}).
+        register(["com.palm.storage"], {
+            "/erase/EraseAll": function (p, reply) {
+                fullErase().then(function () {
+                    reply(ok());
+                    restartErased();
+                }, function (e) { reply(fail(-1, "Could not erase: " + e)); });
+            },
+            "/erase/Wipe": function (p, reply) {
+                fullErase().then(function () {
+                    reply(ok());
+                    restartErased();
+                }, function (e) { reply(fail(-1, "Could not erase: " + e)); });
+            },
+            // The page may ask before phoenix-sim has told it about the
+            // cable (luna-systemui asks as it starts, and the host's status
+            // comes once the page has loaded): the answer waits for it, 3 s
+            // at most. A page in a browser has no host to wait for.
+            "/diskmode/hostIsConnected": function (p, reply) {
+                var answer = function () { reply(ok({ result: true, hostIsConnected: !!store.get("usbHost", false) })); };
+                if (usbKnown)
+                    return answer();
+                usbWaiting.push(answer);
+                setTimeout(function () {
+                    var i = usbWaiting.indexOf(answer);
+                    if (i >= 0) { usbWaiting.splice(i, 1); answer(); }
+                }, 3000);
+            },
+            "/diskmode/enterMSM": function (p, reply) {
+                if (!store.get("usbHost", false)) return reply(fail(-1, "No computer is connected"));
+                reply(ok());
+                host.postToHost("enterMSM", { enterIMasq: !!p.enterIMasq });
+            },
+            "*": function (p, reply) { reply(ok()); }
+        });
+        runtime.storagedSignal = function (method, payload) {
+            signal("/storaged", method, payload || {});
+        };
+        var usbKnown = /^https?:$/.test(global.location.protocol), usbWaiting = [];
+        function usbHostKnown() {
+            usbKnown = true;
+            usbWaiting.splice(0).forEach(function (answer) { answer(); });
+        }
 
         // ---- VPN (com.webos.service.vpn: LuneOS luneos-vpn-adapter) ----------------
         //
@@ -4327,10 +5357,25 @@
                 store.set("deviceLocked", !!st.deviceLocked);
                 changed();
             }
+            // Dock mode (getDockModeStatus).
+            if ("dockMode" in st && !!st.dockMode !== !!store.get("dockMode", false)) {
+                store.set("dockMode", !!st.dockMode);
+                changed();
+            }
             // How the UI and the device are turned (getSystemStatus).
             if (st.orientation && toJson(st.orientation) !== toJson(store.get("orientation", null))) {
                 store.set("orientation", { ui: st.orientation.ui, device: st.orientation.device });
                 changed();
+            }
+            // The device has a gesture area (getSystemStatus gestureArea).
+            if ("gestureArea" in st && !!st.gestureArea !== !!store.get("gestureArea", false)) {
+                store.set("gestureArea", !!st.gestureArea);
+                changed();
+            }
+            // A cable from a computer is in (com.palm.storage diskmode/hostIsConnected).
+            if ("usbHost" in st) {
+                store.set("usbHost", !!st.usbHost);
+                usbHostKnown();
             }
             // The virtual keyboard is up ({ ime: { visible } }, getSystemStatus).
             if (st.ime && !!st.ime.visible !== !!store.get("imeVisible", false)) {
@@ -4416,6 +5461,31 @@
     //     CallVolume and MessageWaiting D-Bus APIs, see apps/shared/luna/src/telephony.ts):
     //       callStatusQuery {subscribe}, hold {id}, unhold {id}, sendDtmf {tones},
     //       muteSet {mute}, speakerSet {speaker}, voicemailQuery {subscribe}
+    //     The legacy phone preferences' calls (com.palm.app.phone
+    //     shared/phoneprefs/controls/CallsPref.js, NetworkPref.js,
+    //     VoicemailNumberPref.js; LunaSysMgr's StatusBarServicesConnector
+    //     subscribes to forwardQuery for the status bar's icon):
+    //       forwardQuery {condition, bearer, subscribe} -> {extended: {condition,
+    //           status: [{bearer, activated, number}]}}
+    //       forwardRegister {number ("" to stop), condition, bearer, time}
+    //       clirQuery -> {extended: {restricted}}, clirSet {restrict}
+    //       callWaitingQuery -> {extended: {enabled}}, callWaitingSet {enable}
+    //       voicemailNumberQuery {subscribe} -> {extended: {number}},
+    //           voicemailNumberSet {number}
+    //       roamModeQuery -> {extended: {mode: "automatic" | "carrieronly"}},
+    //           roamModeSet {mode}
+    //       ratQuery -> {extended: {mode: "automatic" | "umts" | "gsm"}}, ratSet {mode}
+    //     The supplementary services (forwarding, caller ID, waiting) need
+    //     the network: errorCode 102 in airplane mode, as the phone app's
+    //     messages say. Only unconditional forwarding is kept; while it is on,
+    //     a simulated incoming call is forwarded and does not ring.
+    //   com.palm.wan                          the data connection (legacy wand):
+    //       getstatus {subscribe} -> {disablewan: "on" | "off" (Data Usage
+    //       off / on), roamguard: "enable" | "disable" (data roaming off /
+    //       on; "disable" also as the original's "neverblock"), state}
+    //       set {disablewan?, roamguard?} (NetworkPref.js toggleWAN,
+    //       toggleDataRoaming). The original read roamguard from
+    //       com.palm.preferences appProperties; here getstatus says it.
     //   org.webosports.service.messaging     webOS-ports/org.webosports.messaging
     //       putMessage {message} -> {threadids}   service/javascript/assistants/PutMessage.js,
     //                                              utils/MessageAssigner.js (thread assignment)
@@ -4430,8 +5500,8 @@
     //
     // Call state lives in the shared store ("telephony:state"), so the Phone
     // card and any other page see the same calls; other windows' changes
-    // arrive as "storage" events. db8 watches also fire across windows here,
-    // so Messaging updates when a text arrives through another page.
+    // arrive as "storage" events. db8 watches also fire across windows (see
+    // makeDb), so Messaging updates when a text arrives through another page.
     //
     // Simulator helpers (phoenix-sim F4 / F5, tools/test-phone-messaging.cjs):
     //   __phoenixRuntime.simulateIncomingCall({number?, name?}) -> call id
@@ -4449,7 +5519,10 @@
 
         function defaults() {
             return { calls: [], muted: false, speaker: false, nextId: 1,
-                     voicemail: { number: "(408) 555-0100", waiting: true, count: 2 } };
+                     voicemail: { number: "(408) 555-0100", waiting: true, count: 2 },
+                     // The phone preferences (network-side settings).
+                     forward: { activated: false, number: "" }, clirRestricted: false, callWaiting: true,
+                     roamMode: "automatic", rat: "automatic" };
         }
         function load() {
             var s = store.get(KEY, null);
@@ -4524,6 +5597,9 @@
         function incoming(opts) {
             opts = opts || {};
             var s = load();
+            // Forwarded by the network: the phone never rings.
+            if (s.forward && s.forward.activated && !offline())
+                return 0;
             var id = s.nextId++;
             var busy = s.calls.some(function (x) { return live(x) && x.state !== "incoming"; });
             s.calls.push({ id: id, state: busy ? "waiting" : "incoming", number: opts.number || "(415) 555-0123",
@@ -4602,7 +5678,60 @@
                 if (p.subscribe) listen(ctx, function () { if (!ctx.cancelled()) reply(v()); });
             },
             // telephonyd's activity callback for the outbox (outgoing-sms.json).
-            "/sendSmsFromDb": function (p, reply) { sendOutbox(); reply(ok()); }
+            "/sendSmsFromDb": function (p, reply) { sendOutbox(); reply(ok()); },
+
+            // ---- The phone preferences ---------------------------------------------
+            "/forwardQuery": function (p, reply, ctx) {
+                var answer = function () {
+                    if (offline()) return fail(102, "No network");
+                    var f = load().forward;
+                    return ok({ extended: { condition: "unconditional",
+                                            status: [{ bearer: "defaultbearer", activated: !!f.activated, number: f.number || "" }] } });
+                };
+                reply(answer());
+                if (p.subscribe) listen(ctx, function () { if (!ctx.cancelled()) reply(answer()); });
+            },
+            "/forwardRegister": function (p, reply) {
+                if (offline()) return reply(fail(102, "No network"));
+                if (p.condition && p.condition !== "unconditional") return reply(fail(-1, "Only unconditional forwarding is supported"));
+                var number = String(p.number || "").replace(/[^0-9+*#]/g, "");
+                var s = load();
+                s.forward = number ? { activated: true, number: String(p.number) } : { activated: false, number: s.forward.number || "" };
+                save(s);
+                reply(ok());
+            },
+            "/clirQuery": function (p, reply) {
+                reply(offline() ? fail(102, "No network") : ok({ extended: { restricted: !!load().clirRestricted, permanent: false } }));
+            },
+            "/clirSet": function (p, reply) {
+                if (offline()) return reply(fail(102, "No network"));
+                var s = load(); s.clirRestricted = !!p.restrict; save(s); reply(ok());
+            },
+            "/callWaitingQuery": function (p, reply) {
+                reply(offline() ? fail(102, "No network") : ok({ extended: { enabled: load().callWaiting !== false } }));
+            },
+            "/callWaitingSet": function (p, reply) {
+                if (offline()) return reply(fail(102, "No network"));
+                var s = load(); s.callWaiting = !!p.enable; save(s); reply(ok());
+            },
+            "/voicemailNumberQuery": function (p, reply, ctx) {
+                var v = function () { return ok({ extended: { number: load().voicemail.number } }); };
+                reply(v());
+                if (p.subscribe) listen(ctx, function () { if (!ctx.cancelled()) reply(v()); });
+            },
+            "/voicemailNumberSet": function (p, reply) {
+                var s = load(); s.voicemail.number = String(p.number || ""); save(s); reply(ok());
+            },
+            "/roamModeQuery": function (p, reply) { reply(ok({ extended: { mode: load().roamMode } })); },
+            "/roamModeSet": function (p, reply) {
+                if (["automatic", "carrieronly", "homeonly"].indexOf(p.mode) < 0) return reply(fail(-1, "Invalid mode"));
+                var s = load(); s.roamMode = p.mode; save(s); reply(ok());
+            },
+            "/ratQuery": function (p, reply) { reply(ok({ extended: { mode: load().rat } })); },
+            "/ratSet": function (p, reply) {
+                if (["automatic", "umts", "gsm"].indexOf(p.mode) < 0) return reply(fail(-1, "Invalid mode"));
+                var s = load(); s.rat = p.mode; save(s); reply(ok());
+            }
         };
         register(["com.palm.telephony"], telephony);
 
@@ -4611,6 +5740,42 @@
         } catch (x) { /* no window events */ }
 
         runtime.simulateIncomingCall = function (opts) { return incoming(opts); };
+        // The status bar's call forwarding icon (runtime.hostStatus).
+        // Off with the radio, as LunaSysMgr hid it (StatusBarServicesConnector.cpp:962).
+        runtime.callForwarding = function () { var f = load().forward; return !!(f && f.activated) && !offline(); };
+
+        // com.palm.wan: Data Usage and Data Roaming (NetworkPref.js).
+        var WAN_KEY = "wan:state";
+        var wanWatchers = [];
+        function wan() {
+            var w = store.get(WAN_KEY, null) || {};
+            return { disablewan: w.disablewan === "on" ? "on" : "off", roamguard: w.roamguard === "disable" ? "disable" : "enable" };
+        }
+        function wanStatus() {
+            var w = wan();
+            return ok({ disablewan: w.disablewan, roamguard: w.roamguard,
+                        state: w.disablewan === "on" || offline() ? "disconnected" : "connected" });
+        }
+        register(["com.palm.wan"], {
+            "/getstatus": function (p, reply, ctx) {
+                reply(wanStatus());
+                if (p.subscribe) wanWatchers.push(function () { if (ctx.cancelled()) return false; reply(wanStatus()); return true; });
+            },
+            "/set": function (p, reply) {
+                var w = wan();
+                if (p.disablewan !== undefined) {
+                    if (p.disablewan !== "on" && p.disablewan !== "off") return reply(fail(-1, "disablewan is \"on\" or \"off\""));
+                    w.disablewan = p.disablewan;
+                }
+                if (p.roamguard !== undefined) {
+                    if (["enable", "disable", "neverblock"].indexOf(p.roamguard) < 0) return reply(fail(-1, "Invalid roamguard"));
+                    w.roamguard = p.roamguard === "enable" ? "enable" : "disable";
+                }
+                store.set(WAN_KEY, w);
+                wanWatchers = wanWatchers.filter(function (fn) { return fn(); });
+                reply(ok());
+            }
+        });
         runtime.simulateRemoteHangup = function () {
             var s = load();
             var c = s.calls.filter(function (x) { return x.state === "active"; })[0] || s.calls.filter(live)[0];
@@ -4620,7 +5785,9 @@
             return true;
         };
 
-        // ---- db8 helpers and cross-window watches ------------------------------------
+        // ---- db8 helpers ---------------------------------------------------------------
+        //
+        // (db8 watches fire for changes other pages make: see makeDb.)
 
         var dbSvc = runtime.services["com.palm.db"];
         function dbCall(method, params) {
@@ -4628,35 +5795,33 @@
             dbSvc[method](params, function (r) { if (out === undefined) out = r; }, { cancelled: function () { return true; } });
             return out || {};
         }
-
-        // db8 watches in this page fire for changes other pages make, too.
-        var xWatchers = [];
-        function crossWindow(reply, ctx) {
-            var done = false;
-            xWatchers.push(function () {
-                if (done || ctx.cancelled()) return;
-                done = true;
-                reply(ok({ fired: true }));
-            });
-            return function (r) {
-                if (r && r.fired) { if (done) return; done = true; }
-                reply(r);
-            };
+        // Presence lives in tempdb, as on webOS (com.palm.imbuddystatus:1).
+        var tempdbSvc = runtime.services["com.palm.tempdb"];
+        function tempdbCall(method, params) {
+            var out;
+            tempdbSvc[method](params, function (r) { if (out === undefined) out = r; }, { cancelled: function () { return true; } });
+            return out || {};
         }
-        var baseFind = dbSvc["/find"], baseWatch = dbSvc["/watch"];
-        dbSvc["/find"] = function (p, reply, ctx) {
-            if (!p.watch) return baseFind(p, reply, ctx);
-            baseFind(p, crossWindow(reply, ctx), ctx);
-        };
-        dbSvc["/watch"] = function (p, reply, ctx) { baseWatch(p, crossWindow(reply, ctx), ctx); };
-        try {
-            global.addEventListener("storage", function (e) {
-                if (e.key !== "phoenix:db8:com.palm.db") return;
-                var w = xWatchers;
-                xWatchers = [];
-                w.forEach(function (fn) { fn(); });
+        var MMS_KIND = "com.palm.mmsmessage:1";
+        var IM_KIND = "com.palm.immessage:1";
+        var IM_BUDDY_KIND = "com.palm.imbuddystatus:1";
+        var IM_LOGIN_KIND = "com.palm.imloginstate:1";
+
+        // The kinds MMS and IM add (their own version, so a store seeded
+        // before them gets them too; seeding again puts them back).
+        messagingKinds();
+        function messagingKinds() {
+            var VERSION = 1;
+            if (store.get("messaging:kinds", 0) >= VERSION) return;
+            [["com.palm.message:1", []], ["com.palm.smsmessage:1", ["com.palm.message:1"]],
+             [MMS_KIND, ["com.palm.message:1"]], [IM_KIND, ["com.palm.message:1"]],
+             ["com.palm.immessage.xmpp:1", [IM_KIND]], ["com.palm.chatthread:1", []],
+             [IM_LOGIN_KIND, []]].forEach(function (k) {
+                dbCall("/putKind", { id: k[0], owner: "org.webosphoenix.simulator", extends: k[1] });
             });
-        } catch (x) { /* no window events */ }
+            tempdbCall("/putKind", { id: IM_BUDDY_KIND, owner: "org.webosphoenix.simulator" });
+            store.set("messaging:kinds", VERSION);
+        }
 
         // ---- Messaging: thread assignment (LuneOS MessageAssigner.js) ----------------
 
@@ -4681,12 +5846,33 @@
             return null;
         }
 
+        // Texts (SMS, MMS) go by phone number; instant messages by the
+        // buddy's address on an IM service ("type_jabber", ...), which is
+        // not a phone number, and keep to their own conversations.
+        function isIm(service) { return /^type_/.test(String(service || "")); }
+        // The person an IM buddy is (the transport links its roster to the
+        // address book, as the contacts linker did: imbuddystatus personId).
+        function personForIm(addr, service) {
+            var b = (tempdbCall("/find", { query: { from: IM_BUDDY_KIND } }).results || []).filter(function (x) {
+                return x.serviceName === service && String(x.username).toLowerCase() === String(addr).toLowerCase();
+            })[0];
+            return b && b.personId ? (dbCall("/get", { ids: [b.personId] }).results || [])[0] || null : null;
+        }
+        // What a conversation's last line says of a picture message.
+        function summaryOf(msg) {
+            var pics = (msg.parts || []).filter(function (p) { return /^image\//.test(p.mimeType || ""); }).length;
+            if (!pics && !(msg.parts || []).length) return msg.messageText;
+            var what = pics ? (pics === 1 ? "Picture" : pics + " pictures") : "Attachment";
+            return msg.messageText ? what + ": " + msg.messageText : what;
+        }
+
         // Find or create msg's chat thread, update it (summary, timestamp,
         // unread count) and store msg with conversations = [thread id].
         function assign(msg) {
             var incomingMsg = msg.folder === "inbox";
             var addr = incomingMsg ? (msg.from && msg.from.addr) : (msg.to && msg.to[0] && msg.to[0].addr);
-            var person = addr ? personFor(addr) : null;
+            var im = isIm(msg.serviceName);
+            var person = addr ? (im ? personForIm(addr, msg.serviceName) : personFor(addr)) : null;
             var thread = null;
             if (msg.conversations && msg.conversations.length)
                 thread = (dbCall("/get", { ids: [msg.conversations[0]] }).results || [])[0] || null;
@@ -4694,18 +5880,23 @@
                 var threads = dbCall("/find", { query: { from: "com.palm.chatthread:1" } }).results || [];
                 for (var i = 0; i < threads.length && !thread; ++i) {
                     var t = threads[i];
-                    if ((person && t.personId === person._id) || (!person && t.replyAddress && sameNumber(t.replyAddress, addr)))
+                    if (im !== isIm(t.replyService)) continue;
+                    if (im ? t.replyService === msg.serviceName && String(t.replyAddress).toLowerCase() === String(addr).toLowerCase()
+                              && (!t.username || !msg.username || t.username === msg.username)
+                           : (person && t.personId === person._id) || (!person && t.replyAddress && sameNumber(t.replyAddress, addr)))
                         thread = t;
                 }
             }
             thread = thread || { _kind: "com.palm.chatthread:1", unreadCount: 0, flags: {} };
             thread.displayName = (person && personName(person)) || thread.displayName ||
-                (!incomingMsg && msg.to[0].name) || addr;
+                (!incomingMsg && msg.to[0].name) || (incomingMsg && msg.from.name) || addr;
             if (person) thread.personId = person._id;
-            thread.normalizedAddress = digits(addr);
+            thread.normalizedAddress = im ? String(addr).toLowerCase() : digits(addr);
             thread.replyAddress = addr;
             thread.replyService = msg.serviceName || "sms";
-            thread.summary = msg.messageText;
+            // The IM account the conversation is on (the immessage's username).
+            if (im && msg.username) thread.username = msg.username;
+            thread.summary = summaryOf(msg);
             thread.timestamp = msg.localTimestamp || Date.now();
             thread.flags = thread.flags || {};
             thread.flags.visible = true;
@@ -4718,16 +5909,53 @@
         }
 
         // telephonyd: pending outbox texts -> sending -> successful / failed.
+        // A picture message (MMS, mmsd under oFono) takes longer.
         function sendOutbox() {
-            var pending = dbCall("/find", { query: { from: "com.palm.smsmessage:1", where: [
-                { prop: "folder", op: "=", val: "outbox" }, { prop: "status", op: "=", val: "pending" }] } }).results || [];
-            pending.forEach(function (m) {
-                dbCall("/merge", { objects: [{ _id: m._id, status: "sending" }] });
-                setTimeout(function () {
-                    dbCall("/merge", { objects: [{ _id: m._id, status: offline() ? "failed" : "successful" }] });
-                }, 600);
+            [["com.palm.smsmessage:1", 600], [MMS_KIND, 1500]].forEach(function (k) {
+                var pending = dbCall("/find", { query: { from: k[0], where: [
+                    { prop: "folder", op: "=", val: "outbox" }, { prop: "status", op: "=", val: "pending" }] } }).results || [];
+                pending.forEach(function (m) {
+                    dbCall("/merge", { objects: [{ _id: m._id, status: "sending" }] });
+                    setTimeout(function () {
+                        dbCall("/merge", { objects: [{ _id: m._id, status: offline() ? "failed" : "successful" }] });
+                    }, k[1]);
+                });
             });
         }
+
+        function callP(url, params) {
+            return new Promise(function (resolve) {
+                dispatch(url, params || {}, resolve, { cancelled: function () { return false; }, onCancel: null });
+            });
+        }
+        // A picture message keeps its own copies of its pictures, as the MMS
+        // store does (/media/internal/.mms, which Files and Photos leave out):
+        // the message stays whole when the original goes. parts:
+        // [{path, mimeType, name?}] -> the same with the copies' paths.
+        var MMS_DIR = "/media/internal/.mms";
+        var partSeq = 0;
+        function keepParts(parts) {
+            // The folder first (an error when it is there already is fine).
+            return callP("luna://org.webosphoenix.filemanager/mkdir", { path: MMS_DIR }).then(function () {
+                return copyParts(parts);
+            });
+        }
+        function copyParts(parts) {
+            return Promise.all((parts || []).map(function (part) {
+                var name = String(part.name || part.path || "part").replace(/^.*\//, "");
+                var dest = MMS_DIR + "/" + Date.now().toString(36) + "-" + (++partSeq) + "-" + name;
+                return callP("luna://org.webosphoenix.filemanager/copy", { from: part.path, to: dest }).then(function (r) {
+                    var out = { mimeType: part.mimeType || "", name: name, path: r.returnValue === false ? part.path : dest };
+                    if (r.returnValue === false) console.warn("[phoenix-runtime] MMS: kept the picture where it is: " + r.errorText);
+                    return out;
+                });
+            }));
+        }
+
+        // The IM transports deliver outgoing instant messages
+        // (org.webosphoenix.service.xmpp, block "Instant messaging" below).
+        var imTransports = {};
+        runtime.registerImTransport = function (service, send) { imTransports[service] = send; };
 
         register(["org.webosports.service.messaging"], {
             "/putMessage": function (p, reply) {
@@ -4735,12 +5963,43 @@
                 if (!msg || !msg._kind || (!msg.to && !msg.from))
                     return reply(fail(-1, "Requiring valid message argument with _kind member already set."));
                 msg = JSON.parse(toJson(msg));
-                var r = assign(msg);
-                reply(ok({ threadids: [r.threadId] }));
-                if (msg._kind === "com.palm.smsmessage:1" && msg.folder === "outbox" && msg.status === "pending")
-                    setTimeout(sendOutbox, 250);
+                var mms = msg._kind === MMS_KIND;
+                (mms && msg.parts && msg.parts.length ? keepParts(msg.parts) : Promise.resolve(msg.parts)).then(function (parts) {
+                    if (parts) msg.parts = parts;
+                    var r = assign(msg);
+                    reply(ok({ threadids: [r.threadId] }));
+                    var outgoing = msg.folder === "outbox" && msg.status === "pending";
+                    if (outgoing && (msg._kind === "com.palm.smsmessage:1" || mms))
+                        setTimeout(sendOutbox, 250);
+                    else if (outgoing && isIm(msg.serviceName) && imTransports[msg.serviceName])
+                        setTimeout(function () { imTransports[msg.serviceName](r.messageId); }, 150);
+                });
             }
         });
+        runtime.messaging = { assign: assign, isIm: isIm, personName: personName, tempdbCall: tempdbCall, dbCall: dbCall,
+                              IM_BUDDY_KIND: IM_BUDDY_KIND, IM_LOGIN_KIND: IM_LOGIN_KIND };
+
+        // A picture message arrives (phoenix-sim Shift+F5): its pictures in
+        // the MMS store, then as a text: a thread, unread, a notification.
+        runtime.simulateIncomingMms = function (opts) {
+            opts = opts || {};
+            var from = opts.from || "(408) 555-0142";
+            var text = opts.text === undefined ? "Look where we are!" : opts.text;
+            var image = opts.image || "/media/internal/samples/photos/harbor-dusk.jpg";
+            return keepParts([{ path: image, mimeType: opts.mimeType || "image/jpeg" }]).then(function (parts) {
+                var now = Date.now();
+                var r = assign({
+                    _kind: MMS_KIND, folder: "inbox", status: "successful", serviceName: "mms",
+                    messageText: text, parts: parts, localTimestamp: now, timestamp: now, simId: 0,
+                    from: { addr: from }, flags: { read: false, visible: true }
+                });
+                var person = personFor(from);
+                host.postToHost("notification", { appId: MESSAGING_APP, title: person ? personName(person) : from,
+                                                  body: text ? "Picture: " + text : "Picture message",
+                                                  params: { threadId: r.threadId }, soundClass: "notifications" });
+                return r.threadId;
+            });
+        };
 
         runtime.simulateIncomingSms = function (opts) {
             opts = opts || {};
@@ -4769,6 +6028,8 @@
              ["com.palm.chatthread:1", []], ["com.palm.phonecall:1", []]].forEach(function (k) {
                 dbCall("/putKind", { id: k[0], owner: "org.webosphoenix.simulator", extends: k[1] });
             });
+            store.set("messaging:kinds", 0);
+            messagingKinds();
             // The people are the simulator's sample contacts (runtime/sample-data.js,
             // loaded earlier), so Phone, Messaging and Contacts share one address book.
             var persons = dbCall("/find", { query: { from: "com.palm.person:1" } }).results || [];
@@ -4832,6 +6093,223 @@
         // Ids for the shell (sim.qml F4 / F5).
         runtime.phoneAppId = PHONE_APP;
         runtime.messagingAppId = MESSAGING_APP;
+    })();
+
+    // ================================================================================
+    // Instant messaging (simulated XMPP: org.webosphoenix.service.xmpp)
+    // ================================================================================
+    //
+    // An IM transport as webOS's Synergy ones were (libpurple's AIM and
+    // Google Talk), shaped like the XMPP transport Phoenix plans
+    // (docs/SYNERGY-MODERN.md: template com.webosphoenix.xmpp, MESSAGING
+    // with capabilitySubtype "IM", serviceName "type_jabber"), against a
+    // simulated server, chat.example, whose people are fictional and linked
+    // to the sample contacts.
+    //
+    //   The account: Accounts > Add Account > Jabber (XMPP), with any
+    //   address on chat.example (you@chat.example) and a password; the
+    //   template (runtime/accounts/com.webosphoenix.xmpp/) goes through the
+    //   accounts block of "CardDAV and CalDAV", which calls this service's
+    //   checkCredentials, onCreate, onEnabled and onDelete as Synergy did.
+    //   Signed in, the account's state is a com.palm.imloginstate:1 (db8:
+    //   accountId, username, serviceName, state "online" | "offline",
+    //   availability 0 available, 2 busy, 4 offline, customMessage) and its
+    //   roster com.palm.imbuddystatus:1 objects (tempdb: accountId, username
+    //   (the buddy's address), serviceName, displayName, personId,
+    //   availability, personAvailability, status, group), which Messaging's
+    //   Buddies and Contacts' presence read, as on webOS.
+    //   Messages are com.palm.immessage.xmpp:1 (extends com.palm.immessage:1,
+    //   extends com.palm.message:1: folder, status, serviceName, username =
+    //   the account's address, from / to, messageText), put through
+    //   putMessage like texts and threaded per buddy; the outbox goes out
+    //   here (successful, or failed while signed out or in airplane mode).
+    //   A buddy who is available or busy answers after a moment (the
+    //   simulated server); an offline one does not.
+    //
+    //   setPresence {accountId, availability, customMessage?} (Phoenix): your
+    //   own status; 4 signs out (the roster goes offline), else signs in.
+    //
+    // Simulator helpers (phoenix-sim Ctrl+F5, the tests):
+    //   __phoenixRuntime.simulateIncomingIm({from?, text?}) -> thread id
+    //   __phoenixRuntime.xmpp.setBuddyPresence(jid, availability, status?)
+    (function instantMessaging() {
+        var M = runtime.messaging;
+        if (!M) return;
+        var SERVICE = "org.webosphoenix.service.xmpp";
+        var TEMPLATE = "com.webosphoenix.xmpp";
+        var IM_SERVICE = "type_jabber";
+        var MSG_KIND = "com.palm.immessage.xmpp:1";
+        var SERVER = "chat.example";
+        var MESSAGING_APP = runtime.messagingAppId;
+        var AVAILABLE = 0, BUSY = 2, OFFLINE = 4;
+
+        // The simulated server's people, and how they answer.
+        var ROSTER = [
+            { jid: "ada.palmer@" + SERVER, given: "Ada", family: "Palmer", availability: AVAILABLE, status: "Flashing a Pre 3",
+              replies: ["Ha, yes!", "Cards forever.", "Send me a picture when it boots?", "On my way."] },
+            { jid: "marcus.reyes@" + SERVER, given: "Marcus", family: "Reyes", availability: BUSY, status: "In a meeting until 3",
+              replies: ["In a meeting, will reply after.", "Can't talk now, later?"] },
+            { jid: "lena.okafor@" + SERVER, given: "Lena", family: "Okafor", availability: AVAILABLE, status: "",
+              replies: ["Hi! Just landed.", "Sounds good.", "See you there."] },
+            { jid: "theo.lindqvist@" + SERVER, given: "Theo", family: "Lindqvist", availability: OFFLINE, status: "", replies: [] }
+        ];
+        function rosterEntry(jid) {
+            return ROSTER.filter(function (b) { return b.jid === String(jid).toLowerCase(); })[0] || null;
+        }
+
+        function db(method, params) { return M.dbCall(method, params); }
+        function tdb(method, params) { return M.tempdbCall(method, params); }
+        function account(id) { return (db("/get", { ids: [id] }).results || [])[0] || null; }
+        function loginState(accountId) {
+            return (db("/find", { query: { from: M.IM_LOGIN_KIND, where: [{ prop: "accountId", op: "=", val: accountId }] } }).results || [])[0] || null;
+        }
+        function signedInAccounts() {
+            return (db("/find", { query: { from: M.IM_LOGIN_KIND } }).results || []).filter(function (s) {
+                return s.serviceName === IM_SERVICE && s.state === "online";
+            });
+        }
+        function personByName(given, family) {
+            return (db("/find", { query: { from: "com.palm.person:1" } }).results || []).filter(function (p) {
+                return p.name && p.name.givenName === given && p.name.familyName === family;
+            })[0] || null;
+        }
+
+        // Presence (the buddies' and your own) as stored for the apps.
+        // The server's view of the buddies' presence, per account
+        // ("xmpp:presence:<account>": jid -> {availability, status}); a buddy
+        // not in it has the roster's.
+        function buddyPresence(accountId, b) {
+            return store.get("xmpp:presence:" + accountId, {})[b.jid] || { availability: b.availability, status: b.status };
+        }
+        function writeRoster(accountId, signedIn) {
+            tdb("/del", { purge: true, query: { from: M.IM_BUDDY_KIND, where: [{ prop: "accountId", op: "=", val: accountId }] } });
+            if (!signedIn) return;
+            tdb("/put", { objects: ROSTER.map(function (b) {
+                var person = personByName(b.given, b.family), pr = buddyPresence(accountId, b);
+                var o = { _kind: M.IM_BUDDY_KIND, accountId: accountId, serviceName: IM_SERVICE, username: b.jid,
+                          displayName: b.given + " " + b.family, availability: pr.availability, personAvailability: pr.availability,
+                          status: pr.status || "", group: "Buddies" };
+                if (person) o.personId = person._id;
+                return o;
+            }) });
+        }
+        function setLogin(acc, availability, customMessage) {
+            var cur = loginState(acc._id);
+            var online = availability !== OFFLINE;
+            var o = { _kind: M.IM_LOGIN_KIND, accountId: acc._id, serviceName: IM_SERVICE, username: acc.username,
+                      state: online ? "online" : "offline", availability: availability,
+                      customMessage: customMessage !== undefined ? customMessage : cur && cur.customMessage || "" };
+            if (cur) { o._id = cur._id; db("/merge", { objects: [o] }); }
+            else db("/put", { objects: [o] });
+            writeRoster(acc._id, online);
+        }
+
+        // ---- Messages ----------------------------------------------------------------------
+
+        function deliver(acc, jid, text) {
+            var b = rosterEntry(jid);
+            var now = Date.now();
+            var r = M.assign({ _kind: MSG_KIND, folder: "inbox", status: "successful", serviceName: IM_SERVICE,
+                               username: acc.username, messageText: text, localTimestamp: now, timestamp: now,
+                               from: { addr: jid, name: b ? b.given + " " + b.family : jid }, flags: { read: false, visible: true } });
+            host.postToHost("notification", { appId: MESSAGING_APP, title: b ? b.given + " " + b.family : jid, body: text,
+                                              params: { threadId: r.threadId }, soundClass: "notifications" });
+            return r.threadId;
+        }
+        var replySeq = {};
+        function send(messageId) {
+            var m = (db("/get", { ids: [messageId] }).results || [])[0];
+            if (!m || m.status !== "pending") return;
+            var login = (db("/find", { query: { from: M.IM_LOGIN_KIND, where: [{ prop: "username", op: "=", val: m.username }] } }).results || [])[0];
+            var st = store.get("settings:state", null);
+            var ok_ = login && login.state === "online" && !(st && st.offlineMode);
+            db("/merge", { objects: [{ _id: m._id, status: "sending" }] });
+            setTimeout(function () {
+                db("/merge", { objects: [{ _id: m._id, status: ok_ ? "successful" : "failed" }] });
+                if (!ok_) return;
+                var jid = m.to && m.to[0] && m.to[0].addr, b = rosterEntry(jid);
+                var acc = account(login.accountId);
+                if (!b || !acc || !b.replies.length) return;
+                var pr = buddyPresence(acc._id, b);
+                if (pr.availability === OFFLINE) return;
+                var n = replySeq[b.jid] = (replySeq[b.jid] || 0) + 1;
+                setTimeout(function () {
+                    var still = loginState(acc._id);
+                    if (still && still.state === "online") deliver(acc, b.jid, b.replies[(n - 1) % b.replies.length]);
+                }, 1800);
+            }, 400);
+        }
+        runtime.registerImTransport(IM_SERVICE, send);
+
+        // ---- The transport's service (Synergy callbacks) -------------------------------------
+
+        register([SERVICE], {
+            // Any address on the simulated server with a password signs in.
+            "/checkCredentials": function (p, reply) {
+                var user = String(p.username || "").trim().toLowerCase();
+                if (!/^[^@\s]+@[^@\s]+$/.test(user))
+                    return reply({ returnValue: false, errorCode: "401_UNAUTHORIZED", errorText: "Enter your address, like you@" + SERVER });
+                if (user.split("@")[1] !== SERVER)
+                    return reply({ returnValue: false, errorCode: "HOST_NOT_FOUND", errorText: "Only the simulated server, " + SERVER + ", is reachable here" });
+                if (!p.password)
+                    return reply({ returnValue: false, errorCode: "401_UNAUTHORIZED", errorText: "Enter your password" });
+                reply(ok({ credentials: { common: { password: String(p.password) } }, config: { server: SERVER } }));
+            },
+            "/onCreate": function (p, reply) { reply(ok()); },
+            "/onEnabled": function (p, reply) {
+                var acc = account(p.accountId);
+                if (!acc) return reply(fail(-1, "No such account: " + p.accountId));
+                setLogin(acc, p.enabled ? AVAILABLE : OFFLINE);
+                reply(ok());
+            },
+            // The account goes: its state, roster, messages and conversations.
+            "/onDelete": function (p, reply) {
+                var acc = account(p.accountId) || { _id: p.accountId, username: "" };
+                writeRoster(acc._id, false);
+                db("/del", { query: { from: M.IM_LOGIN_KIND, where: [{ prop: "accountId", op: "=", val: acc._id }] } });
+                var threads = (db("/find", { query: { from: "com.palm.chatthread:1" } }).results || []).filter(function (t) {
+                    return t.replyService === IM_SERVICE && (!acc.username || t.username === acc.username);
+                });
+                threads.forEach(function (t) {
+                    db("/del", { query: { from: "com.palm.message:1", where: [{ prop: "conversations", op: "=", val: t._id }] } });
+                    db("/del", { ids: [t._id] });
+                });
+                reply(ok());
+            },
+            "/setPresence": function (p, reply) {
+                var acc = account(p.accountId);
+                if (!acc) return reply(fail(-1, "No such account: " + p.accountId));
+                var a = Number(p.availability);
+                if ([AVAILABLE, BUSY, OFFLINE].indexOf(a) < 0) return reply(fail(-1, "availability: 0, 2 or 4"));
+                setLogin(acc, a, p.customMessage);
+                reply(ok());
+            }
+        });
+
+        // ---- Helpers for the simulator and the tests ----------------------------------------
+
+        runtime.simulateIncomingIm = function (opts) {
+            opts = opts || {};
+            var login = signedInAccounts()[0];
+            if (!login) return null;
+            var acc = account(login.accountId);
+            return acc ? deliver(acc, opts.from || ROSTER[0].jid, opts.text || "Are you on Phoenix yet?") : null;
+        };
+        runtime.xmpp = {
+            server: SERVER,
+            roster: function () { return ROSTER.map(function (b) { return { jid: b.jid, name: b.given + " " + b.family }; }); },
+            setBuddyPresence: function (jid, availability, status) {
+                var b = rosterEntry(jid);
+                if (!b) return false;
+                signedInAccounts().forEach(function (login) {
+                    var mine = store.get("xmpp:presence:" + login.accountId, {});
+                    mine[b.jid] = { availability: availability, status: status || "" };
+                    store.set("xmpp:presence:" + login.accountId, mine);
+                    writeRoster(login.accountId, true);
+                });
+                return true;
+            }
+        };
     })();
 
     // ================================================================================
@@ -4924,6 +6402,11 @@
                     Promise.resolve(fn(st)).then(function (r) { result = r; }, function () { /* t.onerror */ });
                     t.oncomplete = function () { resolve(result); };
                     t.onerror = function () { reject(t.error); };
+                    // A transaction can abort without a request failing (out
+                    // of quota when it commits, the connection closing): it
+                    // fires neither complete nor error, and the caller would
+                    // wait for ever.
+                    t.onabort = function () { reject(t.error || new Error("The media store transaction was aborted")); };
                 });
             });
         }
@@ -5115,7 +6598,8 @@
                 var idx = loadIndex();
                 var known = {};
                 ["image", "audio", "video"].forEach(function (t) { idx[t].forEach(function (it) { known[it.file_path] = true; }); });
-                var fresh = paths.filter(function (p) { return !known[p] && typeOf(p); });
+                // Not hidden folders' files (a message's pictures, /.mms).
+                var fresh = paths.filter(function (p) { return !known[p] && typeOf(p) && !/\/\./.test(p); });
                 return Promise.all(fresh.map(function (p) {
                     return files.read(p).then(function (blob) {
                         var type = typeOf(p);
@@ -5349,27 +6833,36 @@
                 var c = store.get(WALLPAPER_KEY, null);
                 if (c && c.file === payload.wallpaperFile) payload.wallpaperUrl = c.url;
             }
+            // Dock mode's wallpaper (the dockwallpaper preference) the same way.
+            if (type === "systemStatus" && payload && isMediaPath(payload.dockWallpaperFile)) {
+                var dc = store.get(DOCK_WALLPAPER_KEY, null);
+                if (dc && dc.file === payload.dockWallpaperFile) payload.dockWallpaperUrl = dc.url;
+            }
             return basePost.call(host, type, payload);
         };
 
+        var DOCK_WALLPAPER_KEY = "media:dockwallpaper";
         var sysSvc = runtime.services["com.webos.service.systemservice"];
         if (sysSvc) {
             var baseSetPrefs = sysSvc["/setPreferences"];
             sysSvc["/setPreferences"] = function (p, reply, ctx) {
                 var file = p.wallpaper && p.wallpaper.wallpaperFile;
-                if (!isMediaPath(file)) return baseSetPrefs(p, reply, ctx);
+                var dockFile = p.dockwallpaper && p.dockwallpaper.wallpaperFile;
+                if (!isMediaPath(file) && !isMediaPath(dockFile)) return baseSetPrefs(p, reply, ctx);
                 // Read the picture first so the systemStatus that setPreferences
                 // sends already carries it.
-                wallpaperData(file).then(function (url) {
-                    if (url) store.set(WALLPAPER_KEY, { file: file, url: url });
+                Promise.all([isMediaPath(file) ? wallpaperData(file) : null,
+                             isMediaPath(dockFile) ? wallpaperData(dockFile) : null]).then(function (urls) {
+                    if (urls[0]) store.set(WALLPAPER_KEY, { file: file, url: urls[0] });
+                    if (urls[1]) store.set(DOCK_WALLPAPER_KEY, { file: dockFile, url: urls[1] });
                     baseSetPrefs(p, reply, ctx);
                 });
             };
         }
 
         // A media wallpaper chosen earlier: tell the shell again, now with its picture.
-        var wp = prefs().wallpaper;
-        if (wp && isMediaPath(wp.wallpaperFile) && runtime.hostStatus)
+        var wp = prefs().wallpaper, dwp = prefs().dockwallpaper;
+        if (((wp && isMediaPath(wp.wallpaperFile)) || (dwp && isMediaPath(dwp.wallpaperFile))) && runtime.hostStatus)
             host.postToHost("systemStatus", runtime.hostStatus());
     })();
 
@@ -6007,19 +7500,39 @@
             if (!pattern || !mime) return false;
             return pattern === mime || (/\/\*$/.test(pattern) && mime.indexOf(pattern.slice(0, -1)) === 0);
         }
+        // Every resource handler, each with its index: the apps' appinfo.json
+        // types, the built-in ones (HANDLERS), then those added at run time
+        // (addResourceHandler: {appId, mime, extension, shouldDownload}).
+        function resourceTable() {
+            var out = [], i = 0;
+            registeredTypes().forEach(function (r) {
+                out.push({ appId: r.appId, title: r.title, mime: r.mime, extension: r.extension, stream: r.stream, index: ++i, tag: "system-default" });
+            });
+            HANDLERS.forEach(function (h) {
+                out.push({ appId: h.appId, title: h.title, mime: h.prefix, prefix: true, extension: "", index: ++i, tag: "system-default" });
+            });
+            runtime.handlerRegistry().resources.forEach(function (r) {
+                var a = launchPoints().filter(function (lp) { return /_default$/.test(lp.launchPointId) && lp.id === r.appId; })[0];
+                if (a) out.push({ appId: r.appId, title: a.title, mime: r.mime, extension: r.extension || "", stream: !r.shouldDownload,
+                                  shouldDownload: !!r.shouldDownload, index: r.index, tag: "user" });
+            });
+            return out;
+        }
+        // The handlers for a type (and extension), the active one first
+        // (swapResourceHandler), one per app.
         function handlersFor(mime, ext) {
             mime = String(mime || "").toLowerCase();
             ext = String(ext || "").toLowerCase();
             var seen = {}, out = [];
-            function add(appId, title) {
-                if (seen[appId]) return;
-                seen[appId] = true;
-                out.push({ appId: appId, title: title, mime: mime, index: out.length });
-            }
-            registeredTypes().forEach(function (r) {
-                if (typeMatches(r.mime, mime) || (ext && r.extension === ext)) add(r.appId, r.title);
+            resourceTable().forEach(function (r) {
+                var hit = r.prefix ? mime.indexOf(r.mime) === 0 : (typeMatches(r.mime, mime) || (ext && r.extension === ext));
+                if (!hit || seen[r.appId]) return;
+                seen[r.appId] = true;
+                out.push({ appId: r.appId, title: r.title, mime: mime, index: r.index, tag: r.tag, stream: !!r.stream });
             });
-            HANDLERS.forEach(function (h) { if (mime.indexOf(h.prefix) === 0) add(h.appId, h.title); });
+            var active = runtime.handlerRegistry().activeResource[mime];
+            var a = out.filter(function (h) { return h.index === active; })[0];
+            if (a) out = [a].concat(out.filter(function (h) { return h !== a; }));
             return out;
         }
         // A file path, file:// uri or web address -> the first app that opens it.
@@ -6042,7 +7555,6 @@
         runtime.handlerForTarget = handlerForTarget;
         var am = runtime.services["com.palm.applicationManager"];
         if (am) {
-            am["/listAllHandlersForMime"] = function (p, reply) { reply(ok({ mime: p.mime, resources: handlersFor(p.mime) })); };
             am["/getHandlerForMimeType"] = function (p, reply) {
                 var h = handlersFor(p.mimeType || p.mime)[0];
                 reply(h ? ok({ appId: h.appId, mimeType: p.mimeType || p.mime }) : fail(-1, "no handler"));
@@ -6063,6 +7575,104 @@
                 });
                 reply(ok({ uri: uri, appIdByExtension: h.appId, mimeByExtension: mime, canStream: streams && /^https?:/i.test(uri) }));
             };
+            // ---- The resource handler registry (MimeSystem) --------------------------
+            // listAllHandlersForMime also answers as LunaSysMgr did:
+            // resourceHandlers {activeHandler, alternates}.
+            function asResource(h, mime) {
+                var a = launchPoints().filter(function (lp) { return /_default$/.test(lp.launchPointId) && lp.id === h.appId; })[0];
+                return { mime: mime, extension: "", appId: h.appId, streamable: !!h.stream, index: h.index, tag: h.tag || "system-default",
+                         appName: a ? a.title : h.title || h.appId };
+            }
+            am["/listAllHandlersForMime"] = function (p, reply) {
+                var mime = String(p.mime || p.mimeType || "").toLowerCase();
+                var list = handlersFor(mime);
+                var r = ok({ subscribed: false, mime: p.mime, resources: list });
+                if (list.length) {
+                    r.resourceHandlers = { activeHandler: asResource(list[0], mime) };
+                    if (list.length > 1) r.resourceHandlers.alternates = list.slice(1).map(function (h) { return asResource(h, mime); });
+                }
+                reply(r);
+            };
+            // mimeTypeForExtension {extension} -> {mimeType, extension}.
+            am["/mimeTypeForExtension"] = function (p, reply) {
+                var ext = String(p.extension || "").replace(/^\./, "").toLowerCase();
+                var mime = MIME[ext] || (resourceTable().filter(function (r) { return r.extension === ext && r.mime; })[0] || {}).mime;
+                reply(mime ? { subscribed: false, returnValue: true, mimeType: mime, extension: ext }
+                           : { subscribed: false, returnValue: false, errorCode: "No mime mapped to this extension" });
+            };
+            // getHandlerForExtension {extension} -> {mimeType, appId, download}.
+            am["/getHandlerForExtension"] = function (p, reply) {
+                var ext = String(p.extension || "").replace(/^\./, "").toLowerCase();
+                var mime = MIME[ext] || (resourceTable().filter(function (r) { return r.extension === ext && r.mime; })[0] || {}).mime;
+                if (!mime) return reply({ subscribed: false, returnValue: false, errorCode: "No mime type mapped to extension " + ext });
+                var h = handlersFor(mime, ext)[0];
+                reply(h ? { subscribed: false, returnValue: true, mimeType: mime, appId: h.appId, download: !h.stream }
+                        : { subscribed: false, returnValue: false, errorCode: "No handler found for extension " + ext });
+            };
+            // getHandlerForUrl {url}: a scheme or web address to its
+            // redirect handler, else a file to the app for its type.
+            am["/getHandlerForUrl"] = function (p, reply) {
+                var url = String(p.url || "");
+                var path = url.replace(/^file:\/\//, "").replace(/[?#].*$/, "");
+                var ext = extOf(path);
+                var typed = ext && (!/^https?:/i.test(url) || registeredTypes().some(function (r) { return r.extension === ext; }));
+                if (typed) {
+                    var mime = MIME[ext] || "application/octet-stream", h = handlersFor(mime, ext)[0];
+                    if (h) return reply({ subscribed: false, returnValue: true, mimeType: mime, appId: h.appId, download: !/^https?:/i.test(url) || !h.stream });
+                }
+                var app = runtime.redirectHandlerFor(url);
+                reply(app ? { subscribed: false, returnValue: true, appId: app, download: false }
+                          : { subscribed: false, returnValue: false, errorCode: "No handler found for url [" + url + "]" });
+            };
+            // addResourceHandler {appId, shouldDownload, mimeType | extension}.
+            am["/addResourceHandler"] = function (p, reply) {
+                function no(text) { reply({ subscribed: false, returnValue: false, errorCode: text }); }
+                if (typeof p.appId !== "string" || !p.appId) return no("Missing appId parameter");
+                var mime = String(p.mimeType || "").toLowerCase(), ext = String(p.extension || "").replace(/^\./, "").toLowerCase();
+                if (!mime && !ext) return no("Neither extension or mime type provided");
+                if (!mime) {
+                    mime = MIME[ext] || "";
+                    if (!mime) return no("Cannot find mime type for extension [" + ext + "]");
+                }
+                if (!launchPoints().some(function (lp) { return lp.id === p.appId; })) return no("adding handler failed");
+                var reg = runtime.handlerRegistry();
+                if (!reg.resources.some(function (r) { return r.appId === p.appId && r.mime === mime && (r.extension || "") === ext; })) {
+                    reg.resources.push({ appId: p.appId, mime: mime, extension: ext, shouldDownload: !!p.shouldDownload, index: reg.next++ });
+                    runtime.saveHandlerRegistry(reg);
+                }
+                reply({ subscribed: false, returnValue: true });
+            };
+            // swapResourceHandler {mimeType, index}: that handler is active.
+            am["/swapResourceHandler"] = function (p, reply) {
+                var mime = String(p.mimeType || "").toLowerCase(), index = Number(p.index);
+                if (!handlersFor(mime).some(function (h) { return h.index === index; }))
+                    return reply({ subscribed: false, returnValue: false, errorCode: "swap failed (incorrect index for mime type, perhaps?)" });
+                var reg = runtime.handlerRegistry();
+                reg.activeResource[mime] = index;
+                runtime.saveHandlerRegistry(reg);
+                reply({ subscribed: false, returnValue: true });
+            };
+            // removeHandlersForAppId {appId}: the handlers it added go.
+            am["/removeHandlersForAppId"] = function (p, reply) {
+                if (typeof p.appId !== "string" || !p.appId) return reply({ subscribed: false, returnValue: false, errorCode: "Missing appId parameter" });
+                var reg = runtime.handlerRegistry();
+                reg.resources = reg.resources.filter(function (r) { return r.appId !== p.appId; });
+                reg.redirects = reg.redirects.filter(function (r) { return r.appId !== p.appId; });
+                runtime.saveHandlerRegistry(reg);
+                reply({ subscribed: false, returnValue: true });
+            };
+            // LunaSysMgr registered listResourceHandlers but never answered
+            // it; Phoenix lists them.
+            am["/listResourceHandlers"] = function (p, reply) {
+                reply(ok({ resourceHandlers: resourceTable().map(function (r) { return asResource(r, r.mime); }) }));
+            };
+            am["/listExtensionMap"] = function (p, reply) {
+                var map = {};
+                Object.keys(MIME).forEach(function (e) { map[e] = MIME[e]; });
+                resourceTable().forEach(function (r) { if (r.extension && r.mime && !map[r.extension]) map[r.extension] = r.mime; });
+                reply(ok({ extensionMap: map }));
+            };
+
             // open {target}: a file goes to the app that handles its type
             // (the browser's finished downloads, "Open by Type" in Files).
             var baseOpen = am["/open"];
@@ -6125,6 +7735,413 @@
     })();
 
     // ================================================================================
+    // Certificate manager (com.palm.certificatemanager; Settings > Certificate Manager)
+    // ================================================================================
+    //
+    // The legacy webOS certificate store, which com.palm.app.certificate
+    // (Device Info's "Certificate Manager...") managed and others read: Enyo
+    // 1.0's Wi-Fi setup lists the user's certificates for networks that ask
+    // for one (lib/wifi/wifi.js: listcertificates -> userCertificateStore
+    // [{certificateId, certificateFilename, commonname, organization}]), the
+    // browser shows a site's certificate (isis-browser CertificateDetail.js:
+    // getcertificatedetails {certificateFilename} -> subject / issuer
+    // {commonname, organization, organizationalunit, country, state,
+    // location, altname}, startdate, expiredate, serialNumber, version,
+    // signature.algorithm, publicKey.algorithm). Phoenix adds what the
+    // Settings pane needs, in the same style:
+    //
+    //   listcertificates {}  -> {certificates: [summary], userCertificateStore:
+    //       [the imported ones]}; summary: {certificateId, certificateFilename,
+    //       commonname, organization, issuer, startdate, expiredate (ms),
+    //       trusted, system, isCA}
+    //   getcertificatedetails {certificateId | certificateFilename} -> the
+    //       details above, plus fingerprints {sha256, sha1}, publicKey.bits /
+    //       curve, isCA, trusted, system
+    //   addcertificate {certificateFilename}: a .pem / .crt (PEM, one or more
+    //       certificates) or .cer / .der (DER) on the device, read with
+    //       org.webosphoenix.filemanager -> {certificateIds}
+    //   setcertificatetrust {certificateId, trusted}
+    //   removecertificate {certificateId}
+    //   errors: -1 bad parameters, -2 not a certificate, -3 already
+    //   installed, -4 no such certificate, -5 the file cannot be read
+    //
+    // The system's root certificates are a few real CAs' (runtime/certs, as
+    // published in the Mozilla CA list); the user may distrust or remove them
+    // (and restore them: restorecertificates). What is imported, and every
+    // change, is kept in the runtime's store, so it lasts. X.509 is read here
+    // (DER, enough of RFC 5280 to show a certificate); signatures are not
+    // checked: the store only says which certificates the device trusts.
+    (function certificateManager() {
+        var KEY = "certificates";
+        var SYSTEM_CERTS = ["isrg-root-x1", "isrg-root-x2", "digicert-global-root-g2", "gts-root-r1",
+                            "amazon-root-ca-1", "usertrust-rsa-certification-authority"];
+        var SYSTEM_DIR = "/usr/share/phoenix/runtime/certs/";
+        var E = { BAD_PARAMS: -1, NOT_CERT: -2, EXISTS: -3, NOT_FOUND: -4, READ: -5 };
+
+        // ---- DER and X.509 --------------------------------------------------------------
+
+        function b64Bytes(s) {
+            var bin = global.atob(String(s).replace(/[^A-Za-z0-9+\/=]/g, ""));
+            var out = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; ++i) out[i] = bin.charCodeAt(i);
+            return out;
+        }
+        function bytesB64(b) {
+            var s = "";
+            for (var i = 0; i < b.length; ++i) s += String.fromCharCode(b[i]);
+            return global.btoa(s);
+        }
+        // The certificates in a file: PEM blocks, else the file as DER.
+        function certsIn(bytes) {
+            var text = "";
+            for (var i = 0; i < Math.min(bytes.length, 4 * 1024 * 1024); ++i) text += String.fromCharCode(bytes[i]);
+            var re = /-----BEGIN (?:X509 |TRUSTED )?CERTIFICATE-----([\s\S]*?)-----END (?:X509 |TRUSTED )?CERTIFICATE-----/g;
+            var out = [], m;
+            while ((m = re.exec(text))) out.push(b64Bytes(m[1]));
+            if (!out.length && bytes[0] === 0x30) out.push(bytes);
+            return out;
+        }
+        // One TLV at pos: {tag, start (of the value), end}.
+        function tlv(b, pos) {
+            if (pos + 2 > b.length) throw new Error("truncated");
+            var tag = b[pos], len = b[pos + 1], p = pos + 2;
+            if (len & 0x80) {
+                var n = len & 0x7f;
+                if (n < 1 || n > 4) throw new Error("bad length");
+                len = 0;
+                for (var i = 0; i < n; ++i) len = len * 256 + b[p++];
+            }
+            if (p + len > b.length) throw new Error("truncated");
+            return { tag: tag, start: p, end: p + len };
+        }
+        function children(b, t) {
+            var out = [];
+            for (var p = t.start; p < t.end;) { var c = tlv(b, p); out.push(c); p = c.end; }
+            return out;
+        }
+        function oid(b, t) {
+            var parts = [], v = 0;
+            for (var i = t.start; i < t.end; ++i) {
+                v = v * 128 + (b[i] & 0x7f);
+                if (!(b[i] & 0x80)) {
+                    if (!parts.length) parts.push(v < 80 ? Math.floor(v / 40) : 2, v < 80 ? v % 40 : v - 80);
+                    else parts.push(v);
+                    v = 0;
+                }
+            }
+            return parts.join(".");
+        }
+        function str(b, t) {
+            var s = "", i;
+            if (t.tag === 0x1e) {                       // BMPString
+                for (i = t.start; i + 1 < t.end; i += 2) s += String.fromCharCode(b[i] * 256 + b[i + 1]);
+                return s;
+            }
+            for (i = t.start; i < t.end; ++i) s += String.fromCharCode(b[i]);
+            if (t.tag === 0x0c) {                       // UTF8String
+                try { return decodeURIComponent(global.escape(s)); } catch (e) { return s; }
+            }
+            return s;
+        }
+        function hex(b, start, end, sep) {
+            var out = [];
+            for (var i = start; i < end; ++i) out.push((b[i] < 16 ? "0" : "") + b[i].toString(16).toUpperCase());
+            return out.join(sep || "");
+        }
+        function time(b, t) {
+            var s = str(b, t);
+            var m = t.tag === 0x17 ? /^(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)?Z$/.exec(s) : /^(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)?Z$/.exec(s);
+            if (!m) return 0;
+            var y = +m[1];
+            if (t.tag === 0x17) y += y >= 50 ? 1900 : 2000;
+            return Date.UTC(y, +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+        }
+        var NAME_KEYS = { "2.5.4.3": "commonname", "2.5.4.6": "country", "2.5.4.7": "location", "2.5.4.8": "state",
+                          "2.5.4.10": "organization", "2.5.4.11": "organizationalunit", "1.2.840.113549.1.9.1": "email" };
+        function name(b, t) {
+            var out = {};
+            children(b, t).forEach(function (set) {
+                children(b, set).forEach(function (atv) {
+                    var kv = children(b, atv), k = NAME_KEYS[oid(b, kv[0])];
+                    if (k && !(k in out)) out[k] = str(b, kv[1]);
+                });
+            });
+            return out;
+        }
+        var ALGS = { "1.2.840.113549.1.1.1": "RSA", "1.2.840.113549.1.1.4": "MD5 with RSA", "1.2.840.113549.1.1.5": "SHA-1 with RSA",
+                     "1.2.840.113549.1.1.11": "SHA-256 with RSA", "1.2.840.113549.1.1.12": "SHA-384 with RSA",
+                     "1.2.840.113549.1.1.13": "SHA-512 with RSA", "1.2.840.113549.1.1.10": "RSA-PSS",
+                     "1.2.840.10045.2.1": "Elliptic curve", "1.2.840.10045.4.3.2": "ECDSA with SHA-256",
+                     "1.2.840.10045.4.3.3": "ECDSA with SHA-384", "1.2.840.10045.4.3.4": "ECDSA with SHA-512",
+                     "1.3.101.112": "Ed25519", "1.3.101.113": "Ed448" };
+        var CURVES = { "1.2.840.10045.3.1.7": "P-256", "1.3.132.0.34": "P-384", "1.3.132.0.35": "P-521" };
+        function alg(b, t) {
+            var id = oid(b, children(b, t)[0]);
+            return ALGS[id] || id;
+        }
+
+        // The parts of a certificate the store and Settings show.
+        function parse(der) {
+            var b = der;
+            var cert = tlv(b, 0);
+            if (cert.tag !== 0x30 || cert.end !== b.length) throw new Error("not a certificate");
+            var top = children(b, cert);
+            var tbs = children(b, top[0]), i = 0, version = 1;
+            if (tbs[0].tag === 0xa0) { version = b[children(b, tbs[0])[0].start] + 1; i = 1; }
+            var serial = tbs[i], sigAlg = tbs[i + 1], issuer = tbs[i + 2], validity = children(b, tbs[i + 3]);
+            var subject = tbs[i + 4], spki = children(b, tbs[i + 5]);
+            var out = {
+                version: version,
+                serialNumber: hex(b, serial.start + (b[serial.start] === 0 && serial.end - serial.start > 1 ? 1 : 0), serial.end, ":"),
+                signature: { algorithm: alg(b, sigAlg) },
+                issuer: name(b, issuer),
+                subject: name(b, subject),
+                startdate: time(b, validity[0]),
+                expiredate: time(b, validity[1]),
+                publicKey: { algorithm: alg(b, spki[0]) },
+                isCA: false
+            };
+            var keyAlg = children(b, spki[0]);
+            if (keyAlg[1] && keyAlg[1].tag === 0x06) out.publicKey.curve = CURVES[oid(b, keyAlg[1])] || oid(b, keyAlg[1]);
+            if (out.publicKey.algorithm === "RSA") {
+                // BIT STRING: unused-bits byte, then RSAPublicKey {modulus, exponent}.
+                var rsa = children(b, tlv(b, spki[1].start + 1))[0];
+                var m0 = rsa.start;
+                while (m0 < rsa.end && b[m0] === 0) m0++;
+                out.publicKey.bits = (rsa.end - m0) * 8 - (b[m0] ? Math.clz32(b[m0]) - 24 : 0);
+            } else if (out.publicKey.curve) {
+                out.publicKey.bits = { "P-256": 256, "P-384": 384, "P-521": 521 }[out.publicKey.curve];
+            }
+            tbs.slice(i + 6).forEach(function (t) {
+                if (t.tag !== 0xa3) return;
+                children(b, children(b, t)[0]).forEach(function (ext) {
+                    var parts = children(b, ext), id = oid(b, parts[0]), value = parts[parts.length - 1];
+                    var inner = tlv(b, value.start);
+                    if (id === "2.5.29.17") {           // subjectAltName
+                        out.subject.altname = children(b, inner).filter(function (g) {
+                            return g.tag === 0x81 || g.tag === 0x82 || g.tag === 0x86 || g.tag === 0x87;
+                        }).map(function (g) {
+                            if (g.tag !== 0x87) return str(b, g);
+                            var ip = [];
+                            for (var k = g.start; k < g.end; ++k) ip.push(b[k]);
+                            return ip.length === 4 ? ip.join(".") : hex(b, g.start, g.end, ":");
+                        });
+                    } else if (id === "2.5.29.19") {    // basicConstraints
+                        var bc = children(b, inner);
+                        out.isCA = !!(bc[0] && bc[0].tag === 0x01 && b[bc[0].start]);
+                    }
+                });
+            });
+            return out;
+        }
+
+        // SHA-256 and SHA-1 of the DER (the fingerprints Settings shows).
+        function sha(bytes, one) {
+            var K = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+                     0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+                     0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+                     0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+                     0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+                     0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+                     0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+                     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2];
+            var n = bytes.length, len = ((n + 9 + 63) >> 6) << 6, m = new Uint8Array(len), i, j;
+            m.set(bytes);
+            m[n] = 0x80;
+            var bits = n * 8;
+            for (i = 0; i < 8; ++i) m[len - 1 - i] = i < 4 ? (bits >>> (8 * i)) & 0xff : Math.floor(bits / 0x100000000 / Math.pow(256, i - 4)) & 0xff;
+            var h = one ? [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0]
+                        : [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+            var w = new Array(80);
+            function rotr(x, k) { return (x >>> k) | (x << (32 - k)); }
+            for (var off = 0; off < len; off += 64) {
+                for (i = 0; i < 16; ++i)
+                    w[i] = (m[off + 4 * i] << 24) | (m[off + 4 * i + 1] << 16) | (m[off + 4 * i + 2] << 8) | m[off + 4 * i + 3];
+                var a = h.slice();
+                if (one) {
+                    for (i = 16; i < 80; ++i) { var x = w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]; w[i] = (x << 1) | (x >>> 31); }
+                    for (i = 0; i < 80; ++i) {
+                        var f = i < 20 ? (a[1] & a[2]) | (~a[1] & a[3]) : i < 40 || i >= 60 ? a[1] ^ a[2] ^ a[3] : (a[1] & a[2]) | (a[1] & a[3]) | (a[2] & a[3]);
+                        var k = i < 20 ? 0x5a827999 : i < 40 ? 0x6ed9eba1 : i < 60 ? 0x8f1bbcdc : 0xca62c1d6;
+                        var t1 = (((a[0] << 5) | (a[0] >>> 27)) + f + a[4] + k + w[i]) | 0;
+                        a = [t1, a[0], (a[1] << 30) | (a[1] >>> 2), a[2], a[3]];
+                    }
+                } else {
+                    for (i = 16; i < 64; ++i) {
+                        var s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+                        var s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+                        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+                    }
+                    for (i = 0; i < 64; ++i) {
+                        var S1 = rotr(a[4], 6) ^ rotr(a[4], 11) ^ rotr(a[4], 25);
+                        var ch = (a[4] & a[5]) ^ (~a[4] & a[6]);
+                        var u1 = (a[7] + S1 + ch + K[i] + w[i]) | 0;
+                        var S0 = rotr(a[0], 2) ^ rotr(a[0], 13) ^ rotr(a[0], 22);
+                        var maj = (a[0] & a[1]) ^ (a[0] & a[2]) ^ (a[1] & a[2]);
+                        var u2 = (S0 + maj) | 0;
+                        a = [(u1 + u2) | 0, a[0], a[1], a[2], (a[3] + u1) | 0, a[4], a[5], a[6]];
+                    }
+                }
+                for (j = 0; j < h.length; ++j) h[j] = (h[j] + a[j]) | 0;
+            }
+            var out = new Uint8Array(h.length * 4);
+            for (j = 0; j < h.length; ++j) { out[4 * j] = h[j] >>> 24; out[4 * j + 1] = (h[j] >>> 16) & 0xff; out[4 * j + 2] = (h[j] >>> 8) & 0xff; out[4 * j + 3] = h[j] & 0xff; }
+            return hex(out, 0, out.length, ":");
+        }
+
+        // ---- The store ------------------------------------------------------------------
+
+        // user: [{certificateId, der (base64), trusted, added}]; system:
+        // {id: {trusted?, removed?}}.
+        function load() {
+            var st = store.get(KEY, null) || {};
+            return { user: st.user || [], system: st.system || {}, nextId: st.nextId || 1 };
+        }
+        var systemCerts = null;
+        function systemList() {
+            if (!systemCerts) {
+                systemCerts = [];
+                SYSTEM_CERTS.forEach(function (id) {
+                    var text = PalmSystem.getResource(SYSTEM_DIR + id + ".pem");
+                    if (!text) return;
+                    var bytes = new Uint8Array(text.length);
+                    for (var i = 0; i < text.length; ++i) bytes[i] = text.charCodeAt(i) & 0xff;
+                    var der = certsIn(bytes)[0];
+                    if (der) systemCerts.push({ certificateId: id, der: der, system: true });
+                });
+            }
+            return systemCerts;
+        }
+        // Every certificate: {certificateId, der (bytes), trusted, system}.
+        function all(st) {
+            st = st || load();
+            var out = [];
+            systemList().forEach(function (c) {
+                var o = st.system[c.certificateId] || {};
+                if (!o.removed) out.push({ certificateId: c.certificateId, der: c.der, trusted: o.trusted !== false, system: true });
+            });
+            st.user.forEach(function (c) {
+                out.push({ certificateId: c.certificateId, der: b64Bytes(c.der), trusted: c.trusted !== false, system: false });
+            });
+            return out;
+        }
+        function filename(c) {
+            return c.system ? SYSTEM_DIR + c.certificateId + ".pem" : "/var/palm/data/certificates/" + c.certificateId + ".pem";
+        }
+        var parsed = {};
+        function info(c) {
+            var k = c.certificateId + ":" + c.der.length;
+            if (!parsed[k]) parsed[k] = parse(c.der);
+            return parsed[k];
+        }
+        function displayName(n) { return n.commonname || n.organization || n.organizationalunit || ""; }
+        function summary(c) {
+            var p = info(c);
+            return { certificateId: c.certificateId, certificateFilename: filename(c),
+                     commonname: p.subject.commonname || "", organization: p.subject.organization || "",
+                     issuer: displayName(p.issuer), startdate: p.startdate, expiredate: p.expiredate,
+                     trusted: c.trusted, system: c.system, isCA: p.isCA };
+        }
+        function find(p) {
+            return all().filter(function (c) {
+                return (p.certificateId !== undefined && String(c.certificateId) === String(p.certificateId))
+                    || (p.certificateFilename && filename(c) === p.certificateFilename);
+            })[0] || null;
+        }
+        function sameDer(a, b) {
+            if (a.length !== b.length) return false;
+            for (var i = 0; i < a.length; ++i) if (a[i] !== b[i]) return false;
+            return true;
+        }
+        var watchers = [];
+        function save(st) {
+            store.set(KEY, st);
+            watchers = watchers.filter(function (w) { return w(); });
+        }
+        function listReply() {
+            var list = all().map(summary).sort(function (a, b) {
+                return (a.commonname || a.organization).toLowerCase() < (b.commonname || b.organization).toLowerCase() ? -1 : 1;
+            });
+            return ok({ certificates: list, userCertificateStore: list.filter(function (c) { return !c.system; }) });
+        }
+
+        register(["com.palm.certificatemanager"], {
+            // {subscribe}: again after each change (Phoenix).
+            "/listcertificates": function (p, reply, ctx) {
+                reply(listReply());
+                if (p.subscribe) watchers.push(function () { if (ctx.cancelled()) return false; reply(listReply()); return true; });
+            },
+            "/getcertificatedetails": function (p, reply) {
+                if (p.certificateId === undefined && !p.certificateFilename) return reply(fail(E.BAD_PARAMS, "certificateId or certificateFilename is required"));
+                var c = find(p);
+                if (!c) return reply(fail(E.NOT_FOUND, "No such certificate"));
+                var d = info(c), r = ok({}), k;
+                for (k in d) r[k] = d[k];
+                r.certificateId = c.certificateId;
+                r.certificateFilename = filename(c);
+                r.trusted = c.trusted;
+                r.system = c.system;
+                r.fingerprints = { sha256: sha(c.der, false), sha1: sha(c.der, true) };
+                r.pem = "-----BEGIN CERTIFICATE-----\n" + bytesB64(c.der).replace(/(.{64})/g, "$1\n").replace(/\n$/, "") + "\n-----END CERTIFICATE-----\n";
+                reply(r);
+            },
+            "/addcertificate": function (p, reply) {
+                var path = p.certificateFilename;
+                if (typeof path !== "string" || path.charAt(0) !== "/") return reply(fail(E.BAD_PARAMS, "certificateFilename must be an absolute path"));
+                dispatch("palm://org.webosphoenix.filemanager/read", { path: path, encoding: "base64", maxBytes: 1024 * 1024 }, function (r) {
+                    if (!r || !r.returnValue) return reply(fail(E.READ, (r && r.errorText) || "Cannot read " + path));
+                    var ders = certsIn(b64Bytes(r.data)), good = [];
+                    ders.forEach(function (der) { try { parse(der); good.push(der); } catch (e) { /* not one */ } });
+                    if (!good.length) return reply(fail(E.NOT_CERT, "There is no certificate in " + path.replace(/^.*\//, "")));
+                    var st = load(), have = all(st), ids = [];
+                    good.forEach(function (der) {
+                        if (have.some(function (c) { return sameDer(c.der, der); })) return;
+                        var id = "user-" + st.nextId++;
+                        st.user.push({ certificateId: id, der: bytesB64(der), trusted: true, added: Date.now() });
+                        have.push({ certificateId: id, der: der });
+                        ids.push(id);
+                    });
+                    if (!ids.length) return reply(fail(E.EXISTS, "This certificate is installed already"));
+                    save(st);
+                    reply(ok({ certificateIds: ids }));
+                }, { cancelled: function () { return false; }, onCancel: null });
+            },
+            "/setcertificatetrust": function (p, reply) {
+                var c = find(p);
+                if (!c || p.certificateId === undefined) return reply(fail(E.NOT_FOUND, "No such certificate"));
+                var st = load();
+                if (c.system) {
+                    var o = st.system[c.certificateId] || {};
+                    o.trusted = !!p.trusted;
+                    st.system[c.certificateId] = o;
+                } else {
+                    st.user.forEach(function (u) { if (u.certificateId === c.certificateId) u.trusted = !!p.trusted; });
+                }
+                save(st);
+                reply(ok());
+            },
+            "/removecertificate": function (p, reply) {
+                var c = find(p);
+                if (!c || p.certificateId === undefined) return reply(fail(E.NOT_FOUND, "No such certificate"));
+                var st = load();
+                if (c.system) st.system[c.certificateId] = { removed: true };
+                else st.user = st.user.filter(function (u) { return u.certificateId !== c.certificateId; });
+                save(st);
+                reply(ok());
+            },
+            // The system's certificates back as shipped (Phoenix).
+            "/restorecertificates": function (p, reply) {
+                var st = load();
+                st.system = {};
+                save(st);
+                reply(ok());
+            }
+        });
+        runtime.certificates = { parse: function (der) { return parse(der); }, sha256: function (b) { return sha(b, false); },
+                                 sha1: function (b) { return sha(b, true); }, certsIn: certsIn };
+    })();
+
+    // ================================================================================
     // HTTP, downloads and audio focus (Videos, Podcasts, PDF View, Doc View)
     // ================================================================================
     //
@@ -6142,10 +8159,17 @@
     //       {ticket, amountReceived, amountTotal} and at the end {ticket,
     //       completed: true, completionStatusCode, destPath, destFile, target,
     //       url, mimetype} (interrupted: true when it failed); cancelDownload
-    //       {ticket}; getAllHistory; clearHistory. Files land under
-    //       /media/internal (default folder /media/internal/downloads) in the
-    //       media block's store, so Files, the media indexer and the apps see
-    //       them.
+    //       {ticket}; getAllHistory (items oldest first, with the legacy
+    //       state, fileExistsOnFilesys and recordString); clearHistory.
+    //       Files land under /media/internal in the media block's store, so
+    //       Files, the media indexer and the apps see them. The default
+    //       folder is /media/internal/Downloads, the Downloads folder Files
+    //       shows (legacy webOS used /media/internal/downloads; Linux names
+    //       are case-sensitive, so there is one folder; a device image will
+    //       have to set the service's default to it). The amounts come from the host's proxy
+    //       while the body comes (progressOf), and each download is an
+    //       ongoing activity in the notification area until it ends; a tap
+    //       opens its app's list of downloads (the browser's drawer).
     //   com.webos.service.audiofocusmanager   requestFocus {requestType,
     //       streamType, displayId, subscribe} -> {result: "AF_GRANTED"}; the
     //       app that held the focus is told {result: "AF_LOST"}. The holder
@@ -6156,7 +8180,7 @@
     // __phoenixRuntime.downloads: list() (the history), reset().
     (function mediaAppServices() {
         var MEDIA_ROOT = "/media/internal";
-        var DOWNLOAD_DIR = MEDIA_ROOT + "/downloads";
+        var DOWNLOAD_DIR = MEDIA_ROOT + "/Downloads";
         var HISTORY_KEY = "downloads:history";
         var FOCUS_KEY = "audiofocus";
 
@@ -6168,16 +8192,20 @@
                 s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
             return global.btoa(s);
         }
+        // req.progress: an id the host's proxy reports the body's progress
+        // under (progressOf below); the download manager's.
         function request(req) {
             var r = { method: req.method || "GET", url: req.url, headers: req.headers || {}, body: req.body,
                       binary: !!req.binary, follow: req.follow !== false };
+            if (req.progress) r.progress = String(req.progress);
             var viaHost = /^https?:$/.test(global.location.protocol)
                 ? fetch("/__phoenix/proxy", { method: "POST", headers: { "Content-Type": "application/json" }, body: toJson(r) })
+                    .then(function (res) { return res.json(); })
                 : global.location.protocol === "phoenix:"
-                ? fetch("/__phoenix/proxy?req=" + encodeURIComponent(toJson(r)))
+                ? hostGetJson("/__phoenix/proxy?req=" + encodeURIComponent(toJson(r)))
                 : null;
             if (viaHost) {
-                return viaHost.then(function (res) { return res.json(); }).then(function (x) {
+                return viaHost.then(function (x) {
                     if (x.error) {
                         var e = new Error(x.error);
                         e.code = x.code;
@@ -6205,6 +8233,19 @@
                 throw err;
             });
         }
+        // How far the proxy has come with a request made with {progress: id}:
+        // {received, total} (total -1: not known), or null (over, unknown, or
+        // no proxy: a page fetching directly cannot tell).
+        function progressOf(id) {
+            var proto = global.location.protocol;
+            var path = "/__phoenix/proxy/progress?id=" + encodeURIComponent(id);
+            var answer = /^https?:$/.test(proto) ? fetch(path).then(function (res) { return res.json(); })
+                : proto === "phoenix:" ? hostGetJson(path) : null;
+            if (!answer) return Promise.resolve(null);
+            return answer.then(function (x) {
+                return x && typeof x.received === "number" ? { received: x.received, total: typeof x.total === "number" ? x.total : -1 } : null;
+            }, function () { return null; });
+        }
         runtime.http = { request: request };
 
         // ---- Download manager -------------------------------------------------------------
@@ -6229,6 +8270,30 @@
             return out;
         }
 
+        function sizeText(n) {
+            if (n < 1024) return n + " B";
+            if (n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+            return (n / (1024 * 1024)).toFixed(1) + " MB";
+        }
+        // Where a tap on a download's ongoing activity goes: the app's own
+        // list of downloads where it has one (the browser's Downloads drawer,
+        // the launch params its "finished downloading" banner uses).
+        var DOWNLOAD_LISTS = { "com.palm.app.browser": { toasterOpen: "downloads" } };
+        // A download in the notification area while it runs
+        // (org.webosphoenix.ongoing, "Ongoing activities" below): the file's
+        // name, how much has come, and the progress when the size is known.
+        function showOngoing(rec) {
+            var known = rec.amountTotal > 0;
+            host.postToHost("ongoing", {
+                id: "download-" + rec.ticket, appId: rec.owner || PalmSystem.appIdentifier, title: rec.destFile,
+                body: known ? "Downloading " + sizeText(rec.amountReceived) + " of " + sizeText(rec.amountTotal)
+                            : rec.amountReceived > 0 ? "Downloading " + sizeText(rec.amountReceived) : "Downloading",
+                icon: "", params: DOWNLOAD_LISTS[rec.owner] || null,
+                progress: known ? Math.min(100, Math.floor(rec.amountReceived * 100 / rec.amountTotal)) : -1
+            });
+        }
+        function clearOngoing(rec) { host.postToHost("ongoing", { id: "download-" + rec.ticket, clear: true }); }
+
         function download(p, reply, ctx) {
             var url = String(p.target || p.url || "");
             if (!/^https?:\/\//i.test(url)) return reply(fail(-1, "target must be an http or https URL"));
@@ -6241,34 +8306,53 @@
             store.set("downloads:ticket", ticketSeq);
             var rec = { ticket: ticket, url: url, target: path, destPath: dir + "/", destFile: name, mimetype: p.mime || "",
                         owner: PalmSystem.appIdentifier || "", amountReceived: 0, amountTotal: 0, completed: false };
-            running[ticket] = { aborted: false };
+            var job = running[ticket] = { aborted: false, progressId: "dl-" + Date.now().toString(36) + "-" + ticket };
             remember(rec);
             reply(ok({ ticket: ticket, url: url, target: path, subscribed: !!p.subscribe }));
             var send = function (x) { if (!ctx.cancelled()) reply(ok(x)); };
-            request({ url: url, binary: true, follow: true }).then(function (res) {
-                if (running[ticket].aborted) throw { aborted: true };
+            showOngoing(rec);
+            // The host's proxy says how much has come while the body comes;
+            // the subscriber and the notification area get it as the real
+            // service reports it, {ticket, amountReceived, amountTotal}.
+            var polling = true;
+            (function poll() {
+                if (!polling) return;
+                progressOf(job.progressId).then(function (pr) {
+                    if (!polling) return;
+                    if (pr && (pr.received !== rec.amountReceived || (pr.total > 0 && pr.total !== rec.amountTotal))) {
+                        rec.amountReceived = pr.received;
+                        if (pr.total > 0) rec.amountTotal = pr.total;
+                        send({ ticket: ticket, url: url, amountReceived: rec.amountReceived, amountTotal: rec.amountTotal });
+                        showOngoing(rec);
+                    }
+                    setTimeout(poll, 250);
+                });
+            })();
+            request({ url: url, binary: true, follow: true, progress: job.progressId }).then(function (res) {
+                polling = false;
+                if (job.aborted) throw { aborted: true };
                 if (res.status < 200 || res.status > 299) throw { status: res.status };
                 var bytes = fromB64(res.bodyBase64 || "");
                 var total = bytes.length;
                 rec.amountTotal = total;
                 rec.mimetype = rec.mimetype || (res.headers && res.headers["content-type"] || "").split(";")[0];
-                // Progress in a few steps, as the real service reports it.
-                send({ ticket: ticket, url: url, amountReceived: Math.floor(total / 2), amountTotal: total });
                 var blob = new Blob([bytes], { type: rec.mimetype || "" });
                 if (!runtime.mediaFiles) throw { status: -1 };
                 return runtime.mediaFiles.write(path, blob).then(function () { return total; });
             }).then(function (total) {
-                if (running[ticket].aborted) throw { aborted: true };
+                if (job.aborted) throw { aborted: true };
                 rec.amountReceived = total;
                 rec.completed = true;
                 rec.completionStatusCode = 200;
                 remember(rec);
                 delete running[ticket];
+                clearOngoing(rec);
                 send({ ticket: ticket, url: url, amountReceived: total, amountTotal: total });
                 send({ ticket: ticket, url: url, target: path, destPath: rec.destPath, destFile: name, mimetype: rec.mimetype,
                        amountReceived: total, amountTotal: total, completed: true, completionStatusCode: 200,
                        interrupted: false, aborted: false });
             }, function (e) {
+                polling = false;
                 var aborted = !!(e && e.aborted);
                 rec.completed = true;
                 rec.aborted = aborted;
@@ -6276,9 +8360,22 @@
                 rec.completionStatusCode = e && e.status ? e.status : -1;
                 remember(rec);
                 delete running[ticket];
+                clearOngoing(rec);
                 send({ ticket: ticket, url: url, target: path, destPath: rec.destPath, destFile: name, completed: true,
                        completionStatusCode: rec.completionStatusCode, interrupted: !aborted, aborted: aborted });
             });
+        }
+
+        // getAllHistory's items as the legacy service kept them (Isis reads
+        // state, fileExistsOnFilesys and the record, recordString, to list the
+        // finished downloads again), with the record's fields beside them.
+        function historyItem(h) {
+            var item = {}, k;
+            for (k in h) item[k] = h[k];
+            item.state = !h.completed ? "running" : h.completionStatusCode === 200 && !h.aborted && !h.interrupted ? "completed"
+                : h.aborted ? "cancelled" : "failed";
+            item.recordString = toJson(h);
+            return item;
         }
 
         var dm = {
@@ -6289,9 +8386,21 @@
                 r.aborted = true;
                 reply(ok({ ticket: p.ticket }));
             },
+            // Oldest first, as the legacy service sorted them by ticket.
             "/getAllHistory": function (p, reply) {
                 var owner = p.owner;
-                reply(ok({ items: history().filter(function (h) { return !owner || h.owner === owner; }) }));
+                var mine = history().filter(function (h) { return !owner || h.owner === owner; });
+                var mf = runtime.mediaFiles;
+                Promise.all(mine.map(function (h) {
+                    if (!h.completed || !mf) return Promise.resolve(false);
+                    return mf.read(h.target).then(function (b) { return !!b; }, function () { return false; });
+                })).then(function (exists) {
+                    reply(ok({ items: mine.map(function (h, i) {
+                        var item = historyItem(h);
+                        item.fileExistsOnFilesys = exists[i];
+                        return item;
+                    }).reverse() }));
+                });
             },
             "/clearHistory": function (p, reply) {
                 store.set(HISTORY_KEY, p.owner ? history().filter(function (h) { return h.owner !== p.owner; }) : []);
@@ -6835,6 +8944,115 @@
         runtime.voiceMemos = { placeholder: PLACEHOLDER, errors: E };
     })();
 
+    // ================================================================================
+    // Dictation for the apps (org.webosphoenix.dictation; Voice Dial)
+    // ================================================================================
+    //
+    // The shell's microphone and transcriber, the keyboard's dictation (shell/
+    // native/dictation.cpp: it records, writes a 16 kHz WAV and runs
+    // org.webosphoenix.transcriber's whisper.cpp on it), lent to an app that
+    // listens without a text field. A Phoenix service; the original Voice
+    // Dial called com.palm.pmvoicecommand, which was never released.
+    //
+    //   start {prompt?, autoStop?, subscribe: true}
+    //       -> {subscribed: true, state: "listening"}, {state: "transcribing"},
+    //          then {state: "done", text}, or an error (DICTATION_ERRORS in
+    //          apps/shared/luna/src/dictation.ts). prompt: words to expect,
+    //          e.g. the contacts' names (whisper's initial prompt); autoStop:
+    //          end by itself when the speaker is done. Cancelling the
+    //          subscription stops listening without a transcript.
+    //   stop {}      the speaker is done: transcribe what was heard
+    //   getStatus {} -> {available}
+    //
+    // One microphone: one recording at a time, for one window; the keyboard
+    // and other windows get NOT_AVAILABLE / IN_USE meanwhile.
+    //
+    // The shell does the work when /usr/share/phoenix/host.json says
+    // {"dictation": true} (phoenix-sim; a device's shell): "dictation" host
+    // messages ({op: "start" | "stop" | "cancel", prompt, autoStop}) go out,
+    // and the states come back through __phoenixRuntime.dictationEvent({state,
+    // text?, errorText?}). Anywhere else (a browser) there is no microphone
+    // to lend: start fails with NOT_AVAILABLE.
+    (function dictationServices() {
+        var E = { BAD_PARAMS: -1, NOT_AVAILABLE: 1, IN_USE: 2, NOTHING_HEARD: 3, FAILED: 4 };
+        var hostInfo = null;
+        function available() {
+            if (hostInfo === null) {
+                try { hostInfo = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/host.json") || "{}") || {}; }
+                catch (e) { hostInfo = {}; }
+            }
+            return hostInfo.dictation === true;
+        }
+        var current = null;           // {reply, ctx} of the listening start call
+        function finish(r) {
+            var c = current;
+            current = null;
+            if (c && !c.ctx.cancelled()) c.reply(r);
+        }
+        runtime.dictationEvent = function (ev) {
+            if (!current || !ev) return;
+            if (ev.state === "listening" || ev.state === "transcribing") {
+                if (!current.ctx.cancelled()) current.reply(ok({ subscribed: true, state: ev.state }));
+            } else if (ev.state === "done") {
+                var text = String(ev.text || "").trim();
+                finish(text ? ok({ state: "done", text: text }) : fail(E.NOTHING_HEARD, "Nothing was heard."));
+            } else if (ev.state === "error") {
+                var why = String(ev.errorText || "Dictation failed.");
+                finish(fail(/^Nothing was heard/.test(why) ? E.NOTHING_HEARD
+                            : /in use/.test(why) ? E.IN_USE
+                            : /not available|no microphone|not installed/i.test(why) ? E.NOT_AVAILABLE : E.FAILED, why));
+            }
+        };
+        register(["org.webosphoenix.dictation"], {
+            "/start": function (p, reply, ctx) {
+                if (p.prompt !== undefined && (typeof p.prompt !== "string" || p.prompt.length > 1000))
+                    return reply(fail(E.BAD_PARAMS, "prompt must be text of up to 1000 characters"));
+                if (!available())
+                    return reply(fail(E.NOT_AVAILABLE, "Dictation needs the Phoenix shell's microphone."));
+                if (current) return reply(fail(E.IN_USE, "This app is already listening."));
+                current = { reply: reply, ctx: ctx };
+                var mine = current;
+                ctx.onCancel = function () {
+                    if (current !== mine) return;
+                    current = null;
+                    host.postToHost("dictation", { op: "cancel" });
+                };
+                host.postToHost("dictation", { op: "start", prompt: p.prompt || "", autoStop: !!p.autoStop });
+            },
+            "/stop": function (p, reply) {
+                if (!current) return reply(fail(E.BAD_PARAMS, "Not listening."));
+                host.postToHost("dictation", { op: "stop" });
+                reply(ok());
+            },
+            "/getStatus": function (p, reply) { reply(ok({ available: available() })); }
+        });
+        // A page that goes away stops listening.
+        global.addEventListener("pagehide", function () {
+            if (current) { current = null; host.postToHost("dictation", { op: "cancel" }); }
+        });
+        runtime.dictation = { errors: E };
+    })();
+
+    // ================================================================================
+    // Voice Dial (com.palm.sysapp.voicedial)
+    // ================================================================================
+    //
+    // luna-sysmgr's Voice Dial launcher icon only called
+    // palm://com.palm.pmvoicecommand/startVoiceCommand {source: "appicon"}
+    // (ApplicationManager.cpp slotBuiltInAppEntryPoint_VoiceDial), a service
+    // that was never released. Phoenix Voice Dial (apps/voicedial,
+    // org.webosphoenix.voicedial) answers to that id and that call.
+    (function voiceDial() {
+        var VOICE_DIAL = "org.webosphoenix.voicedial";
+        runtime.appAliases["com.palm.sysapp.voicedial"] = VOICE_DIAL;
+        register(["com.palm.pmvoicecommand"], {
+            "/startVoiceCommand": function (p, reply) {
+                host.postToHost("launch", { id: VOICE_DIAL, params: { source: p.source || "service" } });
+                reply(ok());
+            }
+        });
+    })();
+
     // ---- Node.js device services in the page --------------------------------------
     //
     // Some Phoenix services are Node.js modules a device runs with
@@ -6913,11 +9131,12 @@
     function proxiedRequest(req) {
         var viaHost = /^https?:$/.test(global.location.protocol)
             ? fetch("/__phoenix/proxy", { method: "POST", headers: { "Content-Type": "application/json" }, body: toJson(req) })
+                .then(function (res) { return res.json(); })
             : global.location.protocol === "phoenix:"
-            ? fetch("/__phoenix/proxy?req=" + encodeURIComponent(toJson(req)))
+            ? hostGetJson("/__phoenix/proxy?req=" + encodeURIComponent(toJson(req)))
             : null;
         if (viaHost) {
-            return viaHost.then(function (res) { return res.json(); }).then(function (r) {
+            return viaHost.then(function (r) {
                 if (r.error) {
                     var e = new Error(r.error);
                     e.code = r.code;
@@ -6980,7 +9199,10 @@
     (function davTransport() {
         var SERVICE = "org.webosphoenix.service.dav";
         var SERVICE_DIR = "/usr/palm/applications/org.webosphoenix.dav/service/";
-        var DAV_TEMPLATES = ["/usr/palm/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json"];
+        // And the simulated Jabber (XMPP) account (block "Instant
+        // messaging"), whose accounts need the same handling.
+        var DAV_TEMPLATES = ["/usr/palm/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json",
+                             "/usr/share/phoenix/runtime/accounts/com.webosphoenix.xmpp/com.webosphoenix.xmpp.json"];
         var ACCOUNT_KIND = "com.palm.account:1";
         var LOCK_MS = 5 * 60 * 1000;
 
@@ -7538,18 +9760,30 @@
             if (st && typeof st.appsVersion === "number" && st.appsVersion !== lastAppsVersion) {
                 var first = lastAppsVersion < 0;
                 lastAppsVersion = st.appsVersion;
-                if (!first || st.appsVersion > 0) appsChanged();
+                if (!first || st.appsVersion > 0) appsChanged(st.appsCause || null);
+            }
+            // What the shell knows is being installed, from every page.
+            if (st && st.installs && typeof st.installs === "object") {
+                installs = st.installs;
+                installWatchers = installWatchers.filter(function (w) { return w() !== false; });
             }
             baseApply(st);
         };
-        function hostInstall(op, appId, files) {
-            launchPoints();   // the list before, for launchPointChanges
+        // One request to the host, answered with {ok, error, ...}: install
+        // and remove (an app's files), and the application manager's work
+        // that needs the host: addLaunchPoint, removeLaunchPoint, rescan,
+        // running, close, capacity (free space). phoenix-sim's
+        // SimWindowSource answers through applyHostStatus {installerResult};
+        // tools/serve-rootfs.py at POST /__phoenix/installer.
+        var CHANGES_APPS = { install: true, remove: true, addLaunchPoint: true, removeLaunchPoint: true, rescan: true };
+        function hostOp(op, payload) {
+            if (CHANGES_APPS[op]) launchPoints();   // the list before, for launchPointChanges
+            var body = Object.assign({ op: op }, payload || {});
             if (/^https?:$/.test(global.location.protocol)) {
                 return fetch("/__phoenix/installer", {
-                    method: "POST", headers: { "Content-Type": "application/json" },
-                    body: toJson({ op: op, appId: appId, files: files || [] })
+                    method: "POST", headers: { "Content-Type": "application/json" }, body: toJson(body)
                 }).then(function (res) { return res.json(); }).then(function (r) {
-                    if (r.ok) appsChanged();
+                    if (r.ok && CHANGES_APPS[op]) appsChanged(r.cause ? { cause: r.cause, appId: body.appId } : null);
                     return r;
                 });
             }
@@ -7560,20 +9794,73 @@
                     resolve({ ok: false, error: "The shell did not answer" });
                 }, 60000);
                 pending[id] = function (r) { clearTimeout(timer); resolve(r); };
-                host.postToHost(op === "install" ? "installApp" : "removeApp", { requestId: id, appId: appId, files: files || [] });
+                body.requestId = id;
+                if (op === "install" || op === "remove")
+                    host.postToHost(op === "install" ? "installApp" : "removeApp", body);
+                else
+                    host.postToHost("appManagerOp", body);
             });
         }
+        runtime.hostOp = hostOp;
+        function hostInstall(op, appId, files, cause) {
+            return hostOp(op, { appId: appId, files: files || [], cause: cause || "" });
+        }
+
+        // ---- Installs as they go, for the launcher -----------------------------------
+        // The launcher shows an app being installed as a faded icon with a
+        // progress strip, and one that failed with a warning badge
+        // (LunaSysMgr: ApplicationDescription Status_Installing /
+        // Status_Failed, AppMonitor's install status decorators). Whoever
+        // installs tells the shell ("installStatus" host message):
+        // {appId, state: "installing" | "failed" | "installed", progress
+        // (0-100), title, icon, reason, retry: {uri, params} (how to try
+        // again), open: {id, params} (what a tap opens meanwhile)}. The
+        // shell tells every page what is pending (applyHostStatus
+        // {installs}), for installProgressQuery.
+        var installs = {};
+        runtime.installStatus = function (appId, st) {
+            if (!appId) return;
+            var was = installs[appId] || {}, now = Object.assign({}, was, { appId: appId });
+            for (var k in st) if (st[k] !== undefined) now[k] = st[k];
+            // Several report the same install (the Marketplace, then the
+            // installer): progress only goes forward.
+            if (now.state === "installing" && was.state === "installing" && (was.progress || 0) > (st.progress || 0))
+                now.progress = was.progress;
+            if (now.state === "installed") delete installs[appId];
+            else installs[appId] = now;
+            host.postToHost("installStatus", now);
+        };
+        runtime.pendingInstalls = function () { return installs; };
 
         // ---- Install and remove ---------------------------------------------------------
 
-        var statuses = {}, statusWatchers = [];
-        function report(id, statusValue, details, each) {
+        var statuses = {}, statusWatchers = [], installWatchers = [];
+        // launcher: what the launcher's pending icon shows ({progress,
+        // title, icon, retry}); null for removals.
+        function report(id, statusValue, details, each, launcher) {
             var d = Object.assign({ packageId: id }, details || {});
             statuses[id] = d;
             var msg = ok({ id: id, statusValue: statusValue, details: d });
             if (each) each(msg);
             statusWatchers = statusWatchers.filter(function (w) { return w(msg) !== false; });
             if (/^(installed|install failed|removed|remove failed)$/.test(d.state)) delete statuses[id];
+            if (launcher && id) {
+                var st = d.state === "installed" ? { state: "installed", progress: 100 }
+                       : d.state === "install failed" ? { state: "failed", reason: d.reason || "" }
+                       : { state: "installing", progress: d.state === "installing" ? 50 : 0 };
+                for (var k in launcher) if (launcher[k] !== undefined && launcher[k] !== null) st[k] = launcher[k];
+                runtime.installStatus(id, st);
+            }
+        }
+
+        // The app's title and icon from its package, for the pending icon.
+        function packageLooks(pkg, app) {
+            var info = app.appinfo || {}, out = { title: info.title || app.id };
+            var iconPath = app.dir + (info.icon || "icon.png");
+            var f = pkg.files.filter(function (x) { return x.path === iconPath; })[0];
+            if (f && f.data && f.data.length < 512 * 1024)
+                out.icon = "data:image/png;base64," + b64(f.data);
+            return out;
         }
 
         // -> Promise<{appId, version, skipped}>; rejects with an Error (code, message).
@@ -7581,8 +9868,15 @@
         // package with install scripts, services or files outside its app
         // installs its app; the rest is skipped here (the simulator cannot
         // run scripts or a 2011 service) and listed in `skipped`.
-        function installPackage(id, path, each, developer) {
-            report(id || "", 11, { state: "install needed", ipkUrl: path }, each);
+        // retry: how the launcher's failed icon tries again ({uri, params});
+        // by default the same install, unless the package was only in this
+        // page's memory (/tmp).
+        function installPackage(id, path, each, developer, retry) {
+            if (retry === undefined)
+                retry = /^\/tmp\//.test(path) ? null
+                      : { uri: "luna://com.webos.appInstallService/install", params: { id: id || "", ipkUrl: path, developerMode: !!developer } };
+            var looks = { retry: retry };
+            report(id || "", 11, { state: "install needed", ipkUrl: path }, each, id ? looks : null);
             return readPackage(path).then(function (bytes) {
                 return ipk().read(bytes);
             }).then(function (pkg) {
@@ -7590,6 +9884,8 @@
                 if (!app) throw Object.assign(new Error("The package has no app"), { code: "NO_APP" });
                 if (id && app.id !== id) throw Object.assign(new Error("The package is " + app.id + ", not " + id), { code: "WRONG_ID" });
                 id = app.id;
+                looks = Object.assign(packageLooks(pkg, app), { retry: retry && retry.params && retry.params.id === "" ?
+                    { uri: retry.uri, params: Object.assign({}, retry.params, { id: id }) } : retry });
                 var outside = pkg.files.filter(function (f) { return f.path.indexOf(app.dir) !== 0; });
                 var dev = !!developer && store.get("devMode", false);
                 var skipped = [];
@@ -7610,15 +9906,15 @@
                     var others = outside.filter(function (f) { return pkg.services.indexOf(f.path) < 0; });
                     if (others.length) skipped.push(others.length + " files outside the app");
                 }
-                report(id, 13, { state: "installing", ipkUrl: path }, each);
+                report(id, 13, { state: "installing", ipkUrl: path }, each, looks);
                 var files = pkg.files.map(function (f) { return { path: f.path.slice(app.dir.length), data: b64(f.data) }; });
                 return hostInstall("install", id, files).then(function (r) {
                     if (!r.ok) throw Object.assign(new Error(r.error || "Install failed"), { code: "HOST" });
-                    report(id, 30, { state: "installed", installBasePath: "/media/cryptofs/apps", skipped: skipped }, each);
+                    report(id, 30, { state: "installed", installBasePath: "/media/cryptofs/apps", skipped: skipped }, each, {});
                     return { appId: id, version: app.appinfo.version || pkg.control.Version || "", skipped: skipped };
                 });
             }).then(null, function (e) {
-                report(id || "", 24, { state: "install failed", errorCode: -1, reason: e.message }, each);
+                report(id || "", 24, { state: "install failed", errorCode: -1, reason: e.message }, each, id ? looks : null);
                 throw e;
             });
         }
@@ -7627,10 +9923,11 @@
         function installed(id) {
             return launchPoints().some(function (lp) { return lp.id === id && lp.removable; });
         }
-        function removeApp(id, each) {
+        // cause: why, for notifyOnChange ("USER", the default; "REVOKED").
+        function removeApp(id, each, cause) {
             if (!installed(id)) return Promise.reject(Object.assign(new Error("No such id"), { code: -2 }));
             report(id, 41, { state: "remove needed" }, each);
-            return hostInstall("remove", id).then(function (r) {
+            return hostInstall("remove", id, [], cause || "USER").then(function (r) {
                 if (!r.ok) {
                     report(id, 25, { state: "remove failed", reason: r.error }, each);
                     throw Object.assign(new Error(r.error || "Remove failed"), { code: -7 });
@@ -7683,20 +9980,178 @@
                 send("STARTING");
                 installPackage(null, path, function (m) {
                     if (m.details.state === "installing") send("IPKG_INSTALL");
-                }).then(function (r) {
+                }, false, /^\/tmp\//.test(path) ? null : { uri: "luna://com.palm.appinstaller/installNoVerify", params: { target: path } }).then(function (r) {
                     send("SUCCESS", { appId: r.appId });
                 }, function (e) {
                     send("FAILED_IPKG_INSTALL", { details: { reason: e.message } });
                 });
             });
         }
+        runtime.legacyInstall = legacyInstall;
+
+        // ---- notifyOnChange: apps installed and removed -------------------------------
+        // {appId} (or none: every app, "*"), as ApplicationInstaller's
+        // subscriptions (cbNotifyOnChange, notifyAppInstalled,
+        // notifyAppRemoved: {appId, version, statusChange: "INSTALLED" |
+        // "REMOVED", cause: "USER" | "REVOKED" | "UNKNOWN"}; system apps,
+        // com.palm.sysapp.*, are not told).
+        var changeWatchers = [];
+        runtime.onAppsChanged(function (before, after, info) {
+            var was = {}, now = {};
+            before.forEach(function (lp) { if (/_default$/.test(lp.launchPointId)) was[lp.id] = lp; });
+            after.forEach(function (lp) { if (/_default$/.test(lp.launchPointId)) now[lp.id] = lp; });
+            var changes = [];
+            Object.keys(now).forEach(function (id) {
+                if (!was[id] || (was[id].version || "") !== (now[id].version || ""))
+                    changes.push({ appId: id, version: now[id].version || "", statusChange: "INSTALLED" });
+            });
+            Object.keys(was).forEach(function (id) {
+                if (!now[id] && id.indexOf("com.palm.sysapp") !== 0)
+                    changes.push({ appId: id, version: was[id].version || "", statusChange: "REMOVED",
+                                   cause: info && info.appId === id && info.cause ? info.cause : "USER" });
+            });
+            changes.forEach(function (c) {
+                changeWatchers = changeWatchers.filter(function (w) { return w(c) !== false; });
+            });
+        });
+
+        // ---- Sizes and capacity -------------------------------------------------------
+        function kb(bytes) { return Math.ceil((Number(bytes) || 0) / 1024); }
+        function userApps() {
+            return launchPoints().filter(function (lp) { return /_default$/.test(lp.launchPointId) && lp.removable; });
+        }
+
+        // queryInstallCapacity result bits (ApplicationInstaller.cpp:844-845,
+        // the App Catalog's codes); an unpacked size not given is twice the
+        // package's (INSTALLER_DEFV__MIN_FREE_MULT, :75).
+        var DOWNLOAD_SPACE_INSUFFICIENT = 1, INSTALL_SPACE_INSUFFICIENT = 2, MIN_FREE_MULT = 2;
+
+        // revoke: the apps a trusted Marketplace catalog withdrew. LunaSysMgr
+        // checked the signature over the app ids, one after the other,
+        // with Palm's revocation certificate (cbRevoke, :3386-3505); Phoenix
+        // checks it with the Ed25519 keys of the catalogs the device trusts.
+        function trustedKeys() {
+            var keys = [], st = store.get("marketplace:state", null) || {};
+            (st.sources || []).forEach(function (s) { if (s.key && s.enabled !== false) keys.push(s.key); });
+            try {
+                (JSON.parse(PalmSystem.getResource("/etc/palm/marketplace/sources.json") || "{}").sources || []).forEach(function (s) {
+                    if (s.key && keys.indexOf(s.key) < 0) keys.push(s.key);
+                });
+            } catch (e) { /* none */ }
+            return keys;
+        }
+        function verifyRevocation(appIds, signatureB64) {
+            var ed = loadModule("lib/ed25519.js");
+            var sig, msg = new TextEncoder().encode(appIds.join(""));
+            try { sig = unb64(String(signatureB64 || "")); } catch (e) { return Promise.resolve(false); }
+            var sha512 = function (bytes) { return global.crypto.subtle.digest("SHA-512", bytes); };
+            return trustedKeys().reduce(function (chain, k) {
+                return chain.then(function (good) {
+                    if (good) return true;
+                    var key;
+                    try { key = unb64(k); } catch (e) { return false; }
+                    return ed.verify(sig, msg, key, sha512);
+                });
+            }, Promise.resolve(false));
+        }
+
         register(["com.palm.appinstaller"], {
             "/installNoVerify": legacyInstall,
             "/install": legacyInstall,
             "/remove": function (p, reply) {
                 removeApp(p.packageName || p.id).then(function () { reply(ok()); }, function (e) { reply(fail(-1, e.message)); });
             },
-            "/isInstalled": function (p, reply) { reply(ok({ installed: launchPoints().some(function (lp) { return lp.id === (p.appId || p.packageName); }) })); }
+            "/isInstalled": function (p, reply) { reply(ok({ installed: launchPoints().some(function (lp) { return lp.id === (p.appId || p.packageName); }) })); },
+            "/notifyOnChange": function (p, reply, ctx) {
+                var id = typeof p.appId === "string" && p.appId ? p.appId : "*";
+                reply(ok({ subscribed: true, appId: id }));
+                launchPoints();   // what there is now, to tell changes from
+                changeWatchers.push(function (c) {
+                    if (ctx.cancelled()) return false;
+                    if (id === "*" || id === c.appId) reply(c);
+                    return true;
+                });
+            },
+            // An install as it goes: {appId} -> {appId, state ("installing"
+            // | "failed"), progress (0-100), title, reason}; {subscribe:
+            // true}: each change, until it is installed (state "none",
+            // progress 100) or fails. LunaSysMgr registered the method but
+            // never answered it (lunasvcInstallProgressQuery returned
+            // false); Phoenix answers from the launcher's pending icons.
+            "/installProgressQuery": function (p, reply, ctx) {
+                var id = p.appId || p.id || p.packageName;
+                if (!id) return reply(fail("appinstaller_error", "missing appId"));
+                function now() {
+                    var st = installs[id];
+                    return st ? ok({ appId: id, state: st.state, progress: st.progress || 0, title: st.title || "", reason: st.reason || "" })
+                              : ok({ appId: id, state: "none", progress: launchPoints().some(function (lp) { return lp.id === id; }) ? 100 : 0 });
+                }
+                var first = now();
+                if (first.state === "none")
+                    return reply(Object.assign(first, { returnValue: false, errorText: "No install of " + id + " in progress" }));
+                reply(Object.assign(first, { subscribed: !!p.subscribe }));
+                if (!p.subscribe) return;
+                var last = toJson(now());
+                installWatchers.push(function () {
+                    if (ctx.cancelled()) return false;
+                    var r = now(), text = toJson(r);
+                    if (text !== last) { last = text; reply(r); }
+                    return r.state === "installing";
+                });
+            },
+            // {appId | packageId, size, uncompressedSize} in KB ->
+            // {result (0, or DOWNLOAD 1 | INSTALL 2 space insufficient),
+            // spaceNeededInKB} (lunasvcQueryInstallCapacity: the package
+            // and its unpacked files on one filesystem, less what an
+            // installed copy frees).
+            "/queryInstallCapacity": function (p, reply) {
+                var id = p.appId || p.packageId;
+                if (!id) return reply({ returnValue: false, errorCode: "appinstaller_error", errorText: "missing appId or packageId parameter" });
+                if (p.size === undefined || p.size === null || p.size === "") return reply({ returnValue: false, errorCode: "appinstaller_error", errorText: "missing size parameter" });
+                var size = Number(p.size), unpacked = Number(p.uncompressedSize) || 0;
+                if (!(size >= 0)) return reply({ returnValue: false, errorCode: "appinstaller_error", errorText: "bad size parameter" });
+                if (!unpacked) unpacked = size * MIN_FREE_MULT;
+                hostOp("capacity", {}).then(function (r) {
+                    if (!r.ok || typeof r.freeKB !== "number" || r.freeKB < 0)
+                        return reply({ returnValue: false, errorCode: "appinstaller_error", errorText: r.error || "free space unknown" });
+                    var have = userApps().filter(function (lp) { return lp.id === id; })[0];
+                    var freed = have ? Math.min(kb(have.appSize || have.size), unpacked) : 0;
+                    var needed = Math.max(0, size + unpacked - freed), result = 0;
+                    if (size > r.freeKB) result |= DOWNLOAD_SPACE_INSUFFICIENT;
+                    if (needed > r.freeKB) result |= INSTALL_SPACE_INSUFFICIENT;
+                    reply(ok({ result: result, spaceNeededInKB: String(needed) }));
+                });
+            },
+            // {apps: [{appName (the app id), size (KB)}], totalSize (KB)}.
+            "/getUserInstalledAppSizes": function (p, reply) {
+                var apps = userApps().map(function (lp) { return { appName: lp.id, size: kb(lp.appSize || lp.size) }; });
+                reply(ok({ apps: apps, totalSize: apps.reduce(function (t, a) { return t + a.size; }, 0) }));
+            },
+            // {item: '{"payload": {"signature": base64, "appId": [ids]}}'}
+            // (item is JSON text, as the pubsub message carried it; an
+            // object is taken too).
+            "/revoke": function (p, reply) {
+                var item = p.item, payload;
+                if (item === undefined) return reply({ returnValue: false, errorCode: "missing item key" });
+                if (typeof item === "string") {
+                    try { item = JSON.parse(item); } catch (e) { return reply({ returnValue: false, errorCode: "item payload parse error" }); }
+                }
+                payload = item && item.payload;
+                if (!payload) return reply({ returnValue: false, errorCode: "payload key missing" });
+                if (typeof payload.signature !== "string") return reply({ returnValue: false, errorCode: "missing signature key" });
+                if (!Array.isArray(payload.appId))
+                    return reply({ returnValue: false, errorCode: payload.appId === undefined ? "missing appId key" : "appId key does not represent a json array object" });
+                var ids = payload.appId.map(String);
+                verifyRevocation(ids, payload.signature).then(function (good) {
+                    if (!good) return reply({ returnValue: false, errorCode: "verify failed" });
+                    reply(ok());
+                    ids.reduce(function (chain, id) {
+                        return chain.then(function () {
+                            return installed(id) ? removeApp(id, null, "REVOKED").then(null, function () {}) : null;
+                        });
+                    }, Promise.resolve());
+                });
+            }
         });
     })();
 
@@ -7745,7 +10200,21 @@
                         try { return JSON.parse(PalmSystem.getResource("/etc/palm/marketplace/sources.json") || "{}").sources || []; }
                         catch (e) { return []; }
                     },
-                    log: function (m) { console.info("[marketplace] " + m); }
+                    log: function (m) { console.info("[marketplace] " + m); },
+                    // The launcher's pending icon: a tap opens the app's page
+                    // in the Marketplace meanwhile; a failed one tries the
+                    // Marketplace's install again.
+                    pending: function (st) {
+                        var params = { sourceId: st.sourceId, id: st.catalogId };
+                        if (!runtime.installStatus) return;
+                        runtime.installStatus(st.appId, {
+                            state: st.state === "failed" || st.state === "installed" ? st.state : "installing",
+                            progress: typeof st.progress === "number" ? st.progress : 0,
+                            title: st.title || undefined, icon: st.icon || undefined, reason: st.errorText || "",
+                            retry: { uri: "luna://" + SERVICE + "/install", params: params },
+                            open: { id: "org.webosphoenix.marketplace", params: params }
+                        });
+                    }
                 });
             }
             return methods;
@@ -7798,6 +10267,567 @@
             reply(ok());
         }
     });
+
+    // ================================================================================
+    // Printing (com.palm.printmgr; Print Manager)
+    // ================================================================================
+    //
+    // Enyo 1.0's print dialog (lib/printdialog: PrintDialog, the browser's
+    // and Email's Print) speaks to the print manager, com.palm.printmgr.
+    // Its calls, as PrintJob.js, DocumentPrintJob.js, ImagePrintJob.js,
+    // PrinterSelector.js, PrinterOptions.js and PrinterAdder.js make them:
+    //
+    //   printers/list {subscribe}     {eventType: "Add" | "Rmv", printerID,
+    //                                  printerName, printerAddress} per printer
+    //   printers/getCurrent, printers/setCurrent {printerID}
+    //   printers/getCapabilities {printerID} -> {mediaSize[], mediaType[],
+    //                                  printQuality[], canDuplex, hasColor}
+    //   printers/add {printerID, printerName, printerAddress}
+    //   jobs/open {printerID, description, appName} -> {jobID}
+    //   jobs/editPrintParams {jobID, numCopies, mediaSize, color, duplex,
+    //                         topInset, leftInset, rightInset, bottomInset (in)}
+    //   jobs/getFinalParamsAndArea {jobID} -> {width, height, pixelUnits,
+    //                         renderInReverseOrder, ...}: the printable area
+    //                         in dots at pixelUnits dots per inch
+    //   jobs/getStatus {subscribe} -> {jobID, printerState: "DONE",
+    //                         jobStatus: "Success" | "Cancelled" | "Error"}
+    //   jobs/getRenderStatus {subscribe} -> {jobID, currentPage, totalPages,
+    //                         renderResultCode (0 done, -502 cancelled)}
+    //   jobs/addFile {jobID, pathName, currentPage, totalPages} (images)
+    //   jobs/close {jobID}, jobs/cancel {jobID}
+    //
+    // Errors use the print manager's codes (PrintManagerError.js).
+    //
+    // The printer is "Save as PDF": the job becomes a PDF in
+    // /media/internal/Documents, which Files, PDF View and the Print
+    // Manager open. A document job is rendered by the page view or window
+    // that prints: in phoenix-sim by Chromium (QtWebEngine's printToPdf,
+    // WebAppWindow.qml, the "print" host message; the PDF comes back
+    // through __phoenixRuntime.print.rendered), elsewhere (a desktop
+    // browser, the tests) as the page's text. Image jobs (jobs/addFile) are
+    // put on pages here, one picture a page. Network printers would need
+    // CUPS / IPP Everywhere on a device; the simulator has none, so adding
+    // one answers PM_ERR_PRINTER_NO_RESPONSE_MANUAL.
+    //
+    // Phoenix additions for the Print Manager app (com.palm.app.printmanager,
+    // which is org.webosphoenix.printmanager): jobs/list {subscribe} ->
+    // {jobs: [{jobID, description, appName, printerID, printerName, state
+    // ("Printing", "Done", "Cancelled", "Failed"), pages, file, created,
+    // finished, errorText}]} newest first; jobs/remove {jobID} (a finished
+    // one). A job prints as an ongoing activity, as the Print Manager's
+    // status dashboard did; its headless launch by PrintJob opens no card.
+    //
+    // __phoenixRuntime.print: render(jobID, how) (a page view or window),
+    // renderHtml(jobID, {title, html}) (some HTML, Email's message),
+    // rendered(jobID, base64 | null, info), pdf (the PDF writer), jobs().
+    (function printing() {
+        var SERVICE = "com.palm.printmgr";
+        var PRINT_MANAGER = "org.webosphoenix.printmanager";
+        var JOBS_KEY = "print:jobs", CURRENT_KEY = "print:current";
+        var PDF_PRINTER = { printerID: "phoenix-save-as-pdf", printerName: "Save as PDF", printerAddress: "/media/internal/Documents" };
+        var OUT_DIR = "/media/internal/Documents";
+        var DPI = 300;
+        // Points (1/72 in) per paper size; PrintDialog's names.
+        var PAPER = { US_Letter: [612, 792], US_Legal: [612, 1008], ISO_A4: [595, 842],
+                      Photo_4x6: [288, 432], Photo_5x7: [360, 504], Photo_5x7_MainTray: [360, 504], Photo_L: [252, 360], HAGAKI: [283, 420] };
+        var E = { NO_RESPONSE_MANUAL: -203, BAD_JOB: -601, RENDER: -301, CANCEL_REQUESTED: -502 };
+        runtime.appAliases["com.palm.app.printmanager"] = PRINT_MANAGER;
+
+        // ---- Jobs (shared by every page, so the Print Manager sees them) ----------------
+
+        function jobs() { return store.get(JOBS_KEY, []); }
+        function saveJob(j) {
+            var all = jobs().filter(function (x) { return x.jobID !== j.jobID; });
+            all.unshift(j);
+            store.set(JOBS_KEY, all.slice(0, 100));
+            changed();
+        }
+        function findJob(id) { return jobs().filter(function (x) { return x.jobID === id; })[0] || null; }
+        var listeners = [];
+        function changed() { listeners.slice().forEach(function (f) { try { f(); } catch (e) { /* a page gone */ } }); }
+        function listen(ctx, f) {
+            listeners.push(f);
+            var prev = ctx.onCancel;
+            ctx.onCancel = function () { listeners = listeners.filter(function (x) { return x !== f; }); if (prev) prev(); };
+        }
+        try {
+            global.addEventListener("storage", function (e) { if (e.key === "phoenix:" + JOBS_KEY) changed(); });
+        } catch (x) { /* no window events */ }
+
+        // This page's open jobs: what is not shared (the rendered bytes, the
+        // pictures added, the subscriptions of the app printing).
+        var open = {};
+        function local(id) { alive(); return open[id] || (open[id] = { files: [], status: [], render: [] }); }
+
+        // A job lives in the page that prints it. While that page has jobs it
+        // says so every few seconds ("print:alive:<page>"); a job still
+        // printing whose page has gone quiet (the card closed, the app
+        // crashed) has failed, and a page going away cancels its own.
+        var PAGE = "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+        var ALIVE_EVERY = 4000, QUIET_AFTER = 12000, aliveTimer = null;
+        function alive() {
+            store.set("print:alive:" + PAGE, Date.now());
+            if (!aliveTimer) aliveTimer = setInterval(function () {
+                if (Object.keys(open).length) return store.set("print:alive:" + PAGE, Date.now());
+                clearInterval(aliveTimer);
+                aliveTimer = null;
+                try { global.localStorage.removeItem("phoenix:print:alive:" + PAGE); } catch (e) { /* no storage */ }
+            }, ALIVE_EVERY);
+        }
+        function reap() {
+            jobs().forEach(function (j) {
+                if (j.state !== "Printing" || j.page === PAGE) return;
+                if (store.get("print:alive:" + j.page, 0) < Date.now() - QUIET_AFTER)
+                    finish(j, "Failed", { errorText: "The app printing it closed" });
+            });
+        }
+        try {
+            global.addEventListener("pagehide", function () {
+                Object.keys(open).forEach(function (id) {
+                    var j = findJob(id);
+                    if (j && j.state === "Printing") finish(j, "Cancelled");
+                });
+                try { global.localStorage.removeItem("phoenix:print:alive:" + PAGE); } catch (e) { /* no storage */ }
+            });
+        } catch (x) { /* no window events */ }
+        function tell(list, x) { list.slice().forEach(function (f) { f(x); }); }
+        function subscribeTo(list, ctx, f) {
+            list.push(f);
+            var prev = ctx.onCancel;
+            ctx.onCancel = function () { var i = list.indexOf(f); if (i >= 0) list.splice(i, 1); if (prev) prev(); };
+        }
+        var statusSubs = [], renderSubs = [];
+
+        function printers() { return [PDF_PRINTER]; }
+        function printerById(id) { return printers().filter(function (p) { return p.printerID === id; })[0] || null; }
+
+        function showOngoing(j) {
+            host.postToHost("ongoing", { id: "print-" + j.jobID, appId: PRINT_MANAGER, title: "Printing " + (j.description || j.appName || "a document"),
+                body: j.pages ? j.pages + (j.pages === 1 ? " page" : " pages") + " to " + j.printerName : "Preparing to print to " + j.printerName,
+                progress: j.state === "Printing" && j.pages ? 100 : -1, params: { jobID: j.jobID } });
+        }
+        function finish(j, state, extra) {
+            j.state = state;
+            j.finished = Date.now();
+            for (var k in extra || {}) j[k] = extra[k];
+            saveJob(j);
+            host.postToHost("ongoing", { id: "print-" + j.jobID, clear: true });
+            tell(statusSubs, { jobID: j.jobID, printerState: "DONE",
+                               jobStatus: state === "Done" ? "Success" : state === "Cancelled" ? "Cancelled" : "Error" });
+            if (state === "Done")
+                host.postToHost("notification", { appId: PRINT_MANAGER, title: "Saved as PDF", body: nameOf(j.file),
+                                                  params: { jobID: j.jobID } });
+        }
+        function nameOf(p) { return String(p || "").replace(/^.*\//, ""); }
+
+        // A free name in the Documents folder: "<title>.pdf", then "<title> (2).pdf".
+        function freePath(title) {
+            var base = String(title || "Document").replace(/[\/\\:*?"<>|\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "Document";
+            var mf = runtime.mediaFiles;
+            function attempt(n) {
+                var p = OUT_DIR + "/" + base + (n > 1 ? " (" + n + ")" : "") + ".pdf";
+                if (!mf) return Promise.resolve(p);
+                return mf.read(p).then(function (b) { return b ? attempt(n + 1) : p; }, function () { return p; });
+            }
+            return attempt(1);
+        }
+
+        function writePdf(j, bytes) {
+            if (!runtime.mediaFiles) return Promise.reject(new Error("No place to save the PDF"));
+            return freePath(j.description).then(function (path) {
+                return runtime.mediaFiles.write(path, new Blob([bytes], { type: "application/pdf" })).then(function () { return path; });
+            });
+        }
+
+        // ---- A small PDF writer ---------------------------------------------------------
+        //
+        // pages: [{width, height (points), items: [{image: {jpeg: Uint8Array,
+        // width, height (pixels)}, x, y, w, h} | {text, x, y, size}]}].
+        // Text is Helvetica in WinAnsi (other characters become "?"); y is
+        // from the top of the page.
+        function pdf(pages) {
+            var chunks = [], offsets = [], length = 0;
+            function add(x) {
+                var b = typeof x === "string" ? latin1(x) : x;
+                chunks.push(b);
+                length += b.length;
+            }
+            function latin1(s) {
+                var b = new Uint8Array(s.length);
+                for (var i = 0; i < s.length; i++) { var c = s.charCodeAt(i); b[i] = c < 256 ? c : 63; }
+                return b;
+            }
+            function obj(n, body) { offsets[n] = length; add(n + " 0 obj\n"); body(); add("\nendobj\n"); }
+            function esc(s) { return String(s).replace(/[\\()]/g, "\\$&").replace(/[\r\n\t]/g, " "); }
+            // 1 catalog, 2 pages, 3 font; then per page: page, content, images.
+            var next = 4, kids = [], plan = pages.map(function (pg) {
+                var p = { page: next++, content: next++, images: [] };
+                pg.items.forEach(function (it) { if (it.image) p.images.push(next++); });
+                kids.push(p.page + " 0 R");
+                return p;
+            });
+            add("%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n");
+            obj(1, function () { add("<< /Type /Catalog /Pages 2 0 R >>"); });
+            obj(2, function () { add("<< /Type /Pages /Kids [" + kids.join(" ") + "] /Count " + pages.length + " >>"); });
+            obj(3, function () { add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"); });
+            pages.forEach(function (pg, i) {
+                var p = plan[i], ops = [], xobj = [], img = 0;
+                pg.items.forEach(function (it) {
+                    if (it.image) {
+                        var name = "Im" + (img + 1);
+                        xobj.push("/" + name + " " + p.images[img] + " 0 R");
+                        ops.push("q " + it.w.toFixed(2) + " 0 0 " + it.h.toFixed(2) + " " + it.x.toFixed(2) + " " +
+                                 (pg.height - it.y - it.h).toFixed(2) + " cm /" + name + " Do Q");
+                        img++;
+                    } else if (it.text !== undefined) {
+                        ops.push("BT /F1 " + it.size + " Tf " + it.x.toFixed(2) + " " + (pg.height - it.y - it.size).toFixed(2) +
+                                 " Td (" + esc(it.text) + ") Tj ET");
+                    }
+                });
+                obj(p.page, function () {
+                    add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + pg.width + " " + pg.height + "] /Contents " + p.content +
+                        " 0 R /Resources << /Font << /F1 3 0 R >> /XObject << " + xobj.join(" ") + " >> >> >>");
+                });
+                var content = ops.join("\n");
+                obj(p.content, function () { add("<< /Length " + content.length + " >>\nstream\n" + content + "\nendstream"); });
+                img = 0;
+                pg.items.forEach(function (it) {
+                    if (!it.image) return;
+                    obj(p.images[img++], function () {
+                        add("<< /Type /XObject /Subtype /Image /Width " + it.image.width + " /Height " + it.image.height +
+                            " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + it.image.jpeg.length + " >>\nstream\n");
+                        add(it.image.jpeg);
+                        add("\nendstream");
+                    });
+                });
+            });
+            var xref = length, count = next;
+            var x = "xref\n0 " + count + "\n0000000000 65535 f \n";
+            for (var n = 1; n < count; n++) x += ("0000000000" + offsets[n]).slice(-10) + " 00000 n \n";
+            add(x + "trailer\n<< /Size " + count + " /Root 1 0 R >>\nstartxref\n" + xref + "\n%%EOF\n");
+            var out = new Uint8Array(length), at = 0;
+            chunks.forEach(function (c) { out.set(c, at); at += c.length; });
+            return out;
+        }
+        // Pages of a PDF (Chromium's): its page objects.
+        function pageCount(bytes) {
+            var s = "";
+            for (var i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            var m = s.match(/\/Type\s*\/Page(?![a-zA-Z])/g);
+            return m ? m.length : 1;
+        }
+
+        function paperOf(j) {
+            var size = PAPER[j.params.mediaSize] || PAPER.US_Letter;
+            return j.params.landscape ? [size[1], size[0]] : size.slice();
+        }
+        function insetsOf(j) {
+            var p = j.params;
+            return { top: (p.topInset || 0) * 72, left: (p.leftInset || 0) * 72, right: (p.rightInset || 0) * 72, bottom: (p.bottomInset || 0) * 72 };
+        }
+
+        // A page's text on pages (what a desktop browser can print of it).
+        function textPages(j, title, text) {
+            var paper = paperOf(j), m = insetsOf(j), size = 11, lead = 14;
+            var cols = Math.max(20, Math.floor((paper[0] - m.left - m.right) / (size * 0.5)));
+            var rows = Math.max(5, Math.floor((paper[1] - m.top - m.bottom) / lead));
+            var lines = [];
+            (title ? [title, ""] : []).concat(String(text || "").split(/\r?\n/)).forEach(function (para) {
+                para = para.replace(/\s+/g, " ").trim();
+                if (!para) { if (lines.length && lines[lines.length - 1] !== "") lines.push(""); return; }
+                while (para.length > cols) {
+                    var cut = para.lastIndexOf(" ", cols);
+                    if (cut <= 0) cut = cols;
+                    lines.push(para.slice(0, cut));
+                    para = para.slice(cut).trim();
+                }
+                lines.push(para);
+            });
+            var pages = [];
+            for (var i = 0; i < Math.max(1, lines.length); i += rows) {
+                pages.push({ width: paper[0], height: paper[1], items: lines.slice(i, i + rows).map(function (l, k) {
+                    return { text: l, x: m.left, y: m.top + k * lead, size: size };
+                }) });
+            }
+            return pdf(pages);
+        }
+
+        // A picture as JPEG bytes and its size (through a canvas, so PNG,
+        // GIF and WebP print too).
+        function jpegOf(path) {
+            var url = runtime.fileManager ? runtime.fileManager.url(path) : Promise.resolve(path);
+            return url.then(function (u) {
+                return new Promise(function (resolve, reject) {
+                    var im = new global.Image();
+                    im.onload = function () {
+                        var c = global.document.createElement("canvas");
+                        c.width = im.naturalWidth;
+                        c.height = im.naturalHeight;
+                        var g = c.getContext("2d");
+                        g.fillStyle = "#fff";
+                        g.fillRect(0, 0, c.width, c.height);
+                        g.drawImage(im, 0, 0);
+                        c.toBlob(function (b) {
+                            if (!b) return reject(new Error("Could not read " + path));
+                            b.arrayBuffer().then(function (buf) {
+                                resolve({ jpeg: new Uint8Array(buf), width: c.width, height: c.height });
+                            }, reject);
+                        }, "image/jpeg", 0.92);
+                    };
+                    im.onerror = function () { reject(new Error("Could not read " + path)); };
+                    im.src = u;
+                });
+            });
+        }
+        function imagePages(j, paths) {
+            return Promise.all(paths.map(jpegOf)).then(function (images) {
+                var m = j.params.borderless ? { top: 0, left: 0, right: 0, bottom: 0 } : insetsOf(j);
+                return pdf(images.map(function (im) {
+                    var paper = PAPER[j.params.mediaSize] || PAPER.US_Letter;
+                    // autoRotate: a landscape picture on a page turned to it.
+                    if (j.params.autoRotate !== false && (im.width > im.height) !== (paper[0] > paper[1])) paper = [paper[1], paper[0]];
+                    var bw = paper[0] - m.left - m.right, bh = paper[1] - m.top - m.bottom;
+                    var s = Math.min(bw / im.width, bh / im.height);
+                    var w = im.width * s, h = im.height * s;
+                    return { width: paper[0], height: paper[1],
+                             items: [{ image: im, x: m.left + (bw - w) / 2, y: m.top + (bh - h) / 2, w: w, h: h }] };
+                }));
+            });
+        }
+
+        // ---- Rendering a document job -----------------------------------------------------
+
+        // A page view (the browser's, Email's) or the app's own window asks
+        // to be put on paper. jobs: jobID -> what to do once rendered.
+        function render(jobID, how) {
+            var j = findJob(jobID);
+            if (!j || j.state !== "Printing") return false;
+            var L = local(jobID);
+            L.title = how.title || "";
+            if (!j.description && how.title) { j.description = how.title; saveJob(j); showOngoing(j); }
+            var paper = PAPER[j.params.mediaSize] || PAPER.US_Letter;
+            var size = paper === PAPER.ISO_A4 ? "A4" : paper === PAPER.US_Legal ? "Legal" : "Letter";
+            if (how.host) {
+                host.postToHost(how.host.type, { op: "print", id: how.host.id, jobID: jobID, pageSize: size, landscape: !!j.params.landscape });
+            } else {
+                setTimeout(function () { rendered(jobID, null, { text: how.text, title: how.title }); }, 0);
+            }
+            return true;
+        }
+        // A page's HTML put on paper (Email's message, which is a part of its
+        // window): in phoenix-sim rendered by Chromium in a page view nobody
+        // sees, elsewhere its text.
+        function renderHtml(jobID, how) {
+            var j = findJob(jobID);
+            if (!j || j.state !== "Printing") return false;
+            if (!runtime.offscreenWebView) {
+                var div = global.document.createElement("div");
+                div.innerHTML = String(how.html || "");
+                return render(jobID, { title: how.title, text: div.innerText || div.textContent || "" });
+            }
+            var view = runtime.offscreenWebView(String(how.html || ""), function (id) {
+                render(jobID, { title: how.title, host: { type: "webView", id: id } });
+            });
+            local(jobID).cleanup = view.destroy;
+            return true;
+        }
+
+        // The rendering is back: a PDF (base64) from the host, or null to
+        // print the text instead.
+        function rendered(jobID, b64, info) {
+            var j = findJob(jobID);
+            if (!j) return;
+            var L = local(jobID);
+            if (L.cleanup) { L.cleanup(); delete L.cleanup; }
+            if (j.state !== "Printing") {
+                tell(renderSubs, { jobID: jobID, renderResultCode: E.CANCEL_REQUESTED });
+                return;
+            }
+            var bytes;
+            try {
+                if (b64) {
+                    var bin = global.atob(b64);
+                    bytes = new Uint8Array(bin.length);
+                    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                } else if (info && info.error) {
+                    throw new Error(info.error);
+                } else {
+                    bytes = textPages(j, info && info.title || L.title, info && info.text || "");
+                }
+            } catch (e) {
+                tell(renderSubs, { jobID: jobID, renderResultCode: E.RENDER });
+                finish(j, "Failed", { errorText: String(e && e.message || e) });
+                return;
+            }
+            L.pdf = bytes;
+            j.pages = pageCount(bytes);
+            saveJob(j);
+            showOngoing(j);
+            for (var n = 1; n <= j.pages; n++) tell(renderSubs, { jobID: jobID, currentPage: n, totalPages: j.pages });
+            tell(renderSubs, { jobID: jobID, currentPage: j.pages, totalPages: j.pages, renderResultCode: 0 });
+        }
+
+        // ---- The service --------------------------------------------------------------------
+
+        var jobSeq = Date.now() % 100000;
+        function newJobId() { return "job" + Date.now().toString(36) + (++jobSeq).toString(36); }
+        function needJob(p, reply) {
+            var j = findJob(p.jobID);
+            if (!j) reply(fail(E.BAD_JOB, "No such print job: " + p.jobID));
+            return j;
+        }
+        function publicJob(j) {
+            return { jobID: j.jobID, description: j.description, appName: j.appName, printerID: j.printerID, printerName: j.printerName,
+                     state: j.state, pages: j.pages || 0, file: j.file || "", created: j.created, finished: j.finished || 0,
+                     errorText: j.errorText || "" };
+        }
+
+        var methods = {
+            "/printers/list": function (p, reply, ctx) {
+                reply(ok({ subscribed: !!p.subscribe }));
+                printers().forEach(function (pr) {
+                    setTimeout(function () {
+                        if (!ctx.cancelled()) reply(ok({ eventType: "Add", printerID: pr.printerID, printerName: pr.printerName, printerAddress: pr.printerAddress }));
+                    }, 0);
+                });
+            },
+            "/printers/getCurrent": function (p, reply) {
+                var pr = printerById(store.get(CURRENT_KEY, PDF_PRINTER.printerID)) || PDF_PRINTER;
+                reply(ok({ printerID: pr.printerID, printerName: pr.printerName, printerAddress: pr.printerAddress }));
+            },
+            "/printers/setCurrent": function (p, reply) {
+                if (!printerById(p.printerID)) return reply(fail(-1, "No such printer: " + p.printerID));
+                store.set(CURRENT_KEY, p.printerID);
+                reply(ok());
+            },
+            "/printers/getCapabilities": function (p, reply) {
+                if (!printerById(p.printerID)) return reply(fail(-1, "No such printer: " + p.printerID));
+                reply(ok({ printerID: p.printerID, mediaSize: ["US_Letter", "ISO_A4", "US_Legal", "Photo_4x6", "Photo_5x7"],
+                           mediaType: ["Plain", "Photo"], printQuality: ["Normal", "Best"], canDuplex: false, hasColor: true }));
+            },
+            "/printers/add": function (p, reply) {
+                reply(fail(E.NO_RESPONSE_MANUAL, "There are no network printers in the simulator (on a device: CUPS, IPP Everywhere)"));
+            },
+            "/jobs/open": function (p, reply) {
+                var pr = printerById(p.printerID);
+                if (!pr) return reply(fail(-1, "No such printer: " + p.printerID));
+                var j = { jobID: newJobId(), printerID: pr.printerID, printerName: pr.printerName, appName: String(p.appName || ""),
+                          appId: PalmSystem.appIdentifier || "", page: PAGE, description: String(p.description || ""), state: "Printing",
+                          params: {}, created: Date.now(), pages: 0 };
+                saveJob(j);
+                local(j.jobID);
+                showOngoing(j);
+                reply(ok({ jobID: j.jobID, subscribed: !!p.subscribe }));
+            },
+            "/jobs/editPrintParams": function (p, reply) {
+                var j = needJob(p, reply);
+                if (!j) return;
+                for (var k in p) if (k !== "jobID") j.params[k] = p[k];
+                saveJob(j);
+                reply(ok({ jobID: j.jobID }));
+            },
+            "/jobs/getFinalParamsAndArea": function (p, reply) {
+                var j = needJob(p, reply);
+                if (!j) return;
+                var paper = paperOf(j), m = insetsOf(j);
+                reply(ok({ jobID: j.jobID, width: Math.round((paper[0] - m.left - m.right) / 72 * DPI),
+                           height: Math.round((paper[1] - m.top - m.bottom) / 72 * DPI), pixelUnits: DPI,
+                           renderInReverseOrder: false, mediaSize: j.params.mediaSize || "US_Letter",
+                           numCopies: j.params.numCopies || 1, color: j.params.color || "Color" }));
+            },
+            "/jobs/getStatus": function (p, reply, ctx) {
+                reply(ok({ subscribed: !!p.subscribe }));
+                if (p.subscribe) subscribeTo(statusSubs, ctx, function (x) { if (!ctx.cancelled()) reply(ok(x)); });
+            },
+            "/jobs/getRenderStatus": function (p, reply, ctx) {
+                reply(ok({ subscribed: !!p.subscribe }));
+                if (p.subscribe) subscribeTo(renderSubs, ctx, function (x) { if (!ctx.cancelled()) reply(ok(x)); });
+            },
+            "/jobs/addFile": function (p, reply) {
+                var j = needJob(p, reply);
+                if (!j) return;
+                if (!p.pathName) return reply(fail(-1, "pathName is required"));
+                local(j.jobID).files.push(String(p.pathName));
+                reply(ok({ jobID: j.jobID }));
+            },
+            "/jobs/close": function (p, reply) {
+                var j = needJob(p, reply);
+                if (!j) return;
+                if (j.state !== "Printing") return reply(ok({ jobID: j.jobID }));
+                var L = local(j.jobID);
+                var bytes = L.pdf ? Promise.resolve(L.pdf) : L.files.length ? imagePages(j, L.files) : null;
+                if (!bytes) {
+                    finish(j, "Failed", { errorText: "Nothing was printed" });
+                    return reply(ok({ jobID: j.jobID }));
+                }
+                bytes.then(function (b) {
+                    if (!L.pdf) j.pages = pageCount(b);
+                    return writePdf(j, b);
+                }).then(function (path) {
+                    finish(j, "Done", { file: path });
+                    delete open[j.jobID];
+                    reply(ok({ jobID: j.jobID }));
+                }, function (e) {
+                    finish(j, "Failed", { errorText: String(e && e.message || e) });
+                    reply(fail(E.RENDER, String(e && e.message || e)));
+                });
+            },
+            "/jobs/cancel": function (p, reply) {
+                var j = needJob(p, reply);
+                if (!j) return;
+                if (j.state === "Printing") finish(j, "Cancelled");
+                delete open[j.jobID];
+                reply(ok({ jobID: j.jobID }));
+            },
+            "/jobs/list": function (p, reply, ctx) {
+                var send = function () { if (!ctx.cancelled()) reply(ok({ jobs: jobs().map(publicJob), subscribed: !!p.subscribe })); };
+                reap();
+                send();
+                if (p.subscribe) {
+                    listen(ctx, send);
+                    // A page printing may go quiet while the list is open.
+                    var t = setInterval(function () { if (ctx.cancelled()) clearInterval(t); else reap(); }, QUIET_AFTER / 2);
+                    var prev = ctx.onCancel;
+                    ctx.onCancel = function () { clearInterval(t); if (prev) prev(); };
+                }
+            },
+            "/jobs/remove": function (p, reply) {
+                var j = needJob(p, reply);
+                if (!j) return;
+                if (j.state === "Printing") return reply(fail(-1, "The job is still printing; cancel it first"));
+                store.set(JOBS_KEY, jobs().filter(function (x) { return x.jobID !== j.jobID; }));
+                changed();
+                reply(ok());
+            }
+        };
+        register([SERVICE], methods);
+
+        // A job cancelled elsewhere (the Print Manager) stops here too.
+        listeners.push(function () {
+            Object.keys(open).forEach(function (id) {
+                var j = findJob(id);
+                if (!j || j.state === "Cancelled") {
+                    tell(statusSubs, { jobID: id, printerState: "DONE", jobStatus: "Cancelled" });
+                    tell(renderSubs, { jobID: id, renderResultCode: E.CANCEL_REQUESTED });
+                    delete open[id];
+                }
+            });
+        });
+
+        // PrintJob launches the Print Manager headless for its status
+        // dashboard; here the job's ongoing activity is that dashboard.
+        var am = runtime.services["com.palm.applicationManager"];
+        if (am) {
+            var baseOpen = am["/open"];
+            am["/open"] = function (p, reply, ctx) {
+                if (p.id === "com.palm.app.printmanager" && p.params && p.params.runHeadless)
+                    return reply(ok({ processId: String(Date.now()), appId: PRINT_MANAGER }));
+                baseOpen(p, reply, ctx);
+            };
+        }
+
+        runtime.print = { render: render, renderHtml: renderHtml, rendered: rendered, pdf: pdf, jobs: jobs };
+    })();
 
     // ================================================================================
     // System updates (com.palm.update; services/updates)
@@ -8005,6 +11035,10 @@
     //       title, icon, label}]}: the apps whose appinfo.json says they take
     //       all of these types ("phoenix": {"shareTargets": [{"types":
     //       ["image/*"], "label"?}]}), and the legacy apps below.
+    //   org.webosphoenix.filepicker/pick {kinds: ["image"], title?} ->
+    //       {files: [{fullPath, mimeType, name}]} or {canceled: true}: the
+    //       user picks a picture (SF2, pictures only so far; Messaging's
+    //       picture messages).
     //   org.webosphoenix.filepicker/save {name, from?: path, data?: base64,
     //       mimeType?, title?} -> {path} or {canceled: true}: the user picks a
     //       folder of /media/internal (the last one used first) and a name;
@@ -8097,7 +11131,7 @@
                 var id = "sheet" + (++seq) + "_" + Date.now();
                 var frame = doc.createElement("iframe");
                 frame.setAttribute("data-phoenix-sheet", kind);
-                frame.setAttribute("title", kind === "save" ? "Save to Files" : "Share");
+                frame.setAttribute("title", kind === "save" ? "Save to Files" : kind === "pick" ? "Choose a Picture" : "Share");
                 frame.src = SHEET_URL + "?launchParams=" + encodeURIComponent(toJson({ kind: kind, id: id }));
                 var st = frame.style;
                 st.position = "fixed"; st.left = "0"; st.top = "0"; st.width = "100%"; st.height = "100%";
@@ -8207,6 +11241,17 @@
         });
 
         register(["org.webosphoenix.filepicker"], {
+            // SF2 for pictures: the user picks from the pictures Photos has
+            // (by album), as the original picker did for "image".
+            "/pick": function (p, reply) {
+                var kinds = p.kinds || ["image"];
+                if (!kinds.length || kinds.some(function (k) { return k !== "image"; }))
+                    return reply(fail(-1, "Only pictures can be picked so far: kinds [\"image\"]"));
+                showSheet("pick", { title: p.title || "Choose a Picture", kinds: kinds }).then(function (r) {
+                    if (!r || r.action !== "pick" || !r.files || !r.files.length) return reply(ok({ canceled: true }));
+                    reply(ok({ files: r.files.map(function (f) { return { fullPath: f.path, mimeType: f.mimeType || "", name: f.path.replace(/^.*\//, "") }; }) }));
+                });
+            },
             "/save": function (p, reply) {
                 if (!p.name) return reply(fail(-1, "name is required"));
                 if (p.data === undefined && !p.from) return reply(fail(-1, "from (a path) or data (base64) is required"));
@@ -8698,7 +11743,11 @@
     //                      medications, notes, organDonor, contacts: [{personId,
     //                      name, number, relation}], showWhenLocked}
     //   accessibility      Settings > Accessibility: {reduceMotion,
-    //                      highContrast, monoAudio, captions}
+    //                      highContrast, monoAudio, captions; the hardware
+    //                      keyboard's stickyKeys, slowKeys (ms, 0 off),
+    //                      bounceKeys (ms, 0 off), keyRepeatDelay /
+    //                      keyRepeatInterval (ms; no delay: the keyboard's
+    //                      own repeat)}
     //
     // com.palm.systemmanager (legacy webOS, luna-sysmgr SystemService.cpp):
     //   getBootStatus {subscribe}  -> {finished, firstUse}: firstUse while the
@@ -8838,7 +11887,76 @@
                 store.set("shell:firstUse", !!st.firstUse);
                 changed();
             }
+            // The debugging overlays, as the shell last said (getDebugOverlays).
+            if (st && st.debugOverlays && toJson(st.debugOverlays) !== toJson(store.get("shell:debugOverlays", null))) {
+                store.set("shell:debugOverlays", st.debugOverlays);
+                changed();
+            }
             baseApply(st);
+        };
+
+        // ---- Debugging overlays, progress animations, turbo mode ------------------------
+        //
+        // luna-sysmgr SystemService.cpp:3605-3720, 2585-2690, 5305-5380:
+        //   enableFpsCounter {enable?, reset?, dump?}  the frame rate counter at
+        //       the bottom left (WindowServer.cpp:134-218, 1376-1409); reset
+        //       and dump work on its history, which the shell keeps
+        //   enableTouchPlot {collection?, trails?, crosshairs?}  the touch
+        //       plot over everything (visual/TouchPlot.cpp)
+        //       Both answer returnValue false when no key they know was given.
+        //   runProgressAnimation {type: "msm" | "fsck" | other, state: "start" |
+        //       "stop"}  the full-screen progress animation (ProgressAnimation.cpp;
+        //       any other type is the boot logo's)
+        //   subscribeTurboMode {subscribe}  the CPU boost is on while anyone
+        //       is subscribed (HostBase::turboModeSubscription); Phoenix adds
+        //       turboMode (true while subscribed) to the reply
+        // and, Phoenix:
+        //   getDebugOverlays {subscribe} -> {fpsCounter, touchPlot: {collection,
+        //       trails, crosshairs}}: what the shell shows (Settings >
+        //       Developer Mode's switches)
+        // The shell does the drawing: the requests go to it as "debugOverlay"
+        // and "progressAnimation" host messages; it reports its overlays back
+        // as host status ({debugOverlays}).
+        function debugOverlays() {
+            var d = store.get("shell:debugOverlays", null) || {};
+            var t = d.touchPlot || {};
+            return { fpsCounter: !!d.fpsCounter, touchPlot: { collection: !!t.collection, trails: !!t.trails, crosshairs: !!t.crosshairs } };
+        }
+        sm["/enableFpsCounter"] = function (p, reply) {
+            var req = {};
+            if (typeof p.enable === "boolean") req.enable = p.enable;
+            if (typeof p.reset === "number" && Math.floor(p.reset) === p.reset) req.reset = p.reset;
+            if ("dump" in p) req.dump = true;
+            if (!Object.keys(req).length) return reply({ returnValue: false });
+            host.postToHost("debugOverlay", { fpsCounter: req });
+            reply(ok());
+        };
+        sm["/enableTouchPlot"] = function (p, reply) {
+            var req = {};
+            ["collection", "trails", "crosshairs"].forEach(function (k) { if (typeof p[k] === "boolean") req[k] = p[k]; });
+            if (!Object.keys(req).length) return reply({ returnValue: false });
+            host.postToHost("debugOverlay", { touchPlot: req });
+            reply(ok());
+        };
+        sm["/getDebugOverlays"] = function (p, reply, ctx) {
+            watch(p, reply, ctx, function () { return ok(debugOverlays()); });
+        };
+        sm["/runProgressAnimation"] = function (p, reply) {
+            if (typeof p.type !== "string" || typeof p.state !== "string") return reply({ returnValue: false });
+            if (p.state !== "start" && p.state !== "stop") return reply({ returnValue: false });
+            host.postToHost("progressAnimation", { type: p.type, state: p.state });
+            reply(ok());
+        };
+        var turboSubscriptions = 0;
+        sm["/subscribeTurboMode"] = function (p, reply, ctx) {
+            if (!p.subscribe) return reply(ok({ subscribed: false, turboMode: turboSubscriptions > 0 }));
+            turboSubscriptions++;
+            var prev = ctx.onCancel;
+            ctx.onCancel = function () {
+                turboSubscriptions--;
+                if (prev) prev();
+            };
+            reply(ok({ subscribed: true, turboMode: true }));
         };
 
         // ---- System UI events (subscribeToSystemUI) ---------------------------------

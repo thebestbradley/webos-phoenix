@@ -277,6 +277,91 @@ body.messaging-app { overflow: hidden; }
 .send-button:disabled { background: linear-gradient(#c7c7c5, #a9a9a7); border-color: #8a8a88; cursor: default; }
 .pui-menu-item .unavailable { font-size: 12px; color: #aaa; margin-left: 6px; }
 
+/* A picture to send: above the field until it goes or is taken off. */
+.compose-bar-wrap { flex: none; }
+.staged {
+    display: flex;
+    gap: 6px;
+    padding: 6px 8px 0;
+    background: #e9e9e7;
+    border-top: 1px solid #c4c4c2;
+}
+.staged-part {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 4px 6px;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    font-size: 13px;
+}
+.staged-part img, .staged-blank { width: 44px; height: 44px; object-fit: cover; border-radius: 3px; background: #ccc; }
+.staged-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; color: var(--pui-text-dim); }
+.staged-remove {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    border: 0;
+    border-radius: 13px;
+    background: #8a8a88;
+    color: #fff;
+    font: bold 17px/26px sans-serif;
+    cursor: pointer;
+    padding: 0;
+}
+.attach-button {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border: 0;
+    background: none;
+    color: var(--pui-label);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+}
+.attach-button:disabled { opacity: 0.4; cursor: default; }
+
+/* A picture message's pictures in its balloon. */
+.bubble.has-parts { padding: 4px; white-space: normal; }
+.bubble.has-parts .bubble-text { padding: 4px 8px 4px; white-space: pre-wrap; }
+.bubble-picture {
+    display: block;
+    border: 0;
+    padding: 0;
+    background: none;
+    cursor: pointer;
+}
+.bubble-picture img, .bubble-picture-blank {
+    display: block;
+    max-width: min(220px, 100%);
+    max-height: 220px;
+    border-radius: 12px;
+}
+.bubble-picture-blank { width: 160px; height: 120px; background: #ccc; }
+.bubble-file { padding: 6px 8px; font-size: 14px; }
+
+/* A picture, full screen. */
+.picture-viewer {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+}
+.picture-viewer img { flex: 1; min-height: 0; width: 100%; object-fit: contain; }
+.picture-viewer-bar { flex: none; display: flex; gap: 8px; padding: 8px; }
+.picture-viewer-bar .pui-button { flex: 1; }
+
+/* An IM buddy's presence (Enyo contactsui's dots). */
+.presence-icon { flex: none; vertical-align: -2px; margin-right: 4px; }
+.thread-name .presence-icon { vertical-align: -1px; }
+
 /* ---- New message ------------------------------------------------------------------------------ */
 
 .to-field {
@@ -338,7 +423,11 @@ body.messaging-app { overflow: hidden; }
 
 /* ---- Buddies ----------------------------------------------------------------------------------- */
 
-.buddies { padding: 4px 8px; }
+.buddies { padding: 4px 8px 12px; }
+.buddies > .pui-button { width: 100%; margin: 8px 0; }
+.buddy-account { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.buddy-account-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.buddy-account small { display: block; font-size: 12px; color: var(--pui-text-dim); }
 .presence { display: inline-block; width: 12px; height: 12px; border-radius: 6px; margin: 0 4px; }
 .presence.offline { background: radial-gradient(circle at 35% 35%, #ddd, #8a8a88); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3); }
 

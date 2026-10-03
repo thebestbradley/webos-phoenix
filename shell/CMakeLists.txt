@@ -27,7 +27,7 @@ if(PHOENIX_BUILD_SIM)
     # The Terminal's PTY core (and its tests, pty-test), shared with the
     # device's org.webosphoenix.pty service.
     add_subdirectory(../services/pty ${CMAKE_CURRENT_BINARY_DIR}/pty)
-    add_executable(phoenix-sim sim/main.cpp sim/rootfs.cpp sim/rootfs.h sim/simsettings.h sim/simprocess.h sim/simpty.cpp sim/simpty.h sim/siminstaller.cpp sim/siminstaller.h)
+    add_executable(phoenix-sim sim/main.cpp sim/rootfs.cpp sim/rootfs.h sim/simsettings.h sim/simprocess.h sim/simpty.cpp sim/simpty.h sim/siminstaller.cpp sim/siminstaller.h sim/simsnapshots.cpp sim/simsnapshots.h)
     target_link_libraries(phoenix-sim PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick phoenix-pty-core)
     if(TARGET Qt6::WebEngineQuick)
         # Network: the pages' HTTP proxy (RootfsSchemeHandler, /__phoenix/proxy).

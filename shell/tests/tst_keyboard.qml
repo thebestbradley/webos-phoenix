@@ -104,6 +104,31 @@ Item {
             fuzzyCompare(shell.cardView.windowHeight, shell.uiRoot.height - Theme.statusBarHeight - kb.keyboardHeight, 0.01);
         }
 
+        // A hardware keyboard attached (GAPS V8 (1)): a field taking the
+        // focus leaves the keyboard down and shows the keyboard button;
+        // the button brings it up, and a key typed on the hardware keyboard
+        // puts it away again. Detached, it comes up as usual.
+        function test_hardwareKeyboardKeepsItDown() {
+            sys.hardwareKeyboard = true;
+            var button = findChild(shell, "showKeyboardButton");
+            field.forceActiveFocus();
+            tryCompare(button, "visible", true, 1000);
+            wait(300);
+            verify(!shell.keyboardOpen);
+            compare(shell.notifications.negativeSpace, 0);
+            mouseClick(button);
+            tryCompare(shell, "keyboardOpen", true, 1000);
+            verify(!button.visible);
+            keyClick(Qt.Key_A);
+            compare(field.text, "a");
+            tryCompare(shell, "keyboardOpen", false, 1000);
+            verify(field.activeFocus);
+            tryCompare(button, "visible", true, 1000);
+            sys.hardwareKeyboard = false;
+            tryCompare(shell, "keyboardOpen", true, 1000);
+            verify(!button.visible);
+        }
+
         function test_showAndHideAnimateOver400ms() {
             compare(Theme.positiveSpaceDuration, 400);
             field.forceActiveFocus();
@@ -716,6 +741,39 @@ Item {
             compare(field.text.toLowerCase(), "teh don't ");
         }
 
+        // Settings > Text Assist > Shortcuts (x_palm_textinput): the space bar
+        // puts in what a shortcut stands for, with auto-correct off too;
+        // backspace puts the shortcut back; the switch turns them off.
+        function test_textAssistShortcuts() {
+            var before = sys.textAssist;
+            sys.textAssist = { suggestions: true, autoCorrect: false, swipe: true, spaces2period: true, forgetWords: 0,
+                               shortcuts: { omw: "On my way", brb: "be right back" }, shortcutsOn: true };
+            showKeyboard();
+            type(["o", "m", "w"]);
+            compare(kb.candidates[0].kind, "typed");
+            compare(kb.candidates[1].kind, "correction");
+            compare(kb.candidates[1].text, "On my way");
+            tapKey("Space");
+            compare(field.text, "On my way ");
+            tapKey("Backspace");
+            compare(field.text.toLowerCase(), "omw");
+            tapKey("Space");
+            compare(field.text.toLowerCase(), "omw ");
+            // Capitalized as typed.
+            tapKey("Shift");
+            type(["b", "r", "b", "Space"]);
+            compare(field.text.toLowerCase().slice(0, 4), "omw ");
+            compare(field.text.slice(4), "Be right back ");
+            // Off: left as typed.
+            sys.textAssist = { suggestions: true, autoCorrect: false, swipe: true, spaces2period: true, forgetWords: 0,
+                               shortcuts: { omw: "On my way" }, shortcutsOn: false };
+            type(["o", "m", "w"]);
+            verify(!kb.candidates.some(function (c) { return c.text === "On my way"; }), JSON.stringify(kb.candidates));
+            tapKey("Space");
+            verify(/omw $/.test(field.text), field.text);
+            sys.textAssist = before;
+        }
+
         function test_textAssistLearnsTheNextWord() {
             kb.textAssistData = "";
             showKeyboard();
@@ -833,6 +891,19 @@ Item {
             kb.dictation.transcribeFile("/dev/null");
             tryCompare(kb, "dictationMessage", "Speech recognition is not installed", 3000);
             compare(field.text, "Hello there.");
+            // An app's recording (Voice Dial's) is not typed, nor shown in the bar.
+            kb.dictation.owner = "w7";
+            kb.dictation.command = ["sh", "-c", "echo '{\"returnValue\":true,\"text\":\"call ada\"}'"];
+            var heard = "";
+            var take = function(t) { heard = t; };
+            kb.dictation.transcribed.connect(take);
+            kb.dictation.transcribeFile("/dev/null");
+            verify(!findChild(kb, "candidateBar").transcribing);
+            tryCompare(kb.dictation, "busy", false, 3000);
+            kb.dictation.transcribed.disconnect(take);
+            compare(heard, "call ada");
+            compare(field.text, "Hello there.");
+            kb.dictation.owner = "";
             kb.dictation.command = old;
         }
 

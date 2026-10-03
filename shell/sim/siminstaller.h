@@ -12,6 +12,7 @@
 #include <QObject>
 #include <QString>
 #include <QVariantList>
+#include <QVariantMap>
 
 class Rootfs;
 
@@ -30,6 +31,23 @@ public:
     Q_INVOKABLE QString remove(const QString &appId);
     // The apps as Rootfs::apps() has them now.
     Q_INVOKABLE QVariantList apps() const;
+    // Read the apps again (applicationManager/rescan).
+    Q_INVOKABLE void rescan();
+
+    // A launch point an app adds for itself (applicationManager/
+    // addLaunchPoint; ApplicationManager::addLaunchPoint): lp is {id (the
+    // app), title, appmenu, icon (a device path; relative ones are the
+    // app's), params (an object), removable}. Stored as
+    // /var/luna/launchpoints/<id>, the id eight random digits as LunaSysMgr
+    // made them (findUniqueFileName). -> {launchPointId} or {error}.
+    Q_INVOKABLE QVariantMap addLaunchPoint(const QVariantMap &lp);
+    // Removes one an app added (removeLaunchPoint): "" when done, else
+    // what is wrong, in LunaSysMgr's words.
+    Q_INVOKABLE QString removeLaunchPoint(const QString &launchPointId);
+
+    // Free space where apps are installed, in KB (queryInstallCapacity);
+    // -1 if unknown.
+    Q_INVOKABLE qint64 freeSpaceKB() const;
 
     static bool validId(const QString &appId);
 

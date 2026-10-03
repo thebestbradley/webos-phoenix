@@ -21,6 +21,8 @@
     "voicememos",
     "flashlight",
     "screenshot",
+    "printmanager",
+    "voicedial",
     "sharesheet",
     "notificationlab",
     "scanner",
@@ -35,7 +37,8 @@
     "docview",
     "help",
     "firstuse",
-    "marketplace"
+    "marketplace",
+    "agenda"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

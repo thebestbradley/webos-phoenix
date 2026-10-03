@@ -65,6 +65,12 @@
             "apps/tasks/public/icon"
         ]
     },
+    "agenda": {
+        "platter": "disc",
+        "out": [
+            "apps/agenda/public/icon"
+        ]
+    },
     "voicememos": {
         "platter": "disc",
         "out": [
@@ -189,6 +195,14 @@
             "apps/screenshot/public/icon"
         ]
     },
+    "printmanager": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 66,
+        "out": [
+            "apps/printmanager/public/icon"
+        ]
+    },
     "notificationlab": {
         "platter": "diamond",
         "base": 178,
@@ -245,6 +259,14 @@
             "apps/settings/public/icons/airplane"
         ]
     },
+    "exhibition": {
+        "platter": "diamond",
+        "base": 180,
+        "foot": 62,
+        "out": [
+            "apps/settings/public/icons/exhibition"
+        ]
+    },
     "screen": {
         "platter": "diamond",
         "base": 176,
@@ -283,6 +305,30 @@
         "foot": 70,
         "out": [
             "apps/settings/public/icons/textassist"
+        ]
+    },
+    "justtype": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 14,
+        "out": [
+            "apps/settings/public/icons/justtype"
+        ]
+    },
+    "certificates": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 58,
+        "out": [
+            "apps/settings/public/icons/certificates"
+        ]
+    },
+    "phoneprefs": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 46,
+        "out": [
+            "apps/settings/public/icons/phoneprefs"
         ]
     },
     "location": {

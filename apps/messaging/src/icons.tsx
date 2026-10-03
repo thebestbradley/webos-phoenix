@@ -1,7 +1,31 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Glyphs for Messaging (Palm's were not open-sourced).
+// Glyphs for Messaging (Palm's were not open-sourced), and the presence dots
+// of Enyo 1.0's contactsui (images/PROVENANCE.md).
+
+import { presenceClass } from "@phoenix/luna";
+import statusAvailable from "./images/status-available.png";
+import statusAway from "./images/status-away.png";
+import statusOffline from "./images/status-offline.png";
+
+const PRESENCE = { available: statusAvailable, busy: statusAway, offline: statusOffline };
+
+/** An IM buddy's presence: green available, orange busy, grey offline. */
+export const Presence = ({ availability, title }: { availability: number | undefined; title?: string }) => {
+    const cls = presenceClass(availability);
+    return <img className={`presence-icon ${cls}`} src={PRESENCE[cls]} alt={title ?? cls} title={title} width={16} height={16} />;
+};
+
+/** A picture, to attach one (a framed landscape). */
+export const AttachPicture = () => (
+    <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"
+         strokeLinejoin="round">
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+        <path d="M5 17l5-5 3 3 2-2 4 4" strokeLinecap="round" />
+        <circle cx="16" cy="9" r="1.6" fill="currentColor" stroke="none" />
+    </svg>
+);
 
 export const Compose = () => (
     <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"

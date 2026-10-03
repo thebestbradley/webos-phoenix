@@ -13,6 +13,11 @@
 //   address   typing an address and Enter goes there
 //   history   back and forward move through the pages
 //   handlers  mailto: links go to Email (command-resource-handlers.json)
+//   download  a file the page view does not show is downloaded with
+//             com.palm.downloadmanager: an ongoing activity with progress,
+//             the Downloads drawer, the Downloads folder, Open in its app
+//   print     Print in the app menu: the print dialog, Save as PDF, the
+//             PDF in Documents and the job in the Print Manager
 //
 //   node tools/test-browser.cjs [--tablet] [--out DIR]
 
@@ -119,6 +124,113 @@ async function main() {
         await page.waitForTimeout(800);
         const mail = host.find((m) => m.type === "launch" && m.payload.id === "com.palm.app.email");
         check(!!mail, "handlers: mailto: opens Email");
+
+        // Downloads. A file the page view does not show comes back to the
+        // browser as BrowserAdapter's mimeNotSupported (phoenix-sim's native
+        // view sends it when Chromium would download); the browser asks who
+        // opens the type and has com.palm.downloadmanager fetch it. The
+        // simulated service fetches through serve-rootfs.py's proxy, which
+        // reports the body's progress meanwhile; both are answered here.
+        const luna = (u, p) => page.evaluate(([uri, params]) => new Promise((res) => {
+            const b = new PalmServiceBridge();
+            b.onservicecallback = (j) => res(JSON.parse(j));
+            b.call(uri, JSON.stringify(params || {}));
+        }), [u, p]);
+        const waitFor = async (what, ms) => {
+            for (let t = 0; t < (ms || 8000); t += 100) {
+                const v = await what();
+                if (v) return v;
+                await page.waitForTimeout(100);
+            }
+            return null;
+        };
+        const PDF_URL = "https://example.org/docs/field-guide.pdf";
+        const pdf = fs.readFileSync(path.join(REPO, "apps/media-samples/media/documents/field-guide.pdf"));
+        let received = 0, release = null;
+        const arrived = new Promise((r) => { release = r; });
+        await page.route("**/__phoenix/proxy/progress**", (route) => route.fulfill({
+            contentType: "application/json", body: JSON.stringify({ received, total: pdf.length }) }));
+        await page.route("**/__phoenix/proxy", async (route) => {
+            const req = JSON.parse(route.request().postData() || "{}");
+            if (req.url !== PDF_URL) return route.continue();
+            await arrived;
+            await route.fulfill({ contentType: "application/json", body: JSON.stringify({
+                status: 200, headers: { "content-type": "application/pdf" }, url: PDF_URL, bodyBase64: pdf.toString("base64") }) });
+        });
+        host.length = 0;
+        await page.evaluate((u) => {
+            document.querySelector("object[type='application/x-palm-browser']").eventListener.mimeNotSupported("application/pdf", u);
+        }, PDF_URL);
+        const ongoing = () => host.filter((m) => m.type === "ongoing").map((m) => m.payload);
+        const started = await waitFor(() => ongoing().find((o) => o.title === "field-guide.pdf"));
+        check(!!started && started.appId === "com.palm.app.browser" && started.params && started.params.toasterOpen === "downloads",
+            "download: an ongoing activity in the notification area, opening the browser's Downloads");
+        received = Math.floor(pdf.length / 2);
+        const half = await waitFor(() => ongoing().find((o) => o.progress >= 45 && o.progress <= 50));
+        check(!!half && /^Downloading \d+ KB of \d+ KB$/.test(half.body), "download: its progress comes from the proxy (" + (half && half.body) + ")");
+        const row = page.locator(".enyo-toaster .item-progress:has-text('field-guide.pdf')").first();
+        check(await row.isVisible(), "download: the browser's Downloads drawer lists it");
+        await shot("download-progress");
+        release();
+        check(!!await waitFor(() => ongoing().find((o) => o.clear && o.id === started.id)), "download: the activity goes when it is done");
+        const open = page.locator(".enyo-toaster:visible .enyo-button:has-text('Open')").first();
+        check(!!await waitFor(() => open.isVisible()), "download: then it can be opened from the list");
+        await shot("download-done");
+        const stat = await luna("luna://org.webosphoenix.filemanager/stat", { path: "/media/internal/Downloads/field-guide.pdf" });
+        const size = stat.entry && stat.entry.size;
+        check(size === pdf.length, "download: the file is in the Downloads folder, whole (" + size + " bytes)");
+        host.length = 0;
+        await open.click();
+        const launched = await waitFor(() => host.find((m) => m.type === "launch"));
+        check(!!launched && launched.payload.id === "org.webosphoenix.pdfview" && launched.payload.params.target === "/media/internal/Downloads/field-guide.pdf",
+            "download: Open hands it to PDF View");
+        const hist = await luna("luna://com.palm.downloadmanager/getAllHistory", { owner: "com.palm.app.browser" });
+        const item = (hist.items || []).find((h) => h.destFile === "field-guide.pdf");
+        check(!!item && item.state === "completed" && item.fileExistsOnFilesys === true && JSON.parse(item.recordString).ticket === item.ticket,
+            "download: the history lists it as the browser reads it again");
+        // A type no app opens: the browser says so, as on webOS.
+        await page.evaluate(() => {
+            document.querySelector("object[type='application/x-palm-browser']").eventListener.mimeNotSupported("application/zip", "https://example.org/a.zip");
+        });
+        check(!!await waitFor(() => page.getByText("Cannot open MIME type").first().isVisible()), "download: a type nothing opens says \"Cannot open MIME type\"");
+        await page.locator(".enyo-popup:visible .enyo-button").first().click();
+
+        // Print: the app menu's Print opens Enyo 1.0's print dialog, which
+        // finds the print manager's "Save as PDF" printer; Print renders the
+        // page (here its text: the iframe engine) into a PDF in Documents.
+        await page.goto(browserUrl({ target: CALCULATOR }));
+        await waitForFrame(CALCULATOR);
+        // Isis keeps Print disabled while the page loads, which it counts
+        // until a second after the progress bar reached 100 %.
+        await page.waitForTimeout(1600);
+        host.length = 0;
+        await page.evaluate(() => __phoenixRuntime.openAppMenu());
+        const printItem = page.locator(".enyo-appmenu .enyo-menuitem:has-text('Print')").first();
+        check(!!await waitFor(() => printItem.isVisible()), "print: the app menu has Print");
+        await printItem.click();
+        const dialog = page.locator(".print-dialog:visible");
+        check(!!await waitFor(() => dialog.getByText("Save as PDF").first().isVisible()), "print: the print dialog offers Save as PDF");
+        check(!!await waitFor(() => dialog.getByText("Number of Copies").first().isVisible()), "print: and its options (the dialog's picker kinds exist)");
+        await shot("print-dialog");
+        await dialog.locator(".enyo-button:has-text('Print')").last().click();
+        const saved = await waitFor(() => host.find((m) => m.type === "notification" && m.payload.title === "Saved as PDF"), 10000);
+        check(!!saved && saved.payload.appId === "org.webosphoenix.printmanager", "print: \"Saved as PDF\" (" + (saved && saved.payload.body) + ")");
+        const jobs = await luna("luna://com.palm.printmgr/jobs/list", {});
+        const printed = (jobs.jobs || [])[0];
+        check(!!printed && printed.state === "Done" && printed.appName === "Browser" && printed.pages >= 1, "print: the Print Manager lists the job, done");
+        const pdfStat = printed && await luna("luna://org.webosphoenix.filemanager/stat", { path: printed.file });
+        check(!!pdfStat && pdfStat.entry && pdfStat.entry.size > 300 && /^\/media\/internal\/Documents\/.+\.pdf$/.test(printed.file),
+            "print: the PDF is in Documents (" + (printed && printed.file) + ")");
+        const head = printed && await luna("luna://org.webosphoenix.filemanager/read", { path: printed.file, encoding: "base64" });
+        const headText = head && (head.encoding === "base64" ? Buffer.from(head.data || "", "base64").toString("latin1") : head.data || "");
+        check(/^%PDF-/.test(headText || ""), "print: and it is a PDF");
+        await page.goto(`${origin}/usr/palm/applications/org.webosphoenix.printmanager/index.html?launchParams=` +
+                        encodeURIComponent(JSON.stringify({ jobID: printed && printed.jobID })));
+        const jobRow = page.locator(`[data-testid='job-${printed && printed.jobID}']`);
+        check(!!await waitFor(() => jobRow.isVisible()) && /Calculator/.test(await jobRow.textContent()) && /saved as PDF/.test(await jobRow.textContent()),
+            "print: the Print Manager shows the job (" + (await jobRow.textContent().catch(() => "")) + ")");
+        check(await page.locator(".pm-shown").count() === 1, "print: the job a notification opened is marked");
+        await shot("printmanager");
 
         check(errors.length === 0, "no errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
         await browser.close();

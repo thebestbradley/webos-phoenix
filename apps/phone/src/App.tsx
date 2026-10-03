@@ -13,8 +13,8 @@
 // {emergency: true} is the restricted mode the lock screen opens
 // (views/Emergency).
 
-import { useEffect, useMemo, useState } from "react";
-import { primaryCall, ringingCall, telephony, type Call } from "@phoenix/luna";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { apps, primaryCall, ringingCall, telephony, type Call } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import { AppMenu, BackProvider, RadioToolGroup, ToolBar, dialable, useBack } from "@phoenix/ui";
 import { callLog, otherParty, type PhoneCall } from "./lib/calllog";
@@ -59,7 +59,10 @@ function Phone() {
     const people = usePeople();
     const voicemail = useVoicemail();
     const wide = useWide();
-    const params = useLaunchParams<{ number?: string }>();
+    // {number}: on the dial pad; {number, dial: true}: called at once
+    // (Voice Dial, after you said yes).
+    const params = useLaunchParams<{ number?: string; dial?: boolean }>();
+    const dialedFor = useRef<object | null>(null);
     const [tab, setTab] = useState<Tab>("dial");
     const [number, setNumber] = useState(params.number ? dialable(params.number) : "");
     const [error, setError] = useState<string | null>(null);
@@ -69,10 +72,15 @@ function Phone() {
     useActiveCallBanner(status.calls, people);
 
     useEffect(() => {
-        if (params.number) {
+        if (params.number && params.dial) {
+            if (dialedFor.current === params) return;
+            dialedFor.current = params;
+            dial(params.number);
+        } else if (params.number) {
             setNumber(dialable(params.number));
             setTab("dial");
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [params]);
 
     const ringing = ringingCall(status.calls);
@@ -116,6 +124,9 @@ function Phone() {
                 { label: "Dial Pad", onSelect: () => setTab("dial") },
                 { label: "Call Log", onSelect: () => setTab("log") },
                 { label: "Favorites", onSelect: () => setTab("favorites") },
+                // As the original's menu opened its Phone Preferences (call
+                // forwarding, caller ID, voicemail number, network).
+                { label: "Preferences", onSelect: () => void apps.launch("org.webosphoenix.settings", { page: "phone" }) },
             ]} />
             {wide ? (
                 <>

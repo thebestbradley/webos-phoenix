@@ -41,11 +41,14 @@ Every other object: `camera`, `podcasts`, `voicememos`, `weather`, `pdfview`,
 `passwords`, `authenticator`, `flashlight`, `scanner` (its code is a made-up
 pattern), `files`, `marketplace` (a bag with a star where the App Catalog's
 had HP's logo), the four `notes-*` notebooks, and the system objects
-`settings`, `firstuse`, `help`, `sharesheet`, `screenshot`, `notificationlab`,
+`settings`, `firstuse`, `help`, `sharesheet`, `screenshot`, `printmanager`, `notificationlab`,
 `terminal`, `bluetooth`, `vpn`, `airplane`, `screen`, `sounds`, `datetime`,
-`language`, `textassist`, `location`, `emergency` (the six-armed star of the
+`language`, `textassist`, `justtype` (a magnifying glass), `certificates`
+(a certificate with a seal), `phoneprefs` (the `deviceinfo` phone with a
+call forwarding badge), `location`, `emergency` (the six-armed star of the
 Phone app's emergency button), `accessibility`, `deviceinfo`, `backup`,
-`devmode`.
+`devmode`, `agenda` (a bedside agenda card) and `exhibition` (a phone on a
+Touchstone, the Time exhibition's glass clock on its screen).
 
 ## The originals' 512 px icons
 

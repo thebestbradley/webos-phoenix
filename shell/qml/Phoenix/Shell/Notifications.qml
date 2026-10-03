@@ -40,6 +40,61 @@ Item {
     // The scene behind, for the blur under the tablet panels.
     property Item backdrop: null
     property bool dashboardOpen: false
+
+    // ---- Keyboard navigation (GAPS V8 (3)) -------------------------------------------
+    // With the dashboard open: Up / Down (and Tab) move a highlight over the
+    // rows in the order they are shown (tablets: newest at the top), Enter
+    // opens the row as a tap would, Delete or Backspace dismisses it (not a
+    // live activity), Esc closes the dashboard.
+    property int keyRow: -1
+    function _rowOrder() {
+        var n = model ? model.count : 0, out = [];
+        for (var i = 0; i < n; ++i)
+            out.push(i);
+        if (overlay)
+            out.sort(function (a, b) { return dropDown.posOf(a) - dropDown.posOf(b); });
+        return out;
+    }
+    function handleKey(event) {
+        if (!dashboardOpen || !model)
+            return false;
+        var k = event.key;
+        if (k === Qt.Key_Escape) {
+            dashboardOpen = false;
+            return true;
+        }
+        var order = _rowOrder();
+        if (k === Qt.Key_Down || k === Qt.Key_Up || k === Qt.Key_Tab || k === Qt.Key_Backtab) {
+            if (!order.length)
+                return true;
+            var up = k === Qt.Key_Up || k === Qt.Key_Backtab;
+            var at = order.indexOf(keyRow);
+            at = at < 0 ? (up ? order.length - 1 : 0) : Math.max(0, Math.min(order.length - 1, at + (up ? -1 : 1)));
+            keyRow = order[at];
+            return true;
+        }
+        if (keyRow < 0 || keyRow >= model.count)
+            return false;
+        var n = model.get(keyRow);
+        if (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space) {
+            activated(n.appId, n.params || "");
+            if (!n.ongoing)
+                dismissRequested(keyRow);
+            keyRow = -1;
+            return true;
+        }
+        if ((k === Qt.Key_Delete || k === Qt.Key_Backspace) && !n.ongoing) {
+            var at2 = order.indexOf(keyRow);
+            dismissRequested(keyRow);
+            // The row after it (or before, at the end) keeps the highlight.
+            var left = model.count;
+            keyRow = left === 0 ? -1 : Math.min(at2, left - 1);
+            if (keyRow >= 0)
+                keyRow = _rowOrder()[keyRow];
+            return true;
+        }
+        return false;
+    }
     // Tablet: where the status bar's system indicators begin (from the right).
     property real statusBarRightInset: 0
     // Height of the whole screen, for the dashboard's maximum size.
@@ -51,6 +106,9 @@ Item {
     readonly property bool overlay: Theme.tablet
     readonly property bool hasNotifications: model && model.count > 0
     property bool bannerActive: false
+    // The time for a swipe's speed (a test sets its own, so how busy the
+    // machine is does not decide whether a flick was quick).
+    property var clock: function () { return Date.now(); }
     // The dashboard has content while a banner shows or notifications wait
     // (DashboardWindowManager::setBannerHasContent, :454-465).
     // The phone's active-call banner ({appId, icon, message, startTime}
@@ -121,6 +179,7 @@ Item {
         drawerExpanded = on;
     }
     onDashboardOpenChanged: {
+        keyRow = -1;
         if (!dashboardOpen) {
             liftAnim.stop();
             drawerLift = 0;
@@ -235,7 +294,7 @@ Item {
             // A dashboard window shows itself; its app sends its own banner.
             if (n.windowKey)
                 return;
-            root.showBanner(n.title + (n.body ? ": " + n.body : ""), n.icon || "", n.color, n.glyph, n.appId, n.params || "");
+            root.showBanner(n.title + (n.body ? ": " + n.body : ""), n.icon || "", n.color, n.glyph, n.appId, n.params || "", n.key || "");
         }
         function onCountChanged() {
             if (root.model.count === 0)
@@ -255,16 +314,91 @@ Item {
     }
 
     // A banner, with or without a notification behind it
-    // (PalmSystem.addBannerMessage only scrolls a banner by).
-    function showBanner(text, icon, color, glyph, appId, params) {
-        bannerText = text;
-        bannerIcon = icon || "";
-        bannerColor = color || "#666666";
-        bannerGlyph = glyph || "";
-        bannerAppId = appId || "";
-        bannerParams = params || "";
+    // (PalmSystem.addBannerMessage only scrolls a banner by). Banners queue
+    // (BannerMessageHandler::addMessage): one alone shows for 5 s; while
+    // others wait each shows for 2 s, and a new one cuts the one showing
+    // down to 2 s from when it came in. id (with appId) is what
+    // removeBanner and clearBanners find it by; onShow runs as it starts
+    // to show (aboutToShowBanner: its sound).
+    property var _bannerQueue: []
+    property var _bannerShowing: null
+    property double _bannerShownAt: 0
+    property bool _bannerAlone: true
+    readonly property int bannerQueueLength: _bannerQueue.length
+    function showBanner(text, icon, color, glyph, appId, params, id, onShow) {
+        if (!text)
+            return;
+        var b = { text: String(text), icon: icon || "", color: color || "#666666", glyph: glyph || "",
+                  appId: appId || "", params: params || "", id: id || "", onShow: onShow || null };
+        _bannerQueue = _bannerQueue.concat([b]);
+        if (_bannerShowing === null) {
+            _nextBanner();
+        } else if (_bannerAlone) {
+            // The one showing had 5 s; now 2 s from when it was in place,
+            // or none if it has been up longer.
+            _bannerAlone = false;
+            if (bannerHold.running) {
+                bannerHold.interval = Math.max(0, Theme.bannerShowTimeQueued - (Date.now() - _bannerShownAt));
+                bannerHold.restart();
+            }
+        }
+    }
+    function _nextBanner() {
+        if (_bannerQueue.length === 0) {
+            _bannerShowing = null;
+            bannerActive = false;
+            return;
+        }
+        var b = _bannerQueue[0];
+        _bannerQueue = _bannerQueue.slice(1);
+        _bannerShowing = b;
+        bannerText = b.text;
+        bannerIcon = b.icon;
+        bannerColor = b.color;
+        bannerGlyph = b.glyph;
+        bannerAppId = b.appId;
+        bannerParams = b.params;
         bannerActive = true;
-        bannerAnim.restart();
+        bannerHold.stop();
+        _bannerAlone = _bannerQueue.length === 0;
+        bannerHide.stop();
+        bannerContent.opacity = 1;
+        bannerShow.restart();
+        if (b.onShow)
+            b.onShow();
+    }
+    // BannerMessageHandler::removeMessage: the one showing leaves now
+    // (signalHideBanner), a waiting one is dropped.
+    function removeBanner(appId, id) {
+        if (_bannerShowing !== null && _bannerShowing.appId === appId && _bannerShowing.id === id) {
+            _hideBanner();
+            return;
+        }
+        _bannerQueue = _bannerQueue.filter(function (b) { return !(b.appId === appId && b.id === id); });
+    }
+    // BannerMessageHandler::clearMessages: all of an app's banners.
+    function clearBanners(appId) {
+        _bannerQueue = _bannerQueue.filter(function (b) { return b.appId !== appId; });
+        if (_bannerShowing !== null && _bannerShowing.appId === appId)
+            _hideBanner();
+    }
+    function _hideBanner() {
+        bannerHold.stop();
+        if (bannerHide.running)
+            return;
+        bannerShow.stop();
+        bannerHide.restart();
+    }
+    // Clearing bannerActive from outside drops the banner and the queue.
+    onBannerActiveChanged: {
+        if (!bannerActive && _bannerShowing !== null) {
+            _bannerQueue = [];
+            _bannerShowing = null;
+            bannerShow.stop();
+            bannerHold.stop();
+            bannerHide.stop();
+            bannerProgress = 0;
+        }
     }
 
     // BannerWindow::handleTap: while a banner shows, a tap activates it
@@ -290,16 +424,26 @@ Item {
     // the way it came, fading to 0.25 (BannerMessageHandler.cpp:111-131,
     // 315-345, 611-625). progress is posAnimProgress: 0 out, 1 in place.
     property real bannerProgress: 0
-    SequentialAnimation {
-        id: bannerAnim
-        PropertyAction { target: bannerContent; property: "opacity"; value: 1 }
-        NumberAnimation { target: root; property: "bannerProgress"; from: 0; to: 1; duration: Theme.bannerSlideDuration; easing.type: Easing.OutCubic }
-        PauseAnimation { duration: root.model && root.model.count > 1 ? Theme.bannerShowTimeQueued : Theme.bannerShowTime }
-        ParallelAnimation {
-            NumberAnimation { target: root; property: "bannerProgress"; to: 0; duration: Theme.bannerSlideDuration }
-            NumberAnimation { target: bannerContent; property: "opacity"; to: 0.25; duration: Theme.bannerSlideDuration }
+    NumberAnimation {
+        id: bannerShow
+        target: root; property: "bannerProgress"; from: 0; to: 1
+        duration: Theme.bannerSlideDuration; easing.type: Easing.OutCubic
+        onFinished: {
+            root._bannerShownAt = Date.now();
+            bannerHold.interval = root._bannerAlone ? Theme.bannerShowTime : Theme.bannerShowTimeQueued;
+            bannerHold.restart();
         }
-        ScriptAction { script: root.bannerActive = false }
+    }
+    // The show state's timer (5 s, or 2 s with others queued).
+    Timer {
+        id: bannerHold
+        onTriggered: root._hideBanner()
+    }
+    ParallelAnimation {
+        id: bannerHide
+        NumberAnimation { target: root; property: "bannerProgress"; to: 0; duration: Theme.bannerSlideDuration }
+        NumberAnimation { target: bannerContent; property: "opacity"; to: 0.25; duration: Theme.bannerSlideDuration }
+        onFinished: root._nextBanner()
     }
 
     onAlertKeyChanged: Qt.callLater(attachAlert)
@@ -382,6 +526,10 @@ Item {
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
+                        // Too long for the bar: cut off at its end
+                        // (BannerMessage::createElidedMessage, ElideRight).
+                        width: Math.min(implicitWidth, banner.width - Theme.px(5) * 3 - Theme.px(22))
+                        elide: Text.ElideRight
                         text: root.bannerText
                         color: Theme.text
                         font.family: Theme.fontFamily
@@ -434,19 +582,22 @@ Item {
                 }
             }
 
-            // Phones: the waiting notifications' icons, once the banner is gone.
+            // Phones: the waiting notifications' icons, once the banner is
+            // gone: right-aligned, side by side with no gaps, the newest at
+            // the right, each as tall as the bar at most
+            // (BannerWindow::paint, BannerWindow.cpp:90-115).
             Row {
                 id: phoneIcons
+                objectName: "phoneNotificationIcons"
                 anchors.right: parent.right
-                anchors.rightMargin: Theme.px(8)
                 y: (Theme.bannerHeight - height) / 2
-                spacing: Theme.px(4)
+                spacing: 0
                 visible: !root.overlay && !root.bannerActive && !root.dashboardOpen && !root.activeCallShown
                 Repeater {
                     model: root.overlay ? null : root.model
                     delegate: AppIcon {
                         required property var model
-                        size: Theme.px(22)
+                        size: Theme.bannerHeight
                         showLabel: false
                         color: model.color
                         glyph: model.glyph
@@ -621,24 +772,35 @@ Item {
             source: Theme.asset("statusBar/status-bar-separator.png")
             opacity: 1 - notifTab.opacity
         }
-        Row {
+        // At most ten icons' width (MAX_NOTIF_ICONS x (24 + 5), StatusBar.
+        // cpp:128); past it the leftmost is cut off (StatusBarNotificationArea::
+        // paint, "paint partial").
+        Item {
             id: tabletIcons
+            objectName: "tabletNotificationIcons"
             visible: root.overlay && root.hasNotifications && !root.bannerActive
             anchors.right: parent.right
             anchors.rightMargin: root.statusBarRightInset + Theme.px(6)
             y: -Theme.statusBarHeight + (Theme.statusBarHeight - height) / 2
-            spacing: Theme.px(5)                                        // StatusBar.h:31-32
-            Repeater {
-                model: root.overlay ? root.model : null
-                delegate: AppIcon {
-                    required property var model
-                    size: Theme.px(22)
-                    showLabel: false
-                    color: model.color
-                    glyph: model.glyph
-                    // The notification's small icon (a dashboard window's
-                    // "icon" attribute), or its app's.
-                    source: model.icon || ""
+            width: Math.min(tabletIconRow.width, Theme.px(10 * (24 + 5)))
+            height: tabletIconRow.height
+            clip: true
+            Row {
+                id: tabletIconRow
+                anchors.right: parent.right
+                spacing: Theme.px(5)                                        // StatusBar.h:31-32
+                Repeater {
+                    model: root.overlay ? root.model : null
+                    delegate: AppIcon {
+                        required property var model
+                        size: Theme.bannerHeight
+                        showLabel: false
+                        color: model.color
+                        glyph: model.glyph
+                        // The notification's small icon (a dashboard window's
+                        // "icon" attribute), or its app's.
+                        source: model.icon || ""
+                    }
                 }
             }
         }
@@ -707,6 +869,18 @@ Item {
                 width: list.width
                 height: Theme.dashboardItemHeight
 
+                // The keyboard's highlight.
+                Rectangle {
+                    objectName: "dashboardKeyFocus"
+                    visible: root.keyRow === item.index
+                    anchors.fill: parent
+                    anchors.margins: Theme.px(2)
+                    radius: Theme.px(6)
+                    color: "#302c8ce0"
+                    border.color: "#2c8ce0"
+                    border.width: Theme.px(2)
+                    z: 3
+                }
                 // A faint rule between the live activities and the
                 // notifications (Phoenix).
                 Rectangle {
@@ -764,11 +938,11 @@ Item {
                         onPressed: (m) => {
                             snap.stop();
                             start = mapToItem(root, m.x, m.y);
-                            startTime = Date.now();
+                            startTime = root.clock();
                         }
                         onReleased: (m) => {
                             var p = mapToItem(root, m.x, m.y);
-                            var ms = Date.now() - startTime;
+                            var ms = root.clock() - startTime;
                             var vx = ms > 0 ? (p.x - start.x) / ms : 0, vy = ms > 0 ? (p.y - start.y) / ms : 0;
                             var speed = Math.abs(vx) + Math.abs(vy);
                             var flicked = speed >= Theme.flickMinVelocity && speed <= Theme.flickMaxVelocity

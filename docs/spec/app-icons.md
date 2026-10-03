@@ -30,9 +30,9 @@ Accounts among them, on the diamond).
 
 | Disc (user apps) | Diamond (system apps) |
 | --- | --- |
-| Phone, Messaging, Camera, Photos, Music, Videos, Podcasts, Maps, Weather, Tasks, Voice Memos | Settings and its 16 launch points (Wi-Fi, Bluetooth, VPN, Airplane Mode, Screen & Lock, Sounds & Ringtones, Date & Time, Language & Region, Text Assist, Location Services, Emergency Info, Accessibility, Device Info, Backup, Updates, Developer Mode) |
+| Phone, Messaging, Camera, Photos, Music, Videos, Podcasts, Maps, Weather, Tasks, Voice Memos, Agenda | Settings and its 20 launch points (Wi-Fi, Bluetooth, VPN, Airplane Mode, Screen & Lock, Exhibition, Sounds & Ringtones, Date & Time, Language & Region, Text Assist, Just Type, Phone Preferences, Certificate Manager, Location Services, Emergency Info, Accessibility, Device Info, Backup, Updates, Developer Mode) |
 | Doc View, PDF View, Files, Passwords, Authenticator, Flashlight, QR Scanner | Accounts (original), First Use, Help |
-| Marketplace | Share (the share sheet and save picker), Screenshot |
+| Marketplace | Share (the share sheet and save picker), Screenshot, Print Manager (on the settings page, as on webOS) |
 | The Notes demos (Enact Agate, Enact Limestone, Flutter, Ionic), Enyo 2 Demo | Notification Lab, Terminal (developer tools) |
 | Calculator, Calendar, Clock, Contacts, Email, Memos, Web (originals) | CardDAV & CalDAV (a sync service; hidden, its icon shows in notifications) |
 

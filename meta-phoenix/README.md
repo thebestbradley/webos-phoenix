@@ -14,3 +14,14 @@ OpenEmbedded layer that adds the Phoenix shell to a webOS OSE build.
 Depends on `meta-webos` and `meta-qt6` (scarthgap, Qt 6.8), as pinned by
 webOS OSE's `build-webos/weboslayers.py`. Use `scripts/setup-build.sh` from
 the repository root to set up a build directory with this layer added.
+
+## Checking the layer without a build host
+
+`scripts/parse-check.sh [MACHINE...]` (default `qemux86-64 raspberrypi4-64`)
+parses every recipe and dry-runs `webos-phoenix-image` (plus the `torchd`
+and `whisper-cpp` stubs) for each machine, with the same pinned layers but
+without fetching or building anything: about 200 MB of layers plus 300 MB
+and about 12 minutes per machine. CI runs it on every pull request
+(`.github/workflows/parse.yml`). The recipes take `PHOENIX_SRCREV` from the
+checkout's HEAD there. Run it as an ordinary user (bitbake will not run as
+root); see the script's header and docs/HARDWARE.md, "Build".

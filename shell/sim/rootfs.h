@@ -13,6 +13,9 @@
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
+#include <QVariantMap>
+#include <QJsonObject>
+#include <functional>
 #include <QtGlobal>
 
 #ifdef PHOENIX_HAVE_WEBENGINE
@@ -45,11 +48,30 @@ public:
     bool hasApp(const QString &appId) const { return m_appDirs.contains(appId); }
     void rescan();
 
+    // The device's writable /var/luna/ (the simulator's data folder):
+    // launch points apps add (/var/luna/launchpoints/<id>, as
+    // LunaSysMgr's lunaLaunchPointsPath, Settings.cpp:90) and files apps
+    // save there (the browser's page pictures, /var/luna/data/browser/).
+    void setDataDir(const QString &dir);
+    QString dataDir() const { return m_dataDir; }
+    // The file for a device path under /var/luna/, or "" (not writable here).
+    QString dataPath(const QString &devicePath) const;
+    QString launchPointsDir() const;
+    // A launch point an app added, by its id, as stored (empty if none).
+    QVariantMap dynamicLaunchPoint(const QString &launchPointId) const { return m_dynamic.value(launchPointId); }
+    // The app's folder on disk ("" if there is no such app).
+    QString appDir(const QString &appId) const { return m_appDirs.value(appId); }
+
     // Launcher entries as maps: id, appId (the app; differs from id for a
     // launch point), title, type, noWindow, main (phoenix:// URL, with
     // ?launchParams= for launch points), params (JSON), tab (-1 = hidden),
-    // dir and icon (file URLs, for the shell).
+    // page (the launcher page appinfo.json names, "" for none), dynamic (a
+    // launch point an app added), category, keywords ("\n"-separated),
+    // installed, size (bytes), dir and icon (file URLs, for the shell).
     QVariantList apps() const { return m_apps; }
+
+    // The bytes of the files under dir.
+    static qint64 dirSize(const QString &dir);
 
     // The same apps for the simulated applicationManager in web pages
     // (served as /usr/share/phoenix/apps.json): the launch point records
@@ -78,7 +100,9 @@ private:
     QStringList m_applicationDirs;             // rootfs.json applicationDirs, absolute
     QStringList m_systemApps;                  // rootfs.json systemApps, absolute
     QString m_installedDir;
+    QString m_dataDir;
     QStringList m_installed;                   // ids of installed apps
+    QHash<QString, QVariantMap> m_dynamic;     // launch points apps added, by id
     QVariantList m_apps;
     QList<QVariantMap> m_launchPoints;
     QByteArray m_hostInfo = "{}";
@@ -104,6 +128,18 @@ private:
     const Rootfs *m_rootfs;
 };
 
+// What makes the browser's page pictures (SimSnapshots), as the scheme
+// handler sees it: requests at /__phoenix/snapshot, and files still being
+// made, answered once they are.
+class PictureMaker
+{
+public:
+    virtual ~PictureMaker() = default;
+    virtual QJsonObject request(const QJsonObject &req) = 0;
+    virtual bool isPending(const QString &devicePath) const = 0;
+    virtual void whenReady(const QString &devicePath, const std::function<void(bool)> &done) = 0;
+};
+
 #ifdef PHOENIX_HAVE_WEBENGINE
 class QNetworkAccessManager;
 
@@ -118,16 +154,27 @@ public:
     // Must run before the QGuiApplication is created.
     static void registerScheme();
 
+    // The browser's page pictures (/__phoenix/snapshot, and files still
+    // being made).
+    void setSnapshots(PictureMaker *snapshots) { m_snapshots = snapshots; }
+
 private:
+    void serveFile(QWebEngineUrlRequestJob *job, const QString &devicePath);
     // GET /__phoenix/proxy?req={method, url, headers, body, binary?, follow?}:
     // one HTTP request for the simulated services that talk to servers (DAV
     // accounts, backups to WebDAV, the Marketplace), which servers' CORS
     // rules would refuse from a page; answers {status, headers, url, body |
     // bodyBase64} or {error, code}, as tools/serve-rootfs.py's POST
-    // /__phoenix/proxy does.
+    // /__phoenix/proxy does. With progress: ID, GET
+    // /__phoenix/proxy/progress?id=ID answers {received, total} (total -1
+    // when the server did not say) while the body comes, {} after: the
+    // simulated download manager's progress.
     void proxy(QWebEngineUrlRequestJob *job);
+    void proxyProgress(QWebEngineUrlRequestJob *job);
 
     const Rootfs *m_rootfs;
     QNetworkAccessManager *m_network = nullptr;
+    PictureMaker *m_snapshots = nullptr;
+    QHash<QString, QPair<qint64, qint64>> m_progress;   // progress id -> received, total
 };
 #endif

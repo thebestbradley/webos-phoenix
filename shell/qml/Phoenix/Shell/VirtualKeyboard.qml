@@ -48,6 +48,9 @@
 // word (TextAssist.swipe; the other candidates in the bar). The words come
 // from TextAssist.js (WordsEnUS.js and what the user types, learned here and
 // kept by the shell: textAssistData). Dictation: the bar's microphone.
+// The user's shortcuts (Settings > Text Assist > Shortcuts, as webOS's
+// x_palm_textinput shortcutChecking) go in on the space bar like a
+// correction, in any language and with auto-correct off.
 // Not ported: keyboard combos (language key),
 // and the emoticon pictures (/usr/palm/emoticons, not in the Apache-2.0
 // images): emoticon keys show their text.
@@ -119,6 +122,15 @@ Item {
     property bool textSuggestions: true
     property bool autoCorrect: true
     property bool swipeTyping: true
+    // Settings > Text Assist > Shortcuts: typed -> what the space bar puts
+    // in ({"omw": "On my way"}), and whether they are used (x_palm_textinput
+    // shortcutChecking).
+    property var userShortcuts: ({})
+    property bool shortcutsOn: true
+    onUserShortcutsChanged: {
+        TA.setUserShortcuts(userShortcuts);
+        _refreshCandidates();
+    }
     // Dictation: an object with start() / stop() / cancel(), listening,
     // busy, and a signal transcribed(text, error) (Phoenix.Native Dictation);
     // null: no microphone key.
@@ -180,9 +192,17 @@ Item {
             return;
         }
         var prev = _sentenceStart ? (_prevWord ? _prevWord + "." : "") : _prevWord;
-        var list = TA.suggest(_word, prev, tablet ? 5 : 3);
+        var max = tablet ? 5 : 3;
+        var list = TA.suggest(_word, prev, max);
         if (!autoCorrect || _word === _keepWord)
             list = list.map(function (c) { return c.kind === "correction" ? { text: c.text, kind: "word" } : c; });
+        // A shortcut of the user's is what the space bar puts in, after the
+        // word as typed.
+        var sc = shortcutsOn && _word !== _keepWord ? TA.shortcut(_word) : "";
+        if (sc) {
+            list = list.filter(function (c) { return c.kind !== "correction" && c.kind !== "typed" && c.text !== sc; });
+            list = [{ text: _word, kind: "typed" }, { text: sc, kind: "correction" }].concat(list).slice(0, max);
+        }
         candidates = list;
     }
     function _saveTextAssist() {
@@ -243,9 +263,12 @@ Item {
     }
     // Before a space or punctuation: the correction, if any, goes in.
     function _autoCorrect() {
-        if (!autoCorrect || !assistField || !_word || _word === _keepWord)
+        if (!assistField || !_word || _word === _keepWord)
             return;
-        var fix = TA.correction(_word);
+        // The user's shortcut, else (with auto-correct) the correction.
+        var fix = shortcutsOn ? TA.shortcut(_word) : "";
+        if (!fix && autoCorrect)
+            fix = TA.correction(_word);
         if (!fix || fix === _word)
             return;
         _assistBackspaces(_word.length);
@@ -334,15 +357,21 @@ Item {
             return;
         _makeSound(KM.Key.A);
         dictationMessage = "";
-        if (dictation.listening)
-            dictation.stop();
-        else
+        if (dictation.listening) {
+            if (dictation.owner === "")
+                dictation.stop();
+        } else {
+            dictation.owner = "";
             dictation.start();
+        }
     }
     Connections {
         target: kb.dictation
         ignoreUnknownSignals: true
         function onTranscribed(text, error) {
+            // An app's (Voice Dial's) recording is not for typing.
+            if (kb.dictation.owner !== "")
+                return;
             if (error) {
                 kb.dictationMessage = error;
                 dictationMessageTimer.restart();
@@ -813,7 +842,7 @@ Item {
             // visibleChanged(false): back to plain letters.
             closeEmoji();
             _cancelSwipe();
-            if (dictation && dictation.listening)
+            if (dictation && dictation.listening && dictation.owner === "")
                 dictation.cancel();
             _km.setSymbolMode(KM.SymbolMode.Off);
             _km.setShiftMode(KM.ShiftMode.Off);

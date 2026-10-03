@@ -29,7 +29,7 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | App | Status | Legacy webOS | Priority | Approach |
 | --- | --- | --- | --- | --- |
 | Phone | Phoenix | Phone (dial pad, call log, voicemail, conference) | P0 | Done in the simulator. The lock-screen answer is done. Needs the device telephony service (webos-telephonyd on oFono) and the active-call banner. See [HARDWARE.md](HARDWARE.md#hardware-abstraction-plan) |
-| Messaging | Phoenix | Messaging (SMS, MMS, IM through Synergy) | P0 | Done for SMS in the simulator. Needs MMS (oFono has MMS through `mmsd`), cell broadcast alerts |
+| Messaging | Phoenix | Messaging (SMS, MMS, IM through Synergy) | P0 | Done in the simulator for SMS, MMS (attach from the picture picker, pictures in the balloon, simulated receive) and IM (a Jabber (XMPP) account on a simulated server: buddies, presence, chat). Needs real MMS (oFono has MMS through `mmsd`), a real XMPP transport, cell broadcast alerts |
 | Contacts | Open webOS | Contacts with Synergy linking | P0 | Works. Needs CardDAV sync (below), vCard import/export, contact photos |
 | Email | Open webOS | Email (IMAP, POP, Exchange EAS) | P0 | Works with simulated transports. Needs real IMAP/SMTP transports in the email service (`third_party/app-services`); OAuth2 for Gmail and Outlook is the hard part |
 | Calendar | Open webOS | Calendar with Synergy | P0 | Works. Needs CalDAV sync and reminders that fire (activity manager) |
@@ -123,8 +123,8 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | **Health / steps** | Missing | None | P2 | Needs a step counter: available from the Android sensor HAL through sensorfw on Halium devices; on mainline, iio-sensor-proxy has no raw acceleration or step data, so it needs a small IIO accelerometer service. Local-only storage in db8 |
 | Cell broadcast / emergency alerts | Missing | Carrier dependent | P1 | Legally required in some countries. ModemManager and oFono both support cell broadcast; show them as full-screen alerts in the shell |
 | eSIM management | Missing | None | P2 | `lpac` (LuneOS already packages it) behind a Settings pane |
-| Voice assistant | Missing | Voice Dial | P2 | Voice dial first, on-device speech recognition only; the assistant and its MCP layer are planned in [AI-AND-MCP.md](AI-AND-MCP.md) |
-| Print | Missing | Print Manager (HP printers) | P2 | CUPS with IPP Everywhere; OSE has no print service |
+| Voice assistant | Phoenix | Voice Dial | P2 | Voice Dial done (apps/voicedial, com.palm.sysapp.voicedial: say a name or number, confirm by voice or tap, Phone calls), on-device speech recognition only (whisper.cpp through the keyboard's dictation); the assistant and its MCP layer are planned in [AI-AND-MCP.md](AI-AND-MCP.md) |
+| Print | **Done in the simulator** (Save as PDF; `apps/printmanager`) | Print Manager (HP printers) | P2 | Print in Web, Email and Photos, the original Enyo print dialog, the Print Manager, `com.palm.printmgr` simulated with a "Save as PDF" printer (Chromium renders the page); see [APP-RUNTIME.md](APP-RUNTIME.md#printing). Still to do on a device: real printers with CUPS and IPP Everywhere behind the same service (OSE has no print service) |
 
 ## Streaming services, honestly
 

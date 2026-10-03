@@ -7,12 +7,13 @@
 //   com.webos.settingsservice get/setSystemSettings {category:"picture", backlight}
 //   com.webos.service.systemservice get/setPreferences
 //       screenTimeout, lockTimeout (Phoenix keys), rotationLock, wallpaper, showAlertsWhenLocked,
-//       blinkNotifications
+//       blinkNotifications, sysUiEnableNextPrevGestures (Advanced gestures)
+//   com.palm.systemmanager getSystemStatus {gestureArea}: whether to offer them
 //   com.palm.systemmanager getDeviceLockMode / setDevicePasscode (legacy webOS;
 //       Phoenix will provide it on OSE)
 
 import { useEffect, useState } from "react";
-import { deviceLock, LunaError, settings, system, type LockMode, type SystemPreferences } from "@phoenix/luna";
+import { deviceLock, LunaError, settings, system, systemStatus, type LockMode, type SystemPreferences, type SystemStatus } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
 import {
     Button, Checkmark, Dialog, ErrorText, Group, ListSelector, Page, PageHeader, Row, Slider, TextField, ToggleButton,
@@ -53,10 +54,13 @@ const LOCK_AFTER = [
     { label: "30 minutes", value: 1800 },
 ];
 
-const PREF_KEYS: (keyof SystemPreferences)[] = ["screenTimeout", "lockTimeout", "rotationLock", "wallpaper", "showAlertsWhenLocked", "blinkNotifications"];
+const PREF_KEYS: (keyof SystemPreferences)[] = ["screenTimeout", "lockTimeout", "rotationLock", "wallpaper", "showAlertsWhenLocked", "blinkNotifications",
+    "sysUiEnableNextPrevGestures"];
 
 export function ScreenPage() {
     const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(PREF_KEYS, cb, err), []).value ?? {};
+    // Advanced gestures need a gesture area (the TouchPad's Screen & Lock had none).
+    const gestureArea = useLuna<SystemStatus>((cb, err) => systemStatus.watch(cb, err), []).value?.gestureArea === true;
     const backlight = useLuna<number | undefined>(
         (cb, err) => settings.watch("picture", ["backlight"], (s) => cb(s.backlight), err), []).value;
     const [dragging, setDragging] = useState<number | null>(null);
@@ -117,6 +121,15 @@ export function ScreenPage() {
                     <ToggleButton value={!!prefs.rotationLock} label="Rotation lock" onChange={(v) => setPref({ rotationLock: v })} />
                 </Row>
             </Group>
+
+            {gestureArea && (
+                <Group label="Gestures">
+                    <Row title="Advanced gestures" subtitle="Swipe across to switch apps" testId="advanced-gestures">
+                        <ToggleButton value={!!prefs.sysUiEnableNextPrevGestures} label="Advanced gestures"
+                                      onChange={(v) => setPref({ sysUiEnableNextPrevGestures: v })} />
+                    </Row>
+                </Group>
+            )}
 
             <Group label="Wallpaper">
                 <Row title={wallpaper.name} chevron onClick={() => setPicking(true)} testId="wallpaper"

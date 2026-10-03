@@ -61,7 +61,9 @@ service bus). `runtime/phoenix-runtime.js` runs before the app's own scripts:
   services that store their data in localStorage: db8 (`put`, `get`, `merge`,
   `del`, `find`/`search` with `where`/`orderBy`/`limit`, `watch`, kind
   inheritance, revision sets, `_id`s for objects in arrays, the core apps'
-  search index properties), system service (time, preferences), application
+  search index properties; each object and kind under a localStorage key of
+  its own, so pages writing at once keep each other's changes, and watches
+  fire for other pages' writes), system service (time, preferences), application
   manager (launch, open), connection manager, power, and harmless stubs for
   the rest. Calls to a service it doesn't know return an error and are logged
   once. For the core apps it also simulates, modelled on
@@ -273,6 +275,27 @@ in that app's stack. Headless apps (`"noWindow": true` in `appinfo.json`, e.g.
 Calendar, Clock, Email) run their main page invisibly, and each window they
 open is a card, as on webOS.
 
+**Launch at boot and keep alive** (`SimWindowSource`, after luna.conf). At
+start-up the launch-at-boot apps start without a card, with the launch
+params `{"launchedAtBoot": true}` (Email and Calendar then open nothing:
+`Launch.js`, `App.handleLaunchParams`): phones Phone, Email, Calendar,
+Messaging and Camera (`conf/luna.conf` [LaunchAtBoot]), tablets the same
+without Camera (`luna-topaz.conf`); the original ids map to the Phoenix
+apps that replace them. A headless app keeps its page; any other keeps its
+window, ready, and its first launch shows it at once. Closing the last card
+of a keep-alive app keeps the app running without a card, and the next
+launch brings the same window back and relaunches it (the page gets the
+launch params, `webOSRelaunch` / `Mojo.relaunch`): phones keep Phone
+([KeepAlive]); tablets Email, Calendar, Messaging, Photos and Music
+(`luna-topaz.conf`); both keep the browser until memory runs low
+([KeepAliveUntilMemPressure]: when `MemoryMonitor` says low, it closes).
+A page can ask for its own window (`PalmSystem.keepAlive(true)`: Email's
+main card, Calendar's), as WebAppMgr's off-screen cache did. The angry card
+(thrown down off the screen) and a window the app closes itself end the app
+for good (`CardWindowManager::closeWindow` / `setDisableKeepAlive`).
+`--scene` and the tests build their own scenes and start no boot apps
+(`SimWindowSource.bootAppsEnabled`, which `sim.qml` turns on).
+
 **In a desktop browser.**
 
 ```sh
@@ -356,7 +379,9 @@ WebAppMgr:
   for a half turn.
 - **Asking how things are turned.** `com.palm.systemmanager/getSystemStatus`
   (subscribable) answers `{ime: {visible}, orientation: {ui, device}}` as the
-  shell last reported (`orientation` in `applyHostStatus`).
+  shell last reported (`orientation` in `applyHostStatus`), and Phoenix's
+  `gestureArea` (the device has the strip below the screen; Settings offers
+  Advanced gestures by it).
 
 `tools/test-orientation.cjs` checks all three with the original Calculator.
 
@@ -412,7 +437,8 @@ drives it (Wi-Fi, password, PIN, brightness, airplane mode, Bluetooth).
 Phoenix Phone and Messaging start cleanly too, and
 `node tools/test-phone-messaging.cjs [--tablet]` places, holds and ends a
 call, answers and ignores simulated incoming calls, and sends and receives
-texts.
+texts, picture messages (MMS) and instant messages (a Jabber account on
+the simulated server).
 
 Camera, Photos and Music start cleanly too, and `node tools/test-media.cjs
 [--tablet]` drives them. So does Files, driven by `node tools/test-files.cjs
@@ -435,7 +461,7 @@ New Phoenix apps live in `apps/`, an npm workspace:
 | --- | --- |
 | `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers), `tasks.ts` Tasks (`com.palm.task:1`, `com.palm.tasklist:1`, reminder activities, `postNotification`); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
 
-| `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers), `transcriber.ts` Voice Memos (`transcriber.transcribe()` with progress, `TRANSCRIBE_ERRORS`), `location.ts` the location service and per-app permissions (`location`, `locationPermissions`, `LOCATION_ERRORS`), `setup.ts` First Use, the medical ID, accessibility and the emergency numbers (`firstUse`, `emergencyInfo`, `accessibility`, `isEmergencyNumber`); `vpn.ts` the VPN service (`vpn`, file import helpers), `backup.ts` the backup service (`backup`, `BACKUP_PARTS`); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
+| `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers), `transcriber.ts` Voice Memos (`transcriber.transcribe()` with progress, `TRANSCRIBE_ERRORS`), `location.ts` the location service and per-app permissions (`location`, `locationPermissions`, `LOCATION_ERRORS`), `setup.ts` First Use, the medical ID, accessibility and the emergency numbers (`firstUse`, `emergencyInfo`, `accessibility`, `isEmergencyNumber`); `vpn.ts` the VPN service (`vpn`, file import helpers), `backup.ts` the backup service (`backup`, `BACKUP_PARTS`), `search.ts` Just Type's preferences (`universalSearch`), `certificates.ts` the certificate store (`certificates`, `CERTIFICATE_ERRORS`), and in `telephony.ts` the phone preferences (`phonePrefs`, `mobileData`); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
 | `apps/shared/phoenix-ui` (`@phoenix/ui`) | React components with the webOS 1.x/2.x look, drawn with the Enyo 1.0 "Heritage" artwork (copied into `assets/enyo`, see its `PROVENANCE.md`): `PageHeader`, `Group`, `Row`, `Divider`, `ToggleButton`, `Slider` (also as a progress/seek bar), `ListSelector`, `Picker`, `PopupMenu`, `Button`, `Drawer`, `DividerDrawer`, `Dialog`, `Spinner`, `TextField`; for Phone and Messaging the webOS dial pad (`Dialpad`, `DialButton`, `BackspaceButton`, from Enyo's `lib/telephony` art), the command menu (`ToolBar`, `RadioToolGroup`, `ToolButton`), `Avatar` and number / time formatting (`formatDuration` takes milliseconds); for the media apps `Toolbar`, `IconToolButton`, `GroupedToolButtons`, `Glyph` and `formatSeconds`; for Files `CheckBox` (Heritage `checkbox.png`) and file glyphs (copy, cut, paste, new folder, ...); `BackProvider`/`useBack` for the back gesture |
 | `apps/settings` | Settings (see below) |
 | `apps/phone`, `apps/messaging` | Phone and Messaging (see below) |
@@ -453,6 +479,8 @@ New Phoenix apps live in `apps/`, an npm workspace:
 | `apps/videos`, `apps/podcasts`, `apps/pdfview`, `apps/docview` | Videos, Podcasts, PDF View and Doc View (see [below](#videos-podcasts-pdf-view-and-doc-view)); `@phoenix/luna`'s `web.ts` (HTTP, download manager), `playback.ts` (audio focus, `nowPlaying`, orientation) and `documents.ts` (launch targets, reading files, finding documents) serve them |
 
 | `apps/firstuse` | First Use (see [below](#first-use)) |
+| `apps/printmanager` | Print Manager (see [below](#printing)); `@phoenix/luna`'s `print.ts` is the print manager's client and `@phoenix/ui`'s `PrintDialog` the print dialog for Phoenix apps |
+| `apps/voicedial` | Voice Dial (see [below](#voice-dial)); `@phoenix/luna`'s `dictation.ts` is the client of `org.webosphoenix.dictation`, the shell's microphone and transcriber |
 | `apps/help` | Help (see [below](#help)); its topics are Markdown files in `apps/help/topics` |
 
 | `apps/dav` | The CardDAV & CalDAV account (see [below](#carddav-and-caldav)): a hidden Enyo 1.0 app with the account's sign-in page, its db8 kinds and account template, and `apps/dav/service`, its Node.js Luna service and sync engine |
@@ -503,7 +531,19 @@ apps) or grey diamond (system apps), rendered by `tools/render-app-icons.cjs`
 }
 ```
 
-- `launcherTab`: 0 Apps (default), 1 Downloads, 2 Settings
+- `launcherTab`: 0 Apps, 1 Downloads, 2 Settings, 3 Favorites. Without
+  it the launcher places a new app as luna-sysmgr did
+  (`LauncherLayout.pageFor`): by its `category`, then its `keywords`,
+  through the keyword map (`conf/launcher3/app-keywords-to-designator-map.txt`,
+  which ships only a placeholder; Phoenix adds "settings" and "preferences"
+  for the Settings page); else the app catalog (the Marketplace) and apps
+  the user installed go to Downloads, a built-in app of category
+  "Settings" to Settings, the rest to Apps
+  (`pageIndexForAppByPredefinedDesignators`). Apps in
+  `conf/launcher3/app_blacklist.conf` (`com.palm.sysapp.launchermode0`)
+  never show. The launcher's pages are Apps, Downloads, Favorites and
+  Settings, as on the TouchPad; a layout saved before Favorites keeps its
+  three pages.
 - `hidden`: leave the app itself out of the launcher (its launch points stay)
 - `quickLaunch`: put the app in this quick launch slot (1-4); Phone is 1 and
   Messaging 3 (Email 2 and Calendar 4 are set by title in `SimWindowSource`)
@@ -511,6 +551,15 @@ apps) or grey diamond (system apps), rendered by `tools/render-app-icons.cjs`
   card and starts the app with `params` as its launch params
   (`PalmSystem.launchParams`, `?launchParams=` on the page URL). A web app
   whose title matches a placeholder (Wi-Fi, Bluetooth, ...) replaces it.
+
+An app can also add launch points of its own at run time, as on webOS
+(`applicationManager/addLaunchPoint {id, title, icon, params, removable}`
+-> `{launchPointId}`, eight digits; `removeLaunchPoint {launchPointId}`).
+They go on the launcher's Favorites page (`slotAppAuxiliaryIconAdd`), have
+the (–) remove decorator in edit mode ("Remove Shortcut?"), and survive
+restarts: phoenix-sim keeps each as `/var/luna/launchpoints/<id>` in its
+data folder, as LunaSysMgr did. The browser's Share > Add to Launcher makes
+one (see [The browser](#the-browser-and-enyowebview)).
 
 On OSE, the same launch points are registered with SAM
 (`com.webos.applicationManager/addLaunchPoint`), and launch params arrive the
@@ -523,9 +572,10 @@ params match a launch point opens that launch point's card.
 ## Settings
 
 `apps/settings` is one app with one launch point per pane, like the separate
-preference apps of webOS 2.x: Wi-Fi, Bluetooth, Airplane Mode, Screen & Lock,
-Sounds & Ringtones, Date & Time, Language & Region, Accessibility, Location
-Services, Emergency Info, Device Info, Backup, Updates, VPN, Developer Mode.
+preference apps of webOS 2.x: Wi-Fi, Bluetooth, Airplane Mode, Phone Preferences, Screen & Lock,
+Sounds & Ringtones, Date & Time, Language & Region, Text Assist, Just Type,
+Accessibility, Location Services, Emergency Info, Certificate Manager,
+Device Info, Backup, Updates, VPN, Developer Mode.
 Launched without a page it lists them all. The launcher icons are drawn in
 `art/app-icons` (on the grey diamond, as Palm's preference apps were) and the
 wallpapers by
@@ -543,8 +593,9 @@ same request and reply shapes:
 | Airplane Mode | `com.webos.service.connectionmanager`: `getstatus` (`offlineMode`), `setstate {offlineMode}` | `webos-connman-adapter` `src/connectionmanager_service.c` |
 | Bluetooth | `com.webos.service.bluetooth2`: `adapter/getStatus`, `adapter/setState {powered}`, `adapter/startDiscovery`, `adapter/cancelDiscovery`, `adapter/pair`, `adapter/unpair`, `device/getStatus` | `com.webos.service.bluetooth2` `src/bluetoothmanagerservice.cpp`, `bluetoothmanageradapter.cpp` |
 | Screen & Lock | `com.webos.settingsservice` `get/setSystemSettings {category: "picture", backlight}`; `com.webos.service.systemservice` `get/setPreferences` (`screenTimeout`, `rotationLock`, `wallpaper`, `showAlertsWhenLocked`, `blinkNotifications`) | `settingsservice` `inc/SettingsServiceApi.h`; `luna-sysservice` `Src/PrefsFactory.cpp` (stores any key) |
-| Screen & Lock (PIN) | `com.palm.systemmanager` `getDeviceLockMode`, `setDevicePasscode`, `matchDevicePasscode`: the legacy webOS API; OSE has none, so Phoenix will have to provide it | `openwebos/luna-sysmgr` `Src/base/SystemService.cpp` |
-| Sounds | `com.webos.service.audio` `master/getVolume`, `master/setVolume`, `master/muteVolume`, `getInputVolume` / `setInputVolume` (`streamType` `pringtones`, `palerts`, `pfeedback`, `pmedia`), `playFeedback`, `playSound`, `controlPlayback`; system service `ringtone`, `systemSounds`, `x_palm_virtualkeyboard_prefs` (`TapSounds`: Keyboard clicks), `ringtone/listRingtones` | `audiod-pro` `src/modules/masterVolumeManager`, `audioPolicyManager`, `systemSoundsManager` |
+| Screen & Lock (PIN) | `com.palm.systemmanager` `getDeviceLockMode`, `setDevicePasscode`, `matchDevicePasscode` (and `getSecurityPolicy`: a security policy's rules; see [Device security](#device-security-erase-usb-drive-mode-and-debugging)): the legacy webOS API; OSE has none, so Phoenix will have to provide it | `openwebos/luna-sysmgr` `Src/base/SystemService.cpp` |
+| Sounds | `com.webos.service.audio` `master/getVolume`, `master/setVolume`, `master/muteVolume`, `getInputVolume` / `setInputVolume` (`streamType` `pringtones`, `palerts`, `pfeedback`, `pmedia`), `playFeedback`, `playSound`, `controlPlayback`; system service `ringtone`, `alerttone`, `notificationtone` (`{name, fullPath}`: Open webOS's alert.wav and notification.wav or any ringtone; the shell plays them for alerts, alarms and reminders, and for notifications, that name no sound of their own, as LunaSysMgr's `AlertWindow` and `BannerMessageHandler` did), `systemSounds`, `x_palm_virtualkeyboard_prefs` (`TapSounds`: Keyboard clicks), `ringtone/listRingtones` | `audiod-pro` `src/modules/masterVolumeManager`, `audioPolicyManager`, `systemSoundsManager`; `luna-sysmgr` `conf/defaultPreferences.txt`, `Src/base/settings/Preferences.cpp` |
+| Text Assist | system service `get/setPreferences`: `x_palm_virtualkeyboard_prefs` (`WordSuggestions`, `AutoCorrect`, `SwipeTyping`, `spaces2period`, `ForgetWords`, `keyboards`), `keyboardShortcuts`, and `x_palm_textinput` (`shortcutChecking` `"autoCorrect"` / `"off"`; Phoenix adds `shortcuts: [{shortcut, text}]`, the user's text replacements). The runtime gives the shell's keyboard `systemStatus` `textAssist` (`suggestions`, `autoCorrect`, `swipe`, `spaces2period`, `forgetWords`, `shortcuts` as `{typed: text}`, `shortcutsOn`); the space bar puts a shortcut's text in (`TextAssist.js` `shortcut()`), in any keyboard language, and backspace puts the shortcut back | `luna-sysmgr` `conf/defaultPreferences.txt` (`x_palm_textinput`), `Src/ime/VirtualKeyboardPreferences.cpp` |
 | Date & Time | system service `get/setPreferences` (`timeFormat`, `useNetworkTime`, `useNetworkTimeZone`, `timeZone`), `getPreferenceValues {key: "timeZone"}`, `time/getSystemTime`, `time/setSystemTime {utc}` | `luna-sysservice` `Src/TimePrefsHandler.cpp` |
 | Language & Region | `com.webos.settingsservice` `get/setSystemSettings {keys: ["localeInfo"]}` (`locales.UI`, `locales.FMT`) | `settingsservice` |
 | Device Info | system service `deviceInfo/query`, `osInfo/query`; `com.palm.power` `batteryStatusQuery` (legacy); `com.palm.telephony` `platformQuery` (IMEI/MEID, carrier), `subscriberIdQuery` (`msisdn`: the phone number), `simStatusQuery`, `networkStatusQuery`; settings service `resetSystemSettings`; `org.webosphoenix.service.reset` `eraseUserData` (apps' data and settings; the user's files on the USB drive are kept, as legacy webOS's "Erase Apps & Data") and `fullErase` (everything, files too) (Phoenix, simulator only so far); "Help and tips" and "Run setup again" launch Help and First Use (`{rerun: true}`) | `luna-sysservice` `Src/DeviceInfoService.cpp`, `OsInfoService.cpp` |
@@ -552,6 +603,8 @@ same request and reply shapes:
 | Accessibility | system service `get/setPreferences` `accessibility {reduceMotion, highContrast, monoAudio, captions}` (Phoenix key) | `luna-sysservice` `Src/PrefsFactory.cpp` (stores any key) |
 | Location Services | `com.webos.service.location` `getAllLocationHandlers`, `setState {Handler, state}`, `getLocationUpdates`, `getReverseLocation`; `org.webosphoenix.service.location` `getPermissions`, `setPermission`, `removePermission` (Phoenix) | see [Location](#location) |
 | Emergency Info | system service `get/setPreferences` `emergencyInfo` (Phoenix key); contacts from db8 `com.palm.person:1` | see [Emergency information](#emergency-information) |
+| Phone Preferences | `com.palm.telephony` `forwardQuery {condition: "unconditional", bearer, subscribe}` / `forwardRegister {number, condition, bearer, time}` (call forwarding; `""` stops it), `clirQuery` / `clirSet {restrict}` (Show My Caller ID), `callWaitingQuery` / `callWaitingSet {bearer, enable}`, `voicemailNumberQuery {subscribe}` / `voicemailNumberSet {number}`, `roamModeQuery` / `roamModeSet {mode: "automatic" \| "carrieronly"}` (Voice Network), `ratQuery` / `ratSet {mode: "automatic" \| "umts" \| "gsm"}` (Network Type); the supplementary services answer errorCode 102 without the network (airplane mode). `com.palm.wan` `getstatus {subscribe}` (`disablewan` `"on"`: Data Usage off; `roamguard` `"enable"`: Data Roaming off) and `set {disablewan, roamguard}`. In the simulator unconditional forwarding sends an incoming call on (it does not ring), and the runtime's `systemStatus` `callForwarding` shows the status bar's call-forward icon. The Phone app's menu has Preferences. webOS had no Power preferences app (the battery is in Device Info) | `com.palm.app.phone` `shared/phoneprefs/controls/CallsPref.js`, `NetworkPref.js`, `VoicemailNumberPref.js` (the original app, as LuneOS's CE build ships it); `luna-sysmgr` `StatusBarServicesConnector.cpp:1956-2046` |
+| Certificate Manager | `com.palm.certificatemanager` `listcertificates` (`userCertificateStore`: the user's, as Wi-Fi setup reads them; Phoenix adds `certificates`, all of them, and `subscribe`), `getcertificatedetails {certificateFilename \| certificateId}` (subject and issuer `commonname`, `organization`, `organizationalunit`, `location`, `state`, `country`, `altname`; `startdate`, `expiredate`, `serialNumber`, `version`, `signature.algorithm`, `publicKey.algorithm`; Phoenix adds `publicKey.bits` / `curve`, `fingerprints {sha256, sha1}`, `isCA`, `trusted`, `system`, `pem`); Phoenix: `addcertificate {certificateFilename}` (PEM, one or more, or DER, read with `org.webosphoenix.filemanager`), `setcertificatetrust {certificateId, trusted}`, `removecertificate {certificateId}`, `restorecertificates`; errors -1 to -5 (`CERTIFICATE_ERRORS`). The simulator parses X.509 itself (no signature checks) and keeps the store in the runtime's store; the system's CAs are `runtime/certs` (`/usr/share/phoenix/runtime/certs`). `com.palm.app.certificate` opens the pane, as Device Info's app menu and Email's "Open Certificate Manager" did; certificates are added from the files on `/media/internal` (`.crt`, `.pem`, `.cer`, `.der`; the demo media has `samples/documents/phoenix-lab-root-ca.crt`) | Enyo 1.0 `lib/wifi/wifi.js` (`listcertificates`), `isis-browser` `source/CertificateDetail.js` (`getcertificatedetails`); `luna-sysmgr` `ApplicationManagerService.cpp:3822` |
 | Developer Mode | `com.webos.service.devmode` `getDevMode {subscribe}`, `setDevMode {status: "enabled" \| "disabled"}`; `com.palm.systemmanager` `getDeviceLockMode`, `matchDevicePasscode` | OSE's Developer Mode service (`com.webos.service.devmode`); see [Developer Mode](#developer-mode) |
 | VPN | `com.webos.service.vpn` (LuneOS): `getStatus` (connection states and credential prompts, subscribed), `getProfileList`, `getProfileDetails`, `getConnectionDetails`, `getAgents`, `getAgentFormFields`, `addProfile`, `updateProfile`, `deleteProfile`, `connect`, `disconnect`, `uiPromptResponse`, `cancelUiPrompt`; errors -1 to -10 as legacy `com.palm.vpn`. A `.ovpn` is written with `org.webosphoenix.filemanager` to `/media/internal/vpn` and used as `OpenVPN.ConfigFile`; a WireGuard `.conf` is split into its fields (`@phoenix/luna` `parseWireGuardConf`). The shell's VPN drawer gets the profiles from `systemStatus` `vpnProfiles` and sends `{vpnConnect}` / `{vpnDisconnect}` | `luneos-vpn-adapter` `src/vpn_service.c`, `vpn_errors.h`, `vpn_providers.c`, `files/formfields/*.json` (commit 40bdda2) |
 
@@ -608,13 +661,23 @@ framework's avatar.
 - **Messaging**: Conversations / Buddies view menu, conversations newest
   first with unread counts, the conversation as chat balloons with time
   stamps and sending status, compose with a "To:" field that suggests
-  contacts by name or number, and a transport picker in which only SMS is
-  available (AIM, Google Talk, Yahoo!, Skype are listed as unavailable, as
-  is the Buddies view). Tablet: conversations on the left, the
-  conversation on the right.
+  contacts by name or number and IM buddies. The compose bar's attach
+  button opens the system picture picker
+  (`org.webosphoenix.filepicker/pick`); the picture waits above the field
+  and the message goes as MMS, its pictures shown in the balloon (tap: full
+  screen, with Share). **Buddies**: My Status per IM account (Available /
+  Busy / Offline, Offline signs out), the buddies of signed-in accounts
+  grouped by presence with their status messages (tap: chat), Accounts to
+  add one; an IM conversation shows the buddy's presence under the name and
+  sends by their service, text only. AIM, Google Talk, Yahoo! and Skype are
+  listed as not available (closed networks). Tablet: conversations on the
+  left, the conversation on the right.
 
-Launch params: Phone `{number}` fills in the dial pad; Messaging
-`{threadId}` opens a conversation, `{to, name}` starts a message.
+Launch params: Phone `{number}` fills in the dial pad, `{number, dial: true}`
+calls it at once (Voice Dial); Messaging
+`{threadId}` opens a conversation, `{to, name}` starts a message,
+`{attachment}` or a share's `{share: {files}}` with a picture starts a
+picture message (Messaging is a share target for `image/*`).
 
 ### Services
 
@@ -631,6 +694,9 @@ end of `runtime/phoenix-runtime.js`):
 | Call log | db8 `com.palm.phonecall:1` (`type` incoming / outgoing / missed / ignored, `timestamp`, `duration`, `from`, `to[]`), written by the app | LuneOS phone app `qml/model/CallHistory.qml` |
 | Texts | db8 `com.palm.smsmessage:1` (extends `com.palm.message:1`: `folder` inbox / outbox, `status` pending / sending / successful / failed, `messageText`, `from`, `to[]`, `conversations[]`, `flags.read`), `com.palm.chatthread:1` (`displayName`, `summary`, `timestamp`, `unreadCount`, `personId`, `replyAddress`) | `webos-telephonyd` `files/db8/kinds`, `src/telephonyservice_sms.c`; `webOS-ports/org.webosports.messaging` `service/configuration/db/kinds` |
 | Sending | `org.webosports.service.messaging` `putMessage {message}` -> `{threadids}`: assigns the thread and stores the message; the telephony service then sends outbox messages with status pending (`sendSmsFromDb`) | `org.webosports.messaging` `service/javascript/assistants/PutMessage.js`, `utils/MessageAssigner.js`; `webos-telephonyd` `files/activities/com.palm.telephony/outgoing-sms.json` |
+| Picture messages | db8 `com.palm.mmsmessage:1` (extends `com.palm.message:1`; `serviceName: "mms"`, `parts[{path, mimeType, name}]`), shipped by Messaging. `putMessage` first copies each part into `/media/internal/.mms/` so the message keeps its picture (the media indexer skips dot folders); the summary reads "Picture: text" | the legacy `com.palm.mmsmessage` kind (`webos-telephonyd` leaves MMS to `mmsd`, which LuneOS never wired up) |
+| Instant messages | db8 `com.palm.immessage:1` / `com.palm.immessage.xmpp:1` (`serviceName: "type_jabber"`, `username` = your account), `com.palm.imloginstate:1` (per account: `state` online / offline, `availability` 0 available, 2 busy, 4 offline, `customMessage`), tempdb `com.palm.imbuddystatus:1` (`username`, `displayName`, `availability`, `status`, `personId`). An IM conversation is its own `com.palm.chatthread:1` (`replyService`, `replyAddress` = the buddy, `username`); a person's texts and IMs are not merged into one thread | the readers in the tree: Enyo 1.0 `lib/contactsui/UI/PersonList.js` (`imloginstate`, `imbuddystatus` from tempdb), Email `facades/ContactCache.js`; `webOS-ports/org.webosports.messaging` `service/configuration/db/kinds` |
+| IM transport | `org.webosphoenix.service.xmpp`: the Synergy callbacks of the `com.webosphoenix.xmpp` account template (Accounts > Add > Jabber (XMPP), `runtime/accounts/com.webosphoenix.xmpp`): `checkCredentials`, `onCreate`, `onEnabled` (signs in: login state + roster), `onDelete` (state, roster, IM conversations); `setPresence {accountId, availability}` (Phoenix) | the template layout of the legacy Synergy accounts (`com.palm.service.accounts`) |
 
 The apps ship their db8 kinds in `public/configuration/db/kinds`, which
 `tools/install-rootfs.py` installs to `/etc/palm/db/kinds`.
@@ -655,6 +721,23 @@ Helpers for tests and the shell:
   text and posts `phoenixHost.postToHost("notification", {appId, title,
   body})` for Messaging, which `SimWindowSource` shows as a banner and
   dashboard item for that app (phoenix-sim **F5**)
+- `__phoenixRuntime.simulateIncomingMms({from?, text?, image?})` the same
+  for a picture message (default: a sample photo from Ada; **Shift+F5**)
+- `__phoenixRuntime.simulateIncomingIm({from?, text?})` an instant message
+  to the first signed-in Jabber account (**Ctrl+F5**);
+  `__phoenixRuntime.xmpp.setBuddyPresence(jid, availability, status?)`
+
+The IM server is simulated: any `name@chat.example` with a password signs
+in, the roster is four of the demo contacts (Ada and Lena available,
+Marcus busy, Theo offline), and a buddy who is not offline answers a
+message after about two seconds. Sending fails while signed out or in
+airplane mode. A real transport (XMPP, as planned in
+`docs/SYNERGY-MODERN.md`) registers with
+`runtime.registerImTransport(service, send)` the same way.
+
+db8 here follows `extends` through every level (`com.palm.immessage.xmpp:1`
+-> `com.palm.immessage:1` -> `com.palm.message:1`), and watches on tempdb
+fire across windows as db8's do.
 
 ## Camera, Photos and Music
 
@@ -747,6 +830,22 @@ as it is typed. What it finds comes from:
   searches ("Calendar Events") that apps declare in the `universalSearch`
   field of their `appinfo.json`.
 
+Its app menu (the status bar's "Just Type", as `SystemUiController` made the
+title actionable) is the page's own Enyo `AppMenu`: Preferences launches
+`com.palm.app.searchpreferences`, which the runtime opens as Settings > Just
+Type, and Help (Enyo's `HelpMenu` opens `com.palm.app.help` with a help.palm.com address, which the runtime turns into Phoenix's Help at the matching topic; this goes for every original app's Help). The back gesture goes to the page: an open menu closes
+first, then Just Type (`SimWindowSource.justTypeAppMenu()`,
+`justTypeBack()`).
+
+Settings > Just Type (`apps/settings/src/pages/JustType.tsx`) changes what it
+shows through the same service, after luna-universalsearchmgr's methods
+(`Src/UniversalSearchService.cpp:75-92`): `setSearchPreference` (`AppSearch`,
+`ContactSearch`, `GAL`, `defaultSearch`), `updateSearchItem {category, id,
+enabled, setDefault}`, `updateAllSearchItems` and `reorderSearchItem
+{category, id, toIndex}` (the item's new place in its category; the
+original counted it below the default engine). `getUniversalSearchList`
+lists each category in the user's order, which Just Type follows.
+
 `tools/test-justtype.cjs` uses it end to end. On a device, the compositor
 still has to show `com.palm.launcher`'s window this way (see the roadmap).
 
@@ -769,10 +868,51 @@ engines behind them:
   `<iframe>`, so only sites that allow framing show, and only same-origin
   pages report their titles.
 
+Share > Add to Launcher works as on webOS: the plugin's
+`saveViewToFile`, `generateIconFromFile` and `resizeImage` make the page's
+thumbnail and a 64 px icon in `/var/luna/data/browser/icons/`
+(phoenix-sim's `SimSnapshots`: the shell takes a picture of the page's
+Chromium view; the icon is the top of the page in a rounded frame, since
+BrowserServer's own art was never released), the dialog shows it, and Add
+to Launcher calls `applicationManager/addLaunchPoint` with the page's
+address: a launcher icon on Favorites that opens the page in its own
+card. The calls return at once, as the plugin's did; a picture still being
+made is served when it is ready. In a desktop browser the page is an
+`<iframe>`, so there is no picture and the shortcut gets the browser's icon.
+
 Links for other apps (`mailto:`, `tel:`, `sms:`) go to them through
 `/usr/palm/command-resource-handlers.json` (a compat file), as the
 application manager's `open` does on webOS. `tools/test-browser.cjs` browses
-with it end to end. On a device, OSE's WebAppMgr has no BrowserAdapter, so
+with it end to end.
+
+**Downloads.** A file the page view does not show (a PDF, a link with
+`download`) is not downloaded by Chromium: phoenix-sim's view hands it
+back to the page as BrowserAdapter did, with the plugin's
+`mimeNotSupported(mime, url)` callback (`WebAppWindow.qml` catches the
+profile's `downloadRequested` for that view). The browser then does what
+it always did: `getResourceInfo` names the app for the type, and
+`com.palm.downloadmanager/download` fetches the file into
+`/media/internal/Downloads` (the folder Files shows), while Isis's own
+Downloads drawer shows the progress bar. The simulated download manager
+reports the real progress, read from the host's proxy while the body
+comes (`/__phoenix/proxy/progress`), and shows each download as an
+[ongoing activity](#ongoing-activities); a tap opens the browser's
+Downloads drawer (`{toasterOpen: "downloads"}`, the params of its
+"finished downloading" banner). Open in the drawer, or tapping the file in
+Files, opens it in its app (PDF View for a PDF). A type no app opens gets
+the browser's original "Cannot open MIME type", as on webOS, whose
+application manager had no handler for it either. Downloaded files are not
+apps: the launcher's Downloads tab lists installed apps, as on webOS.
+`tools/test-browser.cjs` (download) and `apps/shared/luna/src/
+mediaapps.test.ts` check it; the native view's hand-back was checked in
+phoenix-sim. The drawer (`enyo.Toaster`) flies in over the page: the native
+view keeps to the part it leaves uncovered (on a phone, none), since
+nothing in the page can draw over it.
+
+phoenix-sim's own proxy, and every request the runtime makes to the host
+there, go through `XMLHttpRequest`: Chromium refuses `fetch()` on the
+`phoenix:` scheme before Qt 6.6 (`FetchApiAllowed`), which left downloads
+(and the other proxied requests) failing on Qt 6.4. On a device, OSE's WebAppMgr has no BrowserAdapter, so
 the browser needs a native view there too (see the roadmap).
 
 ## Files
@@ -1038,6 +1178,65 @@ placeholder), searches in the app and through Just Type's content search,
 renames, shares by Email, deletes, "transcribe automatically", and the
 `{memoId}` and `{newMemo}` launch params, with screenshots in
 `build/voicememos-tests/`.
+
+## Voice Dial
+
+`apps/voicedial` (`org.webosphoenix.voicedial`, Apps tab, with the original
+generic microphone icon of luna-sysmgr's
+`sysapps/com.palm.sysapp.voicedial`) is the Voice Dial system app.
+`com.palm.sysapp.voicedial` is an alias of it, and
+`com.palm.pmvoicecommand/startVoiceCommand {source}`, the only thing the
+original's launcher icon did (`ApplicationManager.cpp`
+`slotBuiltInAppEntryPoint_VoiceDial`; that service was never released),
+opens it.
+
+- It listens as soon as it opens: "Call Ada Palmer", "Call Marcus at work",
+  "Dial 4 0 8 5 5 5 0 1 4 2" (digits or words, "double five"). It stops by
+  itself a second after you finish speaking; a tap on the microphone stops
+  it sooner, or listens again.
+- What was said is matched to the contacts with a phone number
+  (`com.palm.person:1`; `src/lib/match.ts`): word by word, letter by letter,
+  so a name heard wrong still finds them ("Call either Palmer" is Ada
+  Palmer). A number is matched to its contact. "at work", "home", "mobile"
+  pick the number. When two people are about as likely (two Marcuses), it
+  asks which one; no match, or nothing heard, says so with Try Again.
+- The confirmation ("Call Ada Palmer?", the number and its type) listens
+  for "Yes" or "No", or takes a tap on Call or No. Yes launches Phone with
+  `{number, dial: true}` (a Phoenix launch param: Phone places the call at
+  once and shows it), and Voice Dial closes.
+
+**Listening** is the keyboard's dictation, lent to the app: the runtime's
+`org.webosphoenix.dictation` (`start {prompt, autoStop, subscribe}`,
+`stop`, `getStatus`; `@phoenix/luna`'s `dictation.ts`) sends "dictation"
+host messages to the shell, whose `Dictation` (`shell/native/dictation.cpp`)
+records the microphone and runs `org.webosphoenix.transcriber`
+(whisper.cpp) on it, and `SimWindowSource` passes its states back to the
+window. One microphone: the window that started a recording owns it
+(`Dictation.owner`) and only it gets the transcript; the keyboard ignores
+it. Voice Dial passes the contacts' names as `prompt`, which goes to
+whisper as its initial prompt (`transcribe {prompt}`, `whisper-cli
+--prompt`): with it whisper.cpp writes the names as they are spelled
+(espeak-ng saying "Call Lena Okafor mobile" came back as "Call the Iraq
+Affirmal" without it, "Call Lena Okafor Mobile." with it). `autoStop` ends
+the recording after speech and a second of quiet (`Dictation::EndOfSpeech`),
+or with "Nothing was heard." after 7 seconds without speech. In a browser
+without the shell there is no microphone to lend, and Voice Dial says so.
+
+**In phoenix-sim**, dictation runs `apps/voicememos/service/transcribe-cli.js`
+on the computer (whisper.cpp from `PHOENIX_WHISPER_CLI` /
+`PHOENIX_WHISPER_MODEL`, or the PATH). A computer without a microphone (or
+a test) can play WAV files as the microphone: `--microphone-file
+call.wav --microphone-file yes.wav` plays one per recording, each followed
+by quiet.
+
+`node tools/test-voicedial.cjs [--tablet]` drives it with the script in the
+shell's place (the dictation host messages, answered with the transcripts
+whisper.cpp made of espeak-ng's speech): the prompt, a misheard name, Yes
+and Phone's call, No, a number, a choice, no match, nothing heard, the
+microphone button, no microphone, and the original ids;
+`apps/voicedial/src/lib/match.test.ts` the matching;
+`build/dictation-test` the end of speech, the prompt and the file
+microphone.
 
 ## Flashlight
 
@@ -1527,6 +1726,42 @@ get the same menu ([ANDROID.md](ANDROID.md)). A built-in
 app's id cannot be installed over. `build/siminstaller-test` tests
 SimInstaller.
 
+**In the launcher, as it goes.** Whoever installs tells the shell
+(`runtime.installStatus`, an `installStatus` host message: state,
+progress, title, icon, the reason of a failure, how to try again): the
+Marketplace from its first download step (`deps.pending` of the packages
+service), the installer as it reads and installs the package. An app not
+installed yet gets a pending icon of its own (on Downloads), faded to half
+with a 32 px progress badge, a frame of `loading-strip.png` per 1/19 of the
+progress; a failed one shows `warning-icon.png` (LunaSysMgr's install
+status decorators, `iconheap.cpp:44-51`, at 50 px right of and above the
+cell's centre on tablets). A tap on it does not launch it: while it
+installs it opens the app's page in the Marketplace, as webOS sent such
+launches to Software Manager; after a failure it asks "Installation
+Failed", with Try Again (the same install again: the Marketplace's, or the
+installer's with the same file) and Remove. `phoenix-sim --scene
+launcherinstall` shows both.
+
+**The rest of the installer and the application manager** (luna-sysmgr's
+`ApplicationInstaller.cpp`, `ApplicationManagerService.cpp`; the host's
+part through `runtime.hostOp`, phoenix-sim's `SimWindowSource` or
+`tools/serve-rootfs.py`; `tools/test-appmanager.cjs` tests them):
+
+| Method | What it does here |
+| --- | --- |
+| `com.palm.appinstaller/notifyOnChange {appId?}` | `{appId, version, statusChange: "INSTALLED" \| "REMOVED", cause: "USER" \| "REVOKED"}` for one app or all (`*`) |
+| `installProgressQuery {appId, subscribe?}` | `{state, progress, title, reason}` of a pending install (LunaSysMgr never answered it) |
+| `queryInstallCapacity {appId \| packageId, size, uncompressedSize}` | `{result (1 download, 2 install space short), spaceNeededInKB}`, against the free space where apps go |
+| `getUserInstalledAppSizes` | `{apps: [{appName, size (KB)}], totalSize}` |
+| `revoke {item: '{"payload": {signature, appId: [...]}}'}` | removes the apps (cause REVOKED) when a trusted Marketplace catalog's Ed25519 key signed their ids; else `verify failed` |
+| `com.palm.applicationManager/addLaunchPoint`, `removeLaunchPoint` | above |
+| `running`, `close {processId}` | the apps with cards, headless or kept alive, with process ids; close ends one for good |
+| `install {target}`, `rescan` | install a package file; read the apps again |
+| `getSizeOfApps {appIds}` | `{<appId>: bytes}` |
+| `listPendingLaunchPoints` | the apps being installed |
+| `listDockModeLaunchPoints`, `addDockModeLaunchPoint`, `removeDockModeLaunchPoint`, `listDockPoints` | apps with `"exhibitionMode"` (or `"dockMode"`) in `appinfo.json`, enabled by default as `conf/default-exhibition-apps.json` (Photos); data only until dock mode comes |
+| `addResourceHandler`, `swapResourceHandler`, `addRedirectHandler`, `swapRedirectHandler`, `removeHandlersForAppId`, `listAllHandlersForMime` / `ForUrl`, `getHandlerForUrl` / `ForExtension`, `mimeTypeForExtension`, `listResourceHandlers`, `listRedirectHandlers`, `listExtensionMap` | the handler registry: the apps' `mimeTypes`, the built-in handlers and `command-resource-handlers.json`, plus those apps add (kept in the shared store, indexes from 1000); the first for a type or pattern is active until swapped |
+
 ### Developer Mode
 
 Settings > Developer Mode (the last pane, under Advanced) turns on what
@@ -1537,7 +1772,9 @@ shows what it allows and asks for the device PIN or password
 (`matchDevicePasscode`); with no secure unlock set it asks for one first
 and offers Screen & Lock. Turning it off asks nothing. The state is OSE's
 `com.webos.service.devmode` (`getDevMode`, `setDevMode`); erasing the
-device turns it off.
+device turns it off. While it is on, its Debugging switches show the
+shell's frame rate counter and touch plot (`enableFpsCounter`,
+`enableTouchPlot`; see [Device security](#device-security-erase-usb-drive-mode-and-debugging)).
 
 The installer takes such a package only when Developer Mode is on and the
 request says `developerMode: true` (`com.webos.appInstallService install`;
@@ -1594,9 +1831,69 @@ slot's. A simulator bundle is only a RAUC manifest
 (`php server/updates/bin/updates.php simulator --version 0.2.0 --build 2`,
 served by `server/updates/bin/serve.sh` at `http://127.0.0.1:8089/`).
 `com.palm.power/shutdown/machineReboot` restarts phoenix-sim (`simProcess`),
-or reloads the page under `tools/serve-rootfs.py`. Tests:
+or reloads the page under `tools/serve-rootfs.py`; for a system update
+(`reason: "System update"`) phoenix-sim starts again with `--updating`, and
+the boot shows luna-sysmgr's "Updating the system / Do not remove battery"
+(BootupAnimation's activity state) while the new system's UI loads, its
+progress that page's loading. Tests:
 `services/updates/updatesservice.test.ts` (with a stand-in for RAUC's command
 line), `server/updates/tests/run.php`, `tools/test-updates.cjs`.
+
+## Device security, erase, USB drive mode and debugging
+
+The rest of luna-sysmgr's `com.palm.systemmanager` and the storage daemon's
+`com.palm.storage` the system UI relies on, simulated in the runtime
+(`runtime/phoenix-runtime.js`, "com.palm.systemmanager: device lock",
+"com.palm.storage", "Debugging overlays"). OSE has none of them; on a device
+Phoenix will have to provide them. `tools/test-security.cjs` tests them.
+
+**Device lock and security policy** (`Security.cpp`, `EASPolicyManager.cpp`):
+
+| Method | Phoenix |
+| --- | --- |
+| `getDeviceLockMode {subscribe}` | `{lockMode: "none" \| "pin" \| "password", policyState: "none" \| "active" \| "pending", retriesLeft}` (the policy's tries left; 0 without one) |
+| `getSecurityPolicy {}` | `{policy: {password: {enabled, minLength, maxRetries, alphaNumeric, allowSimplePassword?}, inactivityInSeconds, id, status: {enforced, retriesLeft}}}`; `returnValue: false` without a policy |
+| `setDevicePasscode {lockMode, passCode, oldPasscode}` | the old passcode when one is set, except while the policy is pending (the lock screen sets the new one it asks for); against a policy, the original's checks: `errorCode` -1 empty, -2 too short, -3 / -4 not alphanumeric, -5 not digits, -8 repeating, -9 sequential, with its texts ("No sequential numbers (1234)") |
+| `matchDevicePasscode {passCode}` | `{succeeded}`, and when wrong `{lockedOut, retriesLeft}` (the original answered `returnValue: false`) |
+
+A policy is what an Exchange account puts in db8: `com.palm.securitypolicy:1`
+objects with EAS's fields (`devicePasswordEnabled`, `minDevicePasswordLength`,
+`maxDevicePasswordFailedAttempts`, `alphanumericDevicePasswordRequired`,
+`allowSimpleDevicePassword`, `maxInactivityTimeDeviceLock`), merged into the
+strictest. phoenix-sim `--security-policy minLength=6,maxRetries=4,...` puts
+one there (`_id` `phoenix-sim-policy`; `none` removes it). A policy the
+passcode does not satisfy is pending: the lock screen shows "PIN Required" (or
+"Password Required") and sets a new one. Active, each wrong passcode costs a
+try: "2 Tries Remaining", then the last-try warning, then "Your device will
+now be erased." and `com.palm.storage/erase/Wipe`. Its inactivity caps
+Screen & Lock's "Lock after". Without a policy, three wrong passcodes hold the
+next try off for 15 s (`lockedOut`).
+
+**Erase and USB drive mode** (`com.palm.storage`):
+
+| Method | Phoenix |
+| --- | --- |
+| `erase/EraseAll {}`, `erase/Wipe {}` | Full Erase (the Full Erase key chord; a policy's last try): as Settings' Full Erase (`org.webosphoenix.service.reset/fullErase`, which now does the same), then an `erase` host message: phoenix-sim restarts with no data (`simProcess.eraseAndRestart`: its data and cache folders and settings file go) into First Use |
+| `diskmode/hostIsConnected {}` | `{result: true, hostIsConnected}`: a USB cable from a computer is in (the shell says so with the `usbHost` host status; a page waits for it, 3 s at most) |
+| `diskmode/enterMSM {"user-confirmed", enterIMasq}` | an `enterMSM` host message to phoenix-sim's storaged (`SimStorage.qml`) |
+
+storaged's `/storaged` signals (`MSMAvail {mode-avail}`, `MSMProgress {stage}`,
+`MSMEntry {new-mode}`, `MSMFscking`, `PartitionAvail {fscked}`) reach
+`com.palm.bus/signal/addmatch` in every page (`runtime.storagedSignal`,
+luna-systemui's StoragedService.js: the "Connected" alert, the USB warning,
+the USB dashboard, "Some data was damaged") and the shell
+(`Shell.storagedSignal`: the brick screen, the check of the drive, "USB Drive
+connection failed").
+
+**Debugging and the rest** (`SystemService.cpp:209-250`):
+
+| Method | Phoenix |
+| --- | --- |
+| `enableFpsCounter {enable?, reset?, dump?}` | the frame rate counter at the bottom left; `debugOverlay` host message |
+| `enableTouchPlot {collection?, trails?, crosshairs?}` | the touch plot; `debugOverlay` host message. Both `returnValue: false` without a key they know |
+| `getDebugOverlays {subscribe}` (Phoenix) | `{fpsCounter, touchPlot: {collection, trails, crosshairs}}`, as the shell reports them (`debugOverlays` host status); Settings > Developer Mode > Debugging has a switch for each |
+| `runProgressAnimation {type, state}` | `"msm"`, `"fsck"` or anything else (the logo); `"start"` / `"stop"`; `progressAnimation` host message |
+| `subscribeTurboMode {subscribe}` | `{subscribed, turboMode: true}` while subscribed (nothing to boost in the simulator) |
 
 ## Ongoing activities
 
@@ -1608,7 +1905,9 @@ its params. It is the shell's API:
 - `luna://org.webosphoenix.ongoing/set {id, appId?, title, body?, icon?, progress (0-100, -1: none), params?}`
 - `luna://org.webosphoenix.ongoing/clear {id}`
 
-System updates (`com.palm.update`) and Marketplace installs use it. They are
+System updates (`com.palm.update`), Marketplace installs and the download
+manager (each download: file name, "Downloading 160 KB of 441 KB" and its
+progress) use it. They are
 pinned at the top of the notification list, in the order they began, with a
 faint rule between them and the notifications (which keep the original's
 order below). On a phone the list opens at them when there are any (else at
@@ -1639,6 +1938,56 @@ Other legacy hooks the simulator now answers as a device would:
 `com.webos.notification/createToast` with an `onclick.appId` for another app
 (a service's toast) posts that app's notification.
 
+## Printing
+
+Print is where webOS had it: in the app menu of Web and Email (both open
+Enyo 1.0's own print dialog, `lib/printdialog`) and in Photos' viewer.
+The dialog speaks to the print manager, `com.palm.printmgr`, which the
+runtime simulates (block "Printing") with the calls `PrintJob.js`,
+`DocumentPrintJob.js`, `ImagePrintJob.js` and the printer kinds make
+(`printers/list`, `getCurrent`, `setCurrent`, `getCapabilities`, `add`;
+`jobs/open`, `editPrintParams`, `getFinalParamsAndArea`, `getStatus`,
+`getRenderStatus`, `addFile`, `close`, `cancel`) and the print manager's
+error codes.
+
+- **The printer** is **Save as PDF**: the job becomes a PDF in
+  `/media/internal/Documents` (named after the page, "(2)" when taken),
+  which Files and PDF View open. A network printer would need CUPS with
+  IPP Everywhere on a device; there is none in the simulator, so Add a
+  Printer answers "Unable to communicate with the printer" (-203).
+- **Rendering**: a page view's page (the browser's, Email's message) or an
+  app's own window (`PalmSystem.printFrame`, the dialog's `frameToPrint`)
+  is rendered by Chromium in phoenix-sim: the "print" host message (or the
+  page view's `print` op) has `WebAppWindow.qml` call QtWebEngine's
+  `printToPdf` on that view, in the job's paper size, and hand the PDF back
+  (`__phoenixRuntime.print.rendered`). In a desktop browser (and the
+  Playwright tests) the page's text is printed instead. Pictures
+  (`jobs/addFile`) are put on pages by the runtime's small PDF writer, one a
+  page, turned and scaled to the paper.
+- **Enyo 1.0** was released with two of the dialog's files empty
+  (`MediaTypePicker.js`, `PrintQualityPicker.js`) although the options
+  page creates both, so opening a printer's options failed; the compat
+  overlay supplies them, written after `MediaSizePicker.js`.
+- **While it prints**, a job is an ongoing activity in the notification area
+  ("Printing <name>"), as the original Print Manager's status dashboard was
+  (`PrintJob` still launches it headless, which opens no card here); when
+  it is done a "Saved as PDF" notification opens the Print Manager at the
+  job.
+- **Print Manager** (`apps/printmanager`, `org.webosphoenix.printmanager`,
+  on the launcher's Settings page as on webOS; `com.palm.app.printmanager`
+  is an alias): the jobs (printing ones with Cancel, then the rest newest
+  first; tap one to open its PDF; Clear Finished Jobs in the app menu) and
+  the printers (the current one checked). It uses two Phoenix additions,
+  `jobs/list {subscribe}` and `jobs/remove`. `@phoenix/luna`'s `print.ts`
+  is the client; `@phoenix/ui`'s `PrintDialog` is the dialog for Phoenix
+  apps (Photos), with the original's steps and words.
+
+Tests: `apps/shared/luna/src/print.test.ts` (the service, the PDF writer),
+`apps/printmanager/src/jobs.test.ts`, `tools/test-browser.cjs` (print:
+the app menu, the dialog, the PDF, the Print Manager). Checked in
+phoenix-sim, phone and tablet: the browser's page as Chromium's PDF and a
+photo from Photos, both opened in PDF View.
+
 ## Screen captures
 
 Home + Power together, as the original (released one while the other is
@@ -1658,6 +2007,58 @@ Tests: `shell/tests/tst_screenshot.qml` (the keys, the flash, the hand
 over), `apps/screenshot/src/editor.test.ts`, `tools/test-screenshot.cjs`;
 `phoenix-sim --scene capture` / `capturepreview` (with `--delay`).
 Plan and later features: [SCREENSHOTS.md](SCREENSHOTS.md).
+
+## Exhibitions (dock mode)
+
+On a Touchstone (the inductive charger) the shell goes into dock mode,
+"Exhibition", as luna-sysmgr did (GAPS R5; the rules are in `Shell.qml`,
+the surface in `DockMode.qml`): one exhibition fills the screen under the
+status bar, and its title in the status bar drops the menu of exhibitions
+(Time, built into the shell, then the apps the user turned on in
+Settings > Exhibition, at most three; Photos at first). Any web app can be
+one:
+
+```json
+"exhibitionMode": true,
+"exhibitionModeOptions": { "title": "Weather" }
+```
+
+(`dockMode` / `dockModeOptions` are the webOS 2.x names and work too;
+without a title the app's own is used; luna-sysmgr
+`ApplicationDescription.cpp:369-398`.) Dock mode opens the app's
+exhibition in a window of its own, not a card, with the launch params
+`{"dockMode": true, "windowType": "dockModeWindow"}`
+(`DockModeWindowManager::launchApp`): `PalmSystem.launchParams`, so the app
+shows its exhibition instead of its usual first view
+(`isExhibitionLaunch(params)` in `@phoenix/luna`; Photos shows a slideshow,
+`apps/photos/src/Exhibition.tsx`, the Agenda the coming days,
+`apps/agenda`). The window keeps running while dock mode is up; it hears
+when it comes to the front of dock mode or leaves it as a card does, the
+`phoenixcardactivation` event `{active}` (the shell's
+`source.activateWindow`), and should pause its timers while not active.
+Leaving dock mode closes the windows of the exhibitions not in front
+(`dockModeCloseOnExit`); the one in front stays for next time. Tapping
+something that opens an app (a link, a notification) ends dock mode.
+
+| What | Service and methods | Source |
+| --- | --- | --- |
+| Dock mode is up | `com.palm.systemmanager` `getDockModeStatus {subscribe}` -> `{enabled}` (`dockMode.watch()`) | luna-sysmgr `SystemService.cpp:1913-1990`; the shell says it (`applyHostStatus {dockMode}`) |
+| Exhibition apps | `com.palm.applicationManager` `listDockModeLaunchPoints` -> `{launchPoints: [{id, appId, title, icon, exhibitionMode, exhibitionModeTitle, enabled}], maxApps}`; Phoenix: `{subscribe: true}` hears each change (`dockMode.watchLaunchPoints()`) | `ApplicationManagerService.cpp:2486-2575` |
+| Turn on / off | `addDockModeLaunchPoint {appId}` (last in the menu; fails past `maxApps` 3, errorCode -2, or for an app that is no exhibition, -1), `removeDockModeLaunchPoint {appId}`; Phoenix: `setDockModeLaunchPoints {appIds}`, the ones on in the menu's order | `:2820-2985`; `DockModePositionManager` |
+| Preferences | `com.webos.service.systemservice` `getPreferences` / `setPreferences`: `dockwallpaper {wallpaperName, wallpaperFile}` and `dockModeSoundPref` (`"systemsettings"`, or Phoenix's `"mute"`) as luna-sysmgr kept them; Phoenix's `exhibition {enabled, startAfter (s; 0: when the screen would turn off), nightMode, nightStart, nightEnd ("HH:MM")}` | `conf/defaultPreferences.txt`, `Preferences.cpp:560-568` |
+| The Touchstone | powerd's `USBDockStatus` signal and `chargerStatusQuery`: `{Charging, DockConnected, DockPower, DockSerialNo, USBConnected: false, type: "inductive"}` | `DisplayManager.cpp:967-1060` |
+
+The old ids name the new apps: `com.palm.app.photos` is Phoenix Photos,
+`com.palm.app.agendaview` the Agenda, and `com.palm.app.exhibitionpreferences`
+opens Settings > Exhibition. The shell hears the list and the preferences in
+`systemStatus` (`exhibitionApps`, `exhibition`, `dockModeSound`,
+`dockWallpaperFile`). Tests: `shell/tests/tst_dockmode.qml`,
+`apps/shared/luna/src/exhibition.test.ts`,
+`apps/settings/src/pages/Exhibition.test.tsx`, `apps/photos/src/slideshow.test.ts`,
+`apps/agenda/src/agenda.test.ts`, `node tools/test-exhibition.cjs`. In
+phoenix-sim F12 sets the device on a Touchstone or lifts it off,
+Shift+F12 moves it onto another one, and `--touchstone` starts on one, in
+dock mode.
 
 ## Backup
 

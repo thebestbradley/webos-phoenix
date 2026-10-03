@@ -62,7 +62,7 @@ export interface DialpadProps {
     testId?: string;
 }
 
-/** The 3x4 webOS dial pad on its key grid (pin-grid.png, 106x55 keys). */
+/** The 3x4 webOS dial pad (Enyo telephony Dialpad: flexing rows; pin-grid.png's lines at 320 wide). */
 export function Dialpad({ onKey, onHold, lettersHidden, voicemailKey = true, testId }: DialpadProps) {
     const [down, setDown] = useState<string | null>(null);
     const downKey = useRef<string | null>(null);
@@ -105,8 +105,7 @@ export function Dialpad({ onKey, onHold, lettersHidden, voicemailKey = true, tes
                 <button
                     key={k.key}
                     type="button"
-                    className={cx("pui-dialpad-key", `col${i % 3}`, down === k.key && "down")}
-                    style={{ top: 4 + Math.floor(i / 3) * 55 }}
+                    className={cx("pui-dialpad-key", `col${i % 3}`, `row${Math.floor(i / 3)}`, down === k.key && "down")}
                     data-key={k.key}
                     aria-label={k.key}
                     onPointerDown={press(k)}

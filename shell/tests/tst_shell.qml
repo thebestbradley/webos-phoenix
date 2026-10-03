@@ -19,7 +19,7 @@ Item {
         anchors.fill: parent
         formFactor: "phone"
         source: SimWindowSource { id: windows }
-        system: SimSystemStatus {}
+        system: SimSystemStatus { id: status }
     }
 
     Component {
@@ -316,6 +316,45 @@ Item {
             compare(shell.cardView.windowHeight, fullHeight);
         }
 
+        // Phones: once the banner has gone the bar shows the waiting
+        // notifications' icons at its right edge, side by side, each as
+        // tall as the bar (BannerWindow::paint).
+        function tryVerifyNoThrow(f) {
+            for (var t = 0; t < 40; ++t) {
+                if (f())
+                    return true;
+                wait(50);
+            }
+            return false;
+        }
+
+        function test_phoneNotificationIcons() {
+            var notes = shell.notifications;
+            windows.notify("org.webosphoenix.messaging", "One", "");
+            windows.notify("org.webosphoenix.email", "Two", "");
+            notes.bannerActive = false;
+            var icons = findChild(notes, "phoneNotificationIcons");
+            tryCompare(icons, "visible", true, 2000);
+            var shown = [];
+            for (var i = 0; i < icons.children.length; ++i)
+                if (icons.children[i].height > 0)
+                    shown.push(icons.children[i]);
+            // Leave nothing behind, whatever the checks find.
+            var counts = [shown.length, shown.length > 0 ? shown[0].height : 0];
+            // The Row lays them out at its next polish.
+            var laidOut = shown.length === 2 && tryVerifyNoThrow(function () {
+                return shown[1].x === shown[0].x + shown[0].width
+                    && icons.mapToItem(notes, icons.width, 0).x === notes.width;
+            });
+            windows.dismissNotification(0);
+            windows.dismissNotification(0);
+            notes.bannerActive = false;
+            tryCompare(notes, "negativeSpace", 0, 2000);
+            compare(counts[0], 2);
+            compare(counts[1], Theme.bannerHeight);
+            verify(laidOut, "side by side at the right edge");
+        }
+
         function test_appNameOpensTheAppMenu() {
             var uid = windows.launch("org.webosphoenix.email", "");
             shell.cardView.maximizeProgress = 1;
@@ -351,7 +390,7 @@ Item {
         // nothing in the dashboard.
         function test_bannerMessageIsTransient() {
             var notes = shell.notifications;
-            windows.bannerRequested("org.webosphoenix.email", "Charging Battery", "", "", "", "", 0);
+            windows.bannerRequested("org.webosphoenix.email", "Charging Battery", "", "", "", "", 0, "");
             verify(notes.bannerActive);
             compare(notes.bannerText, "Charging Battery");
             compare(windows.notifications.count, 0);
@@ -363,7 +402,7 @@ Item {
         function test_bannerRisesAndTapLaunches() {
             var notes = shell.notifications;
             var content = findChild(notes, "bannerContent");
-            windows.bannerRequested("org.webosphoenix.email", "New mail", "", "{\"folder\":\"inbox\"}", "", "", 0);
+            windows.bannerRequested("org.webosphoenix.email", "New mail", "", "{\"folder\":\"inbox\"}", "", "", 0, "");
             wait(100);
             // Still below its place, coming up; not from the side.
             verify(content.y > (Theme.bannerHeight - content.height) / 2);
@@ -375,11 +414,49 @@ Item {
             compare(spy.signalArguments[0][0], "org.webosphoenix.email");
             compare(JSON.parse(spy.signalArguments[0][1]).folder, "inbox");
             // Without params a tap does nothing while the banner shows.
-            windows.bannerRequested("org.webosphoenix.email", "Charging Battery", "", "", "", "", 0);
+            notes.bannerActive = false;
+            windows.bannerRequested("org.webosphoenix.email", "Charging Battery", "", "", "", "", 0, "");
             notes.tapBanner();
             compare(spy.count, 1);
             verify(!notes.dashboardOpen);
             notes.bannerActive = false;
+        }
+
+        // BannerMessageHandler::addMessage: banners wait their turn. One
+        // alone has 5 s; a second coming in cuts it to 2 s, and each shows
+        // in order with its sound as it starts. removeBanner drops a
+        // waiting one; clearBanners all of an app's.
+        function test_bannerQueue() {
+            var notes = shell.notifications;
+            notes.bannerActive = false;
+            var start = Date.now();
+            windows.bannerRequested("org.webosphoenix.email", "First", "", "", "", "", 0, "a");
+            windows.bannerRequested("org.webosphoenix.email", "Second", "", "", "", "", 0, "b");
+            windows.bannerRequested("org.webosphoenix.email", "Dropped", "", "", "", "", 0, "c");
+            windows.bannerRequested("com.palm.app.calendar", "Cleared", "", "", "", "", 0, "d");
+            compare(notes.bannerText, "First");
+            compare(notes.bannerQueueLength, 3);
+            windows.bannerRemoved("org.webosphoenix.email", "c");
+            windows.bannersCleared("com.palm.app.calendar");
+            compare(notes.bannerQueueLength, 1);
+            // In 1 s, held 2 s (not 5), out 1 s: the second is in by ~4 s.
+            tryCompare(notes, "bannerText", "Second", 8000);
+            // Uncut it would have been 7 s (1 + 5 + 1).
+            verify(Date.now() - start < 6500, "the first banner was cut to 2 s");
+            verify(notes.bannerActive);
+            // The last one alone has its 5 s, then the bar is clear.
+            tryCompare(notes, "bannerActive", false, 9000);
+            compare(notes.bannerText, "Second");
+        }
+
+        // PalmSystem.removeBannerMessage on the banner showing: it leaves now.
+        function test_bannerRemovedWhileShowing() {
+            var notes = shell.notifications;
+            notes.bannerActive = false;
+            windows.bannerRequested("org.webosphoenix.email", "Going", "", "", "", "", 0, "g");
+            tryCompare(notes, "bannerProgress", 1, 2000);
+            windows.bannerRemoved("org.webosphoenix.email", "g");
+            tryCompare(notes, "bannerActive", false, 1500);
         }
 
         function dashboardRows() {
@@ -428,15 +505,53 @@ Item {
             mouseRelease(r, 140, y);
             tryCompare(windows.notifications, "count", 2, 1000);
 
-            // A quick short flick sideways.
+            // A quick short flick sideways: 40 px in 10 ms (on the
+            // notification area's clock, not the machine's).
             rows = dashboardRows();
             r = rows[0];
+            var t = 1000;
+            notes.clock = function () { return t; };
             mousePress(r, 20, y);
-            mouseMove(r, 40, y, 5);
-            mouseMove(r, 60, y, 5);
-            mouseRelease(r, 60, y, Qt.LeftButton, Qt.NoModifier, 5);
+            mouseMove(r, 40, y);
+            mouseMove(r, 60, y);
+            t += 10;
+            mouseRelease(r, 60, y);
+            notes.clock = function () { return Date.now(); };
             tryCompare(windows.notifications, "count", 1, 1000);
             notes.dashboardOpen = false;
+        }
+
+        // GAPS V8 (3): with the dashboard open, Down / Up move a highlight
+        // over the rows, Delete dismisses one, Enter opens one, Esc closes.
+        function test_dashboardKeyboard() {
+            var notes = shell.notifications;
+            windows.notify("org.webosphoenix.messaging", "One", "");
+            windows.notify("org.webosphoenix.email", "Two", "");
+            windows.notify("org.webosphoenix.messaging", "Three", "");
+            notes.bannerActive = false;
+            notes.dashboardOpen = true;
+            tryCompare(notes, "negativeSpace", notes.dashboardHeight, 2000);
+            verify(shell.activeFocus);
+            keyClick(Qt.Key_Down);
+            compare(notes.keyRow, 0);
+            verify(findChild(notes, "dashboardKeyFocus").visible);
+            keyClick(Qt.Key_Down);
+            compare(notes.keyRow, 1);
+            keyClick(Qt.Key_Delete);
+            tryCompare(windows.notifications, "count", 2, 1000);
+            verify(notes.keyRow >= 0);
+            var spy = createTemporaryObject(spyComponent, root, { target: notes, signalName: "activated" });
+            var expected = windows.notifications.get(notes.keyRow).appId;
+            keyClick(Qt.Key_Return);
+            compare(spy.count, 1);
+            compare(spy.signalArguments[0][0], expected);
+            notes.dashboardOpen = true;
+            keyClick(Qt.Key_Escape);
+            verify(!notes.dashboardOpen);
+            while (windows.notifications.count > 0)
+                windows.dismissNotification(0);
+            notes.bannerActive = false;
+            tryCompare(notes, "negativeSpace", 0, 2000);
         }
 
         // An ongoing activity (a download, an install: org.webosphoenix.ongoing)
@@ -795,10 +910,15 @@ Item {
             var uid = windows.launch("org.webosphoenix.email", "");
             shell.cardView.maximizeProgress = 1;
             var bar = findChild(shell, "statusBar");
+            var corners = findChild(shell, "screenCorners");
+            // R3: the phone's corners show in card view and maximized...
+            verify(corners.visible);
             var normal = shell.cardView.windowHeight;
             windows._hostMessage("org.webosphoenix.email", uid, "fullScreen", { on: true });
             verify(shell.fullScreen);
             verify(!bar.visible);
+            // ...and go only while a full-screen card covers the screen.
+            verify(!corners.visible);
             compare(shell.cardView.windowHeight, normal + Theme.statusBarHeight);
             windows.notify("org.webosphoenix.messaging", "Palm Pre", "Hi");
             wait(500);
@@ -807,6 +927,7 @@ Item {
             shell.cardView.maximizeProgress = 0;
             verify(!shell.fullScreen);
             verify(bar.visible);
+            verify(corners.visible);
             windows.dismissNotification(0);
             shell.notifications.bannerActive = false;
         }
@@ -850,6 +971,11 @@ Item {
             verify(/battery-charged\.png$/.test(img.source));
             shell.system.batteryPercent = 50;
             verify(/battery-charging-5\.png$/.test(img.source));
+            // No reading from powerd: the error battery, whether charging or not.
+            shell.system.batteryPercent = -1;
+            verify(/battery-error\.png$/.test(img.source));
+            shell.system.charging = false;
+            verify(/battery-error\.png$/.test(img.source));
             shell.system.batteryPercent = 100;
         }
 
@@ -897,6 +1023,28 @@ Item {
             tryVerify(function() { return !vpn.visible; }, 2500);
         }
 
+        // Settings > Phone's call forwarding: its icon between the VPN's and
+        // Wi-Fi's (StatusBarInfo.cpp:143-275), not in airplane mode.
+        function test_callForwardIndicator() {
+            var sys = shell.system;
+            var fwd = findChild(shell, "callForwardIcon");
+            verify(!fwd.visible);
+            verify(/statusBar\/call-forward\.png$/.test(fwd.source));
+            sys.applyAppStatus({ callForwarding: true });
+            verify(fwd.visible);
+            tryCompare(fwd, "progress", 1, 2500);
+            sys.vpnProfiles = [{ name: "Office", state: "connected" }];
+            tryCompare(findChild(shell, "vpnIcon"), "progress", 1, 2500);
+            verify(fwd.x > findChild(shell, "vpnIcon").x);
+            verify(fwd.x < findChild(shell, "wifiIcon").x);
+            sys.vpnProfiles = [{ name: "Office", state: "disconnected" }];
+            sys.airplaneMode = true;
+            tryVerify(function() { return !fwd.visible; }, 2500);
+            sys.airplaneMode = false;
+            sys.applyAppStatus({ callForwarding: false });
+            tryVerify(function() { return !fwd.visible; }, 2500);
+        }
+
         // Back: the dashboard, then the menu, then the launcher
         // (SystemUiController.cpp:424-443).
         function test_backOrder() {
@@ -916,6 +1064,172 @@ Item {
             verify(shell.launcherOpen);
             shell.gestureBack();
             verify(!shell.launcherOpen);
+        }
+
+        // G4: the forward swipe closes the dashboard and the menus at once
+        // and is eaten while the launcher is up (SystemUiController.cpp:
+        // 410-422); it never closes the launcher, as Back does.
+        function test_forwardSwipe() {
+            windows.notify("org.webosphoenix.messaging", "Palm Pre", "Hi");
+            shell.notifications.bannerActive = false;
+            shell.gestureUp();
+            verify(shell.launcherOpen);
+            shell.notifications.dashboardOpen = true;
+            var menu = findChild(shell, "systemMenu");
+            menu.open = true;
+            var area = findChild(shell, "gestureMouse");
+            // A swipe left to right in the gesture area.
+            mouseDrag(area, area.width * 0.3, area.height / 2, area.width * 0.4, 0);
+            verify(!shell.notifications.dashboardOpen);
+            verify(!menu.open);
+            verify(shell.launcherOpen);
+            shell.gestureForward();
+            verify(shell.launcherOpen);
+            shell.gestureBack();
+            verify(!shell.launcherOpen);
+            windows.dismissNotification(0);
+        }
+
+        // G5: advanced gestures. A long swipe across the gesture area's
+        // centre shows the app beside this one, maximized; off, it is Back.
+        function test_advancedGestures() {
+            var a = windows.launch("org.webosphoenix.email", "");
+            var b = windows.launch("org.webosphoenix.messaging", "");
+            var c = windows.launch("org.webosphoenix.phone", "");
+            var view = shell.cardView;
+            view.maximize(b);
+            tryCompare(view, "maximizeProgress", 1, 2000);
+            compare(view.currentUid, b);
+            var area = findChild(shell, "gestureMouse");
+            var gestures = findChild(shell, "gestureBar");
+            // Off: a long leftward swipe is only Back.
+            status.advancedGestures = false;
+            verify(!gestures.advancedGestures);
+            mouseDrag(area, area.width * 0.9, area.height / 2, -area.width * 0.8, 0);
+            compare(view.currentUid, b);
+            status.advancedGestures = true;
+            verify(gestures.advancedGestures);
+            // Leftward (Previous): the card to the right, still maximized.
+            mouseDrag(area, area.width * 0.9, area.height / 2, -area.width * 0.8, 0);
+            tryCompare(view, "currentUid", c, 2000);
+            tryCompare(view, "position", 2, 2000);
+            compare(view.maximizeProgress, 1);
+            // At the last card it stays, nudged back into place.
+            mouseDrag(area, area.width * 0.9, area.height / 2, -area.width * 0.8, 0);
+            compare(view.currentUid, c);
+            verify(view.edgeNudge !== 0);
+            tryCompare(view, "edgeNudge", 0, 2000);
+            // Rightward (Next): back to the left, twice.
+            mouseDrag(area, area.width * 0.1, area.height / 2, area.width * 0.8, 0);
+            // A second swipe during the slide goes on from where it is going.
+            shell.gestureSwitchApp(false);
+            tryCompare(view, "currentUid", a, 2000);
+            tryCompare(view, "position", 0, 2000);
+            // A short swipe is still Back, not a switch.
+            mouseDrag(area, area.width * 0.6, area.height / 2, -area.width * 0.25, 0);
+            compare(view.currentUid, a);
+            // In card view it moves the focus without maximizing.
+            view.minimize();
+            tryCompare(view, "maximizeProgress", 0, 2000);
+            shell.gestureSwitchApp(true);
+            tryCompare(view, "currentUid", b, 2000);
+            compare(view.maximizeProgress, 0);
+            status.advancedGestures = false;
+        }
+
+        // C7: in a stack of more than four, a tap on a card buried at the
+        // far end of the fan scrolls the fan three cards instead of
+        // maximizing it; one near the fan's position maximizes; a tap in
+        // the stack's column on no card does nothing
+        // (CardGroup::shouldMaximizeOrScroll).
+        function test_tapOnALongFan() {
+            var first = windows.launch("org.webosphoenix.email", "");
+            var uids = [first];
+            for (var i = 0; i < 5; ++i)
+                uids.push(windows.openChild(first));
+            // openChild puts each at the front.
+            uids = shell.cardView.groups[0].uids.slice();
+            var view = shell.cardView;
+            // Each child asks to rise (Qt.callLater): let that happen first.
+            wait(50);
+            view.jumpTo(0);
+            verify(!view.preparing);
+            compare(view.groupCount, 1);
+            compare(view.groups[0].uids.length, 6);
+            var gid = view.groups[0].id;
+            // The fan starts at its right end (position n - 3 = 3).
+            // The visible strip of card k: between its left edge and the
+            // next card's.
+            function strip(k) {
+                var a = view.layout.cards[uids[k]], b = view.layout.cards[uids[k + 1]];
+                var half = view.windowWidth * a.scale / 2;
+                return { x: ((a.cx - half) + (b.cx - view.windowWidth * b.scale / 2)) / 2, y: a.cy };
+            }
+            // Card 1 (card 0 is off the screen): too deep, the fan moves.
+            var p = strip(1);
+            verify(p.x > 0);
+            mouseClick(view, p.x, p.y);
+            compare(view.maximizeProgress, 0);
+            // 3 - 3 = 0, clamped to 1.
+            compare(view.fanPositions[gid], 1);
+            // Now the left end is in reach: the back card maximizes.
+            wait(400);
+            p = strip(0);
+            mouseClick(view, p.x, p.y);
+            tryCompare(view, "maximizeProgress", 1, 2000);
+            compare(view.currentUid, uids[0]);
+            view.minimize();
+            tryCompare(view, "maximizeProgress", 0, 2000);
+            // Below the stack's cards, in its column: nothing changes.
+            var col = view.layout.columns[0];
+            mouseClick(view, (col.left + col.right) / 2, view.height - 5);
+            compare(view.position, 0);
+            compare(view.maximizeProgress, 0);
+        }
+
+        // C11: no memory left: the launch is refused and "Sorry, Too Many
+        // Cards" takes the popup alert's place until OK.
+        function test_tooManyCards() {
+            // /proc/meminfo read (Linux): plenty left here.
+            verify(windows.memory.totalMb > 0);
+            verify(windows.memory.availableMb > 0);
+            verify(!windows.memory.low);
+            windows.memory.forceLow = true;
+            var uid = shell.launch("org.webosphoenix.email");
+            compare(uid, "");
+            compare(windows.cards.count, 0);
+            compare(windows.alerts.count, 1);
+            compare(shell.notifications.alertKey, "memoryalert");
+            var alert = findChild(shell, "memoryAlert");
+            verify(alert);
+            tryCompare(alert, "visible", true);
+            compare(findChild(alert, "memoryAlertTitle").text, "Sorry, Too Many Cards");
+            // Once only.
+            shell.launch("org.webosphoenix.calendar");
+            compare(windows.alerts.count, 1);
+            // A call, contacts and texts still open (AppsToAllowInLowMemory).
+            verify(shell.launch("org.webosphoenix.messaging") !== "");
+            compare(windows.alerts.count, 1);
+            // Once the negative space has grown to it.
+            tryCompare(shell.notifications, "negativeSpace", shell.notifications.alertHeight, 2000);
+            mouseClick(findChild(alert, "memoryAlertOk"));
+            compare(windows.alerts.count, 0);
+            windows.memory.forceLow = false;
+            verify(shell.launch("org.webosphoenix.email") !== "");
+        }
+
+        // G8: the reticle where a tap lands, gone after 200 ms; not for a
+        // drag.
+        function test_reticle() {
+            var r = findChild(shell, "reticle");
+            verify(!r.visible);
+            mouseClick(shell, 100, 200);
+            verify(r.visible);
+            fuzzyCompare(r.x + r.width / 2, 100, 1);
+            fuzzyCompare(r.y + r.height / 2, 200, 1);
+            tryCompare(r, "visible", false, 1000);
+            mouseDrag(shell, 100, 200, 0, 80);
+            verify(!r.visible);
         }
 
         // The dock's own show / hide (OverlayWindowManager dock states).
@@ -945,6 +1259,89 @@ Item {
 
         // The Home button (SystemUiController.cpp:527-583): one thing per
         // press; a double press from an app reaches the launcher.
+        // V8: a Bluetooth keyboard's Search key toggles Just Type, its
+        // card-view key (Super) is the swipe up.
+        function test_keyboardSearchAndCardViewKeys() {
+            shell.forceActiveFocus();
+            keyClick(Qt.Key_Search);
+            verify(shell.justTypeOpen);
+            keyClick(Qt.Key_Search);
+            verify(!shell.justTypeOpen);
+            var uid = windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximize(uid);
+            tryVerify(function() { return shell.maximized; }, 2000);
+            keyClick(Qt.Key_Super_L);
+            tryVerify(function() { return !shell.maximized; }, 2000);
+            keyClick(Qt.Key_Meta);
+            verify(shell.launcherOpen);
+            keyClick(Qt.Key_Super_L);
+            verify(!shell.launcherOpen);
+            // Held for a shortcut (Super + another key) it is a modifier.
+            keyPress(Qt.Key_Meta);
+            keyClick(Qt.Key_A, Qt.MetaModifier);
+            keyRelease(Qt.Key_Meta);
+            verify(!shell.launcherOpen);
+            // Not over the lock screen.
+            shell.lock();
+            keyClick(Qt.Key_Search);
+            verify(!shell.justTypeOpen);
+            shell.unlock();
+        }
+
+        // V8: the two shortcut schemes, and the sheet while the modifier
+        // is held.
+        function test_keyboardShortcuts() {
+            shell.forceActiveFocus();
+            compare(shell.keyboardShortcuts, "ipad");
+            var a = windows.launch("org.webosphoenix.email", "");
+            var b = windows.launch("org.webosphoenix.messaging", "");
+            var view = shell.cardView;
+            view.maximize(a);
+            tryVerify(function() { return shell.maximized && view.currentUid === a; }, 2000);
+            keyClick(Qt.Key_Tab, Qt.ControlModifier);
+            tryCompare(view, "currentUid", b, 2000);
+            verify(shell.maximized);
+            keyClick(Qt.Key_Backtab, Qt.ControlModifier | Qt.ShiftModifier);
+            tryCompare(view, "currentUid", a, 2000);
+            keyClick(Qt.Key_H, Qt.ControlModifier);
+            tryVerify(function() { return !shell.maximized; }, 2000);
+            keyClick(Qt.Key_Space, Qt.ControlModifier);
+            verify(shell.justTypeOpen);
+            keyClick(Qt.Key_Space, Qt.ControlModifier);
+            verify(!shell.justTypeOpen);
+            keyClick(Qt.Key_N, Qt.AltModifier);
+            verify(shell.notifications.dashboardOpen);
+            keyClick(Qt.Key_N, Qt.AltModifier);
+            verify(!shell.notifications.dashboardOpen);
+            keyClick(Qt.Key_W, Qt.ControlModifier);
+            tryCompare(windows.cards, "count", 1, 3000);
+            // Desktop style: Alt+Tab; Ctrl+Tab no longer the shell's.
+            status.keyboardShortcuts = "desktop";
+            compare(shell.keyboardShortcuts, "desktop");
+            windows.launch("org.webosphoenix.calendar", "");
+            wait(50);
+            view.jumpTo(0);
+            var first = view.currentUid;
+            keyClick(Qt.Key_Tab, Qt.ControlModifier);
+            wait(400);
+            compare(view.currentUid, first);
+            keyClick(Qt.Key_Tab, Qt.AltModifier);
+            tryVerify(function() { return view.currentUid !== first; }, 2000);
+            // The sheet: Super held a second; gone when it is let go.
+            var sheet = findChild(shell, "shortcutSheet");
+            keyPress(Qt.Key_Meta);
+            wait(300);
+            verify(!sheet.shown);
+            tryCompare(sheet, "shown", true, 2000);
+            keyRelease(Qt.Key_Meta);
+            verify(!sheet.shown);
+            // Super+L locks.
+            keyClick(Qt.Key_L, Qt.MetaModifier);
+            verify(shell.locked);
+            shell.unlock();
+            status.keyboardShortcuts = "ipad";
+        }
+
         function test_homeKey() {
             var notes = shell.notifications;
             windows.launch("org.webosphoenix.email", "");

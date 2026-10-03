@@ -23,8 +23,31 @@ QtObject {
     id: status
 
     property string carrier: "Phoenix"
-    property int batteryPercent: 76
+    property int batteryPercent: 76  // -1: no reading (powerd not answering; the status bar shows battery-error)
     property bool charging: false
+    // What it charges on: "none", "wall" or "pc" (USB), or "inductive", the
+    // Touchstone (powerd's chargerStatus type; phoenix-sim F7, F12,
+    // --touchstone). On a Touchstone, puckId is its serial number
+    // (DockSerialNo), so dock mode remembers which exhibition each one
+    // showed (DockModeWindowManager's m_puckIdToDlpIndex).
+    property string charger: "none"
+    property string puckId: ""
+    readonly property bool onPuck: charger === "inductive"
+
+    // ---- Dock mode (Settings > Exhibition; the runtime's preferences) ----------
+    // Exhibitions on the Touchstone at all; how long on it with the screen
+    // on before one starts (0: when the screen would turn off); the
+    // exhibitions turned on, in the menu's order (after Time); sounds while
+    // one shows ("systemsettings" or "mute"); night mode, its brightness
+    // from nightStart to nightEnd ("HH:MM"); dock mode's own wallpaper.
+    property bool exhibitionEnabled: true
+    property int exhibitionStartAfter: 0
+    property var exhibitionApps: ["org.webosphoenix.photos"]
+    property string dockModeSound: "systemsettings"
+    property bool exhibitionNightMode: false
+    property string exhibitionNightStart: "22:00"
+    property string exhibitionNightEnd: "07:00"
+    property url dockWallpaper: ""
     property int wifiBars: 3          // 0..3 connected, 0 = on but not connected, -1 = off
     property int signalBars: 5        // 0..5, -1 = no modem
     property bool airplaneMode: false
@@ -42,6 +65,9 @@ QtObject {
     // Ctrl+Right). The shell turns the UI to follow (UiRotation).
     property string deviceOrientation: "up"
     property bool muted: false
+    // Unconditional call forwarding is on (Settings > Phone; the runtime's
+    // com.palm.telephony forwardQuery), for the status bar's icon.
+    property bool callForwarding: false
     // System sounds (SystemSounds.qml), as the runtime reports them
     // (Settings > Sounds & Ringtones): the master and stream volumes
     // (0..100), "System Sounds", "Keyboard clicks" and the tones' paths.
@@ -54,7 +80,8 @@ QtObject {
     property bool tapSounds: true
     // Settings > Text Assist: {suggestions, autoCorrect, swipe, spaces2period,
     // forgetWords (when the learned words were forgotten, ms)}.
-    property var textAssist: ({ suggestions: true, autoCorrect: true, swipe: true, spaces2period: true, forgetWords: 0 })
+    property var textAssist: ({ suggestions: true, autoCorrect: true, swipe: true, spaces2period: true, forgetWords: 0,
+                                shortcuts: {}, shortcutsOn: true })
     // Settings > Text Assist > Keyboards: [{layout, language}] turned on,
     // and the one in use (the keyboard's language key picks another).
     property var keyboards: [{ layout: "qwerty", language: "en" }]
@@ -68,12 +95,24 @@ QtObject {
     // (seconds locked before the passcode is asked for; 0 at once).
     property int screenTimeout: 60
     property int lockTimeout: 0
+    // Screen & Lock > Advanced gestures (sysUiEnableNextPrevGestures): a
+    // long swipe across the gesture area switches apps.
+    property bool advancedGestures: false
+    // Settings > Text Assist > Hardware keyboard: "ipad" or "desktop".
+    property string keyboardShortcuts: "ipad"
     // Settings > Screen & Lock "Show notifications when locked"
     // (system preference showAlertsWhenLocked).
     property bool showAlertsWhenLocked: true
     // Settings > Accessibility "Reduce motion" (system preference
     // accessibility.reduceMotion): the shell's animations (Theme.reduceMotion).
     property bool reduceMotion: false
+    // Settings > Accessibility > Keyboard (the runtime's keyboardAccess):
+    // {stickyKeys, slowKeys, bounceKeys (ms, 0 off), customRepeat,
+    // repeatDelay, repeatInterval}.
+    property var keyboardAccess: ({})
+    // A hardware keyboard is attached (phoenix-sim --hardware-keyboard,
+    // Ctrl+Shift+K): the virtual keyboard stays down unless asked for.
+    property bool hardwareKeyboard: typeof simHardwareKeyboard !== "undefined" && simHardwareKeyboard === true
     property real brightness: 0.7     // 0.10 (the floor, Theme.minimumBrightness) .. 1
     // Fixed time for reproducible screenshots; null = live clock.
     property var fixedTime: null
@@ -241,10 +280,13 @@ QtObject {
     // Apply a "systemStatus" report from the web runtime: wifiEnabled,
     // wifiConnected, wifiBars, bluetoothOn, airplaneMode, brightness
     // (0-100), rotationLocked, muted, timeFormat, showAlertsWhenLocked,
-    // screenTimeout, lockTimeout,
+    // screenTimeout, lockTimeout, advancedGestures, keyboardShortcuts,
     // volume, streams, systemSounds, tapSounds, textAssist, keyboards,
     // keyboard, ringtone, alerttone,
-    // notificationtone, reduceMotion, vpnProfiles. Missing keys are left alone.
+    // notificationtone, callForwarding, reduceMotion, keyboardAccess,
+    // vpnProfiles, exhibitionApps, dockModeSound, exhibition {enabled,
+    // startAfter, nightMode, nightStart, nightEnd}, dockWallpaperUrl.
+    // Missing keys are left alone.
     function applyAppStatus(s) {
         applyingAppStatus = true;
         if (s.wifiEnabled !== undefined)
@@ -261,6 +303,8 @@ QtObject {
             rotationLocked = !!s.rotationLocked;
         if (s.muted !== undefined)
             muted = !!s.muted;
+        if (s.callForwarding !== undefined)
+            callForwarding = !!s.callForwarding;
         if (s.timeFormat !== undefined)
             twentyFourHour = s.timeFormat === "HH24";
         if (s.showAlertsWhenLocked !== undefined)
@@ -269,6 +313,10 @@ QtObject {
             screenTimeout = s.screenTimeout;
         if (s.lockTimeout !== undefined)
             lockTimeout = s.lockTimeout;
+        if (s.advancedGestures !== undefined)
+            advancedGestures = !!s.advancedGestures;
+        if (s.keyboardShortcuts !== undefined)
+            keyboardShortcuts = s.keyboardShortcuts === "desktop" ? "desktop" : "ipad";
         if (s.volume !== undefined)
             volume = s.volume;
         if (s.audioScenario !== undefined)
@@ -293,10 +341,25 @@ QtObject {
             notificationtone = s.notificationtone;
         if (s.reduceMotion !== undefined)
             reduceMotion = !!s.reduceMotion;
+        if (s.keyboardAccess !== undefined)
+            keyboardAccess = s.keyboardAccess || ({});
         if (s.vpnProfiles !== undefined) {
             _runtimeVpn = true;
             vpnProfiles = s.vpnProfiles;
         }
+        if (s.exhibitionApps !== undefined && s.exhibitionApps !== null)
+            exhibitionApps = s.exhibitionApps;
+        if (s.dockModeSound !== undefined)
+            dockModeSound = s.dockModeSound === "mute" ? "mute" : "systemsettings";
+        if (s.exhibition !== undefined && s.exhibition !== null) {
+            exhibitionEnabled = s.exhibition.enabled !== false;
+            exhibitionStartAfter = s.exhibition.startAfter > 0 ? s.exhibition.startAfter : 0;
+            exhibitionNightMode = !!s.exhibition.nightMode;
+            exhibitionNightStart = s.exhibition.nightStart || "22:00";
+            exhibitionNightEnd = s.exhibition.nightEnd || "07:00";
+        }
+        if (s.dockWallpaperUrl !== undefined)
+            dockWallpaper = s.dockWallpaperUrl;
         applyingAppStatus = false;
     }
 

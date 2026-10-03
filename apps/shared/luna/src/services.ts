@@ -8,7 +8,7 @@
 import { call, subscribe, type LunaError, type Subscription } from "./bridge";
 import type {
     AudioStream, BluetoothAdapter, BluetoothDevice, ConnectionStatus, DeviceInfo, LockMode, OsInfo, Ringtone,
-    SystemPreferences, SystemSettings, SystemTime, TimeZone, VirtualKeyboardPrefs, WifiNetworkInfo, WifiSecurityType, WifiStatus,
+    SystemPreferences, SystemSettings, SystemStatus, SystemTime, TimeZone, VirtualKeyboardPrefs, WifiNetworkInfo, WifiSecurityType, WifiStatus,
 } from "./types";
 
 type OnError = (e: LunaError) => void;
@@ -241,6 +241,15 @@ export const deviceLock = {
     /** getLockStatus {subscribe}: the lock screen is up (the shell says so when the screen locks and unlocks). */
     watchLocked(cb: (locked: boolean) => void, onError?: OnError): Subscription {
         return subscribe("luna://com.palm.systemmanager/getLockStatus", {}, (r) => cb(!!r.locked), onError);
+    },
+};
+
+// ---- System status: com.palm.systemmanager getSystemStatus ----------------------------
+
+export const systemStatus = {
+    /** getSystemStatus {subscribe}: the keyboard, the orientation, the gesture area. */
+    watch(cb: (s: SystemStatus) => void, onError?: OnError): Subscription {
+        return subscribe("luna://com.palm.systemmanager/getSystemStatus", {}, cb, onError);
     },
 };
 

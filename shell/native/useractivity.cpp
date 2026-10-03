@@ -6,6 +6,8 @@
 #include <QCoreApplication>
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QTouchEvent>
+#include <QLineF>
 #include <QWindow>
 
 UserActivity::UserActivity(QObject *parent)
@@ -43,6 +45,62 @@ void UserActivity::setTapToWake(bool on)
         return;
     m_tapToWake = on;
     emit tapToWakeChanged();
+}
+
+void UserActivity::setTapRadius(qreal r)
+{
+    if (qFuzzyCompare(r, m_tapRadius))
+        return;
+    m_tapRadius = r;
+    emit tapRadiusChanged();
+}
+
+void UserActivity::trackTap(QEvent *event)
+{
+    const auto type = event->type();
+    const bool touch = type == QEvent::TouchBegin || type == QEvent::TouchUpdate || type == QEvent::TouchEnd
+        || type == QEvent::TouchCancel;
+    if (!touch && m_touching)
+        return;
+    QPointF pos;
+    int points = 1;
+    if (touch) {
+        const auto *te = static_cast<QTouchEvent *>(event);
+        points = te->points().size();
+        if (points > 0)
+            pos = te->points().first().position();
+    } else {
+        pos = static_cast<QMouseEvent *>(event)->position();
+    }
+    switch (type) {
+    case QEvent::TouchBegin:
+        m_touching = true;
+        Q_FALLTHROUGH();
+    case QEvent::MouseButtonPress:
+        m_pressed = true;
+        m_tapMoved = points > 1;
+        m_pressPos = pos;
+        break;
+    case QEvent::TouchUpdate:
+    case QEvent::MouseMove:
+        if (m_pressed && (points > 1 || QLineF(pos, m_pressPos).length() > m_tapRadius))
+            m_tapMoved = true;
+        break;
+    case QEvent::TouchEnd:
+    case QEvent::MouseButtonRelease:
+        if (m_pressed && !m_tapMoved && QLineF(pos, m_pressPos).length() <= m_tapRadius)
+            emit tapped(pos);
+        m_pressed = false;
+        if (type == QEvent::TouchEnd)
+            m_touching = false;
+        break;
+    case QEvent::TouchCancel:
+        m_pressed = false;
+        m_touching = false;
+        break;
+    default:
+        break;
+    }
 }
 
 bool UserActivity::eventFilter(QObject *watched, QEvent *event)
@@ -90,6 +148,14 @@ bool UserActivity::eventFilter(QObject *watched, QEvent *event)
         if (m_tapToWake && (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::TouchBegin))
             emit wakeRequested();
         return true;
+    }
+    switch (event->type()) {
+    case QEvent::MouseButtonPress: case QEvent::MouseButtonRelease: case QEvent::MouseMove:
+    case QEvent::TouchBegin: case QEvent::TouchUpdate: case QEvent::TouchEnd: case QEvent::TouchCancel:
+        trackTap(event);
+        break;
+    default:
+        break;
     }
     if (move && m_lastMove.isValid() && m_lastMove.elapsed() < 250)
         return false;

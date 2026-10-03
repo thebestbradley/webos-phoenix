@@ -4,7 +4,7 @@
 #
 # Set up a webOS OSE build with meta-phoenix added.
 #
-#   scripts/setup-build.sh [BUILD_DIR] [MACHINE]
+#   scripts/setup-build.sh [BUILD_DIR] [MACHINE [MACHINE...]]
 #
 # Defaults: ../build-webos-phoenix, qemux86-64. Then:
 #   cd BUILD_DIR && . ./oe-init-build-env && bitbake webos-phoenix-image
@@ -12,12 +12,18 @@
 # webOS OSE builds need Ubuntu (see webosose.org system requirements),
 # ~200 GB of disk and several hours on first build. macOS cannot run the
 # build natively; use a Linux VM or a Linux build server.
+#
+# More than one MACHINE configures them all (the first is the default;
+# MACHINE=... bitbake picks another). MCF_COMMAND=configure only writes the
+# configuration, leaving the layer checkouts as they are (scripts/
+# parse-check.sh fetches them itself, without history).
 
 set -eu
 
 REPO_DIR=$(cd "$(dirname "$0")/.." && pwd)
 BUILD_DIR=${1:-"$REPO_DIR/../build-webos-phoenix"}
 MACHINE=${2:-qemux86-64}
+[ $# -gt 2 ] && shift 2 || set --
 
 # Pinned build-webos commit (webOS OSE master, 2025-03-27).
 BUILD_WEBOS_URL=https://github.com/webosose/build-webos.git
@@ -44,7 +50,7 @@ open(path, "w").write(src[:end + 1] + entry + src[end + 1:])
 PY
 fi
 
-./mcf -p 0 -b 0 "$MACHINE"
+./mcf -p 0 -b 0 --command "${MCF_COMMAND:-update+configure}" "$MACHINE" "$@"
 echo
 echo "Ready. Next:"
 echo "  cd $BUILD_DIR && . ./oe-init-build-env && bitbake webos-phoenix-image"

@@ -150,6 +150,7 @@ jobs:
           node tools/test-backup.cjs --tablet --out app-tests/backup-tablet
           node tools/test-marketplace.cjs --out app-tests/marketplace-phone
           node tools/test-marketplace.cjs --tablet --out app-tests/marketplace-tablet
+          node tools/test-appmanager.cjs
           node tools/test-updates.cjs --out app-tests/updates-phone
           node tools/test-updates.cjs --tablet --out app-tests/updates-tablet
           node tools/test-phone-messaging.cjs --out app-tests/phone-messaging-phone
@@ -164,6 +165,7 @@ jobs:
           node tools/test-files.cjs --tablet --out app-tests/files-tablet
           node tools/test-tasks.cjs --out app-tests/tasks-phone
           node tools/test-tasks.cjs --tablet --out app-tests/tasks-tablet
+          node tools/test-db8-pages.cjs --out app-tests/db8-pages
           node tools/test-alarm.cjs --out app-tests/alarm
           node tools/test-voicememos.cjs --out app-tests/voicememos-phone
           node tools/test-voicememos.cjs --tablet --out app-tests/voicememos-tablet

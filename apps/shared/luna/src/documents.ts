@@ -10,7 +10,7 @@
 //                  {id: appIdByExtension, params: {target: "file:///...",
 //                  mimeType, fileName}} (core-apps com.palm.app.email
 //                  controls/AttachmentsDrawer.js)
-//   The browser    open {target: "/media/internal/downloads/x.pdf"} for a
+//   The browser    open {target: "/media/internal/Downloads/x.pdf"} for a
 //                  finished download (isis-browser BrowserApp.js
 //                  openDownloadedFile); open {target: "http://..."} for a
 //                  link the application manager sends to the handler

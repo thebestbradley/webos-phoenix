@@ -12,12 +12,15 @@
 //          latest iOS sheet mixes icons and a list.
 //   save   A folder of /media/internal (the last one used first), its
 //          subfolders, New Folder, the file's name; Replace asks first.
+//   pick   The pictures Photos has, album by album (Camera Roll first),
+//          as the original file picker showed them; a tap picks one
+//          (org.webosphoenix.filepicker/pick, SF2 for pictures).
 //
 // It talks to the page under it with postMessage: "ready", then the
 // request; "done" with the choice. The back gesture comes as "back".
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fileManager, joinPath, LunaError, parentOf, type FileEntry } from "@phoenix/luna";
+import { fileManager, joinPath, LunaError, mediaIndexer, parentOf, type FileEntry, type ImageItem } from "@phoenix/luna";
 import { useLaunchParams, useMediaUrl } from "@phoenix/luna/react";
 import { Button, Dialog, FileIcon, Spinner, TextField } from "@phoenix/ui";
 
@@ -29,11 +32,13 @@ interface Share { title: string; text: string; url: string; files: SharedFile[] 
 interface Target { appId: string; title: string; icon: string; label: string }
 interface ShareRequest { share: Share; targets: Target[] }
 interface SaveRequest { name: string; title: string; folder: string }
-type Request = ShareRequest | SaveRequest;
+interface PickRequest { title: string; kinds: string[] }
+type Request = ShareRequest | SaveRequest | PickRequest;
 type Result =
     | { action: "app"; appId: string }
     | { action: "photos" | "files" | "copy" | "cancel" }
-    | { action: "save"; folder: string; name: string; overwrite: boolean };
+    | { action: "save"; folder: string; name: string; overwrite: boolean }
+    | { action: "pick"; files: SharedFile[] };
 
 const baseName = (p: string) => p.replace(/^.*\//, "");
 const isPicture = (f: SharedFile) => /^image\//.test(f.mimeType) || /\.(png|jpe?g|gif|webp|bmp)$/i.test(f.path);
@@ -57,7 +62,7 @@ async function copyText(text: string): Promise<boolean> {
 }
 
 export function App() {
-    const params = useLaunchParams<{ kind?: "share" | "save"; id?: string }>();
+    const params = useLaunchParams<{ kind?: "share" | "save" | "pick"; id?: string }>();
     const [request, setRequest] = useState<Request | null>(null);
     const [leaving, setLeaving] = useState(false);
     const backHandler = useRef<() => void>(() => {});
@@ -101,6 +106,9 @@ export function App() {
             )}
             {request && params.kind === "save" && "folder" in request && (
                 <SavePicker request={request} finish={finish} backHandler={backHandler} />
+            )}
+            {request && params.kind === "pick" && "kinds" in request && (
+                <PicturePicker request={request} finish={finish} backHandler={backHandler} />
             )}
         </div>
     );
@@ -258,6 +266,66 @@ function SavePicker({ request, finish, backHandler }: SheetProps<SaveRequest>) {
                 <Button variant="negative" onClick={() => { setReplace(false); void save(true); }} data-testid="replace-confirm">Replace</Button>
                 <Button onClick={() => setReplace(false)}>Cancel</Button>
             </Dialog>
+        </div>
+    );
+}
+
+// ---- Choose a Picture ----------------------------------------------------------------
+
+const CAMERA_ROLL = MEDIA + "/DCIM/100PHNX";
+
+function albumOf(path: string): string {
+    const dir = parentOf(path);
+    if (dir === CAMERA_ROLL) return "Camera Roll";
+    if (dir === MEDIA + "/samples/photos") return "Sample Photos";
+    if (dir === MEDIA + "/screencaptures") return "Screen Captures";
+    const last = baseName(dir);
+    return last ? last.charAt(0).toUpperCase() + last.slice(1) : "Pictures";
+}
+
+function Thumb({ item, onPick }: { item: ImageItem; onPick: () => void }) {
+    const url = useMediaUrl(item.file_path);
+    return (
+        <button type="button" className="ss-pick-thumb" data-testid="pick-picture" title={baseName(item.file_path)} onClick={onPick}
+                style={url ? { backgroundImage: `url("${url}")` } : undefined} aria-label={item.title ?? baseName(item.file_path)} />
+    );
+}
+
+function PicturePicker({ request, finish, backHandler }: SheetProps<PickRequest>) {
+    const [items, setItems] = useState<ImageItem[] | null>(null);
+    backHandler.current = () => finish({ action: "cancel" });
+    useEffect(() => {
+        let gone = false;
+        mediaIndexer.images().then((list) => { if (!gone) setItems(list); }, () => { if (!gone) setItems([]); });
+        return () => { gone = true; };
+    }, []);
+    // Albums, Camera Roll first, then by name; newest pictures first in each.
+    const albums = new Map<string, ImageItem[]>();
+    [...(items ?? [])].sort((a, b) => Date.parse(b.last_modified_date ?? "") - Date.parse(a.last_modified_date ?? "") || 0)
+        .forEach((it) => {
+            const a = albumOf(it.file_path);
+            albums.set(a, [...(albums.get(a) ?? []), it]);
+        });
+    const order = [...albums.keys()].sort((a, b) => (a === "Camera Roll" ? -1 : b === "Camera Roll" ? 1 : a.localeCompare(b)));
+    return (
+        <div className="ss-sheet ss-pick" role="dialog" aria-label={request.title} data-testid="picture-picker">
+            <div className="ss-title ss-pick-title">{request.title}</div>
+            <div className="ss-pick-albums">
+                {items === null ? <div className="ss-loading"><Spinner /></div>
+                    : items.length === 0 ? <div className="ss-empty">No pictures yet</div>
+                    : order.map((a) => (
+                        <div key={a} className="ss-pick-album">
+                            <div className="ss-pick-album-name">{a}</div>
+                            <div className="ss-pick-grid">
+                                {albums.get(a)!.map((it) => (
+                                    <Thumb key={it.file_path} item={it}
+                                           onPick={() => finish({ action: "pick", files: [{ path: it.file_path, mimeType: it.mime ?? "image/jpeg" }] })} />
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+            </div>
+            <Button onClick={() => finish({ action: "cancel" })} data-testid="pick-cancel">Cancel</Button>
         </div>
     );
 }

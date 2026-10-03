@@ -1,4 +1,20 @@
 {
+ "apps/agenda/public/icon-128x128.png": {
+  "svg": "35b1ac834dc618216bb22dc3f380c51538d58104c2fc98949815e3e1083bcdab",
+  "png": "c9fd83b38c4e681c75d4a46fb27fc9378e60835dac8d7505adbb008ba4b0dab9"
+ },
+ "apps/agenda/public/icon-256x256.png": {
+  "svg": "3d794aa864c3be77c94fce5e62c8b19729b7491413dbb417004cf43a6ea88ee3",
+  "png": "70ba9c6efba9b55750fdb408094f5630d76d502a4de2b79e88bd488f62206ae7"
+ },
+ "apps/agenda/public/icon-512x512.png": {
+  "svg": "2dde35bb2c3eab372da8d60d1a1422c4a3829c20cd9e5a65d53571fb2a8f52e9",
+  "png": "dc3e626a0134fca6a993a5eb61f5d2e2d34668b4ab4baba6aa22cd024154f212"
+ },
+ "apps/agenda/public/icon.png": {
+  "svg": "0622f348e1d66ce04659ee0003538fa07c32e0e40657379fc40c99f7fec3793e",
+  "png": "1d6eb2d405b0cf44d062d0c67710964f2fa3e42b59566a5b12e55f9d119e9fa2"
+ },
  "apps/authenticator/public/icon-128x128.png": {
   "svg": "62eb08c7e32bf1add46e98ded8b49b0173655edb9f0ce532dbac5795462ac1f2",
   "png": "7c1cbce5bbf25b63184af965d11289f5204ff5d46860ca91e5d783a36242c814"
@@ -367,6 +383,22 @@
   "svg": "a63d7fec09d3135840c120ee8fe8375c661e16cdf8c8809980218b94bf484a10",
   "png": "2258dbef741b2c0a91be5306e0a51388c8520681561d28c3bb5900ecebe235b7"
  },
+ "apps/printmanager/public/icon-128x128.png": {
+  "svg": "96fdefb5c35f9d863ab703162e5fc71cfe3d0bd9b3cc899569e2a9f24afc00e7",
+  "png": "c00184869dfb46a903c61962926f3e2cb2f56b5b2eb7fd524e77585f263f08ca"
+ },
+ "apps/printmanager/public/icon-256x256.png": {
+  "svg": "93f43bdbf626d2100af2dbb32c6a08561b7c81685d9080e4433b5c82e5f66688",
+  "png": "90c9c83aa79c635f4a08488bec8b3b7ab5c83ad869e1f43add6cb272a93f3675"
+ },
+ "apps/printmanager/public/icon-512x512.png": {
+  "svg": "9eb87f8816ec7384a99cd810f266ad0a23d1d552441f0208bf3eec936a0207dc",
+  "png": "acb6afb300dfb6bec97821d1a2a9bd633694c1478b027071fb892ddd071c822a"
+ },
+ "apps/printmanager/public/icon.png": {
+  "svg": "4b8e8122cce90bac63603f014394ba56208b733e0a552bbcd604ffc0bfb564bc",
+  "png": "2ad0902c22b9ee2e87a7cfdf5f08c7d57e2f916f8a7590f7d1398512f252de46"
+ },
  "apps/scanner/public/icon-128x128.png": {
   "svg": "3b0602175cc4fd765bb303374ecfae8b2df15306b5372cfe08d6980d107b7a8c",
   "png": "8f5e29bc5be96acf79afe491677f4542f4ca385b22ba0c5d012fd79f2bdc60ce"
@@ -479,6 +511,22 @@
   "svg": "5ba7e547052c2fbd9e987eea9564e289dc68f9d00b3e8818f2fc41548e915808",
   "png": "ca85c18deef61cc88cc3c8fa227a66b9a5dda75e165f29245d2d3b45b541069f"
  },
+ "apps/settings/public/icons/certificates-128x128.png": {
+  "svg": "257b98e3997f47f7bfc8615e0f912b29cc5acbe0764216f383ac9b96f23513eb",
+  "png": "d2a582d041e3cb4059dc931ab4b32ee38294eb526f1909d06fc9351331828d4e"
+ },
+ "apps/settings/public/icons/certificates-256x256.png": {
+  "svg": "41f61eee61f98b04c31e11deddb1fea80fcd478832bba95d8340522e17c5c646",
+  "png": "e0b233d3d5f957a2fae5bb7ca065b474f9769be90074b7dc5037c0490faf6df2"
+ },
+ "apps/settings/public/icons/certificates-512x512.png": {
+  "svg": "793b4b5e703a7550390133e6a22eadbbc32618682c3c090aaa6bbb63beb63113",
+  "png": "41027edc3f5e26a24e3e8cda292e90fb6e355801eaf4c9e7975f3c2efe7aba62"
+ },
+ "apps/settings/public/icons/certificates.png": {
+  "svg": "76873ca542a5ce5fc94a5321a3a705a122f4897c79946f022c7795f83382523b",
+  "png": "094c0a34620a7729837a18cb3ef908295f676aada6f95442627b8a4394d0589a"
+ },
  "apps/settings/public/icons/datetime-128x128.png": {
   "svg": "34cfa77fbecc76fdf51061b0da963c90c08b4e0ba9782b60aa00f9e3b3c37152",
   "png": "cdddfb0b385c85b72c9cc8efed8ed45bf0d70cee6f2dfc6dc4480c5268a25870"
@@ -543,6 +591,38 @@
   "svg": "dc76204b66c358f687ef2d50cdb3115a1f2049234996a5aafa1fb1c1291629a3",
   "png": "4eb90e4f9201d9bb206d979d9d68453b1ea1e000ebadcdb2b77bcc7cd8f65a39"
  },
+ "apps/settings/public/icons/exhibition-128x128.png": {
+  "svg": "50c4a6b67f9cf395188d179847303b709f1f570556b910af873edbe993d36939",
+  "png": "922383711f1322cc2d2b6de066b2c9fa13dac206d32ee6fca310195beb6981e3"
+ },
+ "apps/settings/public/icons/exhibition-256x256.png": {
+  "svg": "a66c330194f52a84d67cca377f37bf09411b7a5cea3cc965449a84bc9dc23390",
+  "png": "edcfa9b36bdda546f403236f6d1dea4c8e1018ba1a7701c9d44310bfa1e44b5b"
+ },
+ "apps/settings/public/icons/exhibition-512x512.png": {
+  "svg": "808184b9bdb8b6013382f1d985c1403fa263fd2a16123b2ffad2526169aa6c24",
+  "png": "bff9fddd5546a42773c541db01015f75d897753f583adf2dbe8a5d9a66717ba8"
+ },
+ "apps/settings/public/icons/exhibition.png": {
+  "svg": "2e51edddb9fca240ad3d8bc43e5a034f61e02e175f22be6ede281c675a53dca8",
+  "png": "2e498b06fd5fdaf5b1ce2b2b70a037c46e09576b2b4e71c3592be7dd8c11424f"
+ },
+ "apps/settings/public/icons/justtype-128x128.png": {
+  "svg": "97cb8dd61b45daa489dffe9178e208f96680a797750b5dbfc67ddad77d6ec7f3",
+  "png": "f1e50247ec3f6ed621f444d703d71df85e502f2597e7bdda99406367e46fbb61"
+ },
+ "apps/settings/public/icons/justtype-256x256.png": {
+  "svg": "562a62c3989860cdf46dd35c8ba585a5831dc73c09e9160201d50c68ebc0f3f0",
+  "png": "f1e737f4c3fe10634772dc30cc948ed33839a43827ed76206e4ae01e5f9a524b"
+ },
+ "apps/settings/public/icons/justtype-512x512.png": {
+  "svg": "76c7ad3b8111adc3f562e2433d442ea7e5cebcc3dc2871eb958347a7fcdfbf79",
+  "png": "dbbb3d1569f70c2db9f220febd48c197e7edbb5bbc7ff29dbe19d81fa3edbfbf"
+ },
+ "apps/settings/public/icons/justtype.png": {
+  "svg": "330c940d02e43efa1ce8ade8a793782b75fdb6fdf05c3b94e0daf587a40967b3",
+  "png": "ac5aefebd03087440e01ccaed8b14dcc9c4f0eb39bbc02fa40416182580c293c"
+ },
  "apps/settings/public/icons/language-128x128.png": {
   "svg": "47a14effb9efcf6ed2436c6a8800e7b7eff05ed17e35055f54fbed87e97258e6",
   "png": "c5f0fa4b6e89ed470fca97fb41504b1d6ce909429636f51899d15fc3d37bd4e6"
@@ -574,6 +654,22 @@
  "apps/settings/public/icons/location.png": {
   "svg": "8c9e6f0933f93916337422bc204a7ef89057379fc1bcfd1e554053505b6a099c",
   "png": "b66fbb99b26290e25da4e65962bb08f9a15211570a41ad3f036fa1f30b0a8add"
+ },
+ "apps/settings/public/icons/phoneprefs-128x128.png": {
+  "svg": "97d0000f963204550196db5946ad764e121f094ca81f99a867bbb6541795f466",
+  "png": "d787814cc2eb39825603b97c70605dd4b1c3bb8f64e5e2a1335d256a0b549949"
+ },
+ "apps/settings/public/icons/phoneprefs-256x256.png": {
+  "svg": "3aef1ca121931f169485e65b1b82746a401a7921944a2b311c2c77ee0e08e457",
+  "png": "0bb8cdddb1c2bb08505a2a87ad54be4fc4c8c0cb13862b0bf0d929add13c9368"
+ },
+ "apps/settings/public/icons/phoneprefs-512x512.png": {
+  "svg": "980f0cd1ef443ab98c77ec7e7c3e4593b0fa81badbb752267283bb9594de8f09",
+  "png": "dc5109d7a00f0e84d1df2c859e0eea3224d458f6d99cc549b15855ab3fe47281"
+ },
+ "apps/settings/public/icons/phoneprefs.png": {
+  "svg": "38c4c32f7b991d77d5800f57115a3ed6c556cdf27c5db7059efc1cde97cb2b24",
+  "png": "400a5878ca07093d1ba6c88437dd53b95ff084f3038c2afef9c3cedd3d2d192d"
  },
  "apps/settings/public/icons/screen-128x128.png": {
   "svg": "39166211484b985dbfe7e43ce6a684916f22c24c25f5f0d415ba5175204c8732",

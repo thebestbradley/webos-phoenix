@@ -9,7 +9,10 @@
   `framework/lib/palmstyle/images/`
 - `enyo/wifi/*.png` from `framework/lib/wifi/images/` (Palm's Wi-Fi list UI)
 - `enyo/telephony/*.png` from `framework/lib/telephony/dialpad/images/` (the
-  webOS dial pad: key grid, dial button, voicemail key, backspace, popup)
+  webOS dial pad: key grid, dial button, voicemail key, backspace, popup).
+  `dial-button-frame*.png` and `dial-button-glyph*.png` are cut from
+  `dial-button*.png` (its rounded ends with one plain column, and the
+  handset), so the button can widen without stretching the handset
 
 `contacts/` is copied unmodified from `openwebos/loadable-frameworks` at commit
 `c1b13a97828ca3f76f6e5742a7f25551d4b33efe` (`contacts/images/`, Apache-2.0):

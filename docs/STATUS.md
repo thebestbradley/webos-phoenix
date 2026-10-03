@@ -40,8 +40,8 @@ notice ([HARDWARE.md](HARDWARE.md#install-it-like-a-linux-distro)). Also
 in 1.0: dictation, predictive text and swipe typing on the keyboard; a
 Siri-like voice assistant without AI models. Done in the simulator: the
 Edit menu and the long-press Cut / Copy / Paste popup (E1), cursor control
-(V4), emoji (V6), and Text Assist: word suggestions, auto-correct, swipe
-typing and dictation (V2, V3) ([GAPS.md](spec/GAPS.md)); Backup and Restore
+(V4), emoji (V6), and Text Assist: word suggestions, auto-correct, the
+user's shortcuts, swipe typing and dictation (V2, V3) ([GAPS.md](spec/GAPS.md)); Backup and Restore
 ([APP-RUNTIME.md](APP-RUNTIME.md#backup)); the Marketplace with web apps,
 App Museum II and Preware as sources and its PHP catalog service
 ([APP-RUNTIME.md](APP-RUNTIME.md#marketplace)); System Updates on RAUC
@@ -102,9 +102,7 @@ The whole plan, milestone by milestone, with the decisions taken so far:
   screen reader, magnification, health,
   cell broadcast, eSIM, printing, screen recording, fingerprint, notes
   sync, a now-playing dashboard, and the "not done" lists of each new app.
-- **Browser**: fix Share > Add to Launcher (the runtime's `addLaunchPoint`
-  is a stub, and the dialog has no icon because the old browser's native
-  snapshot plugin is missing); add "Install Web App" for sites with a web
+- **Browser**: add "Install Web App" for sites with a web
   app manifest (a coloured dot by the app menu, the item under
   Preferences; install as described in [APP-STORE.md](APP-STORE.md)); plan a
   Chromium-based Phoenix browser to replace the Isis browser in the 2.0 UI.

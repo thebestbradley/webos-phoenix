@@ -13,6 +13,7 @@
 #pragma once
 
 #include <QElapsedTimer>
+#include <QPointF>
 #include <QObject>
 #include <QVariantList>
 #include <QtQml/qqmlregistration.h>
@@ -29,6 +30,9 @@ class UserActivity : public QObject
     // going nowhere: phoenix-sim's window, whose Power button (F3) a Mac
     // keyboard keeps for itself. A device's touch panel is off: false.
     Q_PROPERTY(bool tapToWake READ tapToWake WRITE setTapToWake NOTIFY tapToWakeChanged)
+    // A press let go within this many pixels of where it began is a tap
+    // (tapped(), for the reticle: WindowServer::gestureEvent's QTapGesture).
+    Q_PROPERTY(qreal tapRadius READ tapRadius WRITE setTapRadius NOTIFY tapRadiusChanged)
 
 public:
     explicit UserActivity(QObject *parent = nullptr);
@@ -40,6 +44,8 @@ public:
     void setPassKeys(const QVariantList &keys);
     bool tapToWake() const { return m_tapToWake; }
     void setTapToWake(bool on);
+    qreal tapRadius() const { return m_tapRadius; }
+    void setTapRadius(qreal r);
 
 signals:
     // At most every 250 ms while a finger moves; at once for a press or key.
@@ -48,13 +54,26 @@ signals:
     void passKeysChanged();
     void wakeRequested();
     void tapToWakeChanged();
+    void tapRadiusChanged();
+    // A tap at this point of the window (its own coordinates), while awake.
+    void tapped(QPointF pos);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
+    void trackTap(QEvent *event);
+
+private:
     bool m_asleep = false;
     QVariantList m_passKeys;
     bool m_tapToWake = false;
+    qreal m_tapRadius = 25;
     QElapsedTimer m_lastMove;
+    // The press a tap would begin with; a touch's suppresses the mouse
+    // events synthesized from it.
+    bool m_pressed = false;
+    bool m_touching = false;
+    QPointF m_pressPos;
+    bool m_tapMoved = false;
 };

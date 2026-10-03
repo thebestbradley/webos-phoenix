@@ -59,6 +59,65 @@ declaring its buttons and features, and for 2.0, DisplayPort Alt Mode, HDCP
 and a TEE for Widevine ([CONVERGENCE.md](CONVERGENCE.md#3-hardware-it-depends-on)).
 The device table's install counts are the evidence that there is demand.
 
+## Drivers: found and installed, not baked in
+
+Owner's question (3 October 2026): can Phoenix find and install its own
+drivers, as Linux distributions do, instead of a build per device?
+
+**On PCs, yes, as a distro does.** x86-64 and arm64 UEFI machines describe
+their hardware (PCI, USB, ACPI), the generic kernel binds its drivers by
+the devices' IDs (modaliases), and `linux-firmware` supplies their
+firmware. One image covers them. What a distro adds, and Phoenix will
+too, is a **driver manager** for the optional pieces the kernel does not
+ship: it reads the machine's modaliases, matches them against a table
+(as `ubuntu-drivers` and Manjaro's `mhwd` do), and offers proprietary GPU
+or Wi-Fi drivers and missing firmware from the Phoenix package feed.
+
+**On ARM phones and tablets, not completely, but not a build per device
+either.** A phone cannot tell the kernel what is in it: its parts sit on
+buses that do not enumerate, so the kernel needs a description of each
+device (its device tree) and that device's kernel options. A generic image
+cannot discover this. What Phoenix does instead is the Halium / Ubuntu
+Touch split:
+
+| Piece | Per device? | Where it comes from |
+| --- | --- | --- |
+| Phoenix itself: shell, services, apps, the web runtime (the root file system) | **No**: one per CPU architecture | The normal build; updated by RAUC |
+| An **adaptation package**: kernel, device tree, firmware, `device.json`, the device's audio (UCM) and sensor configuration | **Yes**, small | Built per device in CI from postmarketOS / LuneOS device packages; installed and updated on its own, like a driver package |
+| On Halium devices, the drivers themselves | No | **Already on the phone**: the device's own Android vendor partition, used through libhybris. This is the nearest thing to drivers that install themselves |
+
+The **installer** identifies the device over USB (`fastboot getvar product`,
+the Android build fingerprint) and fetches the generic image plus that
+device's adaptation package. Supporting a new phone means adding one
+package, not a new build of Phoenix.
+
+**On the device: a hardware check that heals.** A `org.webosphoenix.hardware`
+service runs at first boot and after each update:
+
+1. Probe each part through its backend (modem through oFono, sensors
+   through iio-sensor-proxy or sensorfw, the camera, vibration, the LED,
+   the torch, suspend and resume).
+2. Turn on the backends that answer and record the rest in `device.json`
+   terms, so the shell and Settings hide what the device lacks instead of
+   showing switches that do nothing.
+3. Fetch missing firmware or an updated adaptation package from the feed
+   when one exists (the driver manager above, on phones).
+4. With the user's consent, send the result to the public device table
+   (Settings > Device Info > Report hardware), so every install improves
+   the list of what works where.
+
+**Reverse engineering, for devices without open drivers.** Allowed for
+interoperability (US: DMCA §1201(f); EU: Software Directive article 6),
+and how most mainline phone support came about (postmarketOS, Freedreno,
+Panfrost, Asahi Linux's Apple GPU driver). The usual methods are reading
+the device tree and partition layout from the Android boot image and
+`/proc/device-tree`, tracing how the vendor driver drives the hardware
+(ftrace, mmiotrace) and writing an open driver to match. Firmware the
+vendor does not license for redistribution is copied from the user's own
+device at install time, never shipped. This is slow work that needs the
+device in hand; Phoenix leaves it to (and contributes to) postmarketOS and
+the kernel, and reaches the rest through Halium.
+
 ## Device tiers
 
 ### Support levels
@@ -377,17 +436,43 @@ Verizon Pixels) cannot be unlocked and are out.
   wrynose. Pin scarthgap branches where they exist, and carry backports in a
   `meta-phoenix-bsp` layer where they do not.
 - **Build host:** x86-64 only, as today (see [BUILDING-MAC.md](BUILDING-MAC.md)).
+- **Parse check, no build host needed:** `scripts/parse-check.sh [MACHINE...]`
+  (default `qemux86-64 raspberrypi4-64`) sets up `build-webos` at the pinned
+  commit, clones its layers without history (about 200 MB), adds `meta-phoenix`, and for each machine runs `bitbake -p`
+  (parse every recipe) and `bitbake -n webos-phoenix-image` (a dry run that
+  resolves the whole task graph, including every `RDEPENDS`, and runs
+  nothing; the `torchd` and `whisper-cpp` stubs are resolved too). Nothing
+  is fetched (`BB_NO_NETWORK`) or built. Each machine adds about 300 MB
+  and about 12 minutes on 4 cores. The build directory is
+  `${TMPDIR:-/tmp}/webos-phoenix-parse` unless `PHOENIX_PARSE_DIR` says
+  otherwise; delete it afterwards. Host packages beyond a stock Ubuntu
+  24.04: `gawk diffstat chrpath cpio zstd lz4` and the `en_US.UTF-8`
+  locale. bitbake will not run as root; in a root-only container use
+  `unshare --user --map-user=1000 --map-group=1000 scripts/parse-check.sh`.
 
 ### Device CI matrix
 
 | Job | Machines | When |
 | --- | --- | --- |
-| Parse and resolve (`bitbake -p`, `--check`) | All Reference and Supported machines | Every PR |
+| Parse and resolve (`bitbake -p`, `bitbake -n`): **exists**, `.github/workflows/parse.yml` | `qemux86-64`, `raspberrypi4-64` today; every Reference and Supported machine as its BSP layers are added | Every PR |
 | Full image build (shared sstate) | `qemux86-64`, `raspberrypi4-64` | Every merge to main |
 | Boot test in QEMU (reach the card view, run app smoke tests) | `qemux86-64` | Every merge |
 | Full image build | Phone machines (Pixel 3a mainline and Halium, OnePlus 6, PinePhone Pro) | Nightly |
 | Hardware-in-the-loop boot test | Reference devices on a USB relay / fastboot rig, as postmarketOS is building | Nightly, once we have the rig (M3) |
 | Release images, signed RAUC bundles | All Reference and Supported | Each release |
+
+The parse job (`scripts/parse-check.sh`, see Build above) catches recipes
+that do not parse, missing `DEPENDS`/`RDEPENDS` providers, wrong
+`bbappend` targets and layer-series mismatches. It cannot catch what only
+shows when sources arrive: a wrong `LIC_FILES_CHKSUM` md5, a `SRC_URI` or
+`SRCREV` that does not exist upstream, a missing `file://` file (bitbake
+only notes its absence while parsing) or a compile error. Those wait for the
+full build. PinePhone Pro, the one Supported phone, is not in it yet: its
+BSP (`meta-pine64-luneos`, scarthgap branch) needs `meta-rockchip` and
+`meta-arm`, and its machine pulls `sensorfw`, `qtsensors-sensorfw-plugin`,
+`eg25-manager`, `linux-firmware-pine64` and `initramfs-uboot-image` from
+LuneOS's own layers (`meta-webos-ports`), which are built for the `luneos`
+distro rather than OSE's `webos`.
 
 ## Community and adoption
 

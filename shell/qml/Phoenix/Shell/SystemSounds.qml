@@ -38,6 +38,9 @@ QtObject {
     property var last: null
     // Vibrations asked for (soundClass "vibrate"); there is no motor here.
     property int vibrations: 0
+    // Nothing but the ringtone and alarms play (dock mode with its sounds muted:
+    // the dockModeSoundPref preference).
+    property bool quiet: false
 
     property bool _bootFinished: false
     property bool _batteryArmed: false
@@ -78,7 +81,9 @@ QtObject {
             last = { kind: kind, vibrate: true };
             return "";
         }
-        var vol = Policy.volume(d.stream, _prefs());
+        // Dock mode's sound preference "mute": an exhibition stays quiet but
+        // for a call ringing and an alarm.
+        var vol = quiet && d.stream !== "ringtones" && d.stream !== "alarm" ? 0 : Policy.volume(d.stream, _prefs());
         last = { kind: kind, file: d.file, stream: d.stream, loop: d.loop, duration: d.duration, volume: vol };
         if (vol <= 0 || !source || typeof source.playSound !== "function")
             return "";

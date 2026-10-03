@@ -128,7 +128,10 @@ export function App() {
     }, [stop]);
 
     useEffect(() => {
-        void start(cameraIndex);
+        // Not while hidden: the shell starts Camera without a card at boot
+        // (luna.conf [LaunchAtBoot]) and keeps it ready; the viewfinder
+        // starts when its card shows.
+        if (!document.hidden) void start(cameraIndex);
         const onVis = () => { if (document.hidden) stop(); else void start(cameraIndex); };
         document.addEventListener("visibilitychange", onVis);
         return () => { document.removeEventListener("visibilitychange", onVis); stop(); };

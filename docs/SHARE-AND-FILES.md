@@ -10,8 +10,12 @@ Files, in a folder the user picks).
 > rows when there are many) that scrolls sideways, the way the latest iOS
 > sheet mixes icons and a list; Save to Files opens the last folder used.
 > **Built in the simulator:** SF3 (save picker), SF4 (share sheet) and SF5
-> for Screenshot; Messaging takes text and links. To do: SF1, SF2 and the
-> other apps of SF5.
+> for Screenshot; Messaging takes text, links and pictures. SF2 for
+> pictures: `org.webosphoenix.filepicker/pick {kinds: ["image"], title?}`
+> shows Photos' pictures album by album (Camera Roll first) and answers
+> `{files: [{fullPath, mimeType, name}]}` or `{canceled: true}`
+> (`filePicker.pick()`; Messaging's attach button). To do: SF1, SF2 for
+> other kinds, several files and a crop size, and the other apps of SF5.
 
 ## 1. What the original had
 

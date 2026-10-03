@@ -180,7 +180,61 @@ export interface SystemPreferences {
     screenTimeout?: number;
     /** Phoenix: seconds locked before the PIN or password is asked for (0: always). */
     lockTimeout?: number;
+    /** Screen & Lock > Advanced gestures: a long swipe across the gesture area switches apps. */
+    sysUiEnableNextPrevGestures?: boolean;
+    /** Phoenix: the shell's hardware keyboard shortcuts, iPad-style or desktop-style. */
+    keyboardShortcuts?: "ipad" | "desktop";
+    /** Text Assist's checks and the user's shortcuts (see TextInputPrefs). */
+    x_palm_textinput?: TextInputPrefs;
+    /** Dock mode's own wallpaper (luna-sysmgr Preferences "dockwallpaper"). */
+    dockwallpaper?: { wallpaperName: string; wallpaperFile: string };
+    /** Sounds in dock mode: "systemsettings" (as Sounds & Ringtones) or, Phoenix, "mute". */
+    dockModeSoundPref?: "systemsettings" | "mute";
+    /** Phoenix: Settings > Exhibition. */
+    exhibition?: ExhibitionPrefs;
     [key: string]: unknown;
+}
+
+/** One of the user's Text Assist shortcuts: typed `shortcut`, the space bar puts in `text`. */
+export interface TextAssistShortcut {
+    shortcut: string;
+    text: string;
+}
+
+/**
+ * x_palm_textinput (LunaSysMgr conf/defaultPreferences.txt): "autoCorrect" or
+ * "off" for each check. Phoenix keeps the user's shortcuts in it too.
+ */
+export interface TextInputPrefs {
+    spellChecking?: "autoCorrect" | "off";
+    grammarChecking?: "autoCorrect" | "off";
+    shortcutChecking?: "autoCorrect" | "off";
+    shortcuts?: TextAssistShortcut[];
+}
+
+/** Settings > Exhibition (Phoenix): when dock mode starts and its night mode. */
+export interface ExhibitionPrefs {
+    /** Exhibitions on the Touchstone at all. */
+    enabled: boolean;
+    /** Seconds on the Touchstone with the screen on before one starts; 0: when the screen would turn off. */
+    startAfter: number;
+    /** The night brightness from nightStart to nightEnd ("HH:MM"). */
+    nightMode: boolean;
+    nightStart: string;
+    nightEnd: string;
+}
+
+/** listDockModeLaunchPoints: an app that can be an exhibition (appinfo.json exhibitionMode). */
+export interface DockModeLaunchPoint {
+    id: string;
+    appId: string;
+    launchPointId: string;
+    title: string;
+    icon: string;
+    /** Its row in dock mode's menu (exhibitionModeOptions.title). */
+    exhibitionModeTitle: string;
+    /** Turned on: in dock mode's menu. */
+    enabled: boolean;
 }
 
 /** ringtone/listRingtones: one ringtone; system ones cannot be deleted. */
@@ -255,6 +309,14 @@ export interface VolumeStatus {
 
 export type LockMode = "none" | "pin" | "password";
 
+/** getSystemStatus (SystemService.cpp:3860-3970); gestureArea is Phoenix's. */
+export interface SystemStatus {
+    ime?: { visible: boolean };
+    orientation?: { ui: string; device: string };
+    /** The device has a gesture area (the strip below the screen). */
+    gestureArea?: boolean;
+}
+
 // ---- The map -----------------------------------------------------------------------
 
 const WIFI = "luna://com.webos.service.wifi";
@@ -316,6 +378,7 @@ export interface LunaApi {
     // device lock (legacy)
     "luna://com.palm.systemmanager/getDeviceLockMode": { params: Empty; result: { lockMode: LockMode } };
     "luna://com.palm.systemmanager/getLockStatus": { params: Sub; result: { locked: boolean } };
+    "luna://com.palm.systemmanager/getSystemStatus": { params: Sub; result: SystemStatus };
     "luna://com.palm.systemmanager/setDevicePasscode": { params: { lockMode: LockMode; passCode?: string; oldPasscode?: string }; result: Empty };
     "luna://com.palm.systemmanager/matchDevicePasscode": { params: { passCode: string }; result: { succeeded: boolean } };
     // Developer Mode (OSE)
