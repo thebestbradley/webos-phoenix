@@ -1707,6 +1707,8 @@ FocusScope {
                 textSuggestions: _assistPrefs.suggestions !== false
                 autoCorrect: _assistPrefs.autoCorrect !== false
                 swipeTyping: _assistPrefs.swipe !== false
+                userShortcuts: _assistPrefs.shortcuts || ({})
+                shortcutsOn: _assistPrefs.shortcutsOn !== false
                 spaces2period: _assistPrefs.spaces2period !== false
                 forgetWordsAt: _assistPrefs.forgetWords || 0
                 // Settings > Text Assist > Keyboards, and the one in use: the

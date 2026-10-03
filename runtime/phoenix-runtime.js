@@ -951,6 +951,11 @@
         // Settings > Text Assist > Hardware keyboard: the shell's shortcut
         // scheme, "ipad" or "desktop" (Phoenix).
         keyboardShortcuts: "ipad",
+        // Text Assist (conf/defaultPreferences.txt x_palm_textinput): the
+        // original's checks, and Phoenix's list of the user's shortcuts
+        // (Settings > Text Assist > Shortcuts), [{shortcut, text}], which
+        // the keyboard's space bar puts in while shortcutChecking is not "off".
+        x_palm_textinput: { spellChecking: "autoCorrect", grammarChecking: "autoCorrect", shortcutChecking: "autoCorrect", shortcuts: [] },
         firstUse: false
     };
 
@@ -2965,9 +2970,17 @@
         }
         function textAssist(p) {
             var kb = keyboardPrefs(p);
+            var ti = p.x_palm_textinput && typeof p.x_palm_textinput === "object" ? p.x_palm_textinput : {};
+            // The user's shortcuts, typed (lower case) -> text.
+            var shortcuts = {};
+            (Array.isArray(ti.shortcuts) ? ti.shortcuts : []).forEach(function (s) {
+                if (s && typeof s.shortcut === "string" && s.shortcut && typeof s.text === "string" && s.text)
+                    shortcuts[s.shortcut.toLowerCase()] = s.text;
+            });
             return { suggestions: kb.WordSuggestions !== false, autoCorrect: kb.AutoCorrect !== false,
                      swipe: kb.SwipeTyping !== false, spaces2period: kb.spaces2period !== false,
-                     forgetWords: typeof kb.ForgetWords === "number" ? kb.ForgetWords : 0 };
+                     forgetWords: typeof kb.ForgetWords === "number" ? kb.ForgetWords : 0,
+                     shortcuts: shortcuts, shortcutsOn: ti.shortcutChecking !== "off" };
         }
 
         function changed() {
@@ -3509,7 +3522,7 @@
         sys["/setPreferences"] = function (p, reply, ctx) {
             baseSetPreferences(p, reply, ctx);
             if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "screenTimeout", "lockTimeout", "sysUiEnableNextPrevGestures", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
-                 "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "accessibility"].some(function (k) { return k in p; })) {
+                 "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "x_palm_textinput", "accessibility"].some(function (k) { return k in p; })) {
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
                 changed();
             }

@@ -340,6 +340,30 @@ Item {
                 windows.dismissNotification(0);
         }
 
+        // Settings > Sounds' alert and notification tones, as the runtime
+        // sends them (systemStatus alerttone / notificationtone): what sounds
+        // for alerts and alarms, and for notifications, that name no sound
+        // of their own (or one that does not exist).
+        function test_chosenTonesPlay() {
+            sys.applyAppStatus({ alerttone: "/usr/palm/sounds/phone.wav", notificationtone: "/usr/palm/sounds/ringtone.mp3" });
+            windows._hostMessage("com.palm.app.email", "", "sound",
+                                 { soundClass: "alerts", soundFile: "/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3", duration: 3000 });
+            compare(windows.lastSound.path, "/usr/palm/sounds/phone.wav");
+            windows._hostMessage("org.webosphoenix.messaging", "", "notification",
+                                 { appId: "org.webosphoenix.messaging", title: "Sam", body: "Lunch?", soundClass: "notifications" });
+            compare(windows.lastSound.path, "/usr/palm/sounds/ringtone.mp3");
+            compare(windows.lastSound.duration, 5000);
+            while (windows.notifications.count > 0)
+                windows.dismissNotification(0);
+            var n = windows.soundCount;
+            windows.alerts.append({ key: "alarm", appId: "com.palm.app.clock", name: "alarm", height: 150,
+                                    sound: "", soundClass: "alarm" });
+            tryCompare(windows, "soundCount", n + 1, 1000);
+            compare(windows.lastSound.path, "/usr/palm/sounds/phone.wav");
+            windows.alerts.clear();
+            sys.applyAppStatus({ alerttone: "/usr/palm/sounds/alert.wav", notificationtone: "/usr/palm/sounds/notification.wav" });
+        }
+
         function test_mutedBanner() {
             sys.muted = true;
             var n = windows.soundCount;

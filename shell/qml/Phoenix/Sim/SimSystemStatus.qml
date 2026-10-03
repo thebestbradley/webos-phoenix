@@ -54,7 +54,8 @@ QtObject {
     property bool tapSounds: true
     // Settings > Text Assist: {suggestions, autoCorrect, swipe, spaces2period,
     // forgetWords (when the learned words were forgotten, ms)}.
-    property var textAssist: ({ suggestions: true, autoCorrect: true, swipe: true, spaces2period: true, forgetWords: 0 })
+    property var textAssist: ({ suggestions: true, autoCorrect: true, swipe: true, spaces2period: true, forgetWords: 0,
+                                shortcuts: {}, shortcutsOn: true })
     // Settings > Text Assist > Keyboards: [{layout, language}] turned on,
     // and the one in use (the keyboard's language key picks another).
     property var keyboards: [{ layout: "qwerty", language: "en" }]

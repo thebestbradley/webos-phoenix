@@ -245,6 +245,18 @@ async function main() {
         await page.locator("[role='option']", { hasText: /^\s*Phone\s*$/ }).click();
         await page.waitForFunction(() => /Phone/.test(document.querySelector("[data-testid='ringtone']")?.textContent || ""));
         check(last().ringtone === "/usr/palm/sounds/phone.wav", "the new ringtone reaches the shell");
+        // The alert and notification tones: Open webOS's by default, any
+        // ringtone too.
+        check(/Alert/.test(await page.textContent("[data-testid='alerttone']"))
+              && /Notification/.test(await page.textContent("[data-testid='notificationtone']")), "alert.wav and notification.wav by default");
+        await page.click("[data-testid='notificationtone']");
+        await page.locator("[role='option']", { hasText: /^\s*Ringtone\s*$/ }).click();
+        await page.waitForFunction(() => /Ringtone/.test(document.querySelector("[data-testid='notificationtone']")?.textContent || ""));
+        check(last().notificationtone === "/usr/palm/sounds/ringtone.mp3", "the new notification tone reaches the shell");
+        await page.click("[data-testid='alerttone']");
+        await page.locator("[role='option']", { hasText: /^\s*Notification\s*$/ }).click();
+        await page.waitForFunction(() => /Notification/.test(document.querySelector("[data-testid='alerttone']")?.textContent || ""));
+        check(last().alerttone === "/usr/palm/sounds/notification.wav", "the new alert tone reaches the shell");
         await page.click("[data-testid='keyboard-clicks']");
         await page.waitForSelector("[data-testid='keyboard-clicks'][aria-checked='false']");
         check(last().tapSounds === false, "Keyboard clicks off reaches the shell");
@@ -289,6 +301,19 @@ async function main() {
         await page.click("role=option[name='Desktop style (Alt, Super)']");
         await page.waitForTimeout(200);
         check(last().keyboardShortcuts === "desktop", `desktop-style shortcuts reach the shell (${last().keyboardShortcuts})`);
+        // Shortcuts: one added reaches the keyboard; a bad one is refused.
+        await page.click("[data-testid='ta-shortcut-add']");
+        await page.fill("[data-testid='ta-shortcut-field']", "on my");
+        await page.fill("[data-testid='ta-shortcut-text']", "x");
+        await page.click("[data-testid='ta-shortcut-save']");
+        check(/letters only/.test(await page.textContent("[data-testid='ta-shortcut-error']")), "a shortcut with a space is refused");
+        await page.fill("[data-testid='ta-shortcut-field']", "omw");
+        await page.fill("[data-testid='ta-shortcut-text']", "On my way");
+        await shot("textassist-shortcut");
+        await page.click("[data-testid='ta-shortcut-save']");
+        await page.waitForSelector("[data-testid='ta-shortcut-omw']");
+        check(last().textAssist.shortcuts && last().textAssist.shortcuts.omw === "On my way" && last().textAssist.shortcutsOn === true,
+              `a new shortcut reaches the keyboard (${JSON.stringify(last().textAssist.shortcuts)})`);
         await shot("textassist");
 
         // ---- Device Info: the phone, and the legacy reset options ----------------------
