@@ -4,7 +4,7 @@ There are two things you can build:
 
 | What | How | Time |
 | --- | --- | --- |
-| The Phoenix UI simulator | Natively on macOS, see the README | A minute |
+| The Phoenix UI simulator | Natively on macOS, see [GETTING-STARTED.md](GETTING-STARTED.md) | Minutes |
 | A full webOS Phoenix OS image | In a Linux container, this page | Hours the first time |
 
 This page is for the second one. It uses Apple's

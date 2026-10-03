@@ -219,11 +219,16 @@ First fetch the original Open webOS apps and frameworks (git submodules):
 git submodule update --init
 ```
 
+Step by step, with troubleshooting and the test tools:
+[docs/GETTING-STARTED.md](docs/GETTING-STARTED.md). `scripts/mac-setup.sh`
+and `scripts/linux-setup.sh` install everything and build it.
+
 **macOS**
 
 ```sh
-brew install qt cmake node
-cmake -S shell -B build -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
+brew install qt cmake ninja node@22
+export PATH="$(brew --prefix)/opt/node@22/bin:$PATH"
+cmake -S shell -B build -G Ninja -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
 cmake --build build
 ./build/phoenix-sim            # Pre (320x480)
 ./build/phoenix-sim --size 480x800 --scale 1.5 --scene cards   # Pre 3
@@ -385,6 +390,8 @@ Apple's `container` tool; see [docs/BUILDING-MAC.md](docs/BUILDING-MAC.md). See
 
 ## Documentation
 
+- [Getting started](docs/GETTING-STARTED.md): install on a Mac or Ubuntu, run, test, build images for devices, and set up Claude Code
+- [Building an OS image on a Mac](docs/BUILDING-MAC.md)
 - [Architecture](docs/ARCHITECTURE.md): how Phoenix sits on top of webOS OSE
 - [Roadmap](docs/ROADMAP.md): milestones from simulator to phones
 - [Status](docs/STATUS.md): where the project stands, open decisions and next work
