@@ -289,7 +289,9 @@
             keyboardType: "QWERTY",
             wifiAvailable: true,
             bluetoothAvailable: true,
-            coreNaviButton: false
+            coreNaviButton: false,
+            // Exhibitions on the Touchstone (DeviceInfo.cpp:315).
+            dockModeEnabled: true
         }),
         isActivated: function () { return activated; },
         get isMinimal() { return false; },
@@ -926,6 +928,21 @@
         timeZone: { ZoneID: PalmSystem.TZ, City: "", Country: "" },
         useNetworkTime: true,
         wallpaper: { wallpaperName: "", wallpaperFile: "" },
+        // Dock mode's own wallpaper (Preferences.cpp "dockwallpaper"), behind
+        // the exhibitions; none: dock mode is black, the Time exhibition on
+        // its clock_bg.png.
+        dockwallpaper: { wallpaperName: "", wallpaperFile: "" },
+        // Sounds in dock mode (conf/defaultPreferences.txt): "systemsettings"
+        // follows Sounds & Ringtones; "mute" (Phoenix) keeps notifications
+        // and alerts quiet while an exhibition shows (calls still ring).
+        dockModeSoundPref: "systemsettings",
+        // Settings > Exhibition (Phoenix): exhibitions on the Touchstone at
+        // all; startAfter, seconds on the charger with the screen on before
+        // the exhibition starts (0: when the screen would turn off, as
+        // DisplayOnPuck waited); night mode, the screen at its night
+        // brightness (Settings.cpp:184 DockModeNightBrightness) from
+        // nightStart to nightEnd ("HH:MM").
+        exhibition: { enabled: true, startAfter: 0, nightMode: false, nightStart: "22:00", nightEnd: "07:00" },
         // The tones LunaSysMgr fell back on (conf/defaultPreferences.txt; the
         // Pre's own Pre.mp3 ringtone was not open-sourced, so the ringtone is
         // Open webOS's ringtone.mp3, as luna-sysservice's examples add it).
@@ -1100,7 +1117,12 @@
         "com.palm.app.backup": { id: "org.webosphoenix.settings", params: { page: "backup" } },
         // System Updates (luna-systemui opens it from its update alerts).
         "com.palm.app.updates": { id: "org.webosphoenix.settings", params: { page: "updates" } },
-        "com.palm.app.textassist": { id: "org.webosphoenix.settings", params: { page: "textassist" } }
+        "com.palm.app.textassist": { id: "org.webosphoenix.settings", params: { page: "textassist" } },
+        // Photos & Videos, the default exhibition (conf/default-exhibition-apps.json),
+        // the Agenda exhibition, and Exhibition preferences, a Settings page now.
+        "com.palm.app.photos": "org.webosphoenix.photos",
+        "com.palm.app.agendaview": "org.webosphoenix.agenda",
+        "com.palm.app.exhibitionpreferences": { id: "org.webosphoenix.settings", params: { page: "exhibition" } }
     };
     function appId(id) {
         var a = APP_ALIASES[id];
@@ -1113,6 +1135,42 @@
         return out;
     }
     runtime.appAliases = APP_ALIASES;
+
+    // Exhibition (dock mode) apps: the ones that can be (appinfo.json
+    // "exhibitionMode" / "dockMode", from the app list) and the ones the user
+    // turned on, in the order dock mode's menu lists them after Time
+    // (DockModePositionManager's exhibitionApps; default Photos, as
+    // conf/default-exhibition-apps.json). At most dockModeMaxApps
+    // (Settings.cpp:183). The shell hears the list in systemStatus
+    // {exhibitionApps}.
+    var DOCK_MODE_MAX_APPS = 3;
+    var DEFAULT_EXHIBITION_APPS = ["org.webosphoenix.photos"];
+    var dockModeWatchers = [];
+    function exhibitionApps() {
+        var list = store.get("exhibitionApps", null);
+        return Array.isArray(list) ? list : DEFAULT_EXHIBITION_APPS.slice();
+    }
+    function setExhibitionApps(list) {
+        store.set("exhibitionApps", list);
+        dockModeWatchers = dockModeWatchers.filter(function (w) { return w() !== false; });
+        if (runtime.hostStatus) host.postToHost("systemStatus", runtime.hostStatus());
+    }
+    function dockModeLaunchPoints() {
+        var on = exhibitionApps();
+        return launchPoints().filter(function (lp) {
+            return lp.exhibitionMode === true && /_default$/.test(lp.launchPointId);
+        }).map(function (lp) {
+            var r = {}, k;
+            for (k in lp) r[k] = lp[k];
+            r.appId = lp.id;
+            r.exhibitionModeTitle = lp.exhibitionModeTitle || lp.title;
+            r.enabled = on.indexOf(lp.id) >= 0;
+            return r;
+        });
+    }
+    // Those turned on, in order (the shell shows the ones it has as
+    // exhibitions: an app removed since drops out there).
+    runtime.exhibitionApps = exhibitionApps;
 
     register(["com.palm.applicationManager", "com.webos.applicationManager"], {
         "/launch": function (p, reply) {
@@ -1161,6 +1219,47 @@
                 return /_default$/.test(a.launchPointId) && (a.id === p.appId || a.id === p.id);
             })[0];
             reply(app ? ok({ appInfo: app }) : fail(-1, "app not found"));
+        },
+        // ---- Exhibition (dock mode) apps (ApplicationManagerService.cpp:2486-2985) ----
+        // Every app whose appinfo.json says "exhibitionMode" (or "dockMode")
+        // true, each with exhibitionModeTitle and whether the user turned it
+        // on ("enabled"); the built-in Time exhibition is the shell's own and
+        // always there, so it is not listed.
+        "/listDockModeLaunchPoints": function (p, reply, ctx) {
+            var send = function () { reply(ok({ launchPoints: dockModeLaunchPoints(), maxApps: DOCK_MODE_MAX_APPS })); };
+            send();
+            // Phoenix: {subscribe: true} hears every change of the list.
+            if (p.subscribe) dockModeWatchers.push(function () {
+                if (ctx.cancelled()) return false;
+                send();
+                return true;
+            });
+        },
+        // {appId}: shown in dock mode's menu from now on, after the others.
+        "/addDockModeLaunchPoint": function (p, reply) {
+            var id = appId(String(p.appId || "")), list = exhibitionApps();
+            if (!dockModeLaunchPoints().some(function (lp) { return lp.id === id; }))
+                return reply(fail(-1, "Not an exhibition app: " + id));
+            if (list.indexOf(id) < 0 && list.length >= DOCK_MODE_MAX_APPS)
+                return reply(fail(-2, "At most " + DOCK_MODE_MAX_APPS + " exhibition apps can be on"));
+            setExhibitionApps(list.filter(function (a) { return a !== id; }).concat([id]));
+            reply(ok());
+        },
+        "/removeDockModeLaunchPoint": function (p, reply) {
+            var id = appId(String(p.appId || ""));
+            setExhibitionApps(exhibitionApps().filter(function (a) { return a !== id; }));
+            reply(ok());
+        },
+        // Phoenix: {appIds}: the exhibitions that are on, in the menu's order
+        // (Settings > Exhibition reorders them).
+        "/setDockModeLaunchPoints": function (p, reply) {
+            var ids = (Array.isArray(p.appIds) ? p.appIds : []).map(function (a) { return appId(String(a)); });
+            var known = dockModeLaunchPoints().map(function (lp) { return lp.id; });
+            var bad = ids.filter(function (a) { return known.indexOf(a) < 0; });
+            if (bad.length) return reply(fail(-1, "Not an exhibition app: " + bad[0]));
+            if (ids.length > DOCK_MODE_MAX_APPS) return reply(fail(-2, "At most " + DOCK_MODE_MAX_APPS + " exhibition apps can be on"));
+            setExhibitionApps(ids.filter(function (a, i) { return ids.indexOf(a) === i; }));
+            reply(ok());
         },
         "/addLaunchPoint": function (p, reply) { reply(ok({ launchPointId: "lp" + Date.now() })); },
         "/getHandlerForMimeType": function (p, reply) { reply(fail(-1, "no handler")); },
@@ -1538,17 +1637,21 @@
         "*": function (p, reply) { reply(ok()); }
     });
 
-    // charger: "none", "wall" (a wall charger on the USB port) or "pc"; as
-    // on the Pre, both charge over USB (luna-systemui PowerdService.js).
+    // charger: "none", "wall" (a wall charger on the USB port), "pc", or
+    // "inductive", the Touchstone (puckId: its serial number). The first two
+    // charge over USB, as on the Pre (luna-systemui PowerdService.js); on the
+    // Touchstone powerd said DockConnected with DockPower and DockSerialNo
+    // (DisplayManager::usbDockCallback, :967-1060).
     function powerState() { return store.get("power", { percent: 76, charger: "none" }); }
     function batteryPayload(st) {
         return { percent: st.percent, percent_ui: st.percent, temperature_C: 28,
                  current_mA: st.charger !== "none" ? 800 : -250, capacity_mAh: 1150, voltage_mV: 3900 };
     }
     function chargerPayload(st) {
-        var on = st.charger !== "none";
-        return { Charging: on, Connected: on, USBConnected: on, USBName: on ? st.charger : "",
-                 DockConnected: false, DockPower: false, type: st.charger };
+        var on = st.charger !== "none", dock = st.charger === "inductive";
+        return { Charging: on, Connected: on, USBConnected: on && !dock, USBName: on && !dock ? st.charger : "",
+                 DockConnected: dock, DockPower: dock, DockSerialNo: dock ? (st.puckId || "NULL") : "",
+                 type: st.charger };
     }
     // {percent, charger}: change the battery and tell the listeners.
     runtime.setPower = function (changes) {
@@ -2902,6 +3005,13 @@
                 // Settings > Accessibility: the shell's animations.
                 reduceMotion: !!(p.accessibility && p.accessibility.reduceMotion),
                 wallpaperFile: (p.wallpaper && p.wallpaper.wallpaperFile) || "",
+                // Dock mode (Settings > Exhibition): its wallpaper, the
+                // exhibitions that are on (after the built-in Time), its
+                // sounds and when it starts; night mode.
+                dockWallpaperFile: (p.dockwallpaper && p.dockwallpaper.wallpaperFile) || "",
+                exhibitionApps: runtime.exhibitionApps ? runtime.exhibitionApps() : [],
+                dockModeSound: p.dockModeSoundPref === "mute" ? "mute" : "systemsettings",
+                exhibition: exhibitionPrefs(p),
                 // The system menu's VPN drawer: each profile's name, its state
                 // (disconnected, connecting, connected) and whether connecting
                 // asks for a user name and password (then the drawer opens
@@ -2912,6 +3022,15 @@
                              needsCredentials: vpnNeedsCredentials(c) };
                 })
             };
+        }
+
+        // Settings > Exhibition, with the defaults filled in and the times
+        // checked ("HH:MM").
+        function exhibitionPrefs(p) {
+            var e = p.exhibition && typeof p.exhibition === "object" ? p.exhibition : {};
+            var time = function (v, d) { return /^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(v) ? v : d; };
+            return { enabled: e.enabled !== false, startAfter: typeof e.startAfter === "number" && e.startAfter > 0 ? e.startAfter : 0,
+                     nightMode: !!e.nightMode, nightStart: time(e.nightStart, "22:00"), nightEnd: time(e.nightEnd, "07:00") };
         }
 
         // The keyboard's "Keyboard clicks": x_palm_virtualkeyboard_prefs
@@ -2985,7 +3104,7 @@
         // Another window changed the shared state.
         try {
             global.addEventListener("storage", function (e) {
-                if (e.key === "phoenix:" + KEY || e.key === "phoenix:prefs" || e.key === "phoenix:deviceLocked") changed();
+                if (e.key === "phoenix:" + KEY || e.key === "phoenix:prefs" || e.key === "phoenix:deviceLocked" || e.key === "phoenix:dockMode") changed();
             });
         } catch (e) { /* ignore */ }
 
@@ -3509,7 +3628,8 @@
         sys["/setPreferences"] = function (p, reply, ctx) {
             baseSetPreferences(p, reply, ctx);
             if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "screenTimeout", "lockTimeout", "sysUiEnableNextPrevGestures", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
-                 "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "accessibility"].some(function (k) { return k in p; })) {
+                 "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "accessibility",
+                 "dockwallpaper", "dockModeSoundPref", "exhibition"].some(function (k) { return k in p; })) {
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
                 changed();
             }
@@ -3585,6 +3705,12 @@
             // app answers a ringing call when the user unlocks.
             "/getLockStatus": function (p, reply, ctx) {
                 watch(p, reply, ctx, function () { return ok({ locked: !!store.get("deviceLocked", false) }); });
+            },
+            // Dock mode (an exhibition on the Touchstone) is up, as the shell
+            // last said (SystemService.cpp:1913-1990 getDockModeStatus
+            // {enabled}); subscribe to hear it start and end.
+            "/getDockModeStatus": function (p, reply, ctx) {
+                watch(p, reply, ctx, function () { return ok({ enabled: !!store.get("dockMode", false) }); });
             },
             // How the UI and the device are turned, as the shell last said
             // ({ orientation: { ui, device } }); subscribe to follow them.
@@ -4149,6 +4275,11 @@
             // The shell's lock screen (com.palm.systemmanager getLockStatus).
             if ("deviceLocked" in st && !!st.deviceLocked !== !!store.get("deviceLocked", false)) {
                 store.set("deviceLocked", !!st.deviceLocked);
+                changed();
+            }
+            // Dock mode (getDockModeStatus).
+            if ("dockMode" in st && !!st.dockMode !== !!store.get("dockMode", false)) {
+                store.set("dockMode", !!st.dockMode);
                 changed();
             }
             // How the UI and the device are turned (getSystemStatus).
@@ -5183,27 +5314,36 @@
                 var c = store.get(WALLPAPER_KEY, null);
                 if (c && c.file === payload.wallpaperFile) payload.wallpaperUrl = c.url;
             }
+            // Dock mode's wallpaper (the dockwallpaper preference) the same way.
+            if (type === "systemStatus" && payload && isMediaPath(payload.dockWallpaperFile)) {
+                var dc = store.get(DOCK_WALLPAPER_KEY, null);
+                if (dc && dc.file === payload.dockWallpaperFile) payload.dockWallpaperUrl = dc.url;
+            }
             return basePost.call(host, type, payload);
         };
 
+        var DOCK_WALLPAPER_KEY = "media:dockwallpaper";
         var sysSvc = runtime.services["com.webos.service.systemservice"];
         if (sysSvc) {
             var baseSetPrefs = sysSvc["/setPreferences"];
             sysSvc["/setPreferences"] = function (p, reply, ctx) {
                 var file = p.wallpaper && p.wallpaper.wallpaperFile;
-                if (!isMediaPath(file)) return baseSetPrefs(p, reply, ctx);
+                var dockFile = p.dockwallpaper && p.dockwallpaper.wallpaperFile;
+                if (!isMediaPath(file) && !isMediaPath(dockFile)) return baseSetPrefs(p, reply, ctx);
                 // Read the picture first so the systemStatus that setPreferences
                 // sends already carries it.
-                wallpaperData(file).then(function (url) {
-                    if (url) store.set(WALLPAPER_KEY, { file: file, url: url });
+                Promise.all([isMediaPath(file) ? wallpaperData(file) : null,
+                             isMediaPath(dockFile) ? wallpaperData(dockFile) : null]).then(function (urls) {
+                    if (urls[0]) store.set(WALLPAPER_KEY, { file: file, url: urls[0] });
+                    if (urls[1]) store.set(DOCK_WALLPAPER_KEY, { file: dockFile, url: urls[1] });
                     baseSetPrefs(p, reply, ctx);
                 });
             };
         }
 
         // A media wallpaper chosen earlier: tell the shell again, now with its picture.
-        var wp = prefs().wallpaper;
-        if (wp && isMediaPath(wp.wallpaperFile) && runtime.hostStatus)
+        var wp = prefs().wallpaper, dwp = prefs().dockwallpaper;
+        if (((wp && isMediaPath(wp.wallpaperFile)) || (dwp && isMediaPath(dwp.wallpaperFile))) && runtime.hostStatus)
             host.postToHost("systemStatus", runtime.hostStatus());
     })();
 

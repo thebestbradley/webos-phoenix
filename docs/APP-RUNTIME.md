@@ -1661,6 +1661,58 @@ over), `apps/screenshot/src/editor.test.ts`, `tools/test-screenshot.cjs`;
 `phoenix-sim --scene capture` / `capturepreview` (with `--delay`).
 Plan and later features: [SCREENSHOTS.md](SCREENSHOTS.md).
 
+## Exhibitions (dock mode)
+
+On a Touchstone (the inductive charger) the shell goes into dock mode,
+"Exhibition", as luna-sysmgr did (GAPS R5; the rules are in `Shell.qml`,
+the surface in `DockMode.qml`): one exhibition fills the screen under the
+status bar, and its title in the status bar drops the menu of exhibitions
+(Time, built into the shell, then the apps the user turned on in
+Settings > Exhibition, at most three; Photos at first). Any web app can be
+one:
+
+```json
+"exhibitionMode": true,
+"exhibitionModeOptions": { "title": "Weather" }
+```
+
+(`dockMode` / `dockModeOptions` are the webOS 2.x names and work too;
+without a title the app's own is used; luna-sysmgr
+`ApplicationDescription.cpp:369-398`.) Dock mode opens the app's
+exhibition in a window of its own, not a card, with the launch params
+`{"dockMode": true, "windowType": "dockModeWindow"}`
+(`DockModeWindowManager::launchApp`): `PalmSystem.launchParams`, so the app
+shows its exhibition instead of its usual first view
+(`isExhibitionLaunch(params)` in `@phoenix/luna`; Photos shows a slideshow,
+`apps/photos/src/Exhibition.tsx`, the Agenda the coming days,
+`apps/agenda`). The window keeps running while dock mode is up; it hears
+when it comes to the front of dock mode or leaves it as a card does, the
+`phoenixcardactivation` event `{active}` (the shell's
+`source.activateWindow`), and should pause its timers while not active.
+Leaving dock mode closes the windows of the exhibitions not in front
+(`dockModeCloseOnExit`); the one in front stays for next time. Tapping
+something that opens an app (a link, a notification) ends dock mode.
+
+| What | Service and methods | Source |
+| --- | --- | --- |
+| Dock mode is up | `com.palm.systemmanager` `getDockModeStatus {subscribe}` -> `{enabled}` (`dockMode.watch()`) | luna-sysmgr `SystemService.cpp:1913-1990`; the shell says it (`applyHostStatus {dockMode}`) |
+| Exhibition apps | `com.palm.applicationManager` `listDockModeLaunchPoints` -> `{launchPoints: [{id, appId, title, icon, exhibitionMode, exhibitionModeTitle, enabled}], maxApps}`; Phoenix: `{subscribe: true}` hears each change (`dockMode.watchLaunchPoints()`) | `ApplicationManagerService.cpp:2486-2575` |
+| Turn on / off | `addDockModeLaunchPoint {appId}` (last in the menu; fails past `maxApps` 3, errorCode -2, or for an app that is no exhibition, -1), `removeDockModeLaunchPoint {appId}`; Phoenix: `setDockModeLaunchPoints {appIds}`, the ones on in the menu's order | `:2820-2985`; `DockModePositionManager` |
+| Preferences | `com.webos.service.systemservice` `getPreferences` / `setPreferences`: `dockwallpaper {wallpaperName, wallpaperFile}` and `dockModeSoundPref` (`"systemsettings"`, or Phoenix's `"mute"`) as luna-sysmgr kept them; Phoenix's `exhibition {enabled, startAfter (s; 0: when the screen would turn off), nightMode, nightStart, nightEnd ("HH:MM")}` | `conf/defaultPreferences.txt`, `Preferences.cpp:560-568` |
+| The Touchstone | powerd's `USBDockStatus` signal and `chargerStatusQuery`: `{Charging, DockConnected, DockPower, DockSerialNo, USBConnected: false, type: "inductive"}` | `DisplayManager.cpp:967-1060` |
+
+The old ids name the new apps: `com.palm.app.photos` is Phoenix Photos,
+`com.palm.app.agendaview` the Agenda, and `com.palm.app.exhibitionpreferences`
+opens Settings > Exhibition. The shell hears the list and the preferences in
+`systemStatus` (`exhibitionApps`, `exhibition`, `dockModeSound`,
+`dockWallpaperFile`). Tests: `shell/tests/tst_dockmode.qml`,
+`apps/shared/luna/src/exhibition.test.ts`,
+`apps/settings/src/pages/Exhibition.test.tsx`, `apps/photos/src/slideshow.test.ts`,
+`apps/agenda/src/agenda.test.ts`, `node tools/test-exhibition.cjs`. In
+phoenix-sim F12 sets the device on a Touchstone or lifts it off,
+Shift+F12 moves it onto another one, and `--touchstone` starts on one, in
+dock mode.
+
 ## Backup
 
 Legacy webOS backed up to the Palm Profile servers every day, through a
