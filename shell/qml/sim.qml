@@ -24,6 +24,8 @@
 //   simTurn        an orientation to turn the device to after a second (--turn)
 //   simBootSounds  play the boot and shutdown sounds (not with --quiet,
 //                  --screenshot or the offscreen platform)
+//   simTouchstone  start on a Touchstone, in dock mode (--touchstone; F12
+//                  sets the device on one or lifts it off)
 
 import QtQuick
 import Phoenix.Native
@@ -85,7 +87,9 @@ Item {
     Rectangle {
         anchors.fill: parent
         color: "black"
-        opacity: shell.display.state === "off" ? 1 : shell.display.state === "dim" ? 0.9 : 0
+        // Dock mode's night mode: the night brightness, 1 of 100
+        // (DockModeNightBrightness), darker still.
+        opacity: shell.display.state === "off" ? 1 : shell.display.state === "dim" ? 0.9 : shell.display.night ? 0.95 : 0
         visible: opacity > 0
         Behavior on opacity { enabled: shell.display.state !== "off"; NumberAnimation { duration: 300 } }
         // The simulator says what a dark device would not.
@@ -157,6 +161,10 @@ Item {
             status.applyAppStatus(s);
             if (s.wallpaperUrl !== undefined)
                 shell.wallpaper = s.wallpaperUrl;
+            // The exhibitions that are on, kept for the next start, as
+            // LunaSysMgr read them at boot (user-exhibition-apps.json).
+            if (s.exhibitionApps && typeof simSettings !== "undefined")
+                simSettings.setValue("dockmode/exhibitionApps", JSON.stringify(s.exhibitionApps));
         }
     }
     Connections {
@@ -177,6 +185,8 @@ Item {
         function onLockedChanged() { windows.pushSystemStatus({ deviceLocked: shell.locked }); }
         // com.palm.systemmanager getBootStatus {firstUse}.
         function onFirstUseChanged() { windows.pushSystemStatus({ firstUse: shell.firstUse }); }
+        // com.palm.systemmanager getDockModeStatus {enabled}.
+        function onDockModeChanged() { windows.pushSystemStatus({ dockMode: shell.dockMode }); }
         // The keyboard is up (com.palm.systemmanager getSystemStatus ime.visible).
         function onKeyboardOpenChanged() { windows.pushSystemStatus({ ime: { visible: shell.keyboardOpen } }); }
     }
@@ -208,31 +218,58 @@ Item {
     // F6: the battery runs low (5% and under: luna-systemui's Low Battery
     // alert, battery_low.mp3). F7: plug a wall charger in or out ("Charging
     // Battery", charging.mp3). F8: charged to full (battery_full.mp3).
-    property string charger: "none"
+    // F12: set the device on a Touchstone (the inductive charger; dock mode,
+    // GAPS R5) or lift it off; Shift+F12: onto another Touchstone (each
+    // remembers its exhibition). --touchstone starts on one.
+    readonly property string charger: status.charger
+    readonly property var touchstones: ["TS-0001", "TS-0002"]
     function power(changes) {
+        // On the Touchstone powerd names it (DockSerialNo).
+        if (changes.charger !== undefined)
+            changes.puckId = changes.charger === "inductive" ? (changes.puckId || touchstones[0]) : "";
         windows.simulatePower(changes);
         if (changes.percent !== undefined)
             status.batteryPercent = changes.percent;
-        if (changes.charger !== undefined)
+        if (changes.charger !== undefined) {
+            status.puckId = changes.puckId;
+            status.charger = changes.charger;
             status.charging = changes.charger !== "none";
+        }
     }
     Shortcut {
         sequence: "F6"
         context: Qt.ApplicationShortcut
-        onActivated: { root.charger = "none"; root.power({ percent: 4, charger: "none" }); }
+        onActivated: root.power({ percent: 4, charger: "none" })
     }
     Shortcut {
         sequence: "F7"
         context: Qt.ApplicationShortcut
         onActivated: {
-            root.charger = root.charger === "none" ? "wall" : "none";
-            root.power({ charger: root.charger, percent: root.charger === "none" ? 60 : 61 });
+            var c = root.charger === "wall" ? "none" : "wall";
+            root.power({ charger: c, percent: c === "none" ? 60 : 61 });
         }
     }
     Shortcut {
         sequence: "F8"
         context: Qt.ApplicationShortcut
-        onActivated: { root.charger = "wall"; root.power({ charger: "wall", percent: 100 }); }
+        onActivated: root.power({ charger: root.charger === "none" ? "wall" : root.charger, percent: 100, puckId: status.puckId })
+    }
+    Shortcut {
+        sequence: "F12"
+        context: Qt.ApplicationShortcut
+        onActivated: root.power(root.charger === "inductive" ? { charger: "none", percent: 60 }
+                                                             : { charger: "inductive", percent: 61, puckId: root.touchstones[0] })
+    }
+    Shortcut {
+        sequence: "Shift+F12"
+        context: Qt.ApplicationShortcut
+        onActivated: {
+            // Lifted off one and set on the other.
+            var next = status.puckId === root.touchstones[1] ? root.touchstones[0] : root.touchstones[1];
+            if (root.charger === "inductive")
+                root.power({ charger: "none", percent: 60 });
+            root.power({ charger: "inductive", percent: 61, puckId: next });
+        }
     }
 
     // Closing the window turns the device off: the screen goes dark and
@@ -304,6 +341,16 @@ Item {
         }
     }
 
+    // Which exhibition each Touchstone showed survives restarts too
+    // (DockModePositionManager's knownPucks).
+    Connections {
+        target: windows
+        function onDockModePositionsJsonChanged() {
+            if (typeof simSettings !== "undefined" && windows.dockModePositionsJson !== "")
+                simSettings.setValue("dockmode/positions", windows.dockModePositionsJson);
+        }
+    }
+
     // The keyboard's recent emoji and skin tones survive restarts too, and
     // the words Text Assist learned (saved a moment after the typing stops).
     Connections {
@@ -337,8 +384,15 @@ Item {
         pushOrientation();
         // Settings offers Advanced gestures where there is a gesture area.
         windows.pushSystemStatus({ gestureArea: Theme.gestureAreaHeight > 0 });
-        if (typeof simSettings !== "undefined")
+        if (typeof simSettings !== "undefined") {
             windows.launcherLayoutJson = simSettings.value("launcher/layout");
+            windows.dockModePositionsJson = simSettings.value("dockmode/positions");
+            try {
+                var exhibitions = JSON.parse(simSettings.value("dockmode/exhibitionApps") || "null");
+                if (Array.isArray(exhibitions))
+                    status.exhibitionApps = exhibitions;
+            } catch (e) { /* the default */ }
+        }
         if (typeof simSettings !== "undefined") {
             shell.keyboard.emojiPrefs = simSettings.value("keyboard/emoji");
             shell.keyboard.textAssistData = simSettings.value("keyboard/words");
@@ -354,13 +408,16 @@ Item {
                     shell.launch(simLaunch[j]);
                 if (opening)
                     windows.openUrl(simOpen);
+                root.startOnTouchstone();
             });
             return;
         }
         // First Use: asked for, or never done on this simulator.
         var scene = typeof simScene !== "undefined" ? simScene : "";
+        // (Not with --touchstone either, which asks for dock mode.)
+        var touchstone = typeof simTouchstone !== "undefined" && simTouchstone;
         var firstUse = (typeof simFirstUse !== "undefined" && simFirstUse)
-            || (scene === "" && typeof simSettings !== "undefined" && simSettings.value("firstuse/done") !== "1");
+            || (scene === "" && !touchstone && typeof simSettings !== "undefined" && simSettings.value("firstuse/done") !== "1");
         if (firstUse) {
             Qt.callLater(function() {
                 if (!shell.startFirstUse())
@@ -369,7 +426,19 @@ Item {
             return;
         }
         // After the window source has built its app list.
-        Qt.callLater(buildScene);
+        Qt.callLater(function() {
+            buildScene();
+            root.startOnTouchstone();
+        });
+    }
+
+    // --touchstone: on a Touchstone from the start, its exhibition showing,
+    // as when the device was set on it with the screen off.
+    function startOnTouchstone() {
+        if (typeof simTouchstone === "undefined" || !simTouchstone)
+            return;
+        root.power({ charger: "inductive", percent: 61, puckId: root.touchstones[0] });
+        shell.enterDockMode();
     }
 
     function buildScene() {

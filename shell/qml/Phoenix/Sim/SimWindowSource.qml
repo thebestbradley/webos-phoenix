@@ -89,12 +89,20 @@
 //                            (com.webos.service.systemservice setPreferences),
 //                            e.g. firstUseComplete when First Use is done
 //
-// Optional, for the emergency window (Shell.openEmergency):
+// Optional, for the emergency window (Shell.openEmergency) and dock mode's
+// exhibitions (DockMode.qml, kind "dockmode"):
 //   openSystemWindow(appId, params, kind) -> key   an app window that is no
 //                            card: windowFor(key), back(key); "" if the
-//                            app cannot be opened
+//                            app cannot be opened; windowFor(key).ready
+//                            once its page has loaded
 //   closeSystemWindow(key)
 //   systemWindowClosed(key)  signal: the page closed its window
+//   activateWindow(key, active)  the window came to the front of dock
+//                            mode or left it ("phoenixcardactivation")
+//   savedDockModePositions() -> string, saveDockModePositions(json)
+//                            which exhibition each Touchstone showed
+//   apps also has exhibition (appinfo.json exhibitionMode) and
+//   exhibitionTitle (exhibitionModeOptions.title)
 //
 // Web apps (the original webOS apps, Settings, ...) come from the virtual
 // webOS filesystem when phoenix-sim was built with Qt WebEngine; they
@@ -162,7 +170,7 @@ Item {
                           webAppId: "", params: "", dir: "",
                           // Stand-ins for apps still to come can be deleted, as
                           // downloaded apps could; the built-in ones cannot.
-                          removable: true });
+                          removable: true, version: "", exhibition: false, exhibitionTitle: p.title });
         }
         Qt.callLater(_bootSystemApps);
         if (_simPty())
@@ -179,7 +187,10 @@ Item {
                  web: true, main: a.main, noWindow: !!a.noWindow,
                  orientation: a.requestedWindowOrientation || "",
                  webAppId: a.appId || a.id, params: a.params || "", dir: a.dir || "",
-                 removable: !!a.installed, version: a.version || "" };
+                 removable: !!a.installed, version: a.version || "",
+                 // appinfo.json exhibitionMode (dockMode): it can be an
+                 // exhibition in dock mode, under exhibitionTitle.
+                 exhibition: !!a.exhibition, exhibitionTitle: a.exhibitionTitle || a.title };
     }
 
     // ---- Installing and removing apps (phoenix-sim's SimInstaller) ---------------------
@@ -499,6 +510,10 @@ Item {
                 // A picture from /media (Photos) comes with its data: URL.
                 st.wallpaperUrl = payload.wallpaperFile
                         ? (resolveDevicePath(payload.wallpaperFile) || payload.wallpaperUrl || "") : "";
+            // Dock mode's own (the dockwallpaper preference).
+            if ("dockWallpaperFile" in payload)
+                st.dockWallpaperUrl = payload.dockWallpaperFile
+                        ? (resolveDevicePath(payload.dockWallpaperFile) || payload.dockWallpaperUrl || "") : "";
             systemStatusReported(st);
         }
     }
@@ -867,7 +882,7 @@ Item {
     // State only the shell knows (the lock screen, how the UI and the device
     // are turned), which every page gets as it loads; unlike the rest it is
     // not the pages' to overrule.
-    readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse", "launcherLayout", "gestureArea"]
+    readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse", "launcherLayout", "gestureArea", "dockMode"]
     property var _shellStatus: ({})
 
     function pushSystemStatus(changes) {
@@ -994,6 +1009,24 @@ Item {
     property string launcherLayoutJson: ""
     function savedLauncherLayout() { return launcherLayoutJson; }
     function saveLauncherLayout(json) { launcherLayoutJson = json; }
+
+    // ---- Dock mode -----------------------------------------------------------------
+
+    // Which exhibition each Touchstone showed last (DockModePositionManager's
+    // knownPucks, /var/palm/user-exhibition-apps.json), as JSON; sim.qml
+    // keeps it in the settings file.
+    property string dockModePositionsJson: ""
+    function savedDockModePositions() { return dockModePositionsJson; }
+    function saveDockModePositions(json) { dockModePositionsJson = json; }
+
+    // An exhibition's window came to the front of dock mode or left it
+    // (DockModeWindow::focusEvent): the page hears it as a card coming to
+    // the front ("phoenixcardactivation").
+    function activateWindow(key, active) {
+        var w = _windows[key];
+        if (w && w.runScript)
+            w.runScript("window.__phoenixRuntime && __phoenixRuntime.cardActivated && __phoenixRuntime.cardActivated(" + !!active + ")");
+    }
 
     // Deleting an app closes its windows (the launcher layout keeps it out);
     // one the user installed is removed from the device, as webOS did.

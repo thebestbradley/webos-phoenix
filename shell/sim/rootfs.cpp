@@ -193,6 +193,19 @@ void Rootfs::rescan()
         const QString splashBgFile = splashBg.isEmpty() ? QString() : appDir + QLatin1Char('/') + splashBg;
         entry[QStringLiteral("splashBackground")] = !splashBgFile.isEmpty() && QFileInfo::exists(splashBgFile)
             ? QUrl::fromLocalFile(splashBgFile).toString() : QString();
+        // An exhibition (dock mode) app: appinfo.json "exhibitionMode", or
+        // "dockMode" as webOS 2.x named it, and the title of its row in the
+        // exhibition menu (exhibitionModeOptions / dockModeOptions "title",
+        // else the app's title), as ApplicationDescription.cpp:369-398 read them.
+        QJsonValue exhibition = app.value(QStringLiteral("exhibitionMode"));
+        if (!exhibition.isBool())
+            exhibition = app.value(QStringLiteral("dockMode"));
+        QJsonObject exhibitionOptions = app.value(QStringLiteral("exhibitionModeOptions")).toObject();
+        if (exhibitionOptions.isEmpty())
+            exhibitionOptions = app.value(QStringLiteral("dockModeOptions")).toObject();
+        entry[QStringLiteral("exhibition")] = exhibition.toBool(false);
+        entry[QStringLiteral("exhibitionTitle")] = exhibitionOptions.value(QStringLiteral("title"))
+            .toString(entry.value(QStringLiteral("title")).toString());
         // Installed by the user: the launcher may delete it (uninstall).
         entry[QStringLiteral("installed")] = installed;
         if (installed)
@@ -208,6 +221,12 @@ void Rootfs::rescan()
         record[QStringLiteral("universalSearch")] = app.value(QStringLiteral("universalSearch")).toVariant();
         record[QStringLiteral("removable")] = installed;
         record[QStringLiteral("version")] = app.value(QStringLiteral("version")).toString();
+        // For listDockModeLaunchPoints (ApplicationDescription::toJSON, :770-774).
+        if (entry.value(QStringLiteral("exhibition")).toBool()) {
+            record[QStringLiteral("exhibitionMode")] = true;
+            record[QStringLiteral("dockMode")] = true;
+            record[QStringLiteral("exhibitionModeTitle")] = entry.value(QStringLiteral("exhibitionTitle"));
+        }
         // The types the app opens (appinfo.json "mimeTypes": [{mime, extension,
         // stream}], luna-sysmgr's resource handlers), for the application
         // manager's listAllHandlersForMime and open {target}.
@@ -238,6 +257,8 @@ void Rootfs::rescan()
             if (lp.contains(QStringLiteral("icon")))
                 point[QStringLiteral("largeIcon")] = QString();
             point[QStringLiteral("noWindow")] = false;
+            // The app's own entry is its exhibition, not its launch points.
+            point[QStringLiteral("exhibition")] = false;
             point[QStringLiteral("quickLaunch")] = lp.value(QStringLiteral("quickLaunch")).toInt(0);
             m_apps.append(point);
             QVariantMap pointRecord;

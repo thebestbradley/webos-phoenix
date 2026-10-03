@@ -270,6 +270,15 @@ def launch_points():
             targets = (APPS[app_id][1].get("phoenix") or {}).get("shareTargets")
             if targets:
                 rec["shareTargets"] = targets
+            # An exhibition (dock mode) app, for listDockModeLaunchPoints:
+            # appinfo.json "exhibitionMode", or webOS 2.x's "dockMode".
+            info = APPS[app_id][1]
+            exhibition = info.get("exhibitionMode", info.get("dockMode"))
+            if exhibition is True:
+                options = info.get("exhibitionModeOptions") or info.get("dockModeOptions") or {}
+                rec["exhibitionMode"] = True
+                rec["dockMode"] = True
+                rec["exhibitionModeTitle"] = options.get("title", a["title"])
         out.append(rec)
     return out
 

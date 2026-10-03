@@ -42,3 +42,8 @@ DrawerHeader 1.0 DrawerHeader.qml
 SelectMark 1.0 SelectMark.qml
 ScreenCaptureFlash 1.0 ScreenCaptureFlash.qml
 ScreenCaptureThumbnail 1.0 ScreenCaptureThumbnail.qml
+DockMode 1.0 DockMode.qml
+DockModeAppMenu 1.0 DockModeAppMenu.qml
+DockModeTime 1.0 DockModeTime.qml
+DockModeAnalogClock 1.0 DockModeAnalogClock.qml
+DockModeDigitalClock 1.0 DockModeDigitalClock.qml
