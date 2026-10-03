@@ -121,8 +121,10 @@ async function main() {
             b.call(u, JSON.stringify(prm || {}));
         }), [uri, params]);
         const db = (p, kind) => p.evaluate((k) => {
-            const d = JSON.parse(localStorage.getItem("phoenix:db8:com.palm.db") || "{\"objects\":{}}");
-            return Object.values(d.objects).filter((o) => !o._del && o._kind === k);
+            // The runtime's db8 keeps each object under a key of its own.
+            const objects = Object.keys(localStorage).filter((x) => x.startsWith("phoenix:db8:com.palm.db/obj/"))
+                .map((x) => JSON.parse(localStorage.getItem(x)));
+            return objects.filter((o) => !o._del && o._kind === k);
         }, kind);
         // A sync through the activity manager, as the apps' "Sync now" starts it;
         // waits for the account's sync lock to clear.
@@ -277,8 +279,9 @@ async function main() {
         for (const f of await dav.list("/alice/calendar/")) serverSubjects.push(ical.toEvents((await dav.get(f)).body).master.subject);
         check(JSON.stringify(subjects) === JSON.stringify(serverSubjects.sort()), "db8 and the server have the same events (" + subjects.join(", ") + ")");
         const status = await page.evaluate(() => {
-            const d = JSON.parse(localStorage.getItem("phoenix:db8:com.palm.tempdb") || "{\"objects\":{}}");
-            return Object.values(d.objects).filter((o) => !o._del && o._kind === "com.palm.account.syncstate:1").map((o) => o.syncState);
+            const objects = Object.keys(localStorage).filter((x) => x.startsWith("phoenix:db8:com.palm.tempdb/obj/"))
+                .map((x) => JSON.parse(localStorage.getItem(x)));
+            return objects.filter((o) => !o._del && o._kind === "com.palm.account.syncstate:1").map((o) => o.syncState);
         });
         check(status.length === 2 && status.every((s) => s === "IDLE"), "sync status in tempdb: IDLE for both capabilities");
 

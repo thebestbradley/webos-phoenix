@@ -310,6 +310,7 @@ node tools/test-phone-messaging.cjs                        # calls and texts
 node tools/test-media.cjs                                   # Camera, Photos, Music
 node tools/test-files.cjs                                   # Files
 node tools/test-tasks.cjs                                   # Tasks and reminders
+node tools/test-db8-pages.cjs                               # db8 shared by pages writing at once
 node tools/test-alarm.cjs                                   # a Clock alarm rings as a popup alert
 node tools/test-keyboard.cjs                                # web fields and the virtual keyboard
 node tools/test-voicememos.cjs                              # Voice Memos

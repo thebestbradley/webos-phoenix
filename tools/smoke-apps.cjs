@@ -56,8 +56,10 @@ function helpers(page, appId) {
         expectText: async (s) => h.expect("to see \"" + s + "\"", async () => (await h.text()).includes(s)),
         screenshot: async (name) => h.page.screenshot({ path: path.join(outDir, "smoke-" + appId.replace("com.palm.app.", "") + "-" + (++shot) + "-" + name + ".png") }),
         db: (kindRe) => h.page.evaluate((re) => {
-            const db = JSON.parse(localStorage.getItem("phoenix:db8:com.palm.db") || "{\"objects\":{}}");
-            return Object.values(db.objects).filter((o) => !o._del && new RegExp(re).test(o._kind));
+            // The runtime's db8 keeps each object under a key of its own.
+            const objects = Object.keys(localStorage).filter((k) => k.startsWith("phoenix:db8:com.palm.db/obj/"))
+                .map((k) => JSON.parse(localStorage.getItem(k)));
+            return objects.filter((o) => !o._del && new RegExp(re).test(o._kind));
         }, kindRe)
     };
     return h;
