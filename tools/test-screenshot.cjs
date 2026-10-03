@@ -91,7 +91,11 @@ async function main() {
             const at = await page.waitForFunction(([t, from]) => {
                 const i = window.__toasts.findIndex((s, n) => n >= from && s.includes(t));
                 return i >= 0 ? i + 1 : false;
-            }, [text, toastsSeen]);
+            }, [text, toastsSeen]).catch(async (e) => {
+                // Say what was shown instead.
+                const seen = await page.evaluate(() => window.__toasts).catch(() => []);
+                throw new Error(`no "${text}" toast; shown: ${JSON.stringify(seen)}; page errors: ${JSON.stringify(errors)}\n${e.message}`);
+            });
             toastsSeen = await at.jsonValue();
         };
         const luna = (uri, params) => page.evaluate(([u, p]) => new Promise((res) => {

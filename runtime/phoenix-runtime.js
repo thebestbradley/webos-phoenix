@@ -4749,6 +4749,11 @@
                     Promise.resolve(fn(st)).then(function (r) { result = r; }, function () { /* t.onerror */ });
                     t.oncomplete = function () { resolve(result); };
                     t.onerror = function () { reject(t.error); };
+                    // A transaction can abort without a request failing (out
+                    // of quota when it commits, the connection closing): it
+                    // fires neither complete nor error, and the caller would
+                    // wait for ever.
+                    t.onabort = function () { reject(t.error || new Error("The media store transaction was aborted")); };
                 });
             });
         }
