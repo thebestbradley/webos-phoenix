@@ -250,6 +250,24 @@ Item {
             }
             // Links that open a new window stay in this view.
             onNewWindowRequested: (request) => { page.url = request.requestedUrl; }
+
+            // A file the view does not show (a PDF, a zip, a link with
+            // "download"): Chromium would download it itself. BrowserAdapter
+            // handed such a load back to the app instead
+            // (BasicWebView.mimeNotSupported -> onFileLoad), and the browser
+            // asks the application manager who opens the type and has the
+            // download manager fetch it (BrowserApp.gotResourceInfo).
+            Connections {
+                target: phoenixWebProfile
+                function onDownloadRequested(download) {
+                    if (download.view !== page)
+                        return;
+                    const mime = download.mimeType || "application/octet-stream";
+                    const url = download.url.toString();
+                    download.cancel();
+                    win._webViewEvent(page.viewId, "mimeNotSupported", [mime, url]);
+                }
+            }
         }
     }
 

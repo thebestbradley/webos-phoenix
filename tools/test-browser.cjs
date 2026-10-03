@@ -13,6 +13,9 @@
 //   address   typing an address and Enter goes there
 //   history   back and forward move through the pages
 //   handlers  mailto: links go to Email (command-resource-handlers.json)
+//   download  a file the page view does not show is downloaded with
+//             com.palm.downloadmanager: an ongoing activity with progress,
+//             the Downloads drawer, the Downloads folder, Open in its app
 //
 //   node tools/test-browser.cjs [--tablet] [--out DIR]
 
@@ -119,6 +122,75 @@ async function main() {
         await page.waitForTimeout(800);
         const mail = host.find((m) => m.type === "launch" && m.payload.id === "com.palm.app.email");
         check(!!mail, "handlers: mailto: opens Email");
+
+        // Downloads. A file the page view does not show comes back to the
+        // browser as BrowserAdapter's mimeNotSupported (phoenix-sim's native
+        // view sends it when Chromium would download); the browser asks who
+        // opens the type and has com.palm.downloadmanager fetch it. The
+        // simulated service fetches through serve-rootfs.py's proxy, which
+        // reports the body's progress meanwhile; both are answered here.
+        const luna = (u, p) => page.evaluate(([uri, params]) => new Promise((res) => {
+            const b = new PalmServiceBridge();
+            b.onservicecallback = (j) => res(JSON.parse(j));
+            b.call(uri, JSON.stringify(params || {}));
+        }), [u, p]);
+        const waitFor = async (what, ms) => {
+            for (let t = 0; t < (ms || 8000); t += 100) {
+                const v = await what();
+                if (v) return v;
+                await page.waitForTimeout(100);
+            }
+            return null;
+        };
+        const PDF_URL = "https://example.org/docs/field-guide.pdf";
+        const pdf = fs.readFileSync(path.join(REPO, "apps/media-samples/media/documents/field-guide.pdf"));
+        let received = 0, release = null;
+        const arrived = new Promise((r) => { release = r; });
+        await page.route("**/__phoenix/proxy/progress**", (route) => route.fulfill({
+            contentType: "application/json", body: JSON.stringify({ received, total: pdf.length }) }));
+        await page.route("**/__phoenix/proxy", async (route) => {
+            const req = JSON.parse(route.request().postData() || "{}");
+            if (req.url !== PDF_URL) return route.continue();
+            await arrived;
+            await route.fulfill({ contentType: "application/json", body: JSON.stringify({
+                status: 200, headers: { "content-type": "application/pdf" }, url: PDF_URL, bodyBase64: pdf.toString("base64") }) });
+        });
+        host.length = 0;
+        await page.evaluate((u) => {
+            document.querySelector("object[type='application/x-palm-browser']").eventListener.mimeNotSupported("application/pdf", u);
+        }, PDF_URL);
+        const ongoing = () => host.filter((m) => m.type === "ongoing").map((m) => m.payload);
+        const started = await waitFor(() => ongoing().find((o) => o.title === "field-guide.pdf"));
+        check(!!started && started.appId === "com.palm.app.browser" && started.params && started.params.toasterOpen === "downloads",
+            "download: an ongoing activity in the notification area, opening the browser's Downloads");
+        received = Math.floor(pdf.length / 2);
+        const half = await waitFor(() => ongoing().find((o) => o.progress >= 45 && o.progress <= 50));
+        check(!!half && /^Downloading \d+ KB of \d+ KB$/.test(half.body), "download: its progress comes from the proxy (" + (half && half.body) + ")");
+        const row = page.locator(".enyo-toaster .item-progress:has-text('field-guide.pdf')").first();
+        check(await row.isVisible(), "download: the browser's Downloads drawer lists it");
+        await shot("download-progress");
+        release();
+        check(!!await waitFor(() => ongoing().find((o) => o.clear && o.id === started.id)), "download: the activity goes when it is done");
+        const open = page.locator(".enyo-toaster:visible .enyo-button:has-text('Open')").first();
+        check(!!await waitFor(() => open.isVisible()), "download: then it can be opened from the list");
+        await shot("download-done");
+        const stat = await luna("luna://org.webosphoenix.filemanager/stat", { path: "/media/internal/Downloads/field-guide.pdf" });
+        const size = stat.entry && stat.entry.size;
+        check(size === pdf.length, "download: the file is in the Downloads folder, whole (" + size + " bytes)");
+        host.length = 0;
+        await open.click();
+        const launched = await waitFor(() => host.find((m) => m.type === "launch"));
+        check(!!launched && launched.payload.id === "org.webosphoenix.pdfview" && launched.payload.params.target === "/media/internal/Downloads/field-guide.pdf",
+            "download: Open hands it to PDF View");
+        const hist = await luna("luna://com.palm.downloadmanager/getAllHistory", { owner: "com.palm.app.browser" });
+        const item = (hist.items || []).find((h) => h.destFile === "field-guide.pdf");
+        check(!!item && item.state === "completed" && item.fileExistsOnFilesys === true && JSON.parse(item.recordString).ticket === item.ticket,
+            "download: the history lists it as the browser reads it again");
+        // A type no app opens: the browser says so, as on webOS.
+        await page.evaluate(() => {
+            document.querySelector("object[type='application/x-palm-browser']").eventListener.mimeNotSupported("application/zip", "https://example.org/a.zip");
+        });
+        check(!!await waitFor(() => page.getByText("Cannot open MIME type").first().isVisible()), "download: a type nothing opens says \"Cannot open MIME type\"");
 
         check(errors.length === 0, "no errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
         await browser.close();

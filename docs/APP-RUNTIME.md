@@ -774,7 +774,36 @@ engines behind them:
 Links for other apps (`mailto:`, `tel:`, `sms:`) go to them through
 `/usr/palm/command-resource-handlers.json` (a compat file), as the
 application manager's `open` does on webOS. `tools/test-browser.cjs` browses
-with it end to end. On a device, OSE's WebAppMgr has no BrowserAdapter, so
+with it end to end.
+
+**Downloads.** A file the page view does not show (a PDF, a link with
+`download`) is not downloaded by Chromium: phoenix-sim's view hands it
+back to the page as BrowserAdapter did, with the plugin's
+`mimeNotSupported(mime, url)` callback (`WebAppWindow.qml` catches the
+profile's `downloadRequested` for that view). The browser then does what
+it always did: `getResourceInfo` names the app for the type, and
+`com.palm.downloadmanager/download` fetches the file into
+`/media/internal/Downloads` (the folder Files shows), while Isis's own
+Downloads drawer shows the progress bar. The simulated download manager
+reports the real progress, read from the host's proxy while the body
+comes (`/__phoenix/proxy/progress`), and shows each download as an
+[ongoing activity](#ongoing-activities); a tap opens the browser's
+Downloads drawer (`{toasterOpen: "downloads"}`, the params of its
+"finished downloading" banner). Open in the drawer, or tapping the file in
+Files, opens it in its app (PDF View for a PDF). A type no app opens gets
+the browser's original "Cannot open MIME type", as on webOS, whose
+application manager had no handler for it either. Downloaded files are not
+apps: the launcher's Downloads tab lists installed apps, as on webOS.
+`tools/test-browser.cjs` (download) and `apps/shared/luna/src/
+mediaapps.test.ts` check it; the native view's hand-back was checked in
+phoenix-sim. The drawer (`enyo.Toaster`) flies in over the page: the native
+view keeps to the part it leaves uncovered (on a phone, none), since
+nothing in the page can draw over it.
+
+phoenix-sim's own proxy, and every request the runtime makes to the host
+there, go through `XMLHttpRequest`: Chromium refuses `fetch()` on the
+`phoenix:` scheme before Qt 6.6 (`FetchApiAllowed`), which left downloads
+(and the other proxied requests) failing on Qt 6.4. On a device, OSE's WebAppMgr has no BrowserAdapter, so
 the browser needs a native view there too (see the roadmap).
 
 ## Files
@@ -1610,7 +1639,9 @@ its params. It is the shell's API:
 - `luna://org.webosphoenix.ongoing/set {id, appId?, title, body?, icon?, progress (0-100, -1: none), params?}`
 - `luna://org.webosphoenix.ongoing/clear {id}`
 
-System updates (`com.palm.update`) and Marketplace installs use it. They are
+System updates (`com.palm.update`), Marketplace installs and the download
+manager (each download: file name, "Downloading 160 KB of 441 KB" and its
+progress) use it. They are
 pinned at the top of the notification list, in the order they began, with a
 faint rule between them and the notifications (which keep the original's
 order below). On a phone the list opens at them when there are any (else at

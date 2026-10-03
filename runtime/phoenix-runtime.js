@@ -75,6 +75,23 @@
         }
     };
 
+    // A JSON answer from the host at a path of its own (phoenix-sim's
+    // /__phoenix/proxy?req=..., /__phoenix/proxy/progress?id=...). With
+    // XMLHttpRequest: before Qt 6.6 Chromium refuses fetch() on a custom
+    // scheme such as phoenix: (QWebEngineUrlScheme::FetchApiAllowed is 6.6),
+    // and XHR is how the apps' own pages read files there anyway.
+    function hostGetJson(path) {
+        return new Promise(function (resolve, reject) {
+            var x = new global.XMLHttpRequest();
+            x.open("GET", path, true);
+            x.onload = function () {
+                try { resolve(JSON.parse(x.responseText)); } catch (e) { reject(e); }
+            };
+            x.onerror = function () { reject(new Error("The host did not answer " + path.replace(/\?.*$/, ""))); };
+            x.send();
+        });
+    }
+
     // ---- App identity ------------------------------------------------------------
 
     function appIdFromLocation() {
@@ -1321,10 +1338,27 @@
         track: function () {
             var self = this;
             if (this.destroyed) return;
-            var n = this.node, r = n.getBoundingClientRect();
+            var n = this.node, b = n.getBoundingClientRect();
+            var r = { left: b.left, top: b.top, right: b.right, bottom: b.bottom };
             var popup = Array.prototype.some.call(global.document.querySelectorAll(".enyo-popup"), function (e) {
                 return e.offsetParent !== null && e.getBoundingClientRect().height > 0;
             });
+            // A drawer flown in from a side (enyo.Toaster, class enyo-toaster:
+            // the browser's bookmarks, history and downloads) covers part of
+            // the page: the view keeps to the part it leaves, since nothing in
+            // the page can draw over a native view.
+            Array.prototype.forEach.call(global.document.querySelectorAll(".enyo-toaster"), function (e) {
+                if (e.offsetParent === null) return;
+                var t = e.getBoundingClientRect();
+                if (t.width === 0 || t.height === 0 || t.right <= r.left || t.left >= r.right || t.bottom <= r.top || t.top >= r.bottom) return;
+                if (t.top <= r.top && t.bottom >= r.bottom) {
+                    if (t.left > r.left) r.right = Math.min(r.right, t.left);
+                    else r.left = Math.max(r.left, t.right);
+                } else if (t.top > r.top) r.bottom = Math.min(r.bottom, t.top);
+                else r.top = Math.max(r.top, t.bottom);
+            });
+            r.width = Math.max(0, r.right - r.left);
+            r.height = Math.max(0, r.bottom - r.top);
             var hidden = !n.isConnected || n.offsetParent === null || r.width === 0 || r.height === 0 || popup;
             var rect = [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)].join(",");
             if (rect !== this.rect || hidden !== this.hidden) {
@@ -5976,10 +6010,17 @@
     //       {ticket, amountReceived, amountTotal} and at the end {ticket,
     //       completed: true, completionStatusCode, destPath, destFile, target,
     //       url, mimetype} (interrupted: true when it failed); cancelDownload
-    //       {ticket}; getAllHistory; clearHistory. Files land under
-    //       /media/internal (default folder /media/internal/downloads) in the
-    //       media block's store, so Files, the media indexer and the apps see
-    //       them.
+    //       {ticket}; getAllHistory (items oldest first, with the legacy
+    //       state, fileExistsOnFilesys and recordString); clearHistory.
+    //       Files land under /media/internal in the media block's store, so
+    //       Files, the media indexer and the apps see them. The default
+    //       folder is /media/internal/Downloads, the Downloads folder Files
+    //       shows (legacy webOS used /media/internal/downloads; Linux names
+    //       are case-sensitive, so there is one folder; a device image will
+    //       have to set the service's default to it). The amounts come from the host's proxy
+    //       while the body comes (progressOf), and each download is an
+    //       ongoing activity in the notification area until it ends; a tap
+    //       opens its app's list of downloads (the browser's drawer).
     //   com.webos.service.audiofocusmanager   requestFocus {requestType,
     //       streamType, displayId, subscribe} -> {result: "AF_GRANTED"}; the
     //       app that held the focus is told {result: "AF_LOST"}. The holder
@@ -5990,7 +6031,7 @@
     // __phoenixRuntime.downloads: list() (the history), reset().
     (function mediaAppServices() {
         var MEDIA_ROOT = "/media/internal";
-        var DOWNLOAD_DIR = MEDIA_ROOT + "/downloads";
+        var DOWNLOAD_DIR = MEDIA_ROOT + "/Downloads";
         var HISTORY_KEY = "downloads:history";
         var FOCUS_KEY = "audiofocus";
 
@@ -6002,16 +6043,20 @@
                 s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
             return global.btoa(s);
         }
+        // req.progress: an id the host's proxy reports the body's progress
+        // under (progressOf below); the download manager's.
         function request(req) {
             var r = { method: req.method || "GET", url: req.url, headers: req.headers || {}, body: req.body,
                       binary: !!req.binary, follow: req.follow !== false };
+            if (req.progress) r.progress = String(req.progress);
             var viaHost = /^https?:$/.test(global.location.protocol)
                 ? fetch("/__phoenix/proxy", { method: "POST", headers: { "Content-Type": "application/json" }, body: toJson(r) })
+                    .then(function (res) { return res.json(); })
                 : global.location.protocol === "phoenix:"
-                ? fetch("/__phoenix/proxy?req=" + encodeURIComponent(toJson(r)))
+                ? hostGetJson("/__phoenix/proxy?req=" + encodeURIComponent(toJson(r)))
                 : null;
             if (viaHost) {
-                return viaHost.then(function (res) { return res.json(); }).then(function (x) {
+                return viaHost.then(function (x) {
                     if (x.error) {
                         var e = new Error(x.error);
                         e.code = x.code;
@@ -6039,6 +6084,19 @@
                 throw err;
             });
         }
+        // How far the proxy has come with a request made with {progress: id}:
+        // {received, total} (total -1: not known), or null (over, unknown, or
+        // no proxy: a page fetching directly cannot tell).
+        function progressOf(id) {
+            var proto = global.location.protocol;
+            var path = "/__phoenix/proxy/progress?id=" + encodeURIComponent(id);
+            var answer = /^https?:$/.test(proto) ? fetch(path).then(function (res) { return res.json(); })
+                : proto === "phoenix:" ? hostGetJson(path) : null;
+            if (!answer) return Promise.resolve(null);
+            return answer.then(function (x) {
+                return x && typeof x.received === "number" ? { received: x.received, total: typeof x.total === "number" ? x.total : -1 } : null;
+            }, function () { return null; });
+        }
         runtime.http = { request: request };
 
         // ---- Download manager -------------------------------------------------------------
@@ -6063,6 +6121,30 @@
             return out;
         }
 
+        function sizeText(n) {
+            if (n < 1024) return n + " B";
+            if (n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+            return (n / (1024 * 1024)).toFixed(1) + " MB";
+        }
+        // Where a tap on a download's ongoing activity goes: the app's own
+        // list of downloads where it has one (the browser's Downloads drawer,
+        // the launch params its "finished downloading" banner uses).
+        var DOWNLOAD_LISTS = { "com.palm.app.browser": { toasterOpen: "downloads" } };
+        // A download in the notification area while it runs
+        // (org.webosphoenix.ongoing, "Ongoing activities" below): the file's
+        // name, how much has come, and the progress when the size is known.
+        function showOngoing(rec) {
+            var known = rec.amountTotal > 0;
+            host.postToHost("ongoing", {
+                id: "download-" + rec.ticket, appId: rec.owner || PalmSystem.appIdentifier, title: rec.destFile,
+                body: known ? "Downloading " + sizeText(rec.amountReceived) + " of " + sizeText(rec.amountTotal)
+                            : rec.amountReceived > 0 ? "Downloading " + sizeText(rec.amountReceived) : "Downloading",
+                icon: "", params: DOWNLOAD_LISTS[rec.owner] || null,
+                progress: known ? Math.min(100, Math.floor(rec.amountReceived * 100 / rec.amountTotal)) : -1
+            });
+        }
+        function clearOngoing(rec) { host.postToHost("ongoing", { id: "download-" + rec.ticket, clear: true }); }
+
         function download(p, reply, ctx) {
             var url = String(p.target || p.url || "");
             if (!/^https?:\/\//i.test(url)) return reply(fail(-1, "target must be an http or https URL"));
@@ -6075,34 +6157,53 @@
             store.set("downloads:ticket", ticketSeq);
             var rec = { ticket: ticket, url: url, target: path, destPath: dir + "/", destFile: name, mimetype: p.mime || "",
                         owner: PalmSystem.appIdentifier || "", amountReceived: 0, amountTotal: 0, completed: false };
-            running[ticket] = { aborted: false };
+            var job = running[ticket] = { aborted: false, progressId: "dl-" + Date.now().toString(36) + "-" + ticket };
             remember(rec);
             reply(ok({ ticket: ticket, url: url, target: path, subscribed: !!p.subscribe }));
             var send = function (x) { if (!ctx.cancelled()) reply(ok(x)); };
-            request({ url: url, binary: true, follow: true }).then(function (res) {
-                if (running[ticket].aborted) throw { aborted: true };
+            showOngoing(rec);
+            // The host's proxy says how much has come while the body comes;
+            // the subscriber and the notification area get it as the real
+            // service reports it, {ticket, amountReceived, amountTotal}.
+            var polling = true;
+            (function poll() {
+                if (!polling) return;
+                progressOf(job.progressId).then(function (pr) {
+                    if (!polling) return;
+                    if (pr && (pr.received !== rec.amountReceived || (pr.total > 0 && pr.total !== rec.amountTotal))) {
+                        rec.amountReceived = pr.received;
+                        if (pr.total > 0) rec.amountTotal = pr.total;
+                        send({ ticket: ticket, url: url, amountReceived: rec.amountReceived, amountTotal: rec.amountTotal });
+                        showOngoing(rec);
+                    }
+                    setTimeout(poll, 250);
+                });
+            })();
+            request({ url: url, binary: true, follow: true, progress: job.progressId }).then(function (res) {
+                polling = false;
+                if (job.aborted) throw { aborted: true };
                 if (res.status < 200 || res.status > 299) throw { status: res.status };
                 var bytes = fromB64(res.bodyBase64 || "");
                 var total = bytes.length;
                 rec.amountTotal = total;
                 rec.mimetype = rec.mimetype || (res.headers && res.headers["content-type"] || "").split(";")[0];
-                // Progress in a few steps, as the real service reports it.
-                send({ ticket: ticket, url: url, amountReceived: Math.floor(total / 2), amountTotal: total });
                 var blob = new Blob([bytes], { type: rec.mimetype || "" });
                 if (!runtime.mediaFiles) throw { status: -1 };
                 return runtime.mediaFiles.write(path, blob).then(function () { return total; });
             }).then(function (total) {
-                if (running[ticket].aborted) throw { aborted: true };
+                if (job.aborted) throw { aborted: true };
                 rec.amountReceived = total;
                 rec.completed = true;
                 rec.completionStatusCode = 200;
                 remember(rec);
                 delete running[ticket];
+                clearOngoing(rec);
                 send({ ticket: ticket, url: url, amountReceived: total, amountTotal: total });
                 send({ ticket: ticket, url: url, target: path, destPath: rec.destPath, destFile: name, mimetype: rec.mimetype,
                        amountReceived: total, amountTotal: total, completed: true, completionStatusCode: 200,
                        interrupted: false, aborted: false });
             }, function (e) {
+                polling = false;
                 var aborted = !!(e && e.aborted);
                 rec.completed = true;
                 rec.aborted = aborted;
@@ -6110,9 +6211,22 @@
                 rec.completionStatusCode = e && e.status ? e.status : -1;
                 remember(rec);
                 delete running[ticket];
+                clearOngoing(rec);
                 send({ ticket: ticket, url: url, target: path, destPath: rec.destPath, destFile: name, completed: true,
                        completionStatusCode: rec.completionStatusCode, interrupted: !aborted, aborted: aborted });
             });
+        }
+
+        // getAllHistory's items as the legacy service kept them (Isis reads
+        // state, fileExistsOnFilesys and the record, recordString, to list the
+        // finished downloads again), with the record's fields beside them.
+        function historyItem(h) {
+            var item = {}, k;
+            for (k in h) item[k] = h[k];
+            item.state = !h.completed ? "running" : h.completionStatusCode === 200 && !h.aborted && !h.interrupted ? "completed"
+                : h.aborted ? "cancelled" : "failed";
+            item.recordString = toJson(h);
+            return item;
         }
 
         var dm = {
@@ -6123,9 +6237,21 @@
                 r.aborted = true;
                 reply(ok({ ticket: p.ticket }));
             },
+            // Oldest first, as the legacy service sorted them by ticket.
             "/getAllHistory": function (p, reply) {
                 var owner = p.owner;
-                reply(ok({ items: history().filter(function (h) { return !owner || h.owner === owner; }) }));
+                var mine = history().filter(function (h) { return !owner || h.owner === owner; });
+                var mf = runtime.mediaFiles;
+                Promise.all(mine.map(function (h) {
+                    if (!h.completed || !mf) return Promise.resolve(false);
+                    return mf.read(h.target).then(function (b) { return !!b; }, function () { return false; });
+                })).then(function (exists) {
+                    reply(ok({ items: mine.map(function (h, i) {
+                        var item = historyItem(h);
+                        item.fileExistsOnFilesys = exists[i];
+                        return item;
+                    }).reverse() }));
+                });
             },
             "/clearHistory": function (p, reply) {
                 store.set(HISTORY_KEY, p.owner ? history().filter(function (h) { return h.owner !== p.owner; }) : []);
@@ -6747,11 +6873,12 @@
     function proxiedRequest(req) {
         var viaHost = /^https?:$/.test(global.location.protocol)
             ? fetch("/__phoenix/proxy", { method: "POST", headers: { "Content-Type": "application/json" }, body: toJson(req) })
+                .then(function (res) { return res.json(); })
             : global.location.protocol === "phoenix:"
-            ? fetch("/__phoenix/proxy?req=" + encodeURIComponent(toJson(req)))
+            ? hostGetJson("/__phoenix/proxy?req=" + encodeURIComponent(toJson(req)))
             : null;
         if (viaHost) {
-            return viaHost.then(function (res) { return res.json(); }).then(function (r) {
+            return viaHost.then(function (r) {
                 if (r.error) {
                     var e = new Error(r.error);
                     e.code = r.code;
