@@ -2,6 +2,7 @@ module Phoenix.Shell
 singleton Theme 1.0 Theme.qml
 Shell 1.0 Shell.qml
 ActionButton 1.0 ActionButton.qml
+MemoryAlert 1.0 MemoryAlert.qml
 ArtBorderImage 1.0 ArtBorderImage.qml
 ArtTiledImage 1.0 ArtTiledImage.qml
 AppIcon 1.0 AppIcon.qml

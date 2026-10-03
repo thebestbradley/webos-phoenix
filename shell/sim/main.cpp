@@ -5,7 +5,7 @@
 //
 //   phoenix-sim [--size WxH] [--scale N] [--tablet|--phone] [--scene NAME]
 //               [--orientation up|left|down|right] [--turn ORIENTATION]
-//               [--home-button] [--first-use] [--screenshot FILE [--delay MS]] [--stay-awake] [--no-host-shell]
+//               [--home-button] [--first-use] [--screenshot FILE [--delay MS]] [--stay-awake] [--low-memory] [--no-host-shell]
 //               [--host-shell PATH]
 //
 // Keys: Esc = back gesture, Home/F1 = up gesture, F2 = demo notification,
@@ -135,11 +135,12 @@ int main(int argc, char *argv[])
     QCommandLineOption orientationOpt(QStringLiteral("orientation"), QStringLiteral("How the device is held at start-up: up (default), left (turned counter-clockwise), down or right. The window shows it as held; --size is the screen upright."), QStringLiteral("orientation"), QStringLiteral("up"));
     QCommandLineOption turnOpt(QStringLiteral("turn"), QStringLiteral("Turn the device to this orientation one second after start-up (the UI follows 200 ms later and turns for 300 ms)."), QStringLiteral("orientation"));
     QCommandLineOption homeButtonOpt(QStringLiteral("home-button"), QStringLiteral("The device has a hardware Home button its maker uses instead of the gesture bar (the TouchPad): no gesture bar; the Home key presses the button."));
+    QCommandLineOption lowMemoryOpt(QStringLiteral("low-memory"), QStringLiteral("Act as if memory were low: launching an app shows \"Sorry, Too Many Cards\"."));
     QCommandLineOption stayAwakeOpt(QStringLiteral("stay-awake"), QStringLiteral("The screen never dims or turns off by itself (always so with --screenshot)."));
     QCommandLineOption quietOpt(QStringLiteral("quiet"), QStringLiteral("No boot and shutdown sounds (they are off anyway with --screenshot and the offscreen platform)."));
     QCommandLineOption noHostShellOpt(QStringLiteral("no-host-shell"), QStringLiteral("Do not give the Terminal app a real shell on this computer (it gets the runtime's simulated shell)."));
     QCommandLineOption hostShellOpt(QStringLiteral("host-shell"), QStringLiteral("Run this program in the Terminal instead of the shell it asks for."), QStringLiteral("path"));
-    parser.addOptions({ stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
+    parser.addOptions({ lowMemoryOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
                         noHostShellOpt, hostShellOpt });
     parser.process(app);
 
@@ -242,6 +243,7 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simWebEngine"), webEngine);
     view.rootContext()->setContextProperty(QStringLiteral("simWebApps"), webApps);
     view.rootContext()->setContextProperty(QStringLiteral("simLaunch"), parser.values(launchOpt));
+    view.rootContext()->setContextProperty(QStringLiteral("simLowMemory"), parser.isSet(lowMemoryOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simOpen"), parser.value(openOpt));
     RootfsFiles rootfsFiles(&rootfs);
     view.rootContext()->setContextProperty(QStringLiteral("simRootfs"), rootfs.isValid() ? &rootfsFiles : nullptr);

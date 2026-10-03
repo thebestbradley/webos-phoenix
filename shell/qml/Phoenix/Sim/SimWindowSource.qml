@@ -101,6 +101,8 @@
 // replace the placeholder app with the same title.
 
 import QtQuick
+import Phoenix.Native
+import Phoenix.Shell
 import "../Shell/NotificationPolicy.js" as Policy
 
 Item {
@@ -746,6 +748,38 @@ Item {
         }
     }
 
+    // How much memory is left (MemoryMonitor); phoenix-sim --low-memory
+    // makes it low.
+    property MemoryMonitor memory: MemoryMonitor {
+        forceLow: typeof simLowMemory !== "undefined" && simLowMemory === true
+    }
+
+    // Launched even then: a call, its contacts, a text (luna.conf [Memory]
+    // AppsToAllowInLowMemory), and their Phoenix counterparts.
+    readonly property var appsAllowedInLowMemory: ["com.palm.app.phone", "com.palm.app.contacts", "com.palm.app.messaging",
+                                                   "org.webosphoenix.phone", "org.webosphoenix.messaging"]
+
+    // "Sorry, Too Many Cards", once, in the popup alert's place
+    // (MemoryAlert.qml, 160 px tall); OK closes it.
+    readonly property string memoryAlertKey: "memoryalert"
+    Component {
+        id: memoryAlertComponent
+        MemoryAlert {}
+    }
+    function showMemoryAlert() {
+        if (_windows[memoryAlertKey])
+            return;
+        var alert = memoryAlertComponent.createObject(source, { visible: false });
+        alert.okButtonPressed.connect(function () { source.closeAlert(source.memoryAlertKey); });
+        _windows[memoryAlertKey] = alert;
+        var queued = [];
+        for (var i = 0; i < alerts.count; ++i)
+            queued.push({ appId: alerts.get(i).appId, name: alerts.get(i).name });
+        alerts.insert(Policy.insertIndex(queued, "com.palm.systemui", "memoryalert"),
+                      { key: memoryAlertKey, appId: "com.palm.systemui", name: "memoryalert", height: 160,
+                        sound: "", soundClass: "" });
+    }
+
     // The Home button closes the front popup alert
     // (DashboardWindowManager::slotCloseAlert: the window is closed).
     function closeAlert(key) {
@@ -1106,6 +1140,14 @@ Item {
         var info = appInfo(appId);
         if (!info)
             return "";
+        // No memory left for another app: refused, and the user is asked
+        // to close some cards (MemoryMonitor::allowNewNativeAppLaunch,
+        // IpcServer.cpp:232-238; WindowServerLuna::createMemoryAlertWindow).
+        memory.refresh();
+        if (memory.low && !(info.web && info.noWindow) && appsAllowedInLowMemory.indexOf(appId) < 0) {
+            showMemoryAlert();
+            return "";
+        }
         var url = params ? mainUrl(appId, params) : "";
         if (info.web && info.noWindow) {
             // Headless app: its page runs hidden and opens card windows itself.

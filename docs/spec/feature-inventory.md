@@ -167,7 +167,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [ ] Launch-at-boot (headless, pre-warmed): phone, email, calendar, messaging, camera (base). Pixi adds contacts; TouchPad drops camera; Pre 3 (windsornot) keeps only phone and email. `conf/luna.conf:98-99`; `conf/luna-pixie.conf:30-31`; `conf/luna-topaz.conf:18-19`; `conf/luna-windsornot.conf:18-19`
 - [ ] Keep-alive apps: phone (base). TouchPad: email, calendar, messaging, photos, musicplayer. `conf/luna.conf:101-102`; `conf/luna-topaz.conf:21-22`
 - [ ] Keep alive until memory pressure: browser (Pixi also camera). `conf/luna.conf:104-105`; `conf/luna-pixie.conf:33-34`
-- [ ] Apps allowed in low memory: phone, contacts, messaging. `conf/luna.conf:65`
+- [x] Apps allowed in low memory: phone, contacts, messaging. `conf/luna.conf:65` *Phoenix: SimWindowSource.appsAllowedInLowMemory (and the Phoenix Phone and Messaging); any other launch shows "Sorry, Too Many Cards" (phoenix-sim --low-memory).*
 - [ ] SUC apps with special launch privileges: App Catalog (enyo-findapps), QuickOffice AR, payment app and service. `conf/luna.conf:156-157`
 - [ ] Persistent (pre-created, cached) windows: systemui DeviceMenu; phone incoming / incoming-known / incoming-unknown; IME pinyin and hwr. `conf/persistentWindows.conf:18-32`; `Src/lunaui/PersistentWindowCache.cpp`
 

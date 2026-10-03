@@ -1045,6 +1045,37 @@ Item {
             compare(view.maximizeProgress, 0);
         }
 
+        // C11: no memory left: the launch is refused and "Sorry, Too Many
+        // Cards" takes the popup alert's place until OK.
+        function test_tooManyCards() {
+            // /proc/meminfo read (Linux): plenty left here.
+            verify(windows.memory.totalMb > 0);
+            verify(windows.memory.availableMb > 0);
+            verify(!windows.memory.low);
+            windows.memory.forceLow = true;
+            var uid = shell.launch("org.webosphoenix.email");
+            compare(uid, "");
+            compare(windows.cards.count, 0);
+            compare(windows.alerts.count, 1);
+            compare(shell.notifications.alertKey, "memoryalert");
+            var alert = findChild(shell, "memoryAlert");
+            verify(alert);
+            tryCompare(alert, "visible", true);
+            compare(findChild(alert, "memoryAlertTitle").text, "Sorry, Too Many Cards");
+            // Once only.
+            shell.launch("org.webosphoenix.calendar");
+            compare(windows.alerts.count, 1);
+            // A call, contacts and texts still open (AppsToAllowInLowMemory).
+            verify(shell.launch("org.webosphoenix.messaging") !== "");
+            compare(windows.alerts.count, 1);
+            // Once the negative space has grown to it.
+            tryCompare(shell.notifications, "negativeSpace", shell.notifications.alertHeight, 2000);
+            mouseClick(findChild(alert, "memoryAlertOk"));
+            compare(windows.alerts.count, 0);
+            windows.memory.forceLow = false;
+            verify(shell.launch("org.webosphoenix.email") !== "");
+        }
+
         // The dock's own show / hide (OverlayWindowManager dock states).
         function test_dockShowHide() {
             var dock = findChild(shell, "quickLaunch");
