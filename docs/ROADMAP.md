@@ -212,8 +212,10 @@ Done in the simulator:
 
 Still to do:
 
-- [ ] Browser: Share > Add to Launcher that saves a launcher icon you can
-      change, as webOS did (today the runtime's `addLaunchPoint` is a stub)
+- [x] Browser: Share > Add to Launcher that saves a launcher icon you can
+      change, as webOS did: a picture of the page as its icon, the title
+      editable in the dialog, on the launcher's Favorites page
+      ([APP-RUNTIME.md](APP-RUNTIME.md#the-browser-and-enyowebview))
 - [ ] Browser: "Install Web App" under Preferences, with a coloured dot by the
       app menu when the page has a web app manifest ([APP-STORE.md](APP-STORE.md) section 1)
 - [ ] Modern Synergy, in the order of [SYNERGY-MODERN.md](SYNERGY-MODERN.md#5-roadmap):
