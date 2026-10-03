@@ -478,10 +478,15 @@ icons, relative asset paths), so `runtime/rootfs.json`'s `applicationDirs`
 entry for `apps` picks it up. `dist/` and `node_modules/` are not committed.
 
 Icons: `icon.png` is 64 px; ship `icon-256x256.png` too and name it as
-`"splashicon"`, as the Open webOS apps did, and the shell draws it on dense
-screens and on the loading card (a launch point's `icons/name.png` gets
-`icons/name-256x256.png`). The apps' `tools/render-icon*.cjs` write both
-(docs/spec/hidpi-art.md).
+`"splashicon"`, as the Open webOS apps did, with `icon-128x128.png` and
+`icon-512x512.png` beside it, named as the webOS fields `"largeIcon"` and
+`"extraLargeIcon"` (Enact's packer copies only the files `appinfo.json`
+names); the shell picks the one for the screen's
+density and draws the bigger ones on the loading card (a launch point's
+`icons/name.png` gets `icons/name-128x128.png` and so on). Phoenix's icons
+are SVG in `art/app-icons`, the app's object on the webOS glass disc (user
+apps) or grey diamond (system apps), rendered by `tools/render-app-icons.cjs`
+(docs/spec/app-icons.md, docs/spec/hidpi-art.md).
 
 ### Launcher metadata and launch points
 
@@ -521,8 +526,9 @@ params match a launch point opens that launch point's card.
 preference apps of webOS 2.x: Wi-Fi, Bluetooth, Airplane Mode, Screen & Lock,
 Sounds & Ringtones, Date & Time, Language & Region, Accessibility, Location
 Services, Emergency Info, Device Info, Backup, Updates, VPN, Developer Mode.
-Launched without a page it lists them all. The launcher icons are drawn by
-`apps/settings/tools/render-icons.cjs` and the wallpapers by
+Launched without a page it lists them all. The launcher icons are drawn in
+`art/app-icons` (on the grey diamond, as Palm's preference apps were) and the
+wallpapers by
 `tools/make-wallpapers.py` (CC0); Palm's were never open-sourced.
 
 ### Services

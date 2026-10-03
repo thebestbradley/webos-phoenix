@@ -128,6 +128,11 @@ jobs:
           python3 tools/hidpi-art.py --check
           python3 tools/keyboard-charcoal.py --check
 
+      - name: App icons match their SVG sources; the originals' 512 px icons are present
+        run: |
+          node tools/render-app-icons.cjs --check
+          python3 tools/upscale-app-icons.py --check
+
       - name: Feedback sounds match their generator
         run: python3 tools/make-feedback-sounds.py --check
 
