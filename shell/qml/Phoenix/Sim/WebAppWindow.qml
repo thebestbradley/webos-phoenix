@@ -72,9 +72,13 @@ Item {
         view.forceActiveFocus();
     }
 
-    // Run a snippet in the page (the shell talking to the runtime).
-    function runScript(js) {
-        view.runJavaScript(js);
+    // Run a snippet in the page (the shell talking to the runtime); done,
+    // if given, is called with its result once it has run.
+    function runScript(js, done) {
+        if (done)
+            view.runJavaScript(js, function (result) { done(result); });
+        else
+            view.runJavaScript(js);
     }
 
     // Relaunch with new launch params (webOSRelaunch event in the page).

@@ -71,7 +71,9 @@ Item {
             // A desktop window has no Power button a Mac keyboard reaches
             // (F3 is Mission Control there): a click wakes the dark screen.
             tapToWake: true
-            source: SimWindowSource { id: windows }
+            // The launch-at-boot apps start with the simulator, as with
+            // LunaSysMgr (WebAppMgrProxy.cpp:117).
+            source: SimWindowSource { id: windows; bootAppsEnabled: true }
             system: SimSystemStatus {
                 id: status
                 // Fixed clock for reproducible screenshots.
@@ -248,6 +250,20 @@ Item {
             var c = root.charger === "wall" ? "none" : "wall";
             root.power({ charger: c, percent: c === "none" ? 60 : 61 });
         }
+    }
+    // Ctrl+Shift+K: a hardware keyboard attached or detached.
+    Shortcut {
+        sequence: "Ctrl+Shift+K"
+        context: Qt.ApplicationShortcut
+        onActivated: status.hardwareKeyboard = !status.hardwareKeyboard
+    }
+    // Shift+F6: the battery stops reporting (powerd gone: the status bar's
+    // battery-error, "Battery: Not Available" in the system menu), or
+    // reports again.
+    Shortcut {
+        sequence: "Shift+F6"
+        context: Qt.ApplicationShortcut
+        onActivated: status.batteryPercent = status.batteryPercent < 0 ? 60 : -1
     }
     Shortcut {
         sequence: "F8"
@@ -491,6 +507,15 @@ Item {
             shell.gestureUp();
             if (scene === "launcheredit")
                 shell.launcherEditMode = true;
+        } else if (scene === "launcherinstall") {
+            // Downloads with two apps from the Marketplace: one being
+            // installed (40%, the progress strip, the icon faded), one
+            // whose install failed (the warning badge).
+            windows._installStatus({ appId: "org.example.tides", state: "installing", progress: 40, title: "Tide Tables" });
+            windows._installStatus({ appId: "org.example.sudoku", state: "failed", title: "Sudoku",
+                                     reason: "The download was interrupted" });
+            shell.gestureUp();
+            Qt.callLater(shell.showLauncherPage, 1);
         } else if (scene === "lowbattery") {
             // An app is open; the battery drops to 4% and luna-systemui (booted
             // by the window source) raises its Low Battery alert.

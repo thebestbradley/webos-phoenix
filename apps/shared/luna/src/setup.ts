@@ -52,6 +52,16 @@ export interface AccessibilityPrefs {
     monoAudio?: boolean;
     /** Show captions where videos have them. */
     captions?: boolean;
+    /** Hardware keyboard: a modifier pressed on its own holds for the next key (twice: until pressed again). */
+    stickyKeys?: boolean;
+    /** Hardware keyboard: a key counts only once held this long (ms; 0 off). */
+    slowKeys?: number;
+    /** Hardware keyboard: a key pressed again within this long (ms) of its release is ignored (0 off). */
+    bounceKeys?: number;
+    /** Hardware keyboard: a held key repeats after this long (ms); 0 never; absent: as the keyboard does. */
+    keyRepeatDelay?: number;
+    /** Hardware keyboard: then every this many ms. */
+    keyRepeatInterval?: number;
 }
 
 export const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;

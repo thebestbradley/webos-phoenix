@@ -316,6 +316,45 @@ Item {
             compare(shell.cardView.windowHeight, fullHeight);
         }
 
+        // Phones: once the banner has gone the bar shows the waiting
+        // notifications' icons at its right edge, side by side, each as
+        // tall as the bar (BannerWindow::paint).
+        function tryVerifyNoThrow(f) {
+            for (var t = 0; t < 40; ++t) {
+                if (f())
+                    return true;
+                wait(50);
+            }
+            return false;
+        }
+
+        function test_phoneNotificationIcons() {
+            var notes = shell.notifications;
+            windows.notify("org.webosphoenix.messaging", "One", "");
+            windows.notify("org.webosphoenix.email", "Two", "");
+            notes.bannerActive = false;
+            var icons = findChild(notes, "phoneNotificationIcons");
+            tryCompare(icons, "visible", true, 2000);
+            var shown = [];
+            for (var i = 0; i < icons.children.length; ++i)
+                if (icons.children[i].height > 0)
+                    shown.push(icons.children[i]);
+            // Leave nothing behind, whatever the checks find.
+            var counts = [shown.length, shown.length > 0 ? shown[0].height : 0];
+            // The Row lays them out at its next polish.
+            var laidOut = shown.length === 2 && tryVerifyNoThrow(function () {
+                return shown[1].x === shown[0].x + shown[0].width
+                    && icons.mapToItem(notes, icons.width, 0).x === notes.width;
+            });
+            windows.dismissNotification(0);
+            windows.dismissNotification(0);
+            notes.bannerActive = false;
+            tryCompare(notes, "negativeSpace", 0, 2000);
+            compare(counts[0], 2);
+            compare(counts[1], Theme.bannerHeight);
+            verify(laidOut, "side by side at the right edge");
+        }
+
         function test_appNameOpensTheAppMenu() {
             var uid = windows.launch("org.webosphoenix.email", "");
             shell.cardView.maximizeProgress = 1;
@@ -351,7 +390,7 @@ Item {
         // nothing in the dashboard.
         function test_bannerMessageIsTransient() {
             var notes = shell.notifications;
-            windows.bannerRequested("org.webosphoenix.email", "Charging Battery", "", "", "", "", 0);
+            windows.bannerRequested("org.webosphoenix.email", "Charging Battery", "", "", "", "", 0, "");
             verify(notes.bannerActive);
             compare(notes.bannerText, "Charging Battery");
             compare(windows.notifications.count, 0);
@@ -363,7 +402,7 @@ Item {
         function test_bannerRisesAndTapLaunches() {
             var notes = shell.notifications;
             var content = findChild(notes, "bannerContent");
-            windows.bannerRequested("org.webosphoenix.email", "New mail", "", "{\"folder\":\"inbox\"}", "", "", 0);
+            windows.bannerRequested("org.webosphoenix.email", "New mail", "", "{\"folder\":\"inbox\"}", "", "", 0, "");
             wait(100);
             // Still below its place, coming up; not from the side.
             verify(content.y > (Theme.bannerHeight - content.height) / 2);
@@ -375,11 +414,49 @@ Item {
             compare(spy.signalArguments[0][0], "org.webosphoenix.email");
             compare(JSON.parse(spy.signalArguments[0][1]).folder, "inbox");
             // Without params a tap does nothing while the banner shows.
-            windows.bannerRequested("org.webosphoenix.email", "Charging Battery", "", "", "", "", 0);
+            notes.bannerActive = false;
+            windows.bannerRequested("org.webosphoenix.email", "Charging Battery", "", "", "", "", 0, "");
             notes.tapBanner();
             compare(spy.count, 1);
             verify(!notes.dashboardOpen);
             notes.bannerActive = false;
+        }
+
+        // BannerMessageHandler::addMessage: banners wait their turn. One
+        // alone has 5 s; a second coming in cuts it to 2 s, and each shows
+        // in order with its sound as it starts. removeBanner drops a
+        // waiting one; clearBanners all of an app's.
+        function test_bannerQueue() {
+            var notes = shell.notifications;
+            notes.bannerActive = false;
+            var start = Date.now();
+            windows.bannerRequested("org.webosphoenix.email", "First", "", "", "", "", 0, "a");
+            windows.bannerRequested("org.webosphoenix.email", "Second", "", "", "", "", 0, "b");
+            windows.bannerRequested("org.webosphoenix.email", "Dropped", "", "", "", "", 0, "c");
+            windows.bannerRequested("com.palm.app.calendar", "Cleared", "", "", "", "", 0, "d");
+            compare(notes.bannerText, "First");
+            compare(notes.bannerQueueLength, 3);
+            windows.bannerRemoved("org.webosphoenix.email", "c");
+            windows.bannersCleared("com.palm.app.calendar");
+            compare(notes.bannerQueueLength, 1);
+            // In 1 s, held 2 s (not 5), out 1 s: the second is in by ~4 s.
+            tryCompare(notes, "bannerText", "Second", 8000);
+            // Uncut it would have been 7 s (1 + 5 + 1).
+            verify(Date.now() - start < 6500, "the first banner was cut to 2 s");
+            verify(notes.bannerActive);
+            // The last one alone has its 5 s, then the bar is clear.
+            tryCompare(notes, "bannerActive", false, 9000);
+            compare(notes.bannerText, "Second");
+        }
+
+        // PalmSystem.removeBannerMessage on the banner showing: it leaves now.
+        function test_bannerRemovedWhileShowing() {
+            var notes = shell.notifications;
+            notes.bannerActive = false;
+            windows.bannerRequested("org.webosphoenix.email", "Going", "", "", "", "", 0, "g");
+            tryCompare(notes, "bannerProgress", 1, 2000);
+            windows.bannerRemoved("org.webosphoenix.email", "g");
+            tryCompare(notes, "bannerActive", false, 1500);
         }
 
         function dashboardRows() {
@@ -428,13 +505,18 @@ Item {
             mouseRelease(r, 140, y);
             tryCompare(windows.notifications, "count", 2, 1000);
 
-            // A quick short flick sideways.
+            // A quick short flick sideways: 40 px in 10 ms (on the
+            // notification area's clock, not the machine's).
             rows = dashboardRows();
             r = rows[0];
+            var t = 1000;
+            notes.clock = function () { return t; };
             mousePress(r, 20, y);
-            mouseMove(r, 40, y, 5);
-            mouseMove(r, 60, y, 5);
-            mouseRelease(r, 60, y, Qt.LeftButton, Qt.NoModifier, 5);
+            mouseMove(r, 40, y);
+            mouseMove(r, 60, y);
+            t += 10;
+            mouseRelease(r, 60, y);
+            notes.clock = function () { return Date.now(); };
             tryCompare(windows.notifications, "count", 1, 1000);
             notes.dashboardOpen = false;
         }
@@ -856,6 +938,11 @@ Item {
             verify(/battery-charged\.png$/.test(img.source));
             shell.system.batteryPercent = 50;
             verify(/battery-charging-5\.png$/.test(img.source));
+            // No reading from powerd: the error battery, whether charging or not.
+            shell.system.batteryPercent = -1;
+            verify(/battery-error\.png$/.test(img.source));
+            shell.system.charging = false;
+            verify(/battery-error\.png$/.test(img.source));
             shell.system.batteryPercent = 100;
         }
 

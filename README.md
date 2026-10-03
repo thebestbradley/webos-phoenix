@@ -253,7 +253,7 @@ then take the bottom-edge flick). A big `--size` needs a matching
 `--scale` to look like a real device (2 for most tablets of 2560 px). Keys: **Esc** back, **F1** swipe up, **Home** the Home button,
 **F2** demo notification, **F3** the Power button (the screen off and locked, or on again), **F4** incoming call (rings
 the Phone app), **F5** incoming text message (for Messaging), **F6** low
-battery, **F7** plug a charger in or out, **F8** battery charged to full,
+battery, **Shift+F6** the battery stops reporting (or reports again), **F7** plug a charger in or out, **F8** battery charged to full,
 **F12** set the device on a Touchstone (the inductive charger) or lift it off,
 **Shift+F12** onto another Touchstone,
 **F9** (or **Home**+**F3**, **Print Screen**, **Ctrl+Alt+P**) a screen capture,
@@ -264,7 +264,7 @@ view for Just Type. Left alone the screen dims and turns off as on a device
 (Settings > Screen & Lock > Turn off after; 5 s on the lock screen); a
 click, **F3** or **Home** turns it on (on a Mac, F3 to F11 need **fn**:
 macOS keeps them for itself). `--stay-awake` keeps it on (as `--screenshot`
-does). `--low-memory` acts as if memory were low: launching an app shows
+does). `--hardware-keyboard` starts with a hardware keyboard attached, and **Ctrl+Shift+K** attaches or detaches one: the virtual keyboard then stays down when a field takes the focus, a keyboard button above the gesture bar brings it up, and typing on the keyboard puts it away. `--low-memory` acts as if memory were low: launching an app shows
 "Sorry, Too Many Cards" instead. On a Touchstone the device goes into dock
 mode, "Exhibition", as on webOS: at once with the screen off (or Power), or
 when the screen would have turned off; an exhibition shows full screen (the
@@ -297,10 +297,11 @@ shutdown sounds (so do `--screenshot` and the offscreen platform).
 `--launch com.palm.app.notes` opens an app at start-up (repeatable);
 `--launch org.webosphoenix.settings.wifi` opens a Settings pane.
 
-`--scene locked|cards|stacks|reorder|maximized|heldcard|launcher|dashboard|justtype|keyboard|systemmenu|pin|emergency|firstuse` opens
+`--scene locked|cards|stacks|reorder|maximized|heldcard|launcher|launcherinstall|dashboard|justtype|keyboard|systemmenu|pin|emergency|firstuse` opens
 a demo state (`keyboard`: Just Type with the virtual keyboard up; `heldcard`: a card that keeps the upright orientation, drawn
 turned in card view with `--orientation left`; `emergency`: the PIN pad's
-Emergency Call; `firstuse`: First Use); add `--screenshot out.png`
+Emergency Call; `firstuse`: First Use; `launcherinstall`: the launcher's
+Downloads page with an app being installed and one whose install failed); add `--screenshot out.png`
 to save a PNG and exit.
 
 **First Use** runs at start-up, as on a new device, until it has been
@@ -334,6 +335,7 @@ node tools/test-firstuse.cjs                                # First Use, every s
 node tools/test-help.cjs                                    # Help, and Just Type finding it
 node tools/test-emergency.cjs                               # Emergency Info, restricted Phone, Accessibility
 node tools/test-location.cjs                                # Location Services and permissions
+node tools/test-appmanager.cjs                              # launch points apps add, handlers, the installer's queries
 ```
 
 ## Build a webOS OSE image (experimental)

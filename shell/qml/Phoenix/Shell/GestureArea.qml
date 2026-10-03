@@ -15,8 +15,12 @@
 //                      as the gesture driver reported it (setAdvancedGestures)
 //   tap             -> toggle between the app and card view
 //   hold and slide  -> with the keyboard up, moves the cursor a character
-//                      per step (Phoenix, GAPS V4); with it down the hold
-//                      is left free
+//                      per step (Phoenix, GAPS V4)
+//   hold            -> the meta key (Key_CoreNavi_Meta, MetaKeyManager): a
+//                      finger resting on the area is a modifier; with it
+//                      down, C, X, V and A typed are Copy, Cut, Paste and
+//                      Select All (metaHeld). Held a moment the bar glows
+//                      until it lifts (CoreNaviManager setMetaGlow)
 // A thin glowing bar hints where it is, like the Pre 2 / Pre 3 light bar.
 
 import QtQuick
@@ -43,6 +47,8 @@ Item {
     // The keyboard is up: a hold moves the cursor.
     property bool cursorControl: false
     readonly property bool cursorActive: mouse.cursor
+    // A finger is on the area and has not swiped: the meta key is down.
+    readonly property bool metaHeld: mouse.pressed && !mouse.swiped
     readonly property int holdDelay: 400
     readonly property real cursorStepWidth: Theme.px(10)
 
@@ -138,12 +144,14 @@ Item {
         property real sx
         property real sy
         property bool cursor: false
+        property bool swiped: false
+        property bool glowing: false
         property real anchorX
         onPressed: (m) => {
             sx = m.x; sy = m.y;
             cursor = false;
-            if (area.cursorControl)
-                hold.restart();
+            swiped = false;
+            hold.restart();
         }
         onPositionChanged: (m) => {
             if (cursor) {
@@ -153,20 +161,34 @@ Item {
                 anchorX += n * area.cursorStepWidth;
             } else if (Math.abs(m.x - sx) + Math.abs(m.y - sy) > area.threshold / 2) {
                 hold.stop();      // a swipe
+                swiped = true;
+                if (glowing) { glowing = false; glowFade.restart(); }
             }
         }
-        onCanceled: { hold.stop(); cursor = false; }
+        onCanceled: { hold.stop(); cursor = false; swiped = false; if (glowing) { glowing = false; glowFade.restart(); } }
         Timer {
             id: hold
             interval: area.holdDelay
             onTriggered: {
-                mouse.cursor = true;
-                mouse.anchorX = mouse.mouseX;
-                area.flash();
+                if (area.cursorControl) {
+                    mouse.cursor = true;
+                    mouse.anchorX = mouse.mouseX;
+                    area.flash();
+                } else {
+                    // The meta glow, steady while the finger stays.
+                    glowFade.stop();
+                    area.glow = 1;
+                    mouse.glowing = true;
+                }
             }
         }
         onReleased: (m) => {
             hold.stop();
+            if (glowing) {
+                glowing = false;
+                glowFade.restart();
+                return;       // a hold, not a tap
+            }
             if (cursor) {
                 cursor = false;
                 return;

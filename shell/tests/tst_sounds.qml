@@ -311,7 +311,7 @@ Item {
         // A banner's sound plays as it shows (BannerMessageHandler).
         function test_bannerSound() {
             var n = windows.soundCount;
-            windows.bannerRequested("com.palm.systemui", "Charging Battery", "", "{}", "notifications", "/usr/palm/sounds/charging.mp3", 0);
+            windows.bannerRequested("com.palm.systemui", "Charging Battery", "", "{}", "notifications", "/usr/palm/sounds/charging.mp3", 0, "");
             compare(windows.soundCount, n + 1);
             compare(windows.lastSound.path, "/usr/palm/sounds/charging.mp3");
             compare(windows.lastSound.stream, "notifications");
@@ -319,7 +319,7 @@ Item {
             // The simulator's volumes: master 60 %, alerts 70 %.
             fuzzyCompare(windows.lastSound.volume, 0.42, 0.0001);
             // A banner without a sound is silent.
-            windows.bannerRequested("com.palm.app.calendar", "Syncing accounts", "", "{}", "", "", 0);
+            windows.bannerRequested("com.palm.app.calendar", "Syncing accounts", "", "{}", "", "", 0, "");
             compare(windows.soundCount, n + 1);
             shell.notifications.bannerActive = false;
         }
@@ -343,7 +343,7 @@ Item {
         function test_mutedBanner() {
             sys.muted = true;
             var n = windows.soundCount;
-            windows.bannerRequested("com.palm.systemui", "Charging Battery", "", "{}", "notifications", "/usr/palm/sounds/charging.mp3", 0);
+            windows.bannerRequested("com.palm.systemui", "Charging Battery", "", "{}", "notifications", "/usr/palm/sounds/charging.mp3", 0, "");
             compare(windows.soundCount, n);
             sys.muted = false;
             shell.notifications.bannerActive = false;

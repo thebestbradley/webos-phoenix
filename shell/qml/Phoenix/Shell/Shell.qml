@@ -37,6 +37,9 @@ FocusScope {
     readonly property bool launcherOpen: launcher.open
     readonly property bool justTypeOpen: justType.open
     property alias launcherEditMode: launcher.editMode
+    // The launcher page shown (LauncherLayout.PAGES: apps 0, downloads 1,
+    // favorites 2, prefs 3).
+    function showLauncherPage(i) { launcher.showPage(i); }
     property alias cardView: cards
     property alias notifications: notes
     property alias searchPill: searchPill
@@ -79,6 +82,25 @@ FocusScope {
         if (uid !== "")
             Qt.callLater(cards.focusLaunched, uid);
         return uid;
+    }
+
+    // A tap on an app the launcher shows as being installed: the original
+    // sent the launch of an app not ready to Software Manager
+    // (WebAppMgrProxy.cpp:544-559), where a failed install could be tried
+    // again or removed. Here a failed one asks (Try Again, Remove); one
+    // still installing opens what installs it (the Marketplace's page for
+    // the app), when the window source says.
+    function pendingAppTapped(appId) {
+        var e = launcher.entry(appId);
+        if (!e)
+            return;
+        if (e.installState === "failed") {
+            deleteDialog.ask(appId);
+            return;
+        }
+        var info = source && typeof source.installInfo === "function" ? source.installInfo(appId) : null;
+        if (info && info.open && info.open.id)
+            launch(info.open.id, info.open.params || null);
     }
 
     function startJustType(text) {
@@ -575,6 +597,23 @@ FocusScope {
     // (KeyboardShortcuts.js).
     readonly property string keyboardShortcuts: system && system.keyboardShortcuts === "desktop" ? "desktop" : "ipad"
 
+    // The meta key's Edit commands (SystemUiController::slotCopy and the
+    // rest): to Just Type while it is open, else to the app in front.
+    function metaEdit(action) {
+        if (locked)
+            return;
+        backlight.activity();
+        if (justType.open) {
+            justType.edit(action);
+            return;
+        }
+        if (!cards.maximized || !source || !source.windowFor)
+            return;
+        var w = source.windowFor(cards.currentUid);
+        if (w && typeof w.edit === "function")
+            w.edit(action);
+    }
+
     // A hardware keyboard shortcut's action (GAPS V8). Not over the lock
     // screen (but for nothing), First Use or the emergency window.
     function shortcut(action) {
@@ -786,15 +825,18 @@ FocusScope {
         function onCardFocusRequested(uid) { Qt.callLater(cards.focusLaunched, uid); }
         function onCardCloseRequested(uid) { cards.close(uid, true); }
         function onJustTypeDismissed() { justType.open = false; }
-        function onBannerRequested(appId, text, icon, params, soundClass, soundFile, soundDuration) {
+        function onBannerRequested(appId, text, icon, params, soundClass, soundFile, soundDuration, bannerId) {
             var a = null;
             for (var i = 0; shell.source.apps && i < shell.source.apps.count; ++i)
                 if (shell.source.apps.get(i).appId === appId)
                     a = shell.source.apps.get(i);
-            notes.showBanner(text, icon, a ? a.color : "#666666", a ? a.glyph : "", appId, params || "");
-            // BannerMessageHandler::aboutToShowBanner: its sound as it shows.
-            sounds.notification(appId, soundClass || "", soundFile || "", soundDuration || 0, false);
+            // BannerMessageHandler::aboutToShowBanner: its sound as it shows
+            // (after the ones queued before it).
+            notes.showBanner(text, icon, a ? a.color : "#666666", a ? a.glyph : "", appId, params || "", bannerId || "",
+                             function () { sounds.notification(appId, soundClass || "", soundFile || "", soundDuration || 0, false); });
         }
+        function onBannerRemoved(appId, bannerId) { notes.removeBanner(appId, bannerId); }
+        function onBannersCleared(appId) { notes.clearBanners(appId); }
         // PalmSystem.playSoundNotification, or a notification with a sound.
         function onSoundRequested(appId, soundClass, soundFile, duration) {
             sounds.notification(appId, soundClass, soundFile, duration, false);
@@ -842,8 +884,35 @@ FocusScope {
         function onAlertKeyChanged() { Qt.callLater(shell._updateAlertSound); }
     }
 
+    // An overlay that takes the keys while it is open (the system menu):
+    // the item that had the keyboard gets it back when it closes.
+    property Item _focusBeforeOverlay: null
+    function _overlayFocus(opened) {
+        if (opened) {
+            if (Window.activeFocusItem !== shell)
+                _focusBeforeOverlay = Window.activeFocusItem;
+            shell.forceActiveFocus();
+        } else if (_focusBeforeOverlay) {
+            var f = _focusBeforeOverlay;
+            _focusBeforeOverlay = null;
+            if (Window.activeFocusItem === shell && f.visible)
+                f.forceActiveFocus();
+        }
+    }
+
     // Desktop / hardware keyboard shortcuts.
     Keys.onPressed: (event) => {
+        // The system menu's own keys (GAPS V8 (3)).
+        if (systemMenu.handleKey(event)) {
+            event.accepted = true;
+            return;
+        }
+        // Typed while Just Type's page is still taking its first letter.
+        if (justType.open && event.text.length === 1 && !(event.modifiers & Qt.ControlModifier)
+                && justType.typeAhead(event.text)) {
+            event.accepted = true;
+            return;
+        }
         // Card view keys (CardWindowManager.cpp:1189-1212).
         if (!locked && cards.maximizeProgress === 0 && !launcher.open && !justType.open) {
             if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
@@ -903,7 +972,14 @@ FocusScope {
         readonly property var captureChords: [{ key: Qt.Key_P, modifiers: Qt.ControlModifier | Qt.AltModifier },
                                               { key: Qt.Key_P, modifiers: Qt.MetaModifier | Qt.AltModifier }]
         readonly property var shortcuts: KeyboardShortcuts.scheme(shell.keyboardShortcuts)
+        // With the gesture area held (the meta key), C, X, V and A are the
+        // Edit commands (MetaKeyManager::handleEvent).
+        readonly property var metaChords: [{ key: Qt.Key_C, modifiers: 0, action: "copy" },
+                                           { key: Qt.Key_X, modifiers: 0, action: "cut" },
+                                           { key: Qt.Key_V, modifiers: 0, action: "paste" },
+                                           { key: Qt.Key_A, modifiers: 0, action: "selectAll" }]
         chords: captureChords.concat(shortcuts.map(function (s) { return { key: s.key, modifiers: s.modifiers }; }))
+                             .concat(gesture.metaHeld ? metaChords.map(function (c) { return { key: c.key, modifiers: c.modifiers }; }) : [])
         // Held on its own, the scheme's modifier lists them (ShortcutSheet).
         watchKeys: [KeyboardShortcuts.sheetKey(shell.keyboardShortcuts)]
         onHolding: (key, down) => {
@@ -948,11 +1024,30 @@ FocusScope {
         onChord: (index) => {
             if (index < captureChords.length)
                 shell.takeScreenshot();
+            else if (index >= captureChords.length + shortcuts.length)
+                shell.metaEdit(metaChords[index - captureChords.length - shortcuts.length].action);
             else if (backlight.on) {
                 backlight.activity();
                 shell.shortcut(shortcuts[index - captureChords.length].action);
             }
         }
+    }
+
+    // ---- Keyboard accessibility (GAPS V8 (4)) ------------------------------------
+    // Settings > Accessibility > Keyboard: sticky, slow and bounce keys and
+    // the key repeat, on the hardware keyboard's keys before SystemKeys
+    // and the apps see them (created after SystemKeys, so its filter runs
+    // first). Not over the lock screen's latches: locking drops them.
+    readonly property KeyboardAccess keyboardAccess: KeyboardAccess {
+        readonly property var prefs: shell.system && shell.system.keyboardAccess ? shell.system.keyboardAccess : ({})
+        stickyKeys: !!prefs.stickyKeys
+        slowKeys: (prefs.slowKeys || 0) > 0
+        slowKeysDelay: prefs.slowKeys || 300
+        bounceKeys: (prefs.bounceKeys || 0) > 0
+        bounceKeysDelay: prefs.bounceKeys || 300
+        customRepeat: !!prefs.customRepeat
+        repeatDelay: prefs.repeatDelay !== undefined ? prefs.repeatDelay : 500
+        repeatInterval: prefs.repeatInterval || 50
     }
 
     // ---- The volume keys ----------------------------------------------------------
@@ -1123,7 +1218,14 @@ FocusScope {
         var entries = [];
         for (var i = 0; source && source.apps && i < source.apps.count; ++i) {
             var a = source.apps.get(i);
-            entries.push({ id: a.appId, title: a.title, tab: a.tab, quickLaunch: a.quickLaunch });
+            // page: the page the app's appinfo.json names ("" for none);
+            // dynamic: a launch point an app added (addLaunchPoint), for
+            // Favorites; category, keywords and installed place the rest
+            // (LauncherLayout.pageFor).
+            entries.push({ id: a.appId, appId: a.webAppId || a.appId, title: a.title, tab: a.tab, quickLaunch: a.quickLaunch,
+                           page: a.page || "", dynamic: !!a.dynamic, category: a.category || "",
+                           keywords: a.keywords ? String(a.keywords).split("\n").filter(function(k) { return k !== ""; }) : [],
+                           installed: !!a.installed });
         }
         return entries;
     }
@@ -1136,7 +1238,7 @@ FocusScope {
         if (!saved && typeof source.savedLauncherLayout === "function") {
             try { saved = JSON.parse(source.savedLauncherLayout() || "null"); } catch (e) { saved = null; }
         }
-        launcherLayout = LauncherLayout.build(entries, launcher.tabs.length, saved);
+        launcherLayout = LauncherLayout.build(entries, saved);
     }
 
     function setLauncherLayout(l) {
@@ -1152,7 +1254,7 @@ FocusScope {
         try { l = JSON.parse(json); } catch (e) { return; }
         if (!l || typeof l !== "object" || !source || !source.apps)
             return;
-        setLauncherLayout(LauncherLayout.build(_launcherEntries(), launcher.tabs.length, l));
+        setLauncherLayout(LauncherLayout.build(_launcherEntries(), l));
     }
 
     Connections {
@@ -1172,6 +1274,33 @@ FocusScope {
     // luna-pyramid.conf:99-100, ...). The simulator turns it on; a device
     // leaves it off and reports OSE's own keyboard (platformKeyboardHeight).
     property bool virtualKeyboard: false
+    // A hardware keyboard is attached (the TouchPad's Bluetooth keyboard;
+    // system.hardwareKeyboard): the virtual keyboard stays down when a
+    // field takes the focus, as with webOS's keyboard-open state, and comes
+    // up only when asked for (the keyboard button above the gesture bar,
+    // the keyboard's own keyboard key); typing on the hardware keyboard
+    // puts it away again (GAPS V8 (1)).
+    readonly property bool hardwareKeyboard: !!(system && system.hardwareKeyboard)
+    property bool _keyboardAskedFor: false
+    function showVirtualKeyboard() {
+        if (!imeClient)
+            return;
+        _keyboardAskedFor = true;
+        _showIMEInternal(true);
+    }
+    onHardwareKeyboardChanged: {
+        _keyboardAskedFor = false;
+        Qt.callLater(_updateImeClient);
+    }
+    Connections {
+        target: shell.keyboardAccess
+        function onHardwareKeyPressed(key) {
+            if (shell.hardwareKeyboard && shell._imeOpened && shell._keyboardAskedFor) {
+                shell._keyboardAskedFor = false;
+                shell._hideIMEInternal();
+            }
+        }
+    }
     // The height of a keyboard the platform draws (OSE's IME panel on a
     // device, PhoenixViewsRoot): the shell makes room for it the same way.
     property real platformKeyboardHeight: 0
@@ -1239,7 +1368,12 @@ FocusScope {
         var old = imeClient;
         var same = old !== null && c !== null && old.kind === c.kind && old.item === c.item && old.uid === c.uid;
         imeClient = c;
-        if (c)
+        if (!same)
+            _keyboardAskedFor = false;
+        if (c && hardwareKeyboard && !_keyboardAskedFor) {
+            ime.editorState = c.state;
+            _hideIMEInternal();
+        } else if (c)
             _showIMEInternal(!same || JSON.stringify(old.state) !== JSON.stringify(c.state));
         else if (old)
             _hideIMEInternal();
@@ -1426,6 +1560,9 @@ FocusScope {
     // Unlocked over a card that is held the other way: back to its
     // orientation (CardWindow::setMaximized, CardWindow.cpp:1756-1760).
     onLockedChanged: {
+        // Sticky keys' latched modifiers do not outlive the lock.
+        if (locked)
+            keyboardAccess.clearModifiers();
         var o = maximizedCardOrientation();
         if (!locked && o !== "free")
             uiRotation.setRotationMode(o, true);
@@ -1534,6 +1671,13 @@ FocusScope {
                         onLaunchRequested: (appId) => shell.launch(appId)
                         onCloseRequested: launcher.open = false
                         onDeleteRequested: (appId) => deleteDialog.ask(appId)
+                        onPendingTapped: (appId) => shell.pendingAppTapped(appId)
+                        // The page edge took the dragged icon to the page beside.
+                        onDragPageChanged: (page) => {
+                            if (iconDrag.appId !== "" && iconDrag.from === "page")
+                                shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, iconDrag.appId, page, -1));
+                            iconDrag.lastIndex = -1;
+                        }
                         onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, launcher.mapToItem(ui, x, y))
                         onDragMoved: (x, y) => iconDrag.move(launcher.mapToItem(ui, x, y))
                         onDragEnded: (x, y) => iconDrag.drop(launcher.mapToItem(ui, x, y))
@@ -1625,6 +1769,9 @@ FocusScope {
                         if (!launcher.open || overDock(p))
                             return;
                         var lp = ui.mapToItem(launcher, p.x, p.y);
+                        // At a page's edge: the launcher pans or scrolls.
+                        if (from === "page" && launcher.dragOver(lp.x, lp.y))
+                            return;
                         var tab = launcher.tabAt(lp.x, lp.y);
                         if (tab >= 0 && tab !== launcher.currentPage) {
                             shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, tab, -1));
@@ -1647,6 +1794,7 @@ FocusScope {
                     function drop(p) {
                         if (appId === "")
                             return;
+                        launcher.dragDone();
                         var l = shell.launcherLayout;
                         if (overDock(p)) {
                             var q = ui.mapToItem(quickLaunch, p.x, p.y);
@@ -1679,25 +1827,74 @@ FocusScope {
                     id: deleteDialog
                     objectName: "deleteDialog"
                     property string appId: ""
+                    // "app": Remove Application?; "shortcut": a launch point an
+                    // app added, Remove Shortcut? (LauncherObject::
+                    // appDeleteDecoratorActivated, dimensionslauncher.cpp:
+                    // 3161-3198); "failed": an install that failed, with Try
+                    // Again when it can be (Phoenix's stand-in for Software
+                    // Manager's list).
+                    property string mode: "app"
+                    property string shownId: ""
                     anchors.fill: parent
                     visible: opacity > 0
                     opacity: appId !== "" ? 1 : 0
                     Behavior on opacity { NumberAnimation { duration: 300 } }
                     z: 1001
-                    function ask(id) { appId = id; }
-                    // "Calculator - v.3.0.5" (the app's title and version).
+                    // What the dialog says, set when it opens.
+                    property string titleText: ""
+                    property string messageText: ""
+                    property bool canRetry: false
+                    function ask(id) {
+                        var e = iconDrag.entry(id);
+                        mode = e && e.installState === "failed" ? "failed" : e && e.dynamic ? "shortcut" : "app";
+                        shownId = id;
+                        titleText = title();
+                        messageText = message();
+                        var i = info();
+                        canRetry = mode === "failed" && !!(i && i.retry);
+                        appId = id;
+                    }
+                    function info() {
+                        return shell.source && typeof shell.source.installInfo === "function" ? shell.source.installInfo(shownId) : null;
+                    }
+                    function title() {
+                        return mode === "shortcut" ? qsTr("Remove Shortcut?")
+                             : mode === "failed" ? qsTr("Installation Failed") : qsTr("Remove Application?");
+                    }
+                    // "Calculator - v.3.0.5" (the app's title and version);
+                    // "Google (Web)" (the shortcut's title, its app's).
                     function message() {
-                        var e = iconDrag.entry(appId);
+                        var e = iconDrag.entry(shownId);
                         if (!e)
-                            return appId;
+                            return shownId;
+                        if (mode === "shortcut") {
+                            var app = iconDrag.entry(e.webAppId);
+                            return qsTr("%1 (%2)").arg(e.title).arg(app ? app.title : e.webAppId);
+                        }
+                        if (mode === "failed") {
+                            var i = info();
+                            return i && i.reason ? qsTr("%1: %2").arg(e.title).arg(i.reason) : e.title;
+                        }
                         return e.version ? qsTr("%1 - v.%2").arg(e.title).arg(e.version) : e.title;
                     }
                     function remove() {
                         var id = deleteDialog.appId;
                         deleteDialog.appId = "";
-                        shell.setLauncherLayout(LauncherLayout.remove(shell.launcherLayout, id));
+                        if (mode === "failed") {
+                            if (shell.source && typeof shell.source.dismissInstall === "function")
+                                shell.source.dismissInstall(id);
+                            return;
+                        }
+                        shell.setLauncherLayout(mode === "shortcut" ? LauncherLayout.drop(shell.launcherLayout, id)
+                                                                    : LauncherLayout.remove(shell.launcherLayout, id));
                         if (shell.source && typeof shell.source.removeApp === "function")
                             shell.source.removeApp(id);
+                    }
+                    function retry() {
+                        var id = deleteDialog.appId;
+                        deleteDialog.appId = "";
+                        if (shell.source && typeof shell.source.retryInstall === "function")
+                            shell.source.retryInstall(id);
                     }
                     Rectangle { anchors.fill: parent; color: "#80000000" }
                     MouseArea { anchors.fill: parent; enabled: deleteDialog.appId !== ""; onClicked: deleteDialog.appId = "" }
@@ -1721,9 +1918,10 @@ FocusScope {
                             width: parent.width - 2 * x
                             spacing: appInfoDialog.margin
                             Text {
+                                objectName: "deleteDialogTitle"
                                 width: parent.width
                                 wrapMode: Text.Wrap
-                                text: qsTr("Remove Application?")
+                                text: deleteDialog.titleText
                                 color: "#FFFFFF"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.px(18)
@@ -1733,7 +1931,7 @@ FocusScope {
                                 objectName: "deleteDialogMessage"
                                 width: parent.width
                                 wrapMode: Text.Wrap
-                                text: deleteDialog.message()
+                                text: deleteDialog.messageText
                                 color: "#FFFFFF"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.px(14)
@@ -1747,6 +1945,14 @@ FocusScope {
                                     height: Theme.px(52)
                                     caption: qsTr("Cancel")
                                     onAction: deleteDialog.appId = ""
+                                }
+                                ActionButton {
+                                    objectName: "deleteDialogRetry"
+                                    width: parent.width
+                                    height: Theme.px(52)
+                                    visible: deleteDialog.canRetry
+                                    caption: qsTr("Try Again")
+                                    onAction: deleteDialog.retry()
                                 }
                                 ActionButton {
                                     objectName: "deleteDialogRemove"
@@ -1972,6 +2178,9 @@ FocusScope {
                 availableHeight: ui.height - Theme.statusBarHeight - notes.negativeSpace + Theme.px(10)
                 onCloseRequested: systemMenu.open = false
                 onLaunchRequested: (appId, params) => shell.launch(appId, params)
+                // Keyboard navigation: the menu has the keyboard while open
+                // (the app's page would take the keys), then hands it back.
+                onOpenChanged: shell._overlayFocus(open)
             }
 
             // The virtual keyboard, above everything (InputWindowManager is the
@@ -2000,6 +2209,12 @@ FocusScope {
                         KeyInjector.sendImeKey(t, key, modifiers);
                 }
                 onTextCommitted: (text) => {
+                    // The meta key held: c, x, v and a are Edit commands.
+                    var meta = { c: "copy", x: "cut", v: "paste", a: "selectAll" }[String(text).toLowerCase()];
+                    if (gesture.metaHeld && meta) {
+                        shell.metaEdit(meta);
+                        return;
+                    }
                     var t = shell._imeTarget();
                     if (t)
                         KeyInjector.commitText(t, text);
@@ -2142,6 +2357,84 @@ FocusScope {
         z: 99997
         scheme: shell.keyboardShortcuts
         anchors.centerIn: parent
+    }
+
+    // A hardware keyboard attached and a field with the focus: the button
+    // that brings the virtual keyboard up (the iPad's keyboard bar), at the
+    // bottom right above the gesture bar.
+    Rectangle {
+        id: keyboardButton
+        objectName: "showKeyboardButton"
+        z: 99996
+        visible: shell.virtualKeyboard && shell.hardwareKeyboard && shell.imeClient !== null && !shell._imeOpened && !shell.locked
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.rightMargin: Theme.px(12)
+        anchors.bottomMargin: Theme.gestureAreaHeight + Theme.px(10)
+        width: Theme.px(56)
+        height: Theme.px(40)
+        radius: Theme.px(8)
+        color: keyboardButtonArea.pressed ? "#e0505050" : "#d0202020"
+        border.color: "#60ffffff"
+        Item {
+            anchors.centerIn: parent
+            width: Theme.px(36)
+            height: Theme.px(22)
+            clip: true
+            // icon-hide-keyboard.png without its arrow: just the keyboard.
+            Image {
+                source: Theme.asset("keyboard-tablet/icon-hide-keyboard.png")
+                width: Theme.px(36)
+                height: Theme.px(36) * Theme.artHeight(source) / Math.max(1, Theme.artWidth(source))
+            }
+        }
+        MouseArea {
+            id: keyboardButtonArea
+            anchors.fill: parent
+            onClicked: shell.showVirtualKeyboard()
+        }
+    }
+
+    // Sticky keys: the modifiers waiting for the next key, and in bold
+    // the ones locked down, in a chip above the gesture bar.
+    Rectangle {
+        id: stickyChip
+        objectName: "stickyModifiers"
+        readonly property int mods: shell.keyboardAccess.latchedModifiers | shell.keyboardAccess.lockedModifiers
+        function names(m) {
+            var out = [];
+            if (m & Qt.ShiftModifier) out.push("Shift");
+            if (m & Qt.ControlModifier) out.push(Qt.platform.os === "osx" ? "⌘" : "Ctrl");
+            if (m & Qt.AltModifier) out.push(Qt.platform.os === "osx" ? "Option" : "Alt");
+            if (m & Qt.MetaModifier) out.push(Qt.platform.os === "osx" ? "Control" : "Super");
+            return out;
+        }
+        z: 99996
+        visible: mods !== 0
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Theme.gestureAreaHeight + Theme.px(12)
+        width: chipText.implicitWidth + Theme.px(24)
+        height: Theme.px(30)
+        radius: height / 2
+        color: "#d0202020"
+        border.color: "#60ffffff"
+        Text {
+            id: chipText
+            objectName: "stickyModifiersText"
+            anchors.centerIn: parent
+            textFormat: Text.StyledText
+            color: Theme.text
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.px(15)
+            text: {
+                var locked = shell.keyboardAccess.lockedModifiers;
+                return stickyChip.names(stickyChip.mods).map(function (n, i) {
+                    var all = stickyChip.names(locked);
+                    return all.indexOf(n) >= 0 ? "<b><u>" + n + "</u></b>" : n;
+                }).join("  ");
+            }
+        }
     }
 
     // The reticle: penindicator-ripple.png where a tap lands, growing to

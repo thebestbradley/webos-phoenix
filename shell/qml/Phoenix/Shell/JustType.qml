@@ -46,13 +46,34 @@ Item {
     // OutCubic (lunaAnimations.conf:87-88).
     Behavior on opacity { NumberAnimation { duration: Theme.justTypeFadeDuration; easing.type: Easing.OutCubic } }
 
+    // Typing in card view starts Just Type with the first letter; the page
+    // shows it a moment later. Until it does the shell keeps the keyboard
+    // and holds what is typed (typeAhead), then hands it on in order.
+    property bool _starting: false
+    property string _typedAhead: ""
+    function typeAhead(text) {
+        if (!_starting)
+            return false;
+        _typedAhead += text;
+        return true;
+    }
     function start(firstText) {
         _attachSurface();
         open = true;
         if (surface) {
-            source.justTypeStart(firstText || "");
-            if (surface.focusPage)
-                surface.focusPage();
+            _starting = true;
+            _typedAhead = "";
+            source.justTypeStart(firstText || "", function () {
+                if (!jt._starting)
+                    return;
+                var more = jt._typedAhead;
+                jt._starting = false;
+                jt._typedAhead = "";
+                if (more && source.justTypeType)
+                    source.justTypeType(more);
+                if (jt.open && surface.focusPage)
+                    surface.focusPage();
+            });
             return;
         }
         input.text = firstText || "";
@@ -62,6 +83,8 @@ Item {
     onOpenChanged: {
         if (open)
             return;
+        _starting = false;
+        _typedAhead = "";
         editPopup.close();
         if (surface)
             source.justTypeStop();
@@ -117,6 +140,7 @@ Item {
 
         TextInput {
             id: input
+            objectName: "justTypeInput"
             anchors.left: parent.left
             anchors.leftMargin: Theme.px(36)
             anchors.right: parent.right
@@ -154,17 +178,20 @@ Item {
         id: editPopup
         objectName: "justTypeEditPopup"
         anchors.fill: parent
-        onTriggered: (action) => {
-            switch (action) {
-            case "selectAll": input.selectAll(); break;
-            case "cut": input.cut(); break;
-            case "copy": input.copy(); break;
-            case "paste": input.paste(); break;
-            }
-        }
+        onTriggered: (action) => jt.edit(action)
     }
 
     ListModel { id: results }
+
+    // Edit commands on the search field (the edit popup's, the meta key's).
+    function edit(action) {
+        switch (action) {
+        case "selectAll": input.selectAll(); break;
+        case "cut": input.cut(); break;
+        case "copy": input.copy(); break;
+        case "paste": input.paste(); break;
+        }
+    }
 
     function refresh() {
         results.clear();

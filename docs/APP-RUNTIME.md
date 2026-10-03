@@ -273,6 +273,27 @@ in that app's stack. Headless apps (`"noWindow": true` in `appinfo.json`, e.g.
 Calendar, Clock, Email) run their main page invisibly, and each window they
 open is a card, as on webOS.
 
+**Launch at boot and keep alive** (`SimWindowSource`, after luna.conf). At
+start-up the launch-at-boot apps start without a card, with the launch
+params `{"launchedAtBoot": true}` (Email and Calendar then open nothing:
+`Launch.js`, `App.handleLaunchParams`): phones Phone, Email, Calendar,
+Messaging and Camera (`conf/luna.conf` [LaunchAtBoot]), tablets the same
+without Camera (`luna-topaz.conf`); the original ids map to the Phoenix
+apps that replace them. A headless app keeps its page; any other keeps its
+window, ready, and its first launch shows it at once. Closing the last card
+of a keep-alive app keeps the app running without a card, and the next
+launch brings the same window back and relaunches it (the page gets the
+launch params, `webOSRelaunch` / `Mojo.relaunch`): phones keep Phone
+([KeepAlive]); tablets Email, Calendar, Messaging, Photos and Music
+(`luna-topaz.conf`); both keep the browser until memory runs low
+([KeepAliveUntilMemPressure]: when `MemoryMonitor` says low, it closes).
+A page can ask for its own window (`PalmSystem.keepAlive(true)`: Email's
+main card, Calendar's), as WebAppMgr's off-screen cache did. The angry card
+(thrown down off the screen) and a window the app closes itself end the app
+for good (`CardWindowManager::closeWindow` / `setDisableKeepAlive`).
+`--scene` and the tests build their own scenes and start no boot apps
+(`SimWindowSource.bootAppsEnabled`, which `sim.qml` turns on).
+
 **In a desktop browser.**
 
 ```sh
@@ -505,7 +526,19 @@ apps) or grey diamond (system apps), rendered by `tools/render-app-icons.cjs`
 }
 ```
 
-- `launcherTab`: 0 Apps (default), 1 Downloads, 2 Settings
+- `launcherTab`: 0 Apps, 1 Downloads, 2 Settings, 3 Favorites. Without
+  it the launcher places a new app as luna-sysmgr did
+  (`LauncherLayout.pageFor`): by its `category`, then its `keywords`,
+  through the keyword map (`conf/launcher3/app-keywords-to-designator-map.txt`,
+  which ships only a placeholder; Phoenix adds "settings" and "preferences"
+  for the Settings page); else the app catalog (the Marketplace) and apps
+  the user installed go to Downloads, a built-in app of category
+  "Settings" to Settings, the rest to Apps
+  (`pageIndexForAppByPredefinedDesignators`). Apps in
+  `conf/launcher3/app_blacklist.conf` (`com.palm.sysapp.launchermode0`)
+  never show. The launcher's pages are Apps, Downloads, Favorites and
+  Settings, as on the TouchPad; a layout saved before Favorites keeps its
+  three pages.
 - `hidden`: leave the app itself out of the launcher (its launch points stay)
 - `quickLaunch`: put the app in this quick launch slot (1-4); Phone is 1 and
   Messaging 3 (Email 2 and Calendar 4 are set by title in `SimWindowSource`)
@@ -513,6 +546,15 @@ apps) or grey diamond (system apps), rendered by `tools/render-app-icons.cjs`
   card and starts the app with `params` as its launch params
   (`PalmSystem.launchParams`, `?launchParams=` on the page URL). A web app
   whose title matches a placeholder (Wi-Fi, Bluetooth, ...) replaces it.
+
+An app can also add launch points of its own at run time, as on webOS
+(`applicationManager/addLaunchPoint {id, title, icon, params, removable}`
+-> `{launchPointId}`, eight digits; `removeLaunchPoint {launchPointId}`).
+They go on the launcher's Favorites page (`slotAppAuxiliaryIconAdd`), have
+the (–) remove decorator in edit mode ("Remove Shortcut?"), and survive
+restarts: phoenix-sim keeps each as `/var/luna/launchpoints/<id>` in its
+data folder, as LunaSysMgr did. The browser's Share > Add to Launcher makes
+one (see [The browser](#the-browser-and-enyowebview)).
 
 On OSE, the same launch points are registered with SAM
 (`com.webos.applicationManager/addLaunchPoint`), and launch params arrive the
@@ -770,6 +812,18 @@ engines behind them:
 - **A desktop browser** (`tools/serve-rootfs.py`, the Playwright tests): an
   `<iframe>`, so only sites that allow framing show, and only same-origin
   pages report their titles.
+
+Share > Add to Launcher works as on webOS: the plugin's
+`saveViewToFile`, `generateIconFromFile` and `resizeImage` make the page's
+thumbnail and a 64 px icon in `/var/luna/data/browser/icons/`
+(phoenix-sim's `SimSnapshots`: the shell takes a picture of the page's
+Chromium view; the icon is the top of the page in a rounded frame, since
+BrowserServer's own art was never released), the dialog shows it, and Add
+to Launcher calls `applicationManager/addLaunchPoint` with the page's
+address: a launcher icon on Favorites that opens the page in its own
+card. The calls return at once, as the plugin's did; a picture still being
+made is served when it is ready. In a desktop browser the page is an
+`<iframe>`, so there is no picture and the shortcut gets the browser's icon.
 
 Links for other apps (`mailto:`, `tel:`, `sms:`) go to them through
 `/usr/palm/command-resource-handlers.json` (a compat file), as the
@@ -1528,6 +1582,42 @@ The back gesture goes back in the site's history first. Android cards will
 get the same menu ([ANDROID.md](ANDROID.md)). A built-in
 app's id cannot be installed over. `build/siminstaller-test` tests
 SimInstaller.
+
+**In the launcher, as it goes.** Whoever installs tells the shell
+(`runtime.installStatus`, an `installStatus` host message: state,
+progress, title, icon, the reason of a failure, how to try again): the
+Marketplace from its first download step (`deps.pending` of the packages
+service), the installer as it reads and installs the package. An app not
+installed yet gets a pending icon of its own (on Downloads), faded to half
+with a 32 px progress badge, a frame of `loading-strip.png` per 1/19 of the
+progress; a failed one shows `warning-icon.png` (LunaSysMgr's install
+status decorators, `iconheap.cpp:44-51`, at 50 px right of and above the
+cell's centre on tablets). A tap on it does not launch it: while it
+installs it opens the app's page in the Marketplace, as webOS sent such
+launches to Software Manager; after a failure it asks "Installation
+Failed", with Try Again (the same install again: the Marketplace's, or the
+installer's with the same file) and Remove. `phoenix-sim --scene
+launcherinstall` shows both.
+
+**The rest of the installer and the application manager** (luna-sysmgr's
+`ApplicationInstaller.cpp`, `ApplicationManagerService.cpp`; the host's
+part through `runtime.hostOp`, phoenix-sim's `SimWindowSource` or
+`tools/serve-rootfs.py`; `tools/test-appmanager.cjs` tests them):
+
+| Method | What it does here |
+| --- | --- |
+| `com.palm.appinstaller/notifyOnChange {appId?}` | `{appId, version, statusChange: "INSTALLED" \| "REMOVED", cause: "USER" \| "REVOKED"}` for one app or all (`*`) |
+| `installProgressQuery {appId, subscribe?}` | `{state, progress, title, reason}` of a pending install (LunaSysMgr never answered it) |
+| `queryInstallCapacity {appId \| packageId, size, uncompressedSize}` | `{result (1 download, 2 install space short), spaceNeededInKB}`, against the free space where apps go |
+| `getUserInstalledAppSizes` | `{apps: [{appName, size (KB)}], totalSize}` |
+| `revoke {item: '{"payload": {signature, appId: [...]}}'}` | removes the apps (cause REVOKED) when a trusted Marketplace catalog's Ed25519 key signed their ids; else `verify failed` |
+| `com.palm.applicationManager/addLaunchPoint`, `removeLaunchPoint` | above |
+| `running`, `close {processId}` | the apps with cards, headless or kept alive, with process ids; close ends one for good |
+| `install {target}`, `rescan` | install a package file; read the apps again |
+| `getSizeOfApps {appIds}` | `{<appId>: bytes}` |
+| `listPendingLaunchPoints` | the apps being installed |
+| `listDockModeLaunchPoints`, `addDockModeLaunchPoint`, `removeDockModeLaunchPoint`, `listDockPoints` | apps with `"exhibitionMode"` (or `"dockMode"`) in `appinfo.json`, enabled by default as `conf/default-exhibition-apps.json` (Photos); data only until dock mode comes |
+| `addResourceHandler`, `swapResourceHandler`, `addRedirectHandler`, `swapRedirectHandler`, `removeHandlersForAppId`, `listAllHandlersForMime` / `ForUrl`, `getHandlerForUrl` / `ForExtension`, `mimeTypeForExtension`, `listResourceHandlers`, `listRedirectHandlers`, `listExtensionMap` | the handler registry: the apps' `mimeTypes`, the built-in handlers and `command-resource-handlers.json`, plus those apps add (kept in the shared store, indexes from 1000); the first for a type or pattern is active until swapped |
 
 ### Developer Mode
 

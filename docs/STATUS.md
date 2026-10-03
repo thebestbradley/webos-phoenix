@@ -102,9 +102,7 @@ The whole plan, milestone by milestone, with the decisions taken so far:
   screen reader, magnification, health,
   cell broadcast, eSIM, printing, screen recording, fingerprint, notes
   sync, a now-playing dashboard, and the "not done" lists of each new app.
-- **Browser**: fix Share > Add to Launcher (the runtime's `addLaunchPoint`
-  is a stub, and the dialog has no icon because the old browser's native
-  snapshot plugin is missing); add "Install Web App" for sites with a web
+- **Browser**: add "Install Web App" for sites with a web
   app manifest (a coloured dot by the app menu, the item under
   Preferences; install as described in [APP-STORE.md](APP-STORE.md)); plan a
   Chromium-based Phoenix browser to replace the Isis browser in the 2.0 UI.

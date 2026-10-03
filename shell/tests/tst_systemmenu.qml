@@ -69,6 +69,37 @@ Item {
             compare(p.y, Theme.statusBarHeight);
         }
 
+        // GAPS V8 (3): with a keyboard, Down / Up move through the rows on
+        // show (the first is the brightness slider: the date and battery
+        // rows do nothing), Left / Right move a slider, Enter acts, Esc
+        // closes the menu.
+        function test_keyboardNavigation() {
+            verify(shell.activeFocus);
+            keyClick(Qt.Key_Down);
+            var brightness = menu.keyItem;
+            verify(brightness && brightness.adjustable, "first stop: the brightness slider");
+            verify(brightness.keyFocused);
+            keyClick(Qt.Key_Right);
+            verify(status.brightness > 0.7);
+            keyClick(Qt.Key_Left);
+            keyClick(Qt.Key_Left);
+            verify(status.brightness < 0.7);
+            // Down to the Airplane Mode row and turn it on with Enter.
+            var airplane = null;
+            for (var i = 0; i < 20 && !airplane; ++i) {
+                keyClick(Qt.Key_Down);
+                if (menu.keyItem.label !== undefined && String(menu.keyItem.label).indexOf("Airplane Mode") >= 0)
+                    airplane = menu.keyItem;
+            }
+            verify(airplane, "reached Airplane Mode");
+            verify(!brightness.keyFocused);
+            keyClick(Qt.Key_Return);
+            tryCompare(status, "airplaneMode", true, 2000);
+            // Up from the top wraps to the bottom; Esc closes.
+            keyClick(Qt.Key_Escape);
+            tryCompare(menu, "open", false, 1000);
+        }
+
         function test_dateAndBattery() {
             compare(findChild(menu, "systemMenuDate").label,
                     new Date(2009, 5, 6).toLocaleDateString(Qt.locale(), Locale.LongFormat));

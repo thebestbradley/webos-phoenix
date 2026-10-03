@@ -5,14 +5,15 @@
 //
 //   phoenix-sim [--size WxH] [--scale N] [--tablet|--phone] [--scene NAME]
 //               [--orientation up|left|down|right] [--turn ORIENTATION]
-//               [--home-button] [--first-use] [--screenshot FILE [--delay MS]] [--stay-awake] [--low-memory] [--touchstone] [--no-host-shell]
+//               [--home-button] [--first-use] [--screenshot FILE [--delay MS]] [--stay-awake] [--low-memory] [--hardware-keyboard] [--touchstone] [--no-host-shell]
 //               [--host-shell PATH]
 //
 // Keys: Esc = back gesture, Home/F1 = up gesture, F2 = demo notification,
 //       F3 = Power (screen off and locked / on), F4 = incoming call, F5 = incoming text message,
-//       F6 = low battery, F7 = charger in/out, F12 = Touchstone (inductive charger: dock mode) on/off, Shift+F12 = onto the other Touchstone,
+//       F6 = low battery, Shift+F6 = battery not reporting, F7 = charger in/out, F12 = Touchstone (inductive charger: dock mode) on/off, Shift+F12 = onto the other Touchstone,
 //       F10 / F11 = volume down / up, F9 / Print Screen /
 //       Ctrl+Alt+P (Command or Control+Option+P on a Mac) = screen capture,
+//       Ctrl+Shift+K = attach or detach a hardware keyboard,
 //       Home + F3 together = screen capture, Ctrl+Left / Ctrl+Right =
 //       turn the device a quarter turn counter-clockwise / clockwise.
 //       Type in card view for Just Type.
@@ -35,6 +36,7 @@
 
 #include "rootfs.h"
 #include "siminstaller.h"
+#include "simsnapshots.h"
 #include "simpty.h"
 #include "simsettings.h"
 #include "simprocess.h"
@@ -124,7 +126,7 @@ int main(int argc, char *argv[])
     QCommandLineOption scaleOpt(QStringLiteral("scale"), QStringLiteral("Device pixels per legacy pixel, like a denser screen (default 1; the Pre 3 was 1.5 at 480x800)."), QStringLiteral("N"), QStringLiteral("1"));
     QCommandLineOption tabletOpt(QStringLiteral("tablet"), QStringLiteral("Use the tablet (TouchPad) layout."));
     QCommandLineOption phoneOpt(QStringLiteral("phone"), QStringLiteral("Force the phone layout."));
-    QCommandLineOption sceneOpt(QStringLiteral("scene"), QStringLiteral("Demo scene: locked, cards, stacks, reorder, maximized, heldcard, launcher, launcheredit, pin, emergency, firstuse, lowbattery, banner, notified, dashboard, justtype, keyboard, systemmenu, empty."), QStringLiteral("name"));
+    QCommandLineOption sceneOpt(QStringLiteral("scene"), QStringLiteral("Demo scene: locked, cards, stacks, reorder, maximized, heldcard, launcher, launcheredit, launcherinstall, pin, emergency, firstuse, lowbattery, banner, notified, dashboard, justtype, keyboard, systemmenu, empty."), QStringLiteral("name"));
     QCommandLineOption firstUseOpt(QStringLiteral("first-use"), QStringLiteral("Start with First Use, as on a new device (without it, First Use runs until it has been done once, unless --scene or --launch is given)."));
     QCommandLineOption shotOpt(QStringLiteral("screenshot"), QStringLiteral("Save a screenshot to FILE and exit."), QStringLiteral("file"));
     QCommandLineOption delayOpt(QStringLiteral("delay"), QStringLiteral("Delay before the screenshot (default 1500 ms)."), QStringLiteral("ms"), QStringLiteral("1500"));
@@ -138,11 +140,12 @@ int main(int argc, char *argv[])
     QCommandLineOption homeButtonOpt(QStringLiteral("home-button"), QStringLiteral("The device has a hardware Home button its maker uses instead of the gesture bar (the TouchPad): no gesture bar; the Home key presses the button."));
     QCommandLineOption lowMemoryOpt(QStringLiteral("low-memory"), QStringLiteral("Act as if memory were low: launching an app shows \"Sorry, Too Many Cards\"."));
     QCommandLineOption touchstoneOpt(QStringLiteral("touchstone"), QStringLiteral("Start on a Touchstone (the inductive charger), in dock mode: its exhibition showing (F12 sets the device on one or lifts it off)."));
+    QCommandLineOption hardwareKeyboardOpt(QStringLiteral("hardware-keyboard"), QStringLiteral("Start with a hardware keyboard attached (Ctrl+Shift+K attaches or detaches it): the virtual keyboard stays down unless asked for."));
     QCommandLineOption stayAwakeOpt(QStringLiteral("stay-awake"), QStringLiteral("The screen never dims or turns off by itself (always so with --screenshot)."));
     QCommandLineOption quietOpt(QStringLiteral("quiet"), QStringLiteral("No boot and shutdown sounds (they are off anyway with --screenshot and the offscreen platform)."));
     QCommandLineOption noHostShellOpt(QStringLiteral("no-host-shell"), QStringLiteral("Do not give the Terminal app a real shell on this computer (it gets the runtime's simulated shell)."));
     QCommandLineOption hostShellOpt(QStringLiteral("host-shell"), QStringLiteral("Run this program in the Terminal instead of the shell it asks for."), QStringLiteral("path"));
-    parser.addOptions({ lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
+    parser.addOptions({ hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
                         noHostShellOpt, hostShellOpt });
     parser.process(app);
 
@@ -199,10 +202,16 @@ int main(int argc, char *argv[])
         qWarning("phoenix-sim: web apps disabled: %s", qPrintable(rootfs.error()));
     // Apps the user installs (the Marketplace, Files' .ipk sheet) live with
     // the simulator's other data, as on a device in /media/cryptofs/apps.
+    // /var/luna/ (launch points apps add, the browser's page pictures) in
+    // the simulator's data folder; read with the apps below.
+    if (rootfs.isValid())
+        rootfs.setDataDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
     if (rootfs.isValid())
         rootfs.setInstalledDir(parser.isSet(installedOpt) ? parser.value(installedOpt)
             : QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath(QStringLiteral("cryptofs/apps")));
     SimInstaller installer(&rootfs);
+    // The browser's page pictures (saveViewToFile, generateIconFromFile).
+    SimSnapshots snapshots(&rootfs);
 
     // The Terminal's shells: real ones on this computer (docs/TERMINAL.md),
     // unless turned off. The runtime learns which from /usr/share/phoenix/host.json.
@@ -236,7 +245,9 @@ int main(int argc, char *argv[])
         profile->setStorageName(QStringLiteral("phoenix-sim"));
         profile->setOffTheRecord(false);
 #endif
-        profile->installUrlSchemeHandler(Rootfs::scheme().toLatin1(), new RootfsSchemeHandler(&rootfs, profile));
+        auto *schemeHandler = new RootfsSchemeHandler(&rootfs, profile);
+        schemeHandler->setSnapshots(&snapshots);
+        profile->installUrlSchemeHandler(Rootfs::scheme().toLatin1(), schemeHandler);
         view.rootContext()->setContextProperty(QStringLiteral("phoenixWebProfile"), profile);
         webEngine = true;
         webApps = rootfs.apps();
@@ -247,6 +258,7 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simLaunch"), parser.values(launchOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simLowMemory"), parser.isSet(lowMemoryOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simTouchstone"), parser.isSet(touchstoneOpt));
+    view.rootContext()->setContextProperty(QStringLiteral("simHardwareKeyboard"), parser.isSet(hardwareKeyboardOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simOpen"), parser.value(openOpt));
     RootfsFiles rootfsFiles(&rootfs);
     view.rootContext()->setContextProperty(QStringLiteral("simRootfs"), rootfs.isValid() ? &rootfsFiles : nullptr);
@@ -257,6 +269,7 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simSettings"), &settings);
     view.rootContext()->setContextProperty(QStringLiteral("simPty"), simPty);
     view.rootContext()->setContextProperty(QStringLiteral("simInstaller"), rootfs.isValid() ? &installer : nullptr);
+    view.rootContext()->setContextProperty(QStringLiteral("simSnapshots"), rootfs.isValid() ? &snapshots : nullptr);
     view.rootContext()->setContextProperty(QStringLiteral("simScene"), parser.value(sceneOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simFirstUse"), parser.isSet(firstUseOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simStayAwake"), parser.isSet(stayAwakeOpt) || parser.isSet(shotOpt));
