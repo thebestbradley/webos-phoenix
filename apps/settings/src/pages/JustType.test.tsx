@@ -62,6 +62,15 @@ describe("com.palm.universalsearch", () => {
         expect(hostMessages.filter((m) => m.type === "launch").pop()!.payload)
             .toEqual({ id: "org.webosphoenix.settings", params: { page: "justtype" } });
     });
+
+    it("opens its Help (Enyo's HelpMenu: com.palm.app.help) at the Just Type topic", async () => {
+        await call("luna://com.palm.applicationManager/open",
+                   { id: "com.palm.app.help", params: { target: "http://help.palm.com/universalsearch/index.html" } });
+        expect(hostMessages.filter((m) => m.type === "launch").pop()!.payload)
+            .toEqual({ id: "org.webosphoenix.help", params: { topic: "justtype" } });
+        await call("luna://com.palm.applicationManager/open", { id: "com.palm.app.help", params: { target: "http://help.palm.com/somewhere/index.html" } });
+        expect(hostMessages.filter((m) => m.type === "launch").pop()!.payload).toEqual({ id: "org.webosphoenix.help", params: {} });
+    });
 });
 
 describe("Settings > Just Type", () => {

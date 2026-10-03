@@ -1111,8 +1111,15 @@
         "com.palm.app.searchpreferences": { id: "org.webosphoenix.settings", params: { page: "justtype" } },
         // The Certificate Manager (Device Info's menu, Email's "Open
         // Certificate Manager", ApplicationManagerService.cpp:3822).
-        "com.palm.app.certificate": { id: "org.webosphoenix.settings", params: { page: "certificates" } }
+        "com.palm.app.certificate": { id: "org.webosphoenix.settings", params: { page: "certificates" } },
+        // Help: Enyo 1.0's HelpMenu (every original app's "Help", Just
+        // Type's too) opens com.palm.app.help with {target:
+        // "http://help.palm.com/<area>/index.html"}; Phoenix's Help opens the
+        // matching topic (HELP_TOPICS), else its list.
+        "com.palm.app.help": "org.webosphoenix.help"
     };
+    var HELP_TOPICS = { universalsearch: "justtype", accountsmgr: "accounts", phone: "phone", messaging: "messaging",
+                        camera: "camera", photos: "photos", music: "music", launcher: "launcher", notifications: "notifications" };
     function appId(id) {
         var a = APP_ALIASES[id];
         return a ? (typeof a === "string" ? a : a.id) : id;
@@ -1121,6 +1128,11 @@
         var a = APP_ALIASES[id], out = {};
         if (a && typeof a === "object") for (var k in a.params) out[k] = a.params[k];
         for (var j in params || {}) out[j] = params[j];
+        if (id === "com.palm.app.help" && typeof out.target === "string") {
+            var m = /^https?:\/\/help\.palm\.com\/([^\/]+)\//i.exec(out.target);
+            delete out.target;
+            if (m && HELP_TOPICS[m[1].toLowerCase()]) out.topic = HELP_TOPICS[m[1].toLowerCase()];
+        }
         return out;
     }
     runtime.appAliases = APP_ALIASES;

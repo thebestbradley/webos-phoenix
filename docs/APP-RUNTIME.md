@@ -756,7 +756,7 @@ as it is typed. What it finds comes from:
 Its app menu (the status bar's "Just Type", as `SystemUiController` made the
 title actionable) is the page's own Enyo `AppMenu`: Preferences launches
 `com.palm.app.searchpreferences`, which the runtime opens as Settings > Just
-Type, and Help. The back gesture goes to the page: an open menu closes
+Type, and Help (Enyo's `HelpMenu` opens `com.palm.app.help` with a help.palm.com address, which the runtime turns into Phoenix's Help at the matching topic; this goes for every original app's Help). The back gesture goes to the page: an open menu closes
 first, then Just Type (`SimWindowSource.justTypeAppMenu()`,
 `justTypeBack()`).
 
