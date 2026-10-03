@@ -802,6 +802,10 @@ Item {
                 out.push({
                     x: z.x, y: z.y, w: z.width, h: z.height, col: x, row: y,
                     background: _keyBackground(x, y, key),
+                    // Its art folder with it: the tablet and the phone name
+                    // different images (a form factor change re-binds _art
+                    // before the keys are built again).
+                    art: _art,
                     caps: (!tablet && plain === KM.Key.None) ? [] : _keyCap({ x: z.x, y: z.y, w: z.width, h: z.height }, x, y, key, 0),
                     ellipsis: _extendedKeys !== null && _km.extendedChars(x, y) !== null,
                     label: _km.displayString(key, true),
@@ -1591,7 +1595,7 @@ Item {
             if (key === KM.Key.None)
                 continue;
             var r = { x: z.x, y: z.y, w: z.width, h: z.height };
-            var p = { x: r.x, y: r.y, w: r.w, h: r.h, background: _keyBackground(t.coord.x, t.coord.y, key),
+            var p = { x: r.x, y: r.y, w: r.w, h: r.h, background: _keyBackground(t.coord.x, t.coord.y, key), art: _art,
                       caps: _keyCap(r, t.coord.x, t.coord.y, key, 1),
                       ellipsis: _extendedKeys !== null && _km.extendedChars(t.coord.x, t.coord.y) !== null,
                       preview: null };
@@ -1815,7 +1819,7 @@ Item {
                 height: modelData.h
                 KeyTile {
                     anchors.fill: parent
-                    source: kb._art + keyItem.modelData.background
+                    source: keyItem.modelData.art + keyItem.modelData.background
                     half: kb._keyHalfFor(keyItem.modelData.background)
                     corner: kb._corner
                     trim: kb.tablet ? kb._trim : kb.cPhoneKeyTrim
@@ -1880,7 +1884,7 @@ Item {
                     KeyTile {
                         anchors.fill: parent
                         objectName: "pressedKey"
-                        source: kb._art + pressedItem.modelData.background
+                        source: pressedItem.modelData.art + pressedItem.modelData.background
                         pressed: true
                         half: kb._keyHalfFor(pressedItem.modelData.background)
                         corner: kb._corner

@@ -483,6 +483,19 @@ Item {
             verify(px.r > 0.10 && px.r < 0.16, "a charcoal face, near black (" + px + ")");
         }
 
+        // Turned between phone and tablet (the sim's "auto" form factor
+        // follows the window's size) the keys never ask one art folder for
+        // the other's images (key-gray-short.png is the tablet's only).
+        function test_formFactorFlipKeepsArtTogether() {
+            showKeyboard();
+            failOnWarning(/Cannot open/);
+            kb.tablet = true;
+            wait(50);
+            kb.tablet = false;
+            wait(50);
+            verify(kb.keyRect("q") !== null);
+        }
+
         function test_emojiKeyTypesAnEmoji() {
             var panel = openEmoji();
             // No recents yet: smileys first.
