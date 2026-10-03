@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Certificate Manager: a certificate standing, its text lines and a red wax seal with ribbons. Original Phoenix art. -->
+<defs>
+  <path id="s1" d="M72 30H176C180 30 182 32 182 36V170C182 174 180 176 176 176H72C68 176 66 174 66 170V36C66 32 68 30 72 30Z"/>
+  <radialGradient id="g2" cx="0.38" cy="0.32" r="0.8"><stop offset="0" stop-color="#ff8a7a"/><stop offset="0.55" stop-color="#d22b20"/><stop offset="1" stop-color="#7c0f0a"/></radialGradient>
+  <linearGradient id="g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e2382c"/><stop offset="1" stop-color="#931510"/></linearGradient>
+</defs>
+<g>
+<use href="#s1" y="-4" fill="#c9ced3" stroke="#5a6067" stroke-width="2.5"/>
+<use href="#s1" y="-3" fill="#c9ced3" stroke="#5a6067" stroke-width="2.5"/>
+<use href="#s1" y="-2" fill="#c9ced3" stroke="#5a6067" stroke-width="2.5"/>
+<use href="#s1" y="-1" fill="#c9ced3" stroke="#5a6067" stroke-width="2.5"/>
+<use href="#s1" fill="url(#c-paper)" stroke="#5a6067" stroke-width="2.5" stroke-linejoin="round"/>
+</g>
+<rect x="76" y="40" width="96" height="126" rx="2" fill="none" stroke="#c7a44a" stroke-width="3"/>
+<path d="M98 60H150" stroke="#3a3f45" stroke-width="8" stroke-linecap="round"/>
+<path d="M88 82H160M88 98H160M88 114H136" stroke="#8c949c" stroke-width="5" stroke-linecap="round"/>
+<g filter="url(#c-lift)">
+<path d="M134 148L124 186L138 178L146 190L152 152Z" fill="url(#g3)" stroke="#5e0b07" stroke-width="2" stroke-linejoin="round"/>
+<path d="M156 150L170 186L174 172L188 176L170 144Z" fill="url(#g3)" stroke="#5e0b07" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="154" cy="138" r="24" fill="url(#g2)" stroke="#5e0b07" stroke-width="2.5"/>
+<circle cx="154" cy="138" r="15" fill="none" stroke="#ffb3a8" stroke-opacity="0.6" stroke-width="2"/>
+<path d="M146 138L152 144L163 131" fill="none" stroke="#fff3f0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>

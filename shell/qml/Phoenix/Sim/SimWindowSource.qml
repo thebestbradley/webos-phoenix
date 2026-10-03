@@ -58,6 +58,11 @@
 // Optional (the shell has a built-in fallback without them):
 //   justTypeWindow() -> Item  the Just Type search surface, or null
 //   justTypeStart(text)      show it with this text typed
+//   justTypeAppMenu()        open or close its app menu (the status bar's
+//                            "Just Type"); false when it has none yet
+//   justTypeBack()           the back gesture while it is up: its app menu
+//                            closes if open, else it is dismissed
+//                            (justTypeDismissed)
 //   justTypeStop()           it was dismissed; clear it
 //   justTypeDismissed        signal: it launched something; close it
 //   appMenu(uid)             the user tapped the app name: open its app menu
@@ -1054,6 +1059,32 @@ Item {
     function justTypeStop() {
         if (_justType && _justTypeLoaded)
             _justType.runScript(_justTypeScript("jt.justTypeDeactivated();"));
+    }
+
+    // Just Type's app menu (luna-applauncher JustType.js: Preferences, which
+    // launches com.palm.app.searchpreferences, and Help), as the status
+    // bar's title opened it (SystemUiController.cpp:806-838): Enyo's
+    // enyo.appMenu in its page (runtime openAppMenu).
+    function justTypeAppMenu() {
+        if (!_justType || !_justTypeLoaded)
+            return false;
+        _justType.runScript("window.__phoenixRuntime && __phoenixRuntime.openAppMenu && __phoenixRuntime.openAppMenu()");
+        return true;
+    }
+
+    // Back while Just Type is up goes to its page (SystemUiController.cpp:
+    // 424-443): an open app menu closes; otherwise Just Type goes.
+    function justTypeBack() {
+        if (!_justType || !_justTypeLoaded) {
+            source.justTypeDismissed();
+            return;
+        }
+        _justType.runScript("(function(){var m=window.enyo&&enyo.appMenu;"
+                            + "if(m&&m.isOpen){m.close();return true;}return false;})()",
+                            function(menuClosed) {
+                                if (menuClosed !== true)
+                                    source.justTypeDismissed();
+                            });
     }
 
     // ---- Simulator: incoming call and text -----------------------------------------

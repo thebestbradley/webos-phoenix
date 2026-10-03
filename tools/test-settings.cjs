@@ -80,6 +80,10 @@ async function main() {
             await page.waitForTimeout(300);
         };
         const shot = (name) => page.screenshot({ path: path.join(outDir, name + ".png"), fullPage: true });
+        // Call a simulated service in the page, as an app would.
+        const svc = (uri, params) => page.evaluate(([u, p]) => new Promise((resolve) => {
+            __phoenixRuntime.dispatch(u, p, resolve, { cancelled: () => false, onCancel: null });
+        }), [uri, params]);
 
         // ---- Wi-Fi ------------------------------------------------------------
         await open("wifi");
@@ -316,11 +320,39 @@ async function main() {
               `a new shortcut reaches the keyboard (${JSON.stringify(last().textAssist.shortcuts)})`);
         await shot("textassist");
 
+        // ---- Just Type: com.palm.universalsearch, what Just Type reads ------------------
+        const usList = () => svc("luna://com.palm.universalsearch/getUniversalSearchList", {});
+        await open("justtype");
+        await page.waitForSelector("[data-testid='jt-engine-amazon']");
+        check((await usList()).UniversalSearchList.map((e) => e.id).join() === "google,wikipedia,amazon,imdb,cnn", "the engines as UniversalSearchList.json lists them");
+        await page.click("[data-testid='jt-engine-amazon']");
+        await page.waitForSelector("[data-testid='jt-engine-amazon'][aria-checked='true']");
+        check((await usList()).UniversalSearchList.find((e) => e.id === "amazon").enabled === true, "Amazon turned on for Just Type");
+        // Drag Amazon to the top by its grip.
+        const grip = await page.locator("[data-testid='grip-amazon']").boundingBox();
+        const top = await page.locator("[data-testid='grip-google']").boundingBox();
+        await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(grip.x + grip.width / 2, top.y + 4, { steps: 8 });
+        await page.mouse.up();
+        for (let i = 0; i < 30 && (await usList()).UniversalSearchList[0].id !== "amazon"; ++i) await page.waitForTimeout(100);
+        check((await usList()).UniversalSearchList.map((e) => e.id).join() === "amazon,google,wikipedia,imdb,cnn", "dragged to the top, Amazon is first in Just Type's list");
+        await page.click("[data-testid='jt-default-engine']");
+        await page.click("role=option[name='Wikipedia']");
+        for (let i = 0; i < 30 && (await usList()).defaultSearchEngine !== "wikipedia"; ++i) await page.waitForTimeout(100);
+        check((await usList()).defaultSearchEngine === "wikipedia", "Wikipedia is Just Type's default search");
+        await page.waitForTimeout(300);
+        await shot("justtype");
+        // Just Type's Preferences item opens this pane.
+        const hostMsgs = [];
+        page.on("console", (m) => { const t = m.text(); if (t.startsWith("__phoenix__")) hostMsgs.push(JSON.parse(t.slice(11))); });
+        await svc("luna://com.palm.applicationManager/launch", { id: "com.palm.app.searchpreferences" });
+        await page.waitForTimeout(200);
+        check(hostMsgs.some((m) => m.type === "launch" && m.payload.id === "org.webosphoenix.settings" && m.payload.params.page === "justtype"),
+              "com.palm.app.searchpreferences opens Settings > Just Type");
+
         // ---- Device Info: the phone, and the legacy reset options ----------------------
         // Erase Apps & Data keeps the files on the USB drive; Full Erase does not.
-        const svc = (uri, params) => page.evaluate(([u, p]) => new Promise((resolve) => {
-            __phoenixRuntime.dispatch(u, p, resolve, { cancelled: () => false, onCancel: null });
-        }), [uri, params]);
         const KEEP = "/media/internal/Documents/keep.txt";
         const PHOTO = "/media/internal/Pictures/kept.png";
         const plant = async () => {

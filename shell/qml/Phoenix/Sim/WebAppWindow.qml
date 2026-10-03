@@ -73,8 +73,12 @@ Item {
     }
 
     // Run a snippet in the page (the shell talking to the runtime).
-    function runScript(js) {
-        view.runJavaScript(js);
+    // done(result), if given, gets what the script's last expression was.
+    function runScript(js, done) {
+        if (done)
+            view.runJavaScript(js, done);
+        else
+            view.runJavaScript(js);
     }
 
     // Relaunch with new launch params (webOSRelaunch event in the page).

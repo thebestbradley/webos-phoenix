@@ -285,6 +285,30 @@
             "apps/settings/public/icons/textassist"
         ]
     },
+    "justtype": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 14,
+        "out": [
+            "apps/settings/public/icons/justtype"
+        ]
+    },
+    "certificates": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 58,
+        "out": [
+            "apps/settings/public/icons/certificates"
+        ]
+    },
+    "phoneprefs": {
+        "platter": "diamond",
+        "base": 176,
+        "foot": 46,
+        "out": [
+            "apps/settings/public/icons/phoneprefs"
+        ]
+    },
     "location": {
         "platter": "diamond",
         "base": 176,

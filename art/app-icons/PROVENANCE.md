@@ -43,7 +43,9 @@ pattern), `files`, `marketplace` (a bag with a star where the App Catalog's
 had HP's logo), the four `notes-*` notebooks, and the system objects
 `settings`, `firstuse`, `help`, `sharesheet`, `screenshot`, `notificationlab`,
 `terminal`, `bluetooth`, `vpn`, `airplane`, `screen`, `sounds`, `datetime`,
-`language`, `textassist`, `location`, `emergency` (the six-armed star of the
+`language`, `textassist`, `justtype` (a magnifying glass), `certificates`
+(a certificate with a seal), `phoneprefs` (the `deviceinfo` phone with a
+call forwarding badge), `location`, `emergency` (the six-armed star of the
 Phone app's emergency button), `accessibility`, `deviceinfo`, `backup`,
 `devmode`.
 

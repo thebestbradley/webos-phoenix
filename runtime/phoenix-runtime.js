@@ -1105,7 +1105,10 @@
         "com.palm.app.backup": { id: "org.webosphoenix.settings", params: { page: "backup" } },
         // System Updates (luna-systemui opens it from its update alerts).
         "com.palm.app.updates": { id: "org.webosphoenix.settings", params: { page: "updates" } },
-        "com.palm.app.textassist": { id: "org.webosphoenix.settings", params: { page: "textassist" } }
+        "com.palm.app.textassist": { id: "org.webosphoenix.settings", params: { page: "textassist" } },
+        // Just Type's preferences (luna-applauncher AppLauncher.js
+        // launchPreferences, from Just Type's app menu).
+        "com.palm.app.searchpreferences": { id: "org.webosphoenix.settings", params: { page: "justtype" } }
     };
     function appId(id) {
         var a = APP_ALIASES[id];
@@ -1177,6 +1180,19 @@
     // its UniversalSearchList.json, and the "action" (New Memo, New Event...)
     // and "dbsearch" (content search) providers the installed apps declare
     // in their appinfo.json "universalSearch" field. Preferences persist.
+    // The Just Type preferences (Settings > Just Type, in place of
+    // com.palm.app.searchpreferences) change them with its methods
+    // (UniversalSearchService.cpp:75-92):
+    //   updateSearchItem {category, id, enabled, setDefault?}
+    //   updateAllSearchItems {category, enabled}
+    //   reorderSearchItem {category, id, toIndex}: toIndex is the item's new
+    //       place in its category's list (the original counted it in the
+    //       list below the default engine, SearchItemsManager.cpp:766-775;
+    //       Settings shows every engine in one list)
+    //   get/getAll/setSearchPreference {key, value}: defaultSearchEngine,
+    //       defaultSearch (the default engine's row in Just Type),
+    //       ContactSearch, AppSearch, GAL (strings "true" / "false")
+    // getUniversalSearchList lists each category in the user's order.
 
     var US_ICONS = "/usr/lib/luna/system/luna-applauncher/images/";
     var US_ENGINES = [
@@ -1191,7 +1207,13 @@
     var US_DEFAULT_PREFS = { defaultSearchEngine: "google", defaultSearch: "true", ContactSearch: "true", AppSearch: "true", GAL: "false" };
     var usWatchers = [];
 
-    function usState() { return store.get("universalsearch", { prefs: {}, enabled: {} }); }
+    function usState() {
+        var st = store.get("universalsearch", null) || {};
+        st.prefs = st.prefs || {};
+        st.enabled = st.enabled || {};
+        st.order = st.order || {};
+        return st;
+    }
     function usSave(st) {
         store.set("universalsearch", st);
         usWatchers = usWatchers.filter(function (w) { return w(); });
@@ -1219,16 +1241,33 @@
             if (kind === "dbsearch" && !x.url) x.url = lp.id;
             out.push(x);
         });
-        return out;
+        return usOrdered(kind, out);
+    }
+    function usEngines() {
+        return usOrdered("search", US_ENGINES.map(function (e) {
+            var x = { category: "search", type: "web", iconFilePath: US_ICONS + "search-icon-" + e.id + ".png" }, k;
+            for (k in e) x[k] = e[k];
+            x.enabled = usEnabled("search:" + e.id, e.enabled);
+            return x;
+        }));
+    }
+    // The items of a category in the user's order (reorderSearchItem); new
+    // ones keep their place after those.
+    function usOrdered(category, items) {
+        var order = usState().order[category] || [];
+        return items.map(function (x, i) { return { x: x, i: i, o: order.indexOf(x.id) }; }).sort(function (a, b) {
+            if (a.o >= 0 && b.o >= 0) return a.o - b.o;
+            if (a.o >= 0 || b.o >= 0) return a.o >= 0 ? -1 : 1;
+            return a.i - b.i;
+        }).map(function (e) { return e.x; });
+    }
+    function usItems(category) {
+        return category === "search" ? usEngines() : category === "action" ? usProviders("action")
+             : category === "dbsearch" ? usProviders("dbsearch") : null;
     }
     function usList() {
         return ok({
-            UniversalSearchList: US_ENGINES.map(function (e) {
-                var x = { category: "search", type: "web", iconFilePath: US_ICONS + "search-icon-" + e.id + ".png" }, k;
-                for (k in e) x[k] = e[k];
-                x.enabled = usEnabled("search:" + e.id, e.enabled);
-                return x;
-            }),
+            UniversalSearchList: usEngines(),
             ActionList: usProviders("action"),
             DBSearchItemList: usProviders("dbsearch"),
             defaultSearchEngine: usPrefs().defaultSearchEngine
@@ -1255,10 +1294,38 @@
             usSave(st);
             reply(ok());
         },
-        // {id, category: "search" | "action" | "dbsearch", enabled}
+        // {id, category: "search" | "action" | "dbsearch", enabled, setDefault}
         "/updateSearchItem": function (p, reply) {
+            var category = p.category || "search", items = usItems(category);
+            if (!items) return reply(fail(-1, "Invalid category"));
+            if (!items.some(function (x) { return x.id === p.id; })) return reply(fail(-1, "Unable to update item"));
             var st = usState();
-            st.enabled[(p.category || "search") + ":" + p.id] = !!p.enabled;
+            if (p.enabled !== undefined) st.enabled[category + ":" + p.id] = !!p.enabled;
+            // The default engine (SearchItemsManager::updateSearchItem).
+            if (p.setDefault && category === "search") st.prefs.defaultSearchEngine = String(p.id);
+            usSave(st);
+            reply(ok());
+        },
+        // {category, enabled}: every item of the category on or off.
+        "/updateAllSearchItems": function (p, reply) {
+            var category = p.category || "search", items = usItems(category);
+            if (!items) return reply(fail(-1, "Invalid category"));
+            var st = usState();
+            items.forEach(function (x) { st.enabled[category + ":" + x.id] = !!p.enabled; });
+            usSave(st);
+            reply(ok());
+        },
+        // {category, id, toIndex}
+        "/reorderSearchItem": function (p, reply) {
+            var category = p.category || "search", items = usItems(category);
+            if (!items) return reply(fail(-1, "Invalid category"));
+            var ids = items.map(function (x) { return x.id; });
+            var from = ids.indexOf(p.id), to = Number(p.toIndex);
+            if (from < 0 || !(to >= 0)) return reply(fail(-1, "Unable to reorder item"));
+            ids.splice(from, 1);
+            ids.splice(Math.min(to, ids.length), 0, p.id);
+            var st = usState();
+            st.order[category] = ids;
             usSave(st);
             reply(ok());
         },

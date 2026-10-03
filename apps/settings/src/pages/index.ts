@@ -17,6 +17,7 @@ import { LocationPage } from "./Location";
 import { EmergencyPage } from "./Emergency";
 import { AccessibilityPage } from "./Accessibility";
 import { TextAssistPage } from "./TextAssist";
+import { JustTypePage } from "./JustType";
 import { DevModePage } from "./DevMode";
 
 export interface PageInfo {
@@ -37,6 +38,7 @@ export const PAGES = {
     datetime: { title: "Date & Time", icon: "icons/datetime.png", component: DateTimePage },
     language: { title: "Language & Region", icon: "icons/language.png", component: LanguagePage },
     textassist: { title: "Text Assist", icon: "icons/textassist.png", component: TextAssistPage },
+    justtype: { title: "Just Type", icon: "icons/justtype.png", component: JustTypePage },
     location: { title: "Location Services", icon: "icons/location.png", component: LocationPage },
     emergency: { title: "Emergency Info", icon: "icons/emergency.png", component: EmergencyPage },
     accessibility: { title: "Accessibility", icon: "icons/accessibility.png", component: AccessibilityPage },

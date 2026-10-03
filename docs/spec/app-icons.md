@@ -30,7 +30,7 @@ Accounts among them, on the diamond).
 
 | Disc (user apps) | Diamond (system apps) |
 | --- | --- |
-| Phone, Messaging, Camera, Photos, Music, Videos, Podcasts, Maps, Weather, Tasks, Voice Memos | Settings and its 16 launch points (Wi-Fi, Bluetooth, VPN, Airplane Mode, Screen & Lock, Sounds & Ringtones, Date & Time, Language & Region, Text Assist, Location Services, Emergency Info, Accessibility, Device Info, Backup, Updates, Developer Mode) |
+| Phone, Messaging, Camera, Photos, Music, Videos, Podcasts, Maps, Weather, Tasks, Voice Memos | Settings and its 19 launch points (Wi-Fi, Bluetooth, VPN, Airplane Mode, Screen & Lock, Sounds & Ringtones, Date & Time, Language & Region, Text Assist, Just Type, Phone, Certificate Manager, Location Services, Emergency Info, Accessibility, Device Info, Backup, Updates, Developer Mode) |
 | Doc View, PDF View, Files, Passwords, Authenticator, Flashlight, QR Scanner | Accounts (original), First Use, Help |
 | Marketplace | Share (the share sheet and save picker), Screenshot |
 | The Notes demos (Enact Agate, Enact Limestone, Flutter, Ionic), Enyo 2 Demo | Notification Lab, Terminal (developer tools) |

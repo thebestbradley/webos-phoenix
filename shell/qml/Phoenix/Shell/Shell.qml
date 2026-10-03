@@ -469,9 +469,13 @@ FocusScope {
             siteMenu.open = false;
         else if (systemMenu.open)
             systemMenu.open = false;
-        else if (justType.open)
-            justType.open = false;
-        else if (launcher.open)
+        else if (justType.open) {
+            // The original's page gets it (its app menu closes first).
+            if (justType.surface && source && typeof source.justTypeBack === "function")
+                source.justTypeBack();
+            else
+                justType.open = false;
+        } else if (launcher.open)
             launcher.open = false;
         else if (cards.maximized)
             source.back(cards.currentUid);
@@ -1583,14 +1587,16 @@ FocusScope {
                 system: shell.system
                 // SystemUiController::updateStatusBarTitle: Just Type, then the
                 // launcher ("Launcher", com.palm.launcher's title; not actionable),
-                // then the maximized app; else the carrier. Our Just Type has no
-                // app menu yet (the original's: Preferences, Help), so no arrow.
+                // then the maximized app; else the carrier. Just Type's title
+                // opens its app menu (Preferences, Help) when it is the
+                // original page (JustType.js); the built-in stand-in has none.
                 readonly property string _mode: shell.locked || shell.firstUse ? "" : justType.open ? "justtype"
                     : launcher.open ? "launcher" : cards.maximized ? "app" : ""
                 title: _mode === "justtype" ? qsTr("Just Type") : _mode === "launcher" ? qsTr("Launcher")
                      : _mode === "app" ? cards.currentTitle : (shell.system ? shell.system.carrier : "")
                 titleBorder: _mode !== ""
-                titleActionable: _mode === "app"
+                titleActionable: _mode === "app" || (_mode === "justtype" && justType.surface !== null
+                                                     && !!shell.source && typeof shell.source.justTypeAppMenu === "function")
                 // A maximized app's own colour (setWindowProperties
                 // statusBarColor; SystemUiController.cpp:820-827), faded to
                 // over 300 ms (StatusBar::setBackgroundColor). Tablets only.
@@ -1602,6 +1608,10 @@ FocusScope {
                 filled: cards.maximized || launcher.open || justType.open
                 onSystemMenuRequested: if (!shell.locked && !shell.firstUse) systemMenu.open = !systemMenu.open
                 onAppMenuRequested: {
+                    if (_mode === "justtype") {
+                        shell.source.justTypeAppMenu();
+                        return;
+                    }
                     if (!cards.maximized || !shell.source || typeof shell.source.appMenu !== "function")
                         return;
                     if (siteMenu.open) {

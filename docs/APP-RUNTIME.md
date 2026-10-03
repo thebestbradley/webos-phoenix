@@ -526,8 +526,9 @@ params match a launch point opens that launch point's card.
 
 `apps/settings` is one app with one launch point per pane, like the separate
 preference apps of webOS 2.x: Wi-Fi, Bluetooth, Airplane Mode, Screen & Lock,
-Sounds & Ringtones, Date & Time, Language & Region, Accessibility, Location
-Services, Emergency Info, Device Info, Backup, Updates, VPN, Developer Mode.
+Sounds & Ringtones, Date & Time, Language & Region, Text Assist, Just Type,
+Accessibility, Location Services, Emergency Info, Device Info, Backup,
+Updates, VPN, Developer Mode.
 Launched without a page it lists them all. The launcher icons are drawn in
 `art/app-icons` (on the grey diamond, as Palm's preference apps were) and the
 wallpapers by
@@ -749,6 +750,22 @@ as it is typed. What it finds comes from:
   `UniversalSearchList.json`, and the actions ("New Memo") and content
   searches ("Calendar Events") that apps declare in the `universalSearch`
   field of their `appinfo.json`.
+
+Its app menu (the status bar's "Just Type", as `SystemUiController` made the
+title actionable) is the page's own Enyo `AppMenu`: Preferences launches
+`com.palm.app.searchpreferences`, which the runtime opens as Settings > Just
+Type, and Help. The back gesture goes to the page: an open menu closes
+first, then Just Type (`SimWindowSource.justTypeAppMenu()`,
+`justTypeBack()`).
+
+Settings > Just Type (`apps/settings/src/pages/JustType.tsx`) changes what it
+shows through the same service, after luna-universalsearchmgr's methods
+(`Src/UniversalSearchService.cpp:75-92`): `setSearchPreference` (`AppSearch`,
+`ContactSearch`, `GAL`, `defaultSearch`), `updateSearchItem {category, id,
+enabled, setDefault}`, `updateAllSearchItems` and `reorderSearchItem
+{category, id, toIndex}` (the item's new place in its category; the
+original counted it below the default engine). `getUniversalSearchList`
+lists each category in the user's order, which Just Type follows.
 
 `tools/test-justtype.cjs` uses it end to end. On a device, the compositor
 still has to show `com.palm.launcher`'s window this way (see the roadmap).
