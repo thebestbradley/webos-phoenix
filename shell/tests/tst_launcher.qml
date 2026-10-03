@@ -202,6 +202,17 @@ Item {
             shell.setLauncherLayout(layout);
         }
 
+        // An empty page says how to fill it (ReorderablePage); a page with
+        // apps does not.
+        function test_emptyPageHint() {
+            var hints = [];
+            function collect(o) { if (o.objectName === "launcherEmptyPage") hints.push(o); for (var i = 0; i < o.children.length; ++i) collect(o.children[i]); }
+            collect(shell);
+            compare(hints.length, shell.launcherLayout.pages.length);
+            for (var t = 0; t < hints.length; ++t)
+                compare(hints[t].visible, shell.launcherLayout.pages[t].length === 0, "page " + t);
+        }
+
         function test_deleteARemovableApp() {
             // Placeholder apps stand in for downloaded ones and can be deleted.
             var ids = shell.launcherLayout.pages[0];

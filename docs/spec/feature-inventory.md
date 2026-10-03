@@ -88,7 +88,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [ ] App blacklist (hidden system apps) and keyword → page mapping. `conf/launcher3/app_blacklist.conf`; `conf/launcher3/app-keywords-to-designator-map.txt` *Phoenix: hidden system apps and launcher tabs from appinfo.json; not the original's blacklist or keyword map files.*
 - [ ] Launch points (multiple per app, custom launch points added by apps). `Src/base/application/LaunchPoint.cpp`; README `addLaunchPoint` *Phoenix: several per app from appinfo.json; addLaunchPoint does not add one yet.*
 - [x] Launcher and dock position persistence. `Src/lunaui/launcher/systeminterface/pagesaver.cpp`, `pagerestore.cpp`; `Src/base/settings/Settings.cpp:161-165` *Phoenix: in the simulator.*
-- [ ] Empty-page hint. `Src/lunaui/launcher/elements/page/reorderablepage.cpp:64`
+- [x] Empty-page hint. `Src/lunaui/launcher/elements/page/reorderablepage.cpp:64` *Phoenix: done (`Launcher.qml`, `tst_launcher.qml`).*
 
 ## 6. Lock screen and security [spec §6]
 

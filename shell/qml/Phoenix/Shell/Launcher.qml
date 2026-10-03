@@ -293,6 +293,35 @@ Item {
             contentHeight: launcher.pageTopMargin
                            + Math.ceil((model ? model.count : 0) / launcher.columns) * launcher.cellHeight
 
+            // An empty page says how to fill it (ReorderablePage: its picture
+            // centred, the text 100 px above the centre, 24 px bold white;
+            // iconlayoutsettings.cpp:163-170).
+            Item {
+                objectName: "launcherEmptyPage"
+                visible: !page.model || page.model.count === 0
+                width: page.width
+                height: page.height
+                Image {
+                    source: Theme.asset("launcher3/launcher-empty-page.png")
+                    width: Theme.artWidth(source)
+                    height: Theme.artHeight(source)
+                    x: (parent.width - width) / 2
+                    y: (parent.height - height) / 2
+                }
+                Text {
+                    width: Math.min(Theme.px(800), parent.width - Theme.px(32))
+                    x: (parent.width - width) / 2
+                    y: parent.height / 2 - Theme.px(100) - height / 2
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    text: qsTr("Tap and hold any app to drag it to this page.")
+                    color: "#FFFFFF"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.px(24)
+                    font.bold: true
+                }
+            }
+
             Repeater {
                 model: page.model
                 delegate: Item {
