@@ -10,7 +10,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 
 - [x] Cards for running apps, with maximized and minimized (card view) states. `Src/lunaui/cards/CardWindowManager.cpp:180-246`
 - [x] Card **stacks** (groups): cards launched by the focused app stack with it, others open a new stack to the right. `CardWindowManager.cpp:556-599`
-- [x] Fanned layout inside the active stack, with tilt and a slight drop; closed stacks sit left and right with a 7 px offset. `Src/lunaui/cards/CardGroup.cpp:699-771`
+- [x] Fanned layout inside the active stack, with tilt and a slight drop; other stacks fold by their distance from the centre, cards 10 px apart when folded (the 7 px closed layout is only for unanimated relayouts). `Src/lunaui/cards/CardGroup.cpp:699-771`
 - [x] Horizontal drag and flick through cards and stacks, snapping to the nearest stack. `CardWindowManager.cpp:1452-1600,1677-1738`
 - [x] Flick a card up to close it (velocity/distance rule), or drag it off the top. `CardWindowManager.cpp:63-65,1700-1716`
 - [x] Close any card on screen, including the stacks at the sides, and several at once with several fingers.

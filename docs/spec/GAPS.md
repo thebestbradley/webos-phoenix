@@ -22,7 +22,7 @@ Nearly all the art is already in `shell/assets/openwebos/`.
 | C7 | Stacks of >4: tap far from the fan scrolls instead of maximizing; tap in the column on no card does nothing (`CardGroup.cpp:401-470`) | **Done** (`CardLayout.tapOnFan`, `CardView` tap; `tst_shell` test_tapOnALongFan; phoenix-sim `--scene longstack`): `shouldMaximizeOrScroll` ported, four stationary cards, the fan moving three; a tap on no card inside the open stack's column (`withinColumn`, the layout's `columns`) leaves the stacks as they are | P2 · S |
 | C8 | New window joins the focused stack when its `launchingAppId` is the focused app (browser from Email stacks on Email) (`:561-567`) | **Done** in the simulator: an app launched by the card in front (maximized and focused) joins its stack at the front; the device source does not know the launching app yet | P1 · S |
 | C9 | Corners: elliptical factors (0.491 h, 0.478/0.473 v), smoothstep feather (`CardRoundedCornerShaderStage.h:64-127`) | 40 px circular mask that snaps square at the end of maximize | P2 · S |
-| C10 | Stack collapse driven by x offset (`CardGroup.cpp:727-736`) | Lerp on distance from position | P2 · S |
+| C10 | Stack collapse driven by x offset (`CardGroup.cpp:727-736`) | **Done** (`CardLayout.compute`; `tst_stacks` test_stacksOpenByTheirDistanceFromTheCentre, test_restingStackFoldsTenPixelSteps): every stack is `calculateOpenedPositions(xOffset)` from its centre's distance to the screen's, `max(1, aw − |x|) / aw` open, folded cards 10 px apart, as after `slideAllGroups` and while dragging; the distance comes from a first pass by index | P2 · S |
 | C11 | Scene transitions, modal cards, first-use tutorial, card limit / low-memory alert, Touch-to-Share ghost | None | P2 · S–M |
 
 ## 2. Launcher

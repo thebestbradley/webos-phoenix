@@ -165,6 +165,10 @@ scale = activeScale                                                  // :723
 
 * All cards use **nonActiveScale**. Cards stack with a **7 px** x-step, applied only to the top 3 cards
   (`kMaxClosedSpacedCards`). Deeper cards sit exactly underneath (`:757-764`).
+* This layout is only used by `layoutAllGroups` (relayouts without animation: rotation, loading). After a slide
+  (`slideAllGroups`, including the minimize) and while dragging (`slideAllGroupsOnTouchUpdate`) every other group is
+  `calculateOpenedPositions(xOffset)` with its offset (`animateClose`: the card width, fully folded), so resting
+  neighbours show the 10 px collapse above. Phoenix lays every stack out that way.
 * Groups are laid out left and right of the active group with `GapBetweenCardGroups` between their bounding widths
   (`CardWindowManager.cpp:2501-2537`).
 

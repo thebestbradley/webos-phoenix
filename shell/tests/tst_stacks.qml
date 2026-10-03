@@ -114,14 +114,36 @@ Item {
             verify(b.z > a.z);
         }
 
-        function test_closedStackUsesSmallScaleAndSevenPixelSteps() {
+        // A stack more than an active card's width from the centre is
+        // folded: CardGroup::calculateOpenedPositions(xOffset) with
+        // max(1, aw - |x|) / aw open, its cards 10 px apart, at the small
+        // scale, flat (slideAllGroups' animateClose, CardGroup.cpp:698-742).
+        function test_restingStackFoldsTenPixelSteps() {
             var s = makeStacks();
             cv.jumpTo(0);
             var p0 = cv.layout.cards[s.msg], p1 = cv.layout.cards[s.c1], p2 = cv.layout.cards[s.c2];
-            fuzzyCompare(p0.scale, cv.nonActiveScale, 0.0001);
-            fuzzyCompare(p1.cx - p0.cx, 7, 0.01);
-            fuzzyCompare(p2.cx - p1.cx, 7, 0.01);
-            compare(p0.rot, 0);
+            var aw = cv.windowWidth * cv.activeScale;
+            var amt = 1 / aw;
+            fuzzyCompare(p0.scale, cv.nonActiveScale + (cv.activeScale - cv.nonActiveScale) * amt, 0.0001);
+            verify(Math.abs(p1.cx - p0.cx - 10) < 1);
+            verify(Math.abs(p2.cx - p1.cx - 10) < 1);
+            verify(Math.abs(p0.rot) < 0.1);
+            compare(p0.cy, cv.cardOriginY);
+        }
+
+        // Dragging toward a stack opens it as its centre nears the
+        // screen's, and folds the one it leaves (C10).
+        function test_stacksOpenByTheirDistanceFromTheCentre() {
+            var s = makeStacks();
+            cv.jumpTo(0);
+            var gap0 = cv.layout.cards[s.c1].cx - cv.layout.cards[s.msg].cx;
+            cv.position = 0.5;
+            var gapHalf = cv.layout.cards[s.c1].cx - cv.layout.cards[s.msg].cx;
+            cv.position = 1;
+            var gap1 = cv.layout.cards[s.c1].cx - cv.layout.cards[s.msg].cx;
+            verify(gap0 < gapHalf && gapHalf < gap1, gap0 + " " + gapHalf + " " + gap1);
+            // Open at the centre: the opened fan's own spacing.
+            fuzzyCompare(cv.layout.cards[s.msg].scale, cv.activeScale, 0.0001);
         }
 
         function test_closeInStackKeepsStack() {

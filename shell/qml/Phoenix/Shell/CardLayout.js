@@ -65,12 +65,6 @@ function openedOffset(k, pos, p) {
     };
 }
 
-// Offset of card k in a closed stack: the top three cards step 7px right,
-// deeper cards sit exactly underneath. CardGroup.cpp:744-771.
-function closedOffset(k, n, p) {
-    return 7 * p.u * clamp(k - (n - 3), 0, 2);
-}
-
 // groups: [{ id, uids: [..] }] in screen order.
 // p: {
 //   viewWidth, cardWidth, cardHeight, u,
@@ -98,42 +92,54 @@ function compute(groups, p) {
     var lefts = [];
     var rights = [];
 
-    for (var g = 0; g < G; ++g) {
-        var grp = groups[g];
-        var n = grp.uids.length;
-        var a = Math.max(0, 1 - Math.abs(g - p.position));   // how "open" this stack is
-        var pos = clampFanPosition(p.fan[grp.id] !== undefined ? p.fan[grp.id] : 1e9, n);
-        var cards = [];
-        var left = Infinity, right = -Infinity;
-        for (var k = 0; k < n; ++k) {
-            var o = openedOffset(k, pos, p);
-            var c = {
-                x: o.x * a + (1 - a) * closedOffset(k, n, p),
-                y: o.y * a,
-                scale: mix(p.nonActiveScale, p.activeScale, a),
-                rot: o.rot * a
-            };
-            var hw = p.cardWidth * c.scale / 2;
-            left = Math.min(left, c.x - hw);
-            right = Math.max(right, c.x + hw);
-            cards.push(c);
+    // How open each stack is: CardGroup::calculateOpenedPositions(xOffset),
+    // CardGroup.cpp:698-742. Every stack is laid out from its centre's
+    // distance to the screen's centre (slideAllGroupsOnTouchUpdate, and
+    // slideAllGroups' animateClose for the rest): open at the centre,
+    // folding up linearly over one active card width, then fully folded,
+    // its cards 10 px apart. The distance comes from the stacks' widths,
+    // which come from how open they are: a first pass lays them out by
+    // their index's distance, the second from where that put them (the
+    // original also uses the widths of its previous layout).
+    var aw = p.cardWidth * p.activeScale;
+    function layOut(openness) {
+        laid = []; lefts = []; rights = [];
+        for (var g = 0; g < G; ++g) {
+            var grp = groups[g];
+            var n = grp.uids.length;
+            var amt = openness(g);
+            var pos = clampFanPosition(p.fan[grp.id] !== undefined ? p.fan[grp.id] : 1e9, n);
+            var cards = [];
+            var left = Infinity, right = -Infinity;
+            for (var k = 0; k < n; ++k) {
+                var o = openedOffset(k, pos, p);
+                var c = {
+                    x: o.x * amt + (1 - amt) * 10 * p.u * k,
+                    y: o.y * amt,
+                    scale: mix(p.nonActiveScale, p.activeScale, amt),
+                    rot: o.rot * amt
+                };
+                var hw = p.cardWidth * c.scale / 2;
+                left = Math.min(left, c.x - hw);
+                right = Math.max(right, c.x + hw);
+                cards.push(c);
+            }
+            // A maximizing card pushes its neighbours away as it grows.
+            if (g === current && m > 0) {
+                left = mix(left, -p.viewWidth / 2, m);
+                right = mix(right, p.viewWidth / 2, m);
+            }
+            laid.push(cards);
+            lefts.push(left);
+            rights.push(right);
         }
-        // A maximizing card pushes its neighbours away as it grows.
-        if (g === current && m > 0) {
-            left = mix(left, -p.viewWidth / 2, m);
-            right = mix(right, p.viewWidth / 2, m);
-        }
-        laid.push(cards);
-        lefts.push(left);
-        rights.push(right);
+        // Stacks sit side by side with a fixed gap between their bounds
+        // (CardWindowManager.cpp:2501-2537).
+        anchors = [0];
+        for (g = 1; g < G; ++g)
+            anchors.push(anchors[g - 1] + rights[g - 1] + p.gap - lefts[g]);
+        scroll = anchorAt(p.position);
     }
-
-    // Stacks sit side by side with a fixed gap between their bounds
-    // (CardWindowManager.cpp:2501-2537).
-    var anchors = [0];
-    for (g = 1; g < G; ++g)
-        anchors.push(anchors[g - 1] + rights[g - 1] + p.gap - lefts[g]);
-    result.anchors = anchors;
 
     // Interpolate the scroll offset; extrapolate past the ends for rubber-banding.
     function anchorAt(t) {
@@ -146,21 +152,32 @@ function compute(groups, p) {
         var i = Math.floor(t);
         return mix(anchors[i], anchors[i + 1], t - i);
     }
-    var scroll = anchorAt(p.position);
+    function amountOpen(offset) {
+        return Math.max(1, aw - Math.abs(offset)) / aw;
+    }
+
+    var anchors, scroll;
+    layOut(function (g) { return amountOpen((g - p.position) * aw); });
+    var offsets = [];
+    for (var g = 0; g < G; ++g)
+        offsets.push(anchors[g] - scroll);
+    layOut(function (g) { return amountOpen(offsets[g]); });
+    result.anchors = anchors;
+
     for (g = 0; g < G; ++g) {
         var at = p.viewWidth / 2 + anchors[g] - scroll;
         result.columns.push({ left: at + lefts[g], right: at + rights[g] });
     }
 
     for (g = 0; g < G; ++g) {
-        grp = groups[g];
-        n = grp.uids.length;
+        var grp = groups[g];
+        var n = grp.uids.length;
         var focusUid = p.focus[grp.id];
         var f = grp.uids.indexOf(focusUid);
         if (f < 0)
             f = n - 1;
-        for (k = 0; k < n; ++k) {
-            c = laid[g][k];
+        for (var k = 0; k < n; ++k) {
+            var c = laid[g][k];
             var r = {
                 cx: p.viewWidth / 2 + anchors[g] - scroll + c.x,
                 cy: p.originY + c.y,
