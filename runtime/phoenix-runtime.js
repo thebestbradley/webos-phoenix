@@ -936,6 +936,9 @@
         // after"; 0: as soon as the screen is off).
         screenTimeout: 60,
         lockTimeout: 0,
+        // Screen & Lock > Advanced gestures: LunaSysMgr's key. A long swipe
+        // across the gesture area switches apps (phones).
+        sysUiEnableNextPrevGestures: false,
         firstUse: false
     };
 
@@ -2882,6 +2885,7 @@
                 audioScenario: audioScenario(),
                 screenTimeout: typeof p.screenTimeout === "number" ? p.screenTimeout : 60,
                 lockTimeout: typeof p.lockTimeout === "number" ? p.lockTimeout : 0,
+                advancedGestures: !!p.sysUiEnableNextPrevGestures,
                 // Settings > Accessibility: the shell's animations.
                 reduceMotion: !!(p.accessibility && p.accessibility.reduceMotion),
                 wallpaperFile: (p.wallpaper && p.wallpaper.wallpaperFile) || "",
@@ -3491,7 +3495,7 @@
         };
         sys["/setPreferences"] = function (p, reply, ctx) {
             baseSetPreferences(p, reply, ctx);
-            if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "screenTimeout", "lockTimeout", "systemSounds", "ringtone", "alerttone",
+            if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "screenTimeout", "lockTimeout", "sysUiEnableNextPrevGestures", "systemSounds", "ringtone", "alerttone",
                  "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "accessibility"].some(function (k) { return k in p; })) {
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
                 changed();
@@ -3575,7 +3579,9 @@
             "/getSystemStatus": function (p, reply, ctx) {
                 watch(p, reply, ctx, function () {
                     var o = store.get("orientation", null) || {};
-                    return ok({ ime: { visible: !!store.get("imeVisible", false) }, orientation: { ui: o.ui || "up", device: o.device || "up" } });
+                    // gestureArea (Phoenix): the shell says whether there is one.
+                    return ok({ ime: { visible: !!store.get("imeVisible", false) }, orientation: { ui: o.ui || "up", device: o.device || "up" },
+                                gestureArea: !!store.get("gestureArea", false) });
                 });
             },
             "/getDeviceLockMode": function (p, reply) {
@@ -4135,6 +4141,11 @@
             // How the UI and the device are turned (getSystemStatus).
             if (st.orientation && toJson(st.orientation) !== toJson(store.get("orientation", null))) {
                 store.set("orientation", { ui: st.orientation.ui, device: st.orientation.device });
+                changed();
+            }
+            // The device has a gesture area (getSystemStatus gestureArea).
+            if ("gestureArea" in st && !!st.gestureArea !== !!store.get("gestureArea", false)) {
+                store.set("gestureArea", !!st.gestureArea);
                 changed();
             }
             // The virtual keyboard is up ({ ime: { visible } }, getSystemStatus).

@@ -356,7 +356,9 @@ WebAppMgr:
   for a half turn.
 - **Asking how things are turned.** `com.palm.systemmanager/getSystemStatus`
   (subscribable) answers `{ime: {visible}, orientation: {ui, device}}` as the
-  shell last reported (`orientation` in `applyHostStatus`).
+  shell last reported (`orientation` in `applyHostStatus`), and Phoenix's
+  `gestureArea` (the device has the strip below the screen; Settings offers
+  Advanced gestures by it).
 
 `tools/test-orientation.cjs` checks all three with the original Calculator.
 

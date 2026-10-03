@@ -180,6 +180,8 @@ export interface SystemPreferences {
     screenTimeout?: number;
     /** Phoenix: seconds locked before the PIN or password is asked for (0: always). */
     lockTimeout?: number;
+    /** Screen & Lock > Advanced gestures: a long swipe across the gesture area switches apps. */
+    sysUiEnableNextPrevGestures?: boolean;
     [key: string]: unknown;
 }
 
@@ -255,6 +257,14 @@ export interface VolumeStatus {
 
 export type LockMode = "none" | "pin" | "password";
 
+/** getSystemStatus (SystemService.cpp:3860-3970); gestureArea is Phoenix's. */
+export interface SystemStatus {
+    ime?: { visible: boolean };
+    orientation?: { ui: string; device: string };
+    /** The device has a gesture area (the strip below the screen). */
+    gestureArea?: boolean;
+}
+
 // ---- The map -----------------------------------------------------------------------
 
 const WIFI = "luna://com.webos.service.wifi";
@@ -316,6 +326,7 @@ export interface LunaApi {
     // device lock (legacy)
     "luna://com.palm.systemmanager/getDeviceLockMode": { params: Empty; result: { lockMode: LockMode } };
     "luna://com.palm.systemmanager/getLockStatus": { params: Sub; result: { locked: boolean } };
+    "luna://com.palm.systemmanager/getSystemStatus": { params: Sub; result: SystemStatus };
     "luna://com.palm.systemmanager/setDevicePasscode": { params: { lockMode: LockMode; passCode?: string; oldPasscode?: string }; result: Empty };
     "luna://com.palm.systemmanager/matchDevicePasscode": { params: { passCode: string }; result: { succeeded: boolean } };
     // Developer Mode (OSE)

@@ -827,7 +827,7 @@ Item {
     // State only the shell knows (the lock screen, how the UI and the device
     // are turned), which every page gets as it loads; unlike the rest it is
     // not the pages' to overrule.
-    readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse", "launcherLayout"]
+    readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse", "launcherLayout", "gestureArea"]
     property var _shellStatus: ({})
 
     function pushSystemStatus(changes) {

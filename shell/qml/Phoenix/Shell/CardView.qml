@@ -250,6 +250,54 @@ Item {
         cardMinimized(currentUid);
     }
 
+    // Advanced gestures (G5): the card beside the active one, through its
+    // stack and on into the next (CardWindowManager::switchToNextApp /
+    // PrevApp and their Maximized forms, CardWindowManager.cpp:2223-2480;
+    // CardGroup::makeNextCardActive). toRight: the next card (the back card
+    // of the next stack after the stack's front one). Maximized, the new
+    // card is maximized; at the last card the maximized card shifts 40 px
+    // and slides back. Returns whether the card changed.
+    property real edgeNudge: 0
+    NumberAnimation on edgeNudge {
+        id: edgeNudgeAnim
+        running: false
+        to: 0
+        duration: Theme.cardMaximizeDuration
+        easing.type: Theme.cardEasing
+    }
+    function switchApp(toRight) {
+        // From where a slide is going: a second swipe during it goes on
+        // from that card (CardWindowManager's active group changes at once).
+        var g = slideAnim.running ? Math.round(slideAnim.to) : currentGroup;
+        if (g < 0 || g >= groupCount)
+            return false;
+        var uids = groups[g].uids;
+        var i = uids.indexOf(focusOf(groups[g]));
+        var next = "";
+        if (toRight)
+            next = i < uids.length - 1 ? uids[i + 1] : g < groupCount - 1 ? groups[g + 1].uids[0] : "";
+        else
+            next = i > 0 ? uids[i - 1] : g > 0 ? groups[g - 1].uids[groups[g - 1].uids.length - 1] : "";
+        if (next === "") {
+            if (maximized) {
+                edgeNudge = (toRight ? -40 : 40) * Theme.u;
+                edgeNudgeAnim.restart();
+            } else {
+                slideTo(g);
+            }
+            return false;
+        }
+        animateLayout(Theme.cardSlideDuration);
+        if (maximized) {
+            cardMinimized(currentUid);
+            maximize(next);
+        } else {
+            setFocus(next);
+            slideTo(groupIndexOf(next));
+        }
+        return true;
+    }
+
     // Jump straight to card view on a stack, without animating.
     function jumpTo(groupIndex) {
         cancelRise();
@@ -633,7 +681,8 @@ Item {
             width: view.windowWidth
             height: view.windowHeight
             window: view.source.windowFor(uid)
-            centerX: rising ? view.width / 2 : lifted ? view.reorderX : place ? place.cx : view.width / 2
+            centerX: (rising ? view.width / 2 : lifted ? view.reorderX : place ? place.cx : view.width / 2)
+                     + (place && place.focused ? view.edgeNudge : 0)
             centerY: rising ? view.mix(view.height + height / 2, view.maximizedCenterY, view.maximizeProgress)
                    : lifted ? view.reorderY : place ? place.cy : view.cardOriginY
             cardScale: rising ? 1 : lifted ? view.activeScale : place ? place.scale : view.activeScale

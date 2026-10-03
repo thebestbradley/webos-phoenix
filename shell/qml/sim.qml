@@ -335,6 +335,8 @@ Item {
         }
         windows.pushSystemStatus({ deviceLocked: shell.locked });
         pushOrientation();
+        // Settings offers Advanced gestures where there is a gesture area.
+        windows.pushSystemStatus({ gestureArea: Theme.gestureAreaHeight > 0 });
         if (typeof simSettings !== "undefined")
             windows.launcherLayoutJson = simSettings.value("launcher/layout");
         if (typeof simSettings !== "undefined") {

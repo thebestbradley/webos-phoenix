@@ -19,7 +19,7 @@ Item {
         anchors.fill: parent
         formFactor: "phone"
         source: SimWindowSource { id: windows }
-        system: SimSystemStatus {}
+        system: SimSystemStatus { id: status }
     }
 
     Component {
@@ -946,6 +946,53 @@ Item {
             shell.gestureBack();
             verify(!shell.launcherOpen);
             windows.dismissNotification(0);
+        }
+
+        // G5: advanced gestures. A long swipe across the gesture area's
+        // centre shows the app beside this one, maximized; off, it is Back.
+        function test_advancedGestures() {
+            var a = windows.launch("org.webosphoenix.email", "");
+            var b = windows.launch("org.webosphoenix.messaging", "");
+            var c = windows.launch("org.webosphoenix.phone", "");
+            var view = shell.cardView;
+            view.maximize(b);
+            tryCompare(view, "maximizeProgress", 1, 2000);
+            compare(view.currentUid, b);
+            var area = findChild(shell, "gestureMouse");
+            var gestures = findChild(shell, "gestureBar");
+            // Off: a long leftward swipe is only Back.
+            status.advancedGestures = false;
+            verify(!gestures.advancedGestures);
+            mouseDrag(area, area.width * 0.9, area.height / 2, -area.width * 0.8, 0);
+            compare(view.currentUid, b);
+            status.advancedGestures = true;
+            verify(gestures.advancedGestures);
+            // Leftward (Previous): the card to the right, still maximized.
+            mouseDrag(area, area.width * 0.9, area.height / 2, -area.width * 0.8, 0);
+            tryCompare(view, "currentUid", c, 2000);
+            tryCompare(view, "position", 2, 2000);
+            compare(view.maximizeProgress, 1);
+            // At the last card it stays, nudged back into place.
+            mouseDrag(area, area.width * 0.9, area.height / 2, -area.width * 0.8, 0);
+            compare(view.currentUid, c);
+            verify(view.edgeNudge !== 0);
+            tryCompare(view, "edgeNudge", 0, 2000);
+            // Rightward (Next): back to the left, twice.
+            mouseDrag(area, area.width * 0.1, area.height / 2, area.width * 0.8, 0);
+            // A second swipe during the slide goes on from where it is going.
+            shell.gestureSwitchApp(false);
+            tryCompare(view, "currentUid", a, 2000);
+            tryCompare(view, "position", 0, 2000);
+            // A short swipe is still Back, not a switch.
+            mouseDrag(area, area.width * 0.6, area.height / 2, -area.width * 0.25, 0);
+            compare(view.currentUid, a);
+            // In card view it moves the focus without maximizing.
+            view.minimize();
+            tryCompare(view, "maximizeProgress", 0, 2000);
+            shell.gestureSwitchApp(true);
+            tryCompare(view, "currentUid", b, 2000);
+            compare(view.maximizeProgress, 0);
+            status.advancedGestures = false;
         }
 
         // The dock's own show / hide (OverlayWindowManager dock states).

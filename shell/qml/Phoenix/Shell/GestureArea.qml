@@ -8,6 +8,11 @@
 //   swipe left      -> back
 //   swipe right     -> forward (Key_CoreNavi_Menu): closes the dashboard
 //                      and menus; a site goes forward
+//   long swipe      -> with advanced gestures on (Screen & Lock), a swipe
+//                      across the area's centre over half its width is
+//                      Key_CoreNavi_Previous (leftward) / Next (rightward):
+//                      the app beside this one. Off, it is Back / forward,
+//                      as the gesture driver reported it (setAdvancedGestures)
 //   tap             -> toggle between the app and card view
 //   hold and slide  -> with the keyboard up, moves the cursor a character
 //                      per step (Phoenix, GAPS V4); with it down the hold
@@ -23,9 +28,17 @@ Item {
     signal down
     signal back
     signal forward
+    // Advanced gestures: leftward (Key_CoreNavi_Previous) and rightward
+    // (Key_CoreNavi_Next) long swipes.
+    signal previous
+    signal next
     signal tapped
     // Cursor control: -1 left, 1 right, a character at a time.
     signal cursorStep(int direction)
+
+    // Settings > Screen & Lock > Advanced gestures
+    // (sysUiEnableNextPrevGestures).
+    property bool advancedGestures: false
 
     // The keyboard is up: a hold moves the cursor.
     property bool cursorControl: false
@@ -101,6 +114,10 @@ Item {
                 area.flash(); area.up();
             } else if (dy > area.threshold && dy > Math.abs(dx)) {
                 area.flash(); area.down();
+            } else if (Math.abs(dx) > area.threshold && area.advancedGestures && Math.abs(dx) >= area.width / 2
+                       && (sx - area.width / 2) * (m.x - area.width / 2) < 0) {
+                area.flash();
+                if (dx < 0) area.previous(); else area.next();
             } else if (dx < -area.threshold) {
                 area.flash(); area.back();
             } else if (dx > area.threshold) {

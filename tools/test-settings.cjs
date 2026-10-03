@@ -163,6 +163,14 @@ async function main() {
         await page.click("role=option[name='5 minutes']");
         await page.waitForTimeout(200);
         check(last().lockTimeout === 300, `Lock after reaches the shell (${last().lockTimeout})`);
+        // Advanced gestures: offered once the shell reports a gesture area,
+        // and the long swipe's setting reaches it.
+        check(await page.locator("[data-testid='advanced-gestures']").count() === 0, "no Advanced gestures without a gesture area");
+        await page.evaluate(() => window.__phoenixRuntime.applyHostStatus({ gestureArea: true }));
+        await page.waitForSelector("[data-testid='advanced-gestures']", { timeout: 3000 });
+        await page.click("[data-testid='advanced-gestures'] [role='switch']");
+        await page.waitForTimeout(200);
+        check(last().advancedGestures === true, `Advanced gestures reaches the shell (${last().advancedGestures})`);
         await page.click("[data-testid='wallpaper']");
         await page.click("[data-testid='wallpaper-Aurora']");
         await page.waitForTimeout(200);

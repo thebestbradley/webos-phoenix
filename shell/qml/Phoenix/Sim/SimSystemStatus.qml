@@ -68,6 +68,9 @@ QtObject {
     // (seconds locked before the passcode is asked for; 0 at once).
     property int screenTimeout: 60
     property int lockTimeout: 0
+    // Screen & Lock > Advanced gestures (sysUiEnableNextPrevGestures): a
+    // long swipe across the gesture area switches apps.
+    property bool advancedGestures: false
     // Settings > Screen & Lock "Show notifications when locked"
     // (system preference showAlertsWhenLocked).
     property bool showAlertsWhenLocked: true
@@ -241,7 +244,7 @@ QtObject {
     // Apply a "systemStatus" report from the web runtime: wifiEnabled,
     // wifiConnected, wifiBars, bluetoothOn, airplaneMode, brightness
     // (0-100), rotationLocked, muted, timeFormat, showAlertsWhenLocked,
-    // screenTimeout, lockTimeout,
+    // screenTimeout, lockTimeout, advancedGestures,
     // volume, streams, systemSounds, tapSounds, textAssist, keyboards,
     // keyboard, ringtone, alerttone,
     // notificationtone, reduceMotion, vpnProfiles. Missing keys are left alone.
@@ -269,6 +272,8 @@ QtObject {
             screenTimeout = s.screenTimeout;
         if (s.lockTimeout !== undefined)
             lockTimeout = s.lockTimeout;
+        if (s.advancedGestures !== undefined)
+            advancedGestures = !!s.advancedGestures;
         if (s.volume !== undefined)
             volume = s.volume;
         if (s.audioScenario !== undefined)

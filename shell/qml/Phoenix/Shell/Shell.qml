@@ -438,6 +438,23 @@ FocusScope {
             source.siteAction(cards.currentUid, "forward");
     }
 
+    // Advanced gestures' long swipes (Key_CoreNavi_Previous / Next): on
+    // the release they close the dashboard and the menus and, unless the
+    // launcher is up, show the app beside this one, maximized if this one
+    // was (SystemUiController.cpp:394-408; MaximizeState / MinimizeState::
+    // changeCardWindow, CardWindowManagerStates.cpp:173-179, 443-449: Next,
+    // rightward, is the card to the left). toRight: the card to the right.
+    function gestureSwitchApp(toRight) {
+        if (locked || emergencyShown)
+            return;
+        notes.dashboardOpen = false;
+        siteMenu.open = false;
+        systemMenu.open = false;
+        if (launcher.open || justType.open)
+            return;
+        cards.switchApp(toRight);
+    }
+
     function gestureTap() {
         if (locked || emergencyShown || (firstUse && cards.count < 2))
             return;
@@ -1676,6 +1693,9 @@ FocusScope {
             onDown: shell.gestureDown()
             onBack: shell.gestureBack()
             onForward: shell.gestureForward()
+            onPrevious: shell.gestureSwitchApp(true)
+            onNext: shell.gestureSwitchApp(false)
+            advancedGestures: !!(shell.system && shell.system.advancedGestures)
             onTapped: shell.gestureTap()
             // With the keyboard up, hold and slide to move the cursor.
             cursorControl: ime.visible
