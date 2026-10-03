@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Bluetooth: a blue oval badge with the white rune standing on the diamond. Original Phoenix art. -->
+<defs>
+  <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7fb6ff"/><stop offset="0.5" stop-color="#2a6fd6"/><stop offset="1" stop-color="#123f8c"/></linearGradient>
+  <path id="s2" d="M128 40C158 40 172 62 172 108C172 154 158 176 128 176C98 176 84 154 84 108C84 62 98 40 128 40Z"/>
+  <linearGradient id="g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.6"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.12"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+</defs>
+<g>
+<use href="#s2" y="-8" fill="#a9cbff" stroke="#0a2a66" stroke-width="2.5"/>
+<use href="#s2" y="-7" fill="#a9cbff" stroke="#0a2a66" stroke-width="2.5"/>
+<use href="#s2" y="-6" fill="#a9cbff" stroke="#0a2a66" stroke-width="2.5"/>
+<use href="#s2" y="-5" fill="#a9cbff" stroke="#0a2a66" stroke-width="2.5"/>
+<use href="#s2" y="-4" fill="#a9cbff" stroke="#0a2a66" stroke-width="2.5"/>
+<use href="#s2" y="-3" fill="#a9cbff" stroke="#0a2a66" stroke-width="2.5"/>
+<use href="#s2" y="-2" fill="#a9cbff" stroke="#0a2a66" stroke-width="2.5"/>
+<use href="#s2" y="-1" fill="#a9cbff" stroke="#0a2a66" stroke-width="2.5"/>
+<use href="#s2" fill="url(#g1)" stroke="#0a2a66" stroke-width="2.5" stroke-linejoin="round"/>
+<use href="#s2" fill="url(#g3)"/>
+</g>
+<g fill="none" stroke-linecap="round" stroke-linejoin="round"><path id="rune" d="M106 84L150 128L128 150V66L150 88L106 132"/><use href="#rune" stroke="#0a2a66" stroke-width="14"/><use href="#rune" stroke="#fff" stroke-width="9"/></g>
+</svg>

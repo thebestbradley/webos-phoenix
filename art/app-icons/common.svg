@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!--
+  Definitions every icon may use (url(#c-...)). The light comes from above,
+  a little to the left, as on the Open webOS icons.
+-->
+<!-- What an object lying on the disc casts: soft, just below it. -->
+<filter id="c-drop" x="-20%" y="-20%" width="140%" height="150%" color-interpolation-filters="sRGB">
+  <feGaussianBlur in="SourceAlpha" stdDeviation="4.5"/>
+  <feOffset dy="5" result="blur"/>
+  <feComponentTransfer><feFuncA type="linear" slope="0.6"/></feComponentTransfer>
+  <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+</filter>
+<!-- An object standing on the diamond: a faint shadow behind its edges. -->
+<filter id="c-stand" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+  <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+  <feOffset dy="1.5"/>
+  <feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
+  <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+</filter>
+<!-- Small shadow for parts lying on other parts. -->
+<filter id="c-lift" x="-20%" y="-20%" width="140%" height="150%" color-interpolation-filters="sRGB">
+  <feGaussianBlur in="SourceAlpha" stdDeviation="2.2"/>
+  <feOffset dy="2.5"/>
+  <feComponentTransfer><feFuncA type="linear" slope="0.4"/></feComponentTransfer>
+  <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+</filter>
+<!-- Brushed chrome, lit from above. -->
+<linearGradient id="c-chrome" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0" stop-color="#fdfdfd"/>
+  <stop offset="0.45" stop-color="#c9cdd1"/>
+  <stop offset="0.5" stop-color="#a6abb1"/>
+  <stop offset="0.8" stop-color="#d7dadd"/>
+  <stop offset="1" stop-color="#8d9298"/>
+</linearGradient>
+<!-- Paper, white to a cool grey. -->
+<linearGradient id="c-paper" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0" stop-color="#ffffff"/>
+  <stop offset="1" stop-color="#e3e7ea"/>
+</linearGradient>
+<!-- Gloss over the top half of a glossy shape. -->
+<linearGradient id="c-gloss" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0" stop-color="#fff" stop-opacity="0.75"/>
+  <stop offset="1" stop-color="#fff" stop-opacity="0.08"/>
+</linearGradient>
+</svg>

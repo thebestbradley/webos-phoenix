@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Location Services: a red map pin standing on its point. Original Phoenix art. -->
+<defs>
+  <radialGradient id="g1" cx="0.38" cy="0.25" r="0.85"><stop offset="0" stop-color="#ffb39a"/><stop offset="0.4" stop-color="#ef4a2a"/><stop offset="1" stop-color="#9c1d0b"/></radialGradient>
+  <path id="s2" d="M128 176C116 150 82 122 82 84A46 46 0 1 1 174 84C174 122 140 150 128 176Z"/>
+  <linearGradient id="g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.6"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.12"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <linearGradient id="g4" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#ffd9cf"/></linearGradient>
+</defs>
+<ellipse cx="128" cy="176" rx="24" ry="7" fill="none" stroke="#e8573a" stroke-width="3" opacity="0.8"/>
+<g>
+<use href="#s2" y="-7" fill="#ff9a80" stroke="#5e1005" stroke-width="2.5"/>
+<use href="#s2" y="-6" fill="#ff9a80" stroke="#5e1005" stroke-width="2.5"/>
+<use href="#s2" y="-5" fill="#ff9a80" stroke="#5e1005" stroke-width="2.5"/>
+<use href="#s2" y="-4" fill="#ff9a80" stroke="#5e1005" stroke-width="2.5"/>
+<use href="#s2" y="-3" fill="#ff9a80" stroke="#5e1005" stroke-width="2.5"/>
+<use href="#s2" y="-2" fill="#ff9a80" stroke="#5e1005" stroke-width="2.5"/>
+<use href="#s2" y="-1" fill="#ff9a80" stroke="#5e1005" stroke-width="2.5"/>
+<use href="#s2" fill="url(#g1)" stroke="#5e1005" stroke-width="2.5" stroke-linejoin="round"/>
+<use href="#s2" fill="url(#g3)"/>
+</g>
+<circle cx="128" cy="82" r="17" fill="url(#g4)" stroke="#7a1a0a" stroke-width="2"/>
+</svg>

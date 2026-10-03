@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Terminal: a black monitor with a green prompt on it. Original Phoenix art. -->
+<defs>
+  <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6b7178"/><stop offset="1" stop-color="#1c1f22"/></linearGradient>
+  <linearGradient id="g2" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffffff"/><stop offset="0.45" stop-color="#cfd3d7"/><stop offset="0.55" stop-color="#9aa0a6"/><stop offset="1" stop-color="#dfe2e5"/></linearGradient>
+  <linearGradient id="g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4b4f55"/><stop offset="0.1" stop-color="#202326"/><stop offset="1" stop-color="#0c0d0f"/></linearGradient>
+  <path id="s4" d="M60 34H196C202 34 206 38 206 44V132C206 138 202 142 196 142H60C54 142 50 138 50 132V44C50 38 54 34 60 34Z"/>
+  <linearGradient id="g5" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d2a1a"/><stop offset="1" stop-color="#061209"/></linearGradient>
+</defs>
+<ellipse cx="128" cy="172" rx="40" ry="8" fill="url(#g1)" stroke="#111" stroke-width="2"/>
+<path d="M116 136H140L144 170H112Z" fill="url(#g2)" stroke="#111" stroke-width="2"/>
+<g>
+<use href="#s4" y="-6" fill="#9aa1a8" stroke="#050607" stroke-width="2.5"/>
+<use href="#s4" y="-5" fill="#9aa1a8" stroke="#050607" stroke-width="2.5"/>
+<use href="#s4" y="-4" fill="#9aa1a8" stroke="#050607" stroke-width="2.5"/>
+<use href="#s4" y="-3" fill="#9aa1a8" stroke="#050607" stroke-width="2.5"/>
+<use href="#s4" y="-2" fill="#9aa1a8" stroke="#050607" stroke-width="2.5"/>
+<use href="#s4" y="-1" fill="#9aa1a8" stroke="#050607" stroke-width="2.5"/>
+<use href="#s4" fill="url(#g3)" stroke="#050607" stroke-width="2.5" stroke-linejoin="round"/>
+</g>
+<rect x="60" y="44" width="136" height="88" rx="3" fill="url(#g5)" stroke="#000" stroke-width="1.5"/>
+<g fill="none" stroke="#5cff8a" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M74 66L94 82L74 98"/><path d="M104 100H130"/></g>
+<path d="M60 44H196L60 104Z" fill="#fff" opacity="0.12"/>
+</svg>

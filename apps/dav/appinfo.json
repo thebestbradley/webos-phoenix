@@ -6,6 +6,7 @@
     "main": "index.html",
     "title": "CardDAV & CalDAV",
     "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
     "uiRevision": 2,
     "phoenix": {
         "//": "Not in the launcher: this app only carries the account wizard the Accounts app shows (validator.customUI in public/accounts/com.webosphoenix.dav).",

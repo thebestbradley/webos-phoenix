@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- CardDAV &amp; CalDAV: two blue arrows chasing each other (sync), after the Open webOS system UI's notification-large-sync.png (luna-systemui, Apache-2.0). -->
+<defs>
+  <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a9dcff"/><stop offset="0.5" stop-color="#3b97e6"/><stop offset="1" stop-color="#1a5fae"/></linearGradient>
+  <path id="s2" d="M76 108A52 52 0 0 1 166 72"/>
+  <path id="s3" d="M180 108A52 52 0 0 1 90 144"/>
+</defs>
+<g fill="none" stroke-linecap="butt" stroke-linejoin="round">
+<use href="#s2" y="-6" stroke="#0c3466" stroke-width="23"/>
+<use href="#s2" y="-5" stroke="#0c3466" stroke-width="23"/>
+<use href="#s2" y="-4" stroke="#0c3466" stroke-width="23"/>
+<use href="#s2" y="-3" stroke="#0c3466" stroke-width="23"/>
+<use href="#s2" y="-2" stroke="#0c3466" stroke-width="23"/>
+<use href="#s2" y="-1" stroke="#0c3466" stroke-width="23"/>
+<use href="#s2" y="-6" stroke="#cfe9ff" stroke-width="18"/>
+<use href="#s2" y="-5" stroke="#cfe9ff" stroke-width="18"/>
+<use href="#s2" y="-4" stroke="#cfe9ff" stroke-width="18"/>
+<use href="#s2" y="-3" stroke="#cfe9ff" stroke-width="18"/>
+<use href="#s2" y="-2" stroke="#cfe9ff" stroke-width="18"/>
+<use href="#s2" y="-1" stroke="#cfe9ff" stroke-width="18"/>
+<use href="#s2" stroke="#0c3466" stroke-width="23"/>
+<use href="#s2" stroke="url(#g1)" stroke-width="18"/>
+</g>
+<g fill="none" stroke-linecap="butt" stroke-linejoin="round">
+<use href="#s3" y="-6" stroke="#0c3466" stroke-width="23"/>
+<use href="#s3" y="-5" stroke="#0c3466" stroke-width="23"/>
+<use href="#s3" y="-4" stroke="#0c3466" stroke-width="23"/>
+<use href="#s3" y="-3" stroke="#0c3466" stroke-width="23"/>
+<use href="#s3" y="-2" stroke="#0c3466" stroke-width="23"/>
+<use href="#s3" y="-1" stroke="#0c3466" stroke-width="23"/>
+<use href="#s3" y="-6" stroke="#cfe9ff" stroke-width="18"/>
+<use href="#s3" y="-5" stroke="#cfe9ff" stroke-width="18"/>
+<use href="#s3" y="-4" stroke="#cfe9ff" stroke-width="18"/>
+<use href="#s3" y="-3" stroke="#cfe9ff" stroke-width="18"/>
+<use href="#s3" y="-2" stroke="#cfe9ff" stroke-width="18"/>
+<use href="#s3" y="-1" stroke="#cfe9ff" stroke-width="18"/>
+<use href="#s3" stroke="#0c3466" stroke-width="23"/>
+<use href="#s3" stroke="url(#g1)" stroke-width="18"/>
+</g>
+<polygon points="146,48 190,64 160,96" fill="url(#g1)" stroke="#0c3466" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon points="110,168 66,152 96,120" fill="url(#g1)" stroke="#0c3466" stroke-width="2.5" stroke-linejoin="round"/>
+</svg>

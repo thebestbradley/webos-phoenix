@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Marketplace: a glossy white shopping bag with a star on it, in the
+     place of the App Catalog's bag. Original Phoenix art (the App Catalog
+     icon, with HP's logo, was not open-sourced). -->
+<defs>
+  <linearGradient id="front" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="1" stop-color="#dfe5ea"/>
+  </linearGradient>
+  <linearGradient id="side" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#c9d2da"/>
+    <stop offset="1" stop-color="#9aa6b1"/>
+  </linearGradient>
+  <radialGradient id="badge" cx="0.4" cy="0.3" r="0.75">
+    <stop offset="0" stop-color="#79b8ff"/>
+    <stop offset="0.6" stop-color="#2a6fd1"/>
+    <stop offset="1" stop-color="#16408a"/>
+  </radialGradient>
+  <linearGradient id="star" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="1" stop-color="#dbe9ff"/>
+  </linearGradient>
+  <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#fff" stop-opacity="0.7"/>
+    <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+  </linearGradient>
+</defs>
+<!-- Handles: rope, through the bag's top. -->
+<path d="M84 92V72C84 44 102 30 124 30C146 30 164 44 164 72V92" fill="none" stroke="#1e3f73" stroke-width="9" stroke-linecap="round"/>
+<path d="M84 92V72C84 44 102 30 124 30C146 30 164 44 164 72V92" fill="none" stroke="#4b86d6" stroke-width="5" stroke-linecap="round"/>
+<!-- The bag: its front and its gusset side, in perspective. -->
+<path d="M190 70L222 86L214 220L182 230Z" fill="url(#side)" stroke="#6f7d8a" stroke-width="2" stroke-linejoin="round"/>
+<path d="M40 70H190L182 230H46Z" fill="url(#front)" stroke="#6f7d8a" stroke-width="2.5" stroke-linejoin="round"/>
+<path d="M44 74H186L184 112H44Z" fill="url(#gloss)" opacity="0.6"/>
+<path d="M104 80V100M146 80V100" stroke="#1e3f73" stroke-width="9" stroke-linecap="round"/>
+<path d="M104 80V100M146 80V100" stroke="#4b86d6" stroke-width="5" stroke-linecap="round"/>
+<!-- The badge. -->
+<g filter="url(#c-lift)">
+  <circle cx="114" cy="158" r="44" fill="url(#badge)" stroke="#0f2c63" stroke-width="2.5"/>
+  <path d="M114 128L122.8 145.9L142.5 148.7L128.3 162.6L131.6 182.3L114 173L96.4 182.3L99.7 162.6L85.5 148.7L105.2 145.9Z" fill="url(#star)" stroke="#0f2c63" stroke-width="2" stroke-linejoin="round"/>
+  <ellipse cx="106" cy="134" rx="26" ry="11" fill="#fff" opacity="0.35"/>
+</g>
+</svg>

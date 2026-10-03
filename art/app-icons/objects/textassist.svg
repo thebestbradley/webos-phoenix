@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Text Assist: a big keyboard key with a capital A and a red squiggle under it. Original Phoenix art. -->
+<defs>
+  <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b8bec4"/><stop offset="1" stop-color="#7d848b"/></linearGradient>
+  <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#dde2e7"/></linearGradient>
+  <path id="s3" d="M80 46H176C182 46 186 50 186 56V148C186 154 182 158 176 158H80C74 158 70 154 70 148V56C70 50 74 46 80 46Z"/>
+  <linearGradient id="g4" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.6"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.12"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+</defs>
+<path d="M66 70H190L198 176H58Z" fill="url(#g1)" stroke="#4a5056" stroke-width="2.5" stroke-linejoin="round"/>
+<path d="M58 176L66 70M198 176L190 70" stroke="#fff" stroke-opacity="0.3" stroke-width="1.5"/>
+<g>
+<use href="#s3" y="-4" fill="#f2f4f6" stroke="#4a5056" stroke-width="2.5"/>
+<use href="#s3" y="-3" fill="#f2f4f6" stroke="#4a5056" stroke-width="2.5"/>
+<use href="#s3" y="-2" fill="#f2f4f6" stroke="#4a5056" stroke-width="2.5"/>
+<use href="#s3" y="-1" fill="#f2f4f6" stroke="#4a5056" stroke-width="2.5"/>
+<use href="#s3" fill="url(#g2)" stroke="#4a5056" stroke-width="2.5" stroke-linejoin="round"/>
+<use href="#s3" fill="url(#g4)"/>
+</g>
+<g fill="none" stroke-linecap="round" stroke-linejoin="round"><path id="ka" d="M98 128L128 62L158 128M108 106H148" stroke="#2a2d31" stroke-width="12"/></g>
+<path d="M92 142Q98 136 104 142T116 142T128 142T140 142T152 142T164 142" fill="none" stroke="#e0302a" stroke-width="4" stroke-linecap="round"/>
+</svg>

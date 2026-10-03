@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Accessibility: a blue medallion with the accessibility figure, standing on edge. Original Phoenix art. -->
+<defs>
+  <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fd0ff"/><stop offset="0.5" stop-color="#1f80d6"/><stop offset="1" stop-color="#0f4a8e"/></linearGradient>
+  <path id="s2" d="M66 114A62 62 0 1 0 190 114A62 62 0 1 0 66 114Z"/>
+  <linearGradient id="g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.6"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.12"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+</defs>
+<g>
+<use href="#s2" y="-8" fill="#bfe3ff" stroke="#08305e" stroke-width="2.5"/>
+<use href="#s2" y="-7" fill="#bfe3ff" stroke="#08305e" stroke-width="2.5"/>
+<use href="#s2" y="-6" fill="#bfe3ff" stroke="#08305e" stroke-width="2.5"/>
+<use href="#s2" y="-5" fill="#bfe3ff" stroke="#08305e" stroke-width="2.5"/>
+<use href="#s2" y="-4" fill="#bfe3ff" stroke="#08305e" stroke-width="2.5"/>
+<use href="#s2" y="-3" fill="#bfe3ff" stroke="#08305e" stroke-width="2.5"/>
+<use href="#s2" y="-2" fill="#bfe3ff" stroke="#08305e" stroke-width="2.5"/>
+<use href="#s2" y="-1" fill="#bfe3ff" stroke="#08305e" stroke-width="2.5"/>
+<use href="#s2" fill="url(#g1)" stroke="#08305e" stroke-width="2.5" stroke-linejoin="round"/>
+<use href="#s2" fill="url(#g3)"/>
+</g>
+<circle cx="128" cy="114" r="54" fill="none" stroke="#fff" stroke-opacity="0.35" stroke-width="2"/>
+<circle cx="128" cy="78" r="9" fill="#fff"/><path d="M94 94Q128 102 162 94M128 100V124M128 124L110 154M128 124L146 154" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

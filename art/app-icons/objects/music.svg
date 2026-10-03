@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Music: a smoky teal CD case with two notes, the disc sliding out, after
+     the Open webOS file picker's empty-folder-audio.png (luna-systemui,
+     Apache-2.0). -->
+<defs>
+  <radialGradient id="cd" cx="0.5" cy="0.5" r="0.5">
+    <stop offset="0" stop-color="#fff"/>
+    <stop offset="0.16" stop-color="#e9ecef"/>
+    <stop offset="0.19" stop-color="#9aa1a8"/>
+    <stop offset="0.22" stop-color="#f4f6f8"/>
+    <stop offset="0.95" stop-color="#cfd5db"/>
+    <stop offset="1" stop-color="#8f979f"/>
+  </radialGradient>
+  <linearGradient id="rainbow" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0.25" stop-color="#ff5a5a" stop-opacity="0"/>
+    <stop offset="0.4" stop-color="#ffcf3a" stop-opacity="0.75"/>
+    <stop offset="0.5" stop-color="#5ad86a" stop-opacity="0.75"/>
+    <stop offset="0.6" stop-color="#4aa8ff" stop-opacity="0.75"/>
+    <stop offset="0.7" stop-color="#b05aff" stop-opacity="0.6"/>
+    <stop offset="0.85" stop-color="#b05aff" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="glass" x1="0" y1="0" x2="0.3" y2="1">
+    <stop offset="0" stop-color="#3f8a92"/>
+    <stop offset="0.5" stop-color="#1c5961"/>
+    <stop offset="1" stop-color="#0c3036"/>
+  </linearGradient>
+  <filter id="smoke" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.022" numOctaves="3" seed="7"/>
+    <feColorMatrix type="matrix" values="0 0 0 0 0.75  0 0 0 0 0.95  0 0 0 0 0.95  0 0 0 -1.6 1.05"/>
+  </filter>
+  <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#fff" stop-opacity="0.45"/>
+    <stop offset="0.45" stop-color="#fff" stop-opacity="0.08"/>
+    <stop offset="0.46" stop-color="#fff" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="spine" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#0b2427"/>
+    <stop offset="0.5" stop-color="#2f6168"/>
+    <stop offset="1" stop-color="#123a40"/>
+  </linearGradient>
+  <linearGradient id="note" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="1" stop-color="#d6eef0"/>
+  </linearGradient>
+  <clipPath id="face"><rect width="146" height="176"/></clipPath>
+</defs>
+<!-- The disc, half out of the case. -->
+<g filter="url(#c-lift)">
+  <circle cx="172" cy="178" r="64" fill="url(#cd)" stroke="#6f777f" stroke-width="1.5"/>
+  <circle cx="172" cy="178" r="62" fill="url(#rainbow)"/>
+  <circle cx="172" cy="178" r="10" fill="#4a4f55"/>
+  <circle cx="172" cy="178" r="8" fill="#2e3237"/>
+</g>
+<!-- The case: its hinge edge, then its front in perspective. -->
+<g filter="url(#c-lift)">
+  <path d="M34 54L52 46L58 222L40 228Z" fill="url(#spine)" stroke="#061517" stroke-width="2" stroke-linejoin="round"/>
+  <g transform="matrix(1 -0.137 0.034 1 52 46)">
+    <rect width="146" height="176" rx="3" fill="url(#glass)"/>
+    <g clip-path="url(#face)">
+      <rect width="146" height="176" filter="url(#smoke)" opacity="0.32"/>
+      <g fill="url(#note)" stroke="#0a2a2e" stroke-width="1.5" stroke-linejoin="round">
+        <path d="M54 46L110 32V48L66 59V128A16 13 -18 1 1 54 116V58Z"/>
+        <path d="M98 51L110 48V116A16 13 -18 1 1 98 104Z"/>
+        
+      </g>
+      <rect width="146" height="176" fill="url(#sheen)"/>
+    </g>
+    <rect x="0.5" y="0.5" width="145" height="175" rx="3" fill="none" stroke="#08262a" stroke-width="2.5"/>
+    <rect x="3" y="3" width="140" height="170" rx="2" fill="none" stroke="#8fd0d6" stroke-opacity="0.45" stroke-width="1.2"/>
+  </g>
+</g>
+</svg>

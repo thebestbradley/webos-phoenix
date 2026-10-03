@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Help: a red and white life ring standing on edge. Original Phoenix art. -->
+<defs>
+  <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d9dee3"/></linearGradient>
+  <path id="s2" d="M58 106A70 70 0 1 0 198 106A70 70 0 1 0 58 106ZM92 106A36 36 0 1 1 164 106A36 36 0 1 1 92 106Z" fill-rule="evenodd"/>
+  <clipPath id="c3"><use href="#s2"/></clipPath>
+  <linearGradient id="g4" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff7a6a"/><stop offset="1" stop-color="#b3180c"/></linearGradient>
+</defs>
+<g>
+<use href="#s2" y="-7" fill="#f3f5f7" stroke="#5d636a" stroke-width="2.5"/>
+<use href="#s2" y="-6" fill="#f3f5f7" stroke="#5d636a" stroke-width="2.5"/>
+<use href="#s2" y="-5" fill="#f3f5f7" stroke="#5d636a" stroke-width="2.5"/>
+<use href="#s2" y="-4" fill="#f3f5f7" stroke="#5d636a" stroke-width="2.5"/>
+<use href="#s2" y="-3" fill="#f3f5f7" stroke="#5d636a" stroke-width="2.5"/>
+<use href="#s2" y="-2" fill="#f3f5f7" stroke="#5d636a" stroke-width="2.5"/>
+<use href="#s2" y="-1" fill="#f3f5f7" stroke="#5d636a" stroke-width="2.5"/>
+<use href="#s2" fill="url(#g1)" stroke="#5d636a" stroke-width="2.5" stroke-linejoin="round"/>
+</g>
+<g clip-path="url(#c3)" fill="url(#g4)"><path d="M128 106L100 20L156 20 Z"/><path d="M128 106L214 78L214 134 Z"/><path d="M128 106L156 192L100 192 Z"/><path d="M128 106L42 134L42 78 Z"/></g>
+<use href="#s2" fill="none" stroke="#5d636a" stroke-width="2.5"/>
+<g clip-path="url(#c3)"><ellipse cx="110" cy="56" rx="60" ry="26" fill="#fff" opacity="0.45"/></g>
+<g fill="none" stroke="#e9dcb8" stroke-width="4" stroke-dasharray="10 8"><circle cx="128" cy="106" r="53"/></g>
+</svg>

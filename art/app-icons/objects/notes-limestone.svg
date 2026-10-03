@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Notes (Limestone): a red hardcover notebook with an elastic band, its
+     label marked "L" for Enact Limestone. The four Notes demos share this
+     drawing in different covers. Original Phoenix art. -->
+<defs>
+  <linearGradient id="cover" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#f6a39a"/>
+    <stop offset="0.55" stop-color="#d0392d"/>
+    <stop offset="1" stop-color="#8e1a12"/>
+  </linearGradient>
+  <linearGradient id="pages" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="1" stop-color="#d5d9dd"/>
+  </linearGradient>
+  <linearGradient id="label" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="1" stop-color="#e9e4d6"/>
+  </linearGradient>
+  <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#fff" stop-opacity="0.45"/>
+    <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="band" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#1b1d20"/>
+    <stop offset="0.5" stop-color="#4a4f55"/>
+    <stop offset="1" stop-color="#1b1d20"/>
+  </linearGradient>
+</defs>
+<g filter="url(#c-lift)" transform="rotate(-6 128 128)">
+  <!-- Page block, showing along the open side and the foot. -->
+  <path d="M62 34H202C208 34 212 38 212 44V218C212 224 208 228 202 228H62Z" fill="url(#pages)" stroke="#8b939b" stroke-width="1.5"/>
+  <path d="M206 44V220M209 48V216" stroke="#b6bcc2" stroke-width="1.2"/>
+  <!-- Cover, its spine on the left. -->
+  <rect x="44" y="28" width="158" height="194" rx="10" fill="url(#cover)" stroke="#5a0f09" stroke-width="2.5"/>
+  <rect x="44" y="28" width="22" height="194" rx="8" fill="#000" opacity="0.18"/>
+  <path d="M66 30V220" stroke="#fff" stroke-opacity="0.25" stroke-width="1.5"/>
+  <rect x="47" y="31" width="152" height="70" rx="8" fill="url(#gloss)"/>
+  <!-- Label. -->
+  <rect x="82" y="70" width="96" height="96" rx="10" fill="url(#label)" stroke="#5a0f09" stroke-width="2"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path id="letter" d="M114 88V150H148"/>
+    <use href="#letter" stroke="#5a0f09" stroke-width="16"/>
+    <use href="#letter" stroke="#d0392d" stroke-width="11"/>
+  </g>
+  <!-- Elastic band. -->
+  <rect x="184" y="26" width="9" height="198" fill="url(#band)"/>
+</g>
+</svg>

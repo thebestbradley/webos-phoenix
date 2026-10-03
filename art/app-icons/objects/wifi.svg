@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Wi-Fi: the signal fan in blue glass, after the Open webOS system UI's system-notification-wifi-icon.png (luna-systemui, Apache-2.0). Original Phoenix art. -->
+<defs>
+  <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a9dcff"/><stop offset="0.5" stop-color="#3b97e6"/><stop offset="1" stop-color="#1a5fae"/></linearGradient>
+  <path id="s2" d="M88 124A56 56 0 0 1 168 124M66 100A86 86 0 0 1 190 100M44 76A116 116 0 0 1 212 76"/>
+  <path id="s3" d="M114 158A14 14 0 1 0 142 158A14 14 0 1 0 114 158Z"/>
+  <linearGradient id="g4" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.6"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.12"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+</defs>
+<g fill="none" stroke-linecap="round" stroke-linejoin="round" transform="translate(0 18)">
+<use href="#s2" y="-6" stroke="#0c3466" stroke-width="20"/>
+<use href="#s2" y="-5" stroke="#0c3466" stroke-width="20"/>
+<use href="#s2" y="-4" stroke="#0c3466" stroke-width="20"/>
+<use href="#s2" y="-3" stroke="#0c3466" stroke-width="20"/>
+<use href="#s2" y="-2" stroke="#0c3466" stroke-width="20"/>
+<use href="#s2" y="-1" stroke="#0c3466" stroke-width="20"/>
+<use href="#s2" y="-6" stroke="#cfe9ff" stroke-width="15"/>
+<use href="#s2" y="-5" stroke="#cfe9ff" stroke-width="15"/>
+<use href="#s2" y="-4" stroke="#cfe9ff" stroke-width="15"/>
+<use href="#s2" y="-3" stroke="#cfe9ff" stroke-width="15"/>
+<use href="#s2" y="-2" stroke="#cfe9ff" stroke-width="15"/>
+<use href="#s2" y="-1" stroke="#cfe9ff" stroke-width="15"/>
+<use href="#s2" stroke="#0c3466" stroke-width="20"/>
+<use href="#s2" stroke="url(#g1)" stroke-width="15"/>
+</g>
+<g>
+<use href="#s3" y="-6" fill="#cfe9ff" stroke="#0c3466" stroke-width="2.5"/>
+<use href="#s3" y="-5" fill="#cfe9ff" stroke="#0c3466" stroke-width="2.5"/>
+<use href="#s3" y="-4" fill="#cfe9ff" stroke="#0c3466" stroke-width="2.5"/>
+<use href="#s3" y="-3" fill="#cfe9ff" stroke="#0c3466" stroke-width="2.5"/>
+<use href="#s3" y="-2" fill="#cfe9ff" stroke="#0c3466" stroke-width="2.5"/>
+<use href="#s3" y="-1" fill="#cfe9ff" stroke="#0c3466" stroke-width="2.5"/>
+<use href="#s3" fill="url(#g1)" stroke="#0c3466" stroke-width="2.5" stroke-linejoin="round"/>
+<use href="#s3" fill="url(#g4)"/>
+</g>
+</svg>
