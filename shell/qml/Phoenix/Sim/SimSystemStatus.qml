@@ -23,7 +23,7 @@ QtObject {
     id: status
 
     property string carrier: "Phoenix"
-    property int batteryPercent: 76
+    property int batteryPercent: 76  // -1: no reading (powerd not answering; the status bar shows battery-error)
     property bool charging: false
     property int wifiBars: 3          // 0..3 connected, 0 = on but not connected, -1 = off
     property int signalBars: 5        // 0..5, -1 = no modem

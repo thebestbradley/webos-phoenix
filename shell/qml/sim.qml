@@ -229,6 +229,14 @@ Item {
             root.power({ charger: root.charger, percent: root.charger === "none" ? 60 : 61 });
         }
     }
+    // Shift+F6: the battery stops reporting (powerd gone: the status bar's
+    // battery-error, "Battery: Not Available" in the system menu), or
+    // reports again.
+    Shortcut {
+        sequence: "Shift+F6"
+        context: Qt.ApplicationShortcut
+        onActivated: status.batteryPercent = status.batteryPercent < 0 ? 60 : -1
+    }
     Shortcut {
         sequence: "F8"
         context: Qt.ApplicationShortcut

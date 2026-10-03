@@ -856,6 +856,11 @@ Item {
             verify(/battery-charged\.png$/.test(img.source));
             shell.system.batteryPercent = 50;
             verify(/battery-charging-5\.png$/.test(img.source));
+            // No reading from powerd: the error battery, whether charging or not.
+            shell.system.batteryPercent = -1;
+            verify(/battery-error\.png$/.test(img.source));
+            shell.system.charging = false;
+            verify(/battery-error\.png$/.test(img.source));
             shell.system.batteryPercent = 100;
         }
 

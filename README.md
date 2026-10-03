@@ -253,7 +253,7 @@ then take the bottom-edge flick). A big `--size` needs a matching
 `--scale` to look like a real device (2 for most tablets of 2560 px). Keys: **Esc** back, **F1** swipe up, **Home** the Home button,
 **F2** demo notification, **F3** the Power button (the screen off and locked, or on again), **F4** incoming call (rings
 the Phone app), **F5** incoming text message (for Messaging), **F6** low
-battery, **F7** plug a charger in or out, **F8** battery charged to full,
+battery, **Shift+F6** the battery stops reporting (or reports again), **F7** plug a charger in or out, **F8** battery charged to full,
 **F9** (or **Home**+**F3**, **Print Screen**, **Ctrl+Alt+P**) a screen capture,
 **F10** / **F11** the volume keys (down / up),
 **Ctrl+Left** / **Ctrl+Right**
