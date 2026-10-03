@@ -22,6 +22,17 @@ Excluded on purpose:
 - Palm and HP app icons, wallpapers and ringtones. They were not in the
   open-source release, so we do not ship them.
 
+HiDPI variants (`name@2x.png`, `name@3x.png`) of this art, of the Enyo art
+in `apps/shared/phoenix-ui/assets` and of luna-systemui's `images/` (those in
+`compat/rootfs/usr/lib/luna/system/luna-systemui/images`) are larger
+originals from the same Apache-2.0 repositories where they exist, else
+modified versions of the 1x art under the same license, enlarged by
+`tools/hidpi-art.py` (Real-ESRGAN, BSD-3-Clause, as a tool only, or plain
+resampling). Each set's `PROVENANCE.md` and `docs/spec/hidpi-art.md` say
+which. Third parties' logos in luna-systemui (Facebook, Google, LinkedIn,
+Outlook, Yahoo, HP's App Catalog bag, the Palm battery door) are not
+enlarged: trademarks are not licensed by Apache-2.0 (section 6).
+
 ## Open webOS system sounds (`shell/assets/sounds/openwebos/`)
 
 The twelve files of luna-sysmgr's `sounds/` directory (`alert.wav`,
