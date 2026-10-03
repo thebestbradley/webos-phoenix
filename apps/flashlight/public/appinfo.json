@@ -7,6 +7,8 @@
     "title": "Flashlight",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
     "iconColor": "#1c1c1c",
     "uiRevision": 2,
     "keywords": ["Torch", "Flash", "Light", "LED"],

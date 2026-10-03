@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Phone: a silver handset sounding, after the Open webOS launcher's
+     icon-dial.png (luna-applauncher, Apache-2.0). -->
+<defs>
+  <linearGradient id="silver" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="0.35" stop-color="#dfe2e5"/>
+    <stop offset="0.7" stop-color="#a9aeb3"/>
+    <stop offset="1" stop-color="#6f757b"/>
+  </linearGradient>
+  <linearGradient id="wave" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="1" stop-color="#b8bdc2"/>
+  </linearGradient>
+  <!-- The handset as one shape: earpiece, curved handle, mouthpiece. -->
+  <path id="handset" d="M44 64C40 50 50 38 64 36L90 32C100 30 108 36 110 46L116 76C118 86 112 94 102 96L94 98C96 132 120 160 152 170L158 160C164 152 174 150 182 154L208 168C218 174 222 184 216 194L204 214C196 226 182 230 168 226C100 206 52 150 44 64Z"/>
+  <clipPath id="hclip"><use href="#handset"/></clipPath>
+</defs>
+<use href="#handset" fill="url(#silver)" stroke="#3a3f44" stroke-width="3.5" stroke-linejoin="round"/>
+<g clip-path="url(#hclip)">
+  <!-- Light along its outer edge, shade along the inner one. -->
+  <path d="M52 62C58 140 104 196 170 216" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" opacity="0.8"/>
+  <path d="M100 98C104 134 126 160 156 172" fill="none" stroke="#5b6167" stroke-width="10" opacity="0.35"/>
+  <path d="M60 40L92 36" stroke="#fff" stroke-width="6" stroke-linecap="round" opacity="0.7"/>
+</g>
+<!-- Sound: three arcs and a dot, up and to the right. -->
+<g fill="none" stroke-linecap="round">
+  <g stroke="#3a3f44" stroke-width="17">
+    <path d="M150 74A28 28 0 0 1 178 102"/>
+    <path d="M150 46A56 56 0 0 1 206 102"/>
+    <path d="M150 18A84 84 0 0 1 234 102"/>
+  </g>
+  <g stroke="url(#wave)" stroke-width="11">
+    <path d="M150 74A28 28 0 0 1 178 102"/>
+    <path d="M150 46A56 56 0 0 1 206 102"/>
+    <path d="M150 18A84 84 0 0 1 234 102"/>
+  </g>
+</g>
+<circle cx="152" cy="100" r="9" fill="url(#wave)" stroke="#3a3f44" stroke-width="3"/>
+</svg>

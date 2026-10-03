@@ -7,6 +7,8 @@
     "title": "Tasks",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
     "iconColor": "#3b8fd6",
     "uiRevision": 2,
     "keywords": ["To-do", "Todo", "Reminders", "Checklist"],

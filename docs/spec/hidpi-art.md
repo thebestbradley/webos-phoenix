@@ -63,20 +63,32 @@ to them).
 
 ## App icons
 
-`appinfo.json`'s `icon` is 64 px. Apps ship bigger ones: Open webOS core apps
-and Isis name `icon-256x256.png` as `splashicon` (luna-sysmgr drew it on the
-loading card), and every Phoenix app does the same (its `tools/render-icon*.cjs`
-draws the SVG at 64 and 256 px).
+`appinfo.json`'s `icon` is 64 px. Apps ship bigger ones beside it: Open
+webOS core apps and Isis name `icon-256x256.png` as `splashicon` (luna-sysmgr
+drew it on the loading card), and every Phoenix app does the same. Phoenix's
+icons are drawn from SVG by `tools/render-app-icons.cjs` at 64, 128, 256 and
+512 px (`icon.png`, `icon-128x128.png`, `icon-256x256.png`,
+`icon-512x512.png`); the originals get a 512 px one from
+`tools/upscale-app-icons.py` in the compat overlay. See
+[app-icons.md](app-icons.md).
 
 `Theme.appIcon(icon, pixels, large)` keeps `icon` while it has at least
 `pixels`, else takes the smallest bigger one: `large` (the `splashicon` or
 OSE `largeIcon`, `largeIcon` in the app list) and files beside the icon named
 `icon-<N>x<N>.png`, `icon-<N>.png` or `icon@<k>x.png`. `AppIcon` and the
-loading card use it, and decode the bigger icon at the drawn size
-(`sourceSize`) so it is scaled down smoothly. At 1.0 the launcher, dock and
-notifications draw `icon.png` as before; the loading card, which draws the
-icon half as big again, now scales the 256 px icon down instead of the 64 px
-one up.
+loading card use it, and decode any file bigger than the drawn size at that
+size (`sourceSize`), so it is scaled down smoothly rather than shrunk by the
+scene graph. At 1.0 the launcher and dock draw `icon.png` as before;
+notifications (22 px), dashboards (32 px) and the drag proxy decode it at their
+size; the loading card, which draws the icon half as big again, scales the
+256 px icon down instead of the 64 px one up. At 2.0 the launcher draws the
+128 px icon, at 3.0 the 256 px one, and the loading card at 3.0 (288 px) the
+512 px one.
+
+The originals' 512 px icons live in `compat/rootfs`, not beside their icons
+(the submodules are not changed). A device installs them beside the icon; the
+simulator, which reads the icon from the app's own folder, gives the biggest
+icon the overlay adds as the app's `largeIcon` (`shell/sim/rootfs.cpp`).
 
 Not covered: pictures inside web apps (Just Type's results, the apps' own art)
 are the page's to choose; Enyo picks its `images-1.5` art by the page's

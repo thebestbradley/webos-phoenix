@@ -7,6 +7,8 @@
     "title": "Camera",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
     "iconColor": "#555c66",
     "uiRevision": 2,
     "//requiredPermissions": "OSE access control groups for the services the app calls (the groups in each service's sysbus api.json).",

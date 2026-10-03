@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Maps: a street map folded in three under an orange pin, after the Open
+     webOS launcher's search-icon-maps.png (luna-applauncher, Apache-2.0). -->
+<defs>
+  <!-- The map, 192 x 160, drawn once and shown on each panel. -->
+  <g id="map">
+    <rect width="192" height="160" fill="#f1f1ea"/>
+    <path d="M0 0H70L0 62Z" fill="#7cb85a"/>
+    <path d="M18 92H86V128H18Z" fill="#d7d9d2"/>
+    <path d="M120 96H176V136H120Z" fill="#d7d9d2"/>
+    <path d="M150 0H192V160H160C164 110 140 60 150 0Z" fill="#7fb2df"/>
+    <path d="M0 74H120" stroke="#89c06a" stroke-width="10"/>
+    <g fill="none" stroke="#fff" stroke-width="7">
+      <path d="M0 40H150M0 110H192M0 146H160M40 0V160M104 0V160M134 0V160"/>
+    </g>
+    <g fill="none" stroke="#b9bbb4" stroke-width="1.5">
+      <path d="M0 36.5H150M0 43.5H150M0 106.5H192M0 113.5H192"/>
+    </g>
+    <g fill="none" stroke="#7a62c4" stroke-width="8" stroke-linecap="square">
+      <path d="M0 86H192"/>
+      <path d="M20 0L74 58"/>
+      <path d="M118 0C116 60 120 110 112 160"/>
+      <path d="M0 136H192"/>
+    </g>
+  </g>
+  <linearGradient id="fold1" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#fff" stop-opacity="0.15"/>
+    <stop offset="1" stop-color="#000" stop-opacity="0.05"/>
+  </linearGradient>
+  <linearGradient id="fold2" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#000" stop-opacity="0.28"/>
+    <stop offset="1" stop-color="#000" stop-opacity="0.12"/>
+  </linearGradient>
+  <linearGradient id="fold3" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#fff" stop-opacity="0.18"/>
+    <stop offset="1" stop-color="#000" stop-opacity="0.08"/>
+  </linearGradient>
+  <clipPath id="p"><rect width="64" height="160"/></clipPath>
+  <radialGradient id="pin" cx="0.38" cy="0.3" r="0.8">
+    <stop offset="0" stop-color="#ffc08f"/>
+    <stop offset="0.4" stop-color="#f87a2c"/>
+    <stop offset="0.85" stop-color="#d14a10"/>
+    <stop offset="1" stop-color="#a8350a"/>
+  </radialGradient>
+  <radialGradient id="hole" cx="0.5" cy="0.35" r="0.6">
+    <stop offset="0" stop-color="#fff"/>
+    <stop offset="1" stop-color="#ffe2cf"/>
+  </radialGradient>
+  <linearGradient id="pingloss" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#fff" stop-opacity="0.65"/>
+    <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+  </linearGradient>
+</defs>
+<!-- The three panels, each an affine view of a third of the map. -->
+<g stroke="#8c8f88" stroke-width="1.6" stroke-linejoin="round">
+  <g transform="matrix(1 -0.1875 0 1 30 76)">
+    <g clip-path="url(#p)"><use href="#map"/></g>
+    <rect width="64" height="160" fill="url(#fold1)"/>
+    <rect width="64" height="160" fill="none"/>
+  </g>
+  <g transform="matrix(1 0.25 0 1 94 64)">
+    <g clip-path="url(#p)"><use href="#map" x="-64"/></g>
+    <rect width="64" height="160" fill="url(#fold2)"/>
+    <rect width="64" height="160" fill="none"/>
+  </g>
+  <g transform="matrix(1 -0.21875 0 1 158 80)">
+    <g clip-path="url(#p)"><use href="#map" x="-128"/></g>
+    <rect width="64" height="160" fill="url(#fold3)"/>
+    <rect width="64" height="160" fill="none"/>
+  </g>
+</g>
+<!-- The pin, its point on the map. -->
+<ellipse cx="128" cy="140" rx="12" ry="5" fill="#000" opacity="0.35"/>
+<g filter="url(#c-lift)">
+  <path d="M128 140C118 118 92 98 92 64A36 36 0 1 1 164 64C164 98 138 118 128 140Z" fill="url(#pin)" stroke="#87300a" stroke-width="2.5"/>
+  <ellipse cx="124" cy="48" rx="24" ry="14" fill="url(#pingloss)"/>
+  <circle cx="128" cy="62" r="13" fill="url(#hole)" stroke="#b84510" stroke-width="2"/>
+</g>
+</svg>

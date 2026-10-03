@@ -7,6 +7,8 @@
     "title": "Help",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
     "iconColor": "#2f86d6",
     "uiRevision": 2,
     "keywords": ["Help", "Tips", "Tutorial", "How to", "Gestures", "Manual"],

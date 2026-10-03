@@ -174,7 +174,8 @@ Item {
         for (var i = 0; i < apps.count; ++i) {
             var a = apps.get(i);
             if (a.title.toLowerCase().indexOf(q) >= 0)
-                results.append({ appId: a.appId, title: a.title, color: a.color, glyph: a.glyph });
+                results.append({ appId: a.appId, title: a.title, color: a.color, glyph: a.glyph,
+                                 icon: String(a.icon || ""), largeIcon: String(a.largeIcon || "") });
         }
     }
     Connections {
@@ -205,6 +206,8 @@ Item {
                     showLabel: false
                     color: result.model.color
                     glyph: result.model.glyph
+                    source: result.model.icon
+                    largeSource: result.model.largeIcon
                 }
                 Text {
                     anchors.left: rIcon.right

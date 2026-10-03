@@ -7,6 +7,8 @@
     "title": "Enyo 2 Demo",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
     "iconColor": "#343a40",
     "uiRevision": 2,
     "keywords": ["Enyo", "Onyx", "Sampler"],

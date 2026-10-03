@@ -7,6 +7,8 @@
     "title": "Voice Memos",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
     "iconColor": "#b8322a",
     "uiRevision": 2,
     "keywords": ["Voice Recorder", "Dictation", "Recording", "Audio", "Transcribe"],

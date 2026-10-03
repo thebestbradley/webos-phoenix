@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Camera: a silver compact camera with a big glass lens. Original
+     Phoenix art (Palm's Camera icon was not open-sourced). -->
+<defs>
+  <linearGradient id="top" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#fbfcfd"/>
+    <stop offset="0.6" stop-color="#cfd4d9"/>
+    <stop offset="1" stop-color="#9aa1a8"/>
+  </linearGradient>
+  <linearGradient id="grip" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#43474c"/>
+    <stop offset="1" stop-color="#16181a"/>
+  </linearGradient>
+  <pattern id="leather" width="6" height="6" patternUnits="userSpaceOnUse">
+    <rect width="6" height="6" fill="#000" opacity="0"/>
+    <circle cx="1.5" cy="1.5" r="0.9" fill="#fff" opacity="0.06"/>
+    <circle cx="4.5" cy="4.5" r="0.9" fill="#000" opacity="0.25"/>
+  </pattern>
+  <linearGradient id="barrel" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#2a2d31"/>
+    <stop offset="0.5" stop-color="#5c6168"/>
+    <stop offset="1" stop-color="#d2d6da"/>
+  </linearGradient>
+  <linearGradient id="ring" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#f6f7f8"/>
+    <stop offset="0.5" stop-color="#9ba1a7"/>
+    <stop offset="1" stop-color="#e2e5e8"/>
+  </linearGradient>
+  <radialGradient id="lens" cx="0.4" cy="0.35" r="0.75">
+    <stop offset="0" stop-color="#6fb4f0"/>
+    <stop offset="0.3" stop-color="#2f4fa8"/>
+    <stop offset="0.65" stop-color="#1a1650"/>
+    <stop offset="1" stop-color="#05040f"/>
+  </radialGradient>
+  <radialGradient id="flare" cx="0.5" cy="0.5" r="0.5">
+    <stop offset="0" stop-color="#d77cff" stop-opacity="0.8"/>
+    <stop offset="1" stop-color="#d77cff" stop-opacity="0"/>
+  </radialGradient>
+  <linearGradient id="flash" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="1" stop-color="#c9d3dc"/>
+  </linearGradient>
+  <clipPath id="body"><rect x="20" y="72" width="216" height="136" rx="16"/></clipPath>
+</defs>
+<!-- Shutter button and the hump over the lens. -->
+<rect x="170" y="56" width="40" height="20" rx="6" fill="url(#top)" stroke="#5b6168" stroke-width="2"/>
+<rect x="176" y="52" width="28" height="8" rx="4" fill="#d24a3a" stroke="#7a1f16" stroke-width="1.5"/>
+<!-- The body: silver above, black leatherette below. -->
+<rect x="20" y="72" width="216" height="136" rx="16" fill="url(#top)"/>
+<g clip-path="url(#body)">
+  <rect x="20" y="132" width="216" height="80" fill="url(#grip)"/>
+  <rect x="20" y="132" width="216" height="80" fill="url(#leather)"/>
+  <rect x="20" y="130" width="216" height="3" fill="#fff" opacity="0.35"/>
+  <rect x="20" y="198" width="216" height="12" fill="#000" opacity="0.35"/>
+</g>
+<rect x="20" y="72" width="216" height="136" rx="16" fill="none" stroke="#3a3f44" stroke-width="2.5"/>
+<rect x="23" y="75" width="210" height="130" rx="13" fill="none" stroke="#fff" stroke-opacity="0.55" stroke-width="1.5"/>
+<!-- Flash and viewfinder. -->
+<rect x="36" y="86" width="44" height="26" rx="4" fill="url(#flash)" stroke="#6b737b" stroke-width="2"/>
+<path d="M40 92H76M40 98H76M40 104H76" stroke="#b9c3cc" stroke-width="1.2"/>
+<rect x="196" y="88" width="24" height="16" rx="3" fill="#1d2a3a" stroke="#4a525a" stroke-width="2"/>
+<!-- The lens. -->
+<g filter="url(#c-lift)">
+  <circle cx="128" cy="142" r="62" fill="url(#ring)" stroke="#3a3f44" stroke-width="2.5"/>
+  <circle cx="128" cy="142" r="52" fill="url(#barrel)" stroke="#202326" stroke-width="2"/>
+  <circle cx="128" cy="142" r="40" fill="url(#lens)" stroke="#000" stroke-width="2"/>
+  <circle cx="146" cy="160" r="20" fill="url(#flare)"/>
+  <ellipse cx="114" cy="126" rx="15" ry="10" fill="#fff" opacity="0.6" transform="rotate(-30 114 126)"/>
+  <circle cx="142" cy="154" r="3.5" fill="#fff" opacity="0.6"/>
+</g>
+</svg>

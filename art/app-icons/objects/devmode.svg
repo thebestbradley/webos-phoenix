@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Developer Mode: a red metal toolbox. Original Phoenix art. -->
+<defs>
+  <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="0.45" stop-color="#cfd3d7"/><stop offset="0.55" stop-color="#9aa0a6"/><stop offset="1" stop-color="#dfe2e5"/></linearGradient>
+  <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff7a6a"/><stop offset="0.5" stop-color="#d6362b"/><stop offset="1" stop-color="#8e140c"/></linearGradient>
+  <path id="s3" d="M60 104H196V170C196 174 192 176 188 176H68C64 176 60 174 60 170Z"/>
+  <linearGradient id="g4" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.6"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.12"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <linearGradient id="g5" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff9282"/><stop offset="1" stop-color="#c42a1e"/></linearGradient>
+  <path id="s6" d="M66 76H190L198 104H58Z"/>
+  <linearGradient id="g7" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.6"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.12"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <linearGradient id="g8" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="0.45" stop-color="#cfd3d7"/><stop offset="0.55" stop-color="#9aa0a6"/><stop offset="1" stop-color="#dfe2e5"/></linearGradient>
+  <linearGradient id="g9" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="0.45" stop-color="#cfd3d7"/><stop offset="0.55" stop-color="#9aa0a6"/><stop offset="1" stop-color="#dfe2e5"/></linearGradient>
+</defs>
+<path d="M100 76V62C100 56 104 52 110 52H146C152 52 156 56 156 62V76" fill="none" stroke="#2a2d31" stroke-width="12"/><path d="M100 76V62C100 56 104 52 110 52H146C152 52 156 56 156 62V76" fill="none" stroke="url(#g1)" stroke-width="7"/>
+<g>
+<use href="#s3" y="-4" fill="#ff9d90" stroke="#4f0a05" stroke-width="2.5"/>
+<use href="#s3" y="-3" fill="#ff9d90" stroke="#4f0a05" stroke-width="2.5"/>
+<use href="#s3" y="-2" fill="#ff9d90" stroke="#4f0a05" stroke-width="2.5"/>
+<use href="#s3" y="-1" fill="#ff9d90" stroke="#4f0a05" stroke-width="2.5"/>
+<use href="#s3" fill="url(#g2)" stroke="#4f0a05" stroke-width="2.5" stroke-linejoin="round"/>
+<use href="#s3" fill="url(#g4)"/>
+</g>
+<g>
+<use href="#s6" y="-3" fill="#ffb0a5" stroke="#4f0a05" stroke-width="2.5"/>
+<use href="#s6" y="-2" fill="#ffb0a5" stroke="#4f0a05" stroke-width="2.5"/>
+<use href="#s6" y="-1" fill="#ffb0a5" stroke="#4f0a05" stroke-width="2.5"/>
+<use href="#s6" fill="url(#g5)" stroke="#4f0a05" stroke-width="2.5" stroke-linejoin="round"/>
+<use href="#s6" fill="url(#g7)"/>
+</g>
+<rect x="84" y="112" width="16" height="22" rx="3" fill="url(#g8)" stroke="#3a3f44" stroke-width="1.5"/>
+<rect x="156" y="112" width="16" height="22" rx="3" fill="url(#g9)" stroke="#3a3f44" stroke-width="1.5"/>
+<path d="M64 150H192" stroke="#6e0d06" stroke-width="2" opacity="0.6"/>
+</svg>

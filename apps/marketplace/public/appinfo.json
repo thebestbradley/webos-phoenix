@@ -7,6 +7,8 @@
     "title": "Marketplace",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
     "iconColor": "#2f6fb3",
     "uiRevision": 2,
     "keywords": ["App Catalog", "Apps", "Store", "Download", "Install", "Web Apps", "PWA", "Updates", "App Museum", "Preware"],

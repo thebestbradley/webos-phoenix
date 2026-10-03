@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Messaging: a teal speech bubble behind a cream one, after the Open webOS
+     launcher's messaging-sms.png (luna-applauncher, Apache-2.0). -->
+<defs>
+  <radialGradient id="teal" cx="0.42" cy="0.18" r="0.95">
+    <stop offset="0" stop-color="#8ee3ec"/>
+    <stop offset="0.35" stop-color="#2bb5c7"/>
+    <stop offset="0.75" stop-color="#0d8798"/>
+    <stop offset="1" stop-color="#075e6a"/>
+  </radialGradient>
+  <radialGradient id="cream" cx="0.4" cy="0.15" r="0.95">
+    <stop offset="0" stop-color="#fffef4"/>
+    <stop offset="0.45" stop-color="#fbf0c4"/>
+    <stop offset="0.85" stop-color="#ead08a"/>
+    <stop offset="1" stop-color="#d9b866"/>
+  </radialGradient>
+  <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#fff" stop-opacity="0.7"/>
+    <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+  </linearGradient>
+  <path id="back" d="M109 38C158 38 198 70 198 112C198 154 158 186 109 186C96 186 83 184 71 180C59 193 43 203 22 208C34 195 41 183 44 168C30 154 20 134 20 112C20 70 60 38 109 38Z"/>
+  <path id="front" d="M166 102C206 102 238 128 238 160C238 181 225 198 206 208C209 220 216 230 230 238C210 236 195 228 185 215C179 216 172 217 166 217C126 217 94 191 94 160C94 128 126 102 166 102Z"/>
+  <clipPath id="backclip"><use href="#back"/></clipPath>
+  <clipPath id="frontclip"><use href="#front"/></clipPath>
+</defs>
+<use href="#back" fill="url(#teal)" stroke="#05505b" stroke-width="3"/>
+<g clip-path="url(#backclip)">
+  <ellipse cx="104" cy="74" rx="76" ry="34" fill="url(#gloss)" opacity="0.8"/>
+</g>
+<g filter="url(#c-lift)">
+  <use href="#front" fill="url(#cream)" stroke="#8f6f22" stroke-width="3"/>
+</g>
+<g clip-path="url(#frontclip)">
+  <ellipse cx="162" cy="128" rx="58" ry="24" fill="url(#gloss)" opacity="0.85"/>
+</g>
+</svg>

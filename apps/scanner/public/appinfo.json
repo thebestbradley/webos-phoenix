@@ -7,6 +7,8 @@
     "title": "QR Scanner",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
     "iconColor": "#333333",
     "uiRevision": 2,
     "keywords": ["QR Code", "Barcode", "Scan", "Wi-Fi Code", "Reader"],

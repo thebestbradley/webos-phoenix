@@ -1195,6 +1195,7 @@ FocusScope {
                     proxy.color = e.color;
                     proxy.glyph = e.glyph;
                     proxy.source = e.icon || "";
+                    proxy.largeSource = e.largeIcon || "";
                     from = source;
                     lastIndex = -1;
                     appId = id;

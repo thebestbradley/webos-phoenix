@@ -7,6 +7,8 @@
     "title": "Passwords",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
     "iconColor": "#2f5f8f",
     "uiRevision": 2,
     "keywords": ["Password Manager", "KeePass", "KDBX", "Logins", "Vault", "Security"],

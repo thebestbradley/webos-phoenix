@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Updates: an orange gift box tied with a red ribbon, after the Open webOS system UI's notification-large-update.png (luna-systemui, Apache-2.0). -->
+<defs>
+  <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffb44a"/><stop offset="1" stop-color="#d9700c"/></linearGradient>
+  <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e98a1c"/><stop offset="1" stop-color="#a8520a"/></linearGradient>
+  <linearGradient id="g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd08a"/><stop offset="1" stop-color="#f08c22"/></linearGradient>
+  <linearGradient id="g4" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffc266"/><stop offset="1" stop-color="#e0780e"/></linearGradient>
+  <linearGradient id="g5" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ff6a5a"/><stop offset="1" stop-color="#b3180c"/></linearGradient>
+  <linearGradient id="g6" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff7a6a"/><stop offset="1" stop-color="#c21e10"/></linearGradient>
+</defs>
+<path d="M66 108H178V176H66Z" fill="url(#g1)" stroke="#7a3a04" stroke-width="2.5" stroke-linejoin="round"/>
+<path d="M178 108L196 96V164L178 176Z" fill="url(#g2)" stroke="#7a3a04" stroke-width="2.5" stroke-linejoin="round"/>
+<path d="M58 92H184L204 82V94L186 108H58Z" fill="url(#g3)" stroke="#7a3a04" stroke-width="2.5" stroke-linejoin="round"/>
+<path d="M58 92H184V110H58Z" fill="url(#g4)" stroke="#7a3a04" stroke-width="2.5"/>
+<path d="M112 92H132V176H112Z" fill="url(#g5)" stroke="#6e0d06" stroke-width="2"/>
+<path d="M184 100L204 88" stroke="#b3180c" stroke-width="14"/>
+<g fill="url(#g6)" stroke="#6e0d06" stroke-width="2.5" stroke-linejoin="round"><path d="M122 92C100 60 72 64 78 80C82 92 104 94 122 92Z"/><path d="M122 92C144 60 172 64 166 80C162 92 140 94 122 92Z"/><path d="M122 92C108 104 100 116 96 124L106 120L110 130C114 116 118 104 122 92Z"/><path d="M122 92C136 104 144 116 148 124L138 120L134 130C130 116 126 104 122 92Z"/><circle cx="122" cy="90" r="9"/></g>
+<path d="M88 72C96 70 106 76 114 84" fill="none" stroke="#fff" stroke-opacity="0.5" stroke-width="3" stroke-linecap="round"/>
+</svg>

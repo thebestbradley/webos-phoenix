@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Weather: the sun behind a white cloud. Original Phoenix art. -->
+<defs>
+  <radialGradient id="sun" cx="0.42" cy="0.38" r="0.62">
+    <stop offset="0" stop-color="#fffbd0"/>
+    <stop offset="0.45" stop-color="#ffd23a"/>
+    <stop offset="0.85" stop-color="#f59a0c"/>
+    <stop offset="1" stop-color="#d9760a"/>
+  </radialGradient>
+  <linearGradient id="ray" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffe066"/>
+    <stop offset="1" stop-color="#f39a12"/>
+  </linearGradient>
+  <linearGradient id="cloud" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="0.6" stop-color="#eef2f6"/>
+    <stop offset="1" stop-color="#b9c4cf"/>
+  </linearGradient>
+  <path id="c" d="M62 216C36 216 18 198 18 174C18 152 34 136 56 134C58 106 82 86 110 86C132 86 150 98 158 116C164 112 172 110 180 110C206 110 226 130 228 154C238 160 244 172 244 184C244 202 230 216 210 216Z"/>
+  <clipPath id="cc"><use href="#c"/></clipPath>
+</defs>
+<!-- Sun and rays. -->
+<g transform="translate(150 92)">
+  <g fill="url(#ray)" stroke="#c46a08" stroke-width="1.5" stroke-linejoin="round">
+    <path d="M-7 -60L0 -80L7 -60Z" transform="rotate(0)"/>
+    <path d="M-7 -60L0 -80L7 -60Z" transform="rotate(45)"/>
+    <path d="M-7 -60L0 -80L7 -60Z" transform="rotate(90)"/>
+    <path d="M-7 -60L0 -80L7 -60Z" transform="rotate(135)"/>
+    <path d="M-7 -60L0 -80L7 -60Z" transform="rotate(-45)"/>
+    <path d="M-7 -60L0 -80L7 -60Z" transform="rotate(-90)"/>
+    <path d="M-7 -60L0 -80L7 -60Z" transform="rotate(-135)"/>
+  </g>
+  <circle r="52" fill="url(#sun)" stroke="#c46a08" stroke-width="2"/>
+  <ellipse cx="-14" cy="-22" rx="26" ry="16" fill="#fff" opacity="0.45"/>
+</g>
+<!-- Cloud. -->
+<g filter="url(#c-lift)">
+  <use href="#c" fill="url(#cloud)" stroke="#7d8a97" stroke-width="2.5"/>
+  <g clip-path="url(#cc)" fill="none" stroke="#fff" stroke-width="6" opacity="0.9">
+    <path d="M60 140C64 112 86 94 112 94"/>
+    <path d="M162 124C168 118 176 116 184 116"/>
+  </g>
+</g>
+</svg>

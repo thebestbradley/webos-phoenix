@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Screenshot: a print of the launcher on a little easel, framed by capture brackets. Original Phoenix art. -->
+<defs>
+  <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#dde2e7"/></linearGradient>
+  <path id="s2" d="M78 30H178V172H78Z"/>
+  <linearGradient id="g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1b3a6b"/><stop offset="0.6" stop-color="#3d6fae"/><stop offset="1" stop-color="#9ec5e8"/></linearGradient>
+</defs>
+<path d="M128 150L150 178" stroke="#3a3f44" stroke-width="8" stroke-linecap="round"/><path d="M128 150L150 178" stroke="#c9ced3" stroke-width="4" stroke-linecap="round"/>
+<g>
+<use href="#s2" y="-4" fill="#f2f4f6" stroke="#5d636a" stroke-width="2.5"/>
+<use href="#s2" y="-3" fill="#f2f4f6" stroke="#5d636a" stroke-width="2.5"/>
+<use href="#s2" y="-2" fill="#f2f4f6" stroke="#5d636a" stroke-width="2.5"/>
+<use href="#s2" y="-1" fill="#f2f4f6" stroke="#5d636a" stroke-width="2.5"/>
+<use href="#s2" fill="url(#g1)" stroke="#5d636a" stroke-width="2.5" stroke-linejoin="round"/>
+</g>
+<rect x="88" y="40" width="80" height="106" fill="url(#g3)"/>
+<rect x="98" y="52" width="16" height="16" rx="4" fill="#fff" opacity="0.85"/>
+<rect x="120" y="52" width="16" height="16" rx="4" fill="#fff" opacity="0.85"/>
+<rect x="142" y="52" width="16" height="16" rx="4" fill="#fff" opacity="0.85"/>
+<rect x="98" y="76" width="16" height="16" rx="4" fill="#fff" opacity="0.85"/>
+<rect x="120" y="76" width="16" height="16" rx="4" fill="#fff" opacity="0.85"/>
+<rect x="142" y="76" width="16" height="16" rx="4" fill="#fff" opacity="0.85"/>
+<rect x="98" y="100" width="16" height="16" rx="4" fill="#fff" opacity="0.85"/>
+<rect x="120" y="100" width="16" height="16" rx="4" fill="#fff" opacity="0.85"/>
+<rect x="142" y="100" width="16" height="16" rx="4" fill="#fff" opacity="0.85"/>
+<g fill="none" stroke-linecap="round" stroke-linejoin="round"><path id="br" d="M70 52V22H100M156 22H186V52M186 150V180H156M100 180H70V150"/><use href="#br" stroke="#0c3466" stroke-width="12"/><use href="#br" stroke="#4aa8ff" stroke-width="7"/></g>
+</svg>

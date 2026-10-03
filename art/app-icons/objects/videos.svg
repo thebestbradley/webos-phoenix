@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Videos: a clapperboard of smoky teal glass with a play mark, after the
+     Open webOS file picker's empty-folder-videos.png (luna-systemui,
+     Apache-2.0). -->
+<defs>
+  <linearGradient id="glass" x1="0" y1="0" x2="0.2" y2="1">
+    <stop offset="0" stop-color="#3a858d"/>
+    <stop offset="0.55" stop-color="#1a535a"/>
+    <stop offset="1" stop-color="#0b2f34"/>
+  </linearGradient>
+  <filter id="smoke" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.024" numOctaves="3" seed="3"/>
+    <feColorMatrix type="matrix" values="0 0 0 0 0.75  0 0 0 0 0.95  0 0 0 0 0.95  0 0 0 -1.6 1.05"/>
+  </filter>
+  <linearGradient id="stick" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#5a5f64"/>
+    <stop offset="1" stop-color="#25282b"/>
+  </linearGradient>
+  <linearGradient id="stripe" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="1" stop-color="#c4c9cd"/>
+  </linearGradient>
+  <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#fff" stop-opacity="0.4"/>
+    <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="plate" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#f0f2f4"/>
+    <stop offset="0.5" stop-color="#a5abb1"/>
+    <stop offset="1" stop-color="#6c7278"/>
+  </linearGradient>
+  <linearGradient id="play" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="1" stop-color="#dcecee"/>
+  </linearGradient>
+  <clipPath id="slate"><rect x="30" y="108" width="196" height="112" rx="8"/></clipPath>
+  <clipPath id="bar"><rect x="30" y="86" width="196" height="24"/></clipPath>
+  <clipPath id="arm"><rect x="0" y="0" width="196" height="26"/></clipPath>
+</defs>
+<!-- The slate. -->
+<rect x="30" y="108" width="196" height="112" rx="8" fill="url(#glass)"/>
+<g clip-path="url(#slate)">
+  <rect x="30" y="108" width="196" height="112" filter="url(#smoke)" opacity="0.32"/>
+  <rect x="30" y="108" width="196" height="46" fill="url(#gloss)"/>
+</g>
+<rect x="31" y="109" width="194" height="110" rx="7" fill="none" stroke="#08262a" stroke-width="2.5"/>
+<rect x="34" y="112" width="188" height="104" rx="5" fill="none" stroke="#8fd0d6" stroke-opacity="0.4" stroke-width="1.2"/>
+<path d="M112 136L162 164L112 192Z" fill="url(#play)" stroke="#0a2a2e" stroke-width="2" stroke-linejoin="round" filter="url(#c-lift)"/>
+<!-- The fixed bar along its top. -->
+<rect x="30" y="86" width="196" height="24" rx="3" fill="url(#stick)"/>
+<g clip-path="url(#bar)" fill="url(#stripe)">
+  <path d="M50 86H72L56 110H34Z M94 86H116L100 110H78Z M138 86H160L144 110H122Z M182 86H204L188 110H166Z M226 86H248L232 110H210Z"/>
+</g>
+<rect x="30.5" y="86.5" width="195" height="23" rx="3" fill="none" stroke="#1a1c1e" stroke-width="2"/>
+<!-- The clapper arm, raised. -->
+<g transform="translate(30 82) rotate(-14)">
+  <rect x="0" y="-26" width="196" height="26" rx="3" fill="url(#stick)"/>
+  <g transform="translate(0 -26)">
+    <g clip-path="url(#arm)" fill="url(#stripe)">
+      <path d="M46 0H68L52 26H30Z M90 0H112L96 26H74Z M134 0H156L140 26H118Z M178 0H200L184 26H162Z"/>
+    </g>
+  </g>
+  <rect x="0.5" y="-25.5" width="195" height="25" rx="3" fill="none" stroke="#1a1c1e" stroke-width="2"/>
+</g>
+<!-- The hinge plate. -->
+<g filter="url(#c-lift)">
+  <path d="M26 52H60V78H52V100H26Z" fill="url(#plate)" stroke="#3f454a" stroke-width="2" stroke-linejoin="round"/>
+  <circle cx="38" cy="64" r="4.5" fill="#4b5157"/>
+  <circle cx="38" cy="88" r="4.5" fill="#4b5157"/>
+</g>
+</svg>

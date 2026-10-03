@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Doc View: a word-processor page, a second one behind it, after the Open
+     webOS file picker's empty-folder-other.png (luna-systemui, Apache-2.0). -->
+<defs>
+  <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="1" stop-color="#e6eaee"/>
+  </linearGradient>
+  <linearGradient id="fold" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="1" stop-color="#bfc6cd"/>
+  </linearGradient>
+  <linearGradient id="head" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#5a95dc"/>
+    <stop offset="1" stop-color="#2a5ca8"/>
+  </linearGradient>
+  <linearGradient id="pic" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#9fd0f2"/>
+    <stop offset="1" stop-color="#5c9a3a"/>
+  </linearGradient>
+</defs>
+<g filter="url(#c-lift)" transform="rotate(8 128 128)">
+  <rect x="58" y="30" width="148" height="192" fill="url(#page)" stroke="#9ba3ab" stroke-width="1.5"/>
+</g>
+<g filter="url(#c-lift)" transform="rotate(-4 128 128)">
+  <path d="M46 26H170L210 66V230H46Z" fill="url(#page)" stroke="#8a939c" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M170 26V66H210Z" fill="url(#fold)" stroke="#8a939c" stroke-width="2" stroke-linejoin="round"/>
+  <rect x="62" y="44" width="92" height="12" rx="2" fill="url(#head)"/>
+  <g stroke="#9aa6b2" stroke-width="5" stroke-linecap="round">
+    <path d="M64 80H154M64 96H192M64 112H192M64 128H130"/>
+    <path d="M64 196H192M64 212H160"/>
+    <path d="M140 148H192M140 164H192M140 180H176"/>
+  </g>
+  <rect x="62" y="142" width="66" height="44" rx="2" fill="url(#pic)" stroke="#6d7a86" stroke-width="1.5"/>
+  <path d="M62 186L84 162L100 176L112 166L128 182V186Z" fill="#2f6125"/>
+  <circle cx="110" cy="154" r="6" fill="#fff6c4"/>
+</g>
+</svg>

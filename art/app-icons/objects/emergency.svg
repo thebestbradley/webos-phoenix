@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Emergency Info: a red plaque with the white six-armed star the Phone app's emergency button shows. Original Phoenix art. -->
+<defs>
+  <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff8a7a"/><stop offset="0.5" stop-color="#d6362b"/><stop offset="1" stop-color="#8e140c"/></linearGradient>
+  <path id="s2" d="M82 66H174C184 66 190 72 190 82V160C190 170 184 176 174 176H82C72 176 66 170 66 160V82C66 72 72 66 82 66Z"/>
+  <linearGradient id="g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.6"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.12"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+</defs>
+<g>
+<use href="#s2" y="-8" fill="#ff9d90" stroke="#4f0a05" stroke-width="2.5"/>
+<use href="#s2" y="-7" fill="#ff9d90" stroke="#4f0a05" stroke-width="2.5"/>
+<use href="#s2" y="-6" fill="#ff9d90" stroke="#4f0a05" stroke-width="2.5"/>
+<use href="#s2" y="-5" fill="#ff9d90" stroke="#4f0a05" stroke-width="2.5"/>
+<use href="#s2" y="-4" fill="#ff9d90" stroke="#4f0a05" stroke-width="2.5"/>
+<use href="#s2" y="-3" fill="#ff9d90" stroke="#4f0a05" stroke-width="2.5"/>
+<use href="#s2" y="-2" fill="#ff9d90" stroke="#4f0a05" stroke-width="2.5"/>
+<use href="#s2" y="-1" fill="#ff9d90" stroke="#4f0a05" stroke-width="2.5"/>
+<use href="#s2" fill="url(#g1)" stroke="#4f0a05" stroke-width="2.5" stroke-linejoin="round"/>
+<use href="#s2" fill="url(#g3)"/>
+</g>
+<g transform="translate(128 121)" fill="#fff" stroke="#6e0d06" stroke-width="2"><g id="arm"><rect x="-8" y="-40" width="16" height="80" rx="4"/></g><use href="#arm" transform="rotate(60)"/><use href="#arm" transform="rotate(-60)"/></g><g transform="translate(128 121)" fill="#fff"><rect x="-7" y="-39" width="14" height="78" rx="3.5"/><rect x="-7" y="-39" width="14" height="78" rx="3.5" transform="rotate(60)"/><rect x="-7" y="-39" width="14" height="78" rx="3.5" transform="rotate(-60)"/></g>
+</svg>
