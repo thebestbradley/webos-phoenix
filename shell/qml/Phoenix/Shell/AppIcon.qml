@@ -6,6 +6,7 @@
 // original Palm app icons are not part of the open-source release.
 
 import QtQuick
+import Phoenix.Native
 
 Item {
     id: icon
@@ -50,10 +51,13 @@ Item {
             anchors.fill: parent
             visible: icon.source != ""
             // The icon, or a bigger one the app ships once the icon would
-            // be magnified (Theme.appIcon); that one is decoded at the
-            // drawn size, smoothly scaled down.
+            // be magnified (Theme.appIcon). A file bigger than the drawn
+            // size (that bigger one, or the 64 px icon in a 22 px
+            // notification) is decoded at the drawn size, smoothly scaled
+            // down, rather than shrunk by the scene graph, which aliases.
             readonly property url best: icon.source != "" ? Theme.appIcon(icon.source, icon.size, icon.largeSource) : ""
-            readonly property bool larger: best != icon.source
+            readonly property size fileSize: best != "" ? HiDpi.imageSize(best) : Qt.size(-1, -1)
+            readonly property bool larger: Math.max(fileSize.width, fileSize.height) > icon.size
             source: best
             sourceSize: larger ? Qt.size(icon.size, icon.size) : Qt.size(-1, -1)
             smooth: true

@@ -180,9 +180,13 @@ Item {
             compare(root.fileName(Theme.appIcon(root.clock, 96)), "icon-256x256.png");
             // Calendar keeps its icons in images/.
             compare(root.fileName(Theme.appIcon(root.calendar, 160)), "icon-256x256.png");
-            // Phoenix's own, rendered at 256 (render-icon.cjs), and a launch point's.
-            compare(root.fileName(Theme.appIcon(root.phone, 128)), "icon-256x256.png");
-            compare(root.fileName(Theme.appIcon(root.wifiIcon, 128)), "wifi-256x256.png");
+            // Phoenix's own, rendered at 128, 256 and 512 (tools/render-app-icons.cjs),
+            // and a launch point's: the smallest that is big enough.
+            compare(root.fileName(Theme.appIcon(root.phone, 128)), "icon-128x128.png");
+            compare(root.fileName(Theme.appIcon(root.phone, 192)), "icon-256x256.png");
+            compare(root.fileName(Theme.appIcon(root.phone, 288)), "icon-512x512.png");
+            compare(root.fileName(Theme.appIcon(root.wifiIcon, 96)), "wifi-128x128.png");
+            compare(root.fileName(Theme.appIcon(root.wifiIcon, 384)), "wifi-512x512.png");
             // Bigger than any: the biggest.
             compare(root.fileName(Theme.appIcon(root.calculator, 1000)), "icon-256x256.png");
             // The app's splashicon, when it names one.
@@ -223,6 +227,17 @@ Item {
             // Decoded at the drawn size.
             compare(img.sourceSize.width, 128);
             compare(img.width, 128);
+        }
+
+        function test_appIconDecodesABiggerFileAtTheDrawnSize() {
+            // A notification's 22 px icon from the 64 px file: decoded at
+            // 22 px, not shrunk by the scene graph.
+            var img = findChild(appIcon, "iconImage");
+            Theme.u = 1;
+            appIcon.size = 22;
+            compare(String(img.source), String(root.calculator));
+            tryCompare(img, "status", Image.Ready);
+            compare(img.sourceSize.width, 22);
         }
     }
 }
