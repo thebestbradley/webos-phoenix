@@ -506,6 +506,38 @@ async function main() {
         await page.waitForSelector("[data-testid='vpn-lab']", { state: "detached" });
         check(!vpnStatus().some((v) => v.name === "lab"), "a deleted profile leaves the system menu too");
 
+        // ---- Certificate Manager: com.palm.certificatemanager -------------------------
+        // The system's CAs; the demo CA added from the device's storage with
+        // the picker, its details, distrusted, then deleted.
+        await open("certificates");
+        await page.waitForSelector("[data-testid='cert-isrg-root-x1']");
+        check(await page.locator("[data-testid^='cert-'][role='button']").count() >= 7, "the system's root certificates are listed");
+        await shot("certificates");
+        await page.click("[data-testid='cert-add']");
+        await page.waitForSelector("[data-testid='cert-file-phoenix-lab-root-ca.crt']");
+        await shot("certificates-picker");
+        await page.click("[data-testid='cert-file-phoenix-lab-root-ca.crt']");
+        await page.waitForSelector("[data-testid='cert-notice']");
+        const labRow = page.locator("[data-testid^='cert-user-']");
+        check(/Phoenix Lab Root CA/.test(await labRow.first().textContent()), "the picked certificate is installed");
+        const store = await svc("luna://com.palm.certificatemanager/listcertificates", {});
+        check(store.userCertificateStore.length === 1 && store.userCertificateStore[0].commonname === "Phoenix Lab Root CA",
+              "Wi-Fi's view (userCertificateStore) has it");
+        await labRow.first().click();
+        await page.waitForSelector("[data-testid='cert-sha256']");
+        check((await page.textContent("[data-testid='cert-sha256']")).startsWith("06:1E:77:61"), "its SHA-256 fingerprint is shown");
+        await shot("certificates-details");
+        await page.click("[data-testid='cert-trusted']");
+        await page.waitForSelector("[data-testid='cert-trusted'][aria-checked='false']");
+        const userCerts = async () => (await svc("luna://com.palm.certificatemanager/listcertificates", {})).userCertificateStore;
+        for (let i = 0; i < 30 && (await userCerts())[0].trusted !== false; ++i) await page.waitForTimeout(100);
+        check((await userCerts())[0].trusted === false, "distrusted");
+        await page.click("[data-testid='cert-delete']");
+        await page.click("[data-testid='cert-delete-confirm']");
+        await page.waitForSelector("[data-testid='cert-add']");
+        for (let i = 0; i < 30 && (await userCerts()).length; ++i) await page.waitForTimeout(100);
+        check((await userCerts()).length === 0, "deleted");
+
         // ---- Every other pane renders --------------------------------------------------
         for (const p of ["datetime", "language", "deviceinfo", "updates"]) {
             await open(p);

@@ -1108,7 +1108,10 @@
         "com.palm.app.textassist": { id: "org.webosphoenix.settings", params: { page: "textassist" } },
         // Just Type's preferences (luna-applauncher AppLauncher.js
         // launchPreferences, from Just Type's app menu).
-        "com.palm.app.searchpreferences": { id: "org.webosphoenix.settings", params: { page: "justtype" } }
+        "com.palm.app.searchpreferences": { id: "org.webosphoenix.settings", params: { page: "justtype" } },
+        // The Certificate Manager (Device Info's menu, Email's "Open
+        // Certificate Manager", ApplicationManagerService.cpp:3822).
+        "com.palm.app.certificate": { id: "org.webosphoenix.settings", params: { page: "certificates" } }
     };
     function appId(id) {
         var a = APP_ALIASES[id];
@@ -6036,6 +6039,413 @@
             });
             reply(ok({ ringtones: SYSTEM_RINGTONES.concat(mine) }));
         };
+    })();
+
+    // ================================================================================
+    // Certificate manager (com.palm.certificatemanager; Settings > Certificate Manager)
+    // ================================================================================
+    //
+    // The legacy webOS certificate store, which com.palm.app.certificate
+    // (Device Info's "Certificate Manager...") managed and others read: Enyo
+    // 1.0's Wi-Fi setup lists the user's certificates for networks that ask
+    // for one (lib/wifi/wifi.js: listcertificates -> userCertificateStore
+    // [{certificateId, certificateFilename, commonname, organization}]), the
+    // browser shows a site's certificate (isis-browser CertificateDetail.js:
+    // getcertificatedetails {certificateFilename} -> subject / issuer
+    // {commonname, organization, organizationalunit, country, state,
+    // location, altname}, startdate, expiredate, serialNumber, version,
+    // signature.algorithm, publicKey.algorithm). Phoenix adds what the
+    // Settings pane needs, in the same style:
+    //
+    //   listcertificates {}  -> {certificates: [summary], userCertificateStore:
+    //       [the imported ones]}; summary: {certificateId, certificateFilename,
+    //       commonname, organization, issuer, startdate, expiredate (ms),
+    //       trusted, system, isCA}
+    //   getcertificatedetails {certificateId | certificateFilename} -> the
+    //       details above, plus fingerprints {sha256, sha1}, publicKey.bits /
+    //       curve, isCA, trusted, system
+    //   addcertificate {certificateFilename}: a .pem / .crt (PEM, one or more
+    //       certificates) or .cer / .der (DER) on the device, read with
+    //       org.webosphoenix.filemanager -> {certificateIds}
+    //   setcertificatetrust {certificateId, trusted}
+    //   removecertificate {certificateId}
+    //   errors: -1 bad parameters, -2 not a certificate, -3 already
+    //   installed, -4 no such certificate, -5 the file cannot be read
+    //
+    // The system's root certificates are a few real CAs' (runtime/certs, as
+    // published in the Mozilla CA list); the user may distrust or remove them
+    // (and restore them: restorecertificates). What is imported, and every
+    // change, is kept in the runtime's store, so it lasts. X.509 is read here
+    // (DER, enough of RFC 5280 to show a certificate); signatures are not
+    // checked: the store only says which certificates the device trusts.
+    (function certificateManager() {
+        var KEY = "certificates";
+        var SYSTEM_CERTS = ["isrg-root-x1", "isrg-root-x2", "digicert-global-root-g2", "gts-root-r1",
+                            "amazon-root-ca-1", "usertrust-rsa-certification-authority"];
+        var SYSTEM_DIR = "/usr/share/phoenix/runtime/certs/";
+        var E = { BAD_PARAMS: -1, NOT_CERT: -2, EXISTS: -3, NOT_FOUND: -4, READ: -5 };
+
+        // ---- DER and X.509 --------------------------------------------------------------
+
+        function b64Bytes(s) {
+            var bin = global.atob(String(s).replace(/[^A-Za-z0-9+\/=]/g, ""));
+            var out = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; ++i) out[i] = bin.charCodeAt(i);
+            return out;
+        }
+        function bytesB64(b) {
+            var s = "";
+            for (var i = 0; i < b.length; ++i) s += String.fromCharCode(b[i]);
+            return global.btoa(s);
+        }
+        // The certificates in a file: PEM blocks, else the file as DER.
+        function certsIn(bytes) {
+            var text = "";
+            for (var i = 0; i < Math.min(bytes.length, 4 * 1024 * 1024); ++i) text += String.fromCharCode(bytes[i]);
+            var re = /-----BEGIN (?:X509 |TRUSTED )?CERTIFICATE-----([\s\S]*?)-----END (?:X509 |TRUSTED )?CERTIFICATE-----/g;
+            var out = [], m;
+            while ((m = re.exec(text))) out.push(b64Bytes(m[1]));
+            if (!out.length && bytes[0] === 0x30) out.push(bytes);
+            return out;
+        }
+        // One TLV at pos: {tag, start (of the value), end}.
+        function tlv(b, pos) {
+            if (pos + 2 > b.length) throw new Error("truncated");
+            var tag = b[pos], len = b[pos + 1], p = pos + 2;
+            if (len & 0x80) {
+                var n = len & 0x7f;
+                if (n < 1 || n > 4) throw new Error("bad length");
+                len = 0;
+                for (var i = 0; i < n; ++i) len = len * 256 + b[p++];
+            }
+            if (p + len > b.length) throw new Error("truncated");
+            return { tag: tag, start: p, end: p + len };
+        }
+        function children(b, t) {
+            var out = [];
+            for (var p = t.start; p < t.end;) { var c = tlv(b, p); out.push(c); p = c.end; }
+            return out;
+        }
+        function oid(b, t) {
+            var parts = [], v = 0;
+            for (var i = t.start; i < t.end; ++i) {
+                v = v * 128 + (b[i] & 0x7f);
+                if (!(b[i] & 0x80)) {
+                    if (!parts.length) parts.push(v < 80 ? Math.floor(v / 40) : 2, v < 80 ? v % 40 : v - 80);
+                    else parts.push(v);
+                    v = 0;
+                }
+            }
+            return parts.join(".");
+        }
+        function str(b, t) {
+            var s = "", i;
+            if (t.tag === 0x1e) {                       // BMPString
+                for (i = t.start; i + 1 < t.end; i += 2) s += String.fromCharCode(b[i] * 256 + b[i + 1]);
+                return s;
+            }
+            for (i = t.start; i < t.end; ++i) s += String.fromCharCode(b[i]);
+            if (t.tag === 0x0c) {                       // UTF8String
+                try { return decodeURIComponent(global.escape(s)); } catch (e) { return s; }
+            }
+            return s;
+        }
+        function hex(b, start, end, sep) {
+            var out = [];
+            for (var i = start; i < end; ++i) out.push((b[i] < 16 ? "0" : "") + b[i].toString(16).toUpperCase());
+            return out.join(sep || "");
+        }
+        function time(b, t) {
+            var s = str(b, t);
+            var m = t.tag === 0x17 ? /^(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)?Z$/.exec(s) : /^(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)?Z$/.exec(s);
+            if (!m) return 0;
+            var y = +m[1];
+            if (t.tag === 0x17) y += y >= 50 ? 1900 : 2000;
+            return Date.UTC(y, +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+        }
+        var NAME_KEYS = { "2.5.4.3": "commonname", "2.5.4.6": "country", "2.5.4.7": "location", "2.5.4.8": "state",
+                          "2.5.4.10": "organization", "2.5.4.11": "organizationalunit", "1.2.840.113549.1.9.1": "email" };
+        function name(b, t) {
+            var out = {};
+            children(b, t).forEach(function (set) {
+                children(b, set).forEach(function (atv) {
+                    var kv = children(b, atv), k = NAME_KEYS[oid(b, kv[0])];
+                    if (k && !(k in out)) out[k] = str(b, kv[1]);
+                });
+            });
+            return out;
+        }
+        var ALGS = { "1.2.840.113549.1.1.1": "RSA", "1.2.840.113549.1.1.4": "MD5 with RSA", "1.2.840.113549.1.1.5": "SHA-1 with RSA",
+                     "1.2.840.113549.1.1.11": "SHA-256 with RSA", "1.2.840.113549.1.1.12": "SHA-384 with RSA",
+                     "1.2.840.113549.1.1.13": "SHA-512 with RSA", "1.2.840.113549.1.1.10": "RSA-PSS",
+                     "1.2.840.10045.2.1": "Elliptic curve", "1.2.840.10045.4.3.2": "ECDSA with SHA-256",
+                     "1.2.840.10045.4.3.3": "ECDSA with SHA-384", "1.2.840.10045.4.3.4": "ECDSA with SHA-512",
+                     "1.3.101.112": "Ed25519", "1.3.101.113": "Ed448" };
+        var CURVES = { "1.2.840.10045.3.1.7": "P-256", "1.3.132.0.34": "P-384", "1.3.132.0.35": "P-521" };
+        function alg(b, t) {
+            var id = oid(b, children(b, t)[0]);
+            return ALGS[id] || id;
+        }
+
+        // The parts of a certificate the store and Settings show.
+        function parse(der) {
+            var b = der;
+            var cert = tlv(b, 0);
+            if (cert.tag !== 0x30 || cert.end !== b.length) throw new Error("not a certificate");
+            var top = children(b, cert);
+            var tbs = children(b, top[0]), i = 0, version = 1;
+            if (tbs[0].tag === 0xa0) { version = b[children(b, tbs[0])[0].start] + 1; i = 1; }
+            var serial = tbs[i], sigAlg = tbs[i + 1], issuer = tbs[i + 2], validity = children(b, tbs[i + 3]);
+            var subject = tbs[i + 4], spki = children(b, tbs[i + 5]);
+            var out = {
+                version: version,
+                serialNumber: hex(b, serial.start + (b[serial.start] === 0 && serial.end - serial.start > 1 ? 1 : 0), serial.end, ":"),
+                signature: { algorithm: alg(b, sigAlg) },
+                issuer: name(b, issuer),
+                subject: name(b, subject),
+                startdate: time(b, validity[0]),
+                expiredate: time(b, validity[1]),
+                publicKey: { algorithm: alg(b, spki[0]) },
+                isCA: false
+            };
+            var keyAlg = children(b, spki[0]);
+            if (keyAlg[1] && keyAlg[1].tag === 0x06) out.publicKey.curve = CURVES[oid(b, keyAlg[1])] || oid(b, keyAlg[1]);
+            if (out.publicKey.algorithm === "RSA") {
+                // BIT STRING: unused-bits byte, then RSAPublicKey {modulus, exponent}.
+                var rsa = children(b, tlv(b, spki[1].start + 1))[0];
+                var m0 = rsa.start;
+                while (m0 < rsa.end && b[m0] === 0) m0++;
+                out.publicKey.bits = (rsa.end - m0) * 8 - (b[m0] ? Math.clz32(b[m0]) - 24 : 0);
+            } else if (out.publicKey.curve) {
+                out.publicKey.bits = { "P-256": 256, "P-384": 384, "P-521": 521 }[out.publicKey.curve];
+            }
+            tbs.slice(i + 6).forEach(function (t) {
+                if (t.tag !== 0xa3) return;
+                children(b, children(b, t)[0]).forEach(function (ext) {
+                    var parts = children(b, ext), id = oid(b, parts[0]), value = parts[parts.length - 1];
+                    var inner = tlv(b, value.start);
+                    if (id === "2.5.29.17") {           // subjectAltName
+                        out.subject.altname = children(b, inner).filter(function (g) {
+                            return g.tag === 0x81 || g.tag === 0x82 || g.tag === 0x86 || g.tag === 0x87;
+                        }).map(function (g) {
+                            if (g.tag !== 0x87) return str(b, g);
+                            var ip = [];
+                            for (var k = g.start; k < g.end; ++k) ip.push(b[k]);
+                            return ip.length === 4 ? ip.join(".") : hex(b, g.start, g.end, ":");
+                        });
+                    } else if (id === "2.5.29.19") {    // basicConstraints
+                        var bc = children(b, inner);
+                        out.isCA = !!(bc[0] && bc[0].tag === 0x01 && b[bc[0].start]);
+                    }
+                });
+            });
+            return out;
+        }
+
+        // SHA-256 and SHA-1 of the DER (the fingerprints Settings shows).
+        function sha(bytes, one) {
+            var K = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+                     0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+                     0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+                     0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+                     0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+                     0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+                     0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+                     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2];
+            var n = bytes.length, len = ((n + 9 + 63) >> 6) << 6, m = new Uint8Array(len), i, j;
+            m.set(bytes);
+            m[n] = 0x80;
+            var bits = n * 8;
+            for (i = 0; i < 8; ++i) m[len - 1 - i] = i < 4 ? (bits >>> (8 * i)) & 0xff : Math.floor(bits / 0x100000000 / Math.pow(256, i - 4)) & 0xff;
+            var h = one ? [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0]
+                        : [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+            var w = new Array(80);
+            function rotr(x, k) { return (x >>> k) | (x << (32 - k)); }
+            for (var off = 0; off < len; off += 64) {
+                for (i = 0; i < 16; ++i)
+                    w[i] = (m[off + 4 * i] << 24) | (m[off + 4 * i + 1] << 16) | (m[off + 4 * i + 2] << 8) | m[off + 4 * i + 3];
+                var a = h.slice();
+                if (one) {
+                    for (i = 16; i < 80; ++i) { var x = w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]; w[i] = (x << 1) | (x >>> 31); }
+                    for (i = 0; i < 80; ++i) {
+                        var f = i < 20 ? (a[1] & a[2]) | (~a[1] & a[3]) : i < 40 || i >= 60 ? a[1] ^ a[2] ^ a[3] : (a[1] & a[2]) | (a[1] & a[3]) | (a[2] & a[3]);
+                        var k = i < 20 ? 0x5a827999 : i < 40 ? 0x6ed9eba1 : i < 60 ? 0x8f1bbcdc : 0xca62c1d6;
+                        var t1 = (((a[0] << 5) | (a[0] >>> 27)) + f + a[4] + k + w[i]) | 0;
+                        a = [t1, a[0], (a[1] << 30) | (a[1] >>> 2), a[2], a[3]];
+                    }
+                } else {
+                    for (i = 16; i < 64; ++i) {
+                        var s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+                        var s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+                        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+                    }
+                    for (i = 0; i < 64; ++i) {
+                        var S1 = rotr(a[4], 6) ^ rotr(a[4], 11) ^ rotr(a[4], 25);
+                        var ch = (a[4] & a[5]) ^ (~a[4] & a[6]);
+                        var u1 = (a[7] + S1 + ch + K[i] + w[i]) | 0;
+                        var S0 = rotr(a[0], 2) ^ rotr(a[0], 13) ^ rotr(a[0], 22);
+                        var maj = (a[0] & a[1]) ^ (a[0] & a[2]) ^ (a[1] & a[2]);
+                        var u2 = (S0 + maj) | 0;
+                        a = [(u1 + u2) | 0, a[0], a[1], a[2], (a[3] + u1) | 0, a[4], a[5], a[6]];
+                    }
+                }
+                for (j = 0; j < h.length; ++j) h[j] = (h[j] + a[j]) | 0;
+            }
+            var out = new Uint8Array(h.length * 4);
+            for (j = 0; j < h.length; ++j) { out[4 * j] = h[j] >>> 24; out[4 * j + 1] = (h[j] >>> 16) & 0xff; out[4 * j + 2] = (h[j] >>> 8) & 0xff; out[4 * j + 3] = h[j] & 0xff; }
+            return hex(out, 0, out.length, ":");
+        }
+
+        // ---- The store ------------------------------------------------------------------
+
+        // user: [{certificateId, der (base64), trusted, added}]; system:
+        // {id: {trusted?, removed?}}.
+        function load() {
+            var st = store.get(KEY, null) || {};
+            return { user: st.user || [], system: st.system || {}, nextId: st.nextId || 1 };
+        }
+        var systemCerts = null;
+        function systemList() {
+            if (!systemCerts) {
+                systemCerts = [];
+                SYSTEM_CERTS.forEach(function (id) {
+                    var text = PalmSystem.getResource(SYSTEM_DIR + id + ".pem");
+                    if (!text) return;
+                    var bytes = new Uint8Array(text.length);
+                    for (var i = 0; i < text.length; ++i) bytes[i] = text.charCodeAt(i) & 0xff;
+                    var der = certsIn(bytes)[0];
+                    if (der) systemCerts.push({ certificateId: id, der: der, system: true });
+                });
+            }
+            return systemCerts;
+        }
+        // Every certificate: {certificateId, der (bytes), trusted, system}.
+        function all(st) {
+            st = st || load();
+            var out = [];
+            systemList().forEach(function (c) {
+                var o = st.system[c.certificateId] || {};
+                if (!o.removed) out.push({ certificateId: c.certificateId, der: c.der, trusted: o.trusted !== false, system: true });
+            });
+            st.user.forEach(function (c) {
+                out.push({ certificateId: c.certificateId, der: b64Bytes(c.der), trusted: c.trusted !== false, system: false });
+            });
+            return out;
+        }
+        function filename(c) {
+            return c.system ? SYSTEM_DIR + c.certificateId + ".pem" : "/var/palm/data/certificates/" + c.certificateId + ".pem";
+        }
+        var parsed = {};
+        function info(c) {
+            var k = c.certificateId + ":" + c.der.length;
+            if (!parsed[k]) parsed[k] = parse(c.der);
+            return parsed[k];
+        }
+        function displayName(n) { return n.commonname || n.organization || n.organizationalunit || ""; }
+        function summary(c) {
+            var p = info(c);
+            return { certificateId: c.certificateId, certificateFilename: filename(c),
+                     commonname: p.subject.commonname || "", organization: p.subject.organization || "",
+                     issuer: displayName(p.issuer), startdate: p.startdate, expiredate: p.expiredate,
+                     trusted: c.trusted, system: c.system, isCA: p.isCA };
+        }
+        function find(p) {
+            return all().filter(function (c) {
+                return (p.certificateId !== undefined && String(c.certificateId) === String(p.certificateId))
+                    || (p.certificateFilename && filename(c) === p.certificateFilename);
+            })[0] || null;
+        }
+        function sameDer(a, b) {
+            if (a.length !== b.length) return false;
+            for (var i = 0; i < a.length; ++i) if (a[i] !== b[i]) return false;
+            return true;
+        }
+        var watchers = [];
+        function save(st) {
+            store.set(KEY, st);
+            watchers = watchers.filter(function (w) { return w(); });
+        }
+        function listReply() {
+            var list = all().map(summary).sort(function (a, b) {
+                return (a.commonname || a.organization).toLowerCase() < (b.commonname || b.organization).toLowerCase() ? -1 : 1;
+            });
+            return ok({ certificates: list, userCertificateStore: list.filter(function (c) { return !c.system; }) });
+        }
+
+        register(["com.palm.certificatemanager"], {
+            // {subscribe}: again after each change (Phoenix).
+            "/listcertificates": function (p, reply, ctx) {
+                reply(listReply());
+                if (p.subscribe) watchers.push(function () { if (ctx.cancelled()) return false; reply(listReply()); return true; });
+            },
+            "/getcertificatedetails": function (p, reply) {
+                if (p.certificateId === undefined && !p.certificateFilename) return reply(fail(E.BAD_PARAMS, "certificateId or certificateFilename is required"));
+                var c = find(p);
+                if (!c) return reply(fail(E.NOT_FOUND, "No such certificate"));
+                var d = info(c), r = ok({}), k;
+                for (k in d) r[k] = d[k];
+                r.certificateId = c.certificateId;
+                r.certificateFilename = filename(c);
+                r.trusted = c.trusted;
+                r.system = c.system;
+                r.fingerprints = { sha256: sha(c.der, false), sha1: sha(c.der, true) };
+                r.pem = "-----BEGIN CERTIFICATE-----\n" + bytesB64(c.der).replace(/(.{64})/g, "$1\n").replace(/\n$/, "") + "\n-----END CERTIFICATE-----\n";
+                reply(r);
+            },
+            "/addcertificate": function (p, reply) {
+                var path = p.certificateFilename;
+                if (typeof path !== "string" || path.charAt(0) !== "/") return reply(fail(E.BAD_PARAMS, "certificateFilename must be an absolute path"));
+                dispatch("palm://org.webosphoenix.filemanager/read", { path: path, encoding: "base64", maxBytes: 1024 * 1024 }, function (r) {
+                    if (!r || !r.returnValue) return reply(fail(E.READ, (r && r.errorText) || "Cannot read " + path));
+                    var ders = certsIn(b64Bytes(r.data)), good = [];
+                    ders.forEach(function (der) { try { parse(der); good.push(der); } catch (e) { /* not one */ } });
+                    if (!good.length) return reply(fail(E.NOT_CERT, "There is no certificate in " + path.replace(/^.*\//, "")));
+                    var st = load(), have = all(st), ids = [];
+                    good.forEach(function (der) {
+                        if (have.some(function (c) { return sameDer(c.der, der); })) return;
+                        var id = "user-" + st.nextId++;
+                        st.user.push({ certificateId: id, der: bytesB64(der), trusted: true, added: Date.now() });
+                        have.push({ certificateId: id, der: der });
+                        ids.push(id);
+                    });
+                    if (!ids.length) return reply(fail(E.EXISTS, "This certificate is installed already"));
+                    save(st);
+                    reply(ok({ certificateIds: ids }));
+                }, { cancelled: function () { return false; }, onCancel: null });
+            },
+            "/setcertificatetrust": function (p, reply) {
+                var c = find(p);
+                if (!c || p.certificateId === undefined) return reply(fail(E.NOT_FOUND, "No such certificate"));
+                var st = load();
+                if (c.system) {
+                    var o = st.system[c.certificateId] || {};
+                    o.trusted = !!p.trusted;
+                    st.system[c.certificateId] = o;
+                } else {
+                    st.user.forEach(function (u) { if (u.certificateId === c.certificateId) u.trusted = !!p.trusted; });
+                }
+                save(st);
+                reply(ok());
+            },
+            "/removecertificate": function (p, reply) {
+                var c = find(p);
+                if (!c || p.certificateId === undefined) return reply(fail(E.NOT_FOUND, "No such certificate"));
+                var st = load();
+                if (c.system) st.system[c.certificateId] = { removed: true };
+                else st.user = st.user.filter(function (u) { return u.certificateId !== c.certificateId; });
+                save(st);
+                reply(ok());
+            },
+            // The system's certificates back as shipped (Phoenix).
+            "/restorecertificates": function (p, reply) {
+                var st = load();
+                st.system = {};
+                save(st);
+                reply(ok());
+            }
+        });
+        runtime.certificates = { parse: function (der) { return parse(der); }, sha256: function (b) { return sha(b, false); },
+                                 sha1: function (b) { return sha(b, true); }, certsIn: certsIn };
     })();
 
     // ================================================================================

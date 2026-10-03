@@ -21,6 +21,9 @@ Also (tools/make-videos.cjs, tools/make-documents.cjs; they update
   story, a Word document, an Excel workbook and a PowerPoint presentation
   (Office Open XML packages written by hand, the same bytes every run), and
   a Markdown file. All text and pictures were written or drawn for Phoenix.
+  Also a CA certificate, `phoenix-lab-root-ca.crt` (a fictional "Phoenix Lab
+  Root CA", made once with openssl, its key discarded), for Settings >
+  Certificate Manager to import.
 
 Dedicated to the public domain under CC0 1.0. The artist and album names are
 made up.

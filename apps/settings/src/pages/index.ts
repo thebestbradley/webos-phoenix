@@ -18,6 +18,7 @@ import { EmergencyPage } from "./Emergency";
 import { AccessibilityPage } from "./Accessibility";
 import { TextAssistPage } from "./TextAssist";
 import { JustTypePage } from "./JustType";
+import { CertificatesPage } from "./Certificates";
 import { DevModePage } from "./DevMode";
 
 export interface PageInfo {
@@ -45,6 +46,7 @@ export const PAGES = {
     deviceinfo: { title: "Device Info", icon: "icons/deviceinfo.png", component: DeviceInfoPage },
     backup: { title: "Backup", icon: "icons/backup.png", component: BackupPage },
     updates: { title: "Updates", icon: "icons/updates.png", component: UpdatesPage },
+    certificates: { title: "Certificate Manager", icon: "icons/certificates.png", component: CertificatesPage },
     devmode: { title: "Developer Mode", icon: "icons/devmode.png", component: DevModePage },
 } satisfies Record<string, PageInfo>;
 

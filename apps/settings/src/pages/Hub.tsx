@@ -9,7 +9,7 @@ export function Hub({ onOpen }: { onOpen: (id: PageId) => void }) {
     const groups: { label: string; ids: PageId[] }[] = [
         { label: "Connections", ids: ["wifi", "bluetooth", "vpn", "airplane"] },
         { label: "Device", ids: ["screen", "sounds", "datetime", "language", "textassist", "justtype", "accessibility"] },
-        { label: "Privacy & Safety", ids: ["location", "emergency"] },
+        { label: "Privacy & Safety", ids: ["location", "emergency", "certificates"] },
         { label: "About", ids: ["deviceinfo", "backup", "updates"] },
         { label: "Advanced", ids: ["devmode"] },
     ];

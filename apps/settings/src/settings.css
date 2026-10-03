@@ -249,4 +249,28 @@ div.license-text { font-family: var(--pui-font); font-size: 13px; }
         linear-gradient(#a3a39f, #a3a39f) center 27px / 20px 2px no-repeat;
 }
 .reorder-row.dragging .reorder-grip { cursor: grabbing; }
+
+/* Certificate Manager ------------------------------------------------------------ */
+
+.cert-files { max-height: 50vh; overflow-y: auto; margin: 4px 0 8px; }
+.cert-file {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 10px 8px;
+    border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    background: transparent;
+    color: #fff;
+    font: inherit;
+    font-size: 18px;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+}
+.cert-file:active { background: rgba(255, 255, 255, 0.15); }
+.cert-file:disabled { opacity: 0.5; }
+.cert-file-folder { display: block; color: #9ab; font-size: 14px; }
+.cert-hex { font-family: "DejaVu Sans Mono", monospace; font-size: 13px; overflow-wrap: anywhere; white-space: normal; }
+.cert-field .pui-row-subtitle { white-space: normal; overflow-wrap: anywhere; }
+.cert-untrusted .pui-row-subtitle, .cert-expired .pui-row-title { color: #c01e1e; }
 .search-icon { width: 32px; height: 32px; object-fit: contain; }
