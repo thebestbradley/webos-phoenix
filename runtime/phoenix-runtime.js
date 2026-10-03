@@ -503,17 +503,33 @@
     // listener is a capture one so that it runs before the page's own
     // pagehide handlers.
     var unsent = {}, nextUnsent = 1, unloading = false;
+    function sendUnsent() {
+        Object.keys(unsent).forEach(function (k) {
+            var u = unsent[k];
+            if (!u) return;
+            clearTimeout(u.timer);
+            u.run();
+        });
+    }
     try {
         global.addEventListener("pagehide", function () {
             unloading = true;
-            Object.keys(unsent).forEach(function (k) {
-                var u = unsent[k];
-                if (!u) return;
-                clearTimeout(u.timer);
-                u.run();
-            });
+            sendUnsent();
         }, true);
         global.addEventListener("pageshow", function () { unloading = false; });
+    } catch (e) { /* ignore */ }
+    // window.close(): phoenix-sim takes a closed alert or dashboard window
+    // away without a pagehide, so what the page asked for just before
+    // (luna-systemui's USB warning: enterMSM, then close()) goes out first.
+    try {
+        var nativeClose = global.close;
+        if (typeof nativeClose === "function") {
+            global.close = function () {
+                unloading = true;
+                sendUnsent();
+                return nativeClose.apply(global, arguments);
+            };
+        }
     } catch (e) { /* ignore */ }
 
     runtime.dispatch = dispatch;
