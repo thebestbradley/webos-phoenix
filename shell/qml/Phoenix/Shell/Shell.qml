@@ -8,6 +8,7 @@
 import QtQuick
 import Phoenix.Native
 import "LauncherLayout.js" as LauncherLayout
+import "KeyboardShortcuts.js" as KeyboardShortcuts
 
 FocusScope {
     id: shell
@@ -347,6 +348,48 @@ FocusScope {
             launcher.open = true;
     }
 
+    // Settings > Text Assist > Hardware keyboard: "ipad" or "desktop"
+    // (KeyboardShortcuts.js).
+    readonly property string keyboardShortcuts: system && system.keyboardShortcuts === "desktop" ? "desktop" : "ipad"
+
+    // A hardware keyboard shortcut's action (GAPS V8). Not over the lock
+    // screen (but for nothing), First Use or the emergency window.
+    function shortcut(action) {
+        if (locked || firstUse || emergencyShown)
+            return;
+        shortcutSheet.shown = false;
+        if (action === "next" || action === "previous") {
+            justType.open = false;
+            launcher.open = false;
+            cards.switchApp(action === "next");
+        } else if (action === "cardView") {
+            justType.open = false;
+            launcher.open = false;
+            if (cards.maximizeProgress > 0 && !cards.minimizing)
+                cards.minimize();
+        } else if (action === "justType") {
+            searchKey();
+        } else if (action === "close") {
+            if (cards.count > 0 && !launcher.open && !justType.open)
+                cards.close(cards.currentUid, false);
+        } else if (action === "launcher") {
+            if (launcher.open) {
+                launcher.open = false;
+            } else {
+                justType.open = false;
+                if (cards.maximizeProgress > 0)
+                    cards.minimize();
+                launcher.open = true;
+            }
+        } else if (action === "maximize") {
+            gestureDown();
+        } else if (action === "notifications") {
+            notes.dashboardOpen = !notes.dashboardOpen;
+        } else if (action === "lock") {
+            lock();
+        }
+    }
+
     // A keyboard's Search key: Just Type opens, or closes if it is open;
     // not over the lock screen or the emergency window (Qt::Key_Search,
     // SystemUiController.cpp:607-618).
@@ -607,8 +650,22 @@ FocusScope {
             backlight.activity();
             shell.gestureUp();
         }
-        chords: [{ key: Qt.Key_P, modifiers: Qt.ControlModifier | Qt.AltModifier },
-                 { key: Qt.Key_P, modifiers: Qt.MetaModifier | Qt.AltModifier }]
+        // The screen capture's two, then the shortcut scheme's
+        // (KeyboardShortcuts.js; Settings > Text Assist > Hardware keyboard).
+        readonly property var captureChords: [{ key: Qt.Key_P, modifiers: Qt.ControlModifier | Qt.AltModifier },
+                                              { key: Qt.Key_P, modifiers: Qt.MetaModifier | Qt.AltModifier }]
+        readonly property var shortcuts: KeyboardShortcuts.scheme(shell.keyboardShortcuts)
+        chords: captureChords.concat(shortcuts.map(function (s) { return { key: s.key, modifiers: s.modifiers }; }))
+        // Held on its own, the scheme's modifier lists them (ShortcutSheet).
+        watchKeys: [KeyboardShortcuts.sheetKey(shell.keyboardShortcuts)]
+        onHolding: (key, down) => {
+            if (down && !shell.locked && !shell.firstUse && backlight.on)
+                sheetDelay.restart();
+            else {
+                sheetDelay.stop();
+                shortcutSheet.shown = false;
+            }
+        }
         onPressed: (key, autoRepeat) => {
             // The volume keys repeat while held (the simulator's F10, F11).
             if (key === Qt.Key_VolumeUp || key === Qt.Key_VolumeDown || key === Qt.Key_F10 || key === Qt.Key_F11) {
@@ -640,7 +697,14 @@ FocusScope {
             if (!autoRepeat && (key === Qt.Key_Home || shell._isPowerKey(key)))
                 shell._buttonUp(key === Qt.Key_Home);
         }
-        onChord: shell.takeScreenshot()
+        onChord: (index) => {
+            if (index < captureChords.length)
+                shell.takeScreenshot();
+            else if (backlight.on) {
+                backlight.activity();
+                shell.shortcut(shortcuts[index - captureChords.length].action);
+            }
+        }
     }
 
     // ---- The volume keys ----------------------------------------------------------
@@ -1760,6 +1824,19 @@ FocusScope {
         PointHandler {
             id: fingers
         }
+    }
+
+    // The shortcuts, listed while their modifier is held a second.
+    Timer {
+        id: sheetDelay
+        interval: 1000
+        onTriggered: shortcutSheet.shown = true
+    }
+    ShortcutSheet {
+        id: shortcutSheet
+        z: 99997
+        scheme: shell.keyboardShortcuts
+        anchors.centerIn: parent
     }
 
     // The reticle: penindicator-ripple.png where a tap lands, growing to

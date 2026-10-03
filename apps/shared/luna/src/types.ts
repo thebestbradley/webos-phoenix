@@ -182,6 +182,8 @@ export interface SystemPreferences {
     lockTimeout?: number;
     /** Screen & Lock > Advanced gestures: a long swipe across the gesture area switches apps. */
     sysUiEnableNextPrevGestures?: boolean;
+    /** Phoenix: the shell's hardware keyboard shortcuts, iPad-style or desktop-style. */
+    keyboardShortcuts?: "ipad" | "desktop";
     [key: string]: unknown;
 }
 

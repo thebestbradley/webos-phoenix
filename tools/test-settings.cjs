@@ -283,6 +283,12 @@ async function main() {
         await page.click("[data-testid='ta-kb-qwertz-de']");
         await page.waitForSelector("[data-testid='ta-kb-qwertz-de'][aria-checked='false']");
         check(last().keyboard && last().keyboard.language === "en", "turned off, the keyboard in use goes back to the first");
+        // Hardware keyboard: the shortcut scheme reaches the shell.
+        check(last().keyboardShortcuts === "ipad", "iPad-style shortcuts by default");
+        await page.click("[data-testid='keyboard-shortcuts']");
+        await page.click("role=option[name='Desktop style (Alt, Super)']");
+        await page.waitForTimeout(200);
+        check(last().keyboardShortcuts === "desktop", `desktop-style shortcuts reach the shell (${last().keyboardShortcuts})`);
         await shot("textassist");
 
         // ---- Device Info: the phone, and the legacy reset options ----------------------

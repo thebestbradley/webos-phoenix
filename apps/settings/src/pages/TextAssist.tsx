@@ -9,14 +9,16 @@
 // forgotten), which the shell's keyboard follows. Keyboards: which layouts
 // and languages the keyboard offers (its "keyboards" combos, as
 // VirtualKeyboardPreferences kept them); with two or more its language key
-// goes from one to the next.
+// goes from one to the next. Hardware keyboard: the shell's shortcuts,
+// iPad-style (Ctrl / Command) or desktop-style (Alt, Super), system
+// preference keyboardShortcuts.
 //
 // Launch params {page: "textassist"}; com.palm.app.textassist opens it.
 
 import { useState } from "react";
 import { keyboardPrefs, system, withKeyboardPrefs, type SystemPreferences, type VirtualKeyboardPrefs } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
-import { Button, Dialog, Group, Note, Page, PageHeader, Row, ToggleButton } from "@phoenix/ui";
+import { Button, Dialog, Group, ListSelector, Note, Page, PageHeader, Row, ToggleButton } from "@phoenix/ui";
 
 /** The keyboards there are: a layout and the language of its words ("none": no suggestions or corrections). */
 export const KEYBOARDS = [
@@ -30,7 +32,7 @@ const same = (a: { layout: string; language: string }, b: { layout: string; lang
     a.layout === b.layout && a.language === b.language;
 
 export function TextAssistPage() {
-    const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(["x_palm_virtualkeyboard_prefs"], cb, err), []).value ?? {};
+    const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(["x_palm_virtualkeyboard_prefs", "keyboardShortcuts"], cb, err), []).value ?? {};
     const kb = keyboardPrefs(prefs.x_palm_virtualkeyboard_prefs);
     const [confirm, setConfirm] = useState(false);
     const [forgotten, setForgotten] = useState(false);
@@ -87,6 +89,13 @@ export function TextAssistPage() {
                 Backspace right after a correction puts back what you typed. Dictation: tap the microphone above the
                 keys and speak; it is turned into text on this device.
             </Note>
+            <Group label="Hardware keyboard">
+                <ListSelector<"ipad" | "desktop"> title="Shortcuts" value={prefs.keyboardShortcuts === "desktop" ? "desktop" : "ipad"} testId="keyboard-shortcuts"
+                    options={[{ label: "iPad style (Ctrl)", value: "ipad" }, { label: "Desktop style (Alt, Super)", value: "desktop" }]}
+                    onChange={(v) => void system.setPreferences({ keyboardShortcuts: v })} />
+                <Note>Hold Ctrl (⌘ on a Mac) for iPad style, or Super for desktop style, for a moment to see them all.</Note>
+            </Group>
+
             <Group label="Learned words">
                 <Button onClick={() => setConfirm(true)} data-testid="ta-forget">Forget Learned Words</Button>
             </Group>

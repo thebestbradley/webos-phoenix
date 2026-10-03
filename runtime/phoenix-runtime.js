@@ -948,6 +948,9 @@
         // Screen & Lock > Advanced gestures: LunaSysMgr's key. A long swipe
         // across the gesture area switches apps (phones).
         sysUiEnableNextPrevGestures: false,
+        // Settings > Text Assist > Hardware keyboard: the shell's shortcut
+        // scheme, "ipad" or "desktop" (Phoenix).
+        keyboardShortcuts: "ipad",
         firstUse: false
     };
 
@@ -2895,6 +2898,7 @@
                 screenTimeout: typeof p.screenTimeout === "number" ? p.screenTimeout : 60,
                 lockTimeout: typeof p.lockTimeout === "number" ? p.lockTimeout : 0,
                 advancedGestures: !!p.sysUiEnableNextPrevGestures,
+                keyboardShortcuts: p.keyboardShortcuts === "desktop" ? "desktop" : "ipad",
                 // Settings > Accessibility: the shell's animations.
                 reduceMotion: !!(p.accessibility && p.accessibility.reduceMotion),
                 wallpaperFile: (p.wallpaper && p.wallpaper.wallpaperFile) || "",
@@ -3504,7 +3508,7 @@
         };
         sys["/setPreferences"] = function (p, reply, ctx) {
             baseSetPreferences(p, reply, ctx);
-            if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "screenTimeout", "lockTimeout", "sysUiEnableNextPrevGestures", "systemSounds", "ringtone", "alerttone",
+            if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "screenTimeout", "lockTimeout", "sysUiEnableNextPrevGestures", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
                  "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "accessibility"].some(function (k) { return k in p; })) {
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
                 changed();

@@ -71,6 +71,8 @@ QtObject {
     // Screen & Lock > Advanced gestures (sysUiEnableNextPrevGestures): a
     // long swipe across the gesture area switches apps.
     property bool advancedGestures: false
+    // Settings > Text Assist > Hardware keyboard: "ipad" or "desktop".
+    property string keyboardShortcuts: "ipad"
     // Settings > Screen & Lock "Show notifications when locked"
     // (system preference showAlertsWhenLocked).
     property bool showAlertsWhenLocked: true
@@ -244,7 +246,7 @@ QtObject {
     // Apply a "systemStatus" report from the web runtime: wifiEnabled,
     // wifiConnected, wifiBars, bluetoothOn, airplaneMode, brightness
     // (0-100), rotationLocked, muted, timeFormat, showAlertsWhenLocked,
-    // screenTimeout, lockTimeout, advancedGestures,
+    // screenTimeout, lockTimeout, advancedGestures, keyboardShortcuts,
     // volume, streams, systemSounds, tapSounds, textAssist, keyboards,
     // keyboard, ringtone, alerttone,
     // notificationtone, reduceMotion, vpnProfiles. Missing keys are left alone.
@@ -274,6 +276,8 @@ QtObject {
             lockTimeout = s.lockTimeout;
         if (s.advancedGestures !== undefined)
             advancedGestures = !!s.advancedGestures;
+        if (s.keyboardShortcuts !== undefined)
+            keyboardShortcuts = s.keyboardShortcuts === "desktop" ? "desktop" : "ipad";
         if (s.volume !== undefined)
             volume = s.volume;
         if (s.audioScenario !== undefined)

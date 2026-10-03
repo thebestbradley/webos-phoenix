@@ -1146,6 +1146,60 @@ Item {
             shell.unlock();
         }
 
+        // V8: the two shortcut schemes, and the sheet while the modifier
+        // is held.
+        function test_keyboardShortcuts() {
+            shell.forceActiveFocus();
+            compare(shell.keyboardShortcuts, "ipad");
+            var a = windows.launch("org.webosphoenix.email", "");
+            var b = windows.launch("org.webosphoenix.messaging", "");
+            var view = shell.cardView;
+            view.maximize(a);
+            tryVerify(function() { return shell.maximized && view.currentUid === a; }, 2000);
+            keyClick(Qt.Key_Tab, Qt.ControlModifier);
+            tryCompare(view, "currentUid", b, 2000);
+            verify(shell.maximized);
+            keyClick(Qt.Key_Backtab, Qt.ControlModifier | Qt.ShiftModifier);
+            tryCompare(view, "currentUid", a, 2000);
+            keyClick(Qt.Key_H, Qt.ControlModifier);
+            tryVerify(function() { return !shell.maximized; }, 2000);
+            keyClick(Qt.Key_Space, Qt.ControlModifier);
+            verify(shell.justTypeOpen);
+            keyClick(Qt.Key_Space, Qt.ControlModifier);
+            verify(!shell.justTypeOpen);
+            keyClick(Qt.Key_N, Qt.AltModifier);
+            verify(shell.notifications.dashboardOpen);
+            keyClick(Qt.Key_N, Qt.AltModifier);
+            verify(!shell.notifications.dashboardOpen);
+            keyClick(Qt.Key_W, Qt.ControlModifier);
+            tryCompare(windows.cards, "count", 1, 3000);
+            // Desktop style: Alt+Tab; Ctrl+Tab no longer the shell's.
+            status.keyboardShortcuts = "desktop";
+            compare(shell.keyboardShortcuts, "desktop");
+            windows.launch("org.webosphoenix.calendar", "");
+            wait(50);
+            view.jumpTo(0);
+            var first = view.currentUid;
+            keyClick(Qt.Key_Tab, Qt.ControlModifier);
+            wait(400);
+            compare(view.currentUid, first);
+            keyClick(Qt.Key_Tab, Qt.AltModifier);
+            tryVerify(function() { return view.currentUid !== first; }, 2000);
+            // The sheet: Super held a second; gone when it is let go.
+            var sheet = findChild(shell, "shortcutSheet");
+            keyPress(Qt.Key_Meta);
+            wait(300);
+            verify(!sheet.shown);
+            tryCompare(sheet, "shown", true, 2000);
+            keyRelease(Qt.Key_Meta);
+            verify(!sheet.shown);
+            // Super+L locks.
+            keyClick(Qt.Key_L, Qt.MetaModifier);
+            verify(shell.locked);
+            shell.unlock();
+            status.keyboardShortcuts = "ipad";
+        }
+
         function test_homeKey() {
             var notes = shell.notifications;
             windows.launch("org.webosphoenix.email", "");
