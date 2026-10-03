@@ -12,6 +12,7 @@ body.pui-app { overflow: hidden; }
 
 .tk-app { position: fixed; inset: 0; display: flex; }
 .tk-loading { flex: 1; display: flex; justify-content: center; padding: 80px 0; }
+.tk-load-error { flex-direction: column; align-items: center; justify-content: flex-start; gap: 12px; padding: 80px 24px; text-align: center; }
 .tk-lists, .tk-main, .tk-editor { --pui-gutter: 0px; position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .tk-lists > .pui-header, .tk-main > .pui-header, .tk-editor > .pui-header { margin-bottom: 0; }
 .tk-scroll { position: relative; flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0 8px 66px; }

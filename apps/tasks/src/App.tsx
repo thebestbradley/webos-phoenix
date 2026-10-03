@@ -105,7 +105,7 @@ function ListNameDialog({ title, initial, action, onSubmit, onClose }: {
 }
 
 function TasksApp() {
-    const lists = useLists();
+    const { lists, error: listsError, retry: retryLists } = useLists();
     const all = useTasks();
     const now = useNow();
     const wide = useWide();
@@ -188,6 +188,17 @@ function TasksApp() {
     };
 
     if (!lists || !all || !current) {
+        // Without its lists (or the Inbox) the app cannot start: say why rather than spin.
+        if (listsError) {
+            return (
+                <div className="tk-app">
+                    <div className="tk-loading tk-load-error" data-testid="lists-error">
+                        <ErrorText>{`Tasks could not open your lists: ${listsError}`}</ErrorText>
+                        <Button data-testid="lists-retry" onClick={retryLists}>Try Again</Button>
+                    </div>
+                </div>
+            );
+        }
         return <div className="tk-app"><div className="tk-loading"><Spinner large /></div></div>;
     }
 
