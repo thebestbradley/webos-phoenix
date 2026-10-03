@@ -20,17 +20,16 @@ The simulator doesn't need a repository of its own. It builds the same QML,
 runtime and apps a device runs, and keeping them together means one change
 and one test run covers both.
 
-## Which branch
-
-Development happens on a branch until it is merged; check which branch
-holds the newest work (the open pull request says) and use it:
+## Get the code
 
 ```sh
 git clone --recurse-submodules https://github.com/thebestbradley/webos-phoenix.git
 cd webos-phoenix
-git checkout tbb/nice-maxwell-ps69wb   # the branch with the current work, until it is merged into main
-git submodule update --init
 ```
+
+`main` has the current work. In a checkout from before October 2026, which
+used the `tbb/nice-maxwell-ps69wb` branch, switch back with
+`git checkout main && git pull && git submodule update --init`.
 
 ## On a Mac
 
