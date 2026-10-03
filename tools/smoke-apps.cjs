@@ -223,6 +223,12 @@ async function main() {
         const browser = await chromium.launch();
         for (const app of apps) {
             const context = await browser.newContext({ viewport });
+            // Noon today, running from there: the sample data is seeded
+            // around today (Calendar's "Lunch with Priya"), and a run that
+            // crosses midnight would open the day after it.
+            const noon = new Date();
+            noon.setHours(12, 0, 0, 0);
+            await context.clock.install({ time: noon });
             const page = await context.newPage();
             const errors = [];
             context.on("page", (p) => p.on("pageerror", (e) => errors.push(e.message)));
