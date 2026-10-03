@@ -6,14 +6,18 @@
 //   phoenix-sim [--size WxH] [--scale N] [--tablet|--phone] [--scene NAME]
 //               [--orientation up|left|down|right] [--turn ORIENTATION]
 //               [--home-button] [--first-use] [--screenshot FILE [--delay MS]] [--stay-awake] [--low-memory] [--no-host-shell]
-//               [--host-shell PATH]
+//               [--host-shell PATH] [--security-policy SPEC] [--usb] [--usb-busy]
+//               [--boot-animation | --no-boot-animation]
 //
 // Keys: Esc = back gesture, Home/F1 = up gesture, F2 = demo notification,
 //       F3 = Power (screen off and locked / on), F4 = incoming call, F5 = incoming text message,
 //       F6 = low battery, Shift+F6 = battery not reporting, F7 = charger in/out, F10 / F11 = volume down / up, F9 / Print Screen /
 //       Ctrl+Alt+P (Command or Control+Option+P on a Mac) = screen capture,
 //       Home + F3 together = screen capture, Ctrl+Left / Ctrl+Right =
-//       turn the device a quarter turn counter-clockwise / clockwise.
+//       turn the device a quarter turn counter-clockwise / clockwise,
+//       Shift+F8 = a USB cable from a computer in / out, Ctrl+F8 = the computer
+//       ejects the USB drive; F3 + F11 held, then Home = Full Erase,
+//       F3 + F10 = USB drive mode.
 //       Type in card view for Just Type.
 
 #include <QCommandLineParser>
@@ -22,6 +26,8 @@
 #include <QFileInfo>
 #include <QFontDatabase>
 #include <QGuiApplication>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickView>
@@ -140,9 +146,61 @@ int main(int argc, char *argv[])
     QCommandLineOption quietOpt(QStringLiteral("quiet"), QStringLiteral("No boot and shutdown sounds (they are off anyway with --screenshot and the offscreen platform)."));
     QCommandLineOption noHostShellOpt(QStringLiteral("no-host-shell"), QStringLiteral("Do not give the Terminal app a real shell on this computer (it gets the runtime's simulated shell)."));
     QCommandLineOption hostShellOpt(QStringLiteral("host-shell"), QStringLiteral("Run this program in the Terminal instead of the shell it asks for."), QStringLiteral("path"));
+    QCommandLineOption policyOpt(QStringLiteral("security-policy"), QStringLiteral("A device security policy, as an Exchange account sets one (EAS): comma-separated minLength=N, maxRetries=N (the last wrong try erases the device), alphaNumeric (a password, letters and digits), noSimple (no runs like 1234 or 1111), inactivity=SECONDS (the longest Lock after); \"none\" removes it. It is kept until removed or the device is erased."), QStringLiteral("spec"));
+    QCommandLineOption usbOpt(QStringLiteral("usb"), QStringLiteral("Start with a USB cable from a computer plugged in (Shift+F8 plugs it in or out, Ctrl+F8 ejects the USB drive on the computer)."));
+    QCommandLineOption usbBusyOpt(QStringLiteral("usb-busy"), QStringLiteral("An app keeps a file open on the USB drive: entering USB drive mode fails (\"USB Drive connection failed\")."));
+    QCommandLineOption bootAnimOpt(QStringLiteral("boot-animation"), QStringLiteral("Show the boot animation at start-up (it shows anyway unless --screenshot or an offscreen platform)."));
+    QCommandLineOption noBootAnimOpt(QStringLiteral("no-boot-animation"), QStringLiteral("Start without the boot animation."));
+    // Set by phoenix-sim itself when it restarts (SimProcess).
+    QCommandLineOption updatingOpt(QStringLiteral("updating"), QStringLiteral("Boot as after a system update: \"Updating the system\" first."));
+    QCommandLineOption eraseOpt(QStringLiteral("erase-data"), QStringLiteral("Internal: once process PID is gone, erase the simulator's data and start into First Use."), QStringLiteral("pid"));
+    updatingOpt.setFlags(QCommandLineOption::HiddenFromHelp);
+    eraseOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     parser.addOptions({ lowMemoryOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
-                        noHostShellOpt, hostShellOpt });
+                        noHostShellOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, bootAnimOpt, noBootAnimOpt, updatingOpt, eraseOpt });
     parser.process(app);
+
+    // A Full Erase or a security policy's wipe restarted the simulator:
+    // its data goes before anything reads it.
+    if (parser.isSet(eraseOpt))
+        SimProcess::eraseData(parser.value(eraseOpt).toLongLong());
+
+    // --security-policy: a com.palm.securitypolicy:1 object in db8, as an
+    // EAS account wrote one (EASPolicyManager.cpp:60-80); sim.qml puts it there.
+    QString securityPolicy;
+    if (parser.isSet(policyOpt)) {
+        const QString spec = parser.value(policyOpt).trimmed();
+        if (spec == QLatin1String("none")) {
+            securityPolicy = QStringLiteral("none");
+        } else {
+            QJsonObject policy { { QStringLiteral("devicePasswordEnabled"), true } };
+            for (const QString &part : spec.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+                const QString key = part.section(QLatin1Char('='), 0, 0).trimmed();
+                const QString value = part.section(QLatin1Char('='), 1).trimmed();
+                bool ok = true;
+                if (key == QLatin1String("minLength"))
+                    policy.insert(QStringLiteral("minDevicePasswordLength"), value.toInt(&ok));
+                else if (key == QLatin1String("maxRetries"))
+                    policy.insert(QStringLiteral("maxDevicePasswordFailedAttempts"), value.toInt(&ok));
+                else if (key == QLatin1String("inactivity"))
+                    policy.insert(QStringLiteral("maxInactivityTimeDeviceLock"), value.toInt(&ok));
+                else if (key == QLatin1String("alphaNumeric") && value.isEmpty())
+                    policy.insert(QStringLiteral("alphanumericDevicePasswordRequired"), true);
+                else if (key == QLatin1String("noSimple") && value.isEmpty())
+                    policy.insert(QStringLiteral("allowSimpleDevicePassword"), false);
+                else
+                    ok = false;
+                if (!ok) {
+                    qCritical("--security-policy: did not understand \"%s\" (minLength=N, maxRetries=N, alphaNumeric, noSimple, inactivity=SECONDS, or none)",
+                              qPrintable(part));
+                    return 2;
+                }
+            }
+            if (!policy.contains(QStringLiteral("maxInactivityTimeDeviceLock")))
+                policy.insert(QStringLiteral("maxInactivityTimeDeviceLock"), 9998);   // no limit (EASPolicyManager.h:45)
+            securityPolicy = QString::fromUtf8(QJsonDocument(policy).toJson(QJsonDocument::Compact));
+        }
+    }
 
     const QStringList orientations = { QStringLiteral("up"), QStringLiteral("left"), QStringLiteral("down"), QStringLiteral("right") };
     const QString orientation = parser.value(orientationOpt);
@@ -265,8 +323,15 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simTurn"), turn);
     // The boot and shutdown sounds, only when someone is there to hear them.
     const QString platform = QGuiApplication::platformName();
-    view.rootContext()->setContextProperty(QStringLiteral("simBootSounds"),
-        !parser.isSet(quietOpt) && !parser.isSet(shotOpt) && platform != QLatin1String("offscreen") && platform != QLatin1String("minimal"));
+    const bool watched = !parser.isSet(shotOpt) && platform != QLatin1String("offscreen") && platform != QLatin1String("minimal");
+    view.rootContext()->setContextProperty(QStringLiteral("simBootSounds"), !parser.isSet(quietOpt) && watched);
+    // The boot animation: when someone is there to see it, or asked for.
+    view.rootContext()->setContextProperty(QStringLiteral("simBootAnimation"),
+        !parser.isSet(noBootAnimOpt) && (watched || parser.isSet(bootAnimOpt)));
+    view.rootContext()->setContextProperty(QStringLiteral("simUpdating"), parser.isSet(updatingOpt));
+    view.rootContext()->setContextProperty(QStringLiteral("simSecurityPolicy"), securityPolicy);
+    view.rootContext()->setContextProperty(QStringLiteral("simUsb"), parser.isSet(usbOpt));
+    view.rootContext()->setContextProperty(QStringLiteral("simUsbBusy"), parser.isSet(usbBusyOpt));
     // Qt.quit() (after the shutdown sound).
     QObject::connect(view.engine(), &QQmlEngine::quit, &app, &QCoreApplication::quit, Qt::QueuedConnection);
     view.rootContext()->setContextProperty(QStringLiteral("simFormFactor"),

@@ -258,7 +258,16 @@ battery, **Shift+F6** the battery stops reporting (or reports again), **F7** plu
 **F10** / **F11** the volume keys (down / up),
 **Ctrl+Left** / **Ctrl+Right**
 turn the device a quarter turn counter-clockwise / clockwise, type in card
-view for Just Type. Left alone the screen dims and turns off as on a device
+view for Just Type. The original's key chords: hold **F3** and **F11**
+(Power and Volume Up), then press **Home**: Full Erase's six-second
+countdown; keep holding and the device is erased and starts again into
+First Use (let go to stop it). **F3** with **F10** (Power and Volume Down)
+on a USB cable: USB drive mode. **Shift+F8** plugs a USB cable from a
+computer in or out (`--usb` starts with it in): luna-systemui asks
+"Connected"; "USB Drive" puts the device into USB drive mode, until the
+computer ejects it (**Ctrl+F8**) or the cable is pulled (then the drive is
+checked: "OWWW! That hurts!"). `--usb-busy` makes it fail ("USB Drive
+connection failed"). Left alone the screen dims and turns off as on a device
 (Settings > Screen & Lock > Turn off after; 5 s on the lock screen); a
 click, **F3** or **Home** turns it on (on a Mac, F3 to F11 need **fn**:
 macOS keeps them for itself). `--stay-awake` keeps it on (as `--screenshot`
@@ -285,6 +294,18 @@ full, boot and, when the window closes, shutdown) and Phoenix-made keyboard
 clicks, at the volumes set in Settings > Sounds & Ringtones. The simulator
 plays them with the web engine's audio; `--quiet` leaves out the boot and
 shutdown sounds (so do `--screenshot` and the offscreen platform).
+
+The boot animation shows at start-up, as on a device, until the system UI
+has loaded (not with `--screenshot` or `--no-boot-animation`;
+`--boot-animation` shows it anyway, e.g. for a screenshot). After a system
+update's Install Now it says "Updating the system" first.
+
+`--security-policy minLength=6,maxRetries=4,alphaNumeric,noSimple,inactivity=300`
+sets a device security policy, as an Exchange account did (any of the
+parts; `none` removes it): the lock screen asks for a PIN or password that
+meets it, counts the tries left, warns before the last one and erases the
+device after it. Settings > Developer Mode (when on) has switches for the
+frame rate counter and the touch plot.
 
 `--launch com.palm.app.notes` opens an app at start-up (repeatable);
 `--launch org.webosphoenix.settings.wifi` opens a Settings pane.
@@ -326,6 +347,7 @@ node tools/test-firstuse.cjs                                # First Use, every s
 node tools/test-help.cjs                                    # Help, and Just Type finding it
 node tools/test-emergency.cjs                               # Emergency Info, restricted Phone, Accessibility
 node tools/test-location.cjs                                # Location Services and permissions
+node tools/test-security.cjs                                # security policy, erase, USB drive mode, debugging
 ```
 
 ## Build a webOS OSE image (experimental)
