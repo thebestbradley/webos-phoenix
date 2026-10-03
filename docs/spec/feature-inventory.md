@@ -115,7 +115,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Light-bar / CoreNavi LED gesture feedback. `Src/base/CoreNaviManager.cpp`; `Src/base/CoreNaviLeds.cpp` *Phoenix: on the on-screen gesture bar: lit while an app is maximized, a drop from the centre for up, its reverse for down, a run left / right for back / forward. A device's own LEDs are not driven yet.*
 - [x] Screenshot (Home + Power) and the `takeScreenShot` service, with a screenshot flash animation. `Src/base/WindowServer.cpp:629-683`; `Src/base/visual/WSOverlayScreenShotAnimation.cpp` *Phoenix: Home + Power, the flash, then a thumbnail and preview (docs/SCREENSHOTS.md); no com.palm.systemmanager/takeScreenShot service yet.*
 - [x] Touch reticle (tap ripple). `Src/base/visual/ReticleItem.cpp` *Phoenix: Shell.qml's reticle, from UserActivity's taps.*
-- [ ] Bluetooth keyboard shortcuts (Esc for dashboard, Search for Just Type, Super for card view, Keyboard key for the IME). `SystemUiController.cpp:338-343,586-624` *Phoenix: Esc is Back and typing in card view starts Just Type; not Search, Super or the Keyboard key.*
+- [ ] Bluetooth keyboard shortcuts (Esc for dashboard, Search for Just Type, Super for card view, Keyboard key for the IME). `SystemUiController.cpp:338-343,586-624` *Phoenix: Search toggles Just Type and Super (alone) is card view; Esc stays Back (the simulator's Back key) and typing in card view starts Just Type. Not the Keyboard key (Qt has no code for it).*
 
 ## 8. Input [spec §8]
 
