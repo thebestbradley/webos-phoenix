@@ -9,7 +9,8 @@
 //   cards         ListModel  uid, appId, title, groupId  (running windows in
 //                            screen order; consecutive cards with the same
 //                            groupId form a card stack); optional:
-//                            fullScreen (enableFullScreenMode), blockScreenTimeout
+//                            fullScreen (enableFullScreenMode), blockScreenTimeout,
+//                            statusBarColor (setWindowProperties; -1 for none)
 //                            (setWindowProperties: the screen stays on), orientation
 //                            (the app's PalmSystem.setWindowOrientation:
 //                            "free", "up", "down", "left", "right",
@@ -315,7 +316,7 @@ Item {
         _windows[uid] = win;
         // appinfo.json requestedWindowOrientation (ApplicationDescription.cpp:
         // 464-469, handed to WebAppMgr) until the page asks for another.
-        cards.insert(at, { uid: uid, appId: appId, title: titleText, groupId: groupId, fullScreen: false, blockScreenTimeout: false,
+        cards.insert(at, { uid: uid, appId: appId, title: titleText, groupId: groupId, fullScreen: false, blockScreenTimeout: false, statusBarColor: -1,
                            orientation: _windowOrientation(info.orientation) });
         return uid;
     }
@@ -451,10 +452,13 @@ Item {
                 cards.setProperty(fi, "fullScreen", !!payload.on);
         } else if (type === "windowProperties") {
             // PalmSystem.setWindowProperties {blockScreenTimeout}: the
-            // screen stays on while the card is in front (Display.blocked).
+            // screen stays on while the card is in front (Display.blocked);
+            // {statusBarColor}: the tablet's status bar while it is maximized.
             var wi = cardIndex(uid);
             if (wi >= 0 && payload.blockScreenTimeout !== undefined)
                 cards.setProperty(wi, "blockScreenTimeout", !!payload.blockScreenTimeout);
+            if (wi >= 0 && typeof payload.statusBarColor === "number")
+                cards.setProperty(wi, "statusBarColor", payload.statusBarColor);
         } else if (type === "inputFocus") {
             // An editable element of the page got or lost the focus, or the
             // app showed or hid the keyboard itself (runtime: "Virtual

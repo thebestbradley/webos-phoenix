@@ -53,6 +53,18 @@ Item {
                 return source.cards.get(i).blockScreenTimeout === true;
         return false;
     }
+    // The status bar colour the card in front asked for
+    // (setWindowProperties statusBarColor, 0xRRGGBB), or "" for none.
+    readonly property string currentStatusBarColor: {
+        revision;
+        for (var i = 0; source && i < source.cards.count; ++i) {
+            if (source.cards.get(i).uid === currentUid) {
+                var c = source.cards.get(i).statusBarColor;
+                return typeof c === "number" && c >= 0 ? "#" + ("000000" + c.toString(16)).slice(-6) : "";
+            }
+        }
+        return "";
+    }
     // On its way back to card view: gestures treat it as there already.
     readonly property bool minimizing: maximizeAnim.running && maximizeAnim.to === 0
     // On its way up to maximized (or waiting below the screen to rise).

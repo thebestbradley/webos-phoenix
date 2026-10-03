@@ -307,11 +307,20 @@
             host.postToHost("windowOrientation", { appId: PalmSystem.appIdentifier, orientation: String(o) });
         },
         // enyo.windows.setWindowProperties: blockScreenTimeout keeps the
-        // screen on while the card is in front (a video, a flashlight).
-        // setSubtleLightbar and fastAccelerometer have nothing to act on.
+        // screen on while the card is in front (a video, a flashlight);
+        // statusBarColor (0xRRGGBB) tints the tablet's status bar while the
+        // card is maximized (IpcClientHost.cpp:294-296). setSubtleLightbar
+        // and fastAccelerometer have nothing to act on.
         setWindowProperties: function (props) {
-            if (props && typeof props === "object" && "blockScreenTimeout" in props)
-                host.postToHost("windowProperties", { appId: PalmSystem.appIdentifier, blockScreenTimeout: !!props.blockScreenTimeout });
+            if (!props || typeof props !== "object")
+                return;
+            var out = { appId: PalmSystem.appIdentifier };
+            if ("blockScreenTimeout" in props)
+                out.blockScreenTimeout = !!props.blockScreenTimeout;
+            if (typeof props.statusBarColor === "number" && isFinite(props.statusBarColor))
+                out.statusBarColor = props.statusBarColor & 0xFFFFFF;
+            if (Object.keys(out).length > 1)
+                host.postToHost("windowProperties", out);
         },
         enableFullScreenMode: function (on) { host.postToHost("fullScreen", { appId: PalmSystem.appIdentifier, on: !!on }); },
         allowResizeOnPositiveSpaceChange: function () {},

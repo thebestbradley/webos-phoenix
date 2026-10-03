@@ -1489,7 +1489,12 @@ FocusScope {
                      : _mode === "app" ? cards.currentTitle : (shell.system ? shell.system.carrier : "")
                 titleBorder: _mode !== ""
                 titleActionable: _mode === "app"
-                fillColor: _mode === "justtype" || _mode === "launcher" ? Theme.statusBarLauncherFill : Theme.statusBarFill
+                // A maximized app's own colour (setWindowProperties
+                // statusBarColor; SystemUiController.cpp:820-827), faded to
+                // over 300 ms (StatusBar::setBackgroundColor). Tablets only.
+                fillColor: _mode === "justtype" || _mode === "launcher" ? Theme.statusBarLauncherFill
+                         : _mode === "app" && cards.currentStatusBarColor !== "" ? cards.currentStatusBarColor
+                         : Theme.statusBarFill
                 systemMenuOpen: systemMenu.open
                 lockScreen: shell.locked
                 filled: cards.maximized || launcher.open || justType.open

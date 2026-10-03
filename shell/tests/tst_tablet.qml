@@ -107,8 +107,17 @@ Item {
             fuzzyCompare(arrow.x, title.width + Theme.px(5), 0.5);
             verify(findChild(bar, "statusBarTitleSeparator").visible);
             compare(fill.color, Theme.statusBarFill);
+            // S6: the app's own colour (setWindowProperties statusBarColor),
+            // faded to; back to the default without it.
+            var uid = shell.cardView.currentUid;
+            windows._hostMessage("org.webosphoenix.email", uid, "windowProperties", { statusBarColor: 0x2266aa });
+            tryCompare(fill, "color", Qt.color("#2266aa"), 1000);
+            windows._hostMessage("org.webosphoenix.email", uid, "windowProperties", { statusBarColor: -1 });
+            tryCompare(fill, "color", Theme.statusBarFill, 1000);
+            windows._hostMessage("org.webosphoenix.email", uid, "windowProperties", { statusBarColor: 0x2266aa });
             shell.cardView.minimize();
             tryCompare(fill, "opacity", 0, 1500);
+            tryCompare(fill, "color", Theme.statusBarFill, 1000);
         }
 
         // Turned to portrait (the TouchPad held with its home button down):
