@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useEffect, useRef, useState } from "react";
-import { contacts, personDisplayName, matchNumber, telephony, type Call, type CallStatus, type Person, type VoicemailStatus } from "@phoenix/luna";
+import { contacts, personDisplayName, matchNumber, primaryCall, telephony, type Call, type CallStatus, type Person, type VoicemailStatus } from "@phoenix/luna";
 import { formatNumber } from "@phoenix/ui";
 import { callLog, recordFor, type PhoneCall } from "./calllog";
 
@@ -94,6 +94,41 @@ export function useCallBookkeeping(calls: readonly Call[], people: readonly Pers
             }
         }
     }, [calls]);
+}
+
+type ActiveCallBannerApi = {
+    addActiveCallBanner?: (icon: string, message: string, startTime: number) => void;
+    updateActiveCallBanner?: (icon: string, message: string, startTime: number) => void;
+    removeActiveCallBanner?: () => void;
+};
+const palm = () => (globalThis as { PalmSystem?: ActiveCallBannerApi }).PalmSystem;
+
+/**
+ * The active-call banner: while a call is connected, the phone's banner
+ * strip shows who it is with and for how long, and a tap brings the call
+ * back ({action: "activecall"}), as the webOS phone app had LunaSysMgr do
+ * (PalmSystem.addActiveCallBanner(icon, message, startTime in seconds);
+ * ActiveCallBanner.cpp).
+ */
+export function useActiveCallBanner(calls: readonly Call[], people: readonly Person[]) {
+    const shown = useRef<string | null>(null);
+    const call = primaryCall(calls);
+    const connected = call && (call.state === "active" || call.state === "held") && call.connectTime ? call : null;
+    const message = connected ? callerName(connected, people) : "";
+    const start = connected ? Math.floor((connected.connectTime ?? 0) / 1000) : 0;
+    useEffect(() => {
+        const api = palm();
+        const key = connected ? `${message}|${start}` : null;
+        if (key === shown.current) return;
+        try {
+            if (key === null) api?.removeActiveCallBanner?.();
+            else if (shown.current === null) api?.addActiveCallBanner?.("icon.png", message, start);
+            else api?.updateActiveCallBanner?.("icon.png", message, start);
+        } catch { /* not in a webOS runtime */ }
+        shown.current = key;
+    }, [connected, message, start]);
+    // The page going away takes it along.
+    useEffect(() => () => { if (shown.current !== null) palm()?.removeActiveCallBanner?.(); }, []);
 }
 
 /** matchMedia wrapper: the two-pane tablet layout. */

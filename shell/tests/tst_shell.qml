@@ -756,6 +756,39 @@ Item {
             compare(Theme.fontFamily, Theme.preludeInstalled ? "Prelude" : "Open Sans");
         }
 
+        // PalmSystem.addActiveCallBanner: the phone's banner strip shows the
+        // call and its time; a tap goes back to it; removed, it goes.
+        function test_activeCallBanner() {
+            var notes = shell.notifications;
+            var start = Math.floor(Date.now() / 1000) - 65;
+            windows._hostMessage("org.webosphoenix.phone", "", "activeCallBanner",
+                                 { op: "add", icon: "icon.png", message: "Ada Palmer", startTime: start });
+            verify(notes.activeCallShown);
+            var text = findChild(notes, "activeCallText");
+            tryVerify(function() { return /^Ada Palmer \(1:0[56]\)$/.test(text.text); }, 1000, text.text);
+            tryCompare(notes, "negativeSpace", Theme.bannerHeight, 2000);
+            // Another app cannot change it; its own can.
+            windows._hostMessage("org.webosphoenix.email", "", "activeCallBanner", { op: "remove" });
+            verify(notes.activeCallShown);
+            windows._hostMessage("org.webosphoenix.phone", "", "activeCallBanner",
+                                 { op: "update", icon: "icon.png", message: "Ada Palmer (mobile)", startTime: start });
+            tryVerify(function() { return /^Ada Palmer \(mobile\) \(1:0[5-7]\)$/.test(text.text); }, 1000, text.text);
+            // A tap: the phone, {action: "activecall"}.
+            mouseClick(findChild(notes, "bannerTap"));
+            tryVerify(function() {
+                for (var i = 0; i < windows.cards.count; ++i)
+                    if (windows.cards.get(i).appId === "org.webosphoenix.phone")
+                        return true;
+                return false;
+            }, 2000, "the phone opened");
+            windows._hostMessage("org.webosphoenix.phone", "", "activeCallBanner", { op: "remove" });
+            verify(!notes.activeCallShown);
+            // The time as ActiveCallBanner.cpp wrote it.
+            compare(notes.callTime(0, 3725 * 1000), "(1:02:05)");
+            compare(notes.callTime(0, 59 * 1000), "(0:59)");
+            compare(notes.callTime(0, 400000 * 1000), "(99:59:59)");
+        }
+
         // PalmSystem.enableFullScreenMode: no status bar, no notification
         // area; the card gets the whole screen while maximized.
         function test_fullScreenApp() {

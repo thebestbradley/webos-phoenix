@@ -1466,6 +1466,8 @@ FocusScope {
 
             Notifications {
                 fullScreen: shell.fullScreen
+                // The phone's active-call banner (the window source's).
+                activeCall: shell.source && shell.source.activeCallBanner !== undefined ? shell.source.activeCallBanner : null
                 locked: shell.locked
                 lockAlertHost: lockScreen.alertHost
                 id: notes

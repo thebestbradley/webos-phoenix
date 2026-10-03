@@ -164,11 +164,16 @@ async function main() {
         check(true, "answer: the call is up on the Phone card");
         check(host.some((m) => m.page === "phone" && m.type === "activate"), "and the Phone card comes to the front (PalmSystem.activate)");
         check(scenario() === "phone", `in the call: "phone" (${scenario()})`);
+        const acb = () => host.filter((m) => m.type === "activeCallBanner");
+        await phone.waitForTimeout(300);
+        check(acb().some((m) => m.payload.op === "add" && m.payload.message === "Ada Palmer" && m.payload.startTime > 0),
+              `the active-call banner: Ada Palmer (${JSON.stringify(acb().map((m) => m.payload))})`);
         await phone.evaluate(() => window.__phoenixRuntime.simulateRemoteHangup());
         await phone.waitForSelector("[data-testid='incall']", { state: "detached", timeout: 4000 });
         check(true, "the caller hangs up");
         await phone.waitForTimeout(3000);
         check(scenario() === "system", `after it: "system" (${scenario()})`);
+        check(acb().length > 0 && acb()[acb().length - 1].payload.op === "remove", "and it goes when the call ends");
 
         // ---- Incoming call on the lock screen: unlocking answers ---------------------------------------
         // ("Drag up to answer": the shell unlocks; the alert hears it through

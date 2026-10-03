@@ -33,6 +33,8 @@
 //                            soundClass (the window's sound attributes):
 //                            popup alert windows (windowFor(key)), front first
 //   closeAlert(key)          (optional) close a popup alert window (Home)
+//   activeCallBanner        {appId, icon, message, startTime (s)} or null: the
+//                            phone's active-call banner (PalmSystem.addActiveCallBanner)
 //   bannerRequested(appId, text, icon, params, soundClass, soundFile, soundDuration)
 //                            signal: a transient banner (params: its launch
 //                            params, JSON, or ""), and the sound it asked for
@@ -401,6 +403,18 @@ Item {
             bannerRequested(appId, payload.message || "", _iconUrl(payload.icon, appId),
                             bp === undefined || bp === null ? "" : typeof bp === "string" ? bp : JSON.stringify(bp),
                             bs[0], bs[1], bs[2]);
+        } else if (type === "activeCallBanner") {
+            // PalmSystem.add/update/removeActiveCallBanner: one at a time,
+            // the app that added it changes or removes it.
+            if (payload.op === "add" && activeCallBanner === null) {
+                activeCallBanner = { appId: appId, icon: _iconUrl(payload.icon, appId), message: payload.message || "",
+                                     startTime: payload.startTime || 0 };
+            } else if (payload.op === "update" && activeCallBanner !== null && activeCallBanner.appId === appId) {
+                activeCallBanner = { appId: appId, icon: _iconUrl(payload.icon, appId), message: payload.message || "",
+                                     startTime: payload.startTime || 0 };
+            } else if (payload.op === "remove" && activeCallBanner !== null && activeCallBanner.appId === appId) {
+                activeCallBanner = null;
+            }
         } else if (type === "sound") {
             // PalmSystem.playSoundNotification(soundClass, soundFile, duration).
             var ss = _soundArgs(payload);
@@ -657,6 +671,7 @@ Item {
     // apps it launches stack on it.
     property string focusedUid: ""
     signal bannerRequested(string appId, string text, url icon, string params, string soundClass, string soundFile, int soundDuration)
+    property var activeCallBanner: null
 
     // Tell a page when its card comes to the front (maximized) or leaves it
     // (minimized to card view, or another card maximized), as LunaSysMgr
@@ -1141,8 +1156,12 @@ Item {
         }
         // Its live activities go with it: their work ran in its pages, and
         // they cannot be swiped away.
-        if (runningUid(appId) === "" && !_headless[appId])
+        if (runningUid(appId) === "" && !_headless[appId]) {
             _clearOngoingOf(appId);
+            // Its active-call banner too (its page asked for it).
+            if (activeCallBanner !== null && activeCallBanner.appId === appId)
+                activeCallBanner = null;
+        }
     }
 
     function _clearOngoingOf(appId) {

@@ -64,7 +64,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [ ] Dashboards (persistent app mini-windows, 52 px rows) with swipe-to-dismiss, persistent (non-dismissable) variant, and scrolling after 5.5 rows. `Src/lunaui/notifications/DashboardWindowContainer.cpp` *Phoenix: 52 px rows, swipe to dismiss, scrolling after 5.5 rows done; app dashboards persistent only as live activities (no persistent dashboard variant).*
 - [x] Popup alerts (incoming call, alarm, calendar reminder, system alerts) filtered by the policy file. `Src/lunaui/notifications/AlertWindow.cpp`; `conf/notificationPolicy.conf`; `NotificationPolicy.cpp` *Phoenix: with the notificationPolicy.conf queue.*
 - [ ] Transient alerts. `DashboardWindowManager.cpp:183-190`
-- [ ] Active-call banner with running call timer. `Src/lunaui/notifications/ActiveCallBanner.cpp`
+- [x] Active-call banner with running call timer. `Src/lunaui/notifications/ActiveCallBanner.cpp` *Phoenix: done on phones (GAPS N7).*
 - [x] Volume / ringer HUD. `Src/lunaui/notifications/VolumeControlAlertWindow.cpp` *Phoenix: done (`VolumeIndicator.qml`; GAPS N7).*
 - [ ] QML alert windows (generic system dialogs). `Src/lunaui/notifications/QmlAlertWindow.cpp`; `uiComponents/MessageDialog/MessageDialog.qml`
 - [ ] Native alert manager (low-level system alerts, e.g. low battery). `Src/lunaui/notifications/NativeAlertManager.cpp` *Phoenix: low battery comes from luna-systemui's popup; no native alert manager.*

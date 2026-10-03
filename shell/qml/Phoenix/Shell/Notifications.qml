@@ -53,7 +53,13 @@ Item {
     property bool bannerActive: false
     // The dashboard has content while a banner shows or notifications wait
     // (DashboardWindowManager::setBannerHasContent, :454-465).
-    readonly property bool hasContent: hasNotifications || bannerActive
+    // The phone's active-call banner ({appId, icon, message, startTime}
+    // or null): in the banner strip while a call is up, over the other
+    // banners (BannerWindow::paint); tablets have none
+    // (StatusBarNotificationArea's are empty).
+    property var activeCall: null
+    readonly property bool activeCallShown: activeCall !== null && activeCall !== undefined && !overlay
+    readonly property bool hasContent: hasNotifications || bannerActive || activeCallShown
 
     // ---- The drawer (Phoenix) ------------------------------------------------------
     // Live activities (ongoing) are pinned at the top of the list, above the
@@ -237,6 +243,17 @@ Item {
         }
     }
 
+    // "(m:ss)", "(h:mm:ss)", at most "(99:59:59)"
+    // (ActiveCallBanner::recomputeTime). startTime: seconds since 1970.
+    function callTime(startTime, nowMs) {
+        var t = Math.max(0, Math.floor(nowMs / 1000) - startTime);
+        if (t >= 356813)
+            return "(99:59:59)";
+        var h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60;
+        var mm = h > 0 && m < 10 ? "0" + m : String(m);
+        return "(" + (h > 0 ? h + ":" : "") + mm + ":" + (sec < 10 ? "0" : "") + sec + ")";
+    }
+
     // A banner, with or without a notification behind it
     // (PalmSystem.addBannerMessage only scrolls a banner by).
     function showBanner(text, icon, color, glyph, appId, params) {
@@ -254,6 +271,11 @@ Item {
     // (its app with its launch params; nothing without params); otherwise
     // it opens the dashboard.
     function tapBanner() {
+        // ActiveCallBanner::handleTap: back to the call.
+        if (activeCallShown) {
+            activated(activeCall.appId, JSON.stringify({ action: "activecall" }));
+            return;
+        }
         if (bannerActive) {
             if (bannerAppId !== "" && bannerParams !== "")
                 activated(bannerAppId, bannerParams);
@@ -336,7 +358,7 @@ Item {
                 anchors.top: parent.top
                 height: Math.min(Theme.bannerHeight, parent.height)
                 clip: true
-                visible: root.bannerActive && !root.dashboardOpen
+                visible: root.bannerActive && !root.dashboardOpen && !root.activeCallShown
 
                 Image {
                     anchors.fill: parent
@@ -368,6 +390,50 @@ Item {
                 }
             }
 
+            // Phones: the call, its icon, who it is with and how long
+            // (ActiveCallBanner.cpp: black, white 16 px text, 2 px in).
+            Rectangle {
+                id: activeCallRow
+                objectName: "activeCallBanner"
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                height: Math.min(Theme.bannerHeight, parent.height)
+                color: Theme.black
+                visible: root.activeCallShown && !root.dashboardOpen
+                property real now: Date.now()
+                Timer {
+                    interval: 450
+                    repeat: true
+                    running: activeCallRow.visible
+                    triggeredOnStart: true
+                    onTriggered: activeCallRow.now = Date.now()
+                }
+                readonly property string elapsed: root.activeCall ? root.callTime(root.activeCall.startTime, now) : ""
+                AppIcon {
+                    id: activeCallIcon
+                    x: Theme.px(2)
+                    y: Theme.px(2)
+                    size: parent.height - Theme.px(4)
+                    showLabel: false
+                    source: root.activeCall ? root.activeCall.icon : ""
+                }
+                Text {
+                    id: activeCallText
+                    objectName: "activeCallText"
+                    anchors.left: activeCallIcon.right
+                    anchors.leftMargin: Theme.px(4)
+                    anchors.right: parent.right
+                    anchors.rightMargin: Theme.px(2)
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: (root.activeCall ? root.activeCall.message : "") + " " + activeCallRow.elapsed
+                    color: Theme.text
+                    elide: Text.ElideMiddle
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.px(16)
+                }
+            }
+
             // Phones: the waiting notifications' icons, once the banner is gone.
             Row {
                 id: phoneIcons
@@ -375,7 +441,7 @@ Item {
                 anchors.rightMargin: Theme.px(8)
                 y: (Theme.bannerHeight - height) / 2
                 spacing: Theme.px(4)
-                visible: !root.overlay && !root.bannerActive && !root.dashboardOpen
+                visible: !root.overlay && !root.bannerActive && !root.dashboardOpen && !root.activeCallShown
                 Repeater {
                     model: root.overlay ? null : root.model
                     delegate: AppIcon {
@@ -395,7 +461,7 @@ Item {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 height: Theme.bannerHeight
-                visible: (root.hasNotifications || root.bannerActive) && !root.dashboardOpen
+                visible: (root.hasNotifications || root.bannerActive || root.activeCallShown) && !root.dashboardOpen
                 onClicked: root.tapBanner()
             }
 

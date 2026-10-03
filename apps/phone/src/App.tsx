@@ -18,7 +18,7 @@ import { primaryCall, ringingCall, telephony, type Call } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import { AppMenu, BackProvider, RadioToolGroup, ToolBar, dialable, useBack } from "@phoenix/ui";
 import { callLog, otherParty, type PhoneCall } from "./lib/calllog";
-import { useCallBookkeeping, useCallStatus, usePeople, useVoicemail, useWide } from "./lib/hooks";
+import { useActiveCallBanner, useCallBookkeeping, useCallStatus, usePeople, useVoicemail, useWide } from "./lib/hooks";
 import { Dialer } from "./views/Dialer";
 import { CallLog } from "./views/CallLog";
 import { Favorites } from "./views/Favorites";
@@ -66,6 +66,7 @@ function Phone() {
     const lastDialed = useLastDialed();
     useCallBookkeeping(status.calls, people);
     useIncomingAlert(status.calls, people);
+    useActiveCallBanner(status.calls, people);
 
     useEffect(() => {
         if (params.number) {

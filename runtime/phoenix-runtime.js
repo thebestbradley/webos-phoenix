@@ -360,9 +360,18 @@
         clearBannerMessages: function () {},
         addNewContentIndicator: function () { return "nci"; },
         removeNewContentIndicator: function () {},
-        addActiveCallBanner: function () {},
-        removeActiveCallBanner: function () {},
-        updateActiveCallBanner: function () {},
+        // The phone's active-call banner (ActiveCallBanner.cpp): who the call
+        // is with, timed from startTime (seconds since 1970); a tap
+        // relaunches the app with {action: "activecall"}.
+        addActiveCallBanner: function (icon, message, startTime) {
+            host.postToHost("activeCallBanner", { op: "add", icon: icon ? String(icon) : "", message: String(message || ""),
+                                                  startTime: +startTime || 0 });
+        },
+        removeActiveCallBanner: function () { host.postToHost("activeCallBanner", { op: "remove" }); },
+        updateActiveCallBanner: function (icon, message, startTime) {
+            host.postToHost("activeCallBanner", { op: "update", icon: icon ? String(icon) : "", message: String(message || ""),
+                                                  startTime: +startTime || 0 });
+        },
 
         // Synchronous file read. Returns undefined for missing files, which
         // MojoLoader relies on (e.g. to fall back from concatenated.js to the
