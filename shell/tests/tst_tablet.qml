@@ -120,6 +120,20 @@ Item {
             tryCompare(fill, "color", Theme.statusBarFill, 1000);
         }
 
+        // At most ten notification icons' width in the bar; the leftmost
+        // past it is cut off (StatusBar.cpp:128).
+        function test_notificationIconsCappedAtTen() {
+            for (var i = 0; i < 12; ++i)
+                windows.notify("org.webosphoenix.messaging", "Palm Pre", "Hi " + i);
+            shell.notifications.bannerActive = false;
+            var icons = findChild(shell, "tabletNotificationIcons");
+            tryVerify(function() { return icons.visible; }, 3000);
+            tryCompare(icons, "width", Theme.px(290), 2000);
+            verify(icons.clip);
+            while (windows.notifications.count > 0)
+                windows.dismissNotification(0);
+        }
+
         // Turned to portrait (the TouchPad held with its home button down):
         // still the tablet layout, laid out 768 wide; the bottom-edge flick
         // comes from the UI's bottom edge, wherever that is on the screen

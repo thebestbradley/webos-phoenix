@@ -621,24 +621,35 @@ Item {
             source: Theme.asset("statusBar/status-bar-separator.png")
             opacity: 1 - notifTab.opacity
         }
-        Row {
+        // At most ten icons' width (MAX_NOTIF_ICONS x (24 + 5), StatusBar.
+        // cpp:128); past it the leftmost is cut off (StatusBarNotificationArea::
+        // paint, "paint partial").
+        Item {
             id: tabletIcons
+            objectName: "tabletNotificationIcons"
             visible: root.overlay && root.hasNotifications && !root.bannerActive
             anchors.right: parent.right
             anchors.rightMargin: root.statusBarRightInset + Theme.px(6)
             y: -Theme.statusBarHeight + (Theme.statusBarHeight - height) / 2
-            spacing: Theme.px(5)                                        // StatusBar.h:31-32
-            Repeater {
-                model: root.overlay ? root.model : null
-                delegate: AppIcon {
-                    required property var model
-                    size: Theme.px(22)
-                    showLabel: false
-                    color: model.color
-                    glyph: model.glyph
-                    // The notification's small icon (a dashboard window's
-                    // "icon" attribute), or its app's.
-                    source: model.icon || ""
+            width: Math.min(tabletIconRow.width, Theme.px(10 * (24 + 5)))
+            height: tabletIconRow.height
+            clip: true
+            Row {
+                id: tabletIconRow
+                anchors.right: parent.right
+                spacing: Theme.px(5)                                        // StatusBar.h:31-32
+                Repeater {
+                    model: root.overlay ? root.model : null
+                    delegate: AppIcon {
+                        required property var model
+                        size: Theme.px(22)
+                        showLabel: false
+                        color: model.color
+                        glyph: model.glyph
+                        // The notification's small icon (a dashboard window's
+                        // "icon" attribute), or its app's.
+                        source: model.icon || ""
+                    }
                 }
             }
         }

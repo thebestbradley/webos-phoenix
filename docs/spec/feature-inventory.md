@@ -3,7 +3,7 @@
 Checklist of every user-facing system-UI feature that the Open webOS `luna-sysmgr` source shows evidence of
 (<https://github.com/openwebos/luna-sysmgr> at commit `1393f0af`; paths below are relative to it). Tick items off as Phoenix implements them. A tick means it works in the simulator; what a device still needs is in
 [`GAPS.md`](GAPS.md) and [`../ROADMAP.md`](../ROADMAP.md). Partly done items stay unticked, with a *Phoenix:* note on what is done
-and what is missing. (Last checked against the code on 2 October 2026.)
+and what is missing. (Last checked against the code on 3 October 2026.)
 The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legacy-ui-spec.md), with section numbers in brackets.
 
 ## 1. Card view / multitasking [spec §1]
@@ -22,24 +22,24 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Dimming of cards that aren't active (0.8). `CardWindow.cpp:245-255`
 - [x] Loading card: splash icon, pulsing glow and splash background while an app launches. `Src/lunaui/cards/CardLoading.cpp` *Phoenix: CardLoading.qml: the app's splashicon fitted to SplashIconSize (else its launcher icon at 1.5×), the pulsing glow, and its appinfo.json splashBackground tiled from the top left (else loading-bg.png). Not the per-window splashbackgroundname a window can name when it opens.*
 - [ ] In-app scene push/pop zoom transition. `Src/lunaui/cards/CardTransition.cpp`
-- [ ] Modal cards (320x480 child window over a dimmed parent), via `launchModalApp`/`dismissModalApp`. `CardWindow.cpp:1855-2125`; `Src/base/SystemService.cpp:247-248`
+- [ ] Modal cards (320x480 child window over a dimmed parent), via `launchModalApp`/`dismissModalApp`. `CardWindow.cpp:1855-2125`; `Src/base/SystemService.cpp:247-248` *Phoenix: not done; no released app calls launchModalApp (the core apps' "modal" dialogs are popups in their own page).*
 - [x] Full-screen apps that hide the status bar. `Src/base/SystemUiController.cpp:1389-1400` *Phoenix: in the simulator (enableFullScreenMode).*
 - [x] Card rotation and orientation lock per app (fixed-orientation apps). `CardWindow.cpp:2536-`; `Src/lunaui/cards/CardHostWindow.cpp:180-240`
 - [x] Keyboard navigation of cards (←/→, Enter, Ctrl+Backspace). `CardWindowManager.cpp:1189-1212`
 - [ ] First-use "dismiss card" tutorial dialog. `CardWindowManager.cpp:1168-1187`; `uiComponents/DismissCardTutorial/dismissDialog.qml`
-- [ ] Card limit and low-memory launch blocking, with a low-memory alert dialog. `conf/luna.conf:63-65`; `Src/base/MemoryMonitor.cpp`; `uiComponents/MemoryAlert/alert.qml`
+- [x] Card limit and low-memory launch blocking, with a low-memory alert dialog. `conf/luna.conf:63-65`; `Src/base/MemoryMonitor.cpp`; `uiComponents/MemoryAlert/alert.qml` *Phoenix: MemoryMonitor (MemAvailable) refuses a launch when memory is low, except phone, contacts and messaging, and MemoryAlert.qml says "Sorry, Too Many Cards" (phoenix-sim --low-memory). The card limit is off in the original too (CardLimit=-1). The device source does not refuse launches yet.*
 - [x] Card-view wallpaper, rotated for landscape. `Src/lunaui/WindowServerLuna.cpp:89-156,900-928`
 - [ ] Touch-to-Share "ghost card" throw animation and glow. `CardWindowManager.cpp:2915-2957`; `Src/base/visual/TouchToShareGlow.cpp`
 
 ## 2. Status bar [spec §2]
 
 - [x] 28 px status bar: carrier or app title, clock, battery, and signal/connection icons. `Src/lunaui/status-bar/StatusBar.cpp`
-- [ ] App-tinted status bar (custom color and title while an app is maximized). `StatusBar.cpp:476-520` *Phoenix: the maximized app's title is shown; no per-app colour yet (GAPS S6).*
+- [x] App-tinted status bar (custom color and title while an app is maximized). `StatusBar.cpp:476-520` *Phoenix: the maximized app's title, and on tablets its setWindowProperties statusBarColor, faded to over 300 ms (GAPS S6).*
 - [x] Tappable title for the app menu (tablet). `StatusBar.cpp:111-116`
 - [ ] Battery gauge with 12 levels, charging variants and error state; "battery full" sound. `StatusBarBattery.cpp` *Phoenix: levels, charging and the "battery full" sound done; no error state yet.*
 - [x] Clock in 12/24 h, following the locale time-format preference. `StatusBarClock.cpp:198-232`
 - [ ] Icons: RSSI (GSM / 1x / EV-DO dual), WAN type, Bluetooth, Wi-Fi bars, TTY, HAC, call forwarding, roaming (triangle variant), VPN, rotation lock, mute, airplane mode. `StatusBarInfo.cpp:183-326` *Phoenix: airplane, mute, rotation lock, VPN, Wi-Fi, Bluetooth and signal done; not yet WAN type, dual RSSI, TTY, HAC, call forwarding, roaming, connecting states.*
-- [ ] Notification icon strip in the status bar (tablet, up to 10). `StatusBarNotificationArea.cpp`; `StatusBar.h:31-32` *Phoenix: done (Notifications.qml tabletIcons); not capped at 10.*
+- [x] Notification icon strip in the status bar (tablet, up to 10). `StatusBarNotificationArea.cpp`; `StatusBar.h:31-32` *Phoenix: Notifications.qml's tablet icons, at most ten icons' width with the leftmost past it cut off.*
 - [x] Phone rounded screen corners. `Src/lunaui/status-bar/MenuWindowManager.cpp:126-146` *Phoenix: at the positive space's corners in every view, hidden while a full-screen card covers the screen.*
 
 ## 3. System menu (status-bar drop-down) [spec §3]
@@ -63,10 +63,10 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Tablet: notification drop-down (320 px) from the status bar. `uiComponents/DashboardMenu/DashboardMenu.qml`; `DashboardWindowManager.cpp:142-170`
 - [ ] Dashboards (persistent app mini-windows, 52 px rows) with swipe-to-dismiss, persistent (non-dismissable) variant, and scrolling after 5.5 rows. `Src/lunaui/notifications/DashboardWindowContainer.cpp` *Phoenix: 52 px rows, swipe to dismiss, scrolling after 5.5 rows done; app dashboards persistent only as live activities (no persistent dashboard variant).*
 - [x] Popup alerts (incoming call, alarm, calendar reminder, system alerts) filtered by the policy file. `Src/lunaui/notifications/AlertWindow.cpp`; `conf/notificationPolicy.conf`; `NotificationPolicy.cpp` *Phoenix: with the notificationPolicy.conf queue.*
-- [ ] Transient alerts. `DashboardWindowManager.cpp:183-190`
+- [ ] Transient alerts. `DashboardWindowManager.cpp:183-190` *Phoenix: the volume indicator on transient-alart-bg.png (GAPS N7); not transient alert windows opened by apps.*
 - [x] Active-call banner with running call timer. `Src/lunaui/notifications/ActiveCallBanner.cpp` *Phoenix: done on phones (GAPS N7).*
 - [x] Volume / ringer HUD. `Src/lunaui/notifications/VolumeControlAlertWindow.cpp` *Phoenix: done (`VolumeIndicator.qml`; GAPS N7).*
-- [ ] QML alert windows (generic system dialogs). `Src/lunaui/notifications/QmlAlertWindow.cpp`; `uiComponents/MessageDialog/MessageDialog.qml`
+- [ ] QML alert windows (generic system dialogs). `Src/lunaui/notifications/QmlAlertWindow.cpp`; `uiComponents/MessageDialog/MessageDialog.qml` *Phoenix: the memory alert (MemoryAlert.qml) in the popup alert's place, and the launcher's app dialog; not a generic MessageDialog service.*
 - [ ] Native alert manager (low-level system alerts, e.g. low battery). `Src/lunaui/notifications/NativeAlertManager.cpp` *Phoenix: low battery comes from luna-systemui's popup; no native alert manager.*
 - [ ] LED notification throbber and blink-notifications preferences. `conf/defaultPreferences.txt` (`LEDThrobberEnabled`, `BlinkNotifications`); `Src/base/CoreNaviLeds.cpp` *Phoenix: the Blink Notifications preference only; nothing blinks yet.*
 - [x] "Show alerts when locked" preference. `conf/defaultPreferences.txt` (`showAlertsWhenLocked`)
@@ -142,7 +142,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Boot and shutdown sounds, charging sounds, and the system sound set. `sounds/`; `Src/base/settings/Settings.cpp:103-107` *Phoenix: in the simulator; on a device the MP3s need WAV copies (GAPS A1).*
 - [ ] Ringtone, alert tone and notification tone preferences. `conf/defaultPreferences.txt` *Phoenix: the ringtone is chosen in Settings > Sounds; alert and notification tones have no picker.*
 - [ ] Wallpaper preference, plus a separate dock wallpaper. `conf/defaultPreferences.txt`; `Src/base/settings/Preferences.cpp` (`dockwallpaper`) *Phoenix: wallpaper done (Settings > Screen & Lock); no dock wallpaper.*
-- [ ] Auto-brightness (ambient light sensor), brightness scales, display timeout and dimming. `Src/base/AmbientLightSensor.cpp`; `Src/base/DisplayManager.cpp:95-115`; `conf/luna.conf:49-53` *Phoenix: brightness; the timeout and dimming done (`Display.qml`: dim at two thirds of "Turn off after", off a third later, 5 s on the lock screen; banners, alerts, calls and the charger turn it on; `blockScreenTimeout` keeps it on). No ambient light sensor; a device's backlight follows `Shell.display.state` (device layer).*
+- [ ] Auto-brightness (ambient light sensor), brightness scales, display timeout and dimming. `Src/base/AmbientLightSensor.cpp`; `Src/base/DisplayManager.cpp:95-115`; `conf/luna.conf:49-53` *Phoenix: brightness, and the timeout and dimming (Display.qml: dim at two thirds of "Turn off after", off a third later, 5 s on the lock screen, woken by alerts, calls and the charger); no light sensor yet (device).*
 - [x] UI rotation driven by the accelerometer, with rotation lock (simulator; the device's sensor is not wired yet). `Src/base/WindowServer.cpp:1900-1960`; `conf/luna.conf:121`
 - [ ] Haptics / vibration (`vibrate`, `vibrateNamedEffect`). `Src/base/HapticsController.cpp`; README.md:127-128 *Phoenix: the shell counts vibrations; nothing is felt, no vibrateNamedEffect.*
 - [ ] Headset, audio, media and ringer switch keys (`com.palm.keys/*`). README.md:96-99
