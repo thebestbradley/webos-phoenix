@@ -11,6 +11,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMimeDatabase>
+#include <QRegularExpression>
 #include <QUrl>
 #include <algorithm>
 
@@ -67,6 +68,43 @@ void Rootfs::setInstalledDir(const QString &dir)
 {
     m_installedDir = dir;
     rescan();
+}
+
+// A PNG's width, from its header (0 if it is not a PNG). The simulator's
+// tests link Qt Core only, so no QImageReader.
+int Rootfs::pngSide(const QString &file)
+{
+    QFile f(file);
+    if (!f.open(QIODevice::ReadOnly))
+        return 0;
+    const QByteArray head = f.read(24);
+    if (head.size() < 24 || !head.startsWith("\x89PNG") || head.mid(12, 4) != "IHDR")
+        return 0;
+    const auto *p = reinterpret_cast<const uchar *>(head.constData()) + 16;
+    return int((quint32(p[0]) << 24) | (quint32(p[1]) << 16) | (quint32(p[2]) << 8) | quint32(p[3]));
+}
+
+// The biggest <stem>-<N>x<N>.png an overlay puts beside app `id`'s icon
+// (`icon` is relative to the app's folder), or "" if none does.
+QString Rootfs::overlayLargestIcon(const QString &id, const QString &icon) const
+{
+    const QFileInfo iconInfo(icon);
+    const QRegularExpression re(QLatin1Char('^') + QRegularExpression::escape(iconInfo.completeBaseName())
+        + QStringLiteral("-(\\d+)x\\1\\.") + QRegularExpression::escape(iconInfo.suffix()) + QLatin1Char('$'));
+    QString best;
+    int bestSide = 0;
+    for (const QString &overlay : m_overlays) {
+        const QDir dir(QDir::cleanPath(overlay + QString::fromLatin1(kAppsPrefix) + id + QLatin1Char('/') + iconInfo.path()));
+        const auto names = dir.entryList({ iconInfo.completeBaseName() + QStringLiteral("-*.") + iconInfo.suffix() }, QDir::Files);
+        for (const QString &name : names) {
+            const auto m = re.match(name);
+            if (m.hasMatch() && m.captured(1).toInt() > bestSide) {
+                bestSide = m.captured(1).toInt();
+                best = dir.filePath(name);
+            }
+        }
+    }
+    return best;
 }
 
 void Rootfs::rescan()
@@ -126,8 +164,20 @@ void Rootfs::rescan()
         QString large = app.value(QStringLiteral("splashicon")).toString();
         if (large.isEmpty())
             large = app.value(QStringLiteral("largeIcon")).toString();
-        entry[QStringLiteral("largeIcon")] = large.isEmpty() || !QFileInfo::exists(appDir + QLatin1Char('/') + large)
-            ? QString() : QUrl::fromLocalFile(appDir + QLatin1Char('/') + large).toString();
+        QString largeFile = large.isEmpty() ? QString() : appDir + QLatin1Char('/') + large;
+        if (!largeFile.isEmpty() && !QFileInfo::exists(largeFile))
+            largeFile.clear();
+        // The compat overlay may add bigger icons beside the app's icon:
+        // icon-512x512.png for the Open webOS apps, whose own folders are
+        // submodules we leave unchanged (tools/upscale-app-icons.py). On a
+        // device they are installed beside the icon, where HiDpi::icon finds
+        // them; here the icon is read from the app's own folder, so the
+        // biggest one the overlay adds is the large icon when it beats the
+        // splashicon (the splashicon, beside the icon, is still found).
+        const QString overlayIcon = overlayLargestIcon(id, icon);
+        if (!overlayIcon.isEmpty() && pngSide(overlayIcon) > (largeFile.isEmpty() ? 0 : pngSide(largeFile)))
+            largeFile = overlayIcon;
+        entry[QStringLiteral("largeIcon")] = largeFile.isEmpty() ? QString() : QUrl::fromLocalFile(largeFile).toString();
         // Installed by the user: the launcher may delete it (uninstall).
         entry[QStringLiteral("installed")] = installed;
         if (installed)

@@ -48,6 +48,18 @@ int main(int argc, char **argv)
     SimInstaller installer(&rootfs);
     const int builtIn = rootfs.apps().size();
 
+    // The Open webOS apps' 512 px icons sit in the compat overlay, not
+    // beside their icons in the submodules: they are the large icon.
+    check(entry(rootfs, QStringLiteral("com.palm.app.calculator")).value(QStringLiteral("largeIcon")).toString()
+              .endsWith(QStringLiteral("compat/rootfs/usr/palm/applications/com.palm.app.calculator/icon-512x512.png")),
+          "a core app's large icon is the overlay's 512 px one");
+    check(entry(rootfs, QStringLiteral("com.palm.app.calendar")).value(QStringLiteral("largeIcon")).toString()
+              .endsWith(QStringLiteral("com.palm.app.calendar/images/icon-512x512.png")),
+          "... found beside an icon in a subfolder too");
+    check(entry(rootfs, QStringLiteral("org.webosphoenix.phone")).value(QStringLiteral("largeIcon")).toString()
+              .endsWith(QStringLiteral("icon-256x256.png")),
+          "a Phoenix app's large icon is still its splashicon");
+
     const QString id = QStringLiteral("org.example.hello");
     const QByteArray info = R"({"id": "org.example.hello", "title": "Hello", "version": "1.0.0", "main": "index.html"})";
     QString err = installer.install(id, { file(QStringLiteral("appinfo.json"), info), file(QStringLiteral("index.html"), "<h1>1</h1>"),

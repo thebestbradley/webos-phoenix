@@ -62,6 +62,9 @@ public:
     static QString urlFor(const QString &devicePath);
 
 private:
+    static int pngSide(const QString &file);
+    QString overlayLargestIcon(const QString &id, const QString &icon) const;
+
     bool m_valid = false;
     QString m_error;
     QString m_repoDir;
