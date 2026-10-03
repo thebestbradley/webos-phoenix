@@ -5,16 +5,28 @@
 // of Enyo 1.0's contactsui (images/PROVENANCE.md).
 
 import { presenceClass } from "@phoenix/luna";
+import { art, srcSet } from "@phoenix/ui";
 import statusAvailable from "./images/status-available.png";
+import statusAvailable2 from "./images/status-available@2x.png";
+import statusAvailable3 from "./images/status-available@3x.png";
 import statusAway from "./images/status-away.png";
+import statusAway2 from "./images/status-away@2x.png";
+import statusAway3 from "./images/status-away@3x.png";
 import statusOffline from "./images/status-offline.png";
+import statusOffline2 from "./images/status-offline@2x.png";
+import statusOffline3 from "./images/status-offline@3x.png";
 
-const PRESENCE = { available: statusAvailable, busy: statusAway, offline: statusOffline };
+// With their HiDPI variants (tools/hidpi-art.json, docs/spec/hidpi-art.md).
+const PRESENCE = {
+    available: art(statusAvailable, statusAvailable2, statusAvailable3),
+    busy: art(statusAway, statusAway2, statusAway3),
+    offline: art(statusOffline, statusOffline2, statusOffline3),
+};
 
 /** An IM buddy's presence: green available, orange busy, grey offline. */
 export const Presence = ({ availability, title }: { availability: number | undefined; title?: string }) => {
     const cls = presenceClass(availability);
-    return <img className={`presence-icon ${cls}`} src={PRESENCE[cls]} alt={title ?? cls} title={title} width={16} height={16} />;
+    return <img className={`presence-icon ${cls}`} src={PRESENCE[cls]} srcSet={srcSet(PRESENCE[cls])} alt={title ?? cls} title={title} width={16} height={16} />;
 };
 
 /** A picture, to attach one (a framed landscape). */

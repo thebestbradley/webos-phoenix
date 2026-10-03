@@ -97,20 +97,37 @@ size, and checks them (`--check`).
 every picture in the directory has its variants, each the right size and
 true to its 1x art. The 1x files are never changed.
 
+Three more ways, for the web pages' art below: `downscale` from a larger
+drawing of the same picture elsewhere in the repository (`source`: an app's
+256 px icon for its 48 px copies); `pixel`, each pixel a square, for a
+pattern drawn a pixel at a time (Calendar's half-hour hatch), which
+smoothing turns grey and the model loses; and `model` or `smooth` from a
+larger drawing (`source`: Enyo's `images-1.5` art, the contacts framework's
+`1.5/` art) where it is exactly 1.5 times the 1x art and within 5 of it.
+Sprite sheets are enlarged and resized a cell at a time (`tiles`, or `split`
+at their clear rows where the cells are not all the same size), so no cell
+bleeds into the next; art that
+is tiled is resampled as tiled (`wrap`). Byte-identical pictures share their
+variants (`copy`). A JPEG's variants are JPEGs, an animated GIF's are
+animated GIFs (each frame enlarged, the edge where it is half covered), and
+an opaque palette PNG's (the browser's start page, a dithered grey
+gradient) are palette PNGs.
+
 To add art: add it to `tools/hidpi-art.json` (`original` with its source path
 when Open webOS / Enyo has it larger, else `upscale` with the method that
 suits it), run `tools/hidpi-art.py --missing --ref <checkouts> --model
 RealESRGAN_x4plus.pth`, look at the results beside the 1x art (at 3x and
 more: grain, halos, seams), draw it as above, and record it in
-`shell/assets/openwebos/PROVENANCE.md`.
+`shell/assets/openwebos/PROVENANCE.md` (the shell's) or `compat/README.md`
+(the original apps').
 
 ## Web pages' art
 
 The shell zooms a web view by `Theme.u`, which Chromium reports as the
-page's device pixel ratio, so a page picks its own art: CSS from
-`-webkit-image-set()` (the prefixed form, which the simulator's Chromium
-has), an `<img>` from `srcset`. Sizes, background positions and
-`border-image` slices stay in the 1x art's pixels.
+page's device pixel ratio (on a Retina Mac the window's ratio is 2 as well),
+so a page picks its own art: CSS from `-webkit-image-set()` (the prefixed
+form, which the simulator's Chromium has), an `<img>` from `srcset`. Sizes,
+background positions and `border-image` slices stay in the 1x art's pixels.
 
 - **Phoenix apps** (`apps/shared/phoenix-ui/assets`: the Enyo Heritage art,
   the dial pad, Wi-Fi icons, the contacts avatar). Each has `@2x` and `@3x`
@@ -120,21 +137,114 @@ has), an `<img>` from `srcset`. Sizes, background positions and
   with `-webkit-image-set()`; `tools/hidpi-art.py --check` fails on a
   `url()` of such art outside one. Pictures the apps use from script come
   from `icons` / `phoneArt` with `srcSet(url)` for an `<img>` and
-  `cssImage(url)` for a background.
-- **luna-systemui** (its alerts, dashboards and banners). The submodule
-  stays as it is: the variants of `images/` are in the compat overlay at the
-  same device path (`compat/rootfs/usr/lib/luna/system/luna-systemui/images`),
-  where a device installs them beside the originals.
-  `stylesheets/phoenix-hidpi.css` there (written by `tools/hidpi-art.py`)
-  repeats the original stylesheets' image rules with image sets, and each
-  alert page's `depends.js` overlay loads it last. The notification and
-  banner icons the system UI names by path (`notification-small-*.png`) are
-  drawn by the shell, which finds their variants the same way:
-  `HiDpi.addTwinDirectory` tells it, in the simulator, that the overlay's
-  directory is installed with the submodule's. Third parties' logos
-  (`notification-large-facebook.png` and the like, the App Catalog bag, the
-  Palm battery door) and a sample photo stay 1x: trademarks are not
-  licensed by Apache-2.0 (section 6).
+  `cssImage(url)` for a background (`art(x1, x2, x3)` registers an app's
+  own picture: Messaging's presence dots). `PageHeader`'s icon, and the
+  Settings list's, is a 64 px app icon with its 128 and 256 px sizes beside
+  it (`tools/render-app-icons.cjs` draws Phoenix's; Voice Dial's, luna-sysmgr's
+  64 px original, gets them from `tools/upscale-app-icons.py`), given as a
+  `srcset` (`iconSrcSet`); a unit test checks that every icon an app gives
+  `PageHeader` has them. The DAV and XMPP accounts' icons
+  (`apps/dav/public/accounts`, `runtime/accounts`) and Notification Lab's
+  divider have `@2x` and `@3x` beside them, which the accounts' pages get
+  from `phoenix-runtime.js` (below).
+- **The original apps, frameworks and system UI** in `third_party/`: the
+  seven Open webOS core apps, the Isis browser, Just Type
+  (`luna-applauncher`), luna-systemui (alerts, dashboards, banners, the file
+  picker), Enyo 1.0 (its build: the Onyx theme, the dashboard window; the
+  libraries the apps load: accounts, addressing, authlib, contactsui,
+  networkalerts, printdialog, syncui, systemui), the contacts framework
+  (`loadable-frameworks`), the account templates (`app-services`: the Palm
+  profile and the mail accounts) and Onyx for Enyo 2. The submodules
+  stay as they are. Each is a set in `tools/hidpi-art.json` with the device
+  paths it is served at (`devices`, checked against `runtime/rootfs.json`);
+  the variants are in the compat overlay at each, where a device installs
+  them beside the originals.
+
+  Which art needs variants was established by loading every page the
+  system shows (each app, its other windows: Email's compose, viewer and
+  account wizard, Calendar's reminder, Clock's alarm, the contacts picker,
+  Enyo's dashboard window and network alerts; Just Type, the system UI)
+  and taking every picture they load, every picture a stylesheet they
+  load names (its `url()` resolved as the browser does) and every picture
+  their scripts name. Pictures nothing reaches are listed as skipped with
+  that reason, so a picture a page starts to use fails `--check` until it
+  is covered. Some of those are named only by broken paths in the
+  originals (authlib's `styles.css` names `lib/images/`), which no browser
+  loads either.
+  - **Stylesheets** (`rewrite-css`): the overlay has a copy of each
+    stylesheet that names art with variants, every such `url()` an image set
+    of them, written and checked by `tools/hidpi-art.py` (the copy says so
+    at its top). A copy in place of the original, not a stylesheet loaded
+    after it: the cascade stays exactly the original's. (Repeating the
+    framework's rules in a stylesheet loaded last would undo the pages'
+    own: Just Type restyles `.enyo-button` and `.enyo-radiobutton` with the
+    same selectors.)
+  - **Enyo's 1.5x art.** `enyo-build.css` switches to `images-1.5/` art in
+    `@media (-webkit-min-device-pixel-ratio: 1.5)` blocks, with slices and
+    sizes for that art, which is not always 1.5 times the 1x art (74x54 for
+    50x36, its radio button bands 55 px for 37). Those rules stay as Enyo
+    wrote them, so ratios from 1.5 to 2 draw what Enyo drew; after each such
+    block the copy repeats, for `(-webkit-min-device-pixel-ratio: 2)`, the
+    same selectors' 1x rules with image sets (and `background-size: auto`
+    where the 1.5 rule set a size for its own art), so 2x and 3x screens get
+    `@2x` and `@3x` drawn as the 1x art is. Where the 1.5x art is exactly 1.5
+    times the 1x art and true to it (within 5), it is the source of the
+    `@2x` and `@3x` (`source`).
+  - **Pictures named from script** (an `<img>`'s `src`, an inline
+    background: Enyo's `Image`, `IconButton` and `ToolButton`, the apps'
+    templates): `phoenix-runtime.js` gives each `<img>` whose picture has
+    variants a `srcset`, and each inline background or border image an image
+    set, as the page sets them (a MutationObserver). `runtime/hidpi-art.json`
+    (written and checked by `tools/hidpi-art.py`, loaded once a page names a
+    picture) lists the art with variants by device directory. A page's own
+    `srcset` or image set is left alone.
+  - **Apps' icons in pages** (Just Type's results, Settings' Just Type and
+    Exhibition panes): `runtime/hidpi-art.json` also lists every app's
+    icons (appinfo.json's `icon` and its launch points') with the bigger
+    sizes beside them as the shell finds them (`icon-256x256.png`, also in
+    the compat overlay), each with its factor over the icon (4 for a 64 px
+    icon's 256 px one), so the runtime gives those an image set or srcset
+    too.
+  - **Pictures the shell draws** for a page (dashboard and banner icons
+    named by path, e.g. `notification-small-*.png`): the shell finds their
+    variants the same way as its own: `HiDpi.addTwinDirectory` tells it, in
+    the simulator, that the overlay's directory at a mount's or an app's
+    device path is installed with the repository's (`Rootfs::twinDirectories`).
+  - luna-systemui is served at two paths: its pages (`com.palm.systemui`)
+    run from `/usr/palm/applications/com.palm.systemui/`, while Enyo's file
+    picker and the sync dashboards name
+    `/usr/lib/luna/system/luna-systemui/`; its variants and stylesheet copies
+    are at both. So is Just Type: its page runs as `com.palm.launcher`, and
+    its search providers name their icons under
+    `/usr/lib/luna/system/luna-applauncher/images/`.
+
+  `node tools/test-hidpi.cjs` (in CI) loads the original apps and their
+  other windows, Just Type, the file picker, Enyo's dashboard window and
+  the Enyo 2 demo in headless Chromium at ratios 2 and 3 and fails on any
+  1x picture with variants they load, or on Enyo's 1.5x art. It also
+  parses each stylesheet copy beside its original and fails on a rule the
+  copy lost (a byte order mark left after the copy's header once made
+  Chromium drop Calculator's first rule; `tools/hidpi-art.py` reads the
+  originals without it).
+
+Left at 1x, each with its reason in `tools/hidpi-art.json`: third parties'
+logos (Amazon, Bing, CNN, Facebook, Google, IMDb, LinkedIn, Outlook,
+Twitter, Wikipedia, Yahoo, HP's App Catalog bag, the Accounts icon with
+Facebook's, Google's and Yahoo!'s logos, as released; trademarks are not
+licensed by Apache-2.0, section 6), pictures of products (the HP TouchPad,
+the Pre's battery door with the Palm logo), photographs and sample content
+(the first-use dial pad's sky, the apps' mock data, Email's spawn test page,
+a sample photo, Settings' wallpapers), the apps' icons themselves (the shell
+draws their 256 and 512 px files; see below), Calendar's dated launcher
+icons (the shell does not show `updateLaunchPointIcon`), Enyo's own 1.5x
+art (drawn as Enyo wrote it at ratios from 1.5 to 2), transparent pixels,
+and pictures no page reaches. Not loaded by anything: Enyo's Heritage theme
+and its debug sources (`source/`), the Enyo 1.0 libraries no app loads
+(captiveportal, palmstyle, telephony, wifi; the Phoenix apps have their own
+copies of the telephony and Wi-Fi art), Enyo 1.0 at
+`/usr/palm/frameworks/enyo/1.0/` (every page names `0.10`), Onyx's samples
+and designer art and Enyo 2's Layout samples (not installed with the
+library's pages).
 
 ## App icons
 
@@ -170,8 +280,3 @@ The originals' 512 px icons live in `compat/rootfs`, not beside their icons
 (the submodules are not changed). A device installs them beside the icon; the
 simulator, which reads the icon from the app's own folder, gives the biggest
 icon the overlay adds as the app's `largeIcon` (`shell/sim/rootfs.cpp`).
-
-Not covered: the original Open webOS apps' own pictures (`third_party/core-apps`,
-Enyo 1.0's Heritage theme in those apps, luna-systemui's file picker in
-`app/FilePicker`) are the page's to choose; Enyo's Onyx theme picks its
-`images-1.5` art by the page's devicePixelRatio.

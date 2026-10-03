@@ -144,6 +144,7 @@ jobs:
           export NODE_PATH="$(npm root -g)"
           node tools/test-apps.cjs --out app-tests/phone
           node tools/test-apps.cjs --tablet --out app-tests/tablet
+          node tools/test-hidpi.cjs
           node tools/test-settings.cjs --out app-tests/settings-phone
           node tools/test-settings.cjs --tablet --out app-tests/settings-tablet
           node tools/test-backup.cjs --out app-tests/backup-phone

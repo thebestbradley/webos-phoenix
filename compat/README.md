@@ -32,8 +32,25 @@ JSON files cannot say why they are here, so they are listed here:
 
 Pictures cannot say why they are here either:
 
-- `rootfs/usr/lib/luna/system/luna-systemui/images/*@2x.png`, `*@3x.png`:
-  HiDPI variants of luna-systemui's own `images/` (Apache-2.0), beside which
-  a device installs them; `stylesheets/phoenix-hidpi.css` asks for them.
-  `tools/hidpi-art.py` writes both and checks them (`--check`); see
-  `docs/spec/hidpi-art.md`.
+- `*@2x.*`, `*@3x.*` under `rootfs/usr/palm/applications/<id>/`,
+  `rootfs/usr/palm/frameworks/` (Enyo 1.0, Onyx for Enyo 2, the contacts
+  framework), `rootfs/usr/palm/public/accounts/` and
+  `rootfs/usr/lib/luna/system/` (luna-systemui, luna-applauncher): HiDPI
+  variants of the original apps', frameworks' and system UI's pictures, at
+  the device path each picture is served at, beside which a device installs
+  them. They are made from larger originals in the same Apache-2.0
+  repositories where one exists (Enyo's `images-1.5` art, the contacts
+  framework's `1.5/` art, an app's 256 px icon for its smaller copies),
+  else from the 1x art: modified versions under the same license, made by
+  `tools/hidpi-art.py`
+  (Real-ESRGAN `RealESRGAN_x4plus`, BSD-3-Clause, used as a tool and not
+  shipped, or plain resampling); `tools/hidpi-art.json` says which for each
+  picture. luna-systemui's are at both its paths: its system UI pages run
+  from `/usr/palm/applications/com.palm.systemui/`, its file picker and
+  some dashboards name `/usr/lib/luna/system/luna-systemui/`. So are
+  luna-applauncher's: Just Type runs as `com.palm.launcher`, and its search
+  providers name their icons under `/usr/lib/luna/system/luna-applauncher/`.
+- The stylesheets beside them (`enyo-build.css`, the apps' and libraries'
+  `*.css`) are copies of the originals that ask for those variants with
+  image sets, which `tools/hidpi-art.py` writes (each says so at its top)
+  and checks (`--check`). See `docs/spec/hidpi-art.md`.

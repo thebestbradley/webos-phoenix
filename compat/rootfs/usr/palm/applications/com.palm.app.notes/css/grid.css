@@ -1,0 +1,143 @@
+/* webOS Phoenix overlay (tools/hidpi-art.py): the original stylesheet, with each
+   picture that has HiDPI variants asked for as an image set of them
+   (docs/spec/hidpi-art.md). Do not edit; regenerate. */
+/* @@@LICENSE
+*
+*      Copyright (c) 2010-2013 LG Electronics, Inc.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+* http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*
+* LICENSE@@@ */
+
+/* Title Bar for GridView */
+.memo-count {
+  text-transform: capitalize;
+  white-space: nowrap;
+  line-height: 24px;
+  margin-top: 2px;
+  text-align: center;
+}
+
+#appView_grid_search_search_input {
+  width: 153px;
+}
+
+.search-input {
+  min-width: 250px;
+}
+
+.search-input .enyo-input-input {
+  min-width: 200px;
+}
+
+/* GridView */
+.memo-list {
+  position: relative;
+}
+
+.grid-scroller .enyo-scroller-scrollee {
+  padding: 15px;
+}
+
+.new-memo {
+  width: 224px;
+  height: 232px;
+  padding-top: 14px;
+  padding-left: 22px;
+  background: -webkit-image-set(url(../images/grid/new-memo-base.png) 1x, url(../images/grid/new-memo-base@2x.png) 2x, url(../images/grid/new-memo-base@3x.png) 3x) no-repeat;
+}
+
+.new-memo .swatch {
+  width: 200px;
+  height: 200px;
+}
+
+.memo-list.blue .new-memo .swatch {
+  background-image: -webkit-image-set(url(../images/grid/new-memo-blue.png) 1x, url(../images/grid/new-memo-blue@2x.png) 2x, url(../images/grid/new-memo-blue@3x.png) 3x);
+}
+
+.memo-list.green .new-memo .swatch {
+  background-image: -webkit-image-set(url(../images/grid/new-memo-green.png) 1x, url(../images/grid/new-memo-green@2x.png) 2x, url(../images/grid/new-memo-green@3x.png) 3x);
+}
+
+.memo-list.pink .new-memo .swatch {
+  background-image: -webkit-image-set(url(../images/grid/new-memo-pink.png) 1x, url(../images/grid/new-memo-pink@2x.png) 2x, url(../images/grid/new-memo-pink@3x.png) 3x);
+}
+
+.memo-list.yellow .new-memo .swatch {
+  background-image: -webkit-image-set(url(../images/grid/new-memo-yellow.png) 1x, url(../images/grid/new-memo-yellow@2x.png) 2x, url(../images/grid/new-memo-yellow@3x.png) 3x);
+}
+
+.memo-list.salmon .new-memo .swatch {
+  background-image: -webkit-image-set(url(../images/grid/new-memo-salmon.png) 1x, url(../images/grid/new-memo-salmon@2x.png) 2x, url(../images/grid/new-memo-salmon@3x.png) 3x);
+}
+
+.memo-preview {
+  -webkit-box-sizing: border-box;
+  width: 246px;
+  height: 246px;
+  font-size: 18px;
+  padding: 35px;
+  line-height: 25px;
+  word-break: break-word;
+  background-repeat: no-repeat;
+  overflow: hidden;
+  /* TODO: animations -webkit-transition: all 0.3s ease-in-out;*/
+}
+
+.memo-preview.zoom {
+  /* TODO: animations -webkit-transform: scale(3) translate(0px, 100px);*/
+}
+
+.memo-preview-content {
+  width: 176px;
+  height: 176px;
+  overflow: hidden;
+}
+
+.memo-preview-content {
+  /* TODO: animations -webkit-transition: opacity 0.1s ease-in-out;*/
+}
+
+.memo-preview.zoom .memo-preview-content {
+  /* TODO: animations opacity: 0;*/
+}
+
+.memo-preview.blue {
+  background-image: -webkit-image-set(url(../images/grid/memo-blue.png) 1x, url(../images/grid/memo-blue@2x.png) 2x, url(../images/grid/memo-blue@3x.png) 3x);
+}
+
+.memo-preview.green {
+  background-image: -webkit-image-set(url(../images/grid/memo-green.png) 1x, url(../images/grid/memo-green@2x.png) 2x, url(../images/grid/memo-green@3x.png) 3x);
+}
+
+.memo-preview.pink {
+  background-image: -webkit-image-set(url(../images/grid/memo-pink.png) 1x, url(../images/grid/memo-pink@2x.png) 2x, url(../images/grid/memo-pink@3x.png) 3x);
+}
+
+.memo-preview.yellow {
+  background-image: -webkit-image-set(url(../images/grid/memo-yellow.png) 1x, url(../images/grid/memo-yellow@2x.png) 2x, url(../images/grid/memo-yellow@3x.png) 3x);
+}
+
+.memo-preview.salmon {
+  background-image: -webkit-image-set(url(../images/grid/memo-salmon.png) 1x, url(../images/grid/memo-salmon@2x.png) 2x, url(../images/grid/memo-salmon@3x.png) 3x);
+}
+
+.string-highlight {
+	background-color: transparent;
+	border: none;
+	border-width: 0;
+	-webkit-border-image: none;
+	margin: 0;
+	background: -webkit-image-set(url(../images/grid/underline.png) 1x, url(../images/grid/underline@2x.png) 2x, url(../images/grid/underline@3x.png) 3x) center bottom repeat-x;
+}

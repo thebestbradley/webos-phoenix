@@ -60,7 +60,13 @@ luna-systemui and Enyo 1.0 (listed in art/app-icons/PROVENANCE.md):
     Licensed under the Apache License, Version 2.0.
 The 512 px icons of the Open webOS core apps and the Isis browser in
 compat/rootfs/usr/palm/applications/ are enlargements of those apps' own
-icons (same copyright and license as above).
+icons, and the HiDPI variants (name@2x.png, name@3x.png) in compat/rootfs/
+enlargements of the pictures of the Open webOS apps, Enyo 1.0, Onyx for
+Enyo 2, luna-applauncher, luna-systemui, the contacts framework and the
+account templates, served beside them; the stylesheets there that ask for
+them are copies of those projects' stylesheets with their url()s changed
+(same copyright and license as above). Voice Dial's 128 and 256 px icons
+(apps/voicedial/public/) are enlargements of luna-sysmgr's 64 px one.
 
 runtime/phoenix-runtime.js includes the VPN provider table and the form
 field descriptors (files/formfields/*.json) of LuneOS luneos-vpn-adapter
