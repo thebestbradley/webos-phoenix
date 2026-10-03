@@ -127,6 +127,16 @@ FocusScope {
         onWakeRequested: backlight.turnOn()
         passKeys: [Qt.Key_Home, Qt.Key_F3, Qt.Key_PowerOff, Qt.Key_VolumeUp, Qt.Key_VolumeDown, Qt.Key_F10, Qt.Key_F11]
         onActivity: backlight.activity()
+        tapRadius: Theme.tapRadius
+        onTapped: (pos) => {
+            var p = shell.mapFromItem(null, pos.x, pos.y);
+            // Not over the keyboard, whose keys show their own
+            // (InputWindowManager::doReticle).
+            var k = ime.mapFromItem(shell, p.x, p.y);
+            if (ime.visible && ime.contains(k))
+                return;
+            reticle.startAt(p.x, p.y);
+        }
     }
     Connections {
         target: notes
@@ -1701,6 +1711,7 @@ FocusScope {
             onPrevious: shell.gestureSwitchApp(true)
             onNext: shell.gestureSwitchApp(false)
             advancedGestures: !!(shell.system && shell.system.advancedGestures)
+            lit: cards.maximized && !shell.locked
             onTapped: shell.gestureTap()
             // With the keyboard up, hold and slide to move the cursor.
             cursorControl: ime.visible
@@ -1720,6 +1731,36 @@ FocusScope {
         z: 10000
         PointHandler {
             id: fingers
+        }
+    }
+
+    // The reticle: penindicator-ripple.png where a tap lands, growing to
+    // one and a half times as it fades over 200 ms (WindowServer::
+    // gestureEvent, ReticleItem::startAt; lunaAnimations.conf Reticle).
+    Image {
+        id: reticle
+        objectName: "reticle"
+        z: 99998
+        source: Theme.asset("penindicator-ripple.png")
+        width: Theme.artWidth(source)
+        height: Theme.artHeight(source)
+        visible: false
+        function startAt(x, y) {
+            reticleAnim.stop();
+            reticle.x = x - width / 2;
+            reticle.y = y - height / 2;
+            reticle.opacity = 1;
+            reticle.scale = 1;
+            reticle.visible = true;
+            reticleAnim.start();
+        }
+        SequentialAnimation {
+            id: reticleAnim
+            ParallelAnimation {
+                NumberAnimation { target: reticle; property: "opacity"; from: 1; to: 0; duration: Theme.reticleDuration }
+                NumberAnimation { target: reticle; property: "scale"; from: 1; to: 1.5; duration: Theme.reticleDuration }
+            }
+            PropertyAction { target: reticle; property: "visible"; value: false }
         }
     }
 

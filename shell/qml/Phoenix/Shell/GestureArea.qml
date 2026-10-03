@@ -49,10 +49,42 @@ Item {
     // A short swipe; the legacy thresholds were tuned for a 320px wide area.
     readonly property real threshold: Theme.px(30)
 
-    // Light bar feedback: brightens on each gesture.
+    // The light bar is on while an app is maximized (and the screen
+    // unlocked), off in card view (CoreNaviManager::restoreLightbar).
+    property bool lit: false
+
+    // A tap or the cursor hold: the bar brightens and fades.
     property real glow: 0
     NumberAnimation on glow { id: glowFade; to: 0; duration: 600; running: false }
     function flash() { glow = 1; glowFade.restart(); }
+
+    // Each gesture's own light (CoreNaviManager::renderGestureOnLightbar):
+    // the launcher's swipe up a "waterdrop" from the centre outwards, a
+    // swipe down the reverse; Back / Previous runs to the left, forward /
+    // Next to the right. Over a lit bar it runs dark, as the LEDs went out
+    // and back on (ledLightbarFullSwipe).
+    readonly property string lastLight: _lastLight
+    property string _lastLight: ""
+    function light(kind) {
+        _lastLight = kind;
+        lightAnim.stop();
+        sweep.color = lit ? Qt.rgba(0, 0, 0, 0.75) : "#FFFFFF";
+        var w = bar.width;
+        if (kind === "waterdrop" || kind === "reverse") {
+            var out = kind === "waterdrop";
+            spreadFrom.value = out ? 0 : w;
+            spreadTo.value = out ? w : 0;
+            runFrom.value = runTo.value = 0;
+            spreadAnim.duration = Theme.motion(400);
+        } else {
+            var left = kind === "left";
+            spreadFrom.value = spreadTo.value = w * 0.35;
+            runFrom.value = left ? w : -w * 0.35;
+            runTo.value = left ? -w * 0.35 : w;
+            spreadAnim.duration = Theme.motion(500);
+        }
+        lightAnim.start();
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -60,11 +92,41 @@ Item {
     }
 
     Rectangle {
+        id: bar
+        objectName: "lightBar"
         anchors.centerIn: parent
         width: parent.width * 0.3
         height: Math.max(2, Theme.px(3))
         radius: height / 2
-        color: Qt.rgba(1, 1, 1, 0.25 + 0.75 * area.glow)
+        color: Qt.rgba(1, 1, 1, area.lit ? 1 : 0.25 + 0.75 * area.glow)
+        Behavior on color { ColorAnimation { duration: Theme.motion(300) } }
+        clip: true
+
+        Rectangle {
+            id: sweep
+            objectName: "lightSweep"
+            property real spread: 0
+            property real run: 0
+            height: parent.height
+            radius: height / 2
+            width: spread
+            // A drop spreads from the centre; a run moves along the bar.
+            x: spreadTo.value === spreadFrom.value ? run : (parent.width - spread) / 2
+            opacity: 0
+        }
+        SequentialAnimation {
+            id: lightAnim
+            PropertyAction { target: sweep; property: "opacity"; value: 1 }
+            ParallelAnimation {
+                NumberAnimation { id: spreadAnim; target: sweep; property: "spread"; from: spreadFrom.value; to: spreadTo.value; easing.type: Easing.OutQuad }
+                NumberAnimation { target: sweep; property: "run"; from: runFrom.value; to: runTo.value; duration: spreadAnim.duration; easing.type: Easing.InOutQuad }
+            }
+            NumberAnimation { target: sweep; property: "opacity"; to: 0; duration: Theme.motion(300) }
+        }
+        QtObject { id: spreadFrom; property real value: 0 }
+        QtObject { id: spreadTo; property real value: 0 }
+        QtObject { id: runFrom; property real value: 0 }
+        QtObject { id: runTo; property real value: 0 }
     }
 
     MouseArea {
@@ -111,17 +173,17 @@ Item {
             }
             var dx = m.x - sx, dy = m.y - sy;
             if (-dy > area.threshold && -dy > Math.abs(dx)) {
-                area.flash(); area.up();
+                area.light("waterdrop"); area.up();
             } else if (dy > area.threshold && dy > Math.abs(dx)) {
-                area.flash(); area.down();
+                area.light("reverse"); area.down();
             } else if (Math.abs(dx) > area.threshold && area.advancedGestures && Math.abs(dx) >= area.width / 2
                        && (sx - area.width / 2) * (m.x - area.width / 2) < 0) {
-                area.flash();
+                area.light(dx < 0 ? "left" : "right");
                 if (dx < 0) area.previous(); else area.next();
             } else if (dx < -area.threshold) {
-                area.flash(); area.back();
+                area.light("left"); area.back();
             } else if (dx > area.threshold) {
-                area.flash(); area.forward();
+                area.light("right"); area.forward();
             } else if (Math.abs(dx) < area.threshold / 2 && Math.abs(dy) < area.threshold / 2) {
                 area.flash(); area.tapped();
             }

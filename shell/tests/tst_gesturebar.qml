@@ -38,6 +38,30 @@ Item {
             shell.cardView.maximizeProgress = 0;
         }
 
+        // G8: the bar is lit while an app is maximized; each gesture runs
+        // its own light (CoreNaviManager::renderGestureOnLightbar).
+        function test_lightBar() {
+            var g = findChild(shell, "gestureBar");
+            var m = findChild(shell, "gestureMouse");
+            verify(!g.lit);
+            var uid = windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximize(uid);
+            tryVerify(function() { return shell.maximized; }, 2000);
+            verify(g.lit);
+            mouseDrag(m, m.width * 0.6, m.height / 2, -m.width * 0.2, 0);
+            compare(g.lastLight, "left");
+            var sweep = findChild(g, "lightSweep");
+            tryCompare(sweep, "opacity", 1, 500);
+            tryCompare(sweep, "opacity", 0, 2000);
+            mouseDrag(m, m.width * 0.4, m.height / 2, m.width * 0.2, 0);
+            compare(g.lastLight, "right");
+            mouseDrag(m, m.width / 2, m.height - 1, 0, -60);
+            compare(g.lastLight, "waterdrop");
+            tryVerify(function() { return !shell.maximized; }, 2000);
+            verify(!g.lit);
+            windows.close(uid);
+        }
+
         function test_tabletHasTheBarByDefault() {
             shell.unlock();
             compare(Theme.gestureAreaHeight, Theme.px(20));

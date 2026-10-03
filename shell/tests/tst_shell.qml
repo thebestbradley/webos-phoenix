@@ -1076,6 +1076,20 @@ Item {
             verify(shell.launch("org.webosphoenix.email") !== "");
         }
 
+        // G8: the reticle where a tap lands, gone after 200 ms; not for a
+        // drag.
+        function test_reticle() {
+            var r = findChild(shell, "reticle");
+            verify(!r.visible);
+            mouseClick(shell, 100, 200);
+            verify(r.visible);
+            fuzzyCompare(r.x + r.width / 2, 100, 1);
+            fuzzyCompare(r.y + r.height / 2, 200, 1);
+            tryCompare(r, "visible", false, 1000);
+            mouseDrag(shell, 100, 200, 0, 80);
+            verify(!r.visible);
+        }
+
         // The dock's own show / hide (OverlayWindowManager dock states).
         function test_dockShowHide() {
             var dock = findChild(shell, "quickLaunch");

@@ -427,6 +427,7 @@ QtObject {
     readonly property int justTypeFadeDuration: motion(150)                  // conf/lunaAnimations.conf:87-88
     readonly property int searchPillFadeDuration: motion(200)                // conf/lunaAnimations.conf:81 quickLaunchFadeDuration
     readonly property int emergencyFadeDuration: motion(350)                 // EmergencyWindowManager.cpp:49 kFadeAnimDuration (linear)
+    readonly property int reticleDuration: motion(200)                       // conf/lunaAnimations.conf:92-93 (curve 0 Linear)
 
     // lunaAnimations.conf curve numbers map to QEasingCurve types:
     // 6 = OutCubic, 10 = OutQuart.

@@ -112,9 +112,9 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [ ] Meta key (gesture-area hold) for copy/cut/paste/select-all. `Src/base/MetaKeyManager.cpp`; `SystemUiController.cpp:180-184`
 - [x] Home button: minimize, launcher toggle, double-press. `SystemUiController.cpp:528-584`
 - [x] TouchPad bezel edge-flick. `SystemUiController.cpp:2041-2121`; `Src/base/gesture/ScreenEdgeFlickGestureRecognizer.cpp`
-- [ ] Light-bar / CoreNavi LED gesture feedback. `Src/base/CoreNaviManager.cpp`; `Src/base/CoreNaviLeds.cpp` *Phoenix: an on-screen glow on the gesture bar; no LED animations.*
+- [x] Light-bar / CoreNavi LED gesture feedback. `Src/base/CoreNaviManager.cpp`; `Src/base/CoreNaviLeds.cpp` *Phoenix: on the on-screen gesture bar: lit while an app is maximized, a drop from the centre for up, its reverse for down, a run left / right for back / forward. A device's own LEDs are not driven yet.*
 - [x] Screenshot (Home + Power) and the `takeScreenShot` service, with a screenshot flash animation. `Src/base/WindowServer.cpp:629-683`; `Src/base/visual/WSOverlayScreenShotAnimation.cpp` *Phoenix: Home + Power, the flash, then a thumbnail and preview (docs/SCREENSHOTS.md); no com.palm.systemmanager/takeScreenShot service yet.*
-- [ ] Touch reticle (tap ripple). `Src/base/visual/ReticleItem.cpp`
+- [x] Touch reticle (tap ripple). `Src/base/visual/ReticleItem.cpp` *Phoenix: Shell.qml's reticle, from UserActivity's taps.*
 - [ ] Bluetooth keyboard shortcuts (Esc for dashboard, Search for Just Type, Super for card view, Keyboard key for the IME). `SystemUiController.cpp:338-343,586-624` *Phoenix: Esc is Back and typing in card view starts Just Type; not Search, Super or the Keyboard key.*
 
 ## 8. Input [spec §8]
