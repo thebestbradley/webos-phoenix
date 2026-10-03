@@ -58,8 +58,18 @@ public:
     // An image file's size in pixels, read from its header; (-1, -1) if it
     // cannot be read.
     Q_INVOKABLE QSize imageSize(const QUrl &url) const;
+    // Files in `twin` count as icon()'s siblings of the files in `dir` (and
+    // in its subdirectories, matched by path). On a device the compat
+    // overlay's files are installed beside the original app's, so an icon's
+    // HiDPI variants there sit beside it; the simulator serves the same
+    // device directory from two places (runtime/rootfs.json: a submodule
+    // and compat/rootfs) and says so here.
+    Q_INVOKABLE void addTwinDirectory(const QString &dir, const QString &twin);
 
 private:
+    QStringList siblingDirs(const QString &dir) const;
+
+    QList<QPair<QString, QString>> m_twins;
     mutable QHash<QString, QUrl> m_variants;
     mutable QHash<QString, QSize> m_sizes;
     mutable QHash<QString, QStringList> m_siblings;

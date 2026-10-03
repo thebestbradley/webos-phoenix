@@ -26,6 +26,7 @@
 //                  --screenshot or the offscreen platform)
 
 import QtQuick
+import Phoenix.Native
 import Phoenix.Shell
 import Phoenix.Sim
 
@@ -294,6 +295,14 @@ Item {
 
     // Build a demo scene, as if the user had been using the phone for a bit.
     Component.onCompleted: {
+        // Icons the system UI names by device path find their HiDPI variants
+        // in the compat overlay as on a device, where it is installed beside
+        // the submodule's files (luna-systemui's notification icons).
+        if (typeof simRootfs !== "undefined" && simRootfs) {
+            var twins = simRootfs.twinDirectories();
+            for (var t = 0; t < twins.length; ++t)
+                HiDpi.addTwinDirectory(twins[t][0], twins[t][1]);
+        }
         windows.pushSystemStatus({ deviceLocked: shell.locked });
         pushOrientation();
         if (typeof simSettings !== "undefined")

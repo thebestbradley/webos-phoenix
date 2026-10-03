@@ -217,6 +217,29 @@ QString RootfsFiles::fileUrl(const QString &devicePath) const
     return !file.isEmpty() && QFileInfo(file).isFile() ? QUrl::fromLocalFile(file).toString() : QString();
 }
 
+QVariantList RootfsFiles::twinDirectories() const
+{
+    QVariantList pairs;
+    for (const auto &p : m_rootfs->twinDirectories())
+        pairs.append(QVariant(QStringList { p.first, p.second }));
+    return pairs;
+}
+
+QList<QPair<QString, QString>> Rootfs::twinDirectories() const
+{
+    QList<QPair<QString, QString>> pairs;
+    for (const auto &m : m_mounts) {
+        if (!m.first.endsWith(QLatin1Char('/')) || !QFileInfo(m.second).isDir())
+            continue;
+        for (const QString &overlay : m_overlays) {
+            const QString twin = QDir::cleanPath(overlay + m.first);
+            if (QFileInfo(twin).isDir())
+                pairs.append({ QDir::cleanPath(m.second), twin });
+        }
+    }
+    return pairs;
+}
+
 QString Rootfs::urlFor(const QString &devicePath)
 {
     return scheme() + QStringLiteral("://rootfs") + devicePath;
