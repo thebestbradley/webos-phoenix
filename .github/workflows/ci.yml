@@ -106,7 +106,8 @@ jobs:
         run: QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import shell/qml -import build/qml -input shell/tests
 
       # A device pixel ratio of 2 (a Retina Mac): Qt then loads name@2x.png
-      # for name.png by itself, which must not change the art's size.
+      # for name.png by itself, which must not change the art's size, and
+      # app icons come from the file that covers 2 pixels per point.
       - name: HiDPI art at a device pixel ratio of 2
         run: QT_SCALE_FACTOR=2 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import shell/qml -import build/qml -input shell/tests/tst_hidpi.qml
 

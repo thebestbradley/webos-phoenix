@@ -76,6 +76,8 @@ Item {
             appIcon.size = Qt.binding(function() { return Theme.launcherIconSize; });
             appIcon.source = root.calculator;
             appIcon.largeSource = "";
+            appIcon.pixelRatio = Qt.binding(function() { return Screen.devicePixelRatio; });
+            loading.pixelRatio = Qt.binding(function() { return Screen.devicePixelRatio; });
         }
 
         function test_oneXArtIsTheArtItself() {
@@ -235,6 +237,7 @@ Item {
                 if (loading.children[i].hasOwnProperty("side"))
                     img = loading.children[i];
             verify(img);
+            loading.pixelRatio = 1;
             compare(img.side, 96);
             compare(img.width, 96);
             compare(root.fileName(img.source), "icon-256x256.png");
@@ -244,9 +247,11 @@ Item {
             compare(img.sourceSize.width, 192);
         }
 
+        // A device: the window's pixels are the shell's (ratio 1), u scales.
         function test_appIconDrawsTheBiggerOneAtItsSize() {
             var img = findChild(appIcon, "iconImage");
             verify(img);
+            appIcon.pixelRatio = 1;
             Theme.u = 1;
             compare(String(img.source), String(root.calculator));
             // Decoded as it is: exactly the 1x drawing.
@@ -290,10 +295,24 @@ Item {
             loading.pixelRatio = 1;
         }
 
+        // By default the ratio is the window's: 2 in CI's QT_SCALE_FACTOR=2
+        // run, where the 64 point icon must come from the bigger file.
+        function test_appIconFollowsTheWindowsRatio() {
+            var img = findChild(appIcon, "iconImage");
+            var r = Screen.devicePixelRatio;
+            Theme.u = 1;
+            compare(appIcon.pixelRatio, r);
+            compare(root.fileName(img.source), r > 1 ? "icon-256x256.png" : "icon.png");
+            tryCompare(img, "status", Image.Ready);
+            compare(img.sourceSize.width, 64 * r);
+            compare(img.width, 64);
+        }
+
         function test_appIconDecodesABiggerFileAtTheDrawnSize() {
             // A notification's 22 px icon from the 64 px file: decoded at
             // 22 px, not shrunk by the scene graph.
             var img = findChild(appIcon, "iconImage");
+            appIcon.pixelRatio = 1;
             Theme.u = 1;
             appIcon.size = 22;
             compare(String(img.source), String(root.calculator));
