@@ -155,14 +155,15 @@ Item {
             var p = placeholders.get(i);
             if (titles[p.title])
                 continue;
-            apps.append({ appId: p.appId, title: p.title, color: p.color, glyph: p.glyph, tab: p.tab,
+            apps.append(Object.assign(_launcherFields(), {
+                          appId: p.appId, title: p.title, color: p.color, glyph: p.glyph, tab: p.tab,
                           quickLaunch: p.quickLaunch, icon: p.icon, largeIcon: "", splashIcon: "", splashBackground: "",
                           web: false, main: "", noWindow: false,
                           orientation: "",
                           webAppId: "", params: "", dir: "",
                           // Stand-ins for apps still to come can be deleted, as
                           // downloaded apps could; the built-in ones cannot.
-                          removable: true });
+                          removable: true }));
         }
         Qt.callLater(_bootSystemApps);
         if (_simPty())
@@ -173,13 +174,28 @@ Item {
     // (appinfo.json phoenix.launchPoints) are entries of their own: own icon,
     // title, card and launch params. Apps the user installed can be deleted.
     function _webEntry(a) {
-        return { appId: a.id, title: a.title, color: "#555c66", glyph: a.title.charAt(0),
+        return Object.assign(_launcherFields(), {
+                 appId: a.id, title: a.title, color: "#555c66", glyph: a.title.charAt(0),
                  tab: a.tab !== undefined ? a.tab : 0, quickLaunch: a.quickLaunch || webQuickLaunch[a.title] || 0,
                  icon: a.icon, largeIcon: a.largeIcon || "", splashIcon: a.splashIcon || "", splashBackground: a.splashBackground || "",
                  web: true, main: a.main, noWindow: !!a.noWindow,
                  orientation: a.requestedWindowOrientation || "",
                  webAppId: a.appId || a.id, params: a.params || "", dir: a.dir || "",
-                 removable: !!a.installed, version: a.version || "" };
+                 // Apps the user installed can be deleted, launch points
+                 // apps added removed.
+                 removable: a.dynamic ? a.removable !== false : !!a.installed, version: a.version || "",
+                 page: a.page || "", dynamic: !!a.dynamic, category: a.category || "", keywords: a.keywords || "",
+                 installed: !!a.installed });
+    }
+
+    // The launcher's fields every entry has (Shell._launcherEntries,
+    // LauncherLayout.pageFor): the page appinfo.json names, a launch point
+    // an app added (Favorites), category and keywords ("\n"-separated);
+    // and an install as it goes: installState "installing" | "failed" | "",
+    // progress 0-100, pending (an app not installed yet: only its icon).
+    function _launcherFields() {
+        return { page: "", dynamic: false, category: "", keywords: "", installed: false,
+                 installState: "", progress: -1, pending: false, installReason: "" };
     }
 
     // ---- Installing and removing apps (phoenix-sim's SimInstaller) ---------------------
@@ -205,12 +221,17 @@ Item {
             byId[list[i].id] = list[i];
         for (var j = apps.count - 1; j >= 0; --j) {
             var e = apps.get(j);
-            if (!e.web)
+            // A pending icon becomes the app once it is installed (in its
+            // place, so the launcher keeps it where it was).
+            if (!e.web && !e.pending)
                 continue;
-            if (!byId[e.appId])
-                apps.remove(j);
-            else {
-                apps.set(j, _webEntry(byId[e.appId]));
+            if (!byId[e.appId]) {
+                if (!e.pending)
+                    apps.remove(j);
+            } else {
+                var st = _installs[e.appId];
+                apps.set(j, Object.assign(_webEntry(byId[e.appId]), st && st.state !== "installed"
+                    ? { installState: st.state, progress: st.progress || 0, installReason: st.reason || "" } : {}));
                 delete byId[e.appId];
             }
         }
@@ -226,14 +247,175 @@ Item {
                   : type === "installApp" ? inst.install(String(payload.appId || ""), payload.files || [])
                   : inst.remove(String(payload.appId || ""));
         if (!error) {
-            // Its windows go with it; an update starts afresh.
-            for (var i = cards.count - 1; i >= 0; --i)
-                if (cards.get(i).appId === payload.appId || cards.get(i).webAppId === payload.appId)
-                    close(cards.get(i).uid);
+            // Its windows go with it, kept alive or not; an update starts afresh.
+            closeApp(String(payload.appId || ""));
             _syncWebApps();
         }
-        pushSystemStatus({ installerResult: { requestId: payload.requestId, ok: !error, error: error },
-                           appsVersion: appsVersion });
+        var status = { installerResult: { requestId: payload.requestId, ok: !error, error: error }, appsVersion: appsVersion };
+        // Why an app went, for com.palm.appinstaller/notifyOnChange.
+        if (!error && type === "removeApp")
+            status.appsCause = { appId: payload.appId, cause: payload.cause || "USER" };
+        pushSystemStatus(status);
+    }
+
+    // The application manager's work for the runtime ("appManagerOp" host
+    // messages, runtime.hostOp): {requestId, op, ...}; the answer goes to
+    // every page as applyHostStatus {installerResult: {requestId, ok,
+    // error, ...}}, and the one that asked takes it.
+    function _appManagerOp(payload) {
+        var inst = _simInstaller();
+        var r = { requestId: payload.requestId, ok: true, error: "" };
+        var changed = false;
+        switch (payload.op) {
+        case "addLaunchPoint": {
+            var added = inst ? inst.addLaunchPoint(payload.launchPoint || {}) : { error: "Failed to save launch point" };
+            if (added.error) { r.ok = false; r.error = added.error; }
+            else { r.launchPointId = added.launchPointId; changed = true; }
+            break;
+        }
+        case "removeLaunchPoint":
+            r.error = inst ? inst.removeLaunchPoint(String(payload.launchPointId || "")) : "launch point folder not set";
+            r.ok = r.error === "";
+            changed = r.ok;
+            break;
+        case "rescan":
+            if (inst) { inst.rescan(); changed = true; }
+            else { r.ok = false; r.error = "Not available"; }
+            break;
+        case "capacity":
+            r.freeKB = inst ? inst.freeSpaceKB() : -1;
+            break;
+        case "running":
+            r.running = running();
+            break;
+        case "close":
+            closeProcess(String(payload.processId || ""));
+            break;
+        default:
+            r.ok = false;
+            r.error = "Unknown op: " + payload.op;
+        }
+        if (changed)
+            _syncWebApps();
+        pushSystemStatus(changed ? { installerResult: r, appsVersion: appsVersion } : { installerResult: r });
+    }
+
+    // The browser's page pictures (SimSnapshots): a picture of the web view
+    // viewId (an enyo.WebView's Chromium view in one of the windows).
+    Connections {
+        target: typeof simSnapshots !== "undefined" ? simSnapshots : null
+        function onGrabRequested(id, viewId) { source._grabView(id, viewId); }
+    }
+    function _grabView(id, viewId) {
+        var wins = [];
+        for (var uid in _windows)
+            wins.push(_windows[uid]);
+        for (var h in _headless)
+            wins.push(_headless[h]);
+        for (var i = 0; i < wins.length; ++i) {
+            var views = wins[i] && wins[i]._webViews;
+            var v = views ? views[viewId] : null;
+            if (v && v.width > 0 && v.height > 0) {
+                v.grabToImage(function (result) { simSnapshots.finishGrab(id, result.image); });
+                return;
+            }
+        }
+        // No such view: the request times out and fails (SimSnapshots).
+    }
+
+    // A launch point the user removed in the launcher (Remove Shortcut?).
+    function removeLaunchPoint(id) {
+        var inst = _simInstaller();
+        if (!inst || inst.removeLaunchPoint(id) !== "")
+            return false;
+        _syncWebApps();
+        pushSystemStatus({ appsVersion: appsVersion });
+        return true;
+    }
+
+    // ---- Installs as they go (the launcher's pending icons) ------------------------
+    // "installStatus" host messages from whichever page installs (the
+    // runtime's installer, the Marketplace): {appId, state, progress,
+    // title, icon, reason, retry, open}. An app not installed yet gets an
+    // entry of its own (pending), for its icon; one being updated keeps
+    // its entry, with the badge. Pages hear what is pending
+    // (applyHostStatus {installs}, installProgressQuery).
+    property var _installs: ({})
+
+    function _entryIndex(appId) {
+        for (var i = 0; i < apps.count; ++i)
+            if (apps.get(i).appId === appId)
+                return i;
+        return -1;
+    }
+
+    function _installStatus(payload) {
+        var id = String(payload.appId || "");
+        if (!id)
+            return;
+        var all = Object.assign({}, _installs);
+        var i = _entryIndex(id);
+        if (payload.state === "installed") {
+            delete all[id];
+            if (i >= 0) {
+                if (apps.get(i).pending)
+                    apps.remove(i);   // not installed after all (the list says)
+                else
+                    apps.set(i, { installState: "", progress: -1, installReason: "" });
+            }
+        } else {
+            var st = Object.assign({}, all[id] || {}, payload);
+            all[id] = st;
+            var icon = st.icon ? (/^(data|https?|file):/.test(st.icon) ? st.icon : _iconUrl(st.icon, id)) : "";
+            if (i < 0) {
+                apps.append(Object.assign(_launcherFields(), {
+                    appId: id, title: st.title || id, color: "#555c66", glyph: (st.title || id).charAt(0),
+                    tab: 0, quickLaunch: 0, icon: icon, largeIcon: "", splashIcon: "", splashBackground: "",
+                    web: false, main: "", noWindow: false, orientation: "", webAppId: id, params: "", dir: "",
+                    removable: false, version: "", installed: true, pending: true,
+                    installState: st.state, progress: st.progress || 0, installReason: st.reason || "" }));
+            } else {
+                var change = { installState: st.state, progress: st.progress || 0, installReason: st.reason || "" };
+                if (apps.get(i).pending) {
+                    if (st.title) change.title = st.title;
+                    if (icon) change.icon = icon;
+                }
+                apps.set(i, change);
+            }
+        }
+        _installs = all;
+        pushSystemStatus({ installs: all });
+    }
+
+    // What the launcher shows for an app being installed: {state,
+    // progress, title, reason, retry, open}, or null.
+    function installInfo(appId) {
+        return _installs[appId] || null;
+    }
+
+    // The failed install's Try Again: as it was asked (the Marketplace's
+    // install, or the installer's with the same package), in a page that
+    // runs the runtime.
+    function retryInstall(appId) {
+        var st = _installs[appId];
+        if (!st || !st.retry || !st.retry.uri)
+            return false;
+        _installStatus({ appId: appId, state: "installing", progress: 0, reason: "" });
+        lunaCall(st.retry.uri, st.retry.params || {}, function (reply) {
+            if (reply === null)
+                _installStatus({ appId: appId, state: "failed", reason: "Nothing can install it now" });
+        });
+        return true;
+    }
+
+    // The failed install's Remove: its icon goes; an app installed before
+    // (a failed update) is removed.
+    function dismissInstall(appId) {
+        var i = _entryIndex(appId);
+        var installed = i >= 0 && !apps.get(i).pending && apps.get(i).removable;
+        _installStatus({ appId: appId, state: "installed" });
+        if (installed)
+            removeApp(appId);
     }
 
     // ---- The Terminal's shells (phoenix-sim's SimPty) -------------------------------
@@ -320,6 +502,7 @@ Item {
         // 464-469, handed to WebAppMgr) until the page asks for another.
         cards.insert(at, { uid: uid, appId: appId, title: titleText, groupId: groupId, fullScreen: false, blockScreenTimeout: false, statusBarColor: -1,
                            orientation: _windowOrientation(info.orientation) });
+        _pidOf(appId);
         return uid;
     }
 
@@ -435,7 +618,10 @@ Item {
                 soundRequested(target, ns[0], ns[1], ns[2]);
             }
         } else if (type === "activate") {
-            // PalmSystem.activate: the app brings its card to the front.
+            // PalmSystem.activate: the app brings its card to the front; a
+            // window kept alive without one gets its card back.
+            if (cardIndex(uid) < 0 && _parked[uid])
+                _unpark(uid);
             if (cardIndex(uid) >= 0)
                 cardFocusRequested(uid);
         } else if (type === "windowOrientation") {
@@ -484,6 +670,23 @@ Item {
             rebootRequested();
         } else if (type === "installApp" || type === "removeApp") {
             _installerRequest(type, payload);
+        } else if (type === "appManagerOp") {
+            _appManagerOp(payload);
+        } else if (type === "installStatus") {
+            _installStatus(payload);
+        } else if (type === "keepAlive") {
+            // PalmSystem.keepAlive(on): the app stays loaded when its last
+            // card closes (headless apps such as Calendar ask for it).
+            // Per window: Email marks its main card "cachable off-screen"
+            // (MailApp.js), Calendar its app window (AppView.js).
+            if (uid !== "") {
+                var ka = Object.assign({}, _keepAliveAsked);
+                if (payload.on)
+                    ka[uid] = true;
+                else
+                    delete ka[uid];
+                _keepAliveAsked = ka;
+            }
         } else if (type === "launcherLayout") {
             // A restored backup's launcher layout (com.palm.sysMgrDataBackup
             // postRestore, as LunaSysMgr's BackupManager put its files back).
@@ -805,12 +1008,215 @@ Item {
     // Start the system's own headless apps at boot, as LunaSysMgr started
     // com.palm.systemui (WebAppMgrProxy.cpp:88-97).
     readonly property var bootApps: ["com.palm.systemui"]
+
+    // ---- Launch at boot and keep alive (luna.conf) -----------------------------------
+    // The original apps by their webOS ids, with the Phoenix apps that
+    // stand in for them (Phone, Messaging, Camera, Photos, Music).
+    readonly property var _palmIds: ({
+        "com.palm.app.phone": "org.webosphoenix.phone", "com.palm.app.messaging": "org.webosphoenix.messaging",
+        "com.palm.app.camera": "org.webosphoenix.camera", "com.palm.app.photos": "org.webosphoenix.photos",
+        "com.palm.app.musicplayer": "org.webosphoenix.music"
+    })
+    function _phoenixIds(ids) {
+        return ids.map(function (id) { return source._palmIds[id] || id; });
+    }
+    // [LaunchAtBoot]: started at boot without a card, with the launch
+    // params {launchedAtBoot: true} (the apps open nothing then:
+    // Email's Launch.js relaunch, Calendar's App.handleLaunchParams), so
+    // they come up at once when launched. Phones: conf/luna.conf:98-99
+    // (the Pre and Pre 2; the Pre 3 kept only phone and email,
+    // luna-windsornot.conf:18-19); the TouchPad: luna-topaz.conf:18-19.
+    readonly property var launchAtBootApps: _phoenixIds(Theme.tablet
+        ? ["com.palm.app.phone", "com.palm.app.email", "com.palm.app.calendar", "com.palm.app.messaging"]
+        : ["com.palm.app.phone", "com.palm.app.email", "com.palm.app.calendar", "com.palm.app.messaging", "com.palm.app.camera"])
+    // [KeepAlive]: closing the app's last card keeps it running without
+    // one; launching it again brings that back (luna.conf:101-102; the
+    // TouchPad's list, luna-topaz.conf:21-22, replaces the phones').
+    readonly property var keepAliveApps: _phoenixIds(Theme.tablet
+        ? ["com.palm.app.email", "com.palm.app.calendar", "com.palm.app.messaging", "com.palm.app.photos", "com.palm.app.musicplayer"]
+        : ["com.palm.app.phone"])
+    // [KeepAliveUntilMemPressure]: the same until memory runs low
+    // (luna.conf:104-105, both).
+    readonly property var keepAliveUntilMemoryPressureApps: ["com.palm.app.browser"]
+
+    // Windows kept alive without a card: uid -> {win, appId, title,
+    // orientation}. Their apps still run (running()); a launch, or the
+    // page activating its window, brings the card back.
+    property var _parked: ({})
+    // Windows whose page asked to be kept (PalmSystem.keepAlive): uid -> true.
+    property var _keepAliveAsked: ({})
+    // Process ids, as WebAppMgr gave them: appId -> "1001", ...
+    property var _pids: ({})
+    property int _nextPid: 1000
+
     function _bootSystemApps() {
         for (var i = 0; i < bootApps.length; ++i) {
             var info = appInfo(bootApps[i]);
             if (info && info.web && !_headless[bootApps[i]])
                 _headless[bootApps[i]] = _webWindow(bootApps[i], info.main, "");
         }
+        // Not when a demo scene or a test sets the scene up.
+        if (bootAppsEnabled)
+            for (var j = 0; j < launchAtBootApps.length; ++j)
+                launchAtBoot(launchAtBootApps[j]);
+    }
+    // phoenix-sim starts the launch-at-boot apps (sim.qml turns this off
+    // for --scene and screenshots of a set scene).
+    property bool bootAppsEnabled: false
+
+    // Start an app without a card: a headless app's page, or an app's
+    // window kept ready for its first launch.
+    function launchAtBoot(appId) {
+        var info = appInfo(appId);
+        if (!info || !info.web || runningUid(appId) !== "" || _headless[appId] || _parkedUid(appId) !== "")
+            return false;
+        var url = mainUrl(appId, { launchedAtBoot: true });
+        if (info.noWindow) {
+            _headless[appId] = _webWindow(appId, url, "");
+        } else {
+            var uid = "w" + (_nextUid++);
+            var win = _webWindow(appId, url, uid);
+            win.visible = false;
+            _windows[uid] = win;
+            _park(uid, { appId: appId, title: info.title, orientation: _windowOrientation(info.orientation) });
+        }
+        _pidOf(appId);
+        return true;
+    }
+
+    function _pidOf(appId) {
+        if (!_pids[appId]) {
+            var p = Object.assign({}, _pids);
+            p[appId] = String(++_nextPid);
+            _pids = p;
+        }
+        return _pids[appId];
+    }
+    function _parkedUid(appId) {
+        var found = "";
+        for (var uid in _parked)
+            if (_parked[uid].appId === appId)
+                found = uid;   // the last one kept
+        return found;
+    }
+    function _park(uid, card) {
+        var win = _windows[uid];
+        if (win) {
+            win.visible = false;
+            win.parent = source;
+        }
+        var p = Object.assign({}, _parked);
+        p[uid] = card;
+        _parked = p;
+    }
+    // Bring a kept window back as a card, in front.
+    function _unpark(uid) {
+        var card = _parked[uid];
+        if (!card)
+            return "";
+        var p = Object.assign({}, _parked);
+        delete p[uid];
+        _parked = p;
+        cards.insert(cards.count, { uid: uid, appId: card.appId, title: card.title, groupId: newGroupId(), fullScreen: false,
+                                    blockScreenTimeout: false, statusBarColor: -1, orientation: card.orientation || "free" });
+        return uid;
+    }
+    // Whether closing this card keeps its window: its page asked
+    // (PalmSystem.keepAlive), or it is the last card of an app kept alive
+    // (not a headless one, whose page is what stays).
+    function _keepsWindow(uid, appId, info) {
+        if (_keepAliveAsked[uid])
+            return true;
+        if (!info || info.noWindow || runningUid(appId) !== "")
+            return false;
+        if (keepAliveApps.indexOf(appId) >= 0)
+            return true;
+        return keepAliveUntilMemoryPressureApps.indexOf(appId) >= 0 && !memory.low;
+    }
+    // A headless app's page stays when its last card closes if the app is
+    // kept alive, or one of its windows is.
+    function _keepsHeadless(appId) {
+        return keepAliveApps.indexOf(appId) >= 0 || _parkedUid(appId) !== "";
+    }
+
+    // Memory runs low: the apps kept only until then go (as WebAppMgr
+    // closed KeepAliveUntilMemPressure apps).
+    Connections {
+        target: source.memory
+        function onChanged() {
+            if (!source.memory.low)
+                return;
+            for (var uid in source._parked)
+                if (source.keepAliveUntilMemoryPressureApps.indexOf(source._parked[uid].appId) >= 0)
+                    source._dropParked(uid);
+        }
+    }
+    function _dropParked(uid) {
+        var card = _parked[uid];
+        if (!card)
+            return;
+        var p = Object.assign({}, _parked);
+        delete p[uid];
+        _parked = p;
+        var ka = Object.assign({}, _keepAliveAsked);
+        delete ka[uid];
+        _keepAliveAsked = ka;
+        var win = _windows[uid];
+        delete _windows[uid];
+        if (win)
+            win.destroy();
+        _appGone(card.appId);
+    }
+    // The app has nothing left running: its process id, live activities
+    // and active-call banner go.
+    function _appGone(appId) {
+        if (runningUid(appId) !== "" || _headless[appId] || _parkedUid(appId) !== "")
+            return;
+        if (_pids[appId]) {
+            var p = Object.assign({}, _pids);
+            delete p[appId];
+            _pids = p;
+        }
+        _clearOngoingOf(appId);
+        if (activeCallBanner !== null && activeCallBanner.appId === appId)
+            activeCallBanner = null;
+    }
+
+    // The apps running (applicationManager/running): with cards, headless,
+    // or kept alive; [{id, processid}].
+    function running() {
+        var ids = [], seen = {};
+        function add(id) { if (id && !seen[id]) { seen[id] = true; ids.push(id); } }
+        for (var h in _headless)
+            add(h);
+        for (var i = 0; i < cards.count; ++i)
+            add(cards.get(i).appId);
+        for (var uid in _parked)
+            add(_parked[uid].appId);
+        return ids.map(function (id) { return { id: id, processid: source._pidOf(id) }; });
+    }
+
+    // Close an app: its cards, kept windows and headless page
+    // (applicationManager/close, an update or removal).
+    function closeApp(appId) {
+        if (!appId)
+            return;
+        for (var i = cards.count - 1; i >= 0; --i)
+            if (cards.get(i).appId === appId || cards.get(i).webAppId === appId)
+                close(cards.get(i).uid, true);
+        for (var uid in _parked)
+            if (_parked[uid].appId === appId)
+                _dropParked(uid);
+        if (_headless[appId]) {
+            _headless[appId].destroy();
+            delete _headless[appId];
+        }
+        _appGone(appId);
+    }
+    function closeProcess(processId) {
+        for (var id in _pids)
+            if (_pids[id] === processId)
+                closeApp(id);
     }
 
     // phoenix-sim: the battery and charger (runtime setPower in every page,
@@ -998,11 +1404,19 @@ Item {
     // Deleting an app closes its windows (the launcher layout keeps it out);
     // one the user installed is removed from the device, as webOS did.
     function removeApp(appId) {
-        for (var i = cards.count - 1; i >= 0; --i)
-            if (cards.get(i).appId === appId)
-                close(cards.get(i).uid);
         for (var j = 0; j < apps.count; ++j) {
             var e = apps.get(j);
+            // A launch point an app added goes; the app stays.
+            if (e.appId === appId && e.dynamic) {
+                removeLaunchPoint(appId);
+                return;
+            }
+        }
+        for (var i = cards.count - 1; i >= 0; --i)
+            if (cards.get(i).appId === appId)
+                close(cards.get(i).uid, true);
+        for (j = 0; j < apps.count; ++j) {
+            e = apps.get(j);
             if (e.appId === appId && e.web && e.removable) {
                 _installerRequest("removeApp", { appId: e.webAppId, requestId: "" });
                 break;
@@ -1138,8 +1552,28 @@ Item {
             return existing;
         }
         var info = appInfo(appId);
-        if (!info)
+        // An app still being installed does not run (the launcher handles
+        // taps on its icon).
+        if (!info || info.pending)
             return "";
+        if (info.web && info.noWindow && _headless[appId]) {
+            // Running without a card: the app opens one when told; a
+            // window of it kept alive comes back when the page activates
+            // it (enyo.windows.activate finds it open).
+            if (_headless[appId].relaunch)
+                _headless[appId].relaunch(params || {});
+            return "";
+        }
+        // Kept alive (or started at boot): its window comes back as a card,
+        // and the page hears of the launch (relaunch, as webOS relaunched a
+        // running app).
+        var kept = info.noWindow ? "" : _parkedUid(appId);
+        if (kept !== "") {
+            _unpark(kept);
+            if (_windows[kept] && _windows[kept].relaunch)
+                _windows[kept].relaunch(params || {});
+            return kept;
+        }
         // No memory left for another app: refused, and the user is asked
         // to close some cards (MemoryMonitor::allowNewNativeAppLaunch,
         // IpcServer.cpp:232-238; WindowServerLuna::createMemoryAlertWindow).
@@ -1153,6 +1587,7 @@ Item {
             // Headless app: its page runs hidden and opens card windows itself.
             if (!_headless[appId])
                 _headless[appId] = _webWindow(appId, url || info.main, "");
+            _pidOf(appId);
             return "";
         }
         var at = afterUid ? _afterGroupOf(afterUid) : cards.count;
@@ -1184,32 +1619,41 @@ Item {
             cards.setProperty(i, "groupId", groupId);
     }
 
-    function close(uid) {
+    // disableKeepAlive: close for good, kept alive or not (the angry card,
+    // CardWindowManager::closeWindow -> setDisableKeepAlive; an app removed).
+    function close(uid, disableKeepAlive) {
         var i = cardIndex(uid);
         if (i < 0)
             return;
-        var appId = cards.get(i).appId;
+        var card = { appId: cards.get(i).appId, title: cards.get(i).title, orientation: cards.get(i).orientation };
+        var appId = card.appId;
         cards.remove(i);
+        if (!disableKeepAlive && _windows[uid] && _keepsWindow(uid, appId, appInfo(appId))) {
+            // Kept alive: the page goes on running without its card.
+            _park(uid, card);
+            return;
+        }
         // Throwing a Terminal card away hangs its shell up (SIGHUP).
         if (_simPty())
             _simPty().closeWindow(uid);
         var win = _windows[uid];
         delete _windows[uid];
+        if (_keepAliveAsked[uid]) {
+            var ka = Object.assign({}, _keepAliveAsked);
+            delete ka[uid];
+            _keepAliveAsked = ka;
+        }
         if (win)
             win.destroy();
-        // Closing a headless app's last card closes the app.
-        if (_headless[appId] && runningUid(appId) === "") {
+        // Closing a headless app's last card closes the app, unless it is
+        // kept alive.
+        if (_headless[appId] && runningUid(appId) === "" && (disableKeepAlive || !_keepsHeadless(appId))) {
             _headless[appId].destroy();
             delete _headless[appId];
         }
         // Its live activities go with it: their work ran in its pages, and
-        // they cannot be swiped away.
-        if (runningUid(appId) === "" && !_headless[appId]) {
-            _clearOngoingOf(appId);
-            // Its active-call banner too (its page asked for it).
-            if (activeCallBanner !== null && activeCallBanner.appId === appId)
-                activeCallBanner = null;
-        }
+        // they cannot be swiped away; its active-call banner too.
+        _appGone(appId);
     }
 
     function _clearOngoingOf(appId) {

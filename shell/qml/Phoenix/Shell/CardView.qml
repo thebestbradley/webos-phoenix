@@ -474,6 +474,9 @@ Item {
         var g = groupIndexOf(uid);
         if (g < 0)
             return;
+        // The app closed its own window: no keep-alive for it.
+        if (byApp)
+            _noKeepAlive[uid] = true;
         cardClosing(uid, !!byApp);
         var place = layout.cards[uid];
         var card = cardItem(uid);
@@ -533,7 +536,12 @@ Item {
         var c = Object.assign({}, closing);
         delete c[uid];
         closing = c;
-        source.close(uid);
+        // The window source may keep the app running without its card
+        // (keep-alive), unless it was thrown away angrily or the app
+        // closed it (disableKeepAlive).
+        var noKeepAlive = !!_noKeepAlive[uid];
+        delete _noKeepAlive[uid];
+        source.close(uid, noKeepAlive);
         if (count === 0)
             maximizeProgress = 0;
         cardClosed(uid);
@@ -1194,8 +1202,11 @@ Item {
             return;
         }
         angryCardClosed(card.uid);
+        _noKeepAlive[card.uid] = true;
         view.close(card.uid);
     }
+    // Cards closed without keep-alive (the angry card, the app's own close).
+    property var _noKeepAlive: ({})
 
     // A card the user cannot flick away (First Use's, Shell.firstUse): it
     // springs back. Phoenix addition.
