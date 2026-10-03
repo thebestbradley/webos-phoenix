@@ -3071,8 +3071,9 @@
     // script (an <img>'s src, an inline background: Enyo's Image and
     // IconButton kinds, the apps' own templates) gets them here.
     // hidpi-art.json beside this file lists the art that has variants, by
-    // device directory, name@2x.png / name@3x.png beside it
-    // (docs/spec/hidpi-art.md). An <img> gets a srcset, an inline background
+    // device directory, name@2x.png / name@3x.png beside it, and the apps'
+    // icons' bigger sizes (icon-256x256.png: 4 times the icon), which Just
+    // Type and Settings show (docs/spec/hidpi-art.md). An <img> gets a srcset, an inline background
     // or border image an image set; both keep the 1x art's size. A page's
     // own srcset or image set is left alone. So do the pages an app shows in
     // its frames without a runtime of their own (luna-systemui's file
@@ -3105,7 +3106,10 @@
             try { dir = decodeURIComponent(new URL(m[1]).pathname); } catch (e) { return null; }
             var all = art();
             var ks = all && all[dir] && all[dir][decodeURIComponent(m[2] + m[3])];
-            return ks ? ks.map(function (k) { return [k, m[1] + m[2] + "@" + k + "x" + m[3]]; }) : null;
+            // name@kx beside it, or [k, file]: an app icon's bigger sizes.
+            return ks ? ks.map(function (k) {
+                return typeof k === "number" ? [k, m[1] + m[2] + "@" + k + "x" + m[3]] : [k[0], m[1] + encodeURIComponent(k[1])];
+            }) : null;
         }
         function absolute(url, node) {
             try { return new URL(url, node.ownerDocument.baseURI).href; } catch (e) { return null; }

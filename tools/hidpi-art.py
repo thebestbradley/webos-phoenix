@@ -415,11 +415,20 @@ def in_image_set(text, pos):
     return "image-set(" in text[start:pos]
 
 
+def read_css(path):
+    """A stylesheet's text, without the byte order mark some originals start
+    with (Calculator's, Email's): the copies start with CSS_HEADER, and a
+    mark after it would be part of the first rule's selector, which the
+    browser would then drop."""
+    with open(path, encoding="utf-8-sig") as f:
+        return f.read()
+
+
 def check_css(sets, path, failed, text=None, label=None):
     """Every url() of art with variants in a stylesheet asks for them all
     (`text`: the stylesheet's overlay copy, its url()s relative to `path`)."""
     if text is None:
-        text = open(path).read()
+        text = read_css(path)
     for m in CSS_URL.finditer(text):
         url = m.group(2)
         if "@" in os.path.basename(url):
@@ -492,7 +501,7 @@ def rewrite_css(sets, path, failed):
     art's. They stay as they are, and are followed by the same selectors'
     1x rules again, with image sets, for screens of 2 and more: there the
     @2x and @3x variants are drawn as the 1x art is."""
-    text = open(path).read()
+    text = read_css(path)
     clean = re.sub(r"/\*.*?\*/", lambda m: " " * len(m.group(0)), text, flags=re.S)
     out, pos = [], 0
     base = {}   # (selector, property) -> (property as written, value) of the 1x rules so far
@@ -560,10 +569,76 @@ def rewrite_css(sets, path, failed):
     return CSS_HEADER + "".join(out)
 
 
+ICON_SIBLING = r"(?:-\d+(?:x\d+)?|@\d+(?:\.\d+)?x)"
+
+
+def app_icons():
+    """Each app's icons (appinfo.json's `icon`, its launch points') that
+    have bigger ones beside them, as the shell finds them (Theme.appIcon,
+    shell/native/hidpi.cpp): name-<N>x<N>.png, name-<N>.png or name@<k>x.png
+    in the app's folder or the compat overlay's at its device path. By
+    device directory: {name: [[factor, file], ...]}, the factor the file's
+    size over the icon's. A page that shows an app's icon (Just Type, the
+    Settings pages) gets them as a srcset or image set like other art.
+    Vite apps' files are read from public/, which their build copies."""
+    with open(os.path.join(ROOT, "runtime", "rootfs.json")) as f:
+        cfg = json.load(f)
+    dirs = []
+    for rel in cfg.get("applicationDirs", []):
+        base = os.path.join(ROOT, rel)
+        if os.path.isdir(base):
+            dirs += [os.path.join(rel, n) for n in sorted(os.listdir(base))]
+    dirs += cfg.get("systemApps", [])
+    out = {}
+    for rel in dirs:
+        src = next((d for d in (rel, os.path.join(rel, "public")) if os.path.isfile(os.path.join(ROOT, d, "appinfo.json"))), None)
+        if src is None:
+            continue
+        with open(os.path.join(ROOT, src, "appinfo.json"), encoding="utf-8-sig") as f:
+            info = json.load(f)
+        device = "/usr/palm/applications/" + info["id"]
+        icons = set()
+
+        def walk(v):
+            if isinstance(v, dict):
+                for k, x in v.items():
+                    if k == "icon" and isinstance(x, str) and x.endswith(".png"):
+                        icons.add(os.path.normpath(x))
+                    else:
+                        walk(x)
+            elif isinstance(v, list):
+                for x in v:
+                    walk(x)
+        walk(info)
+        for icon in sorted(icons):
+            if icon.startswith(("/", "..")):
+                continue
+            path = os.path.join(ROOT, src, icon)
+            if not os.path.isfile(path):
+                continue
+            own = max(Image.open(path).size)
+            stem, ext = os.path.splitext(os.path.basename(icon))
+            pattern = re.compile("^" + re.escape(stem) + ICON_SIBLING + re.escape(ext) + "$")
+            found = {}
+            for d in (os.path.dirname(path), os.path.join(COMPAT, device.lstrip("/"), os.path.dirname(icon))):
+                if os.path.isdir(d):
+                    for n in sorted(os.listdir(d)):
+                        if pattern.match(n) and n not in found:
+                            k = round(max(Image.open(os.path.join(d, n)).size) / own, 2)
+                            k = int(k) if k == int(k) else k
+                            if k > 1:
+                                found[n] = k
+            if found:
+                where = (device + "/" + os.path.dirname(icon)).rstrip("/") + "/"
+                out.setdefault(where, {})[os.path.basename(icon)] = sorted(([k, n] for n, k in found.items()))
+    return out
+
+
 def manifest(sets):
     """For phoenix-runtime.js: the art pages name from script, by device
-    directory: each picture's variant factors (name@kx beside it)."""
-    art = {}
+    directory: each picture's variant factors (name@kx beside it), or
+    [factor, file] for an app's icon's bigger sizes (app_icons)."""
+    art = app_icons()
     for st in sets.sets:
         devices = st["_devices"] or ([sets.rootfs.device(st["art"])] if sets.rootfs.device(st["art"]) else [])
         if not devices or st["name"] in ("shell",):
@@ -792,7 +867,7 @@ def main():
                 failed.append("%s/%s: no stylesheet" % (st["art"], pattern))
             for css in files:
                 text = rewrite_css(sets, css, failed)
-                if text == CSS_HEADER + open(css).read():
+                if text == CSS_HEADER + read_css(css):
                     continue   # no art with variants
                 # The copy asks for every variant (a url() this does not
                 # understand would show here).
@@ -800,6 +875,11 @@ def main():
                 for d in st["_devices"]:
                     dest = os.path.join(COMPAT, d.lstrip("/"), os.path.relpath(css, st["_dir"]))
                     written.add(dest)
+                    if os.path.exists(dest) and not open(dest).read().startswith(CSS_HEADER):
+                        # The overlay's own fix of this stylesheet: never overwritten.
+                        failed.append("%s: the compat overlay's own copy of %s; put the image sets in it by hand"
+                                      % (os.path.relpath(dest, ROOT), os.path.relpath(css, ROOT)))
+                        continue
                     if args.check:
                         if not os.path.exists(dest) or open(dest).read() != text:
                             failed.append("%s: out of date" % os.path.relpath(dest, ROOT))

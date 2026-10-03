@@ -21,6 +21,16 @@ changed. On a device the overlay lands beside the icon; the simulator passes
 it as the app's large icon (`shell/sim/rootfs.cpp`). No 128 px file: the
 256 px one decoded at 128 is as good.
 
+Voice Dial shows luna-sysmgr's own Voice Dial icon (`apps/voicedial/public`),
+released at 64 px only. The same tool makes its `icon-128x128.png` and
+`icon-256x256.png` (four times the original; no 512 px, which would be eight
+times it), beside it in the app, which names them as its `largeIcon` and
+`splashicon`.
+
+Pages that show an app's icon (Just Type's results, Settings' Just Type and
+Exhibition panes, `PageHeader`) get these bigger files too, as a `srcset`
+or image set; see [hidpi-art.md](hidpi-art.md).
+
 ## Classification
 
 User app (disc): something a person opens to do or see something.

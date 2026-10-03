@@ -4,9 +4,45 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
-import { AppMenu, CheckBox, Dialog, Group, ListSelector, Row, Slider, ToggleButton } from "./index";
+import fs from "node:fs";
+import path from "node:path";
+import { AppMenu, CheckBox, Dialog, Group, ListSelector, PageHeader, Row, Slider, ToggleButton } from "./index";
+import { iconSrcSet } from "./layout";
 
 afterEach(cleanup);
+
+describe("PageHeader", () => {
+    it("offers the icon's larger sizes to dense screens", () => {
+        render(<PageHeader title="Wi-Fi" icon="icons/wifi.png" />);
+        const img = document.querySelector(".pui-header-icon") as HTMLImageElement;
+        expect(img.getAttribute("src")).toBe("icons/wifi.png");
+        expect(img.getAttribute("srcset")).toBe("icons/wifi.png 64w, icons/wifi-128x128.png 128w, icons/wifi-256x256.png 256w");
+        expect(img.getAttribute("sizes")).toBe("32px");
+    });
+
+    it("is only given icons drawn at those sizes, in every app", () => {
+        // Each PageHeader icon in the apps is a Phoenix icon with its 128
+        // and 256 px files beside it in the app's public folder.
+        const root = path.resolve(__dirname, "../../..");
+        const missing: string[] = [];
+        let seen = 0;
+        for (const app of fs.readdirSync(root)) {
+            const src = path.join(root, app, "src");
+            if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) continue;
+            const files = fs.readdirSync(src, { recursive: true }) as string[];
+            for (const f of files.filter((n) => n.endsWith(".tsx"))) {
+                const text = fs.readFileSync(path.join(src, f), "utf8");
+                for (const m of text.matchAll(/<PageHeader\b[^>]*?\bicon=\{?[^"}]*"([^"]+\.png)"/g)) {
+                    seen++;
+                    for (const n of (iconSrcSet(m[1]) ?? "").split(", ").map((c) => c.split(" ")[0]))
+                        if (!fs.existsSync(path.join(root, app, "public", n))) missing.push(`${app}: ${n}`);
+                }
+            }
+        }
+        expect(seen).toBeGreaterThan(20);
+        expect(missing).toEqual([]);
+    });
+});
 
 describe("ToggleButton", () => {
     it("shows its state and flips on tap", () => {

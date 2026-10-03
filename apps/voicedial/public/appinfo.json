@@ -6,6 +6,8 @@
     "main": "index.html",
     "title": "Voice Dial",
     "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
     "iconColor": "#5d636a",
     "uiRevision": 2,
     "keywords": ["Voice Dial", "Voice", "Dial", "Call", "Speak"],
