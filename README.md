@@ -254,6 +254,8 @@ then take the bottom-edge flick). A big `--size` needs a matching
 **F2** demo notification, **F3** the Power button (the screen off and locked, or on again), **F4** incoming call (rings
 the Phone app), **F5** incoming text message (for Messaging), **F6** low
 battery, **F7** plug a charger in or out, **F8** battery charged to full,
+**F12** set the device on a Touchstone (the inductive charger) or lift it off,
+**Shift+F12** onto another Touchstone,
 **F9** (or **Home**+**F3**, **Print Screen**, **Ctrl+Alt+P**) a screen capture,
 **F10** / **F11** the volume keys (down / up),
 **Ctrl+Left** / **Ctrl+Right**
@@ -263,7 +265,13 @@ view for Just Type. Left alone the screen dims and turns off as on a device
 click, **F3** or **Home** turns it on (on a Mac, F3 to F11 need **fn**:
 macOS keeps them for itself). `--stay-awake` keeps it on (as `--screenshot`
 does). `--low-memory` acts as if memory were low: launching an app shows
-"Sorry, Too Many Cards" instead. `./build/phoenix-sim --open https://example.com` opens a
+"Sorry, Too Many Cards" instead. On a Touchstone the device goes into dock
+mode, "Exhibition", as on webOS: at once with the screen off (or Power), or
+when the screen would have turned off; an exhibition shows full screen (the
+Time clocks, Photos' slideshow, the Agenda, any app that declares
+`exhibitionMode`), picked from the status bar's title; Home, the swipe up
+or lifting it off leaves (Settings > Exhibition). `--touchstone` starts on
+one, in dock mode. `./build/phoenix-sim --open https://example.com` opens a
 page in the browser. A text field taking the focus brings up the virtual
 keyboard (the Open webOS phone and TouchPad keyboards); click its keys, or
 keep typing on the desktop keyboard.
