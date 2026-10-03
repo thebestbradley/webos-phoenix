@@ -291,6 +291,26 @@ async function main() {
         check(last().keyboardShortcuts === "desktop", `desktop-style shortcuts reach the shell (${last().keyboardShortcuts})`);
         await shot("textassist");
 
+        // ---- Accessibility > Keyboard: the hardware keyboard's options reach the shell ----
+        await open("accessibility");
+        check(last().keyboardAccess && last().keyboardAccess.stickyKeys === false && last().keyboardAccess.customRepeat === false,
+              "keyboard accessibility off by default, the keyboard's own repeat");
+        await page.click("[data-testid='a11y-stickyKeys']");
+        await page.waitForSelector("[data-testid='a11y-stickyKeys'][aria-checked='true']");
+        await page.click("[data-testid='a11y-slowKeys']");
+        await page.click("role=option[name='0.6 seconds']");
+        await page.click("[data-testid='a11y-keyRepeat']");
+        await page.click("role=option[name='Fast']");
+        await page.waitForTimeout(200);
+        const ka = last().keyboardAccess || {};
+        check(ka.stickyKeys === true && ka.slowKeys === 600 && ka.bounceKeys === 0, `sticky and slow keys reach the shell (${JSON.stringify(ka)})`);
+        check(ka.customRepeat === true && ka.repeatDelay === 250 && ka.repeatInterval === 30, "the key repeat reaches the shell");
+        await page.click("[data-testid='a11y-keyRepeat']");
+        await page.click("role=option[name='As the keyboard does']");
+        await page.waitForTimeout(200);
+        check(last().keyboardAccess.customRepeat === false, "back to the keyboard's own repeat");
+        await shot("accessibility-keyboard");
+
         // ---- Device Info: the phone, and the legacy reset options ----------------------
         // Erase Apps & Data keeps the files on the USB drive; Full Erase does not.
         const svc = (uri, params) => page.evaluate(([u, p]) => new Promise((resolve) => {

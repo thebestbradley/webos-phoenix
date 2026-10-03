@@ -58,7 +58,8 @@
 //
 // Optional (the shell has a built-in fallback without them):
 //   justTypeWindow() -> Item  the Just Type search surface, or null
-//   justTypeStart(text)      show it with this text typed
+//   justTypeStart(text, done) show it with this text typed (done: once it is)
+//   justTypeType(text)       type more at the end
 //   justTypeStop()           it was dismissed; clear it
 //   justTypeDismissed        signal: it launched something; close it
 //   appMenu(uid)             the user tapped the app name: open its app menu
@@ -1050,13 +1051,33 @@ Item {
                + "if(jt){" + js + "}})()";
     }
 
-    function justTypeStart(text) {
+    // done (optional) is called once the page shows text.
+    function justTypeStart(text, done) {
         var win = justTypeWindow();
         if (!win)
             return;
-        var js = _justTypeScript("jt.forceFocus();jt.$.searchField.setValue(" + JSON.stringify(text)
-                                 + ");jt.onValueChange(null,null," + JSON.stringify(text) + ");");
-        _runWhenLoaded(win, js, !_justTypeLoaded);
+        var js = _justTypeScript("jt.forceFocus();" + _justTypeSetText(JSON.stringify(text)));
+        _runWhenLoaded(win, js, !_justTypeLoaded, done);
+    }
+
+    // More text typed at the end of the search.
+    function justTypeType(text) {
+        if (!_justType || !_justTypeLoaded)
+            return;
+        _justType.runScript(_justTypeScript(_justTypeSetText("jt.$.searchField.getValue()+" + JSON.stringify(text))));
+    }
+
+    // The search field's text set to the expression v, the cursor after it.
+    // The field is an editable div (a RichText): setValue replaces its
+    // content and leaves the cursor at its start, so what was typed next
+    // went in front ("palm" came out "almp").
+    function _justTypeSetText(v) {
+        return "var v=" + v + ";var f=jt.$.searchField;f.setValue(v);"
+               + "var n=f.$.input&&f.$.input.hasNode();"
+               + "if(n&&n.setSelectionRange){n.setSelectionRange(v.length,v.length);}"
+               + "else if(n){var r=document.createRange();r.selectNodeContents(n);r.collapse(false);"
+               + "var sel=window.getSelection();sel.removeAllRanges();sel.addRange(r);}"
+               + "jt.onValueChange(null,null,v);";
     }
 
     function justTypeStop() {
@@ -1070,9 +1091,9 @@ Item {
     readonly property string messagingAppId: "org.webosphoenix.messaging"
 
     // Run js in win now, or once its page has loaded when just created.
-    function _runWhenLoaded(win, js, fresh) {
+    function _runWhenLoaded(win, js, fresh, then) {
         if (!fresh) {
-            win.runScript(js);
+            win.runScript(js, then);
             return;
         }
         var done = false;
@@ -1080,7 +1101,7 @@ Item {
             if (done)
                 return;
             done = true;
-            win.runScript(js);
+            win.runScript(js, then);
         });
     }
 

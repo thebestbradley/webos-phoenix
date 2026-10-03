@@ -5,13 +5,14 @@
 //
 //   phoenix-sim [--size WxH] [--scale N] [--tablet|--phone] [--scene NAME]
 //               [--orientation up|left|down|right] [--turn ORIENTATION]
-//               [--home-button] [--first-use] [--screenshot FILE [--delay MS]] [--stay-awake] [--low-memory] [--no-host-shell]
+//               [--home-button] [--first-use] [--screenshot FILE [--delay MS]] [--stay-awake] [--low-memory] [--hardware-keyboard] [--no-host-shell]
 //               [--host-shell PATH]
 //
 // Keys: Esc = back gesture, Home/F1 = up gesture, F2 = demo notification,
 //       F3 = Power (screen off and locked / on), F4 = incoming call, F5 = incoming text message,
 //       F6 = low battery, Shift+F6 = battery not reporting, F7 = charger in/out, F10 / F11 = volume down / up, F9 / Print Screen /
 //       Ctrl+Alt+P (Command or Control+Option+P on a Mac) = screen capture,
+//       Ctrl+Shift+K = attach or detach a hardware keyboard,
 //       Home + F3 together = screen capture, Ctrl+Left / Ctrl+Right =
 //       turn the device a quarter turn counter-clockwise / clockwise.
 //       Type in card view for Just Type.
@@ -136,11 +137,12 @@ int main(int argc, char *argv[])
     QCommandLineOption turnOpt(QStringLiteral("turn"), QStringLiteral("Turn the device to this orientation one second after start-up (the UI follows 200 ms later and turns for 300 ms)."), QStringLiteral("orientation"));
     QCommandLineOption homeButtonOpt(QStringLiteral("home-button"), QStringLiteral("The device has a hardware Home button its maker uses instead of the gesture bar (the TouchPad): no gesture bar; the Home key presses the button."));
     QCommandLineOption lowMemoryOpt(QStringLiteral("low-memory"), QStringLiteral("Act as if memory were low: launching an app shows \"Sorry, Too Many Cards\"."));
+    QCommandLineOption hardwareKeyboardOpt(QStringLiteral("hardware-keyboard"), QStringLiteral("Start with a hardware keyboard attached (Ctrl+Shift+K attaches or detaches it): the virtual keyboard stays down unless asked for."));
     QCommandLineOption stayAwakeOpt(QStringLiteral("stay-awake"), QStringLiteral("The screen never dims or turns off by itself (always so with --screenshot)."));
     QCommandLineOption quietOpt(QStringLiteral("quiet"), QStringLiteral("No boot and shutdown sounds (they are off anyway with --screenshot and the offscreen platform)."));
     QCommandLineOption noHostShellOpt(QStringLiteral("no-host-shell"), QStringLiteral("Do not give the Terminal app a real shell on this computer (it gets the runtime's simulated shell)."));
     QCommandLineOption hostShellOpt(QStringLiteral("host-shell"), QStringLiteral("Run this program in the Terminal instead of the shell it asks for."), QStringLiteral("path"));
-    parser.addOptions({ lowMemoryOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
+    parser.addOptions({ hardwareKeyboardOpt, lowMemoryOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
                         noHostShellOpt, hostShellOpt });
     parser.process(app);
 
@@ -244,6 +246,7 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simWebApps"), webApps);
     view.rootContext()->setContextProperty(QStringLiteral("simLaunch"), parser.values(launchOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simLowMemory"), parser.isSet(lowMemoryOpt));
+    view.rootContext()->setContextProperty(QStringLiteral("simHardwareKeyboard"), parser.isSet(hardwareKeyboardOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simOpen"), parser.value(openOpt));
     RootfsFiles rootfsFiles(&rootfs);
     view.rootContext()->setContextProperty(QStringLiteral("simRootfs"), rootfs.isValid() ? &rootfsFiles : nullptr);

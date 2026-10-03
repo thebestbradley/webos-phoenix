@@ -505,13 +505,18 @@ Item {
             mouseRelease(r, 140, y);
             tryCompare(windows.notifications, "count", 2, 1000);
 
-            // A quick short flick sideways.
+            // A quick short flick sideways: 40 px in 10 ms (on the
+            // notification area's clock, not the machine's).
             rows = dashboardRows();
             r = rows[0];
+            var t = 1000;
+            notes.clock = function () { return t; };
             mousePress(r, 20, y);
-            mouseMove(r, 40, y, 5);
-            mouseMove(r, 60, y, 5);
-            mouseRelease(r, 60, y, Qt.LeftButton, Qt.NoModifier, 5);
+            mouseMove(r, 40, y);
+            mouseMove(r, 60, y);
+            t += 10;
+            mouseRelease(r, 60, y);
+            notes.clock = function () { return Date.now(); };
             tryCompare(windows.notifications, "count", 1, 1000);
             notes.dashboardOpen = false;
         }

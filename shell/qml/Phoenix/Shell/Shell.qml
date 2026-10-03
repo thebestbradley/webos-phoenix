@@ -616,6 +616,12 @@ FocusScope {
 
     // Desktop / hardware keyboard shortcuts.
     Keys.onPressed: (event) => {
+        // Typed while Just Type's page is still taking its first letter.
+        if (justType.open && event.text.length === 1 && !(event.modifiers & Qt.ControlModifier)
+                && justType.typeAhead(event.text)) {
+            event.accepted = true;
+            return;
+        }
         // Card view keys (CardWindowManager.cpp:1189-1212).
         if (!locked && cards.maximizeProgress === 0 && !launcher.open && !justType.open) {
             if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
@@ -734,6 +740,23 @@ FocusScope {
                 shell.shortcut(shortcuts[index - captureChords.length].action);
             }
         }
+    }
+
+    // ---- Keyboard accessibility (GAPS V8 (4)) ------------------------------------
+    // Settings > Accessibility > Keyboard: sticky, slow and bounce keys and
+    // the key repeat, on the hardware keyboard's keys before SystemKeys
+    // and the apps see them (created after SystemKeys, so its filter runs
+    // first). Not over the lock screen's latches: locking drops them.
+    readonly property KeyboardAccess keyboardAccess: KeyboardAccess {
+        readonly property var prefs: shell.system && shell.system.keyboardAccess ? shell.system.keyboardAccess : ({})
+        stickyKeys: !!prefs.stickyKeys
+        slowKeys: (prefs.slowKeys || 0) > 0
+        slowKeysDelay: prefs.slowKeys || 300
+        bounceKeys: (prefs.bounceKeys || 0) > 0
+        bounceKeysDelay: prefs.bounceKeys || 300
+        customRepeat: !!prefs.customRepeat
+        repeatDelay: prefs.repeatDelay !== undefined ? prefs.repeatDelay : 500
+        repeatInterval: prefs.repeatInterval || 50
     }
 
     // ---- The volume keys ----------------------------------------------------------
@@ -945,6 +968,33 @@ FocusScope {
     // luna-pyramid.conf:99-100, ...). The simulator turns it on; a device
     // leaves it off and reports OSE's own keyboard (platformKeyboardHeight).
     property bool virtualKeyboard: false
+    // A hardware keyboard is attached (the TouchPad's Bluetooth keyboard;
+    // system.hardwareKeyboard): the virtual keyboard stays down when a
+    // field takes the focus, as with webOS's keyboard-open state, and comes
+    // up only when asked for (the keyboard button above the gesture bar,
+    // the keyboard's own keyboard key); typing on the hardware keyboard
+    // puts it away again (GAPS V8 (1)).
+    readonly property bool hardwareKeyboard: !!(system && system.hardwareKeyboard)
+    property bool _keyboardAskedFor: false
+    function showVirtualKeyboard() {
+        if (!imeClient)
+            return;
+        _keyboardAskedFor = true;
+        _showIMEInternal(true);
+    }
+    onHardwareKeyboardChanged: {
+        _keyboardAskedFor = false;
+        Qt.callLater(_updateImeClient);
+    }
+    Connections {
+        target: shell.keyboardAccess
+        function onHardwareKeyPressed(key) {
+            if (shell.hardwareKeyboard && shell._imeOpened && shell._keyboardAskedFor) {
+                shell._keyboardAskedFor = false;
+                shell._hideIMEInternal();
+            }
+        }
+    }
     // The height of a keyboard the platform draws (OSE's IME panel on a
     // device, PhoenixViewsRoot): the shell makes room for it the same way.
     property real platformKeyboardHeight: 0
@@ -1012,7 +1062,12 @@ FocusScope {
         var old = imeClient;
         var same = old !== null && c !== null && old.kind === c.kind && old.item === c.item && old.uid === c.uid;
         imeClient = c;
-        if (c)
+        if (!same)
+            _keyboardAskedFor = false;
+        if (c && hardwareKeyboard && !_keyboardAskedFor) {
+            ime.editorState = c.state;
+            _hideIMEInternal();
+        } else if (c)
             _showIMEInternal(!same || JSON.stringify(old.state) !== JSON.stringify(c.state));
         else if (old)
             _hideIMEInternal();
@@ -1199,6 +1254,9 @@ FocusScope {
     // Unlocked over a card that is held the other way: back to its
     // orientation (CardWindow::setMaximized, CardWindow.cpp:1756-1760).
     onLockedChanged: {
+        // Sticky keys' latched modifiers do not outlive the lock.
+        if (locked)
+            keyboardAccess.clearModifiers();
         var o = maximizedCardOrientation();
         if (!locked && o !== "free")
             uiRotation.setRotationMode(o, true);
@@ -1872,6 +1930,84 @@ FocusScope {
         z: 99997
         scheme: shell.keyboardShortcuts
         anchors.centerIn: parent
+    }
+
+    // A hardware keyboard attached and a field with the focus: the button
+    // that brings the virtual keyboard up (the iPad's keyboard bar), at the
+    // bottom right above the gesture bar.
+    Rectangle {
+        id: keyboardButton
+        objectName: "showKeyboardButton"
+        z: 99996
+        visible: shell.virtualKeyboard && shell.hardwareKeyboard && shell.imeClient !== null && !shell._imeOpened && !shell.locked
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.rightMargin: Theme.px(12)
+        anchors.bottomMargin: Theme.gestureAreaHeight + Theme.px(10)
+        width: Theme.px(56)
+        height: Theme.px(40)
+        radius: Theme.px(8)
+        color: keyboardButtonArea.pressed ? "#e0505050" : "#d0202020"
+        border.color: "#60ffffff"
+        Item {
+            anchors.centerIn: parent
+            width: Theme.px(36)
+            height: Theme.px(22)
+            clip: true
+            // icon-hide-keyboard.png without its arrow: just the keyboard.
+            Image {
+                source: Theme.asset("keyboard-tablet/icon-hide-keyboard.png")
+                width: Theme.px(36)
+                height: Theme.px(36) * Theme.artHeight(source) / Math.max(1, Theme.artWidth(source))
+            }
+        }
+        MouseArea {
+            id: keyboardButtonArea
+            anchors.fill: parent
+            onClicked: shell.showVirtualKeyboard()
+        }
+    }
+
+    // Sticky keys: the modifiers waiting for the next key, and in bold
+    // the ones locked down, in a chip above the gesture bar.
+    Rectangle {
+        id: stickyChip
+        objectName: "stickyModifiers"
+        readonly property int mods: shell.keyboardAccess.latchedModifiers | shell.keyboardAccess.lockedModifiers
+        function names(m) {
+            var out = [];
+            if (m & Qt.ShiftModifier) out.push("Shift");
+            if (m & Qt.ControlModifier) out.push(Qt.platform.os === "osx" ? "⌘" : "Ctrl");
+            if (m & Qt.AltModifier) out.push(Qt.platform.os === "osx" ? "Option" : "Alt");
+            if (m & Qt.MetaModifier) out.push(Qt.platform.os === "osx" ? "Control" : "Super");
+            return out;
+        }
+        z: 99996
+        visible: mods !== 0
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Theme.gestureAreaHeight + Theme.px(12)
+        width: chipText.implicitWidth + Theme.px(24)
+        height: Theme.px(30)
+        radius: height / 2
+        color: "#d0202020"
+        border.color: "#60ffffff"
+        Text {
+            id: chipText
+            objectName: "stickyModifiersText"
+            anchors.centerIn: parent
+            textFormat: Text.StyledText
+            color: Theme.text
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.px(15)
+            text: {
+                var locked = shell.keyboardAccess.lockedModifiers;
+                return stickyChip.names(stickyChip.mods).map(function (n, i) {
+                    var all = stickyChip.names(locked);
+                    return all.indexOf(n) >= 0 ? "<b><u>" + n + "</u></b>" : n;
+                }).join("  ");
+            }
+        }
     }
 
     // The reticle: penindicator-ripple.png where a tap lands, growing to

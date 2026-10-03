@@ -79,6 +79,13 @@ QtObject {
     // Settings > Accessibility "Reduce motion" (system preference
     // accessibility.reduceMotion): the shell's animations (Theme.reduceMotion).
     property bool reduceMotion: false
+    // Settings > Accessibility > Keyboard (the runtime's keyboardAccess):
+    // {stickyKeys, slowKeys, bounceKeys (ms, 0 off), customRepeat,
+    // repeatDelay, repeatInterval}.
+    property var keyboardAccess: ({})
+    // A hardware keyboard is attached (phoenix-sim --hardware-keyboard,
+    // Ctrl+Shift+K): the virtual keyboard stays down unless asked for.
+    property bool hardwareKeyboard: typeof simHardwareKeyboard !== "undefined" && simHardwareKeyboard === true
     property real brightness: 0.7     // 0.10 (the floor, Theme.minimumBrightness) .. 1
     // Fixed time for reproducible screenshots; null = live clock.
     property var fixedTime: null
@@ -249,7 +256,7 @@ QtObject {
     // screenTimeout, lockTimeout, advancedGestures, keyboardShortcuts,
     // volume, streams, systemSounds, tapSounds, textAssist, keyboards,
     // keyboard, ringtone, alerttone,
-    // notificationtone, reduceMotion, vpnProfiles. Missing keys are left alone.
+    // notificationtone, reduceMotion, keyboardAccess, vpnProfiles. Missing keys are left alone.
     function applyAppStatus(s) {
         applyingAppStatus = true;
         if (s.wifiEnabled !== undefined)
@@ -302,6 +309,8 @@ QtObject {
             notificationtone = s.notificationtone;
         if (s.reduceMotion !== undefined)
             reduceMotion = !!s.reduceMotion;
+        if (s.keyboardAccess !== undefined)
+            keyboardAccess = s.keyboardAccess || ({});
         if (s.vpnProfiles !== undefined) {
             _runtimeVpn = true;
             vpnProfiles = s.vpnProfiles;

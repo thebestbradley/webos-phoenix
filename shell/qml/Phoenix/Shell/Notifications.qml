@@ -51,6 +51,9 @@ Item {
     readonly property bool overlay: Theme.tablet
     readonly property bool hasNotifications: model && model.count > 0
     property bool bannerActive: false
+    // The time for a swipe's speed (a test sets its own, so how busy the
+    // machine is does not decide whether a flick was quick).
+    property var clock: function () { return Date.now(); }
     // The dashboard has content while a banner shows or notifications wait
     // (DashboardWindowManager::setBannerHasContent, :454-465).
     // The phone's active-call banner ({appId, icon, message, startTime}
@@ -867,11 +870,11 @@ Item {
                         onPressed: (m) => {
                             snap.stop();
                             start = mapToItem(root, m.x, m.y);
-                            startTime = Date.now();
+                            startTime = root.clock();
                         }
                         onReleased: (m) => {
                             var p = mapToItem(root, m.x, m.y);
-                            var ms = Date.now() - startTime;
+                            var ms = root.clock() - startTime;
                             var vx = ms > 0 ? (p.x - start.x) / ms : 0, vy = ms > 0 ? (p.y - start.y) / ms : 0;
                             var speed = Math.abs(vx) + Math.abs(vy);
                             var flicked = speed >= Theme.flickMinVelocity && speed <= Theme.flickMaxVelocity

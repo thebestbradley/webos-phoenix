@@ -955,6 +955,19 @@
         firstUse: false
     };
 
+    // Settings > Accessibility's keyboard options, as the shell takes them.
+    function keyboardAccess(a) {
+        var ms = function (v) { return typeof v === "number" && v > 0 ? Math.round(v) : 0; };
+        return {
+            stickyKeys: !!a.stickyKeys,
+            slowKeys: ms(a.slowKeys),
+            bounceKeys: ms(a.bounceKeys),
+            customRepeat: typeof a.keyRepeatDelay === "number",
+            repeatDelay: typeof a.keyRepeatDelay === "number" ? Math.max(0, Math.round(a.keyRepeatDelay)) : 500,
+            repeatInterval: ms(a.keyRepeatInterval) || 50
+        };
+    }
+
     function prefs() {
         var p = store.get("prefs", {});
         var out = {};
@@ -2902,6 +2915,9 @@
                 keyboardShortcuts: p.keyboardShortcuts === "desktop" ? "desktop" : "ipad",
                 // Settings > Accessibility: the shell's animations.
                 reduceMotion: !!(p.accessibility && p.accessibility.reduceMotion),
+                // ... and the hardware keyboard's sticky, slow and bounce
+                // keys and key repeat (the shell's KeyboardAccess).
+                keyboardAccess: keyboardAccess(p.accessibility || {}),
                 wallpaperFile: (p.wallpaper && p.wallpaper.wallpaperFile) || "",
                 // The system menu's VPN drawer: each profile's name, its state
                 // (disconnected, connecting, connected) and whether connecting
@@ -8533,7 +8549,11 @@
     //                      medications, notes, organDonor, contacts: [{personId,
     //                      name, number, relation}], showWhenLocked}
     //   accessibility      Settings > Accessibility: {reduceMotion,
-    //                      highContrast, monoAudio, captions}
+    //                      highContrast, monoAudio, captions; the hardware
+    //                      keyboard's stickyKeys, slowKeys (ms, 0 off),
+    //                      bounceKeys (ms, 0 off), keyRepeatDelay /
+    //                      keyRepeatInterval (ms; no delay: the keyboard's
+    //                      own repeat)}
     //
     // com.palm.systemmanager (legacy webOS, luna-sysmgr SystemService.cpp):
     //   getBootStatus {subscribe}  -> {finished, firstUse}: firstUse while the

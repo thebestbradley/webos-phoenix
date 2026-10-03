@@ -104,6 +104,31 @@ Item {
             fuzzyCompare(shell.cardView.windowHeight, shell.uiRoot.height - Theme.statusBarHeight - kb.keyboardHeight, 0.01);
         }
 
+        // A hardware keyboard attached (GAPS V8 (1)): a field taking the
+        // focus leaves the keyboard down and shows the keyboard button;
+        // the button brings it up, and a key typed on the hardware keyboard
+        // puts it away again. Detached, it comes up as usual.
+        function test_hardwareKeyboardKeepsItDown() {
+            sys.hardwareKeyboard = true;
+            var button = findChild(shell, "showKeyboardButton");
+            field.forceActiveFocus();
+            tryCompare(button, "visible", true, 1000);
+            wait(300);
+            verify(!shell.keyboardOpen);
+            compare(shell.notifications.negativeSpace, 0);
+            mouseClick(button);
+            tryCompare(shell, "keyboardOpen", true, 1000);
+            verify(!button.visible);
+            keyClick(Qt.Key_A);
+            compare(field.text, "a");
+            tryCompare(shell, "keyboardOpen", false, 1000);
+            verify(field.activeFocus);
+            tryCompare(button, "visible", true, 1000);
+            sys.hardwareKeyboard = false;
+            tryCompare(shell, "keyboardOpen", true, 1000);
+            verify(!button.visible);
+        }
+
         function test_showAndHideAnimateOver400ms() {
             compare(Theme.positiveSpaceDuration, 400);
             field.forceActiveFocus();

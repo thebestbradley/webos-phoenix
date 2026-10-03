@@ -229,6 +229,12 @@ Item {
             root.power({ charger: root.charger, percent: root.charger === "none" ? 60 : 61 });
         }
     }
+    // Ctrl+Shift+K: a hardware keyboard attached or detached.
+    Shortcut {
+        sequence: "Ctrl+Shift+K"
+        context: Qt.ApplicationShortcut
+        onActivated: status.hardwareKeyboard = !status.hardwareKeyboard
+    }
     // Shift+F6: the battery stops reporting (powerd gone: the status bar's
     // battery-error, "Battery: Not Available" in the system menu), or
     // reports again.
