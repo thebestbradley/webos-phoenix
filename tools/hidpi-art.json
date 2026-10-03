@@ -242,6 +242,8 @@
                 { "art": "enyo/slider-button.png", "method": "smooth", "tiles": [1, 2] },
                 { "art": "enyo/toggle-button.png", "method": "smooth", "tiles": [1, 4] },
                 { "art": "enyo/telephony/dial-button.png", "method": "smooth", "tiles": [1, 3] },
+                { "art": "enyo/telephony/dial-button-frame.png", "method": "smooth", "tiles": [1, 3] },
+                { "art": "enyo/telephony/dial-button-glyph.png", "method": "smooth", "tiles": [1, 3] },
                 { "art": "enyo/telephony/pin-key-highlight.png", "method": "smooth" },
                 { "art": "enyo/telephony/popup-bg.png", "method": "smooth" },
                 { "art": "enyo/wifi/bg_field.png", "method": "smooth" },
