@@ -307,7 +307,10 @@ Item {
             menu.open = false;
             tryCompare(menu, "visible", false, 1000);
             verify(!wifi.isOpen);
-            compare(wifi.height, 42);
+            // Shut at once (no animation)...
+            verify(wifi.closedFully);
+            // ...and the drawer's column lays out again on the next frame.
+            tryCompare(wifi, "height", 42, 500);
         }
 
         function test_settingsLaunchPoint() {
