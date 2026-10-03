@@ -7,6 +7,8 @@
     "title": "Notes (Limestone)",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
     "iconColor": "#e8b400",
     "uiRevision": 2,
     "keywords": ["Notes", "Markdown", "Enact", "Limestone"],

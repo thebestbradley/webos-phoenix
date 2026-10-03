@@ -7,6 +7,8 @@
     "title": "Notes (Ionic)",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
     "iconColor": "#3880ff",
     "uiRevision": 2,
     "keywords": ["Notes", "Markdown", "Ionic"],

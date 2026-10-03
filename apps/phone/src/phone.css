@@ -397,7 +397,7 @@ html:has(> body.phone-app), body.phone-app {
 .emergency-actions .pui-button { flex: 1; margin: 0; }
 .emergency-medical-button { display: flex; align-items: center; justify-content: center; gap: 6px; }
 
-/* The six-armed star of the Settings icon (apps/settings/tools/render-icons.cjs). */
+/* The six-armed star of the Emergency Info icon (art/app-icons/objects/emergency.svg). */
 .emergency-star {
     display: inline-block;
     flex: none;

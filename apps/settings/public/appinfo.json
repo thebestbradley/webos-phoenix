@@ -7,6 +7,8 @@
     "title": "Settings",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
     "uiRevision": 2,
     "phoenix": {
         "//": "Phoenix launcher metadata: launcherTab 0 = Apps, 1 = Downloads, 2 = Settings. hidden keeps the app itself out of the launcher; each launch point is its own icon and card, and starts the app with its params.",

@@ -7,6 +7,8 @@
     "title": "Music",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
     "iconColor": "#e07a1f",
     "uiRevision": 2,
     "//requiredPermissions": "OSE access control groups for the services the app calls (the groups in each service's sysbus api.json).",

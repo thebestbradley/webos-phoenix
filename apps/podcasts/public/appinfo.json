@@ -7,6 +7,8 @@
     "title": "Podcasts",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
     "iconColor": "#7a3fa8",
     "uiRevision": 2,
     "keywords": ["Podcast", "RSS", "Episodes", "Radio", "OPML"],

@@ -7,6 +7,8 @@
     "title": "Doc View",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
     "iconColor": "#2b5fa8",
     "uiRevision": 2,
     "keywords": ["Books", "E-books", "EPUB", "Reader", "Word", "Excel", "PowerPoint", "Documents", "Markdown"],

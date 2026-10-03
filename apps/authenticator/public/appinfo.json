@@ -7,6 +7,8 @@
     "title": "Authenticator",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
     "iconColor": "#1f7a5a",
     "uiRevision": 2,
     "keywords": ["Two-Factor", "2FA", "TOTP", "One-Time Password", "Verification Code", "Security"],

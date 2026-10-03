@@ -7,6 +7,8 @@
     "title": "First Use",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
     "iconColor": "#e07a2c",
     "uiRevision": 2,
     "keywords": ["Setup", "Welcome", "Tutorial"],

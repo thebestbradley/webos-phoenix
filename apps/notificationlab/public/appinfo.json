@@ -7,6 +7,8 @@
     "title": "Notification Lab",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
     "iconColor": "#2a2f36",
     "uiRevision": 2,
     "keywords": ["Notifications", "Live Activities", "Background", "Dashboard", "Banner", "Developer"],
