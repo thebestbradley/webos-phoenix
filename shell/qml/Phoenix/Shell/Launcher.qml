@@ -42,7 +42,85 @@ Item {
     signal dragMoved(real x, real y)
     signal dragEnded(real x, real y)
 
-    onOpenChanged: if (!open) editMode = false
+    onOpenChanged: {
+        if (!open)
+            editMode = false;
+        keyIndex = -1;
+    }
+    onCurrentPageChanged: if (keyIndex >= 0) keyIndex = Math.min(keyIndex, Math.max(0, _pageCount(currentPage) - 1))
+
+    // ---- Keyboard navigation (GAPS V8 (3)) -----------------------------------------
+    // The arrows move a focus ring over the page's icons (past its left or
+    // right edge to the page beside), Tab / Shift+Tab go to the next /
+    // previous page (Home is the device's Home button), Enter or Space
+    // opens the icon as a tap would, Esc closes the launcher.
+    property int keyIndex: -1
+    function _pageCount(i) {
+        var m = pageModels[i];
+        return m ? m.count : 0;
+    }
+    function _keyActivate() {
+        var m = pageModels[currentPage];
+        if (!m || keyIndex < 0 || keyIndex >= m.count)
+            return;
+        var item = m.get(keyIndex);
+        if (editMode)
+            return;
+        if (item.installState !== "") {
+            pendingTapped(item.appId);
+            return;
+        }
+        feedbackId = item.appId;
+        launchRequested(item.appId);
+    }
+    function handleKey(event) {
+        if (!open || dragging)
+            return false;
+        var k = event.key, n = _pageCount(currentPage), cols = columns;
+        var shift = (event.modifiers & Qt.ShiftModifier) || k === Qt.Key_Backtab;
+        if (k === Qt.Key_Escape) {
+            if (editMode)
+                editMode = false;
+            else
+                closeRequested();
+            return true;
+        }
+        if (k === Qt.Key_Tab || k === Qt.Key_Backtab) {
+            showPage((currentPage + (shift ? tabs.length - 1 : 1)) % tabs.length);
+            keyIndex = _pageCount(currentPage) > 0 ? 0 : -1;
+            return true;
+        }
+        if (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space) {
+            _keyActivate();
+            return true;
+        }
+        if ([Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down].indexOf(k) < 0)
+            return false;
+        if (keyIndex < 0) {
+            keyIndex = n > 0 ? 0 : -1;
+            return true;
+        }
+        var i = keyIndex;
+        if (k === Qt.Key_Up) i = i - cols >= 0 ? i - cols : i;
+        else if (k === Qt.Key_Down) i = i + cols < n ? i + cols : i;
+        else if (k === Qt.Key_Left) {
+            if (i % cols === 0 && currentPage > 0) {
+                showPage(currentPage - 1);
+                keyIndex = Math.max(0, _pageCount(currentPage) - 1);
+                return true;
+            }
+            i = Math.max(0, i - 1);
+        } else if (k === Qt.Key_Right) {
+            if ((i % cols === cols - 1 || i === n - 1) && currentPage < tabs.length - 1) {
+                showPage(currentPage + 1);
+                keyIndex = _pageCount(currentPage) > 0 ? 0 : -1;
+                return true;
+            }
+            i = Math.min(n - 1, i + 1);
+        }
+        keyIndex = i;
+        return true;
+    }
 
     // The icon showing launch feedback, until the launcher has finished
     // hiding or the timeout (LauncherObject::setAppLaunchFeedback /
@@ -506,6 +584,21 @@ Item {
                     Behavior on y { NumberAnimation { duration: Theme.launcherReorderDuration; easing.type: Easing.InQuad } }
                     // The dragged icon travels under the finger (the shell's drag proxy).
                     opacity: launcher.draggedId === appId ? 0 : 1
+
+                    // The keyboard's focus ring.
+                    Rectangle {
+                        objectName: "launcherFocusRing"
+                        readonly property bool on: launcher.keyIndex === cell.index && page.index === launcher.currentPage
+                        visible: on
+                        anchors.horizontalCenter: iconItem.horizontalCenter
+                        y: iconItem.y - Theme.px(6)
+                        width: Math.min(parent.width - Theme.px(4), Theme.launcherIconSize + Theme.px(36))
+                        height: iconItem.height + Theme.px(10)
+                        radius: Theme.px(10)
+                        color: "#302c8ce0"
+                        border.color: "#2c8ce0"
+                        border.width: Theme.px(2)
+                    }
 
                     // Edit mode: the icon sits on the edit tile (edit-icon-bg.png).
                     Image {

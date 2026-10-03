@@ -24,6 +24,11 @@ Item {
         system: SimSystemStatus {}
     }
 
+    Component {
+        id: spyComponent
+        SignalSpy {}
+    }
+
     TestCase {
         name: "LauncherLayout"
 
@@ -204,6 +209,41 @@ Item {
             verify(launcher.hidden < 1);
             tryCompare(launcher, "feedbackId", "", 2000);
             compare(launcher.hidden, 1);
+        }
+
+        // GAPS V8 (3): the arrows move a focus ring over the icons, Tab
+        // goes to the next page, Enter opens the icon, Esc closes.
+        function test_keyboardNavigation() {
+            shell.forceActiveFocus();
+            var page = shell.launcherLayout.pages[0];
+            keyClick(Qt.Key_Right);
+            compare(launcher.keyIndex, 0);
+            var ring = findChild(launcher, function(o) { return o.objectName === "launcherFocusRing" && o.visible; });
+            verify(ring, "the focus ring shows");
+            keyClick(Qt.Key_Right);
+            compare(launcher.keyIndex, 1);
+            keyClick(Qt.Key_Down);
+            compare(launcher.keyIndex, 1 + launcher.columns < page.length ? 1 + launcher.columns : 1);
+            keyClick(Qt.Key_Up);
+            keyClick(Qt.Key_Left);
+            compare(launcher.keyIndex, 0);
+            keyClick(Qt.Key_Tab);
+            compare(launcher.currentPage, 1);
+            keyClick(Qt.Key_Backtab);
+            compare(launcher.currentPage, 0);
+            keyClick(Qt.Key_Right);
+            var spy = createTemporaryObject(spyComponent, root, { target: launcher, signalName: "launchRequested" });
+            keyClick(Qt.Key_Return);
+            compare(spy.count, 1);
+            compare(spy.signalArguments[0][0], shell.launcherLayout.pages[0][1]);
+            tryVerify(function() { return !shell.launcherOpen; }, 2000);
+            // Opened again, Esc closes it.
+            shell.gestureUp();
+            tryCompare(launcher, "hidden", 0, 2000);
+            compare(launcher.keyIndex, -1);
+            shell.forceActiveFocus();
+            keyClick(Qt.Key_Escape);
+            tryVerify(function() { return !shell.launcherOpen; }, 2000);
         }
 
         // 16 px bold white / #C8C8C8 tabs, at most 150 px each.
