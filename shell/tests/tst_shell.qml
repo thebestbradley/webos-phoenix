@@ -795,10 +795,15 @@ Item {
             var uid = windows.launch("org.webosphoenix.email", "");
             shell.cardView.maximizeProgress = 1;
             var bar = findChild(shell, "statusBar");
+            var corners = findChild(shell, "screenCorners");
+            // R3: the phone's corners show in card view and maximized...
+            verify(corners.visible);
             var normal = shell.cardView.windowHeight;
             windows._hostMessage("org.webosphoenix.email", uid, "fullScreen", { on: true });
             verify(shell.fullScreen);
             verify(!bar.visible);
+            // ...and go only while a full-screen card covers the screen.
+            verify(!corners.visible);
             compare(shell.cardView.windowHeight, normal + Theme.statusBarHeight);
             windows.notify("org.webosphoenix.messaging", "Palm Pre", "Hi");
             wait(500);
@@ -807,6 +812,7 @@ Item {
             shell.cardView.maximizeProgress = 0;
             verify(!shell.fullScreen);
             verify(bar.visible);
+            verify(corners.visible);
             windows.dismissNotification(0);
             shell.notifications.bannerActive = false;
         }

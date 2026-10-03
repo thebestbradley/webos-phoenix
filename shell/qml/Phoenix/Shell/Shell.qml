@@ -1361,12 +1361,19 @@ FocusScope {
             }
 
             // Phones round the corners of a maximized app (MenuWindowManager.cpp:126-146).
+            // The phone's screen corners: always at the positive space's
+            // corners (card view, launcher, Just Type too), hidden only while
+            // a full-screen card covers the screen (MenuWindowManager.cpp:
+            // 126-146, 492-517; CardWindow::enableFullScreen /
+            // disableFullScreen, CardWindow.cpp:1274-1312). Under the lock
+            // screen (TopLevelWindowManager), over the overlays.
             Item {
                 id: screenCorners
+                objectName: "screenCorners"
                 anchors.fill: parent
                 anchors.topMargin: Theme.statusBarHeight
                 anchors.bottomMargin: notes.negativeSpace
-                visible: !Theme.tablet && cards.maximized
+                visible: !Theme.tablet && !shell.fullScreen
                 Image { anchors.left: parent.left; anchors.top: parent.top; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-top-left.png") }
                 Image { anchors.right: parent.right; anchors.top: parent.top; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-top-right.png") }
                 Image { anchors.left: parent.left; anchors.bottom: parent.bottom; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-bottom-left.png") }

@@ -40,7 +40,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Clock in 12/24 h, following the locale time-format preference. `StatusBarClock.cpp:198-232`
 - [ ] Icons: RSSI (GSM / 1x / EV-DO dual), WAN type, Bluetooth, Wi-Fi bars, TTY, HAC, call forwarding, roaming (triangle variant), VPN, rotation lock, mute, airplane mode. `StatusBarInfo.cpp:183-326` *Phoenix: airplane, mute, rotation lock, VPN, Wi-Fi, Bluetooth and signal done; not yet WAN type, dual RSSI, TTY, HAC, call forwarding, roaming, connecting states.*
 - [ ] Notification icon strip in the status bar (tablet, up to 10). `StatusBarNotificationArea.cpp`; `StatusBar.h:31-32` *Phoenix: done (Notifications.qml tabletIcons); not capped at 10.*
-- [ ] Phone rounded screen corners. `Src/lunaui/status-bar/MenuWindowManager.cpp:126-146` *Phoenix: drawn while an app is maximized, not in card view.*
+- [x] Phone rounded screen corners. `Src/lunaui/status-bar/MenuWindowManager.cpp:126-146` *Phoenix: at the positive space's corners in every view, hidden while a full-screen card covers the screen.*
 
 ## 3. System menu (status-bar drop-down) [spec §3]
 
