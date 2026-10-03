@@ -4,7 +4,7 @@
 // Desktop simulator entry point (loaded by phoenix-sim).
 //
 // Context properties set by phoenix-sim:
-//   simScene       "locked" | "cards" | "stacks" | "reorder" | "maximized" | "heldcard" | "launcher" |
+//   simScene       "locked" | "cards" | "stacks" | "longstack" | "reorder" | "maximized" | "heldcard" | "launcher" |
 //                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" | "drawer" | "capture" | "capturepreview" |
 //                  "justtype" | "keyboard" | "systemmenu" | "empty"
 //   simFirstUse    start with First Use (--first-use); without it First Use
@@ -389,11 +389,12 @@ Item {
         // cards hid it). Scenes that maximize hide it again.
         shell.dockShown = true;
         shell.cardView.position = 1;
-        if (scene === "stacks" || scene === "reorder") {
-            // Two extra Messaging windows stack with the first.
+        if (scene === "stacks" || scene === "reorder" || scene === "longstack") {
+            // Two extra Messaging windows stack with the first (five for
+            // longstack: a fan longer than its four stationary cards).
             var msg = windows.runningUid(windows.appIdByTitle("Messaging"));
-            windows.openChild(msg);
-            windows.openChild(msg);
+            for (var c = 0; c < (scene === "longstack" ? 5 : 2); ++c)
+                windows.openChild(msg);
             // After the child windows' own focus requests have run.
             Qt.callLater(function() {
                 var cv = shell.cardView;

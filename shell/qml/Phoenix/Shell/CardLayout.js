@@ -21,6 +21,30 @@ function clampFanPosition(pos, n) {
     return clamp(pos, 1, n - 3);
 }
 
+// A tap on card k of the open stack (n cards, fan position pos): maximize
+// it, or scroll the fan when the card is too buried to be meant
+// (CardGroup::shouldMaximizeOrScroll, CardGroup.cpp:400-474; four cards
+// stay put, kMaxStationaryCards). Returns {maximize: true} or
+// {maximize: false, fan: the new position}.
+function tapOnFan(k, n, pos) {
+    var S = 4;
+    if (n <= S)
+        return { maximize: true };
+    if (pos > n - S) {
+        if (k >= n - S)
+            return { maximize: true };
+        return { maximize: false, fan: clampFanPosition(pos - (S - 1), n) };
+    }
+    if (k <= pos) {
+        if (k >= pos - 1)
+            return { maximize: true };
+        return { maximize: false, fan: clampFanPosition(pos - (S - 1), n) };
+    }
+    if (k <= pos + 2)
+        return { maximize: true };
+    return { maximize: false, fan: clampFanPosition(pos + (S - 1), n) };
+}
+
 // Offset of card k in an open (active) stack, relative to the stack origin.
 // CardGroup::calculateOpenedPositions, CardGroup.cpp:699-740.
 function openedOffset(k, pos, p) {
@@ -58,10 +82,11 @@ function closedOffset(k, n, p) {
 //   originY, maximizedCenterY
 // }
 // Returns { cards: { uid: {cx, cy, scale, rot, z, group, k, focused} },
-//           anchors: [..], currentGroup }
+//           anchors: [..], columns: [{left, right}] (each stack's extent on
+//           screen, CardGroup's m_leftWidth / m_rightWidth), currentGroup }
 function compute(groups, p) {
     var G = groups.length;
-    var result = { cards: {}, anchors: [], currentGroup: -1 };
+    var result = { cards: {}, anchors: [], columns: [], currentGroup: -1 };
     if (G === 0)
         return result;
 
@@ -122,6 +147,10 @@ function compute(groups, p) {
         return mix(anchors[i], anchors[i + 1], t - i);
     }
     var scroll = anchorAt(p.position);
+    for (g = 0; g < G; ++g) {
+        var at = p.viewWidth / 2 + anchors[g] - scroll;
+        result.columns.push({ left: at + lefts[g], right: at + rights[g] });
+    }
 
     for (g = 0; g < G; ++g) {
         grp = groups[g];

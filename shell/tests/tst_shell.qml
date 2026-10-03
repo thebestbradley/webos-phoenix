@@ -995,6 +995,56 @@ Item {
             status.advancedGestures = false;
         }
 
+        // C7: in a stack of more than four, a tap on a card buried at the
+        // far end of the fan scrolls the fan three cards instead of
+        // maximizing it; one near the fan's position maximizes; a tap in
+        // the stack's column on no card does nothing
+        // (CardGroup::shouldMaximizeOrScroll).
+        function test_tapOnALongFan() {
+            var first = windows.launch("org.webosphoenix.email", "");
+            var uids = [first];
+            for (var i = 0; i < 5; ++i)
+                uids.push(windows.openChild(first));
+            // openChild puts each at the front.
+            uids = shell.cardView.groups[0].uids.slice();
+            var view = shell.cardView;
+            // Each child asks to rise (Qt.callLater): let that happen first.
+            wait(50);
+            view.jumpTo(0);
+            verify(!view.preparing);
+            compare(view.groupCount, 1);
+            compare(view.groups[0].uids.length, 6);
+            var gid = view.groups[0].id;
+            // The fan starts at its right end (position n - 3 = 3).
+            // The visible strip of card k: between its left edge and the
+            // next card's.
+            function strip(k) {
+                var a = view.layout.cards[uids[k]], b = view.layout.cards[uids[k + 1]];
+                var half = view.windowWidth * a.scale / 2;
+                return { x: ((a.cx - half) + (b.cx - view.windowWidth * b.scale / 2)) / 2, y: a.cy };
+            }
+            // Card 1 (card 0 is off the screen): too deep, the fan moves.
+            var p = strip(1);
+            verify(p.x > 0);
+            mouseClick(view, p.x, p.y);
+            compare(view.maximizeProgress, 0);
+            // 3 - 3 = 0, clamped to 1.
+            compare(view.fanPositions[gid], 1);
+            // Now the left end is in reach: the back card maximizes.
+            wait(400);
+            p = strip(0);
+            mouseClick(view, p.x, p.y);
+            tryCompare(view, "maximizeProgress", 1, 2000);
+            compare(view.currentUid, uids[0]);
+            view.minimize();
+            tryCompare(view, "maximizeProgress", 0, 2000);
+            // Below the stack's cards, in its column: nothing changes.
+            var col = view.layout.columns[0];
+            mouseClick(view, (col.left + col.right) / 2, view.height - 5);
+            compare(view.position, 0);
+            compare(view.maximizeProgress, 0);
+        }
+
         // The dock's own show / hide (OverlayWindowManager dock states).
         function test_dockShowHide() {
             var dock = findChild(shell, "quickLaunch");

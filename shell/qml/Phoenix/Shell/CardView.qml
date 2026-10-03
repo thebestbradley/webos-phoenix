@@ -910,16 +910,33 @@ Item {
             return Object.keys(fingers).length;
         }
 
-        // Tap on the open stack maximizes the tapped card; a tap on or beside
-        // another stack switches to it (CardWindowManager.cpp:2151-2195).
+        // Tap on the open stack maximizes the tapped card, unless it lies
+        // too deep in a long fan, which then scrolls to it; a tap on or
+        // beside another stack switches to it; one in the open stack's
+        // column on no card leaves things as they are
+        // (CardWindowManager::handleTapGestureMinimized, CardWindowManager.cpp:
+        // 2151-2195; CardGroup::shouldMaximizeOrScroll, withinColumn).
         function tap(uid, x) {
             var g = uid !== "" ? view.groupIndexOf(uid) : -1;
-            if (g === view.currentGroup)
-                view.maximize(uid);
-            else if (g >= 0)
+            if (g === view.currentGroup) {
+                var grp = view.groups[g];
+                var t = CardLayout.tapOnFan(grp.uids.indexOf(uid), grp.uids.length, currentFan());
+                if (t.maximize) {
+                    view.maximize(uid);
+                } else {
+                    view.animateLayout(Theme.cardSlideDuration);
+                    setCurrentFan(t.fan);
+                    view.slideTo(g);
+                }
+            } else if (g >= 0) {
                 view.slideTo(g);
-            else
-                view.slideTo(view.currentGroup + (x < view.width / 2 ? -1 : 1));
+            } else {
+                var col = view.layout.columns[view.currentGroup];
+                if (col && x >= col.left && x <= col.right)
+                    view.slideTo(view.currentGroup);
+                else
+                    view.slideTo(view.currentGroup + (x < view.width / 2 ? -1 : 1));
+            }
         }
 
         // The "angry card": let go with the card's centre below the bottom of
