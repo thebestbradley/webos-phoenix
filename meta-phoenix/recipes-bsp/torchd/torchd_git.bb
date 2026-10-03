@@ -43,7 +43,7 @@ RDEPENDS:${PN} = "nyx-modules"
 SRC_URI = "git://github.com/webOS-ports/org.webosports.service.torch.git;protocol=https;branch=master"
 # master on 2026-09-01.
 SRCREV = "d447e6f92b1a46b8597e93571c33ace45b7760a5"
-PV = "1.0.0+git${SRCPV}"
+PV = "1.0.0+git"
 
 S = "${WORKDIR}/git"
 

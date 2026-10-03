@@ -56,7 +56,7 @@ EXTRA_OECMAKE = " \
 
 do_install:append() {
     install -d ${D}${datadir}/whisper
-    install -m 0644 ${WORKDIR}/ggml-base.en.bin ${D}${datadir}/whisper/ggml-base.en.bin
+    install -m 0644 ${UNPACKDIR}/ggml-base.en.bin ${D}${datadir}/whisper/ggml-base.en.bin
 }
 
 PACKAGES =+ "${PN}-model-base-en"

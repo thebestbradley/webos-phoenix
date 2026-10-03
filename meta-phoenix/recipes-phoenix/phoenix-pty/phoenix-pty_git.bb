@@ -15,7 +15,7 @@ PHOENIX_SRCREV ?= "${AUTOREV}"
 PHOENIX_BRANCH ?= "main"
 SRC_URI = "git://github.com/thebestbradley/webos-phoenix.git;protocol=https;branch=${PHOENIX_BRANCH}"
 SRCREV = "${PHOENIX_SRCREV}"
-PV = "0.1.0+git${SRCPV}"
+PV = "0.1.0+git"
 
 S = "${WORKDIR}/git/services/pty"
 

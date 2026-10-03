@@ -19,7 +19,7 @@ SRC_URI = " \
     file://product.env \
 "
 SRCREV = "${PHOENIX_SRCREV}"
-PV = "0.1.0+git${SRCPV}"
+PV = "0.1.0+git"
 
 S = "${WORKDIR}/git/shell"
 
