@@ -29,7 +29,7 @@ import {
 } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
 import {
-    BackProvider, Button, Checkmark, Dialog, ErrorText, Group, icons, ListSelector, Note, Row, Spinner, TextField, ToggleButton, useBack,
+    BackProvider, Button, Checkmark, Dialog, ErrorText, Group, icons, ListSelector, Note, Row, Spinner, srcSet, TextField, ToggleButton, useBack,
 } from "@phoenix/ui";
 import { LANGUAGES, nextStep, passcodeProblem, previousStep, STEPS, stepIndex, type StepId } from "./lib/flow";
 import { Tutorial } from "./Tutorial";
@@ -107,6 +107,11 @@ function securityOf(n: WifiNetworkInfo): "none" | "psk" | "wep" {
     return t === "wep" ? "wep" : t ? "psk" : "none";
 }
 
+/** The Wi-Fi bars picture for 0..3 bars. */
+function signalIcon(bars: number): string {
+    return icons.wifiSignal[Math.max(0, Math.min(3, bars))];
+}
+
 function WifiStep(nav: NavProps) {
     const status = useLuna<WifiStatus>((cb, err) => wifi.watchStatus(cb, err), []).value;
     const enabled = status ? status.status !== "serviceDisabled" : undefined;
@@ -155,8 +160,8 @@ function WifiStep(nav: NavProps) {
                              subtitle={busy === n.ssid ? "Connecting…" : n.ssid === connected ? "Connected" : undefined}
                              icon={n.ssid === connected ? <Checkmark /> : <span className="fu-check-space" />}>
                             {busy === n.ssid && <Spinner />}
-                            {securityOf(n) !== "none" && <img src={icons.secure} width={14} height={25} alt="secure" />}
-                            <img src={icons.wifiSignal[Math.max(0, Math.min(3, n.signalBars))]} width={33} height={25} alt="" />
+                            {securityOf(n) !== "none" && <img src={icons.secure} srcSet={srcSet(icons.secure)} width={14} height={25} alt="secure" />}
+                            <img src={signalIcon(n.signalBars)} srcSet={srcSet(signalIcon(n.signalBars))} width={33} height={25} alt="" />
                         </Row>
                     ))}
                 </Group>

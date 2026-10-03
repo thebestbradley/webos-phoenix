@@ -20,7 +20,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { apps, deleteMedia, system, type MediaItem } from "@phoenix/luna";
 import { useMediaUrl } from "@phoenix/luna/react";
-import { Button, Dialog, PopupMenu, IconToolButton, Toolbar, ToolSpacer, icons } from "@phoenix/ui";
+import { Button, Dialog, PopupMenu, IconToolButton, Toolbar, ToolSpacer, cssImage, icons } from "@phoenix/ui";
 import { isVideo } from "./albums";
 
 const VIDEOS_APP = "org.webosphoenix.videos";
@@ -47,7 +47,7 @@ function Slide({ item, active }: { item: MediaItem; active: boolean }) {
                 <video ref={video} className="ph-slide-media" src={url} playsInline preload="metadata"
                        onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} />
                 {!playing && (
-                    <button type="button" className="ph-play" aria-label="Play" style={{ backgroundImage: `url(${icons.fullscreenPlay})` }}
+                    <button type="button" className="ph-play" aria-label="Play" style={{ backgroundImage: cssImage(icons.fullscreenPlay) }}
                             onPointerDown={(e) => e.stopPropagation()}
                             onClick={(e) => { e.stopPropagation(); void video.current?.play(); }} />
                 )}

@@ -15,7 +15,7 @@
     width: 320px;
     height: 230px;
     margin: 0 auto;
-    background: url(../assets/enyo/telephony/pin-grid.png) left top no-repeat;
+    background: -webkit-image-set(url(../assets/enyo/telephony/pin-grid.png) 1x, url(../assets/enyo/telephony/pin-grid@2x.png) 2x, url(../assets/enyo/telephony/pin-grid@3x.png) 3x) left top no-repeat;
     flex: none;
     touch-action: manipulation;
 }
@@ -44,7 +44,7 @@
     /* .dialpadbutton-*.enyo-button-down: pin-key-highlight.png 1 0 1 0 */
     border-style: solid;
     border-width: 1px 0;
-    border-image: url(../assets/enyo/telephony/pin-key-highlight.png) 1 0 1 0 fill stretch;
+    border-image: -webkit-image-set(url(../assets/enyo/telephony/pin-key-highlight.png) 1x, url(../assets/enyo/telephony/pin-key-highlight@2x.png) 2x, url(../assets/enyo/telephony/pin-key-highlight@3x.png) 3x) 1 0 1 0 fill stretch;
 }
 .pui-dialpad-key:focus-visible { box-shadow: inset 0 0 0 2px #2c8ce0; }
 
@@ -77,14 +77,14 @@
     padding: 0;
     border-style: solid;
     border-width: 0 26px;
-    border-image: url(../assets/enyo/telephony/dial-button.png) 0 26 132 26 fill repeat;
+    border-image: -webkit-image-set(url(../assets/enyo/telephony/dial-button.png) 1x, url(../assets/enyo/telephony/dial-button@2x.png) 2x, url(../assets/enyo/telephony/dial-button@3x.png) 3x) 0 26 132 26 fill repeat;
     background: none;
     cursor: pointer;
     outline: none;
     flex: none;
 }
-.pui-dial-button:active { border-image: url(../assets/enyo/telephony/dial-button.png) 132 26 0 26 fill repeat; }
-.pui-dial-button:disabled { border-image: url(../assets/enyo/telephony/dial-button.png) 66 26 66 26 fill repeat; cursor: default; }
+.pui-dial-button:active { border-image: -webkit-image-set(url(../assets/enyo/telephony/dial-button.png) 1x, url(../assets/enyo/telephony/dial-button@2x.png) 2x, url(../assets/enyo/telephony/dial-button@3x.png) 3x) 132 26 0 26 fill repeat; }
+.pui-dial-button:disabled { border-image: -webkit-image-set(url(../assets/enyo/telephony/dial-button.png) 1x, url(../assets/enyo/telephony/dial-button@2x.png) 2x, url(../assets/enyo/telephony/dial-button@3x.png) 3x) 66 26 66 26 fill repeat; cursor: default; }
 
 .pui-backspace {
     /* .backspace-button */
@@ -93,7 +93,7 @@
     flex: none;
     border: 0;
     padding: 0;
-    background: url(../assets/enyo/telephony/dialpad-backspace.png) left top no-repeat;
+    background: -webkit-image-set(url(../assets/enyo/telephony/dialpad-backspace.png) 1x, url(../assets/enyo/telephony/dialpad-backspace@2x.png) 2x, url(../assets/enyo/telephony/dialpad-backspace@3x.png) 3x) left top no-repeat;
     cursor: pointer;
     outline: none;
 }
@@ -113,7 +113,7 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
-    background: url(../assets/enyo/bottom-fade.png) 0 31px repeat-x;
+    background: -webkit-image-set(url(../assets/enyo/bottom-fade.png) 1x, url(../assets/enyo/bottom-fade@2x.png) 2x, url(../assets/enyo/bottom-fade@3x.png) 3x) 0 31px repeat-x;
     pointer-events: none;
     z-index: 5;
 }
@@ -150,25 +150,25 @@
     gap: 6px;
 }
 .pui-grouped-toolbutton svg { flex: none; }
-.pui-grouped-toolbutton.first { padding-left: 2px; border-width: 0 1px 0 23px; border-image: url(../assets/enyo/grouped-toolbutton.png) 0 1 950 23 fill; }
-.pui-grouped-toolbutton.middle { border-width: 0 1px; border-image: url(../assets/enyo/grouped-toolbutton.png) 250 1 700 1 fill; }
-.pui-grouped-toolbutton.last { padding-right: 2px; border-width: 0 23px 0 1px; border-image: url(../assets/enyo/grouped-toolbutton.png) 500 23 450 1 fill; }
-.pui-grouped-toolbutton.single { padding: 0 2px; border-width: 0 23px; border-image: url(../assets/enyo/grouped-toolbutton.png) 750 23 200 23 fill; }
+.pui-grouped-toolbutton.first { padding-left: 2px; border-width: 0 1px 0 23px; border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 0 1 950 23 fill; }
+.pui-grouped-toolbutton.middle { border-width: 0 1px; border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 250 1 700 1 fill; }
+.pui-grouped-toolbutton.last { padding-right: 2px; border-width: 0 23px 0 1px; border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 500 23 450 1 fill; }
+.pui-grouped-toolbutton.single { padding: 0 2px; border-width: 0 23px; border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 750 23 200 23 fill; }
 
-.pui-grouped-toolbutton.first:active { border-image: url(../assets/enyo/grouped-toolbutton.png) 50 1 900 23 fill; }
-.pui-grouped-toolbutton.middle:active { border-image: url(../assets/enyo/grouped-toolbutton.png) 300 1 650 1 fill; }
-.pui-grouped-toolbutton.last:active { border-image: url(../assets/enyo/grouped-toolbutton.png) 550 23 400 1 fill; }
-.pui-grouped-toolbutton.single:active { border-image: url(../assets/enyo/grouped-toolbutton.png) 800 23 150 23 fill; }
+.pui-grouped-toolbutton.first:active { border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 50 1 900 23 fill; }
+.pui-grouped-toolbutton.middle:active { border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 300 1 650 1 fill; }
+.pui-grouped-toolbutton.last:active { border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 550 23 400 1 fill; }
+.pui-grouped-toolbutton.single:active { border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 800 23 150 23 fill; }
 
-.pui-grouped-toolbutton.first.depressed { border-image: url(../assets/enyo/grouped-toolbutton.png) 100 1 850 23 fill; }
-.pui-grouped-toolbutton.middle.depressed { border-image: url(../assets/enyo/grouped-toolbutton.png) 350 1 600 1 fill; }
-.pui-grouped-toolbutton.last.depressed { border-image: url(../assets/enyo/grouped-toolbutton.png) 600 23 350 1 fill; }
-.pui-grouped-toolbutton.single.depressed { border-image: url(../assets/enyo/grouped-toolbutton.png) 850 23 100 23 fill; }
+.pui-grouped-toolbutton.first.depressed { border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 100 1 850 23 fill; }
+.pui-grouped-toolbutton.middle.depressed { border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 350 1 600 1 fill; }
+.pui-grouped-toolbutton.last.depressed { border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 600 23 350 1 fill; }
+.pui-grouped-toolbutton.single.depressed { border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 850 23 100 23 fill; }
 
-.pui-grouped-toolbutton.first:disabled { border-image: url(../assets/enyo/grouped-toolbutton.png) 200 1 750 23 fill; color: #888; cursor: default; }
-.pui-grouped-toolbutton.middle:disabled { border-image: url(../assets/enyo/grouped-toolbutton.png) 450 1 500 1 fill; color: #888; cursor: default; }
-.pui-grouped-toolbutton.last:disabled { border-image: url(../assets/enyo/grouped-toolbutton.png) 700 23 250 1 fill; color: #888; cursor: default; }
-.pui-grouped-toolbutton.single:disabled { border-image: url(../assets/enyo/grouped-toolbutton.png) 950 23 0 23 fill; color: #888; cursor: default; }
+.pui-grouped-toolbutton.first:disabled { border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 200 1 750 23 fill; color: #888; cursor: default; }
+.pui-grouped-toolbutton.middle:disabled { border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 450 1 500 1 fill; color: #888; cursor: default; }
+.pui-grouped-toolbutton.last:disabled { border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 700 23 250 1 fill; color: #888; cursor: default; }
+.pui-grouped-toolbutton.single:disabled { border-image: -webkit-image-set(url(../assets/enyo/grouped-toolbutton.png) 1x, url(../assets/enyo/grouped-toolbutton@2x.png) 2x, url(../assets/enyo/grouped-toolbutton@3x.png) 3x) 950 23 0 23 fill; color: #888; cursor: default; }
 
 .pui-tool-badge {
     /* The count bubble webOS put on the Missed / unread tabs. */
@@ -191,7 +191,7 @@
     padding: 0;
     border-style: solid;
     border-width: 0 25px;
-    border-image: url(../assets/enyo/palm-menu-button.png) 0 25 200 25 fill;
+    border-image: -webkit-image-set(url(../assets/enyo/palm-menu-button.png) 1x, url(../assets/enyo/palm-menu-button@2x.png) 2x, url(../assets/enyo/palm-menu-button@3x.png) 3x) 0 25 200 25 fill;
     background: none;
     color: #fff;
     font: inherit;
@@ -204,10 +204,10 @@
     text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.5);
 }
 .pui-tool-button > * { margin: 0 -16px; }
-.pui-tool-button:active { border-image: url(../assets/enyo/palm-menu-button.png) 50 25 150 25 fill; }
-.pui-tool-button.depressed { border-image: url(../assets/enyo/palm-menu-button.png) 100 25 100 25 fill; }
-.pui-tool-button.depressed:active { border-image: url(../assets/enyo/palm-menu-button.png) 150 25 50 25 fill; }
-.pui-tool-button:disabled { border-image: url(../assets/enyo/palm-menu-button.png) 200 25 0 25 fill; color: #999; cursor: default; }
+.pui-tool-button:active { border-image: -webkit-image-set(url(../assets/enyo/palm-menu-button.png) 1x, url(../assets/enyo/palm-menu-button@2x.png) 2x, url(../assets/enyo/palm-menu-button@3x.png) 3x) 50 25 150 25 fill; }
+.pui-tool-button.depressed { border-image: -webkit-image-set(url(../assets/enyo/palm-menu-button.png) 1x, url(../assets/enyo/palm-menu-button@2x.png) 2x, url(../assets/enyo/palm-menu-button@3x.png) 3x) 100 25 100 25 fill; }
+.pui-tool-button.depressed:active { border-image: -webkit-image-set(url(../assets/enyo/palm-menu-button.png) 1x, url(../assets/enyo/palm-menu-button@2x.png) 2x, url(../assets/enyo/palm-menu-button@3x.png) 3x) 150 25 50 25 fill; }
+.pui-tool-button:disabled { border-image: -webkit-image-set(url(../assets/enyo/palm-menu-button.png) 1x, url(../assets/enyo/palm-menu-button@2x.png) 2x, url(../assets/enyo/palm-menu-button@3x.png) 3x) 200 25 0 25 fill; color: #999; cursor: default; }
 
 /* ---- Avatar ------------------------------------------------------------------------ */
 

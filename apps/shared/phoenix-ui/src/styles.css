@@ -59,7 +59,7 @@ body.pui-app, .pui-app {
     /* Header.css: palm-page-header.png 35 24 13 24 */
     border-style: solid;
     border-width: 35px 24px 13px 24px;
-    border-image: url(../assets/enyo/palm-page-header.png) 35 24 13 24 fill repeat stretch;
+    border-image: -webkit-image-set(url(../assets/enyo/palm-page-header.png) 1x, url(../assets/enyo/palm-page-header@2x.png) 2x, url(../assets/enyo/palm-page-header@3x.png) 3x) 35 24 13 24 fill repeat stretch;
     min-height: 50px;
     margin: 0 calc(-1 * var(--pui-gutter, 8px)) 6px;
     color: #444;
@@ -98,13 +98,13 @@ body.pui-app, .pui-app {
     /* Group.css: group.png 14 */
     border-style: solid;
     border-width: 14px;
-    border-image: url(../assets/enyo/group.png) 14 fill;
+    border-image: -webkit-image-set(url(../assets/enyo/group.png) 1x, url(../assets/enyo/group@2x.png) 2x, url(../assets/enyo/group@3x.png) 3x) 14 fill;
     margin: 8px 0;
 }
 
 .pui-group.labeled {
     border-width: 36px 14px 14px 14px;
-    border-image: url(../assets/enyo/group-labeled.png) 36 14 14 14 fill;
+    border-image: -webkit-image-set(url(../assets/enyo/group-labeled.png) 1x, url(../assets/enyo/group-labeled@2x.png) 2x, url(../assets/enyo/group-labeled@3x.png) 3x) 36 14 14 14 fill;
 }
 
 .pui-group-label {
@@ -192,13 +192,13 @@ body.pui-app, .pui-app {
 .pui-row-arrow {
     width: 13px;
     height: 7px;
-    background: url(../assets/enyo/menu-arrow.png) no-repeat;
+    background: -webkit-image-set(url(../assets/enyo/menu-arrow.png) 1x, url(../assets/enyo/menu-arrow@2x.png) 2x, url(../assets/enyo/menu-arrow@3x.png) 3x) no-repeat;
 }
 
 .pui-row-chevron {
     width: 24px;
     height: 24px;
-    background: url(../assets/enyo/menuitem-arrow.png) no-repeat 0 0;
+    background: -webkit-image-set(url(../assets/enyo/menuitem-arrow.png) 1x, url(../assets/enyo/menuitem-arrow@1.5x.png) 1.5x, url(../assets/enyo/menuitem-arrow@2x.png) 2x, url(../assets/enyo/menuitem-arrow@3x.png) 3x) no-repeat 0 0;
 }
 .pui-row.tappable:active .pui-row-chevron { background-position: 0 -24px; }
 
@@ -227,7 +227,7 @@ body.pui-app, .pui-app {
 
 .pui-divider-line {
     height: 7px;
-    background: url(../assets/enyo/enyo-divider.png) left top repeat-x;
+    background: -webkit-image-set(url(../assets/enyo/enyo-divider.png) 1x, url(../assets/enyo/enyo-divider@2x.png) 2x, url(../assets/enyo/enyo-divider@3x.png) 3x) left top repeat-x;
 }
 .pui-divider-cap-left {
     width: 12px;
@@ -235,7 +235,7 @@ body.pui-app, .pui-app {
     height: 7px;
     border-style: solid;
     border-width: 0 0 0 6px;
-    border-image: url(../assets/enyo/enyo-divider-border.png) 0 6 0 6 fill repeat;
+    border-image: -webkit-image-set(url(../assets/enyo/enyo-divider-border.png) 1x, url(../assets/enyo/enyo-divider-border@2x.png) 2x, url(../assets/enyo/enyo-divider-border@3x.png) 3x) 0 6 0 6 fill repeat;
     margin-left: 6px;
 }
 .pui-divider-cap-right {
@@ -244,7 +244,7 @@ body.pui-app, .pui-app {
     height: 7px;
     border-style: solid;
     border-width: 0 6px 0 0;
-    border-image: url(../assets/enyo/enyo-divider-border.png) 0 6 0 6 fill repeat;
+    border-image: -webkit-image-set(url(../assets/enyo/enyo-divider-border.png) 1x, url(../assets/enyo/enyo-divider-border@2x.png) 2x, url(../assets/enyo/enyo-divider-border@3x.png) 3x) 0 6 0 6 fill repeat;
     margin-right: 6px;
 }
 .pui-divider-caption {
@@ -278,17 +278,17 @@ body.pui-app, .pui-app {
 }
 .pui-toggle.on {
     border-width: 0 36px 0 15px;
-    border-image: url(../assets/enyo/toggle-button.png) 1 36 97 15 fill repeat;
+    border-image: -webkit-image-set(url(../assets/enyo/toggle-button.png) 1x, url(../assets/enyo/toggle-button@2x.png) 2x, url(../assets/enyo/toggle-button@3x.png) 3x) 1 36 97 15 fill repeat;
 }
 .pui-toggle.off {
     border-width: 0 15px 0 36px;
-    border-image: url(../assets/enyo/toggle-button.png) 33 15 65 36 fill repeat;
+    border-image: -webkit-image-set(url(../assets/enyo/toggle-button.png) 1x, url(../assets/enyo/toggle-button@2x.png) 2x, url(../assets/enyo/toggle-button@3x.png) 3x) 33 15 65 36 fill repeat;
 }
 .pui-toggle.on:disabled {
-    border-image: url(../assets/enyo/toggle-button.png) 65 36 33 15 fill repeat;
+    border-image: -webkit-image-set(url(../assets/enyo/toggle-button.png) 1x, url(../assets/enyo/toggle-button@2x.png) 2x, url(../assets/enyo/toggle-button@3x.png) 3x) 65 36 33 15 fill repeat;
 }
 .pui-toggle.off:disabled {
-    border-image: url(../assets/enyo/toggle-button.png) 97 15 1 36 fill repeat;
+    border-image: -webkit-image-set(url(../assets/enyo/toggle-button.png) 1x, url(../assets/enyo/toggle-button@2x.png) 2x, url(../assets/enyo/toggle-button@3x.png) 3x) 97 15 1 36 fill repeat;
 }
 .pui-toggle:disabled { cursor: default; }
 
@@ -300,7 +300,7 @@ body.pui-app, .pui-app {
     margin: 0;
     padding: 0;
     border: 0;
-    background: url(../assets/enyo/checkbox.png) 0 0 no-repeat;
+    background: -webkit-image-set(url(../assets/enyo/checkbox.png) 1x, url(../assets/enyo/checkbox@2x.png) 2x, url(../assets/enyo/checkbox@3x.png) 3x) 0 0 no-repeat;
     cursor: pointer;
     outline: none;
 }
@@ -334,7 +334,7 @@ body.pui-app, .pui-app {
     margin: 22px 25px 21px;
     border-style: solid;
     border-width: 0 4px;
-    border-image: url(../assets/enyo/slider.png) 0 4 0 4 fill repeat;
+    border-image: -webkit-image-set(url(../assets/enyo/slider.png) 1x, url(../assets/enyo/slider@2x.png) 2x, url(../assets/enyo/slider@3x.png) 3x) 0 4 0 4 fill repeat;
 }
 /* The part right of the knob is greyed out, so the level reads at a glance. */
 .pui-slider-rest {
@@ -352,7 +352,7 @@ body.pui-app, .pui-app {
     width: 50px;
     height: 50px;
     margin: -25px 0 0 -25px;
-    background: url(../assets/enyo/slider-button.png) left top no-repeat;
+    background: -webkit-image-set(url(../assets/enyo/slider-button.png) 1x, url(../assets/enyo/slider-button@2x.png) 2x, url(../assets/enyo/slider-button@3x.png) 3x) left top no-repeat;
     z-index: 2;
 }
 .pui-slider.dragging .pui-slider-knob { background-position: 0 -50px; }
@@ -384,7 +384,7 @@ body.pui-app, .pui-app {
     padding: 0;
     border-style: solid;
     border-width: 0 17px;
-    border-image: url(../assets/enyo/palm-button-medium.png) 0 17 104 17 fill repeat;
+    border-image: -webkit-image-set(url(../assets/enyo/palm-button-medium.png) 1x, url(../assets/enyo/palm-button-medium@2x.png) 2x, url(../assets/enyo/palm-button-medium@3x.png) 3x) 0 17 104 17 fill repeat;
     background: none;
     color: #fff;
     font: inherit;
@@ -396,24 +396,24 @@ body.pui-app, .pui-app {
     outline: none;
     text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.3);
 }
-.pui-button:active { border-image: url(../assets/enyo/palm-button-medium.png) 52 17 52 17 fill repeat; }
-.pui-button:disabled { border-image: url(../assets/enyo/palm-button-medium.png) 104 17 0 17 fill repeat; cursor: default; }
+.pui-button:active { border-image: -webkit-image-set(url(../assets/enyo/palm-button-medium.png) 1x, url(../assets/enyo/palm-button-medium@2x.png) 2x, url(../assets/enyo/palm-button-medium@3x.png) 3x) 52 17 52 17 fill repeat; }
+.pui-button:disabled { border-image: -webkit-image-set(url(../assets/enyo/palm-button-medium.png) 1x, url(../assets/enyo/palm-button-medium@2x.png) 2x, url(../assets/enyo/palm-button-medium@3x.png) 3x) 104 17 0 17 fill repeat; cursor: default; }
 
-.pui-button.light { color: #332; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5); border-image: url(../assets/enyo/palm-button-light.png) 0 17 104 17 fill repeat; }
-.pui-button.light:active { border-image: url(../assets/enyo/palm-button-light.png) 52 17 52 17 fill repeat; }
-.pui-button.light:disabled { color: #777; border-image: url(../assets/enyo/palm-button-light.png) 104 17 0 17 fill repeat; }
+.pui-button.light { color: #332; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5); border-image: -webkit-image-set(url(../assets/enyo/palm-button-light.png) 1x, url(../assets/enyo/palm-button-light@2x.png) 2x, url(../assets/enyo/palm-button-light@3x.png) 3x) 0 17 104 17 fill repeat; }
+.pui-button.light:active { border-image: -webkit-image-set(url(../assets/enyo/palm-button-light.png) 1x, url(../assets/enyo/palm-button-light@2x.png) 2x, url(../assets/enyo/palm-button-light@3x.png) 3x) 52 17 52 17 fill repeat; }
+.pui-button.light:disabled { color: #777; border-image: -webkit-image-set(url(../assets/enyo/palm-button-light.png) 1x, url(../assets/enyo/palm-button-light@2x.png) 2x, url(../assets/enyo/palm-button-light@3x.png) 3x) 104 17 0 17 fill repeat; }
 
-.pui-button.affirmative { border-image: url(../assets/enyo/palm-button-affirmative.png) 0 17 104 17 fill repeat; }
-.pui-button.affirmative:active { border-image: url(../assets/enyo/palm-button-affirmative.png) 52 17 52 17 fill repeat; }
-.pui-button.affirmative:disabled { border-image: url(../assets/enyo/palm-button-affirmative.png) 104 17 0 17 fill repeat; }
+.pui-button.affirmative { border-image: -webkit-image-set(url(../assets/enyo/palm-button-affirmative.png) 1x, url(../assets/enyo/palm-button-affirmative@2x.png) 2x, url(../assets/enyo/palm-button-affirmative@3x.png) 3x) 0 17 104 17 fill repeat; }
+.pui-button.affirmative:active { border-image: -webkit-image-set(url(../assets/enyo/palm-button-affirmative.png) 1x, url(../assets/enyo/palm-button-affirmative@2x.png) 2x, url(../assets/enyo/palm-button-affirmative@3x.png) 3x) 52 17 52 17 fill repeat; }
+.pui-button.affirmative:disabled { border-image: -webkit-image-set(url(../assets/enyo/palm-button-affirmative.png) 1x, url(../assets/enyo/palm-button-affirmative@2x.png) 2x, url(../assets/enyo/palm-button-affirmative@3x.png) 3x) 104 17 0 17 fill repeat; }
 
-.pui-button.negative { border-image: url(../assets/enyo/palm-button-negative.png) 0 17 104 17 fill repeat; }
-.pui-button.negative:active { border-image: url(../assets/enyo/palm-button-negative.png) 52 17 52 17 fill repeat; }
-.pui-button.negative:disabled { border-image: url(../assets/enyo/palm-button-negative.png) 104 17 0 17 fill repeat; }
+.pui-button.negative { border-image: -webkit-image-set(url(../assets/enyo/palm-button-negative.png) 1x, url(../assets/enyo/palm-button-negative@2x.png) 2x, url(../assets/enyo/palm-button-negative@3x.png) 3x) 0 17 104 17 fill repeat; }
+.pui-button.negative:active { border-image: -webkit-image-set(url(../assets/enyo/palm-button-negative.png) 1x, url(../assets/enyo/palm-button-negative@2x.png) 2x, url(../assets/enyo/palm-button-negative@3x.png) 3x) 52 17 52 17 fill repeat; }
+.pui-button.negative:disabled { border-image: -webkit-image-set(url(../assets/enyo/palm-button-negative.png) 1x, url(../assets/enyo/palm-button-negative@2x.png) 2x, url(../assets/enyo/palm-button-negative@3x.png) 3x) 104 17 0 17 fill repeat; }
 
-.pui-button.dark { border-image: url(../assets/enyo/palm-button-dark.png) 0 17 104 17 fill repeat; }
-.pui-button.dark:active { border-image: url(../assets/enyo/palm-button-dark.png) 52 17 52 17 fill repeat; }
-.pui-button.dark:disabled { border-image: url(../assets/enyo/palm-button-dark.png) 104 17 0 17 fill repeat; }
+.pui-button.dark { border-image: -webkit-image-set(url(../assets/enyo/palm-button-dark.png) 1x, url(../assets/enyo/palm-button-dark@2x.png) 2x, url(../assets/enyo/palm-button-dark@3x.png) 3x) 0 17 104 17 fill repeat; }
+.pui-button.dark:active { border-image: -webkit-image-set(url(../assets/enyo/palm-button-dark.png) 1x, url(../assets/enyo/palm-button-dark@2x.png) 2x, url(../assets/enyo/palm-button-dark@3x.png) 3x) 52 17 52 17 fill repeat; }
+.pui-button.dark:disabled { border-image: -webkit-image-set(url(../assets/enyo/palm-button-dark.png) 1x, url(../assets/enyo/palm-button-dark@2x.png) 2x, url(../assets/enyo/palm-button-dark@3x.png) 3x) 104 17 0 17 fill repeat; }
 
 .pui-button-row { display: flex; gap: 8px; }
 .pui-button-row .pui-button { flex: 1; }
@@ -437,14 +437,14 @@ body.pui-app, .pui-app {
 .pui-picker-button {
     border-style: solid;
     border-width: 19px;
-    border-image: url(../assets/enyo/background-pill.png) 19 fill;
+    border-image: -webkit-image-set(url(../assets/enyo/background-pill.png) 1x, url(../assets/enyo/background-pill@2x.png) 2x, url(../assets/enyo/background-pill@3x.png) 3x) 19 fill;
     background: none;
     padding: 0;
     font: inherit;
     cursor: pointer;
     outline: none;
 }
-.pui-picker-button:active, .pui-picker-button.open { border-image: url(../assets/enyo/background-pill-downstate.png) 19 fill; }
+.pui-picker-button:active, .pui-picker-button.open { border-image: -webkit-image-set(url(../assets/enyo/background-pill-downstate.png) 1x, url(../assets/enyo/background-pill-downstate@2x.png) 2x, url(../assets/enyo/background-pill-downstate@3x.png) 3x) 19 fill; }
 .pui-picker-caption {
     display: block;
     margin: -15px -8px -17px -11px;
@@ -476,7 +476,7 @@ body.pui-app, .pui-app {
     z-index: 320;
     border-style: solid;
     border-width: 24px;
-    border-image: url(../assets/enyo/popup-heritage.png) 24 fill stretch;
+    border-image: -webkit-image-set(url(../assets/enyo/popup-heritage.png) 1x, url(../assets/enyo/popup-heritage@2x.png) 2x, url(../assets/enyo/popup-heritage@3x.png) 3x) 24 fill stretch;
     min-width: 120px;
     max-height: 70vh;
     display: flex;
@@ -489,7 +489,7 @@ body.pui-app, .pui-app {
 }
 .pui-popup.picker {
     border-width: 19px;
-    border-image: url(../assets/enyo/popup-picker.png) 19 fill;
+    border-image: -webkit-image-set(url(../assets/enyo/popup-picker.png) 1x, url(../assets/enyo/popup-picker@2x.png) 2x, url(../assets/enyo/popup-picker@3x.png) 3x) 19 fill;
 }
 .pui-popup.picker .pui-popup-inner { margin: -12px -12px; }
 
@@ -520,7 +520,7 @@ body.pui-app, .pui-app {
     width: 32px;
     height: 25px;
     flex: none;
-    background: url(../assets/enyo/checkmark.png) no-repeat center;
+    background: -webkit-image-set(url(../assets/enyo/checkmark.png) 1x, url(../assets/enyo/checkmark@2x.png) 2x, url(../assets/enyo/checkmark@3x.png) 3x) no-repeat center;
 }
 
 /* File type icons (FileIcon). */
@@ -543,7 +543,7 @@ body.pui-app, .pui-app {
     width: 56px;
     height: 33px;
     flex: none;
-    background: url(../assets/enyo/palm-divider-arrow.png) center -66px;
+    background: -webkit-image-set(url(../assets/enyo/palm-divider-arrow.png) 1x, url(../assets/enyo/palm-divider-arrow@2x.png) 2x, url(../assets/enyo/palm-divider-arrow@3x.png) 3x) center -66px;
 }
 .pui-drawer-arrow.open { background-position: center 0; }
 
@@ -567,7 +567,7 @@ body.pui-app, .pui-app {
     margin: 0 4px 4px;
     border-style: solid;
     border-width: 18px;
-    border-image: url(../assets/enyo/popup-heritage.png) 24 fill stretch;
+    border-image: -webkit-image-set(url(../assets/enyo/popup-heritage.png) 1x, url(../assets/enyo/popup-heritage@2x.png) 2x, url(../assets/enyo/popup-heritage@3x.png) 3x) 24 fill stretch;
     color: var(--pui-text);
     animation: pui-slide-up 0.2s ease-out;
 }
@@ -604,10 +604,10 @@ body.pui-app, .pui-app {
     border-style: solid;
     border-width: 14px;
     border-color: transparent;
-    border-image: url(../assets/enyo/wifi/bg_field.png) 14 fill;
+    border-image: -webkit-image-set(url(../assets/enyo/wifi/bg_field.png) 1x, url(../assets/enyo/wifi/bg_field@2x.png) 2x, url(../assets/enyo/wifi/bg_field@3x.png) 3x) 14 fill;
     margin: 4px 0 8px;
 }
-.pui-field.focused { border-image: url(../assets/enyo/input-focus.png) 14 fill; }
+.pui-field.focused { border-image: -webkit-image-set(url(../assets/enyo/input-focus.png) 1x, url(../assets/enyo/input-focus@2x.png) 2x, url(../assets/enyo/input-focus@3x.png) 3x) 14 fill; }
 .pui-field input {
     display: block;
     width: 100%;
@@ -634,13 +634,13 @@ body.pui-app, .pui-app {
     width: 32px;
     height: 32px;
     flex: none;
-    background: url(../assets/enyo/spinner.png) 0 0 no-repeat;
+    background: -webkit-image-set(url(../assets/enyo/spinner.png) 1x, url(../assets/enyo/spinner@2x.png) 2x, url(../assets/enyo/spinner@3x.png) 3x) 0 0 no-repeat;
     animation: pui-spin-small 1s steps(12) infinite;
 }
 .pui-spinner.large {
     width: 128px;
     height: 128px;
-    background-image: url(../assets/enyo/spinner-large.png);
+    background-image: -webkit-image-set(url(../assets/enyo/spinner-large.png) 1x, url(../assets/enyo/spinner-large@2x.png) 2x, url(../assets/enyo/spinner-large@3x.png) 3x);
     animation-name: pui-spin-large;
 }
 @keyframes pui-spin-small { from { background-position: 0 0; } to { background-position: 0 -384px; } }
@@ -672,7 +672,7 @@ body.pui-app, .pui-app {
     color: white;
     border-style: solid;
     border-width: 12px 24px 20px 24px;
-    border-image: url(../assets/enyo/appmenu.png) 12 24 20 24 fill stretch;
+    border-image: -webkit-image-set(url(../assets/enyo/appmenu.png) 1x, url(../assets/enyo/appmenu@1.5x.png) 1.5x, url(../assets/enyo/appmenu@2x.png) 2x, url(../assets/enyo/appmenu@3x.png) 3x) 12 24 20 24 fill stretch;
 }
 
 .pui-appmenu-inner {
@@ -683,7 +683,7 @@ body.pui-app, .pui-app {
     padding: 10px 7px 10px 5px;
     font-size: 18px;
     border-bottom: 2px solid transparent;
-    border-image: url(../assets/enyo/appmenu-divider.png) 0 0 2 0 stretch;
+    border-image: -webkit-image-set(url(../assets/enyo/appmenu-divider.png) 1x, url(../assets/enyo/appmenu-divider@2x.png) 2x, url(../assets/enyo/appmenu-divider@3x.png) 3x) 0 0 2 0 stretch;
     cursor: default;
 }
 
@@ -692,7 +692,7 @@ body.pui-app, .pui-app {
 }
 
 .pui-appmenu-item:active:not(.disabled) {
-    background-image: url(../assets/enyo/appmenu-highlight.png);
+    background-image: -webkit-image-set(url(../assets/enyo/appmenu-highlight.png) 1x, url(../assets/enyo/appmenu-highlight@1.5x.png) 1.5x, url(../assets/enyo/appmenu-highlight@2x.png) 2x, url(../assets/enyo/appmenu-highlight@3x.png) 3x);
     background-size: 40px 56px;
 }
 
@@ -710,7 +710,7 @@ body.pui-app, .pui-app {
 .pui-appmenu-arrow {
     width: 30px;
     height: 24px;
-    background: url(../assets/enyo/menuitem-arrow.png) center 0 no-repeat;
+    background: -webkit-image-set(url(../assets/enyo/menuitem-arrow.png) 1x, url(../assets/enyo/menuitem-arrow@1.5x.png) 1.5x, url(../assets/enyo/menuitem-arrow@2x.png) 2x, url(../assets/enyo/menuitem-arrow@3x.png) 3x) center 0 no-repeat;
 }
 
 .pui-appmenu-arrow.open {
