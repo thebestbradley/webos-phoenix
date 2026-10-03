@@ -236,6 +236,16 @@ Item {
             windows.alerts.clear();
         }
 
+        function test_usbDriveModeEndsIt() {
+            enterNow();
+            var screens = shell.systemScreens;
+            screens.brickMode = true;
+            verify(!shell.dockMode, "slotEnterBrickMode: out of dock mode");
+            verify(!shell.enterDockMode(), "not while the screen is the USB drive's");
+            screens.brickMode = false;
+            verify(shell.enterDockMode());
+        }
+
         function test_anAppComingUpEndsIt() {
             enterNow();
             shell.launch(windows.appIdByTitle("Memos"));

@@ -98,10 +98,10 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Notifications on the lock screen (dashboards, banners, popups). `LockWindow.cpp:2595-2860`
 - [x] PIN pad unlock. `uiComponents/UnlockPanel/PINPad.qml`
 - [x] Password unlock (hardware or virtual keyboard). `uiComponents/UnlockPanel/PasswordField.qml`
-- [ ] Last-try warning and "set new PIN" dialogs (EAS policy). `Src/lunaui/lockscreen/LockWindow.h:129-137`; `Src/base/EASPolicyManager.cpp` *Phoenix: not done: no retry count or security policy, and no port of `uiComponents/MessageDialog` (GAPS K1, K7).*
-- [ ] Device passcode service (`setDevicePasscode`, `matchDevicePasscode`, `getDeviceLockMode`, `getSecurityPolicy`). `Src/base/SystemService.cpp:218-222`; `Src/base/Security.cpp` *Phoenix: set, match and lock mode in the simulator; no getSecurityPolicy, no device service yet.*
+- [x] Last-try warning and "set new PIN" dialogs (EAS policy). `Src/lunaui/lockscreen/LockWindow.h:129-137`; `Src/base/EASPolicyManager.cpp` *Phoenix: `MessageDialog.qml` on the lock screen: PIN / Password Required and the new passcode entered twice, tries left, the last-try warning, Final Try, then the wipe; the policy from db8 `com.palm.securitypolicy` (`--security-policy`; `tst_securitypolicy`, `tools/test-security.cjs`).*
+- [x] Device passcode service (`setDevicePasscode`, `matchDevicePasscode`, `getDeviceLockMode`, `getSecurityPolicy`). `Src/base/SystemService.cpp:218-222`; `Src/base/Security.cpp` *Phoenix: set, match, getDeviceLockMode and getSecurityPolicy in the simulator, with the original's checks and error texts; the device service is still to do.*
 - [x] Lock timeout preference; auto-lock on display off. `Src/base/DisplayManager.cpp`; `conf/defaultPreferences.txt` (`lockTimeout`) *Phoenix: done (`Display.qml`, `tst_display.qml`): the screen dims and turns off when left alone, turning off locks, Power turns it off and Power or Home on; Screen & Lock's "Lock after" (`lockTimeout`) skips the PIN within that long of locking (`LockWindow::requiresPasscode`).*
-- [ ] Full Erase key chord with countdown confirmation. `Src/lunaui/FullEraseConfirmationWindow.cpp`; `Src/lunaui/WindowServerLuna.cpp:1240-1276` *Phoenix: not the chord or its window; Settings > Device Info > Full Erase erases (`org.webosphoenix.service.reset/fullErase` in the simulator).*
+- [x] Full Erase key chord with countdown confirmation. `Src/lunaui/FullEraseConfirmationWindow.cpp`; `Src/lunaui/WindowServerLuna.cpp:1240-1276` *Phoenix: Power + Volume Up held, then Home: the countdown on warning-system.png, then the erase and a restart into First Use; letting go cancels (`tst_systemscreens`).*
 
 ## 7. Navigation: gesture area, home button, light bar [spec §7]
 
@@ -136,8 +136,8 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 
 ## 10. System lifecycle and misc surfaces [spec §10]
 
-- [ ] Boot animation (logo plus spinner) and "Updating the system" progress. `Src/base/BootupAnimation.cpp`
-- [ ] USB mass-storage mode (MSM) and fsck screens. `Src/base/ProgressAnimation.cpp`; `Src/lunaui/lockscreen/TopLevelWindowManager.cpp:180-200`; `uiComponents/MsmEntryFailed/alert.qml`
+- [x] Boot animation (logo plus spinner) and "Updating the system" progress. `Src/base/BootupAnimation.cpp` *Phoenix: the logo and its glow pulsing with BootupAnimation's timing until the system UI has loaded; after an update, "Updating the system" with its progress (`SystemScreens`; Phoenix's own boot logo, as Palm's cannot ship).*
+- [x] USB mass-storage mode (MSM) and fsck screens. `Src/base/ProgressAnimation.cpp`; `Src/lunaui/lockscreen/TopLevelWindowManager.cpp:180-200`; `uiComponents/MsmEntryFailed/alert.qml` *Phoenix: a simulated USB cable (Shift+F8, `--usb`): luna-systemui's alerts, the USB drive screen, the check after an unsafe unplug and the failure alert (`--usb-busy`).*
 - [x] Emergency (full-screen call) mode. `Src/lunaui/emergency/EmergencyWindowManager.cpp` *Phoenix: EmergencyWindow.qml, from the lock screen's Emergency Call.*
 - [x] Boot and shutdown sounds, charging sounds, and the system sound set. `sounds/`; `Src/base/settings/Settings.cpp:103-107` *Phoenix: in the simulator; on a device the MP3s need WAV copies (GAPS A1).*
 - [ ] Ringtone, alert tone and notification tone preferences. `conf/defaultPreferences.txt` *Phoenix: the ringtone is chosen in Settings > Sounds; alert and notification tones have no picker.*
@@ -148,8 +148,8 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [ ] Headset, audio, media and ringer switch keys (`com.palm.keys/*`). README.md:96-99 *Phoenix: the volume keys only (simulator F10 / F11, `Shell.volumeKey`); no ringer switch, headset or media keys.*
 - [x] Locale, region, time zone and network time preferences. `conf/defaultPreferences.txt`; `conf/locale.txt`; `conf/timezone.txt` *Phoenix: Settings > Date & Time and Language & Region, in the simulator.*
 - [x] Backup and restore hooks (`preBackup` / `postRestore`). `Src/base/BackupManager.cpp`; README.md:27-28. *Phoenix: `com.palm.sysMgrDataBackup` in `runtime/phoenix-runtime.js` ("Backup") saves and restores the launcher pages and dock (there is no dock mode to save), called by Settings > Backup and First Use's restore (`tools/test-backup.cjs`). On a device the shell does not register the service yet.*
-- [ ] Turbo-mode (CPU boost) subscription. `Src/base/SystemService.cpp:249` *Phoenix: `subscribeTurboMode` answers without doing anything.*
-- [ ] FPS counter / touch plot debugging overlays. `Src/base/SystemService.cpp:238-239`; `Src/base/visual/TouchPlot.cpp` *Phoenix: not done (the tap reticle is the only touch overlay).*
+- [x] Turbo-mode (CPU boost) subscription. `Src/base/SystemService.cpp:249` *Phoenix: `subscribeTurboMode` reports the boost while subscribed (there is no CPU governor to drive in the simulator).*
+- [x] FPS counter / touch plot debugging overlays. `Src/base/SystemService.cpp:238-239`; `Src/base/visual/TouchPlot.cpp` *Phoenix: `enableFpsCounter` and `enableTouchPlot`, and switches in Settings > Developer Mode.*
 
 ## 11. Services LunaSysMgr exposes (README.md:24-128)
 

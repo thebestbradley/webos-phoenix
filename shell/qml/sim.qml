@@ -26,6 +26,15 @@
 //                  --screenshot or the offscreen platform)
 //   simTouchstone  start on a Touchstone, in dock mode (--touchstone; F12
 //                  sets the device on one or lifts it off)
+//   simBootAnimation  start with the boot animation (not with --screenshot,
+//                  the offscreen platform or --no-boot-animation; always
+//                  with --boot-animation)
+//   simUpdating    the boot after a system update: "Updating the system"
+//                  (phoenix-sim restarts itself with --updating)
+//   simSecurityPolicy  --security-policy as a com.palm.securitypolicy:1
+//                  object (JSON), "none" to remove it, "" to leave it be
+//   simUsb, simUsbBusy  --usb (a cable from a computer is in), --usb-busy
+//                  (an app keeps a file open on the USB drive)
 
 import QtQuick
 import Phoenix.Native
@@ -67,6 +76,8 @@ Item {
             virtualKeyboard: true
             dictationCommand: typeof simTranscriberCommand !== "undefined" ? simTranscriberCommand : []
             bootSound: typeof simBootSounds !== "undefined" && simBootSounds
+            bootAnimation: typeof simBootAnimation !== "undefined" && simBootAnimation
+            bootUpdating: typeof simUpdating !== "undefined" && simUpdating
             stayAwake: typeof simStayAwake !== "undefined" && simStayAwake
             // A desktop window has no Power button a Mac keyboard reaches
             // (F3 is Mission Control there): a click wakes the dark screen.
@@ -307,30 +318,152 @@ Item {
         id: shutdownTimer
         interval: 4200    // shutdown.mp3 is 4.1 s
         property bool restart: false
+        property bool erase: false
+        property var restartArgs: []
         onTriggered: {
-            if (restart && typeof simProcess !== "undefined" && simProcess.restart())
-                return;
+            if (typeof simProcess !== "undefined") {
+                if (erase && simProcess.eraseAndRestart())
+                    return;
+                if (restart && simProcess.restart(restartArgs))
+                    return;
+            }
             Qt.quit();
         }
     }
+    // Off as above, then phoenix-sim starts again.
+    function restartDevice(args, erase) {
+        if (root.shuttingDown)
+            return;
+        root.shuttingDown = true;
+        device.visible = false;
+        shutdownTimer.restart = true;
+        shutdownTimer.erase = !!erase;
+        shutdownTimer.restartArgs = args || [];
+        if (shell.bootSound) {
+            shell.sounds.shutdown();
+            shutdownTimer.start();
+        } else {
+            shutdownTimer.triggered();
+        }
+    }
 
-    // A restart (machineReboot: a system update's "Install now"): off as
-    // above, then phoenix-sim starts again and boots into the new system.
+    // A restart (machineReboot: a system update's "Install now"): the
+    // device boots into the new system, "Updating the system" first.
     Connections {
         target: windows
-        function onRebootRequested() {
-            if (root.shuttingDown)
-                return;
-            root.shuttingDown = true;
-            device.visible = false;
-            shutdownTimer.restart = true;
-            if (shell.bootSound) {
-                shell.sounds.shutdown();
-                shutdownTimer.start();
-            } else {
-                shutdownTimer.triggered();
-            }
+        function onRebootRequested(reason) {
+            root.restartDevice(reason === "System update" ? ["--updating"] : []);
         }
+    }
+
+    // The device was erased (Full Erase, from Settings or the key chord;
+    // the security policy's last try): it restarts with nothing on it, into
+    // First Use. What the screen showed stays a moment ("Your device will
+    // now be erased.", the countdown), as the erase itself took a while.
+    Connections {
+        target: windows
+        function onEraseRequested() { eraseDelay.start(); }
+    }
+    Timer {
+        id: eraseDelay
+        interval: 2000
+        onTriggered: root.restartDevice([], true)
+    }
+
+    // ---- Booting ---------------------------------------------------------------------
+    // The boot animation runs until the system UI's page has loaded, and at
+    // least through the logo's first glow (BootupAnimation.cpp:44,
+    // kFirstGlowAnimDuration). After a system update its progress is that
+    // page's loading: the new system starting.
+    Timer {
+        id: bootMinimum
+        interval: 4000
+        running: shell.bootAnimation
+        property bool done: false
+        onTriggered: done = true
+    }
+    readonly property bool _systemUiUp: !simWebEngineOn || windows.systemUiLoaded
+    readonly property bool simWebEngineOn: typeof simWebEngine !== "undefined" && simWebEngine
+    readonly property bool _bootDone: bootMinimum.done && _systemUiUp
+    on_BootDoneChanged: if (_bootDone) shell.systemScreens.finishBoot()
+    Connections {
+        target: windows
+        function onSystemUiProgressChanged() { shell.systemScreens.bootProgress(windows.systemUiProgress, 100); }
+    }
+
+    // ---- Security policy (--security-policy) --------------------------------------------
+    // The policy an Exchange account would have put in db8; phoenix-sim's
+    // own (its _id), replaced or removed by the option.
+    function applySecurityPolicy() {
+        var spec = typeof simSecurityPolicy !== "undefined" ? simSecurityPolicy : "";
+        if (spec === "")
+            return;
+        var del = function () { windows.lunaCall("palm://com.palm.db/del", { ids: ["phoenix-sim-policy"] }, function () {}); };
+        if (spec === "none")
+            return del();
+        var policy = JSON.parse(spec);
+        policy._kind = "com.palm.securitypolicy:1";
+        policy._id = "phoenix-sim-policy";
+        windows.lunaCall("palm://com.palm.db/put", { objects: [policy] }, function (r) {
+            if (!r || r.returnValue === false)
+                console.warn("phoenix-sim: could not set the security policy:", JSON.stringify(r));
+        });
+    }
+    Connections {
+        target: windows
+        function onSystemUiLoadedChanged() {
+            if (windows.systemUiLoaded)
+                root.applySecurityPolicy();
+        }
+    }
+
+    // ---- Debugging overlays and the progress animation ----------------------------------
+    // com.palm.systemmanager enableFpsCounter, enableTouchPlot and
+    // runProgressAnimation, from the pages; what shows goes back to them
+    // (getDebugOverlays).
+    Connections {
+        target: windows
+        function onDebugOverlayRequested(request) {
+            shell.systemScreens.debugOverlay(request);
+            windows.pushSystemStatus({ debugOverlays: shell.systemScreens.debugOverlays });
+        }
+        function onProgressAnimationRequested(type, state) {
+            if (state === "start")
+                shell.systemScreens.startProgressAnimation(type);
+            else
+                shell.systemScreens.stopProgressAnimation();
+        }
+    }
+
+    // ---- USB: a cable from a computer, and USB drive mode --------------------------------
+    // Shift+F8 plugs it in or out, Ctrl+F8 ejects the drive on the computer
+    // (SimStorage.qml). Plugged in, it charges the device ("pc").
+    SimStorage {
+        id: storage
+        busy: typeof simUsbBusy !== "undefined" && simUsbBusy
+        onSignalled: (method, payload) => {
+            windows.storagedSignal(method, payload);
+            shell.storagedSignal(method, payload);
+        }
+        onCableChanged: (connected) => {
+            windows.pushSystemStatus({ usbHost: connected });
+            root.charger = connected ? "pc" : "none";
+            root.power({ charger: root.charger });
+        }
+    }
+    Connections {
+        target: windows
+        function onEnterMSMRequested(enterIMasq) { storage.enterMSM(enterIMasq); }
+    }
+    Shortcut {
+        sequence: "Shift+F8"
+        context: Qt.ApplicationShortcut
+        onActivated: storage.plug(!storage.hostConnected)
+    }
+    Shortcut {
+        sequence: "Ctrl+F8"
+        context: Qt.ApplicationShortcut
+        onActivated: storage.eject()
     }
 
     // First Use is done (the app set firstUseComplete): not again at the next
@@ -397,6 +530,11 @@ Item {
                 HiDpi.addTwinDirectory(twins[t][0], twins[t][1]);
         }
         windows.pushSystemStatus({ deviceLocked: shell.locked });
+        // The USB cable (the pages wait for it before answering
+        // hostIsConnected) and the debugging overlays, off at boot.
+        windows.pushSystemStatus({ usbHost: false, debugOverlays: shell.systemScreens.debugOverlays });
+        if (typeof simUsb !== "undefined" && simUsb)
+            storage.plug(true);
         pushOrientation();
         // Settings offers Advanced gestures where there is a gesture area.
         windows.pushSystemStatus({ gestureArea: Theme.gestureAreaHeight > 0 });
@@ -454,7 +592,17 @@ Item {
         if (typeof simTouchstone === "undefined" || !simTouchstone)
             return;
         root.power({ charger: "inductive", percent: 61, puckId: root.touchstones[0] });
-        shell.enterDockMode();
+        // Dock mode once the boot animation is over (it holds the screen).
+        var screens = shell.systemScreens;
+        if (!screens.holdsDisplay)
+            return shell.enterDockMode();
+        var after = function() {
+            if (screens.holdsDisplay)
+                return;
+            screens.holdsDisplayChanged.disconnect(after);
+            shell.enterDockMode();
+        };
+        screens.holdsDisplayChanged.connect(after);
     }
 
     function buildScene() {

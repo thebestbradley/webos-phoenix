@@ -506,17 +506,33 @@
     // listener is a capture one so that it runs before the page's own
     // pagehide handlers.
     var unsent = {}, nextUnsent = 1, unloading = false;
+    function sendUnsent() {
+        Object.keys(unsent).forEach(function (k) {
+            var u = unsent[k];
+            if (!u) return;
+            clearTimeout(u.timer);
+            u.run();
+        });
+    }
     try {
         global.addEventListener("pagehide", function () {
             unloading = true;
-            Object.keys(unsent).forEach(function (k) {
-                var u = unsent[k];
-                if (!u) return;
-                clearTimeout(u.timer);
-                u.run();
-            });
+            sendUnsent();
         }, true);
         global.addEventListener("pageshow", function () { unloading = false; });
+    } catch (e) { /* ignore */ }
+    // window.close(): phoenix-sim takes a closed alert or dashboard window
+    // away without a pagehide, so what the page asked for just before
+    // (luna-systemui's USB warning: enterMSM, then close()) goes out first.
+    try {
+        var nativeClose = global.close;
+        if (typeof nativeClose === "function") {
+            global.close = function () {
+                unloading = true;
+                sendUnsent();
+                return nativeClose.apply(global, arguments);
+            };
+        }
     } catch (e) { /* ignore */ }
 
     runtime.dispatch = dispatch;
@@ -3957,6 +3973,41 @@
         };
 
         // ---- com.palm.systemmanager: device lock (legacy webOS API) ----------------
+        //
+        // luna-sysmgr's Security.cpp and EASPolicyManager.cpp, ported:
+        //   getDeviceLockMode {subscribe} -> {lockMode: "none" | "pin" | "password",
+        //       policyState: "none" | "active" | "pending", retriesLeft}
+        //   getSecurityPolicy {} -> {policy: {password: {enabled, minLength,
+        //       maxRetries, alphaNumeric, allowSimplePassword?}, inactivityInSeconds,
+        //       id, status: {enforced, retriesLeft}}}, or returnValue false
+        //       without a policy (SystemService.cpp:2295-2400)
+        //   setDevicePasscode {lockMode, passCode, oldPasscode}: Phoenix asks for
+        //       the old passcode when one is set, except while a security
+        //       policy is pending: the lock screen then sets the one the policy
+        //       asks for, as LockWindow did (LockWindow.cpp:1427-1530). Against
+        //       a policy that requires a passcode, the original's checks and
+        //       errors (Security::validatePasscode, Security.cpp:466-512;
+        //       errorCode -1 to -9); without one, Phoenix's (4 digits or
+        //       characters at least).
+        //   matchDevicePasscode {passCode} -> {succeeded}, and when it is not
+        //       {lockedOut, retriesLeft} (Security::matchPasscode, :325-385).
+        //       Phoenix answers returnValue true with succeeded; the original
+        //       answered returnValue false for a wrong passcode.
+        //
+        // The security policy (EAS: an Exchange account asks the device for a
+        // passcode) is what the accounts put in db8 as com.palm.securitypolicy:1
+        // objects, with EAS's field names (devicePasswordEnabled,
+        // minDevicePasswordLength, maxDevicePasswordFailedAttempts,
+        // alphanumericDevicePasswordRequired, allowSimpleDevicePassword,
+        // maxInactivityTimeDeviceLock), merged into the strictest of them
+        // (EASPolicyManager.cpp:300-384, EASPolicy::merge :968-1012).
+        // phoenix-sim --security-policy puts one there. A policy that asks for
+        // a passcode the device does not have (or one too weak for it) is
+        // "pending" until one is set, then "active": each wrong passcode then
+        // costs one of its maxRetries, and the last wipes the device
+        // (com.palm.storage/erase/Wipe). Without a policy, three wrong
+        // passcodes in a row hold the next try off for 15 s
+        // (Security.cpp:43-44, s_defaultMaxRetries, s_deviceLockOutDuration).
 
         function hash(s) {
             // Not a secure hash: the simulator only needs to avoid storing the
@@ -3965,6 +4016,136 @@
             for (var i = 0; i < s.length; ++i) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
             return "djb2:" + (h >>> 0).toString(16);
         }
+        var DEFAULT_RETRIES = 3, LOCKOUT_MS = 15000;
+        var POLICY_KIND = "com.palm.securitypolicy:1";
+        function dbSecurity(method, params) {
+            var out, db = runtime.services["com.palm.db"];
+            db[method](params, function (r) { if (out === undefined) out = r; }, { cancelled: function () { return true; } });
+            return out || {};
+        }
+        if (dbSecurity("/find", { query: { from: POLICY_KIND } }).returnValue === false)
+            dbSecurity("/putKind", { id: POLICY_KIND, owner: "com.palm.systemmanager" });
+
+        // EASPolicy::fromNewJSON (:867-938) for each, merged into an
+        // aggregate that starts as EASPolicy(true) (EASPolicyManager.h:40-46).
+        // maxInactivityInSeconds (:943-956): down to 30 s steps under a
+        // minute, minute steps under 9999 s, else 0.
+        function maxInactivity(sec) {
+            if (sec < 60) return sec - sec % 30;
+            if (sec < 9999) return sec - sec % 60;
+            return 0;
+        }
+        function aggregatePolicy() {
+            var docs = (dbSecurity("/find", { query: { from: POLICY_KIND } }).results || []).filter(function (d) { return !d._del; });
+            if (!docs.length) return null;
+            var a = { passwordRequired: false, maxRetries: 0, minLength: 1, alphaNumeric: false, allowSimple: true,
+                      inactivity: 9998, id: "" };
+            docs.forEach(function (d) {
+                var n = { passwordRequired: !!d.devicePasswordEnabled, alphaNumeric: !!d.alphanumericDevicePasswordRequired,
+                          minLength: d.minDevicePasswordLength !== undefined ? d.minDevicePasswordLength | 0 : 1,
+                          maxRetries: d.maxDevicePasswordFailedAttempts !== undefined ? d.maxDevicePasswordFailedAttempts | 0 : 1,
+                          inactivity: d.maxInactivityTimeDeviceLock !== undefined ? d.maxInactivityTimeDeviceLock | 0 : 0,
+                          allowSimple: d.allowSimpleDevicePassword !== undefined ? !!d.allowSimpleDevicePassword : true };
+                if (!a.passwordRequired && n.passwordRequired) {
+                    a.passwordRequired = true;
+                    a.maxRetries = n.maxRetries;
+                    a.minLength = n.minLength;
+                    a.alphaNumeric = n.alphaNumeric;
+                    a.allowSimple = n.allowSimple;
+                    a.inactivity = maxInactivity(n.inactivity);
+                } else if (a.passwordRequired && n.passwordRequired) {
+                    if (n.inactivity < a.inactivity) a.inactivity = maxInactivity(n.inactivity);
+                    if (n.maxRetries > 1 && (!(a.maxRetries > 1) || n.maxRetries < a.maxRetries)) a.maxRetries = n.maxRetries;
+                    if (n.alphaNumeric) a.alphaNumeric = true;
+                    if (!n.allowSimple) a.allowSimple = false;
+                    if (n.minLength > 1 && n.minLength > a.minLength) a.minLength = n.minLength;
+                }
+                if (!a.id && d._id) a.id = String(d._id);
+            });
+            return a;
+        }
+        // EASPolicy::validMaxRetries / validMinLength (EASPolicyManager.h:70-71).
+        function validMaxRetries(a) { return !!a && a.passwordRequired && a.maxRetries > 1; }
+        function validMinLength(a) { return !!a && a.passwordRequired && a.minLength > 1; }
+
+        // Security::validateStrength (:540-590): no run of repeated or
+        // consecutive characters longer than half the passcode.
+        function strength(pass) {
+            var max = Math.floor(pass.length / 2), j = 0;
+            for (var i = 0; i < pass.length - 1; i++) {
+                var cur = pass.charCodeAt(i), next = pass.charCodeAt(i + 1), dir = next - cur;
+                if (dir > -2 && dir < 2) {
+                    var n = 2;
+                    cur = next;
+                    for (j = i + 2; j < pass.length; j++) {
+                        next = pass.charCodeAt(j);
+                        if (next - cur !== dir) break;
+                        if (++n > max) return dir === 0 ? -8 : -9;
+                        cur = next;
+                    }
+                    i = j - 1;
+                }
+            }
+            return 0;
+        }
+        // What a policy needs to know of a passcode, kept when it is set: on
+        // a device Security::passcodeSatisfiesPolicy (:400-418) decrypts the
+        // passcode itself; the simulator keeps only its hash.
+        function traits(mode, pass) {
+            return { mode: mode, length: pass.length, letters: /[A-Za-zÀ-￿]/.test(pass), digits: /[0-9]/.test(pass),
+                     digitsOnly: /^[0-9]*$/.test(pass), strength: strength(pass) };
+        }
+        // Security::validatePasscode (:466-512), on those.
+        function validate(a, t) {
+            if (!a || !a.passwordRequired) return 0;
+            if (t.mode === "none" || !t.length) return -1;
+            if (validMinLength(a) && t.length < a.minLength) return -2;
+            if (a.alphaNumeric) {
+                if (t.mode !== "password") return -3;
+                if (!t.letters || !t.digits) return -4;
+            } else if (t.mode === "pin" && !t.digitsOnly) {
+                return -5;
+            }
+            return a.allowSimple ? 0 : t.strength || 0;
+        }
+        // Security::setPasscode's texts (:180-205).
+        function passcodeError(code, mode) {
+            return { "-1": "Passcode is empty", "-2": "Passcode not minimum length", "-3": "Alphanumeric characters required",
+                     "-4": "Alphanumeric characters required", "-5": "Pin invalid",
+                     "-8": mode === "pin" ? "No repeating numbers (3333)" : "No repeating characters (aaaa)",
+                     "-9": mode === "pin" ? "No sequential numbers (1234)" : "No sequential characters (abcd)" }[String(code)]
+                || "Passcode general failure";
+        }
+
+        // The lock, with the policy brought up to date: a new or changed
+        // policy is enforced at once when the passcode satisfies it
+        // (EASPolicyManager::notifyPolicyChanged, :692-700), and its retries
+        // start again when it allows another number (:358-372).
+        function lockState(s) {
+            var l = s.lock, a = aggregatePolicy();
+            if (l.numRetries === undefined) l.numRetries = DEFAULT_RETRIES;
+            var sig = a ? toJson(a) : "";
+            if (sig !== (l.policy ? l.policy.sig : "")) {
+                var old = l.policy;
+                if (!a) {
+                    l.policy = null;
+                    l.numRetries = DEFAULT_RETRIES;   // Security::slotPolicyChanged (:387-397)
+                } else {
+                    var enforced = validate(a, l.traits || traits(l.lockMode, "")) === 0;
+                    l.policy = { sig: sig, enforced: enforced, maxRetries: a.maxRetries,
+                                 retriesLeft: old && old.maxRetries === a.maxRetries ? old.retriesLeft : a.maxRetries };
+                    if (!validMaxRetries(a) && enforced) l.numRetries = 0;
+                }
+                save(s);
+            }
+            return { a: a, l: l, pending: !!(a && !l.policy.enforced) };
+        }
+        function policyState(st) { return !st.a ? "none" : st.pending ? "pending" : "active"; }
+        // EASPolicyManager::retriesLeft (:741-746).
+        function easRetriesLeft(st) {
+            return validMaxRetries(st.a) && !st.pending ? st.l.policy.retriesLeft : 0;
+        }
+
         var stub = runtime.services["com.palm.systemmanager"] || { "*": function (p, reply) { reply(ok()); } };
         register(["com.palm.systemmanager"], {
             // The lock screen is up, as the shell last said (SystemService
@@ -3990,24 +4171,73 @@
                                 gestureArea: !!store.get("gestureArea", false) });
                 });
             },
-            "/getDeviceLockMode": function (p, reply) {
-                var l = load().lock;
-                reply(ok({ lockMode: l.lockMode, policyState: "none", retriesLeft: 10 }));
+            "/getDeviceLockMode": function (p, reply, ctx) {
+                watch(p, reply, ctx, function () {
+                    var st = lockState(load());
+                    return ok({ lockMode: st.l.lockMode, policyState: policyState(st), retriesLeft: easRetriesLeft(st) });
+                });
+            },
+            "/getSecurityPolicy": function (p, reply) {
+                var st = lockState(load()), a = st.a;
+                if (!a) return reply({ returnValue: false });
+                var password = { enabled: a.passwordRequired, minLength: a.minLength, maxRetries: a.maxRetries, alphaNumeric: a.alphaNumeric };
+                if (a.passwordRequired && !a.alphaNumeric) password.allowSimplePassword = a.allowSimple;
+                reply(ok({ policy: { password: password, inactivityInSeconds: a.inactivity, id: a.id,
+                                     status: { enforced: !st.pending, retriesLeft: st.l.policy.retriesLeft } } }));
             },
             "/setDevicePasscode": function (p, reply) {
-                var s = load();
-                if (s.lock.lockMode !== "none" && hash(p.oldPasscode || "") !== s.lock.hash)
+                var s = load(), st = lockState(s), mode = p.lockMode, pass = typeof p.passCode === "string" ? p.passCode : "";
+                if (st.l.lockMode !== "none" && !st.pending && hash(p.oldPasscode || "") !== st.l.hash)
                     return reply(fail(-1, "Incorrect passcode"));
-                if (["none", "pin", "password"].indexOf(p.lockMode) < 0) return reply(fail(-1, "Invalid lock mode"));
-                if (p.lockMode === "pin" && !/^[0-9]{4,}$/.test(p.passCode || "")) return reply(fail(-1, "A PIN needs at least 4 digits"));
-                if (p.lockMode === "password" && (p.passCode || "").length < 4) return reply(fail(-1, "Passwords need at least 4 characters"));
-                s.lock = { lockMode: p.lockMode, hash: p.lockMode === "none" ? "" : hash(p.passCode) };
+                if (["none", "pin", "password"].indexOf(mode) < 0) return reply(fail(-1, "Invalid lock mode"));
+                var t = traits(mode, mode === "none" ? "" : pass);
+                if (st.a && st.a.passwordRequired) {
+                    var code = validate(st.a, t);
+                    if (code < 0) return reply(fail(code, passcodeError(code, mode)));
+                } else {
+                    if (mode === "pin" && !/^[0-9]{4,}$/.test(pass)) return reply(fail(-1, "A PIN needs at least 4 digits"));
+                    if (mode === "password" && pass.length < 4) return reply(fail(-1, "Passwords need at least 4 characters"));
+                }
+                s.lock.lockMode = mode;
+                s.lock.hash = mode === "none" ? "" : hash(pass);
+                s.lock.traits = t;
+                // EASPolicyManager::passwordEnforced (:728-738).
+                if (st.pending && mode !== "none") {
+                    s.lock.policy.enforced = true;
+                    s.lock.policy.retriesLeft = st.a.maxRetries;
+                }
                 save(s);
                 reply(ok());
             },
             "/matchDevicePasscode": function (p, reply) {
-                var l = load().lock;
-                reply(ok({ succeeded: l.lockMode === "none" || hash(p.passCode || "") === l.hash }));
+                var s = load(), st = lockState(s), l = s.lock, now = Date.now();
+                var counted = validMaxRetries(st.a) && !st.pending;
+                if ((!st.a || st.pending) && l.numRetries === 0) {
+                    if (now - (l.lastFailure || 0) < LOCKOUT_MS)
+                        return reply(ok({ succeeded: false, lockedOut: true, retriesLeft: 0 }));
+                    l.numRetries = DEFAULT_RETRIES;
+                }
+                var good = l.lockMode === "none" || hash(p.passCode || "") === l.hash;
+                var wipe = false;
+                if (!good) {
+                    if (l.numRetries > 0) l.numRetries--;
+                    if (counted) {
+                        if (l.policy.retriesLeft > 0) l.policy.retriesLeft--;
+                        l.numRetries = l.policy.retriesLeft;
+                        wipe = l.numRetries === 0;
+                    }
+                    l.lastFailure = now;
+                } else if (st.a && !st.pending) {
+                    if (counted) l.policy.retriesLeft = st.a.maxRetries;
+                    l.numRetries = counted ? st.a.maxRetries : 0;
+                } else {
+                    l.numRetries = DEFAULT_RETRIES;
+                }
+                save(s);
+                reply(good ? ok({ succeeded: true }) : ok({ succeeded: false, lockedOut: false, retriesLeft: l.numRetries }));
+                // Boom (Security::eraseDevice, :420-432).
+                if (wipe)
+                    dispatch("palm://com.palm.storage/erase/Wipe", {}, function () {}, { cancelled: function () { return false; } });
             },
             "*": stub["*"]
         });
@@ -4068,12 +4298,87 @@
                 reply(ok());
             },
             "/fullErase": function (p, reply) {
-                eraseStore(false);
-                var media = runtime.mediaFiles;
-                (media ? media.clear() : Promise.resolve()).then(function () { reply(ok()); },
-                    function (e) { reply(fail(-1, "Could not erase the files: " + e)); });
+                fullErase().then(function () {
+                    reply(ok());
+                    restartErased();
+                }, function (e) { reply(fail(-1, "Could not erase the files: " + e)); });
             }
         });
+        function fullErase() {
+            eraseStore(false);
+            var media = runtime.mediaFiles;
+            return media ? media.clear() : Promise.resolve();
+        }
+        // The device restarts into First Use. phoenix-sim also removes its
+        // data folder and settings (SimProcess::eraseAndRestart); a page in a
+        // browser has nothing more to erase.
+        function restartErased() {
+            if (!/^https?:$/.test(global.location.protocol))
+                host.postToHost("erase", {});
+        }
+
+        // ---- com.palm.storage: erase and USB drive mode (storaged) -------------------
+        //
+        // The legacy storage daemon's methods LunaSysMgr and luna-systemui call:
+        //   erase/EraseAll {}   Full Erase (WindowServerLuna::slotFullEraseDevice,
+        //                       the Full Erase key chord): the apps' data and the
+        //                       USB drive's files, then the device restarts
+        //   erase/Wipe {}       the same, when a security policy's last try
+        //                       failed (Security::eraseDevice)
+        //   diskmode/hostIsConnected {} -> {result, hostIsConnected}: a cable
+        //                       from a computer is in (luna-systemui
+        //                       StoragedService.js, StoragedAlerts.js)
+        //   diskmode/enterMSM {"user-confirmed", enterIMasq}: USB drive mode
+        // and its /storaged signals (com.palm.bus/signal/addmatch): MSMAvail
+        // {mode-avail}, MSMProgress {stage, enterIMasq}, MSMEntry {new-mode,
+        // enterIMasq}, MSMFscking {}, PartitionAvail {fscked | reformatted}.
+        // The simulator's storaged is phoenix-sim's (SimStorage.qml, F12 and
+        // Shift+F12): a page asks it with an "enterMSM" host message, and it
+        // signals every page through runtime.storagedSignal and the shell
+        // directly. The cable's state reaches the pages as host status
+        // ({usbHost: true | false}).
+        register(["com.palm.storage"], {
+            "/erase/EraseAll": function (p, reply) {
+                fullErase().then(function () {
+                    reply(ok());
+                    restartErased();
+                }, function (e) { reply(fail(-1, "Could not erase: " + e)); });
+            },
+            "/erase/Wipe": function (p, reply) {
+                fullErase().then(function () {
+                    reply(ok());
+                    restartErased();
+                }, function (e) { reply(fail(-1, "Could not erase: " + e)); });
+            },
+            // The page may ask before phoenix-sim has told it about the
+            // cable (luna-systemui asks as it starts, and the host's status
+            // comes once the page has loaded): the answer waits for it, 3 s
+            // at most. A page in a browser has no host to wait for.
+            "/diskmode/hostIsConnected": function (p, reply) {
+                var answer = function () { reply(ok({ result: true, hostIsConnected: !!store.get("usbHost", false) })); };
+                if (usbKnown)
+                    return answer();
+                usbWaiting.push(answer);
+                setTimeout(function () {
+                    var i = usbWaiting.indexOf(answer);
+                    if (i >= 0) { usbWaiting.splice(i, 1); answer(); }
+                }, 3000);
+            },
+            "/diskmode/enterMSM": function (p, reply) {
+                if (!store.get("usbHost", false)) return reply(fail(-1, "No computer is connected"));
+                reply(ok());
+                host.postToHost("enterMSM", { enterIMasq: !!p.enterIMasq });
+            },
+            "*": function (p, reply) { reply(ok()); }
+        });
+        runtime.storagedSignal = function (method, payload) {
+            signal("/storaged", method, payload || {});
+        };
+        var usbKnown = /^https?:$/.test(global.location.protocol), usbWaiting = [];
+        function usbHostKnown() {
+            usbKnown = true;
+            usbWaiting.splice(0).forEach(function (answer) { answer(); });
+        }
 
         // ---- VPN (com.webos.service.vpn: LuneOS luneos-vpn-adapter) ----------------
         //
@@ -4558,6 +4863,11 @@
             if ("gestureArea" in st && !!st.gestureArea !== !!store.get("gestureArea", false)) {
                 store.set("gestureArea", !!st.gestureArea);
                 changed();
+            }
+            // A cable from a computer is in (com.palm.storage diskmode/hostIsConnected).
+            if ("usbHost" in st) {
+                store.set("usbHost", !!st.usbHost);
+                usbHostKnown();
             }
             // The virtual keyboard is up ({ ime: { visible } }, getSystemStatus).
             if (st.ime && !!st.ime.visible !== !!store.get("imeVisible", false)) {
@@ -9447,7 +9757,76 @@
                 store.set("shell:firstUse", !!st.firstUse);
                 changed();
             }
+            // The debugging overlays, as the shell last said (getDebugOverlays).
+            if (st && st.debugOverlays && toJson(st.debugOverlays) !== toJson(store.get("shell:debugOverlays", null))) {
+                store.set("shell:debugOverlays", st.debugOverlays);
+                changed();
+            }
             baseApply(st);
+        };
+
+        // ---- Debugging overlays, progress animations, turbo mode ------------------------
+        //
+        // luna-sysmgr SystemService.cpp:3605-3720, 2585-2690, 5305-5380:
+        //   enableFpsCounter {enable?, reset?, dump?}  the frame rate counter at
+        //       the bottom left (WindowServer.cpp:134-218, 1376-1409); reset
+        //       and dump work on its history, which the shell keeps
+        //   enableTouchPlot {collection?, trails?, crosshairs?}  the touch
+        //       plot over everything (visual/TouchPlot.cpp)
+        //       Both answer returnValue false when no key they know was given.
+        //   runProgressAnimation {type: "msm" | "fsck" | other, state: "start" |
+        //       "stop"}  the full-screen progress animation (ProgressAnimation.cpp;
+        //       any other type is the boot logo's)
+        //   subscribeTurboMode {subscribe}  the CPU boost is on while anyone
+        //       is subscribed (HostBase::turboModeSubscription); Phoenix adds
+        //       turboMode (true while subscribed) to the reply
+        // and, Phoenix:
+        //   getDebugOverlays {subscribe} -> {fpsCounter, touchPlot: {collection,
+        //       trails, crosshairs}}: what the shell shows (Settings >
+        //       Developer Mode's switches)
+        // The shell does the drawing: the requests go to it as "debugOverlay"
+        // and "progressAnimation" host messages; it reports its overlays back
+        // as host status ({debugOverlays}).
+        function debugOverlays() {
+            var d = store.get("shell:debugOverlays", null) || {};
+            var t = d.touchPlot || {};
+            return { fpsCounter: !!d.fpsCounter, touchPlot: { collection: !!t.collection, trails: !!t.trails, crosshairs: !!t.crosshairs } };
+        }
+        sm["/enableFpsCounter"] = function (p, reply) {
+            var req = {};
+            if (typeof p.enable === "boolean") req.enable = p.enable;
+            if (typeof p.reset === "number" && Math.floor(p.reset) === p.reset) req.reset = p.reset;
+            if ("dump" in p) req.dump = true;
+            if (!Object.keys(req).length) return reply({ returnValue: false });
+            host.postToHost("debugOverlay", { fpsCounter: req });
+            reply(ok());
+        };
+        sm["/enableTouchPlot"] = function (p, reply) {
+            var req = {};
+            ["collection", "trails", "crosshairs"].forEach(function (k) { if (typeof p[k] === "boolean") req[k] = p[k]; });
+            if (!Object.keys(req).length) return reply({ returnValue: false });
+            host.postToHost("debugOverlay", { touchPlot: req });
+            reply(ok());
+        };
+        sm["/getDebugOverlays"] = function (p, reply, ctx) {
+            watch(p, reply, ctx, function () { return ok(debugOverlays()); });
+        };
+        sm["/runProgressAnimation"] = function (p, reply) {
+            if (typeof p.type !== "string" || typeof p.state !== "string") return reply({ returnValue: false });
+            if (p.state !== "start" && p.state !== "stop") return reply({ returnValue: false });
+            host.postToHost("progressAnimation", { type: p.type, state: p.state });
+            reply(ok());
+        };
+        var turboSubscriptions = 0;
+        sm["/subscribeTurboMode"] = function (p, reply, ctx) {
+            if (!p.subscribe) return reply(ok({ subscribed: false, turboMode: turboSubscriptions > 0 }));
+            turboSubscriptions++;
+            var prev = ctx.onCancel;
+            ctx.onCancel = function () {
+                turboSubscriptions--;
+                if (prev) prev();
+            };
+            reply(ok({ subscribed: true, turboMode: true }));
         };
 
         // ---- System UI events (subscribeToSystemUI) ---------------------------------

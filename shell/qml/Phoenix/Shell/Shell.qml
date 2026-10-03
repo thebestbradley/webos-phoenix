@@ -141,8 +141,9 @@ FocusScope {
         id: backlight
         timeout: shell.system && shell.system.screenTimeout > 0 ? shell.system.screenTimeout : 60
         locked: shell.locked
-        // An app in front keeping the screen on (blockScreenTimeout).
-        blocked: cards.maximized && cards.currentBlocksScreenTimeout
+        // An app in front keeping the screen on (blockScreenTimeout); the
+        // system screens (USB drive mode, a progress animation, booting).
+        blocked: (cards.maximized && cards.currentBlocksScreenTimeout) || systemScreens.holdsDisplay
         onTurnedOff: shell.lock()
         // On the Touchstone it waits for dock mode instead of dimming.
         onPuck: shell._exhibitionsOnPuck
@@ -281,7 +282,18 @@ FocusScope {
 
     function _dockAllowed() {
         return _exhibitionsOnPuck && !emergencyShown && !notes.incomingCall
-            && !(source && source.activeCallBanner);
+            && !(source && source.activeCallBanner) && !systemScreens.holdsDisplay;
+    }
+    // USB drive mode (brick mode), the boot or progress animation and Full
+    // Erase's countdown take the screen: dock mode ends at once
+    // (SystemUiController::slotEnterBrickMode, SystemUiController.cpp:1900-1903),
+    // and does not start while they do.
+    Connections {
+        target: systemScreens
+        function onHoldsDisplayChanged() {
+            if (systemScreens.holdsDisplay && shell.dockMode)
+                shell.exitDockMode(false);
+        }
     }
 
     // Returns whether dock mode is up.
@@ -902,8 +914,8 @@ FocusScope {
 
     // Desktop / hardware keyboard shortcuts.
     Keys.onPressed: (event) => {
-        // The system menu's own keys (GAPS V8 (3)).
-        if (systemMenu.handleKey(event)) {
+        // The system menu's and the launcher's own keys (GAPS V8 (3)).
+        if (systemMenu.handleKey(event) || (!locked && launcher.handleKey(event))) {
             event.accepted = true;
             return;
         }
@@ -991,6 +1003,17 @@ FocusScope {
             }
         }
         onPressed: (key, autoRepeat) => {
+            // Power with a volume key: the Full Erase and USB drive chords
+            // (SystemScreens.systemKey); their keys do nothing else.
+            if (autoRepeat ? systemScreens.comboDown && systemScreens.isChordKey(key)
+                           : systemScreens.systemKey(key, true))
+                return;
+            // A system screen (USB drive mode, Full Erase...) takes the
+            // keys, but for Power and the volume.
+            if (systemScreens.blocksInput && (key === Qt.Key_Home || key === Qt.Key_Escape || key === Qt.Key_Back
+                                              || key === Qt.Key_F1 || key === Qt.Key_F2 || key === Qt.Key_Search
+                                              || key === Qt.Key_Print || key === Qt.Key_F9))
+                return;
             // The volume keys repeat while held (the simulator's F10, F11).
             if (key === Qt.Key_VolumeUp || key === Qt.Key_VolumeDown || key === Qt.Key_F10 || key === Qt.Key_F11) {
                 backlight.activity();
@@ -1018,7 +1041,21 @@ FocusScope {
                 shell._buttonDown(key === Qt.Key_Home);
         }
         onReleased: (key, autoRepeat) => {
-            if (!autoRepeat && (key === Qt.Key_Home || shell._isPowerKey(key)))
+            if (autoRepeat)
+                return;
+            if (systemScreens.systemKey(key, false)) {
+                // A chord's key: let go of, and nothing else.
+                if (key === Qt.Key_Home)
+                    shell._homeDown = false;
+                else if (shell._isPowerKey(key))
+                    shell._powerDown = false;
+                return;
+            }
+            if (systemScreens.blocksInput && key === Qt.Key_Home) {
+                shell._homeDown = false;
+                return;
+            }
+            if (key === Qt.Key_Home || shell._isPowerKey(key))
                 shell._buttonUp(key === Qt.Key_Home);
         }
         onChord: (index) => {
@@ -1579,13 +1616,18 @@ FocusScope {
         && notes.negativeSpace === notes.negativeSpaceTarget
 
     Component.onCompleted: {
+        // The boot animation from the first frame.
+        if (bootAnimation)
+            systemScreens.startBoot(bootUpdating);
         Qt.callLater(rebuildLauncherLayout);
         // WindowServer::bootupFinished: straight to how the device is held.
         Qt.callLater(function() {
             shell._followRotationLock();
             uiRotation.bootupFinished(shell.system && shell.system.deviceOrientation ? shell.system.deviceOrientation : "up");
-            // WindowServer::bootupFinished: the boot sound.
-            sounds.bootFinished();
+            // WindowServer::bootupFinished: the boot sound; with the boot
+            // animation, when it ends (systemScreens.finishBoot).
+            if (!shell.bootAnimation)
+                sounds.bootFinished();
         });
     }
 
@@ -2483,5 +2525,33 @@ FocusScope {
         id: captureFlash
         anchors.fill: parent
         z: 100000
+    }
+
+    // ---- The system's full-screen states (SystemScreens.qml) ---------------------
+    // Boot animation, progress animation, USB drive mode, Full Erase's
+    // countdown, the frame rate counter and touch plot; over everything.
+    readonly property alias systemScreens: systemScreens
+    // Start with the boot animation (phoenix-sim when someone is watching):
+    // the boot sound then waits for it (WindowServer::bootupFinished).
+    property bool bootAnimation: false
+    // ... showing "Updating the system" first: the system was updated.
+    property bool bootUpdating: false
+    SystemScreens {
+        id: systemScreens
+        anchors.fill: parent
+        z: 100001
+        source: shell.source
+        system: shell.system
+        locked: shell.locked
+        onCall: notes.incomingCall || !!(shell.source && shell.source.activeCallBanner)
+        displayOn: backlight.on
+        onBootFinished: sounds.bootFinished()
+        // storaged could not take the drive: "USB Drive connection failed".
+        onBrickModeFailed: if (shell.source && shell.source.showMsmEntryFailedAlert) shell.source.showMsmEntryFailedAlert()
+    }
+    // A storage daemon /storaged signal (MSMAvail, MSMProgress, MSMEntry,
+    // MSMFscking), as LunaSysMgr's SystemService heard them.
+    function storagedSignal(method, payload) {
+        systemScreens.storagedSignal(method, payload);
     }
 }
