@@ -18,6 +18,7 @@ import { EmergencyPage } from "./Emergency";
 import { AccessibilityPage } from "./Accessibility";
 import { TextAssistPage } from "./TextAssist";
 import { DevModePage } from "./DevMode";
+import { ExhibitionPage } from "./Exhibition";
 
 export interface PageInfo {
     title: string;
@@ -33,6 +34,7 @@ export const PAGES = {
     airplane: { title: "Airplane Mode", icon: "icons/airplane.png", component: AirplanePage },
     vpn: { title: "VPN", icon: "icons/vpn.png", component: VpnPage },
     screen: { title: "Screen & Lock", icon: "icons/screen.png", component: ScreenPage },
+    exhibition: { title: "Exhibition", icon: "icons/exhibition.png", component: ExhibitionPage },
     sounds: { title: "Sounds & Ringtones", icon: "icons/sounds.png", component: SoundsPage },
     datetime: { title: "Date & Time", icon: "icons/datetime.png", component: DateTimePage },
     language: { title: "Language & Region", icon: "icons/language.png", component: LanguagePage },
