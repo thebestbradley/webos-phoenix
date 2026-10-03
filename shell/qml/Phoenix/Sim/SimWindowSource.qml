@@ -1051,8 +1051,14 @@ Item {
         var win = justTypeWindow();
         if (!win)
             return;
+        // The field is a contenteditable (Enyo RichText): setting its value
+        // leaves the caret before the text, so what is typed next would go
+        // in front of the first letter ("cal" became "alc"); it goes after it.
         var js = _justTypeScript("jt.forceFocus();jt.$.searchField.setValue(" + JSON.stringify(text)
-                                 + ");jt.onValueChange(null,null," + JSON.stringify(text) + ");");
+                                 + ");var n=jt.$.searchField.$.input.hasNode();"
+                                 + "if(n&&window.getSelection){var r=document.createRange();r.selectNodeContents(n);"
+                                 + "r.collapse(false);var s=window.getSelection();s.removeAllRanges();s.addRange(r);}"
+                                 + "jt.onValueChange(null,null," + JSON.stringify(text) + ");");
         _runWhenLoaded(win, js, !_justTypeLoaded);
     }
 

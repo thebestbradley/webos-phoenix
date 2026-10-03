@@ -78,6 +78,14 @@ FocusScope {
         return uid;
     }
 
+    // Whether the window's keyboard focus is in item (or below it).
+    function _hasFocusInside(item) {
+        for (var it = shell.Window.activeFocusItem; it; it = it.parent)
+            if (it === item)
+                return true;
+        return false;
+    }
+
     function startJustType(text) {
         launcher.open = false;
         justType.start(text);
@@ -294,6 +302,10 @@ FocusScope {
                 shell.dockShown = false;
             else if (!cards.maximized)
                 shell._showDock();
+            // Its page had the keys: they come back to the shell, so typing
+            // in card view starts Just Type again.
+            if (!justType.open && shell._hasFocusInside(justType))
+                shell.forceActiveFocus();
         }
     }
     Connections {

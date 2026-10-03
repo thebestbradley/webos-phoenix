@@ -76,6 +76,9 @@ Item {
         surface.width = Qt.binding(function() { return surfaceHost.width; });
         surface.height = Qt.binding(function() { return surfaceHost.height; });
         surface.visible = true;
+        // Closed, the page cannot keep (or take back) the keyboard: typing
+        // in card view must reach the shell to start Just Type again.
+        surface.enabled = Qt.binding(function() { return jt.open; });
     }
 
     // Escape leaves Just Type even while the page has the keyboard.

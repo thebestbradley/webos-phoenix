@@ -33,6 +33,12 @@ Item {
         property bool menuOpen: false
         property var scripts: []
         signal loaded
+        // As a web view does, it takes the keys back when it loses them
+        // while its page has a field focused.
+        property bool pageHasFocus: false
+        onActiveFocusChanged: if (!activeFocus && pageHasFocus) Qt.callLater(page.forceActiveFocus)
+        // and takes every key it is given.
+        Keys.onPressed: (event) => { event.accepted = true; }
         function runScript(js, done) {
             scripts = scripts.concat([js]);
             var result;
@@ -79,6 +85,24 @@ Item {
             shell.gestureBack();
             tryVerify(function() { return !shell.justTypeOpen; }, 1000);
             verify(!bar.titleActionable);
+        }
+
+        // The page had the keys; once Just Type goes they come back to the
+        // shell, so typing in card view starts it again.
+        function test_typingAgainAfterBack() {
+            shell.startJustType("c");
+            page.forceActiveFocus();
+            page.pageHasFocus = true;
+            verify(page.activeFocus);
+            shell.gestureBack();
+            tryVerify(function() { return !shell.justTypeOpen; }, 1000);
+            wait(50);
+            verify(root.Window.activeFocusItem !== page, "the page does not keep the keys");
+            page.pageHasFocus = false;
+            keyClick(Qt.Key_M);
+            verify(shell.justTypeOpen);
+            shell.gestureBack();
+            tryVerify(function() { return !shell.justTypeOpen; }, 1000);
         }
 
         // Preferences launches an app from the page: Just Type closes.
