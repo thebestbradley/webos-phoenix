@@ -62,6 +62,13 @@ Item {
             return out;
         }
 
+        function insideKeyboard(item) {
+            for (var p = item; p; p = p.parent)
+                if (p === shell.keyboard)
+                    return true;
+            return false;
+        }
+
         function fileName(url) {
             var s = String(url);
             return s.substring(s.lastIndexOf("/") + 1);
@@ -80,7 +87,11 @@ Item {
             for (var i = 0; i < items.length; ++i) {
                 var src = String(items[i].source);
                 var name = fileName(src);
-                var keyboard = src.indexOf("/keyboard-phone/") >= 0 || src.indexOf("/keyboard-tablet/") >= 0;
+                // The keyboard draws its art at its own scale; the same art
+                // elsewhere (the hardware keyboard's keyboard button) is at
+                // the shell's.
+                var keyboard = (src.indexOf("/keyboard-phone/") >= 0 || src.indexOf("/keyboard-tablet/") >= 0)
+                    && insideKeyboard(items[i]);
                 var want = suffixFor(keyboard ? shell.keyboard.pixelScale : u);
                 var m = /(@[0-9.]+x)?\.png$/.exec(name);
                 verify(m !== null, name);
