@@ -2867,6 +2867,10 @@
                 alerttone: (p.alerttone && p.alerttone.fullPath) || "",
                 notificationtone: (p.notificationtone && p.notificationtone.fullPath) || "",
                 showAlertsWhenLocked: p.showAlertsWhenLocked !== false,
+                // What the volume keys adjust, as audiod's scenarios
+                // (NativeAlertManager::actOnChanged): the shell's volume
+                // indicator draws the phone, ringtone or music picture.
+                audioScenario: audioScenario(),
                 screenTimeout: typeof p.screenTimeout === "number" ? p.screenTimeout : 60,
                 lockTimeout: typeof p.lockTimeout === "number" ? p.lockTimeout : 0,
                 // Settings > Accessibility: the shell's animations.
@@ -2893,6 +2897,18 @@
         }
         function tapSounds(p) {
             return keyboardPrefs(p).TapSounds !== false;
+        }
+        // "ringtone" while a call rings, "phone" during one (dialing,
+        // alerting, active, held), "media" while an app holds the media
+        // audio focus (com.webos.service.audiofocusmanager), else "system".
+        function audioScenario() {
+            var t = store.get("telephony:state", null), calls = (t && t.calls) || [];
+            if (calls.some(function (c) { return c.state === "incoming" || c.state === "waiting"; }))
+                return "ringtone";
+            if (calls.some(function (c) { return c.state !== "disconnected"; }))
+                return "phone";
+            var f = store.get("audiofocus", null);
+            return f && f.streamType === "pmedia" ? "media" : "system";
         }
         // The keyboards the user turned on (x_palm_virtualkeyboard_prefs
         // keyboards, VirtualKeyboardPreferences::virtualKeyboardPreferencesChanged):
@@ -4240,7 +4256,12 @@
         }
         var listeners = [];
         function changed() { listeners.slice().forEach(function (fn) { fn(); }); }
-        function save(s) { store.set(KEY, s); changed(); }
+        // The shell hears of it too (its volume indicator: audioScenario).
+        function save(s) {
+            store.set(KEY, s);
+            changed();
+            if (runtime.hostStatus) host.postToHost("systemStatus", runtime.hostStatus());
+        }
         function status(s) {
             return ok({ calls: s.calls, muted: !!s.muted, speaker: !!s.speaker });
         }
@@ -6110,6 +6131,7 @@
                 store.set(FOCUS_KEY, { token: token, appId: PalmSystem.appIdentifier || "", streamType: streamType,
                                        requestType: p.requestType, time: Date.now() });
                 tellLosers();
+                if (runtime.hostStatus) host.postToHost("systemStatus", runtime.hostStatus());
                 if (p.subscribe) {
                     var w = { token: token, reply: reply, ctx: ctx, streamType: streamType };
                     holders.push(w);
@@ -6119,7 +6141,10 @@
             },
             "/releaseFocus": function (p, reply) {
                 var h = current();
-                if (h && h.token.indexOf(pageId + ":") === 0) store.set(FOCUS_KEY, null);
+                if (h && h.token.indexOf(pageId + ":") === 0) {
+                    store.set(FOCUS_KEY, null);
+                    if (runtime.hostStatus) host.postToHost("systemStatus", runtime.hostStatus());
+                }
                 reply(ok({ result: "AF_SUCCESSFULLY_RELEASED" }));
             },
             "/getStatus": function (p, reply) {

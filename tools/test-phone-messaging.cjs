@@ -153,6 +153,9 @@ async function main() {
         await phone.waitForTimeout(200);
         check(host.some((m) => m.type === "banner" && /Incoming call: Ada Palmer/.test(m.payload.message)),
             "incoming call banner for the shell");
+        // What the volume keys adjust: the ringer while it rings, the call once answered.
+        const scenario = () => { const st = host.filter((m) => m.type === "systemStatus"); return st.length ? st[st.length - 1].payload.audioScenario : undefined; };
+        check(scenario() === "ringtone", `ringing: the shell's audio scenario is "ringtone" (${scenario()})`);
         await shot(alert, "phone-incoming-alert");
         let closed = alert.waitForEvent("close", { timeout: 5000 }).then(() => true, () => false);
         await alert.click("[data-testid='answer']");
@@ -160,9 +163,12 @@ async function main() {
         await phone.waitForSelector("[data-testid='incall'][data-state='active']");
         check(true, "answer: the call is up on the Phone card");
         check(host.some((m) => m.page === "phone" && m.type === "activate"), "and the Phone card comes to the front (PalmSystem.activate)");
+        check(scenario() === "phone", `in the call: "phone" (${scenario()})`);
         await phone.evaluate(() => window.__phoenixRuntime.simulateRemoteHangup());
         await phone.waitForSelector("[data-testid='incall']", { state: "detached", timeout: 4000 });
         check(true, "the caller hangs up");
+        await phone.waitForTimeout(3000);
+        check(scenario() === "system", `after it: "system" (${scenario()})`);
 
         // ---- Incoming call on the lock screen: unlocking answers ---------------------------------------
         // ("Drag up to answer": the shell unlocks; the alert hears it through

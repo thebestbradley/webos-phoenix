@@ -65,7 +65,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Popup alerts (incoming call, alarm, calendar reminder, system alerts) filtered by the policy file. `Src/lunaui/notifications/AlertWindow.cpp`; `conf/notificationPolicy.conf`; `NotificationPolicy.cpp` *Phoenix: with the notificationPolicy.conf queue.*
 - [ ] Transient alerts. `DashboardWindowManager.cpp:183-190`
 - [ ] Active-call banner with running call timer. `Src/lunaui/notifications/ActiveCallBanner.cpp`
-- [ ] Volume / ringer HUD. `Src/lunaui/notifications/VolumeControlAlertWindow.cpp`
+- [x] Volume / ringer HUD. `Src/lunaui/notifications/VolumeControlAlertWindow.cpp` *Phoenix: done (`VolumeIndicator.qml`; GAPS N7).*
 - [ ] QML alert windows (generic system dialogs). `Src/lunaui/notifications/QmlAlertWindow.cpp`; `uiComponents/MessageDialog/MessageDialog.qml`
 - [ ] Native alert manager (low-level system alerts, e.g. low battery). `Src/lunaui/notifications/NativeAlertManager.cpp` *Phoenix: low battery comes from luna-systemui's popup; no native alert manager.*
 - [ ] LED notification throbber and blink-notifications preferences. `conf/defaultPreferences.txt` (`LEDThrobberEnabled`, `BlinkNotifications`); `Src/base/CoreNaviLeds.cpp` *Phoenix: the Blink Notifications preference only; nothing blinks yet.*

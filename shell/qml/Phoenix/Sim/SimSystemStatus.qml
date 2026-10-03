@@ -46,6 +46,9 @@ QtObject {
     // (Settings > Sounds & Ringtones): the master and stream volumes
     // (0..100), "System Sounds", "Keyboard clicks" and the tones' paths.
     property int volume: 60
+    // What the volume keys adjust (audiod's scenario, from the runtime):
+    // "phone", "ringtone" (a call ringing), "media" or "system".
+    property string audioScenario: "system"
     property var streams: ({ pringtones: 80, palerts: 70, pfeedback: 50 })
     property bool systemSounds: true
     property bool tapSounds: true
@@ -268,6 +271,8 @@ QtObject {
             lockTimeout = s.lockTimeout;
         if (s.volume !== undefined)
             volume = s.volume;
+        if (s.audioScenario !== undefined)
+            audioScenario = s.audioScenario;
         if (s.streams !== undefined)
             streams = s.streams;
         if (s.systemSounds !== undefined)

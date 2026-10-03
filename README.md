@@ -255,6 +255,7 @@ then take the bottom-edge flick). A big `--size` needs a matching
 the Phone app), **F5** incoming text message (for Messaging), **F6** low
 battery, **F7** plug a charger in or out, **F8** battery charged to full,
 **F9** (or **Home**+**F3**, **Print Screen**, **Ctrl+Alt+P**) a screen capture,
+**F10** / **F11** the volume keys (down / up),
 **Ctrl+Left** / **Ctrl+Right**
 turn the device a quarter turn counter-clockwise / clockwise, type in card
 view for Just Type. Left alone the screen dims and turns off as on a device

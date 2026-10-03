@@ -249,6 +249,8 @@ async function main() {
             .then(() => check(true, "music: the song plays"), () => check(false, "music: the song plays"));
         const np = lastHost("nowPlaying");
         check(np && np.payload.title === "Morning Boot" && np.payload.playing === true, "music: nowPlaying host message");
+        check(lastHost("systemStatus") && lastHost("systemStatus").payload.audioScenario === "media",
+              "music: playing, the volume keys adjust media (audioScenario)");
         await shot(page, "music-now-playing");
 
         await page.click("[data-testid='np-play']");

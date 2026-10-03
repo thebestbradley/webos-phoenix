@@ -117,10 +117,11 @@ FocusScope {
         onTurnedOff: shell.lock()
     }
     // Every touch and key resets its timers; while it is off the touch
-    // panel takes nothing and only Power and Home get through.
+    // panel takes nothing and only Power, Home and the volume keys get
+    // through.
     UserActivity {
         asleep: !backlight.on
-        passKeys: [Qt.Key_Home, Qt.Key_F3, Qt.Key_PowerOff]
+        passKeys: [Qt.Key_Home, Qt.Key_F3, Qt.Key_PowerOff, Qt.Key_VolumeUp, Qt.Key_VolumeDown, Qt.Key_F10, Qt.Key_F11]
         onActivity: backlight.activity()
     }
     Connections {
@@ -521,10 +522,17 @@ FocusScope {
         // Also the simulator's gestures and demo keys (sim/main.cpp): Esc
         // (or Back) the back gesture, F1 the up gesture, F2 a notification.
         keys: [Qt.Key_Home, Qt.Key_F3, Qt.Key_PowerOff, Qt.Key_Print, Qt.Key_F9,
+               Qt.Key_VolumeUp, Qt.Key_VolumeDown, Qt.Key_F10, Qt.Key_F11,
                Qt.Key_Escape, Qt.Key_Back, Qt.Key_F1, Qt.Key_F2]
         chords: [{ key: Qt.Key_P, modifiers: Qt.ControlModifier | Qt.AltModifier },
                  { key: Qt.Key_P, modifiers: Qt.MetaModifier | Qt.AltModifier }]
         onPressed: (key, autoRepeat) => {
+            // The volume keys repeat while held (the simulator's F10, F11).
+            if (key === Qt.Key_VolumeUp || key === Qt.Key_VolumeDown || key === Qt.Key_F10 || key === Qt.Key_F11) {
+                backlight.activity();
+                shell.volumeKey(key === Qt.Key_VolumeUp || key === Qt.Key_F11);
+                return;
+            }
             if (autoRepeat)
                 return;
             // The screen is off: only Power and Home do anything.
@@ -548,6 +556,31 @@ FocusScope {
                 shell._buttonUp(key === Qt.Key_Home);
         }
         onChord: shell.takeScreenshot()
+    }
+
+    // ---- The volume keys ----------------------------------------------------------
+    // They change the volume the system menu's slider shows, in steps of
+    // 10, and the indicator shows it in the picture for what is playing
+    // (audiod's scenario, from the system: a call, a ringing call, media,
+    // else the ringer's). With the ringer switched off (Mute), the ringer's
+    // volume is not changed: the bell, crossed out
+    // (NativeAlertManager::actOnChanged). On the lock screen too
+    // (LockWindow lets the volume keys through), and with the screen off
+    // they change it without waking it.
+    readonly property alias volumeIndicator: volumeIndicator
+    function volumeKey(up) {
+        var sys = shell.system;
+        if (!sys || sys.volume === undefined)
+            return;
+        var scenario = sys.audioScenario || "system";
+        if (sys.muted && (scenario === "ringtone" || scenario === "system")) {
+            if (backlight.on)
+                volumeIndicator.show("mute", 0);
+            return;
+        }
+        sys.volume = Math.max(0, Math.min(100, sys.volume + (up ? 10 : -10)));
+        if (backlight.on)
+            volumeIndicator.show(scenario === "phone" ? "phone" : scenario === "media" ? "media" : "ringtone", sys.volume);
     }
 
     // ---- Home + Power: a screen capture -----------------------------------------
@@ -1377,6 +1410,15 @@ FocusScope {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: shell.locked ? 0 : notes.negativeSpace
                 source: shell.source
+            }
+
+            // The volume keys' indicator, centred in the positive space;
+            // over the lock screen too (where the original left it to do,
+            // LockWindow::slotTransientAlertActivated).
+            VolumeIndicator {
+                id: volumeIndicator
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: Math.round((Theme.statusBarHeight + parent.height - (shell.locked ? 0 : notes.negativeSpace) - height) / 2)
             }
 
             StatusBar {

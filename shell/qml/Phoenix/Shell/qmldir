@@ -15,6 +15,7 @@ Launcher 1.0 Launcher.qml
 LockScreen 1.0 LockScreen.qml
 UiRotation 1.0 UiRotation.qml
 UnlockPanel 1.0 UnlockPanel.qml
+VolumeIndicator 1.0 VolumeIndicator.qml
 Notifications 1.0 Notifications.qml
 QuickLaunch 1.0 QuickLaunch.qml
 SearchPill 1.0 SearchPill.qml
