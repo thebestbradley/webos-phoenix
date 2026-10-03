@@ -676,10 +676,10 @@ Item {
                 var info = view.source && typeof view.source.appInfo === "function" ? view.source.appInfo(model.appId) : null;
                 return info && info.icon ? info.icon : "";
             }
-            largeIcon: {
-                var info = view.source && typeof view.source.appInfo === "function" ? view.source.appInfo(model.appId) : null;
-                return info && info.largeIcon ? info.largeIcon : "";
-            }
+            readonly property var info: view.source && typeof view.source.appInfo === "function" ? view.source.appInfo(model.appId) : null
+            largeIcon: info && info.largeIcon ? info.largeIcon : ""
+            splashIcon: info && info.splashIcon ? info.splashIcon : ""
+            splashBackground: info && info.splashBackground ? info.splashBackground : ""
             width: view.windowWidth
             height: view.windowHeight
             window: view.source.windowFor(uid)

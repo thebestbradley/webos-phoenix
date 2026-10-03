@@ -78,6 +78,8 @@ Item {
             appIcon.largeSource = "";
             appIcon.pixelRatio = Qt.binding(function() { return Screen.devicePixelRatio; });
             loading.pixelRatio = Qt.binding(function() { return Screen.devicePixelRatio; });
+            loading.splashIcon = "";
+            loading.splashBackground = "";
         }
 
         function test_oneXArtIsTheArtItself() {
@@ -306,6 +308,25 @@ Item {
             tryCompare(img, "status", Image.Ready);
             compare(img.sourceSize.width, 64 * r);
             compare(img.width, 64);
+        }
+
+        // An app's splashicon is fitted to SplashIconSize (128 px on a
+        // phone) instead of the launcher icon at one and a half times; its
+        // splashBackground replaces loading-bg.png (CardLoading.cpp:79-116).
+        function test_loadingCardUsesTheAppsSplashArt() {
+            var img = findChild(loading, "loadingIcon");
+            var bg = findChild(loading, "splashBackground");
+            Theme.u = 1;
+            loading.pixelRatio = 1;
+            compare(img.width, 96);
+            verify(!bg.visible);
+            loading.splashIcon = Qt.resolvedUrl("../../third_party/core-apps/com.palm.app.calculator/icon-256x256.png");
+            compare(img.width, Theme.splashIconSize);
+            compare(root.fileName(img.source), "icon-256x256.png");
+            tryCompare(img, "status", Image.Ready);
+            compare(img.sourceSize.width, Theme.splashIconSize);
+            loading.splashBackground = Theme.assetUrl("loading-bg.png");
+            tryCompare(bg, "visible", true);
         }
 
         function test_appIconDecodesABiggerFileAtTheDrawnSize() {

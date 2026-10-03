@@ -180,6 +180,19 @@ void Rootfs::rescan()
         if (!overlayIcon.isEmpty() && pngSide(overlayIcon) > (largeFile.isEmpty() ? 0 : pngSide(largeFile)))
             largeFile = overlayIcon;
         entry[QStringLiteral("largeIcon")] = largeFile.isEmpty() ? QString() : QUrl::fromLocalFile(largeFile).toString();
+        // The loading card's own icon and background (CardLoading.cpp:79-116):
+        // the splashicon itself, drawn at SplashIconSize; "splashBackground"
+        // (or "splashbackground"), tiled over the card, when the file is there.
+        const QString splashIconFile = large.isEmpty() || large != app.value(QStringLiteral("splashicon")).toString()
+            ? QString() : appDir + QLatin1Char('/') + large;
+        entry[QStringLiteral("splashIcon")] = !splashIconFile.isEmpty() && QFileInfo::exists(splashIconFile)
+            ? QUrl::fromLocalFile(splashIconFile).toString() : QString();
+        QString splashBg = app.value(QStringLiteral("splashBackground")).toString();
+        if (splashBg.isEmpty())
+            splashBg = app.value(QStringLiteral("splashbackground")).toString();
+        const QString splashBgFile = splashBg.isEmpty() ? QString() : appDir + QLatin1Char('/') + splashBg;
+        entry[QStringLiteral("splashBackground")] = !splashBgFile.isEmpty() && QFileInfo::exists(splashBgFile)
+            ? QUrl::fromLocalFile(splashBgFile).toString() : QString();
         // Installed by the user: the launcher may delete it (uninstall).
         entry[QStringLiteral("installed")] = installed;
         if (installed)

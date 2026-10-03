@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // What a card shows while its app is still loading (luna-sysmgr
-// Src/lunaui/cards/CardLoading.cpp): loading-bg.png filling the card, the
-// app's icon in the middle at one and a half times its launcher size (at
-// most SplashIconSize: 128 px, 192 on tablets), and loading-glow.png behind
+// Src/lunaui/cards/CardLoading.cpp): the app's splashBackground tiled from
+// the card's top left, or loading-bg.png filling it; the app's splashicon in
+// the middle, fitted to SplashIconSize (128 px, 192 on tablets), or its
+// launcher icon at one and a half times its size (at most that); and
+// loading-glow.png behind
 // it, pulsing. The pulse starts after 900 ms, rises over 500 ms, falls over
 // 500 ms and rests for a second (slotPulseTimeout; lunaAnimations.conf
 // cardLoading*). When the app is ready it cross-fades away over 300 ms.
@@ -21,6 +23,9 @@ Item {
     // Its bigger icon (appinfo.json "splashicon"), drawn in its place when
     // the icon would be magnified (Theme.appIcon).
     property url largeIcon: ""
+    // The app's own (appinfo.json "splashicon", "splashBackground").
+    property url splashIcon: ""
+    property url splashBackground: ""
     // Window pixels per point (AppIcon.pixelRatio).
     property real pixelRatio: Screen.devicePixelRatio
 
@@ -46,7 +51,19 @@ Item {
 
     Image {
         anchors.fill: parent
+        visible: !splashBg.visible
         source: Theme.asset("loading-bg.png")
+    }
+    // The pixmap as a brush from the card's top left, at its own size
+    // (CardLoading::paint, fillPath with the background).
+    ArtTiledImage {
+        id: splashBg
+        objectName: "splashBackground"
+        anchors.fill: parent
+        visible: loading.splashBackground != "" && status === Image.Ready
+        source: loading.splashBackground
+        horizontalAlignment: Image.AlignLeft
+        verticalAlignment: Image.AlignTop
     }
 
     Image {
@@ -74,16 +91,21 @@ Item {
     Image {
         id: icon
         anchors.centerIn: parent
-        // The launcher icon, half as big again, no larger than the splash size.
+        objectName: "loadingIcon"
+        // The splashicon, fitted to the splash size; else the launcher
+        // icon, half as big again, no larger than that (CardLoading.cpp:79-96).
+        readonly property url own: loading.splashIcon != "" ? loading.splashIcon : loading.icon
         readonly property size iconSize: loading.icon != "" ? HiDpi.imageSize(loading.icon) : Qt.size(0, 0)
-        readonly property real side: Math.min(Math.max(iconSize.width, iconSize.height) * 1.5, Theme.splashIconSize)
+        readonly property real side: loading.splashIcon != "" ? Theme.splashIconSize
+            : Math.min(Math.max(iconSize.width, iconSize.height) * 1.5, Theme.splashIconSize)
         // In the window's pixels (AppIcon.pixelRatio): two per point on a
         // Retina Mac.
         readonly property int pixels: Math.ceil(Theme.px(side) * loading.pixelRatio)
-        readonly property url best: loading.icon != "" ? Theme.appIcon(loading.icon, pixels, loading.largeIcon) : ""
+        readonly property url best: own != "" ? Theme.appIcon(own, pixels, loading.largeIcon) : ""
+        readonly property size bestSize: best != "" ? HiDpi.imageSize(best) : Qt.size(-1, -1)
         source: best
-        // A bigger icon is decoded at the drawn size, smoothly scaled down.
-        sourceSize: best != loading.icon ? Qt.size(pixels, pixels) : Qt.size(-1, -1)
+        // A bigger file is decoded at the drawn size, smoothly scaled down.
+        sourceSize: Math.max(bestSize.width, bestSize.height) > pixels ? Qt.size(pixels, pixels) : Qt.size(-1, -1)
         width: Theme.px(side)
         height: Theme.px(side)
         fillMode: Image.PreserveAspectFit

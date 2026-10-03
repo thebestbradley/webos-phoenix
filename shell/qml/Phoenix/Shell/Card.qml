@@ -34,6 +34,10 @@ Item {
     property url icon: ""
     // Its bigger icon (appinfo.json "splashicon"), if any.
     property url largeIcon: ""
+    // The loading card's icon (the splashicon) and background
+    // (appinfo.json "splashBackground"), if the app names them.
+    property url splashIcon: ""
+    property url splashBackground: ""
     // Cards that have lost focus are darkened (CardWindow.cpp:211-213).
     property bool dimmed: false
 
@@ -157,6 +161,8 @@ Item {
                 active: card.loading
                 icon: card.icon
                 largeIcon: card.largeIcon
+                splashIcon: card.splashIcon
+                splashBackground: card.splashBackground
             }
         }
 

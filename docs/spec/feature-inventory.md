@@ -20,7 +20,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Tap-and-hold to reorder cards within a stack and move them between stacks (20% edge zones). `CardWindowManager.cpp:1835-2101`
 - [x] Rounded card corners (shader) and drop shadow. `CardWindow.cpp:2485-2533`; `Src/base/visual/CardDropShadowEffect.cpp`
 - [x] Dimming of cards that aren't active (0.8). `CardWindow.cpp:245-255`
-- [ ] Loading card: splash icon, pulsing glow and splash background while an app launches. `Src/lunaui/cards/CardLoading.cpp` *Phoenix: icon, pulsing glow and loading background done (CardLoading.qml); not yet the app's own splash background.*
+- [x] Loading card: splash icon, pulsing glow and splash background while an app launches. `Src/lunaui/cards/CardLoading.cpp` *Phoenix: CardLoading.qml: the app's splashicon fitted to SplashIconSize (else its launcher icon at 1.5×), the pulsing glow, and its appinfo.json splashBackground tiled from the top left (else loading-bg.png). Not the per-window splashbackgroundname a window can name when it opens.*
 - [ ] In-app scene push/pop zoom transition. `Src/lunaui/cards/CardTransition.cpp`
 - [ ] Modal cards (320x480 child window over a dimmed parent), via `launchModalApp`/`dismissModalApp`. `CardWindow.cpp:1855-2125`; `Src/base/SystemService.cpp:247-248`
 - [x] Full-screen apps that hide the status bar. `Src/base/SystemUiController.cpp:1389-1400` *Phoenix: in the simulator (enableFullScreenMode).*
