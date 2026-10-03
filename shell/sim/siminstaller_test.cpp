@@ -14,6 +14,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <cstdio>
 
@@ -95,6 +96,36 @@ int main(int argc, char **argv)
     check(installer.remove(id).isEmpty() && entry(rootfs, id).isEmpty() && rootfs.apps().size() == builtIn, "remove");
     check(!installer.remove(QStringLiteral("org.webosphoenix.settings")).isEmpty() && !entry(rootfs, QStringLiteral("org.webosphoenix.settings")).isEmpty(),
           "built-in apps cannot be removed");
+
+    // Launch points an app adds (applicationManager/addLaunchPoint): kept in
+    // /var/luna/launchpoints/<id> under the data folder, listed for the
+    // launcher (Favorites) and the pages, removed again.
+    QTemporaryDir data;
+    rootfs.setDataDir(data.path());
+    rootfs.rescan();
+    const QVariantMap added = installer.addLaunchPoint({ { QStringLiteral("id"), QStringLiteral("com.palm.app.browser") },
+        { QStringLiteral("title"), QStringLiteral("Example") }, { QStringLiteral("icon"), QStringLiteral("/var/luna/data/browser/icons/icon64-1.png") },
+        { QStringLiteral("params"), QVariantMap { { QStringLiteral("url"), QStringLiteral("https://example.com/") } } } });
+    const QString lpId = added.value(QStringLiteral("launchPointId")).toString();
+    check(QRegularExpression(QStringLiteral("^\\d{8}$")).match(lpId).hasMatch()
+          && QFile::exists(data.path() + QStringLiteral("/var/luna/launchpoints/") + lpId), "addLaunchPoint: an eight-digit id, a file in /var/luna/launchpoints");
+    const QVariantMap point = entry(rootfs, lpId);
+    check(point.value(QStringLiteral("dynamic")).toBool() && point.value(QStringLiteral("page")).toString() == QStringLiteral("favorites")
+          && point.value(QStringLiteral("appId")).toString() == QStringLiteral("com.palm.app.browser")
+          && point.value(QStringLiteral("main")).toString().contains(QStringLiteral("launchParams=%7B%22url%22")),
+          "it is a launcher entry on Favorites that opens the browser with its params");
+    check(point.value(QStringLiteral("icon")).toString() == entry(rootfs, QStringLiteral("com.palm.app.browser")).value(QStringLiteral("icon")).toString(),
+          "an icon not made yet: the app's");
+    check(rootfs.launchPointsJson().contains(("\"launchPointId\":\"" + lpId + "\"").toUtf8()), "the pages list it");
+    check(rootfs.resolve(QStringLiteral("/var/luna/data/browser/icons/icon64-1.png")) == data.path() + QStringLiteral("/var/luna/data/browser/icons/icon64-1.png"),
+          "/var/luna/ is in the data folder");
+    check(installer.addLaunchPoint({ { QStringLiteral("id"), QStringLiteral("com.example.none") }, { QStringLiteral("title"), QStringLiteral("X") } })
+              .value(QStringLiteral("error")).toString() == QStringLiteral("Unable to find id: com.example.none"), "an unknown app is refused");
+    check(installer.removeLaunchPoint(QStringLiteral("com.palm.app.browser_default")).startsWith(QStringLiteral("launch point [")),
+          "an app's own launch point cannot be removed");
+    check(installer.removeLaunchPoint(lpId).isEmpty() && entry(rootfs, lpId).isEmpty(), "removeLaunchPoint");
+    check(installer.freeSpaceKB() > 0, "free space where apps go");
+    check(entry(rootfs, QStringLiteral("com.palm.app.browser")).value(QStringLiteral("size")).toLongLong() > 10000, "apps know their size");
     std::printf(failures ? "%d failed\n" : "all passed\n", failures);
     return failures ? 1 : 0;
 }

@@ -7,6 +7,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -70,6 +71,39 @@ void Rootfs::setInstalledDir(const QString &dir)
     rescan();
 }
 
+static const char kDataPrefix[] = "/var/luna/";
+
+void Rootfs::setDataDir(const QString &dir)
+{
+    m_dataDir = dir;
+    // setInstalledDir, or rescan(), reads the launch points kept there.
+}
+
+QString Rootfs::dataPath(const QString &devicePath) const
+{
+    const QString path = QDir::cleanPath(devicePath);
+    if (m_dataDir.isEmpty() || !path.startsWith(QLatin1String(kDataPrefix))
+        || path.split(QLatin1Char('/')).contains(QStringLiteral("..")))
+        return {};
+    return QDir::cleanPath(m_dataDir + path);
+}
+
+QString Rootfs::launchPointsDir() const
+{
+    return m_dataDir.isEmpty() ? QString() : dataPath(QStringLiteral("/var/luna/launchpoints"));
+}
+
+qint64 Rootfs::dirSize(const QString &dir)
+{
+    qint64 total = 0;
+    QDirIterator it(dir, QDir::Files | QDir::Hidden | QDir::NoSymLinks, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        it.next();
+        total += it.fileInfo().size();
+    }
+    return total;
+}
+
 // A PNG's width, from its header (0 if it is not a PNG). The simulator's
 // tests link Qt Core only, so no QImageReader.
 int Rootfs::pngSide(const QString &file)
@@ -113,8 +147,10 @@ void Rootfs::rescan()
     m_apps.clear();
     m_launchPoints.clear();
     m_installed.clear();
+    m_dynamic.clear();
+    QHash<QString, QVariantMap> appEntries;   // app id -> its launcher entry
     // systemApps are always hidden from the launcher (Just Type, the system UI).
-    auto addApp = [&](QString appDir, const QString &name, bool system, bool installed) {
+    auto addApp =[&](QString appDir, const QString &name, bool system, bool installed) {
         // Built apps (e.g. React) keep their installable output in dist/.
         if (!QFileInfo::exists(appDir + QStringLiteral("/appinfo.json")))
             appDir += QStringLiteral("/dist");
@@ -139,6 +175,27 @@ void Rootfs::rescan()
         // 1-4), launchPoints.
         const QJsonObject phoenix = app.value(QStringLiteral("phoenix")).toObject();
         const int tab = phoenix.value(QStringLiteral("launcherTab")).toInt(0);
+        // The launcher page the app names (Phoenix's launcherTab: 0 Apps,
+        // 1 Downloads, 2 Settings, 3 Favorites), or "" to let the
+        // launcher place it (LauncherLayout.pageFor: category, keywords,
+        // installed).
+        static const QStringList pageNames = { QStringLiteral("apps"), QStringLiteral("downloads"),
+                                               QStringLiteral("prefs"), QStringLiteral("favorites") };
+        auto pageOf = [](const QJsonObject &o, const QString &fallback) {
+            const int t = o.value(QStringLiteral("launcherTab")).toInt(-1);
+            return o.contains(QStringLiteral("launcherTab")) && t >= 0 && t < pageNames.size() ? pageNames.at(t) : fallback;
+        };
+        QStringList keywords;
+        for (const auto &k : app.value(QStringLiteral("keywords")).toArray())
+            keywords.append(k.toString());
+        // Dock (Exhibition) mode: "exhibitionMode", or the older "dockMode",
+        // with an optional title (ApplicationDescription.cpp:369-398).
+        QJsonValue dock = app.value(QStringLiteral("exhibitionMode"));
+        if (!dock.isBool())
+            dock = app.value(QStringLiteral("dockMode"));
+        QJsonObject dockOptions = app.value(QStringLiteral("exhibitionModeOptions")).toObject();
+        if (dockOptions.isEmpty())
+            dockOptions = app.value(QStringLiteral("dockModeOptions")).toObject();
         QVariantMap entry;
         entry[QStringLiteral("id")] = id;
         entry[QStringLiteral("appId")] = id;
@@ -154,6 +211,10 @@ void Rootfs::rescan()
         entry[QStringLiteral("params")] = QString();
         // -1 keeps an app out of the launcher.
         entry[QStringLiteral("tab")] = system || phoenix.value(QStringLiteral("hidden")).toBool() ? -1 : tab;
+        entry[QStringLiteral("page")] = pageOf(phoenix, QString());
+        entry[QStringLiteral("category")] = app.value(QStringLiteral("category")).toString();
+        entry[QStringLiteral("keywords")] = keywords.join(QLatin1Char('\n'));
+        entry[QStringLiteral("dynamic")] = false;
         entry[QStringLiteral("quickLaunch")] = phoenix.value(QStringLiteral("quickLaunch")).toInt(0);
         // The app's files on disk, for device paths the shell resolves itself (wallpapers).
         entry[QStringLiteral("dir")] = QUrl::fromLocalFile(appDir + QLatin1Char('/')).toString();
@@ -195,19 +256,38 @@ void Rootfs::rescan()
             ? QUrl::fromLocalFile(splashBgFile).toString() : QString();
         // Installed by the user: the launcher may delete it (uninstall).
         entry[QStringLiteral("installed")] = installed;
+        // The app's files (getSizeOfApps, getUserInstalledAppSizes).
+        const qint64 size = dirSize(appDir);
+        entry[QStringLiteral("size")] = size;
         if (installed)
             m_installed.append(id);
         m_apps.append(entry);
+        appEntries.insert(id, entry);
         QVariantMap record;
         record[QStringLiteral("id")] = id;
+        record[QStringLiteral("appId")] = id;
         record[QStringLiteral("launchPointId")] = id + QStringLiteral("_default");
         record[QStringLiteral("title")] = entry.value(QStringLiteral("title"));
+        record[QStringLiteral("appmenu")] = entry.value(QStringLiteral("title"));
         record[QStringLiteral("icon")] = root + icon;
         record[QStringLiteral("params")] = QVariantMap();
         record[QStringLiteral("hidden")] = entry.value(QStringLiteral("tab")).toInt() < 0;
         record[QStringLiteral("universalSearch")] = app.value(QStringLiteral("universalSearch")).toVariant();
         record[QStringLiteral("removable")] = installed;
         record[QStringLiteral("version")] = app.value(QStringLiteral("version")).toString();
+        // LaunchPoint::toJSON (LaunchPoint.cpp:262-310): the vendor, the
+        // package, its size (user-installed apps; 0 for the built-in ones).
+        record[QStringLiteral("vendor")] = app.value(QStringLiteral("vendor")).toString();
+        record[QStringLiteral("vendorUrl")] = app.value(QStringLiteral("vendorurl")).toString();
+        record[QStringLiteral("packageId")] = id;
+        record[QStringLiteral("size")] = installed ? size : 0;
+        record[QStringLiteral("appSize")] = size;
+        record[QStringLiteral("system")] = system;
+        record[QStringLiteral("noWindow")] = app.value(QStringLiteral("noWindow")).toBool();
+        if (dock.toBool()) {
+            record[QStringLiteral("exhibitionMode")] = true;
+            record[QStringLiteral("exhibitionModeTitle")] = dockOptions.value(QStringLiteral("title")).toString(entry.value(QStringLiteral("title")).toString());
+        }
         // The types the app opens (appinfo.json "mimeTypes": [{mime, extension,
         // stream}], luna-sysmgr's resource handlers), for the application
         // manager's listAllHandlersForMime and open {target}.
@@ -233,6 +313,7 @@ void Rootfs::rescan()
             point[QStringLiteral("params")] = QString::fromUtf8(params);
             point[QStringLiteral("main")] = main + QStringLiteral("?launchParams=") + QString::fromLatin1(QUrl::toPercentEncoding(QString::fromUtf8(params)));
             point[QStringLiteral("tab")] = lp.value(QStringLiteral("launcherTab")).toInt(tab);
+            point[QStringLiteral("page")] = pageOf(lp, entry.value(QStringLiteral("page")).toString());
             point[QStringLiteral("icon")] = QUrl::fromLocalFile(appDir + QLatin1Char('/') + lp.value(QStringLiteral("icon")).toString(icon)).toString();
             // Its own icon's bigger siblings are found beside it (HiDpi::icon).
             if (lp.contains(QStringLiteral("icon")))
@@ -242,8 +323,11 @@ void Rootfs::rescan()
             m_apps.append(point);
             QVariantMap pointRecord;
             pointRecord[QStringLiteral("id")] = id;
+            pointRecord[QStringLiteral("appId")] = id;
             pointRecord[QStringLiteral("launchPointId")] = lpId;
             pointRecord[QStringLiteral("title")] = point.value(QStringLiteral("title"));
+            pointRecord[QStringLiteral("appmenu")] = point.value(QStringLiteral("title"));
+            pointRecord[QStringLiteral("removable")] = false;
             pointRecord[QStringLiteral("icon")] = root + lp.value(QStringLiteral("icon")).toString(icon);
             pointRecord[QStringLiteral("params")] = lp.value(QStringLiteral("params")).toObject().toVariantMap();
             pointRecord[QStringLiteral("hidden")] = false;
@@ -265,6 +349,54 @@ void Rootfs::rescan()
         for (const QString &name : entries)
             if (!name.endsWith(QLatin1String(".new")) && !name.endsWith(QLatin1String(".old")))
                 addApp(base.filePath(name), name, false, true);
+    }
+
+    // Launch points apps added (applicationManager/addLaunchPoint): one
+    // file each, named by its id, holding LaunchPoint::toJSON's record
+    // (ApplicationManager::addLaunchPoint, scanForLaunchPoints). Those of
+    // apps that are gone are left out.
+    const QString lpDir = launchPointsDir();
+    if (!lpDir.isEmpty()) {
+        const auto files = QDir(lpDir).entryList(QDir::Files, QDir::Name);
+        for (const QString &name : files) {
+            QFile f(QDir(lpDir).filePath(name));
+            if (!f.open(QIODevice::ReadOnly))
+                continue;
+            const QJsonObject lp = QJsonDocument::fromJson(f.readAll()).object();
+            const QString appId = lp.value(QStringLiteral("id")).toString();
+            if (!appEntries.contains(appId) || lp.value(QStringLiteral("launchPointId")).toString() != name)
+                continue;
+            const QVariantMap app = appEntries.value(appId);
+            const QString iconPath = lp.value(QStringLiteral("icon")).toString();
+            QString iconFile = iconPath.isEmpty() ? QString() : resolve(iconPath);
+            if (!iconFile.isEmpty() && !QFileInfo(iconFile).isFile())
+                iconFile.clear();
+            const QByteArray params = QJsonDocument(lp.value(QStringLiteral("params")).toObject()).toJson(QJsonDocument::Compact);
+            QVariantMap point = app;
+            point[QStringLiteral("id")] = name;
+            point[QStringLiteral("title")] = lp.value(QStringLiteral("title")).toString();
+            point[QStringLiteral("params")] = QString::fromUtf8(params);
+            const QString main = app.value(QStringLiteral("main")).toString();
+            point[QStringLiteral("main")] = main + (main.contains(QLatin1Char('?')) ? QStringLiteral("&") : QStringLiteral("?"))
+                + QStringLiteral("launchParams=") + QString::fromLatin1(QUrl::toPercentEncoding(QString::fromUtf8(params)));
+            // A launch point of a hidden app (Settings) still shows.
+            point[QStringLiteral("tab")] = 0;
+            point[QStringLiteral("page")] = QStringLiteral("favorites");
+            point[QStringLiteral("dynamic")] = true;
+            point[QStringLiteral("icon")] = iconFile.isEmpty() ? app.value(QStringLiteral("icon")).toString()
+                                                               : QUrl::fromLocalFile(iconFile).toString();
+            point[QStringLiteral("largeIcon")] = QString();
+            point[QStringLiteral("noWindow")] = false;
+            point[QStringLiteral("quickLaunch")] = 0;
+            point[QStringLiteral("removable")] = lp.value(QStringLiteral("removable")).toBool(true);
+            m_apps.append(point);
+            QVariantMap record = lp.toVariantMap();
+            record[QStringLiteral("appId")] = appId;
+            record[QStringLiteral("hidden")] = false;
+            record[QStringLiteral("dynamic")] = true;
+            m_launchPoints.append(record);
+            m_dynamic.insert(name, record);
+        }
     }
 }
 
@@ -327,6 +459,9 @@ QString Rootfs::resolve(const QString &devicePath) const
         if (path.startsWith(prefix))
             return m.second + path.mid(prefix.size());
     }
+    const QString data = dataPath(path);
+    if (!data.isEmpty())
+        return data;
     const QString appsPrefix = QString::fromLatin1(kAppsPrefix);
     if (path.startsWith(appsPrefix)) {
         const QString rest = path.mid(appsPrefix.size());
@@ -447,6 +582,30 @@ void RootfsSchemeHandler::requestStarted(QWebEngineUrlRequestJob *job)
         job->reply("application/json;charset=utf-8", buffer);
         return;
     }
+    if (devicePath == QLatin1String("/__phoenix/snapshot")) {
+        if (!m_snapshots) {
+            replyJson(job, { { QStringLiteral("returnValue"), false }, { QStringLiteral("errorText"), QStringLiteral("No pictures here") } });
+            return;
+        }
+        replyJson(job, m_snapshots->request(QJsonDocument::fromJson(
+            QUrlQuery(job->requestUrl()).queryItemValue(QStringLiteral("req"), QUrl::FullyDecoded).toUtf8()).object()));
+        return;
+    }
+    // A picture still being made is answered once it is there.
+    const QString clean = QDir::cleanPath(devicePath);
+    if (m_snapshots && m_snapshots->isPending(clean)) {
+        QPointer<QWebEngineUrlRequestJob> guard(job);
+        m_snapshots->whenReady(clean, [this, guard, clean](bool) {
+            if (guard)
+                serveFile(guard, clean);
+        });
+        return;
+    }
+    serveFile(job, devicePath);
+}
+
+void RootfsSchemeHandler::serveFile(QWebEngineUrlRequestJob *job, const QString &devicePath)
+{
     const QString file = m_rootfs->resolve(devicePath);
     QFile f(file);
     if (file.isEmpty() || !QFileInfo(file).isFile() || !f.open(QIODevice::ReadOnly)) {
