@@ -79,7 +79,29 @@ Item {
     // both on by default (VirtualKeyboardPreferences.cpp:42).
     property bool tapSounds: true
     property bool spaces2period: true
-    property string layoutName: "qwerty"
+    // The keyboards turned on (Settings > Text Assist > Keyboards;
+    // VirtualKeyboardPreferences' keyboard combos): [{layout, language}],
+    // and the one in use. The language key goes to the next one and,
+    // held, lists them (selectNextKeyboardCombo, selectKeyboardCombo);
+    // keyboardSelected tells the shell, which keeps it.
+    property var keyboards: [{ layout: "qwerty", language: "en" }]
+    property var keyboard: ({ layout: "qwerty", language: "en" })
+    signal keyboardSelected(var keyboard)
+    readonly property int keyboardIndex: {
+        for (var i = 0; i < keyboards.length; ++i)
+            if (keyboard && keyboards[i].layout === keyboard.layout && keyboards[i].language === keyboard.language)
+                return i;
+        return 0;
+    }
+    readonly property var _keyboardInUse: keyboards[keyboardIndex] || { layout: "qwerty", language: "en" }
+    readonly property string layoutName: _keyboardInUse.layout
+    // The words it suggests and corrects with ("none": neither).
+    readonly property string language: _keyboardInUse.language
+    function selectKeyboard(index) {
+        if (index < 0 || index >= keyboards.length)
+            return;
+        keyboardSelected(keyboards[index]);
+    }
     // Tablet: the keyboard size, -2 to 1 (XS, S, M, L).
     property int keyboardSize: 0
 
@@ -623,14 +645,33 @@ Item {
 
     // ---- State ---------------------------------------------------------------------
 
-    property var _km: new KM.Keymap(tablet, layoutName)
+    // Made once (and again for the other form factor, _reset); the layout
+    // changes in place (setLayoutFamily), keeping its size. Not a binding on
+    // layoutName: that would make a new, unsized keymap on each change.
+    property var _km: new KM.Keymap(tablet, "qwerty")
     onTabletChanged: _reset()
     onLayoutNameChanged: {
-        if (_km.setLayoutFamily(layoutName))
+        // (Bound to the keyboard in use: it can change before _km is made.)
+        if (_km && _km.setLayoutFamily(layoutName))
             _layoutChanged();
+    }
+    // The language key's name for each keyboard (comboLanguageName).
+    readonly property var _comboNames: keyboards.map(function (k) {
+        return KM.comboLanguageName(k.language, ({ qwerty: "En", qwertz: "De", azerty: "Fr" })[k.layout]);
+    })
+    on_ComboNamesChanged: _updateCombos()
+    onKeyboardIndexChanged: _updateCombos()
+    function _updateCombos() {
+        if (_km && _km.setCombos(_comboNames, keyboardIndex))
+            _layoutChanged();
+    }
+    onLanguageChanged: {
+        TA.setLanguage(language, layoutName);
+        _refreshCandidates();
     }
     function _reset() {
         _km = new KM.Keymap(tablet, layoutName);
+        _km.setCombos(_comboNames, keyboardIndex);
         _touches = ({});
         _extendedKeys = null;
         _availableSpaceChanged();
@@ -699,6 +740,9 @@ Item {
     onPixelScaleChanged: Qt.callLater(_availableSpaceChanged)
     onKeyboardSizeChanged: if (tablet) { _requestedHeight = _presetHeight(); _setKeyboardHeight(_requestedHeight); }
     Component.onCompleted: {
+        _km.setLayoutFamily(layoutName);
+        _km.setCombos(_comboNames, keyboardIndex);
+        TA.setLanguage(language, layoutName);
         _km.setRowHeight(0, tablet ? _shortKeyHalf : _keyHalf);
         _availableSpaceChanged();
         _km.setEditorState(editorState);
@@ -1001,7 +1045,9 @@ Item {
                 color = cActiveColor;
                 back = cActiveColorBack;
             }
-            ops.push({ text: text, x: loc.x, y: loc.y, w: loc.w, h: loc.h, size: size, bold: bold, color: color, back: back, align: "center" });
+            // A language without its words, struck through (PhoneKeyboard.cpp:1586).
+            var strike = key === KM.Key.ToggleLanguage && /-$/.test(text);
+            ops.push({ text: strike ? text.slice(0, -1) : text, strike: strike, x: loc.x, y: loc.y, w: loc.w, h: loc.h, size: size, bold: bold, color: color, back: back, align: "center" });
         }
         return ops;
     }
@@ -1281,7 +1327,7 @@ Item {
         } else if (KM.isTextShortcutKey(key)) {
             qtkey = key;
         } else if (KM.isComboKey(key)) {
-            // selectKeyboardCombo: no combos.
+            selectKeyboard(key - KM.Key.ComboFirst);   // selectKeyboardCombo
         } else {
             switch (key) {
             case KM.Key.Backspace:
@@ -1325,6 +1371,11 @@ Item {
                 break;
             case KM.Key.Hide:
                 kb.hideRequested();
+                break;
+            case KM.Key.ToggleLanguage:
+                // selectNextKeyboardCombo.
+                if (keyboards.length > 1)
+                    selectKeyboard((keyboardIndex + 1) % keyboards.length);
                 break;
             case KM.Key.Emoji:
                 openEmoji();
@@ -1632,11 +1683,16 @@ Item {
             var cx = left + (k < spec.lineLength ? k : k - spec.lineLength) * _popupKeyWidth;
             var cy = top + (k < spec.lineLength ? 0 : _popup2Height - _popupHeight);
             var text = _km.displayString(key, false);
-            var current = tablet && KM.isSizeKey(key) && _requestedHeight === _tabletPresets[key - KM.Key.ResizeTiny];
+            var strike = KM.isComboKey(key) && /-$/.test(text);
+            if (strike)
+                text = text.slice(0, -1);
+            // The keyboard in use, as the current size is (blue).
+            var current = (tablet && KM.isSizeKey(key) && _requestedHeight === _tabletPresets[key - KM.Key.ResizeTiny])
+                || (KM.isComboKey(key) && key - KM.Key.ComboFirst === keyboardIndex);
             cells.push({ x: cx, y: cy, highlighted: extendedKey === key && key !== 0, text: text,
                          size: text.length < 6 ? cPopupFontSize : cPopupFontSize - 8,
                          color: current ? cBlueColor : cPopoutTextColor, back: current ? cBlueColorBack : cPopoutTextColorBack,
-                         bold: current });
+                         bold: current, strike: strike });
         }
         return { x: f.x, y: f.y, w: f.w, h: f.h, twoLines: spec.lines > 1, pointer: _extendedPointer, cells: cells };
     }
@@ -1714,6 +1770,7 @@ Item {
                         font.family: op.modelData.emoji ? Theme.emojiFontFamily : Theme.fontFamily
                         font.pixelSize: Math.max(1, op.modelData.size)
                         font.bold: op.modelData.bold
+                        font.strikeout: !!op.modelData.strike
                         horizontalAlignment: op.modelData.align === "bottomRight" ? Text.AlignRight : Text.AlignHCenter
                         verticalAlignment: op.modelData.align === "center" ? Text.AlignVCenter : Text.AlignBottom
                         textFormat: Text.PlainText
@@ -1982,7 +2039,7 @@ Item {
                     Caps {
                         ops: [{ text: cell.modelData.text, x: 0, y: 0, w: kb._popupKeyWidth - 3, h: kb._popupKeyHalf - 2,
                                 size: cell.modelData.size, bold: cell.modelData.bold, color: cell.modelData.color,
-                                back: cell.modelData.back, align: "center" }]
+                                back: cell.modelData.back, align: "center", strike: cell.modelData.strike }]
                     }
                 }
             }

@@ -732,6 +732,67 @@ Item {
             kb.forgetWordsAt = 0;
         }
 
+        // Settings > Text Assist > Keyboards: the language key (Shift on the
+        // symbol page) goes to the next keyboard; its layout and words follow.
+        function test_keyboardsAndLanguageKey() {
+            sys.keyboards = [{ layout: "qwerty", language: "en" }, { layout: "qwertz", language: "de" },
+                             { layout: "qwerty", language: "none" }];
+            sys.keyboard = sys.keyboards[0];
+            showKeyboard();
+            compare(kb.layoutName, "qwerty");
+            tapKey("123");
+            tapKey("En");
+            compare(sys.keyboard.language, "de", "the next keyboard, kept by the system");
+            compare(kb.layoutName, "qwertz");
+            compare(kb.language, "de");
+            // QWERTZ: z where QWERTY has y.
+            tapKey("ABC");
+            tryVerify(function() { return kb.keyRect("z") !== null && kb.keyRect("y") !== null; }, 1000);
+            verify(kb.keyRect("z").y < kb.keyRect("y").y, "z on the top row");
+            // German words: "fur" is "für".
+            type(["f", "u", "r"]);
+            tryVerify(function() { return kb.candidates.length > 1; }, 1000);
+            compare(kb.candidates[1].kind, "correction");
+            compare(kb.candidates[1].text, "für");
+            tapKey("Space");
+            compare(field.text, "für ");
+            // Then the keyboard without words: no corrections, struck through.
+            tapKey("123");
+            tapKey("De");
+            compare(sys.keyboard.language, "none");
+            tapKey("ABC");
+            type(["t", "e", "h", "Space"]);
+            compare(field.text, "für teh ");
+            // And round to the first.
+            tapKey("123");
+            tapKey("En-");
+            compare(sys.keyboard.language, "en");
+            sys.keyboards = [{ layout: "qwerty", language: "en" }];
+            sys.keyboard = sys.keyboards[0];
+        }
+
+        // Held, the language key lists the keyboards (selectKeyboardCombo).
+        function test_languageKeyHeldLists() {
+            sys.keyboards = [{ layout: "qwerty", language: "en" }, { layout: "azerty", language: "fr" }];
+            sys.keyboard = sys.keyboards[0];
+            showKeyboard();
+            tapKey("123");
+            var r = kb.keyRect("En");
+            verify(r !== null);
+            mousePress(kb, r.x + r.width / 2, r.y + r.height / 2);
+            tryVerify(function() { return kb._extendedKeys !== null; }, 2000, "the list");
+            var popup = kb._popup || kb._computePopup();
+            compare(popup.cells.map(function (c) { return c.text; }), ["En", "Fr"]);
+            // Slide onto Fr and let go.
+            var cell = popup.cells[1];
+            mouseMove(kb, (cell.x + kb._popupKeyWidth / 2) * kb.pixelScale, (cell.y + kb._popupKeyHalf / 2) * kb.pixelScale + kb.candidateBarHeight);
+            mouseRelease(kb, (cell.x + kb._popupKeyWidth / 2) * kb.pixelScale, (cell.y + kb._popupKeyHalf / 2) * kb.pixelScale + kb.candidateBarHeight);
+            compare(sys.keyboard.layout, "azerty");
+            compare(kb.layoutName, "azerty");
+            sys.keyboards = [{ layout: "qwerty", language: "en" }];
+            sys.keyboard = sys.keyboards[0];
+        }
+
         function test_swipeTyping() {
             showKeyboard();
             // Across h, e, l, o: one finger, without lifting.

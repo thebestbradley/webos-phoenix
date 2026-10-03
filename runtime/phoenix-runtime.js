@@ -2859,6 +2859,10 @@
                 // auto-correction, swipe typing, double space for a period,
                 // and when the learned words were last forgotten.
                 textAssist: textAssist(p),
+                // The keyboards (Settings > Text Assist > Keyboards) and the
+                // one in use (the language key switches).
+                keyboards: keyboardCombos(p),
+                keyboard: keyboardInUse(p),
                 ringtone: (p.ringtone && p.ringtone.fullPath) || "",
                 alerttone: (p.alerttone && p.alerttone.fullPath) || "",
                 notificationtone: (p.notificationtone && p.notificationtone.fullPath) || "",
@@ -2889,6 +2893,33 @@
         }
         function tapSounds(p) {
             return keyboardPrefs(p).TapSounds !== false;
+        }
+        // The keyboards the user turned on (x_palm_virtualkeyboard_prefs
+        // keyboards, VirtualKeyboardPreferences::virtualKeyboardPreferencesChanged):
+        // [{layout, language}], and the one in use
+        // (x_palm_virtualkeyboard_settings {layout, language}). The layouts
+        // the keyboard has, and the languages it has words for ("none":
+        // no suggestions or corrections).
+        var KEYBOARD_LAYOUTS = ["qwerty", "qwertz", "azerty"];
+        var KEYBOARD_LANGUAGES = ["en", "de", "fr", "none"];
+        function keyboardCombo(c) {
+            if (!c || typeof c !== "object") return null;
+            var layout = String(c.layout || "").toLowerCase(), language = String(c.language || "").toLowerCase();
+            return KEYBOARD_LAYOUTS.indexOf(layout) >= 0 && KEYBOARD_LANGUAGES.indexOf(language) >= 0
+                ? { layout: layout, language: language } : null;
+        }
+        function keyboardCombos(p) {
+            var list = (keyboardPrefs(p).keyboards || []).map(keyboardCombo).filter(Boolean);
+            return list.length ? list : [{ layout: "qwerty", language: "en" }];
+        }
+        function keyboardInUse(p) {
+            var st = p.x_palm_virtualkeyboard_settings;
+            if (typeof st === "string") { try { st = JSON.parse(st); } catch (e) { st = null; } }
+            var c = keyboardCombo(st), list = keyboardCombos(p);
+            for (var i = 0; c && i < list.length; ++i)
+                if (list[i].layout === c.layout && list[i].language === c.language)
+                    return list[i];
+            return list[0];
         }
         function textAssist(p) {
             var kb = keyboardPrefs(p);
@@ -3436,7 +3467,7 @@
         sys["/setPreferences"] = function (p, reply, ctx) {
             baseSetPreferences(p, reply, ctx);
             if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "screenTimeout", "lockTimeout", "systemSounds", "ringtone", "alerttone",
-                 "notificationtone", "x_palm_virtualkeyboard_prefs", "accessibility"].some(function (k) { return k in p; })) {
+                 "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "accessibility"].some(function (k) { return k in p; })) {
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
                 changed();
             }
@@ -4088,6 +4119,10 @@
             }
             suppressHost = true;
             try {
+                // The keyboard's language key chose another keyboard.
+                if (st.keyboard && keyboardCombo(st.keyboard))
+                    sys["/setPreferences"]({ x_palm_virtualkeyboard_settings: JSON.stringify(keyboardCombo(st.keyboard)) },
+                                           function () {}, { cancelled: function () { return false; } });
                 if ("rotationLocked" in st && !!st.rotationLocked !== !!prefs().rotationLock)
                     sys["/setPreferences"]({ rotationLock: !!st.rotationLocked }, function () {}, { cancelled: function () { return false; } });
                 save(s);

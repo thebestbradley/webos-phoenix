@@ -261,6 +261,20 @@ async function main() {
         await page.waitForFunction(() => /forgotten/.test(document.querySelector("[data-testid='ta-learned-note']")?.textContent || ""));
         for (let i = 0; i < 50 && !(last().textAssist && last().textAssist.forgetWords > 0); ++i) await page.waitForTimeout(100);
         check(last().textAssist.forgetWords > 0, "Forget Learned Words reaches the shell");
+        // Keyboards: English alone, which cannot be turned off; Deutsch added.
+        check(JSON.stringify(last().keyboards) === '[{"layout":"qwerty","language":"en"}]', "one keyboard by default (English, QWERTY)");
+        check(await page.locator("[data-testid='ta-kb-qwerty-en']").isDisabled(), "the last keyboard stays on");
+        await page.click("[data-testid='ta-kb-qwertz-de']");
+        await page.waitForSelector("[data-testid='ta-kb-qwertz-de'][aria-checked='true']");
+        check(JSON.stringify(last().keyboards) === '[{"layout":"qwerty","language":"en"},{"layout":"qwertz","language":"de"}]',
+              `a second keyboard reaches the shell (${JSON.stringify(last().keyboards)})`);
+        check(last().keyboard && last().keyboard.language === "en", "the one in use stays English");
+        // The keyboard's language key chose German: kept (x_palm_virtualkeyboard_settings).
+        await page.evaluate(() => window.__phoenixRuntime.applyHostStatus({ keyboard: { layout: "qwertz", language: "de" } }));
+        check(last().keyboard && last().keyboard.layout === "qwertz", "the language key's choice is kept");
+        await page.click("[data-testid='ta-kb-qwertz-de']");
+        await page.waitForSelector("[data-testid='ta-kb-qwertz-de'][aria-checked='false']");
+        check(last().keyboard && last().keyboard.language === "en", "turned off, the keyboard in use goes back to the first");
         await shot("textassist");
 
         // ---- Device Info: the phone, and the legacy reset options ----------------------

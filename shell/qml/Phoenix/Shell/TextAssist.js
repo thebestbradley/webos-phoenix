@@ -2,10 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Text Assist (GAPS V3): what the keyboard suggests as you type, what it
-// corrects, and which word a swipe across the keys meant. One word list
-// (WordsEnUS.js, from AOSP LatinIME, Apache-2.0) and what the user types
-// themselves, learned on the device and nowhere else:
+// corrects, and which word a swipe across the keys meant. A word list for
+// the keyboard's language (WordsEnUS.js, WordsDe.js, WordsFr.js, from AOSP
+// LatinIME, Apache-2.0; setLanguage) and what the user types themselves,
+// learned on the device and nowhere else:
 //
+//   setLanguage(lang, layout)  "en", "de", "fr" or "none" (no suggestions
+//                         or corrections), and the keyboard's layout
+//                         ("qwerty", "qwertz", "azerty": which keys are
+//                         neighbours)
 //   suggest(word, prev)   completions and corrections of the word being
 //                         typed; with no word, the next word after `prev`
 //   correction(word)      the word the space bar puts in its place, or ""
@@ -21,7 +26,47 @@
 // word's path through its keys' centres; with the word's frequency.
 
 .pragma library
-.import "WordsEnUS.js" as Words
+.import "WordsEnUS.js" as WordsEn
+.import "WordsDe.js" as WordsDe
+.import "WordsFr.js" as WordsFr
+
+// ---- Languages ---------------------------------------------------------------
+
+var LISTS = { en: WordsEn, de: WordsDe, fr: WordsFr };
+// The letters words are made of: ASCII and Latin-1's (umlauts, accents,
+// ß), and œ.
+var LETTER = "A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF\u0152\u0153";
+var _wordRe = new RegExp("^[" + LETTER + "']+$");
+var _learnRe = new RegExp("^[" + LETTER + "][" + LETTER + "']*$");
+// Letters a word may need beyond a-z (missing, or typed as their plain
+// letter: "fur" for "für", which is a cheap correction).
+var EXTRA_LETTERS = { en: "", de: "\u00e4\u00f6\u00fc\u00df", fr: "\u00e0\u00e2\u00e6\u00e7\u00e9\u00e8\u00ea\u00eb\u00ee\u00ef\u00f4\u0153\u00f9\u00fb\u00fc\u00ff" };
+// The commonest first words (the list's own for German and French).
+var COMMON_NEXT_EN = ["I", "the", "to", "and", "a", "you", "it", "is", "in", "that"];
+
+var _lang = "en";
+var _layout = "qwerty";
+var _loadedLang = "";
+function setLanguage(lang, layout) {
+    lang = String(lang || "en").toLowerCase();
+    _lang = LISTS[lang] ? lang : "none";
+    var l = String(layout || "qwerty").toLowerCase();
+    if (l !== _layout) {
+        _layout = l;
+        _near = null;
+    }
+}
+function language() { return _lang; }
+// The word without its accents.
+function _fold(w) { return w.split("").map(_base).join(""); }
+
+// Its plain letter ("u" for "ü"; "ss" is two keys, so ß is "s").
+function _base(ch) {
+    if (ch === "\u00df") return "s";
+    if (ch === "\u0153") return "o";
+    if (ch === "\u00e6") return "a";
+    return ch.normalize("NFD").charAt(0);
+}
 
 // ---- The word list -------------------------------------------------------------
 
@@ -30,10 +75,24 @@ var _sorted = null;      // lower-case words, sorted (prefix search)
 var _known = null;       // words never suggested, left alone
 var _shortcuts = null;   // typed (lower) -> correction
 var _byFirst = null;     // first letter -> [entry] (swipe candidates)
+var _common = [];        // the commonest words (between words)
+var _dicts = {};         // lang -> the above, once loaded
 
 function _load() {
-    if (_byLower)
+    if (_loadedLang === _lang)
         return;
+    _loadedLang = _lang;
+    var d = _dicts[_lang];
+    if (!d) {
+        d = _lang === "none" ? { byLower: {}, sorted: [], known: {}, shortcuts: {}, byFirst: {}, common: [] }
+                             : _build(LISTS[_lang]);
+        _dicts[_lang] = d;
+    }
+    _byLower = d.byLower; _sorted = d.sorted; _known = d.known;
+    _shortcuts = d.shortcuts; _byFirst = d.byFirst; _common = d.common;
+}
+
+function _build(Words) {
     _byLower = {};
     _byFirst = {};
     var lines = Words.words.split("\n");
@@ -45,19 +104,28 @@ function _load() {
             continue;                  // "May" after "may": the first (more frequent) wins
         var e = { w: w, lw: lw, f: f };
         _byLower[lw] = e;
-        if (/^[a-z']+$/.test(lw) && lw.length >= 2) {
-            var c = lw.charAt(0);
+        if (_wordRe.test(lw) && lw.length >= 2) {
+            // Swiped from its first letter's key ("ü" is on "u").
+            var c = _base(lw.charAt(0));
             (_byFirst[c] = _byFirst[c] || []).push(e);
         }
     }
-    _sorted = Object.keys(_byLower).sort();
-    _known = {};
-    Words.known.split("\n").forEach(function (w) { _known[w.toLowerCase()] = true; });
-    _shortcuts = {};
+    var known = {};
+    Words.known.split("\n").forEach(function (w) { if (w) known[w.toLowerCase()] = true; });
+    var shortcuts = {};
     Words.shortcuts.split("\n").forEach(function (l) {
         var t = l.split("\t");
-        _shortcuts[t[0].toLowerCase()] = t[1];
+        if (t.length === 2)
+            shortcuts[t[0].toLowerCase()] = t[1];
     });
+    var common = [];
+    for (i = 0; i < lines.length && common.length < 10; ++i) {
+        var cw = lines[i].substring(0, lines[i].indexOf("\t"));
+        if (_wordRe.test(cw))
+            common.push(cw);
+    }
+    return { byLower: _byLower, sorted: Object.keys(_byLower).sort(), known: known, shortcuts: shortcuts,
+             byFirst: _byFirst, common: Words === WordsEn ? COMMON_NEXT_EN : common };
 }
 
 // ---- What the user types (learned; kept by the shell) --------------------------
@@ -82,7 +150,7 @@ function learnedCount() { return Object.keys(_user.words).length; }
 // A word the user typed (and kept: not corrected away), after `prev`.
 function learn(prev, word) {
     _load();
-    if (!word || !/^[A-Za-z][A-Za-z']*$/.test(word))
+    if (!word || !_learnRe.test(word))
         return;
     var lw = word.toLowerCase();
     var u = _user.words[lw] || { w: word, n: 0 };
@@ -134,10 +202,11 @@ function _written(lw) {
     return _byLower[lw] ? _byLower[lw].w : (u ? u.w : lw);
 }
 // As typed: "Hello" for "hello" after a capital, "HELLO" in capitals.
+function _isUpper(ch) { return ch !== ch.toLowerCase() && ch === ch.toUpperCase(); }
 function _match(typed, word) {
-    if (typed.length > 1 && typed === typed.toUpperCase() && /[A-Z]/.test(typed))
+    if (typed.length > 1 && typed === typed.toUpperCase() && typed !== typed.toLowerCase())
         return word.toUpperCase();
-    if (/^[A-Z]/.test(typed))
+    if (_isUpper(typed.charAt(0)))
         return word.charAt(0).toUpperCase() + word.slice(1);
     return word;
 }
@@ -164,16 +233,18 @@ function _completions(lp, max) {
 
 // ---- Corrections ----------------------------------------------------------------
 
-// The letter keys' neighbours on a QWERTY keyboard (a swapped neighbour is a
-// cheaper mistake than any other letter).
-var ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
+// The letter keys' neighbours on the keyboard's layout (a swapped
+// neighbour is a cheaper mistake than any other letter).
+var ROWS = { qwerty: ["qwertyuiop", "asdfghjkl", "zxcvbnm"],
+             qwertz: ["qwertzuiop", "asdfghjkl", "yxcvbnm"],
+             azerty: ["azertyuiop", "qsdfghjklm", "wxcvbn"] };
 var _near = null;
 function _neighbours() {
     if (_near)
         return _near;
     _near = {};
     var pos = {};
-    ROWS.forEach(function (row, r) {
+    (ROWS[_layout] || ROWS.qwerty).forEach(function (row, r) {
         for (var c = 0; c < row.length; ++c)
             pos[row.charAt(c)] = { x: c + r * 0.5, y: r };
     });
@@ -189,11 +260,13 @@ function _neighbours() {
 }
 
 var ALPHABET = "abcdefghijklmnopqrstuvwxyz'";
+function _alphabet() { return ALPHABET + (EXTRA_LETTERS[_lang] || ""); }
 // Words one edit from `w`: {word: cost}: 0.5 a doubled letter typed once,
 // 1 a neighbour key or two letters swapped, 1.5 any other edit, 2.2 the
 // last letter typed taken away.
 function _edits(w, into) {
     var near = _neighbours();
+    var ALPHABET = _alphabet();
     function add(c, cost) { if (!(c in into) || into[c] > cost) into[c] = cost; }
     for (var i = 0; i <= w.length; ++i) {
         var a = w.substring(0, i), b = w.substring(i);
@@ -205,7 +278,10 @@ function _edits(w, into) {
             for (var k = 0; k < ALPHABET.length; ++k) {
                 var ch = ALPHABET.charAt(k);
                 if (ch !== b.charAt(0))
-                    add(a + ch + b.substring(1), near[b.charAt(0)] && near[b.charAt(0)][ch] ? 1 : 1.5);   // another letter
+                    // Another letter; the accented one for its plain letter
+                    // (typed without the accent) the cheapest.
+                    add(a + ch + b.substring(1), _base(ch) === b.charAt(0) && ch !== b.charAt(0) ? 0.5
+                                                 : near[b.charAt(0)] && near[b.charAt(0)][ch] ? 1 : 1.5);
             }
         }
         for (k = 0; k < ALPHABET.length; ++k) {
@@ -225,7 +301,7 @@ function _corrections(lw, max) {
         if (seen[c] || c === lw)
             return;
         var f = frequency(c);
-        if (f < 0 || (_byLower[c] && !/[a-z]/.test(c)))
+        if (f < 0 || (_byLower[c] && c === c.toUpperCase()))
             return;
         seen[c] = true;
         found.push({ lw: c, cost: cost, score: f - 70 * cost });
@@ -246,7 +322,7 @@ function _corrections(lw, max) {
 // The word the space bar puts in place of `word`, or "" to leave it.
 function correction(word) {
     _load();
-    if (!word || !/^[A-Za-z']+$/.test(word))
+    if (!word || !_wordRe.test(word) || _lang === "none")
         return "";
     var lw = word.toLowerCase();
     // Contractions typed without their apostrophe ("im", "dont", "ill").
@@ -256,12 +332,16 @@ function correction(word) {
     if (isWord(word) || word.length < 2)
         return "";
     // Capitals inside a word ("iPhone", "McDonald"): typed on purpose.
-    if (/[A-Z]/.test(word.substring(1)) && word !== word.toUpperCase())
+    if (word.substring(1) !== word.substring(1).toLowerCase() && word !== word.toUpperCase())
         return "";
     var best = _corrections(lw, 2);
-    // Short words are too easily another word: only two letters swapped.
+    // Short words are too easily another word: only two letters swapped,
+    // or the same letters with their accents ("fur" for "für").
     if (lw.length <= 3)
-        best = best.filter(function (b) { return b.cost === 1 && b.lw.length === lw.length && b.lw.split("").sort().join("") === lw.split("").sort().join(""); });
+        best = best.filter(function (b) {
+            return (b.cost === 1 && b.lw.length === lw.length && b.lw.split("").sort().join("") === lw.split("").sort().join(""))
+                || (b.lw !== lw && _fold(b.lw) === _fold(lw));
+        });
     if (!best.length || best[0].score < 0)
         return "";
     // Clearly better than the next one, or the only one.
@@ -272,8 +352,6 @@ function correction(word) {
 
 // ---- Suggestions -----------------------------------------------------------------
 
-var COMMON_NEXT = ["I", "the", "to", "and", "a", "you", "it", "is", "in", "that"];
-
 // What the candidate bar shows for `word` (being typed; "" when between
 // words) after `prev`: [{text, kind}], kind "typed" (the word as typed,
 // kept), "correction" (what the space bar puts in), "word".
@@ -281,6 +359,8 @@ function suggest(word, prev, max) {
     _load();
     max = max || 3;
     var out = [], seen = {};
+    if (_lang === "none")
+        return out;
     function push(text, kind) {
         var k = text.toLowerCase();
         if (seen[k] || out.length >= max)
@@ -293,9 +373,9 @@ function suggest(word, prev, max) {
         var lp = (prev || "").toLowerCase(), n = _user.next[lp] || {};
         Object.keys(n).sort(function (a, b) { return n[b] - n[a]; }).forEach(function (k) { push(_written(k), "word"); });
         if (/[.!?]$/.test(prev || "") || !prev)
-            COMMON_NEXT.forEach(function (w) { push(w.charAt(0).toUpperCase() + w.slice(1), "word"); });
+            _common.forEach(function (w) { push(w.charAt(0).toUpperCase() + w.slice(1), "word"); });
         else
-            COMMON_NEXT.forEach(function (w) { push(w, "word"); });
+            _common.forEach(function (w) { push(w, "word"); });
         return out;
     }
     var lw = word.toLowerCase();
@@ -366,7 +446,7 @@ function _nearestKeys(p, keys, within) {
 function swipe(path, keys, keyWidth, max) {
     _load();
     max = max || 4;
-    if (!path || path.length < 2)
+    if (!path || path.length < 2 || _lang === "none")
         return [];
     var pts = _resample(path, SAMPLES);
     var len = 0;
@@ -383,7 +463,8 @@ function swipe(path, keys, keyWidth, max) {
                 list.push({ w: _user.words[k].w, lw: k, f: frequency(k) });
         });
         for (var j = 0; j < list.length; ++j) {
-            var e = list[j], lw = e.lw.replace(/'/g, "");
+            // Its keys: accented letters on their plain letter's key.
+            var e = list[j], lw = e.lw.replace(/'/g, "").split("").map(_base).join("");
             if (!ends[lw.charAt(lw.length - 1)])
                 continue;
             // The word's path: its keys' centres, a doubled letter once.

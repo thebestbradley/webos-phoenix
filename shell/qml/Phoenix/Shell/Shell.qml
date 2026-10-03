@@ -1508,6 +1508,13 @@ FocusScope {
                 swipeTyping: _assistPrefs.swipe !== false
                 spaces2period: _assistPrefs.spaces2period !== false
                 forgetWordsAt: _assistPrefs.forgetWords || 0
+                // Settings > Text Assist > Keyboards, and the one in use: the
+                // language key's choice goes back to the system (kept as
+                // x_palm_virtualkeyboard_settings).
+                keyboards: shell.system && shell.system.keyboards && shell.system.keyboards.length ? shell.system.keyboards
+                                                                                                  : [{ layout: "qwerty", language: "en" }]
+                keyboard: shell.system && shell.system.keyboard ? shell.system.keyboard : ({ layout: "qwerty", language: "en" })
+                onKeyboardSelected: (k) => { if (shell.system && shell.system.keyboard !== undefined) shell.system.keyboard = k; }
                 onFeedback: (name) => shell.sounds.feedback(name)
             }
             Connections {

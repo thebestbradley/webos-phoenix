@@ -488,6 +488,8 @@ function Keymap(tablet, familyName) {
     this.limitsDirty = true;
     this.limitsVersion = 0;
     this.languageName = "";
+    this.comboNames = [];
+    this.comboKeys = [];
     this.customEnter = "";
     this.localized = { Enter: qsTrLike("Enter"), Tab: qsTrLike("Tab"), Next: qsTrLike("Next"), Previous: qsTrLike("Prev") };
     this.setLayoutFamily(familyName || "qwerty", true);
@@ -739,6 +741,34 @@ Keymap.prototype.updateLanguageKey = function (row) {
     return before[0] !== row[this.family.symbolX].w || before[1] !== row[this.family.symbolX + 1].w;
 };
 
+// The enabled keyboards' language names, as their keys show them
+// (comboLanguageName), and which is in use (keyboardCombosChanged,
+// setLanguageName). With fewer than two there is no language key (tablet)
+// and nothing behind Shift (phone). True when the keys change.
+Keymap.prototype.setCombos = function (names, active) {
+    this.comboNames = names.slice();
+    this.comboKeys = names.map(function (n, k) { return Key.ComboFirst + k; });
+    var name = names.length > 1 ? (names[active] || "") : "";
+    if (name === this.languageName)
+        return false;
+    this.languageName = name;
+    // The tablet's bottom row comes from bottomRows: put it back with (or
+    // without) the language key.
+    if (this.tablet)
+        this.setEditorState(this.editorState, true);
+    return true;
+};
+
+// The language key's name for a keyboard's language (setLanguageName,
+// PhoneKeymap.cpp:406-432): "En", "De", "Fr"; "none" (no dictionary) the
+// last name with a "-", which the key draws struck through.
+function comboLanguageName(language, previous) {
+    if (String(language).toLowerCase() === "none")
+        return (previous || "En") + "-";
+    var l = String(language);
+    return l.length ? l.charAt(0).toUpperCase() + l.substring(1).toLowerCase() : "";
+}
+
 // Horizontal centre of a key for the diamond correction (:665-691).
 Keymap.prototype.xCenterOfKey = function (touchX, x, y, weight) {
     var leftSide = Math.trunc(x > 0 ? this.hlimits[y][x - 1] : 0);
@@ -874,9 +904,10 @@ Keymap.prototype.extendedChars = function (x, y) {
     } else {
         ext = wkey.ext;
     }
-    // Keyboard combos (languages): none without VirtualKeyboardPreferences.
+    // Keyboard combos (languages): one per enabled keyboard, with two or
+    // more (keyboardCombosChanged).
     if (ext === "languages")
-        return null;
+        return this.comboKeys.length > 1 ? this.comboKeys : null;
     return ext && ext.length > 0 ? ext : null;
 };
 
@@ -884,7 +915,7 @@ Keymap.prototype.extendedChars = function (x, y) {
 Keymap.prototype.displayString = function (key, logging) {
     if (isFunctionKey(key)) {
         if (isComboKey(key))
-            return "";
+            return this.comboNames[key - Key.ComboFirst] || "";
         switch (key) {
         case Key.Return: return this.customEnter === "" ? this.localized.Enter : this.customEnter;
         case Key.Emoji: return "\uD83D\uDE42";   // 🙂

@@ -159,6 +159,26 @@ Item {
             compare(shell.notifications.negativeSpace, 393 + 44);
         }
 
+        // Two keyboards or more: a language key beside the symbol key
+        // (updateLanguageKey); it goes to the next (AZERTY here).
+        function test_languageKey() {
+            sys.keyboards = [{ layout: "qwerty", language: "en" }];
+            sys.keyboard = sys.keyboards[0];
+            showKeyboard();
+            compare(kb.keyRect("En"), null, "one keyboard: no language key");
+            var symbolWidth = kb.keyRect("+ = [  ]").width;
+            sys.keyboards = [{ layout: "qwerty", language: "en" }, { layout: "azerty", language: "fr" }];
+            tryVerify(function() { return kb.keyRect("En") !== null; }, 1000);
+            verify(kb.keyRect("+ = [  ]").width < symbolWidth * 0.75, "the symbol key makes room");
+            tapKey("En");
+            compare(sys.keyboard.layout, "azerty");
+            tryVerify(function() { return kb.keyRect("Fr") !== null; }, 1000);
+            // AZERTY: a where QWERTY has q.
+            verify(kb.keyRect("a").y < kb.keyRect("q").y);
+            sys.keyboards = [{ layout: "qwerty", language: "en" }];
+            sys.keyboard = sys.keyboards[0];
+        }
+
         function test_urlField() {
             field.inputMethodHints = Qt.ImhUrlCharactersOnly;
             showKeyboard();

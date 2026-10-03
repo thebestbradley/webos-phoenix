@@ -120,7 +120,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 ## 8. Input [spec §8]
 
 - [x] Virtual keyboard (plugin) with show/hide, phone and tablet art (simulator; GAPS V1). `Src/ime/*`; `images/keyboard-phone/`, `images/keyboard-tablet/`
-- [ ] Keyboard layouts and languages preference (QWERTY/AZERTY/QWERTZ). `Src/ime/VirtualKeyboardPreferences.cpp` *Phoenix: the QWERTY, QWERTZ and AZERTY layouts exist; nothing chooses them yet (V7).*
+- [x] Keyboard layouts and languages preference (QWERTY/AZERTY/QWERTZ). `Src/ime/VirtualKeyboardPreferences.cpp` *Phoenix: done: Settings > Text Assist > Keyboards turns on English (QWERTY), Deutsch (QWERTZ), Français (AZERTY) and a QWERTY without words (`x_palm_virtualkeyboard_prefs` keyboards); with two or more, the language key (tablet: beside 123; phone: Shift on the 123 page) goes to the next and, held, lists them, the one in use kept in `x_palm_virtualkeyboard_settings`; suggestions, corrections and swipe follow its language (`tst_keyboard.qml`, `tst_tabletkeyboard.qml`, `tools/test-settings.cjs`). Choosing between whole keyboards (V7) is still to come.*
 - [ ] IME variants: pinyin and handwriting (persistent windows). `conf/persistentWindows.conf:28-31`
 - [ ] Hardware keyboard slider support (Pre, Veer): keyboard-open events, slider unlock timeouts. `Src/base/settings/DeviceInfo.cpp:212-275`; `Src/base/DisplayManager.cpp:110-113`
 - [ ] Text-assist prefs: spell check, autocorrect, shortcuts. `conf/defaultPreferences.txt` (`x_palm_textinput`) *Phoenix: Settings > Text Assist: suggestions, auto-correct, swipe typing (GAPS V3); no editable shortcuts.*

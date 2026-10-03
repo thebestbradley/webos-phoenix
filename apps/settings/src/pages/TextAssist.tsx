@@ -6,7 +6,10 @@
 // was the place for auto-correction. The settings are keys of the keyboard's
 // preference, x_palm_virtualkeyboard_prefs (WordSuggestions, AutoCorrect,
 // SwipeTyping, spaces2period; ForgetWords: when the learned words were
-// forgotten), which the shell's keyboard follows.
+// forgotten), which the shell's keyboard follows. Keyboards: which layouts
+// and languages the keyboard offers (its "keyboards" combos, as
+// VirtualKeyboardPreferences kept them); with two or more its language key
+// goes from one to the next.
 //
 // Launch params {page: "textassist"}; com.palm.app.textassist opens it.
 
@@ -14,6 +17,17 @@ import { useState } from "react";
 import { keyboardPrefs, system, withKeyboardPrefs, type SystemPreferences, type VirtualKeyboardPrefs } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
 import { Button, Dialog, Group, Note, Page, PageHeader, Row, ToggleButton } from "@phoenix/ui";
+
+/** The keyboards there are: a layout and the language of its words ("none": no suggestions or corrections). */
+export const KEYBOARDS = [
+    { layout: "qwerty", language: "en", title: "English", subtitle: "QWERTY" },
+    { layout: "qwertz", language: "de", title: "Deutsch", subtitle: "QWERTZ" },
+    { layout: "azerty", language: "fr", title: "Français", subtitle: "AZERTY" },
+    { layout: "qwerty", language: "none", title: "No language", subtitle: "QWERTY, no suggestions or corrections" },
+];
+const DEFAULT_KEYBOARDS = [{ layout: "qwerty", language: "en" }];
+const same = (a: { layout: string; language: string }, b: { layout: string; language: string }) =>
+    a.layout === b.layout && a.language === b.language;
 
 export function TextAssistPage() {
     const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(["x_palm_virtualkeyboard_prefs"], cb, err), []).value ?? {};
@@ -28,6 +42,15 @@ export function TextAssistPage() {
         setConfirm(false);
         await save({ ForgetWords: Date.now() });
         setForgotten(true);
+    };
+
+    // In the order of KEYBOARDS, at least one.
+    const enabled = kb.keyboards && kb.keyboards.length ? kb.keyboards : DEFAULT_KEYBOARDS;
+    const setKeyboard = (k: { layout: string; language: string }, on: boolean) => {
+        const next = KEYBOARDS.filter((c) => (same(c, k) ? on : enabled.some((e) => same(e, c))))
+            .map((c) => ({ layout: c.layout, language: c.language }));
+        if (next.length)
+            set({ keyboards: next });
     };
 
     const toggle = (title: string, key: "WordSuggestions" | "AutoCorrect" | "SwipeTyping" | "spaces2period", testId: string, subtitle?: string) => (
@@ -45,6 +68,21 @@ export function TextAssistPage() {
                 {toggle("Swipe typing", "SwipeTyping", "ta-swipe", "Slide across the letters")}
                 {toggle("Quick period", "spaces2period", "ta-period", "Two spaces type \". \"")}
             </Group>
+            <Group label="Keyboards">
+                {KEYBOARDS.map((k) => {
+                    const on = enabled.some((e) => same(e, k));
+                    return (
+                        <Row key={k.layout + k.language} title={k.title} subtitle={k.subtitle}>
+                            <ToggleButton value={on} label={k.title} testId={`ta-kb-${k.layout}-${k.language}`}
+                                          disabled={on && enabled.length === 1} onChange={(v) => setKeyboard(k, v)} />
+                        </Row>
+                    );
+                })}
+            </Group>
+            <Note>
+                With more than one, the key beside 123 (on a phone, Shift on the 123 page) switches between them;
+                hold it for the list.
+            </Note>
             <Note>
                 Backspace right after a correction puts back what you typed. Dictation: tap the microphone above the
                 keys and speak; it is turned into text on this device.
