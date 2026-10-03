@@ -28,7 +28,20 @@ Item {
     property bool emergencyAvailable: false
     signal emergencyRequested
 
-    onLockedChanged: if (locked) unlockPanel.shown = false
+    onLockedChanged: {
+        if (locked) {
+            unlockPanel.shown = false;
+            lockedAt = Date.now();
+        }
+    }
+    // "Lock after" (Screen & Lock; system preference lockTimeout, seconds):
+    // with a PIN or password, unlocking within this long of locking needs
+    // neither (LockWindow::requiresPasscode, :1316-1327). 0: always.
+    readonly property int lockTimeout: system && system.lockTimeout > 0 ? system.lockTimeout : 0
+    property real lockedAt: Date.now()
+    function requiresPasscode() {
+        return (Date.now() - lockedAt) / 1000 >= lockTimeout;
+    }
 
     // The phone is ringing: the padlock is the incoming-call handle and the
     // help reads "Drag up to answer", shown until the call stops; the call
@@ -86,7 +99,7 @@ Item {
             var mode = r && r.returnValue !== false ? r.lockMode : "none";
             if (!r || r.returnValue === false)
                 console.warn("Phoenix: device lock service unavailable; unlocking");
-            if (mode !== "pin" && mode !== "password") {
+            if ((mode !== "pin" && mode !== "password") || !lock.requiresPasscode()) {
                 lock.unlockRequested();
                 return;
             }

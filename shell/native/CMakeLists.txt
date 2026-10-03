@@ -11,6 +11,7 @@ qt_add_qml_module(phoenix-native
     OUTPUT_DIRECTORY ${PHOENIX_QML_BUILD_DIR}/Phoenix/Native
     SOURCES keyinjector.h keyinjector.cpp fonttools.h fonttools.cpp hidpi.h hidpi.cpp deviceconfig.h deviceconfig.cpp
             dictation.h dictation.cpp imagetools.h imagetools.cpp systemkeys.h systemkeys.cpp
+            useractivity.h useractivity.cpp
 )
 target_link_libraries(phoenix-native PRIVATE Qt6::Quick Qt6::Gui)
 # Dictation records with Qt Multimedia; without it the keyboard has no microphone.

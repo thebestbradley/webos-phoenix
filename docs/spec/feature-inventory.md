@@ -100,7 +100,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Password unlock (hardware or virtual keyboard). `uiComponents/UnlockPanel/PasswordField.qml`
 - [ ] Last-try warning and "set new PIN" dialogs (EAS policy). `Src/lunaui/lockscreen/LockWindow.h:129-137`; `Src/base/EASPolicyManager.cpp`
 - [ ] Device passcode service (`setDevicePasscode`, `matchDevicePasscode`, `getDeviceLockMode`, `getSecurityPolicy`). `Src/base/SystemService.cpp:218-222`; `Src/base/Security.cpp` *Phoenix: set, match and lock mode in the simulator; no getSecurityPolicy, no device service yet.*
-- [ ] Lock timeout preference; auto-lock on display off. `Src/base/DisplayManager.cpp`; `conf/defaultPreferences.txt` (`lockTimeout`) *Phoenix: the preference exists; the shell does not lock on timeout or display off yet.*
+- [x] Lock timeout preference; auto-lock on display off. `Src/base/DisplayManager.cpp`; `conf/defaultPreferences.txt` (`lockTimeout`) *Phoenix: done (`Display.qml`, `tst_display.qml`): the screen dims and turns off when left alone, turning off locks, Power turns it off and Power or Home on; Screen & Lock's "Lock after" (`lockTimeout`) skips the PIN within that long of locking (`LockWindow::requiresPasscode`).*
 - [ ] Full Erase key chord with countdown confirmation. `Src/lunaui/FullEraseConfirmationWindow.cpp`; `Src/lunaui/WindowServerLuna.cpp:1240-1276`
 
 ## 7. Navigation: gesture area, home button, light bar [spec §7]
@@ -142,7 +142,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Boot and shutdown sounds, charging sounds, and the system sound set. `sounds/`; `Src/base/settings/Settings.cpp:103-107` *Phoenix: in the simulator; on a device the MP3s need WAV copies (GAPS A1).*
 - [ ] Ringtone, alert tone and notification tone preferences. `conf/defaultPreferences.txt` *Phoenix: the ringtone is chosen in Settings > Sounds; alert and notification tones have no picker.*
 - [ ] Wallpaper preference, plus a separate dock wallpaper. `conf/defaultPreferences.txt`; `Src/base/settings/Preferences.cpp` (`dockwallpaper`) *Phoenix: wallpaper done (Settings > Screen & Lock); no dock wallpaper.*
-- [ ] Auto-brightness (ambient light sensor), brightness scales, display timeout and dimming. `Src/base/AmbientLightSensor.cpp`; `Src/base/DisplayManager.cpp:95-115`; `conf/luna.conf:49-53` *Phoenix: brightness and the timeout preference; no ambient light sensor, dimming or display timeout yet.*
+- [ ] Auto-brightness (ambient light sensor), brightness scales, display timeout and dimming. `Src/base/AmbientLightSensor.cpp`; `Src/base/DisplayManager.cpp:95-115`; `conf/luna.conf:49-53` *Phoenix: brightness; the timeout and dimming done (`Display.qml`: dim at two thirds of "Turn off after", off a third later, 5 s on the lock screen; banners, alerts, calls and the charger turn it on; `blockScreenTimeout` keeps it on). No ambient light sensor; a device's backlight follows `Shell.display.state` (device layer).*
 - [x] UI rotation driven by the accelerometer, with rotation lock (simulator; the device's sensor is not wired yet). `Src/base/WindowServer.cpp:1900-1960`; `conf/luna.conf:121`
 - [ ] Haptics / vibration (`vibrate`, `vibrateNamedEffect`). `Src/base/HapticsController.cpp`; README.md:127-128 *Phoenix: the shell counts vibrations; nothing is felt, no vibrateNamedEffect.*
 - [ ] Headset, audio, media and ringer switch keys (`com.palm.keys/*`). README.md:96-99

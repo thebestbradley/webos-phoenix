@@ -4,7 +4,8 @@
 //
 // Drives the Settings app (apps/settings, built into dist/) in headless
 // Chromium against the simulated services in runtime/phoenix-runtime.js:
-// toggles Wi-Fi, joins a network with a password, sets a PIN, moves the
+// toggles Wi-Fi, joins a network with a password, sets a PIN (and the
+// screen and lock timeouts), moves the
 // brightness slider, turns on airplane mode and pairs a Bluetooth device.
 // Checks both the UI and the "systemStatus" messages the runtime sends the
 // shell (what drives the status bar in phoenix-sim).
@@ -152,6 +153,16 @@ async function main() {
             b.call("luna://com.palm.systemmanager/getDeviceLockMode", "{}");
         }));
         check(mode === "pin", "service reports lockMode pin");
+        // "Turn off after" and, with a PIN, "Lock after" reach the shell
+        // (its display and lock screen).
+        await page.click("[data-testid='timeout']");
+        await page.click("role=option[name='2 minutes']");
+        await page.waitForTimeout(200);
+        check(last().screenTimeout === 120, `Turn off after reaches the shell (${last().screenTimeout})`);
+        await page.click("[data-testid='lock-after']");
+        await page.click("role=option[name='5 minutes']");
+        await page.waitForTimeout(200);
+        check(last().lockTimeout === 300, `Lock after reaches the shell (${last().lockTimeout})`);
         await page.click("[data-testid='wallpaper']");
         await page.click("[data-testid='wallpaper-Aurora']");
         await page.waitForTimeout(200);

@@ -57,6 +57,10 @@ QtObject {
     property string notificationtone: "/usr/palm/sounds/notification.wav"
     // The clock's format (system preference timeFormat "HH24").
     property bool twentyFourHour: false
+    // Settings > Screen & Lock: "Turn off after" (seconds) and "Lock after"
+    // (seconds locked before the passcode is asked for; 0 at once).
+    property int screenTimeout: 60
+    property int lockTimeout: 0
     // Settings > Screen & Lock "Show notifications when locked"
     // (system preference showAlertsWhenLocked).
     property bool showAlertsWhenLocked: true
@@ -230,6 +234,7 @@ QtObject {
     // Apply a "systemStatus" report from the web runtime: wifiEnabled,
     // wifiConnected, wifiBars, bluetoothOn, airplaneMode, brightness
     // (0-100), rotationLocked, muted, timeFormat, showAlertsWhenLocked,
+    // screenTimeout, lockTimeout,
     // volume, streams, systemSounds, tapSounds, textAssist, ringtone, alerttone,
     // notificationtone, reduceMotion, vpnProfiles. Missing keys are left alone.
     function applyAppStatus(s) {
@@ -252,6 +257,10 @@ QtObject {
             twentyFourHour = s.timeFormat === "HH24";
         if (s.showAlertsWhenLocked !== undefined)
             showAlertsWhenLocked = !!s.showAlertsWhenLocked;
+        if (s.screenTimeout !== undefined)
+            screenTimeout = s.screenTimeout;
+        if (s.lockTimeout !== undefined)
+            lockTimeout = s.lockTimeout;
         if (s.volume !== undefined)
             volume = s.volume;
         if (s.streams !== undefined)

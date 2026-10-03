@@ -178,6 +178,8 @@ export interface SystemPreferences {
     showAlertsWhenLocked?: boolean;
     /** Phoenix: seconds until the screen turns off. */
     screenTimeout?: number;
+    /** Phoenix: seconds locked before the PIN or password is asked for (0: always). */
+    lockTimeout?: number;
     [key: string]: unknown;
 }
 

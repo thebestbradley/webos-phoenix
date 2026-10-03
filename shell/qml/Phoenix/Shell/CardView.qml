@@ -42,6 +42,15 @@ Item {
                 return source.cards.get(i).fullScreen === true;
         return false;
     }
+    // The card in front keeps the screen on (its window property
+    // blockScreenTimeout, e.g. a video playing).
+    readonly property bool currentBlocksScreenTimeout: {
+        revision;
+        for (var i = 0; source && i < source.cards.count; ++i)
+            if (source.cards.get(i).uid === currentUid)
+                return source.cards.get(i).blockScreenTimeout === true;
+        return false;
+    }
     // On its way back to card view: gestures treat it as there already.
     readonly property bool minimizing: maximizeAnim.running && maximizeAnim.to === 0
     // On its way up to maximized (or waiting below the screen to rise).

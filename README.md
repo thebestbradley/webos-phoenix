@@ -251,13 +251,16 @@ bottom of the screen as you hold it. `--home-button` simulates a device
 whose maker uses a hardware Home button instead (no gesture bar; tablets
 then take the bottom-edge flick). A big `--size` needs a matching
 `--scale` to look like a real device (2 for most tablets of 2560 px). Keys: **Esc** back, **F1** swipe up, **Home** the Home button,
-**F2** demo notification, **F3** lock/unlock, **F4** incoming call (rings
+**F2** demo notification, **F3** the Power button (the screen off and locked, or on again), **F4** incoming call (rings
 the Phone app), **F5** incoming text message (for Messaging), **F6** low
 battery, **F7** plug a charger in or out, **F8** battery charged to full,
 **F9** (or **Home**+**F3**, **Print Screen**, **Ctrl+Alt+P**) a screen capture,
 **Ctrl+Left** / **Ctrl+Right**
 turn the device a quarter turn counter-clockwise / clockwise, type in card
-view for Just Type. `./build/phoenix-sim --open https://example.com` opens a
+view for Just Type. Left alone the screen dims and turns off as on a device
+(Settings > Screen & Lock > Turn off after; 5 s on the lock screen); **F3**
+or **Home** turns it on. `--stay-awake` keeps it on (as `--screenshot`
+does). `./build/phoenix-sim --open https://example.com` opens a
 page in the browser. A text field taking the focus brings up the virtual
 keyboard (the Open webOS phone and TouchPad keyboards); click its keys, or
 keep typing on the desktop keyboard.

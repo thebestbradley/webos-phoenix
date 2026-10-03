@@ -306,7 +306,13 @@
             PalmSystem.specifiedWindowOrientation = o;
             host.postToHost("windowOrientation", { appId: PalmSystem.appIdentifier, orientation: String(o) });
         },
-        setWindowProperties: function () {},
+        // enyo.windows.setWindowProperties: blockScreenTimeout keeps the
+        // screen on while the card is in front (a video, a flashlight).
+        // setSubtleLightbar and fastAccelerometer have nothing to act on.
+        setWindowProperties: function (props) {
+            if (props && typeof props === "object" && "blockScreenTimeout" in props)
+                host.postToHost("windowProperties", { appId: PalmSystem.appIdentifier, blockScreenTimeout: !!props.blockScreenTimeout });
+        },
         enableFullScreenMode: function (on) { host.postToHost("fullScreen", { appId: PalmSystem.appIdentifier, on: !!on }); },
         allowResizeOnPositiveSpaceChange: function () {},
         receivePageUpDownInLandscape: function () {},
@@ -915,6 +921,12 @@
         muteSound: false,
         showAlertsWhenLocked: true,
         blinkNotifications: true,
+        // Screen & Lock: seconds until the screen turns off (Phoenix's key
+        // for the original's com.palm.display timeout), and how long it
+        // stays locked before the PIN or password is asked for ("Lock
+        // after"; 0: as soon as the screen is off).
+        screenTimeout: 60,
+        lockTimeout: 0,
         firstUse: false
     };
 
@@ -2851,6 +2863,8 @@
                 alerttone: (p.alerttone && p.alerttone.fullPath) || "",
                 notificationtone: (p.notificationtone && p.notificationtone.fullPath) || "",
                 showAlertsWhenLocked: p.showAlertsWhenLocked !== false,
+                screenTimeout: typeof p.screenTimeout === "number" ? p.screenTimeout : 60,
+                lockTimeout: typeof p.lockTimeout === "number" ? p.lockTimeout : 0,
                 // Settings > Accessibility: the shell's animations.
                 reduceMotion: !!(p.accessibility && p.accessibility.reduceMotion),
                 wallpaperFile: (p.wallpaper && p.wallpaper.wallpaperFile) || "",
@@ -3421,7 +3435,7 @@
         };
         sys["/setPreferences"] = function (p, reply, ctx) {
             baseSetPreferences(p, reply, ctx);
-            if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "systemSounds", "ringtone", "alerttone",
+            if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "screenTimeout", "lockTimeout", "systemSounds", "ringtone", "alerttone",
                  "notificationtone", "x_palm_virtualkeyboard_prefs", "accessibility"].some(function (k) { return k in p; })) {
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
                 changed();

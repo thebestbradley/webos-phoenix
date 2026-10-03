@@ -6,7 +6,8 @@
 // Services:
 //   com.webos.settingsservice get/setSystemSettings {category:"picture", backlight}
 //   com.webos.service.systemservice get/setPreferences
-//       screenTimeout (Phoenix key), rotationLock, wallpaper, showAlertsWhenLocked, blinkNotifications
+//       screenTimeout, lockTimeout (Phoenix keys), rotationLock, wallpaper, showAlertsWhenLocked,
+//       blinkNotifications
 //   com.palm.systemmanager getDeviceLockMode / setDevicePasscode (legacy webOS;
 //       Phoenix will provide it on OSE)
 
@@ -38,7 +39,21 @@ const TIMEOUTS = [
     { label: "5 minutes", value: 300 },
 ];
 
-const PREF_KEYS: (keyof SystemPreferences)[] = ["screenTimeout", "rotationLock", "wallpaper", "showAlertsWhenLocked", "blinkNotifications"];
+// "Lock after": how long the device stays locked before the PIN or
+// password is asked for, in the steps LunaSysMgr rounds to
+// (Preferences::roundLockTimeout).
+const LOCK_AFTER = [
+    { label: "Screen turns off", value: 0 },
+    { label: "30 seconds", value: 30 },
+    { label: "1 minute", value: 60 },
+    { label: "2 minutes", value: 120 },
+    { label: "3 minutes", value: 180 },
+    { label: "5 minutes", value: 300 },
+    { label: "10 minutes", value: 600 },
+    { label: "30 minutes", value: 1800 },
+];
+
+const PREF_KEYS: (keyof SystemPreferences)[] = ["screenTimeout", "lockTimeout", "rotationLock", "wallpaper", "showAlertsWhenLocked", "blinkNotifications"];
 
 export function ScreenPage() {
     const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(PREF_KEYS, cb, err), []).value ?? {};
@@ -125,7 +140,11 @@ export function ScreenPage() {
                               options={[{ label: "Off", value: "none" }, { label: "Simple PIN", value: "pin" }, { label: "Password", value: "password" }]}
                               onChange={(m) => setLockFlow(m)} />
                 {lockMode && lockMode !== "none" && (
-                    <Row title={lockMode === "pin" ? "Change PIN" : "Change password"} chevron onClick={() => setLockFlow(lockMode)} />
+                    <>
+                        <ListSelector title="Lock after" value={prefs.lockTimeout ?? 0} options={LOCK_AFTER}
+                                      onChange={(v) => setPref({ lockTimeout: v })} testId="lock-after" />
+                        <Row title={lockMode === "pin" ? "Change PIN" : "Change password"} chevron onClick={() => setLockFlow(lockMode)} />
+                    </>
                 )}
             </Group>
 

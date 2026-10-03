@@ -99,6 +99,30 @@ Item {
             verify(!lock.pinEntry);
         }
 
+        // "Lock after": within lockTimeout of locking, no passcode.
+        function test_lockAfter() {
+            lockService.lockMode = "pin";
+            lock.system = { lockTimeout: 60 };
+            lock.locked = false;
+            lock.locked = true;
+            lock.requestUnlock();
+            compare(unlocked.count, 1, "locked a moment ago");
+            verify(!lock.pinEntry);
+            lock.locked = true;
+            lock.lockedAt = Date.now() - 61000;
+            lock.requestUnlock();
+            compare(unlocked.count, 1);
+            verify(lock.pinEntry, "locked for over a minute");
+            // 0 (the default): always.
+            lock.unlockPanel.shown = false;
+            lock.system = { lockTimeout: 0 };
+            lock.locked = false;
+            lock.locked = true;
+            lock.requestUnlock();
+            verify(lock.pinEntry);
+            lock.system = null;
+        }
+
         function test_noLockServiceUnlocks() {
             lock.source = null;
             lock.requestUnlock();

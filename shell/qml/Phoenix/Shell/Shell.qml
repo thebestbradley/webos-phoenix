@@ -94,6 +94,63 @@ FocusScope {
     function unlock() {
         lockScreen.locked = false;
         closeEmergency();
+        // Unlocked only with the screen on (a call answered from the
+        // lock screen, say).
+        backlight.turnOn();
+    }
+
+    // ---- The display (DisplayManager; Display.qml) ---------------------------------
+    // It dims and turns off when left alone ("Turn off after", the system
+    // preference screenTimeout), off on the lock screen after 5 s, and
+    // turning off locks. Power turns it off, and Power or Home on again (to
+    // the lock screen). Banners, popup alerts, calls and a charger plugged in
+    // turn it on. The window source shows the state (the device's
+    // backlight; the simulator's veil).
+    readonly property alias display: backlight
+    property alias stayAwake: backlight.stayAwake
+    Display {
+        id: backlight
+        timeout: shell.system && shell.system.screenTimeout > 0 ? shell.system.screenTimeout : 60
+        locked: shell.locked
+        // An app in front keeping the screen on (blockScreenTimeout).
+        blocked: cards.maximized && cards.currentBlocksScreenTimeout
+        onTurnedOff: shell.lock()
+    }
+    // Every touch and key resets its timers; while it is off the touch
+    // panel takes nothing and only Power and Home get through.
+    UserActivity {
+        asleep: !backlight.on
+        passKeys: [Qt.Key_Home, Qt.Key_F3, Qt.Key_PowerOff]
+        onActivity: backlight.activity()
+    }
+    Connections {
+        target: notes
+        // DisplayManager::alert: a banner (shown on the lock screen only
+        // with "Show notifications when locked"), a popup alert, a call
+        // (on while it rings).
+        function onBannerActiveChanged() {
+            if (notes.bannerActive && (!shell.locked || lockScreen.showAlertsWhenLocked))
+                backlight.alert(false);
+        }
+        function onAlertShownChanged() {
+            if (notes.alertShown)
+                backlight.alert(notes.incomingCall);
+        }
+        function onIncomingCallChanged() {
+            if (notes.incomingCall)
+                backlight.alert(true);
+            else
+                backlight.callDone();
+        }
+    }
+    // A charger plugged in turns it on (DisplayOff: DisplayEventUsbIn).
+    Connections {
+        target: shell.system
+        ignoreUnknownSignals: true
+        function onChargingChanged() {
+            if (shell.system.charging && backlight.state !== "on")
+                backlight.turnOn();
+        }
     }
 
     // ---- First Use (LunaSysMgr's minimal UI) --------------------------------------
@@ -282,6 +339,11 @@ FocusScope {
     // second arrives while the card is still minimizing (the original saw
     // it as the release's auto-repeat flag).
     function homeKey() {
+        // Off, Home only turns the screen on (to the lock screen).
+        if (!backlight.on) {
+            backlight.turnOn();
+            return;
+        }
         if (emergencyShown) {
             closeEmergency();
             return;
@@ -465,6 +527,10 @@ FocusScope {
         onPressed: (key, autoRepeat) => {
             if (autoRepeat)
                 return;
+            // The screen is off: only Power and Home do anything.
+            if (!backlight.on && key !== Qt.Key_Home && !shell._isPowerKey(key))
+                return;
+            backlight.activity();
             if (key === Qt.Key_Print || key === Qt.Key_F9)
                 shell.takeScreenshot();
             else if (key === Qt.Key_Escape || key === Qt.Key_Back)
@@ -527,7 +593,12 @@ FocusScope {
                 takeScreenshot();
                 _eatHomeUp = true;
             } else {
-                locked ? unlock() : lock();
+                // Power turns the screen off (and so locks), or on again to
+                // the lock screen (DisplayManager: DisplayEventPowerKeyPress).
+                if (backlight.on)
+                    backlight.turnOff();
+                else
+                    backlight.turnOn();
             }
         }
     }

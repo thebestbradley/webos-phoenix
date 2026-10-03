@@ -64,6 +64,7 @@ Item {
             virtualKeyboard: true
             dictationCommand: typeof simTranscriberCommand !== "undefined" ? simTranscriberCommand : []
             bootSound: typeof simBootSounds !== "undefined" && simBootSounds
+            stayAwake: typeof simStayAwake !== "undefined" && simStayAwake
             source: SimWindowSource { id: windows }
             system: SimSystemStatus {
                 id: status
@@ -72,6 +73,17 @@ Item {
                 deviceOrientation: typeof simOrientation !== "undefined" && simOrientation !== "" ? simOrientation : "up"
             }
         }
+    }
+
+    // The screen's state (Shell.display): dimmed or off. A device sets its
+    // backlight; here the screen darkens, to a tenth of its brightness when
+    // dimmed (DisplayManager::displayDim) and black when off.
+    Rectangle {
+        anchors.fill: parent
+        color: "black"
+        opacity: shell.display.state === "off" ? 1 : shell.display.state === "dim" ? 0.9 : 0
+        visible: opacity > 0
+        Behavior on opacity { enabled: shell.display.state !== "off"; NumberAnimation { duration: 300 } }
     }
 
     // Turn the device a quarter turn (steps: 1 counter-clockwise, -1

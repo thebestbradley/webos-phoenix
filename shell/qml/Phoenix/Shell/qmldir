@@ -8,6 +8,7 @@ CardView 1.0 CardView.qml
 CardLoading 1.0 CardLoading.qml
 DashboardItem 1.0 DashboardItem.qml
 DashboardMenu 1.0 DashboardMenu.qml
+Display 1.0 Display.qml
 GestureArea 1.0 GestureArea.qml
 JustType 1.0 JustType.qml
 Launcher 1.0 Launcher.qml
