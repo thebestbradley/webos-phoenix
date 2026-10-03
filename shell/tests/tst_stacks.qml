@@ -146,6 +146,59 @@ Item {
             fuzzyCompare(cv.layout.cards[s.msg].scale, cv.activeScale, 0.0001);
         }
 
+        // C5: a finger moving dx px over ms milliseconds, in steps, on the
+        // card view's flick clock.
+        property real fakeTime: 0
+        function swipe(x0, y, dx, ms) {
+            cv.clock = function () { return fakeTime; };
+            mousePress(cv, x0, y);
+            var steps = 6;
+            for (var i = 1; i <= steps; ++i) {
+                fakeTime += ms / steps;
+                mouseMove(cv, x0 + dx * i / steps, y);
+            }
+            mouseRelease(cv, x0 + dx, y);
+            cv.clock = function () { return Date.now(); };
+        }
+
+        // A flick (the whole gesture's average 2.5-11 px/ms) moves one
+        // stack from where it began; the same distance slowly snaps back.
+        function test_flickBetweenStacks() {
+            makeStacks();
+            cv.jumpTo(0);
+            var y = cv.cardOriginY;
+            // 70 px in ~20 ms: 3.5 px/ms.
+            swipe(250, y, -70, 20);
+            tryCompare(cv, "position", 1, 2000);
+            // 70 px in ~700 ms: 0.1 px/ms, not a flick: back to stack 1.
+            swipe(250, y, -70, 700);
+            tryCompare(cv, "position", 1, 2000);
+            // Faster than 11 px/ms is not a flick either: 80 px in 5 ms.
+            swipe(250, y, -80, 5);
+            tryCompare(cv, "position", 1, 2000);
+        }
+
+        // In a long fan a drag moves three positions per unscaled card
+        // width, and a flick there carries the fan on (CardGroup::flick).
+        function test_fanDragAndFlick() {
+            var first = windows.launch("org.webosphoenix.email", "");
+            for (var i = 0; i < 5; ++i)
+                windows.openChild(first);
+            wait(50);
+            cv.jumpTo(0);
+            var gid = cv.groups[0].id;
+            compare(cv.fanPositions[gid] === undefined ? 3 : cv.fanPositions[gid], 3);
+            var y = cv.cardOriginY;
+            // A slow drag right of a third of a card's width: one position.
+            swipe(100, y, cv.windowWidth / 3, 600);
+            fuzzyCompare(cv.fanPositions[gid], 2, 0.05);
+            compare(cv.position, 0);
+            // A flick right at 4 px/ms: 40 px of drag, then 0.4 more.
+            swipe(100, y, 40, 10);
+            fuzzyCompare(cv.fanPositions[gid], 2 - 40 / (cv.windowWidth / 3) - 0.4, 0.05);
+            compare(cv.position, 0);
+        }
+
         function test_closeInStackKeepsStack() {
             var s = makeStacks();
             cv.setFocus(s.c2);

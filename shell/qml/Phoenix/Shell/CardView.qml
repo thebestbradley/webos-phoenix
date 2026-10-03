@@ -33,6 +33,8 @@ Item {
 
     // 0 == card view, 1 == current card maximized.
     property real maximizeProgress: 0
+    // The time a touch's flick is measured by (ms); tests set their own.
+    property var clock: function () { return Date.now(); }
     readonly property bool maximized: maximizeProgress === 1
     // The card in front asked for the whole screen (enableFullScreenMode).
     readonly property bool currentFullScreen: {
@@ -760,6 +762,10 @@ Item {
             return false;
         }
 
+        // CardGroup.cpp:600: a card's unscaled width moves the fan three
+        // positions.
+        function fanUnit() { return view.windowWidth / 3; }
+
         function currentFan() {
             var g = view.groups[view.currentGroup];
             return g ? CardLayout.clampFanPosition(view.fanPositions[g.id] !== undefined ? view.fanPositions[g.id] : 1e9,
@@ -784,11 +790,13 @@ Item {
             // (LoadingState::handleTouchBegin).
             view.loadingUid = "";
             var now = Date.now();
+            var started = view.clock();
             for (var i = 0; i < points.length; ++i) {
                 var p = points[i];
                 var uid = cardAt(p.x, p.y);
-                fingers[p.pointId] = { startX: p.x, startY: p.y, lastX: p.x, lastY: p.y, lastTime: now,
-                                       vx: 0, vy: 0, uid: owned(uid) ? "" : uid, axis: "" };
+                fingers[p.pointId] = { startX: p.x, startY: p.y, lastX: p.x, lastY: p.y, lastTime: now, startTime: started,
+                                       vx: 0, vy: 0, uid: owned(uid) ? "" : uid, axis: "",
+                                       withinGroup: true, panX: 0, panFrom: 0 };
                 if (primary === -1) {
                     primary = p.pointId;
                     slideAnim.stop();
@@ -833,6 +841,10 @@ Item {
                 return;
             }
             var dx = f.lastX - f.startX, dy = f.lastY - f.startY;
+            // This event's movement; on the one that locks the axis, all of
+            // it since the touch began (CardWindowManager.cpp:1462-1480).
+            var stepX = f.prevX !== undefined ? f.lastX - f.prevX : dx;
+            var locking = f.axis === "";
             // Lock to an axis once outside the tap radius
             // (CardWindowManager.cpp:1464-1476). Only the first finger pans.
             if (f.axis === "" && dx * dx + dy * dy > Theme.tapRadius * Theme.tapRadius) {
@@ -845,19 +857,38 @@ Item {
                 else
                     f.axis = "done";
             }
+            if (f.axis !== "")
+                f.prevX = f.lastX;
+            if (locking && f.axis === "h")
+                stepX = dx;
             if (f.axis === "h") {
-                // Scroll the fan of a long stack first, then the stacks
-                // (CardWindowManager.cpp:1482-1499).
-                var fanUnit = view.windowWidth * view.activeScale / 3;
-                var wantFan = startFan - dx / fanUnit;
-                setCurrentFan(wantFan);
-                var leftover = (wantFan - currentFan()) * fanUnit;
-                var pos = startPosition + leftover / view.groupSpacing();
-                // Rubber-band past the ends.
-                var last = view.groupCount - 1;
-                if (pos < 0) pos = pos / 3;
-                if (pos > last) pos = last + (pos - last) / 3;
-                view.position = pos;
+                // A long stack's fan first, three positions a card's width
+                // (unscaled; CardGroup::adjustHorizontally), until it is at
+                // its end that way; from then on, for the rest of the
+                // gesture, the stacks (CardWindowManager.cpp:1480-1499,
+                // m_trackWithinGroup; CardGroup::atEdge).
+                if (f.withinGroup) {
+                    var fanBefore = currentFan();
+                    if (stepX !== 0)
+                        setCurrentFan(fanBefore - stepX / fanUnit());
+                    var moved = currentFan() - fanBefore;
+                    var wanted = stepX !== 0 ? -stepX / fanUnit() : 0;
+                    if (stepX !== 0 && Math.abs(moved - wanted) > 1e-6) {
+                        f.withinGroup = false;
+                        f.panFrom = view.position;
+                        f.panX = (wanted - moved) * fanUnit();
+                    }
+                } else {
+                    f.panX += -stepX;
+                }
+                if (!f.withinGroup) {
+                    var pos = f.panFrom + f.panX / view.groupSpacing();
+                    // Rubber-band past the ends.
+                    var last = view.groupCount - 1;
+                    if (pos < 0) pos = pos / 3;
+                    if (pos > last) pos = last + (pos - last) / 3;
+                    view.position = pos;
+                }
             } else if (f.axis === "v") {
                 // The card follows the finger both ways; pulled down it
                 // stretches toward the angry card (CardWindowManager.cpp:1523-1533).
@@ -888,11 +919,29 @@ Item {
             if (f.axis === "reorder") {
                 view.exitReorder();
             } else if (f.axis === "h") {
-                // Carry momentum: a quick flick advances one stack.
-                var target = Math.round(view.position);
-                if (!cancelled && Math.abs(f.vx) > 0.5 && target === Math.round(startPosition))
-                    target += f.vx < 0 ? 1 : -1;
-                view.slideTo(target);
+                // A flick: the whole gesture's average velocity, |vx| + |vy|
+                // between 2.5 and 11 px/ms (FlickGestureRecognizer.cpp:
+                // 95-104). Still in the fan, the fan carries on, a position
+                // per 10 px/ms (CardGroup::flick); else the next or previous
+                // stack from the one the gesture began on. Without one, the
+                // stack nearest the centre (CardWindowManager.cpp:1574-1600,
+                // 1720-1735).
+                var elapsed = view.clock() - f.startTime;
+                var ax = elapsed > 0 ? (f.lastX - f.startX) / elapsed : 0;
+                var ay = elapsed > 0 ? (f.lastY - f.startY) / elapsed : 0;
+                var speed = Math.abs(ax) + Math.abs(ay);
+                var flicked = !cancelled && f.lastX !== f.startX
+                              && speed >= Theme.flickMinVelocity && speed <= Theme.flickMaxVelocity;
+                var from = Math.round(startPosition);
+                if (flicked && f.withinGroup) {
+                    view.animateLayout(200);
+                    setCurrentFan(currentFan() - Math.round(ax / Theme.u) / 10);
+                    view.slideTo(from);
+                } else if (flicked) {
+                    view.slideTo(from + (ax > 0 ? -1 : 1));
+                } else {
+                    view.slideTo(Math.round(view.position));
+                }
             } else if (f.axis === "v") {
                 var c = view.cardItem(f.uid);
                 if (c) {
@@ -1061,7 +1110,7 @@ Item {
                 }
             }
             if (axis === "h") {
-                var fanUnit = view.windowWidth * view.activeScale / 3;
+                var fanUnit = touch.fanUnit();
                 var wantFan = startFan - sumX / fanUnit;
                 touch.setCurrentFan(wantFan);
                 var leftover = (wantFan - touch.currentFan()) * fanUnit;
