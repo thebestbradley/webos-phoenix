@@ -1117,6 +1117,35 @@ Item {
 
         // The Home button (SystemUiController.cpp:527-583): one thing per
         // press; a double press from an app reaches the launcher.
+        // V8: a Bluetooth keyboard's Search key toggles Just Type, its
+        // card-view key (Super) is the swipe up.
+        function test_keyboardSearchAndCardViewKeys() {
+            shell.forceActiveFocus();
+            keyClick(Qt.Key_Search);
+            verify(shell.justTypeOpen);
+            keyClick(Qt.Key_Search);
+            verify(!shell.justTypeOpen);
+            var uid = windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximize(uid);
+            tryVerify(function() { return shell.maximized; }, 2000);
+            keyClick(Qt.Key_Super_L);
+            tryVerify(function() { return !shell.maximized; }, 2000);
+            keyClick(Qt.Key_Meta);
+            verify(shell.launcherOpen);
+            keyClick(Qt.Key_Super_L);
+            verify(!shell.launcherOpen);
+            // Held for a shortcut (Super + another key) it is a modifier.
+            keyPress(Qt.Key_Meta);
+            keyClick(Qt.Key_A, Qt.MetaModifier);
+            keyRelease(Qt.Key_Meta);
+            verify(!shell.launcherOpen);
+            // Not over the lock screen.
+            shell.lock();
+            keyClick(Qt.Key_Search);
+            verify(!shell.justTypeOpen);
+            shell.unlock();
+        }
+
         function test_homeKey() {
             var notes = shell.notifications;
             windows.launch("org.webosphoenix.email", "");

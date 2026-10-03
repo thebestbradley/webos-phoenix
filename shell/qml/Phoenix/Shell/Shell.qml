@@ -347,6 +347,18 @@ FocusScope {
             launcher.open = true;
     }
 
+    // A keyboard's Search key: Just Type opens, or closes if it is open;
+    // not over the lock screen or the emergency window (Qt::Key_Search,
+    // SystemUiController.cpp:607-618).
+    function searchKey() {
+        if (locked || emergencyShown || firstUse)
+            return;
+        if (justType.open)
+            justType.open = false;
+        else
+            startJustType("");
+    }
+
     // The Home button, Key_CoreNavi_Home (:527-583): one thing per press -
     // the dashboard, the popup alert (closed, as signalCloseAlert did), the
     // menu, the launcher, Just Type - then the app minimizes; with nothing
@@ -580,7 +592,21 @@ FocusScope {
         // (or Back) the back gesture, F1 the up gesture, F2 a notification.
         keys: [Qt.Key_Home, Qt.Key_F3, Qt.Key_PowerOff, Qt.Key_Print, Qt.Key_F9,
                Qt.Key_VolumeUp, Qt.Key_VolumeDown, Qt.Key_F10, Qt.Key_F11,
-               Qt.Key_Escape, Qt.Key_Back, Qt.Key_F1, Qt.Key_F2]
+               Qt.Key_Escape, Qt.Key_Back, Qt.Key_F1, Qt.Key_F2,
+               // A Bluetooth keyboard's (the TouchPad keyboard's): Search
+               // opens or closes Just Type (SystemUiController.cpp:607-618).
+               Qt.Key_Search]
+        // Its card-view key, Super (Qt's Meta on Linux), is the swipe up
+        // (Key_Super_L, :338-343) when pressed on its own; with another key
+        // it is a modifier. On a Mac Meta is Control: not there.
+        soloKeys: Qt.platform.os === "osx" ? [Qt.Key_Super_L, Qt.Key_Super_R]
+                                           : [Qt.Key_Super_L, Qt.Key_Super_R, Qt.Key_Meta]
+        onTapped: (key) => {
+            if (!backlight.on)
+                return;
+            backlight.activity();
+            shell.gestureUp();
+        }
         chords: [{ key: Qt.Key_P, modifiers: Qt.ControlModifier | Qt.AltModifier },
                  { key: Qt.Key_P, modifiers: Qt.MetaModifier | Qt.AltModifier }]
         onPressed: (key, autoRepeat) => {
@@ -602,6 +628,8 @@ FocusScope {
                 shell.gestureBack();
             else if (key === Qt.Key_F1)
                 shell.gestureUp();
+            else if (key === Qt.Key_Search)
+                shell.searchKey();
             else if (key === Qt.Key_F2) {
                 if (shell.source)
                     shell.source.notify("org.webosphoenix.messaging", "Palm Pre", "It's good to be back.");
