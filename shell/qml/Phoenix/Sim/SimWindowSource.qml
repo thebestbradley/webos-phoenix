@@ -174,7 +174,7 @@ Item {
                  icon: a.icon, largeIcon: a.largeIcon || "", web: true, main: a.main, noWindow: !!a.noWindow,
                  orientation: a.requestedWindowOrientation || "",
                  webAppId: a.appId || a.id, params: a.params || "", dir: a.dir || "",
-                 removable: !!a.installed };
+                 removable: !!a.installed, version: a.version || "" };
     }
 
     // ---- Installing and removing apps (phoenix-sim's SimInstaller) ---------------------

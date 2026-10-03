@@ -78,7 +78,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [ ] Alphabetical page layout with letter dividers. `elements/page/icon_layouts/alphabeticonlayout.cpp`
 - [ ] Reorder mode: tap-and-hold to drag icons, move them between pages (edge dwell), Done button. `elements/page/icon_layouts/reorderableiconlayout.cpp`; `dimensionslauncher.cpp` *Phoenix: hold to drag, Done, drop on a tab to move between pages; no edge dwell.*
 - [x] Delete/remove badges on icons (uninstall user apps, remove launch points). `elements/icons/iconheap.cpp:35-39`
-- [ ] App info dialog (version, size, remove). `uiComponents/AppInfoDialog/AppInfoDialog.qml`
+- [x] App info dialog (version, size, remove). `uiComponents/AppInfoDialog/AppInfoDialog.qml` *Phoenix: done as the launcher used it: the (x) in edit mode asks "Remove Application?" with the title and version, Cancel and Remove (`tst_launcher.qml`). The original showed no size.*
 - [ ] Install progress and error badges on icons. `elements/icons/iconheap.cpp:44-51`; `Src/base/application/ApplicationInstaller.cpp`
 - [x] Launch feedback (touch highlight, 3 s timeout). `Src/lunaui/launcher/OverlayWindowManager.cpp:2018-2030`
 - [x] Quick-launch bar (dock) of up to 5 apps, plus a launcher button; drag to reorder, drag in from the launcher. `elements/bars/quicklaunchbar.cpp`; `QuicklaunchLayout.cpp`

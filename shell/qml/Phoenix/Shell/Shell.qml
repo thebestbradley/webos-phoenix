@@ -1255,97 +1255,91 @@ FocusScope {
                 }
             }
 
-            // Deleting an app asks first.
+            // Deleting an app asks first: the launcher's app info dialog
+            // (uiComponents/AppInfoDialog; LauncherObject::appDeleteDecoratorActivated,
+            // showAppInfoDialog): "Remove Application?", its title and
+            // version, Cancel and Remove (both black: the launcher never set
+            // their type), on popup-bg.png over the scrim, fading in and out
+            // over 300 ms.
             Item {
                 id: deleteDialog
+                objectName: "deleteDialog"
                 property string appId: ""
                 anchors.fill: parent
-                visible: appId !== ""
+                visible: opacity > 0
+                opacity: appId !== "" ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: 300 } }
                 z: 1001
                 function ask(id) { appId = id; }
-                function title() {
+                // "Calculator - v.3.0.5" (the app's title and version).
+                function message() {
                     var e = iconDrag.entry(appId);
-                    return e ? e.title : appId;
+                    if (!e)
+                        return appId;
+                    return e.version ? qsTr("%1 - v.%2").arg(e.title).arg(e.version) : e.title;
+                }
+                function remove() {
+                    var id = deleteDialog.appId;
+                    deleteDialog.appId = "";
+                    shell.setLauncherLayout(LauncherLayout.remove(shell.launcherLayout, id));
+                    if (shell.source && typeof shell.source.removeApp === "function")
+                        shell.source.removeApp(id);
                 }
                 Rectangle { anchors.fill: parent; color: "#80000000" }
-                MouseArea { anchors.fill: parent; onClicked: deleteDialog.appId = "" }
+                MouseArea { anchors.fill: parent; enabled: deleteDialog.appId !== ""; onClicked: deleteDialog.appId = "" }
+                // AppInfoDialog.qml: 320 + 2 x 11 wide; 11 px edge, 6 px margins,
+                // 4 px top offset; title 18 px bold, message 14 px bold;
+                // buttons 52 px, the full width.
                 BorderImage {
+                    id: appInfoDialog
+                    readonly property real edge: Theme.px(11)
+                    readonly property real margin: Theme.px(6)
                     anchors.centerIn: parent
-                    width: Math.min(parent.width - Theme.px(20), Theme.px(320))
-                    height: dialogColumn.height + Theme.px(40)
-                    source: Theme.asset("menu-dropdown-bg.png")
-                    border { left: Theme.artBorder(30, source); right: Theme.artBorder(30, source); top: Theme.artBorder(30, source); bottom: Theme.artBorder(30, source) }
+                    width: Math.min(parent.width, Theme.px(320) + 2 * edge)
+                    height: dialogColumn.height + 2 * edge + 2 * margin + Theme.px(4)
+                    source: Theme.asset("popup-bg.png")
+                    border { left: Theme.artBorder(35, source); right: Theme.artBorder(35, source); top: Theme.artBorder(40, source); bottom: Theme.artBorder(40, source) }
                     MouseArea { anchors.fill: parent }
-                    BackdropBlur {
-                        anchors.fill: parent
-                        z: -1
-                        source: sceneBackdrop
-                        mask: dialogShape
-                    }
-                    BorderImage {
-                        id: dialogShape
-                        visible: false
-                        anchors.fill: parent
-                        source: Theme.asset("menu-dropdown-bg.png")
-                        border { left: Theme.artBorder(30, source); right: Theme.artBorder(30, source); top: Theme.artBorder(30, source); bottom: Theme.artBorder(30, source) }
-                    }
                     Column {
                         id: dialogColumn
-                        x: Theme.px(20)
-                        y: Theme.px(20)
-                        width: parent.width - Theme.px(40)
-                        spacing: Theme.px(12)
+                        x: appInfoDialog.edge + appInfoDialog.margin
+                        y: appInfoDialog.edge + appInfoDialog.margin + Theme.px(4)
+                        width: parent.width - 2 * x
+                        spacing: appInfoDialog.margin
                         Text {
                             width: parent.width
-                            wrapMode: Text.WordWrap
-                            text: qsTr("Delete %1?").arg(deleteDialog.title())
-                            color: Theme.text
+                            wrapMode: Text.Wrap
+                            text: qsTr("Remove Application?")
+                            color: "#FFFFFF"
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.px(18)
                             font.bold: true
                         }
                         Text {
+                            objectName: "deleteDialogMessage"
                             width: parent.width
-                            wrapMode: Text.WordWrap
-                            text: qsTr("The app and its data will be removed from this device.")
-                            color: Theme.textDim
+                            wrapMode: Text.Wrap
+                            text: deleteDialog.message()
+                            color: "#FFFFFF"
                             font.family: Theme.fontFamily
-                            font.pixelSize: Theme.px(15)
+                            font.pixelSize: Theme.px(14)
+                            font.bold: true
                         }
-                        Row {
-                            spacing: Theme.px(10)
-                            Repeater {
-                                model: [qsTr("Delete"), qsTr("Cancel")]
-                                delegate: Rectangle {
-                                    required property string modelData
-                                    required property int index
-                                    width: (dialogColumn.width - Theme.px(10)) / 2
-                                    height: Theme.px(40)
-                                    radius: Theme.px(8)
-                                    color: index === 0 ? "#b53a2f" : "#555a60"
-                                    border.color: "#20000000"
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: parent.modelData
-                                        color: "white"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: Theme.px(16)
-                                        font.bold: true
-                                    }
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        objectName: "deleteDialogButton" + parent.index
-                                        onClicked: {
-                                            var id = deleteDialog.appId;
-                                            deleteDialog.appId = "";
-                                            if (parent.index !== 0)
-                                                return;
-                                            shell.setLauncherLayout(LauncherLayout.remove(shell.launcherLayout, id));
-                                            if (shell.source && typeof shell.source.removeApp === "function")
-                                                shell.source.removeApp(id);
-                                        }
-                                    }
-                                }
+                        Column {
+                            width: parent.width
+                            ActionButton {
+                                objectName: "deleteDialogCancel"
+                                width: parent.width
+                                height: Theme.px(52)
+                                caption: qsTr("Cancel")
+                                onAction: deleteDialog.appId = ""
+                            }
+                            ActionButton {
+                                objectName: "deleteDialogRemove"
+                                width: parent.width
+                                height: Theme.px(52)
+                                caption: qsTr("Remove")
+                                onAction: deleteDialog.remove()
                             }
                         }
                     }

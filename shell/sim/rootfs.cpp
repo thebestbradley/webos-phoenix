@@ -144,6 +144,8 @@ void Rootfs::rescan()
         entry[QStringLiteral("appId")] = id;
         entry[QStringLiteral("title")] = app.value(QStringLiteral("title")).toString(id);
         entry[QStringLiteral("type")] = app.value(QStringLiteral("type")).toString(QStringLiteral("web"));
+        // Shown when the launcher asks before removing it ("Remove Application?").
+        entry[QStringLiteral("version")] = app.value(QStringLiteral("version")).toString();
         entry[QStringLiteral("noWindow")] = app.value(QStringLiteral("noWindow")).toBool();
         // The orientation the app's window starts in, until the page asks
         // (luna-sysmgr ApplicationDescription.cpp:464-469).

@@ -217,10 +217,19 @@ Item {
             wait(50);
             var c = iconPoint(index);
             // The delete decorator, at the icon's top left.
-            mouseClick(shell, c.x - Theme.launcherIconSize / 2 + Theme.px(4), c.y - Theme.launcherIconSize / 2 + Theme.px(4));
-            var button = findChild(shell, function(o) { return o.objectName === "deleteDialogButton0"; });
-            verify(button && button.visible, "asks first");
-            mouseClick(button);
+            var decorator = Qt.point(c.x - Theme.launcherIconSize / 2 + Theme.px(4), c.y - Theme.launcherIconSize / 2 + Theme.px(4));
+            mouseClick(shell, decorator.x, decorator.y);
+            // AppInfoDialog: "Remove Application?", the app's title (and
+            // version), Cancel and Remove.
+            var dialog = findChild(shell, function(o) { return o.objectName === "deleteDialog"; });
+            tryCompare(dialog, "opacity", 1, 1000);
+            compare(findChild(shell, function(o) { return o.objectName === "deleteDialogMessage"; }).text.indexOf(launcher.entry(id).title), 0);
+            mouseClick(findChild(shell, function(o) { return o.objectName === "deleteDialogCancel"; }));
+            tryCompare(dialog, "visible", false, 1000);
+            verify(LauncherLayout.pageOf(shell.launcherLayout, id) >= 0, "Cancel keeps it");
+            mouseClick(shell, decorator.x, decorator.y);
+            tryCompare(dialog, "opacity", 1, 1000);
+            mouseClick(findChild(shell, function(o) { return o.objectName === "deleteDialogRemove"; }));
             compare(LauncherLayout.pageOf(shell.launcherLayout, id), -1);
             verify(shell.launcherLayout.removed.indexOf(id) >= 0);
         }

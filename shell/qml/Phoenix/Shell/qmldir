@@ -1,6 +1,7 @@
 module Phoenix.Shell
 singleton Theme 1.0 Theme.qml
 Shell 1.0 Shell.qml
+ActionButton 1.0 ActionButton.qml
 AppIcon 1.0 AppIcon.qml
 BackdropBlur 1.0 BackdropBlur.qml
 Card 1.0 Card.qml
