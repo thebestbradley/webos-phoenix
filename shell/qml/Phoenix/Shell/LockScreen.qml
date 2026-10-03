@@ -203,7 +203,7 @@ Item {
     // Centred, 320 px wide less its 10 px padding, on popup-bg.png; an incoming
     // call gets the whole height from under the bar to 84 px above the
     // bottom (adjustAlertBounds, kAlertsFromBottom). Under the padlock.
-    BorderImage {
+    ArtBorderImage {
         id: alertFrame
         objectName: "lockAlert"
         visible: opacity > 0
@@ -233,7 +233,7 @@ Item {
     // dashboard-scroll-fade.png. A tap reaches a dashboard window only when
     // it asked for {clickableWhenLocked: true}, and not while the help
     // saucer shows (:1862-1883; DashboardWindowContainer.cpp:1069).
-    BorderImage {
+    ArtBorderImage {
         id: lockDashboard
         objectName: "lockDashboard"
         readonly property int count: lock.notifications ? Math.min(lock.notifications.count, Theme.lockDashboardMaxItems) : 0
@@ -313,7 +313,7 @@ Item {
     // Centred, 320 px by the banner's 28 px, 10 px padding inside the
     // popup-bg.png shadow; the message sits still, icon and text 5 px in
     // (BannerMessageView::NoScroll; BannerMessageHandler.cpp:410-430).
-    BorderImage {
+    ArtBorderImage {
         id: lockBanner
         objectName: "lockBanner"
         visible: opacity > 0

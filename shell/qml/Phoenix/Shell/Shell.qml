@@ -1164,7 +1164,7 @@ FocusScope {
                 }
                 Rectangle { anchors.fill: parent; color: "#80000000" }
                 MouseArea { anchors.fill: parent; onClicked: deleteDialog.appId = "" }
-                BorderImage {
+                ArtBorderImage {
                     anchors.centerIn: parent
                     width: Math.min(parent.width - Theme.px(20), Theme.px(320))
                     height: dialogColumn.height + Theme.px(40)
@@ -1177,7 +1177,7 @@ FocusScope {
                         source: sceneBackdrop
                         mask: dialogShape
                     }
-                    BorderImage {
+                    ArtBorderImage {
                         id: dialogShape
                         visible: false
                         anchors.fill: parent

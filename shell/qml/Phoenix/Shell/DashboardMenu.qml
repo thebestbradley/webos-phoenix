@@ -121,7 +121,7 @@ Item {
     property int rowsRevision: 0
 
     // menu-dropdown-swipe-bg.png, stretched over a gap (paintHoriz3Tile, :1444-1464).
-    component GapShade: BorderImage {
+    component GapShade: ArtBorderImage {
         objectName: "dashboardMenuGapShade"
         width: Theme.dashboardMenuWidth
         visible: height > 0
@@ -219,7 +219,7 @@ Item {
 
         // Behind a window moved off its place, from the left edge up to it,
         // divider and all (:1373-1387).
-        BorderImage {
+        ArtBorderImage {
             id: swipeShade
             objectName: "dashboardMenuSwipeShade"
             visible: content.x > 0
@@ -382,7 +382,7 @@ Item {
     // ---- MenuContainer.qml ----------------------------------------------------------
 
     // The art, only as tall as the rows need (MenuContainer.qml:35-41).
-    BorderImage {
+    ArtBorderImage {
         id: menuBorder
         objectName: "dashboardMenuBorder"
         width: parent.width
@@ -401,7 +401,7 @@ Item {
             source: menu.backdrop
             mask: menuShape
         }
-        BorderImage {
+        ArtBorderImage {
             id: menuShape
             visible: false
             anchors.fill: parent
@@ -475,7 +475,7 @@ Item {
         y: clipRect.y
         opacity: !flick.atYBeginning ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.systemMenuScrollFadeDuration } }
-        BorderImage {
+        ArtBorderImage {
             width: parent.width
             height: Theme.artHeight(source)
             source: Theme.asset("menu-dropdown-scrollfade-top.png")
@@ -495,7 +495,7 @@ Item {
         y: clipRect.y + flick.height - Theme.dashboardMenuScrollFadeBottomOffset
         opacity: !flick.atYEnd ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.systemMenuScrollFadeDuration } }
-        BorderImage {
+        ArtBorderImage {
             width: parent.width
             height: Theme.artHeight(source)
             source: Theme.asset("menu-dropdown-scrollfade-bottom.png")

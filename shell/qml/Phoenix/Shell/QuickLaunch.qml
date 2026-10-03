@@ -47,7 +47,7 @@ Item {
     Item {
         anchors.fill: parent
         clip: true
-        Image {
+        ArtTiledImage {
             width: parent.width
             height: Theme.artHeight(source)
             source: Theme.asset("launcher3/quicklaunch-bg.png")

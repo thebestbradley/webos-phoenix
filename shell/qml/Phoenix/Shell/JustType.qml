@@ -105,7 +105,7 @@ Item {
         anchors.bottomMargin: jt.bottomInset
     }
 
-    BorderImage {
+    ArtBorderImage {
         id: pill
         visible: !jt.surface
         x: Theme.px(8)

@@ -20,7 +20,7 @@ Item {
 
     Image {
         anchors.fill: parent
-        source: bar.keyboard._art + "keyboard-bg.png"
+        source: bar.keyboard._artFile("keyboard-bg.png")
         fillMode: Image.Stretch
     }
 

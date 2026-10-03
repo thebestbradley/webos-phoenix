@@ -480,6 +480,14 @@ QtObject {
     function artBorder(v, url) {
         return Math.round(v * HiDpi.borderScale(url))
     }
+    // Device pixels per logical pixel of an Image or BorderImage showing a
+    // file returned by asset(), for art drawn at its own pixel size: a
+    // BorderImage's borders, tiled images. Qt draws a @2x / @3x file's
+    // pixels as the 1x art's (and a @1.5x file's as its own), the shell's
+    // are u times bigger. ArtBorderImage and ArtTiledImage scale by it.
+    function artDrawScale(url) {
+        return u / HiDpi.borderScale(url)
+    }
     // An app icon's file for drawing it `pixels` device pixels wide: the
     // icon, or a bigger one the app ships (`large`: appinfo.json's
     // splashicon; icon-256x256.png beside it) once the icon is too small.

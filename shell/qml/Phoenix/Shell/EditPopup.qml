@@ -60,7 +60,7 @@ Item {
         onPressed: popup.close()
     }
 
-    BorderImage {
+    ArtBorderImage {
         id: bubble
         objectName: "editPopup"
         readonly property real pad: Theme.artBorder(10, source) // the art's shadow
