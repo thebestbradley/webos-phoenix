@@ -903,6 +903,28 @@ Item {
             tryVerify(function() { return !vpn.visible; }, 2500);
         }
 
+        // Settings > Phone's call forwarding: its icon between the VPN's and
+        // Wi-Fi's (StatusBarInfo.cpp:143-275), not in airplane mode.
+        function test_callForwardIndicator() {
+            var sys = shell.system;
+            var fwd = findChild(shell, "callForwardIcon");
+            verify(!fwd.visible);
+            verify(/statusBar\/call-forward\.png$/.test(fwd.source));
+            sys.applyAppStatus({ callForwarding: true });
+            verify(fwd.visible);
+            tryCompare(fwd, "progress", 1, 2500);
+            sys.vpnProfiles = [{ name: "Office", state: "connected" }];
+            tryCompare(findChild(shell, "vpnIcon"), "progress", 1, 2500);
+            verify(fwd.x > findChild(shell, "vpnIcon").x);
+            verify(fwd.x < findChild(shell, "wifiIcon").x);
+            sys.vpnProfiles = [{ name: "Office", state: "disconnected" }];
+            sys.airplaneMode = true;
+            tryVerify(function() { return !fwd.visible; }, 2500);
+            sys.airplaneMode = false;
+            sys.applyAppStatus({ callForwarding: false });
+            tryVerify(function() { return !fwd.visible; }, 2500);
+        }
+
         // Back: the dashboard, then the menu, then the launcher
         // (SystemUiController.cpp:424-443).
         function test_backOrder() {

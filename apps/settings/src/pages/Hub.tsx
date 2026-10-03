@@ -7,7 +7,7 @@ import { PAGES, type PageId } from "./index";
 /** Every pane in one list (the app launched without a page). */
 export function Hub({ onOpen }: { onOpen: (id: PageId) => void }) {
     const groups: { label: string; ids: PageId[] }[] = [
-        { label: "Connections", ids: ["wifi", "bluetooth", "vpn", "airplane"] },
+        { label: "Connections", ids: ["wifi", "bluetooth", "vpn", "airplane", "phone"] },
         { label: "Device", ids: ["screen", "sounds", "datetime", "language", "textassist", "justtype", "accessibility"] },
         { label: "Privacy & Safety", ids: ["location", "emergency", "certificates"] },
         { label: "About", ids: ["deviceinfo", "backup", "updates"] },

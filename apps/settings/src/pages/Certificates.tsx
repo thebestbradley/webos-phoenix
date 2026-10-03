@@ -100,7 +100,7 @@ function NameRows({ n }: { n: CertificateName }) {
         ["Location", n.location], ["State/Province", n.state], ["Country", n.country], ["Email", n.email],
         ["Other names", n.altname?.join(", ")],
     ];
-    return <>{rows.filter(([, v]) => v).map(([k, v]) => <Row key={k} title={k} subtitle={v} className="cert-field" />)}</>;
+    return <>{rows.filter(([, v]) => v).map(([k, v]) => <Row key={k} title={k} subtitle={v} className="wrap-subtitle" />)}</>;
 }
 
 function Details({ id, onGone }: { id: string; onGone: () => void }) {
@@ -133,14 +133,14 @@ function Details({ id, onGone }: { id: string; onGone: () => void }) {
             </Group>
             <Group label="Details">
                 <Row title="Certificate authority" subtitle={c.isCA ? "Yes" : "No"} />
-                <Row className="cert-field" title="Serial number" subtitle={<span className="cert-hex">{c.serialNumber}</span>} />
+                <Row className="wrap-subtitle" title="Serial number" subtitle={<span className="cert-hex">{c.serialNumber}</span>} />
                 <Row title="Version" subtitle={String(c.version)} />
-                <Row className="cert-field" title="Signature algorithm" subtitle={c.signature.algorithm} />
-                <Row className="cert-field" title="Public key" subtitle={key} />
+                <Row className="wrap-subtitle" title="Signature algorithm" subtitle={c.signature.algorithm} />
+                <Row className="wrap-subtitle" title="Public key" subtitle={key} />
             </Group>
             <Group label="Fingerprints">
-                <Row className="cert-field" title="SHA-256" subtitle={<span className="cert-hex" data-testid="cert-sha256">{c.fingerprints.sha256}</span>} />
-                <Row className="cert-field" title="SHA-1" subtitle={<span className="cert-hex">{c.fingerprints.sha1}</span>} />
+                <Row className="wrap-subtitle" title="SHA-256" subtitle={<span className="cert-hex" data-testid="cert-sha256">{c.fingerprints.sha256}</span>} />
+                <Row className="wrap-subtitle" title="SHA-1" subtitle={<span className="cert-hex">{c.fingerprints.sha1}</span>} />
             </Group>
             <Button variant="negative" onClick={() => setDeleting(true)} data-testid="cert-delete">Delete Certificate</Button>
             <Dialog open={deleting} title="Delete this certificate?" onClose={() => setDeleting(false)} testId="cert-delete-dialog"

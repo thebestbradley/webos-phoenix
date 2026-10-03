@@ -262,7 +262,7 @@ Item {
         // Bluetooth, Wi-Fi, TTY, HAC, call forward, roaming, VPN, rotation
         // lock, mute, airplane (StatusBarInfo.cpp:143-275). This Row runs
         // left to right, so the reverse. Not shown yet, for want of the
-        // state: WAN, TTY, HAC, call forward, roaming.
+        // state: WAN, TTY, HAC, roaming.
         Indicator {
             objectName: "airplaneIcon"
             shown: bar.system !== null && bar.system !== undefined && bar.system.airplaneMode
@@ -284,6 +284,13 @@ Item {
             objectName: "vpnIcon"
             shown: !!bar.system && !!bar.system.vpnProfile
             source: Theme.asset("statusBar/vpn-status-icon.png")
+        }
+        // Unconditional call forwarding on (StatusBarInfo::setCallForward,
+        // from com.palm.telephony forwardQuery; off with the radio).
+        Indicator {
+            objectName: "callForwardIcon"
+            shown: !!bar.system && !bar.system.airplaneMode && !!bar.system.callForwarding
+            source: Theme.asset("statusBar/call-forward.png")
         }
         Indicator {
             objectName: "wifiIcon"

@@ -2963,6 +2963,9 @@
                 keyboards: keyboardCombos(p),
                 keyboard: keyboardInUse(p),
                 ringtone: (p.ringtone && p.ringtone.fullPath) || "",
+                // Phone preferences: unconditional call forwarding on (the
+                // status bar's call-forward icon, StatusBarInfo::setCallForward).
+                callForwarding: runtime.callForwarding ? runtime.callForwarding() : false,
                 alerttone: (p.alerttone && p.alerttone.fullPath) || "",
                 notificationtone: (p.notificationtone && p.notificationtone.fullPath) || "",
                 showAlertsWhenLocked: p.showAlertsWhenLocked !== false,
@@ -4328,6 +4331,31 @@
     //     CallVolume and MessageWaiting D-Bus APIs, see apps/shared/luna/src/telephony.ts):
     //       callStatusQuery {subscribe}, hold {id}, unhold {id}, sendDtmf {tones},
     //       muteSet {mute}, speakerSet {speaker}, voicemailQuery {subscribe}
+    //     The legacy phone preferences' calls (com.palm.app.phone
+    //     shared/phoneprefs/controls/CallsPref.js, NetworkPref.js,
+    //     VoicemailNumberPref.js; LunaSysMgr's StatusBarServicesConnector
+    //     subscribes to forwardQuery for the status bar's icon):
+    //       forwardQuery {condition, bearer, subscribe} -> {extended: {condition,
+    //           status: [{bearer, activated, number}]}}
+    //       forwardRegister {number ("" to stop), condition, bearer, time}
+    //       clirQuery -> {extended: {restricted}}, clirSet {restrict}
+    //       callWaitingQuery -> {extended: {enabled}}, callWaitingSet {enable}
+    //       voicemailNumberQuery {subscribe} -> {extended: {number}},
+    //           voicemailNumberSet {number}
+    //       roamModeQuery -> {extended: {mode: "automatic" | "carrieronly"}},
+    //           roamModeSet {mode}
+    //       ratQuery -> {extended: {mode: "automatic" | "umts" | "gsm"}}, ratSet {mode}
+    //     The supplementary services (forwarding, caller ID, waiting) need
+    //     the network: errorCode 102 in airplane mode, as the phone app's
+    //     messages say. Only unconditional forwarding is kept; while it is on,
+    //     a simulated incoming call is forwarded and does not ring.
+    //   com.palm.wan                          the data connection (legacy wand):
+    //       getstatus {subscribe} -> {disablewan: "on" | "off" (Data Usage
+    //       off / on), roamguard: "enable" | "disable" (data roaming off /
+    //       on; "disable" also as the original's "neverblock"), state}
+    //       set {disablewan?, roamguard?} (NetworkPref.js toggleWAN,
+    //       toggleDataRoaming). The original read roamguard from
+    //       com.palm.preferences appProperties; here getstatus says it.
     //   org.webosports.service.messaging     webOS-ports/org.webosports.messaging
     //       putMessage {message} -> {threadids}   service/javascript/assistants/PutMessage.js,
     //                                              utils/MessageAssigner.js (thread assignment)
@@ -4361,7 +4389,10 @@
 
         function defaults() {
             return { calls: [], muted: false, speaker: false, nextId: 1,
-                     voicemail: { number: "(408) 555-0100", waiting: true, count: 2 } };
+                     voicemail: { number: "(408) 555-0100", waiting: true, count: 2 },
+                     // The phone preferences (network-side settings).
+                     forward: { activated: false, number: "" }, clirRestricted: false, callWaiting: true,
+                     roamMode: "automatic", rat: "automatic" };
         }
         function load() {
             var s = store.get(KEY, null);
@@ -4436,6 +4467,9 @@
         function incoming(opts) {
             opts = opts || {};
             var s = load();
+            // Forwarded by the network: the phone never rings.
+            if (s.forward && s.forward.activated && !offline())
+                return 0;
             var id = s.nextId++;
             var busy = s.calls.some(function (x) { return live(x) && x.state !== "incoming"; });
             s.calls.push({ id: id, state: busy ? "waiting" : "incoming", number: opts.number || "(415) 555-0123",
@@ -4514,7 +4548,60 @@
                 if (p.subscribe) listen(ctx, function () { if (!ctx.cancelled()) reply(v()); });
             },
             // telephonyd's activity callback for the outbox (outgoing-sms.json).
-            "/sendSmsFromDb": function (p, reply) { sendOutbox(); reply(ok()); }
+            "/sendSmsFromDb": function (p, reply) { sendOutbox(); reply(ok()); },
+
+            // ---- The phone preferences ---------------------------------------------
+            "/forwardQuery": function (p, reply, ctx) {
+                var answer = function () {
+                    if (offline()) return fail(102, "No network");
+                    var f = load().forward;
+                    return ok({ extended: { condition: "unconditional",
+                                            status: [{ bearer: "defaultbearer", activated: !!f.activated, number: f.number || "" }] } });
+                };
+                reply(answer());
+                if (p.subscribe) listen(ctx, function () { if (!ctx.cancelled()) reply(answer()); });
+            },
+            "/forwardRegister": function (p, reply) {
+                if (offline()) return reply(fail(102, "No network"));
+                if (p.condition && p.condition !== "unconditional") return reply(fail(-1, "Only unconditional forwarding is supported"));
+                var number = String(p.number || "").replace(/[^0-9+*#]/g, "");
+                var s = load();
+                s.forward = number ? { activated: true, number: String(p.number) } : { activated: false, number: s.forward.number || "" };
+                save(s);
+                reply(ok());
+            },
+            "/clirQuery": function (p, reply) {
+                reply(offline() ? fail(102, "No network") : ok({ extended: { restricted: !!load().clirRestricted, permanent: false } }));
+            },
+            "/clirSet": function (p, reply) {
+                if (offline()) return reply(fail(102, "No network"));
+                var s = load(); s.clirRestricted = !!p.restrict; save(s); reply(ok());
+            },
+            "/callWaitingQuery": function (p, reply) {
+                reply(offline() ? fail(102, "No network") : ok({ extended: { enabled: load().callWaiting !== false } }));
+            },
+            "/callWaitingSet": function (p, reply) {
+                if (offline()) return reply(fail(102, "No network"));
+                var s = load(); s.callWaiting = !!p.enable; save(s); reply(ok());
+            },
+            "/voicemailNumberQuery": function (p, reply, ctx) {
+                var v = function () { return ok({ extended: { number: load().voicemail.number } }); };
+                reply(v());
+                if (p.subscribe) listen(ctx, function () { if (!ctx.cancelled()) reply(v()); });
+            },
+            "/voicemailNumberSet": function (p, reply) {
+                var s = load(); s.voicemail.number = String(p.number || ""); save(s); reply(ok());
+            },
+            "/roamModeQuery": function (p, reply) { reply(ok({ extended: { mode: load().roamMode } })); },
+            "/roamModeSet": function (p, reply) {
+                if (["automatic", "carrieronly", "homeonly"].indexOf(p.mode) < 0) return reply(fail(-1, "Invalid mode"));
+                var s = load(); s.roamMode = p.mode; save(s); reply(ok());
+            },
+            "/ratQuery": function (p, reply) { reply(ok({ extended: { mode: load().rat } })); },
+            "/ratSet": function (p, reply) {
+                if (["automatic", "umts", "gsm"].indexOf(p.mode) < 0) return reply(fail(-1, "Invalid mode"));
+                var s = load(); s.rat = p.mode; save(s); reply(ok());
+            }
         };
         register(["com.palm.telephony"], telephony);
 
@@ -4523,6 +4610,42 @@
         } catch (x) { /* no window events */ }
 
         runtime.simulateIncomingCall = function (opts) { return incoming(opts); };
+        // The status bar's call forwarding icon (runtime.hostStatus).
+        // Off with the radio, as LunaSysMgr hid it (StatusBarServicesConnector.cpp:962).
+        runtime.callForwarding = function () { var f = load().forward; return !!(f && f.activated) && !offline(); };
+
+        // com.palm.wan: Data Usage and Data Roaming (NetworkPref.js).
+        var WAN_KEY = "wan:state";
+        var wanWatchers = [];
+        function wan() {
+            var w = store.get(WAN_KEY, null) || {};
+            return { disablewan: w.disablewan === "on" ? "on" : "off", roamguard: w.roamguard === "disable" ? "disable" : "enable" };
+        }
+        function wanStatus() {
+            var w = wan();
+            return ok({ disablewan: w.disablewan, roamguard: w.roamguard,
+                        state: w.disablewan === "on" || offline() ? "disconnected" : "connected" });
+        }
+        register(["com.palm.wan"], {
+            "/getstatus": function (p, reply, ctx) {
+                reply(wanStatus());
+                if (p.subscribe) wanWatchers.push(function () { if (ctx.cancelled()) return false; reply(wanStatus()); return true; });
+            },
+            "/set": function (p, reply) {
+                var w = wan();
+                if (p.disablewan !== undefined) {
+                    if (p.disablewan !== "on" && p.disablewan !== "off") return reply(fail(-1, "disablewan is \"on\" or \"off\""));
+                    w.disablewan = p.disablewan;
+                }
+                if (p.roamguard !== undefined) {
+                    if (["enable", "disable", "neverblock"].indexOf(p.roamguard) < 0) return reply(fail(-1, "Invalid roamguard"));
+                    w.roamguard = p.roamguard === "enable" ? "enable" : "disable";
+                }
+                store.set(WAN_KEY, w);
+                wanWatchers = wanWatchers.filter(function (fn) { return fn(); });
+                reply(ok());
+            }
+        });
         runtime.simulateRemoteHangup = function () {
             var s = load();
             var c = s.calls.filter(function (x) { return x.state === "active"; })[0] || s.calls.filter(live)[0];

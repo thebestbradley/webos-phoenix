@@ -14,7 +14,7 @@
 // (views/Emergency).
 
 import { useEffect, useMemo, useState } from "react";
-import { primaryCall, ringingCall, telephony, type Call } from "@phoenix/luna";
+import { apps, primaryCall, ringingCall, telephony, type Call } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import { AppMenu, BackProvider, RadioToolGroup, ToolBar, dialable, useBack } from "@phoenix/ui";
 import { callLog, otherParty, type PhoneCall } from "./lib/calllog";
@@ -116,6 +116,9 @@ function Phone() {
                 { label: "Dial Pad", onSelect: () => setTab("dial") },
                 { label: "Call Log", onSelect: () => setTab("log") },
                 { label: "Favorites", onSelect: () => setTab("favorites") },
+                // As the original's menu opened its Phone Preferences (call
+                // forwarding, caller ID, voicemail number, network).
+                { label: "Preferences", onSelect: () => void apps.launch("org.webosphoenix.settings", { page: "phone" }) },
             ]} />
             {wide ? (
                 <>

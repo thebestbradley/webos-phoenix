@@ -538,6 +538,37 @@ async function main() {
         for (let i = 0; i < 30 && (await userCerts()).length; ++i) await page.waitForTimeout(100);
         check((await userCerts()).length === 0, "deleted");
 
+        // ---- Phone Preferences: call forwarding, data and roaming ----------------------
+        await open("phone");
+        await page.waitForSelector("[data-testid='phone-forward']");
+        check(last().callForwarding !== true, "no call forwarding at first");
+        await page.click("[data-testid='phone-forward']");
+        await page.fill("[data-testid='phone-forward-number']", "(408) 555-0177");
+        await page.click("[data-testid='phone-forward-save']");
+        for (let i = 0; i < 30 && last().callForwarding !== true; ++i) await page.waitForTimeout(100);
+        check(last().callForwarding === true, "call forwarding on reaches the shell (its status bar icon)");
+        check(await page.evaluate(() => __phoenixRuntime.simulateIncomingCall({})) === 0, "a call that comes in is forwarded, not rung");
+        await page.click("[data-testid='phone-data']");
+        await page.waitForSelector("[data-testid='phone-data'][aria-checked='false']");
+        check((await svc("luna://com.palm.wan/getstatus", {})).disablewan === "on", "Data Usage off: com.palm.wan disablewan on");
+        await page.click("[data-testid='phone-data']");
+        await page.click("[data-testid='phone-roaming']");
+        await page.click("role=option[name='Enabled']");
+        for (let i = 0; i < 30 && (await svc("luna://com.palm.wan/getstatus", {})).roamguard !== "disable"; ++i) await page.waitForTimeout(100);
+        check((await svc("luna://com.palm.wan/getstatus", {})).roamguard === "disable", "Data Roaming enabled: roamguard disable");
+        await page.waitForTimeout(200);
+        await shot("phone");
+        await page.click("[data-testid='phone-forward']");
+        for (let i = 0; i < 30 && last().callForwarding !== false; ++i) await page.waitForTimeout(100);
+        check(last().callForwarding === false, "call forwarding off reaches the shell");
+        // Airplane mode: the network's settings cannot be read.
+        await svc("luna://com.webos.service.connectionmanager/setstate", { offlineMode: "enabled" });
+        await open("phone");
+        await page.waitForSelector("[data-testid='phone-forward-status']");
+        check(/network connection/.test(await page.textContent("[data-testid='phone-forward-status']")), "airplane mode: call forwarding needs the network");
+        await shot("phone-airplane");
+        await svc("luna://com.webos.service.connectionmanager/setstate", { offlineMode: "disabled" });
+
         // ---- Every other pane renders --------------------------------------------------
         for (const p of ["datetime", "language", "deviceinfo", "updates"]) {
             await open(p);

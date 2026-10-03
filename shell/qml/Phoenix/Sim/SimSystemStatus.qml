@@ -42,6 +42,9 @@ QtObject {
     // Ctrl+Right). The shell turns the UI to follow (UiRotation).
     property string deviceOrientation: "up"
     property bool muted: false
+    // Unconditional call forwarding is on (Settings > Phone; the runtime's
+    // com.palm.telephony forwardQuery), for the status bar's icon.
+    property bool callForwarding: false
     // System sounds (SystemSounds.qml), as the runtime reports them
     // (Settings > Sounds & Ringtones): the master and stream volumes
     // (0..100), "System Sounds", "Keyboard clicks" and the tones' paths.
@@ -250,7 +253,8 @@ QtObject {
     // screenTimeout, lockTimeout, advancedGestures, keyboardShortcuts,
     // volume, streams, systemSounds, tapSounds, textAssist, keyboards,
     // keyboard, ringtone, alerttone,
-    // notificationtone, reduceMotion, vpnProfiles. Missing keys are left alone.
+    // notificationtone, callForwarding, reduceMotion, vpnProfiles. Missing
+    // keys are left alone.
     function applyAppStatus(s) {
         applyingAppStatus = true;
         if (s.wifiEnabled !== undefined)
@@ -267,6 +271,8 @@ QtObject {
             rotationLocked = !!s.rotationLocked;
         if (s.muted !== undefined)
             muted = !!s.muted;
+        if (s.callForwarding !== undefined)
+            callForwarding = !!s.callForwarding;
         if (s.timeFormat !== undefined)
             twentyFourHour = s.timeFormat === "HH24";
         if (s.showAlertsWhenLocked !== undefined)

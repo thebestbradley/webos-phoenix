@@ -19,6 +19,7 @@ import { AccessibilityPage } from "./Accessibility";
 import { TextAssistPage } from "./TextAssist";
 import { JustTypePage } from "./JustType";
 import { CertificatesPage } from "./Certificates";
+import { PhonePrefsPage } from "./PhonePrefs";
 import { DevModePage } from "./DevMode";
 
 export interface PageInfo {
@@ -33,6 +34,7 @@ export const PAGES = {
     wifi: { title: "Wi-Fi", icon: "icons/wifi.png", component: WifiPage },
     bluetooth: { title: "Bluetooth", icon: "icons/bluetooth.png", component: BluetoothPage },
     airplane: { title: "Airplane Mode", icon: "icons/airplane.png", component: AirplanePage },
+    phone: { title: "Phone Preferences", icon: "icons/phoneprefs.png", component: PhonePrefsPage },
     vpn: { title: "VPN", icon: "icons/vpn.png", component: VpnPage },
     screen: { title: "Screen & Lock", icon: "icons/screen.png", component: ScreenPage },
     sounds: { title: "Sounds & Ringtones", icon: "icons/sounds.png", component: SoundsPage },
