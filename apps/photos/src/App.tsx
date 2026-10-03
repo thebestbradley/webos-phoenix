@@ -9,19 +9,24 @@
 //
 // Launch params: {imageList: {results: [item]}} (the convention OSE's
 // camera app uses to open its image viewer) or {target: "/media/internal/..."}
-// open that picture in the viewer.
+// open that picture in the viewer. {dockMode: true} (windowType
+// "dockModeWindow"): the window is dock mode's exhibition, the slideshow
+// (Exhibition.tsx; appinfo.json "exhibitionMode").
 
 import { useEffect, useMemo, useState } from "react";
-import { apps, folderOf, mediaIndexer, type ImageItem, type MediaItem, type VideoItem } from "@phoenix/luna";
+import { apps, folderOf, isExhibitionLaunch, mediaIndexer, type ImageItem, type MediaItem, type VideoItem } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
 import { AppMenu, BackProvider, Button, Spinner, useBack } from "@phoenix/ui";
 import { countLabel, groupAlbums, isVideo, type Album } from "./albums";
+import { Exhibition } from "./Exhibition";
 import { Thumb } from "./Thumb";
 import { Viewer } from "./Viewer";
 
 interface LaunchParams {
     imageList?: { results?: { file_path?: string; uri?: string }[] };
     target?: string;
+    dockMode?: boolean;
+    windowType?: string;
 }
 
 function launchTarget(p: LaunchParams): string | null {
@@ -156,6 +161,9 @@ function Photos() {
 }
 
 export function App() {
+    const params = useLaunchParams<LaunchParams>();
+    // Dock mode's exhibition (DockModeWindowManager::launchApp's params).
+    if (isExhibitionLaunch(params)) return <Exhibition />;
     return (
         <BackProvider>
             <Photos />
