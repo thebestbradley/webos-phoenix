@@ -9,7 +9,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as kdbxweb from "kdbxweb";
 import {
     applyEdit, createDatabase, customFields, inRecycleBin, mergeRemote, newEntry, newGroup, openDatabase, otpOf, otpUriOf, recycleBin, remove,
@@ -147,6 +147,29 @@ describe("KDBX databases", () => {
         const bytes = await saveDatabase(db);
         await expect(openDatabase(bytes, "old")).rejects.toMatchObject({ kind: "wrong-key" });
         expect((await openDatabase(bytes, "new")).meta.name).toBe("C");
+    });
+
+    it("changes the master password even while the first one is still being hashed", async () => {
+        // kdbxweb hashes a new database's password in the background
+        // (KdbxCredentials' constructor). Held back here, the old hash would
+        // land after the new one and win, so the file would still open with "old".
+        const getHash = kdbxweb.ProtectedValue.prototype.getHash;
+        let first = true;
+        const spy = vi.spyOn(kdbxweb.ProtectedValue.prototype, "getHash").mockImplementation(function (this: kdbxweb.ProtectedValue) {
+            const hash = getHash.call(this);
+            if (!first) return hash;
+            first = false;
+            return hash.then((h) => new Promise<ArrayBuffer>((resolve) => setTimeout(() => resolve(h), 50)));
+        });
+        try {
+            const db = createDatabase("R", "old", FAST);
+            await setMasterPassword(db, "new");
+            const bytes = await saveDatabase(db);
+            await expect(openDatabase(bytes, "old")).rejects.toMatchObject({ kind: "wrong-key" });
+            expect((await openDatabase(bytes, "new")).meta.name).toBe("R");
+        } finally {
+            spy.mockRestore();
+        }
     });
 
     it("refuses a file whose key derivation asks for absurd memory", async () => {

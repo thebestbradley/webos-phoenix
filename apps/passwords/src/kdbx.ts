@@ -105,6 +105,10 @@ export async function saveDatabase(db: Kdbx): Promise<ArrayBuffer> {
 
 /** Change the master password (takes effect on the next save). */
 export async function setMasterPassword(db: Kdbx, password: string): Promise<void> {
+    // The credentials hash their first password in the background
+    // (KdbxCredentials' constructor); if that finished after this one, the
+    // old password would win. Wait for it first.
+    await db.credentials.ready;
     await db.credentials.setPassword(kdbxweb.ProtectedValue.fromString(password));
 }
 

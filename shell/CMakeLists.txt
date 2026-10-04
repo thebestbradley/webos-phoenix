@@ -143,6 +143,11 @@ if(PHOENIX_BUILD_APPS)
     # The Flutter demo (apps/flutter-notes) is a Flutter web build, made
     # when the Flutter SDK is installed (optional; its README.md) and again
     # when its sources change. The Ionic demo is one of the web apps above.
+    # find_program caches what it finds; a Flutter since removed (or a
+    # dangling Homebrew link) would stay in the cache and fail the build.
+    if(PHOENIX_FLUTTER AND NOT EXISTS "${PHOENIX_FLUTTER}")
+        unset(PHOENIX_FLUTTER CACHE)
+    endif()
     find_program(PHOENIX_FLUTTER flutter)
     if(PHOENIX_FLUTTER)
         set(_flutter_dir "${PHOENIX_APPS_DIR}/flutter-notes")

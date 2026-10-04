@@ -42,11 +42,14 @@ used the `tbb/nice-maxwell-ps69wb` branch, switch back with
 
 ### 2. Install and build
 
-```sh
-scripts/mac-setup.sh --check    # what is installed and what is missing
-scripts/mac-setup.sh            # install Qt, CMake, Ninja, Node 22, Python; build
-scripts/mac-setup.sh --all      # the same, plus the test tools and voice (whisper.cpp)
-```
+Run each command on its own (zsh doesn't treat `#` as a comment when you
+paste, so don't paste notes after a command):
+
+| Command | What it does |
+| --- | --- |
+| `scripts/mac-setup.sh --check` | What is installed and what is missing |
+| `scripts/mac-setup.sh` | Install Qt, CMake, Ninja, Node 22, Python; build |
+| `scripts/mac-setup.sh --all` | The same, plus the test tools and voice (whisper.cpp) |
 
 The script uses Homebrew's `qt` (it includes Qt WebEngine and Qt 5 Compat,
 which the simulator needs), `cmake`, `ninja`, `node@22` and
@@ -67,19 +70,21 @@ brew install qt cmake ninja node@22
 export PATH="$(brew --prefix)/opt/node@22/bin:$PATH"
 git submodule update --init
 cmake -S shell -B build -G Ninja -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
-cmake --build build          # also runs npm ci and builds the apps in apps/
+cmake --build build
 ```
+
+`cmake --build build` also runs `npm ci` and builds the apps in `apps/`.
 
 ### 3. Run it
 
-```sh
-./build/phoenix-sim                               # a phone (Pre, 320x480)
-./build/phoenix-sim --tablet                      # a tablet (TouchPad, 1024x768)
-./build/phoenix-sim --size 480x800 --scale 1.5    # Pre 3
-./build/phoenix-sim --tablet --size 2560x1600 --scale 2   # a large tablet
-./build/phoenix-sim --launch com.palm.app.notes   # open an app at start-up
-./build/phoenix-sim --help                        # every option
-```
+| Command | What it does |
+| --- | --- |
+| `./build/phoenix-sim` | A phone (Pre, 320x480) |
+| `./build/phoenix-sim --tablet` | A tablet (TouchPad, 1024x768) |
+| `./build/phoenix-sim --size 480x800 --scale 1.5` | Pre 3 |
+| `./build/phoenix-sim --tablet --size 2560x1600 --scale 2` | A large tablet |
+| `./build/phoenix-sim --launch com.palm.app.notes` | Open an app at start-up |
+| `./build/phoenix-sim --help` | Every option |
 
 On a Retina screen it draws at 2x by itself.
 
@@ -118,11 +123,12 @@ macOS asks for microphone access the first time. Without a microphone,
 
 ## On Ubuntu 24.04 (desktop, VM or a cloud container)
 
-```sh
-scripts/linux-setup.sh           # Qt 6, CMake, Node 22; fetch submodules; build
-scripts/linux-setup.sh --tests   # also the test tools
-./build/phoenix-sim
-```
+| Command | What it does |
+| --- | --- |
+| `scripts/linux-setup.sh` | Qt 6, CMake, Node 22; fetch submodules; build |
+| `scripts/linux-setup.sh --tests` | Also the test tools |
+
+Then `./build/phoenix-sim`.
 
 Without a display (SSH, containers), run it under Xvfb:
 

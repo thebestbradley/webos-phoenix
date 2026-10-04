@@ -35,13 +35,12 @@ on ARM64 is on the roadmap.
 
 From your checkout:
 
-```sh
-scripts/mac-build.sh --check              # quick check first: fetch layers and resolve
-                                          # the whole image without compiling
-scripts/mac-build.sh                      # qemux86-64 emulator image
-scripts/mac-build.sh raspberrypi4-64      # 64-bit Raspberry Pi 4 image
-scripts/mac-build.sh --shell              # just open a shell in the build container
-```
+| Command | What it does |
+| --- | --- |
+| `scripts/mac-build.sh --check` | A quick check first: fetch the layers and resolve the whole image without compiling |
+| `scripts/mac-build.sh` | The `qemux86-64` emulator image |
+| `scripts/mac-build.sh raspberrypi4-64` | 64-bit Raspberry Pi 4 image |
+| `scripts/mac-build.sh --shell` | Just open a shell in the build container |
 
 The first run:
 
@@ -67,7 +66,11 @@ inside the volume. To copy them to the Mac:
 
 ```sh
 scripts/mac-build.sh --shell
-# inside the container:
+```
+
+then, inside the container:
+
+```sh
 cp /work/build-webos-phoenix/BUILD/deploy/images/raspberrypi4-64/*.wic* /src/webos-phoenix/out/
 ```
 
