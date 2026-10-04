@@ -230,11 +230,14 @@ brew install qt cmake ninja node@22
 export PATH="$(brew --prefix)/opt/node@22/bin:$PATH"
 cmake -S shell -B build -G Ninja -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
 cmake --build build
-./build/phoenix-sim            # Pre (320x480)
-./build/phoenix-sim --size 480x800 --scale 1.5 --scene cards   # Pre 3
-./build/phoenix-sim --tablet   # TouchPad (1024x768)
-./build/phoenix-sim --tablet --size 2560x1600 --scale 2      # a large tablet
 ```
+
+| Command | What it does |
+| --- | --- |
+| `./build/phoenix-sim` | Pre (320x480) |
+| `./build/phoenix-sim --size 480x800 --scale 1.5 --scene cards` | Pre 3 |
+| `./build/phoenix-sim --tablet` | TouchPad (1024x768) |
+| `./build/phoenix-sim --tablet --size 2560x1600 --scale 2` | A large tablet |
 
 **Ubuntu 24.04**
 
@@ -243,10 +246,12 @@ sudo apt install qt6-base-dev qt6-declarative-dev qml6-module-qtquick \
   qml6-module-qtquick-window qml6-module-qtqml-workerscript \
   qml6-module-qt5compat-graphicaleffects qml6-module-qttest \
   qt6-webengine-dev qml6-module-qtwebengine
-sudo snap install node --classic   # Node.js 20+; Ubuntu's nodejs package is too old
+sudo snap install node --classic
 cmake -S shell -B build && cmake --build build
 ./build/phoenix-sim
 ```
+
+Node.js comes from the snap because Ubuntu's own nodejs package is too old.
 
 Controls: drag with the mouse as you would with a finger. In card view a
 two-finger trackpad swipe sideways moves between cards and a swipe up throws
@@ -345,33 +350,36 @@ Tests:
 ```sh
 QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -input shell/tests
 (cd apps && npm test && npm run typecheck)
-node tools/test-apps.cjs && node tools/test-settings.cjs   # needs Playwright
-node tools/test-phone-messaging.cjs                        # calls, texts, MMS and IM
-node tools/test-voicedial.cjs                              # Voice Dial
-node tools/test-media.cjs                                   # Camera, Photos, Music
-node tools/test-files.cjs                                   # Files
-node tools/test-tasks.cjs                                   # Tasks and reminders
-node tools/test-db8-pages.cjs                               # db8 shared by pages writing at once
-node tools/test-alarm.cjs                                   # a Clock alarm rings as a popup alert
-node tools/test-keyboard.cjs                                # web fields and the virtual keyboard
-node tools/test-voicememos.cjs                              # Voice Memos
-node tools/test-maps.cjs                                    # Maps (no live map servers)
-node tools/test-passwords.cjs                               # Passwords (KeePass)
-node tools/test-authenticator.cjs                           # Authenticator (TOTP/HOTP)
-node tools/test-terminal.cjs                                # Terminal (simulated shell, then /bin/sh for real)
-build/pty/pty-test                                          # the Terminal's PTY service
-node tools/test-videos.cjs                                  # Videos
-node tools/test-podcasts.cjs                                # Podcasts
-node tools/test-docs.cjs                                    # PDF View and Doc View
-node tools/test-orientation.cjs                             # apps asking for and following an orientation
-node tools/test-firstuse.cjs                                # First Use, every step
-node tools/test-help.cjs                                    # Help, and Just Type finding it
-node tools/test-emergency.cjs                               # Emergency Info, restricted Phone, Accessibility
-node tools/test-location.cjs                                # Location Services and permissions
-node tools/test-appmanager.cjs                              # launch points apps add, handlers, the installer's queries
-node tools/test-security.cjs                                # security policy, erase, USB drive mode, debugging
-node tools/test-browser.cjs                                 # the browser: pages, downloads, printing (Save as PDF)
 ```
+
+| Command | What it does |
+| --- | --- |
+| `node tools/test-apps.cjs && node tools/test-settings.cjs` | Needs Playwright |
+| `node tools/test-phone-messaging.cjs` | Calls, texts, MMS and IM |
+| `node tools/test-voicedial.cjs` | Voice Dial |
+| `node tools/test-media.cjs` | Camera, Photos, Music |
+| `node tools/test-files.cjs` | Files |
+| `node tools/test-tasks.cjs` | Tasks and reminders |
+| `node tools/test-db8-pages.cjs` | Db8 shared by pages writing at once |
+| `node tools/test-alarm.cjs` | A Clock alarm rings as a popup alert |
+| `node tools/test-keyboard.cjs` | Web fields and the virtual keyboard |
+| `node tools/test-voicememos.cjs` | Voice Memos |
+| `node tools/test-maps.cjs` | Maps (no live map servers) |
+| `node tools/test-passwords.cjs` | Passwords (KeePass) |
+| `node tools/test-authenticator.cjs` | Authenticator (TOTP/HOTP) |
+| `node tools/test-terminal.cjs` | Terminal (simulated shell, then /bin/sh for real) |
+| `build/pty/pty-test` | The Terminal's PTY service |
+| `node tools/test-videos.cjs` | Videos |
+| `node tools/test-podcasts.cjs` | Podcasts |
+| `node tools/test-docs.cjs` | PDF View and Doc View |
+| `node tools/test-orientation.cjs` | Apps asking for and following an orientation |
+| `node tools/test-firstuse.cjs` | First Use, every step |
+| `node tools/test-help.cjs` | Help, and Just Type finding it |
+| `node tools/test-emergency.cjs` | Emergency Info, restricted Phone, Accessibility |
+| `node tools/test-location.cjs` | Location Services and permissions |
+| `node tools/test-appmanager.cjs` | Launch points apps add, handlers, the installer's queries |
+| `node tools/test-security.cjs` | Security policy, erase, USB drive mode, debugging |
+| `node tools/test-browser.cjs` | The browser: pages, downloads, printing (Save as PDF) |
 
 ## Build a webOS OSE image (experimental)
 

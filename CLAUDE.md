@@ -28,9 +28,12 @@ Humans: see [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md).
 
 ```sh
 git submodule update --init
-cmake -S shell -B build            # Mac: add -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
-cmake --build build                # also builds apps/ with npm
+cmake -S shell -B build
+cmake --build build
 ```
+
+On a Mac, add `-DCMAKE_PREFIX_PATH="$(brew --prefix qt)"` to the first
+`cmake`. The build also builds `apps/` with npm.
 
 Only the apps: `cd apps && npm run build` (or `npm run build -w settings`).
 Setup from scratch: `scripts/mac-setup.sh` or `scripts/linux-setup.sh`.
