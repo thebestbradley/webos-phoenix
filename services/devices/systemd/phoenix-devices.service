@@ -1,0 +1,28 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# phoenix-devices: com.palm.display, com.palm.keys, com.palm.vibrate and
+# com.palm.ambientLightSensor (services/devices). It writes the backlight
+# and the vibrator under /sys and reads /dev/input, which are root's on an
+# OSE image; the rest of the filesystem is read-only to it. (udev rules
+# giving an unprivileged account those nodes would let it drop root:
+# docs/HARDWARE.md.)
+
+[Unit]
+Description=webOS Phoenix device services (display, keys, vibrator, light sensor)
+After=ls-hubd.service
+Requires=ls-hubd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/phoenix-devices
+Restart=on-failure
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
