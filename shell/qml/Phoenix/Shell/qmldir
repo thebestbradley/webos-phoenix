@@ -4,6 +4,7 @@ Shell 1.0 Shell.qml
 ActionButton 1.0 ActionButton.qml
 MemoryAlert 1.0 MemoryAlert.qml
 DismissCardTutorial 1.0 DismissCardTutorial.qml
+TouchToShareGlow 1.0 TouchToShareGlow.qml
 CardCornerMask 1.0 CardCornerMask.qml
 ShortcutSheet 1.0 ShortcutSheet.qml
 ArtBorderImage 1.0 ArtBorderImage.qml

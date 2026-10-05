@@ -12023,6 +12023,31 @@
             reply(ok());
         };
 
+        // ---- Touch to Share -----------------------------------------------------
+        // The tap2share service (com.palm.stservice, not released) told the
+        // system manager a phone was in range (the glow) and that an app's
+        // data had gone (its card thrown): SystemService.cpp:5143-5296. In
+        // phoenix-sim the shell plays a nearby phone (Shift+F7, Ctrl+F7) and
+        // shareData here hands the app's data to it.
+        sm["/touchToShareDeviceInRange"] = function (p, reply) {
+            if (typeof p.inRange !== "boolean") return reply(fail(-1, "inRange (boolean) is required"));
+            host.postToHost("touchToShare", { op: "inRange", inRange: p.inRange });
+            reply(ok());
+        };
+        sm["/touchToShareAppUrlTransferred"] = function (p, reply) {
+            if (typeof p.appid !== "string") return reply(fail(-1, "appid (string) is required"));
+            host.postToHost("touchToShare", { op: "transferred", appId: p.appid });
+            reply(ok());
+        };
+        // An app answering {sendDataToShare} (the Isis browser:
+        // {data: {target: url, type: "rawdata", mimetype: "text/html"}}).
+        register(["com.palm.stservice"], {
+            "/shareData": function (p, reply) {
+                if (!p.data || typeof p.data !== "object") return reply(fail(-1, "data (object) is required"));
+                host.postToHost("touchToShare", { op: "shareData", data: p.data });
+                reply(ok());
+            }
+        });
         var turboSubscriptions = 0;
         sm["/subscribeTurboMode"] = function (p, reply, ctx) {
             if (!p.subscribe) return reply(ok({ subscribed: false, turboMode: turboSubscriptions > 0 }));

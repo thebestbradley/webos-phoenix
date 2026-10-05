@@ -16,6 +16,7 @@
 // so the growing card pushes everything else off-screen as in the original.
 
 import QtQuick
+import Qt5Compat.GraphicalEffects
 import "CardLayout.js" as CardLayout
 
 Item {
@@ -761,6 +762,146 @@ Item {
                 card.runSceneTransition(transition, isPop);
             else if (op === "cancel")
                 card.cancelSceneTransition();
+        }
+        // Touch to Share sent the app's data: if its card is the maximized
+        // one, it goes to card view and a ghost of it is thrown off the top
+        // once it is there (MaximizeState::processTouchToShareTransfer,
+        // CardWindowManagerStates.cpp:485-492; MinimizeState::animationsFinished
+        // -> performPendingTouchToShareActions, :158-161).
+        function onTouchToShareTransferred(appId) {
+            if (!view.maximized || view.currentUid === "")
+                return;
+            var i = view.indexOf(view.currentUid);
+            if (i < 0 || view.source.cards.get(i).appId !== appId)
+                return;
+            // The picture is taken now (CardWindow::createGhost copies the
+            // app's buffer, the same until the ghost is made): the ghost
+            // waits, hidden, until the card is in card view.
+            var uid = view.currentUid;
+            var card = view.cardItem(uid);
+            if (card) {
+                card.grabCard(function (result) {
+                    if (result)
+                        view._makeGhost(uid, result);
+                });
+            }
+            view.minimize();
+        }
+    }
+
+    // ---- Touch to Share: the ghost card ------------------------------------------------
+    // CardWindowManager::performPendingTouchToShareActions
+    // (CardWindowManager.cpp:2923-2957): a copy of the card
+    // (CardWindow::createGhost, CardWindow.cpp:2473-2483: its picture in its
+    // rounded outline, GhostCard.cpp) over the card, at half opacity, moves
+    // from the card's place straight up until its centre is half a window
+    // above the top of the screen, growing to GhostCardFinalRatio (0.85) of
+    // the window, over cardGhostDuration (750 ms, OutQuart); then it is
+    // deleted (slotTouchToShareAnimationFinished). Thrown once the card view
+    // is still (MinimizeState::animationsFinished).
+    Connections {
+        target: maximizeAnim
+        function onRunningChanged() {
+            if (!maximizeAnim.running && view.maximizeProgress === 0)
+                view._throwWaitingGhosts();
+        }
+    }
+    // The ghost is made while the grab result is alive (the callback): the
+    // Image reads the picture at once (asynchronous: false), so the result
+    // may go.
+    function _makeGhost(uid, result) {
+        var card = cardItem(uid);
+        if (!card)
+            return;
+        ghostComponent.createObject(view, {
+            uid: uid,
+            picture: result.url,
+            width: card.width,
+            height: card.height
+        });
+        if (maximizeProgress === 0 && !maximizeAnim.running)
+            _throwWaitingGhosts();
+    }
+    function _throwWaitingGhosts() {
+        for (var i = 0; i < children.length; ++i) {
+            var g = children[i];
+            if (g.objectName !== "ghostCard" || !g.waiting)
+                continue;
+            var card = cardItem(g.uid);
+            if (!card) {
+                g.destroy();
+                continue;
+            }
+            g.startCenterX = card.centerX;
+            g.startCenterY = card.centerY;
+            g.startScale = card.cardScale;
+            g.rotation = card.rotation;
+            g.z = card.z + 0.5;
+            g.waiting = false;
+            g.throwIt();
+        }
+    }
+    // The ghosts in flight (tests).
+    property int ghostCount: 0
+    Component {
+        id: ghostComponent
+        Item {
+            id: ghost
+            objectName: "ghostCard"
+            property string uid
+            property url picture
+            // Made, not yet thrown (its card is on its way to card view).
+            property bool waiting: true
+            property real startCenterX
+            property real startCenterY
+            property real startScale: 1
+            property real t: 0
+            // Its centre ends half a window above the top: offTop, :2946-2948.
+            readonly property real endCenterY: -height / 2
+            x: startCenterX - width / 2
+            y: startCenterY + (endCenterY - startCenterY) * t - height / 2
+            scale: startScale + (Theme.ghostCardFinalRatio - startScale) * t
+            transformOrigin: Item.Center
+            opacity: 0.5
+            visible: !waiting
+            readonly property bool masked: GraphicsInfo.api !== GraphicsInfo.Software
+            Image {
+                id: ghostPicture
+                anchors.fill: parent
+                source: ghost.picture
+                smooth: true
+                cache: false
+                asynchronous: false
+                visible: !ghost.masked
+            }
+            // In the card's rounded outline (Card.qml's corners).
+            CardCornerMask {
+                id: ghostCorners
+                anchors.fill: parent
+                visible: false
+                layer.enabled: true
+            }
+            OpacityMask {
+                anchors.fill: parent
+                visible: ghost.masked
+                source: ghostPicture
+                maskSource: ghostCorners
+            }
+            function throwIt() {
+                view.ghostCount++;
+                throwAnim.start();
+            }
+            Component.onDestruction: if (!waiting) view.ghostCount--
+            NumberAnimation {
+                id: throwAnim
+                target: ghost
+                property: "t"
+                from: 0
+                to: 1
+                duration: Theme.cardGhostDuration
+                easing.type: Easing.OutQuart
+                onFinished: ghost.destroy()
+            }
         }
     }
 

@@ -335,6 +335,15 @@ Item {
         restoreMode: Binding.RestoreBindingOrValue
     }
 
+    // A picture of the card as drawn, in its rounded outline (for
+    // Touch to Share's ghost: CardWindow::createGhost). done(result) gets
+    // the QQuickItemGrabResult; false if it cannot be taken.
+    function grabCard(done) {
+        if (contentHost.width <= 0 || contentHost.height <= 0)
+            return false;
+        return contentHost.grabToImage(done);
+    }
+
     onWindowChanged: { _endSceneTransition(); attachWindow(); }
     Component.onCompleted: attachWindow()
 

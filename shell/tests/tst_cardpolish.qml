@@ -39,6 +39,7 @@ Item {
                 windows.close(windows.cards.get(0).uid);
             while (windows.alerts.count > 0)
                 windows.closeAlert(windows.alerts.get(0).key);
+            windows.simulateTouchToShareDevice(false);
             windows.dismissedFirstCard = true;
             shell.cardView.position = 0;
             shell.cardView.maximizeProgress = 0;
@@ -167,5 +168,81 @@ Item {
             verify(!windows.dismissedFirstCard);
         }
 
+        // ---- Touch to Share ------------------------------------------------------
+
+        function test_glowWhileAPhoneIsInRange() {
+            var glow = findChild(shell, "touchToShareGlow");
+            verify(glow);
+            verify(!glow.active);
+            // com.palm.systemmanager/touchToShareDeviceInRange {inRange: true}.
+            windows._hostMessage("com.palm.systemui", "", "touchToShare", { op: "inRange", inRange: true });
+            verify(glow.active);
+            verify(glow.running);
+            var rings = findChild(glow, "touchToShareGlowRings");
+            verify(rings.visible);
+            // Centred on the bottom edge's middle.
+            var c = rings.mapToItem(shell, rings.width / 2, rings.height / 2);
+            fuzzyCompare(c.x, shell.width / 2, 1);
+            fuzzyCompare(c.y, shell.height, 1);
+            // Grows to 4 times while fading, 1000 ms, again and again.
+            wait(500);
+            verify(rings.scale > 1.5 && rings.scale < 4, "scale " + rings.scale);
+            verify(rings.opacity > 0 && rings.opacity < 1);
+            windows._hostMessage("com.palm.systemui", "", "touchToShare", { op: "inRange", inRange: false });
+            verify(!glow.active);
+            verify(!rings.visible);
+        }
+
+        function test_tapSendsTheAppsDataAndThrowsItsCard() {
+            var uid = maximized("org.webosphoenix.email");
+            var i = windows.cardIndex(uid);
+            var app = windows.appInfo("org.webosphoenix.email");
+            verify(app);
+            // An app that does not say tapToShareSupported is not asked.
+            compare(windows.simulateTouchToShareTap(), "");
+            verify(windows.touchToShareInRange);
+            for (var k = 0; k < windows.apps.count; ++k)
+                if (windows.apps.get(k).appId === "org.webosphoenix.email")
+                    windows.apps.setProperty(k, "tapToShare", true);
+            compare(windows.simulateTouchToShareTap(), "org.webosphoenix.email");
+            compare(windows.windowFor(uid).relaunchParams.sendDataToShare, true);
+            // The app answers with com.palm.stservice/shareData.
+            var data = { target: "https://www.example.com/", type: "rawdata", mimetype: "text/html" };
+            windows._hostMessage("org.webosphoenix.email", uid, "touchToShare", { op: "shareData", data: data });
+            compare(windows.touchToShareReceived.appId, "org.webosphoenix.email");
+            compare(windows.touchToShareReceived.data.target, "https://www.example.com/");
+            // The tone (sounds/tap_to_share.mp3).
+            compare(shell.sounds.last.file, "/usr/palm/sounds/tap_to_share.mp3");
+            // To card view, then the ghost goes up and off at half opacity.
+            tryCompare(shell.cardView, "maximized", false, 1000);
+            compare(shell.cardView.ghostCount, 0, "not before the card is in card view");
+            // The moment it is (its picture was taken as the transfer came).
+            tryCompare(shell.cardView, "maximizeProgress", 0, 1000);
+            compare(shell.cardView.ghostCount, 1);
+            var ghost = findChild(shell.cardView, "ghostCard");
+            verify(ghost);
+            compare(ghost.opacity, 0.5);
+            var card = shell.cardView.cardItem(uid);
+            var startY = ghost.y;
+            wait(150);
+            verify(ghost.y < startY, "moving up");
+            verify(ghost.scale > card.cardScale && ghost.scale < 0.85);
+            tryCompare(shell.cardView, "ghostCount", 0, 2000);
+            // The card itself stays.
+            verify(windows.cardIndex(uid) >= 0);
+        }
+
+        function test_transferredForAnotherAppDoesNothing() {
+            var uid = maximized("org.webosphoenix.email");
+            windows._hostMessage("com.palm.systemui", "", "touchToShare", { op: "transferred", appId: "com.palm.app.browser" });
+            wait(50);
+            verify(shell.cardView.maximized);
+            compare(shell.cardView.ghostCount, 0);
+            // touchToShareAppUrlTransferred for the app in front: thrown.
+            windows._hostMessage("com.palm.systemui", "", "touchToShare", { op: "transferred", appId: "org.webosphoenix.email" });
+            tryCompare(shell.cardView, "maximized", false, 1000);
+            tryCompare(shell.cardView, "ghostCount", 1, 2000);
+            tryCompare(shell.cardView, "ghostCount", 0, 2000);
+        }
     }
 }

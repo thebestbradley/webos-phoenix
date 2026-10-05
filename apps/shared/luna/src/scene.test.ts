@@ -82,3 +82,26 @@ describe("scene transitions", () => {
     });
 });
 
+describe("Touch to Share", () => {
+    const shares = () => hostMessages.filter((m) => m.type === "touchToShare").map((m) => m.payload);
+
+    it("passes the systemmanager calls to the shell", async () => {
+        await call("luna://com.palm.systemmanager/touchToShareDeviceInRange", { inRange: true });
+        await call("luna://com.palm.systemmanager/touchToShareAppUrlTransferred", { appid: "com.palm.app.browser" });
+        expect(shares()).toEqual([
+            { op: "inRange", inRange: true },
+            { op: "transferred", appId: "com.palm.app.browser" },
+        ]);
+        // SystemService's schemas: inRange boolean, appid string.
+        await expect(call("luna://com.palm.systemmanager/touchToShareDeviceInRange", { inRange: "yes" })).rejects.toThrow();
+        await expect(call("luna://com.palm.systemmanager/touchToShareAppUrlTransferred", {})).rejects.toThrow();
+        expect(shares()).toHaveLength(2);
+    });
+
+    it("hands an app's shareData to the shell (the Isis browser's answer)", async () => {
+        const data = { target: "https://www.example.com/", type: "rawdata", mimetype: "text/html" };
+        await call("palm://com.palm.stservice/shareData", { data });
+        expect(shares()).toEqual([{ op: "shareData", data }]);
+        await expect(call("palm://com.palm.stservice/shareData", {})).rejects.toThrow();
+    });
+});

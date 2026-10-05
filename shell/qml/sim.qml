@@ -35,6 +35,8 @@
 //                  object (JSON), "none" to remove it, "" to leave it be
 //   simUsb, simUsbBusy  --usb (a cable from a computer is in), --usb-busy
 //                  (an app keeps a file open on the USB drive)
+//   simTouchToShare  --touch-to-share: a Touch to Share phone in range
+//                  from the start (Shift+F7 / Ctrl+F7)
 
 import QtQuick
 import Phoenix.Native
@@ -312,6 +314,20 @@ Item {
         }
     }
 
+    // Touch to Share with a phone nearby (SimWindowSource "Touch to Share"):
+    // Shift+F7 brings it in range (the glow) or takes it away; Ctrl+F7
+    // touches it to the device, which sends what the app in front shares
+    // (the browser: its page) and throws its card.
+    Shortcut {
+        sequence: "Shift+F7"
+        context: Qt.ApplicationShortcut
+        onActivated: windows.simulateTouchToShareDevice(!windows.touchToShareInRange)
+    }
+    Shortcut {
+        sequence: "Ctrl+F7"
+        context: Qt.ApplicationShortcut
+        onActivated: windows.simulateTouchToShareTap()
+    }
     // The "Dismissing Cards" tutorial was shown: not again.
     Connections {
         target: windows
@@ -574,6 +590,9 @@ Item {
         if (typeof simSettings !== "undefined")
             windows.dismissedFirstCard = simSettings.value("cards/usedFirstCard") === "1"
                 || (typeof simScene !== "undefined" && simScene !== "");
+        // --touch-to-share: a phone in range from the start.
+        if (typeof simTouchToShare !== "undefined" && simTouchToShare)
+            windows.simulateTouchToShareDevice(true);
         if (typeof simSettings !== "undefined") {
             shell.keyboard.emojiPrefs = simSettings.value("keyboard/emoji");
             shell.keyboard.textAssistData = simSettings.value("keyboard/words");
