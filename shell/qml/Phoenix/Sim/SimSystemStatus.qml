@@ -114,6 +114,18 @@ QtObject {
     // Ctrl+Shift+K): the virtual keyboard stays down unless asked for.
     property bool hardwareKeyboard: typeof simHardwareKeyboard !== "undefined" && simHardwareKeyboard === true
     property real brightness: 0.7     // 0.10 (the floor, Theme.minimumBrightness) .. 1
+    // ---- The device's switches and sensors (DeviceServices) ---------------------
+    // The backlight follows the light sensor (the enableALS preference), and
+    // stays on while a USB charger is in (com.palm.display onWhenConnected).
+    property bool automaticBrightness: true
+    property bool onWhenConnected: false
+    // The simulated light on the sensor, in lux (phoenix-sim Ctrl+Shift+L
+    // cycles dark 1, dim 50, indoor 300, outdoor 20000).
+    property int lightLevel: 300
+    // The ringer switch: "up" sound on, "down" silent (Ctrl+Shift+R); a
+    // headset: "none", "headset" or "headset-mic" (Ctrl+Shift+H).
+    property string ringerSwitch: "up"
+    property string headset: "none"
     // Fixed time for reproducible screenshots; null = live clock.
     property var fixedTime: null
 
@@ -285,7 +297,8 @@ QtObject {
     // keyboard, ringtone, alerttone,
     // notificationtone, callForwarding, reduceMotion, keyboardAccess,
     // vpnProfiles, exhibitionApps, dockModeSound, exhibition {enabled,
-    // startAfter, nightMode, nightStart, nightEnd}, dockWallpaperUrl.
+    // startAfter, nightMode, nightStart, nightEnd}, dockWallpaperUrl,
+    // automaticBrightness, displayOnWhenConnected.
     // Missing keys are left alone.
     function applyAppStatus(s) {
         applyingAppStatus = true;
@@ -299,6 +312,10 @@ QtObject {
         }
         if (s.brightness !== undefined)
             brightness = Math.max(0.10, Math.min(1, s.brightness / 100));
+        if (s.automaticBrightness !== undefined)
+            automaticBrightness = !!s.automaticBrightness;
+        if (s.displayOnWhenConnected !== undefined)
+            onWhenConnected = !!s.displayOnWhenConnected;
         if (s.rotationLocked !== undefined)
             rotationLocked = !!s.rotationLocked;
         if (s.muted !== undefined)

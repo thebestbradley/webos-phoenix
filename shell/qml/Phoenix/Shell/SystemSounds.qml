@@ -36,8 +36,17 @@ QtObject {
     // The last decision, for tests and debugging: {kind, file, stream, loop,
     // duration, volume} or {kind, vibrate: true}.
     property var last: null
-    // Vibrations asked for (soundClass "vibrate"); there is no motor here.
+    // Vibrations asked for: a banner's or alert's soundClass "vibrate", and
+    // (DeviceServices) the apps' com.palm.vibrate calls in the simulator.
     property int vibrations: 0
+    // A vibration starts: {name} (a named effect: "notification", "alert",
+    // ...) or {period, duration}; DeviceServices runs the motor (a device)
+    // or shows it (the simulator).
+    signal vibrated(var request)
+    function vibrate(request) {
+        vibrations++;
+        vibrated(request || {});
+    }
     // Nothing but the ringtone and alarms play (dock mode with its sounds muted:
     // the dockModeSoundPref preference).
     property bool quiet: false
@@ -77,8 +86,10 @@ QtObject {
         if (!d)
             return "";
         if (d.vibrate) {
-            vibrations++;
             last = { kind: kind, vibrate: true };
+            // SystemService::vibrate (SystemService.cpp:4861-4881):
+            // vibrateNamedEffect "alert" for alerts, else "notification".
+            vibrate({ name: kind === "alert" ? "alert" : "notification" });
             return "";
         }
         // Dock mode's sound preference "mute": an exhibition stays quiet but
