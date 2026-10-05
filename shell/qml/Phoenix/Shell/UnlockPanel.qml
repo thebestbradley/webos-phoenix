@@ -13,6 +13,16 @@
 // PIN/password unlock window was not received from the Phone app") and
 // offered emergency calls; the TouchPad's UnlockPanel, the only one
 // released, had no phone. Same button art (ActionButton, pin/button-black).
+//
+// Side by side (Phoenix): the panel is about 430 px tall stacked, more than
+// a phone on its side has (320 less the status bar), and LockWindow centred
+// it (LockWindow.cpp:479), so its title and Cancel / Done were off the
+// screen. The original never showed the PIN pad on a phone turned sideways
+// (the TouchPad's panel fits either way; the phones' PIN screen was the
+// Phone app's, upright). When the lock screen says the stacked panel does
+// not fit (availableHeight), a PIN panel puts the title, the field and the
+// buttons in a column at the left and the keypad at the right, a little
+// narrower if it must. Upright and on the tablet nothing changes.
 
 import QtQuick
 
@@ -33,6 +43,29 @@ FocusScope {
 
     // Show the Emergency Call button (the shell has an emergency window to open).
     property bool emergencyAvailable: false
+
+    // The room the lock screen has for the panel (0: as much as it needs).
+    property real availableWidth: 0
+    property real availableHeight: 0
+    // The original's stacked layout, and its height.
+    readonly property real stackedHeight: _stackedHeight(isPINEntry, emergencyAvailable)
+    function _stackedHeight(pin, emergency) {
+        // title, field, keypad, emergency call, Cancel / Done (as laid out below)
+        var title = edgeOffset + margin + topOffset + titleText.height;
+        var field = pin ? inputField.height + Theme.px(12) : Theme.px(6) + Theme.px(50);
+        var keys = pin ? Theme.px(230) : 0;
+        var em = emergency ? Theme.px(44) + margin + 1 : 0;
+        return title + field + keys + em + Theme.px(52) + edgeOffset + margin;
+    }
+    readonly property bool sideBySide: isPINEntry && availableHeight > 0 && stackedHeight > availableHeight
+    // Side by side: the column at the left, the keypad (320 wide, as the
+    // original, unless the screen is narrower) at the right.
+    readonly property real sideColumnWidth: Theme.px(150)
+    readonly property real keypadWidth: sideBySide && availableWidth > 0
+        ? Math.max(Theme.px(220), Math.min(Theme.px(320), availableWidth - 2 * edgeOffset - margin - sideColumnWidth))
+        : Theme.px(320)
+    readonly property real _columnX: edgeOffset + margin
+    readonly property real _columnWidth: sideBySide ? sideColumnWidth - margin : Theme.px(320) - 2 * margin
 
     signal entryCanceled()
     signal passwordSubmitted(string password, bool isPIN)
@@ -69,8 +102,10 @@ FocusScope {
             passwordSubmitted(passwordField.enteredText, isPINEntry);
     }
 
-    width: Theme.px(320) + 2 * edgeOffset
-    height: buttonGrid.y + buttonGrid.height + edgeOffset + margin
+    width: sideBySide ? 2 * edgeOffset + sideColumnWidth + margin + keypadWidth : Theme.px(320) + 2 * edgeOffset
+    height: sideBySide
+        ? Math.max(buttonGrid.y + buttonGrid.height, keyPad.y + keyPad.height) + edgeOffset + margin
+        : buttonGrid.y + buttonGrid.height + edgeOffset + margin
 
     ArtBorderImage {
         anchors.fill: parent
@@ -87,7 +122,10 @@ FocusScope {
         font.pixelSize: Theme.px(18)
         font.bold: true
         color: "#FFFFFF"
-        anchors.horizontalCenter: parent.horizontalCenter
+        x: panel.sideBySide ? panel.edgeOffset + Theme.centred(panel.sideColumnWidth, width)
+                            : Theme.centred(panel.width, width)
+        width: Math.min(implicitWidth, panel.sideBySide ? panel.sideColumnWidth : panel.width)
+        elide: Text.ElideRight
         y: panel.edgeOffset + panel.margin + panel.topOffset
         text: qsTr("Device Locked")
     }
@@ -101,7 +139,7 @@ FocusScope {
         property alias enteredText: inputField.text
         property string hint: ""
 
-        width: Theme.px(320 - 4)
+        width: panel.sideBySide ? panel.sideColumnWidth - Theme.px(4) : Theme.px(320 - 4)
         height: panel.isPINEntry ? inputField.height + Theme.px(12) : Theme.px(50)
         x: panel.edgeOffset + Theme.px(3)
         y: titleText.y + titleText.height + (panel.isPINEntry ? 0 : Theme.px(6))
@@ -159,9 +197,9 @@ FocusScope {
     Item {
         id: keyPad
         visible: panel.isPINEntry
-        x: panel.edgeOffset
-        anchors.top: passwordField.bottom
-        width: Theme.px(320)
+        x: panel.sideBySide ? panel.edgeOffset + panel.sideColumnWidth + panel.margin : panel.edgeOffset
+        y: panel.sideBySide ? panel.edgeOffset + panel.margin : passwordField.y + passwordField.height
+        width: panel.keypadWidth
         height: visible ? Theme.px(230) : 0
 
         Image {
@@ -209,10 +247,11 @@ FocusScope {
         visible: panel.emergencyAvailable
         caption: qsTr("Emergency Call")
         captionColor: "#ff9d93"
-        width: Theme.px(320) - 2 * panel.margin
+        width: panel._columnWidth
         height: visible ? Theme.px(44) : 0
-        x: panel.edgeOffset + panel.margin
-        anchors.top: panel.isPINEntry ? keyPad.bottom : passwordField.bottom
+        x: panel._columnX
+        anchors.top: panel.isPINEntry && !panel.sideBySide ? keyPad.bottom : passwordField.bottom
+        anchors.topMargin: panel.sideBySide ? panel.margin : 0
         onAction: panel.emergencyRequested()
     }
 
@@ -220,17 +259,18 @@ FocusScope {
 
     Grid {
         id: buttonGrid
-        width: Theme.px(320) - 2 * panel.margin
-        x: panel.edgeOffset + panel.margin
+        width: panel._columnWidth
+        x: panel._columnX
         anchors.top: emergencyButton.bottom
-        anchors.topMargin: emergencyButton.visible ? panel.margin + 1 : 0
-        columns: 2
+        anchors.topMargin: emergencyButton.visible || panel.sideBySide ? panel.margin + 1 : 0
+        // Side by side: Cancel above Done, each the column's width.
+        columns: panel.sideBySide ? 1 : 2
         spacing: panel.margin + 1
 
         ActionButton {
             objectName: "unlockCancel"
             caption: qsTr("Cancel")
-            width: buttonGrid.width / 2 - panel.margin / 2
+            width: panel.sideBySide ? buttonGrid.width : buttonGrid.width / 2 - panel.margin / 2
             height: Theme.px(52)
             onAction: panel.entryCanceled()
         }
@@ -238,7 +278,7 @@ FocusScope {
             objectName: "unlockDone"
             caption: qsTr("Done")
             affirmative: true
-            width: buttonGrid.width / 2 - panel.margin / 2
+            width: panel.sideBySide ? buttonGrid.width : buttonGrid.width / 2 - panel.margin / 2
             height: Theme.px(52)
             active: passwordField.enteredText.length >= (panel.enforceMinLength ? panel.minPassLength : 1)
             onAction: panel._submit()

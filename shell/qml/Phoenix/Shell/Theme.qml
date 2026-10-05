@@ -31,6 +31,14 @@ QtObject {
     property real u: 1.0
 
     function px(v) { return Math.round(v * u) }
+    // Where anchors.centerIn (alignWhenCentered) puts an item `size` long in
+    // a parent `parentSize` long: each centre is half the length, rounded up
+    // for an odd whole length (QQuickAnchorsPrivate hcenter / vcenter). For
+    // an item that is centred only some of the time, at the same pixel.
+    function centred(parentSize, size) {
+        function half(l) { return Math.floor(l) % 2 ? (l + 1) / 2 : l / 2; }
+        return half(parentSize) - half(size);
+    }
 
     // Settings > Accessibility > Reduce motion (set by Shell.qml from
     // system.reduceMotion): cards, the launcher and the lock screen appear

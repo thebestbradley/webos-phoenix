@@ -138,6 +138,53 @@ Item {
             compare(launcher.columns, 3);
         }
 
+        // Sideways (292 px under the status bar) the PIN panel, 430 px
+        // stacked, lays itself out side by side, all of it on the screen;
+        // the system menu stops at the screen's bottom and scrolls.
+        // (tst_landscape: the same on a Pre 3.)
+        function test_sidewaysPinPadAndSystemMenu() {
+            sys.deviceOrientation = "left";
+            tryCompare(shell, "uiOrientation", "left", 1000);
+            settle();
+            shell.lock();
+            var lock = findChild(shell, "lockScreen");
+            var panel = findChild(lock, "unlockPanel");
+            panel.setupDialog(true, "Device Locked", "Enter PIN", false, 0);
+            panel.shown = true;
+            verify(panel.sideBySide);
+            verify(panel.y >= Theme.statusBarHeight && panel.y + panel.height <= lock.height,
+                   "the panel fits down: " + panel.y + " + " + panel.height);
+            verify(panel.x >= 0 && panel.x + panel.width <= lock.width, "the panel fits across");
+            var names = ["unlockCancel", "unlockDone", "pinKey1", "pinKeyDelete"];
+            for (var i = 0; i < names.length; ++i) {
+                var it = findChild(panel, names[i]);
+                var p = it.mapToItem(lock, 0, 0);
+                verify(p.y >= Theme.statusBarHeight - 0.5 && p.y + it.height <= lock.height + 0.5, names[i] + " shows");
+            }
+            panel.shown = false;
+            shell.unlock();
+            // Upright again: the original's stacked panel.
+            sys.deviceOrientation = "up";
+            tryCompare(shell, "uiOrientation", "up", 1000);
+            settle();
+            verify(!panel.sideBySide);
+            sys.deviceOrientation = "left";
+            tryCompare(shell, "uiOrientation", "left", 1000);
+            settle();
+
+            shell.openSystemMenu();
+            var menu = findChild(shell, "systemMenu");
+            tryCompare(menu, "open", true, 1000);
+            var flick = findChild(menu, "systemMenuFlickable");
+            var at = flick.mapToItem(ui, 0, 0);
+            verify(at.y + flick.height <= ui.height, "the menu ends on the screen");
+            verify(flick.contentHeight > flick.height, "and scrolls");
+            menu.open = false;
+            sys.deviceOrientation = "up";
+            tryCompare(shell, "uiOrientation", "up", 1000);
+            settle();
+        }
+
         function test_faceUpDoesNotTurn() {
             sys.deviceOrientation = "faceup";
             wait(400);
