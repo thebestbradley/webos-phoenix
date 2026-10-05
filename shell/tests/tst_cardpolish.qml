@@ -35,6 +35,8 @@ Item {
         when: windowShown
 
         function init() {
+            // A ghost still in flight from a test that stopped early.
+            tryCompare(shell.cardView, "ghostCount", 0, 2000);
             while (windows.cards.count > 0)
                 windows.close(windows.cards.get(0).uid);
             while (windows.alerts.count > 0)
@@ -216,9 +218,11 @@ Item {
             // To card view, then the ghost goes up and off at half opacity.
             tryCompare(shell.cardView, "maximized", false, 1000);
             compare(shell.cardView.ghostCount, 0, "not before the card is in card view");
-            // The moment it is (its picture was taken as the transfer came).
+            // Once it is there and its picture (taken as the transfer came;
+            // grabToImage answers asynchronously, possibly after the card
+            // has arrived) is ready.
             tryCompare(shell.cardView, "maximizeProgress", 0, 1000);
-            compare(shell.cardView.ghostCount, 1);
+            tryCompare(shell.cardView, "ghostCount", 1, 2000);
             var ghost = findChild(shell.cardView, "ghostCard");
             verify(ghost);
             compare(ghost.opacity, 0.5);
