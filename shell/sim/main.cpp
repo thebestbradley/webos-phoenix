@@ -6,7 +6,7 @@
 //   phoenix-sim [--size WxH] [--scale N] [--tablet|--phone] [--scene NAME]
 //               [--orientation up|left|down|right] [--turn ORIENTATION]
 //               [--home-button] [--first-use] [--screenshot FILE [--delay MS]] [--stay-awake] [--low-memory] [--hardware-keyboard] [--touchstone] [--no-host-shell]
-//               [--host-shell PATH] [--security-policy SPEC] [--usb] [--usb-busy]
+//               [--host-shell PATH] [--security-policy SPEC] [--usb] [--usb-busy] [--touch-to-share]
 //               [--boot-animation | --no-boot-animation]
 //
 // Keys: Esc = back gesture, Home/F1 = up gesture, F2 = demo notification,
@@ -20,7 +20,8 @@
 //       turn the device a quarter turn counter-clockwise / clockwise,
 //       Shift+F8 = a USB cable from a computer in / out, Ctrl+F8 = the computer
 //       ejects the USB drive; F3 + F11 held, then Home = Full Erase,
-//       F3 + F10 = USB drive mode.
+//       F3 + F10 = USB drive mode; Shift+F7 = a Touch to Share phone in range or
+//       gone, Ctrl+F7 = it touches the device.
 //       Type in card view for Just Type.
 
 #include <QCommandLineParser>
@@ -155,6 +156,7 @@ int main(int argc, char *argv[])
     QCommandLineOption hostShellOpt(QStringLiteral("host-shell"), QStringLiteral("Run this program in the Terminal instead of the shell it asks for."), QStringLiteral("path"));
     QCommandLineOption policyOpt(QStringLiteral("security-policy"), QStringLiteral("A device security policy, as an Exchange account sets one (EAS): comma-separated minLength=N, maxRetries=N (the last wrong try erases the device), alphaNumeric (a password, letters and digits), noSimple (no runs like 1234 or 1111), inactivity=SECONDS (the longest Lock after); \"none\" removes it. It is kept until removed or the device is erased."), QStringLiteral("spec"));
     QCommandLineOption usbOpt(QStringLiteral("usb"), QStringLiteral("Start with a USB cable from a computer plugged in (Shift+F8 plugs it in or out, Ctrl+F8 ejects the USB drive on the computer)."));
+    QCommandLineOption touchToShareOpt(QStringLiteral("touch-to-share"), QStringLiteral("Start with a Touch to Share phone in range: the glow at the bottom of the screen (Shift+F7 brings it or takes it away, Ctrl+F7 touches it to the device and sends what the app in front shares)."));
     QCommandLineOption usbBusyOpt(QStringLiteral("usb-busy"), QStringLiteral("An app keeps a file open on the USB drive: entering USB drive mode fails (\"USB Drive connection failed\")."));
     QCommandLineOption bootAnimOpt(QStringLiteral("boot-animation"), QStringLiteral("Show the boot animation at start-up (it shows anyway unless --screenshot or an offscreen platform)."));
     QCommandLineOption noBootAnimOpt(QStringLiteral("no-boot-animation"), QStringLiteral("Start without the boot animation."));
@@ -164,7 +166,7 @@ int main(int argc, char *argv[])
     updatingOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     eraseOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     parser.addOptions({ hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
-                        noHostShellOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, bootAnimOpt, noBootAnimOpt, updatingOpt, eraseOpt, microphoneFileOpt });
+                        noHostShellOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, updatingOpt, eraseOpt, microphoneFileOpt });
     parser.process(app);
 
     // A Full Erase or a security policy's wipe restarted the simulator:
@@ -358,6 +360,7 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simSecurityPolicy"), securityPolicy);
     view.rootContext()->setContextProperty(QStringLiteral("simUsb"), parser.isSet(usbOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simUsbBusy"), parser.isSet(usbBusyOpt));
+    view.rootContext()->setContextProperty(QStringLiteral("simTouchToShare"), parser.isSet(touchToShareOpt));
     // Qt.quit() (after the shutdown sound).
     QObject::connect(view.engine(), &QQmlEngine::quit, &app, &QCoreApplication::quit, Qt::QueuedConnection);
     view.rootContext()->setContextProperty(QStringLiteral("simFormFactor"),

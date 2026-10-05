@@ -460,10 +460,81 @@
             return asResource(text, flags);
         },
         getIdentifierForFrame: function () { return PalmSystem.identifier; },
-        getLocalizedString: function (s) { return s; }
+        getLocalizedString: function (s) { return s; },
+
+        // Scene transitions: see "Scene transitions" below.
+        prepareSceneTransition: function (isPop) { return runtime.sceneTransition.prepare(isPop); },
+        runSceneTransition: function (type, isPop) { runtime.sceneTransition.run(type, isPop); },
+        cancelSceneTransition: function () { runtime.sceneTransition.cancel(); }
     };
 
     global.PalmSystem = PalmSystem;
+
+    // ---- Scene transitions --------------------------------------------------------
+    // Mojo's ZoomFadeTransition (palmInitFramework506.js, the
+    // Mojo.Controller.Transition.ZoomFadeTransition calls) had the card do
+    // the scene change: PalmSystem.prepareSceneTransition(isPop) as a push or
+    // pop begins made LunaSysMgr snapshot the card, the app then built the
+    // new scene, and runSceneTransition(type, isPop) ("zoom-fade" or
+    // "cross-fade") animated from the snapshot to the live page
+    // (CardTransition.cpp); cancelSceneTransition() if it never ran. The
+    // shell does the same with the "sceneTransition" host message.
+    //
+    // A host message cannot block the page while the shell takes its
+    // snapshot, so prepare also returns a promise that settles once the
+    // shell has it (sceneTransitionPrepared), or after a while without a
+    // shell: pages that can wait for it change the scene after that (the
+    // apps' sceneTransition() in @phoenix/luna); Mojo ignores the return.
+    runtime.sceneTransition = (function () {
+        var waiting = [];
+        var prepared = false;
+        function settle() {
+            var list = waiting;
+            waiting = [];
+            list.forEach(function (f) { f(); });
+        }
+        return {
+            // How long a page waits for the shell's snapshot: only
+            // phoenix-sim's pages (phoenix:) have a shell to take one.
+            timeoutMs: global.location && global.location.protocol === "phoenix:" ? 250 : 0,
+            prepare: function (isPop) {
+                prepared = true;
+                host.postToHost("sceneTransition", { op: "prepare", isPop: !!isPop });
+                var self = this;
+                return new Promise(function (resolve) {
+                    waiting.push(resolve);
+                    global.setTimeout(function () {
+                        var i = waiting.indexOf(resolve);
+                        if (i >= 0) {
+                            waiting.splice(i, 1);
+                            resolve();
+                        }
+                    }, self.timeoutMs);
+                });
+            },
+            run: function (type, isPop) {
+                if (!prepared)
+                    return;
+                prepared = false;
+                type = String(type || "zoom-fade");
+                if (type !== "zoom-fade" && type !== "cross-fade") {
+                    // CardTransition's constructor: anything else is
+                    // invalid and nothing is drawn.
+                    this.cancel();
+                    return;
+                }
+                host.postToHost("sceneTransition", { op: "run", transition: type, isPop: !!isPop });
+            },
+            cancel: function () {
+                prepared = false;
+                settle();
+                host.postToHost("sceneTransition", { op: "cancel" });
+            },
+            // The shell has its snapshot.
+            prepared: function () { settle(); }
+        };
+    })();
+    runtime.sceneTransitionPrepared = function () { runtime.sceneTransition.prepared(); };
 
     // getResource's flags: "json" (with "const") parses the file (a BOM and
     // all); otherwise the text.
@@ -11951,6 +12022,32 @@
             host.postToHost("progressAnimation", { type: p.type, state: p.state });
             reply(ok());
         };
+
+        // ---- Touch to Share -----------------------------------------------------
+        // The tap2share service (com.palm.stservice, not released) told the
+        // system manager a phone was in range (the glow) and that an app's
+        // data had gone (its card thrown): SystemService.cpp:5143-5296. In
+        // phoenix-sim the shell plays a nearby phone (Shift+F7, Ctrl+F7) and
+        // shareData here hands the app's data to it.
+        sm["/touchToShareDeviceInRange"] = function (p, reply) {
+            if (typeof p.inRange !== "boolean") return reply(fail(-1, "inRange (boolean) is required"));
+            host.postToHost("touchToShare", { op: "inRange", inRange: p.inRange });
+            reply(ok());
+        };
+        sm["/touchToShareAppUrlTransferred"] = function (p, reply) {
+            if (typeof p.appid !== "string") return reply(fail(-1, "appid (string) is required"));
+            host.postToHost("touchToShare", { op: "transferred", appId: p.appid });
+            reply(ok());
+        };
+        // An app answering {sendDataToShare} (the Isis browser:
+        // {data: {target: url, type: "rawdata", mimetype: "text/html"}}).
+        register(["com.palm.stservice"], {
+            "/shareData": function (p, reply) {
+                if (!p.data || typeof p.data !== "object") return reply(fail(-1, "data (object) is required"));
+                host.postToHost("touchToShare", { op: "shareData", data: p.data });
+                reply(ok());
+            }
+        });
         var turboSubscriptions = 0;
         sm["/subscribeTurboMode"] = function (p, reply, ctx) {
             if (!p.subscribe) return reply(ok({ subscribed: false, turboMode: turboSubscriptions > 0 }));

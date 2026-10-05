@@ -32,6 +32,10 @@ var notificationSoundDuration = 5000;
 var bootSound = systemSoundsPath + "/boot.mp3";             // WindowServer.cpp:1246
 var shutdownSound = systemSoundsPath + "/shutdown.mp3";
 var batteryFullSound = systemSoundsPath + "/battery_full.mp3";   // StatusBarBattery.cpp:218
+// Touch to Share's tone: LunaSysMgr shipped it (sounds/tap_to_share.mp3) for
+// the tap2share service, which was not released; the shell plays it as a
+// card is sent (the "taptoshare" feedback sound).
+var tapToShareSound = systemSoundsPath + "/tap_to_share.mp3";
 
 // Feedback sounds by name. audiod's own set was not open-sourced; Phoenix
 // ships mimics for the names LunaSysMgr asked for (tools/make-feedback-sounds.py).
@@ -154,6 +158,8 @@ function forFeedback(name, sink, prefs) {
         return "";
     if (keyboardSounds.indexOf(name) >= 0 && prefs.tapSounds === false)
         return "";
+    if (name === "taptoshare")
+        return tapToShareSound;
     return feedbackSounds.indexOf(name) >= 0 ? feedbackSoundsPath + "/" + name + ".wav" : "";
 }
 

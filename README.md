@@ -268,6 +268,7 @@ WAV files as one, one per recording. Keys: **Esc** back, **F1** swipe up, **Home
 **F2** demo notification, **F3** the Power button (the screen off and locked, or on again), **F4** incoming call (rings
 the Phone app), **F5** incoming text message (for Messaging; **Shift+F5** a picture message, **Ctrl+F5** an instant message from a buddy once an IM account is set up), **F6** low
 battery, **Shift+F6** the battery stops reporting (or reports again), **F7** plug a charger in or out, **F8** battery charged to full,
+**Shift+F7** brings a Touch to Share phone in range (the glow) or takes it away, **Ctrl+F7** touches it to the device: the app in front sends what it shares (the browser its page) and its card is thrown (`--touch-to-share` starts with one in range),
 **F12** set the device on a Touchstone (the inductive charger) or lift it off,
 **Shift+F12** onto another Touchstone,
 **F9** (or **Home**+**F3**, **Print Screen**, **Ctrl+Alt+P**) a screen capture,

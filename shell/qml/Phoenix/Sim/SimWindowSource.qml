@@ -210,7 +210,9 @@ Item {
                  installed: !!a.installed,
                  // appinfo.json exhibitionMode (dockMode): it can be an
                  // exhibition in dock mode, under exhibitionTitle.
-                 exhibition: !!a.exhibition, exhibitionTitle: a.exhibitionTitle || a.title });
+                 exhibition: !!a.exhibition, exhibitionTitle: a.exhibitionTitle || a.title,
+                 // appinfo.json tapToShareSupported (Touch to Share).
+                 tapToShare: !!a.tapToShareSupported });
     }
 
     // The launcher's fields every entry has (Shell._launcherEntries,
@@ -221,7 +223,7 @@ Item {
     function _launcherFields() {
         return { page: "", dynamic: false, category: "", keywords: "", installed: false,
                  installState: "", progress: -1, pending: false, installReason: "",
-                 exhibition: false, exhibitionTitle: "" };
+                 exhibition: false, exhibitionTitle: "", tapToShare: false };
     }
 
     // ---- Installing and removing apps (phoenix-sim's SimInstaller) ---------------------
@@ -712,6 +714,15 @@ Item {
         } else if (type === "debugOverlay") {
             // com.palm.systemmanager enableFpsCounter / enableTouchPlot.
             debugOverlayRequested(payload);
+        } else if (type === "sceneTransition") {
+            // PalmSystem.prepare/run/cancelSceneTransition: the card does
+            // the scene change (Card.prepareSceneTransition).
+            if (uid !== "" && cardIndex(uid) >= 0)
+                sceneTransitionRequested(uid, String(payload.op || ""), String(payload.transition || ""), !!payload.isPop);
+            else if (uid !== "" && payload.op === "prepare")
+                sceneTransitionPrepared(uid);
+        } else if (type === "touchToShare") {
+            _touchToShareRequest(appId, uid, payload || {});
         } else if (type === "progressAnimation") {
             // com.palm.systemmanager runProgressAnimation.
             progressAnimationRequested(String(payload.type || ""), String(payload.state || ""));
@@ -772,6 +783,77 @@ Item {
     signal debugOverlayRequested(var request)
     // runProgressAnimation {type, state}.
     signal progressAnimationRequested(string type, string state)
+
+    // ---- Scene transitions ---------------------------------------------------------
+    // A page's PalmSystem.prepareSceneTransition(isPop) ("prepare"),
+    // runSceneTransition(type, isPop) ("run", type "zoom-fade" or
+    // "cross-fade") and cancelSceneTransition() ("cancel"), for its card.
+    signal sceneTransitionRequested(string uid, string op, string transition, bool isPop)
+    // The card has its snapshot: the page may change the scene.
+    property string lastSceneTransitionPrepared: ""
+    function sceneTransitionPrepared(uid) {
+        lastSceneTransitionPrepared = uid;
+        var w = _windows[uid];
+        if (w && w.runScript)
+            w.runScript("window.__phoenixRuntime && __phoenixRuntime.sceneTransitionPrepared && __phoenixRuntime.sceneTransitionPrepared()");
+    }
+
+    // ---- Touch to Share --------------------------------------------------------------
+    // The TouchPad's Touch to Share, with a simulated phone nearby
+    // (phoenix-sim Shift+F7 / Ctrl+F7, --touch-to-share). On the device the
+    // tap2share service (com.palm.stservice, not in the open-source release)
+    // ran it:
+    //  1. a phone in range: com.palm.systemmanager/touchToShareDeviceInRange
+    //     {inRange} starts or stops the glow (SystemService.cpp:5143-5215;
+    //     TouchToShareGlow.cpp);
+    //  2. the phone touches the device: the app in front, if its appinfo.json
+    //     has "tapToShareSupported", is relaunched with {sendDataToShare}
+    //     and answers with com.palm.stservice/shareData {data: {target,
+    //     type, mimetype}} (the Isis browser, BrowserApp.js:137-139);
+    //  3. once it is sent, touchToShareAppUrlTransferred {appid}
+    //     (SystemService.cpp:5224-5296): if that app's card is maximized it
+    //     is minimized and a ghost of it is thrown off the top of the screen
+    //     (CardWindowManagerStates.cpp:485-492, CardWindowManager.cpp:2915-2957).
+    // The shell plays tap_to_share.mp3 (shipped with LunaSysMgr; its caller,
+    // the service, was not released) as the transfer completes.
+    property bool touchToShareInRange: false
+    // What the simulated phone received last: {appId, data} (or null).
+    property var touchToShareReceived: null
+    // An app's data was sent: its card is thrown (CardView).
+    signal touchToShareTransferred(string appId)
+
+    function simulateTouchToShareDevice(inRange) {
+        touchToShareInRange = !!inRange;
+    }
+    // The phone touches the device: the app in front is asked for what to
+    // share. Returns the app asked, or "" (nothing in front that can share).
+    function simulateTouchToShareTap() {
+        touchToShareInRange = true;
+        var uid = focusedUid;
+        var i = cardIndex(uid);
+        if (i < 0)
+            return "";
+        var appId = cards.get(i).appId;
+        var info = appInfo(appId);
+        var w = _windows[uid];
+        if (!info || !info.tapToShare || !w || !w.relaunch)
+            return "";
+        w.relaunch({ sendDataToShare: true });
+        return appId;
+    }
+
+    function _touchToShareRequest(appId, uid, p) {
+        if (p.op === "inRange") {
+            touchToShareInRange = !!p.inRange;
+        } else if (p.op === "transferred") {
+            touchToShareTransferred(String(p.appId || ""));
+        } else if (p.op === "shareData") {
+            // The simulated phone takes it; the transfer completes.
+            touchToShareReceived = { appId: appId, data: p.data || {} };
+            console.info("Touch to Share: " + appId + " sent " + JSON.stringify(p.data || {}));
+            touchToShareTransferred(appId);
+        }
+    }
 
     // A /storaged signal (the simulated storage daemon's, SimStorage.qml)
     // for every page's com.palm.bus/signal/addmatch listeners
@@ -1054,6 +1136,39 @@ Item {
             queued.push({ appId: alerts.get(i).appId, name: alerts.get(i).name });
         alerts.insert(Policy.insertIndex(queued, "com.palm.systemui", "memoryalert"),
                       { key: memoryAlertKey, appId: "com.palm.systemui", name: "memoryalert", height: 160,
+                        sound: "", soundClass: "" });
+    }
+
+    // "Dismissing Cards", the first time the user is in card view
+    // (CardWindowManager::firstCardAlert, CardWindowManager.cpp:1167-1187;
+    // DismissCardTutorial.qml, 170 px tall, in the popup alert's place); OK
+    // closes it. It is marked done as it is shown (markFirstCardDone: the
+    // marker file /var/luna/preferences/used-first-card), so it never shows
+    // again. phoenix-sim keeps the mark in simSettings "cards/usedFirstCard";
+    // without one (tests) it counts as done.
+    property bool dismissedFirstCard: true
+    // It was shown: remember that (sim.qml).
+    signal firstCardAlertShown
+    readonly property string dismissCardTutorialKey: "dismisscardtutorial"
+    Component {
+        id: dismissCardTutorialComponent
+        DismissCardTutorial {}
+    }
+    function firstCardAlert() {
+        if (dismissedFirstCard)
+            return;
+        dismissedFirstCard = true;
+        firstCardAlertShown();
+        if (_windows[dismissCardTutorialKey])
+            return;
+        var alert = dismissCardTutorialComponent.createObject(source, { visible: false });
+        alert.okButtonPressed.connect(function () { source.closeAlert(source.dismissCardTutorialKey); });
+        _windows[dismissCardTutorialKey] = alert;
+        var queued = [];
+        for (var i = 0; i < alerts.count; ++i)
+            queued.push({ appId: alerts.get(i).appId, name: alerts.get(i).name });
+        alerts.insert(Policy.insertIndex(queued, "com.palm.systemui", dismissCardTutorialKey),
+                      { key: dismissCardTutorialKey, appId: "com.palm.systemui", name: dismissCardTutorialKey, height: 170,
                         sound: "", soundClass: "" });
     }
 

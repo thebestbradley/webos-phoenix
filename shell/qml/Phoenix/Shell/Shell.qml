@@ -2650,6 +2650,20 @@ FocusScope {
         }
     }
 
+    // Touch to Share (the window source's touchToShare*): the glow while a
+    // phone is in range, and its tone as an app's data is sent (CardView
+    // throws the card).
+    TouchToShareGlow {
+        anchors.fill: parent
+        z: 99997
+        active: !!(shell.source && shell.source.touchToShareInRange)
+    }
+    Connections {
+        target: shell.source
+        ignoreUnknownSignals: true
+        function onTouchToShareTransferred(appId) { shell.sounds.feedback("taptoshare"); }
+    }
+
     // The capture's thumbnail, in the corner above the gesture area; a tap
     // opens it in the preview.
     ScreenCaptureThumbnail {

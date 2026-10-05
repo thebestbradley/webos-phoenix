@@ -101,6 +101,39 @@ Pages talk to the shell (launch another app, show a banner) through
 `phoenixHost.postToHost(type, payload)`. In phoenix-sim that arrives as a
 console message with the `__phoenix__` prefix.
 
+### Scene transitions
+
+Mojo apps had the card do their scene changes, and so can any page:
+`PalmSystem.prepareSceneTransition(isPop)` as the scene change begins (the
+shell snapshots the card and shows the snapshot), then, once the new scene
+is in the page, `PalmSystem.runSceneTransition(type, isPop)` with type
+`"zoom-fade"` (Mojo's default) or `"cross-fade"`; or
+`cancelSceneTransition()`. The card then animates from the snapshot to the
+live page over 300 ms, as LunaSysMgr's `CardTransition.cpp` drew it: a push
+zooms the new scene in from 0.75 over the fading old one, a pop zooms it
+down from 1.25 under it. A host message cannot hold the page while the
+shell takes its snapshot, as the original's IPC did, so
+`prepareSceneTransition` also returns a promise that settles once the
+snapshot is taken (or after 250 ms without a shell). Phoenix's apps use
+`sceneTransition(change, {pop, type})` from `@phoenix/luna`, which waits
+for it; `change` must update the page at once (in React, `flushSync`).
+Settings opens and leaves its panes with it.
+
+### Touch to Share
+
+The TouchPad's Touch to Share, as the tap2share service
+(`com.palm.stservice`, not in the open-source release) ran it with
+LunaSysMgr: `com.palm.systemmanager/touchToShareDeviceInRange {inRange}`
+shows the glow while a phone is near; when the phone touches the device,
+the app in front, if its `appinfo.json` says `"tapToShareSupported": true`
+(the browser), is relaunched with `{sendDataToShare: true}` and answers
+with `com.palm.stservice/shareData {data: {target, type, mimetype}}`; then
+`touchToShareAppUrlTransferred {appid}` sends its card to card view and
+throws a ghost of it off the top, with `tap_to_share.mp3`. In phoenix-sim
+**Shift+F7** brings a phone in range or takes it away and **Ctrl+F7**
+touches it to the device (`--touch-to-share` starts with one in range); the
+data the phone received is logged (`Touch to Share: <appId> sent {...}`).
+
 ### Editing: Cut, Copy, Paste, Select All
 
 Every app menu starts with **Edit** (Select All, Cut, Copy, Paste), as Mojo

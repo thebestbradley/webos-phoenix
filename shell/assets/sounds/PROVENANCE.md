@@ -26,7 +26,7 @@ mounts this folder.
 | `battery_low.mp3` | 0.7 s | LAME 3.98, no tags | meant for the Low Battery alert, but luna-systemui passes it as the window's params rather than its attributes (`PowerdService.js:78`), so LunaSysMgr played the notification tone; nothing else plays it |
 | `error.mp3` | 1.1 s | LAME 3.98, no tags | no caller in the released sources |
 | `panel.mp3` | 0.4 s | LAME 3.98, no tags | no caller in the released sources |
-| `tap_to_share.mp3` | 0.7 s | LAME 3.98, no tags | no caller in the released sources (Touch to Share was not released) |
+| `tap_to_share.mp3` | 0.7 s | LAME 3.98, no tags | no caller in the released sources (Touch to Share's service was not released); Phoenix plays it as an app's data is sent (`SoundPolicy.js` "taptoshare") |
 
 The files carry no copyright or author tags of their own (the WAVs' only
 metadata is Pro Tools' broadcast-wave chunk; the MP3s have no ID3 tags).
