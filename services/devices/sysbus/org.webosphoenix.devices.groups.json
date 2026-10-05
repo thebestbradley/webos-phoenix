@@ -1,0 +1,26 @@
+{
+    "allowedNames": [
+        "com.palm.display",
+        "com.palm.keys",
+        "com.palm.vibrate",
+        "com.palm.ambientLightSensor"
+    ],
+    "devices.display.status": [
+        "dev"
+    ],
+    "devices.display.control": [
+        "oem"
+    ],
+    "devices.display.shell": [
+        "oem"
+    ],
+    "devices.keys": [
+        "dev"
+    ],
+    "devices.vibrate": [
+        "dev"
+    ],
+    "devices.lightsensor": [
+        "dev"
+    ]
+}

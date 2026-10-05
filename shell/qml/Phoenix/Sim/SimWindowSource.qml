@@ -548,9 +548,16 @@ Item {
             console.warn("phoenix-sim: cannot create web window:", _webComponent.errorString());
             return mockApp.createObject(source, { appId: appId, title: appId });
         }
-        win.hostMessage.connect(function(type, payload) { source._hostMessage(appId, uid, type, payload); });
+        var pageKey = "p" + (_nextPageKey++);
+        win.hostMessage.connect(function(type, payload) {
+            if (!source._deviceMessage(pageKey, appId, type, payload))
+                source._hostMessage(appId, uid, type, payload);
+        });
         if (win.loaded)
             win.loaded.connect(function() { source._pageLoaded(win); });
+        // A page gone lets go of what it held.
+        if (win.gone)
+            win.gone.connect(function() { source._pageGone(pageKey); });
         win.windowRequested.connect(function(request) { source._openWindow(appId, request); });
         if (system)
             win.closeRequested.connect(function() { source.closeSystemWindow(uid); });
@@ -1446,6 +1453,96 @@ Item {
             pages[i].runScript(js);
     }
 
+    // ---- LunaSysMgr's device services (Phoenix.Shell DeviceServices) ---------------
+    // Each page's runtime answers com.palm.display, .keys, .vibrate and
+    // .ambientLightSensor; the shell tells every page what the display, the
+    // keys, the switches and the light do (deviceEvent), and the pages ask
+    // the shell (host messages displayState, displayHolds, vibrate). What a
+    // page holds (requestBlock, powerKeyBlock, ...) ends with the page.
+
+    signal displayStateRequested(string state)
+    signal vibrationRequested(var request)
+    // Every page's holds added up: {requestBlock, powerKeyBlock, proximity, alsDisabled}.
+    property var displayHolds: ({ requestBlock: 0, powerKeyBlock: 0, proximity: 0, alsDisabled: 0 })
+    property var _holdsByPage: ({})      // page key -> its holds
+    property var _vibrationsByPage: ({})  // page key -> [ids of its endless vibrations]
+    property var _deviceState: ({})       // the last display, switches, light and holds, for pages that load later
+    property int _nextPageKey: 1
+
+    function deviceEvent(ev) {
+        var st = Object.assign({}, _deviceState);
+        for (var k in ev)
+            if (k === "display" || k === "switches" || k === "light" || k === "holds")
+                st[k] = Object.assign({}, st[k] || {}, ev[k]);
+        // A key's switch state stays for later pages too.
+        if (ev.key && (ev.key.category === "/switches" || ev.key.category === "/headset")
+                && (ev.key.state === "up" || ev.key.state === "down") && ev.key.key !== "headset_button") {
+            st.switches = Object.assign({}, st.switches || {});
+            st.switches[ev.key.key] = ev.key.state;
+        }
+        _deviceState = st;
+        _toPages("window.__phoenixRuntime && __phoenixRuntime.devices && __phoenixRuntime.devices.hostEvent("
+                 + JSON.stringify(ev) + ")");
+    }
+
+    function _toPages(js) {
+        var pages = _webPages();
+        for (var i = 0; i < pages.length; ++i)
+            pages[i].runScript(js);
+    }
+
+    // Returns whether the message was the device services'.
+    function _deviceMessage(pageKey, appId, type, payload) {
+        if (type === "displayState") {
+            displayStateRequested(String(payload.state || ""));
+        } else if (type === "displayHolds") {
+            var h = Object.assign({}, _holdsByPage);
+            h[pageKey] = { requestBlock: payload.requestBlock | 0, powerKeyBlock: payload.powerKeyBlock | 0,
+                           proximity: payload.proximity | 0, alsDisabled: payload.alsDisabled | 0 };
+            _holdsByPage = h;
+            _sumHolds();
+        } else if (type === "vibrate") {
+            var v = Object.assign({}, _vibrationsByPage);
+            var ids = (v[pageKey] || []).filter(function (id) { return id !== payload.id; });
+            if (payload.on)
+                ids.push(payload.id);
+            v[pageKey] = ids;
+            _vibrationsByPage = v;
+            vibrationRequested(payload);
+        } else {
+            return false;
+        }
+        return true;
+    }
+
+    function _pageGone(pageKey) {
+        if (_holdsByPage[pageKey]) {
+            var h = Object.assign({}, _holdsByPage);
+            delete h[pageKey];
+            _holdsByPage = h;
+            _sumHolds();
+        }
+        var ids = _vibrationsByPage[pageKey] || [];
+        if (ids.length > 0) {
+            var v = Object.assign({}, _vibrationsByPage);
+            delete v[pageKey];
+            _vibrationsByPage = v;
+            for (var i = 0; i < ids.length; ++i)
+                vibrationRequested({ id: ids[i], on: false });
+        }
+    }
+
+    function _sumHolds() {
+        var sum = { requestBlock: 0, powerKeyBlock: 0, proximity: 0, alsDisabled: 0 };
+        for (var p in _holdsByPage)
+            for (var k in sum)
+                sum[k] += _holdsByPage[p][k] || 0;
+        if (JSON.stringify(sum) === JSON.stringify(displayHolds))
+            return;
+        displayHolds = sum;
+        deviceEvent({ holds: sum });
+    }
+
     // What the user changed while no web page was running, for the next
     // page that loads (pages share their state through the runtime's store).
     property var _pendingStatus: null
@@ -1539,6 +1636,9 @@ Item {
         }
         if (Object.keys(_shellStatus).length > 0)
             win.runScript(_statusScript(_shellStatus));
+        if (Object.keys(_deviceState).length > 0)
+            win.runScript("window.__phoenixRuntime && __phoenixRuntime.devices && __phoenixRuntime.devices.hostEvent("
+                          + JSON.stringify(_deviceState) + ")");
     }
 
     // The launcher entry to start for a launch request: a launch point of

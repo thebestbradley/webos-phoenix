@@ -1,0 +1,17 @@
+{
+    "exeName": "/usr/sbin/phoenix-devices",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "com.palm.display",
+        "com.palm.keys",
+        "com.palm.vibrate",
+        "com.palm.ambientLightSensor"
+    ],
+    "permissions": [
+        { "service": "com.palm.display", "outbound": [] },
+        { "service": "com.palm.keys", "outbound": [] },
+        { "service": "com.palm.vibrate", "outbound": [] },
+        { "service": "com.palm.ambientLightSensor", "outbound": [] }
+    ]
+}

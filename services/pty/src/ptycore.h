@@ -20,6 +20,8 @@
 #include <utility>
 #include <vector>
 
+#include "json.h"
+
 namespace phoenix {
 namespace pty {
 
@@ -70,45 +72,10 @@ bool isValidUtf8(const char *buf, size_t len);
 // Every byte as the code point of the same value (ISO 8859-1), in UTF-8.
 std::string latin1ToUtf8(const std::string &bytes);
 
-// ---- JSON (the bus speaks it; flat objects are all we need) -----------------
+// ---- JSON: services/common/json.h ---------------------------------------------
 
-std::string jsonQuote(const std::string &utf8);
-
-// A small JSON reader: objects, arrays, strings (with \u escapes and
-// surrogate pairs), numbers, true/false/null.
-class Json
-{
-public:
-    enum Type { Null, Bool, Number, String, Array, Object };
-    Json() = default;
-
-    static Json parse(const std::string &text, bool *ok = nullptr);
-
-    Type type() const { return m_type; }
-    bool isNull() const { return m_type == Null; }
-    bool isString() const { return m_type == String; }
-    bool isNumber() const { return m_type == Number; }
-    bool isBool() const { return m_type == Bool; }
-    bool isObject() const { return m_type == Object; }
-
-    // Members of an object; a missing one is Null.
-    const Json &operator[](const std::string &key) const;
-    bool has(const std::string &key) const;
-
-    std::string str(const std::string &fallback = std::string()) const { return m_type == String ? m_str : fallback; }
-    double num(double fallback = 0) const { return m_type == Number ? m_num : fallback; }
-    bool boolean(bool fallback = false) const { return m_type == Bool ? m_bool : fallback; }
-    const std::vector<Json> &items() const { return m_items; }
-
-private:
-    friend class JsonParser;
-    Type m_type = Null;
-    bool m_bool = false;
-    double m_num = 0;
-    std::string m_str;
-    std::vector<Json> m_items;
-    std::vector<std::pair<std::string, Json>> m_members;
-};
+using phoenix::Json;
+using phoenix::jsonQuote;
 
 // ---- Sessions ----------------------------------------------------------------
 

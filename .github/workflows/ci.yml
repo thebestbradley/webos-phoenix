@@ -114,6 +114,9 @@ jobs:
       - name: Terminal PTY service (core and Luna methods, services/pty)
         run: build/pty/pty-test
 
+      - name: Device services (display, keys, vibrator, light sensor; services/devices)
+        run: build/devices/devices-test
+
       - name: The simulator's installed apps (SimInstaller)
         run: build/siminstaller-test
 

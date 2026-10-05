@@ -3,7 +3,7 @@
 //
 // Tests of the Terminal's PTY core (UTF-8 chunks, JSON, sessions, flow
 // control) and of the org.webosphoenix.pty service's methods over the
-// luna-service2 stand-in (tests/ls2stub): who may open a shell, a session's
+// luna-service2 stand-in (services/common/ls2stub): who may open a shell, a session's
 // life from open to exited, and hanging up when the page cancels.
 //
 // Shells here are /bin/sh with fixed commands, so the output is the same on

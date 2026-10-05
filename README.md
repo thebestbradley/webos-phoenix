@@ -193,6 +193,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `shell/sim` | `phoenix-sim`, the desktop runner (also takes screenshots) |
 | `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Tasks, Voice Memos, Flashlight, QR Scanner, Weather, Maps, Passwords, Authenticator, Terminal, Videos, Podcasts, PDF View, Doc View, First Use, Help, Print Manager, Voice Dial), with the shared `@phoenix/ui` components, `@phoenix/luna` service client and `@phoenix/secrets` (TOTP, sealing, auto-lock), generated demo media (`apps/media-samples`), the Node.js Luna services of Files (`apps/files/service`) and Voice Memos (`apps/voicememos/service`, speech to text with whisper.cpp), and the CardDAV & CalDAV Synergy account with its sync service (`apps/dav`, see [docs/SYNERGY.md](docs/SYNERGY.md)) |
 | `services/pty` | `org.webosphoenix.pty`, the Terminal's PTY Luna service (C++), whose core phoenix-sim also uses |
+| `services/devices` | `phoenix-devices`: LunaSysMgr's `com.palm.display`, `com.palm.keys`, `com.palm.vibrate` and `com.palm.ambientLightSensor` on a device, which OSE lacks (C++; docs/HARDWARE.md) |
 | `runtime/` | The webOS web app runtime for the simulator and browsers (`PalmSystem`, simulated Luna services) |
 | `shell/tests` | Behaviour tests (`qmltestrunner`) |
 | `shell/assets/openwebos` | Original Open webOS system UI artwork (Apache-2.0) |
@@ -273,6 +274,13 @@ battery, **Shift+F6** the battery stops reporting (or reports again), **F7** plu
 **Shift+F12** onto another Touchstone,
 **F9** (or **Home**+**F3**, **Print Screen**, **Ctrl+Alt+P**) a screen capture,
 **F10** / **F11** the volume keys (down / up),
+**Ctrl+Shift+R** the ringer switch (silent mutes), **Ctrl+Shift+H** a headset
+in or out, **Ctrl+Shift+B** its button (twice within a second: a double
+click), **Ctrl+Shift+M** the play/pause media key, **Ctrl+Shift+L** the
+light on the light sensor (dark, dim, indoor, outdoor: with automatic
+brightness the screen dims in dim and dark light); apps hear them through
+`com.palm.keys` and `com.palm.ambientLightSensor`, and an app's vibration
+shakes the window under "Vibrating: …",
 **Ctrl+Left** / **Ctrl+Right**
 turn the device a quarter turn counter-clockwise / clockwise, type in card
 view for Just Type. The original's key chords: hold **F3** and **F11**
@@ -363,6 +371,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-tasks.cjs` | Tasks and reminders |
 | `node tools/test-db8-pages.cjs` | Db8 shared by pages writing at once |
 | `node tools/test-alarm.cjs` | A Clock alarm rings as a popup alert |
+| `node tools/test-device-services.cjs` | The Clock's alarm holds the display on (`com.palm.display`), a volume key or Power snoozes it (`com.palm.keys`), the ringer switch |
 | `node tools/test-keyboard.cjs` | Web fields and the virtual keyboard |
 | `node tools/test-voicememos.cjs` | Voice Memos |
 | `node tools/test-maps.cjs` | Maps (no live map servers) |
@@ -370,6 +379,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-authenticator.cjs` | Authenticator (TOTP/HOTP) |
 | `node tools/test-terminal.cjs` | Terminal (simulated shell, then /bin/sh for real) |
 | `build/pty/pty-test` | The Terminal's PTY service |
+| `build/devices/devices-test` | phoenix-devices: the display, keys, vibrator and light sensor services |
 | `node tools/test-videos.cjs` | Videos |
 | `node tools/test-podcasts.cjs` | Podcasts |
 | `node tools/test-docs.cjs` | PDF View and Doc View |

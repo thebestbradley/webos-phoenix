@@ -285,6 +285,63 @@ Item {
             lunaCall("luna://com.webos.service.audio/controlPlayback", { playbackId: id, requestType: "stop" }, function() {});
     }
 
+    // ---- LunaSysMgr's device services (Phoenix.Shell DeviceServices) -----------------
+    // OSE has no com.palm.display, .keys, .vibrate or .ambientLightSensor;
+    // phoenix-devices (services/devices) is them on the bus. It reads the
+    // keys, switches and light sensor and runs the motor itself; the display
+    // is the shell's, so the shell reports it there and hears the apps'
+    // requests (com.palm.display/phoenix/report and /phoenix/requests).
+    // STATUS: not yet run on a device; checked against phoenix-devices'
+    // tests (services/devices/tests) only. If the service restarts, the
+    // subscription is not made again (registerServerStatus would).
+
+    signal displayStateRequested(string state)
+    signal vibrationRequested(var request)
+    signal displayPropertiesRequested(var props)
+    property var displayHolds: ({ requestBlock: 0, powerKeyBlock: 0, proximity: 0, alsDisabled: 0 })
+
+    // What the shell knows, for the services: only the display and the
+    // Power key it kept from an app go to phoenix-devices (the keys, the
+    // switches and the light it has first-hand).
+    function deviceEvent(ev) {
+        var report = null;
+        if (ev.display)
+            report = ev.display;
+        if (ev.powerKey)
+            report = Object.assign({}, report || {}, { powerKey: ev.powerKey });
+        if (report)
+            lunaCall("luna://com.palm.display/phoenix/report", report, function() {});
+    }
+
+    // The shell's own vibrations (a banner's "vibrate"): the motor.
+    function vibrate(request) {
+        if (request.name)
+            lunaCall("luna://com.palm.vibrate/vibrateNamedEffect", { name: request.name }, function() {});
+        else if (request.period !== undefined)
+            lunaCall("luna://com.palm.vibrate/vibrate", { period: request.period, duration: request.duration || 0 }, function() {});
+    }
+
+    Service {
+        id: deviceBus
+        appId: LS.appId
+        onResponse: (method, payload, token) => {
+            var r = null;
+            try { r = JSON.parse(payload); } catch (e) { return; }
+            if (!r || r.returnValue === false)
+                return;
+            if (r.holds)
+                source.displayHolds = r.holds;
+            if (r.setState)
+                source.displayStateRequested(r.setState);
+            if (r.setProperty)
+                source.displayPropertiesRequested(r.setProperty);
+            // An app's vibration, already on the motor: counted by the shell.
+            if (r.vibrated)
+                source.vibrationRequested(Object.assign({ on: true, ran: true }, r.vibrated));
+        }
+        Component.onCompleted: call("luna://com.palm.display", "/phoenix/requests", JSON.stringify({ subscribe: true }))
+    }
+
     // The sounds that ship (tools/install-rootfs.py installs them); anything
     // else is taken on trust, and audiod reports a missing file.
     function soundExists(path) {

@@ -1,0 +1,25 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Started by systemd (phoenix-devices.service), not on demand by the hub:
+# it reads the keys and switches from boot on.
+
+[D-BUS Service]
+Name=com.palm.display
+Exec=/usr/sbin/phoenix-devices
+Type=static
+
+[D-BUS Service]
+Name=com.palm.keys
+Exec=/usr/sbin/phoenix-devices
+Type=static
+
+[D-BUS Service]
+Name=com.palm.vibrate
+Exec=/usr/sbin/phoenix-devices
+Type=static
+
+[D-BUS Service]
+Name=com.palm.ambientLightSensor
+Exec=/usr/sbin/phoenix-devices
+Type=static

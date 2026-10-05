@@ -64,8 +64,10 @@ service bus). `runtime/phoenix-runtime.js` runs before the app's own scripts:
   search index properties; each object and kind under a localStorage key of
   its own, so pages writing at once keep each other's changes, and watches
   fire for other pages' writes), system service (time, preferences), application
-  manager (launch, open), connection manager, power, and harmless stubs for
-  the rest. Calls to a service it doesn't know return an error and are logged
+  manager (launch, open), connection manager, power, LunaSysMgr's device
+  services (display, keys, vibrator, light sensor; see [Device
+  services](#device-services-display-keys-vibrator-light-sensor)), and
+  harmless stubs for the rest. Calls to a service it doesn't know return an error and are logged
   once. For the core apps it also simulates, modelled on
   `third_party/app-services`:
   - **accounts** (`com.palm.service.accounts`): accounts in db8, the account
@@ -1270,6 +1272,54 @@ microphone button, no microphone, and the original ids;
 `apps/voicedial/src/lib/match.test.ts` the matching;
 `build/dictation-test` the end of speech, the prompt and the file
 microphone.
+
+## Device services: display, keys, vibrator, light sensor
+
+The services LunaSysMgr itself registered for the apps (luna-sysmgr
+`README.md:24-128`), with its requests, replies, events and error texts.
+The original Clock holds the display on while an alarm rings and snoozes
+on a volume key or Power; Phoenix apps have a client in `@phoenix/luna`
+(`device.ts`: `display`, `keys`, `vibrator`, `lightSensor`).
+
+| Service and methods | Requests and replies | Source |
+| --- | --- | --- |
+| `com.palm.display/status` | `{subscribe}` -> `{event: "request", state: "on" \| "dimmed" \| "off", subscribed}`, then `{event: "displayOn" \| "displayDimmed" \| "displayOff"}` (`displayOn` has `dockMode: true` in dock mode) | `DisplayManager.cpp:2296-2357`, `:1453-1534` |
+| `com.palm.display/control/status` | as `status`, plus `timeout` (s), `blockDisplay` (`"true"` / `"false"`: a string), `active`; events also `changedTimeout {timeout}`, `blockedDisplay`, `unblockedDisplay`, `displayActive`, `displayInactive` | same |
+| `com.palm.display/control/setState` | `{state: "on" \| "dimmed" \| "off" \| "unlock" \| "dock" \| "undock"}`; another state: `{returnValue: false, errorText: "call failed"}`. On: not out of dock mode; dimmed: only from on, unlocked; unlock: on, and the lock screen goes as if slid open (a passcode is still asked for) | `:1225-1308`; `DisplayStates.cpp` |
+| `com.palm.display/control/getProperty` | `{properties: [...]}`: `requestBlock`, `powerKeyBlock`, `timeout`, `maximumBrightness`, `onWhenConnected`, `proximityEnabled`; none known: `errorCode` 1 "failed to get property" | `:1633-1712` |
+| `com.palm.display/control/setProperty` | `{requestBlock: true, client}` holds the display on (and turns it on), locked or not, until the call is cancelled; `{powerKeyBlock: true, client}`: Power goes to the caller as `{powerKey: "released"}`, until cancelled; `{proximityEnabled: true, client}` (counted only); without `client`: `errorCode` 22 "'requestBlock' needs 'client' string". `timeout` (s; 0 or less is 120), `maximumBrightness` (1-100), `onWhenConnected` (the display stays on on a USB charger) are the system's preferences (`screenTimeout`, `picture.backlight`, `display:onWhenConnected`) | `:1796-1990` |
+| `com.palm.keys/audio/status`, `/media/status`, `/headset/status` | `{subscribe: true}` -> `{subscribed: true}`, then `{key, state: "down" \| "up"}`: `volume_up`, `volume_down`; `play`, `pause`, `togglePausePlay`, `stop`, `next`, `prev`; `headset_button` (also `single_click`, `double_click`, `hold`), `headset` and `headset-mic` (in: down). Without subscribe: `errorCode` -1 "We were expecting a subscribe type message, but we did not recieve one." | `InputManager.cpp:333-370`, `:876-1177`; headset button `:225-330` |
+| `com.palm.keys/switches/status` | `{subscribe: true}`: `{key: "ringer" \| "power", state}` (ringer up: sound on, down: silent); `{get: name}` -> `{key, state, returnValue}` (`ringer`, `slider` (closed: down), `headset`, `headset-mic`; others "unknown") | `:556-650`, `:766-800` |
+| `com.palm.vibrate/vibrate` | `{period, duration}` (ms); no `period`: "Invalid arguments"; no duration: until cancelled | `HapticsController.cpp:117-181` |
+| `com.palm.vibrate/vibrateNamedEffect` | `{name: "ringtone" \| "alert" \| "notification" \| "tapdown" \| "tapup", continous}`; another name: "Unable to vibrate"; `continous`: until cancelled | `:236-307`; `HapticsControllerCastle.cpp:78-97` |
+| `com.palm.ambientLightSensor/control/status` | `{subscribe, disableALS}` -> `{current, average, disabled, subscribed}`, then `{current, region}` per reading (0 undefined, 1 dark, 2 dim, 3 indoor, 4 outdoor); `disableALS` holds the region at 0 while subscribed | `AmbientLightSensor.cpp:420-570` |
+| `com.palm.audio/system/status` | `{"ringer switch": true}` while the ringer is on (the Clock asks before it rings: `utility/keymanager.js:113-120`) | Open webOS audiod (as the Clock reads it) |
+
+### In the simulator
+
+Each page's runtime answers these. The shell (`Phoenix.Shell`
+`DeviceServices.qml`) tells every page what changed with
+`__phoenixRuntime.devices.hostEvent({display, holds, key, switches, light,
+powerKey})` (and a page that loads later gets the last of each); pages ask
+the shell with host messages: `displayState {state}`, `displayHolds
+{requestBlock, powerKeyBlock, proximity, alsDisabled, clients}` (what this
+page holds; `SimWindowSource` adds every page's up and drops a page's when
+it goes, as the bus does when a process leaves) and `vibrate {id, on, name
+| period, duration}`. The keys are the simulator's (F3 Power, F10 / F11
+volume, Ctrl+Shift+R the ringer switch, Ctrl+Shift+H a headset,
+Ctrl+Shift+B its button, Ctrl+Shift+M play/pause, Ctrl+Shift+L the light);
+a vibration shakes the window. `PalmSystem.setWindowProperties
+{blockScreenTimeout}` still keeps the screen on while the app is in front,
+as before. Tests: `apps/shared/luna/src/device.test.ts`,
+`shell/tests/tst_deviceservices.qml`, `tools/test-device-services.cjs`
+(the Clock's alarm).
+
+### On a device
+
+OSE has none of these services; `phoenix-devices` (`services/devices`) is
+them, over the backlight, evdev, the vibrator and the IIO light sensor, and
+the shell reports its display to it. See [HARDWARE.md](HARDWARE.md),
+"LunaSysMgr's device services".
 
 ## Flashlight
 

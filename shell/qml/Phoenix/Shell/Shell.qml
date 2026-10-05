@@ -159,6 +159,23 @@ FocusScope {
         dockMode: shell.dockMode
         night: shell.dockMode && shell.nightModeNow
         onPuckTimedOut: shell.enterDockMode()
+        // An app holding it on (com.palm.display requestBlock), and the
+        // backlight's level (DeviceServices.qml).
+        held: devices.holdsDisplay
+        maximumBrightness: shell.system && shell.system.brightness > 0 ? Math.round(shell.system.brightness * 100) : 100
+        automaticBrightness: !shell.system || shell.system.automaticBrightness !== false
+        lightRegion: devices.lightRegion
+    }
+    // The device services the apps call: com.palm.display, .keys, .vibrate
+    // and .ambientLightSensor (DeviceServices.qml).
+    readonly property alias deviceServices: devices
+    DeviceServices {
+        id: devices
+        shell: shell
+        source: shell.source
+        system: shell.system
+        display: backlight
+        sounds: shell.sounds
     }
     // Every touch and key resets its timers; while it is off the touch
     // panel takes nothing and only Power, Home and the volume keys get
@@ -1120,6 +1137,8 @@ FocusScope {
             }
         }
         onPressed: (key, autoRepeat) => {
+            if (!autoRepeat)
+                devices.hardwareKey(key, true);
             // Power with a volume key: the Full Erase and USB drive chords
             // (SystemScreens.systemKey); their keys do nothing else.
             if (autoRepeat ? systemScreens.comboDown && systemScreens.isChordKey(key)
@@ -1160,6 +1179,7 @@ FocusScope {
         onReleased: (key, autoRepeat) => {
             if (autoRepeat)
                 return;
+            devices.hardwareKey(key, false);
             if (systemScreens.systemKey(key, false)) {
                 // A chord's key: let go of, and nothing else.
                 if (key === Qt.Key_Home)
@@ -1271,6 +1291,9 @@ FocusScope {
             } else if (_homeDown && now - _powerDownAt <= 3000) {
                 takeScreenshot();
                 _eatHomeUp = true;
+            } else if (devices.powerKeyBlocked) {
+                // An app has it (com.palm.display powerKeyBlock).
+                devices.powerKeyReleased();
             } else {
                 // Power turns the screen off (and so locks), or on again to
                 // the lock screen (DisplayManager: DisplayEventPowerKeyPress).

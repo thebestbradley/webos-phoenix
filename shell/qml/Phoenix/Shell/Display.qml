@@ -12,6 +12,11 @@
 //   LockScreenTimeoutMs, the OnLocked state).
 // - An app can keep it on while it is in front (blockScreenTimeout, e.g. a
 //   video playing): blocked. Only while unlocked.
+// - An app can also hold it on from anywhere, locked or not, until it lets
+//   go (com.palm.display setProperty requestBlock, e.g. the Clock while an
+//   alarm rings): held. Held, it comes on and stays on: luna-sysmgr's
+//   "do not allow screen timeout" count (pushDNAST :615-640; every state's
+//   startInactivityTimer, DisplayStates.cpp:823-868, 1102-1115, 1566-1579).
 // - A banner, a popup alert or a call turns it on (alert, :2920-2989): a
 //   banner or an alert for 6 s (ALERT_TIMEOUT), a call while it rings; then
 //   it goes back to how it was, unless the user touched it meanwhile.
@@ -44,6 +49,7 @@ QtObject {
     property int timeout: 60
     property bool locked: false
     property bool blocked: false
+    property bool held: false
     // Never dims or turns off by itself (phoenix-sim --stay-awake, and its
     // screenshots); Power still turns it off.
     property bool stayAwake: false
@@ -61,6 +67,41 @@ QtObject {
     // (Settings.cpp:184 DockModeNightBrightness, 1 of 100).
     property bool night: false
     readonly property int nightBrightness: 1
+
+    // The inactivity timer is running (com.palm.display control/status "active").
+    readonly property bool active: _idle.running
+
+    // ---- The backlight's level --------------------------------------------------
+    // 0-100, as DisplayManager::getDisplayBrightness (:2043-2093) set it: the
+    // user's brightness (maximumBrightness: Screen & Lock, the system menu),
+    // scaled by the light sensor's region while automatic brightness is on
+    // (the enableALS preference; outdoor 250%, dim 30%, dark 10%:
+    // Settings.cpp:112-114), never under 1 (MINIMUM_ON_BRIGHTNESS); dimmed,
+    // a tenth of it (displayDim, :3538-3546); off, 0; in night mode the night
+    // brightness. (The original also took 5 to 20 off on a low battery
+    // without a charger, :2053-2062; Phoenix does not.)
+    property int maximumBrightness: 100
+    property bool automaticBrightness: true
+    // The light sensor's region (AmbientLightSensor.h:34-38): 0 undefined
+    // (no sensor, or held off by an app), 1 dark, 2 dim, 3 indoor, 4 outdoor.
+    property int lightRegion: 0
+    readonly property int brightness: {
+        if (state === "off")
+            return 0;
+        if (night)
+            return nightBrightness;
+        var b = maximumBrightness;
+        if (automaticBrightness) {
+            if (lightRegion === 4)
+                b = 250 * b / 100;
+            else if (lightRegion === 2)
+                b = 30 * b / 100;
+            else if (lightRegion === 1)
+                b = 10 * b / 100;
+        }
+        b = Math.max(1, Math.min(100, Math.floor(b)));
+        return state === "dim" ? Math.max(1, Math.floor(b / 10)) : b;
+    }
 
     signal turnedOff()
     signal puckTimedOut()
@@ -90,6 +131,18 @@ QtObject {
             return;
         state = "off";
         turnedOff();
+    }
+
+    // com.palm.display setState "dimmed": only from on, unlocked and off
+    // the Touchstone (DisplayOn's DisplayEventApiDim, DisplayStates.cpp:
+    // 1012-1015; the other states ignore it). Held, it then stays dimmed.
+    function dim() {
+        if (state !== "on" || locked || onPuck || dockMode)
+            return;
+        _restoreTo = "";
+        _alertTimer.stop();
+        state = "dim";
+        _restart();
     }
 
     // Something asks to be seen. call: until callDone(); otherwise for
@@ -126,7 +179,7 @@ QtObject {
     // lock screen.
     function _restart() {
         _idle.stop();
-        if (state === "off" || _restoreTo !== "" || stayAwake || dockMode)
+        if (state === "off" || _restoreTo !== "" || stayAwake || dockMode || held)
             return;
         if (onPuck) {
             // DisplayOnPuck, locked or not (the lock screen there is only
@@ -152,6 +205,16 @@ QtObject {
         if (blocked && !locked)
             state = "on";
         _restart();
+    }
+    // Held: on (pushDNAST calls on(), :627-632), and on for good: an alert
+    // that had turned it on (an alarm's popup comes before the Clock holds
+    // the display) no longer puts it back off when its time is up. Let go,
+    // the timers start again (popDNAST, :655-660).
+    onHeldChanged: {
+        if (held)
+            turnOn();
+        else if (state !== "off")
+            _restart();
     }
     onTimeoutChanged: _restart()
     onStayAwakeChanged: _restart()

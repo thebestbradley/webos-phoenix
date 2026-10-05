@@ -1,0 +1,28 @@
+{
+    "devices.display.status": [
+        "com.palm.display/status"
+    ],
+    "devices.display.control": [
+        "com.palm.display/control/status",
+        "com.palm.display/control/setState",
+        "com.palm.display/control/getProperty",
+        "com.palm.display/control/setProperty"
+    ],
+    "devices.display.shell": [
+        "com.palm.display/phoenix/report",
+        "com.palm.display/phoenix/requests"
+    ],
+    "devices.keys": [
+        "com.palm.keys/audio/status",
+        "com.palm.keys/media/status",
+        "com.palm.keys/headset/status",
+        "com.palm.keys/switches/status"
+    ],
+    "devices.vibrate": [
+        "com.palm.vibrate/vibrate",
+        "com.palm.vibrate/vibrateNamedEffect"
+    ],
+    "devices.lightsensor": [
+        "com.palm.ambientLightSensor/control/status"
+    ]
+}

@@ -104,8 +104,11 @@ Item {
         anchors.fill: parent
         color: "black"
         // Dock mode's night mode: the night brightness, 1 of 100
-        // (DockModeNightBrightness), darker still.
-        opacity: shell.display.state === "off" ? 1 : shell.display.state === "dim" ? 0.9 : shell.display.night ? 0.95 : 0
+        // (DockModeNightBrightness), darker still. In dim or dark light the
+        // light sensor turns the backlight down (Display.brightness, from
+        // the user's brightness): darker by as much.
+        opacity: shell.display.state === "off" ? 1 : shell.display.state === "dim" ? 0.9 : shell.display.night ? 0.95
+                 : Math.max(0, 1 - shell.display.brightness / Math.max(1, shell.display.maximumBrightness)) * 0.75
         visible: opacity > 0
         Behavior on opacity { enabled: shell.display.state !== "off"; NumberAnimation { duration: 300 } }
         // The simulator says what a dark device would not.
@@ -283,6 +286,81 @@ Item {
         context: Qt.ApplicationShortcut
         onActivated: status.hardwareKeyboard = !status.hardwareKeyboard
     }
+    // The device's switches, headset and light sensor (com.palm.keys,
+    // com.palm.ambientLightSensor; DeviceServices): Ctrl+Shift+R flips the
+    // ringer switch (down: silent), Ctrl+Shift+H plugs a headset (with its
+    // microphone) in or out, Ctrl+Shift+B presses its button (twice within
+    // a second: a double click), Ctrl+Shift+M the play/pause media key,
+    // Ctrl+Shift+L changes the light: dark, dim, indoor, outdoor.
+    Shortcut {
+        sequence: "Ctrl+Shift+R"
+        context: Qt.ApplicationShortcut
+        onActivated: status.ringerSwitch = status.ringerSwitch === "down" ? "up" : "down"
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+H"
+        context: Qt.ApplicationShortcut
+        onActivated: status.headset = status.headset === "none" ? "headset-mic" : "none"
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+B"
+        context: Qt.ApplicationShortcut
+        onActivated: {
+            shell.deviceServices.headsetButton(true);
+            headsetButtonUp.restart();
+        }
+    }
+    Timer {
+        id: headsetButtonUp
+        interval: 150
+        onTriggered: shell.deviceServices.headsetButton(false)
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+M"
+        context: Qt.ApplicationShortcut
+        onActivated: shell.deviceServices.mediaKey("togglePausePlay")
+    }
+    readonly property var lightLevels: [1, 50, 300, 20000]
+    Shortcut {
+        sequence: "Ctrl+Shift+L"
+        context: Qt.ApplicationShortcut
+        onActivated: {
+            var i = root.lightLevels.indexOf(status.lightLevel);
+            status.lightLevel = root.lightLevels[(i + 1) % root.lightLevels.length];
+            console.info("phoenix-sim: light " + status.lightLevel + " lux");
+        }
+    }
+
+    // A vibration (com.palm.vibrate, a banner's "vibrate"): the device
+    // shakes in the window while it lasts, under a label saying what it is.
+    SequentialAnimation {
+        running: shell.deviceServices.vibrating
+        loops: Animation.Infinite
+        onStopped: device.anchors.horizontalCenterOffset = 0
+        NumberAnimation { target: device; property: "anchors.horizontalCenterOffset"; to: 3; duration: 25 }
+        NumberAnimation { target: device; property: "anchors.horizontalCenterOffset"; to: -3; duration: 50 }
+        NumberAnimation { target: device; property: "anchors.horizontalCenterOffset"; to: 0; duration: 25 }
+    }
+    Rectangle {
+        visible: shell.deviceServices.vibrating
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: 36
+        width: vibrationLabel.implicitWidth + 24
+        height: vibrationLabel.implicitHeight + 10
+        radius: height / 2
+        color: "#cc202020"
+        z: 10
+        Text {
+            id: vibrationLabel
+            anchors.centerIn: parent
+            text: qsTr("Vibrating: %1").arg(shell.deviceServices.vibration)
+            color: "white"
+            font.family: Theme.fontFamily
+            font.pixelSize: 13
+        }
+    }
+
     // Shift+F6: the battery stops reporting (powerd gone: the status bar's
     // battery-error, "Battery: Not Available" in the system menu), or
     // reports again.

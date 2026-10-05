@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // A stand-in for luna-service2's <luna-service2/lunaservice.h>, for testing
-// org.webosphoenix.pty (services/pty/src/service.cpp) off the device. It
+// the Phoenix services (services/pty, services/devices) off the device. It
 // declares only the calls the service makes, with the signatures of
 // webosose/luna-service2 (include/public/luna-service2/lunaservice.h), and
 // ls2stub.cpp implements them as an in-process bus: a test calls a method
@@ -58,6 +58,8 @@ const char *LSMessageGetPayload(LSMessage *message);
 const char *LSMessageGetApplicationID(LSMessage *message);
 const char *LSMessageGetSenderServiceName(LSMessage *message);
 const char *LSMessageGetUniqueToken(LSMessage *message);
+const char *LSMessageGetCategory(LSMessage *message);
+const char *LSMessageGetMethod(LSMessage *message);
 bool LSMessageIsSubscription(LSMessage *message);
 void LSMessageRef(LSMessage *message);
 void LSMessageUnref(LSMessage *message);
@@ -70,7 +72,7 @@ bool LSSubscriptionSetCancelFunction(LSHandle *sh, LSCancelFunction cancelFuncti
 
 namespace ls2stub {
 
-// Call a method on the handle as appId would (or a native service when
+// Call a method ("open", or "/category/method") on the handle as appId would (or a native service when
 // appId is empty and service is set). Returns the message; its replies
 // collect in replies(msg). The caller holds one reference: release().
 LSMessage *call(LSHandle *sh, const std::string &method, const std::string &payload,

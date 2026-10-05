@@ -15,6 +15,7 @@ export * from "./tasks";
 export * from "./transcriber";
 export * from "./dictation";
 export * from "./torch";
+export * from "./device";
 export * from "./location";
 export * from "./pty";
 export * from "./web";

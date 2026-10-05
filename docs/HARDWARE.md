@@ -314,20 +314,20 @@ cheapest way to back several legacy APIs at once.
 | **VoLTE, VoWiFi and IMS** | On Halium, the vendor's IMS stack in the Android container, reached through oFono's binder plugin *(which devices work is unverified)*; on mainline, no working open IMS stack yet | Same `com.palm.telephony` calls; no new API | **No** | Required: carriers have switched off 3G, so calls on many networks need VoLTE. Check VoLTE per reference device before choosing it. The IMS registration is shared with RCS ([SYNERGY-MODERN.md](SYNERGY-MODERN.md#22b-rcs)), which needs its own open client either way |
 | **Audio routing, in-call audio** | PulseAudio (what OSE's `audiod-pro` and [`pulseaudio-webos`](https://github.com/webosose/pulseaudio-webos) are built on); [callaudiod](https://gitlab.com/mobian1/callaudiod) for call routing on mainline; `pulseaudio-modules-droid` on Halium | Legacy `com.palm.audio`; OSE `com.webos.service.audio` (volumes, streams, feedback sounds) | Yes for media and system sounds. No voice-call audio policy | Keep PulseAudio for M3 (audiod depends on it; LuneOS does the same). Add a voice-call stream type and routing (earpiece, speaker, headset, Bluetooth HFP) to audiod, driven by telephonyd call state; on mainline delegate the UCM profile switch to callaudiod. PipeWire/WirePlumber (with its PulseAudio compat) is a later migration, only when OSE or LuneOS moves |
 | **Camera** | [libcamera](https://libcamera.org/) on mainline; `droidmedia` + `gst-droid` on Halium (both in LuneOS's layer) | OSE `com.webos.service.camera2` and `com.webos.pipeline.camera`; the apps use `getUserMedia` in the web runtime | Yes, for V4L2/UVC cameras | Phone cameras are not simple V4L2 devices. Mainline: a camera2 HAL plugin on libcamera, or route Chromium's capture through libcamera's V4L2 compatibility layer (*uncertain which is less work*). Halium: a gst-droid source. Expect camera to lag every other area |
-| **Sensors** | [iio-sensor-proxy](https://gitlab.freedesktop.org/hadess/iio-sensor-proxy) on mainline; [sensorfw](https://github.com/sailfishos/sensorfw) (Sailfish OS, Ubuntu Touch) with its hybris adaptor on Halium | Legacy `com.palm.ambientLightSensor`, orientation and acceleration events to apps, proximity during calls | **No sensor service** | A small Phoenix service (`org.webosphoenix.sensors`, with the legacy names as aliases) over either backend, and QtSensors in the shell for rotation. Note: iio-sensor-proxy exposes orientation, light, proximity and compass, not raw acceleration or steps; sensorfw on Halium does expose a step counter |
+| **Sensors** | [iio-sensor-proxy](https://gitlab.freedesktop.org/hadess/iio-sensor-proxy) on mainline; [sensorfw](https://github.com/sailfishos/sensorfw) (Sailfish OS, Ubuntu Touch) with its hybris adaptor on Halium | Legacy `com.palm.ambientLightSensor`, orientation and acceleration events to apps, proximity during calls | **No sensor service** (nyx-lib defines the light, proximity and orientation interfaces; OSE's nyx-modules implement none of them) | **Light: done** in `phoenix-devices` (below), straight from IIO (`in_illuminance_input` / `_raw` × `_scale`). Still to do: orientation and acceleration (QtSensors in the shell for rotation; the legacy accelerometer events), proximity during calls. On Halium, sensorfw instead of IIO. Note: iio-sensor-proxy exposes orientation, light, proximity and compass, not raw acceleration or steps; sensorfw on Halium does expose a step counter |
 | **GPS** | [GeoClue](https://gitlab.freedesktop.org/geoclue/geoclue) (with ModemManager/oFono or gpsd for the GNSS source) | Legacy `com.palm.location`; OSE `com.webos.service.location`; `navigator.geolocation` in the web runtime | Yes: OSE's location service has GPS and network handlers, and nyx has a GPS module | Write a nyx GPS module (or location handler) that reads GeoClue. On Halium, a hybris GNSS module (LuneOS has one). Wire Chromium's geolocation provider to the same service |
 | **Wi-Fi** | ConnMan + wpa_supplicant/iwd | OSE `com.webos.service.wifi`, `com.webos.service.connectionmanager` (webos-connman-adapter) | **Yes** | None beyond firmware. Settings already codes against these |
 | **Bluetooth** | BlueZ | OSE `com.webos.service.bluetooth2` | **Yes** | Check profiles on phones: HFP for calls (with oFono's HFP support or `com.webos.service.hfp`), A2DP, HID |
 | **VPN** | ConnMan `connman-vpnd` (OpenVPN, WireGuard) | Legacy `com.palm.app.vpn` pane; LuneOS `com.webos.service.vpn` | Partly (ConnMan has it; webos-connman-adapter does not expose it) | Use LuneOS's [`luneos-vpn-adapter`](https://github.com/webOS-ports/luneos-vpn-adapter) (Apache-2.0), which Settings > VPN already codes against (the simulator reimplements it); build it and `connman-vpnd` with the OpenVPN, WireGuard, OpenConnect, vpnc and L2TP plugins into the image |
 | **Power, suspend, battery** | Kernel power_supply, [UPower](https://upower.freedesktop.org/), systemd-logind/`systemctl suspend` | Legacy `com.palm.power` (`batteryStatusQuery`), sleep/activity wakeups; OSE `com.webos.service.power2`, `com.webos.service.sleep`, `com.webos.service.alarm`, `com.webos.service.activitymanager` | Partly: power2 does power states, wake locks, shutdown and reboot, but **no battery status**; nyx has battery and charger modules | Battery service on nyx battery/charger (or UPower) that answers the legacy API and feeds the status bar. Opportunistic suspend: a policy service using wake locks, suspend on screen off, wake on modem ring, RTC alarm and power key. This is the hardest non-camera item on phones |
-| **Display and backlight** | sysfs `backlight` class through logind; DRM/KMS for panel on/off | Legacy `com.palm.display`; OSE `com.webos.settingsservice` `picture.backlight` | Partly (TV-style backlight setting; nyx display module) | Map the settings value to the real panel backlight, add auto-brightness from the light sensor, and panel off/on with the lock screen and proximity sensor |
+| **Display and backlight** | sysfs `backlight` class; DRM/KMS for panel on/off | Legacy `com.palm.display`; OSE `com.webos.settingsservice` `picture.backlight` | **No**: `picture.backlight` is a stored setting, OSE's nyx display module only reads the framebuffer's size and DPI, and no OSE service (power2, sleepd, luna-surfacemanager) has a display state or `com.palm.display` | **Done** in `phoenix-devices` (below): `com.palm.display` from the shell's own display state (`Display.qml`), the backlight through `/sys/class/backlight` (`bl_power` with it off), auto-brightness from the light sensor. Still to do: the panel's own power (DPMS) with the screen off, which luna-surfacemanager has no API for; proximity during calls |
 | **Touch** | evdev/libinput through Qt's Wayland compositor | None (compositor input) | Yes | Per-device calibration and palm rejection only. Gesture area: on phones with no capacitive gesture strip, reserve the bottom edge of the touchscreen (already how the simulator works) |
-| **Haptics** | [feedbackd](https://source.puri.sm/Librem5/feedbackd) (event-based themes, LED and vibra) | Legacy `com.palm.vibrate`; OSE nothing | **No** | Map `com.palm.vibrate` and the shell's feedback events to feedbackd; on Halium use the Android vibrator HAL (feedbackd has no hybris backend, so the LuneOS nyx haptics module instead) |
-| **Keyboard and IME** | Maliit, which OSE's `com.webos.service.ime` and webOS keyboard are built on; hardware keyboards through evdev | OSE `com.webos.service.ime`; Wayland `text-input` | Yes (TV-oriented keyboard) | Phone and tablet layouts in the webOS style (M2 item), prediction, and later swipe typing (see [APP-GAPS.md](APP-GAPS.md)) |
+| **Haptics** | The kernel's force-feedback input devices (`FF_RUMBLE`, the mainline vibrator drivers), the LED class's `vibrator` with the transient trigger, Android's `timed_output`; [feedbackd](https://source.puri.sm/Librem5/feedbackd) on mainline distros | Legacy `com.palm.vibrate`; OSE nothing | **No** (nyx-lib has `NYX_DEVICE_HAPTICS`; OSE's nyx-modules do not implement it) | **Done** in `phoenix-devices` (below), on those three kernel interfaces. On Halium, the Android vibrator HAL: LuneOS's `luna-haptics` over its nyx-modules-hybris haptics module instead |
+| **Keyboard and IME** | Maliit, which OSE's `com.webos.service.ime` and webOS keyboard are built on; hardware keyboards through evdev | OSE `com.webos.service.ime`; Wayland `text-input` | Yes (TV-oriented keyboard) | The Phoenix keyboard as a Maliit plugin: [The keyboard as the input method](#the-keyboard-as-the-input-method-gaps-v5) |
 | **Notification LED** | Kernel LED class via feedbackd | Legacy: the core navi pulse and the `blinkNotifications` preference | No (LuneOS has a nyx LED controller module) | Drive the LED from notification state; blink on new notifications when the screen is off |
 | **Torch** | Kernel LED class: the flash LED's `/sys/class/leds/<name>/brightness` (a `*torch*` node, else `*flash*`, or the one named in `/etc/nyx.conf`); on `LEDS_CLASS_FLASH` devices `brightness` is the torch current and `flash_brightness`/`flash_strobe` are left alone; Qualcomm `qpnp-flash-v2` also needs its `led:switch*` node; MediaTek has `/dev/flashlight` ioctls | LuneOS `org.webosports.service.torch` (torchd: `getStatus {subscribe}`, `set {on \| brightness}`, `toggle`); none in legacy webOS or OSE | No (LuneOS has torchd and a nyx `led_torch` module, both Apache-2.0) | Use LuneOS's torchd and nyx `led_torch` module as they are (`meta-phoenix/recipes-bsp/torchd`, a stub). The Flashlight app and QR Scanner call it; the simulator implements the same API. No system menu toggle (the original system menu had none) |
 | **Fingerprint** | [fprintd](https://fprint.freedesktop.org/) on mainline (few phone sensors supported); Android biometrics HAL on Halium (Droidian's approach) | None in legacy webOS | No | A PAM/lock-screen integration after PIN lock works. Low priority |
-| **Hardware keys, switches** | evdev (power, volume, ringer switch on devices that have one, headset jack) | Legacy `com.palm.keys` (switches, headset, media keys) | Partly (nyx keys module in LuneOS) | Port the keys module; the shell handles power and volume |
+| **Hardware keys, switches** | evdev (power, volume, ringer switch on devices that have one, headset jack) | Legacy `com.palm.keys` (switches, headset, media keys) | **No** (no OSE service; the compositor gets the keys, never the switches) | **Done** in `phoenix-devices` (below), from evdev; the shell still handles Power and volume itself. Still to do: input devices that come later (a USB or Bluetooth headset's media keys: a udev monitor) |
 
 ### Device configuration
 
@@ -340,12 +340,145 @@ missing file or key means the default. Read by `Phoenix.Native`'s
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `hardwareHomeButton` | `false` | The device has a Home button (physical or capacitive) that its maker uses **instead of** the on-screen gesture bar. The shell then hides the bar, the key does its job (`Key_Home`), and tablets take the bottom-edge flick for swipe up. |
+| `backlight` | the first under `/sys/class/backlight` | The panel's backlight, by name (`phoenix-devices`). |
+| `lightSensor` | the first IIO device with illuminance | The light sensor's IIO device, e.g. `"iio:device1"` (`phoenix-devices`). |
+| `ringerSwitch` | none (the ringer is always on) | The ringer switch: `{"type": "EV_SW" \| "EV_KEY", "code": n, "silentValue": 1}`, the input event code it sends and its value when silent. Linux has no code of its own for it (`SW_MUTE_DEVICE`, 14, is the nearest; OnePlus's alert slider sends keys), so each device names its own (`phoenix-devices`). |
 
 Phoenix keeps the gesture bar on every phone and tablet by default,
 including the TouchPad, whose Home button was a step back from the Pre's
 gesture area: a device goes without the bar only when its maker chooses
 the button. The bar is on the screen, so it follows the UI to the bottom
 as the device turns.
+
+### LunaSysMgr's device services (phoenix-devices)
+
+The apps of webOS 1-3 call four services LunaSysMgr itself registered
+(luna-sysmgr `README.md:24-128`): `com.palm.display`, `com.palm.keys`,
+`com.palm.vibrate` and `com.palm.ambientLightSensor`. webOS OSE has none of
+them, nor the hardware behind them: nyx-lib (webosose/nyx-lib) declares
+haptics, keys and light-sensor devices, but OSE's nyx-modules only build
+battery, charger, display (the framebuffer's size), GPS, device and OS
+info, security and system; meta-webosose has no haptics, sensor or keys
+service; `com.webos.service.mediaindexer` indexes media files, and
+`com.webos.service.tv.display` is LG's TV platform, not OSE. So Phoenix
+has its own: **`phoenix-devices`** (`services/devices`, C++ on
+luna-service2 and GLib like `services/pty`; `meta-phoenix`'s
+`phoenix-devices` recipe, in `webos-phoenix-image`), with luna-sysmgr's
+requests, replies, events and error texts (each cited in the source). The
+display's state is the shell's (`Display.qml`, as in the simulator); the
+service owns the rest. In the simulator each page's runtime answers the
+same API (`runtime/phoenix-runtime.js`, "LunaSysMgr's device services"),
+over the shell's `DeviceServices.qml`.
+
+| Service | In the simulator | On a device | Not done |
+| --- | --- | --- | --- |
+| `com.palm.display` `status`, `control/status`, `setState`, `getProperty`, `setProperty` | The shell's display (on, dimmed, off; its timeout; what keeps it on; dock mode) and its events. `setState` is the shell's (on, dimmed, off, unlock as the padlock, dock, undock). `requestBlock` holds the display on, locked or not (the Clock while an alarm rings); `powerKeyBlock` gives Power to the app; timeout, `maximumBrightness` and `onWhenConnected` are the system's preferences | The shell reports its display to `com.palm.display/phoenix/report` and hears the apps on `/phoenix/requests` (only `com.webos.surfacemanager` may call them; `LsmWindowSource`). The service sets the backlight (`/sys/class/backlight/*/brightness`, `bl_power`) from the shell's level | Proximity (`proximityEnabled` is counted, nothing senses); the panel's power (DPMS); the original's lower brightness on a low battery (`DisplayManager.cpp:2053-2062`) |
+| `com.palm.keys` `audio`, `media`, `headset`, `switches` | Volume (F10, F11), Power (F3) and media keys; the headset in or out (Ctrl+Shift+H) and its button (Ctrl+Shift+B: click, double click within a second; hold is the device's); the ringer switch (Ctrl+Shift+R; down mutes); `switches/status {get}` | evdev: `KEY_VOLUMEUP`/`DOWN`, `KEY_POWER`, the media keys, `KEY_MEDIA` (a wired headset's button), `SW_HEADPHONE_INSERT` and `SW_MICROPHONE_INSERT`, the ringer's code from `device.json`; `LsmSystemStatus` follows the ringer and headset | Hotplugged input devices (a Bluetooth headset's keys come through BlueZ's AVRCP uinput device only if it is there at start); the slider (no device has one; it reads closed) |
+| `com.palm.vibrate` `vibrate`, `vibrateNamedEffect` | Every vibration (an app's, a banner's "vibrate") is counted (`SystemSounds.vibrations`); the window shakes under "Vibrating: …" for as long as it lasts | The first of: a force-feedback device (`EV_FF`, `FF_RUMBLE`), `/sys/class/leds/vibrator` with the transient trigger, `/sys/class/timed_output/vibrator`. The named effects' lengths are Phoenix's (the Castle's were its haptics driver's) | `period` is taken but not pulsed; no device without one of the three (Halium: `luna-haptics`) |
+| `com.palm.ambientLightSensor` `control/status` | A simulated light (Ctrl+Shift+L: 1, 50, 300, 20000 lux) and its region; automatic brightness (`enableALS`) dims the screen in dim and dark light | IIO `in_illuminance_input`, or `_raw` × `_scale`, read every 0.5 s while the display is on, with AmbientLightSensor's ten-reading regions | The sensor's own rates (nyx's fast and slow report rates) |
+
+What it still needs on a device, and the owner's call:
+
+- **ACG.** `sysbus/` gives the status, keys, vibrate and light-sensor
+  methods to every app (`dev`) and the display's control methods to `oem`
+  apps; `org.webosphoenix.devices.shell.perm.json` lets
+  luna-surfacemanager call them. Whether an original app (no
+  `requiredPermissions`) gets `dev` on OSE is the same open question as
+  for every legacy service. *Unverified on a device.*
+- **Root.** It runs as root under systemd with `ProtectSystem=strict`,
+  because the backlight, LED and `/dev/input` nodes are root's on an OSE
+  image. udev rules giving a `phoenix-devices` account those nodes would
+  let it drop root.
+- **LuneOS's daemons instead.** [LUNEOS.md](LUNEOS.md) suggests reusing
+  LuneOS's `luna-displaymanager` (`com.palm.display` and
+  `com.palm.ambientLightSensor`: luna-sysmgr's eight-state display machine
+  split out, Apache-2.0) and `luna-haptics` (`com.palm.vibrate` over nyx).
+  Phoenix did not, for now: `luna-displaymanager` owns the display's state
+  itself, where Phoenix's shell does (so the shell would become its client
+  on a device, and the simulator and device would differ), and it needs
+  LunaSysMgrCommon, Qt Widgets and Sensors, luna-prefs and LuneOS's nyx
+  module forks, none of which OSE has; neither serves `com.palm.keys`.
+  `luna-haptics` plus LuneOS's nyx haptics modules is the better choice on
+  Halium, where only the Android HAL drives the motor.
+- **QEMU.** `qemux86-64` has none of this hardware: the service then
+  reports no backlight, vibrator or light sensor (vibrate answers "Unable
+  to vibrate", as luna-sysmgr did without haptics), and QEMU's keyboard
+  device gives the volume and media keys. `PHOENIX_DEVICES_ROOT` points it
+  at a fake `/sys` to try it there.
+
+Tests: `build/devices/devices-test` (the logic, the hardware against a
+fake sysfs, every method over the luna-service2 stand-in;
+`services/common/ls2stub`), `shell/tests/tst_deviceservices.qml`,
+`apps/shared/luna/src/device.test.ts`, `tools/test-device-services.cjs`.
+
+### The keyboard as the input method (GAPS V5)
+
+How webOS OSE's input method works (webosose/maliit-framework-webos,
+webosose/ime-manager, luna-surfacemanager):
+
+1. Apps (WAM's Chromium, Qt apps through `qtwayland-webos`) speak webOS's
+   own Wayland text protocol (`wl_text_model`, webos-wayland-extensions).
+   luna-surfacemanager receives it (`WaylandTextModel`,
+   `modules/weboscompositor/input/`) and relays it to the one Wayland
+   client bound to its `input_method` interface (`WaylandInputMethod`,
+   `WaylandInputMethodContext`), whose input panel it shows.
+2. That client is `maliit-server` (maliit-framework-webos, run by
+   `maliit-server.service`; its Wayland connection is
+   `connection/minputcontextwestonimprotocolconnection.cpp`). It loads
+   input method plugins from `/usr/lib/maliit/plugins`
+   (`MALIIT_DEFAULT_PLUGIN=libplugin-global.so` in the OSE recipe) and
+   keeps the active one in its settings (`maliit/onscreen/active`,
+   `mimonscreenplugins.cpp`).
+3. OSE's keyboard is `ime-manager`'s `maliit-plugin-global`: a C++
+   `Maliit::Plugins::InputMethodPlugin` whose `MAbstractInputMethod`
+   shows a `QQuickView` of QML (`plugin/keyboard.cpp` loads
+   `qml/view-global/main.qml`), registered with the host
+   (`registerWindow`), and types with the host's `sendCommitString`,
+   `sendPreeditString` and `sendKeyEvent`; it reads the field's
+   `contentType`, `enterKeyType` and `surroundingText` from the host.
+4. `com.webos.service.ime` (maliit-framework-webos `src/imelunaservice.cpp`)
+   is only for remote keyboards (`registerRemoteKeyboard`, `insertText`,
+   `deleteCharacters`, `sendEnterKey`); the on-screen keyboard does not
+   use it.
+
+The plan (V5's route, chosen with V7): **`phoenix-keyboard`, a Maliit
+plugin installed beside OSE's**, made active in `maliit/onscreen/active`:
+
+- `services/keyboard` (C++, Qt 6, linked against maliit-framework-webos's
+  `maliit-plugins`): `PhoenixKeyboardPlugin : InputMethodPlugin` and
+  `PhoenixInputMethod : MAbstractInputMethod`, which shows a `QQuickView`
+  loading `/usr/share/phoenix/qml` and a small wrapper,
+  `Phoenix/Keyboard/MaliitKeyboard.qml`, around the shell's own
+  `VirtualKeyboard.qml`. That component already has the narrow interface
+  this needs (`editorState` in; `keyTyped`, `textCommitted`,
+  `hideRequested`, `feedback`, `keyboardSelected` out), so it does not
+  change.
+- The wrapper's adapter: `textCommitted` → `sendCommitString`;
+  `keyTyped` (Backspace, Enter, the arrows of cursor control) →
+  `sendKeyEvent`; `hideRequested` → `notifyImInitiatedHiding`; the
+  keyboard's height → `setInputMethodArea` and `setScreenRegion`; the
+  field's `contentType` and `enterKeyType` (Maliit's
+  `Maliit::TextContentType`, `EnterKeyType`) → its PalmIME
+  `editorState`; `surroundingText` for prediction and auto-capitals;
+  `feedback` → audiod's `playFeedback`. Dictation keeps calling
+  `org.webosphoenix.transcriber` over the bus.
+- The shell needs no change for the panel: on a device it already draws
+  no keyboard of its own (`Shell.virtualKeyboard` is false there) and
+  makes room for the input method's panel, shown in luna-surfacemanager's
+  stock `KeyboardView` (`platformKeyboardHeight` in
+  `shell/qml/WebOSCompositor/views/PhoenixViewsRoot.qml`), whichever
+  plugin draws it.
+- Settings > Text Assist writes the same preferences the keyboard reads in
+  the simulator; the plugin reads them from the system service.
+- To check on OSE first: that maliit-server finds a second plugin and
+  switches to it by its settings key, and that a Qt 6 `QQuickView` plugin
+  loads the Phoenix QML module path (`QML_IMPORT_PATH`) in maliit-server.
+
+The other route, luna-surfacemanager answering the text protocol itself
+(its `WaylandTextModel` exports `commitString`, `preEditString` and
+`keySym`), would put the keyboard in the shell's process as in the
+simulator, but means rebuilding the keyboard switching and the hardware
+keyboard handling Maliit already has (V7 settled it).
 
 ## Graphics
 
