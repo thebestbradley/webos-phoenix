@@ -312,6 +312,15 @@ Item {
         }
     }
 
+    // The "Dismissing Cards" tutorial was shown: not again.
+    Connections {
+        target: windows
+        function onFirstCardAlertShown() {
+            if (typeof simSettings !== "undefined")
+                simSettings.setValue("cards/usedFirstCard", "1");
+        }
+    }
+
     // Closing the window turns the device off: the screen goes dark and
     // the shutdown sound plays before the simulator quits.
     property bool shuttingDown: false
@@ -560,6 +569,11 @@ Item {
                     status.exhibitionApps = exhibitions;
             } catch (e) { /* the default */ }
         }
+        // The "Dismissing Cards" tutorial, until it has been shown once
+        // (not in a demo scene).
+        if (typeof simSettings !== "undefined")
+            windows.dismissedFirstCard = simSettings.value("cards/usedFirstCard") === "1"
+                || (typeof simScene !== "undefined" && simScene !== "");
         if (typeof simSettings !== "undefined") {
             shell.keyboard.emojiPrefs = simSettings.value("keyboard/emoji");
             shell.keyboard.textAssistData = simSettings.value("keyboard/words");

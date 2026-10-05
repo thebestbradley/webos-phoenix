@@ -39,6 +39,7 @@ Item {
                 windows.close(windows.cards.get(0).uid);
             while (windows.alerts.count > 0)
                 windows.closeAlert(windows.alerts.get(0).key);
+            windows.dismissedFirstCard = true;
             shell.cardView.position = 0;
             shell.cardView.maximizeProgress = 0;
             shell.unlock();
@@ -124,6 +125,46 @@ Item {
             // Run without prepare: nothing.
             card.runSceneTransition("zoom-fade", false);
             compare(card.sceneTransitionState, "");
+        }
+
+        // ---- The "Dismissing Cards" tutorial -------------------------------------
+
+        function test_dismissCardTutorialTheFirstTimeInCardView() {
+            windows.dismissedFirstCard = false;
+            var shown = 0;
+            var onShown = function () { shown++; };
+            windows.firstCardAlertShown.connect(onShown);
+            maximized("org.webosphoenix.email");
+            compare(windows.alerts.count, 0, "not while the card is maximized");
+            shell.cardView.minimize();
+            compare(windows.alerts.count, 1);
+            compare(windows.alerts.get(0).key, "dismisscardtutorial");
+            compare(windows.alerts.get(0).height, 170);
+            compare(shown, 1);
+            verify(windows.dismissedFirstCard);
+            var alert = findChild(shell, "dismissCardTutorial");
+            verify(alert);
+            tryCompare(alert, "visible", true);
+            compare(findChild(alert, "dismissCardTutorialTitle").text, "Dismissing Cards");
+            compare(findChild(alert, "dismissCardTutorialMessage").text,
+                    "You can close an application by using your finger to flick it up and off screen while in Card View.");
+            tryCompare(shell.notifications, "negativeSpace", shell.notifications.alertHeight, 2000);
+            mouseClick(findChild(alert, "dismissCardTutorialOk"));
+            compare(windows.alerts.count, 0);
+            // Never again.
+            shell.cardView.maximize();
+            tryCompare(shell.cardView, "maximized", true, 2000);
+            shell.cardView.minimize();
+            compare(windows.alerts.count, 0);
+            compare(shown, 1);
+            windows.firstCardAlertShown.disconnect(onShown);
+        }
+
+        function test_noTutorialWithoutACard() {
+            windows.dismissedFirstCard = false;
+            shell.cardView.minimize();
+            compare(windows.alerts.count, 0);
+            verify(!windows.dismissedFirstCard);
         }
 
     }

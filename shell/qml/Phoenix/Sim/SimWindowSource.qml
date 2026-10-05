@@ -1079,6 +1079,39 @@ Item {
                         sound: "", soundClass: "" });
     }
 
+    // "Dismissing Cards", the first time the user is in card view
+    // (CardWindowManager::firstCardAlert, CardWindowManager.cpp:1167-1187;
+    // DismissCardTutorial.qml, 170 px tall, in the popup alert's place); OK
+    // closes it. It is marked done as it is shown (markFirstCardDone: the
+    // marker file /var/luna/preferences/used-first-card), so it never shows
+    // again. phoenix-sim keeps the mark in simSettings "cards/usedFirstCard";
+    // without one (tests) it counts as done.
+    property bool dismissedFirstCard: true
+    // It was shown: remember that (sim.qml).
+    signal firstCardAlertShown
+    readonly property string dismissCardTutorialKey: "dismisscardtutorial"
+    Component {
+        id: dismissCardTutorialComponent
+        DismissCardTutorial {}
+    }
+    function firstCardAlert() {
+        if (dismissedFirstCard)
+            return;
+        dismissedFirstCard = true;
+        firstCardAlertShown();
+        if (_windows[dismissCardTutorialKey])
+            return;
+        var alert = dismissCardTutorialComponent.createObject(source, { visible: false });
+        alert.okButtonPressed.connect(function () { source.closeAlert(source.dismissCardTutorialKey); });
+        _windows[dismissCardTutorialKey] = alert;
+        var queued = [];
+        for (var i = 0; i < alerts.count; ++i)
+            queued.push({ appId: alerts.get(i).appId, name: alerts.get(i).name });
+        alerts.insert(Policy.insertIndex(queued, "com.palm.systemui", dismissCardTutorialKey),
+                      { key: dismissCardTutorialKey, appId: "com.palm.systemui", name: dismissCardTutorialKey, height: 170,
+                        sound: "", soundClass: "" });
+    }
+
     // "USB Drive connection failed": storaged could not take the drive
     // (WindowServerLuna::slotBrickModeFailed, uiComponents/MsmEntryFailed;
     // 160 px tall in the popup alert's place); OK closes it.

@@ -262,6 +262,12 @@ Item {
         maximizeAnim.duration = Theme.cardMinimizeDuration;
         maximizeAnim.start();
         cardMinimized(currentUid);
+        // The first time in card view, the "Dismissing Cards" tutorial
+        // (MinimizeState::onEntry -> CardWindowManager::firstCardAlert,
+        // CardWindowManagerStates.cpp:182-191, CardWindowManager.cpp:1167-1187):
+        // the window source shows it, once.
+        if (currentUid !== "" && source && typeof source.firstCardAlert === "function")
+            source.firstCardAlert();
     }
 
     // Advanced gestures (G5): the card beside the active one, through its
