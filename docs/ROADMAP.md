@@ -170,10 +170,13 @@ simulator, the P2 rows are listed there.
 - [x] Trackpad and mouse-wheel gestures in card view (swipe through cards, throw them away)
 - [x] Sharp art at every pixel density ([spec/hidpi-art.md](spec/hidpi-art.md))
 - [x] Phone in landscape: the launcher has as many columns as fit (4 on a
-      Pre's side), the lock screen's banner and dashboard keep between the
-      date and the padlock, the clock steps back behind the PIN pad, and the
-      system menu scrolls within the screen (`tst_rotation.qml`)
-- [ ] Check Just Type in tablet portrait (an overlap was seen once, perhaps mid-rotation)
+      Pre's side, 5 on a Pre 3's), the lock screen's banner and dashboard keep
+      between the date and the padlock, the PIN pad lays itself out side by
+      side with the clock stepping back behind it, and the system menu
+      scrolls within the screen (`tst_rotation.qml`, `tst_landscape.qml`)
+- [x] Check Just Type in tablet portrait: no overlap at start-up or after
+      turning either way (the card thumbnails show dimmed through its
+      translucent backdrop, as in landscape)
 - [ ] Advanced gestures: long swipe to switch apps while maximized (G5)
 - [ ] Exhibition / dock mode (clock, slideshow while charging) (R5)
 - [ ] Just Type: search suggestions, remote (GAL) contacts, its preferences screen

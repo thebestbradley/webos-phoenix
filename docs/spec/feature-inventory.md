@@ -96,7 +96,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Drag-up padlock to unlock (146 px radius). `LockWindow.cpp:1801-1860`
 - [x] Incoming call on the lock screen: "Drag up to answer". `LockWindow.cpp:95-96,2333-2335`
 - [x] Notifications on the lock screen (dashboards, banners, popups). `LockWindow.cpp:2595-2860`
-- [x] PIN pad unlock. `uiComponents/UnlockPanel/PINPad.qml`
+- [x] PIN pad unlock. `uiComponents/UnlockPanel/PINPad.qml` *Phoenix: on a phone turned sideways, where the stacked panel does not fit, the keypad sits beside the title and buttons.*
 - [x] Password unlock (hardware or virtual keyboard). `uiComponents/UnlockPanel/PasswordField.qml`
 - [x] Last-try warning and "set new PIN" dialogs (EAS policy). `Src/lunaui/lockscreen/LockWindow.h:129-137`; `Src/base/EASPolicyManager.cpp` *Phoenix: `MessageDialog.qml` on the lock screen: PIN / Password Required and the new passcode entered twice, tries left, the last-try warning, Final Try, then the wipe; the policy from db8 `com.palm.securitypolicy` (`--security-policy`; `tst_securitypolicy`, `tools/test-security.cjs`).*
 - [x] Device passcode service (`setDevicePasscode`, `matchDevicePasscode`, `getDeviceLockMode`, `getSecurityPolicy`). `Src/base/SystemService.cpp:218-222`; `Src/base/Security.cpp` *Phoenix: set, match, getDeviceLockMode and getSecurityPolicy in the simulator, with the original's checks and error texts; the device service is still to do.*
