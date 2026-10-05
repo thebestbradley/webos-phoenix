@@ -8,7 +8,7 @@
 #   phoenix-pty        the Luna service, when luna-service2 and GLib are
 #                      found (the device; meta-phoenix's phoenix-pty recipe)
 #   pty-test           tests of the core and of the service's methods over a
-#                      luna-service2 stand-in (tests/ls2stub), when GLib is
+#                      luna-service2 stand-in (../common/ls2stub), when GLib is
 #                      found; phoenix-sim's build runs them in CI
 #
 # Standalone: cmake -S services/pty -B build-pty && cmake --build build-pty
@@ -21,8 +21,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(GNUInstallDirs)
 find_package(PkgConfig QUIET)
 
-add_library(phoenix-pty-core STATIC src/ptycore.cpp src/ptycore.h)
-target_include_directories(phoenix-pty-core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_library(phoenix-pty-core STATIC src/ptycore.cpp src/ptycore.h ../common/json.cpp ../common/json.h)
+target_include_directories(phoenix-pty-core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/../common)
 set_target_properties(phoenix-pty-core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # forkpty: libutil on glibc before 2.34 and the BSDs; part of libSystem on macOS.
 if(NOT APPLE)
@@ -57,7 +57,7 @@ endif()
 option(PHOENIX_PTY_TESTS "Build pty-test (the core and the service over a luna-service2 stand-in)" ON)
 if(PHOENIX_GLIB_FOUND AND PHOENIX_PTY_TESTS)
     add_executable(pty-test tests/pty_test.cpp src/service.cpp src/service.h
-                   tests/ls2stub/ls2stub.cpp tests/ls2stub/luna-service2/lunaservice.h)
-    target_include_directories(pty-test PRIVATE tests/ls2stub)
+                   ../common/ls2stub/ls2stub.cpp ../common/ls2stub/luna-service2/lunaservice.h)
+    target_include_directories(pty-test PRIVATE ../common/ls2stub)
     target_link_libraries(pty-test PRIVATE phoenix-pty-core PkgConfig::PHOENIX_GLIB)
 endif()
