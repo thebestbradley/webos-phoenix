@@ -732,6 +732,32 @@ Item {
         return null;
     }
 
+    // ---- Scene transitions (Card.prepareSceneTransition) -------------------------------
+
+    Connections {
+        target: view.source
+        ignoreUnknownSignals: true
+        function onSceneTransitionRequested(uid, op, transition, isPop) {
+            var card = view.cardItem(uid);
+            var src = view.source;
+            var prepared = function () {
+                if (src && typeof src.sceneTransitionPrepared === "function")
+                    src.sceneTransitionPrepared(uid);
+            };
+            if (!card) {
+                if (op === "prepare")
+                    prepared();
+                return;
+            }
+            if (op === "prepare")
+                card.prepareSceneTransition(isPop, prepared);
+            else if (op === "run")
+                card.runSceneTransition(transition, isPop);
+            else if (op === "cancel")
+                card.cancelSceneTransition();
+        }
+    }
+
     // ---- Touch handling in card view ----------------------------------------------------
     // Every finger can flick a card up and away, any card on screen,
     // including the stacks peeking in at the sides, and several at once

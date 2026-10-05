@@ -420,6 +420,9 @@ QtObject {
     readonly property int cardShuffleReorderDuration: motion(350)            // curve 6 = OutCubic
     readonly property int cardGroupReorderDuration: motion(500)              // conf/lunaAnimations.conf:43-46
     readonly property int cardDimmingDuration: motion(300)
+    // An app's scene push / pop (CardTransition.cpp): conf/lunaAnimations.conf:61-62
+    // cardTransitionDuration, curve 20 = easeOutQuad (AnimationSettings.cpp:380-396).
+    readonly property int cardTransitionDuration: motion(300)
     readonly property int launcherReorderDuration: 300               // dynamicssettings.cpp:92-93 iconReorderIconMoveAnimTime, InQuad
     // Dragging an icon to a page's left or right edge (the 50 px border,
     // layoutsettings.cpp:61) takes it to the page beside at once; held

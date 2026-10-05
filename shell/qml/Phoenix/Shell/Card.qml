@@ -154,6 +154,28 @@ Item {
             height: sideways ? parent.width : parent.height
             rotation: card.adjustmentAngle
 
+            // Under a scene transition: black (CardTransition.cpp:146).
+            Rectangle {
+                anchors.fill: parent
+                z: -1
+                color: "black"
+                visible: card.sceneTransitionState === "running"
+            }
+            // The scene being left (a scene transition): over the window
+            // while prepared, a pop and a cross-fade; under it for a
+            // zoom-fade push.
+            Image {
+                objectName: "sceneSnapshot"
+                anchors.fill: parent
+                z: card.sceneTransitionState === "running" && card.sceneTransitionType === "zoom-fade"
+                   && !card.sceneTransitionIsPop ? -0.5 : 0.5
+                visible: card.sceneTransitionState !== "" && source != ""
+                source: card._sceneSnapshot
+                opacity: card._snapshotOpacity
+                cache: false
+                smooth: true
+            }
+
             // Over the app's window until it is ready.
             CardLoading {
                 anchors.fill: parent
@@ -194,7 +216,126 @@ Item {
         fullSize: card.cardScale >= 0.999
     }
 
-    onWindowChanged: attachWindow()
+    // ---- Scene transitions -------------------------------------------------------
+    // An app pushing or popping a scene (PalmSystem.prepareSceneTransition,
+    // runSceneTransition): CardTransition.cpp. prepare takes a snapshot of
+    // the window, which the card shows while the app builds the new scene;
+    // run then animates from it to the live window over
+    // cardTransitionDuration (300 ms), AS_EASEOUT(cardTransitionCurve = 20)
+    // = easeOutQuad (lunaAnimations.conf:61-62; AnimationSettings.cpp:380-396),
+    // on black:
+    //  zoom-fade push: the snapshot fades out under the new scene, which
+    //    zooms in from 0.75 while fading in (zoomAndCrossFadeTick, :155-194);
+    //  zoom-fade pop: the new scene zooms down from 1.25 while fading in,
+    //    under the snapshot fading out (:165-174);
+    //  cross-fade: the snapshot fades out over the new scene (crossFadeTick).
+    // The snapshot is never scaled (the "from" scale the constructor sets is
+    // not drawn). The scaling is about the card's centre (the painter's
+    // origin in CardWindow::paint).
+    // "" | "prepared" (showing the snapshot) | "running".
+    property string sceneTransitionState: ""
+    property string sceneTransitionType: ""
+    property bool sceneTransitionIsPop: false
+    // The snapshot (an image URL from grabToImage).
+    property url _sceneSnapshot: ""
+    property var _sceneGrab: null
+    // Live-scene scale and opacity, from-scene opacity while running.
+    property real _sceneProgress: 0
+
+    // done(): the snapshot is taken (the page may change its scene).
+    function prepareSceneTransition(isPop, done) {
+        _endSceneTransition();
+        sceneTransitionIsPop = !!isPop;
+        if (!window || typeof window.grabToImage !== "function" || window.width <= 0 || window.height <= 0) {
+            if (done)
+                done();
+            return;
+        }
+        var self = card;
+        var ok = window.grabToImage(function (result) {
+            self._sceneGrab = result;
+            self._sceneSnapshot = result.url;
+            self.sceneTransitionState = "prepared";
+            sceneSafety.restart();
+            if (done)
+                done();
+        });
+        if (!ok && done)
+            done();
+    }
+    function runSceneTransition(type, isPop) {
+        if (sceneTransitionState !== "prepared")
+            return;
+        sceneSafety.stop();
+        if (type !== "zoom-fade" && type !== "cross-fade") {
+            _endSceneTransition();
+            return;
+        }
+        if (Theme.reduceMotion) {
+            _endSceneTransition();
+            return;
+        }
+        sceneTransitionType = type;
+        sceneTransitionIsPop = !!isPop;
+        sceneTransitionState = "running";
+        _sceneProgress = 0;
+        sceneAnim.restart();
+    }
+    function cancelSceneTransition() {
+        _endSceneTransition();
+    }
+    function _endSceneTransition() {
+        sceneAnim.stop();
+        sceneSafety.stop();
+        sceneTransitionState = "";
+        sceneTransitionType = "";
+        _sceneProgress = 0;
+        _sceneSnapshot = "";
+        _sceneGrab = null;
+    }
+    // The live window while running: from (1 - s) to 1 (CardTransition's
+    // constructor: push 0.75, pop 1.25; cross-fade unscaled).
+    readonly property real _liveScale: {
+        if (sceneTransitionState !== "running" || sceneTransitionType !== "zoom-fade")
+            return 1;
+        var from = sceneTransitionIsPop ? 1.25 : 0.75;
+        return from + (1 - from) * _sceneProgress;
+    }
+    readonly property real _liveOpacity: sceneTransitionState === "running" && sceneTransitionType === "zoom-fade" ? _sceneProgress : 1
+    readonly property real _snapshotOpacity: sceneTransitionState === "running" ? 1 - _sceneProgress : 1
+    NumberAnimation {
+        id: sceneAnim
+        target: card
+        property: "_sceneProgress"
+        from: 0
+        to: 1
+        duration: Theme.cardTransitionDuration
+        easing.type: Easing.OutQuad
+        onFinished: card._endSceneTransition()
+    }
+    // A page that prepared and never ran nor cancelled (Mojo always does
+    // one or the other) gets its live window back.
+    Timer {
+        id: sceneSafety
+        interval: 2000
+        onTriggered: card._endSceneTransition()
+    }
+    Binding {
+        target: card.window
+        when: card.window !== null && card.sceneTransitionState === "running"
+        property: "scale"
+        value: card._liveScale
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+    Binding {
+        target: card.window
+        when: card.window !== null && card.sceneTransitionState === "running"
+        property: "opacity"
+        value: card._liveOpacity
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
+    onWindowChanged: { _endSceneTransition(); attachWindow(); }
     Component.onCompleted: attachWindow()
 
     function attachWindow() {

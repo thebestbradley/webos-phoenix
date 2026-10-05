@@ -712,6 +712,13 @@ Item {
         } else if (type === "debugOverlay") {
             // com.palm.systemmanager enableFpsCounter / enableTouchPlot.
             debugOverlayRequested(payload);
+        } else if (type === "sceneTransition") {
+            // PalmSystem.prepare/run/cancelSceneTransition: the card does
+            // the scene change (Card.prepareSceneTransition).
+            if (uid !== "" && cardIndex(uid) >= 0)
+                sceneTransitionRequested(uid, String(payload.op || ""), String(payload.transition || ""), !!payload.isPop);
+            else if (uid !== "" && payload.op === "prepare")
+                sceneTransitionPrepared(uid);
         } else if (type === "progressAnimation") {
             // com.palm.systemmanager runProgressAnimation.
             progressAnimationRequested(String(payload.type || ""), String(payload.state || ""));
@@ -772,6 +779,21 @@ Item {
     signal debugOverlayRequested(var request)
     // runProgressAnimation {type, state}.
     signal progressAnimationRequested(string type, string state)
+
+    // ---- Scene transitions ---------------------------------------------------------
+    // A page's PalmSystem.prepareSceneTransition(isPop) ("prepare"),
+    // runSceneTransition(type, isPop) ("run", type "zoom-fade" or
+    // "cross-fade") and cancelSceneTransition() ("cancel"), for its card.
+    signal sceneTransitionRequested(string uid, string op, string transition, bool isPop)
+    // The card has its snapshot: the page may change the scene.
+    property string lastSceneTransitionPrepared: ""
+    function sceneTransitionPrepared(uid) {
+        lastSceneTransitionPrepared = uid;
+        var w = _windows[uid];
+        if (w && w.runScript)
+            w.runScript("window.__phoenixRuntime && __phoenixRuntime.sceneTransitionPrepared && __phoenixRuntime.sceneTransitionPrepared()");
+    }
+
 
     // A /storaged signal (the simulated storage daemon's, SimStorage.qml)
     // for every page's com.palm.bus/signal/addmatch listeners
