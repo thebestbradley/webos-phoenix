@@ -1135,6 +1135,10 @@
         // after"; 0: as soon as the screen is off).
         screenTimeout: 60,
         lockTimeout: 0,
+        // The backlight follows the light sensor (LunaSysMgr's Preferences
+        // "enableALS", Preferences.cpp:83, :709-714; DisplayManager::
+        // getDisplayBrightness, :2065-2082).
+        enableALS: true,
         // Screen & Lock > Advanced gestures: LunaSysMgr's key. A long swipe
         // across the gesture area switches apps (phones).
         sysUiEnableNextPrevGestures: false,
@@ -2259,10 +2263,8 @@
         "/com/palm/power/activityEnd": function (p, reply) { reply(ok()); }
     });
 
-    register(["com.palm.display"], {
-        "/control/status": function (p, reply) { reply(ok({ event: "displayOn", state: "on" })); },
-        "*": function (p, reply) { reply(ok()); }
-    });
+    // com.palm.display, com.palm.keys, com.palm.vibrate: see "LunaSysMgr's
+    // device services" below.
 
     // com.palm.service.accounts: see "Accounts" below.
 
@@ -2271,7 +2273,7 @@
     });
 
     // Services that apps poke but whose absence should not break them.
-    register(["com.palm.keys", "com.palm.audio", "com.palm.vibrate", "com.palm.lunabus",
+    register(["com.palm.audio", "com.palm.lunabus",
               "com.palm.preferences", "com.palm.systemmanager",
               "com.palm.location", "com.palm.telephony", "com.palm.messaging",
               "com.palm.applicationManager.private", "com.palm.mediaindexer"], {
@@ -3784,6 +3786,11 @@
                 audioScenario: audioScenario(),
                 screenTimeout: typeof p.screenTimeout === "number" ? p.screenTimeout : 60,
                 lockTimeout: typeof p.lockTimeout === "number" ? p.lockTimeout : 0,
+                // The backlight follows the light sensor (enableALS), and
+                // stays on while a USB charger is in (com.palm.display
+                // setProperty onWhenConnected).
+                automaticBrightness: p.enableALS !== false,
+                displayOnWhenConnected: runtime.devices ? runtime.devices.onWhenConnected() : false,
                 advancedGestures: !!p.sysUiEnableNextPrevGestures,
                 keyboardShortcuts: p.keyboardShortcuts === "desktop" ? "desktop" : "ipad",
                 // Settings > Accessibility: the shell's animations.
@@ -4422,7 +4429,7 @@
         };
         sys["/setPreferences"] = function (p, reply, ctx) {
             baseSetPreferences(p, reply, ctx);
-            if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "screenTimeout", "lockTimeout", "sysUiEnableNextPrevGestures", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
+            if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "screenTimeout", "lockTimeout", "enableALS", "sysUiEnableNextPrevGestures", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
                  "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "x_palm_textinput", "accessibility",
                  "dockwallpaper", "dockModeSoundPref", "exhibition"].some(function (k) { return k in p; })) {
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
@@ -11349,6 +11356,411 @@
                 store.set(TORCH_KEY, st);
                 torchNotify();
             }
+        };
+    })();
+
+    // ================================================================================
+    // LunaSysMgr's device services: com.palm.display, com.palm.keys,
+    // com.palm.vibrate, com.palm.ambientLightSensor
+    // ================================================================================
+    //
+    // The services luna-sysmgr itself registered for the apps (README.md:24-128),
+    // with its requests, replies and events:
+    //
+    //   com.palm.display          DisplayManager.cpp (status :2296-2357,
+    //                             setState :1225-1308, getProperty :1633-1712,
+    //                             setProperty :1796-1990, events :1453-1534)
+    //   com.palm.keys             InputManager.cpp (:86-116, :333-428, :640-1178)
+    //   com.palm.vibrate          HapticsController.cpp (:117-307);
+    //                             named effects HapticsControllerCastle.cpp:78-97
+    //   com.palm.ambientLightSensor  AmbientLightSensor.cpp (:420-570)
+    //
+    // The shell owns what they report: the display's state (Display.qml), the
+    // keys and switches, the motor and the light sensor (DeviceServices.qml).
+    // In phoenix-sim each page has its own copy of these services; the shell
+    // tells every page what changed through __phoenixRuntime.devices.hostEvent
+    // ({display, holds, switches, key, light, powerKey}) and the pages ask
+    // the shell with host messages:
+    //
+    //   "displayState" {state}            setState: on, dimmed, off, unlock, dock, undock
+    //   "displayHolds" {requestBlock, powerKeyBlock, proximity, alsDisabled, clients}
+    //                                     what this page holds (subscriptions
+    //                                     that last until cancelled; the shell
+    //                                     adds every page's up and drops a
+    //                                     page's when it goes)
+    //   "vibrate" {id, on, period?, duration?, name?}
+    //
+    // The rest (timeout, maximumBrightness, onWhenConnected) are the
+    // system's preferences: screenTimeout, picture.backlight and
+    // display:onWhenConnected, which reach the shell as systemStatus.
+    // On a device the same services come from services/devices (phoenix-devices)
+    // on the bus, and this block is not used (docs/HARDWARE.md).
+    (function deviceServices() {
+        var DISPLAY_KEY = "devices:display", SWITCHES_KEY = "devices:switches", LIGHT_KEY = "devices:light";
+        var PROPS_KEY = "display:props";
+
+        // What the shell last said, kept in the shared store for pages that
+        // load later. Until it has said anything: the display on, the
+        // ringer on (up), no headset (up), the slider closed (down, as
+        // InputManager::getKeyState reported on the emulator, :779-781).
+        function displayState() {
+            var d = store.get(DISPLAY_KEY, null) || {};
+            return {
+                state: d.state === "dimmed" || d.state === "off" ? d.state : "on",
+                timeout: typeof d.timeout === "number" ? d.timeout : screenTimeout(),
+                blockDisplay: !!d.blockDisplay,
+                active: d.active !== false,
+                dockMode: !!d.dockMode,
+                holds: d.holds || { requestBlock: 0, powerKeyBlock: 0, proximity: 0, alsDisabled: 0 }
+            };
+        }
+        function switches() {
+            var s = store.get(SWITCHES_KEY, null) || {};
+            return { ringer: s.ringer || "up", slider: s.slider || "down", headset: s.headset || "up",
+                     "headset-mic": s["headset-mic"] || "up", power: s.power || "up" };
+        }
+        function light() {
+            var l = store.get(LIGHT_KEY, null) || {};
+            return { current: typeof l.current === "number" ? l.current : 300,
+                     average: typeof l.average === "number" ? l.average : (typeof l.current === "number" ? l.current : 300),
+                     region: typeof l.region === "number" ? l.region : 3 };
+        }
+        function screenTimeout() {
+            var t = prefs().screenTimeout;
+            return typeof t === "number" && t > 0 ? t : 60;
+        }
+        function displayProps() { return store.get(PROPS_KEY, null) || { onWhenConnected: false }; }
+        function maximumBrightness() {
+            var st = store.get("settings:state", null);
+            var b = st && st.settings && st.settings.picture ? st.settings.picture.backlight : 70;
+            return typeof b === "number" ? b : 70;
+        }
+
+        // ---- com.palm.display ------------------------------------------------------
+
+        var displaySubs = [];   // {reply, ctx, isPublic}
+        var powerKeySubs = [];  // {reply, ctx}: setProperty {powerKeyBlock}
+        var mine = { requestBlock: [], powerKeyBlock: [], proximity: [], alsDisabled: 0 };
+
+        function live(list) { return list.filter(function (s) { return !s.ctx.cancelled(); }); }
+
+        // DisplayManager::notifySubscribers (:1453-1534): every event on the
+        // private bus (/control/status), the display's own on the public one
+        // (/status) too.
+        function notifyDisplay(event, extra) {
+            var isPublic = event === "displayOn" || event === "displayDimmed" || event === "displayOff";
+            var r = ok({ event: event });
+            for (var k in extra) r[k] = extra[k];
+            displaySubs = live(displaySubs);
+            displaySubs.forEach(function (s) {
+                if (!s.isPublic || isPublic) s.reply(r);
+            });
+        }
+
+        // The shell's display changed: the events luna-sysmgr sent.
+        function displayFromShell(d) {
+            var before = displayState();
+            var after = {
+                state: d.state === "dim" || d.state === "dimmed" ? "dimmed" : d.state === "off" ? "off" : "on",
+                timeout: typeof d.timeout === "number" ? d.timeout : before.timeout,
+                blockDisplay: "blockDisplay" in d ? !!d.blockDisplay : before.blockDisplay,
+                active: "active" in d ? !!d.active : before.active,
+                dockMode: "dockMode" in d ? !!d.dockMode : before.dockMode,
+                holds: before.holds
+            };
+            store.set(DISPLAY_KEY, after);
+            if (after.state !== before.state || (after.state === "on" && after.dockMode !== before.dockMode)) {
+                if (after.state === "on")
+                    notifyDisplay("displayOn", after.dockMode ? { dockMode: true } : null);
+                else
+                    notifyDisplay(after.state === "dimmed" ? "displayDimmed" : "displayOff");
+            }
+            if (after.timeout !== before.timeout)
+                notifyDisplay("changedTimeout", { timeout: after.timeout });
+            if (after.blockDisplay !== before.blockDisplay)
+                notifyDisplay(after.blockDisplay ? "blockedDisplay" : "unblockedDisplay");
+            if (after.active !== before.active)
+                notifyDisplay(after.active ? "displayActive" : "displayInactive");
+        }
+
+        function holdsFromShell(h) {
+            var d = displayState();
+            d.holds = { requestBlock: h.requestBlock | 0, powerKeyBlock: h.powerKeyBlock | 0,
+                        proximity: h.proximity | 0, alsDisabled: h.alsDisabled | 0 };
+            store.set(DISPLAY_KEY, d);
+        }
+
+        // What this page holds, for the shell (it adds every page's up).
+        function reportHolds() {
+            ["requestBlock", "powerKeyBlock", "proximity"].forEach(function (k) { mine[k] = live(mine[k]); });
+            host.postToHost("displayHolds", {
+                requestBlock: mine.requestBlock.length, powerKeyBlock: mine.powerKeyBlock.length,
+                proximity: mine.proximity.length, alsDisabled: mine.alsDisabled,
+                clients: mine.requestBlock.map(function (s) { return s.client; })
+            });
+        }
+        // A hold lasts as long as its call (LSSubscriptionAdd; the cancel
+        // function pops it, DisplayManager::cancelSubscription :1379-1450).
+        function hold(kind, ctx, client) {
+            var h = { ctx: ctx, client: client };
+            mine[kind].push(h);
+            var prev = ctx.onCancel;
+            ctx.onCancel = function () {
+                if (prev) prev();
+                mine[kind] = mine[kind].filter(function (x) { return x !== h; });
+                reportHolds();
+            };
+            reportHolds();
+        }
+
+        // controlStatus (:2296-2357): the public bus gets less.
+        function status(isPublic) {
+            return function (p, reply, ctx) {
+                var d = displayState(), subscribed = p.subscribe === true;
+                var r = isPublic ? ok({ event: "request", state: d.state, subscribed: subscribed })
+                                 : ok({ event: "request", state: d.state, timeout: d.timeout,
+                                        blockDisplay: d.blockDisplay ? "true" : "false", active: d.active, subscribed: subscribed });
+                reply(r);
+                if (subscribed) displaySubs.push({ reply: reply, ctx: ctx, isPublic: isPublic });
+            };
+        }
+
+        var STATES = ["on", "dimmed", "off", "unlock", "dock", "undock"];
+
+        register(["com.palm.display"], {
+            "/status": status(true),
+            "/control/status": status(false),
+            // controlSetState (:1225-1308): the shell's display does it.
+            "/control/setState": function (p, reply) {
+                if (typeof p.state !== "string" || STATES.indexOf(p.state) < 0)
+                    return reply({ returnValue: false, errorText: "call failed" });
+                host.postToHost("displayState", { state: p.state });
+                reply(ok());
+            },
+            // controlGetProperty (:1633-1712): the properties it knows; none
+            // known is a failure.
+            "/control/getProperty": function (p, reply) {
+                if (!Array.isArray(p.properties))
+                    return reply(fail(1, "failed to get property"));
+                var d = displayState(), r = ok(), any = false;
+                p.properties.forEach(function (name) {
+                    var v;
+                    if (name === "requestBlock") v = d.blockDisplay;
+                    else if (name === "powerKeyBlock") v = d.holds.powerKeyBlock > 0;
+                    else if (name === "timeout") v = d.timeout;
+                    else if (name === "maximumBrightness") v = maximumBrightness();
+                    else if (name === "onWhenConnected") v = !!displayProps().onWhenConnected;
+                    else if (name === "proximityEnabled") v = d.holds.proximity > 0;
+                    else return;
+                    r[name] = v;
+                    any = true;
+                });
+                reply(any ? r : fail(1, "failed to get property"));
+            },
+            // controlSetProperty (:1796-1990), in its order; an error stops
+            // there, what came before it stays done.
+            "/control/setProperty": function (p, reply, ctx) {
+                function needsClient(key) {
+                    if (typeof p.client === "string" && p.client) return false;
+                    reply(fail(22, "'" + key + "' needs 'client' string"));
+                    return true;
+                }
+                if (p.requestBlock === true) {
+                    if (needsClient("requestBlock")) return;
+                    hold("requestBlock", ctx, p.client);
+                }
+                if (p.powerKeyBlock === true) {
+                    if (needsClient("powerKeyBlock")) return;
+                    hold("powerKeyBlock", ctx, p.client);
+                    powerKeySubs.push({ reply: reply, ctx: ctx });
+                }
+                if (typeof p.timeout === "number" && p.timeout !== -1) {
+                    // DisplayManager::setTimeout (:1550-1563): 0 or less is
+                    // the default, 120 s. Phoenix keeps it as the system
+                    // preference screenTimeout ("Turn off after").
+                    var t = p.timeout > 0 ? Math.round(p.timeout) : 120;
+                    dispatch("palm://com.palm.systemservice/setPreferences", { screenTimeout: t }, function () {},
+                             { cancelled: function () { return true; }, onCancel: null });
+                }
+                if ("onWhenConnected" in p) {
+                    var props = displayProps();
+                    props.onWhenConnected = !!p.onWhenConnected;
+                    store.set(PROPS_KEY, props);
+                    if (runtime.hostStatus) host.postToHost("systemStatus", runtime.hostStatus());
+                }
+                if (typeof p.maximumBrightness === "number") {
+                    // setMaximumBrightness (:2150-2190): 1-100. It is the
+                    // brightness the user sets (Screen & Lock, the system
+                    // menu): picture.backlight.
+                    var b = Math.max(1, Math.min(100, Math.round(p.maximumBrightness)));
+                    dispatch("luna://com.webos.settingsservice/setSystemSettings", { category: "picture", settings: { backlight: b } },
+                             function () {}, { cancelled: function () { return true; }, onCancel: null });
+                }
+                if (p.proximityEnabled === true) {
+                    if (needsClient("proximityEnabled")) return;
+                    hold("proximity", ctx, p.client);
+                }
+                reply(ok());
+            }
+        });
+
+        // ---- com.palm.keys ----------------------------------------------------------
+
+        var keySubs = [];   // {category, reply, ctx}
+
+        // processSubscription (:333-370): these categories only take subscriptions.
+        function keySubscription(category) {
+            return function (p, reply, ctx) {
+                if (p.subscribe !== true)
+                    return reply({ errorCode: -1, errorText: "We were expecting a subscribe type message, but we did not recieve one.",
+                                   returnValue: false, subscribed: false });
+                reply({ returnValue: true, subscribed: true });
+                keySubs.push({ category: category, reply: reply, ctx: ctx });
+            };
+        }
+
+        register(["com.palm.keys"], {
+            "/audio/status": keySubscription("/audio"),
+            "/media/status": keySubscription("/media"),
+            "/headset/status": keySubscription("/headset"),
+            // switchesStatusCallback (:640-650): a subscription, or {get: name}
+            // for one switch's state (processKeyState, :371-428).
+            "/switches/status": function (p, reply, ctx) {
+                if (p.subscribe === true)
+                    return keySubscription("/switches")(p, reply, ctx);
+                if (typeof p.get !== "string")
+                    return reply({ returnValue: false });
+                var s = switches();
+                reply({ key: p.get, state: s[p.get] || "unknown", returnValue: true });
+            }
+        });
+
+        // A key went down or up, or a switch changed (handleEvent, :1123-1177;
+        // postKeyToSubscribers, :1086-1121): {key, state} to the category's
+        // subscribers.
+        function keyFromShell(k) {
+            if (k.category === "/switches" || k.category === "/headset") {
+                if (k.key in switches() && (k.state === "up" || k.state === "down")) {
+                    var s = switches();
+                    s[k.key] = k.state;
+                    store.set(SWITCHES_KEY, s);
+                }
+            }
+            keySubs = live(keySubs);
+            keySubs.forEach(function (s) {
+                if (s.category === k.category) s.reply({ key: k.key, state: k.state });
+            });
+        }
+
+        // ---- com.palm.vibrate --------------------------------------------------------
+
+        var nextVibration = 1;
+        // The named effects HapticsControllerCastle knew (:85-97).
+        var EFFECTS = ["ringtone", "alert", "notification", "tapdown", "tapup"];
+        function vibration(params, reply, ctx, untilCancelled) {
+            var id = (PalmSystem.appIdentifier || "app") + ":" + (nextVibration++);
+            var msg = { id: id, on: true, appId: PalmSystem.appIdentifier || "" };
+            for (var k in params) msg[k] = params[k];
+            host.postToHost("vibrate", msg);
+            if (untilCancelled) {
+                var prev = ctx.onCancel;
+                ctx.onCancel = function () {
+                    if (prev) prev();
+                    host.postToHost("vibrate", { id: id, on: false });
+                };
+            }
+            reply(ok());
+        }
+        register(["com.palm.vibrate"], {
+            // cbVibrate (:117-181): a period is needed; no duration, until
+            // the call is cancelled.
+            "/vibrate": function (p, reply, ctx) {
+                if (typeof p.period !== "number")
+                    return reply({ returnValue: false, errorText: "Invalid arguments" });
+                var duration = typeof p.duration === "number" ? p.duration : 0;
+                vibration({ period: p.period, duration: duration }, reply, ctx, duration === 0);
+            },
+            // cbVibrateNamedEffect (:236-307): continous, until cancelled.
+            "/vibrateNamedEffect": function (p, reply, ctx) {
+                if (typeof p.name !== "string")
+                    return reply({ returnValue: false, errorText: "Invalid arguments" });
+                if (EFFECTS.indexOf(p.name) < 0)
+                    return reply({ returnValue: false, errorText: "Unable to vibrate" });
+                vibration({ name: p.name, continous: p.continous === true }, reply, ctx, p.continous === true);
+            }
+        });
+
+        // ---- com.palm.ambientLightSensor ------------------------------------------------
+
+        var alsSubs = [];
+        register(["com.palm.ambientLightSensor"], {
+            // controlStatus (:518-570): the reading now; subscribed, every
+            // reading after it ({current, region}, updateAls :398-411);
+            // disableALS with subscribe holds the sensor's region at
+            // "undefined" (0) while the subscription lasts.
+            "/control/status": function (p, reply, ctx) {
+                var subscribed = p.subscribe === true;
+                if (subscribed && p.disableALS === true) {
+                    mine.alsDisabled++;
+                    var prev = ctx.onCancel;
+                    ctx.onCancel = function () {
+                        if (prev) prev();
+                        mine.alsDisabled = Math.max(0, mine.alsDisabled - 1);
+                        reportHolds();
+                    };
+                    reportHolds();
+                }
+                var l = light(), d = displayState();
+                reply(ok({ current: l.current, average: l.average, disabled: d.holds.alsDisabled > 0 || mine.alsDisabled > 0,
+                           subscribed: subscribed }));
+                if (subscribed) alsSubs.push({ reply: reply, ctx: ctx });
+            }
+        });
+        function lightFromShell(l) {
+            store.set(LIGHT_KEY, { current: l.current, average: typeof l.average === "number" ? l.average : l.current, region: l.region });
+            alsSubs = live(alsSubs);
+            alsSubs.forEach(function (s) { s.reply(ok({ current: l.current, region: l.region })); });
+        }
+
+        // ---- The ringer switch, for the Clock (com.palm.audio system/status) --------
+        // The original Clock asks audiod whether the ringer is on before an
+        // alarm sounds (utility/keymanager.js:113-120: response["ringer
+        // switch"], true while the ringer is on).
+        var audioSvc = runtime.services["com.palm.audio"] || {};
+        audioSvc["/system/status"] = function (p, reply) {
+            reply(ok({ "ringer switch": switches().ringer === "up" }));
+        };
+        register(["com.palm.audio"], audioSvc);
+
+        // ---- The shell's side ---------------------------------------------------------
+
+        runtime.devices = {
+            // {display: {state, timeout, blockDisplay, active, dockMode},
+            //  holds: {requestBlock, powerKeyBlock, proximity, alsDisabled},
+            //  key: {category, key, state}, light: {current, average, region},
+            //  powerKey: "released"}
+            hostEvent: function (ev) {
+                if (!ev) return;
+                if (ev.holds) holdsFromShell(ev.holds);
+                if (ev.display) displayFromShell(ev.display);
+                if (ev.switches) {
+                    var s = switches();
+                    for (var k in ev.switches) if (k in s) s[k] = ev.switches[k];
+                    store.set(SWITCHES_KEY, s);
+                }
+                if (ev.key) keyFromShell(ev.key);
+                if (ev.light) lightFromShell(ev.light);
+                // The Power key while blocked (DisplayManager :2463-2476):
+                // its subscribers hear it, nothing else does.
+                if (ev.powerKey) {
+                    powerKeySubs = live(powerKeySubs);
+                    powerKeySubs.forEach(function (s) { s.reply({ powerKey: ev.powerKey }); });
+                }
+            },
+            display: displayState,
+            switches: switches,
+            light: light,
+            onWhenConnected: function () { return !!displayProps().onWhenConnected; }
         };
     })();
 
