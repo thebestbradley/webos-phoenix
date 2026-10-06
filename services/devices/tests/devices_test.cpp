@@ -13,8 +13,13 @@
 #include <linux/input-event-codes.h>
 #include <sys/stat.h>
 
+#include <fcntl.h>
+#include <unistd.h>
+
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -196,7 +201,8 @@ static void testHardware()
     const DeviceConfig c = DeviceConfig::load(root + "/device.json");
     CHECK(c.backlight == "panel0" && c.ringerType == EV_SW && c.ringerCode == SW_MUTE_DEVICE && c.ringerSilentValue == 1,
           "device.json: the backlight and the ringer switch");
-    CHECK(DeviceConfig::load(root + "/missing.json").ringerCode == -1, "device.json: missing, no ringer switch");
+    const DeviceConfig none = DeviceConfig::load(root + "/missing.json");
+    CHECK(!none.loaded && none.ringerCode == -1, "device.json: missing, no ringer switch (it cannot be found by looking)");
 
     struct input_event raw[4] = {};
     raw[0].type = EV_KEY; raw[0].code = KEY_VOLUMEUP; raw[0].value = 1;
@@ -335,7 +341,8 @@ static void testService()
     svc.inputEvent({ EV_SW, SW_MUTE_DEVICE, 1 });
     svc.inputEvent({ EV_KEY, KEY_POWER, 1 });
     CHECK(join(replyField(audio, "state")) == "down,up", "keys: volume_down down and up on /audio");
-    CHECK(join(replyField(headset, "state")) == "down,up,single_click,down,up,down",
+    // The click before the "up" that made it (InputManager.cpp:1145, :1173).
+    CHECK(join(replyField(headset, "state")) == "down,single_click,up,down,up,down",
           "keys: the headset button's click, then the headset in and with its microphone on /headset");
     CHECK(join(replyField(switches, "key")) == "ringer,power" && svc.switchState("ringer") == "down",
           "keys: the ringer switch (silent) and Power on /switches");
@@ -383,6 +390,311 @@ static void testService()
         ls2stub::release(m);
 }
 
+// ---- Finding the hardware, and following it as it comes and goes ---------------------------
+
+// A fake event device: its sysfs entry (name, bus, capabilities, as the
+// kernel writes them) and a FIFO for its node, so the test can write
+// input_events into it and phoenix-devices reads them as from evdev.
+struct FakeInput
+{
+    std::string name;
+    int bus = BUS_HOST;
+    std::vector<int> keys, sws, abs, rel, ff;
+};
+
+static std::string bitsOf(const std::vector<int> &codes)
+{
+    Bits b(16, 0);
+    const int w = static_cast<int>(sizeof(unsigned long) * 8);
+    for (int c : codes) {
+        if (static_cast<size_t>(c / w) >= b.size())
+            b.resize(static_cast<size_t>(c / w) + 1, 0);
+        b[static_cast<size_t>(c / w)] |= 1UL << (c % w);
+    }
+    return formatBitmap(b);
+}
+
+static void addInput(const std::string &root, const std::string &node, const FakeInput &f)
+{
+    const std::string dev = root + "/sys/class/input/" + node + "/device/";
+    mkdirs(dev + "capabilities");
+    mkdirs(dev + "id");
+    put(dev + "name", f.name + "\n");
+    char bus[8];
+    std::snprintf(bus, sizeof bus, "%04x", f.bus);
+    put(dev + "id/bustype", std::string(bus) + "\n");
+    std::vector<int> ev = { EV_SYN };
+    if (!f.keys.empty()) ev.push_back(EV_KEY);
+    if (!f.sws.empty()) ev.push_back(EV_SW);
+    if (!f.abs.empty()) ev.push_back(EV_ABS);
+    if (!f.rel.empty()) ev.push_back(EV_REL);
+    if (!f.ff.empty()) ev.push_back(EV_FF);
+    put(dev + "capabilities/ev", bitsOf(ev) + "\n");
+    put(dev + "capabilities/key", bitsOf(f.keys) + "\n");
+    put(dev + "capabilities/sw", bitsOf(f.sws) + "\n");
+    put(dev + "capabilities/abs", bitsOf(f.abs) + "\n");
+    put(dev + "capabilities/rel", bitsOf(f.rel) + "\n");
+    put(dev + "capabilities/ff", bitsOf(f.ff) + "\n");
+    mkdirs(root + "/dev/input");
+    ::mkfifo((root + "/dev/input/" + node).c_str(), 0600);
+}
+
+static void removeInput(const std::string &root, const std::string &node)
+{
+    ::unlink((root + "/dev/input/" + node).c_str());
+    const std::string cmd = "rm -rf '" + root + "/sys/class/input/" + node + "'";
+    if (std::system(cmd.c_str()) != 0)
+        std::printf("note: could not remove %s's sysfs\n", node.c_str());
+}
+
+// Run the main loop until done() or two seconds pass.
+static bool pump(const std::function<bool()> &done)
+{
+    const gint64 until = g_get_monotonic_time() + 2 * G_USEC_PER_SEC;
+    while (g_get_monotonic_time() < until) {
+        while (g_main_context_iteration(nullptr, FALSE)) {
+        }
+        if (done())
+            return true;
+        g_usleep(2000);
+    }
+    return done();
+}
+
+static bool logHas(DeviceService &svc, const std::string &text)
+{
+    for (const auto &l : svc.log())
+        if (l.find(text) != std::string::npos)
+            return true;
+    return false;
+}
+
+static void writeEvents(int fd, const std::vector<InputDevices::Event> &events)
+{
+    std::vector<struct input_event> raw;
+    for (const auto &e : events) {
+        struct input_event ev = {};
+        ev.type = static_cast<__u16>(e.type);
+        ev.code = static_cast<__u16>(e.code);
+        ev.value = e.value;
+        raw.push_back(ev);
+    }
+    struct input_event syn = {};
+    syn.type = EV_SYN;
+    raw.push_back(syn);
+    if (::write(fd, raw.data(), raw.size() * sizeof raw[0]) < 0)
+        std::printf("note: write to the fake device failed\n");
+}
+
+static const FakeInput GpioKeys{ "gpio-keys", BUS_HOST, { KEY_POWER, KEY_VOLUMEUP, KEY_VOLUMEDOWN }, { SW_MUTE_DEVICE }, {}, {}, {} };
+static const FakeInput Touchscreen{ "Synaptics TM2", BUS_I2C, { BTN_TOUCH }, {}, { ABS_X, ABS_Y, ABS_MT_POSITION_X, ABS_MT_POSITION_Y }, {}, {} };
+static const FakeInput Vibra{ "pm8xxx-vib", BUS_HOST, {}, {}, {}, {}, { FF_RUMBLE, FF_PERIODIC } };
+static const FakeInput Jack{ "sdm845 Headset Jack", BUS_HOST, { KEY_MEDIA, KEY_VOLUMEUP }, { SW_HEADPHONE_INSERT, SW_MICROPHONE_INSERT }, {}, {}, {} };
+static const FakeInput UsbHeadset{ "Jabra EVOLVE 20", BUS_USB, { KEY_PLAYPAUSE, KEY_NEXTSONG, KEY_PREVIOUSSONG, KEY_VOLUMEUP }, {}, {}, {}, {} };
+static const FakeInput UsbKeyboard{ "Logitech USB Keyboard", BUS_USB,
+                                   { KEY_A, KEY_Z, KEY_ENTER, KEY_VOLUMEUP, KEY_VOLUMEDOWN, KEY_PLAYPAUSE }, {}, {}, {}, {} };
+
+static void testBitmapsAndUevents()
+{
+    Bits b = parseBitmap("1 0");
+    CHECK(testBit(b, static_cast<int>(sizeof(unsigned long) * 8)) && !testBit(b, 0), "sysfs bitmap: words highest first");
+    CHECK(formatBitmap(parseBitmap(bitsOf({ KEY_POWER, KEY_VOLUMEUP, KEY_PLAYPAUSE }))) == bitsOf({ KEY_POWER, KEY_VOLUMEUP, KEY_PLAYPAUSE })
+          && testBit(parseBitmap(bitsOf({ KEY_PLAYPAUSE })), KEY_PLAYPAUSE) && !testBit(parseBitmap("0"), 5),
+          "sysfs bitmap: read back as written");
+
+    const char add[] = "add@/devices/platform/usb/1-1/input/input9/event9\0ACTION=add\0DEVPATH=/devices/platform/usb/1-1/input/input9/event9\0"
+                       "SUBSYSTEM=input\0MAJOR=13\0MINOR=73\0DEVNAME=input/event9\0SEQNUM=2101";
+    Uevent e;
+    CHECK(parseUevent(add, sizeof add, &e) && e.action == "add" && e.subsystem == "input" && e.devname == "input/event9" && ueventMatters(e),
+          "uevent: an input device added");
+    const char iio[] = "add@/devices/i2c/iio:device1\0ACTION=add\0SUBSYSTEM=iio\0";
+    CHECK(parseUevent(iio, sizeof iio, &e) && ueventMatters(e), "uevent: an IIO sensor matters (sysfs has no inotify)");
+    const char net[] = "add@/devices/virtual/net/wlan0\0ACTION=add\0SUBSYSTEM=net\0";
+    CHECK(parseUevent(net, sizeof net, &e) && !ueventMatters(e), "uevent: a network device does not");
+    const char udev[] = "libudev\0\xfe\xed\xca\xfe";
+    CHECK(!parseUevent(udev, sizeof udev, &e), "uevent: udev's own messages are not the kernel's");
+}
+
+static void testProbe()
+{
+    const std::string root = fakeRoot();
+    addInput(root, "event0", GpioKeys);
+    addInput(root, "event1", Touchscreen);
+    addInput(root, "event2", Vibra);
+    addInput(root, "event10", Jack);
+    const DeviceConfig config = DeviceConfig::load(root + "/etc/phoenix/device.json");
+
+    const auto inputs = listInputs(root);
+    std::vector<std::string> nodes;
+    for (const auto &i : inputs)
+        nodes.push_back(i.node);
+    CHECK(join(nodes) == "event0,event1,event2,event10", "probe: every event device, in the kernel's order");
+    CHECK(inputs[0].fromSysfs && inputs[0].name == "gpio-keys" && inputs[0].busName() == "host" && inputs[1].busName() == "i2c",
+          "probe: names and buses from sysfs");
+    CHECK(inputs[0].wanted(config) && !inputs[1].wanted(config) && !inputs[2].wanted(config) && inputs[3].wanted(config),
+          "probe: keys and switches used; the touchscreen and the motor are not input for it");
+    CHECK(inputs[0].summary(config) == "keys volume_up, volume_down, power; switches mute (SW_MUTE_DEVICE; the ringer? see device.json)",
+          "probe: a mute switch is pointed out, not taken for the ringer");
+    DeviceConfig withRinger;
+    withRinger.ringerType = EV_SW;
+    withRinger.ringerCode = SW_MUTE_DEVICE;
+    CHECK(inputs[0].summary(withRinger) == "keys volume_up, volume_down, power; switches ringer (EV_SW 14)",
+          "probe: the ringer device.json names");
+    CHECK(inputs[1].summary(config) == "touchscreen", "probe: a touchscreen says so");
+    CHECK(inputs[3].summary(config) == "keys volume_up, headset_button; switches headphone jack, microphone jack",
+          "probe: the headset jack and its button");
+    CHECK(Vibrator::find(root).kind == Vibrator::ForceFeedback && Vibrator::find(root).path == root + "/dev/input/event2",
+          "probe: the force-feedback vibrator by its capabilities");
+
+    InputDevices in(root, config);
+    CHECK(join(in.opened()) == root + "/dev/input/event0," + root + "/dev/input/event10", "input: opens only what it reads");
+    CHECK(in.hasCode(EV_SW, SW_HEADPHONE_INSERT) && in.hasCode(EV_KEY, KEY_POWER) && !in.hasCode(EV_KEY, KEY_NEXTSONG),
+          "input: knows what its devices have");
+
+    // --probe, as the service's own main runs it.
+    const std::string report = probeReport(root, root + "/etc/phoenix/device.json");
+    CHECK(report.find("device.json " + root + "/etc/phoenix/device.json: none (everything found by looking)") != std::string::npos,
+          "--probe: no device.json needed");
+    CHECK(report.find("  " + root + "/dev/input/event0 \"gpio-keys\" (host): keys volume_up, volume_down, power; "
+                      "switches mute (SW_MUTE_DEVICE; the ringer? see device.json) [used]\n") != std::string::npos,
+          "--probe: the keys, with what it uses");
+    CHECK(report.find("  " + root + "/dev/input/event1 \"Synaptics TM2\" (i2c): touchscreen [not used]\n") != std::string::npos,
+          "--probe: and what it does not");
+    CHECK(report.find("vibrator: force feedback (EV_FF, FF_RUMBLE) " + root + "/dev/input/event2\n") != std::string::npos
+              && report.find("headset jack: yes, with its microphone\n") != std::string::npos
+              && report.find("ringer switch: none in device.json; SW_MUTE_DEVICE on event0 may be it: \"ringerSwitch\": "
+                             "{\"type\": \"EV_SW\", \"code\": 14, \"silentValue\": 1}\n") != std::string::npos
+              && report.find("backlight: none\n") != std::string::npos
+              && report.find("hotplug: inotify on " + root + "/dev/input; no kernel uevents") != std::string::npos,
+          "--probe: the vibrator, the jack, a hint for the ringer, no backlight, how it hears changes");
+    CHECK(get(root + "/sys/class/input/event2/device/name") == "pm8xxx-vib\n", "--probe: touches nothing");
+
+#ifdef PHOENIX_DEVICES_STUB
+    gchar *out = nullptr;
+    gint status = -1;
+    gchar *argv[] = { const_cast<gchar *>(PHOENIX_DEVICES_STUB), const_cast<gchar *>("--probe"), nullptr };
+    gchar **envp = g_get_environ();
+    envp = g_environ_setenv(envp, "PHOENIX_DEVICES_ROOT", root.c_str(), TRUE);
+    envp = g_environ_setenv(envp, "PHOENIX_DEVICE_CONFIG", (root + "/etc/phoenix/device.json").c_str(), TRUE);
+    const bool ran = g_spawn_sync(nullptr, argv, envp, G_SPAWN_DEFAULT, nullptr, nullptr, &out, nullptr, &status, nullptr);
+    CHECK(ran && g_spawn_check_wait_status(status, nullptr) && out && report == out, "phoenix-devices --probe prints the report and exits");
+    g_free(out);
+    g_strfreev(envp);
+#endif
+}
+
+static void testHotplug()
+{
+    LSError err;
+    LSErrorInit(&err);
+    DeviceService::Handles h;
+    LSRegister("com.palm.display", &h.display, &err);
+    LSRegister("com.palm.keys", &h.keys, &err);
+    LSRegister("com.palm.vibrate", &h.vibrate, &err);
+    LSRegister("com.palm.ambientLightSensor", &h.als, &err);
+
+    const std::string root = fakeRoot();
+    addInput(root, "event0", GpioKeys);
+    mkdirs(root + "/etc/phoenix");
+    put(root + "/etc/phoenix/device.json", "{\"ringerSwitch\":{\"type\":\"EV_SW\",\"code\":14,\"silentValue\":1}}");
+    const DeviceConfig config = DeviceConfig::load(root + "/etc/phoenix/device.json");
+    DeviceProbe probe(root, config);
+    HotplugMonitor monitor(root, false);
+    DeviceService::Hardware hw;
+    hw.input = probe.input.get();
+    DeviceService svc(h, hw, config);
+    svc.attach(&err);
+    svc.attachProbe(&probe, &monitor);
+    CHECK(logHas(svc, "input " + root + "/dev/input/event0 \"gpio-keys\" (host): keys volume_up, volume_down, power; switches ringer (EV_SW 14) [used]")
+              && logHas(svc, "backlight none") && logHas(svc, "hotplug: inotify on " + root + "/dev/input"),
+          "hotplug: what it found at start-up is in the log");
+
+    LSMessage *headset = ls2stub::call(h.keys, "/headset/status", "{\"subscribe\":true}", "com.palm.app.music");
+    LSMessage *media = ls2stub::call(h.keys, "/media/status", "{\"subscribe\":true}", "com.palm.app.music");
+    LSMessage *audio = ls2stub::call(h.keys, "/audio/status", "{\"subscribe\":true}", "com.palm.app.music");
+
+    // A headset jack's driver comes up after start-up (event3).
+    addInput(root, "event3", Jack);
+    CHECK(pump([&] { return logHas(svc, "input added " + root + "/dev/input/event3"); }),
+          "hotplug: a new event device is found (inotify on /dev/input)");
+    CHECK(logHas(svc, "input added " + root + "/dev/input/event3 \"sdm845 Headset Jack\" (host): keys volume_up, headset_button; "
+                      "switches headphone jack, microphone jack [used]"),
+          "hotplug: and logged with what it can do");
+    const int jack = ::open((root + "/dev/input/event3").c_str(), O_WRONLY | O_NONBLOCK);
+    // Plugged in: the jack and the microphone in one report, one headset-mic.
+    writeEvents(jack, { { EV_SW, SW_HEADPHONE_INSERT, 1 }, { EV_SW, SW_MICROPHONE_INSERT, 1 } });
+    CHECK(pump([&] { return !replyField(headset, "key").empty(); }) && pump([&] { return false; }) == false
+              && replyField(headset, "state").size() == 1 && lastReply(headset)["key"].str() == "headset-mic"
+              && lastReply(headset)["state"].str() == "down",
+          "hotplug: its headset in, with the microphone, is one headset-mic down");
+    writeEvents(jack, { { EV_KEY, KEY_MEDIA, 1 } });
+    writeEvents(jack, { { EV_KEY, KEY_MEDIA, 0 } });
+    CHECK(pump([&] { return join(replyField(headset, "state")) == "down,down,single_click,up"; }),
+          "hotplug: its button clicks");
+
+    // A USB headset with play/pause, next and previous, and a keyboard.
+    addInput(root, "event4", UsbHeadset);
+    addInput(root, "event5", UsbKeyboard);
+    CHECK(pump([&] { return logHas(svc, "input added " + root + "/dev/input/event5"); })
+              && logHas(svc, "\"Jabra EVOLVE 20\" (usb): keys volume_up, togglePausePlay, next, prev [used]")
+              && logHas(svc, "\"Logitech USB Keyboard\" (usb): keys volume_up, volume_down, togglePausePlay; keyboard [used]"),
+          "hotplug: a USB headset and a USB keyboard, with their media keys");
+    const int usb = ::open((root + "/dev/input/event4").c_str(), O_WRONLY | O_NONBLOCK);
+    writeEvents(usb, { { EV_KEY, KEY_NEXTSONG, 1 } });
+    writeEvents(usb, { { EV_KEY, KEY_NEXTSONG, 0 } });
+    CHECK(pump([&] { return join(replyField(media, "key")) == "next,next"; }), "hotplug: the USB headset's next key on /media");
+
+    // Unplugged: the devices go; the jack's switches with them.
+    removeInput(root, "event3");
+    CHECK(pump([&] { return logHas(svc, "input removed " + root + "/dev/input/event3"); }), "hotplug: a device that goes is let go");
+    CHECK(lastReply(headset)["key"].str() == "headset-mic" && lastReply(headset)["state"].str() == "up",
+          "hotplug: the jack gone, the headset is out");
+    removeInput(root, "event4");
+    CHECK(pump([&] { return logHas(svc, "input removed " + root + "/dev/input/event4"); })
+              && probe.input->opened().size() == 2, "hotplug: the USB headset gone, the built-in keys and the keyboard stay");
+    ::close(jack);
+    ::close(usb);
+    // The keyboard's volume key still reaches /audio.
+    const int kb = ::open((root + "/dev/input/event5").c_str(), O_WRONLY | O_NONBLOCK);
+    writeEvents(kb, { { EV_KEY, KEY_VOLUMEUP, 1 } });
+    CHECK(pump([&] { return join(replyField(audio, "key")) == "volume_up"; }), "hotplug: the devices that stay still work");
+
+    // The same node for another device (removed and added before the rescan).
+    ::close(kb);
+    removeInput(root, "event5");
+    addInput(root, "event5", UsbHeadset);
+    CHECK(pump([&] { return logHas(svc, "input added " + root + "/dev/input/event5 \"Jabra EVOLVE 20\""); })
+              && logHas(svc, "input removed " + root + "/dev/input/event5 \"Logitech USB Keyboard\""),
+          "hotplug: another device on the same node is a new device");
+
+    // A sensor and a backlight whose drivers load late (kernel uevents on a
+    // device; here the rescan they cause).
+    const std::string iio = root + "/sys/bus/iio/devices/iio:device0";
+    mkdirs(iio);
+    put(iio + "/in_illuminance_input", "250\n");
+    const std::string bl = root + "/sys/class/backlight/panel0";
+    mkdirs(bl);
+    put(bl + "/max_brightness", "200\n");
+    put(bl + "/brightness", "0");
+    LSMessage *r = ls2stub::call(h.display, "/phoenix/report", "{\"state\":\"on\",\"brightness\":40}", "", SHELL);
+    ls2stub::release(r);
+    const DeviceProbe::Changes c = svc.rescan();
+    CHECK(c.lightSensor && c.backlight && svc.lightSensorOn() && logHas(svc, "light sensor " + iio + "/in_illuminance_input")
+              && logHas(svc, "backlight " + bl),
+          "hotplug: a light sensor and a backlight that appear are used");
+    CHECK(get(bl + "/brightness") == "80", "hotplug: the new backlight gets the display's level");
+    CHECK(!svc.rescan().any(), "hotplug: nothing changed, nothing to do");
+    const std::string cmd = "rm -rf '" + iio + "'";
+    if (std::system(cmd.c_str()) != 0)
+        std::printf("note: could not remove the sensor\n");
+    CHECK(svc.rescan().lightSensor && !svc.lightSensorOn(), "hotplug: the sensor gone, it stops reading");
+
+    for (LSMessage *m : { headset, media, audio }) {
+        ls2stub::cancel(h.keys, m);
+        ls2stub::release(m);
+    }
+}
+
 int main()
 {
     testDisplayEvents();
@@ -390,6 +702,9 @@ int main()
     testLightRegions();
     testHardware();
     testService();
+    testBitmapsAndUevents();
+    testProbe();
+    testHotplug();
     std::printf("%d checks, %d failed\n", checks, failures);
     return failures ? 1 : 0;
 }

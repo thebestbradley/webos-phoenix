@@ -27,13 +27,16 @@
 //
 // Only the shell (its service name, com.webos.surfacemanager by default)
 // may call /phoenix. The service sets the backlight from the reports and
-// reads the keys, switches, motor and light sensor itself (hardware.h).
+// reads the keys, switches, motor and light sensor itself (hardware.h),
+// following them as they come and go (attachProbe: a headset, keyboard or
+// dock plugged in or out, a sensor's driver loaded late).
 
 #pragma once
 
 #include <glib.h>
 #include <luna-service2/lunaservice.h>
 
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -71,12 +74,28 @@ public:
     // Who may call com.palm.display/phoenix (service names).
     void setShellNames(const std::vector<std::string> &names) { m_shellNames = names; }
 
-    // From the hardware (main.cpp's watches; the tests call them too).
+    // From the hardware (the input watches; the tests call them too). One
+    // read's events go together: a headset plugged in reports its jack and
+    // its microphone at once, and that is one "headset-mic" down, as
+    // luna-sysmgr's single Key_HeadsetMic event was.
     void inputEvent(const InputDevices::Event &e);
+    void inputEvents(const std::vector<InputDevices::Event> &events);
     void headsetTimeout();
     void lightReading(int lux);
-    // Read the switches' states now (at start).
+    // Read the switches' states now (at start, and after the input devices
+    // changed): what changed goes to the subscribers. A switch no device
+    // has any more is off (a USB headset's jack unplugged with it).
     void readSwitches();
+
+    // Keep to the hardware as it comes and goes (main.cpp): watch the
+    // probe's input devices and the hotplug monitor on the GLib main
+    // context; on a hotplug event, rescan() (once per burst, when idle).
+    void attachProbe(DeviceProbe *probe, HotplugMonitor *monitor);
+    // Re-probe now: log what changed, follow it (watches, switches, the
+    // backlight's level, the light sensor), and return it.
+    DeviceProbe::Changes rescan();
+    // A line to the log (stderr; tests read it).
+    std::vector<std::string> &log() { return m_log; }
 
     // State, for the tests.
     const DisplayReport &display() const { return m_display; }
@@ -125,6 +144,15 @@ private:
     void sumHolds();
     bool fromShell(LSMessage *msg) const;
     void setSwitch(const std::string &name, const std::string &state, const std::string &category);
+    // "headset-mic", "headset" or "" from the jack's switches.
+    std::string headsetNow() const;
+    // Post the headset's change since was (headsetNow() before it).
+    void postHeadset(const std::string &was);
+    void say(const std::string &line);
+    void watchInputs();
+    static gboolean inputReady(gint fd, GIOCondition cond, gpointer self);
+    static gboolean hotplugReady(gint fd, GIOCondition cond, gpointer self);
+    static gboolean rescanIdle(gpointer self);
     void alsFollowDisplay();
     void startHeadsetTimer();
     static gboolean headsetTimerFired(gpointer self);
@@ -148,6 +176,13 @@ private:
     guint m_lightTimer = 0;
     std::string m_ringer = "up", m_headsetJack = "up", m_headsetMic = "up", m_power = "up";
     bool m_headphoneIn = false, m_micIn = false;
+
+    DeviceProbe *m_probe = nullptr;
+    HotplugMonitor *m_monitor = nullptr;
+    std::map<int, guint> m_inputWatches;      // fd -> source
+    std::vector<guint> m_hotplugWatches;
+    guint m_rescanIdle = 0;
+    std::vector<std::string> m_log;
 };
 
 } // namespace devices

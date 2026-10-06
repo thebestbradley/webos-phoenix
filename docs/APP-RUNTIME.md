@@ -1326,8 +1326,10 @@ focus takes the buttons. Tests: `apps/shared/luna/src/device.test.ts`,
 
 OSE has none of these services; `phoenix-devices` (`services/devices`) is
 them, over the backlight, evdev, the vibrator and the IIO light sensor, and
-the shell reports its display to it. See [HARDWARE.md](HARDWARE.md),
-"LunaSysMgr's device services".
+the shell reports its display to it. It finds them by looking and follows
+them as they come and go, so a USB or Bluetooth headset's media keys reach
+`com.palm.keys/media` as soon as it is connected. See
+[HARDWARE.md](HARDWARE.md), "LunaSysMgr's device services".
 
 ## Flashlight
 

@@ -5,6 +5,8 @@
 
 #include "json.h"
 
+#include <glib-unix.h>
+
 #include <algorithm>
 #include <cstdio>
 
@@ -20,6 +22,12 @@ DeviceService::DeviceService(const Handles &handles, const Hardware &hardware, c
 
 DeviceService::~DeviceService()
 {
+    for (auto &w : m_inputWatches)
+        g_source_remove(w.second);
+    for (guint w : m_hotplugWatches)
+        g_source_remove(w);
+    if (m_rescanIdle)
+        g_source_remove(m_rescanIdle);
     if (m_headsetTimer)
         g_source_remove(m_headsetTimer);
     if (m_lightTimer)
@@ -413,62 +421,98 @@ void DeviceService::setSwitch(const std::string &name, const std::string &state,
     post(KeyStatus, keyJson(name, state), category);
 }
 
+std::string DeviceService::headsetNow() const
+{
+    return !m_headphoneIn ? "" : m_micIn ? "headset-mic" : "headset";
+}
+
+// A headset in is Key_Headset or Key_HeadsetMic down, out is up
+// (InputManager.cpp:784-795), on /headset.
+void DeviceService::postHeadset(const std::string &was)
+{
+    const std::string now = headsetNow();
+    if (now == was)
+        return;
+    if (!was.empty())
+        setSwitch(was, "up", "/headset");
+    if (!now.empty())
+        setSwitch(now, "down", "/headset");
+}
+
 void DeviceService::readSwitches()
 {
     if (!m_hw.input)
         return;
-    const int hp = m_hw.input->switchState(EV_SW, SW_HEADPHONE_INSERT);
-    const int mic = m_hw.input->switchState(EV_SW, SW_MICROPHONE_INSERT);
-    m_headphoneIn = hp == 1;
-    m_micIn = mic == 1;
-    m_headsetMic = m_headphoneIn && m_micIn ? "down" : "up";
-    m_headsetJack = m_headphoneIn && !m_micIn ? "down" : "up";
+    // A switch no device has (any more) is off; one whose state cannot be
+    // read stays as it was.
+    auto state = [&](int type, int code, bool current) {
+        if (!m_hw.input->hasCode(type, code))
+            return false;
+        const int v = m_hw.input->switchState(type, code);
+        return v < 0 ? current : v == 1;
+    };
+    const std::string was = headsetNow();
+    m_headphoneIn = state(EV_SW, SW_HEADPHONE_INSERT, m_headphoneIn);
+    m_micIn = state(EV_SW, SW_MICROPHONE_INSERT, m_micIn);
+    postHeadset(was);
     if (m_config.ringerCode >= 0) {
-        const int v = m_hw.input->switchState(m_config.ringerType, m_config.ringerCode);
-        if (v >= 0)
-            m_ringer = v == m_config.ringerSilentValue ? "down" : "up";
+        // No ringer switch: the ringer is on ("up", as the emulator said,
+        // InputManager.cpp:772-777).
+        if (!m_hw.input->hasCode(m_config.ringerType, m_config.ringerCode)) {
+            setSwitch("ringer", "up", "/switches");
+        } else {
+            const int v = m_hw.input->switchState(m_config.ringerType, m_config.ringerCode);
+            if (v >= 0)
+                setSwitch("ringer", v == m_config.ringerSilentValue ? "down" : "up", "/switches");
+        }
     }
 }
 
 void DeviceService::inputEvent(const InputDevices::Event &e)
 {
-    // The ringer switch, wherever the device has it (device.json).
-    if (m_config.ringerCode >= 0 && e.type == m_config.ringerType && e.code == m_config.ringerCode) {
-        setSwitch("ringer", e.value == m_config.ringerSilentValue ? "down" : "up", "/switches");
-        return;
+    inputEvents({ e });
+}
+
+void DeviceService::inputEvents(const std::vector<InputDevices::Event> &events)
+{
+    const std::string headsetWas = headsetNow();
+    bool jack = false;
+    for (const auto &e : events) {
+        // The ringer switch, wherever the device has it.
+        if (m_config.ringerCode >= 0 && e.type == m_config.ringerType && e.code == m_config.ringerCode) {
+            setSwitch("ringer", e.value == m_config.ringerSilentValue ? "down" : "up", "/switches");
+            continue;
+        }
+        if (e.type == EV_SW && (e.code == SW_HEADPHONE_INSERT || e.code == SW_MICROPHONE_INSERT)) {
+            if (e.code == SW_HEADPHONE_INSERT)
+                m_headphoneIn = e.value != 0;
+            else
+                m_micIn = e.value != 0;
+            jack = true;
+            continue;
+        }
+        if (e.type != EV_KEY)
+            continue;
+        KeyName k;
+        if (!keyForCode(e.code, &k))
+            continue;
+        const std::string state = e.value ? "down" : "up";
+        if (k.category == "/switches") {
+            setSwitch(k.name, state, k.category);
+            continue;
+        }
+        if (k.name == "headset_button") {
+            // The state machine first, then the key: a click goes out
+            // before the "up" that made it (handleEvent,
+            // InputManager.cpp:1145, :1173).
+            for (const auto &extra : m_headset.press(e.value != 0))
+                post(KeyStatus, keyJson(k.name, extra), k.category);
+            startHeadsetTimer();
+        }
+        post(KeyStatus, keyJson(k.name, state), k.category);
     }
-    if (e.type == EV_SW && (e.code == SW_HEADPHONE_INSERT || e.code == SW_MICROPHONE_INSERT)) {
-        // A headset in is Key_Headset or Key_HeadsetMic down (:784-795), on /headset.
-        const std::string was = m_headsetMic == "down" ? "headset-mic" : m_headsetJack == "down" ? "headset" : "";
-        if (e.code == SW_HEADPHONE_INSERT)
-            m_headphoneIn = e.value != 0;
-        else
-            m_micIn = e.value != 0;
-        const std::string now = !m_headphoneIn ? "" : m_micIn ? "headset-mic" : "headset";
-        if (now == was)
-            return;
-        if (!was.empty())
-            setSwitch(was, "up", "/headset");
-        if (!now.empty())
-            setSwitch(now, "down", "/headset");
-        return;
-    }
-    if (e.type != EV_KEY)
-        return;
-    KeyName k;
-    if (!keyForCode(e.code, &k))
-        return;
-    const std::string state = e.value ? "down" : "up";
-    if (k.category == "/switches") {
-        setSwitch(k.name, state, k.category);
-        return;
-    }
-    post(KeyStatus, keyJson(k.name, state), k.category);
-    if (k.name == "headset_button") {
-        for (const auto &extra : m_headset.press(e.value != 0))
-            post(KeyStatus, keyJson(k.name, extra), k.category);
-        startHeadsetTimer();
-    }
+    if (jack)
+        postHeadset(headsetWas);
 }
 
 void DeviceService::startHeadsetTimer()
@@ -625,11 +669,130 @@ gboolean DeviceService::lightTimerFired(gpointer self)
 {
     auto *s = static_cast<DeviceService *>(self);
     if (!s->m_hw.lightSensor)
-        return G_SOURCE_REMOVE;
+        return G_SOURCE_CONTINUE;   // alsFollowDisplay stops it when the sensor goes
     const int lux = s->m_hw.lightSensor->read();
     if (lux >= 0)
         s->lightReading(lux);
     return G_SOURCE_CONTINUE;
+}
+
+// ---- The hardware as it comes and goes -----------------------------------------------------------
+
+void DeviceService::say(const std::string &line)
+{
+    m_log.push_back(line);
+    std::fprintf(stderr, "phoenix-devices: %s\n", line.c_str());
+}
+
+void DeviceService::attachProbe(DeviceProbe *probe, HotplugMonitor *monitor)
+{
+    m_probe = probe;
+    m_monitor = monitor;
+    m_hw.backlight = probe->backlight.get();
+    m_hw.vibrator = probe->vibrator.get();
+    m_hw.lightSensor = probe->lightSensor.get();
+    m_hw.input = probe->input.get();
+    for (const auto &line : probe->describe())
+        say(line);
+    if (monitor) {
+        say("hotplug: " + monitor->describe());
+        for (int fd : monitor->fds())
+            m_hotplugWatches.push_back(g_unix_fd_add(fd, G_IO_IN, &DeviceService::hotplugReady, this));
+    }
+    watchInputs();
+    readSwitches();
+    alsFollowDisplay();
+}
+
+// One watch per input device in use; the ones gone lose theirs.
+void DeviceService::watchInputs()
+{
+    const std::vector<int> fds = m_hw.input ? m_hw.input->fds() : std::vector<int>();
+    for (auto it = m_inputWatches.begin(); it != m_inputWatches.end();) {
+        if (std::find(fds.begin(), fds.end(), it->first) == fds.end()) {
+            g_source_remove(it->second);
+            it = m_inputWatches.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (int fd : fds)
+        if (!m_inputWatches.count(fd))
+            m_inputWatches[fd] = g_unix_fd_add(fd, static_cast<GIOCondition>(G_IO_IN | G_IO_HUP | G_IO_ERR),
+                                               &DeviceService::inputReady, this);
+}
+
+gboolean DeviceService::inputReady(gint fd, GIOCondition cond, gpointer data)
+{
+    auto *self = static_cast<DeviceService *>(data);
+    if (!self->m_hw.input)
+        return G_SOURCE_REMOVE;
+    if (cond & G_IO_IN)
+        self->inputEvents(self->m_hw.input->readFrom(fd));
+    if (cond & (G_IO_HUP | G_IO_ERR)) {
+        // The device went (a USB headset unplugged): forget it, and look
+        // again (it may already have come back on another node).
+        self->say("input " + self->m_hw.input->pathOf(fd) + " hung up");
+        self->m_inputWatches.erase(fd);
+        self->m_hw.input->drop(fd);
+        if (!self->m_rescanIdle)
+            self->m_rescanIdle = g_idle_add(&DeviceService::rescanIdle, self);
+        return G_SOURCE_REMOVE;
+    }
+    return G_SOURCE_CONTINUE;
+}
+
+gboolean DeviceService::hotplugReady(gint fd, GIOCondition, gpointer data)
+{
+    auto *self = static_cast<DeviceService *>(data);
+    std::vector<std::string> what;
+    if (self->m_monitor && self->m_monitor->readFrom(fd, &what)) {
+        for (const auto &w : what)
+            self->say("hotplug: " + w);
+        // A burst (a device's input and event nodes, its uevents) is one
+        // rescan, once the main loop is idle.
+        if (!self->m_rescanIdle)
+            self->m_rescanIdle = g_idle_add(&DeviceService::rescanIdle, self);
+    }
+    return G_SOURCE_CONTINUE;
+}
+
+gboolean DeviceService::rescanIdle(gpointer data)
+{
+    auto *self = static_cast<DeviceService *>(data);
+    self->m_rescanIdle = 0;
+    self->rescan();
+    return G_SOURCE_REMOVE;
+}
+
+DeviceProbe::Changes DeviceService::rescan()
+{
+    if (!m_probe)
+        return DeviceProbe::Changes();
+    DeviceProbe::Changes c = m_probe->rescan();
+    for (const auto &line : c.log)
+        say(line);
+    m_hw.backlight = m_probe->backlight.get();
+    m_hw.vibrator = m_probe->vibrator.get();
+    m_hw.lightSensor = m_probe->lightSensor.get();
+    m_hw.input = m_probe->input.get();
+    // A new backlight gets the level the display has now.
+    if (c.backlight && m_hw.backlight)
+        m_hw.backlight->setPercent(m_display.state == "off" ? 0 : m_display.brightness);
+    if (c.lightSensor) {
+        // Start over with the new one (or stop: none).
+        if (m_alsOn && m_lightTimer) {
+            g_source_remove(m_lightTimer);
+            m_lightTimer = 0;
+        }
+        m_alsOn = false;
+        alsFollowDisplay();
+    }
+    if (c.input.any()) {
+        watchInputs();
+        readSwitches();
+    }
+    return c;
 }
 
 } // namespace devices

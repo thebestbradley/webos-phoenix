@@ -91,6 +91,28 @@ the Android build fingerprint) and fetches the generic image plus that
 device's adaptation package. Supporting a new phone means adding one
 package, not a new build of Phoenix.
 
+**Then Phoenix finds what the drivers expose, by itself.** Installing the
+drivers is half of it; the other half is using whatever they expose
+without a line of Phoenix code per device. The kernel's drivers present
+the hardware through standard interfaces, and `phoenix-devices`
+([below](#finding-the-hardware-and-following-it)) reads only those: input
+devices by their capabilities (`/sys/class/input/eventN/device/
+capabilities`: a headset jack is whatever reports `SW_HEADPHONE_INSERT`,
+a media key whatever reports `KEY_PLAYPAUSE`), the backlight class, the
+vibrator by its kernel interface (force feedback, the LED class,
+`timed_output`) and the IIO light sensor. It looks at start-up and again
+whenever something comes or goes (inotify on `/dev/input` and the
+kernel's uevents), so a USB or Bluetooth headset, a USB keyboard or a
+dock is used as soon as it is plugged in, and a sensor whose driver loads
+late is picked up. `device.json` is left for what no interface says (a
+ringer switch's code, the hardware Home button); `phoenix-devices
+--probe` prints what a new device has and what Phoenix will use, which is
+the first step of bringing one up. So the chain is: the installer or
+driver manager puts the right kernel, firmware and drivers in place, the
+kernel binds them, and `phoenix-devices` (with oFono, ConnMan, BlueZ,
+PulseAudio for the rest) finds what they expose. Most devices need no
+Phoenix-specific code at all.
+
 **On the device: a hardware check that heals.** A `org.webosphoenix.hardware`
 service runs at first boot and after each update:
 
@@ -327,7 +349,7 @@ cheapest way to back several legacy APIs at once.
 | **Notification LED** | Kernel LED class via feedbackd | Legacy: the core navi pulse and the `blinkNotifications` preference | No (LuneOS has a nyx LED controller module) | Drive the LED from notification state; blink on new notifications when the screen is off |
 | **Torch** | Kernel LED class: the flash LED's `/sys/class/leds/<name>/brightness` (a `*torch*` node, else `*flash*`, or the one named in `/etc/nyx.conf`); on `LEDS_CLASS_FLASH` devices `brightness` is the torch current and `flash_brightness`/`flash_strobe` are left alone; Qualcomm `qpnp-flash-v2` also needs its `led:switch*` node; MediaTek has `/dev/flashlight` ioctls | LuneOS `org.webosports.service.torch` (torchd: `getStatus {subscribe}`, `set {on \| brightness}`, `toggle`); none in legacy webOS or OSE | No (LuneOS has torchd and a nyx `led_torch` module, both Apache-2.0) | Use LuneOS's torchd and nyx `led_torch` module as they are (`meta-phoenix/recipes-bsp/torchd`, a stub). The Flashlight app and QR Scanner call it; the simulator implements the same API. No system menu toggle (the original system menu had none) |
 | **Fingerprint** | [fprintd](https://fprint.freedesktop.org/) on mainline (few phone sensors supported); Android biometrics HAL on Halium (Droidian's approach) | None in legacy webOS | No | A PAM/lock-screen integration after PIN lock works. Low priority |
-| **Hardware keys, switches** | evdev (power, volume, ringer switch on devices that have one, headset jack) | Legacy `com.palm.keys` (switches, headset, media keys) | **No** (no OSE service; the compositor gets the keys, never the switches) | **Done** in `phoenix-devices` (below), from evdev; the shell still handles Power and volume itself. Still to do: input devices that come later (a USB or Bluetooth headset's media keys: a udev monitor) |
+| **Hardware keys, switches** | evdev (power, volume, ringer switch on devices that have one, headset jack) | Legacy `com.palm.keys` (switches, headset, media keys) | **No** (no OSE service; the compositor gets the keys, never the switches) | **Done** in `phoenix-devices` (below), from evdev, found by their capabilities and followed as they come and go (a USB or Bluetooth headset's media keys, a USB keyboard, a dock: inotify on `/dev/input` and the kernel's uevents); the shell still handles Power and volume itself |
 
 ### Device configuration
 
@@ -340,9 +362,9 @@ missing file or key means the default. Read by `Phoenix.Native`'s
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `hardwareHomeButton` | `false` | The device has a Home button (physical or capacitive) that its maker uses **instead of** the on-screen gesture bar. The shell then hides the bar, the key does its job (`Key_Home`), and tablets take the bottom-edge flick for swipe up. |
-| `backlight` | the first under `/sys/class/backlight` | The panel's backlight, by name (`phoenix-devices`). |
+| `backlight` | the first under `/sys/class/backlight` by the kernel's preference (`type` firmware, then platform, then raw) | The panel's backlight, by name (`phoenix-devices`), for a device with several where that picks the wrong one. |
 | `lightSensor` | the first IIO device with illuminance | The light sensor's IIO device, e.g. `"iio:device1"` (`phoenix-devices`). |
-| `ringerSwitch` | none (the ringer is always on) | The ringer switch: `{"type": "EV_SW" \| "EV_KEY", "code": n, "silentValue": 1}`, the input event code it sends and its value when silent. Linux has no code of its own for it (`SW_MUTE_DEVICE`, 14, is the nearest; OnePlus's alert slider sends keys), so each device names its own (`phoenix-devices`). |
+| `ringerSwitch` | none (the ringer is always on) | The ringer switch: `{"type": "EV_SW" \| "EV_KEY", "code": n, "silentValue": 1}`, the input event code it sends and its value when silent. Linux has no code of its own for it (`SW_MUTE_DEVICE`, 14, is the nearest; OnePlus's alert slider sends keys), so each device names its own (`phoenix-devices`). `phoenix-devices --probe` points at any device with `SW_MUTE_DEVICE` and prints the line to add. |
 
 Phoenix keeps the gesture bar on every phone and tablet by default,
 including the TouchPad, whose Home button was a step back from the Pre's
@@ -373,7 +395,7 @@ over the shell's `DeviceServices.qml`.
 | Service | In the simulator | On a device | Not done |
 | --- | --- | --- | --- |
 | `com.palm.display` `status`, `control/status`, `setState`, `getProperty`, `setProperty` | The shell's display (on, dimmed, off; its timeout; what keeps it on; dock mode) and its events. `setState` is the shell's (on, dimmed, off, unlock as the padlock, dock, undock). `requestBlock` holds the display on, locked or not (the Clock while an alarm rings); `powerKeyBlock` gives Power to the app; timeout, `maximumBrightness` and `onWhenConnected` are the system's preferences | The shell reports its display to `com.palm.display/phoenix/report` and hears the apps on `/phoenix/requests` (only `com.webos.surfacemanager` may call them; `LsmWindowSource`). The service sets the backlight (`/sys/class/backlight/*/brightness`, `bl_power`) from the shell's level | Proximity (`proximityEnabled` is counted, nothing senses); the panel's power (DPMS); the original's lower brightness on a low battery (`DisplayManager.cpp:2053-2062`) |
-| `com.palm.keys` `audio`, `media`, `headset`, `switches` | Volume (F10, F11), Power (F3) and media keys; the headset in or out (Ctrl+Shift+H) and its button (Ctrl+Shift+B: click, double click within a second; hold is the device's); the ringer switch (Ctrl+Shift+R; down mutes); `switches/status {get}` | evdev: `KEY_VOLUMEUP`/`DOWN`, `KEY_POWER`, the media keys, `KEY_MEDIA` (a wired headset's button), `SW_HEADPHONE_INSERT` and `SW_MICROPHONE_INSERT`, the ringer's code from `device.json`; `LsmSystemStatus` follows the ringer and headset | Hotplugged input devices (a Bluetooth headset's keys come through BlueZ's AVRCP uinput device only if it is there at start); the slider (no device has one; it reads closed) |
+| `com.palm.keys` `audio`, `media`, `headset`, `switches` | Volume (F10, F11), Power (F3) and media keys; the headset in or out (Ctrl+Shift+H) and its button (Ctrl+Shift+B: click, double click within a second; hold is the device's); the ringer switch (Ctrl+Shift+R; down mutes); `switches/status {get}` | evdev: `KEY_VOLUMEUP`/`DOWN`, `KEY_POWER`, the media keys, `KEY_MEDIA` (a wired headset's button), `SW_HEADPHONE_INSERT` and `SW_MICROPHONE_INSERT`, the ringer's code from `device.json`; `LsmSystemStatus` follows the ringer and headset | The slider (no device has one; it reads closed); a USB or Bluetooth headset's arrival is not a "headset" in (only a jack's switch is: the audio route is PulseAudio's) |
 | `com.palm.vibrate` `vibrate`, `vibrateNamedEffect` | Every vibration (an app's, a banner's "vibrate") is counted (`SystemSounds.vibrations`); the window shakes under "Vibrating: …" for as long as it lasts | The first of: a force-feedback device (`EV_FF`, `FF_RUMBLE`), `/sys/class/leds/vibrator` with the transient trigger, `/sys/class/timed_output/vibrator`. The named effects' lengths are Phoenix's (the Castle's were its haptics driver's) | `period` is taken but not pulsed; no device without one of the three (Halium: `luna-haptics`) |
 | `com.palm.ambientLightSensor` `control/status` | A simulated light (Ctrl+Shift+L: 1, 50, 300, 20000 lux) and its region; automatic brightness (`enableALS`) dims the screen in dim and dark light | IIO `in_illuminance_input`, or `_raw` × `_scale`, read every 0.5 s while the display is on, with AmbientLightSensor's ten-reading regions | The sensor's own rates (nyx's fast and slow report rates) |
 
@@ -406,8 +428,69 @@ What it still needs on a device, and the owner's call:
   device gives the volume and media keys. `PHOENIX_DEVICES_ROOT` points it
   at a fake `/sys` to try it there.
 
+#### Finding the hardware, and following it
+
+Nothing in `phoenix-devices` names a device. It finds the hardware the
+way the kernel describes it (`services/devices/src/hardware.cpp`):
+
+- **Input devices** by what they can do: each `/dev/input/eventN`'s
+  name, bus and capability bitmaps from sysfs
+  (`/sys/class/input/eventN/device/{name,id/bustype,capabilities/*}`,
+  the kernel's `input_print_bitmap` format), or from the device itself
+  (`EVIOCGBIT`) where sysfs does not have them. It opens the ones with a
+  headset jack (`SW_HEADPHONE_INSERT`, `SW_MICROPHONE_INSERT`), the
+  ringer's code, or one of the keys it reports (volume, Power, the media
+  keys, `KEY_MEDIA`), whatever their driver or bus: the built-in
+  `gpio-keys`, a codec's jack, a USB headset, a USB keyboard's media keys,
+  BlueZ's AVRCP device for a Bluetooth headset.
+- **The backlight** from `/sys/class/backlight` (the kernel's preferred
+  `type` first), **the vibrator** from the first of a force-feedback
+  device, the LED class's `vibrator`, `timed_output`, and **the light
+  sensor** from the first IIO device with illuminance.
+
+**Hotplug.** Two sources, no libudev: inotify on `/dev/input` (devtmpfs
+makes and removes the event nodes; `IN_ATTRIB` covers udev setting a
+node's permissions after it appears), and the kernel's uevents on a
+`NETLINK_KOBJECT_UEVENT` socket (group 1, the kernel's own messages, sent
+by port 0) for what has no node and gives sysfs no inotify events: an IIO
+sensor, a backlight, an LED or `timed_output` vibrator. OSE images run
+systemd's udevd, so libudev is there, but reading the kernel's messages
+needs no library, and phoenix-devices only uses them as a cue to look
+again. A burst of events (a device's input and event nodes, several
+uevents) is one rescan when the main loop is idle. A rescan opens the
+devices that came, closes the ones that went (an event node reused by
+another device counts as a new one; an fd that hangs up is a device that
+went), replaces the backlight, vibrator or light sensor if they changed
+(a new backlight gets the display's level; the light sensor starts over
+or stops), and re-reads the switches: a switch no device has any more is
+off, so a headset jack that goes with its device sends the headset "up"
+to `com.palm.keys/headset`. One read's events go together, so a headset
+plugged in, which reports its jack and its microphone at once, is one
+`headset-mic` "down", as luna-sysmgr's single `Key_HeadsetMic` was.
+
+**The log.** At start-up it logs each part and every event device with
+what it can do and whether it is used, and on each change what came or
+went, to the journal:
+
+```
+phoenix-devices: input /dev/input/event0 "gpio-keys" (host): keys volume_up, volume_down, power [used]
+phoenix-devices: input /dev/input/event1 "Synaptics TM2" (i2c): touchscreen [not used]
+phoenix-devices: hotplug: inotify on /dev/input; kernel uevents
+phoenix-devices: hotplug: /dev/input/event4 created
+phoenix-devices: input added /dev/input/event4 "Jabra EVOLVE 20" (usb): keys volume_up, togglePausePlay, next, prev [used]
+```
+
+**`phoenix-devices --probe`** prints the same, plus `device.json`, the
+headset jack and hints (a `SW_MUTE_DEVICE` that may be the ringer, with
+the line to add), and exits without touching anything (no LED trigger
+set, no vibrator taken): the first command to run on a new phone.
+`PHOENIX_DEVICES_ROOT` runs it against a copied `/sys` and `/dev`.
+
 Tests: `build/devices/devices-test` (the logic, the hardware against a
-fake sysfs, every method over the luna-service2 stand-in;
+fake sysfs and `/dev` whose event devices are FIFOs carrying real
+`input_event`s, devices appearing and going while the service runs,
+`--probe` through the service's own `main` (`phoenix-devices-stub`),
+every method over the luna-service2 stand-in;
 `services/common/ls2stub`), `shell/tests/tst_deviceservices.qml`,
 `apps/shared/luna/src/device.test.ts`, `tools/test-device-services.cjs`.
 

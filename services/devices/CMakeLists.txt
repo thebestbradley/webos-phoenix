@@ -57,4 +57,11 @@ if(PHOENIX_GLIB_FOUND AND PHOENIX_DEVICES_TESTS)
                    ../common/ls2stub/ls2stub.cpp ../common/ls2stub/luna-service2/lunaservice.h)
     target_include_directories(devices-test PRIVATE ../common/ls2stub)
     target_link_libraries(devices-test PRIVATE phoenix-devices-core PkgConfig::PHOENIX_GLIB)
+    # The service's own main over the stand-in, so devices-test can run
+    # `phoenix-devices --probe` as it is (the real one needs luna-service2).
+    add_executable(phoenix-devices-stub src/main.cpp src/service.cpp src/service.h ../common/ls2stub/ls2stub.cpp)
+    target_include_directories(phoenix-devices-stub PRIVATE ../common/ls2stub)
+    target_link_libraries(phoenix-devices-stub PRIVATE phoenix-devices-core PkgConfig::PHOENIX_GLIB)
+    target_compile_definitions(devices-test PRIVATE PHOENIX_DEVICES_STUB="$<TARGET_FILE:phoenix-devices-stub>")
+    add_dependencies(devices-test phoenix-devices-stub)
 endif()
