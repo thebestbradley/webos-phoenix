@@ -649,6 +649,17 @@ Item {
             tryCompare(notes, "negativeSpace", 0, 2000);
         }
 
+        // Taps one of the drawer header's actions (DrawerHeader.qml). Its
+        // Row places them anew when it is next polished, before the next
+        // frame, after one shows, hides or changes its text ("Clear" to
+        // "Clear (1)"). A finger's tap always comes after that frame; so
+        // must this one (Qt 6.11 lays out before delivering the click,
+        // 6.4 did not).
+        function tapDrawerAction(action) {
+            waitForItemPolished(action.parent);
+            mouseClick(action);
+        }
+
         function visibleChild(parentItem, name) {
             var found = null;
             (function walk(o) {
@@ -689,7 +700,7 @@ Item {
             verify(visibleChild(notes, "drawerHeader") !== null);
 
             // Select one notification and clear it.
-            mouseClick(visibleChild(notes, "drawer_select"));
+            tapDrawerAction(visibleChild(notes, "drawer_select"));
             verify(notes.selecting);
             var rows = dashboardRows();
             compare(rows.length, 4);
@@ -698,7 +709,7 @@ Item {
             mouseClick(rows[2]);                    // "Second"
             compare(notes.selectedCount, 1);
             verify(visibleChild(notes, "drawerSelectMark") !== null);
-            mouseClick(visibleChild(notes, "drawer_clearSelected"));
+            tapDrawerAction(visibleChild(notes, "drawer_clearSelected"));
             compare(windows.notifications.count, 3);
             compare(windows.notifications.get(1).title, "First");
             compare(windows.notifications.get(2).title, "Third");
@@ -707,10 +718,10 @@ Item {
             // Clear All asks once ("Clear 2?"); the second tap clears, and
             // the activity stays.
             var clearAll = visibleChild(notes, "drawer_clearAll");
-            mouseClick(clearAll);
+            tapDrawerAction(clearAll);
             compare(windows.notifications.count, 3);
             compare(clearAll.text, "Clear 2?");
-            mouseClick(clearAll);
+            tapDrawerAction(clearAll);
             compare(windows.notifications.count, 1);
             compare(windows.notifications.get(0).ongoing, true);
 
@@ -767,7 +778,7 @@ Item {
             compare(windows.cards.count, 0);
             verify(!shell.justTypeOpen && !shell.launcherOpen);
 
-            mouseClick(clearAll);
+            tapDrawerAction(clearAll);
             compare(clearAll.text, "Clear 2?");
             wait(Theme.drawerConfirmTimeout + 200);
             compare(clearAll.text, "Clear All", "the question lapses");
@@ -1190,7 +1201,7 @@ Item {
         // C11: no memory left: the launch is refused and "Sorry, Too Many
         // Cards" takes the popup alert's place until OK.
         function test_tooManyCards() {
-            // /proc/meminfo read (Linux): plenty left here.
+            // /proc/meminfo (a Mac: its page counts) read: plenty left here.
             verify(windows.memory.totalMb > 0);
             verify(windows.memory.availableMb > 0);
             verify(!windows.memory.low);
@@ -1272,14 +1283,22 @@ Item {
             tryVerify(function() { return shell.maximized; }, 2000);
             keyClick(Qt.Key_Super_L);
             tryVerify(function() { return !shell.maximized; }, 2000);
-            keyClick(Qt.Key_Meta);
+            // Linux reports Super as Meta too; on a Mac Qt's Meta is the
+            // Control key, which is not the card-view key (Shell.qml's
+            // soloKeys).
+            var mac = Qt.platform.os === "osx";
+            keyClick(mac ? Qt.Key_Super_R : Qt.Key_Meta);
             verify(shell.launcherOpen);
             keyClick(Qt.Key_Super_L);
             verify(!shell.launcherOpen);
+            if (mac) {
+                keyClick(Qt.Key_Meta);
+                verify(!shell.launcherOpen, "Control on a Mac is not the card-view key");
+            }
             // Held for a shortcut (Super + another key) it is a modifier.
-            keyPress(Qt.Key_Meta);
+            keyPress(Qt.Key_Super_L);
             keyClick(Qt.Key_A, Qt.MetaModifier);
-            keyRelease(Qt.Key_Meta);
+            keyRelease(Qt.Key_Super_L);
             verify(!shell.launcherOpen);
             // Not over the lock screen.
             shell.lock();
