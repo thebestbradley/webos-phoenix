@@ -26,6 +26,12 @@ Rectangle {
 
     color: "#e9e9e9"
 
+    // Relaunched with these params (webOSRelaunch in a web app), last.
+    property var relaunchParams: null
+    function relaunch(params) {
+        relaunchParams = params;
+    }
+
     function appMenuRequested() {
         appMenuOpen = !appMenuOpen;
     }

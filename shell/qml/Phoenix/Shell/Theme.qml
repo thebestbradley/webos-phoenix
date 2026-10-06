@@ -31,6 +31,14 @@ QtObject {
     property real u: 1.0
 
     function px(v) { return Math.round(v * u) }
+    // Where anchors.centerIn (alignWhenCentered) puts an item `size` long in
+    // a parent `parentSize` long: each centre is half the length, rounded up
+    // for an odd whole length (QQuickAnchorsPrivate hcenter / vcenter). For
+    // an item that is centred only some of the time, at the same pixel.
+    function centred(parentSize, size) {
+        function half(l) { return Math.floor(l) % 2 ? (l + 1) / 2 : l / 2; }
+        return half(parentSize) - half(size);
+    }
 
     // Settings > Accessibility > Reduce motion (set by Shell.qml from
     // system.reduceMotion): cards, the launcher and the lock screen appear
@@ -420,6 +428,17 @@ QtObject {
     readonly property int cardShuffleReorderDuration: motion(350)            // curve 6 = OutCubic
     readonly property int cardGroupReorderDuration: motion(500)              // conf/lunaAnimations.conf:43-46
     readonly property int cardDimmingDuration: motion(300)
+    // An app's scene push / pop (CardTransition.cpp): conf/lunaAnimations.conf:61-62
+    // cardTransitionDuration, curve 20 = easeOutQuad (AnimationSettings.cpp:380-396).
+    readonly property int cardTransitionDuration: motion(300)
+    // Touch to Share's ghost card: conf/lunaAnimations.conf:63-64
+    // cardGhostDuration, curve 10 = OutQuart; it ends at GhostCardFinalRatio
+    // of the full window (Settings.cpp:212, CardWindowManager.cpp:2949).
+    readonly property int cardGhostDuration: motion(750)
+    readonly property real ghostCardFinalRatio: 0.85
+    // Touch to Share's glow: one 1000 ms pulse after another, the curve
+    // reticleCurve = 0 Linear (TouchToShareGlow.cpp:99-127; lunaAnimations.conf:93).
+    readonly property int touchToShareGlowDuration: 1000
     readonly property int launcherReorderDuration: 300               // dynamicssettings.cpp:92-93 iconReorderIconMoveAnimTime, InQuad
     // Dragging an icon to a page's left or right edge (the 50 px border,
     // layoutsettings.cpp:61) takes it to the page beside at once; held

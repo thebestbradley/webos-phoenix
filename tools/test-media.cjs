@@ -12,7 +12,10 @@
 //           Roll, swipes the viewer through the sample photos, sets a
 //           wallpaper (checks the systemStatus the shell gets) and deletes
 //           the photo
-//   Music   plays a song, pauses, seeks, skips and changes the volume
+//   Music   plays a song, pauses, seeks, skips and changes the volume; then
+//           the headset button (single and double click), the play/pause,
+//           next and previous media keys, and taking the headset out
+//           (com.palm.keys through the runtime)
 //
 //   node tools/test-media.cjs [--tablet] [--out DIR]
 //
@@ -285,6 +288,56 @@ async function main() {
         check(v >= 25 && v <= 35, `music: volume sets the pmedia stream (${v})`);
         await page.waitForTimeout(500);
         await shot(page, "music-now-playing-2");
+
+        // The headset and media keys, as the shell sends them through the
+        // runtime's com.palm.keys (the device's phoenix-devices sends the
+        // same): the headset button's clicks in InputManager's order
+        // (headsetStateMachine, luna-sysmgr InputManager.cpp:254-331).
+        const keyEvents = (events) => page.evaluate((evs) => evs.forEach(([category, key, state]) =>
+            __phoenixRuntime.devices.hostEvent({ key: { category, key, state } })), events);
+        const button = (...states) => keyEvents(states.map((s) => ["/headset", "headset_button", s]));
+        const playLabel = () => page.getAttribute("[data-testid='np-play']", "aria-label");
+        const title = () => page.textContent("[data-testid='np-title']");
+        const waitLabel = (label, what) => page.waitForFunction((l) => document.querySelector("[data-testid='np-play']").getAttribute("aria-label") === l,
+            label, { timeout: 3000 }).then(() => check(true, what), () => check(false, what));
+        const waitTitle = (not, what) => page.waitForFunction((t) => document.querySelector("[data-testid='np-title']").textContent !== t,
+            not, { timeout: 3000 }).then(() => check(true, `${what} (${not} -> ...)`), () => check(false, what));
+        check(await playLabel() === "Pause", "music keys: playing before the keys");
+        await keyEvents([["/headset", "headset-mic", "down"]]);
+        await button("down", "single_click", "up");
+        await waitLabel("Play", "music keys: a single click of the headset button pauses");
+        check(lastHost("nowPlaying").payload.playing === false, "music keys: the shell hears it paused");
+        await page.waitForTimeout(1100);   // past DOUBLE_PRESS_TIME_MS
+        await button("down", "single_click", "up");
+        await waitLabel("Pause", "music keys: another single click plays");
+        await page.waitForTimeout(1100);
+        let t0 = await title();
+        await button("down", "single_click", "up", "down", "double_click", "up");
+        await waitTitle(t0, "music keys: a double click goes to the next song");
+        await page.waitForTimeout(300);
+        check(await playLabel() === "Pause", "music keys: and it plays on");
+        await shot(page, "music-keys-double-click");
+        await keyEvents([["/media", "togglePausePlay", "down"], ["/media", "togglePausePlay", "up"]]);
+        await waitLabel("Play", "music keys: the play/pause media key pauses");
+        await keyEvents([["/media", "togglePausePlay", "down"], ["/media", "togglePausePlay", "up"]]);
+        await waitLabel("Pause", "music keys: and plays");
+        t0 = await title();
+        await keyEvents([["/media", "next", "down"], ["/media", "next", "up"]]);
+        await waitTitle(t0, "music keys: the next media key");
+        const t1 = await title();
+        await keyEvents([["/media", "prev", "down"], ["/media", "prev", "up"]]);
+        await page.waitForFunction((t) => document.querySelector("[data-testid='np-title']").textContent === t, t0, { timeout: 3000 })
+            .then(() => check(true, `music keys: the previous media key (${t1} -> ${t0})`), () => check(false, "music keys: the previous media key"));
+        await page.waitForFunction(() => document.querySelector("[data-testid='np-elapsed']").textContent !== "0:00", null, { timeout: 5000 })
+            .catch(() => undefined);
+        check(await playLabel() === "Pause" && await elapsed() > 0,
+              `music keys: playing before the headset comes out (${await title()} at ${await elapsed()}s)`);
+        await keyEvents([["/headset", "headset-mic", "up"]]);
+        await waitLabel("Play", "music keys: taking the headset out pauses");
+        const p2 = await elapsed();
+        await page.waitForTimeout(1300);
+        check(await elapsed() === p2, "music keys: and the clock stops");
+        await shot(page, "music-keys-unplugged");
         await page.click("[data-testid='np-back']");
         await page.waitForSelector("[data-testid='mini-player']");
         await shot(page, "music-mini-player");

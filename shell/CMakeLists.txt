@@ -27,8 +27,27 @@ if(PHOENIX_BUILD_SIM)
     # The Terminal's PTY core (and its tests, pty-test), shared with the
     # device's org.webosphoenix.pty service.
     add_subdirectory(../services/pty ${CMAKE_CURRENT_BINARY_DIR}/pty)
-    add_executable(phoenix-sim sim/main.cpp sim/rootfs.cpp sim/rootfs.h sim/simsettings.h sim/simprocess.h sim/simpty.cpp sim/simpty.h sim/siminstaller.cpp sim/siminstaller.h sim/simsnapshots.cpp sim/simsnapshots.h)
-    target_link_libraries(phoenix-sim PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick phoenix-pty-core)
+    # phoenix-devices' logic and its tests (devices-test): the device's
+    # com.palm.display, .keys, .vibrate and .ambientLightSensor.
+    add_subdirectory(../services/devices ${CMAKE_CURRENT_BINARY_DIR}/devices)
+    # Widgets: the window's menu bar (the global one on macOS) and toolbar
+    # (SimChrome).
+    find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets)
+    add_executable(phoenix-sim sim/main.cpp sim/rootfs.cpp sim/rootfs.h sim/simsettings.h sim/simprocess.h sim/simpty.cpp sim/simpty.h sim/siminstaller.cpp sim/siminstaller.h sim/simsnapshots.cpp sim/simsnapshots.h
+                               sim/simchrome.cpp sim/simchrome.h)
+    target_link_libraries(phoenix-sim PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets phoenix-pty-core)
+    # The toolbar's icons (SVG: drawn with Qt's SVG icon engine where it is
+    # installed, else the toolbar shows their names).
+    qt_add_resources(phoenix-sim "sim-icons" PREFIX "/sim" BASE sim FILES
+        sim/icons/power.svg sim/icons/home.svg sim/icons/back.svg sim/icons/rotate-left.svg
+        sim/icons/rotate-right.svg sim/icons/screenshot.svg sim/icons/call.svg sim/icons/message.svg
+        sim/icons/notification.svg sim/icons/battery.svg sim/icons/charger.svg sim/icons/touchstone.svg
+        sim/icons/phone.svg sim/icons/tablet.svg)
+    if(APPLE)
+        # Its name in the menu bar's application menu and About box: an
+        # Info.plist in the program itself (it is not an .app bundle).
+        target_link_options(phoenix-sim PRIVATE "LINKER:-sectcreate,__TEXT,__info_plist,${CMAKE_CURRENT_SOURCE_DIR}/sim/Info.plist")
+    endif()
     if(TARGET Qt6::WebEngineQuick)
         # Network: the pages' HTTP proxy (RootfsSchemeHandler, /__phoenix/proxy).
         find_package(Qt6 6.4 REQUIRED COMPONENTS Network)

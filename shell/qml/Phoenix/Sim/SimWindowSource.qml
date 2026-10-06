@@ -210,7 +210,9 @@ Item {
                  installed: !!a.installed,
                  // appinfo.json exhibitionMode (dockMode): it can be an
                  // exhibition in dock mode, under exhibitionTitle.
-                 exhibition: !!a.exhibition, exhibitionTitle: a.exhibitionTitle || a.title });
+                 exhibition: !!a.exhibition, exhibitionTitle: a.exhibitionTitle || a.title,
+                 // appinfo.json tapToShareSupported (Touch to Share).
+                 tapToShare: !!a.tapToShareSupported });
     }
 
     // The launcher's fields every entry has (Shell._launcherEntries,
@@ -221,7 +223,7 @@ Item {
     function _launcherFields() {
         return { page: "", dynamic: false, category: "", keywords: "", installed: false,
                  installState: "", progress: -1, pending: false, installReason: "",
-                 exhibition: false, exhibitionTitle: "" };
+                 exhibition: false, exhibitionTitle: "", tapToShare: false };
     }
 
     // ---- Installing and removing apps (phoenix-sim's SimInstaller) ---------------------
@@ -546,9 +548,16 @@ Item {
             console.warn("phoenix-sim: cannot create web window:", _webComponent.errorString());
             return mockApp.createObject(source, { appId: appId, title: appId });
         }
-        win.hostMessage.connect(function(type, payload) { source._hostMessage(appId, uid, type, payload); });
+        var pageKey = "p" + (_nextPageKey++);
+        win.hostMessage.connect(function(type, payload) {
+            if (!source._deviceMessage(pageKey, appId, type, payload))
+                source._hostMessage(appId, uid, type, payload);
+        });
         if (win.loaded)
             win.loaded.connect(function() { source._pageLoaded(win); });
+        // A page gone lets go of what it held.
+        if (win.gone)
+            win.gone.connect(function() { source._pageGone(pageKey); });
         win.windowRequested.connect(function(request) { source._openWindow(appId, request); });
         if (system)
             win.closeRequested.connect(function() { source.closeSystemWindow(uid); });
@@ -712,6 +721,15 @@ Item {
         } else if (type === "debugOverlay") {
             // com.palm.systemmanager enableFpsCounter / enableTouchPlot.
             debugOverlayRequested(payload);
+        } else if (type === "sceneTransition") {
+            // PalmSystem.prepare/run/cancelSceneTransition: the card does
+            // the scene change (Card.prepareSceneTransition).
+            if (uid !== "" && cardIndex(uid) >= 0)
+                sceneTransitionRequested(uid, String(payload.op || ""), String(payload.transition || ""), !!payload.isPop);
+            else if (uid !== "" && payload.op === "prepare")
+                sceneTransitionPrepared(uid);
+        } else if (type === "touchToShare") {
+            _touchToShareRequest(appId, uid, payload || {});
         } else if (type === "progressAnimation") {
             // com.palm.systemmanager runProgressAnimation.
             progressAnimationRequested(String(payload.type || ""), String(payload.state || ""));
@@ -772,6 +790,77 @@ Item {
     signal debugOverlayRequested(var request)
     // runProgressAnimation {type, state}.
     signal progressAnimationRequested(string type, string state)
+
+    // ---- Scene transitions ---------------------------------------------------------
+    // A page's PalmSystem.prepareSceneTransition(isPop) ("prepare"),
+    // runSceneTransition(type, isPop) ("run", type "zoom-fade" or
+    // "cross-fade") and cancelSceneTransition() ("cancel"), for its card.
+    signal sceneTransitionRequested(string uid, string op, string transition, bool isPop)
+    // The card has its snapshot: the page may change the scene.
+    property string lastSceneTransitionPrepared: ""
+    function sceneTransitionPrepared(uid) {
+        lastSceneTransitionPrepared = uid;
+        var w = _windows[uid];
+        if (w && w.runScript)
+            w.runScript("window.__phoenixRuntime && __phoenixRuntime.sceneTransitionPrepared && __phoenixRuntime.sceneTransitionPrepared()");
+    }
+
+    // ---- Touch to Share --------------------------------------------------------------
+    // The TouchPad's Touch to Share, with a simulated phone nearby
+    // (phoenix-sim Shift+F7 / Ctrl+F7, --touch-to-share). On the device the
+    // tap2share service (com.palm.stservice, not in the open-source release)
+    // ran it:
+    //  1. a phone in range: com.palm.systemmanager/touchToShareDeviceInRange
+    //     {inRange} starts or stops the glow (SystemService.cpp:5143-5215;
+    //     TouchToShareGlow.cpp);
+    //  2. the phone touches the device: the app in front, if its appinfo.json
+    //     has "tapToShareSupported", is relaunched with {sendDataToShare}
+    //     and answers with com.palm.stservice/shareData {data: {target,
+    //     type, mimetype}} (the Isis browser, BrowserApp.js:137-139);
+    //  3. once it is sent, touchToShareAppUrlTransferred {appid}
+    //     (SystemService.cpp:5224-5296): if that app's card is maximized it
+    //     is minimized and a ghost of it is thrown off the top of the screen
+    //     (CardWindowManagerStates.cpp:485-492, CardWindowManager.cpp:2915-2957).
+    // The shell plays tap_to_share.mp3 (shipped with LunaSysMgr; its caller,
+    // the service, was not released) as the transfer completes.
+    property bool touchToShareInRange: false
+    // What the simulated phone received last: {appId, data} (or null).
+    property var touchToShareReceived: null
+    // An app's data was sent: its card is thrown (CardView).
+    signal touchToShareTransferred(string appId)
+
+    function simulateTouchToShareDevice(inRange) {
+        touchToShareInRange = !!inRange;
+    }
+    // The phone touches the device: the app in front is asked for what to
+    // share. Returns the app asked, or "" (nothing in front that can share).
+    function simulateTouchToShareTap() {
+        touchToShareInRange = true;
+        var uid = focusedUid;
+        var i = cardIndex(uid);
+        if (i < 0)
+            return "";
+        var appId = cards.get(i).appId;
+        var info = appInfo(appId);
+        var w = _windows[uid];
+        if (!info || !info.tapToShare || !w || !w.relaunch)
+            return "";
+        w.relaunch({ sendDataToShare: true });
+        return appId;
+    }
+
+    function _touchToShareRequest(appId, uid, p) {
+        if (p.op === "inRange") {
+            touchToShareInRange = !!p.inRange;
+        } else if (p.op === "transferred") {
+            touchToShareTransferred(String(p.appId || ""));
+        } else if (p.op === "shareData") {
+            // The simulated phone takes it; the transfer completes.
+            touchToShareReceived = { appId: appId, data: p.data || {} };
+            console.info("Touch to Share: " + appId + " sent " + JSON.stringify(p.data || {}));
+            touchToShareTransferred(appId);
+        }
+    }
 
     // A /storaged signal (the simulated storage daemon's, SimStorage.qml)
     // for every page's com.palm.bus/signal/addmatch listeners
@@ -1057,6 +1146,39 @@ Item {
                         sound: "", soundClass: "" });
     }
 
+    // "Dismissing Cards", the first time the user is in card view
+    // (CardWindowManager::firstCardAlert, CardWindowManager.cpp:1167-1187;
+    // DismissCardTutorial.qml, 170 px tall, in the popup alert's place); OK
+    // closes it. It is marked done as it is shown (markFirstCardDone: the
+    // marker file /var/luna/preferences/used-first-card), so it never shows
+    // again. phoenix-sim keeps the mark in simSettings "cards/usedFirstCard";
+    // without one (tests) it counts as done.
+    property bool dismissedFirstCard: true
+    // It was shown: remember that (sim.qml).
+    signal firstCardAlertShown
+    readonly property string dismissCardTutorialKey: "dismisscardtutorial"
+    Component {
+        id: dismissCardTutorialComponent
+        DismissCardTutorial {}
+    }
+    function firstCardAlert() {
+        if (dismissedFirstCard)
+            return;
+        dismissedFirstCard = true;
+        firstCardAlertShown();
+        if (_windows[dismissCardTutorialKey])
+            return;
+        var alert = dismissCardTutorialComponent.createObject(source, { visible: false });
+        alert.okButtonPressed.connect(function () { source.closeAlert(source.dismissCardTutorialKey); });
+        _windows[dismissCardTutorialKey] = alert;
+        var queued = [];
+        for (var i = 0; i < alerts.count; ++i)
+            queued.push({ appId: alerts.get(i).appId, name: alerts.get(i).name });
+        alerts.insert(Policy.insertIndex(queued, "com.palm.systemui", dismissCardTutorialKey),
+                      { key: dismissCardTutorialKey, appId: "com.palm.systemui", name: dismissCardTutorialKey, height: 170,
+                        sound: "", soundClass: "" });
+    }
+
     // "USB Drive connection failed": storaged could not take the drive
     // (WindowServerLuna::slotBrickModeFailed, uiComponents/MsmEntryFailed;
     // 160 px tall in the popup alert's place); OK closes it.
@@ -1331,6 +1453,96 @@ Item {
             pages[i].runScript(js);
     }
 
+    // ---- LunaSysMgr's device services (Phoenix.Shell DeviceServices) ---------------
+    // Each page's runtime answers com.palm.display, .keys, .vibrate and
+    // .ambientLightSensor; the shell tells every page what the display, the
+    // keys, the switches and the light do (deviceEvent), and the pages ask
+    // the shell (host messages displayState, displayHolds, vibrate). What a
+    // page holds (requestBlock, powerKeyBlock, ...) ends with the page.
+
+    signal displayStateRequested(string state)
+    signal vibrationRequested(var request)
+    // Every page's holds added up: {requestBlock, powerKeyBlock, proximity, alsDisabled}.
+    property var displayHolds: ({ requestBlock: 0, powerKeyBlock: 0, proximity: 0, alsDisabled: 0 })
+    property var _holdsByPage: ({})      // page key -> its holds
+    property var _vibrationsByPage: ({})  // page key -> [ids of its endless vibrations]
+    property var _deviceState: ({})       // the last display, switches, light and holds, for pages that load later
+    property int _nextPageKey: 1
+
+    function deviceEvent(ev) {
+        var st = Object.assign({}, _deviceState);
+        for (var k in ev)
+            if (k === "display" || k === "switches" || k === "light" || k === "holds")
+                st[k] = Object.assign({}, st[k] || {}, ev[k]);
+        // A key's switch state stays for later pages too.
+        if (ev.key && (ev.key.category === "/switches" || ev.key.category === "/headset")
+                && (ev.key.state === "up" || ev.key.state === "down") && ev.key.key !== "headset_button") {
+            st.switches = Object.assign({}, st.switches || {});
+            st.switches[ev.key.key] = ev.key.state;
+        }
+        _deviceState = st;
+        _toPages("window.__phoenixRuntime && __phoenixRuntime.devices && __phoenixRuntime.devices.hostEvent("
+                 + JSON.stringify(ev) + ")");
+    }
+
+    function _toPages(js) {
+        var pages = _webPages();
+        for (var i = 0; i < pages.length; ++i)
+            pages[i].runScript(js);
+    }
+
+    // Returns whether the message was the device services'.
+    function _deviceMessage(pageKey, appId, type, payload) {
+        if (type === "displayState") {
+            displayStateRequested(String(payload.state || ""));
+        } else if (type === "displayHolds") {
+            var h = Object.assign({}, _holdsByPage);
+            h[pageKey] = { requestBlock: payload.requestBlock | 0, powerKeyBlock: payload.powerKeyBlock | 0,
+                           proximity: payload.proximity | 0, alsDisabled: payload.alsDisabled | 0 };
+            _holdsByPage = h;
+            _sumHolds();
+        } else if (type === "vibrate") {
+            var v = Object.assign({}, _vibrationsByPage);
+            var ids = (v[pageKey] || []).filter(function (id) { return id !== payload.id; });
+            if (payload.on)
+                ids.push(payload.id);
+            v[pageKey] = ids;
+            _vibrationsByPage = v;
+            vibrationRequested(payload);
+        } else {
+            return false;
+        }
+        return true;
+    }
+
+    function _pageGone(pageKey) {
+        if (_holdsByPage[pageKey]) {
+            var h = Object.assign({}, _holdsByPage);
+            delete h[pageKey];
+            _holdsByPage = h;
+            _sumHolds();
+        }
+        var ids = _vibrationsByPage[pageKey] || [];
+        if (ids.length > 0) {
+            var v = Object.assign({}, _vibrationsByPage);
+            delete v[pageKey];
+            _vibrationsByPage = v;
+            for (var i = 0; i < ids.length; ++i)
+                vibrationRequested({ id: ids[i], on: false });
+        }
+    }
+
+    function _sumHolds() {
+        var sum = { requestBlock: 0, powerKeyBlock: 0, proximity: 0, alsDisabled: 0 };
+        for (var p in _holdsByPage)
+            for (var k in sum)
+                sum[k] += _holdsByPage[p][k] || 0;
+        if (JSON.stringify(sum) === JSON.stringify(displayHolds))
+            return;
+        displayHolds = sum;
+        deviceEvent({ holds: sum });
+    }
+
     // What the user changed while no web page was running, for the next
     // page that loads (pages share their state through the runtime's store).
     property var _pendingStatus: null
@@ -1424,6 +1636,9 @@ Item {
         }
         if (Object.keys(_shellStatus).length > 0)
             win.runScript(_statusScript(_shellStatus));
+        if (Object.keys(_deviceState).length > 0)
+            win.runScript("window.__phoenixRuntime && __phoenixRuntime.devices && __phoenixRuntime.devices.hostEvent("
+                          + JSON.stringify(_deviceState) + ")");
     }
 
     // The launcher entry to start for a launch request: a launch point of

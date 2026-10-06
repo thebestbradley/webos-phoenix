@@ -259,6 +259,8 @@ void Rootfs::rescan()
         entry[QStringLiteral("exhibition")] = dock.toBool(false);
         entry[QStringLiteral("exhibitionTitle")] = dockOptions.value(QStringLiteral("title"))
             .toString(entry.value(QStringLiteral("title")).toString());
+        // Touch to Share asks it for what to send (ApplicationDescription.cpp:453-455).
+        entry[QStringLiteral("tapToShareSupported")] = app.value(QStringLiteral("tapToShareSupported")).toBool(false);
         // Installed by the user: the launcher may delete it (uninstall).
         entry[QStringLiteral("installed")] = installed;
         // The app's files (getSizeOfApps, getUserInstalledAppSizes).

@@ -40,7 +40,7 @@ $SUDO apt-get install -y --no-install-recommends \
     qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtqml-workerscript \
     qml6-module-qttest qml6-module-qt5compat-graphicaleffects \
     qt6-webengine-dev qml6-module-qtwebengine qml6-module-qtwebchannel \
-    qt6-multimedia-dev libglib2.0-dev fonts-dejavu-core \
+    qt6-multimedia-dev libqt6svg6 libglib2.0-dev fonts-dejavu-core \
     python3 python3-pip python3-venv
 
 # Node.js 22 LTS. Ubuntu's own nodejs package is too old.

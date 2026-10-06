@@ -32,6 +32,10 @@ Item {
     signal closeRequested
     // The page finished loading (the runtime and the app's scripts ran).
     signal loaded
+    // The window is going away, with its page: what the page held (its
+    // calls to the services) ends with it, as when a process leaves the bus.
+    signal gone
+    Component.onDestruction: gone()
     // Until then the card shows the loading card (CardLoading).
     property bool ready: false
     onLoaded: { ready = true; _sendOrientation(); }

@@ -84,10 +84,6 @@ reference device.
 The whole plan, milestone by milestone, with the decisions taken so far:
 [ROADMAP.md](ROADMAP.md).
 
-- **Phone in landscape**: the launcher keeps 3 columns, the lock screen
-  banner covers the date, the PIN pad covers the clock, and the system menu
-  is taller than the screen. Also check Just Type in tablet portrait (an
-  overlap was seen once).
 - **Check on a Retina Mac** that the status bar icons are the right size
   (fixed in `a8590c1`; CI now runs the HiDPI tests at a device pixel ratio
   of 2).

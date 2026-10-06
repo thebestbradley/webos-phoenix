@@ -15,8 +15,11 @@
 // empty and the functions only flip the radio properties.
 
 import QtQuick
+import WebOSCompositorBase 1.0
+import WebOSServices 1.0
 
 QtObject {
+    id: status
     property string carrier: "webOS Phoenix"
     property int batteryPercent: 100
     property bool charging: true
@@ -57,6 +60,54 @@ QtObject {
     property bool showAlertsWhenLocked: true
     property real brightness: 1.0
     property var fixedTime: null
+
+    // ---- Switches and the light sensor (Phoenix.Shell DeviceServices) -----------
+    // From phoenix-devices (services/devices), which reads them from evdev
+    // and IIO: the ringer switch ("up" on, "down" silent; only on a device
+    // whose device.json names it), a headset ("none", "headset",
+    // "headset-mic") and the light's region (0 undefined: no sensor).
+    // automaticBrightness and onWhenConnected are the system's preferences.
+    // STATUS: the subscriptions are written against phoenix-devices' API
+    // (its tests); not yet run on a device. M1 keeps the preferences in the
+    // system service (enableALS; com.palm.display's onWhenConnected).
+    property string ringerSwitch: "up"
+    property string headset: "none"
+    property int lightLevel: -1
+    property int lightRegion: 0
+    property bool automaticBrightness: true
+    property bool onWhenConnected: false
+
+    property var _devices: Service {
+        appId: LS.appId
+        onResponse: (method, payload, token) => {
+            var r = null;
+            try { r = JSON.parse(payload); } catch (e) { return; }
+            if (!r)
+                return;
+            // {current, region}: a reading.
+            if (typeof r.current === "number" && typeof r.region === "number") {
+                status.lightLevel = r.current;
+                status.lightRegion = r.region;
+            }
+            // {key, state}: a switch, or a headset in or out.
+            if (r.key === "ringer" && (r.state === "up" || r.state === "down"))
+                status.ringerSwitch = r.state;
+            if (r.key === "headset" || r.key === "headset-mic") {
+                if (r.state === "down")
+                    status.headset = r.key;
+                else if (r.state === "up" && status.headset === r.key)
+                    status.headset = "none";
+            }
+        }
+        Component.onCompleted: {
+            call("luna://com.palm.keys", "/switches/status", JSON.stringify({ subscribe: true }));
+            call("luna://com.palm.keys", "/headset/status", JSON.stringify({ subscribe: true }));
+            call("luna://com.palm.keys", "/switches/status", JSON.stringify({ get: "ringer" }));
+            call("luna://com.palm.keys", "/switches/status", JSON.stringify({ get: "headset" }));
+            call("luna://com.palm.keys", "/switches/status", JSON.stringify({ get: "headset-mic" }));
+            call("luna://com.palm.ambientLightSensor", "/control/status", JSON.stringify({ subscribe: true }));
+        }
+    }
     // The charger, and the Touchstone's serial number while on one (dock
     // mode). STATUS: placeholders; M1 reads powerd's chargerStatus /
     // USBDockStatus (DockConnected with DockPower, DockSerialNo) or the

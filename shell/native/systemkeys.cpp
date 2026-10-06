@@ -6,7 +6,7 @@
 #include <QCoreApplication>
 #include <QKeyEvent>
 #include <QVariantMap>
-#include <QWindow>
+#include <QQuickWindow>
 
 SystemKeys::SystemKeys(QObject *parent)
     : QObject(parent)
@@ -72,8 +72,10 @@ bool SystemKeys::eventFilter(QObject *watched, QEvent *event)
     if (!m_enabled || (type != QEvent::KeyPress && type != QEvent::KeyRelease && type != QEvent::ShortcutOverride))
         return false;
     // Each key event reaches the window first and then the item with the
-    // focus; take it once, at the window.
-    if (!qobject_cast<QWindow *>(watched))
+    // focus; take it once, at the window. Only the shell's (Qt Quick)
+    // windows: not another window of the program, such as phoenix-sim's
+    // menus, where Esc closes the menu (SimChrome).
+    if (!qobject_cast<QQuickWindow *>(watched))
         return false;
     auto *key = static_cast<QKeyEvent *>(event);
     const Qt::KeyboardModifiers mods = key->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);

@@ -1,0 +1,35 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# phoenix-devices: com.palm.display, com.palm.keys, com.palm.vibrate and
+# com.palm.ambientLightSensor (services/devices). It writes the backlight
+# and the vibrator under /sys and reads /dev/input, which are root's on an
+# OSE image; the rest of the filesystem is read-only to it. It follows
+# input devices and sensors as they come and go (inotify, uevents), and
+# logs what it finds; `phoenix-devices --probe` prints it. (udev rules
+# giving an unprivileged account those nodes would let it drop root:
+# docs/HARDWARE.md.)
+
+[Unit]
+Description=webOS Phoenix device services (display, keys, vibrator, light sensor)
+After=ls-hubd.service
+Requires=ls-hubd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/phoenix-devices
+Restart=on-failure
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+# AF_NETLINK: the kernel's uevents (NETLINK_KOBJECT_UEVENT), to see a
+# sensor or backlight that comes later. A private network namespace still
+# gets them: the kernel broadcasts uevents into every namespace owned by
+# the initial user namespace (lib/kobject_uevent.c). Without them it falls
+# back to inotify on /dev/input and logs why.
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target

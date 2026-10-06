@@ -694,7 +694,15 @@ Item {
         // requestFocusChange -> LockWindow::slotPinPanelFocusRequest,
         // LockWindow.cpp:1540-1554).
         readonly property bool inputClient: shown && !isPINEntry && opacity === 1
-        anchors.centerIn: parent
+        // Centred (LockWindow.cpp:479). Sideways, where the stacked panel
+        // is taller than the room under the status bar, it lays itself out
+        // side by side (UnlockPanel.qml) and centres in that room.
+        availableWidth: lock.sideways ? lock.width - Theme.px(16) : 0
+        availableHeight: lock.sideways ? lock.height - Theme.statusBarHeight : 0
+        // (Where anchors.centerIn put it: Theme.centred.)
+        x: Theme.centred(lock.width, width)
+        y: sideBySide ? Math.round(Theme.statusBarHeight + Math.max(0, (lock.height - Theme.statusBarHeight - height) / 2))
+                      : Theme.centred(lock.height, height)
         opacity: shown ? 1 : 0
         visible: shown || opacity > 0
         enabled: shown

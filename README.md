@@ -193,6 +193,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `shell/sim` | `phoenix-sim`, the desktop runner (also takes screenshots) |
 | `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Tasks, Voice Memos, Flashlight, QR Scanner, Weather, Maps, Passwords, Authenticator, Terminal, Videos, Podcasts, PDF View, Doc View, First Use, Help, Print Manager, Voice Dial), with the shared `@phoenix/ui` components, `@phoenix/luna` service client and `@phoenix/secrets` (TOTP, sealing, auto-lock), generated demo media (`apps/media-samples`), the Node.js Luna services of Files (`apps/files/service`) and Voice Memos (`apps/voicememos/service`, speech to text with whisper.cpp), and the CardDAV & CalDAV Synergy account with its sync service (`apps/dav`, see [docs/SYNERGY.md](docs/SYNERGY.md)) |
 | `services/pty` | `org.webosphoenix.pty`, the Terminal's PTY Luna service (C++), whose core phoenix-sim also uses |
+| `services/devices` | `phoenix-devices`: LunaSysMgr's `com.palm.display`, `com.palm.keys`, `com.palm.vibrate` and `com.palm.ambientLightSensor` on a device, which OSE lacks (C++; docs/HARDWARE.md); finds the hardware by looking and follows it as it comes and goes; `phoenix-devices --probe` prints what it finds |
 | `runtime/` | The webOS web app runtime for the simulator and browsers (`PalmSystem`, simulated Luna services) |
 | `shell/tests` | Behaviour tests (`qmltestrunner`) |
 | `shell/assets/openwebos` | Original Open webOS system UI artwork (Apache-2.0) |
@@ -245,13 +246,34 @@ cmake --build build
 sudo apt install qt6-base-dev qt6-declarative-dev qml6-module-qtquick \
   qml6-module-qtquick-window qml6-module-qtqml-workerscript \
   qml6-module-qt5compat-graphicaleffects qml6-module-qttest \
-  qt6-webengine-dev qml6-module-qtwebengine
+  qt6-webengine-dev qml6-module-qtwebengine libqt6svg6
 sudo snap install node --classic
 cmake -S shell -B build && cmake --build build
 ./build/phoenix-sim
 ```
 
 Node.js comes from the snap because Ubuntu's own nodejs package is too old.
+
+The window is the **Phoenix WebOS Simulator**: the device's screen under a
+menu bar (on a Mac, the one at the top of the screen) and beside a toolbar.
+**Device** has its buttons and switches (Power, Home, Back, the volume keys,
+the ringer switch, turning it left or right, a screen capture, the Full Erase
+and USB drive chords, a hardware keyboard), **Simulate** what happens to it
+(an incoming call, text, picture message or IM, a notification, the battery
+and chargers, a USB cable, the Touchstones, Touch to Share, a headset and its
+button, the play/pause key, the light), **View** the device it starts as
+(phone or tablet, the scale, a demo scene: these restart it) and the
+developer overlays, and **Help > Keyboard Shortcuts…** lists every key below
+in a window. Each menu item shows its key, so the menus teach them; they are
+made from one list in `shell/qml/sim.qml` (`simActions`), as the keys are.
+The toolbar has icons for the most used: Power, Home, Back, rotate, screen
+capture, incoming call, text, notification, low battery, charger, Touchstone,
+phone and tablet; their tooltips name the keys. It sits beside the screen
+(down the right of an upright screen, along the top of one on its side), so
+the screen keeps its size and `--screenshot` saves the screen alone; **View >
+Show Toolbar** or `--no-toolbar` hides it. Its icons need Qt's SVG plugin
+(`libqt6svg6` on Ubuntu; Homebrew's `qt` has it); without it its buttons
+show their names.
 
 Controls: drag with the mouse as you would with a finger. In card view a
 two-finger trackpad swipe sideways moves between cards and a swipe up throws
@@ -268,10 +290,18 @@ WAV files as one, one per recording. Keys: **Esc** back, **F1** swipe up, **Home
 **F2** demo notification, **F3** the Power button (the screen off and locked, or on again), **F4** incoming call (rings
 the Phone app), **F5** incoming text message (for Messaging; **Shift+F5** a picture message, **Ctrl+F5** an instant message from a buddy once an IM account is set up), **F6** low
 battery, **Shift+F6** the battery stops reporting (or reports again), **F7** plug a charger in or out, **F8** battery charged to full,
+**Shift+F7** brings a Touch to Share phone in range (the glow) or takes it away, **Ctrl+F7** touches it to the device: the app in front sends what it shares (the browser its page) and its card is thrown (`--touch-to-share` starts with one in range),
 **F12** set the device on a Touchstone (the inductive charger) or lift it off,
 **Shift+F12** onto another Touchstone,
 **F9** (or **Home**+**F3**, **Print Screen**, **Ctrl+Alt+P**) a screen capture,
 **F10** / **F11** the volume keys (down / up),
+**Ctrl+Shift+R** the ringer switch (silent mutes), **Ctrl+Shift+H** a headset
+in or out, **Ctrl+Shift+B** its button (twice within a second: a double
+click), **Ctrl+Shift+M** the play/pause media key, **Ctrl+Shift+L** the
+light on the light sensor (dark, dim, indoor, outdoor: with automatic
+brightness the screen dims in dim and dark light); apps hear them through
+`com.palm.keys` and `com.palm.ambientLightSensor`, and an app's vibration
+shakes the window under "Vibrating: …",
 **Ctrl+Left** / **Ctrl+Right**
 turn the device a quarter turn counter-clockwise / clockwise, type in card
 view for Just Type. The original's key chords: hold **F3** and **F11**
@@ -362,6 +392,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-tasks.cjs` | Tasks and reminders |
 | `node tools/test-db8-pages.cjs` | Db8 shared by pages writing at once |
 | `node tools/test-alarm.cjs` | A Clock alarm rings as a popup alert |
+| `node tools/test-device-services.cjs` | The Clock's alarm holds the display on (`com.palm.display`), a volume key or Power snoozes it (`com.palm.keys`), the ringer switch |
 | `node tools/test-keyboard.cjs` | Web fields and the virtual keyboard |
 | `node tools/test-voicememos.cjs` | Voice Memos |
 | `node tools/test-maps.cjs` | Maps (no live map servers) |
@@ -369,6 +400,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-authenticator.cjs` | Authenticator (TOTP/HOTP) |
 | `node tools/test-terminal.cjs` | Terminal (simulated shell, then /bin/sh for real) |
 | `build/pty/pty-test` | The Terminal's PTY service |
+| `build/devices/devices-test` | phoenix-devices: the display, keys, vibrator and light sensor services; the hardware found by looking, devices appearing and going, `--probe` |
 | `node tools/test-videos.cjs` | Videos |
 | `node tools/test-podcasts.cjs` | Podcasts |
 | `node tools/test-docs.cjs` | PDF View and Doc View |

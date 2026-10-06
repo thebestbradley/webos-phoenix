@@ -1,13 +1,15 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// phoenix-sim: runs the Phoenix shell in a desktop window with mock apps.
+// phoenix-sim, the Phoenix WebOS Simulator: runs the Phoenix shell in a
+// desktop window with mock apps, under menus (Device, Simulate, View, Help)
+// and beside a toolbar with every key below (SimChrome; sim.qml simActions).
 //
 //   phoenix-sim [--size WxH] [--scale N] [--tablet|--phone] [--scene NAME]
 //               [--orientation up|left|down|right] [--turn ORIENTATION]
 //               [--home-button] [--first-use] [--screenshot FILE [--delay MS]] [--stay-awake] [--low-memory] [--hardware-keyboard] [--touchstone] [--no-host-shell]
-//               [--host-shell PATH] [--security-policy SPEC] [--usb] [--usb-busy]
-//               [--boot-animation | --no-boot-animation]
+//               [--host-shell PATH] [--security-policy SPEC] [--usb] [--usb-busy] [--touch-to-share]
+//               [--boot-animation | --no-boot-animation] [--no-toolbar]
 //
 // Keys: Esc = back gesture, Home/F1 = up gesture, F2 = demo notification,
 //       F3 = Power (screen off and locked / on), F4 = incoming call, F5 = incoming text message
@@ -20,7 +22,8 @@
 //       turn the device a quarter turn counter-clockwise / clockwise,
 //       Shift+F8 = a USB cable from a computer in / out, Ctrl+F8 = the computer
 //       ejects the USB drive; F3 + F11 held, then Home = Full Erase,
-//       F3 + F10 = USB drive mode.
+//       F3 + F10 = USB drive mode; Shift+F7 = a Touch to Share phone in range or
+//       gone, Ctrl+F7 = it touches the device.
 //       Type in card view for Just Type.
 
 #include <QCommandLineParser>
@@ -28,6 +31,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFontDatabase>
+#include <QApplication>
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -42,6 +46,7 @@
 #endif
 
 #include "rootfs.h"
+#include "simchrome.h"
 #include "siminstaller.h"
 #include "simsnapshots.h"
 #include "simpty.h"
@@ -118,16 +123,20 @@ int main(int argc, char *argv[])
     RootfsSchemeHandler::registerScheme();
     QtWebEngineQuick::initialize();
 #endif
-    QGuiApplication app(argc, argv);
+    // QApplication: the window's menu bar and toolbar are widgets.
+    QApplication app(argc, argv);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0) && !defined(Q_OS_DARWIN)
     // Emoji presentation from the colour font, whatever the text font.
     QFontDatabase::addApplicationEmojiFontFamily(QStringLiteral("Noto Color Emoji"));
 #endif
+    // These two name the settings file and the data folders: as they were,
+    // so a simulated device keeps its data. People see the display name.
     app.setApplicationName(QStringLiteral("phoenix-sim"));
     app.setOrganizationName(QStringLiteral("webos-phoenix"));
+    QGuiApplication::setApplicationDisplayName(SimChrome::displayName());
 
     QCommandLineParser parser;
-    parser.setApplicationDescription(QStringLiteral("webOS Phoenix shell simulator"));
+    parser.setApplicationDescription(SimChrome::displayName() + QStringLiteral(": the webOS Phoenix shell on the desktop. Its menus and Help > Keyboard Shortcuts list the keys."));
     parser.addHelpOption();
     QCommandLineOption sizeOpt(QStringLiteral("size"), QStringLiteral("Window size in pixels (default 320x480, tablet 1024x768)."), QStringLiteral("WxH"));
     QCommandLineOption scaleOpt(QStringLiteral("scale"), QStringLiteral("Device pixels per legacy pixel, like a denser screen (default 1; the Pre 3 was 1.5 at 480x800)."), QStringLiteral("N"), QStringLiteral("1"));
@@ -155,16 +164,18 @@ int main(int argc, char *argv[])
     QCommandLineOption hostShellOpt(QStringLiteral("host-shell"), QStringLiteral("Run this program in the Terminal instead of the shell it asks for."), QStringLiteral("path"));
     QCommandLineOption policyOpt(QStringLiteral("security-policy"), QStringLiteral("A device security policy, as an Exchange account sets one (EAS): comma-separated minLength=N, maxRetries=N (the last wrong try erases the device), alphaNumeric (a password, letters and digits), noSimple (no runs like 1234 or 1111), inactivity=SECONDS (the longest Lock after); \"none\" removes it. It is kept until removed or the device is erased."), QStringLiteral("spec"));
     QCommandLineOption usbOpt(QStringLiteral("usb"), QStringLiteral("Start with a USB cable from a computer plugged in (Shift+F8 plugs it in or out, Ctrl+F8 ejects the USB drive on the computer)."));
+    QCommandLineOption touchToShareOpt(QStringLiteral("touch-to-share"), QStringLiteral("Start with a Touch to Share phone in range: the glow at the bottom of the screen (Shift+F7 brings it or takes it away, Ctrl+F7 touches it to the device and sends what the app in front shares)."));
     QCommandLineOption usbBusyOpt(QStringLiteral("usb-busy"), QStringLiteral("An app keeps a file open on the USB drive: entering USB drive mode fails (\"USB Drive connection failed\")."));
     QCommandLineOption bootAnimOpt(QStringLiteral("boot-animation"), QStringLiteral("Show the boot animation at start-up (it shows anyway unless --screenshot or an offscreen platform)."));
     QCommandLineOption noBootAnimOpt(QStringLiteral("no-boot-animation"), QStringLiteral("Start without the boot animation."));
+    QCommandLineOption noToolbarOpt(QStringLiteral("no-toolbar"), QStringLiteral("Start without the toolbar beside the screen (View > Show Toolbar shows it again)."));
     // Set by phoenix-sim itself when it restarts (SimProcess).
     QCommandLineOption updatingOpt(QStringLiteral("updating"), QStringLiteral("Boot as after a system update: \"Updating the system\" first."));
     QCommandLineOption eraseOpt(QStringLiteral("erase-data"), QStringLiteral("Internal: once process PID is gone, erase the simulator's data and start into First Use."), QStringLiteral("pid"));
     updatingOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     eraseOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     parser.addOptions({ hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
-                        noHostShellOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, bootAnimOpt, noBootAnimOpt, updatingOpt, eraseOpt, microphoneFileOpt });
+                        noHostShellOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, updatingOpt, eraseOpt, microphoneFileOpt });
     parser.process(app);
 
     // A Full Erase or a security policy's wipe restarted the simulator:
@@ -358,17 +369,28 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simSecurityPolicy"), securityPolicy);
     view.rootContext()->setContextProperty(QStringLiteral("simUsb"), parser.isSet(usbOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simUsbBusy"), parser.isSet(usbBusyOpt));
+    view.rootContext()->setContextProperty(QStringLiteral("simTouchToShare"), parser.isSet(touchToShareOpt));
     // Qt.quit() (after the shutdown sound).
     QObject::connect(view.engine(), &QQmlEngine::quit, &app, &QCoreApplication::quit, Qt::QueuedConnection);
     view.rootContext()->setContextProperty(QStringLiteral("simFormFactor"),
         tablet ? QStringLiteral("tablet") : parser.isSet(phoneOpt) ? QStringLiteral("phone") : QStringLiteral("auto"));
     view.setResizeMode(QQuickView::SizeRootObjectToView);
     view.resize(size);
-    view.setTitle(QStringLiteral("webOS Phoenix"));
+    view.setTitle(SimChrome::displayName());
+    // The window with the menus and the toolbar, around the screen; not
+    // on the offscreen platforms, where no one sees it.
+    SimChrome *chrome = platform != QLatin1String("offscreen") && platform != QLatin1String("minimal")
+        ? new SimChrome(&view, !parser.isSet(noToolbarOpt)) : nullptr;
+    view.rootContext()->setContextProperty(QStringLiteral("simChrome"), chrome);
     view.setSource(QUrl::fromLocalFile(QDir(qmlDir).filePath(QStringLiteral("sim.qml"))));
     if (view.status() != QQuickView::Ready)
         return 1;
-    view.show();
+    if (chrome) {
+        chrome->build();
+        chrome->showWithScreen(size);
+    } else {
+        view.show();
+    }
 
     if (parser.isSet(shotOpt)) {
         const QString file = parser.value(shotOpt);

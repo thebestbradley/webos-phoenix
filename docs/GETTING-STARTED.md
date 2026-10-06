@@ -10,7 +10,7 @@ Everything is in this one repository, the simulator included:
 | Part | Where | What it is |
 | --- | --- | --- |
 | The system UI | `shell/qml/Phoenix/Shell` | The QML shell a device runs |
-| The simulator | `shell/sim` (`phoenix-sim`) | A desktop app that runs that same shell, with simulated hardware and services |
+| The simulator, the Phoenix WebOS Simulator | `shell/sim` (`phoenix-sim`) | A desktop app that runs that same shell, with simulated hardware and services |
 | The web app runtime | `runtime/` | webOS's `PalmSystem` and Luna services, for the simulator and browsers |
 | Phoenix's apps | `apps/` | Settings, Phone, Messaging and the rest (React + TypeScript) |
 | The original apps | `third_party/` (git submodules) | Open webOS apps and frameworks, unmodified |
@@ -84,15 +84,27 @@ cmake --build build
 | `./build/phoenix-sim --size 480x800 --scale 1.5` | Pre 3 |
 | `./build/phoenix-sim --tablet --size 2560x1600 --scale 2` | A large tablet |
 | `./build/phoenix-sim --launch com.palm.app.notes` | Open an app at start-up |
+| `./build/phoenix-sim --no-toolbar` | Without the toolbar beside the screen |
 | `./build/phoenix-sim --help` | Every option |
 
 On a Retina screen it draws at 2x by itself.
 
+The window is the **Phoenix WebOS Simulator**. Its menus (on a Mac, in the
+menu bar at the top of the screen) do everything the simulator can: **Device**
+(Power, Home, Back, volume, rotate, screen capture, the key chords),
+**Simulate** (calls, messages, notifications, battery, chargers, USB,
+Touchstone, Touch to Share, headset, light), **View** (phone or tablet, scale,
+demo scenes, developer overlays) and **Help > Keyboard Shortcuts…**, a window
+listing every key. The toolbar beside the screen has the most used ones as
+icons (hover for the key); **View > Show Toolbar** or `--no-toolbar` hides it.
+
 Keys: **Esc** is Back and **Home** the Home button. The function keys are
 the device's buttons and events (F3 Power, F4 an incoming call, F5 a text,
-F12 a Touchstone, and so on; the README has the full list). **On a Mac, F1
-to F12 need fn**, because macOS keeps them for itself. You can change that in
-System Settings > Keyboard > "Use F1, F2, etc. keys as standard function keys".
+F12 a Touchstone, and so on; each menu item shows its key, and Help >
+Keyboard Shortcuts and the README have the full list). **On a Mac, F1 to F12
+need fn**, because macOS keeps them for itself (the menus and the shortcuts
+window say "fn F4"). You can change that in System Settings > Keyboard >
+"Use F1, F2, etc. keys as standard function keys".
 
 The simulator keeps the device's data (apps' data, installed apps, media) in
 `~/Library/Application Support/webos-phoenix/phoenix-sim/` and its own

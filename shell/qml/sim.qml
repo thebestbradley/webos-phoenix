@@ -35,6 +35,10 @@
 //                  object (JSON), "none" to remove it, "" to leave it be
 //   simUsb, simUsbBusy  --usb (a cable from a computer is in), --usb-busy
 //                  (an app keeps a file open on the USB drive)
+//   simTouchToShare  --touch-to-share: a Touch to Share phone in range
+//                  from the start (Shift+F7 / Ctrl+F7)
+//   simChrome      phoenix-sim's window around the screen, with its menus and
+//                  toolbar (SimChrome), or null: resizeScreen(w, h)
 
 import QtQuick
 import Phoenix.Native
@@ -102,8 +106,11 @@ Item {
         anchors.fill: parent
         color: "black"
         // Dock mode's night mode: the night brightness, 1 of 100
-        // (DockModeNightBrightness), darker still.
-        opacity: shell.display.state === "off" ? 1 : shell.display.state === "dim" ? 0.9 : shell.display.night ? 0.95 : 0
+        // (DockModeNightBrightness), darker still. In dim or dark light the
+        // light sensor turns the backlight down (Display.brightness, from
+        // the user's brightness): darker by as much.
+        opacity: shell.display.state === "off" ? 1 : shell.display.state === "dim" ? 0.9 : shell.display.night ? 0.95
+                 : Math.max(0, 1 - shell.display.brightness / Math.max(1, shell.display.maximumBrightness)) * 0.75
         visible: opacity > 0
         Behavior on opacity { enabled: shell.display.state !== "off"; NumberAnimation { duration: 300 } }
         // The simulator says what a dark device would not.
@@ -132,21 +139,17 @@ Item {
             return;
         var win = root.Window.window;
         if (win && (orientations.indexOf(to) - orientations.indexOf(from)) % 2 !== 0) {
-            var w = win.width;
-            win.width = win.height;
-            win.height = w;
+            // In phoenix-sim's window, under its menus and toolbar, that
+            // window turns around the screen.
+            if (typeof simChrome !== "undefined" && simChrome) {
+                simChrome.resizeScreen(win.height, win.width);
+            } else {
+                var w = win.width;
+                win.width = win.height;
+                win.height = w;
+            }
         }
         status.deviceOrientation = to;
-    }
-    Shortcut {
-        sequence: "Ctrl+Left"
-        context: Qt.ApplicationShortcut
-        onActivated: root.turnDevice(1)
-    }
-    Shortcut {
-        sequence: "Ctrl+Right"
-        context: Qt.ApplicationShortcut
-        onActivated: root.turnDevice(-1)
     }
     // --turn: a second after start-up, for screenshots of the turn.
     Timer {
@@ -216,37 +219,7 @@ Item {
             windows.pushSystemStatus(status.appStatusFor(name));
     }
 
-    // Simulator only: F4 rings the phone, F5 delivers a text message,
-    // Shift+F5 a picture message and Ctrl+F5 an instant message from a
-    // buddy (SimWindowSource.simulateIncomingCall / simulateIncomingSms /
-    // simulateIncomingMms / simulateIncomingIm). Shortcuts, so they work
-    // while a web app has keyboard focus.
-    Shortcut {
-        sequence: "F4"
-        context: Qt.ApplicationShortcut
-        onActivated: windows.simulateIncomingCall()
-    }
-    Shortcut {
-        sequence: "F5"
-        context: Qt.ApplicationShortcut
-        onActivated: windows.simulateIncomingSms()
-    }
-    Shortcut {
-        sequence: "Shift+F5"
-        context: Qt.ApplicationShortcut
-        onActivated: windows.simulateIncomingMms()
-    }
-    Shortcut {
-        sequence: "Ctrl+F5"
-        context: Qt.ApplicationShortcut
-        onActivated: windows.simulateIncomingIm()
-    }
-    // F6: the battery runs low (5% and under: luna-systemui's Low Battery
-    // alert, battery_low.mp3). F7: plug a wall charger in or out ("Charging
-    // Battery", charging.mp3). F8: charged to full (battery_full.mp3).
-    // F12: set the device on a Touchstone (the inductive charger; dock mode,
-    // GAPS R5) or lift it off; Shift+F12: onto another Touchstone (each
-    // remembers its exhibition). --touchstone starts on one.
+    // The power supply (simActions: F6 to F8, F12, Shift+F12).
     readonly property string charger: status.charger
     readonly property var touchstones: ["TS-0001", "TS-0002"]
     function power(changes) {
@@ -262,54 +235,300 @@ Item {
             status.charging = changes.charger !== "none";
         }
     }
-    Shortcut {
-        sequence: "F6"
-        context: Qt.ApplicationShortcut
-        onActivated: root.power({ percent: 4, charger: "none" })
+    // The headset button's release (simActions: Ctrl+Shift+B).
+    Timer {
+        id: headsetButtonUp
+        interval: 150
+        onTriggered: shell.deviceServices.headsetButton(false)
     }
-    Shortcut {
-        sequence: "F7"
-        context: Qt.ApplicationShortcut
-        onActivated: {
-            var c = root.charger === "wall" ? "none" : "wall";
-            root.power({ charger: c, percent: c === "none" ? 60 : 61 });
+    // The light on the sensor, in lux: dark, dim, indoor, outdoor (Ctrl+Shift+L).
+    readonly property var lightLevels: [1, 50, 300, 20000]
+
+    // A vibration (com.palm.vibrate, a banner's "vibrate"): the device
+    // shakes in the window while it lasts, under a label saying what it is.
+    SequentialAnimation {
+        running: shell.deviceServices.vibrating
+        loops: Animation.Infinite
+        onStopped: device.anchors.horizontalCenterOffset = 0
+        NumberAnimation { target: device; property: "anchors.horizontalCenterOffset"; to: 3; duration: 25 }
+        NumberAnimation { target: device; property: "anchors.horizontalCenterOffset"; to: -3; duration: 50 }
+        NumberAnimation { target: device; property: "anchors.horizontalCenterOffset"; to: 0; duration: 25 }
+    }
+    Rectangle {
+        visible: shell.deviceServices.vibrating
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: 36
+        width: vibrationLabel.implicitWidth + 24
+        height: vibrationLabel.implicitHeight + 10
+        radius: height / 2
+        color: "#cc202020"
+        z: 10
+        Text {
+            id: vibrationLabel
+            anchors.centerIn: parent
+            text: qsTr("Vibrating: %1").arg(shell.deviceServices.vibration)
+            color: "white"
+            font.family: Theme.fontFamily
+            font.pixelSize: 13
         }
     }
-    // Ctrl+Shift+K: a hardware keyboard attached or detached.
-    Shortcut {
-        sequence: "Ctrl+Shift+K"
-        context: Qt.ApplicationShortcut
-        onActivated: status.hardwareKeyboard = !status.hardwareKeyboard
-    }
-    // Shift+F6: the battery stops reporting (powerd gone: the status bar's
-    // battery-error, "Battery: Not Available" in the system menu), or
-    // reports again.
-    Shortcut {
-        sequence: "Shift+F6"
-        context: Qt.ApplicationShortcut
-        onActivated: status.batteryPercent = status.batteryPercent < 0 ? 60 : -1
-    }
-    Shortcut {
-        sequence: "F8"
-        context: Qt.ApplicationShortcut
-        onActivated: root.power({ charger: root.charger === "none" ? "wall" : root.charger, percent: 100, puckId: status.puckId })
-    }
-    Shortcut {
-        sequence: "F12"
-        context: Qt.ApplicationShortcut
-        onActivated: root.power(root.charger === "inductive" ? { charger: "none", percent: 60 }
-                                                             : { charger: "inductive", percent: 61, puckId: root.touchstones[0] })
-    }
-    Shortcut {
-        sequence: "Shift+F12"
-        context: Qt.ApplicationShortcut
-        onActivated: {
-            // Lifted off one and set on the other.
-            var next = status.puckId === root.touchstones[1] ? root.touchstones[0] : root.touchstones[1];
-            if (root.charger === "inductive")
-                root.power({ charger: "none", percent: 60 });
-            root.power({ charger: "inductive", percent: 61, puckId: next });
+
+    // The "Dismissing Cards" tutorial was shown: not again.
+    Connections {
+        target: windows
+        function onFirstCardAlertShown() {
+            if (typeof simSettings !== "undefined")
+                simSettings.setValue("cards/usedFirstCard", "1");
         }
+    }
+
+    // ---- The simulator's functions ------------------------------------------------------
+    // Every key and command the simulator adds, once: the keyboard shortcuts
+    // below are made from this list, and phoenix-sim builds its menus,
+    // toolbar and Help > Keyboard Shortcuts from it (simActionList(),
+    // simTrigger(), simActionChecked(); shell/sim/simchrome.cpp). An entry:
+    //   id        its name (simTrigger(id), the toolbar's simToolbar)
+    //   menu      "device", "simulate" or "view"; "" for Help > Keyboard
+    //             Shortcuts only; submenu: the submenu it goes in
+    //   text      what it is called; tip: what it does, if the name does not say
+    //   keys      its key sequences (Qt's portable text); the first is shown
+    //             in the menu. keyText: a key chord no sequence can say
+    //   run       what it does: then the keys are a Shortcut here
+    //   press     instead, keys the shell handles itself (SystemKeys in
+    //             Shell.qml: they act on press and release, and make chords):
+    //             the menu presses them in order and lets go in reverse;
+    //             hold: let go of only the last at once, the others when the
+    //             item is unchecked (a chord to keep holding)
+    //   checked   a function: the item is a check box showing it; radio: a
+    //             group of which one is checked
+    //   icon      its toolbar icon (shell/sim/icons/NAME.svg)
+    // { separator: true, menu } separates; Help > Keyboard Shortcuts lists
+    // them in this order.
+    readonly property var simActions: [
+        // Device: the buttons and switches, how it is held.
+        { id: "power", menu: "device", text: qsTr("Power Button"), keys: ["F3"], press: [Qt.Key_F3], icon: "power",
+          tip: qsTr("The screen off and locked, or on again") },
+        { id: "home", menu: "device", text: qsTr("Home Button"), keys: ["Home"], press: [Qt.Key_Home], icon: "home",
+          tip: qsTr("With F3: a screen capture") },
+        { id: "back", menu: "device", text: qsTr("Back Gesture"), keys: ["Esc"], press: [Qt.Key_Escape], icon: "back" },
+        { id: "up", menu: "device", text: qsTr("Up Gesture"), keys: ["F1"], press: [Qt.Key_F1],
+          tip: qsTr("Card view, then the launcher") },
+        { separator: true, menu: "device" },
+        { id: "volumeUp", menu: "device", text: qsTr("Volume Up"), keys: ["F11"], press: [Qt.Key_F11] },
+        { id: "volumeDown", menu: "device", text: qsTr("Volume Down"), keys: ["F10"], press: [Qt.Key_F10] },
+        // The device's switches (com.palm.keys; DeviceServices): down is silent.
+        { id: "ringer", menu: "device", text: qsTr("Ringer Switch Off (Silent)"), keys: ["Ctrl+Shift+R"],
+          run: function () { status.ringerSwitch = status.ringerSwitch === "down" ? "up" : "down"; },
+          checked: function () { return status.ringerSwitch === "down"; } },
+        { separator: true, menu: "device" },
+        { id: "rotateLeft", menu: "device", text: qsTr("Rotate Left"), keys: ["Ctrl+Left"], icon: "rotate-left",
+          tip: qsTr("A quarter turn counter-clockwise"), run: function () { root.turnDevice(1); } },
+        { id: "rotateRight", menu: "device", text: qsTr("Rotate Right"), keys: ["Ctrl+Right"], icon: "rotate-right",
+          tip: qsTr("A quarter turn clockwise"), run: function () { root.turnDevice(-1); } },
+        { separator: true, menu: "device" },
+        { id: "capture", menu: "device", text: qsTr("Screen Capture"), keys: ["F9", "Print", "Ctrl+Alt+P"], keyText: "Home+F3",
+          press: [Qt.Key_F9], icon: "screenshot" },
+        { separator: true, menu: "device" },
+        // The original's key chords (SystemScreens.qml).
+        { id: "fullErase", menu: "device", text: qsTr("Hold Full Erase Chord"), keyText: qsTr("F3+F11, then Home"),
+          press: [Qt.Key_F3, Qt.Key_F11, Qt.Key_Home], hold: true,
+          tip: qsTr("Full Erase's countdown; held on, the device is erased (uncheck to let go)") },
+        { id: "usbDrive", menu: "device", text: qsTr("USB Drive Chord"), keyText: "F3+F10", press: [Qt.Key_F3, Qt.Key_F10],
+          tip: qsTr("Power and Volume Down on a USB cable: USB drive mode") },
+        { separator: true, menu: "device" },
+        { id: "keyboard", menu: "device", text: qsTr("Hardware Keyboard Attached"), keys: ["Ctrl+Shift+K"],
+          run: function () { status.hardwareKeyboard = !status.hardwareKeyboard; },
+          checked: function () { return status.hardwareKeyboard; } },
+
+        // Simulate: what happens to the device. Incoming calls and messages
+        // (SimWindowSource.simulateIncomingCall / Sms / Mms / Im).
+        { id: "call", menu: "simulate", text: qsTr("Incoming Call"), keys: ["F4"], icon: "call",
+          run: function () { windows.simulateIncomingCall(); } },
+        { id: "sms", menu: "simulate", text: qsTr("Incoming Text Message"), keys: ["F5"], icon: "message",
+          run: function () { windows.simulateIncomingSms(); } },
+        { id: "mms", menu: "simulate", text: qsTr("Incoming Picture Message"), keys: ["Shift+F5"],
+          run: function () { windows.simulateIncomingMms(); } },
+        { id: "im", menu: "simulate", text: qsTr("Incoming Instant Message"), keys: ["Ctrl+F5"],
+          tip: qsTr("From a buddy, once an IM account is set up"), run: function () { windows.simulateIncomingIm(); } },
+        { id: "notification", menu: "simulate", text: qsTr("Demo Notification"), keys: ["F2"], press: [Qt.Key_F2], icon: "notification" },
+        { separator: true, menu: "simulate" },
+        // The battery and chargers: 5% and under is luna-systemui's Low
+        // Battery alert (battery_low.mp3); a wall charger "Charging Battery"
+        // (charging.mp3); full, battery_full.mp3.
+        { id: "lowBattery", menu: "simulate", text: qsTr("Low Battery (4%)"), keys: ["F6"], icon: "battery",
+          run: function () { root.power({ percent: 4, charger: "none" }); } },
+        // powerd gone: the status bar's battery-error, "Battery: Not
+        // Available" in the system menu; or it reports again.
+        { id: "batteryError", menu: "simulate", text: qsTr("Battery Not Reporting"), keys: ["Shift+F6"],
+          run: function () { status.batteryPercent = status.batteryPercent < 0 ? 60 : -1; },
+          checked: function () { return status.batteryPercent < 0; } },
+        { id: "charger", menu: "simulate", text: qsTr("Wall Charger Plugged In"), keys: ["F7"], icon: "charger",
+          run: function () {
+              var c = root.charger === "wall" ? "none" : "wall";
+              root.power({ charger: c, percent: c === "none" ? 60 : 61 });
+          },
+          checked: function () { return root.charger === "wall"; } },
+        { id: "batteryFull", menu: "simulate", text: qsTr("Battery Charged to Full"), keys: ["F8"],
+          run: function () { root.power({ charger: root.charger === "none" ? "wall" : root.charger, percent: 100, puckId: status.puckId }); } },
+        { separator: true, menu: "simulate" },
+        // A cable from a computer and USB drive mode (SimStorage.qml).
+        { id: "usbCable", menu: "simulate", text: qsTr("USB Cable from a Computer"), keys: ["Shift+F8"],
+          run: function () { storage.plug(!storage.hostConnected); },
+          checked: function () { return storage.hostConnected; } },
+        { id: "usbEject", menu: "simulate", text: qsTr("Computer Ejects the USB Drive"), keys: ["Ctrl+F8"],
+          run: function () { storage.eject(); } },
+        { separator: true, menu: "simulate" },
+        // The inductive charger (dock mode, GAPS R5); each Touchstone
+        // remembers its exhibition. --touchstone starts on one.
+        { id: "touchstone", menu: "simulate", text: qsTr("On a Touchstone"), keys: ["F12"], icon: "touchstone",
+          tip: qsTr("Set the device on the inductive charger (dock mode), or lift it off"),
+          run: function () {
+              root.power(root.charger === "inductive" ? { charger: "none", percent: 60 }
+                                                      : { charger: "inductive", percent: 61, puckId: root.touchstones[0] });
+          },
+          checked: function () { return root.charger === "inductive"; } },
+        { id: "touchstone2", menu: "simulate", text: qsTr("Onto the Other Touchstone"), keys: ["Shift+F12"],
+          run: function () {
+              // Lifted off one and set on the other.
+              var next = status.puckId === root.touchstones[1] ? root.touchstones[0] : root.touchstones[1];
+              if (root.charger === "inductive")
+                  root.power({ charger: "none", percent: 60 });
+              root.power({ charger: "inductive", percent: 61, puckId: next });
+          } },
+        { separator: true, menu: "simulate" },
+        // Touch to Share with a phone nearby (SimWindowSource): in range,
+        // the glow; touched, the app in front sends what it shares (the
+        // browser: its page) and its card is thrown.
+        { id: "touchToShare", menu: "simulate", text: qsTr("Touch to Share Phone in Range"), keys: ["Shift+F7"],
+          run: function () { windows.simulateTouchToShareDevice(!windows.touchToShareInRange); },
+          checked: function () { return windows.touchToShareInRange; } },
+        { id: "touchToShareTap", menu: "simulate", text: qsTr("Touch to Share: Tap the Phone"), keys: ["Ctrl+F7"],
+          run: function () { windows.simulateTouchToShareTap(); } },
+        { separator: true, menu: "simulate" },
+        // A headset (with its microphone) and its button, twice within a
+        // second a double click; the play/pause media key; the light on
+        // the sensor (com.palm.keys, com.palm.ambientLightSensor).
+        { id: "headset", menu: "simulate", text: qsTr("Headset Plugged In"), keys: ["Ctrl+Shift+H"],
+          run: function () { status.headset = status.headset === "none" ? "headset-mic" : "none"; },
+          checked: function () { return status.headset !== "none"; } },
+        { id: "headsetButton", menu: "simulate", text: qsTr("Headset Button"), keys: ["Ctrl+Shift+B"],
+          tip: qsTr("Twice within a second: a double click"),
+          run: function () {
+              shell.deviceServices.headsetButton(true);
+              headsetButtonUp.restart();
+          } },
+        { id: "playPause", menu: "simulate", text: qsTr("Play/Pause Media Key"), keys: ["Ctrl+Shift+M"],
+          run: function () { shell.deviceServices.mediaKey("togglePausePlay"); } },
+        { id: "light", menu: "simulate", text: qsTr("Next Light Level"), keys: ["Ctrl+Shift+L"],
+          tip: qsTr("Dark, dim, indoor, outdoor"),
+          run: function () {
+              var i = root.lightLevels.indexOf(status.lightLevel);
+              status.lightLevel = root.lightLevels[(i + 1) % root.lightLevels.length];
+              console.info("phoenix-sim: light " + status.lightLevel + " lux");
+          } },
+
+        // View: the device phoenix-sim starts as (it restarts with it).
+        { id: "phone", menu: "view", text: qsTr("Phone"), radio: "formFactor", icon: "phone",
+          tip: qsTr("Restart as a phone (the Pre, 320x480)"),
+          checked: function () { return !shell.tablet; },
+          run: function () { if (shell.tablet) root.restartSim(["tablet", "phone", "size", "scale"], []); } },
+        { id: "tablet", menu: "view", text: qsTr("Tablet"), radio: "formFactor", icon: "tablet",
+          tip: qsTr("Restart as a tablet (the TouchPad, 1024x768)"),
+          checked: function () { return shell.tablet; },
+          run: function () { if (!shell.tablet) root.restartSim(["tablet", "phone", "size", "scale"], ["--tablet"]); } },
+        { separator: true, menu: "view" }
+    ].concat([1, 1.5, 2].map(function (n) {
+        return { id: "scale-" + n, menu: "view", submenu: qsTr("Scale"), text: qsTr("%1x").arg(n), radio: "scale",
+                 tip: qsTr("Restart with --scale %1").arg(n),
+                 checked: function () { return shell.density === n; },
+                 run: function () {
+                     var w = shell.tablet ? 1024 : 320, h = shell.tablet ? 768 : 480;
+                     root.restartSim(["size", "scale"], ["--scale", String(n), "--size", Math.round(w * n) + "x" + Math.round(h * n)]);
+                 } };
+    })).concat([""].concat(scenes).map(function (name) {
+        return { id: "scene-" + (name || "none"), menu: "view", submenu: qsTr("Scene"), text: name || qsTr("None (a normal start)"),
+                 radio: "scene", tip: name ? qsTr("Restart into the demo scene --scene %1").arg(name) : qsTr("Restart without a scene"),
+                 checked: function () { return root.scene === name; },
+                 run: function () {
+                     root.restartSim(["scene", "launch", "open", "first-use", "turn"], name ? ["--scene", name] : []);
+                 } };
+    })).concat([
+        { separator: true, menu: "view" },
+        // The debugging overlays (com.palm.systemmanager enableFpsCounter
+        // and enableTouchPlot), as the pages turn them on.
+        { id: "fpsCounter", menu: "view", submenu: qsTr("Developer Overlays"), text: qsTr("Frame Rate Counter"),
+          checked: function () { return shell.systemScreens.debugOverlays.fpsCounter; },
+          run: function () { root.debugOverlay({ fpsCounter: { enable: !shell.systemScreens.debugOverlays.fpsCounter } }); } },
+        { id: "touchPlot", menu: "view", submenu: qsTr("Developer Overlays"), text: qsTr("Touch Plot"),
+          checked: function () { return shell.systemScreens.debugOverlays.touchPlot.collection; },
+          run: function () {
+              var on = !shell.systemScreens.debugOverlays.touchPlot.collection;
+              root.debugOverlay({ touchPlot: { collection: on, trails: on, crosshairs: on } });
+          } },
+
+        // Keys of the shell's own, for Help > Keyboard Shortcuts.
+        { id: "justType", menu: "", text: qsTr("Just Type"), keyText: qsTr("Type in card view, or the Search key") },
+        { id: "cardView", menu: "", text: qsTr("Card View"), keyText: Qt.platform.os === "osx" ? "" : qsTr("Super, on its own") }
+    ])
+    // The toolbar's, in order ("|" separates).
+    readonly property var simToolbar: ["power", "home", "back", "|", "rotateLeft", "rotateRight", "capture", "|",
+                                       "call", "sms", "notification", "|", "lowBattery", "charger", "touchstone", "|",
+                                       "phone", "tablet"]
+    // The demo scenes (--scene; buildScene()).
+    readonly property var scenes: ["locked", "cards", "stacks", "longstack", "reorder", "maximized", "heldcard",
+                                   "launcher", "launcheredit", "launcherinstall", "pin", "emergency", "firstuse",
+                                   "lowbattery", "banner", "notified", "dashboard", "drawer", "capture",
+                                   "capturepreview", "justtype", "keyboard", "systemmenu", "empty"]
+    readonly property string scene: typeof simScene !== "undefined" ? simScene : ""
+
+    // The keys of the entries that run something, wherever the keyboard
+    // focus is (a web app's too).
+    Repeater {
+        model: root.simActions.filter(function (a) { return a.run && a.keys && a.keys.length > 0; })
+        delegate: Item {
+            required property var modelData
+            Shortcut {
+                sequences: modelData.keys
+                context: Qt.ApplicationShortcut
+                onActivated: modelData.run()
+            }
+        }
+    }
+
+    function _simAction(id) {
+        for (var i = 0; i < simActions.length; ++i) {
+            if (simActions[i].id === id)
+                return simActions[i];
+        }
+        return null;
+    }
+    // For phoenix-sim's menus: the entries without their functions.
+    function simActionList() {
+        return simActions.map(function (a) {
+            return { id: a.id || "", separator: !!a.separator, menu: a.menu || "", submenu: a.submenu || "",
+                     text: a.text || "", tip: a.tip || "", keys: a.keys || [], keyText: a.keyText || "",
+                     press: a.press || [], hold: !!a.hold, run: !!a.run, checkable: !!a.checked,
+                     radio: a.radio || "", icon: a.icon || "" };
+        });
+    }
+    function simActionChecked(id) {
+        var a = _simAction(id);
+        return !!(a && a.checked && a.checked());
+    }
+    function simTrigger(id) {
+        var a = _simAction(id);
+        if (a && a.run)
+            a.run();
+    }
+    // phoenix-sim again, with other options (SimProcess.restartReplacing).
+    function restartSim(drop, add) {
+        if (typeof simProcess !== "undefined" && simProcess)
+            simProcess.restartReplacing(drop, add);
+    }
+    function debugOverlay(request) {
+        shell.systemScreens.debugOverlay(request);
+        windows.pushSystemStatus({ debugOverlays: shell.systemScreens.debugOverlays });
     }
 
     // Closing the window turns the device off: the screen goes dark and
@@ -460,23 +679,13 @@ Item {
         }
         onCableChanged: (connected) => {
             windows.pushSystemStatus({ usbHost: connected });
-            root.charger = connected ? "pc" : "none";
-            root.power({ charger: root.charger });
+            // root.charger follows status.charger (read-only); power() sets it.
+            root.power({ charger: connected ? "pc" : "none" });
         }
     }
     Connections {
         target: windows
         function onEnterMSMRequested(enterIMasq) { storage.enterMSM(enterIMasq); }
-    }
-    Shortcut {
-        sequence: "Shift+F8"
-        context: Qt.ApplicationShortcut
-        onActivated: storage.plug(!storage.hostConnected)
-    }
-    Shortcut {
-        sequence: "Ctrl+F8"
-        context: Qt.ApplicationShortcut
-        onActivated: storage.eject()
     }
 
     // First Use is done (the app set firstUseComplete): not again at the next
@@ -560,6 +769,14 @@ Item {
                     status.exhibitionApps = exhibitions;
             } catch (e) { /* the default */ }
         }
+        // The "Dismissing Cards" tutorial, until it has been shown once
+        // (not in a demo scene).
+        if (typeof simSettings !== "undefined")
+            windows.dismissedFirstCard = simSettings.value("cards/usedFirstCard") === "1"
+                || (typeof simScene !== "undefined" && simScene !== "");
+        // --touch-to-share: a phone in range from the start.
+        if (typeof simTouchToShare !== "undefined" && simTouchToShare)
+            windows.simulateTouchToShareDevice(true);
         if (typeof simSettings !== "undefined") {
             shell.keyboard.emojiPrefs = simSettings.value("keyboard/emoji");
             shell.keyboard.textAssistData = simSettings.value("keyboard/words");

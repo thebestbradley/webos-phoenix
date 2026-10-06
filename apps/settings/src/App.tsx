@@ -7,6 +7,8 @@
 // Without a page it shows the list of all panes.
 
 import { useState } from "react";
+import { flushSync } from "react-dom";
+import { sceneTransition } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import { BackProvider, useBack } from "./nav";
 import { Hub } from "./pages/Hub";
@@ -24,12 +26,16 @@ function Router() {
         setOpened(null);
     }
     const current = launched ?? opened;
+    // Opening a pane pushes a scene and the back gesture pops it, with the
+    // card's zoom-fade (Mojo's pushScene / popScene; CardTransition.cpp).
+    const open = (id: PageId | null, pop: boolean) =>
+        void sceneTransition(() => flushSync(() => setOpened(id)), { pop });
     useBack(() => {
-        setOpened(null);
+        open(null, true);
         return true;
     }, !launched && opened !== null);
 
-    if (!current) return <Hub onOpen={setOpened} />;
+    if (!current) return <Hub onOpen={(id) => open(id, false)} />;
     const Page = PAGES[current].component;
     return <Page key={current} />;
 }
