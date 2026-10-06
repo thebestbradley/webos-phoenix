@@ -679,8 +679,8 @@ Item {
         }
         onCableChanged: (connected) => {
             windows.pushSystemStatus({ usbHost: connected });
-            root.charger = connected ? "pc" : "none";
-            root.power({ charger: root.charger });
+            // root.charger follows status.charger (read-only); power() sets it.
+            root.power({ charger: connected ? "pc" : "none" });
         }
     }
     Connections {
