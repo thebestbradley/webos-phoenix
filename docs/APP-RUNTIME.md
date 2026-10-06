@@ -1310,7 +1310,15 @@ volume, Ctrl+Shift+R the ringer switch, Ctrl+Shift+H a headset,
 Ctrl+Shift+B its button, Ctrl+Shift+M play/pause, Ctrl+Shift+L the light);
 a vibration shakes the window. `PalmSystem.setWindowProperties
 {blockScreenTimeout}` still keeps the screen on while the app is in front,
-as before. Tests: `apps/shared/luna/src/device.test.ts`,
+as before. The players (Music, Podcasts, Videos) take the headset
+button, the media keys and the headset's removal through
+`watchMediaKeys` (`apps/shared/luna/src/mediakeys.ts`): a single click
+plays or pauses, a double click (which arrives as single_click, then
+double_click) restores the play state and goes to the next track, the
+media keys play, pause, toggle, stop, go next or back, and a headset
+up pauses whatever plays; only the player holding the media audio
+focus takes the buttons. Tests: `apps/shared/luna/src/device.test.ts`,
+`apps/shared/luna/src/mediakeys.test.ts`, `tools/test-media.cjs`,
 `shell/tests/tst_deviceservices.qml`, `tools/test-device-services.cjs`
 (the Clock's alarm).
 

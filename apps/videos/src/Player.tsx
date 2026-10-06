@@ -13,9 +13,14 @@
 //   Orientation: PalmSystem.setWindowOrientation("free") while playing, back
 //       to "up" in the library; enableFullScreenMode hides the status bar.
 //   Audio focus: com.webos.service.audiofocusmanager requestFocus (playback.ts).
+//   Headset and media keys: com.palm.keys, as Music takes them (@phoenix/luna
+//       mediakeys.ts): the headset button's single click plays or pauses,
+//       taking the headset out pauses; a double click and the next key go
+//       ahead 30 s, the previous key back 10 s, as the toolbar's buttons.
+//       The buttons act while the player holds the audio focus.
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
-import { audioFocus, fileManager, isWebAddress, listFolderPaths, playableUrl, setFullScreen, setWindowOrientation, type Subscription } from "./platform";
+import { audioFocus, fileManager, isWebAddress, listFolderPaths, playableUrl, setFullScreen, setWindowOrientation, watchMediaKeys, type Subscription } from "./platform";
 import { IconToolButton, PopupMenu, Slider, Toolbar, ToolSpacer, cssImage, formatSeconds, icons, type Option } from "@phoenix/ui";
 import { forgetPosition, loadPositions, resumeAt, savePosition, type Prefs } from "./library";
 import { cueText, parseSubtitles, subtitleTracks, type Cue, type SubtitleTrack } from "./subtitles";
@@ -164,6 +169,21 @@ export function Player({ target, title, prefs, onPrefs, onClose }: PlayerProps) 
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
     });
+
+    // The headset and media keys, through refs to this render's controls.
+    const controls = useRef({ play, pause, seek });
+    controls.current = { play, pause, seek };
+    useEffect(() => {
+        const sub = watchMediaKeys({
+            active: () => focus.current !== null,
+            playing: () => !!video.current && !video.current.paused,
+            play: () => controls.current.play(),
+            pause: () => controls.current.pause(),
+            next: () => { if (video.current) controls.current.seek(video.current.currentTime + 30); },
+            prev: () => { if (video.current) controls.current.seek(video.current.currentTime - 10); },
+        });
+        return () => sub.cancel();
+    }, []);
 
     // A tap shows or hides the controls; it does not pause (the button does).
     const down = useRef<{ x: number; y: number; t: number } | null>(null);

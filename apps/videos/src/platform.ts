@@ -5,7 +5,7 @@
 
 import { fileManager, fileUrl, isWebAddress, mediaUrl, parentOf } from "@phoenix/luna";
 
-export { audioFocus, fileManager, isWebAddress, setFullScreen, setWindowOrientation, type Subscription } from "@phoenix/luna";
+export { audioFocus, fileManager, isWebAddress, setFullScreen, setWindowOrientation, watchMediaKeys, type Subscription } from "@phoenix/luna";
 
 /**
  * A URL the <video> element can play: the web address itself; for a file,

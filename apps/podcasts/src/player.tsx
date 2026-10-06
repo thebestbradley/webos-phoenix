@@ -8,9 +8,16 @@
 // pause), the audio focus (Music and Videos pause when an episode plays,
 // and the episode pauses when they start), and what plays for the shell:
 // the "nowPlaying" host message and a banner, as Music posts them.
+//
+// The headset and media keys as Music takes them (@phoenix/luna
+// mediakeys.ts): a single click of the headset button plays or pauses,
+// taking the headset out pauses; with no next episode to go to, a double
+// click and the next key go ahead 30 seconds and the previous key back 15,
+// as the Now Playing buttons do. The buttons act while Podcasts holds the
+// audio focus.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { audioFocus, bannerIfHidden, mediaUrl, postNowPlaying, type Subscription } from "@phoenix/luna";
+import { audioFocus, bannerIfHidden, mediaUrl, postNowPlaying, watchMediaKeys, type Subscription } from "@phoenix/luna";
 import { APP_ID, podcasts, type Episode, type Podcast } from "./store";
 import { sleepDue, startSleep, type SleepChoice, type SleepTimer } from "./timing";
 
@@ -143,6 +150,25 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }, [episode, podcast, playing]);
 
     useEffect(() => () => { save(); focus.current?.cancel(); el.current?.pause(); }, [save]);
+
+    // The headset and media keys, on the element itself.
+    useEffect(() => {
+        const skip = (delta: number) => {
+            const a = el.current;
+            if (!a || !a.src) return;
+            a.currentTime = Math.max(0, Math.min(isFinite(a.duration) ? a.duration : a.currentTime + delta, a.currentTime + delta));
+            setPosition(a.currentTime);
+        };
+        const sub = watchMediaKeys({
+            active: () => focus.current !== null,
+            playing: () => !!el.current && !el.current.paused,
+            play: () => { if (el.current?.src) void el.current.play().catch(() => setPlaying(false)); },
+            pause: () => el.current?.pause(),
+            next: () => skip(30),
+            prev: () => skip(-15),
+        });
+        return () => sub.cancel();
+    }, []);
 
     const player = useMemo<Player>(() => ({
         episode, podcast, playing, position, duration, speed, sleep, sleepChoice,

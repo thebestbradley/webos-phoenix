@@ -20,6 +20,7 @@ export * from "./location";
 export * from "./pty";
 export * from "./web";
 export * from "./playback";
+export * from "./mediakeys";
 export * from "./documents";
 export * from "./setup";
 export * from "./vpn";

@@ -12,9 +12,15 @@
 // playing}) whenever the song or play state changes, and a banner when a
 // new song starts while the card is not in front. Playing takes the audio
 // focus from Videos and Podcasts, and gives it up to them.
+//
+// The headset and media keys (com.palm.keys; @phoenix/luna mediakeys.ts):
+// the headset button's single click plays or pauses, a double click goes
+// to the next song; the media keys play, pause, toggle, and go to the next
+// or previous song; taking the headset out pauses. The buttons act while
+// Music holds the audio focus (it played last).
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { audio as audioService, audioFocus, mediaUrl, type AudioItem, type Subscription } from "@phoenix/luna";
+import { audio as audioService, audioFocus, mediaUrl, watchMediaKeys, type AudioItem, type Subscription } from "@phoenix/luna";
 import { artistOf, playOrder, titleOf } from "./library";
 
 export type Repeat = "off" | "all" | "one";
@@ -85,6 +91,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         if (el.current && !onDevice()) el.current.volume = Math.max(0, Math.min(1, s.volume / 100));
     }, [s.volume]);
 
+    // play(), and the state says stopped if the song cannot play. An
+    // AbortError is not that: a newer load (the next song, before this one
+    // started) or a pause() superseded this request, and the state already
+    // says what the element should do.
+    const startPlaying = useCallback((a: HTMLAudioElement) => {
+        void a.play().catch((e: unknown) => {
+            if ((e as { name?: string } | null)?.name !== "AbortError") setS((x) => ({ ...x, playing: false }));
+        });
+    }, []);
+
     // Load the current song.
     const path = current?.file_path;
     useEffect(() => {
@@ -94,10 +110,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         void mediaUrl(path).then((url) => {
             if (!live) return;
             a.src = url;
-            if (playing.current) void a.play().catch(() => setS((x) => ({ ...x, playing: false })));
+            if (playing.current) startPlaying(a);
         });
         return () => { live = false; };
-    }, [path, s.token]);
+    }, [path, s.token, startPlaying]);
 
     // The audio focus (com.webos.service.audiofocusmanager): playing takes
     // it, so Videos and Podcasts pause; when one of them takes it, pause.
@@ -116,9 +132,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         const a = el.current;
         if (!a || !a.src) return;
-        if (s.playing && a.paused) void a.play().catch(() => setS((x) => ({ ...x, playing: false })));
+        if (s.playing && a.paused) startPlaying(a);
         else if (!s.playing && !a.paused) a.pause();
-    }, [s.playing]);
+    }, [s.playing, startPlaying]);
 
     const step = useCallback((dir: 1 | -1, auto = false) => {
         setS((x) => {
@@ -170,6 +186,32 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         }
     }, [current, s.playing]);
 
+    // The headset and media keys, for as long as the app runs; they reach
+    // the player through refs. Keys can come faster than React renders (a
+    // double click's single_click and double_click), so playing.current
+    // follows what the keys did at once, not only the next render.
+    const self = useRef<Player | null>(null);
+    const hasQueue = useRef(false);
+    hasQueue.current = s.queue.length > 0;
+    useEffect(() => {
+        const sub = watchMediaKeys({
+            active: () => focus.current !== null,
+            playing: () => playing.current,
+            play: () => {
+                if (!hasQueue.current) return;
+                playing.current = true;
+                setS((x) => ({ ...x, playing: true }));
+            },
+            pause: () => {
+                playing.current = false;
+                setS((x) => ({ ...x, playing: false }));
+            },
+            next: () => self.current?.next(),
+            prev: () => self.current?.prev(),
+        });
+        return () => sub.cancel();
+    }, []);
+
     const player = useMemo<Player>(() => ({
         ...s,
         current,
@@ -207,6 +249,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         },
         setRepeat(r) { setS((x) => ({ ...x, repeat: r })); },
     }), [s, current, step]);
+    self.current = player;
 
     return <Ctx.Provider value={player}>{children}</Ctx.Provider>;
 }
