@@ -112,10 +112,12 @@ Item {
             tryVerify(function() { return shell.maximized; }, 2000);
             var old = shell.cardView.cardItem(a);
             var b = shell.launch("org.webosphoenix.calendar");
-            wait(80);
-            // Part way down to card view, not snapped there.
-            verify(old.scale < 0.99 && old.scale > shell.cardView.activeScale + 0.01,
-                   "the card in front zooms out (scale " + old.scale + ")");
+            // Part way down to card view, not snapped there. Animations
+            // move on as frames are drawn, so wait for the first rather
+            // than a fixed time (a busy machine draws none in 80 ms).
+            tryVerify(function() { return old.scale < 0.99; }, 2000, "the card in front zooms out");
+            verify(old.scale > shell.cardView.activeScale + 0.01,
+                   "the card in front zooms out, not snaps (scale " + old.scale + ")");
             var card = shell.cardView.cardItem(b);
             verify(card.centerY > shell.cardView.maximizedCenterY + 20, "the new card waits below");
             tryVerify(function() { return shell.maximized && shell.cardView.currentUid === b; }, 3000);
@@ -517,7 +519,11 @@ Item {
             t += 10;
             mouseRelease(r, 60, y);
             notes.clock = function () { return Date.now(); };
-            tryCompare(windows.notifications, "count", 1, 1000);
+            // Taken for a flick: the row is sliding off (its swipe area is
+            // off while it goes). Then gone once the slide has been drawn,
+            // which takes as long as the machine takes to draw its frames.
+            verify(!r.enabled, "the flick dismisses the row");
+            tryCompare(windows.notifications, "count", 1, 3000);
             notes.dashboardOpen = false;
         }
 
