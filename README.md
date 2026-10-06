@@ -193,7 +193,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `shell/sim` | `phoenix-sim`, the desktop runner (also takes screenshots) |
 | `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Tasks, Voice Memos, Flashlight, QR Scanner, Weather, Maps, Passwords, Authenticator, Terminal, Videos, Podcasts, PDF View, Doc View, First Use, Help, Print Manager, Voice Dial), with the shared `@phoenix/ui` components, `@phoenix/luna` service client and `@phoenix/secrets` (TOTP, sealing, auto-lock), generated demo media (`apps/media-samples`), the Node.js Luna services of Files (`apps/files/service`) and Voice Memos (`apps/voicememos/service`, speech to text with whisper.cpp), and the CardDAV & CalDAV Synergy account with its sync service (`apps/dav`, see [docs/SYNERGY.md](docs/SYNERGY.md)) |
 | `services/pty` | `org.webosphoenix.pty`, the Terminal's PTY Luna service (C++), whose core phoenix-sim also uses |
-| `services/devices` | `phoenix-devices`: LunaSysMgr's `com.palm.display`, `com.palm.keys`, `com.palm.vibrate` and `com.palm.ambientLightSensor` on a device, which OSE lacks (C++; docs/HARDWARE.md) |
+| `services/devices` | `phoenix-devices`: LunaSysMgr's `com.palm.display`, `com.palm.keys`, `com.palm.vibrate` and `com.palm.ambientLightSensor` on a device, which OSE lacks (C++; docs/HARDWARE.md); finds the hardware by looking and follows it as it comes and goes; `phoenix-devices --probe` prints what it finds |
 | `runtime/` | The webOS web app runtime for the simulator and browsers (`PalmSystem`, simulated Luna services) |
 | `shell/tests` | Behaviour tests (`qmltestrunner`) |
 | `shell/assets/openwebos` | Original Open webOS system UI artwork (Apache-2.0) |
@@ -379,7 +379,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-authenticator.cjs` | Authenticator (TOTP/HOTP) |
 | `node tools/test-terminal.cjs` | Terminal (simulated shell, then /bin/sh for real) |
 | `build/pty/pty-test` | The Terminal's PTY service |
-| `build/devices/devices-test` | phoenix-devices: the display, keys, vibrator and light sensor services |
+| `build/devices/devices-test` | phoenix-devices: the display, keys, vibrator and light sensor services; the hardware found by looking, devices appearing and going, `--probe` |
 | `node tools/test-videos.cjs` | Videos |
 | `node tools/test-podcasts.cjs` | Podcasts |
 | `node tools/test-docs.cjs` | PDF View and Doc View |
