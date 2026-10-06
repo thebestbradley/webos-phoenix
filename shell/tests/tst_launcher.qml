@@ -205,10 +205,16 @@ Item {
             });
             verify(shown, "the feedback image shows");
             compare(shown.width, Theme.px(90));
-            // Still there while the launcher hides; gone once it has.
+            // Still there while the launcher hides; gone once it has. (Or
+            // after launchFeedbackTimeout, on the clock, should the hide
+            // take longer: it moves on only as frames are drawn, which a
+            // busy machine draws slowly.)
             verify(launcher.hidden < 1);
-            tryCompare(launcher, "feedbackId", "", 2000);
-            compare(launcher.hidden, 1);
+            compare(launcher.feedbackId, id);
+            // Exactly 1, as Launcher's onHiddenChanged asks (tryCompare
+            // would take 0.99999 for 1 a frame early).
+            tryVerify(function() { return launcher.hidden === 1; }, Theme.launchFeedbackTimeout + 2000);
+            compare(launcher.feedbackId, "");
         }
 
         // GAPS V8 (3): the arrows move a focus ring over the icons, Tab
