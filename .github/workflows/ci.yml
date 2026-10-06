@@ -277,7 +277,16 @@ jobs:
           sysctl hw.memsize kern.memorystatus_level
           vm_stat
 
+      # Qt Quick's software renderer, as the Linux job gets with the
+      # offscreen platform: its animations move on with the clock. Offscreen
+      # on a Mac otherwise renders with Metal, whose animations move on only
+      # as frames are drawn, and without a screen it draws a few a second,
+      # so every timed check would wait on that. These tests are of the
+      # shell's behaviour; the start-up step below runs the simulator with
+      # the Mac's own renderer.
       - name: Behaviour tests
+        env:
+          QT_QUICK_BACKEND: software
         run: QT_QPA_PLATFORM=offscreen "$(brew --prefix qt)/bin/qmltestrunner" -import shell/qml -import build/qml -input shell/tests
 
       - name: Terminal PTY service, installed apps, dictation
