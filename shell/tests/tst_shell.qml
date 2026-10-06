@@ -461,11 +461,21 @@ Item {
             tryCompare(notes, "bannerActive", false, 1500);
         }
 
+        // The rows' swipe areas. Not a row whose notification has gone: the
+        // list keeps its delegate (index -1, slid off the screen) until it
+        // next lays out, before the next frame; a busy machine (the macOS
+        // CI runner) can be asked for the rows before then.
         function dashboardRows() {
             var out = [];
+            function inModel(o) {
+                for (var p = o.parent; p; p = p.parent)
+                    if (p.index !== undefined)
+                        return p.index >= 0;
+                return true;
+            }
             (function walk(o) {
                 for (var i = 0; i < o.children.length; ++i) {
-                    if (o.children[i].objectName === "dashboardSwipe")
+                    if (o.children[i].objectName === "dashboardSwipe" && inModel(o.children[i]))
                         out.push(o.children[i]);
                     walk(o.children[i]);
                 }
