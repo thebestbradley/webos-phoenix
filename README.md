@@ -246,13 +246,34 @@ cmake --build build
 sudo apt install qt6-base-dev qt6-declarative-dev qml6-module-qtquick \
   qml6-module-qtquick-window qml6-module-qtqml-workerscript \
   qml6-module-qt5compat-graphicaleffects qml6-module-qttest \
-  qt6-webengine-dev qml6-module-qtwebengine
+  qt6-webengine-dev qml6-module-qtwebengine libqt6svg6
 sudo snap install node --classic
 cmake -S shell -B build && cmake --build build
 ./build/phoenix-sim
 ```
 
 Node.js comes from the snap because Ubuntu's own nodejs package is too old.
+
+The window is the **Phoenix WebOS Simulator**: the device's screen under a
+menu bar (on a Mac, the one at the top of the screen) and beside a toolbar.
+**Device** has its buttons and switches (Power, Home, Back, the volume keys,
+the ringer switch, turning it left or right, a screen capture, the Full Erase
+and USB drive chords, a hardware keyboard), **Simulate** what happens to it
+(an incoming call, text, picture message or IM, a notification, the battery
+and chargers, a USB cable, the Touchstones, Touch to Share, a headset and its
+button, the play/pause key, the light), **View** the device it starts as
+(phone or tablet, the scale, a demo scene: these restart it) and the
+developer overlays, and **Help > Keyboard Shortcuts…** lists every key below
+in a window. Each menu item shows its key, so the menus teach them; they are
+made from one list in `shell/qml/sim.qml` (`simActions`), as the keys are.
+The toolbar has icons for the most used: Power, Home, Back, rotate, screen
+capture, incoming call, text, notification, low battery, charger, Touchstone,
+phone and tablet; their tooltips name the keys. It sits beside the screen
+(down the right of an upright screen, along the top of one on its side), so
+the screen keeps its size and `--screenshot` saves the screen alone; **View >
+Show Toolbar** or `--no-toolbar` hides it. Its icons need Qt's SVG plugin
+(`libqt6svg6` on Ubuntu; Homebrew's `qt` has it); without it its buttons
+show their names.
 
 Controls: drag with the mouse as you would with a finger. In card view a
 two-finger trackpad swipe sideways moves between cards and a swipe up throws

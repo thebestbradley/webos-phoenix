@@ -12,7 +12,8 @@
 // files, installed apps, "firstuse/done") and starts into First Use; the
 // options that set up a demo state or the old device's security policy
 // are left out (--scene, --launch, --open, --first-use, --turn,
-// --security-policy).
+// --security-policy). restartReplacing() is the View menu's restart as
+// another device (--tablet, --scale, --scene).
 #pragma once
 
 #include <QCoreApplication>
@@ -40,6 +41,20 @@ public:
     {
         QStringList args = withoutOptions(QCoreApplication::arguments().mid(1), { QStringLiteral("updating"), QStringLiteral("erase-data") },
                                           { QStringLiteral("erase-data") });
+        args += extraArgs;
+        return relaunch(args);
+    }
+
+    // The View menu's (sim.qml simActions): phoenix-sim again, without the
+    // options named (as "tablet", "scale") and with extraArgs.
+    Q_INVOKABLE bool restartReplacing(const QStringList &dropped, const QStringList &extraArgs)
+    {
+        const QStringList withValues = { QStringLiteral("size"), QStringLiteral("scale"), QStringLiteral("scene"),
+                                         QStringLiteral("launch"), QStringLiteral("open"), QStringLiteral("turn"),
+                                         QStringLiteral("orientation"), QStringLiteral("erase-data") };
+        QStringList args = withoutOptions(QCoreApplication::arguments().mid(1),
+                                          dropped + QStringList { QStringLiteral("updating"), QStringLiteral("erase-data") },
+                                          withValues);
         args += extraArgs;
         return relaunch(args);
     }
