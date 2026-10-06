@@ -112,10 +112,12 @@ Item {
             tryVerify(function() { return shell.maximized; }, 2000);
             var old = shell.cardView.cardItem(a);
             var b = shell.launch("org.webosphoenix.calendar");
-            wait(80);
-            // Part way down to card view, not snapped there.
-            verify(old.scale < 0.99 && old.scale > shell.cardView.activeScale + 0.01,
-                   "the card in front zooms out (scale " + old.scale + ")");
+            // Part way down to card view, not snapped there. Animations
+            // move on as frames are drawn, so wait for the first rather
+            // than a fixed time (a busy machine draws none in 80 ms).
+            tryVerify(function() { return old.scale < 0.99; }, 2000, "the card in front zooms out");
+            verify(old.scale > shell.cardView.activeScale + 0.01,
+                   "the card in front zooms out, not snaps (scale " + old.scale + ")");
             var card = shell.cardView.cardItem(b);
             verify(card.centerY > shell.cardView.maximizedCenterY + 20, "the new card waits below");
             tryVerify(function() { return shell.maximized && shell.cardView.currentUid === b; }, 3000);
@@ -459,11 +461,21 @@ Item {
             tryCompare(notes, "bannerActive", false, 1500);
         }
 
+        // The rows' swipe areas. Not a row whose notification has gone: the
+        // list keeps its delegate (index -1, slid off the screen) until it
+        // next lays out, before the next frame; a busy machine (the macOS
+        // CI runner) can be asked for the rows before then.
         function dashboardRows() {
             var out = [];
+            function inModel(o) {
+                for (var p = o.parent; p; p = p.parent)
+                    if (p.index !== undefined)
+                        return p.index >= 0;
+                return true;
+            }
             (function walk(o) {
                 for (var i = 0; i < o.children.length; ++i) {
-                    if (o.children[i].objectName === "dashboardSwipe")
+                    if (o.children[i].objectName === "dashboardSwipe" && inModel(o.children[i]))
                         out.push(o.children[i]);
                     walk(o.children[i]);
                 }
@@ -517,7 +529,11 @@ Item {
             t += 10;
             mouseRelease(r, 60, y);
             notes.clock = function () { return Date.now(); };
-            tryCompare(windows.notifications, "count", 1, 1000);
+            // Taken for a flick: the row is sliding off (its swipe area is
+            // off while it goes). Then gone once the slide has been drawn,
+            // which takes as long as the machine takes to draw its frames.
+            verify(!r.enabled, "the flick dismisses the row");
+            tryCompare(windows.notifications, "count", 1, 3000);
             notes.dashboardOpen = false;
         }
 
@@ -649,6 +665,17 @@ Item {
             tryCompare(notes, "negativeSpace", 0, 2000);
         }
 
+        // Taps one of the drawer header's actions (DrawerHeader.qml). Its
+        // Row places them anew when it is next polished, before the next
+        // frame, after one shows, hides or changes its text ("Clear" to
+        // "Clear (1)"). A finger's tap always comes after that frame; so
+        // must this one (Qt 6.11 lays out before delivering the click,
+        // 6.4 did not).
+        function tapDrawerAction(action) {
+            waitForItemPolished(action.parent);
+            mouseClick(action);
+        }
+
         function visibleChild(parentItem, name) {
             var found = null;
             (function walk(o) {
@@ -689,7 +716,7 @@ Item {
             verify(visibleChild(notes, "drawerHeader") !== null);
 
             // Select one notification and clear it.
-            mouseClick(visibleChild(notes, "drawer_select"));
+            tapDrawerAction(visibleChild(notes, "drawer_select"));
             verify(notes.selecting);
             var rows = dashboardRows();
             compare(rows.length, 4);
@@ -698,7 +725,7 @@ Item {
             mouseClick(rows[2]);                    // "Second"
             compare(notes.selectedCount, 1);
             verify(visibleChild(notes, "drawerSelectMark") !== null);
-            mouseClick(visibleChild(notes, "drawer_clearSelected"));
+            tapDrawerAction(visibleChild(notes, "drawer_clearSelected"));
             compare(windows.notifications.count, 3);
             compare(windows.notifications.get(1).title, "First");
             compare(windows.notifications.get(2).title, "Third");
@@ -707,10 +734,10 @@ Item {
             // Clear All asks once ("Clear 2?"); the second tap clears, and
             // the activity stays.
             var clearAll = visibleChild(notes, "drawer_clearAll");
-            mouseClick(clearAll);
+            tapDrawerAction(clearAll);
             compare(windows.notifications.count, 3);
             compare(clearAll.text, "Clear 2?");
-            mouseClick(clearAll);
+            tapDrawerAction(clearAll);
             compare(windows.notifications.count, 1);
             compare(windows.notifications.get(0).ongoing, true);
 
@@ -767,7 +794,7 @@ Item {
             compare(windows.cards.count, 0);
             verify(!shell.justTypeOpen && !shell.launcherOpen);
 
-            mouseClick(clearAll);
+            tapDrawerAction(clearAll);
             compare(clearAll.text, "Clear 2?");
             wait(Theme.drawerConfirmTimeout + 200);
             compare(clearAll.text, "Clear All", "the question lapses");
@@ -1190,7 +1217,7 @@ Item {
         // C11: no memory left: the launch is refused and "Sorry, Too Many
         // Cards" takes the popup alert's place until OK.
         function test_tooManyCards() {
-            // /proc/meminfo read (Linux): plenty left here.
+            // /proc/meminfo (a Mac: its page counts) read: plenty left here.
             verify(windows.memory.totalMb > 0);
             verify(windows.memory.availableMb > 0);
             verify(!windows.memory.low);
@@ -1272,14 +1299,22 @@ Item {
             tryVerify(function() { return shell.maximized; }, 2000);
             keyClick(Qt.Key_Super_L);
             tryVerify(function() { return !shell.maximized; }, 2000);
-            keyClick(Qt.Key_Meta);
+            // Linux reports Super as Meta too; on a Mac Qt's Meta is the
+            // Control key, which is not the card-view key (Shell.qml's
+            // soloKeys).
+            var mac = Qt.platform.os === "osx";
+            keyClick(mac ? Qt.Key_Super_R : Qt.Key_Meta);
             verify(shell.launcherOpen);
             keyClick(Qt.Key_Super_L);
             verify(!shell.launcherOpen);
+            if (mac) {
+                keyClick(Qt.Key_Meta);
+                verify(!shell.launcherOpen, "Control on a Mac is not the card-view key");
+            }
             // Held for a shortcut (Super + another key) it is a modifier.
-            keyPress(Qt.Key_Meta);
+            keyPress(Qt.Key_Super_L);
             keyClick(Qt.Key_A, Qt.MetaModifier);
-            keyRelease(Qt.Key_Meta);
+            keyRelease(Qt.Key_Super_L);
             verify(!shell.launcherOpen);
             // Not over the lock screen.
             shell.lock();

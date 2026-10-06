@@ -28,8 +28,13 @@ if(PHOENIX_BUILD_SIM)
     # device's org.webosphoenix.pty service.
     add_subdirectory(../services/pty ${CMAKE_CURRENT_BINARY_DIR}/pty)
     # phoenix-devices' logic and its tests (devices-test): the device's
-    # com.palm.display, .keys, .vibrate and .ambientLightSensor.
-    add_subdirectory(../services/devices ${CMAKE_CURRENT_BINARY_DIR}/devices)
+    # com.palm.display, .keys, .vibrate and .ambientLightSensor. Linux only:
+    # it reads the kernel's evdev, sysfs, inotify and uevents, which macOS
+    # does not have. The simulator does not use it (DeviceServices.qml
+    # simulates the hardware), so a Mac build simply leaves it out.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_subdirectory(../services/devices ${CMAKE_CURRENT_BINARY_DIR}/devices)
+    endif()
     # Widgets: the window's menu bar (the global one on macOS) and toolbar
     # (SimChrome).
     find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets)

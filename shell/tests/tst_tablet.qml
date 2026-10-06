@@ -272,9 +272,14 @@ Item {
             tryCompare(menu, "height", menu.fullHeight, 2000);
             var clearAll = findChild(menu, "drawer_clearAll");
             verify(clearAll.visible);
+            // Its header's Row places it when next polished (before the
+            // next frame), as a finger's tap would find it (tst_shell's
+            // tapDrawerAction).
+            waitForItemPolished(clearAll.parent);
             mouseClick(clearAll);
             compare(windows.notifications.count, 3, "Clear All asks first");
             compare(clearAll.text, "Clear 2?");
+            waitForItemPolished(clearAll.parent);
             mouseClick(clearAll);
             compare(windows.notifications.count, 1);
             compare(windows.notifications.get(0).ongoing, true);

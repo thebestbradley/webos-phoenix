@@ -239,3 +239,71 @@ jobs:
           path: |
             screenshots
             app-tests
+
+  # The simulator on a Mac (Apple silicon), built the way
+  # docs/GETTING-STARTED.md and scripts/mac-setup.sh build it: Homebrew's Qt,
+  # Apple's compiler and macOS's headers, with the apps built by CMake's npm
+  # step. The Linux job above can't catch code that only builds on Linux.
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Qt 6, CMake and Ninja (Homebrew)
+        run: brew install qt cmake ninja
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            apps/package-lock.json
+            apps/enact-notes-limestone/package-lock.json
+            apps/enact-notes-agate/package-lock.json
+
+      - name: Build simulator and apps
+        run: |
+          cmake -S shell -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
+          cmake --build build
+
+      # What the shell's MemoryMonitor reads on a Mac (a launch is refused
+      # when under 5 % is available): the figures, should a test find
+      # memory low.
+      - name: Memory
+        run: |
+          sysctl hw.memsize kern.memorystatus_level
+          vm_stat
+
+      # Qt Quick's software renderer, as the Linux job gets with the
+      # offscreen platform: its animations move on with the clock. Offscreen
+      # on a Mac otherwise renders with Metal, whose animations move on only
+      # as frames are drawn, and without a screen it draws a few a second,
+      # so every timed check would wait on that. These tests are of the
+      # shell's behaviour; the start-up step below runs the simulator with
+      # the Mac's own renderer.
+      - name: Behaviour tests
+        env:
+          QT_QUICK_BACKEND: software
+        run: QT_QPA_PLATFORM=offscreen "$(brew --prefix qt)/bin/qmltestrunner" -import shell/qml -import build/qml -input shell/tests
+
+      - name: Terminal PTY service, installed apps, dictation
+        run: |
+          build/pty/pty-test
+          build/siminstaller-test
+          build/dictation-test
+
+      - name: The simulator starts (phone and tablet)
+        run: |
+          mkdir -p screenshots-macos
+          build/phoenix-sim --scene cards --screenshot screenshots-macos/phone.png
+          build/phoenix-sim --tablet --scene cards --screenshot screenshots-macos/tablet.png
+          test -s screenshots-macos/phone.png && test -s screenshots-macos/tablet.png
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-macos
+          path: screenshots-macos

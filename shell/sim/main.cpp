@@ -39,6 +39,7 @@
 #include <QQmlEngine>
 #include <QQuickView>
 #include <QStandardPaths>
+#include <QScopeGuard>
 #include <QTimer>
 
 #ifdef Q_OS_LINUX
@@ -381,6 +382,17 @@ int main(int argc, char *argv[])
     // on the offscreen platforms, where no one sees it.
     SimChrome *chrome = platform != QLatin1String("offscreen") && platform != QLatin1String("minimal")
         ? new SimChrome(&view, !parser.isSet(noToolbarOpt)) : nullptr;
+    // The chrome's window container owns the view it shows: give the view
+    // back (QWindow::setParent, as QWidget::createWindowContainer says) and
+    // close the chrome before the view, a local, goes. Left to
+    // QApplication's destructor, the container reaches for the view after
+    // it is gone (Qt 6.11 crashes on quitting).
+    const auto closeChrome = qScopeGuard([&view, chrome]() {
+        if (!chrome)
+            return;
+        view.setParent(static_cast<QWindow *>(nullptr));
+        delete chrome;
+    });
     view.rootContext()->setContextProperty(QStringLiteral("simChrome"), chrome);
     view.setSource(QUrl::fromLocalFile(QDir(qmlDir).filePath(QStringLiteral("sim.qml"))));
     if (view.status() != QQuickView::Ready)

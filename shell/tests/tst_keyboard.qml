@@ -698,6 +698,11 @@ Item {
             })(bar);
             for (var i = 0; i < cells.length; ++i) {
                 if (cells[i].modelData.text === text) {
+                    // The bar's Row places its cells when next polished
+                    // (before the next frame), after the candidates change;
+                    // a finger's tap comes after that frame, so this one
+                    // must (Qt 6.11 lays out before delivering the click).
+                    waitForItemPolished(cells[i].parent);
                     var p = cells[i].mapToItem(kb, cells[i].width / 2, cells[i].height / 2);
                     mouseClick(kb, p.x, p.y);
                     wait(20);

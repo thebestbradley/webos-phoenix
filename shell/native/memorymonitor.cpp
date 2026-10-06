@@ -5,6 +5,31 @@
 
 #include <QFile>
 
+#ifdef Q_OS_MACOS
+#include <sys/sysctl.h>
+
+// A Mac running phoenix-sim: {total, available} in MB, -1 if they can't be
+// read. Available is the share of memory the kernel itself counts as
+// available (kern.memorystatus_level, a percentage: what macOS's memory
+// pressure goes by). Free plus inactive pages is not it: macOS keeps little
+// free and holds much as compressed or purgeable memory it gives back
+// readily, so on an ordinary Mac that sum can sit near the 5 % that refuses
+// a launch.
+static QPair<int, int> readMacMemory()
+{
+    uint64_t total = 0;
+    size_t len = sizeof total;
+    if (sysctlbyname("hw.memsize", &total, &len, nullptr, 0) != 0)
+        return { -1, -1 };
+    const int totalMb = int(total / (1024 * 1024));
+    int level = 0;
+    len = sizeof level;
+    if (sysctlbyname("kern.memorystatus_level", &level, &len, nullptr, 0) != 0 || level < 0 || level > 100)
+        return { totalMb, -1 };
+    return { totalMb, int(qint64(totalMb) * level / 100) };
+}
+#endif
+
 MemoryMonitor::MemoryMonitor(QObject *parent)
     : QObject(parent)
 {
@@ -37,10 +62,14 @@ QPair<int, int> MemoryMonitor::parse(const QByteArray &meminfo)
 
 void MemoryMonitor::refresh()
 {
+#ifdef Q_OS_MACOS
+    const auto [total, available] = readMacMemory();
+#else
     QFile f(QStringLiteral("/proc/meminfo"));
     if (!f.open(QIODevice::ReadOnly))
         return;
     const auto [total, available] = parse(f.readAll());
+#endif
     if (total == m_totalMb && available == m_availableMb)
         return;
     m_totalMb = total;
