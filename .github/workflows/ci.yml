@@ -269,6 +269,14 @@ jobs:
             -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
           cmake --build build
 
+      # What the shell's MemoryMonitor reads on a Mac (a launch is refused
+      # when under 5 % is available): the figures, should a test find
+      # memory low.
+      - name: Memory
+        run: |
+          sysctl hw.memsize kern.memorystatus_level
+          vm_stat
+
       - name: Behaviour tests
         run: QT_QPA_PLATFORM=offscreen "$(brew --prefix qt)/bin/qmltestrunner" -import shell/qml -import build/qml -input shell/tests
 

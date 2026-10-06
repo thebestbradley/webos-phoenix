@@ -7,9 +7,9 @@
 // createMemoryAlertWindow tells the user). The Palm kernel's memchute
 // thresholds are gone; Phoenix calls memory low when MemAvailable in
 // /proc/meminfo is under lowThresholdMb, or under 5 % of MemTotal if that
-// is more. On a Mac running phoenix-sim the same from the kernel's page
-// counts (free plus inactive pages). forceLow (phoenix-sim --low-memory)
-// makes it low anywhere.
+// is more. On a Mac running phoenix-sim the same, with the share of memory
+// macOS counts as available (kern.memorystatus_level). forceLow
+// (phoenix-sim --low-memory) makes it low anywhere.
 
 #pragma once
 
@@ -39,7 +39,7 @@ public:
     int lowThresholdMb() const { return m_lowThresholdMb; }
     void setLowThresholdMb(int mb);
 
-    // Read /proc/meminfo (a Mac: the kernel's page counts) now; a launch
+    // Read /proc/meminfo (a Mac: kern.memorystatus_level) now; a launch
     // asks before deciding.
     Q_INVOKABLE void refresh();
 

@@ -6,29 +6,27 @@
 #include <QFile>
 
 #ifdef Q_OS_MACOS
-#include <mach/mach.h>
 #include <sys/sysctl.h>
 
-// A Mac running phoenix-sim: {total, available} in MB from the kernel's
-// page counts, -1 if they can't be read. Available is free plus inactive
-// pages (inactive ones are reclaimed before anything is paged out), the
-// nearest thing macOS has to Linux's MemAvailable.
+// A Mac running phoenix-sim: {total, available} in MB, -1 if they can't be
+// read. Available is the share of memory the kernel itself counts as
+// available (kern.memorystatus_level, a percentage: what macOS's memory
+// pressure goes by). Free plus inactive pages is not it: macOS keeps little
+// free and holds much as compressed or purgeable memory it gives back
+// readily, so on an ordinary Mac that sum can sit near the 5 % that refuses
+// a launch.
 static QPair<int, int> readMacMemory()
 {
     uint64_t total = 0;
     size_t len = sizeof total;
     if (sysctlbyname("hw.memsize", &total, &len, nullptr, 0) != 0)
         return { -1, -1 };
-    // One send right for the process's life, not one per refresh.
-    static const mach_port_t host = mach_host_self();
-    vm_size_t page = 0;
-    vm_statistics64_data_t vm {};
-    mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
-    if (host_page_size(host, &page) != KERN_SUCCESS
-        || host_statistics64(host, HOST_VM_INFO64, reinterpret_cast<host_info64_t>(&vm), &count) != KERN_SUCCESS)
-        return { int(total / (1024 * 1024)), -1 };
-    const uint64_t available = (uint64_t(vm.free_count) + vm.inactive_count) * page;
-    return { int(total / (1024 * 1024)), int(available / (1024 * 1024)) };
+    const int totalMb = int(total / (1024 * 1024));
+    int level = 0;
+    len = sizeof level;
+    if (sysctlbyname("kern.memorystatus_level", &level, &len, nullptr, 0) != 0 || level < 0 || level > 100)
+        return { totalMb, -1 };
+    return { totalMb, int(qint64(totalMb) * level / 100) };
 }
 #endif
 
