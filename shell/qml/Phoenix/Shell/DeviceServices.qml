@@ -162,7 +162,9 @@ QtObject {
     // The headset's button (InputManager::headsetStateMachine, :254-330):
     // down and up go out as they are, and from them single_click (let go
     // within 2 s), double_click (pressed again within 1 s of that and let
-    // go), or hold (held 2 s).
+    // go), or hold (held 2 s). The click goes out before the "up" that
+    // made it: handleEvent runs the state machine before it posts the key
+    // (InputManager.cpp:1145, :1173).
     readonly property int pressAndHoldTime: 2000   // PRESS_AND_HOLD_TIME_MS
     readonly property int doublePressTime: 1000    // DOUBLE_PRESS_TIME_MS
     property string _headsetButton: "start"
@@ -170,7 +172,6 @@ QtObject {
         _publish({ key: { category: "/headset", key: "headset_button", state: state } });
     }
     function headsetButton(down) {
-        _headsetEvent(down ? "down" : "up");
         var s = _headsetButton;
         if (s === "start") {
             if (down) {
@@ -205,6 +206,7 @@ QtObject {
                 _headsetButton = "start";
             }
         }
+        _headsetEvent(down ? "down" : "up");
     }
     property Timer _headsetTimer: Timer {
         onTriggered: {

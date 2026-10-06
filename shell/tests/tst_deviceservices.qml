@@ -234,10 +234,10 @@ Item {
         function test_headsetButtonClicks() {
             devices.headsetButton(true);
             devices.headsetButton(false);
-            compare(JSON.stringify(headsetStates()), JSON.stringify(["down", "up", "single_click"]));
+            compare(JSON.stringify(headsetStates()), JSON.stringify(["down", "single_click", "up"]));
             devices.headsetButton(true);
             devices.headsetButton(false);
-            compare(JSON.stringify(headsetStates()), JSON.stringify(["down", "up", "single_click", "down", "up", "double_click"]));
+            compare(JSON.stringify(headsetStates()), JSON.stringify(["down", "single_click", "up", "down", "double_click", "up"]));
         }
 
         function test_headsetButtonHeld() {
@@ -248,7 +248,7 @@ Item {
             // Back at the start: the next press is a click again.
             devices.headsetButton(true);
             devices.headsetButton(false);
-            compare(headsetStates().pop(), "single_click");
+            compare(JSON.stringify(headsetStates().slice(-3)), JSON.stringify(["down", "single_click", "up"]));
             wait(devices.doublePressTime + 50);
         }
 

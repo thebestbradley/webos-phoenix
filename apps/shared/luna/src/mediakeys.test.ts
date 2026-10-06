@@ -102,14 +102,15 @@ describe("watchMediaKeys", () => {
         const p = new FakePlayer();
         const sub = watchMediaKeys(p);
         await tick();
-        // A single click: down, up, single_click (headsetStateMachine).
+        // A single click: down, single_click, up (headsetStateMachine runs
+        // before the key is posted, InputManager.cpp:1145, :1173).
         key("/headset", "headset_button", "down");
-        key("/headset", "headset_button", "up");
         key("/headset", "headset_button", "single_click");
+        key("/headset", "headset_button", "up");
         await tick();
         expect(p.log).toEqual(["play"]);
         // A double click while playing: the first click pauses, the second skips and plays on.
-        for (const s of ["down", "up", "single_click", "down", "up", "double_click"]) key("/headset", "headset_button", s);
+        for (const s of ["down", "single_click", "up", "down", "double_click", "up"]) key("/headset", "headset_button", s);
         await tick();
         expect(p.log).toEqual(["play", "pause", "play", "next"]);
         expect(p.on).toBe(true);

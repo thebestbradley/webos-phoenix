@@ -304,15 +304,15 @@ async function main() {
             not, { timeout: 3000 }).then(() => check(true, `${what} (${not} -> ...)`), () => check(false, what));
         check(await playLabel() === "Pause", "music keys: playing before the keys");
         await keyEvents([["/headset", "headset-mic", "down"]]);
-        await button("down", "up", "single_click");
+        await button("down", "single_click", "up");
         await waitLabel("Play", "music keys: a single click of the headset button pauses");
         check(lastHost("nowPlaying").payload.playing === false, "music keys: the shell hears it paused");
         await page.waitForTimeout(1100);   // past DOUBLE_PRESS_TIME_MS
-        await button("down", "up", "single_click");
+        await button("down", "single_click", "up");
         await waitLabel("Pause", "music keys: another single click plays");
         await page.waitForTimeout(1100);
         let t0 = await title();
-        await button("down", "up", "single_click", "down", "up", "double_click");
+        await button("down", "single_click", "up", "down", "double_click", "up");
         await waitTitle(t0, "music keys: a double click goes to the next song");
         await page.waitForTimeout(300);
         check(await playLabel() === "Pause", "music keys: and it plays on");
