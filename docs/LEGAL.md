@@ -412,6 +412,32 @@ shipping one.
 or GPL depending on how it is built and is only called as a program. The app
 records WAV, so it is optional.
 
+## The Assistant's language models and speech
+
+The Phoenix Assistant (`apps/assistant`) runs **llama.cpp**
+(<https://github.com/ggml-org/llama.cpp>, MIT) as a separate program,
+`llama-server`; no llama.cpp code is in this repository. A `meta-phoenix`
+recipe beside `whisper-cpp`'s is still to write, and should ship llama.cpp's
+`LICENSE`.
+
+The on-device models are downloaded by the user, never shipped: Qwen2.5
+0.5B Instruct, Qwen2.5 1.5B Instruct and Qwen3 4B, each **Apache-2.0** per
+its Hugging Face model card (Qwen/Qwen2.5-0.5B-Instruct-GGUF,
+Qwen/Qwen2.5-1.5B-Instruct-GGUF, Qwen/Qwen3-4B-GGUF; checked 7 October
+2026). Left out on purpose: Llama 3.2 (Llama 3.2 Community License, not
+permissive) and Qwen2.5 3B (Qwen Research License). An image that ships a
+model must carry its licence.
+
+Answers are spoken by **espeak-ng** (GPL-3.0) or, on a Mac, `say`, run as
+separate programs and only called, never linked; Phoenix's code stays
+Apache-2.0. An image that includes espeak-ng ships it as its own package
+with its licence and source offer. Piper or another engine can be configured
+instead (`--speech-command`).
+
+Cloud providers (Anthropic, OpenAI, Google, OpenAI-compatible servers) are
+used only with the user's own key, under the provider's terms; nothing of
+theirs is in the repository.
+
 ## Fonts
 
 Legacy webOS used **Prelude**, which was made for Palm and is not openly

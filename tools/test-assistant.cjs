@@ -133,8 +133,9 @@ async function main() {
         check(await app.locator("[data-testid='as-choice-web']").count() === 1 && await app.locator("[data-testid='as-choice-settings']").count() === 1,
               "it offers Search the web and Set up a cloud model");
         await app.click("[data-testid='as-choice-settings']");
-        await app.waitForTimeout(300);
-        check(launches.some((l) => l.id === "org.webosphoenix.settings" && l.params && l.params.page === "assistant"), "Set up a cloud model opens Settings > Assistant");
+        const opened = () => launches.some((l) => l.id === "org.webosphoenix.settings" && l.params && l.params.page === "assistant");
+        for (let i = 0; i < 100 && !opened(); ++i) await app.waitForTimeout(100);
+        check(opened(), "Set up a cloud model opens Settings > Assistant");
 
         // ---- Settings > Assistant --------------------------------------------------------------
         const st = await context.newPage();
@@ -143,10 +144,12 @@ async function main() {
         await st.waitForSelector("[data-testid='as-enabled']");
         await shot(st, "settings");
         check(/llama-server/.test(await st.textContent("[data-testid='as-local-status']")), "without llama.cpp, it says how to get it");
+        // (The models come with their own answer, after the page.)
+        await st.waitForFunction(() => document.querySelectorAll("[data-testid^='as-model-']").length > 0);
         check(await st.locator("[data-testid^='as-model-']").count() === 3, "three on-device models offered, with size and memory");
         const settings = async () => (await svc(st, A + "getSettings", {})).settings;
         const until = async (fn, what) => {
-            for (let i = 0; i < 50; ++i) {
+            for (let i = 0; i < 150; ++i) {
                 if (fn(await settings())) return check(true, what);
                 await st.waitForTimeout(100);
             }
