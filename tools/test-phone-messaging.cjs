@@ -236,6 +236,21 @@ async function main() {
         check(threads.join(",") === "Marcus Reyes,Lena Okafor,Ada Palmer", "conversation list, newest first");
         check((await msg.textContent("[data-testid='thread-row'] .thread-unread")) === "1", "unread count");
         await shot(msg, "messaging-threads");
+        // On a new profile several pages start at once, each finding the
+        // store not yet seeded: seeding again (as another page would) adds
+        // no second copy of the sample conversations.
+        const seededAgain = await msg.evaluate(() => {
+            localStorage.removeItem("phoenix:telephony:seeded");
+            window.__phoenixRuntime.seedPhoneDemoData(false);
+            const find = (kind) => new Promise((resolve) => {
+                const b = new PalmServiceBridge();
+                b.onservicecallback = (r) => resolve(JSON.parse(r).results || []);
+                b.call("luna://com.palm.db/find", JSON.stringify({ query: { from: kind } }));
+            });
+            return Promise.all([find("com.palm.chatthread:1"), find("com.palm.smsmessage:1")])
+                .then(([t, m]) => t.length + " conversations, " + m.length + " messages");
+        });
+        check(seededAgain === "3 conversations, 8 messages", "seeding again adds no second copy (" + seededAgain + ")");
 
         // ---- Send a text to a contact -----------------------------------------------------------------------
         await msg.click("[data-testid='compose']");

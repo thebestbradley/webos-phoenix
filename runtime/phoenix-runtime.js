@@ -6101,9 +6101,30 @@
 
         // ---- Demo data (simulator only; fictional people, 555 numbers) ---------------
 
-        var SEED_VERSION = 1;
+        // Version 2: the conversations have fixed ids. Version 1 filed them
+        // with new ids, and on a new profile each page that started at once
+        // seeded them again (six copies of each); those copies go.
+        var SEED_VERSION = 2;
+        var DEMO_TEXTS = ["Did you see the Pre 3 is back?", "Running Phoenix on it right now", "Cards! I missed cards.",
+                          "Landing at 6. Dinner?", "Yes! The usual place", "Can you send me the build notes?",
+                          "Sure, give me a minute", "Thanks, got them. The new dial pad looks great"];
+        // Version 1's demo threads: every message in them one of its texts
+        // (one the user wrote keeps the thread). Not the fixed-id ones.
+        function dropVersion1DemoThreads() {
+            var threads = dbCall("/find", { query: { from: "com.palm.chatthread:1" } }).results || [];
+            threads.forEach(function (t) {
+                if (String(t._id).indexOf("phoenix-demo-") === 0) return;
+                var msgs = (dbCall("/find", { query: { from: "com.palm.smsmessage:1" } }).results || []).filter(function (m) {
+                    return (m.conversations || []).indexOf(t._id) >= 0;
+                });
+                if (!msgs.length || msgs.some(function (m) { return DEMO_TEXTS.indexOf(m.messageText) < 0; })) return;
+                dbCall("/del", { ids: msgs.map(function (m) { return m._id; }).concat([t._id]) });
+            });
+        }
         runtime.seedPhoneDemoData = function (force) {
-            if (!force && store.get("telephony:seeded", 0) === SEED_VERSION) return false;
+            var seeded = store.get("telephony:seeded", 0);
+            if (!force && seeded === SEED_VERSION) return false;
+            if (seeded === 1) dropVersion1DemoThreads();
             // The people come from the sample contacts; a forced reseed restores them too.
             if (force && runtime.loadSampleData) runtime.loadSampleData(true);
             [["com.palm.person:1", []], ["com.palm.message:1", []], ["com.palm.smsmessage:1", ["com.palm.message:1"]],
@@ -6156,16 +6177,34 @@
                 var p = people[conv[0]];
                 if (!p || !p.phoneNumbers || !p.phoneNumbers.length) return;
                 var number = p.phoneNumbers[0].value;
-                conv[1].forEach(function (m, i) {
+                // Fixed ids, as the calls above have: every page loads this
+                // runtime, and on a new profile several start at once, each
+                // finding the store not yet seeded (localStorage is shared
+                // but the pages run in their own processes). Seeding again
+                // then writes the same thread and messages, not more.
+                var threadId = "phoenix-demo-thread-" + (conv[0] + 1);
+                var msgs = conv[1].map(function (m, i) {
                     var t = now - m[0] * min;
                     var last = i === conv[1].length - 1;
-                    assign(m[1] ? { _kind: "com.palm.smsmessage:1", folder: "inbox", status: "successful", serviceName: "sms",
-                                    messageText: m[2], localTimestamp: t, timestamp: t, from: { addr: number },
-                                    flags: { read: !(last && conv[0] === 1), visible: true } }
-                                : { _kind: "com.palm.smsmessage:1", folder: "outbox", status: "successful", serviceName: "sms",
-                                    messageText: m[2], localTimestamp: t, timestamp: t, to: [{ addr: number, name: personName(p) }],
-                                    flags: { read: true, visible: true } });
+                    var o = m[1] ? { _kind: "com.palm.smsmessage:1", folder: "inbox", status: "successful", serviceName: "sms",
+                                     messageText: m[2], localTimestamp: t, timestamp: t, from: { addr: number },
+                                     flags: { read: !(last && conv[0] === 1), visible: true } }
+                                 : { _kind: "com.palm.smsmessage:1", folder: "outbox", status: "successful", serviceName: "sms",
+                                     messageText: m[2], localTimestamp: t, timestamp: t, to: [{ addr: number, name: personName(p) }],
+                                     flags: { read: true, visible: true } };
+                    o._id = threadId + "-msg-" + (i + 1);
+                    o.conversations = [threadId];
+                    return o;
                 });
+                var last = msgs[msgs.length - 1];
+                // The thread as assign() files one (its fields), whole.
+                dbCall("/put", { objects: [{
+                    _id: threadId, _kind: "com.palm.chatthread:1", displayName: personName(p), personId: p._id,
+                    normalizedAddress: digits(number), replyAddress: number, replyService: "sms",
+                    summary: summaryOf(last), timestamp: last.localTimestamp, flags: { visible: true },
+                    unreadCount: msgs.filter(function (o) { return o.folder === "inbox" && !o.flags.read; }).length
+                }] });
+                dbCall("/put", { objects: msgs });
             });
             store.set("telephony:seeded", SEED_VERSION);
             return true;
