@@ -293,6 +293,8 @@ Item {
                             color: "#b8b8b8"
                             font.family: Theme.fontFamily
                             font.pixelSize: Math.round(12 * strip.unit)
+                            wrapMode: Text.Wrap
+                            maximumLineCount: 2
                             elide: Text.ElideRight
                         }
                     }

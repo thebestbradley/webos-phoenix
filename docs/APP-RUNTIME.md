@@ -175,6 +175,11 @@ it keeps the field's focus while you choose.
 Tests: `tools/test-editing.cjs` (Memos and Files in Chromium) and
 `shell/tests/tst_editpopup.qml`.
 
+Every copy is also kept in the clipboard history (see
+[Clipboard history](#clipboard-history)), and Copy and Cut work in a
+password field, where Chromium refuses them: the runtime copies the
+selection itself and keeps it as a secret.
+
 System sounds follow LunaSysMgr's routes. `PalmSystem.addBannerMessage(msg,
 params, icon, soundClass, soundFile, duration)` puts the sound in the
 `banner` message; `PalmSystem.playSoundNotification(soundClass, soundFile,
@@ -1516,6 +1521,9 @@ password manager:
   time, idle lock, lock when minimized), Lock.
 - **Files**: "Open with" offers Passwords for `.kdbx` files
   (`application/x-keepass2`); the app gets `{target: path}`.
+- Launch params `{newEntry: {password, title?, username?, url?}}` (the
+  Clipboard app's Save to Passwords) open a new entry filled in with them
+  once a database is unlocked; nothing is saved until the user saves it.
 
 `apps/authenticator` (`org.webosphoenix.authenticator`, Apps tab) shows
 two-factor codes:
@@ -1541,6 +1549,105 @@ two-factor codes:
 | Open Website, Screen & Lock | `com.webos.applicationManager` `launch` | |
 
 Neither app declares a Just Type search or writes to db8.
+
+## Clipboard history
+
+Phoenix's own (webOS had none; [M6-PLAN.md](M6-PLAN.md) F2): every copy in
+every app is kept, with the app it came from, as Paste does on macOS. The
+keyboard, the Clipboard app and Settings share one history through
+`org.webosphoenix.clipboard` (`@phoenix/luna` `clipboard`), simulated in the
+runtime (block "Clipboard history"). Threat model:
+[SECURITY-APPS.md](SECURITY-APPS.md#clipboard-history).
+
+**What is recorded**, in every page the runtime runs in:
+
+- `copy` and `cut` events: the selection, or what the page put on the
+  clipboard itself (`clipboardData`, read after the page's handlers); a
+  picture selected alone is kept by its address;
+- `navigator.clipboard.writeText` and `write` (text and pictures as
+  `data:` URLs, up to about 750 kB);
+- the shell's own copies (Just Type, the site menu's Copy Link), through
+  `lunaCall` `add`;
+- Copy and Cut in a password field (keys, the edit popup, the app menu's
+  Edit): `__phoenixRuntime.clipboard.passwordCopy`.
+
+A clip is `{id, type: "text" | "link" | "image", text?, title?, image?,
+source, time, pinned, category, sensitive, kind?}`. A link is a text that is
+one `http(s)`/`ftp` address or `www.` name; its title is the link's own text
+where it was copied, or the page's title for its own address. Copying the
+same thing again moves its clip to the front.
+
+**The service**, `luna://org.webosphoenix.clipboard/`:
+
+| Method | Does |
+| --- | --- |
+| `history {category?, query?, limit?, subscribe?}` | `{clips, categories, settings}`, newest first; `category` is `recent` (default), `pinned` or a category id; a secret comes without its text (`kind`, `length`) |
+| `subscribe` | `history` with `subscribe` |
+| `add {text \| image, title?, source?, sensitive?, kind?}` | `{clip}` or `{skipped: "off" \| "excluded" \| "sensitive" \| "empty" \| "too large"}` |
+| `pin`, `unpin {id}`; `setCategory {id, category}`; `update {id, text}` | change a clip (`update`: text clips only) |
+| `delete {id \| ids}`; `clear {all?}` | `clear` keeps pinned and categorized clips unless `all` |
+| `paste {id}` | `{clip}` with its text; a secret only for the system UI (the keyboard), error -3 otherwise |
+| `reveal {id, passCode}` | `{text}` after `com.palm.systemmanager/matchDevicePasscode`; error -5 when it is wrong |
+| `addCategory {name}`, `renameCategory {id, name}`, `deleteCategory {id}`, `reorderCategories {ids}` | categories; a deleted one's clips stay, in none |
+| `getSettings {subscribe?}`, `setSettings {...}` | `{enabled, keyboardKey, maxItems, keepFor: hour \| day \| week \| month \| forever, clearOnLock, sensitive: mask \| skip, detectSecrets, excludedApps}` |
+
+Pinned clips and clips in a category are "saved": they neither expire nor
+count against `maxItems`. Expiry and the size limit are applied by whichever
+page reads or adds. When the shell says the screen locked
+(`applyHostStatus {deviceLocked}`) and `clearOnLock` is on, the history goes.
+Turning the history off drops it and takes the keyboard key away.
+
+**Storage**: each clip is its own key (`phoenix:clipboard:clip:<id>`), so
+pages copying at once in their own processes never write over one another
+(the shared-blob race of PR 7); settings and categories are one key each,
+written only when the user changes them. Changes in other pages arrive as
+`storage` events and go to subscribers.
+
+**Secrets**: a copy from a password field (`kind: "password"`), a copy an
+app marks with `__phoenixRuntime.clipboard.markSensitive(text, kind?)`
+(`@phoenix/secrets` `SecretClipboard` does, so Passwords and the
+Authenticator's copies are secrets), and, with `detectSecrets`, text that
+looks like a one-time code (`otp`: 6 digits, `123 456`, 7 or 8 digits), an
+`otpauth://` link (`otpauth`), a base32 TOTP key of 16 characters or more
+(`totp`) or a password (8 to 64 characters, no spaces, three kinds of
+characters with a symbol, or all four). They are kept AES-GCM encrypted
+(see SECURITY-APPS.md), shown masked, and searched never.
+
+**The keyboard** (`shell/qml/Phoenix/Shell/ClipStrip.qml`,
+`ClipboardClient.qml`): the clipboard key at the left of the candidate
+bar, in every field while the history and the key are on (not over the
+lock screen). In a field without Text Assist (a password, an address) the
+bar holds only the key. It swaps the keys for the clip strip: Recent,
+Pinned and category tabs; the clips as small cards in the card view's look;
+a tap pastes through the IME's commit and brings the keys back (a secret
+only into a password field; elsewhere the strip says to reveal it in
+Clipboard); a picture goes into rich text (`clipboard.insertImage`); a hold
+opens Pin, Save to…, Delete, Open Clipboard. ABC, Back, the key, or the
+keyboard going away bring the keys back. The shell talks to the service
+with the window source's `lunaCall` (the system UI page in phoenix-sim).
+`phoenix-sim --scene clipstrip [--launch <app>]` shows it.
+
+**The Clipboard app** (`apps/clipboard`, `org.webosphoenix.clipboard`, Apps
+tab): tabs, search, and a clip's page: Copy (a secret through
+`SecretClipboard`, cleared after 30 s), Show (the device passcode), Save to
+Passwords (`{newEntry: {password}}`) or Add to Authenticator (`{otpauth}`;
+a TOTP key becomes `otpauth://totp/Imported%20key?secret=...`), Open in
+Browser, Edit, Pinned, Category, Delete. The app menu: Categories (new,
+rename, move, delete), Clear History, Preferences. Revealed secrets are
+hidden again when the screen locks. No Just Type search.
+
+**Settings > Clipboard** (`apps/settings/src/pages/Clipboard.tsx`, launch
+point `org.webosphoenix.settings.clipboard`): every setting above, Clear
+History and Clear All Clips.
+
+Tests: `apps/shared/luna/src/clipboard.test.ts` (recording, expiry, size,
+pins, categories, detection, encryption, the lock),
+`shell/tests/tst_clipstrip.qml` (the key and the strip),
+`tools/test-clipboard.cjs` (the app and Settings, phone and tablet).
+
+On a device the service must run on the bus (a small Node.js or C++
+service with the same API; today it exists only in the web runtime), and
+the keyboard must be the device's input method (GAPS V5).
 
 ## Terminal
 

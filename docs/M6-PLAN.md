@@ -9,7 +9,7 @@ or more pull requests, merged when CI is green.
 | --- | --- | --- |
 | F0 | Fixes: settings lost on save; card corners; Messaging reply bar | Settings and corners done; reply bar waits on the owner |
 | F1 | Press and hold on launcher icons | Done in the simulator (7 October 2026) |
-| F2 | Clipboard manager | To do |
+| F2 | Clipboard manager | Done in the simulator (7 October 2026) |
 | F3 | The Phoenix Assistant 1.0 | To do |
 | F4 | Community features picked for 1.0 | To do |
 
@@ -109,6 +109,15 @@ Works like Paste on macOS, in the webOS style.
 - Unit tests for expiry, pins, categories and sensitive detection.
 - QML: the keyboard strip.
 - `tools/test-clipboard.cjs` drives the app and the Settings pane.
+
+**Built (7 October 2026, in the simulator)**
+- **Service** (`runtime/phoenix-runtime.js` "Clipboard history"; `@phoenix/luna` `clipboard`): `history`, `subscribe`, `add`, `pin`, `unpin`, `setCategory`, `update`, `delete`, `clear`, `paste`, `reveal`, `addCategory`, `renameCategory`, `deleteCategory`, `reorderCategories`, `getSettings`, `setSettings`. Each clip is its own stored key, so pages copying at once never write over each other (the lesson of PR 7). Copies are recorded from every page's copy and cut events (the selection, or what the page put on the clipboard), from `navigator.clipboard` writes, and from the shell's own (Just Type, Copy Link), with the app they came from. A link keeps its title (the link's text, or the page's title).
+- **Secrets**: a copy from a password field (Copy and Cut work there again: Chromium refuses them, the runtime copies the selection itself), a copy `@phoenix/secrets`' `SecretClipboard` marks (Passwords, Authenticator), and text that looks like a one-time code, an `otpauth://` link, a TOTP key or a password. Kept AES-GCM encrypted with a non-extractable key in IndexedDB, masked, revealed by `reveal {id, passCode}` (the device passcode). Settings can skip them instead.
+- **Keyboard**: the clipboard key at the left of the candidate bar, in every field (in a field without Text Assist the bar holds only the key; nothing about Phoenix's key layouts changes). The strip (`ClipStrip.qml`): Recent, Pinned and category tabs; small cards in the card view's look (rounded, `card-shadow-tile.png`), a pinned one with a blue folded corner; a tap pastes through the IME commit (a secret only into a password field, through the system UI, which the service allows to read it); a hold opens Pin or Unpin, Save to… (the categories), Delete, Open Clipboard in the popup art; ABC, Back or the key bring the keys back. `--scene clipstrip` (with `--launch <app>`: over that app's first field).
+- **Clipboard app** (`apps/clipboard`): tabs, search, a clip's page (Copy, Show, Save to Passwords or Add to Authenticator, Open in Browser, Edit, Pinned, Category, Delete); Categories (new, rename, move up and down, delete) and Clear History in the app menu; Preferences opens Settings > Clipboard. Passwords gained `{newEntry: {password, title?, username?, url?}}` launch params: a filled-in new entry once a database is unlocked, saved only by the user.
+- **Settings > Clipboard**: history on or off, the keyboard key, keep 1 hour, 1 day, 1 week, 1 month or forever, up to 25 to 500 clips, clear when locked, passwords and codes kept hidden or not kept, recognizing secrets by their look, apps never kept, Clear History, Clear All Clips.
+- **Tests**: `apps/shared/luna/src/clipboard.test.ts`, `shell/tests/tst_clipstrip.qml`, `tools/test-clipboard.cjs` (phone and tablet, in CI).
+- **Not yet**: on a device the service has to be a real bus service (it lives in the web runtime), and the keyboard must be the device's (GAPS V5). Pictures paste only into rich text (`contenteditable`); a plain field takes none.
 
 ## F3: the Phoenix Assistant 1.0
 

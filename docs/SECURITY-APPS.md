@@ -121,7 +121,52 @@ it back; when it cannot, it clears anyway). A manual, screen or idle lock
 clears at once; a lock because the card was minimized does not (the user is
 usually pasting into another app). Closing the card clears it too
 (`pagehide`). Limits: any app can read the clipboard while the secret is on
-it; webOS has no clipboard history today, but one added later would keep it.
+it. `SecretClipboard` marks what it copies as a secret for Phoenix's
+clipboard history, which keeps it encrypted and masked (or not at all, as
+the user chooses): see [Clipboard history](#clipboard-history).
+
+## Clipboard history
+
+Phoenix keeps every copy (`org.webosphoenix.clipboard`,
+[APP-RUNTIME.md](APP-RUNTIME.md#clipboard-history)), so it keeps the
+secrets that pass through the clipboard too. What it does about them:
+
+- **Which clips are secrets**: a copy from a password field; a copy an app
+  marks (`SecretClipboard` in Passwords and Authenticator); with "Recognize
+  secrets" on, text that looks like a one-time code, an `otpauth://` link,
+  a TOTP key or a password. Detection by look is a heuristic: a password
+  that looks like a sentence is not caught, and some ordinary strings are.
+- **At rest**: AES-256-GCM (a fresh 96-bit IV per clip) under one key the
+  runtime generates and keeps in IndexedDB as a **non-extractable**
+  `CryptoKey` (database `phoenix-clipboard`, store `keys`, key `clips`;
+  IndexedDB's `add` refuses a second key, so pages starting together agree
+  on one). Only the ciphertext, the kind and the length go to
+  `localStorage`; `tools/test-clipboard.cjs` scans the stored data for the
+  secrets. Where IndexedDB is missing (the unit tests' jsdom) the key's
+  bytes are kept in the store instead.
+- **Shown**: masked (`••••`) in the keyboard strip and the app, and left
+  out of search; revealed in the app only after `reveal {id, passCode}`,
+  which the service checks with `matchDevicePasscode`; hidden again when
+  the screen locks. The keyboard pastes one only into a password field,
+  without showing it; `paste` gives a secret's text to the system UI page
+  only.
+- **Choices** (Settings > Clipboard): "Passwords and codes: Don't keep"
+  records none; "Clear when locked"; apps never kept; Clear All Clips.
+
+What this protects against, honestly:
+
+| Attacker | Protected? | Why |
+| --- | --- | --- |
+| Someone looking at the screen, or at a card thumbnail | Yes | Secrets are masked until the passcode is given. |
+| Someone with a copy of the profile's `localStorage` only (a backup of it, a sync of web data) | Yes | Ciphertext only; the key is in IndexedDB. |
+| Someone with the **whole profile** (`localStorage` and the IndexedDB files) | **Partly** | The key cannot be exported by JavaScript, but Chromium keeps it in the IndexedDB files in a form an attacker with the files can recover. It is not wrapped by a device secret yet. |
+| **Another app** in the simulator | **No** | All apps share one origin there: any page can call `reveal` with a guessed passcode (a 4-digit PIN; the simulated service has no retry limit for it) or use the key itself. `PalmSystem.appIdentifier`, which `paste` checks, can be set by a page. |
+| Memory forensics while unlocked | No | Decrypted text lives in page memory while shown or pasted, as with Passwords. |
+
+On a device the plan is Authenticator's: the key wrapped by the Phoenix
+key store (hardware-bound where the board allows) and released after
+`matchDevicePasscode` under the device's retry limit, with the service on
+the bus, checking its caller, giving secrets' text only to the keyboard.
 
 ## Just Type and db8
 
