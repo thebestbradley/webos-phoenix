@@ -155,79 +155,90 @@ jobs:
           npm install -g playwright@1
           playwright install --with-deps chromium
           export NODE_PATH="$(npm root -g)"
-          node tools/test-apps.cjs --out app-tests/phone
-          node tools/test-apps.cjs --tablet --out app-tests/tablet
-          node tools/test-hidpi.cjs
-          node tools/test-settings.cjs --out app-tests/settings-phone
-          node tools/test-settings.cjs --tablet --out app-tests/settings-tablet
-          node tools/test-backup.cjs --out app-tests/backup-phone
-          node tools/test-backup.cjs --tablet --out app-tests/backup-tablet
-          node tools/test-marketplace.cjs --out app-tests/marketplace-phone
-          node tools/test-marketplace.cjs --tablet --out app-tests/marketplace-tablet
-          node tools/test-appmanager.cjs
-          node tools/test-updates.cjs --out app-tests/updates-phone
-          node tools/test-updates.cjs --tablet --out app-tests/updates-tablet
-          node tools/test-phone-messaging.cjs --out app-tests/phone-messaging-phone
-          node tools/test-phone-messaging.cjs --tablet --out app-tests/phone-messaging-tablet
-          node tools/test-media.cjs --out app-tests/media-phone
-          node tools/test-media.cjs --tablet --out app-tests/media-tablet
-          node tools/test-justtype.cjs --out app-tests/justtype-phone
-          node tools/test-justtype.cjs --tablet --out app-tests/justtype-tablet
-          node tools/test-browser.cjs --out app-tests/browser-phone
-          node tools/test-browser.cjs --tablet --out app-tests/browser-tablet
-          node tools/test-files.cjs --out app-tests/files-phone
-          node tools/test-files.cjs --tablet --out app-tests/files-tablet
-          node tools/test-tasks.cjs --out app-tests/tasks-phone
-          node tools/test-tasks.cjs --tablet --out app-tests/tasks-tablet
-          node tools/test-db8-pages.cjs --out app-tests/db8-pages
-          node tools/test-alarm.cjs --out app-tests/alarm
-          node tools/test-voicememos.cjs --out app-tests/voicememos-phone
-          node tools/test-voicememos.cjs --tablet --out app-tests/voicememos-tablet
-          node tools/test-flashlight.cjs --out app-tests/flashlight-phone
-          node tools/test-flashlight.cjs --tablet --out app-tests/flashlight-tablet
-          node tools/test-screenshot.cjs --out app-tests/screenshot-phone
-          node tools/test-screenshot.cjs --tablet --out app-tests/screenshot-tablet
-          node tools/test-notificationlab.cjs --out app-tests/notificationlab-phone
-          node tools/test-notificationlab.cjs --tablet --out app-tests/notificationlab-tablet
-          node tools/test-scanner.cjs --out app-tests/scanner-phone
-          node tools/test-scanner.cjs --tablet --out app-tests/scanner-tablet
-          node tools/test-weather.cjs --out app-tests/weather-phone
-          node tools/test-weather.cjs --tablet --out app-tests/weather-tablet
-          node tools/test-maps.cjs --out app-tests/maps-phone
-          node tools/test-maps.cjs --tablet --out app-tests/maps-tablet
-          node tools/test-passwords.cjs --out app-tests/passwords-phone
-          node tools/test-passwords.cjs --tablet --out app-tests/passwords-tablet
-          node tools/test-authenticator.cjs --out app-tests/authenticator-phone
-          node tools/test-authenticator.cjs --tablet --out app-tests/authenticator-tablet
-          node tools/test-clipboard.cjs --out app-tests/clipboard-phone
-          node tools/test-clipboard.cjs --tablet --out app-tests/clipboard-tablet
-          node tools/test-terminal.cjs --out app-tests/terminal-phone
-          node tools/test-terminal.cjs --tablet --out app-tests/terminal-tablet
-          node tools/test-videos.cjs --out app-tests/videos-phone
-          node tools/test-videos.cjs --tablet --out app-tests/videos-tablet
-          node tools/test-podcasts.cjs --out app-tests/podcasts-phone
-          node tools/test-podcasts.cjs --tablet --out app-tests/podcasts-tablet
-          node tools/test-docs.cjs --out app-tests/docs-phone
-          node tools/test-docs.cjs --tablet --out app-tests/docs-tablet
-          node tools/test-dav-sync.cjs --out app-tests/dav-phone
-          node tools/test-dav-sync.cjs --tablet --out app-tests/dav-tablet
-          node tools/test-orientation.cjs --out app-tests/orientation-phone
-          node tools/test-orientation.cjs --tablet --out app-tests/orientation-tablet
-          node tools/test-keyboard.cjs --out app-tests/keyboard-phone
-          node tools/test-keyboard.cjs --tablet --out app-tests/keyboard-tablet
-          node tools/test-editing.cjs --out app-tests/editing-phone
-          node tools/test-editing.cjs --tablet --out app-tests/editing-tablet
-          node tools/test-firstuse.cjs --out app-tests/firstuse-phone
-          node tools/test-firstuse.cjs --tablet --out app-tests/firstuse-tablet
-          node tools/test-help.cjs --out app-tests/help-phone
-          node tools/test-help.cjs --tablet --out app-tests/help-tablet
-          node tools/test-emergency.cjs --out app-tests/emergency-phone
-          node tools/test-emergency.cjs --tablet --out app-tests/emergency-tablet
-          node tools/test-location.cjs --out app-tests/location-phone
-          node tools/test-location.cjs --tablet --out app-tests/location-tablet
-          node tools/test-enact-notes.cjs --out app-tests/enact-notes
-          node tools/test-ionic-notes.cjs --out app-tests/ionic-notes
-          node tools/test-flutter-notes.cjs --out app-tests/flutter-notes
+          # A failing test's command and its last lines become annotations,
+          # readable without the log.
+          t() {
+            "$@" 2>&1 | tee web-test.log
+            local status=${PIPESTATUS[0]}
+            if [ "$status" -ne 0 ]; then
+              echo "::error title=Web test failed::$*"
+              tail -9 web-test.log | while IFS= read -r line; do echo "::error title=Web test output::$line"; done
+              exit "$status"
+            fi
+          }
+          t node tools/test-apps.cjs --out app-tests/phone
+          t node tools/test-apps.cjs --tablet --out app-tests/tablet
+          t node tools/test-hidpi.cjs
+          t node tools/test-settings.cjs --out app-tests/settings-phone
+          t node tools/test-settings.cjs --tablet --out app-tests/settings-tablet
+          t node tools/test-backup.cjs --out app-tests/backup-phone
+          t node tools/test-backup.cjs --tablet --out app-tests/backup-tablet
+          t node tools/test-marketplace.cjs --out app-tests/marketplace-phone
+          t node tools/test-marketplace.cjs --tablet --out app-tests/marketplace-tablet
+          t node tools/test-appmanager.cjs
+          t node tools/test-updates.cjs --out app-tests/updates-phone
+          t node tools/test-updates.cjs --tablet --out app-tests/updates-tablet
+          t node tools/test-phone-messaging.cjs --out app-tests/phone-messaging-phone
+          t node tools/test-phone-messaging.cjs --tablet --out app-tests/phone-messaging-tablet
+          t node tools/test-media.cjs --out app-tests/media-phone
+          t node tools/test-media.cjs --tablet --out app-tests/media-tablet
+          t node tools/test-justtype.cjs --out app-tests/justtype-phone
+          t node tools/test-justtype.cjs --tablet --out app-tests/justtype-tablet
+          t node tools/test-browser.cjs --out app-tests/browser-phone
+          t node tools/test-browser.cjs --tablet --out app-tests/browser-tablet
+          t node tools/test-files.cjs --out app-tests/files-phone
+          t node tools/test-files.cjs --tablet --out app-tests/files-tablet
+          t node tools/test-tasks.cjs --out app-tests/tasks-phone
+          t node tools/test-tasks.cjs --tablet --out app-tests/tasks-tablet
+          t node tools/test-db8-pages.cjs --out app-tests/db8-pages
+          t node tools/test-alarm.cjs --out app-tests/alarm
+          t node tools/test-voicememos.cjs --out app-tests/voicememos-phone
+          t node tools/test-voicememos.cjs --tablet --out app-tests/voicememos-tablet
+          t node tools/test-flashlight.cjs --out app-tests/flashlight-phone
+          t node tools/test-flashlight.cjs --tablet --out app-tests/flashlight-tablet
+          t node tools/test-screenshot.cjs --out app-tests/screenshot-phone
+          t node tools/test-screenshot.cjs --tablet --out app-tests/screenshot-tablet
+          t node tools/test-notificationlab.cjs --out app-tests/notificationlab-phone
+          t node tools/test-notificationlab.cjs --tablet --out app-tests/notificationlab-tablet
+          t node tools/test-scanner.cjs --out app-tests/scanner-phone
+          t node tools/test-scanner.cjs --tablet --out app-tests/scanner-tablet
+          t node tools/test-weather.cjs --out app-tests/weather-phone
+          t node tools/test-weather.cjs --tablet --out app-tests/weather-tablet
+          t node tools/test-maps.cjs --out app-tests/maps-phone
+          t node tools/test-maps.cjs --tablet --out app-tests/maps-tablet
+          t node tools/test-passwords.cjs --out app-tests/passwords-phone
+          t node tools/test-passwords.cjs --tablet --out app-tests/passwords-tablet
+          t node tools/test-authenticator.cjs --out app-tests/authenticator-phone
+          t node tools/test-authenticator.cjs --tablet --out app-tests/authenticator-tablet
+          t node tools/test-clipboard.cjs --out app-tests/clipboard-phone
+          t node tools/test-clipboard.cjs --tablet --out app-tests/clipboard-tablet
+          t node tools/test-terminal.cjs --out app-tests/terminal-phone
+          t node tools/test-terminal.cjs --tablet --out app-tests/terminal-tablet
+          t node tools/test-videos.cjs --out app-tests/videos-phone
+          t node tools/test-videos.cjs --tablet --out app-tests/videos-tablet
+          t node tools/test-podcasts.cjs --out app-tests/podcasts-phone
+          t node tools/test-podcasts.cjs --tablet --out app-tests/podcasts-tablet
+          t node tools/test-docs.cjs --out app-tests/docs-phone
+          t node tools/test-docs.cjs --tablet --out app-tests/docs-tablet
+          t node tools/test-dav-sync.cjs --out app-tests/dav-phone
+          t node tools/test-dav-sync.cjs --tablet --out app-tests/dav-tablet
+          t node tools/test-orientation.cjs --out app-tests/orientation-phone
+          t node tools/test-orientation.cjs --tablet --out app-tests/orientation-tablet
+          t node tools/test-keyboard.cjs --out app-tests/keyboard-phone
+          t node tools/test-keyboard.cjs --tablet --out app-tests/keyboard-tablet
+          t node tools/test-editing.cjs --out app-tests/editing-phone
+          t node tools/test-editing.cjs --tablet --out app-tests/editing-tablet
+          t node tools/test-firstuse.cjs --out app-tests/firstuse-phone
+          t node tools/test-firstuse.cjs --tablet --out app-tests/firstuse-tablet
+          t node tools/test-help.cjs --out app-tests/help-phone
+          t node tools/test-help.cjs --tablet --out app-tests/help-tablet
+          t node tools/test-emergency.cjs --out app-tests/emergency-phone
+          t node tools/test-emergency.cjs --tablet --out app-tests/emergency-tablet
+          t node tools/test-location.cjs --out app-tests/location-phone
+          t node tools/test-location.cjs --tablet --out app-tests/location-tablet
+          t node tools/test-enact-notes.cjs --out app-tests/enact-notes
+          t node tools/test-ionic-notes.cjs --out app-tests/ionic-notes
+          t node tools/test-flutter-notes.cjs --out app-tests/flutter-notes
 
       - name: Screenshots
         run: |
@@ -308,7 +319,7 @@ jobs:
       - name: Report failed behaviour tests
         if: failure()
         run: |
-          grep -A4 -E '^(FAIL!|XPASS)' qml-tests.log | head -60 | while IFS= read -r line; do
+          grep -A2 -E '^(FAIL!|XPASS)' qml-tests.log | head -10 | while IFS= read -r line; do
             echo "::error title=QML test::$line"
           done || true
 
