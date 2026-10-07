@@ -2508,3 +2508,41 @@ and checks `navigator.geolocation`.
 On a device, the per-app permission is a Phoenix service still to write,
 in front of OSE's location service.
 
+
+## Community features (M6 F4)
+
+What the community's options picked for 1.0 ([M6-PLAN.md](M6-PLAN.md) F4)
+add to the runtime and the original apps:
+
+- **Settings > Advanced** writes system preferences (LunaCE's own keys
+  where it had the option: `infiniteCardCyclingEnabled`,
+  `sysUiEnableMaximizeEdges`, `sysUiEnableWaveLauncher`,
+  `showReticleAnimation`; Phoenix's `animationSpeed`, `gestureSensitivity`,
+  `hapticFeedback`, `launcherGridDensity`, `showBatteryPercent`,
+  `keyboardNumberRow`, `emailDashboardCycling`), and the shell gets them as
+  the systemStatus `tweaks`. Settings > Sounds & Ringtones > Repeat alerts
+  is `notificationRepeat` {enabled, minutes, apps}; Screen & Lock > Show
+  previews is `lockScreenPreviews`.
+- **Preferences across pages**: a page's getPreferences subscribers hear a
+  preference another page changed (the store's storage event), as every
+  subscriber on the bus did.
+- **The power menu**: the shell sends com.palm.display's
+  `/com/palm/display` `powerKeyPressed {showDialog: true}` signal to the
+  pages' `com.palm.bus/signal/addmatch` listeners (`displaySignal`);
+  luna-systemui opens its PowerOffAlert (compat overlay of
+  `app/PowerdAlerts/PowerdAlerts.js`: Airplane Mode, Luna Restart, Device
+  Restart, Shut Down, Cancel). The `airplaneMode` preference now turns the
+  radios off and on. `com.palm.power/shutdown/machineOff` turns the
+  simulator off (dark until Power) and `org.webosphoenix.system/restartUi`
+  restarts its UI.
+- **Contact tones**: Contacts' Edit has a Tones group (compat
+  `app/phoenix-tones.js`): the person's own ringtone (`com.palm.person`
+  ringtone) and a message tone in `org.webosphoenix.contacttone:1`
+  {personId, messageTone: {name, location}}; a text from that person comes
+  with `soundFile` set to it.
+- **Email's cycling dashboard**: with `emailDashboardCycling`, the Email
+  app's new-mail dashboards (compat `source/phoenix-dashboard.js`,
+  `phoenix-dashboard/`) show one new email at a time with its time and a
+  delete button.
+
+Tests: `apps/shared/luna/src/tweaks.test.ts`, `tools/test-community.cjs`.

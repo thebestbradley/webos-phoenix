@@ -111,6 +111,17 @@ Item {
     }
     // Tablet: the keyboard size, -2 to 1 (XS, S, M, L).
     property int keyboardSize: 0
+    // Settings > Text Assist > Number row (docs/M6-PLAN.md F4; the
+    // community's keyboard layout patches): the phone keyboard gets a row of
+    // numbers above its letters, three quarters of a letter row tall, and
+    // grows by it. The tablet keyboard has its number row already.
+    property bool numberRow: false
+    onNumberRowChanged: {
+        if (_km && _km.setNumberRow(numberRow)) {
+            _extendedKeys = null;
+            _availableSpaceChanged();
+        }
+    }
 
     // sendKeyDownUp: a key press and release for the input field.
     signal keyTyped(int key, int modifiers)
@@ -698,6 +709,11 @@ Item {
     // key-*.png: two states stacked, 48x96 phone, 93x140 tablet;
     // key-gray-short.png 93x110 (the tablet's number row).
     readonly property int _keyHalf: tablet ? 70 : 48
+    // The phone's number row: three quarters of a letter row.
+    readonly property int _numberRowHalf: 36
+    function _rowHalf(r) {
+        return tablet && r === 0 ? _shortKeyHalf : _km && _km.numberRow && r === 0 ? _numberRowHalf : _keyHalf;
+    }
     readonly property int _shortKeyHalf: 55
     // 9-tile corners: 22 phone, 13 tablet (PhoneKeyboard.cpp:181, TabletKeyboard.cpp:176).
     readonly property int _corner: tablet ? 13 : 22
@@ -764,7 +780,7 @@ Item {
     // Made once (and again for the other form factor, _reset); the layout
     // changes in place (setLayoutFamily), keeping its size. Not a binding on
     // layoutName: that would make a new, unsized keymap on each change.
-    property var _km: new KM.Keymap(tablet, "qwerty")
+    property var _km: new KM.Keymap(tablet, "qwerty", numberRow)
     onTabletChanged: _reset()
     onLayoutNameChanged: {
         // (Bound to the keyboard in use: it can change before _km is made.)
@@ -786,7 +802,7 @@ Item {
         _refreshCandidates();
     }
     function _reset() {
-        _km = new KM.Keymap(tablet, layoutName);
+        _km = new KM.Keymap(tablet, layoutName, numberRow);
         _km.setCombos(_comboNames, keyboardIndex);
         _touches = ({});
         _extendedKeys = null;
@@ -842,8 +858,10 @@ Item {
     function _presetHeight() {
         if (tablet)
             return _tabletPresets[Math.max(0, Math.min(3, 2 + keyboardSize))];
-        // PhoneKeyboard.cpp:231-232: 377 upright (Phoenix: cPhoneHeight), 260 on its side.
-        return _landscape ? 260 : cPhoneHeight;
+        // PhoneKeyboard.cpp:231-232: 377 upright (Phoenix: cPhoneHeight), 260 on its side;
+        // the number row adds its share (keeping the letter rows' size).
+        var h = _landscape ? 260 : cPhoneHeight;
+        return _km && _km.numberRow ? Math.round(h * (_bgHeight + _numberRowHalf) / _bgHeight) : h;
     }
 
     function _availableSpaceChanged() {
@@ -863,7 +881,7 @@ Item {
         _km.setLayoutFamily(layoutName);
         _km.setCombos(_comboNames, keyboardIndex);
         TA.setLanguage(language, layoutName);
-        _km.setRowHeight(0, tablet ? _shortKeyHalf : _keyHalf);
+        _km.setRowHeight(0, _rowHalf(0));
         _availableSpaceChanged();
         _km.setEditorState(editorState);
         _resetShortcuts(editorState);
@@ -875,7 +893,7 @@ Item {
         var width = _spaceWidth, screenHeight = _spaceHeight;
         var rows = _km.rows;
         for (var r = 0; r < rows; ++r)
-            _km.setRowHeight(r, tablet && r === 0 ? _shortKeyHalf : _keyHalf);
+            _km.setRowHeight(r, _rowHalf(r));
         if (tablet)
             height = Math.min(height, screenHeight - 28);
         else
@@ -883,8 +901,9 @@ Item {
         if (height <= 0 || width <= 0)
             return;
         // The art's "ideal" sizes; the padding above the keys scales with them.
-        var fullHeight = _bgHeight;
-        var fullKeymapHeight = tablet ? Math.floor((2 * _shortKeyHalf + (rows - 1) * 2 * _keyHalf) / 2) : rows * _keyHalf;
+        var fullHeight = _bgHeight + (_km.numberRow ? _numberRowHalf : 0);
+        var fullKeymapHeight = tablet ? Math.floor((2 * _shortKeyHalf + (rows - 1) * 2 * _keyHalf) / 2)
+                                      : (_km.numberRow ? _numberRowHalf + (rows - 1) * _keyHalf : rows * _keyHalf);
         if (fullHeight < fullKeymapHeight)
             fullHeight = fullKeymapHeight;
         var keymapHeight = Math.floor(height * fullKeymapHeight / fullHeight);

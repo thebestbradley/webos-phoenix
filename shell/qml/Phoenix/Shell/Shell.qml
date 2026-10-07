@@ -3091,6 +3091,8 @@ FocusScope {
                 objectName: "virtualKeyboard"
                 dictation: shell.dictation
                 tablet: shell.tablet
+                // Settings > Text Assist > Number row (the phone keyboard).
+                numberRow: shell.tweak("numberRow")
                 pixelScale: Theme.keyboardScale
                 availableWidth: ui.width
                 availableHeight: ui.height

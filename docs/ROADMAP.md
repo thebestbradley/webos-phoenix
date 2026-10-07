@@ -287,6 +287,8 @@ Agreed with the owner on 7 October 2026; [M6-PLAN.md](M6-PLAN.md) has the detail
   - [x] Cards: infinite cycling, tap a side card to maximize it, the wave launcher (in the simulator)
   - [x] System: the power menu (hold Power), a Flashlight row in the system menu, battery percentage (in the simulator)
   - [x] Notifications: repeat until seen, private lock screen previews, the cycling email dashboard, per-contact tones (in the simulator)
+  - [x] Settings > Advanced (animation speed, tap ripple, gesture sensitivity, haptics and the options above) (in the simulator)
+  - [x] Keyboard: a number row, off by default (in the simulator)
 
 ## 1.0 release
 

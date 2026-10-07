@@ -230,9 +230,11 @@ before it's built.
    - Tap ripple.
    - Gesture sensitivity.
    - Haptics.
+   - **Built (7 October 2026, in the simulator).** Settings > Advanced (`apps/settings/src/pages/Advanced.tsx`, in the hub's Advanced group with Developer Mode, a launch point with its own icon, `art/app-icons/objects/advancedpane.svg`): Launcher (icon grid), Cards (infinite card cycling, open side cards), Gestures (wave launcher, gesture sensitivity Low / Normal / High, tap ripple), Status bar (battery percentage), Notifications (cycling email dashboard), Feedback (animation speed Normal / Fast, vibrate on tap). Each is a system preference (LunaCE's own key where it had the option: `infiniteCardCyclingEnabled`, `sysUiEnableMaximizeEdges`, `sysUiEnableWaveLauncher`, `showReticleAnimation`) that the shell follows at once through the runtime's systemStatus `tweaks` (`Shell.tweak()`). Fast runs the shell's animations (those through `Theme.motion`) in 60% of their time; gesture sensitivity scales the gesture area's swipe, the bezel flick and the card flick thresholds (High 0.6×, Low 1.5×); tap ripple off drops the reticle; vibrate on tap sends com.palm.vibrate's tapdown on every tap. Keyboard size stays where Phoenix already has it (the keyboard's own size keys and Text Assist), not repeated here. Tests: `tst_tweaks.qml`, `tools/test-community.cjs`, `apps/shared/luna/src/tweaks.test.ts`.
 6. **Keyboard: a number row**
    - Off by default.
    - A switch in Settings turns it on.
+   - **Built (7 October 2026, in the simulator).** Settings > Text Assist > Layout > Number row (`keyboardNumberRow`, off): the phone keyboard gets a row of digits above its letters, with the symbols above them and their long-press characters as on the symbol page, three quarters of a letter row tall; the keyboard grows by it and the letter keys keep their size (`KeyboardKeymap.js` `phoneNumberRow`, `setNumberRow`; `VirtualKeyboard.qml`). The tablet keyboard is the TouchPad's, which has a number row already. Tests: `tst_keyboard.qml` `test_numberRow`, `tools/test-community.cjs`.
 7. **Browser**
    - Private browsing.
    - Find in page.

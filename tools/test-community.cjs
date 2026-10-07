@@ -4,8 +4,9 @@
 //
 // The community's features picked for 1.0 (docs/M6-PLAN.md F4) in the web
 // side, in headless Chromium against runtime/phoenix-runtime.js:
-//   - Settings > Advanced: every option is a system preference that reaches
-//     the shell as the systemStatus tweaks; Settings > Sounds & Ringtones >
+//   - Settings > Advanced (and Text Assist > Number row): every option is a
+//     system preference that reaches the shell as the systemStatus tweaks;
+//     Settings > Sounds & Ringtones >
 //     Repeat alerts and Screen & Lock > Show previews likewise;
 //   - Contacts' Tones (compat app/phoenix-tones.js): a ringtone and a
 //     message tone picked for a contact are kept, and a text from them
@@ -122,6 +123,10 @@ async function main() {
         await until(async () => (await svc(st, "luna://com.webos.service.systemservice/getPreferences", { keys: ["emailDashboardCycling"] })).emailDashboardCycling === true,
                     "Advanced: the cycling email dashboard is a preference");
         await st.screenshot({ path: path.join(outDir, "advanced.png"), fullPage: true });
+
+        await open("textassist");
+        await st.click("[data-testid='ta-numberrow']");
+        await until(() => tweaks().numberRow === true, "Text Assist > Number row reaches the shell");
 
         await open("sounds");
         await st.click("[data-testid='repeat-toggle']");

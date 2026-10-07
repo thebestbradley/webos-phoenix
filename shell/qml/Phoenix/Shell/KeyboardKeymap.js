@@ -244,6 +244,17 @@ function phoneAzerty() {   // sAzerty (:275-280)
     ];
 }
 
+// Phoenix: a row of numbers above the letters (docs/M6-PLAN.md F4; the
+// community's keyboard layout patches), for the phone keyboard, whose
+// digits are otherwise on the letters' symbol page (the tablet keyboard
+// has its own number row, TabletKeymap.cpp:188-194). The digits, the
+// symbols above them on the symbol page and the same long-press
+// characters as there (PX.q1 ...), all 12 cells as the letter rows.
+function phoneNumberRow() {
+    return pairs(1, "1234567890", "!@#$%^&*()",
+                 [PX.q1, PX.q2, PX.q3, PX.q4, PX.q5, PX.q6, PX.q7, PX.q8, PX.q9, PX.q0]).concat(nokeys(2));
+}
+
 // The keys around the space bar (beforeSpace, leftSpace, rightSpace,
 // afterSpace) for plain, symbol, e-mail and URL fields (:284-308).
 function phoneCustom(azerty) {
@@ -467,9 +478,11 @@ var SymbolMode = { Off: 0, Lock: 1 };
 // choosing. The layout tables are copied, since the original rewrote its
 // (static) bottom row in place as fields changed.
 
-function Keymap(tablet, familyName) {
+function Keymap(tablet, familyName, numberRow) {
     this.tablet = !!tablet;
-    this.rows = tablet ? 5 : 4;          // cKeymapRows
+    // The phone keyboard's number row (Phoenix; phoneNumberRow): a fifth row.
+    this.numberRow = !tablet && !!numberRow;
+    this.rows = tablet || this.numberRow ? 5 : 4;   // cKeymapRows
     this.columns = 12;                   // cKeymapColumns
     this.shiftMode = ShiftMode.Off;
     this.symbolMode = SymbolMode.Off;
@@ -507,6 +520,8 @@ Keymap.prototype.setLayoutFamily = function (name, force) {
         return false;
     this.family = family;
     this.layout = family.layout();
+    if (this.numberRow)
+        this.layout = [phoneNumberRow()].concat(this.layout);
     if (this.tablet) {
         this.bottomRows = { "": tabletRowWithEmoji(family.bottomRow("")), noEmoji: family.bottomRow(""),
                             url: family.bottomRow("url"), email: family.bottomRow("email") };
@@ -515,6 +530,20 @@ Keymap.prototype.setLayoutFamily = function (name, force) {
         this.custom = phoneCustomWithEmoji(family.custom());
     }
     this.setEditorState(this.editorState, true);
+    this.limitsDirty = true;
+    return true;
+};
+
+// The phone keyboard's number row on or off: the rows and the layout
+// again. Returns whether anything changed.
+Keymap.prototype.setNumberRow = function (on) {
+    on = !this.tablet && !!on;
+    if (on === this.numberRow)
+        return false;
+    this.numberRow = on;
+    this.rows = on ? 5 : 4;
+    this.rowHeight = on ? [1].concat(this.rowHeight.slice(0, 4)) : this.rowHeight.slice(1);
+    this.setLayoutFamily(this.family.name || "qwerty", true);
     this.limitsDirty = true;
     return true;
 };

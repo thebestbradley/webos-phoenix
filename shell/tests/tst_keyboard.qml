@@ -52,6 +52,7 @@ Item {
             field.inputMethodHints = Qt.ImhNone;
             field.echoMode = TextInput.Normal;
             kb.emojiPrefs = "{}";
+            sys.tweaks = {};
             field.focus = false;
             shell.forceActiveFocus();
             tryCompare(shell, "keyboardOpen", false, 2000);
@@ -178,6 +179,35 @@ Item {
             compare(kb.keymap.shiftMode, 0);
             tapKey("a");
             compare(field.text, "HiOKa");
+        }
+
+        // Settings > Text Assist > Number row (docs/M6-PLAN.md F4): a row
+        // of digits above the letters, three quarters of a letter row; the
+        // keyboard grows by it and the letter keys keep their size. Off by
+        // default.
+        function test_numberRow() {
+            showKeyboard();
+            var q = kb.keyRect("q"), height = kb.keysHeight;
+            verify(kb.keyRect("1") === null, "no number row by default");
+            field.focus = false;
+            shell.forceActiveFocus();
+            tryCompare(shell, "keyboardOpen", false, 2000);
+            sys.tweaks = { numberRow: true };
+            showKeyboard();
+            fuzzyCompare(kb.keysHeight, Math.round(336 * 236 / 200) / 1.5, 0.01);
+            var one = kb.keyRect("1"), q2 = kb.keyRect("q");
+            verify(one !== null && one.y < q2.y, "the digits above the letters");
+            fuzzyCompare(q2.height, q.height, 1);
+            fuzzyCompare(one.height, q.height * 36 / 48, 1);
+            type(["1", "2", "q"]);
+            compare(field.text, "12q");
+            field.focus = false;
+            shell.forceActiveFocus();
+            tryCompare(shell, "keyboardOpen", false, 2000);
+            sys.tweaks = {};
+            showKeyboard();
+            fuzzyCompare(kb.keysHeight, height, 0.01);
+            verify(kb.keyRect("1") === null);
         }
 
         function test_symbols() {

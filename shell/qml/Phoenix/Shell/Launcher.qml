@@ -546,7 +546,7 @@ Item {
     // Phones: 3 across the Pre's 320 upright, and as many of those cells as
     // fit when it is turned or wider (4 on its side); the original never
     // turned the phone's launcher.
-    // Dense (Settings > Advanced): tablets at a 108 px pitch, 104 px rows,
+    // Dense (Settings > Advanced): tablets at a 108 px pitch, 114 px rows,
     // in 100 px cells; phones 4 across the Pre's 320, the icon grid patches'
     // 4 x 4 (the icons keep their size).
     readonly property real cellPitch: dense ? Theme.px(108) : Theme.launcherCellPitch
@@ -556,7 +556,7 @@ Item {
         ? Math.max(1, Math.floor((pages.width - Theme.launcherRowLeftMargin) / cellPitch))
         : Math.max(phoneColumns, Math.floor(pages.width / (Theme.px(320) / phoneColumns) + 0.001))
     readonly property real cellWidth: Theme.tablet ? cellPitch : pages.width / columns
-    readonly property real cellHeight: Theme.tablet ? (dense ? Theme.px(104) : Theme.launcherRowPitch)
+    readonly property real cellHeight: Theme.tablet ? (dense ? Theme.px(114) : Theme.launcherRowPitch)
                                                     : Theme.launcherIconSize + Theme.px(dense ? 40 : 48)
     readonly property real rowLeft: Theme.tablet
         ? Math.max(Theme.launcherRowLeftMargin, Math.floor((pages.width - columns * cellPitch) / 2))

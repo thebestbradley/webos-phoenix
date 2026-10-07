@@ -57,7 +57,7 @@ export function AdvancedPage() {
             </Group>
             <Group label="Cards">
                 {toggle("infiniteCardCyclingEnabled", "Infinite card cycling", "Past the last card is the first")}
-                {toggle("sysUiEnableMaximizeEdges", "Tap side cards to open", "A tap on a card at the edge opens it at once")}
+                {toggle("sysUiEnableMaximizeEdges", "Open side cards", "A tap on a card at the edge opens it")}
             </Group>
             <Group label="Gestures">
                 {toggle("sysUiEnableWaveLauncher", "Wave launcher", "Slide up from a side of the gesture area for your dock's apps")}
