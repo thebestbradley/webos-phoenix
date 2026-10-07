@@ -2845,6 +2845,7 @@ FocusScope {
                     z: 1003
                     source: shell.source
                     dictation: shell.dictation
+                    speech: shell.speech
                     backdrop: sceneBackdrop
                     bottomInset: notes.negativeSpace
                     appIcon: {

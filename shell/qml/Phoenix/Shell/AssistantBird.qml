@@ -49,6 +49,9 @@ Item {
     // Listening: the microphone's loudness, 0 to 1; below 0: none known.
     property real level: -1
     property bool animated: !Theme.reduceMotion
+    // A soft warm light behind it (the flame's), so the black bird reads on
+    // a dark ground (the assistant's view).
+    property bool glow: false
     // Its own motion only while drawn.
     readonly property bool _live: animated && visible && opacity > 0
 
@@ -157,7 +160,8 @@ Item {
     readonly property var _hop: art.motion.hop
     property real _liftTo: 0
     function _applyLift() {
-        var to = poseSpec.lift;
+        // From the pose itself: poseSpec may not have caught up yet here.
+        var to = (art.poses[pose] || art.poses.idle).lift;
         if (Math.abs(to - lift) < 0.001 && !liftUp.running && !liftDown.running)
             return;
         liftUp.stop();
@@ -476,6 +480,21 @@ Item {
                 Translate { y: -bird.lift }
             ]
 
+            Shape {
+                visible: bird.glow
+                preferredRendererType: Shape.CurveRenderer
+                ShapePath {
+                    strokeColor: "transparent"
+                    fillGradient: RadialGradient {
+                        centerX: 208; centerY: 236; centerRadius: 210
+                        focalX: 208; focalY: 236
+                        GradientStop { position: 0; color: "#40F2B705" }
+                        GradientStop { position: 0.55; color: "#18F2B705" }
+                        GradientStop { position: 1; color: "#00F2B705" }
+                    }
+                    PathSvg { path: "M-2 236 A210 210 0 1 0 418 236 A210 210 0 1 0 -2 236 Z" }
+                }
+            }
             Flicker { name: "tail"; running: bird._live; Part { name: "tail" } }
             Flicker { name: "tailInner"; running: bird._live; Part { name: "tailInner" } }
 

@@ -28,6 +28,16 @@
 // microphone while it listens; three dots bounce in a bubble while the
 // assistant thinks.
 //
+// The assistant's bird (AssistantBird, docs/ASSISTANT-CHARACTER.md) sits at
+// the top of the panel and plays the storyboard: it rises with the panel
+// asleep, wakes and waves (hello), listens while the microphone is on,
+// thinks while a request waits, works then cheers (done) when a command
+// ran, speaks while the answer is spoken, asks while a read-back waits,
+// shrugs (confused) at "I can't do that" with its choices, says oops (shy)
+// when something failed, and idles otherwise; it falls asleep again as the
+// panel goes back into the button. Where the panel is short (a phone's
+// keyboard up, landscape) it sits small beside the field.
+//
 // All through the window source's lunaCall (in phoenix-sim the runtime's
 // service in the system UI page; on a device the bus).
 
@@ -53,6 +63,9 @@ Item {
     property point origin: Qt.point(width / 2, height)
     // The Assistant app's icon (its launcher entry's), for the app button.
     property url appIcon: ""
+    // The shell's speech (Phoenix.Native Speech), or null: the bird speaks
+    // while it does.
+    property var speech: null
 
     signal closeRequested()
     // The app button: open the Assistant app on this conversation ("" for
@@ -85,7 +98,14 @@ Item {
     property int _pending: 0
 
     onOpenChanged: {
+        _beats = [];
+        beat = "";
+        beatTimer.stop();
         if (open) {
+            // The bird rises asleep with the panel, then wakes and waves.
+            _wake = "asleep";
+            wakeTimer.interval = Theme.launcherDuration + _beatMs(80);
+            wakeTimer.restart();
             ++_session;
             status = "";
             busy = false;
@@ -101,6 +121,8 @@ Item {
             else
                 ov.forceActiveFocus();
         } else {
+            _wake = "";
+            wakeTimer.stop();
             ++_session;
             busy = false;
             stopListening(true);
@@ -155,12 +177,15 @@ Item {
         busy = false;
         if (!r) {
             status = qsTr("The assistant is not running.");
+            _play(beatsFor("failed"));
             return;
         }
         if (r.returnValue === false) {
             status = String(r.errorText || qsTr("Something went wrong."));
+            _play(beatsFor("failed"));
             return;
         }
+        _play(beatsFor(outcomeOf(r.messages)));
         if (r.thread)
             threadId = r.thread.id;
         refresh();
@@ -219,6 +244,97 @@ Item {
     function openApp() {
         appRequested(threadId);
     }
+
+    // ---- The bird ----------------------------------------------------------------------
+    // What a request's reply was, from its new messages (the service's
+    // message status, apps/assistant/service/assistant.js): "done" (a
+    // command ran), "failed", "asking" (a read-back waits), "choices"
+    // ("I can't do that" with Ask/Search), "cancelled", or "answer".
+    function outcomeOf(list) {
+        var last = null;
+        for (var i = (list || []).length - 1; i >= 0 && !last; --i)
+            if (list[i] && list[i].role === "assistant")
+                last = list[i];
+        if (!last)
+            return "answer";
+        if (last.status === "failed")
+            return "failed";
+        if (last.status === "pending" && last.confirm)
+            return "asking";
+        if (last.choices && last.choices.length && !last.chosen)
+            return "choices";
+        if (last.status === "done" && last.command)
+            return "done";
+        if (last.status === "cancelled")
+            return "cancelled";
+        return "answer";
+    }
+    // The poses an outcome plays, each for a time (ms at normal speed),
+    // before the bird goes back to what is going on (Story.dc.html: working
+    // on it, then done's hop of about 700 ms; a shrug or an oops, then it
+    // bounces back).
+    function beatsFor(outcome) {
+        switch (outcome) {
+        case "done": return [{ pose: "working", ms: 450 }, { pose: "done", ms: 700 }];
+        case "failed": return [{ pose: "shy", ms: 1500 }];
+        case "choices": return [{ pose: "confused", ms: 1500 }];
+        default: return [];
+        }
+    }
+    // Beats follow Animation speed, not Reduce motion (they say what
+    // happened; the bird holds each still then).
+    function _beatMs(ms) { return Math.max(1, Math.round(ms * Theme.animationScale)); }
+    property var _beats: []
+    property string beat: ""
+    function _play(list) {
+        _beats = (list || []).slice();
+        _nextBeat();
+    }
+    function _nextBeat() {
+        if (_beats.length === 0) {
+            beat = "";
+            beatTimer.stop();
+            // No speech with the answer: a nod as it appears.
+            if (!speaking)
+                bird.nod();
+            return;
+        }
+        var b = _beats.shift();
+        beat = b.pose;
+        beatTimer.interval = _beatMs(b.ms);
+        beatTimer.restart();
+    }
+    Timer { id: beatTimer; onTriggered: ov._nextBeat() }
+    // Opening: asleep while the panel grows, then a wave.
+    property string _wake: ""
+    Timer {
+        id: wakeTimer
+        onTriggered: {
+            if (ov._wake === "asleep") {
+                ov._wake = "hello";
+                interval = ov._beatMs(650);
+                restart();
+            } else {
+                ov._wake = "";
+            }
+        }
+    }
+    readonly property bool speaking: !!speech && !!speech.speaking
+    // A read-back waiting for its answer.
+    readonly property bool asking: {
+        for (var i = messages.length - 1; i >= 0; --i)
+            if (messages[i].role === "assistant")
+                return messages[i].status === "pending" && !!messages[i].confirm;
+        return false;
+    }
+    readonly property string birdPose: !open ? "asleep"
+        : _wake !== "" ? _wake
+        : listening ? (dictation && dictation.busy ? "thinking" : "listening")
+        : busy ? "thinking"
+        : beat !== "" ? beat
+        : speaking ? "speaking"
+        : asking ? "asking"
+        : "idle"
 
     // ---- The microphone ----------------------------------------------------------------
     readonly property string _owner: "assistant"
@@ -331,6 +447,14 @@ Item {
     readonly property real panelWidth: Math.min(width - Theme.px(24), Theme.px(Theme.tablet ? 560 : 420))
     // The panel's growth: from a fifth of its size at the origin.
     readonly property real _panelScale: 0.2 + 0.8 * shown
+    // The bird: 96 to 140 px at the top in the middle; where the panel is
+    // too short for that and a conversation (a phone's keyboard up, a
+    // phone on its side), small beside the field.
+    readonly property bool birdBeside: panel.height < Theme.px(360)
+    readonly property real birdSize: birdBeside ? Theme.px(52)
+                                                : Math.max(Theme.px(96), Math.min(Theme.px(140), Math.round(panel.height * 0.2)))
+    // Moves between the two only once the panel is up.
+    readonly property bool _birdMoves: shown === 1
 
     Item {
         id: panel
@@ -427,13 +551,34 @@ Item {
             MouseArea { anchors.fill: parent; anchors.margins: -Theme.px(10); onClicked: ov.newConversation() }
         }
 
+        // The assistant's bird. A tap waves hello.
+        AssistantBird {
+            id: bird
+            pose: ov.birdPose
+            glow: true
+            // Listening: the microphone's loudness where the dictation has it.
+            level: ov.listening && ov.dictation && ov.dictation.listening && ("loudness" in ov.dictation) ? ov.dictation.loudness : -1
+            width: ov.birdSize
+            x: ov.birdBeside ? 0 : Math.round((panel.width - width) / 2)
+            // Beside the field: its feet on the field's bottom line.
+            y: ov.birdBeside ? field.y + field.height - Math.round(height * 412 / 440) : heading.y + heading.height
+            Behavior on width { enabled: ov._birdMoves; NumberAnimation { duration: Theme.motion(250); easing.type: Easing.InOutQuad } }
+            Behavior on x { enabled: ov._birdMoves; NumberAnimation { duration: Theme.motion(250); easing.type: Easing.InOutQuad } }
+            Behavior on y { enabled: ov._birdMoves; NumberAnimation { duration: Theme.motion(250); easing.type: Easing.InOutQuad } }
+            MouseArea {
+                anchors.fill: parent
+                onClicked: if (ov.birdPose === "idle") ov._play([{ pose: "hello", ms: 900 }])
+            }
+        }
+
         ListView {
             id: list
             objectName: "assistantMessages"
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: heading.bottom
-            anchors.topMargin: Theme.px(8)
+            anchors.topMargin: ov.birdBeside ? Theme.px(8) : bird.height + Theme.px(4)
+            Behavior on anchors.topMargin { enabled: ov._birdMoves; NumberAnimation { duration: Theme.motion(250); easing.type: Easing.InOutQuad } }
             anchors.bottom: statusLine.top
             anchors.bottomMargin: Theme.px(6)
             clip: true
@@ -645,6 +790,8 @@ Item {
             id: field
             objectName: "assistantField"
             anchors.left: parent.left
+            anchors.leftMargin: ov.birdBeside ? ov.birdSize + Theme.px(6) : 0
+            Behavior on anchors.leftMargin { enabled: ov._birdMoves; NumberAnimation { duration: Theme.motion(250); easing.type: Easing.InOutQuad } }
             anchors.right: mic.visible ? mic.left : parent.right
             anchors.rightMargin: mic.visible ? Theme.px(8) : 0
             anchors.bottom: parent.bottom
@@ -739,33 +886,11 @@ Item {
                 NumberAnimation { from: 1.08; to: 1; duration: Theme.motion(600); easing.type: Easing.InOutQuad }
                 onRunningChanged: if (!running) mic.scale = 1
             }
-            // A microphone: the capsule, its stand and its foot.
-            Rectangle {
-                width: Theme.px(10); height: Theme.px(16); radius: width / 2
-                anchors.horizontalCenter: parent.horizontalCenter
-                y: Theme.px(9)
-                color: ov.listening ? "#FFFFFF" : "#202428"
-            }
-            Rectangle {
-                width: Theme.px(16); height: Theme.px(10); radius: Theme.px(8)
-                anchors.horizontalCenter: parent.horizontalCenter
-                y: Theme.px(18)
-                color: "transparent"
-                border.color: ov.listening ? "#FFFFFF" : "#202428"
-                border.width: Theme.px(2)
-                // Only its lower half shows.
-                Rectangle { width: parent.width + 2; height: parent.height / 2; y: -1; x: -1; color: mic.color }
-            }
-            Rectangle {
-                width: Theme.px(2); height: Theme.px(6)
-                anchors.horizontalCenter: parent.horizontalCenter
-                y: Theme.px(28)
-                color: ov.listening ? "#FFFFFF" : "#202428"
-            }
-            Rectangle {
-                width: Theme.px(10); height: Theme.px(2)
-                anchors.horizontalCenter: parent.horizontalCenter
-                y: Theme.px(33)
+            // A microphone (MicGlyph, drawn as a vector).
+            MicGlyph {
+                anchors.centerIn: parent
+                width: Theme.px(26)
+                height: width
                 color: ov.listening ? "#FFFFFF" : "#202428"
             }
             MouseArea {
