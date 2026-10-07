@@ -738,6 +738,10 @@ Item {
             setOngoing(appId, payload || {});
         } else if (type === "reboot") {
             rebootRequested(payload.reason ? String(payload.reason) : "");
+        } else if (type === "shutdown") {
+            shutdownRequested(payload.reason ? String(payload.reason) : "");
+        } else if (type === "restartUi") {
+            restartUiRequested();
         } else if (type === "erase") {
             // The device was erased (com.palm.storage erase/EraseAll, Wipe;
             // Settings' Full Erase): it restarts into First Use.
@@ -808,6 +812,10 @@ Item {
     // The page asked the device to restart (com.palm.power/shutdown/machineReboot),
     // and why ("System update" for an update's Install Now).
     signal rebootRequested(string reason)
+    // The power menu's Shut Down (com.palm.power/shutdown/machineOff) and
+    // Luna Restart (org.webosphoenix.system/restartUi).
+    signal shutdownRequested(string reason)
+    signal restartUiRequested
     // The device was erased; it restarts into First Use.
     signal eraseRequested
     // USB drive mode was asked for (com.palm.storage diskmode/enterMSM).
@@ -899,6 +907,20 @@ Item {
         for (var i = 0; i < pages.length; ++i)
             pages[i].runScript(js);
     }
+
+    // A /com/palm/display signal for every page's com.palm.bus/signal/addmatch
+    // listeners: powerKeyPressed {showDialog: true} (Power held; luna-systemui
+    // opens its power menu, PowerdService.js).
+    function displaySignal(method, payload) {
+        var js = "window.__phoenixRuntime && __phoenixRuntime.displaySignal && __phoenixRuntime.displaySignal("
+            + JSON.stringify(method) + ", " + JSON.stringify(payload || {}) + ")";
+        var pages = _webPages();
+        for (var i = 0; i < pages.length; ++i)
+            pages[i].runScript(js);
+        displaySignals.push(method);
+    }
+    // The display signals sent, for the tests.
+    property var displaySignals: []
 
     // ---- System windows: the emergency window ---------------------------------------
     // An app page shown by the shell outside the cards: Phone's restricted

@@ -2374,7 +2374,28 @@
         "/timeout/set": function (p, reply) { reply(ok()); },
         "/timeout/clear": function (p, reply) { reply(ok()); },
         "/com/palm/power/activityStart": function (p, reply) { reply(ok()); },
-        "/com/palm/power/activityEnd": function (p, reply) { reply(ok()); }
+        "/com/palm/power/activityEnd": function (p, reply) { reply(ok()); },
+        // Off (the power menu's Shut Down; shutdown/machineOff): phoenix-sim
+        // plays the shutdown sound and goes dark until Power is pressed. A
+        // page in a browser has nothing to turn off.
+        "/shutdown/machineOff": function (p, reply) {
+            reply(ok());
+            if (!/^https?:$/.test(global.location.protocol))
+                host.postToHost("shutdown", { reason: p.reason || "" });
+        }
+    });
+
+    // The power menu's Luna Restart (the community's Advanced Reset Options,
+    // in webOS CE 3.1.0's power menu): the system UI starts again, the apps
+    // closing, the device staying up. Phoenix's own service: LunaSysMgr had
+    // none (the patch restarted it from a shell script); on a device the
+    // shell is restarted by systemd.
+    register(["org.webosphoenix.system"], {
+        "/restartUi": function (p, reply) {
+            reply(ok());
+            if (!/^https?:$/.test(global.location.protocol))
+                host.postToHost("restartUi", {});
+        }
     });
 
     // com.palm.display, com.palm.keys, com.palm.vibrate: see "LunaSysMgr's
@@ -4548,6 +4569,17 @@
         };
         sys["/setPreferences"] = function (p, reply, ctx) {
             baseSetPreferences(p, reply, ctx);
+            // The airplaneMode preference turns the radios off and on, as
+            // LunaSysMgr did when it changed (Preferences
+            // signalAirplaneModeChanged -> StatusBarServicesConnector::
+            // setAirplaneMode): luna-systemui's power menu sets it.
+            if ("airplaneMode" in p) {
+                var st = load();
+                if (!!st.offlineMode !== !!p.airplaneMode) {
+                    setOffline(st, !!p.airplaneMode);
+                    save(st);
+                }
+            }
             if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "screenTimeout", "lockTimeout", "enableALS", "sysUiEnableNextPrevGestures", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
                  "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "x_palm_textinput", "accessibility",
                  "dockwallpaper", "dockModeSoundPref", "exhibition"].concat(TWEAK_KEYS).some(function (k) { return k in p; })) {
@@ -5011,6 +5043,14 @@
         });
         runtime.storagedSignal = function (method, payload) {
             signal("/storaged", method, payload || {});
+        };
+        // The display's signals (com.palm.display's /com/palm/display):
+        // powerKeyPressed {showDialog: true} when Power is held 3 s with the
+        // screen on (DisplayManager::power, DisplayManager.cpp:3085-3099),
+        // which luna-systemui answers with its power menu (PowerdService.js
+        // powerOffHandleNotifications).
+        runtime.displaySignal = function (method, payload) {
+            signal("/com/palm/display", method, payload || {});
         };
         var usbKnown = /^https?:$/.test(global.location.protocol), usbWaiting = [];
         function usbHostKnown() {

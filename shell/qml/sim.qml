@@ -167,6 +167,12 @@ Item {
         interval: 1200
         onTriggered: shell.openLauncherIconMenu(1)
     }
+    // (luna-systemui's page has to be up and listening first.)
+    Timer {
+        id: scenePowerTimer
+        interval: 10000
+        onTriggered: shell.powerKeyHeld()
+    }
     Timer {
         id: sceneWaveTimer
         interval: 1200
@@ -346,6 +352,11 @@ Item {
         // Device: the buttons and switches, how it is held.
         { id: "power", menu: "device", text: qsTr("Power Button"), keys: ["F3"], press: [Qt.Key_F3], icon: "power",
           tip: qsTr("Lock: the screen off and locked, or on again") },
+        // Power held 3 s: the power menu (Shell.powerKeyHeld; F3 held down
+        // does the same).
+        { id: "powerHold", menu: "device", text: qsTr("Hold Power Button"), keys: ["Shift+F3"],
+          tip: qsTr("The power menu: Airplane Mode, Luna Restart, Device Restart, Shut Down"),
+          run: function () { shell.powerKeyHeld(); } },
         { id: "home", menu: "device", text: qsTr("Home Button"), keys: ["Home"], press: [Qt.Key_Home], icon: "home",
           tip: qsTr("With F3: a screen capture") },
         { id: "back", menu: "device", text: qsTr("Back Gesture"), keys: ["Esc"], press: [Qt.Key_Escape], icon: "back" },
@@ -531,7 +542,7 @@ Item {
                                        "phone", "tablet"]
     // The demo scenes (--scene; buildScene()).
     readonly property var scenes: ["locked", "cards", "stacks", "longstack", "reorder", "maximized", "heldcard",
-                                   "launcher", "launcheredit", "launchermenu", "launchergroup", "launchergroupopen", "launchertabs", "launcherinstall", "wave", "pin", "emergency", "firstuse",
+                                   "launcher", "launcheredit", "launchermenu", "launchergroup", "launchergroupopen", "launchertabs", "launcherinstall", "wave", "powermenu", "pin", "emergency", "firstuse",
                                    "lowbattery", "banner", "notified", "dashboard", "drawer", "capture",
                                    "capturepreview", "justtype", "keyboard", "clipstrip", "assistant", "systemmenu", "empty"]
     readonly property string scene: typeof simScene !== "undefined" ? simScene : ""
@@ -631,6 +642,72 @@ Item {
         } else {
             shutdownTimer.triggered();
         }
+    }
+
+    // The power menu's Shut Down (machineOff; docs/M6-PLAN.md F4): the
+    // screen goes dark as the shutdown sound plays, and the device stays off
+    // until Power (F3) or a click turns it on again: phoenix-sim starts
+    // again, booting.
+    property bool poweredOff: false
+    Connections {
+        target: windows
+        function onShutdownRequested(reason) { root.powerOff(); }
+        // Luna Restart: the system UI again (phoenix-sim restarted at once,
+        // its boot logo, no shutdown sound); the apps start afresh.
+        function onRestartUiRequested() {
+            if (root.shuttingDown)
+                return;
+            root.shuttingDown = true;
+            device.visible = false;
+            if (typeof simProcess === "undefined" || !simProcess || !simProcess.restart([]))
+                Qt.quit();
+        }
+    }
+    function powerOff() {
+        if (root.shuttingDown)
+            return;
+        root.shuttingDown = true;
+        device.visible = false;
+        if (shell.bootSound)
+            shell.sounds.shutdown();
+        offDelay.start();
+    }
+    Timer {
+        id: offDelay
+        interval: shell.bootSound ? 4200 : 300
+        onTriggered: root.poweredOff = true
+    }
+    function powerOn() {
+        if (!root.poweredOff)
+            return;
+        if (typeof simProcess === "undefined" || !simProcess || !simProcess.restart([]))
+            Qt.quit();
+    }
+    Rectangle {
+        objectName: "simPoweredOff"
+        anchors.fill: parent
+        z: 10000
+        color: "black"
+        visible: root.poweredOff
+        Text {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.margins: 16
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+            text: qsTr("Off. Press F3 (Power) or click to turn it on.")
+            color: "#777777"
+            font.family: Theme.fontFamily
+            font.pixelSize: 13
+        }
+        MouseArea { anchors.fill: parent; onClicked: root.powerOn() }
+    }
+    Shortcut {
+        sequence: "F3"
+        enabled: root.poweredOff
+        context: Qt.ApplicationShortcut
+        onActivated: root.powerOn()
     }
 
     // A restart (machineReboot: a system update's "Install now"): the
@@ -945,6 +1022,9 @@ Item {
             shell.gestureUp();
             if (scene === "launcheredit")
                 shell.launcherEditMode = true;
+        } else if (scene === "powermenu") {
+            // Power held: luna-systemui's power menu (once its page is up).
+            scenePowerTimer.start();
         } else if (scene === "wave") {
             // The wave launcher (Settings > Advanced) over an app, the
             // finger on the dock's second app.

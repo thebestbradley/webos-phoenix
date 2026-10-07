@@ -1430,8 +1430,12 @@ FocusScope {
             // Power with a volume key: the Full Erase and USB drive chords
             // (SystemScreens.systemKey); their keys do nothing else.
             if (autoRepeat ? systemScreens.comboDown && systemScreens.isChordKey(key)
-                           : systemScreens.systemKey(key, true))
+                           : systemScreens.systemKey(key, true)) {
+                // A chord, not the power menu (DisplayManager stops m_power
+                // for Power with another key).
+                powerHold.stop();
                 return;
+            }
             // A system screen (USB drive mode, Full Erase...) takes the
             // keys, but for Power and the volume.
             if (systemScreens.blocksInput && (key === Qt.Key_Home || key === Qt.Key_Escape || key === Qt.Key_Back
@@ -1554,11 +1558,45 @@ FocusScope {
             _homeDown = true;
             _eatHomeUp = false;
             _homeDownAt = Date.now();
+            // Home with Power held: a capture, not the power menu.
+            powerHold.stop();
         } else {
             _powerDown = true;
             _eatPowerUp = false;
             _powerDownAt = Date.now();
+            // Held 3 s with the screen on and unlocked (or in dock mode):
+            // the power menu (DisplayManager: DISPLAY_EVENT_POWER_BUTTON_DOWN
+            // starts m_power in DisplayStateOn, OnPuck, DockMode and Dim).
+            if (backlight.on && !_homeDown && (!locked || dockMode))
+                powerHold.restart();
         }
+    }
+
+    // ---- The power menu (docs/M6-PLAN.md F4) ------------------------------------------
+    // Power held 3 s (DisplayManager m_powerKeyTimeout, DisplayManager.cpp:
+    // 232) sends com.palm.display's powerKeyPressed {showDialog: true}
+    // (DisplayManager::power, :3085-3099); luna-systemui answers with its
+    // power menu, the PowerOffAlert popup (PowerdService.js:195-213): in
+    // Phoenix, as in webOS CE 3.1.0, Airplane Mode, Luna Restart, Device
+    // Restart, Shut Down and Cancel (compat overlay of PowerdAlerts.js). The
+    // release that follows is eaten (m_dropPowerKey): the screen stays on.
+    readonly property int powerHoldInterval: 3000
+    Timer {
+        id: powerHold
+        interval: shell.powerHoldInterval
+        onTriggered: shell.powerKeyHeld()
+    }
+    // Power held (also the simulator's Hold Power Button).
+    function powerKeyHeld() {
+        powerHold.stop();
+        if (_powerDown)
+            _eatPowerUp = true;
+        if (locked && !dockMode)
+            return false;
+        backlight.activity();
+        if (source && typeof source.displaySignal === "function")
+            source.displaySignal("powerKeyPressed", { showDialog: true });
+        return true;
     }
     function _buttonUp(home) {
         var now = Date.now();
@@ -1574,6 +1612,7 @@ FocusScope {
             }
         } else {
             _powerDown = false;
+            powerHold.stop();
             if (_eatPowerUp) {
                 _eatPowerUp = false;
             } else if (_homeDown && now - _powerDownAt <= 3000) {
@@ -2820,6 +2859,7 @@ FocusScope {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 system: shell.system
+                batteryPercent: shell.tweak("batteryPercent")
                 // SystemUiController::updateStatusBarTitle: Just Type, then the
                 // launcher ("Launcher", com.palm.launcher's title; not actionable),
                 // then the maximized app; else the carrier. Just Type's title
@@ -2928,6 +2968,7 @@ FocusScope {
                 backdrop: sceneBackdrop
                 anchors.fill: parent
                 system: shell.system
+                source: shell.source
                 // The positive space, plus 10 (SystemMenu.cpp:945-953).
                 availableHeight: ui.height - Theme.statusBarHeight - notes.negativeSpace + Theme.px(10)
                 onCloseRequested: systemMenu.open = false

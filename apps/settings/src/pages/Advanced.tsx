@@ -23,13 +23,16 @@
 //                            Low, Normal or High (Buttah)
 //   showReticleAnimation     the tap ripple (LunaCE tap-ripple.json; on)
 //   hapticFeedback           a buzz on every tap (Haptic Feedback Manager)
+//   showBatteryPercent       the charge beside the status bar's battery
+//                            (Battery Percent and Icon)
 
 import { system, type SystemPreferences } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
 import { Group, ListSelector, Note, Page, PageHeader, Row, ToggleButton } from "@phoenix/ui";
 
 const KEYS: (keyof SystemPreferences)[] = ["launcherGridDensity", "infiniteCardCyclingEnabled", "sysUiEnableMaximizeEdges",
-    "sysUiEnableWaveLauncher", "animationSpeed", "gestureSensitivity", "showReticleAnimation", "hapticFeedback"];
+    "sysUiEnableWaveLauncher", "animationSpeed", "gestureSensitivity", "showReticleAnimation", "hapticFeedback",
+    "showBatteryPercent"];
 
 export function AdvancedPage() {
     const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(KEYS, cb, err), []).value;
@@ -60,6 +63,9 @@ export function AdvancedPage() {
                                         { label: "High", value: "high" as const }]}
                               onChange={(v) => set({ gestureSensitivity: v })} />
                 {toggle("showReticleAnimation", "Tap ripple", "A ripple where you tap", true)}
+            </Group>
+            <Group label="Status bar">
+                {toggle("showBatteryPercent", "Battery percentage", "The charge beside the battery")}
             </Group>
             <Group label="Feedback">
                 <ListSelector title="Animation speed" value={prefs?.animationSpeed ?? "normal"} testId="adv-animationSpeed"

@@ -57,6 +57,9 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Scrollable menu with fade and arrow affordances, closing after a selection. `SystemMenu.qml:289-341`
 - [x] Device menu (phone-era "DeviceMenu" persistent window of `com.palm.systemui`). `conf/persistentWindows.conf:19-21` *Phoenix: phones open the ported system menu (`SystemMenu.qml`), as Open webOS itself did on every device (`MenuWindowManager.cpp:89` always makes a `SystemMenu`); the 2.x DeviceMenu window is not in the released luna-systemui.*
 
+- [x] Power menu on a held Power button: Airplane Mode, Shut Down, Cancel (`DisplayManager::power`; luna-systemui `PowerdAlerts.js` PowerOffAlert), with the community's Luna Restart and Device Restart (webOS CE 3.1.0). *Phoenix: the original popup, through a compat overlay; `tst_powermenu.qml`; M6-PLAN F4.*
+- [x] System menu Flashlight row and status bar battery percentage (community: Device Menu Megamix, Battery Percent and Icon). *Phoenix: the row where torchd reports a torch; the percentage in Settings > Advanced (`SystemMenu.qml`, `StatusBar.qml`; M6-PLAN F4).*
+
 ## 4. Notifications [spec §4]
 
 - [x] Banner notifications: scrolling ticker with icon, queueing (5 s alone, 2 s when queued), sounds. `Src/lunaui/notifications/BannerMessageHandler.cpp` *Phoenix: `Notifications.qml` banner queue: each waits its turn, 5 s alone, 2 s with others waiting (a new one cuts the one showing to 2 s), its sound as it shows; `removeBannerMessage` / `clearBannerMessages`; long text cut off at the end as the original's (`tst_shell` test_bannerQueue). The "ticker" is the slide in: the original never scrolled a banner's text.*

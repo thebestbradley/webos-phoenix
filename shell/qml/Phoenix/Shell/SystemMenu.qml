@@ -26,6 +26,9 @@ Item {
     id: menu
 
     property var system
+    // The window source, for the services the menu asks (lunaCall): the
+    // torch (the Flashlight row).
+    property var source: null
     property bool open: false
     signal closeRequested
     // Open an app (the preferences rows): Shell.launch.
@@ -83,9 +86,30 @@ Item {
     Behavior on opacity { NumberAnimation { duration: Theme.systemMenuFadeDuration } }
 
     onOpenChanged: {
-        if (open) { closeTimer.stop(); date.refresh(); }
+        if (open) { closeTimer.stop(); date.refresh(); refreshTorch(); }
         _setKeyItem(null);
     }
+
+    // ---- The torch (Phoenix; the community's Device Menu Megamix) ----------------------
+    // LuneOS's torchd (org.webosports.service.torch, as the Flashlight app
+    // uses it): the row shows on a device that has one.
+    property bool torchAvailable: false
+    property bool torchOn: false
+    function _torchCall(method, params) {
+        if (!source || typeof source.lunaCall !== "function")
+            return;
+        source.lunaCall("luna://org.webosports.service.torch/" + method, params || {}, function (r) {
+            if (!r || r.returnValue === false) {
+                if (method === "getStatus")
+                    menu.torchAvailable = false;
+                return;
+            }
+            menu.torchAvailable = r.available !== false;
+            menu.torchOn = !!r.on;
+        });
+    }
+    function refreshTorch() { _torchCall("getStatus"); }
+    function toggleTorch() { _torchCall("set", { on: !torchOn }); }
 
     // ---- Keyboard navigation (GAPS V8 (3)) -----------------------------------------
     // Up / Down (and Tab / Shift+Tab) move through the rows on show, top
@@ -166,6 +190,7 @@ Item {
         vpn.close(true);
         rotation.delayUpdate = false;
         mute.delayUpdate = false;
+        torch.delayUpdate = false;
         flick.contentY = 0;
     }
     onAirplaneModeInProgressChanged: {
@@ -1016,7 +1041,7 @@ Item {
                     Entry {
                         id: mute
                         objectName: "systemMenuMute"
-                        last: true
+                        last: !menu.torchAvailable
                         property bool delayUpdate: false
                         property bool muted: false
                         Binding on muted {
@@ -1033,6 +1058,65 @@ Item {
                         Label { text: mute.label }
                         Icon {
                             source: Theme.asset(mute.muted ? "statusBar/icon-mute-off.png" : "statusBar/icon-mute.png")
+                        }
+                    }
+
+                    // ---- Flashlight (Phoenix; the Device Menu Megamix's torch) ----
+                    // Labelled as the rows above; a torch drawn in their
+                    // icons' white, with its beam while it is on.
+                    Divider { visible: menu.torchAvailable }
+                    Entry {
+                        id: torch
+                        objectName: "systemMenuFlashlight"
+                        visible: menu.torchAvailable
+                        last: true
+                        property bool delayUpdate: false
+                        property bool on: false
+                        Binding on on {
+                            when: !torch.delayUpdate
+                            value: menu.torchOn
+                            restoreMode: Binding.RestoreNone
+                        }
+                        readonly property string label: on ? qsTr("Turn off Flashlight") : qsTr("Turn on Flashlight")
+                        onAction: {
+                            delayUpdate = true;
+                            menu.toggleTorch();
+                            menu.closeAfter(Theme.systemMenuToggleCloseDelay);
+                        }
+                        Label { text: torch.label }
+                        Canvas {
+                            objectName: "systemMenuFlashlightIcon"
+                            width: Theme.px(24)
+                            height: Theme.px(24)
+                            anchors.right: parent.right
+                            anchors.rightMargin: Theme.px(12)
+                            anchors.verticalCenter: parent.verticalCenter
+                            property bool lit: torch.on
+                            onLitChanged: requestPaint()
+                            onPaint: {
+                                var c = getContext("2d"), w = width, h = height;
+                                c.reset();
+                                c.fillStyle = "rgba(255,255,255,0.9)";
+                                // The head, wide at the top, and the handle.
+                                c.beginPath();
+                                c.moveTo(w * 0.30, h * 0.30);
+                                c.lineTo(w * 0.70, h * 0.30);
+                                c.lineTo(w * 0.60, h * 0.48);
+                                c.lineTo(w * 0.40, h * 0.48);
+                                c.closePath();
+                                c.fill();
+                                c.fillRect(w * 0.40, h * 0.50, w * 0.20, h * 0.42);
+                                if (lit) {
+                                    c.strokeStyle = "rgba(255,255,255,0.9)";
+                                    c.lineWidth = Math.max(1, w / 14);
+                                    c.lineCap = "round";
+                                    c.beginPath();
+                                    c.moveTo(w * 0.50, h * 0.20); c.lineTo(w * 0.50, h * 0.04);
+                                    c.moveTo(w * 0.30, h * 0.22); c.lineTo(w * 0.18, h * 0.08);
+                                    c.moveTo(w * 0.70, h * 0.22); c.lineTo(w * 0.82, h * 0.08);
+                                    c.stroke();
+                                }
+                            }
                         }
                     }
                 }
