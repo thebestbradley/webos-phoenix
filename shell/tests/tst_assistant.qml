@@ -168,12 +168,36 @@ Item {
 
         function test_askShowsTheThreadWithItsAnswers() {
             openByHold();
-            // Its field has the keyboard.
+            // Voice first where there is a microphone: a tap on the field
+            // brings the keyboard (with none, the field has it at once).
+            var input = findChild(overlay, "assistantInput");
+            if (!input.activeFocus)
+                mouseClick(input, input.width / 2, input.height / 2);
+            tryVerify(function () { return input.activeFocus; }, 2000);
             tryCompare(shell, "keyboardOpen", true, 2000);
             type("turn on the flashlight");
             tryVerify(function () { return bubbles().indexOf("The flashlight is on.") >= 0; }, 2000);
             compare(bubbles().indexOf("turn on the flashlight") >= 0, true);
             verify(fake.calls.indexOf("ask turn on the flashlight") >= 0);
+        }
+
+        // With a microphone (as on a Mac, or --microphone-file here) it opens
+        // voice first: no keyboard until the field is tapped.
+        function test_voiceFirstWithAMicrophone() {
+            shell.dictationInputFiles = ["/nonexistent/quiet.wav"];
+            try {
+                verify(shell.dictation !== null);
+                openByHold();
+                var mic = findChild(overlay, "assistantMic");
+                verify(mic.visible);
+                wait(300);
+                compare(shell.keyboardOpen, false);
+                var input = findChild(overlay, "assistantInput");
+                mouseClick(input, input.width / 2, input.height / 2);
+                tryCompare(shell, "keyboardOpen", true, 2000);
+            } finally {
+                shell.dictationInputFiles = [];
+            }
         }
 
         function test_readBackWaitsForSend() {
