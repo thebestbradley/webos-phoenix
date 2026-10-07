@@ -3,7 +3,8 @@
 //
 // Launcher editing: the layout rules (LauncherLayout.js) and the gestures
 // (press and hold, drag within a page, onto a tab, into and out of the
-// dock, delete).
+// dock, delete), and the icon menu (press and hold or a right click: each
+// of its rows, and the drag out of it).
 
 import QtQuick
 import QtTest
@@ -124,6 +125,26 @@ Item {
     }
 
     TestCase {
+        name: "LauncherLayoutFavorites"
+
+        // The icon menu's Favorite: to the Favorites page; Unfavorite: back
+        // to the page the app would have had (Apps for a launch point).
+        function test_favoriteAndUnfavorite() {
+            var l = LauncherLayout.build([{ id: "a", title: "A", tab: 0, quickLaunch: 0 },
+                                          { id: "s", title: "S", tab: 2, quickLaunch: 0 }], null);
+            l = LauncherLayout.favorite(l, "s");
+            verify(LauncherLayout.isFavorite(l, "s"));
+            compare(l.pages, [["a"], [], ["s"], []]);
+            l = LauncherLayout.unfavorite(l, "s", { id: "s", tab: 2 });
+            compare(l.pages, [["a"], [], [], ["s"]]);
+            l = LauncherLayout.unfavorite(LauncherLayout.favorite(l, "a"), "a", { id: "a", dynamic: true });
+            compare(l.pages[0], ["a"]);
+            verify(!LauncherLayout.dockFull(l, 1));
+            verify(LauncherLayout.dockFull(LauncherLayout.addToDock(l, "a", 0, 1), 1));
+        }
+    }
+
+    TestCase {
         name: "LauncherEditing"
         when: windowShown
 
@@ -169,8 +190,46 @@ Item {
         }
 
         function cleanup() {
+            var menu = iconMenu();
+            if (menu && menu.open)
+                menu.open = false;
+            var dialog = findChild(shell, function(o) { return o.objectName === "deleteDialog"; });
+            if (dialog)
+                dialog.appId = "";
             if (shell.launcherOpen)
                 shell.gestureUp();
+        }
+
+        function iconMenu() {
+            return findChild(shell, function(o) { return o.objectName === "iconMenu"; });
+        }
+        function menuNames() {
+            return iconMenu().items.map(function(i) { return i.name; });
+        }
+        function menuRow(name) {
+            return findChild(iconMenu(), function(o) { return o.objectName === "iconMenu_" + name; });
+        }
+        // Press and hold an icon, let go without moving: the menu opens.
+        function holdForMenu(p) {
+            mousePress(shell, p.x, p.y);
+            wait(Theme.iconMenuHoldInterval + 150);
+            mouseRelease(shell, p.x, p.y);
+            tryCompare(iconMenu(), "open", true, 1000);
+            wait(Theme.statusBarMenuFadeDuration + 50);
+        }
+        // A launcher entry of its own for a test (the simulator's fields).
+        function addEntry(fields) {
+            windows.apps.append(Object.assign(windows._launcherFields(), {
+                title: "Test", color: "#555c66", glyph: "T", tab: 0, quickLaunch: 0,
+                icon: "", largeIcon: "", splashIcon: "", splashBackground: "", web: false, main: "", noWindow: false,
+                orientation: "", webAppId: "", params: "", dir: "", removable: false, version: "" }, fields));
+            if (fields.tab !== -1)
+                tryVerify(function() { return LauncherLayout.pageOf(shell.launcherLayout, fields.appId) >= 0; }, 1000);
+        }
+        function removeEntry(id) {
+            for (var i = windows.apps.count - 1; i >= 0; --i)
+                if (windows.apps.get(i).appId === id)
+                    windows.apps.remove(i);
         }
 
         // Centre of the icon at index on the current page, in shell coordinates.
@@ -490,6 +549,302 @@ Item {
             mouseClick(findChild(shell, function(o) { return o.objectName === "deleteDialogRemove"; }));
             tryVerify(function() { return LauncherLayout.pageOf(shell.launcherLayout, "com.example.newapp") < 0; }, 1000);
             compare(windows.installInfo("com.example.newapp"), null);
+        }
+
+        // ---- The icon menu (docs/M6-PLAN.md F1) ------------------------------------
+
+        // Held for 500 ms: the icon lifts, the rest dims, the menu opens
+        // beside it with a haptic tick; edit mode waits. A tap outside
+        // closes it.
+        function test_holdOpensTheIconMenu() {
+            var id = shell.launcherLayout.pages[0][0];
+            var haptics = shell.iconMenuHaptics;
+            var spy = createTemporaryObject(spyComponent, root, { target: launcher, signalName: "launchRequested" });
+            holdForMenu(iconPoint(0));
+            var menu = iconMenu();
+            compare(menu.appId, id);
+            compare(menu.from, "page");
+            verify(!launcher.editMode, "the menu, not edit mode");
+            compare(spy.count, 0, "a hold does not launch");
+            compare(shell.iconMenuHaptics, haptics + 1, "a haptic tick");
+            compare(shell.deviceServices.vibration, "tapdown");
+            var lifted = findChild(menu, function(o) { return o.objectName === "iconMenuIcon"; });
+            tryCompare(lifted, "scale", 1.15, 1000);
+            var names = menuNames();
+            compare(names[0], "move");
+            verify(names.indexOf("info") === names.length - 1, "App Info last");
+            verify(names.indexOf("favorite") >= 0);
+            verify(names.indexOf("dock") >= 0 || names.indexOf("undock") >= 0);
+            // Beside the icon, inside the screen.
+            var panel = findChild(menu, function(o) { return o.objectName === "iconMenuPanel"; });
+            verify(panel.x >= -Theme.px(11) && panel.x + panel.width <= shell.width + Theme.px(11));
+            // A tap outside closes it.
+            mouseClick(shell, Theme.px(6), shell.height * 0.6);
+            tryCompare(menu, "open", false, 1000);
+            verify(shell.launcherOpen);
+        }
+
+        // A right click opens it at once and launches nothing; Back closes
+        // it and leaves the launcher open.
+        function test_rightClickOpensTheIconMenu() {
+            var id = shell.launcherLayout.pages[0][1];
+            var spy = createTemporaryObject(spyComponent, root, { target: launcher, signalName: "launchRequested" });
+            var p = iconPoint(1);
+            mouseClick(shell, p.x, p.y, Qt.RightButton);
+            tryCompare(iconMenu(), "open", true, 500);
+            compare(iconMenu().appId, id);
+            compare(spy.count, 0);
+            shell.gestureBack();
+            verify(!iconMenu().open);
+            verify(shell.launcherOpen, "Back closed the menu only");
+            // Esc too.
+            mouseClick(shell, p.x, p.y, Qt.RightButton);
+            tryCompare(iconMenu(), "open", true, 500);
+            shell.forceActiveFocus();
+            keyClick(Qt.Key_Escape);
+            verify(!iconMenu().open);
+            verify(shell.launcherOpen);
+        }
+
+        // Held, then moved on: the menu gives way to edit mode's drag,
+        // which reorders as before.
+        function test_dragOutOfTheMenuReorders() {
+            var first = shell.launcherLayout.pages[0][0];
+            var from = iconPoint(0), to = iconPoint(2);
+            mousePress(shell, from.x, from.y);
+            wait(Theme.iconMenuHoldInterval + 150);
+            verify(iconMenu().open, "the menu is open under the finger");
+            for (var i = 1; i <= 12; ++i)
+                mouseMove(shell, from.x + (to.x - from.x) * i / 12, from.y + (to.y - from.y) * i / 12, 10);
+            verify(!iconMenu().open, "the drag closed it");
+            verify(launcher.editMode);
+            compare(launcher.draggedId, first);
+            mouseRelease(shell, to.x, to.y);
+            wait(Theme.launcherReorderDuration + 50);
+            compare(shell.launcherLayout.pages[0].indexOf(first), 2);
+            shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, first, 0, 0));
+        }
+
+        // Move: edit mode with the icon picked up; the next tap puts it there.
+        function test_menuMove() {
+            var id = shell.launcherLayout.pages[0][0];
+            holdForMenu(iconPoint(0));
+            mouseClick(menuRow("move"));
+            verify(launcher.editMode);
+            compare(launcher.draggedId, id, "picked up");
+            var to = iconPoint(2);
+            mouseClick(shell, to.x, to.y);
+            wait(Theme.launcherReorderDuration + 50);
+            compare(launcher.draggedId, "");
+            compare(shell.launcherLayout.pages[0].indexOf(id), 2);
+            // In edit mode a hold picks the icon up at once (no menu).
+            mousePress(shell, to.x, to.y);
+            wait(Theme.tapAndHoldInterval + 150);
+            verify(!iconMenu().open);
+            compare(launcher.draggedId, id);
+            mouseRelease(shell, to.x, to.y);
+            wait(Theme.launcherReorderDuration + 50);
+            compare(shell.launcherLayout.pages[0].indexOf(id), 2);
+            // Picked up again by Move, Back puts it back where it was.
+            launcher.editMode = false;
+            holdForMenu(iconPoint(2));
+            mouseClick(menuRow("move"));
+            compare(launcher.draggedId, id);
+            shell.gestureBack();
+            compare(launcher.draggedId, "");
+            compare(shell.launcherLayout.pages[0].indexOf(id), 2);
+            shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, id, 0, 0));
+        }
+
+        // Add to Dock / Remove from Dock; a full dock offers it greyed.
+        function test_menuDock() {
+            var saved = shell.launcherLayout;
+            while (shell.launcherLayout.dock.length >= Theme.quickLaunchMaxItems - 1)
+                shell.setLauncherLayout(LauncherLayout.removeFromDock(shell.launcherLayout, shell.launcherLayout.dock[0]));
+            var page = shell.launcherLayout.pages[0];
+            var index = -1;
+            for (var i = 0; i < page.length && index < 0; ++i)
+                if (shell.launcherLayout.dock.indexOf(page[i]) < 0)
+                    index = i;
+            var id = page[index];
+            holdForMenu(iconPoint(index));
+            verify(menuRow("dock").available);
+            mouseClick(menuRow("dock"));
+            verify(!iconMenu().open);
+            compare(shell.launcherLayout.dock[shell.launcherLayout.dock.length - 1], id, "at the end of the dock");
+            holdForMenu(iconPoint(index));
+            verify(menuNames().indexOf("dock") < 0);
+            mouseClick(menuRow("undock"));
+            compare(shell.launcherLayout.dock.indexOf(id), -1);
+            // Full: Add to Dock cannot be chosen.
+            var others = page.filter(function(x) { return x !== id; });
+            var l = shell.launcherLayout;
+            for (var k = 0; l.dock.length < Theme.quickLaunchMaxItems - 1; ++k)
+                l = LauncherLayout.addToDock(l, others[k], l.dock.length, Theme.quickLaunchMaxItems - 1);
+            shell.setLauncherLayout(l);
+            holdForMenu(iconPoint(page.indexOf(id)));
+            verify(!menuRow("dock").available, "the dock is full");
+            mouseClick(menuRow("dock"));
+            verify(iconMenu().open, "greyed: nothing happens");
+            compare(shell.launcherLayout.dock.indexOf(id), -1);
+            shell.setLauncherLayout(saved);
+        }
+
+        // Favorite takes the app to the Favorites page; Unfavorite back.
+        function test_menuFavorite() {
+            var id = shell.launcherLayout.pages[0][0];
+            holdForMenu(iconPoint(0));
+            mouseClick(menuRow("favorite"));
+            compare(LauncherLayout.pageOf(shell.launcherLayout, id), 2);
+            compare(JSON.parse(windows.savedLauncherLayout()).pages[2].indexOf(id) >= 0, true, "kept");
+            launcher.showPage(2);
+            wait(Theme.cardSlideDuration + 100);
+            holdForMenu(iconPoint(shell.launcherLayout.pages[2].indexOf(id)));
+            verify(menuNames().indexOf("favorite") < 0);
+            mouseClick(menuRow("unfavorite"));
+            compare(LauncherLayout.pageOf(shell.launcherLayout, id), 0, "back to its own page");
+            shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, id, 0, 0));
+        }
+
+        // Uninstall: only for apps that can be deleted, asking first.
+        function test_menuUninstall() {
+            var ids = shell.launcherLayout.pages[0];
+            var index = -1;
+            for (var i = 0; i < ids.length && index < 0; ++i)
+                if (launcher.entry(ids[i]).removable)
+                    index = i;
+            holdForMenu(iconPoint(index));
+            mouseClick(menuRow("uninstall"));
+            var dialog = findChild(shell, function(o) { return o.objectName === "deleteDialog"; });
+            tryCompare(dialog, "opacity", 1, 1000);
+            compare(findChild(shell, function(o) { return o.objectName === "deleteDialogTitle"; }).text, "Remove Application?");
+            mouseClick(findChild(shell, function(o) { return o.objectName === "deleteDialogCancel"; }));
+            tryCompare(dialog, "visible", false, 1000);
+            verify(LauncherLayout.pageOf(shell.launcherLayout, ids[index]) >= 0);
+            // A built-in app has none.
+            addEntry({ appId: "com.example.builtin", title: "Built In", removable: false, page: "downloads" });
+            var at = LauncherLayout.pageOf(shell.launcherLayout, "com.example.builtin");
+            launcher.showPage(at);
+            wait(Theme.cardSlideDuration + 100);
+            holdForMenu(iconPoint(shell.launcherLayout.pages[at].indexOf("com.example.builtin")));
+            verify(menuNames().indexOf("uninstall") < 0);
+            iconMenu().open = false;
+            removeEntry("com.example.builtin");
+        }
+
+        // App Info: title, version, id and size; Uninstall asks first.
+        function test_menuAppInfo() {
+            addEntry({ appId: "com.example.info", title: "Info App", page: "downloads", version: "2.1.0", size: 3 * 1024 * 1024, removable: true });
+            var at = LauncherLayout.pageOf(shell.launcherLayout, "com.example.info");
+            launcher.showPage(at);
+            wait(Theme.cardSlideDuration + 100);
+            holdForMenu(iconPoint(shell.launcherLayout.pages[at].indexOf("com.example.info")));
+            mouseClick(menuRow("info"));
+            var dialog = findChild(shell, function(o) { return o.objectName === "deleteDialog"; });
+            tryCompare(dialog, "opacity", 1, 1000);
+            compare(findChild(shell, function(o) { return o.objectName === "deleteDialogTitle"; }).text, "Info App");
+            compare(findChild(shell, function(o) { return o.objectName === "deleteDialogMessage"; }).text,
+                    "Version 2.1.0\nID: com.example.info\nSize: 3.0 MB");
+            verify(!findChild(shell, function(o) { return o.objectName === "deleteDialogRemove"; }).visible);
+            var uninstall = findChild(shell, function(o) { return o.objectName === "deleteDialogUninstall"; });
+            verify(uninstall.visible);
+            mouseClick(uninstall);
+            compare(findChild(shell, function(o) { return o.objectName === "deleteDialogTitle"; }).text, "Remove Application?");
+            mouseClick(findChild(shell, function(o) { return o.objectName === "deleteDialogRemove"; }));
+            compare(LauncherLayout.pageOf(shell.launcherLayout, "com.example.info"), -1);
+            removeEntry("com.example.info");
+        }
+
+        // New Window: only for apps that run several at once; another card
+        // while one runs.
+        function test_menuNewWindow() {
+            addEntry({ appId: "com.example.multi", title: "Multi", page: "downloads", multipleInstances: true });
+            var at = LauncherLayout.pageOf(shell.launcherLayout, "com.example.multi");
+            var first = windows.launch("com.example.multi");
+            verify(first !== "");
+            launcher.showPage(at);
+            wait(Theme.cardSlideDuration + 100);
+            holdForMenu(iconPoint(shell.launcherLayout.pages[at].indexOf("com.example.multi")));
+            mouseClick(menuRow("newWindow"));
+            var n = 0;
+            for (var i = 0; i < windows.cards.count; ++i)
+                if (windows.cards.get(i).appId === "com.example.multi")
+                    ++n;
+            compare(n, 2, "a second window");
+            tryVerify(function() { return !shell.launcherOpen; }, 2000);
+            while (windows.cards.count > 0)
+                windows.close(windows.cards.get(0).uid);
+            shell.cardView.maximizeProgress = 0;
+            // Others have none.
+            shell.gestureUp();
+            tryCompare(launcher, "hidden", 0, 2000);
+            wait(Theme.cardSlideDuration + 100);
+            holdForMenu(iconPoint(0));
+            verify(menuNames().indexOf("newWindow") < 0);
+            iconMenu().open = false;
+            removeEntry("com.example.multi");
+        }
+
+        // Share: an app with a web address shares it through the share
+        // sheet, from its page laid over everything; others have no Share.
+        function test_menuShare() {
+            addEntry({ appId: "org.webosphoenix.sharesheet", title: "Share", tab: -1 });
+            addEntry({ appId: "00000077", title: "Site", dynamic: true, removable: true,
+                       webAppId: "org.webosphoenix.browser", params: "{\"url\":\"https://example.com/\"}" });
+            compare(shell.shareLink("00000077"), "https://example.com/");
+            launcher.showPage(2);
+            wait(Theme.cardSlideDuration + 100);
+            holdForMenu(iconPoint(shell.launcherLayout.pages[2].indexOf("00000077")));
+            compare(menuNames()[1], "share");
+            compare(menuRow("uninstall").modelData.text, "Remove", "a launch point is removed");
+            verify(menuNames().indexOf("favorite") < 0 && menuNames().indexOf("unfavorite") < 0, "it lives on Favorites");
+            mouseClick(menuRow("share"));
+            var host = findChild(shell, function(o) { return o.objectName === "shareHost"; });
+            verify(host.windowKey !== "");
+            compare(windows.systemWindows.get(windows.systemWindows.count - 1).kind, "share");
+            verify(host.visible);
+            // The page closes itself when the sheet is done.
+            windows.closeSystemWindow(host.windowKey);
+            compare(host.windowKey, "");
+            launcher.showPage(0);
+            wait(Theme.cardSlideDuration + 100);
+            holdForMenu(iconPoint(0));
+            verify(menuNames().indexOf("share") < 0, "no link, no Share");
+            iconMenu().open = false;
+            removeEntry("00000077");
+            removeEntry("org.webosphoenix.sharesheet");
+        }
+
+        // The dock's icons have the menu too, over the dock.
+        function test_dockIconMenu() {
+            var saved = shell.launcherLayout;
+            shell.gestureUp();            // card view: the dock
+            tryVerify(function() { return !shell.launcherOpen; }, 2000);
+            if (dock.pinned.length === 0)
+                shell.setLauncherLayout(LauncherLayout.addToDock(shell.launcherLayout, shell.launcherLayout.pages[0][0], 0, Theme.quickLaunchMaxItems - 1));
+            tryVerify(function() { return dock.pinned.length >= 1; }, 1000);
+            var id = dock.pinned[0].appId;
+            var p = dock.mapToItem(shell, dock.slotCentre(0), Theme.quickLaunchIconY + dock.iconSize / 2);
+            holdForMenu(p);
+            compare(iconMenu().appId, id);
+            compare(iconMenu().from, "dock");
+            compare(iconMenu().side, "above");
+            mouseClick(menuRow("undock"));
+            compare(shell.launcherLayout.dock.indexOf(id), -1);
+            shell.setLauncherLayout(saved);
+            // Held and moved on: the dock's drag, as before.
+            tryVerify(function() { return dock.pinned.length >= 1; }, 1000);
+            id = dock.pinned[0].appId;
+            mousePress(shell, p.x, p.y);
+            wait(Theme.iconMenuHoldInterval + 150);
+            verify(iconMenu().open);
+            mouseMove(shell, p.x + 20, p.y - 40, 10);
+            compare(iconMenu().open, false);
+            compare(dock.draggedId, id);
+            mouseMove(shell, p.x + 20, shell.height / 3, 10);
+            mouseRelease(shell, p.x + 20, shell.height / 3);
+            compare(shell.launcherLayout.dock.indexOf(id), -1, "dragged off the dock");
+            shell.setLauncherLayout(saved);
         }
 
         // A launch point an app added (addLaunchPoint) is on Favorites; in

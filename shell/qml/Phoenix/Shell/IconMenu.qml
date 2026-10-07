@@ -39,6 +39,8 @@ Item {
     signal closeRequested
 
     visible: open || dim.opacity > 0
+    // Fading out, it takes no touches.
+    enabled: open
 
     function show(id, source, rect, list, look) {
         appId = id;
