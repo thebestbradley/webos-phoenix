@@ -15,8 +15,18 @@
 > AI work (the agent, local LLMs, bring-your-own LLM, a Phoenix AI service)
 > are **2.0**.
 
-The **Phoenix Assistant in 1.0** is a voice assistant in the classic style,
-with no language model and no MCP:
+> **Revised (7 October 2026, from the project owner).** 1.0 adds language
+> models after all, in layers: the commands below first; then an optional
+> on-device model (llama.cpp, downloaded in Settings), which becomes the
+> default for actions once installed; then, when neither can answer, the
+> choice of a cloud model (Anthropic, OpenAI, Google, any OpenAI-compatible
+> URL) or a web search. A cloud model may run commands only with the user's
+> permission, set in Settings > Assistant. It opens by holding the launcher
+> button, has its own app with chat threads, and shows the active thread
+> over a translucent backdrop. The MCP agent stays 2.0. The plan is
+> [M6-PLAN.md](M6-PLAN.md) F3; the table below is its command layer.
+
+The **Phoenix Assistant in 1.0** starts with a voice assistant in the classic style:
 
 | Part | 1.0 |
 | --- | --- |
