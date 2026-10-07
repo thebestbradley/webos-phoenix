@@ -1199,6 +1199,15 @@
         rotationLock: false,
         muteSound: false,
         showAlertsWhenLocked: true,
+        // Settings > Screen & Lock > Show previews (Phoenix; the community's
+        // private notification patches): off, the lock screen hides who
+        // sent what ("New Message").
+        lockScreenPreviews: true,
+        // Settings > Sounds & Ringtones > Repeat alerts (Phoenix; the
+        // community's Notification Repeat patches): a notification's sound
+        // again every `minutes` until it is seen, for every app but those
+        // set false in `apps`.
+        notificationRepeat: { enabled: false, minutes: 2, apps: {} },
         blinkNotifications: true,
         // Screen & Lock: seconds until the screen turns off (Phoenix's key
         // for the original's com.palm.display timeout), and how long it
@@ -1246,6 +1255,15 @@
         keyboardNumberRow: false,
         firstUse: false
     };
+
+    // Settings > Sounds & Ringtones > Repeat alerts, checked.
+    function notificationRepeat(r) {
+        r = r && typeof r === "object" ? r : {};
+        var apps = {};
+        if (r.apps && typeof r.apps === "object")
+            for (var a in r.apps) apps[a] = r.apps[a] !== false;
+        return { enabled: !!r.enabled, minutes: typeof r.minutes === "number" && r.minutes > 0 ? r.minutes : 2, apps: apps };
+    }
 
     // Settings > Advanced, as the shell takes them (hostStatus tweaks).
     function tweaks(p) {
@@ -3918,6 +3936,8 @@
                 alerttone: (p.alerttone && p.alerttone.fullPath) || "",
                 notificationtone: (p.notificationtone && p.notificationtone.fullPath) || "",
                 showAlertsWhenLocked: p.showAlertsWhenLocked !== false,
+                lockScreenPreviews: p.lockScreenPreviews !== false,
+                notificationRepeat: notificationRepeat(p.notificationRepeat),
                 // What the volume keys adjust, as audiod's scenarios
                 // (NativeAlertManager::actOnChanged): the shell's volume
                 // indicator draws the phone, ringtone or music picture.
@@ -4580,7 +4600,7 @@
                     save(st);
                 }
             }
-            if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "screenTimeout", "lockTimeout", "enableALS", "sysUiEnableNextPrevGestures", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
+            if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "lockScreenPreviews", "notificationRepeat", "screenTimeout", "lockTimeout", "enableALS", "sysUiEnableNextPrevGestures", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
                  "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "x_palm_textinput", "accessibility",
                  "dockwallpaper", "dockModeSoundPref", "exhibition"].concat(TWEAK_KEYS).some(function (k) { return k in p; })) {
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
@@ -6023,6 +6043,26 @@
             var n = ((p.name && p.name.givenName) || "") + " " + ((p.name && p.name.familyName) || "");
             return n.trim() || p.nickname || "";
         }
+        // A person's own message tone (docs/M6-PLAN.md F4; the community's
+        // "SMS Tone per Contact" patches): Contacts keeps it beside the
+        // person, in org.webosphoenix.contacttone:1 {personId, messageTone:
+        // {name, location}} (the contacts framework's person, saved whole,
+        // would drop a field of its own). "" for none: the notification tone.
+        var CONTACT_TONE_KIND = "org.webosphoenix.contacttone:1";
+        runtime.contactToneKind = CONTACT_TONE_KIND;
+        function messageToneFor(person) {
+            if (!person || !person._id) return "";
+            var t = (dbCall("/find", { query: { from: CONTACT_TONE_KIND, where: [{ prop: "personId", op: "=", val: person._id }] } }).results || [])[0];
+            return t && t.messageTone && t.messageTone.location ? String(t.messageTone.location) : "";
+        }
+        // The notification for a text from person: its own tone, if it has one.
+        function textNotification(fields, person) {
+            var tone = messageToneFor(person);
+            fields.soundClass = "notifications";
+            if (tone) fields.soundFile = tone;
+            return fields;
+        }
+
         function personFor(addr) {
             var people = dbCall("/find", { query: { from: "com.palm.person:1" } }).results || [];
             for (var i = 0; i < people.length; ++i) {
@@ -6181,9 +6221,9 @@
                     from: { addr: from }, flags: { read: false, visible: true }
                 });
                 var person = personFor(from);
-                host.postToHost("notification", { appId: MESSAGING_APP, title: person ? personName(person) : from,
+                host.postToHost("notification", textNotification({ appId: MESSAGING_APP, title: person ? personName(person) : from,
                                                   body: text ? "Picture: " + text : "Picture message",
-                                                  params: { threadId: r.threadId }, soundClass: "notifications" });
+                                                  params: { threadId: r.threadId } }, person));
                 return r.threadId;
             });
         };
@@ -6199,8 +6239,8 @@
                 from: { addr: from }, flags: { read: false, visible: true }
             });
             var person = personFor(from);
-            host.postToHost("notification", { appId: MESSAGING_APP, title: person ? personName(person) : from, body: text,
-                                              params: { threadId: r.threadId }, soundClass: "notifications" });
+            host.postToHost("notification", textNotification({ appId: MESSAGING_APP, title: person ? personName(person) : from, body: text,
+                                              params: { threadId: r.threadId } }, person));
             return r.threadId;
         };
 

@@ -54,7 +54,8 @@ const LOCK_AFTER = [
     { label: "30 minutes", value: 1800 },
 ];
 
-const PREF_KEYS: (keyof SystemPreferences)[] = ["screenTimeout", "lockTimeout", "rotationLock", "wallpaper", "showAlertsWhenLocked", "blinkNotifications",
+const PREF_KEYS: (keyof SystemPreferences)[] = ["screenTimeout", "lockTimeout", "rotationLock", "wallpaper", "showAlertsWhenLocked", "lockScreenPreviews",
+    "blinkNotifications",
     "sysUiEnableNextPrevGestures"];
 
 export function ScreenPage() {
@@ -141,6 +142,12 @@ export function ScreenPage() {
                 <Row title="Show when locked">
                     <ToggleButton value={prefs.showAlertsWhenLocked !== false} label="Show notifications when locked"
                                   onChange={(v) => setPref({ showAlertsWhenLocked: v })} />
+                </Row>
+                <Row title="Show previews" subtitle={'Off, the lock screen says only "New Message"'} testId="lock-previews"
+                     disabled={prefs.showAlertsWhenLocked === false}>
+                    <ToggleButton value={prefs.lockScreenPreviews !== false} label="Show previews when locked"
+                                  disabled={prefs.showAlertsWhenLocked === false} testId="lock-previews-toggle"
+                                  onChange={(v) => setPref({ lockScreenPreviews: v })} />
                 </Row>
                 <Row title="Blink notifications">
                     <ToggleButton value={prefs.blinkNotifications !== false} label="Blink notifications"

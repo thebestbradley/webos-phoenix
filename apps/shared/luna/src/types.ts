@@ -176,6 +176,10 @@ export interface SystemPreferences {
     x_palm_virtualkeyboard_prefs?: string;
     rotationLock?: boolean;
     showAlertsWhenLocked?: boolean;
+    /** Phoenix: the lock screen shows who sent what (off: "New Message"). */
+    lockScreenPreviews?: boolean;
+    /** Phoenix: a notification's sound again every `minutes` until it is seen; apps set false are left out. */
+    notificationRepeat?: { enabled?: boolean; minutes?: number; apps?: Record<string, boolean> };
     /** Phoenix: seconds until the screen turns off. */
     screenTimeout?: number;
     /** Phoenix: seconds locked before the PIN or password is asked for (0: always). */

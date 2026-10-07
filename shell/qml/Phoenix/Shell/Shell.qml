@@ -1163,13 +1163,97 @@ FocusScope {
             // (after the ones queued before it).
             notes.showBanner(text, icon, a ? a.color : "#666666", a ? a.glyph : "", appId, params || "", bannerId || "",
                              function () { sounds.notification(appId, soundClass || "", soundFile || "", soundDuration || 0, false); });
+            shell._noteUnseen(appId, soundClass || "", soundFile || "", soundDuration || 0);
         }
         function onBannerRemoved(appId, bannerId) { notes.removeBanner(appId, bannerId); }
         function onBannersCleared(appId) { notes.clearBanners(appId); }
         // PalmSystem.playSoundNotification, or a notification with a sound.
         function onSoundRequested(appId, soundClass, soundFile, duration) {
             sounds.notification(appId, soundClass, soundFile, duration, false);
+            shell._noteUnseen(appId, soundClass, soundFile, duration);
         }
+    }
+
+    // ---- Repeat until seen (docs/M6-PLAN.md F4) ------------------------------------------
+    // Settings > Sounds & Ringtones > Repeat alerts (the community's
+    // Notification Repeat patches for Messaging, Email, Phone and Calendar,
+    // lclarkjr): an app's notification sounds again every so many minutes
+    // (2 by default) while it has a notification nobody has looked at. Seen:
+    // the dashboard opened, the app's card in front, or its notifications
+    // gone. Not ringtones or alarms, which have their own popup alerts.
+    readonly property var notificationRepeat: system && system.notificationRepeat ? system.notificationRepeat : ({})
+    readonly property int notificationRepeatInterval: Math.max(100, Math.round((notificationRepeat.minutes || 2) * 60000))
+    function repeatsFor(appId) {
+        var r = notificationRepeat;
+        return !!r.enabled && !(r.apps && r.apps[appId] === false);
+    }
+    // appId -> the sound it came with.
+    property var _unseen: ({})
+    // How often a repeat sounded, for the tests.
+    property int notificationRepeats: 0
+    function _noteUnseen(appId, soundClass, soundFile, duration) {
+        if (!appId || !repeatsFor(appId) || soundClass === "ringtones" || soundClass === "alarm" || soundClass === "none")
+            return;
+        if (notes.dashboardOpen || (cards.maximized && _appOf(cards.currentUid) === appId))
+            return;
+        var u = Object.assign({}, _unseen);
+        u[appId] = { soundClass: soundClass, soundFile: soundFile, duration: duration };
+        _unseen = u;
+    }
+    function markNotificationsSeen(appId) {
+        if (appId === undefined) {
+            _unseen = {};
+            return;
+        }
+        if (!_unseen[appId])
+            return;
+        var u = Object.assign({}, _unseen);
+        delete u[appId];
+        _unseen = u;
+    }
+    function _appOf(uid) {
+        for (var i = 0; source && source.cards && i < source.cards.count; ++i)
+            if (source.cards.get(i).uid === uid)
+                return source.cards.get(i).appId;
+        return "";
+    }
+    function _hasNotification(appId) {
+        for (var i = 0; notes.model && i < notes.model.count; ++i)
+            if (notes.model.get(i).appId === appId && !notes.model.get(i).ongoing)
+                return true;
+        return false;
+    }
+    Timer {
+        id: repeatTimer
+        interval: shell.notificationRepeatInterval
+        repeat: true
+        running: Object.keys(shell._unseen).length > 0
+        onTriggered: {
+            var u = Object.assign({}, shell._unseen), any = false;
+            for (var appId in u) {
+                if (!shell.repeatsFor(appId) || !shell._hasNotification(appId)) {
+                    delete u[appId];
+                    continue;
+                }
+                var s = u[appId];
+                shell.sounds.notification(appId, s.soundClass, s.soundFile, s.duration, false);
+                any = true;
+            }
+            shell._unseen = u;
+            if (any) {
+                shell.notificationRepeats++;
+                // The screen lights as for a new notification (DisplayManager::alert).
+                backlight.alert(false);
+            }
+        }
+    }
+    Connections {
+        target: notes
+        function onDashboardOpenChanged() { if (notes.dashboardOpen) shell.markNotificationsSeen(); }
+    }
+    Connections {
+        target: cards
+        function onCardMaximized(uid) { shell.markNotificationsSeen(shell._appOf(uid)); }
     }
 
     // ---- System sounds -----------------------------------------------------------------
@@ -2797,6 +2881,7 @@ FocusScope {
                     bannerGlyph: notes.bannerGlyph
                     bannerIcon: notes.bannerIcon
                     bannerOpacity: notes.bannerOpacity
+                    bannerAppId: notes.bannerAppId
                     emergencyAvailable: shell.emergencyAvailable
                     onUnlockRequested: shell.unlock()
                     onEmergencyRequested: shell.openEmergency()

@@ -19,6 +19,11 @@
 // BannerMessageHandler.cpp:730-740); "System Sounds" for the feedback
 // sounds (keyboard clicks, closing a card), "Keyboard clicks" for the
 // keyboard's.
+//
+// Repeat alerts (Phoenix; the community's Notification Repeat patches,
+// docs/M6-PLAN.md F4): system preference notificationRepeat {enabled,
+// minutes, apps: {appId: false}}: the shell sounds an app's notification
+// again every so many minutes until it is seen.
 
 import { useEffect, useRef, useState } from "react";
 import { audio, keyboardPrefs, system, withTapSounds, type AudioStream, type Ringtone, type SystemPreferences } from "@phoenix/luna";
@@ -27,6 +32,16 @@ import { Group, ListSelector, Note, Page, PageHeader, Row, Slider, ToggleButton 
 
 // Until the list arrives: the default (runtime defaultPrefs, LunaSysMgr's
 // ringtone preference).
+// The apps the patches repeated for (Messaging, Email, Phone, Calendar);
+// any other app repeats too unless it is turned off here.
+const REPEAT_APPS = [
+    { id: "org.webosphoenix.messaging", title: "Messaging" },
+    { id: "org.webosphoenix.phone", title: "Phone" },
+    { id: "com.palm.app.email", title: "Email" },
+    { id: "com.palm.app.calendar", title: "Calendar" },
+];
+const REPEAT_MINUTES = [1, 2, 5, 10, 15];
+
 const DEFAULT_RINGTONE: Ringtone = { name: "Ringtone", fullPath: "/usr/palm/sounds/ringtone.mp3", system: true };
 // The alert and notification tones LunaSysMgr shipped and defaults to
 // (Settings.cpp:103-108, conf/defaultPreferences.txt); either tone may
@@ -65,7 +80,7 @@ function StreamVolume({ title, stream }: { title: string; stream: AudioStream })
 
 export function SoundsPage() {
     const master = useLuna<{ volume: number; muted: boolean }>((cb, err) => audio.watchMaster(cb, err), []).value;
-    const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(["systemSounds", "ringtone", "alerttone", "notificationtone", "x_palm_virtualkeyboard_prefs"], cb, err), []).value ?? {};
+    const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(["systemSounds", "ringtone", "alerttone", "notificationtone", "x_palm_virtualkeyboard_prefs", "notificationRepeat"], cb, err), []).value ?? {};
     const [ringtones, setRingtones] = useState<Ringtone[]>([DEFAULT_RINGTONE]);
     useEffect(() => {
         let live = true;
@@ -91,6 +106,8 @@ export function SoundsPage() {
                       testId={key} onChange={pick(key, list, stream)} />
     );
     const tapSounds = keyboardPrefs(prefs.x_palm_virtualkeyboard_prefs).TapSounds !== false;
+    const repeat = { enabled: false, minutes: 2, apps: {} as Record<string, boolean>, ...prefs.notificationRepeat };
+    const setRepeat = (changes: Partial<typeof repeat>) => void system.setPreferences({ notificationRepeat: { ...repeat, ...changes } });
     return (
         <Page>
             <PageHeader title="Sounds & Ringtones" icon="icons/sounds.png" />
@@ -116,6 +133,23 @@ export function SoundsPage() {
                 {toneSelector("Notification tone", "notificationtone", tones, SYSTEM_TONES[1], "palerts")}
             </Group>
             <Note>The alert tone sounds for alarms and reminders, the notification tone for new messages and other notifications.</Note>
+
+            <Group label="Repeat alerts">
+                <Row title="Repeat until seen" subtitle="A notification sounds again until you look at it">
+                    <ToggleButton value={!!repeat.enabled} label="Repeat until seen" testId="repeat-toggle"
+                                  onChange={(v) => setRepeat({ enabled: v })} />
+                </Row>
+                <ListSelector title="Every" value={repeat.minutes ?? 2} disabled={!repeat.enabled} testId="repeat-minutes"
+                              options={REPEAT_MINUTES.map((n) => ({ label: n === 1 ? "1 minute" : `${n} minutes`, value: n }))}
+                              onChange={(v) => setRepeat({ minutes: v })} />
+                {REPEAT_APPS.map((a) => (
+                    <Row key={a.id} title={a.title} disabled={!repeat.enabled} testId={`repeat-app-${a.id}`}>
+                        <ToggleButton value={repeat.apps?.[a.id] !== false} label={`Repeat for ${a.title}`} disabled={!repeat.enabled}
+                                      testId={`repeat-app-toggle-${a.id}`}
+                                      onChange={(v) => setRepeat({ apps: { ...repeat.apps, [a.id]: v } })} />
+                    </Row>
+                ))}
+            </Group>
 
             <Group label="System sounds">
                 <Row title="System sounds">

@@ -103,6 +103,12 @@ QtObject {
     // Settings > Screen & Lock "Show notifications when locked"
     // (system preference showAlertsWhenLocked).
     property bool showAlertsWhenLocked: true
+    // Settings > Screen & Lock > Show previews (lockScreenPreviews, Phoenix):
+    // off, the lock screen says "New Message" instead (docs/M6-PLAN.md F4).
+    property bool lockScreenPreviews: true
+    // Settings > Sounds & Ringtones > Repeat alerts (notificationRepeat):
+    // {enabled, minutes, apps: {appId: false}} (docs/M6-PLAN.md F4).
+    property var notificationRepeat: ({ enabled: false, minutes: 2, apps: {} })
     // Settings > Accessibility "Reduce motion" (system preference
     // accessibility.reduceMotion): the shell's animations (Theme.reduceMotion).
     property bool reduceMotion: false
@@ -333,6 +339,10 @@ QtObject {
             twentyFourHour = s.timeFormat === "HH24";
         if (s.showAlertsWhenLocked !== undefined)
             showAlertsWhenLocked = !!s.showAlertsWhenLocked;
+        if (s.lockScreenPreviews !== undefined)
+            lockScreenPreviews = s.lockScreenPreviews !== false;
+        if (s.notificationRepeat !== undefined && s.notificationRepeat !== null)
+            notificationRepeat = s.notificationRepeat;
         if (s.screenTimeout !== undefined)
             screenTimeout = s.screenTimeout;
         if (s.lockTimeout !== undefined)
