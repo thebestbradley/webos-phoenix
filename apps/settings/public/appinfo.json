@@ -27,6 +27,7 @@
             { "id": "org.webosphoenix.settings.language", "title": "Language & Region", "icon": "icons/language.png", "params": { "page": "language" } },
             { "id": "org.webosphoenix.settings.textassist", "title": "Text Assist", "icon": "icons/textassist.png", "params": { "page": "textassist" } },
             { "id": "org.webosphoenix.settings.justtype", "title": "Just Type", "icon": "icons/justtype.png", "params": { "page": "justtype" } },
+            { "id": "org.webosphoenix.settings.clipboard", "title": "Clipboard", "icon": "icons/clipboard.png", "params": { "page": "clipboard" } },
             { "id": "org.webosphoenix.settings.location", "title": "Location Services", "icon": "icons/location.png", "params": { "page": "location" } },
             { "id": "org.webosphoenix.settings.emergency", "title": "Emergency Info", "icon": "icons/emergency.png", "params": { "page": "emergency" } },
             { "id": "org.webosphoenix.settings.accessibility", "title": "Accessibility", "icon": "icons/accessibility.png", "params": { "page": "accessibility" } },

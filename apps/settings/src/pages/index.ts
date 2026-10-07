@@ -22,6 +22,7 @@ import { CertificatesPage } from "./Certificates";
 import { PhonePrefsPage } from "./PhonePrefs";
 import { DevModePage } from "./DevMode";
 import { ExhibitionPage } from "./Exhibition";
+import { ClipboardPage } from "./Clipboard";
 
 export interface PageInfo {
     title: string;
@@ -44,6 +45,7 @@ export const PAGES = {
     language: { title: "Language & Region", icon: "icons/language.png", component: LanguagePage },
     textassist: { title: "Text Assist", icon: "icons/textassist.png", component: TextAssistPage },
     justtype: { title: "Just Type", icon: "icons/justtype.png", component: JustTypePage },
+    clipboard: { title: "Clipboard", icon: "icons/clipboard.png", component: ClipboardPage },
     location: { title: "Location Services", icon: "icons/location.png", component: LocationPage },
     emergency: { title: "Emergency Info", icon: "icons/emergency.png", component: EmergencyPage },
     accessibility: { title: "Accessibility", icon: "icons/accessibility.png", component: AccessibilityPage },

@@ -307,3 +307,16 @@ div.license-text { font-family: var(--pui-font); font-size: 13px; }
 .exhibition-move.down::before { top: 7px; transform: rotate(225deg); }
 .exhibition-move:disabled::before { border-color: #c4c4c4; }
 .exhibition-move:not(:disabled):active { background: rgba(0, 0, 0, 0.08); border-radius: 15px; }
+
+/* Settings > Clipboard: the excluded apps' Remove, a small grey pill. */
+.cb-none { color: var(--pui-text-dim); }
+.cb-remove {
+    padding: 4px 10px;
+    font: inherit;
+    font-size: 14px;
+    color: #333;
+    background: linear-gradient(#fbfbfb, #dadad8);
+    border: 1px solid #a4a4a2;
+    border-radius: 12px;
+    cursor: pointer;
+}
