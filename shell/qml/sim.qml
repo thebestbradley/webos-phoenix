@@ -6,7 +6,7 @@
 // Context properties set by phoenix-sim:
 //   simScene       "locked" | "cards" | "stacks" | "longstack" | "reorder" | "maximized" | "heldcard" | "launcher" |
 //                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" | "drawer" | "capture" | "capturepreview" |
-//                  "justtype" | "keyboard" | "systemmenu" | "empty"
+//                  "justtype" | "keyboard" | "clipstrip" | "systemmenu" | "empty"
 //   simFirstUse    start with First Use (--first-use); without it First Use
 //                  runs at start-up until it has been done once
 //                  (simSettings "firstuse/done", set when the app reports the
@@ -503,7 +503,7 @@ Item {
     readonly property var scenes: ["locked", "cards", "stacks", "longstack", "reorder", "maximized", "heldcard",
                                    "launcher", "launcheredit", "launchermenu", "launcherinstall", "pin", "emergency", "firstuse",
                                    "lowbattery", "banner", "notified", "dashboard", "drawer", "capture",
-                                   "capturepreview", "justtype", "keyboard", "systemmenu", "empty"]
+                                   "capturepreview", "justtype", "keyboard", "clipstrip", "systemmenu", "empty"]
     readonly property string scene: typeof simScene !== "undefined" ? simScene : ""
 
     // The keys of the entries that run something, wherever the keyboard
@@ -816,6 +816,9 @@ Item {
                     shell.launch(simLaunch[j]);
                 if (opening)
                     windows.openUrl(simOpen);
+                // --scene clipstrip with --launch: the strip over that app.
+                if (typeof simScene !== "undefined" && simScene === "clipstrip")
+                    root.clipStripScene();
                 root.startOnTouchstone();
             });
             return;
@@ -969,7 +972,68 @@ Item {
         } else if (scene === "keyboard") {
             // Just Type, its field focused: the keyboard comes up.
             shell.startJustType("");
+        } else if (scene === "clipstrip") {
+            shell.startJustType("");
+            clipStripScene();
         }
+    }
+
+    // "clipstrip": a few clips in the clipboard history (org.webosphoenix.
+    // clipboard), the keyboard up for the field in front (the app's first
+    // text field, with --launch; else Just Type's), and its clip strip open.
+    function clipStripScene() {
+        var seed = [
+            { text: "Pick up the photos from the lab on Friday", source: "org.webosphoenix.tasks" },
+            { text: "https://webosphoenix.org/news", title: "webOS Phoenix news", source: "org.webosphoenix.browser" },
+            { text: "c0rrect-Horse!battery", sensitive: true, kind: "password", source: "org.webosphoenix.passwords" },
+            { text: "482 913", source: "org.webosphoenix.authenticator", sensitive: true },
+            { text: "350 Main Street, Sunnyvale", source: "org.webosphoenix.maps" },
+            { text: "Thanks! See you at eight.", source: "org.webosphoenix.messaging" }
+        ];
+        var call = function (m, p, done) { windows.lunaCall("luna://org.webosphoenix.clipboard/" + m, p, done || function () {}); };
+        var focusField = function () {
+            var w = shell.cardView.maximized ? windows.windowFor(shell.cardView.currentUid) : null;
+            if (w && w.runScript)
+                w.runScript("(function f(n) { var e = document.querySelector('input:not([type=checkbox]):not([type=radio]), textarea');"
+                            + " if (e) e.focus(); else if (n > 0) setTimeout(function () { f(n - 1); }, 300); })(20)");
+            var open = function () {
+                if (!shell.keyboardOpen)
+                    return;
+                shell.keyboardOpenChanged.disconnect(open);
+                shell.keyboard.openClips();
+            };
+            if (shell.keyboardOpen)
+                shell.keyboard.openClips();
+            else
+                shell.keyboardOpenChanged.connect(open);
+        };
+        var run = function () {
+            call("addCategory", { name: "Work" }, function (c) {
+                var i = 0;
+                var next = function () {
+                    if (i >= seed.length)
+                        return focusField();
+                    call("add", seed[i++], function (r) {
+                        if (r && r.clip && i === 5)
+                            call("pin", { id: r.clip.id });
+                        if (r && r.clip && i === 1 && c && c.category)
+                            call("setCategory", { id: r.clip.id, category: c.category.id });
+                        next();
+                    });
+                };
+                next();
+            });
+        };
+        if (windows.systemUiLoaded)
+            return run();
+        var once = function () {
+            if (!windows.systemUiLoaded)
+                return;
+            windows.systemUiLoadedChanged.disconnect(once);
+            // The app's page has a moment to come up.
+            Qt.callLater(run);
+        };
+        windows.systemUiLoadedChanged.connect(once);
     }
 
     Timer {

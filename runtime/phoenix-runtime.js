@@ -12168,6 +12168,13 @@
             },
             sensitiveKind: sensitiveKind,
             passwordCopy: passwordCopy,
+            // A picture from the keyboard's clip strip, into the focused
+            // rich text (contenteditable); a plain field takes none.
+            insertImage: function (src) {
+                var el = editTarget();
+                if (!el || !el.isContentEditable || !src) return false;
+                return global.document.execCommand("insertImage", false, String(src));
+            },
             settings: settings,
             // For tests: the stored record (sensitive ones encrypted).
             raw: readClip,

@@ -940,6 +940,11 @@ FocusScope {
                 exitDockMode(true);
             return;
         }
+        // The keyboard's clip strip first: Back brings the keys back.
+        if (ime.clipsOpen && !locked) {
+            ime.closeClips();
+            return;
+        }
         if (locked) {
             // The back gesture (or Esc) on the passcode panel cancels it.
             if (lockScreen.unlockPanel.shown)
@@ -2462,6 +2467,7 @@ FocusScope {
                     source: shell.source
                     onLaunchRequested: (appId) => shell.launch(appId)
                     onCloseRequested: { justType.open = false; shell.forceActiveFocus(); }
+                    onCopied: (text) => clipboardClient.record(text, "com.palm.systemui")
                 }
 
                 // Phones round the corners of a maximized app (MenuWindowManager.cpp:126-146).
@@ -2657,6 +2663,7 @@ FocusScope {
                 anchors.fill: parent
                 onCloseRequested: siteMenu.open = false
                 onAction: (name) => shell.source.siteAction(cards.currentUid, name)
+                onCopied: (text) => clipboardClient.record(text, shell._appIdOf(cards.currentUid))
                 onOpenChanged: shell._overlayFocus(open)
                 Connections {
                     target: cards
@@ -2736,6 +2743,10 @@ FocusScope {
                 keyboard: shell.system && shell.system.keyboard ? shell.system.keyboard : ({ layout: "qwerty", language: "en" })
                 onKeyboardSelected: (k) => { if (shell.system && shell.system.keyboard !== undefined) shell.system.keyboard = k; }
                 onFeedback: (name) => shell.sounds.feedback(name)
+                // The clipboard key and the clip strip (M6 F2).
+                clipboard: clipboardClient
+                onImagePasteRequested: (clip) => shell._pasteImage(clip)
+                onShownChanged: if (shown) clipboardClient.refreshSettings()
             }
             Connections {
                 target: notes
@@ -2785,6 +2796,45 @@ FocusScope {
             fingerDown: fingers.active
             okToResize: shell.okToResizeUi
         }
+    }
+
+    // ---- Clipboard history (org.webosphoenix.clipboard, M6 F2) ----------------------
+    ClipboardClient {
+        id: clipboardClient
+        source: shell.source
+        locked: shell.locked
+        titleOf: function (appId) { return shell._appTitle(appId); }
+        onOpenAppRequested: {
+            shell.hideKeyboard();
+            shell.launch("org.webosphoenix.clipboard");
+        }
+    }
+    readonly property alias clipboard: clipboardClient
+    function _appIdOf(uid) {
+        var w = uid && source && typeof source.windowFor === "function" ? source.windowFor(uid) : null;
+        return w && w.appId ? String(w.appId) : "";
+    }
+    function _appTitle(appId) {
+        var apps = source ? source.apps : null;
+        if (!apps || !appId)
+            return "";
+        for (var i = 0; i < apps.count; ++i) {
+            var a = apps.get(i);
+            if (a.appId === appId)
+                return a.title;
+        }
+        return appId === "com.palm.systemui" ? qsTr("System") : "";
+    }
+    // A picture from the clip strip: into the page's editable element (no
+    // IME commit carries one); a plain text field takes none.
+    function _pasteImage(clip) {
+        var c = imeClient;
+        if (!c || c.kind !== "web" || !source)
+            return;
+        var w = c.uid === "justtype" ? null : (typeof source.windowFor === "function" ? source.windowFor(c.uid) : null);
+        if (w && w.runScript)
+            w.runScript("window.__phoenixRuntime && __phoenixRuntime.clipboard && __phoenixRuntime.clipboard.insertImage("
+                        + JSON.stringify(String(clip.image || "")) + ")");
     }
 
     // What the keyboard's keys go to: the focused text field, or the web
