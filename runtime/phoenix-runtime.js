@@ -12567,6 +12567,13 @@
             }
         }
         function saved(c) { return !!c.pinned || !!c.category; }
+        // A copy's time, always after the newest clip's: two copies in the
+        // same millisecond would otherwise tie, and "newest first" could
+        // put them either way round.
+        function nextTime() {
+            var now = Date.now(), newest = allClips()[0];
+            return newest && newest.time >= now ? newest.time + 1 : now;
+        }
         function allClips() {
             var out = [];
             store.keys(CLIP).forEach(function (k) {
@@ -12662,7 +12669,7 @@
             var source = String(item.source || PalmSystem.appIdentifier || "");
             if (!s.enabled) return Promise.resolve({ skipped: "off" });
             if (s.excludedApps.indexOf(source) >= 0) return Promise.resolve({ skipped: "excluded" });
-            var c = { id: newId(), time: Date.now(), source: source, pinned: false, category: "", sensitive: false };
+            var c = { id: newId(), time: nextTime(), source: source, pinned: false, category: "", sensitive: false };
             if (item.image) {
                 var img = String(item.image);
                 if (img.length > MAX_IMAGE) return Promise.resolve({ skipped: "too large" });

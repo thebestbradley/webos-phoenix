@@ -43,6 +43,16 @@ describe("simulated org.webosphoenix.clipboard", () => {
         expect(h.settings).toMatchObject({ enabled: true, keepFor: "week", maxItems: 100, sensitive: "mask" });
     });
 
+    it("keeps newest first for copies in the same millisecond", async () => {
+        vi.spyOn(Date, "now").mockReturnValue(1_800_000_000_000);
+        await add("first");
+        await add("second");
+        await add("third");
+        const h = await clipboard.history();
+        expect(h.clips.map((c) => c.text)).toEqual(["third", "second", "first"]);
+        vi.restoreAllMocks();
+    });
+
     it("moves a copy already there to the front instead of doubling it", async () => {
         const a = await add("alpha");
         await add("beta");
