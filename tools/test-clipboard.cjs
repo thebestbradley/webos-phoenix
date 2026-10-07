@@ -311,6 +311,8 @@ async function main() {
         await until((s) => s.enabled === true, "Clipboard history: on again");
         await st.click("[data-testid='cb-clear-all']");
         await st.click("[data-testid='cb-clear-ok']");
+        // Clear History's note was showing: wait for this clear's own answer.
+        // (Settings drops it when a clear starts.)
         await st.waitForFunction(() => /cleared/.test(document.querySelector("[data-testid='cb-cleared']")?.textContent || ""));
         check((await history()).length === 0, "Clear All Clips clears saved clips too");
 

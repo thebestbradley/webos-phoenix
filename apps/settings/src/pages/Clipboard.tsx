@@ -94,6 +94,8 @@ export function ClipboardPage() {
                 <Button variant="negative" data-testid="cb-clear-ok" onClick={() => {
                     const all = clearing === "all";
                     setClearing(null);
+                    // The last clear's count goes until this one answers.
+                    setDone("");
                     clipboard.clear(all).then((n) => setDone(n === 1 ? "1 clip cleared." : `${n} clips cleared.`), () => setDone(""));
                 }}>{clearing === "all" ? "Clear All" : "Clear History"}</Button>
                 <Button onClick={() => setClearing(null)}>Cancel</Button>
