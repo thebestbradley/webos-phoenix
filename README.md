@@ -203,7 +203,8 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Run the simulator
 
-Requires Qt 6.4 or newer with Qt Quick and Qt5Compat. Qt WebEngine is
+Requires Qt 6.8 or newer (6.8 is what a device's webOS OSE image ships)
+with Qt Quick and Qt5Compat. Qt WebEngine is
 needed to run the web apps (the original webOS apps and new Phoenix apps);
 without it the simulator shows placeholder apps only. Node.js 22 or 24
 (the LTS lines; 20.19+ also works) builds the Phoenix apps (Settings, Phone,
@@ -243,16 +244,13 @@ cmake --build build
 **Ubuntu 24.04**
 
 ```sh
-sudo apt install qt6-base-dev qt6-declarative-dev qml6-module-qtquick \
-  qml6-module-qtquick-window qml6-module-qtqml-workerscript \
-  qml6-module-qt5compat-graphicaleffects qml6-module-qttest \
-  qt6-webengine-dev qml6-module-qtwebengine libqt6svg6
-sudo snap install node --classic
-cmake -S shell -B build && cmake --build build
+scripts/linux-setup.sh
 ./build/phoenix-sim
 ```
 
-Node.js comes from the snap because Ubuntu's own nodejs package is too old.
+Ubuntu's own Qt packages stop at 6.4, so the script installs Qt 6.8.1 into
+`/opt/Qt` with aqtinstall (and Node.js 22, as Ubuntu's nodejs is too old),
+then builds with `-DCMAKE_PREFIX_PATH=/opt/Qt/6.8.1/gcc_64`.
 
 The window is the **Phoenix WebOS Simulator**: the device's screen under a
 menu bar (on a Mac, the one at the top of the screen) and beside a toolbar.

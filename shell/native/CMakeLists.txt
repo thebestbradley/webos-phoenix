@@ -4,6 +4,9 @@
 # Phoenix.Native: the few things the shell needs that QML cannot do. Built
 # for the simulator and the device; needs only Qt Quick.
 
+# QTP0001: Qt 6.5's resource prefix (:/qt/qml/). The module has C++ types
+# only, no QML files, and is imported from the build tree, so nothing moves.
+qt_policy(SET QTP0001 NEW)
 qt_add_qml_module(phoenix-native
     URI Phoenix.Native
     VERSION 1.0
