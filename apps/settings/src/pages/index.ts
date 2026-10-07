@@ -23,6 +23,7 @@ import { PhonePrefsPage } from "./PhonePrefs";
 import { DevModePage } from "./DevMode";
 import { ExhibitionPage } from "./Exhibition";
 import { ClipboardPage } from "./Clipboard";
+import { AssistantPage } from "./Assistant";
 
 export interface PageInfo {
     title: string;
@@ -46,6 +47,7 @@ export const PAGES = {
     textassist: { title: "Text Assist", icon: "icons/textassist.png", component: TextAssistPage },
     justtype: { title: "Just Type", icon: "icons/justtype.png", component: JustTypePage },
     clipboard: { title: "Clipboard", icon: "icons/clipboard.png", component: ClipboardPage },
+    assistant: { title: "Assistant", icon: "icons/assistant.png", component: AssistantPage },
     location: { title: "Location Services", icon: "icons/location.png", component: LocationPage },
     emergency: { title: "Emergency Info", icon: "icons/emergency.png", component: EmergencyPage },
     accessibility: { title: "Accessibility", icon: "icons/accessibility.png", component: AccessibilityPage },

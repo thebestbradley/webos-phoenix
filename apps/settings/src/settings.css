@@ -320,3 +320,17 @@ div.license-text { font-family: var(--pui-font); font-size: 13px; }
     border-radius: 12px;
     cursor: pointer;
 }
+
+/* Assistant (pages/Assistant.tsx) */
+.as-none { color: var(--pui-text-dim); }
+.as-field { width: 60%; min-width: 180px; }
+.as-badge {
+    display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 8px; font-size: 11px; vertical-align: middle;
+    color: #fff; background: #3a8bd9;
+}
+.as-small {
+    border: 1px solid #8a8a8a; border-radius: 12px; padding: 4px 12px;
+    background: linear-gradient(#fdfdfd, #d9d9d9); color: #333; font: inherit; font-size: 13px;
+}
+.as-small.negative { border-color: #b04040; background: linear-gradient(#f8d4d0, #e8a8a0); color: #6a1a14; }
+.as-small:disabled { opacity: 0.45; }
