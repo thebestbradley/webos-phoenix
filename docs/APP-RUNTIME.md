@@ -1736,9 +1736,14 @@ characters with a symbol, or all four). They are kept AES-GCM encrypted
 `ClipboardClient.qml`): the clipboard key at the left of the candidate
 bar, in every field while the history and the key are on (not over the
 lock screen). In a field without Text Assist (a password, an address) the
-bar holds only the key. It swaps the keys for the clip strip: Recent,
-Pinned and category tabs; the clips as small cards in the card view's look;
-a tap pastes through the IME's commit and brings the keys back (a secret
+bar holds only the key. It swaps the keys for the clip strip (rising and
+fading in over them): Recent, Pinned and category tabs in the launcher's
+tab bar art; the clips as card view's cards, the one in focus centred and
+its neighbours peeking in beside it, smaller (the non-active card scale)
+and dimmed (`cardDimming`); a swipe moves them and they snap clip to clip
+with card view's flick and slide; another tab slides its clips in from its
+side. A tap on a side clip centres it; a tap on the middle clip pastes
+through the IME's commit and brings the keys back (a secret
 only into a password field; elsewhere the strip says to reveal it in
 Clipboard); a picture goes into rich text (`clipboard.insertImage`); a hold
 opens Pin, Save to…, Delete, Open Clipboard. ABC, Back, the key, or the

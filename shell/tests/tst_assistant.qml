@@ -140,6 +140,9 @@ Item {
             mouseRelease(shell, p.x, p.y);
         }
         function openByHold() {
+            // The dock back in place (it slides away under the keyboard and
+            // back as the keyboard goes), so the hold lands on the button.
+            tryVerify(function () { return !shell.keyboardOpen && ql.visible && ql.opacity === 1 && ql.shownProgress === 1; }, 3000, "the dock in place");
             hold(launcherButton());
             tryCompare(overlay, "open", true, 2000);
             // Grown out of the button, the backdrop faded in.
