@@ -24,6 +24,7 @@ import { DevModePage } from "./DevMode";
 import { ExhibitionPage } from "./Exhibition";
 import { ClipboardPage } from "./Clipboard";
 import { AssistantPage } from "./Assistant";
+import { AdvancedPage } from "./Advanced";
 
 export interface PageInfo {
     title: string;
@@ -56,6 +57,7 @@ export const PAGES = {
     updates: { title: "Updates", icon: "icons/updates.png", component: UpdatesPage },
     certificates: { title: "Certificate Manager", icon: "icons/certificates.png", component: CertificatesPage },
     devmode: { title: "Developer Mode", icon: "icons/devmode.png", component: DevModePage },
+    advanced: { title: "Advanced", icon: "icons/advanced.png", component: AdvancedPage },
 } satisfies Record<string, PageInfo>;
 
 export type PageId = keyof typeof PAGES;

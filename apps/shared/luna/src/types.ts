@@ -192,6 +192,28 @@ export interface SystemPreferences {
     dockModeSoundPref?: "systemsettings" | "mute";
     /** Phoenix: Settings > Exhibition. */
     exhibition?: ExhibitionPrefs;
+    // Settings > Advanced (the community's Tweaks; docs/M6-PLAN.md F4).
+    // LunaCE's own keys where it had the option:
+    /** Card view wraps from the last card to the first (LunaCE abh_features.json). */
+    infiniteCardCyclingEnabled?: boolean;
+    /** A tap on a side card in card view maximizes it (LunaCE maximize-edges.json). */
+    sysUiEnableMaximizeEdges?: boolean;
+    /** An upward slide from the side of the gesture area opens the wave launcher (LunaCE wave-launcher.json). */
+    sysUiEnableWaveLauncher?: boolean;
+    /** The tap ripple (LunaCE tap-ripple.json; on by default). */
+    showReticleAnimation?: boolean;
+    /** Phoenix: the shell's animations. */
+    animationSpeed?: "normal" | "fast";
+    /** Phoenix: how far a swipe goes before it counts. */
+    gestureSensitivity?: "low" | "normal" | "high";
+    /** Phoenix: a vibration on every tap. */
+    hapticFeedback?: boolean;
+    /** Phoenix: the launcher's icon grid. */
+    launcherGridDensity?: "normal" | "dense";
+    /** Phoenix: the battery's percentage beside its icon in the status bar. */
+    showBatteryPercent?: boolean;
+    /** Phoenix: a row of numbers above the keyboard's letters. */
+    keyboardNumberRow?: boolean;
     [key: string]: unknown;
 }
 

@@ -90,6 +90,8 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Launcher and dock position persistence. `Src/lunaui/launcher/systeminterface/pagesaver.cpp`, `pagerestore.cpp`; `Src/base/settings/Settings.cpp:161-165` *Phoenix: in the simulator.*
 - [x] Icon menu on press and hold (Phoenix addition): Move, Share, Uninstall, Add to / Remove from Dock, Favorite, New Window, App Info. *Phoenix: `IconMenu.qml`; 500 ms hold or a right click on a launcher or dock icon; moving on from the hold starts the edit mode drag (`tst_launcher.qml`; M6-PLAN F1). Not in luna-sysmgr, where the hold only entered edit mode.*
 - [x] Empty-page hint. `Src/lunaui/launcher/elements/page/reorderablepage.cpp:64` *Phoenix: done (`Launcher.qml`, `tst_launcher.qml`).*
+- [x] App groups (folders), and tabs renamed, added and removed (community: LunaCE in webOS CE 3.1.0). *Phoenix: an icon held over another's centre groups them; the group's overlay launches, renames, and takes apps out (the icon menu's Remove from Folder); tabs renamed by holding, "+" for a new one (up to six), the trash can for one the user added; kept with the layout (`LauncherGroup.qml`, `LauncherNameDialog.qml`, `LauncherLayout.js`; `tst_launcher.qml`; M6-PLAN F4).*
+- [x] Launcher grid density (community: the icon grid patches). *Phoenix: Settings > Advanced > Icon grid, Normal or Dense (`Launcher.qml`; M6-PLAN F4).*
 
 ## 6. Lock screen and security [spec §6]
 

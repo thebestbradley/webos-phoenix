@@ -16,6 +16,11 @@
 //   tap             -> toggle between the app and card view
 //   hold and slide  -> with the keyboard up, moves the cursor a character
 //                      per step (Phoenix, GAPS V4)
+//   slide up from a side -> with the wave launcher on (Settings > Advanced;
+//                      LunaCE's sysUiEnableWaveLauncher), a finger slid up
+//                      from the area's left or right quarter raises the
+//                      wave (waveStarted / waveMoved / waveEnded, in this
+//                      item's coordinates); the shell decides on the release
 //   hold            -> the meta key (Key_CoreNavi_Meta, MetaKeyManager): a
 //                      finger resting on the area is a modifier; with it
 //                      down, C, X, V and A typed are Copy, Cut, Paste and
@@ -39,6 +44,16 @@ Item {
     signal tapped
     // Cursor control: -1 left, 1 right, a character at a time.
     signal cursorStep(int direction)
+    // The wave launcher (WaveLauncher.qml): the finger went up from a side,
+    // then moved, then let go.
+    signal waveStarted(real x, real y)
+    signal waveMoved(real x, real y)
+    signal waveEnded(real x, real y)
+    signal waveCanceled
+    property bool waveLauncher: false
+    readonly property bool waveActive: mouse.wave
+    // The share of the area's width at each end a wave starts from.
+    readonly property real waveSide: 0.25
 
     // Settings > Screen & Lock > Advanced gestures
     // (sysUiEnableNextPrevGestures).
@@ -53,7 +68,8 @@ Item {
     readonly property real cursorStepWidth: Theme.px(10)
 
     // A short swipe; the legacy thresholds were tuned for a 320px wide area.
-    readonly property real threshold: Theme.px(30)
+    // Settings > Advanced > Gesture sensitivity scales it (Theme.gestureScale).
+    readonly property real threshold: Theme.px(30 * Theme.gestureScale)
 
     // The light bar is on while an app is maximized (and the screen
     // unlocked), off in card view (CoreNaviManager::restoreLightbar).
@@ -144,16 +160,33 @@ Item {
         property real sx
         property real sy
         property bool cursor: false
+        property bool wave: false
         property bool swiped: false
         property bool glowing: false
         property real anchorX
         onPressed: (m) => {
             sx = m.x; sy = m.y;
             cursor = false;
+            wave = false;
             swiped = false;
             hold.restart();
         }
         onPositionChanged: (m) => {
+            if (wave) {
+                area.waveMoved(m.x, m.y);
+                return;
+            }
+            // Up from a side: the wave launcher.
+            if (!cursor && area.waveLauncher && (sx < area.width * area.waveSide || sx > area.width * (1 - area.waveSide))
+                    && sy - m.y > area.threshold && sy - m.y > Math.abs(m.x - sx)) {
+                hold.stop();
+                if (glowing) { glowing = false; glowFade.restart(); }
+                swiped = true;
+                wave = true;
+                area.light("waterdrop");
+                area.waveStarted(m.x, m.y);
+                return;
+            }
             if (cursor) {
                 var n = Math.trunc((m.x - anchorX) / area.cursorStepWidth);
                 for (var i = 0; i < Math.abs(n); ++i)
@@ -165,7 +198,16 @@ Item {
                 if (glowing) { glowing = false; glowFade.restart(); }
             }
         }
-        onCanceled: { hold.stop(); cursor = false; swiped = false; if (glowing) { glowing = false; glowFade.restart(); } }
+        onCanceled: {
+            hold.stop();
+            cursor = false;
+            swiped = false;
+            if (wave) {
+                wave = false;
+                area.waveCanceled();
+            }
+            if (glowing) { glowing = false; glowFade.restart(); }
+        }
         Timer {
             id: hold
             interval: area.holdDelay
@@ -184,6 +226,11 @@ Item {
         }
         onReleased: (m) => {
             hold.stop();
+            if (wave) {
+                wave = false;
+                area.waveEnded(m.x, m.y);
+                return;
+            }
             if (glowing) {
                 glowing = false;
                 glowFade.restart();

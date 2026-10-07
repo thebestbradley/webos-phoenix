@@ -43,6 +43,38 @@ FocusScope {
     function showLauncherPage(i) { launcher.showPage(i); }
     // The icon menu of the icon at index on the launcher's page (IconMenu.qml).
     function openLauncherIconMenu(index) { return launcher.requestMenu(index); }
+    // App groups and tabs (docs/M6-PLAN.md F4), for the simulator's scenes:
+    // ids (on one page) grouped where the first was, named title; a group
+    // opened; a tab added.
+    function groupLauncherApps(ids, title) {
+        var l = launcherLayout;
+        for (var i = 1; i < ids.length; ++i)
+            l = LauncherLayout.makeGroup(l, ids[i], i === 1 ? ids[0] : LauncherLayout.groupOf(l, ids[0]));
+        var g = LauncherLayout.groupOf(l, ids[0]);
+        if (g && title)
+            l = LauncherLayout.renameGroup(l, g, title);
+        setLauncherLayout(l);
+        return g;
+    }
+    function openLauncherGroup(id) { launcher.openGroup(id); }
+    // The wave launcher (WaveLauncher.qml) up, the finger at (x, y) in its
+    // coordinates: the dock's apps, then the launcher button.
+    function openWave(x, y) {
+        var items = [];
+        var dock = launcherLayout ? launcherLayout.dock.slice(0, Theme.quickLaunchMaxItems - 1) : [];
+        for (var i = 0; i < dock.length; ++i) {
+            var e = launcher.entry(dock[i]);
+            if (e)
+                items.push({ appId: e.appId, title: e.title, icon: String(e.icon || ""), largeIcon: String(e.largeIcon || ""),
+                             color: String(e.color), glyph: e.glyph });
+        }
+        items.push({ appId: "" });
+        waveView.items = items;
+        waveView.begin(x);
+        waveView.track(x, y);
+    }
+    readonly property alias waveLauncher: waveView
+    function addLauncherTab(title) { setLauncherLayout(LauncherLayout.addTab(launcherLayout, title)); }
     property alias cardView: cards
     property alias notifications: notes
     property alias searchPill: searchPill
@@ -59,6 +91,15 @@ FocusScope {
     Binding { target: Theme; property: "hardwareHomeButton"; value: shell.hardwareHomeButton }
     // Settings > Accessibility > Reduce motion.
     Binding { target: Theme; property: "reduceMotion"; value: !!(shell.system && shell.system.reduceMotion) }
+    // Settings > Advanced (docs/M6-PLAN.md F4; the system's tweaks, see
+    // SimSystemStatus.tweaks): tweak(name) is the setting, or its default.
+    readonly property var tweaks: shell.system && shell.system.tweaks ? shell.system.tweaks : ({})
+    readonly property var tweakDefaults: ({ infiniteCardCycling: false, maximizeEdges: false, waveLauncher: false, tapRipple: true,
+                                            animationSpeed: "normal", gestureSensitivity: "normal", haptics: false,
+                                            gridDensity: "normal", batteryPercent: false, numberRow: false })
+    function tweak(name) { return tweaks[name] !== undefined ? tweaks[name] : tweakDefaults[name]; }
+    Binding { target: Theme; property: "animationSpeed"; value: shell.tweak("animationSpeed") }
+    Binding { target: Theme; property: "gestureSensitivity"; value: shell.tweak("gestureSensitivity") }
     // Tell the window source which card is in front (apps it launches join
     // its stack).
     Binding {
@@ -118,6 +159,8 @@ FocusScope {
     // Haptic feedback as the menu opens: com.palm.vibrate's short effect,
     // which runs the device's motor where it has one (DeviceServices).
     property int iconMenuHaptics: 0
+    // Taps that buzzed (Settings > Advanced > Haptics), for the tests.
+    property int tapHaptics: 0
 
     // rect: the icon, in item's coordinates.
     function openIconMenu(appId, from, item, rect) {
@@ -175,6 +218,10 @@ FocusScope {
                                                          : { name: "favorite", text: qsTr("Favorite") });
         if (e.multipleInstances && source && typeof source.launchNewInstance === "function")
             list.push({ name: "newWindow", text: qsTr("New Window") });
+        // An app in a group (LunaCE's folders, docs/M6-PLAN.md F4): out of
+        // it, onto the page after the group.
+        if (LauncherLayout.groupOf(l, appId) !== "")
+            list.push({ name: "ungroup", text: qsTr("Remove from Folder") });
         list.push({ name: "info", text: qsTr("App Info") });
         return list;
     }
@@ -184,7 +231,13 @@ FocusScope {
         switch (name) {
         case "move":
             // Edit mode with the icon picked up: it follows the next touch
-            // and stays where that lets go (iconDrag.held).
+            // and stays where that lets go (iconDrag.held). From a group, it
+            // leaves the group first.
+            if (from === "group") {
+                setLauncherLayout(LauncherLayout.removeFromGroup(l, appId));
+                launcher.closeGroup();
+                from = "page";
+            }
             if (from === "page")
                 launcher.editMode = true;
             var r = iconMenu.iconRect;
@@ -215,6 +268,9 @@ FocusScope {
             break;
         case "info":
             deleteDialog.showInfo(appId);
+            break;
+        case "ungroup":
+            setLauncherLayout(LauncherLayout.removeFromGroup(l, appId));
             break;
         }
     }
@@ -381,13 +437,22 @@ FocusScope {
         onActivity: backlight.activity()
         tapRadius: Theme.tapRadius
         onTapped: (pos) => {
+            // Settings > Advanced > Haptics: every tap a short buzz (the
+            // Haptic Feedback Manager patch), keys included.
+            if (shell.tweak("haptics")) {
+                shell.tapHaptics++;
+                devices.vibrate({ name: "tapdown" });
+            }
             var p = shell.mapFromItem(null, pos.x, pos.y);
             // Not over the keyboard, whose keys show their own
             // (InputWindowManager::doReticle).
             var k = ime.mapFromItem(shell, p.x, p.y);
             if (ime.visible && ime.contains(k))
                 return;
-            reticle.startAt(p.x, p.y);
+            // Settings > Advanced > Tap ripple off: none (LunaCE's
+            // showReticleAnimation, tap-ripple.json).
+            if (shell.tweak("tapRipple"))
+                reticle.startAt(p.x, p.y);
         }
     }
     Connections {
@@ -1013,6 +1078,8 @@ FocusScope {
                 source.justTypeBack();
             else
                 justType.open = false;
+        } else if (launcher.open && launcher.closeOverlay()) {
+            // The launcher's tab name dialog, open group or "+" went first.
         } else if (launcher.open)
             launcher.open = false;
         else if (cards.maximized)
@@ -2091,6 +2158,9 @@ FocusScope {
                         uiPortrait: uiRotation.uiPortrait
                         // First Use's card stays until the app closes it.
                         pinnedUid: shell._firstUseUid
+                        // Settings > Advanced (docs/M6-PLAN.md F4).
+                        infiniteCycling: shell.tweak("infiniteCardCycling")
+                        maximizeEdges: shell.tweak("maximizeEdges")
                     }
 
                     Launcher {
@@ -2120,6 +2190,21 @@ FocusScope {
                         onDragMoved: (x, y) => iconDrag.move(launcher.mapToItem(ui, x, y))
                         onDragEnded: (x, y) => iconDrag.drop(launcher.mapToItem(ui, x, y))
                         onMenuRequested: (appId, from, rect) => shell.openIconMenu(appId, from, launcher, rect)
+                        gridDensity: shell.tweak("gridDensity")
+                        // Groups and tabs (LunaCE; docs/M6-PLAN.md F4).
+                        onGroupRenamed: (groupId, title) => shell.setLauncherLayout(LauncherLayout.renameGroup(shell.launcherLayout, groupId, title))
+                        onTabAdded: (title) => {
+                            shell.setLauncherLayout(LauncherLayout.addTab(shell.launcherLayout, title));
+                            launcher.showPage(shell.launcherLayout.pages.length - 1);
+                        }
+                        onTabRenamed: (index, title) => shell.setLauncherLayout(LauncherLayout.renameTab(shell.launcherLayout, index, title))
+                        onTabRemoved: (index) => {
+                            shell.setLauncherLayout(LauncherLayout.removeTab(shell.launcherLayout, index));
+                            launcher.showPage(Math.min(index, shell.launcherLayout.pages.length - 1));
+                        }
+                        // Carried out of its group: onto the page shown, at its end.
+                        onGroupDragOut: (appId) => shell.setLauncherLayout(LauncherLayout.removeFromGroup(shell.launcherLayout, appId,
+                                                                                                         launcher.currentPage, -1))
                     }
                 }
 
@@ -2168,6 +2253,20 @@ FocusScope {
                     z: 999
                     onTriggered: (name) => shell.iconMenuAction(iconMenu.appId, iconMenu.from, name)
                     onCloseRequested: iconMenu.open = false
+                }
+                // The wave launcher (Settings > Advanced; docs/M6-PLAN.md F4):
+                // the dock's apps and the launcher button on a wave the
+                // gesture area raises (GestureArea waveStarted).
+                WaveLauncher {
+                    id: waveView
+                    anchors.fill: parent
+                    anchors.bottomMargin: notes.negativeSpace
+                    z: 997
+                    onLaunchRequested: (appId) => shell.launch(appId)
+                    onLauncherRequested: {
+                        justType.open = false;
+                        launcher.open = true;
+                    }
                 }
                 // The launcher closing (Back, a launch, Home) closes its menu.
                 Connections {
@@ -2224,18 +2323,44 @@ FocusScope {
                         x = p.x - width / 2;
                         y = p.y - height / 2;
                     }
+                    // A group being hovered over (LunaCE: the centre of an
+                    // icon, held there a moment, groups).
+                    property string hoverTarget: ""
+                    Timer {
+                        id: groupHover
+                        interval: Theme.launcherGroupHoverDelay
+                        onTriggered: launcher.groupTarget = iconDrag.hoverTarget
+                    }
+                    function _clearGroupHover() {
+                        groupHover.stop();
+                        hoverTarget = "";
+                        launcher.groupTarget = "";
+                    }
                     function start(id, source, p) {
                         var e = entry(id);
-                        if (!e)
+                        var group = LauncherLayout.isGroup(id);
+                        if (!e && !group)
                             return;
                         // Dragged out of the icon menu: the drag takes over.
                         iconMenu.open = false;
                         held = false;
-                        proxy.title = e.title;
-                        proxy.color = e.color;
-                        proxy.glyph = e.glyph;
-                        proxy.source = e.icon || "";
-                        proxy.largeSource = e.largeIcon || "";
+                        _clearGroupHover();
+                        if (group) {
+                            var g = launcher._cellData(id);
+                            proxy.title = g.title;
+                            proxy.color = g.color;
+                            proxy.glyph = "";
+                            proxy.source = "";
+                            proxy.largeSource = "";
+                            proxy.groupIcons = JSON.parse(g.groupIcons);
+                        } else {
+                            proxy.groupIcons = [];
+                            proxy.title = e.title;
+                            proxy.color = e.color;
+                            proxy.glyph = e.glyph;
+                            proxy.source = e.icon || "";
+                            proxy.largeSource = e.largeIcon || "";
+                        }
                         from = source;
                         lastIndex = -1;
                         appId = id;
@@ -2248,12 +2373,30 @@ FocusScope {
                         if (appId === "")
                             return;
                         place(p);
-                        if (!launcher.open || overDock(p))
+                        if (!launcher.open || overDock(p)) {
+                            _clearGroupHover();
                             return;
+                        }
                         var lp = ui.mapToItem(launcher, p.x, p.y);
                         // At a page's edge: the launcher pans or scrolls.
-                        if (from === "page" && launcher.dragOver(lp.x, lp.y))
+                        if (from === "page" && launcher.dragOver(lp.x, lp.y)) {
+                            _clearGroupHover();
                             return;
+                        }
+                        // Over another icon's centre: it waits to group,
+                        // and the icons stay where they are meanwhile.
+                        var gt = from === "page" ? launcher.groupTargetAt(lp.x, lp.y) : "";
+                        if (gt !== "") {
+                            reorderDelay.stop();
+                            lastIndex = -1;
+                            if (gt !== hoverTarget) {
+                                launcher.groupTarget = "";
+                                hoverTarget = gt;
+                                groupHover.restart();
+                            }
+                            return;
+                        }
+                        _clearGroupHover();
                         var tab = launcher.tabAt(lp.x, lp.y);
                         if (tab >= 0 && tab !== launcher.currentPage) {
                             shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, tab, -1));
@@ -2266,16 +2409,32 @@ FocusScope {
                             var idx = launcher.indexAt(lp.x, lp.y);
                             if (page !== launcher.currentPage) {
                                 shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, launcher.currentPage, idx));
-                            } else if (idx >= 0 && idx !== lastIndex
-                                       && shell.launcherLayout.pages[page].indexOf(appId) !== idx) {
-                                shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, page, idx));
+                            } else if (idx >= 0 && idx !== lastIndex) {
+                                // The others make room once the icon rests
+                                // over a place a moment, so that it can pass
+                                // over them on its way to one's centre (a
+                                // group; Phoenix: the original made room at
+                                // once, having no groups).
+                                reorderDelay.restart();
                             }
                             lastIndex = idx;
+                        }
+                    }
+                    Timer {
+                        id: reorderDelay
+                        interval: Theme.launcherReorderDelay
+                        onTriggered: {
+                            var l = shell.launcherLayout, page = LauncherLayout.pageOf(l, iconDrag.appId);
+                            if (iconDrag.appId !== "" && iconDrag.from === "page" && page === launcher.currentPage
+                                    && iconDrag.lastIndex >= 0 && l.pages[page].indexOf(iconDrag.appId) !== iconDrag.lastIndex)
+                                shell.setLauncherLayout(LauncherLayout.move(l, iconDrag.appId, page, iconDrag.lastIndex));
                         }
                     }
                     // Put back where it was (Back or Esc after Move).
                     function cancel() {
                         held = false;
+                        _clearGroupHover();
+                        reorderDelay.stop();
                         launcher.dragDone();
                         appId = "";
                     }
@@ -2285,7 +2444,28 @@ FocusScope {
                             return;
                         launcher.dragDone();
                         var l = shell.launcherLayout;
-                        if (overDock(p)) {
+                        var target = launcher.groupTarget;
+                        _clearGroupHover();
+                        reorderDelay.stop();
+                        if (target !== "" && launcher.open && from === "page") {
+                            // Onto an icon's centre, held there: a group.
+                            shell.setLauncherLayout(LauncherLayout.makeGroup(l, appId, target));
+                            appId = "";
+                            return;
+                        }
+                        // Let go before the others made room (or over an
+                        // icon's centre before it grouped): in the place
+                        // under the finger.
+                        var lp = ui.mapToItem(launcher, p.x, p.y);
+                        if (from === "page" && launcher.open && !overDock(p) && launcher.inPages(lp.x, lp.y)
+                                && launcher.edgeAt(lp.x, lp.y) === "") {
+                            var pg = LauncherLayout.pageOf(l, appId), idx = launcher.indexAt(lp.x, lp.y);
+                            if (pg === launcher.currentPage && idx >= 0 && l.pages[pg].indexOf(appId) !== idx)
+                                l = LauncherLayout.move(l, appId, pg, idx);
+                        }
+                        if (overDock(p) && LauncherLayout.isGroup(appId)) {
+                            // A group stays on its page: the dock holds apps.
+                        } else if (overDock(p)) {
                             var q = ui.mapToItem(quickLaunch, p.x, p.y);
                             l = LauncherLayout.addToDock(l, appId, quickLaunch.slotAt(q.x), Theme.quickLaunchMaxItems - 1);
                         } else if (from === "dock") {
@@ -2956,6 +3136,25 @@ FocusScope {
             onPrevious: shell.gestureSwitchApp(true)
             onNext: shell.gestureSwitchApp(false)
             advancedGestures: !!(shell.system && shell.system.advancedGestures)
+            // The wave launcher (Settings > Advanced): not over the lock
+            // screen, First Use, dock mode or the launcher.
+            waveLauncher: shell.tweak("waveLauncher") && !shell.locked && !shell.firstUse && !shell.dockMode && !launcher.open
+            onWaveStarted: (x, y) => {
+                var p = gesture.mapToItem(waveView, x, y);
+                shell.openWave(p.x, p.y);
+            }
+            onWaveMoved: (x, y) => {
+                var p = gesture.mapToItem(waveView, x, y);
+                waveView.track(p.x, p.y);
+            }
+            // Let go on the wave: that app; far above it: the swipe up it
+            // also was; else nothing.
+            onWaveEnded: (x, y) => {
+                var p = gesture.mapToItem(waveView, x, y);
+                if (!waveView.finish(p.x, p.y) && p.y < waveView.waveTop - waveView.iconSize)
+                    shell.gestureUp();
+            }
+            onWaveCanceled: waveView.cancel()
             lit: cards.maximized && !shell.locked
             onTapped: shell.gestureTap()
             // With the keyboard up, hold and slide to move the cursor.

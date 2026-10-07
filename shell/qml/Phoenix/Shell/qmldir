@@ -21,6 +21,9 @@ Display 1.0 Display.qml
 GestureArea 1.0 GestureArea.qml
 JustType 1.0 JustType.qml
 Launcher 1.0 Launcher.qml
+WaveLauncher 1.0 WaveLauncher.qml
+LauncherGroup 1.0 LauncherGroup.qml
+LauncherNameDialog 1.0 LauncherNameDialog.qml
 LockScreen 1.0 LockScreen.qml
 UiRotation 1.0 UiRotation.qml
 UnlockPanel 1.0 UnlockPanel.qml

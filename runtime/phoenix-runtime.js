@@ -1221,8 +1221,51 @@
         // (Settings > Text Assist > Shortcuts), [{shortcut, text}], which
         // the keyboard's space bar puts in while shortcutChecking is not "off".
         x_palm_textinput: { spellChecking: "autoCorrect", grammarChecking: "autoCorrect", shortcutChecking: "autoCorrect", shortcuts: [] },
+        // Settings > Advanced (docs/M6-PLAN.md F4, the community's Tweaks).
+        // LunaCE's own keys where it had the option (its Tweaks files in
+        // webOS CE 3.1.0, AddToImage/LunaCE-Tweaks/*.json), off as there:
+        // card view wraps from the last card to the first
+        // (abh_features.json), a tap on a side card maximizes it
+        // (maximize-edges.json), the wave launcher (wave-launcher.json), the
+        // tap ripple (tap-ripple.json, on).
+        infiniteCardCyclingEnabled: false,
+        sysUiEnableMaximizeEdges: false,
+        sysUiEnableWaveLauncher: false,
+        showReticleAnimation: true,
+        // Phoenix's: the shell's animations "normal" or "fast" (the Faster
+        // Card Animations patches); how far a swipe goes before it counts,
+        // "low", "normal" or "high" (Buttah); a vibration on every tap
+        // (Haptic Feedback Manager); the launcher's grid, "normal" or
+        // "dense" (the icon grid patches); the battery's percentage in the
+        // status bar (Battery Percent and Icon); the keyboard's number row.
+        animationSpeed: "normal",
+        gestureSensitivity: "normal",
+        hapticFeedback: false,
+        launcherGridDensity: "normal",
+        showBatteryPercent: false,
+        keyboardNumberRow: false,
         firstUse: false
     };
+
+    // Settings > Advanced, as the shell takes them (hostStatus tweaks).
+    function tweaks(p) {
+        var pick = function (v, allowed, d) { return allowed.indexOf(v) >= 0 ? v : d; };
+        return {
+            infiniteCardCycling: !!p.infiniteCardCyclingEnabled,
+            maximizeEdges: !!p.sysUiEnableMaximizeEdges,
+            waveLauncher: !!p.sysUiEnableWaveLauncher,
+            tapRipple: p.showReticleAnimation !== false,
+            animationSpeed: pick(p.animationSpeed, ["normal", "fast"], "normal"),
+            gestureSensitivity: pick(p.gestureSensitivity, ["low", "normal", "high"], "normal"),
+            haptics: !!p.hapticFeedback,
+            gridDensity: pick(p.launcherGridDensity, ["normal", "dense"], "normal"),
+            batteryPercent: !!p.showBatteryPercent,
+            numberRow: !!p.keyboardNumberRow
+        };
+    }
+    var TWEAK_KEYS = ["infiniteCardCyclingEnabled", "sysUiEnableMaximizeEdges", "sysUiEnableWaveLauncher", "showReticleAnimation",
+                      "animationSpeed", "gestureSensitivity", "hapticFeedback", "launcherGridDensity", "showBatteryPercent",
+                      "keyboardNumberRow"];
 
     // Settings > Accessibility's keyboard options, as the shell takes them.
     function keyboardAccess(a) {
@@ -3872,6 +3915,8 @@
                 // ... and the hardware keyboard's sticky, slow and bounce
                 // keys and key repeat (the shell's KeyboardAccess).
                 keyboardAccess: keyboardAccess(p.accessibility || {}),
+                // Settings > Advanced (tweaks above).
+                tweaks: tweaks(p),
                 wallpaperFile: (p.wallpaper && p.wallpaper.wallpaperFile) || "",
                 // Dock mode (Settings > Exhibition): its wallpaper, the
                 // exhibitions that are on (after the built-in Time), its
@@ -4505,7 +4550,7 @@
             baseSetPreferences(p, reply, ctx);
             if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "screenTimeout", "lockTimeout", "enableALS", "sysUiEnableNextPrevGestures", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
                  "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "x_palm_textinput", "accessibility",
-                 "dockwallpaper", "dockModeSoundPref", "exhibition"].some(function (k) { return k in p; })) {
+                 "dockwallpaper", "dockModeSoundPref", "exhibition"].concat(TWEAK_KEYS).some(function (k) { return k in p; })) {
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
                 changed();
             }

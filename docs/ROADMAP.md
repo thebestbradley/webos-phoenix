@@ -283,6 +283,7 @@ Agreed with the owner on 7 October 2026; [M6-PLAN.md](M6-PLAN.md) has the detail
 - [x] F2: clipboard manager (keyboard strip, Clipboard app, Settings > Clipboard; in the simulator)
 - [x] F3: the Phoenix Assistant 1.0 (commands, optional on-device model, cloud models with permission, Assistant app; in the simulator)
 - [ ] F4: community features picked for 1.0
+  - [x] Launcher: app groups (folders), tabs renamed, added and removed, grid density (in the simulator)
 
 ## 1.0 release
 

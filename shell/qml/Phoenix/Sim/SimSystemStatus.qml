@@ -110,6 +110,13 @@ QtObject {
     // {stickyKeys, slowKeys, bounceKeys (ms, 0 off), customRepeat,
     // repeatDelay, repeatInterval}.
     property var keyboardAccess: ({})
+    // Settings > Advanced (the runtime's tweaks; docs/M6-PLAN.md F4):
+    // {infiniteCardCycling, maximizeEdges, waveLauncher, tapRipple,
+    // animationSpeed ("normal", "fast"), gestureSensitivity ("low",
+    // "normal", "high"), haptics, gridDensity ("normal", "dense"),
+    // batteryPercent, numberRow}. Missing keys are the defaults
+    // (Shell.tweak()).
+    property var tweaks: ({})
     // A hardware keyboard is attached (phoenix-sim --hardware-keyboard,
     // Ctrl+Shift+K): the virtual keyboard stays down unless asked for.
     property bool hardwareKeyboard: typeof simHardwareKeyboard !== "undefined" && simHardwareKeyboard === true
@@ -295,7 +302,7 @@ QtObject {
     // screenTimeout, lockTimeout, advancedGestures, keyboardShortcuts,
     // volume, streams, systemSounds, tapSounds, textAssist, keyboards,
     // keyboard, ringtone, alerttone,
-    // notificationtone, callForwarding, reduceMotion, keyboardAccess,
+    // notificationtone, callForwarding, reduceMotion, keyboardAccess, tweaks,
     // vpnProfiles, exhibitionApps, dockModeSound, exhibition {enabled,
     // startAfter, nightMode, nightStart, nightEnd}, dockWallpaperUrl,
     // automaticBrightness, displayOnWhenConnected.
@@ -360,6 +367,8 @@ QtObject {
             reduceMotion = !!s.reduceMotion;
         if (s.keyboardAccess !== undefined)
             keyboardAccess = s.keyboardAccess || ({});
+        if (s.tweaks !== undefined && s.tweaks !== null)
+            tweaks = s.tweaks;
         if (s.vpnProfiles !== undefined) {
             _runtimeVpn = true;
             vpnProfiles = s.vpnProfiles;

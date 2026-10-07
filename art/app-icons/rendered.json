@@ -495,6 +495,22 @@
   "svg": "9f9416ad2b78803477dff9898aac3ead87d41711bd78791ffe766356460ce5c0",
   "png": "3bed389f75219409ae8e4a6dd1630ad58c2afe575bddab23fa39bae378ee8a1a"
  },
+ "apps/settings/public/icons/advanced-128x128.png": {
+  "svg": "4e2487679035e824586cae3f4a5903f4d2ee65834e527ed33dc4730637a94a94",
+  "png": "55b2f002e82241bbe336e8a1a521778312bf509302f51c921e042fba9772e74e"
+ },
+ "apps/settings/public/icons/advanced-256x256.png": {
+  "svg": "cdb8f8a4c96726bd952cf871ec66199a33db2fe1545b9c76914837952123c8a4",
+  "png": "4d13486fa4d6707cd99c5981be8d85347eec25cf363d0484958e17d92f1e5898"
+ },
+ "apps/settings/public/icons/advanced-512x512.png": {
+  "svg": "80daa364410b590a3faa3097cdedf2ab02d671464739073600f2a24dbc883ae3",
+  "png": "ca01ad0b3a793e6458c6c3dfcfde163b53e97912ab515d4b9300969859a7a60a"
+ },
+ "apps/settings/public/icons/advanced.png": {
+  "svg": "c29ad8608e855eb42761a7812a3d9151a7e0b021d3220953e044aaa5414a8385",
+  "png": "ee282f166ff2c52ccdbff835796d37cdc8202bbc26b17ee8bc6223ad03991b6d"
+ },
  "apps/settings/public/icons/airplane-128x128.png": {
   "svg": "0a49663f09cfb02fd9516337f2712659b6cccbebb37556fe8a722597d574fc25",
   "png": "9e60aebd004410d7522512d029a0ec25b50a11ea4cba0a626ba19b02f2e71c6c"

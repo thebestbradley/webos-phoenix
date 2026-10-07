@@ -169,7 +169,9 @@ Item {
             tryVerify(function() { return shell.launcherLayout !== null; }, 2000);
         }
 
+        property var startLayout: null
         function init() {
+            startLayout = shell.launcherLayout;
             shell.unlock();
             shell.cardView.maximizeProgress = 0;
             launcher.editMode = false;
@@ -190,6 +192,12 @@ Item {
         }
 
         function cleanup() {
+            launcher.closeGroup();
+            launcher.nameDialog.close();
+            launcher.addTabShown = false;
+            // A test that failed half way leaves its groups and tabs.
+            if (startLayout && JSON.stringify(startLayout) !== JSON.stringify(shell.launcherLayout))
+                shell.setLauncherLayout(startLayout);
             var menu = iconMenu();
             if (menu && menu.open)
                 menu.open = false;
@@ -899,6 +907,303 @@ Item {
             compare(LauncherLayout.pageOf(shell.launcherLayout, "00000042"), -1);
             verify(shell.launcherLayout.removed.indexOf("00000042") < 0, "a launch point is not remembered as deleted");
             windows.apps.remove(windows.apps.count - 1);
+        }
+
+        // ---- Groups and tabs (LunaCE; docs/M6-PLAN.md F4) ----------------------------
+
+        // Hold an icon, carry it to `to` and rest there `rest` ms before
+        // letting go.
+        function holdDragAndRest(from, to, rest) {
+            mousePress(shell, from.x, from.y);
+            wait(Theme.iconMenuHoldInterval + 150);
+            var steps = 12;
+            for (var i = 1; i <= steps; ++i)
+                mouseMove(shell, from.x + (to.x - from.x) * i / steps, from.y + (to.y - from.y) * i / steps, 10);
+            wait(rest);
+            mouseRelease(shell, to.x, to.y);
+        }
+        function groupIds() {
+            return Object.keys(shell.launcherLayout.groups || {});
+        }
+
+        // An icon carried onto another's centre and held there joins it in
+        // a group, where the other was; passing over icons does not move them.
+        function test_dragOntoACentreMakesAGroup() {
+            var saved = shell.launcherLayout;
+            var page = shell.launcherLayout.pages[0];
+            var a = page[0], b = page[1], c = page[2];
+            holdDragAndRest(iconPoint(0), iconPoint(1), Theme.launcherGroupHoverDelay + 200);
+            var g = shell.launcherLayout.pages[0][0];
+            verify(LauncherLayout.isGroup(g), "a group where the icon was: " + g);
+            compare(shell.launcherLayout.groups[g].members, [b, a]);
+            compare(shell.launcherLayout.groups[g].title, "Group");
+            compare(shell.launcherLayout.pages[0][1], c);
+            // Its tile shows the apps, its name under it.
+            tryVerify(function() { return findChild(launcher, function(o) { return o.objectName === "groupTile" && o.visible; }) !== null; }, 1000);
+            // Let go before resting: no group, a move.
+            launcher.editMode = false;
+            shell.setLauncherLayout(saved);
+            holdDragAndRest(iconPoint(0), iconPoint(2), 0);
+            compare(groupIds().length, 0);
+            compare(shell.launcherLayout.pages[0].indexOf(a), 2);
+            shell.setLauncherLayout(saved);
+        }
+
+        // A tap opens the group; its apps launch from it; a tap on its name
+        // renames it; Back closes it.
+        function test_groupOverlay() {
+            var saved = shell.launcherLayout;
+            var page = shell.launcherLayout.pages[0];
+            var a = page[0], b = page[1];
+            shell.setLauncherLayout(LauncherLayout.makeGroup(shell.launcherLayout, a, b));
+            var g = shell.launcherLayout.pages[0][0];
+            var p = iconPoint(0);
+            mouseClick(shell, p.x, p.y);
+            compare(launcher.openGroupId, g);
+            var view = findChild(launcher, function(o) { return o.objectName === "launcherGroup"; });
+            tryCompare(view, "visible", true, 1000);
+            compare(view.members.map(function(m) { return m.appId; }), [b, a]);
+            // Rename.
+            var titleArea = findChild(view, function(o) { return o.objectName === "launcherGroupTitleArea"; });
+            mouseClick(titleArea);
+            var field = findChild(view, function(o) { return o.objectName === "launcherGroupTitleField"; });
+            tryCompare(field, "activeFocus", true, 1000);
+            field.text = "Accessories";
+            keyClick(Qt.Key_Return);
+            compare(shell.launcherLayout.groups[g].title, "Accessories");
+            compare(findChild(view, function(o) { return o.objectName === "launcherGroupTitle"; }).text, "Accessories");
+            // Back closes it, the launcher stays.
+            shell.gestureBack();
+            compare(launcher.openGroupId, "");
+            verify(shell.launcherLayout && shell.launcherOpen);
+            // A member launches.
+            mouseClick(shell, p.x, p.y);
+            tryCompare(view, "open", true, 1000);
+            var member = findChild(view, function(o) { return o.objectName === "launcherGroupMember_" + a; });
+            waitForItemPolished(member);
+            var spy = createTemporaryObject(spyComponent, root, { target: launcher, signalName: "launchRequested" });
+            var mp = member.mapToItem(shell, member.width / 2, Theme.launcherIconSize / 2);
+            mouseClick(shell, mp.x, mp.y);
+            compare(spy.count, 1);
+            compare(spy.signalArguments[0][0], a);
+            compare(launcher.openGroupId, "");
+            tryVerify(function() { return !shell.launcherOpen; }, 2000);
+            shell.gestureUp();
+            tryCompare(launcher, "hidden", 0, 2000);
+            shell.setLauncherLayout(saved);
+        }
+
+        // Holding an app in a group opens its menu, with Remove from Folder,
+        // which takes it out (the group, down to one, dissolves); carried
+        // on from the hold, it leaves the group onto the page.
+        function test_groupMemberMenuAndDragOut() {
+            var saved = shell.launcherLayout;
+            var page = shell.launcherLayout.pages[0];
+            var a = page[0], b = page[1], c = page[2];
+            var l = LauncherLayout.makeGroup(shell.launcherLayout, a, b);
+            shell.setLauncherLayout(LauncherLayout.makeGroup(l, c, LauncherLayout.pageOf(l, a) >= 0 ? a : "group:1"));
+            var g = shell.launcherLayout.pages[0][0];
+            compare(shell.launcherLayout.groups[g].members, [b, a, c]);
+            var p = iconPoint(0);
+            mouseClick(shell, p.x, p.y);
+            var view = findChild(launcher, function(o) { return o.objectName === "launcherGroup"; });
+            tryCompare(view, "open", true, 1000);
+            var member = findChild(view, function(o) { return o.objectName === "launcherGroupMember_" + a; });
+            waitForItemPolished(member);
+            var mp = member.mapToItem(shell, member.width / 2, Theme.launcherIconSize / 2);
+            holdForMenu(mp);
+            compare(iconMenu().from, "group");
+            verify(menuNames().indexOf("ungroup") >= 0, "Remove from Folder: " + menuNames());
+            verify(menuNames().indexOf("favorite") < 0);
+            mouseClick(menuRow("ungroup"));
+            compare(shell.launcherLayout.groups[g].members, [b, c]);
+            compare(shell.launcherLayout.pages[0].slice(0, 2), [g, a]);
+            // The other way out: hold, then carry it.
+            tryCompare(view, "open", true, 1000);
+            member = findChild(view, function(o) { return o.objectName === "launcherGroupMember_" + c; });
+            waitForItemPolished(member);
+            mp = member.mapToItem(shell, member.width / 2, Theme.launcherIconSize / 2);
+            var to = iconPoint(5);
+            mousePress(shell, mp.x, mp.y);
+            wait(Theme.iconMenuHoldInterval + 150);
+            for (var i = 1; i <= 10; ++i)
+                mouseMove(shell, mp.x + (to.x - mp.x) * i / 10, mp.y + (to.y - mp.y) * i / 10, 10);
+            compare(launcher.openGroupId, g);
+            verify(launcher.draggedId === c, "carried: " + launcher.draggedId);
+            mouseRelease(shell, to.x, to.y);
+            // Down to one: dissolved, b in its place.
+            tryCompare(launcher, "openGroupId", "", 1000);
+            compare(groupIds().length, 0);
+            compare(shell.launcherLayout.pages[0][0], b);
+            verify(shell.launcherLayout.pages[0].indexOf(c) > 0, "on the page");
+            launcher.editMode = false;
+            shell.setLauncherLayout(saved);
+        }
+
+        // Tabs: "+" in edit mode (or held on the strip's empty part) adds
+        // one, named in the dialog; holding a tab renames it; one the user
+        // added has a trash can; the first four do not. Up to six.
+        function test_tabsAddRenameRemove() {
+            var saved = shell.launcherLayout;
+            launcher.editMode = true;
+            var plus = findChild(launcher, function(o) { return o.objectName === "launcherAddTab"; });
+            tryCompare(plus, "visible", true, 1000);
+            waitForItemPolished(plus.parent);
+            mouseClick(plus);
+            var dialog = findChild(launcher, function(o) { return o.objectName === "launcherNameDialog"; });
+            tryCompare(dialog, "open", true, 1000);
+            compare(dialog.heading, "New Tab");
+            verify(!launcher.editMode);
+            tryCompare(dialog.field, "activeFocus", true, 1000);
+            dialog.field.text = "My Stuff";
+            keyClick(Qt.Key_Return);
+            compare(launcher.tabs.length, 5);
+            compare(launcher.tabs[4], "My Stuff");
+            compare(launcher.currentPage, 4);
+            // Hold a built-in tab: rename, no trash.
+            var tab0 = findChild(launcher, function(o) { return o.objectName === "launcherTab_2"; });
+            mousePress(tab0);
+            wait(Theme.iconMenuHoldInterval + 150);
+            mouseRelease(tab0);
+            tryCompare(dialog, "open", true, 1000);
+            compare(dialog.heading, "Rename Tab");
+            compare(dialog.text, "Favorites");
+            verify(!findChild(dialog, function(o) { return o.objectName === "launcherNameDelete"; }).visible);
+            dialog.field.text = "Games";
+            keyClick(Qt.Key_Return);
+            compare(launcher.tabs[2], "Games");
+            // Back leaves the dialog without a change.
+            var tab4 = findChild(launcher, function(o) { return o.objectName === "launcherTab_4"; });
+            mousePress(tab4);
+            wait(Theme.iconMenuHoldInterval + 150);
+            mouseRelease(tab4);
+            tryCompare(dialog, "open", true, 1000);
+            dialog.field.text = "Other";
+            shell.gestureBack();
+            verify(!dialog.open);
+            verify(shell.launcherOpen);
+            compare(launcher.tabs[4], "My Stuff");
+            // The trash can removes an added tab.
+            mousePress(tab4);
+            wait(Theme.iconMenuHoldInterval + 150);
+            mouseRelease(tab4);
+            tryCompare(dialog, "open", true, 1000);
+            var trash = findChild(dialog, function(o) { return o.objectName === "launcherNameDelete"; });
+            verify(trash.visible);
+            mouseClick(trash);
+            compare(launcher.tabs.length, 4);
+            // Six at most: no "+" then.
+            var l = shell.launcherLayout;
+            l = LauncherLayout.addTab(LauncherLayout.addTab(l, "Five"), "Six");
+            shell.setLauncherLayout(l);
+            launcher.editMode = true;
+            compare(launcher.tabs.length, 6);
+            verify(!plus.visible);
+            launcher.editMode = false;
+            shell.setLauncherLayout(saved);
+            compare(launcher.tabs.length, 4);
+        }
+
+        // Settings > Advanced > Launcher grid: dense puts four across a phone.
+        function test_gridDensity() {
+            compare(launcher.columns, 3);
+            shell.system.tweaks = { gridDensity: "dense" };
+            compare(launcher.columns, 4);
+            shell.system.tweaks = {};
+            compare(launcher.columns, 3);
+        }
+    }
+
+    // App groups (folders) and tabs (LunaCE; docs/M6-PLAN.md F4).
+    TestCase {
+        name: "LauncherLayoutGroupsAndTabs"
+
+        readonly property var entries: [
+            { id: "a", title: "A", tab: 0, quickLaunch: 0 },
+            { id: "b", title: "B", tab: 0, quickLaunch: 0 },
+            { id: "c", title: "C", tab: 0, quickLaunch: 0 },
+            { id: "d", title: "D", tab: 0, quickLaunch: 1 }
+        ]
+
+        function test_groupMakeJoinAndDissolve() {
+            var l = LauncherLayout.build(entries, null);
+            compare(l.pages[0], ["a", "b", "c", "d"]);
+            // c onto b's centre: a group where b was.
+            l = LauncherLayout.makeGroup(l, "c", "b");
+            compare(l.pages[0], ["a", "group:1", "d"]);
+            compare(l.groups["group:1"], { title: "Group", members: ["b", "c"] });
+            compare(LauncherLayout.groupOf(l, "c"), "group:1");
+            compare(LauncherLayout.entryPage(l, "c"), 0);
+            // d onto the group: it joins; still in the dock.
+            l = LauncherLayout.makeGroup(l, "d", "group:1");
+            compare(l.groups["group:1"].members, ["b", "c", "d"]);
+            compare(l.pages[0], ["a", "group:1"]);
+            compare(l.dock, ["d"]);
+            // Groups do not nest; a member onto its own group stays.
+            compare(LauncherLayout.makeGroup(l, "group:1", "a").pages[0], ["a", "group:1"]);
+            compare(LauncherLayout.makeGroup(l, "d", "group:1").groups["group:1"].members, ["b", "c", "d"]);
+            l = LauncherLayout.renameGroup(l, "group:1", "  Games ");
+            compare(l.groups["group:1"].title, "Games");
+            // Out of the group: after it on its page, or where asked.
+            l = LauncherLayout.removeFromGroup(l, "b");
+            compare(l.pages[0], ["a", "group:1", "b"]);
+            l = LauncherLayout.removeFromGroup(l, "c", 1, -1);
+            // One left: the group dissolves, the app in its place.
+            compare(l.pages[0], ["a", "d", "b"]);
+            compare(l.pages[1], ["c"]);
+            compare(l.groups, {});
+        }
+
+        function test_deletedMemberAndSavedGroups() {
+            var l = LauncherLayout.makeGroup(LauncherLayout.build(entries, null), "a", "b");
+            l = LauncherLayout.makeGroup(l, "c", "group:1");
+            // Deleted: out of its group.
+            l = LauncherLayout.remove(l, "a");
+            compare(l.groups["group:1"].members, ["b", "c"]);
+            // Kept across sessions (JSON); an app that is gone leaves it,
+            // and down to one the group dissolves.
+            var saved = JSON.parse(JSON.stringify(l));
+            var again = LauncherLayout.build(entries, saved);
+            compare(again.pages[0], ["group:1", "d"]);
+            compare(again.groups["group:1"].members, ["b", "c"]);
+            again = LauncherLayout.build(entries.filter(function(e) { return e.id !== "c"; }), saved);
+            compare(again.pages[0], ["b", "d"]);
+            compare(again.groups, {});
+            // A layout saved before groups reads as before.
+            compare(LauncherLayout.build(entries, { pages: [["d", "c"], [], [], []], dock: [], removed: [] }).pages[0], ["d", "c", "a", "b"]);
+        }
+
+        function test_tabs() {
+            var l = LauncherLayout.build(entries, null);
+            compare(LauncherLayout.tabTitle(l, 2), "Favorites");
+            // Up to six; the added ones are "user:n".
+            l = LauncherLayout.addTab(l, " My Stuff ");
+            l = LauncherLayout.addTab(l, "Games");
+            compare(l.pages.length, 6);
+            compare(l.designators.slice(4), ["user:1", "user:2"]);
+            compare(LauncherLayout.tabTitle(l, 4), "My Stuff");
+            verify(!LauncherLayout.canAddTab(l));
+            compare(LauncherLayout.addTab(l, "More").pages.length, 6);
+            // Renamed, the first four too; an empty name changes nothing.
+            l = LauncherLayout.renameTab(l, 2, "Games");
+            compare(LauncherLayout.tabTitle(l, 2), "Games");
+            compare(LauncherLayout.tabTitle(LauncherLayout.renameTab(l, 2, " "), 2), "Games");
+            // Removed: only the added ones; their icons go to Apps.
+            l = LauncherLayout.move(l, "a", 4, -1);
+            compare(LauncherLayout.removeTab(l, 1).pages.length, 6);
+            l = LauncherLayout.removeTab(l, 4);
+            compare(l.pages.length, 5);
+            compare(l.designators[4], "user:2");
+            compare(l.pages[0], ["b", "c", "d", "a"]);
+            // Kept across sessions with their names and icons.
+            l = LauncherLayout.move(l, "b", 4, -1);
+            var again = LauncherLayout.build(entries, JSON.parse(JSON.stringify(l)));
+            compare(again.designators, ["apps", "downloads", "favorites", "prefs", "user:2"]);
+            compare(again.pages[4], ["b"]);
+            compare(LauncherLayout.tabTitle(again, 4), "Games");
+            compare(LauncherLayout.tabTitle(again, 2), "Games");
+            // A new tab comes back as a new number.
+            compare(LauncherLayout.addTab(again, "X").designators[5], "user:1");
         }
     }
 

@@ -53,7 +53,8 @@ Touchstone, the Time exhibition's glass clock on its screen), `clipboard`
 `clipboardpane` is the same drawing, smaller, for Settings > Clipboard) and
 `assistant` (a frosted speech balloon with a glowing orb in it, its light in
 bands like a voice's sound waves; `assistantpane` is the same drawing,
-smaller, for Settings > Assistant).
+smaller, for Settings > Assistant) and `advancedpane` (Settings > Advanced:
+a brushed metal panel with three sliders).
 
 ## The originals' 512 px icons
 

@@ -416,5 +416,14 @@
         "out": [
             "apps/settings/public/icons/assistant"
         ]
+    },
+    "settings-advanced": {
+        "platter": "diamond",
+        "object": "advancedpane",
+        "base": 176,
+        "foot": 60,
+        "out": [
+            "apps/settings/public/icons/advanced"
+        ]
     }
 }

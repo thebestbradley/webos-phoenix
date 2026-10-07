@@ -36,7 +36,8 @@
             { "id": "org.webosphoenix.settings.backup", "title": "Backup", "icon": "icons/backup.png", "params": { "page": "backup" } },
             { "id": "org.webosphoenix.settings.updates", "title": "Updates", "icon": "icons/updates.png", "params": { "page": "updates" } },
             { "id": "org.webosphoenix.settings.certificates", "title": "Certificate Manager", "icon": "icons/certificates.png", "params": { "page": "certificates" } },
-            { "id": "org.webosphoenix.settings.devmode", "title": "Developer Mode", "icon": "icons/devmode.png", "params": { "page": "devmode" } }
+            { "id": "org.webosphoenix.settings.devmode", "title": "Developer Mode", "icon": "icons/devmode.png", "params": { "page": "devmode" } },
+            { "id": "org.webosphoenix.settings.advanced", "title": "Advanced", "icon": "icons/advanced.png", "params": { "page": "advanced" } }
         ]
     }
 }

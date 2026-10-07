@@ -42,12 +42,90 @@ Item {
     signal dragMoved(real x, real y)
     signal dragEnded(real x, real y)
     // Press and hold or a right click asks for the icon's menu; iconRect is
-    // the icon in launcher coordinates (IconMenu.qml).
+    // the icon in launcher coordinates (IconMenu.qml). from: "page", or
+    // "group" for an app in the open group.
     signal menuRequested(string appId, string from, rect iconRect)
 
+    // ---- Groups and tabs (LunaCE; docs/M6-PLAN.md F4) ---------------------------
+    // The shell changes the layout: a group renamed, a tab added, renamed
+    // or removed; an app carried out of the open group (dragStarted from
+    // "group" follows).
+    signal groupRenamed(string groupId, string title)
+    signal tabAdded(string title)
+    signal tabRenamed(int index, string title)
+    signal tabRemoved(int index)
+    signal groupDragOut(string appId)
+
+    // Settings > Advanced > Launcher grid: "dense" fits more icons (the
+    // community's icon grid patches, 4 x 4 and 5 x 5 on the Pre).
+    property string gridDensity: "normal"
+    readonly property bool dense: gridDensity === "dense"
+
+    // The open group's id ("" for none).
+    property string openGroupId: ""
+    function openGroup(id) {
+        if (!layout || !layout.groups || !layout.groups[id])
+            return;
+        keyIndex = -1;
+        openGroupId = id;
+    }
+    function closeGroup() { openGroupId = ""; }
+    // The group shown: its title and its apps, as the page's icons show them.
+    readonly property var openGroupData: {
+        var g = layout && layout.groups && openGroupId !== "" ? layout.groups[openGroupId] : null;
+        if (!g)
+            return null;
+        return { title: g.title, members: g.members.map(function(id) { return _cellData(id); }) };
+    }
+
+    // The tab strip's "+" (LunaCE: a press and hold on the empty part of
+    // the strip shows it, while there is room for another tab). Phones have
+    // no empty part: there, and on tablets too, edit mode shows it.
+    property bool addTabShown: false
+    readonly property bool canAddTab: !!layout && LauncherLayout.canAddTab(layout)
+    readonly property bool addTabVisible: canAddTab && (addTabShown || editMode)
+    readonly property real addTabWidth: addTabVisible ? Theme.px(Theme.tablet ? 70 : 44) : 0
+    function askNewTab() {
+        addTabShown = false;
+        editMode = false;
+        nameDialog.target = -1;
+        nameDialog.show(qsTr("New Tab"), "", false);
+    }
+    function askRenameTab(i) {
+        if (i < 0 || i >= tabs.length)
+            return;
+        addTabShown = false;
+        nameDialog.target = i;
+        nameDialog.show(qsTr("Rename Tab"), tabs[i], LauncherLayout.isUserTab(layout, i));
+    }
+    // Back or Esc: the name dialog, the open group, the "+" go first.
+    function closeOverlay() {
+        if (nameDialog.open) {
+            nameDialog.close();
+            return true;
+        }
+        if (groupView.editing) {
+            groupView.finishRename();
+            return true;
+        }
+        if (openGroupId !== "") {
+            closeGroup();
+            return true;
+        }
+        if (addTabShown) {
+            addTabShown = false;
+            return true;
+        }
+        return false;
+    }
+
     onOpenChanged: {
-        if (!open)
+        if (!open) {
             editMode = false;
+            openGroupId = "";
+            addTabShown = false;
+            nameDialog.close();
+        }
         keyIndex = -1;
     }
     onCurrentPageChanged: if (keyIndex >= 0) keyIndex = Math.min(keyIndex, Math.max(0, _pageCount(currentPage) - 1))
@@ -70,6 +148,10 @@ Item {
         var item = m.get(keyIndex);
         if (editMode)
             return;
+        if (item.isGroup) {
+            openGroup(item.appId);
+            return;
+        }
         if (item.installState !== "") {
             pendingTapped(item.appId);
             return;
@@ -82,6 +164,10 @@ Item {
             return false;
         var k = event.key, n = _pageCount(currentPage), cols = columns;
         var shift = (event.modifiers & Qt.ShiftModifier) || k === Qt.Key_Backtab;
+        if (k === Qt.Key_Escape && closeOverlay())
+            return true;
+        if (openGroupId !== "" || nameDialog.open)
+            return false;
         if (k === Qt.Key_Escape) {
             if (editMode)
                 editMode = false;
@@ -145,10 +231,10 @@ Item {
 
     // The icon at index on page (a page of the view), in launcher coordinates.
     function _iconRect(page, i) {
-        var cellW = Theme.tablet ? Theme.launcherCellSize : cellWidth;
+        var cellW = Theme.tablet ? cellSize : cellWidth;
         var x = rowLeft + (i % columns) * cellWidth + (cellW - Theme.launcherIconSize) / 2;
         var y = pageTopMargin + Math.floor(i / columns) * cellHeight
-                + (Theme.tablet ? Theme.launcherCellSize / 2 + Theme.launcherIconOffsetY - Theme.launcherIconSize / 2 : 0);
+                + (Theme.tablet ? cellSize / 2 + Theme.launcherIconOffsetY - Theme.launcherIconSize / 2 : 0);
         var p = page.contentItem.mapToItem(launcher, x, y);
         return Qt.rect(p.x, p.y, Theme.launcherIconSize, Theme.launcherIconSize);
     }
@@ -156,15 +242,27 @@ Item {
     // on the keyboard's ring, or Shift+F10; the simulator's scene).
     function requestMenu(index) {
         var m = pageModels[currentPage];
-        if (!m || index < 0 || index >= m.count || editMode || m.get(index).installState !== "" || !pages.currentItem)
+        if (!m || index < 0 || index >= m.count || editMode || m.get(index).installState !== "" || m.get(index).isGroup || !pages.currentItem)
             return false;
         menuRequested(m.get(index).appId, "page", _iconRect(pages.currentItem, index));
         return true;
     }
 
     // The page titles, in LauncherLayout.PAGES order (apps, downloads,
-    // favorites, prefs).
-    readonly property var tabs: [qsTr("Apps"), qsTr("Downloads"), qsTr("Favorites"), qsTr("Settings")]
+    // favorites, prefs), then the tabs the user added; a tab the user
+    // renamed has its own (LauncherLayout.tabTitle).
+    readonly property var _builtInTabs: [qsTr("Apps"), qsTr("Downloads"), qsTr("Favorites"), qsTr("Settings")]
+    readonly property var tabs: {
+        if (!layout)
+            return _builtInTabs;
+        var out = [];
+        for (var i = 0; i < layout.pages.length; ++i) {
+            var d = layout.designators ? layout.designators[i] : "";
+            var own = layout.titles && layout.titles[d];
+            out.push(own ? own : i < _builtInTabs.length ? _builtInTabs[i] : qsTr("New Tab"));
+        }
+        return out;
+    }
 
     // Room left at the bottom for the dock, which sits on top of the launcher.
     property real dockHeight: 0
@@ -237,12 +335,57 @@ Item {
                         height: parent.height
                         source: Theme.asset("launcher3/tab-divider.png")
                     }
+                    // A tap shows the page; press and hold names the tab
+                    // (LunaCE).
                     MouseArea {
+                        objectName: "launcherTab_" + index
                         anchors.fill: parent
-                        onClicked: pages.currentIndex = index
+                        pressAndHoldInterval: Theme.iconMenuHoldInterval
+                        onClicked: { launcher.addTabShown = false; pages.currentIndex = index; }
+                        onPressAndHold: launcher.askRenameTab(index)
                     }
                 }
             }
+            // "+": a new tab (LunaCE; drawn, a plus in a tab's place).
+            Item {
+                id: addTab
+                objectName: "launcherAddTab"
+                visible: launcher.addTabVisible
+                width: launcher.addTabWidth
+                height: tabBar.height
+                Image {
+                    anchors.left: parent.left
+                    width: Theme.artWidth(source)
+                    height: parent.height
+                    source: Theme.asset("launcher3/tab-divider.png")
+                }
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: Theme.px(22); height: Theme.px(4); radius: height / 2
+                    color: addMouse.pressed ? Theme.launcherTabSelectedColor : Theme.launcherTabColor
+                }
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: Theme.px(4); height: Theme.px(22); radius: width / 2
+                    color: addMouse.pressed ? Theme.launcherTabSelectedColor : Theme.launcherTabColor
+                }
+                MouseArea {
+                    id: addMouse
+                    anchors.fill: parent
+                    onClicked: launcher.askNewTab()
+                }
+            }
+        }
+        // Press and hold on the strip past the tabs: the "+".
+        MouseArea {
+            objectName: "launcherTabStripEmpty"
+            x: launcher.tabWidth * launcher.tabs.length + launcher.addTabWidth
+            width: Math.max(0, parent.width - x)
+            height: parent.height
+            enabled: !launcher.editMode
+            pressAndHoldInterval: Theme.iconMenuHoldInterval
+            onPressAndHold: if (launcher.canAddTab) launcher.addTabShown = true
+            onClicked: launcher.addTabShown = false
         }
     }
 
@@ -296,14 +439,29 @@ Item {
 
     property var pageModels: []
     Component { id: pageModelComponent; ListModel {} }
-    Component.onCompleted: {
-        var ms = [];
-        for (var i = 0; i < tabs.length; ++i)
+    // One model a page; tabs come and go (LunaCE).
+    function _ensurePageModels(n) {
+        if (pageModels.length === n)
+            return;
+        var ms = pageModels.slice();
+        while (ms.length < n)
             ms.push(pageModelComponent.createObject(launcher));
+        while (ms.length > n)
+            ms.pop().destroy();
         pageModels = ms;
+    }
+    Component.onCompleted: {
+        _ensurePageModels(tabs.length);
         syncPages();
     }
-    onLayoutChanged: syncPages()
+    onLayoutChanged: {
+        // The open group went (dissolved, or its last apps deleted). Not
+        // while an app is carried out of it: it keeps the finger until it
+        // lifts (LauncherGroup.carrying).
+        if (openGroupId !== "" && !groupView.carrying && !(layout && layout.groups && layout.groups[openGroupId]))
+            openGroupId = "";
+        syncPages();
+    }
     onAppsChanged: syncPages()
     // An entry's title, icon or install state changed in place.
     Connections {
@@ -320,10 +478,23 @@ Item {
         return null;
     }
 
-    // What a page's icon shows of its entry.
+    // What a page's icon shows of its entry; a group shows its first apps
+    // (groupIcons, JSON: AppIcon.groupIcons) and its name.
     function _cellData(id) {
+        if (LauncherLayout.isGroup(id)) {
+            var g = layout && layout.groups ? layout.groups[id] : null;
+            var icons = (g ? g.members : []).slice(0, 4).map(function(m) {
+                var me = entry(m);
+                return { icon: me ? String(me.icon || "") : "", largeIcon: me ? String(me.largeIcon || "") : "",
+                         color: me ? String(me.color) : "#666666", glyph: me ? me.glyph : "" };
+            });
+            return { appId: id, title: g ? g.title : "", color: "#2A2D31", glyph: "", icon: "", largeIcon: "",
+                     removable: false, shortcut: false, installState: "", progress: -1,
+                     isGroup: true, groupIcons: JSON.stringify(icons) };
+        }
         var e = entry(id);
-        return { appId: id, title: e ? e.title : id, color: e ? String(e.color) : "#666666",
+        return { isGroup: false, groupIcons: "",
+                 appId: id, title: e ? e.title : id, color: e ? String(e.color) : "#666666",
                  glyph: e ? e.glyph : "", icon: e ? String(e.icon || "") : "",
                  largeIcon: e ? String(e.largeIcon || "") : "",
                  removable: e ? !!e.removable : false,
@@ -334,8 +505,11 @@ Item {
     }
 
     function syncPages() {
-        if (!layout || pageModels.length === 0)
+        if (!layout)
             return;
+        _ensurePageModels(layout.pages.length);
+        if (pages.currentIndex >= layout.pages.length)
+            pages.currentIndex = layout.pages.length - 1;
         for (var p = 0; p < pageModels.length; ++p) {
             var m = pageModels[p], ids = layout.pages[p] || [];
             for (var i = 0; i < ids.length; ++i) {
@@ -372,13 +546,20 @@ Item {
     // Phones: 3 across the Pre's 320 upright, and as many of those cells as
     // fit when it is turned or wider (4 on its side); the original never
     // turned the phone's launcher.
+    // Dense (Settings > Advanced): tablets at a 108 px pitch, 104 px rows,
+    // in 100 px cells; phones 4 across the Pre's 320, the icon grid patches'
+    // 4 x 4 (the icons keep their size).
+    readonly property real cellPitch: dense ? Theme.px(108) : Theme.launcherCellPitch
+    readonly property real cellSize: dense ? Theme.px(100) : Theme.launcherCellSize
+    readonly property int phoneColumns: dense ? 4 : Theme.launcherColumns
     readonly property int columns: Theme.tablet
-        ? Math.max(1, Math.floor((pages.width - Theme.launcherRowLeftMargin) / Theme.launcherCellPitch))
-        : Math.max(Theme.launcherColumns, Math.floor(pages.width / (Theme.px(320) / Theme.launcherColumns) + 0.001))
-    readonly property real cellWidth: Theme.tablet ? Theme.launcherCellPitch : pages.width / columns
-    readonly property real cellHeight: Theme.tablet ? Theme.launcherRowPitch : Theme.launcherIconSize + Theme.px(48)
+        ? Math.max(1, Math.floor((pages.width - Theme.launcherRowLeftMargin) / cellPitch))
+        : Math.max(phoneColumns, Math.floor(pages.width / (Theme.px(320) / phoneColumns) + 0.001))
+    readonly property real cellWidth: Theme.tablet ? cellPitch : pages.width / columns
+    readonly property real cellHeight: Theme.tablet ? (dense ? Theme.px(104) : Theme.launcherRowPitch)
+                                                    : Theme.launcherIconSize + Theme.px(dense ? 40 : 48)
     readonly property real rowLeft: Theme.tablet
-        ? Math.max(Theme.launcherRowLeftMargin, Math.floor((pages.width - columns * Theme.launcherCellPitch) / 2))
+        ? Math.max(Theme.launcherRowLeftMargin, Math.floor((pages.width - columns * cellPitch) / 2))
         : 0
     readonly property real pageTopMargin: Theme.px(16)
 
@@ -392,11 +573,35 @@ Item {
         var row = Math.max(0, Math.floor((p.y - pageTopMargin) / cellHeight));
         return Math.min(row * launcher.columns + col, pageModels[pages.currentIndex].count - 1);
     }
+    // The icon whose centre a dragged icon is over, for a group (LunaCE:
+    // the centre of an icon groups, its outer edge reorders): its id, or
+    // "". Not the dragged icon, and not a group dragged onto anything.
+    function groupTargetAt(lx, ly) {
+        var page = pages.currentItem;
+        var m = pageModels[pages.currentIndex];
+        if (!page || !m || !inPages(lx, ly) || LauncherLayout.isGroup(draggedId))
+            return "";
+        var p = launcher.mapToItem(page.contentItem, lx, ly);
+        var col = Math.floor((p.x - rowLeft) / cellWidth), row = Math.floor((p.y - pageTopMargin) / cellHeight);
+        var i = row * columns + col;
+        if (col < 0 || col >= columns || row < 0 || i >= m.count)
+            return "";
+        var id = m.get(i).appId;
+        if (id === draggedId || m.get(i).installState !== "")
+            return "";
+        var cellW = Theme.tablet ? cellSize : cellWidth;
+        var cx = rowLeft + col * cellWidth + cellW / 2;
+        var cy = pageTopMargin + row * cellHeight + (Theme.tablet ? cellSize / 2 + Theme.launcherIconOffsetY : Theme.launcherIconSize / 2);
+        var r = Theme.launcherIconSize * Theme.launcherGroupCentre;
+        return Math.abs(p.x - cx) <= r && Math.abs(p.y - cy) <= r ? id : "";
+    }
+    // The icon a dragged one would join, highlighted ("" for none).
+    property string groupTarget: ""
     // Tabs share the bar from its left, each at most 150 px
     // (PageTabBar::newTabMaxSize, pagetabbar.cpp:85, 631-642); in edit mode
     // they leave room for Done.
     readonly property real tabWidth: Math.min(Theme.launcherTabMaxWidth,
-        (tabBar.width - (editMode ? doneButton.width + Theme.px(12) : 0)) / tabs.length)
+        (tabBar.width - (editMode ? doneButton.width + Theme.px(12) : 0) - addTabWidth) / tabs.length)
 
     // Tab under a point (launcher coordinates), or -1.
     function tabAt(lx, ly) {
@@ -600,11 +805,13 @@ Item {
                     required property bool shortcut
                     required property string installState
                     required property real progress
+                    required property bool isGroup
+                    required property string groupIcons
                     // Being installed, or the install failed: the icon and
                     // its label at half opacity under the status decorator
                     // (IconBase::paint, iconInstallModeOpacity 0.5).
                     readonly property bool notReady: installState !== ""
-                    width: Theme.tablet ? Theme.launcherCellSize : launcher.cellWidth
+                    width: Theme.tablet ? launcher.cellSize : launcher.cellWidth
                     height: launcher.cellHeight
                     x: launcher.rowLeft + (index % launcher.columns) * launcher.cellWidth
                     y: launcher.pageTopMargin + Math.floor(index / launcher.columns) * launcher.cellHeight
@@ -628,6 +835,17 @@ Item {
                         border.width: Theme.px(2)
                     }
 
+                    // The icon a dragged one would join: the launcher's touch
+                    // feedback behind it, as under a tapped icon.
+                    Image {
+                        objectName: "launcherGroupTarget"
+                        visible: launcher.groupTarget !== "" && launcher.groupTarget === cell.appId
+                        width: Theme.launchFeedbackSize * 1.2
+                        height: width
+                        x: iconItem.x + (Theme.launcherIconSize - width) / 2
+                        y: iconItem.y + (Theme.launcherIconSize - height) / 2
+                        source: Theme.asset("launcher3/launcher-touch-feedback.png")
+                    }
                     // Edit mode: the icon sits on the edit tile (edit-icon-bg.png).
                     Image {
                         visible: launcher.editMode
@@ -641,7 +859,8 @@ Item {
                         id: iconItem
                         anchors.horizontalCenter: parent.horizontalCenter
                         // Tablet: 11 px above the 128 px cell's centre.
-                        y: Theme.tablet ? Theme.launcherCellSize / 2 + Theme.launcherIconOffsetY - Theme.launcherIconSize / 2 : 0
+                        y: Theme.tablet ? launcher.cellSize / 2 + Theme.launcherIconOffsetY - Theme.launcherIconSize / 2 : 0
+                        groupIcons: cell.isGroup ? JSON.parse(cell.groupIcons || "[]") : []
                         title: cell.title
                         color: cell.color
                         glyph: cell.glyph
@@ -687,9 +906,9 @@ Item {
                         visible: cell.notReady
                         width: Theme.px(32)
                         height: width
-                        x: Theme.tablet ? Theme.launcherCellSize / 2 + Theme.px(50) - width / 2
+                        x: Theme.tablet ? launcher.cellSize / 2 + Theme.px(50) - width / 2
                                         : iconItem.x + iconItem.width - Theme.px(22)
-                        y: Theme.tablet ? Theme.launcherCellSize / 2 - Theme.px(50) - height / 2
+                        y: Theme.tablet ? launcher.cellSize / 2 - Theme.px(50) - height / 2
                                         : iconItem.y - Theme.px(10)
                         clip: true
                         Image {
@@ -737,7 +956,7 @@ Item {
                 // The menu, unless the icon only moves (edit mode, an install).
                 function openMenu(c) {
                     var item = page.model.get(c.index);
-                    if (launcher.editMode || item.installState !== "")
+                    if (launcher.editMode || item.installState !== "" || item.isGroup)
                         return false;
                     launcher.menuRequested(item.appId, "page", launcher._iconRect(page, c.index));
                     return true;
@@ -749,6 +968,7 @@ Item {
                     heldId = "";
                     if (mouse.button === Qt.RightButton && c)
                         openMenu(c);
+                    launcher.addTabShown = false;
                 }
                 onPressAndHold: (mouse) => {
                     if (pressedId === "" || mouse.button !== Qt.LeftButton)
@@ -790,11 +1010,16 @@ Item {
                     if (!c || mouse.button !== Qt.LeftButton)
                         return;
                     var item = page.model.get(c.index);
+                    if (item.isGroup) {
+                        if (!launcher.editMode)
+                            launcher.openGroup(item.appId);
+                        return;
+                    }
                     if (launcher.editMode) {
                         // The delete decorator, top left of the icon.
-                        var cellW = Theme.tablet ? Theme.launcherCellSize : launcher.cellWidth;
+                        var cellW = Theme.tablet ? launcher.cellSize : launcher.cellWidth;
                         var iconLeft = (cellW - Theme.launcherIconSize) / 2;
-                        var iconTop = Theme.tablet ? Theme.launcherCellSize / 2 + Theme.launcherIconOffsetY - Theme.launcherIconSize / 2 : 0;
+                        var iconTop = Theme.tablet ? launcher.cellSize / 2 + Theme.launcherIconOffsetY - Theme.launcherIconSize / 2 : 0;
                         if ((item.removable || item.shortcut) && item.installState === ""
                                 && c.x < iconLeft + Theme.px(24) && c.x > iconLeft - Theme.px(12)
                                 && c.y < iconTop + Theme.px(24) && c.y > iconTop - Theme.px(12))
@@ -823,4 +1048,66 @@ Item {
         source: Theme.asset("launcher3/launcher-scrollfade-bottom.png")
         fillMode: Image.Stretch
     }
+
+    // The open group, over the pages (and the dock's room).
+    LauncherGroup {
+        id: groupView
+        anchors.fill: parent
+        anchors.topMargin: tabBar.height
+        anchors.bottomMargin: launcher.dockHeight
+        z: 10
+        open: launcher.openGroupId !== ""
+        groupId: launcher.openGroupId
+        title: launcher.openGroupData ? launcher.openGroupData.title : ""
+        members: launcher.openGroupData ? launcher.openGroupData.members : []
+        onCloseRequested: launcher.closeGroup()
+        onCarryingChanged: if (!carrying && launcher.openGroupId !== "" && !launcher.openGroupData) launcher.closeGroup()
+        onRenamed: (title) => launcher.groupRenamed(launcher.openGroupId, title)
+        onLaunchRequested: (appId) => {
+            var e = launcher.entry(appId);
+            if (e && e.installState) {
+                launcher.pendingTapped(appId);
+                return;
+            }
+            launcher.feedbackId = appId;
+            launcher.closeGroup();
+            launcher.launchRequested(appId);
+        }
+        onMenuRequested: (appId, rect) => {
+            var p = groupView.mapToItem(launcher, rect.x, rect.y);
+            launcher.menuRequested(appId, "group", Qt.rect(p.x, p.y, rect.width, rect.height));
+        }
+        // Moved on from the hold: out of the group, onto this page, carried.
+        onDragOutRequested: (appId, x, y) => {
+            launcher.groupDragOut(appId);
+            launcher.editMode = true;
+            var p = groupView.mapToItem(launcher, x, y);
+            launcher.dragStarted(appId, "page", p.x, p.y);
+        }
+        onDragMoved: (x, y) => {
+            var p = groupView.mapToItem(launcher, x, y);
+            launcher.dragMoved(p.x, p.y);
+        }
+        onDragEnded: (x, y) => {
+            var p = groupView.mapToItem(launcher, x, y);
+            launcher.dragEnded(p.x, p.y);
+        }
+    }
+
+    // A tab's name (new, or renamed), over everything else here.
+    LauncherNameDialog {
+        id: nameDialog
+        // The tab being renamed; -1 for a new one.
+        property int target: -1
+        anchors.fill: parent
+        onAccepted: (text) => {
+            if (target < 0)
+                launcher.tabAdded(text);
+            else
+                launcher.tabRenamed(target, text);
+        }
+        onDeleteRequested: if (target >= 0) launcher.tabRemoved(target)
+    }
+    readonly property alias nameDialog: nameDialog
+    readonly property alias groupView: groupView
 }

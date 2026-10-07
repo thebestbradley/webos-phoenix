@@ -167,6 +167,33 @@ Item {
         interval: 1200
         onTriggered: shell.openLauncherIconMenu(1)
     }
+    Timer {
+        id: sceneWaveTimer
+        interval: 1200
+        onTriggered: {
+            var w = shell.waveLauncher;
+            var n = Math.min(shell.launcherLayout.dock.length, Theme.quickLaunchMaxItems - 1) + 1;
+            shell.openWave(w.width * 1.5 / n, w.height - w.baseHeight / 2);
+        }
+    }
+    // --scene launchergroup, launchergroupopen, launchertabs (docs/M6-PLAN.md
+    // F4): the Apps page's second to fifth apps grouped as "Accessories"
+    // (and the group open); a tab "My Stuff" added, in edit mode.
+    Timer {
+        id: sceneGroupTimer
+        interval: 1200
+        onTriggered: {
+            if (root.scene === "launchertabs") {
+                shell.addLauncherTab("My Stuff");
+                shell.launcherEditMode = true;
+                return;
+            }
+            var page = shell.launcherLayout.pages[0];
+            shell.groupLauncherApps(page.slice(1, 5), "Accessories");
+            if (root.scene === "launchergroupopen")
+                shell.openLauncherGroup(shell.launcherLayout.pages[0][1]);
+        }
+    }
 
     // How the UI and the device are turned, for the apps
     // (com.palm.systemmanager getSystemStatus).
@@ -504,7 +531,7 @@ Item {
                                        "phone", "tablet"]
     // The demo scenes (--scene; buildScene()).
     readonly property var scenes: ["locked", "cards", "stacks", "longstack", "reorder", "maximized", "heldcard",
-                                   "launcher", "launcheredit", "launchermenu", "launcherinstall", "pin", "emergency", "firstuse",
+                                   "launcher", "launcheredit", "launchermenu", "launchergroup", "launchergroupopen", "launchertabs", "launcherinstall", "wave", "pin", "emergency", "firstuse",
                                    "lowbattery", "banner", "notified", "dashboard", "drawer", "capture",
                                    "capturepreview", "justtype", "keyboard", "clipstrip", "assistant", "systemmenu", "empty"]
     readonly property string scene: typeof simScene !== "undefined" ? simScene : ""
@@ -918,6 +945,14 @@ Item {
             shell.gestureUp();
             if (scene === "launcheredit")
                 shell.launcherEditMode = true;
+        } else if (scene === "wave") {
+            // The wave launcher (Settings > Advanced) over an app, the
+            // finger on the dock's second app.
+            shell.cardView.maximizeProgress = 1;
+            sceneWaveTimer.start();
+        } else if (scene === "launchergroup" || scene === "launchergroupopen" || scene === "launchertabs") {
+            shell.gestureUp();
+            sceneGroupTimer.start();
         } else if (scene === "launchermenu") {
             // The icon menu of the launcher's second icon (press and hold).
             shell.gestureUp();
