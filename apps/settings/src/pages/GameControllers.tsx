@@ -25,8 +25,13 @@ export function GameControllersPage() {
         <Page>
             <PageHeader title="Game Controllers" icon="icons/gamepads.png" />
             {pads && pads.length === 0 && (
-                <Note testId="gp-none">No game controllers. Pair a Bluetooth controller in Settings &gt; Bluetooth, or plug one in
-                    with a USB cable.</Note>
+                <>
+                    <Note testId="gp-none">No controllers connected.</Note>
+                    <Group label="Connect a controller">
+                        <Row title="Bluetooth" subtitle="Put the controller in pairing mode, then pair it in Settings > Bluetooth" />
+                        <Row title="USB" subtitle="Plug it in with a cable (a USB OTG adapter on a phone)" />
+                    </Group>
+                </>
             )}
             {pads && pads.map((p) => (
                 <Group key={p.index} label={p.name}>

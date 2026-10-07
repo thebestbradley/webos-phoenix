@@ -23,7 +23,14 @@ export function UsbPage() {
         <Page>
             <PageHeader title="USB" icon="icons/usb.png" />
             {drives && drives.length === 0 && (
-                <Note testId="usb-none">No USB drives. Plug one into this device's USB port with an OTG adapter.</Note>
+                <>
+                    <Note testId="usb-none">No USB drives.</Note>
+                    <Group label="Use a USB drive">
+                        <Row title="Plug it in" subtitle="Into this device's USB port, with a USB OTG adapter" />
+                        <Row title="See its space" subtitle="How full it is shows here" />
+                        <Row title="Remove it safely" subtitle="Here, before you unplug it" />
+                    </Group>
+                </>
             )}
             {drives && drives.map((d) => (
                 <Group key={d.id} label={d.label || "USB drive"}>

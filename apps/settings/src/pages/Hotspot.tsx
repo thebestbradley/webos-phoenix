@@ -34,7 +34,13 @@ export function HotspotPage() {
         <Page>
             <PageHeader title="Hotspot & Tethering" icon="icons/hotspot.png" />
             {!st.available ? (
-                <Note testId="ht-unavailable">This device has no mobile data to share.</Note>
+                <>
+                    <Note testId="ht-unavailable">This device has no mobile data to share.</Note>
+                    <Group label="Get online through a phone">
+                        <Row title="Wi-Fi hotspot" subtitle="Turn on the phone's hotspot, then join it in Settings > Wi-Fi" />
+                        <Row title="Bluetooth" subtitle="Pair with the phone in Settings > Bluetooth" />
+                    </Group>
+                </>
             ) : (
                 <>
                     <Group label="Wi-Fi Hotspot">

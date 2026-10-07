@@ -302,6 +302,13 @@ async function main() {
         await waitFor(() => menuItem("Preferences").isVisible());
         await menuItem("Preferences").click();
         check(!!await waitFor(() => page.getByText("Block Ads & Trackers").first().isVisible()), "prefs: Block Ads & Trackers is in Content");
+        // The pane has faded over to Preferences (a tap while it fades is
+        // lost: under load the toggle was clicked mid-transition and stayed
+        // off), and they show the stored system preferences.
+        check(!!await waitFor(() => page.evaluate(() => {
+            const a = enyo.$.browserApp;
+            return !a.$.pane._transitioning && a.isPreferencesShowing() && "browserContentBlocker" in (a.systemPreferences || {});
+        })), "prefs: the page is up, with the stored preferences");
         await clickComp("$.preferences.$.browserContentBlocker");
         const sysPref = async (k) => (await luna("luna://com.palm.systemservice/getPreferences", { keys: [k] }))[k];
         check(!!await waitFor(async () => (await sysPref("browserContentBlocker")) === true), "prefs: blocking is a system preference");

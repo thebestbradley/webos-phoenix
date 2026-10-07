@@ -47,7 +47,7 @@ static void contentFilter()
     check(!f.blocks(QString()), "nothing for no host");
 
     QTemporaryFile hosts;
-    hosts.open();
+    check(hosts.open(), "a hosts file to read");
     hosts.write("# a comment\n0.0.0.0 tracker.example # after\n\nads.example.org\n127.0.0.1 localhost\n");
     hosts.flush();
     ContentFilter g;
