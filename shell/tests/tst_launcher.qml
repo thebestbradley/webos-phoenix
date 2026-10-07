@@ -609,6 +609,23 @@ Item {
             verify(shell.launcherOpen);
         }
 
+        // From the keyboard: the Menu key on the focus ring opens it; Down
+        // rings a row, Enter chooses it.
+        function test_menuKeyOpensTheIconMenu() {
+            shell.forceActiveFocus();
+            keyClick(Qt.Key_Right);
+            keyClick(Qt.Key_Menu);
+            verify(iconMenu().open);
+            compare(iconMenu().appId, shell.launcherLayout.pages[0][0]);
+            keyClick(Qt.Key_Down);
+            compare(iconMenu().keyIndex, 0);
+            keyClick(Qt.Key_Return);
+            verify(!iconMenu().open);
+            compare(launcher.draggedId, shell.launcherLayout.pages[0][0], "Move picked it up");
+            keyClick(Qt.Key_Escape);
+            compare(launcher.draggedId, "");
+        }
+
         // Held, then moved on: the menu gives way to edit mode's drag,
         // which reorders as before.
         function test_dragOutOfTheMenuReorders() {
