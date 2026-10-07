@@ -3531,6 +3531,9 @@
             return true;
         case "cut":
         case "copy":
+            // A password field's copy (see "Clipboard history").
+            if (runtime.clipboard && runtime.clipboard.passwordCopy(action))
+                return true;
             return doc.execCommand(action);
         case "paste":
             PalmSystem.paste();
@@ -11483,6 +11486,692 @@
                 store.set(TORCH_KEY, st);
                 torchNotify();
             }
+        };
+    })();
+
+    // ================================================================================
+    // Clipboard history (org.webosphoenix.clipboard; the keyboard's clip strip,
+    // apps/clipboard, Settings > Clipboard)
+    // ================================================================================
+    //
+    // Phoenix's own service (docs/M6-PLAN.md F2; webOS had no clipboard
+    // history): every copy in every app is recorded with the app it came
+    // from, so the keyboard's clip strip, the Clipboard app and Settings share
+    // one history, as Paste does on macOS.
+    //
+    //   history {category?, query?, limit?, subscribe?} -> {clips, categories, settings}
+    //       newest first; category "recent" (all, the default), "pinned" or a
+    //       category id; with subscribe, again after every change in any page.
+    //       A sensitive clip comes masked: {sensitive: true, kind, length}, no text.
+    //   subscribe {...}: history with subscribe
+    //   add {text | image, title?, source?, sensitive?} -> {clip} or {skipped: why}
+    //   pin {id}, unpin {id}, setCategory {id, category ("" for none)}
+    //   update {id, text} (a text clip edited in the Clipboard app)
+    //   delete {id | ids}, clear {all?} (all: pinned and saved clips too)
+    //   paste {id} -> {clip} with its text (the keyboard: a sensitive clip only
+    //       for the system UI, which pastes it into a password field)
+    //   reveal {id, passCode} -> {text}: a sensitive clip after the device
+    //       passcode (com.palm.systemmanager matchDevicePasscode)
+    //   addCategory {name} -> {category}, renameCategory {id, name},
+    //   deleteCategory {id} (its clips stay, in no category),
+    //   reorderCategories {ids}
+    //   getSettings {subscribe?} -> {settings}, setSettings {...some keys} -> {settings}
+    //
+    // Clip: {id, type: "text" | "link" | "image", text?, title?, image? (a
+    // data: URL or a path), source (app id), time, pinned, category,
+    // sensitive, kind?}. A clip in a category or pinned is "saved": it
+    // neither expires nor counts against the history's size.
+    //
+    // Storage: each clip under its own key (clipboard:clip:<id>), so pages
+    // copying at once in their own processes never write over each other's
+    // clips (PR 7: a page writing back its whole copy of a shared blob undid
+    // other pages' changes). Settings and the category list are one key each,
+    // written only when the user changes them. Expiry and the size limit are
+    // applied by whichever page reads or adds; deleting is safe from any page.
+    //
+    // Sensitive clips (a copy from a password field, a copy an app marks
+    // with __phoenixRuntime.clipboard.markSensitive (@phoenix/secrets'
+    // SecretClipboard: Passwords, Authenticator), or text that looks like a
+    // one-time code, an otpauth:// link, a TOTP secret or a password) are
+    // kept AES-GCM encrypted with a key the runtime keeps in IndexedDB as a
+    // non-extractable CryptoKey (in the store, where there is no IndexedDB:
+    // the unit tests). Threat model: docs/SECURITY-APPS.md "Clipboard history".
+    (function clipboardHistory() {
+        var SERVICE = "org.webosphoenix.clipboard";
+        var CLIP = "clipboard:clip:";
+        var SETTINGS_KEY = "clipboard:settings";
+        var CATS_KEY = "clipboard:categories";
+        var KEEP = { hour: 3600e3, day: 86400e3, week: 7 * 86400e3, month: 30 * 86400e3, forever: 0 };
+        var SIZES = [25, 50, 100, 200, 500];
+        var DEFAULTS = {
+            enabled: true,          // the whole feature: off records nothing and hides the keyboard key
+            keyboardKey: true,      // the clipboard key on the keyboard
+            maxItems: 100,          // history (not saved clips)
+            keepFor: "week",        // hour, day, week, month, forever
+            clearOnLock: false,     // clear the history when the screen locks
+            sensitive: "mask",      // "mask": recorded encrypted and masked; "skip": not recorded
+            detectSecrets: true,    // treat codes and password-like text as sensitive
+            excludedApps: []        // app ids whose copies are not recorded
+        };
+        var MAX_TEXT = 100000;      // characters
+        var MAX_IMAGE = 750000;     // data: URL characters (localStorage is shared and small)
+        var SYSTEM_UI = "com.palm.systemui";
+        var APP = "org.webosphoenix.clipboard";
+
+        function subtle() {
+            var c = global.crypto && global.crypto.subtle ? global.crypto : (typeof crypto !== "undefined" ? crypto : null);
+            return c && c.subtle ? c.subtle : null;
+        }
+        function randomBytes(n) {
+            var a = new Uint8Array(n);
+            (global.crypto || crypto).getRandomValues(a);
+            return a;
+        }
+        function b64(bytes) {
+            var s = "";
+            for (var i = 0; i < bytes.length; ++i) s += String.fromCharCode(bytes[i]);
+            return global.btoa(s);
+        }
+        function unb64(text) {
+            var s = global.atob(text), a = new Uint8Array(s.length);
+            for (var i = 0; i < s.length; ++i) a[i] = s.charCodeAt(i);
+            return a;
+        }
+
+        // ---- Settings ----------------------------------------------------------------
+        function settings() {
+            var s = store.get(SETTINGS_KEY, null) || {};
+            var out = {};
+            for (var k in DEFAULTS) out[k] = k in s ? s[k] : DEFAULTS[k];
+            if (!(out.keepFor in KEEP)) out.keepFor = DEFAULTS.keepFor;
+            out.maxItems = Math.max(1, Math.min(1000, Math.round(Number(out.maxItems) || DEFAULTS.maxItems)));
+            if (out.sensitive !== "skip") out.sensitive = "mask";
+            out.excludedApps = Array.isArray(out.excludedApps) ? out.excludedApps.filter(function (a) { return typeof a === "string"; }) : [];
+            ["enabled", "keyboardKey", "clearOnLock", "detectSecrets"].forEach(function (b) { out[b] = !!out[b]; });
+            return out;
+        }
+
+        // ---- Categories -------------------------------------------------------------------
+        function categories() {
+            var c = store.get(CATS_KEY, null);
+            return Array.isArray(c) ? c.filter(function (x) { return x && typeof x.id === "string"; }) : [];
+        }
+
+        // ---- Clips --------------------------------------------------------------------------
+        function newId() {
+            return Date.now().toString(36) + "-" + b64(randomBytes(6)).replace(/[+\/=]/g, "x");
+        }
+        function readClip(id) {
+            var c = store.get(CLIP + id, null);
+            return c && c.id === id ? c : null;
+        }
+        function writeClip(c) {
+            try {
+                store.set(CLIP + c.id, c);
+                return true;
+            } catch (e) {
+                // Full: drop the oldest history and try once more.
+                console.warn("[phoenix-runtime] clipboard: storage full", e && e.message);
+                prune(Math.floor(settings().maxItems / 2));
+                try { store.set(CLIP + c.id, c); return true; } catch (e2) { return false; }
+            }
+        }
+        function saved(c) { return !!c.pinned || !!c.category; }
+        function allClips() {
+            var out = [];
+            store.keys(CLIP).forEach(function (k) {
+                var c = store.get(k, null);
+                if (c && c.id) out.push(c);
+            });
+            out.sort(function (a, b) { return (b.time || 0) - (a.time || 0); });
+            return out;
+        }
+        // Expiry and the size limit, for the history only.
+        function prune(limit) {
+            var s = settings(), now = Date.now(), keep = KEEP[s.keepFor], max = limit !== undefined ? limit : s.maxItems;
+            var n = 0, gone = 0;
+            allClips().forEach(function (c) {
+                if (saved(c)) return;
+                if ((keep && now - (c.time || 0) > keep) || ++n > max) {
+                    store.remove(CLIP + c.id);
+                    gone++;
+                }
+            });
+            return gone;
+        }
+        // What pages and the shell get: a sensitive clip without its text.
+        function shown(c) {
+            var o = { id: c.id, type: c.type, source: c.source || "", time: c.time || 0, pinned: !!c.pinned,
+                      category: c.category || "", sensitive: !!c.sensitive };
+            if (c.title) o.title = c.title;
+            if (c.sensitive) {
+                o.kind = c.kind || "secret";
+                o.length = c.length || 0;
+            } else if (c.type === "image") {
+                o.image = c.image;
+            } else {
+                o.text = c.text;
+            }
+            return o;
+        }
+
+        // ---- Sensitive text -----------------------------------------------------------------
+        // What a text looks like: "otpauth", "otp" (a one-time code), "totp"
+        // (a base32 TOTP key), "password", or "" (nothing secret). A secret an
+        // app marked that looks like none of them is a "secret".
+        function sensitiveKind(text) {
+            var t = String(text || "").trim();
+            if (!t || t.length > 256) return "";
+            if (/^otpauth(-migration)?:\/\//i.test(t)) return "otpauth";
+            if (/^\d{3}[ -]?\d{3}$|^\d{7,8}$/.test(t)) return "otp";
+            if (/\s/.test(t)) return "";
+            var compact = t.replace(/=+$/, "");
+            if (compact.length >= 16 && compact.length <= 128 && /^[A-Z2-7]+$/.test(compact)) return "totp";
+            if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t) || /^www\./i.test(t) || /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(t)) return "";
+            if (t.length < 8 || t.length > 64) return "";
+            var classes = (/[a-z]/.test(t) ? 1 : 0) + (/[A-Z]/.test(t) ? 1 : 0) + (/[0-9]/.test(t) ? 1 : 0) + (/[^A-Za-z0-9]/.test(t) ? 1 : 0);
+            // A word with a capital and a number at the end ("Seattle2024")
+            // is a password as often as not; three kinds of characters with
+            // a symbol, or all four, are taken as one.
+            if (classes === 4 || (classes === 3 && /[^A-Za-z0-9]/.test(t))) return "password";
+            return "";
+        }
+        function linkOf(text) {
+            var t = String(text || "").trim();
+            return /^(https?|ftp):\/\/[^\s]+$/i.test(t) || /^www\.[^\s]+\.[^\s]+$/i.test(t) ? t : "";
+        }
+
+        // Text an app said is a secret (SecretClipboard), for the copy that follows.
+        var marked = [];
+        function takeMark(text) {
+            var now = Date.now();
+            marked = marked.filter(function (m) { return now - m.at < 5000; });
+            for (var i = 0; i < marked.length; ++i)
+                if (marked[i].text === text)
+                    return marked.splice(i, 1)[0];
+            return null;
+        }
+
+        // ---- The key -------------------------------------------------------------------------
+        // One AES-GCM key for every page: created once (IndexedDB "add"
+        // refuses a second, so two pages starting together end up with the
+        // same one), kept non-extractable.
+        var keyPromise = null;
+        function idbKey() {
+            return new Promise(function (resolve, reject) {
+                var open = global.indexedDB.open("phoenix-clipboard", 1);
+                open.onupgradeneeded = function () { open.result.createObjectStore("keys"); };
+                open.onerror = function () { reject(open.error); };
+                open.onsuccess = function () {
+                    var db = open.result;
+                    var get = db.transaction("keys", "readonly").objectStore("keys").get("clips");
+                    get.onerror = function () { reject(get.error); };
+                    get.onsuccess = function () {
+                        if (get.result) return resolve(get.result);
+                        subtle().generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]).then(function (k) {
+                            var tx = db.transaction("keys", "readwrite");
+                            var add = tx.objectStore("keys").add(k, "clips");
+                            add.onerror = function (e) {
+                                // Another page made it first: use that one.
+                                e.preventDefault();
+                                var again = db.transaction("keys", "readonly").objectStore("keys").get("clips");
+                                again.onsuccess = function () { again.result ? resolve(again.result) : reject(new Error("no clipboard key")); };
+                                again.onerror = function () { reject(again.error); };
+                            };
+                            add.onsuccess = function () { resolve(k); };
+                        }, reject);
+                    };
+                };
+            });
+        }
+        function storeKey() {
+            var raw = store.get("clipboard:key", null);
+            if (raw) return subtle().importKey("raw", unb64(raw), "AES-GCM", false, ["encrypt", "decrypt"]);
+            var bytes = randomBytes(32);
+            store.set("clipboard:key", b64(bytes));
+            return subtle().importKey("raw", bytes, "AES-GCM", false, ["encrypt", "decrypt"]);
+        }
+        function key() {
+            if (!subtle()) return Promise.reject(new Error("WebCrypto is not available"));
+            if (!keyPromise) {
+                keyPromise = (global.indexedDB ? idbKey().catch(function (e) {
+                    console.warn("[phoenix-runtime] clipboard: no IndexedDB key store", e && e.message);
+                    return storeKey();
+                }) : storeKey());
+                keyPromise.catch(function () { keyPromise = null; });
+            }
+            return keyPromise;
+        }
+        function seal(text) {
+            return key().then(function (k) {
+                var iv = randomBytes(12);
+                return subtle().encrypt({ name: "AES-GCM", iv: iv }, k, new TextEncoder().encode(text)).then(function (ct) {
+                    return { iv: b64(iv), data: b64(new Uint8Array(ct)) };
+                });
+            });
+        }
+        function unseal(enc) {
+            return key().then(function (k) {
+                return subtle().decrypt({ name: "AES-GCM", iv: unb64(enc.iv) }, k, unb64(enc.data));
+            }).then(function (pt) { return new TextDecoder().decode(pt); });
+        }
+        // A clip's text, decrypted if need be.
+        function textOf(c) {
+            if (!c.sensitive) return Promise.resolve(c.type === "image" ? "" : c.text || "");
+            if (!c.enc) return Promise.reject(new Error("no data"));
+            return unseal(c.enc);
+        }
+
+        // ---- Recording --------------------------------------------------------------------
+        // item: {text} or {image}, title?, source?, sensitive? (true: the app or
+        // a password field said so). Resolves {clip} or {skipped}.
+        function record(item) {
+            var s = settings();
+            var source = String(item.source || PalmSystem.appIdentifier || "");
+            if (!s.enabled) return Promise.resolve({ skipped: "off" });
+            if (s.excludedApps.indexOf(source) >= 0) return Promise.resolve({ skipped: "excluded" });
+            var c = { id: newId(), time: Date.now(), source: source, pinned: false, category: "", sensitive: false };
+            if (item.image) {
+                var img = String(item.image);
+                if (img.length > MAX_IMAGE) return Promise.resolve({ skipped: "too large" });
+                c.type = "image";
+                c.image = img;
+                if (item.title) c.title = String(item.title).slice(0, 200);
+            } else {
+                var text = String(item.text === undefined || item.text === null ? "" : item.text);
+                if (!text.trim()) return Promise.resolve({ skipped: "empty" });
+                if (text.length > MAX_TEXT) text = text.slice(0, MAX_TEXT);
+                var looks = sensitiveKind(text);
+                var mark = takeMark(text);
+                var secret = !!item.sensitive || !!mark || (s.detectSecrets && !!looks);
+                if (secret && s.sensitive === "skip") return Promise.resolve({ skipped: "sensitive" });
+                c.type = !secret && linkOf(text) ? "link" : "text";
+                if (c.type === "link" && item.title) c.title = String(item.title).slice(0, 200);
+                if (secret) {
+                    c.sensitive = true;
+                    // A password field's text is a password, whatever it looks like.
+                    c.kind = item.password ? "password" : (mark && mark.kind) || (item.kind ? String(item.kind) : "") || looks || "secret";
+                    c.length = text.length;
+                }
+                c.text = text;
+            }
+            return dedupe(c).then(function (same) {
+                if (same) {
+                    // Copied again: it moves to the front.
+                    same.time = c.time;
+                    same.source = c.source;
+                    if (c.title && !same.title) same.title = c.title;
+                    writeClip(same);
+                    changed();
+                    return { clip: shown(same) };
+                }
+                var done = c.sensitive ? seal(c.text).then(function (enc) { delete c.text; c.enc = enc; return c; }) : Promise.resolve(c);
+                return done.then(function (clip) {
+                    if (!writeClip(clip)) return { skipped: "storage full" };
+                    prune();
+                    changed();
+                    return { clip: shown(clip) };
+                });
+            });
+        }
+        // The clip already holding this content, among the latest.
+        function dedupe(c) {
+            var recent = allClips().filter(function (x) { return x.type === c.type || (c.type !== "image" && x.type !== "image"); }).slice(0, 50);
+            var i = 0;
+            function next() {
+                if (i >= recent.length) return Promise.resolve(null);
+                var x = recent[i++];
+                if (x.sensitive !== c.sensitive) return next();
+                if (c.type === "image") return x.image === c.image ? Promise.resolve(x) : next();
+                return textOf(x).then(function (t) { return t === c.text ? x : next(); }, next);
+            }
+            return next();
+        }
+
+        // ---- Subscribers -----------------------------------------------------------------------
+        var watchers = [], notifyTimer = null;
+        function changed() {
+            if (notifyTimer) return;
+            notifyTimer = setTimeout(function () {
+                notifyTimer = null;
+                watchers = watchers.filter(function (w) { return !w.ctx.cancelled(); });
+                watchers.forEach(function (w) { w.send(); });
+            }, 0);
+        }
+        global.addEventListener && global.addEventListener("storage", function (e) {
+            if (e.key === null || String(e.key).indexOf("phoenix:clipboard:") === 0) changed();
+        });
+        function watch(p, reply, ctx, make) {
+            var send = function () { reply(make()); };
+            var first = make();
+            if (p.subscribe) {
+                first.subscribed = true;
+                watchers.push({ ctx: ctx, send: send });
+            }
+            reply(first);
+        }
+
+        function history(p) {
+            prune();
+            var cat = p.category || "recent";
+            var q = String(p.query || "").toLowerCase();
+            var list = allClips().filter(function (c) {
+                if (cat === "pinned" && !c.pinned) return false;
+                if (cat !== "recent" && cat !== "pinned" && c.category !== cat) return false;
+                if (!q) return true;
+                if (c.sensitive) return false;
+                return String(c.text || "").toLowerCase().indexOf(q) >= 0 || String(c.title || "").toLowerCase().indexOf(q) >= 0
+                    || String(c.source || "").toLowerCase().indexOf(q) >= 0;
+            });
+            if (p.limit > 0) list = list.slice(0, p.limit);
+            return ok({ clips: list.map(shown), categories: categories(), settings: settings() });
+        }
+
+        function withClip(p, reply, fn) {
+            var c = p && typeof p.id === "string" ? readClip(p.id) : null;
+            if (!c) return reply(fail(-2, "No such clip: " + (p && p.id)));
+            fn(c);
+        }
+        function caller() { return PalmSystem.appIdentifier; }
+
+        var methods = {
+            "/history": function (p, reply, ctx) {
+                watch(p, reply, ctx, function () { return history(p); });
+            },
+            "/add": function (p, reply) {
+                if (typeof p.text !== "string" && typeof p.image !== "string")
+                    return reply(fail(-1, "need \"text\" or \"image\""));
+                record({ text: p.text, image: p.image, title: p.title, source: p.source || caller(), sensitive: !!p.sensitive,
+                         password: p.kind === "password", kind: p.kind })
+                    .then(function (r) { reply(ok(r)); }, function (e) { reply(fail(-1, String(e && e.message || e))); });
+            },
+            "/pin": function (p, reply) {
+                withClip(p, reply, function (c) { c.pinned = true; writeClip(c); changed(); reply(ok({ clip: shown(c) })); });
+            },
+            "/unpin": function (p, reply) {
+                withClip(p, reply, function (c) { c.pinned = false; writeClip(c); changed(); reply(ok({ clip: shown(c) })); });
+            },
+            "/setCategory": function (p, reply) {
+                var cat = String(p.category || "");
+                if (cat && !categories().some(function (x) { return x.id === cat; }))
+                    return reply(fail(-2, "No such category: " + cat));
+                withClip(p, reply, function (c) { c.category = cat; writeClip(c); changed(); reply(ok({ clip: shown(c) })); });
+            },
+            "/update": function (p, reply) {
+                if (typeof p.text !== "string" || !p.text.trim()) return reply(fail(-1, "need \"text\""));
+                withClip(p, reply, function (c) {
+                    if (c.type === "image" || c.sensitive) return reply(fail(-1, "Only text clips can be edited"));
+                    c.text = p.text.slice(0, MAX_TEXT);
+                    c.type = linkOf(c.text) ? "link" : "text";
+                    if (c.type !== "link") delete c.title;
+                    writeClip(c);
+                    changed();
+                    reply(ok({ clip: shown(c) }));
+                });
+            },
+            "/delete": function (p, reply) {
+                var ids = Array.isArray(p.ids) ? p.ids : typeof p.id === "string" ? [p.id] : [];
+                ids.forEach(function (id) { store.remove(CLIP + id); });
+                changed();
+                reply(ok({ deleted: ids.length }));
+            },
+            "/clear": function (p, reply) {
+                var n = 0;
+                allClips().forEach(function (c) {
+                    if (p.all || !saved(c)) { store.remove(CLIP + c.id); n++; }
+                });
+                changed();
+                reply(ok({ deleted: n }));
+            },
+            "/paste": function (p, reply) {
+                withClip(p, reply, function (c) {
+                    if (c.sensitive && caller() !== SYSTEM_UI)
+                        return reply(fail(-3, "A sensitive clip needs the device passcode (reveal)"));
+                    textOf(c).then(function (t) {
+                        var o = shown(c);
+                        if (c.type !== "image") o.text = t;
+                        reply(ok({ clip: o }));
+                    }, function () { reply(fail(-4, "This clip can no longer be read")); });
+                });
+            },
+            "/reveal": function (p, reply, ctx) {
+                withClip(p, reply, function (c) {
+                    dispatch("luna://com.palm.systemmanager/matchDevicePasscode", { passCode: String(p.passCode || "") }, function (r) {
+                        if (!r || !r.succeeded)
+                            return reply(fail(-5, "The passcode is not right"));
+                        textOf(c).then(function (t) { reply(ok({ text: t })); },
+                                       function () { reply(fail(-4, "This clip can no longer be read")); });
+                    }, ctx);
+                });
+            },
+            "/addCategory": function (p, reply) {
+                var name = String(p.name || "").trim().slice(0, 40);
+                if (!name) return reply(fail(-1, "need \"name\""));
+                var cats = categories();
+                var cat = { id: "c" + newId(), name: name };
+                cats.push(cat);
+                store.set(CATS_KEY, cats);
+                changed();
+                reply(ok({ category: cat, categories: cats }));
+            },
+            "/renameCategory": function (p, reply) {
+                var name = String(p.name || "").trim().slice(0, 40);
+                if (!name) return reply(fail(-1, "need \"name\""));
+                var cats = categories(), cat = cats.filter(function (x) { return x.id === p.id; })[0];
+                if (!cat) return reply(fail(-2, "No such category: " + p.id));
+                cat.name = name;
+                store.set(CATS_KEY, cats);
+                changed();
+                reply(ok({ category: cat, categories: cats }));
+            },
+            "/deleteCategory": function (p, reply) {
+                var cats = categories(), left = cats.filter(function (x) { return x.id !== p.id; });
+                if (left.length === cats.length) return reply(fail(-2, "No such category: " + p.id));
+                store.set(CATS_KEY, left);
+                allClips().forEach(function (c) {
+                    if (c.category === p.id) { c.category = ""; writeClip(c); }
+                });
+                changed();
+                reply(ok({ categories: left }));
+            },
+            "/reorderCategories": function (p, reply) {
+                var cats = categories(), ids = Array.isArray(p.ids) ? p.ids : [];
+                var byId = {};
+                cats.forEach(function (c) { byId[c.id] = c; });
+                var out = ids.filter(function (id) { return byId[id]; }).map(function (id) { var c = byId[id]; delete byId[id]; return c; });
+                cats.forEach(function (c) { if (byId[c.id]) out.push(c); });
+                store.set(CATS_KEY, out);
+                changed();
+                reply(ok({ categories: out }));
+            },
+            "/getSettings": function (p, reply, ctx) {
+                watch(p, reply, ctx, function () { return ok({ settings: settings() }); });
+            },
+            "/setSettings": function (p, reply) {
+                var cur = store.get(SETTINGS_KEY, null) || {};
+                var bad = "";
+                Object.keys(p).forEach(function (k) {
+                    if (k === "subscribe" || !(k in DEFAULTS)) return;
+                    var v = p[k];
+                    if (k === "keepFor" && !(v in KEEP)) bad = "keepFor: one of " + Object.keys(KEEP).join(", ");
+                    else if (k === "maxItems" && !(v >= 1 && v <= 1000)) bad = "maxItems: 1-1000";
+                    else if (k === "sensitive" && v !== "mask" && v !== "skip") bad = "sensitive: \"mask\" or \"skip\"";
+                    else if (k === "excludedApps" && !Array.isArray(v)) bad = "excludedApps: a list of app ids";
+                    else cur[k] = v;
+                });
+                if (bad) return reply(fail(-1, bad));
+                store.set(SETTINGS_KEY, cur);
+                var s = settings();
+                if (!s.enabled) {
+                    // Off: the history goes (saved clips stay).
+                    allClips().forEach(function (c) { if (!saved(c)) store.remove(CLIP + c.id); });
+                }
+                prune();
+                changed();
+                reply(ok({ settings: s }));
+            }
+        };
+        methods["/subscribe"] = function (p, reply, ctx) {
+            var q = {};
+            for (var k in p) q[k] = p[k];
+            q.subscribe = true;
+            methods["/history"](q, reply, ctx);
+        };
+        register([SERVICE], methods);
+
+        // ---- Copies in this page ------------------------------------------------------------
+        // Every copy and cut: the page's selection, or what the page put on
+        // the clipboard itself (clipboardData, read after its own handlers,
+        // as this listener is on the window and bubbles last).
+        function onCopy(e) {
+            var data = e.clipboardData;
+            var text = "", image = "", title = "";
+            var target = e.target && e.target.nodeType === 1 ? e.target : null;
+            var password = !!(target && target.tagName === "INPUT" && String(target.type).toLowerCase() === "password");
+            if (e.defaultPrevented && data) {
+                text = data.getData("text/plain") || data.getData("text/uri-list") || "";
+            } else {
+                text = selectedText();
+                if (!text) {
+                    // A picture alone (no text selected).
+                    var sel = global.getSelection && global.getSelection();
+                    var range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+                    var frag = range ? range.cloneContents() : null;
+                    var img = frag && frag.querySelector ? frag.querySelector("img") : null;
+                    if (img && img.getAttribute("src")) {
+                        image = new URL(img.getAttribute("src"), global.location.href).href;
+                        title = img.getAttribute("alt") || "";
+                    }
+                }
+            }
+            if (!text && !image) return;
+            if (text && linkOf(text)) title = linkTitle(text);
+            record({ text: text, image: image, title: title, sensitive: password, password: password })
+                .catch(function (err) { console.warn("[phoenix-runtime] clipboard: not recorded", err && err.message); });
+        }
+        // A link's title: the link's own text where it was copied from, or
+        // the page's title for its own address.
+        function linkTitle(url) {
+            var sel = global.getSelection && global.getSelection();
+            var node = sel && sel.anchorNode;
+            var a = node && (node.nodeType === 1 ? node : node.parentElement);
+            a = a && a.closest ? a.closest("a[href]") : null;
+            if (a && a.textContent.trim() && a.textContent.trim() !== url) return a.textContent.trim();
+            if (global.location && url === global.location.href) return global.document.title || "";
+            return "";
+        }
+        if (global.addEventListener) {
+            global.addEventListener("copy", onCopy);
+            global.addEventListener("cut", onCopy);
+        }
+
+        // navigator.clipboard writes (SecretClipboard, the apps' Copy
+        // buttons) fire no copy event: recorded here.
+        var clip = global.navigator && global.navigator.clipboard;
+        if (clip && typeof clip.writeText === "function") {
+            var writeText = clip.writeText.bind(clip);
+            try {
+                clip.writeText = function (text) {
+                    var r = writeText(text);
+                    Promise.resolve(r).then(function () {
+                        if (text) record({ text: String(text) }).catch(function () {});
+                    }, function () {});
+                    return r;
+                };
+            } catch (e) { /* read-only: copies through it go unrecorded */ }
+        }
+        if (clip && typeof clip.write === "function") {
+            var write = clip.write.bind(clip);
+            try {
+                clip.write = function (items) {
+                    var r = write(items);
+                    Promise.resolve(r).then(function () { recordItems(items); }, function () {});
+                    return r;
+                };
+            } catch (e) { /* as above */ }
+        }
+        function recordItems(items) {
+            (items || []).forEach(function (it) {
+                var types = it && it.types ? Array.prototype.slice.call(it.types) : [];
+                var img = types.filter(function (t) { return /^image\//.test(t); })[0];
+                if (img) {
+                    it.getType(img).then(function (blob) {
+                        var fr = new global.FileReader();
+                        fr.onload = function () { record({ image: String(fr.result) }).catch(function () {}); };
+                        fr.readAsDataURL(blob);
+                    });
+                } else if (types.indexOf("text/plain") >= 0) {
+                    it.getType("text/plain").then(function (blob) { return blob.text(); })
+                        .then(function (t) { record({ text: t }).catch(function () {}); });
+                }
+            });
+        }
+
+        // Copy and Cut in a password field. Chromium refuses both there (and
+        // fires no copy event); webOS let the user copy a password, so the
+        // runtime copies the selection itself and records it as sensitive.
+        function passwordField() {
+            var el = editTarget();
+            return el && el.tagName === "INPUT" && String(el.type).toLowerCase() === "password" ? el : null;
+        }
+        function passwordCopy(action) {
+            var el = passwordField();
+            if (!el || el.selectionStart === el.selectionEnd) return false;
+            var text = el.value.substring(el.selectionStart, el.selectionEnd);
+            runtime.clipboard.markSensitive(text, "password");
+            var put = clip && typeof clip.writeText === "function"
+                ? Promise.resolve(clip.writeText(text)) : Promise.reject(new Error("no clipboard"));
+            put.catch(function () {
+                // execCommand("copy") on a hidden text area.
+                var ta = global.document.createElement("textarea");
+                ta.value = text;
+                ta.style.position = "fixed";
+                ta.style.opacity = "0";
+                global.document.body.appendChild(ta);
+                ta.select();
+                global.document.execCommand("copy");
+                ta.remove();
+                el.focus();
+            });
+            if (action === "cut")
+                global.document.execCommand("insertText", false, "");
+            return true;
+        }
+        if (global.document) {
+            global.document.addEventListener("keydown", function (e) {
+                var k = String(e.key || "").toLowerCase();
+                if ((e.ctrlKey || e.metaKey) && !e.altKey && (k === "c" || k === "x") && passwordCopy(k === "c" ? "copy" : "cut"))
+                    e.preventDefault();
+            }, true);
+        }
+
+        // The screen locked: the history goes, when the user asked for that
+        // (Settings > Clipboard). Only on the change, which one page sees
+        // first (applyHostStatus stores deviceLocked); deleting twice is harmless.
+        var baseApply = runtime.applyHostStatus;
+        runtime.applyHostStatus = function (st, opts) {
+            var was = !!store.get("deviceLocked", false);
+            var r = baseApply.apply(this, arguments);
+            if (st && st.deviceLocked && !was && settings().clearOnLock) {
+                allClips().forEach(function (c) { if (!saved(c)) store.remove(CLIP + c.id); });
+                changed();
+            }
+            return r;
+        };
+
+        runtime.clipboard = {
+            record: record,
+            // The next copy of this text is a secret (@phoenix/secrets SecretClipboard).
+            // kind: "password", "otp", ... ("" to tell from the text).
+            markSensitive: function (text, kind) {
+                if (typeof text === "string" && text) marked.push({ text: text, kind: kind ? String(kind) : "", at: Date.now() });
+            },
+            sensitiveKind: sensitiveKind,
+            passwordCopy: passwordCopy,
+            settings: settings,
+            // For tests: the stored record (sensitive ones encrypted).
+            raw: readClip,
+            prune: prune
         };
     })();
 

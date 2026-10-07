@@ -111,8 +111,20 @@ Item {
 
     function edit(action, target) {
         const v = target || view;
-        if (_webActions[action] !== undefined)
-            v.triggerWebAction(_webActions[action]);
+        if (_webActions[action] === undefined)
+            return;
+        // Copy and Cut in a password field: Chromium refuses them, the
+        // runtime copies the selection itself and records it as a sensitive
+        // clip (runtime/phoenix-runtime.js "Clipboard history").
+        if ((action === "copy" || action === "cut") && v === view) {
+            view.runJavaScript("!!(window.__phoenixRuntime && __phoenixRuntime.clipboard && __phoenixRuntime.clipboard.passwordCopy("
+                               + JSON.stringify(action) + "))", (done) => {
+                if (!done)
+                    v.triggerWebAction(_webActions[action]);
+            });
+            return;
+        }
+        v.triggerWebAction(_webActions[action]);
     }
 
     // The popup for a page (view or a page inside it) at rect, in the page's

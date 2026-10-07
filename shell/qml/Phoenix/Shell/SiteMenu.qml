@@ -21,6 +21,9 @@ Item {
     // "back", "forward", "reload", "browser" (copy is done here).
     signal action(string name)
     signal closeRequested
+    // Copy Link put text on the clipboard (the shell records it in the
+    // clipboard history, org.webosphoenix.clipboard).
+    signal copied(string text)
 
     visible: open || panel.opacity > 0
 
@@ -78,6 +81,7 @@ Item {
         clip.text = url;
         clip.selectAll();
         clip.copy();
+        copied(url);
     }
 
     component Entry: Item {

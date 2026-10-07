@@ -39,6 +39,8 @@ Item {
     signal launchRequested(string appId)
     signal actionRequested(string action, string text)
     signal closeRequested
+    // Copy or Cut put text on the clipboard (for the clipboard history).
+    signal copied(string text)
 
     visible: opacity > 0
     opacity: open ? 1 : 0
@@ -190,8 +192,8 @@ Item {
     function edit(action) {
         switch (action) {
         case "selectAll": input.selectAll(); break;
-        case "cut": input.cut(); break;
-        case "copy": input.copy(); break;
+        case "cut": copied(input.selectedText); input.cut(); break;
+        case "copy": copied(input.selectedText); input.copy(); break;
         case "paste": input.paste(); break;
         }
     }
