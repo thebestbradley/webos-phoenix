@@ -2508,7 +2508,8 @@
     // (DisplayManager::usbDockCallback, :967-1060).
     function powerState() { return store.get("power", { percent: 76, charger: "none" }); }
     function batteryPayload(st) {
-        return { percent: st.percent, percent_ui: st.percent, temperature_C: 28,
+        // temperature: the simulator's (Ctrl+Shift+T), 31 °C until it says.
+        return { percent: st.percent, percent_ui: st.percent, temperature_C: typeof st.temperature === "number" ? st.temperature : 31,
                  current_mA: st.charger !== "none" ? 800 : -250, capacity_mAh: 1150, voltage_mV: 3900 };
     }
     function chargerPayload(st) {
@@ -2522,6 +2523,7 @@
         var st = powerState(), k;
         for (k in changes) st[k] = changes[k];
         store.set("power", st);
+        if (runtime.recordBattery) runtime.recordBattery(st);
         signal("/com/palm/power", "USBDockStatus", chargerPayload(st));
         signal("/com/palm/power", "batteryStatus", batteryPayload(st));
         return st;
@@ -5696,6 +5698,11 @@
         runtime.applyHostStatus = function (st, opts) {
             if (!st) return;
             var writer = !opts || opts.writer !== false;
+            // Blocks below that follow the shell's own status (the
+            // accessories, the battery's use): hook(status, writer).
+            (runtime.hostStatusHooks || []).forEach(function (h) {
+                try { h(st, writer); } catch (e) { console.warn("[phoenix-runtime] status hook: " + (e && e.message || e)); }
+            });
             var s = writer ? load() : null, before = writer ? toJson(s) : "";
             if (writer) {
                 if ("airplaneMode" in st) setOffline(s, !!st.airplaneMode);
@@ -11957,6 +11964,304 @@
             "/getStatus": function (p, reply) {
                 reply(session ? view(session, session.last || {}) : ok({ state: "off", url: "", files: [] }));
             }
+        });
+    })();
+
+    // ================================================================================
+    // Accessories, tethering and the battery's use (docs/M6-PLAN.md F4 items 8-9)
+    // ================================================================================
+    //
+    // Phoenix's services for Settings > Game Controllers, USB, Hotspot &
+    // Tethering and Battery. In the simulator the hardware is phoenix-sim's
+    // (its Simulate menu: a game controller, a USB drive in the device's
+    // port; the app in front, for the battery's use), which reaches the
+    // pages as shell status (hostStatusHooks). On a device each is a small
+    // service on the system's own: see docs/APP-RUNTIME.md "Accessories".
+    //
+    //   org.webosphoenix.gamepads/list {subscribe} -> {gamepads: [{index,
+    //       id, name, connection, mapping, buttons: [pressed indexes], axes}]}:
+    //       the controllers the Gamepad API sees (Chromium's own, from the
+    //       computer's) and the simulator's. Web apps get the simulator's
+    //       through navigator.getGamepads() and gamepadconnected /
+    //       gamepaddisconnected events too.
+    //   org.webosphoenix.usb/listDrives {subscribe} -> {drives: [{id, label,
+    //       vendor, size, used, fs, mounted, path, safeToRemove}]};
+    //       unmount {id} (safe removal), mount {id}.
+    //   org.webosphoenix.tethering/getStatus {subscribe} -> {available,
+    //       wifi: {enabled, ssid, passphrase, security, clients}, usb:
+    //       {enabled, connected}}; setWifi {enabled?, ssid?, passphrase?,
+    //       security? ("wpa2" | "open")}; setUsb {enabled}.
+    //   org.webosphoenix.battery/usage {subscribe} -> {percent, charging,
+    //       history: [{t, percent}] (the last 24 hours), screenOnMs, apps:
+    //       [{appId, title, ms, share}] (estimates from the time each app
+    //       was in front with the screen on), since}.
+    (function accessories() {
+        runtime.hostStatusHooks = runtime.hostStatusHooks || [];
+        var hooks = runtime.hostStatusHooks;
+        function watchers() {
+            var list = [];
+            return {
+                add: function (p, reply, ctx, build) {
+                    reply(build());
+                    if (p.subscribe) list.push({ reply: reply, ctx: ctx, build: build });
+                },
+                fire: function () {
+                    list = list.filter(function (w) { return !w.ctx.cancelled(); });
+                    list.forEach(function (w) { w.reply(w.build()); });
+                }
+            };
+        }
+
+        // ---- Game controllers ---------------------------------------------------------
+        var simPads = [];
+        var padWatch = watchers();
+        var nav = global.navigator;
+        var nativeGetGamepads = nav && typeof nav.getGamepads === "function" ? nav.getGamepads.bind(nav) : null;
+        function gamepadObject(p, slot) {
+            var buttons = [];
+            for (var i = 0; i < 17; i++) {
+                var on = (p.buttons || []).indexOf(i) >= 0;
+                buttons.push({ pressed: on, touched: on, value: on ? 1 : 0 });
+            }
+            return { id: p.id, index: slot, connected: true, mapping: p.mapping || "standard", timestamp: p.at || 0,
+                     axes: (p.axes || [0, 0, 0, 0]).slice(), buttons: buttons, vibrationActuator: null, phoenixSimulated: true };
+        }
+        function allPads() {
+            var real = [];
+            try { real = nativeGetGamepads ? Array.prototype.slice.call(nativeGetGamepads()) : []; } catch (e) { real = []; }
+            var out = real.slice();
+            while (out.length < 4) out.push(null);
+            simPads.forEach(function (p) {
+                var slot = out.indexOf(null);
+                if (slot < 0) { slot = out.length; out.push(null); }
+                out[slot] = gamepadObject(p, slot);
+            });
+            return out;
+        }
+        if (nav) {
+            try {
+                Object.defineProperty(nav, "getGamepads", { configurable: true, value: function () { return allPads(); } });
+            } catch (e) { /* the page keeps Chromium's */ }
+        }
+        function padEvent(type, pad) {
+            if (!global.dispatchEvent) return;
+            var e;
+            try { e = new Event(type); } catch (x) { return; }
+            e.gamepad = pad;
+            global.dispatchEvent(e);
+        }
+        hooks.push(function (st) {
+            if (!("gamepads" in st)) return;
+            var before = simPads.map(function (p) { return p.id; });
+            simPads = (st.gamepads || []).map(function (p) { var x = {}, k; for (k in p) x[k] = p[k]; x.at = Date.now(); return x; });
+            var now = simPads.map(function (p) { return p.id; });
+            var pads = allPads();
+            now.forEach(function (id) {
+                if (before.indexOf(id) < 0) padEvent("gamepadconnected", pads.filter(function (g) { return g && g.id === id; })[0]);
+            });
+            before.forEach(function (id) {
+                if (now.indexOf(id) < 0) padEvent("gamepaddisconnected", { id: id, connected: false });
+            });
+            padWatch.fire();
+        });
+        function padList() {
+            var sims = {};
+            simPads.forEach(function (p) { sims[p.id] = p; });
+            return ok({ gamepads: allPads().filter(Boolean).map(function (g) {
+                var sim = sims[g.id];
+                var name = sim ? sim.name : String(g.id).replace(/\s*\(.*$/, "") || "Game controller";
+                return { index: g.index, id: g.id, name: name, connection: sim ? sim.connection : "",
+                         mapping: g.mapping, axes: Array.prototype.slice.call(g.axes || []),
+                         buttons: Array.prototype.map.call(g.buttons || [], function (b, i) { return b.pressed ? i : -1; })
+                             .filter(function (i) { return i >= 0; }) };
+            }) });
+        }
+        if (global.addEventListener) {
+            global.addEventListener("gamepadconnected", function (e) { if (!(e.gamepad && e.gamepad.phoenixSimulated)) padWatch.fire(); });
+            global.addEventListener("gamepaddisconnected", function () { padWatch.fire(); });
+        }
+        register(["org.webosphoenix.gamepads"], {
+            "/list": function (p, reply, ctx) { padWatch.add(p, reply, ctx, padList); }
+        });
+
+        // ---- USB drives (host mode, OTG) ----------------------------------------------
+        var drives = [];
+        var usbWatch = watchers();
+        function driveState() { return store.get("usbDriveState", {}); }
+        function driveList() {
+            var stt = driveState();
+            return ok({ drives: drives.map(function (d) {
+                var x = {}, k;
+                for (k in d) x[k] = d[k];
+                var mounted = !(stt[d.id] && stt[d.id].unmounted);
+                x.mounted = mounted;
+                x.safeToRemove = !mounted;
+                x.path = mounted ? "/media/usb/" + (d.label || d.id) : "";
+                return x;
+            }) });
+        }
+        hooks.push(function (st, writer) {
+            if (!("usbDrives" in st)) return;
+            var before = drives.map(function (d) { return d.id; });
+            drives = (st.usbDrives || []).slice();
+            var now = drives.map(function (d) { return d.id; });
+            // A drive put in again is mounted again.
+            var stt = driveState(), dirty = false;
+            Object.keys(stt).forEach(function (id) { if (now.indexOf(id) < 0) { delete stt[id]; dirty = true; } });
+            if (dirty && writer) store.set("usbDriveState", stt);
+            // A drive put in: the notification (one page tells it).
+            if (writer) drives.forEach(function (d) {
+                if (before.indexOf(d.id) < 0)
+                    host.postToHost("notification", { appId: "org.webosphoenix.settings", title: (d.label || "USB drive") + " connected",
+                        body: "Tap to see it or remove it safely", params: { page: "usb" } });
+            });
+            usbWatch.fire();
+        });
+        function setMounted(id, mounted, reply) {
+            if (!drives.some(function (d) { return d.id === id; })) return reply(fail(-1, "No such drive: " + id));
+            var stt = driveState();
+            stt[id] = { unmounted: !mounted };
+            store.set("usbDriveState", stt);
+            usbWatch.fire();
+            reply(ok(driveList()));
+        }
+        register(["org.webosphoenix.usb"], {
+            "/listDrives": function (p, reply, ctx) { usbWatch.add(p, reply, ctx, driveList); },
+            // Safe removal: the drive's file systems are written out and let go.
+            "/unmount": function (p, reply) { setMounted(String(p.id || ""), false, reply); },
+            "/mount": function (p, reply) { setMounted(String(p.id || ""), true, reply); }
+        });
+
+        // ---- Hotspot and tethering ------------------------------------------------------
+        var tetherWatch = watchers();
+        var formFactor = "";
+        function tetherState() {
+            var t = store.get("tethering", {});
+            return { wifi: { enabled: !!(t.wifi && t.wifi.enabled), ssid: (t.wifi && t.wifi.ssid) || "Phoenix Hotspot",
+                             passphrase: (t.wifi && t.wifi.passphrase) || "", security: (t.wifi && t.wifi.security) === "open" ? "open" : "wpa2" },
+                     usb: { enabled: !!(t.usb && t.usb.enabled) } };
+        }
+        function tetherStatus() {
+            var t = tetherState();
+            t.available = formFactor !== "tablet";
+            t.wifi.clients = t.wifi.enabled ? [] : [];
+            t.usb.connected = !!store.get("usbHost", false);
+            return ok(t);
+        }
+        function tetherOngoing(t) {
+            var on = [];
+            if (t.wifi.enabled) on.push("Wi-Fi hotspot “" + t.wifi.ssid + "”");
+            if (t.usb.enabled) on.push("USB tethering");
+            if (on.length)
+                host.postToHost("ongoing", { id: "tethering", appId: "org.webosphoenix.settings", title: "Sharing your mobile data",
+                    body: on.join(" and ") + " on", icon: "", params: { page: "hotspot" }, progress: -1 });
+            else host.postToHost("ongoing", { id: "tethering", clear: true });
+        }
+        hooks.push(function (st) {
+            if ("formFactor" in st) { formFactor = String(st.formFactor || ""); tetherWatch.fire(); }
+            if ("usbHost" in st) tetherWatch.fire();
+        });
+        function saveTether(t) {
+            store.set("tethering", { wifi: { enabled: t.wifi.enabled, ssid: t.wifi.ssid, passphrase: t.wifi.passphrase, security: t.wifi.security },
+                                     usb: { enabled: t.usb.enabled } });
+            tetherOngoing(t);
+            tetherWatch.fire();
+        }
+        register(["org.webosphoenix.tethering"], {
+            "/getStatus": function (p, reply, ctx) { tetherWatch.add(p, reply, ctx, tetherStatus); },
+            "/setWifi": function (p, reply) {
+                if (formFactor === "tablet") return reply(fail(-1, "This device has no mobile data to share"));
+                var t = tetherState();
+                if (p.ssid !== undefined) {
+                    var ssid = String(p.ssid).trim();
+                    if (!ssid || ssid.length > 32) return reply(fail(-1, "The network name has 1 to 32 characters"));
+                    t.wifi.ssid = ssid;
+                }
+                if (p.security !== undefined) t.wifi.security = p.security === "open" ? "open" : "wpa2";
+                if (p.passphrase !== undefined) t.wifi.passphrase = String(p.passphrase);
+                if (t.wifi.security === "wpa2" && (p.enabled || t.wifi.enabled) && !(t.wifi.passphrase.length >= 8 && t.wifi.passphrase.length <= 63))
+                    return reply(fail(-1, "The password has 8 to 63 characters"));
+                if (p.enabled !== undefined) t.wifi.enabled = !!p.enabled;
+                saveTether(t);
+                reply(tetherStatus());
+            },
+            "/setUsb": function (p, reply) {
+                if (formFactor === "tablet") return reply(fail(-1, "This device has no mobile data to share"));
+                var t = tetherState();
+                t.usb.enabled = !!p.enabled;
+                saveTether(t);
+                reply(tetherStatus());
+            }
+        });
+
+        // ---- The battery's use ---------------------------------------------------------
+        // The level over time (each change powerd reports) and how long each
+        // app was in front with the screen on (the shell's usageTick), kept
+        // for a day. The estimate gives each app its share of the screen-on
+        // time: the screen is most of a phone's drain.
+        var DAY = 24 * 3600 * 1000;
+        var batteryWatch = watchers();
+        runtime.recordBattery = function (st) {
+            var h = store.get("batteryHistory", []), now = Date.now();
+            var last = h[h.length - 1];
+            if (last && last.percent === st.percent && !!last.charging === (st.charger !== "none")) return;
+            h.push({ t: now, percent: st.percent, charging: st.charger !== "none" });
+            store.set("batteryHistory", h.filter(function (x) { return now - x.t <= DAY; }));
+            batteryWatch.fire();
+        };
+        hooks.push(function (st, writer) {
+            if (!st.usageTick || !writer) return;
+            var u = store.get("batteryUsage", { since: Date.now(), screenOnMs: 0, apps: {}, log: [] });
+            var tick = st.usageTick, now = tick.at || Date.now();
+            u.log = (u.log || []).concat([{ t: now, appId: tick.appId || "", ms: tick.ms }]).filter(function (x) { return now - x.t <= DAY; });
+            store.set("batteryUsage", u);
+            batteryWatch.fire();
+        });
+        // A card's app is an app or one of its launch points (Settings' panes).
+        function appTitle(id) {
+            var lp = launchPoints().filter(function (l) { return l.launchPointId === id || l.id === id; })[0];
+            return lp ? lp.title : id;
+        }
+        // SIMULATOR-ONLY DEMO DATA, as runtime/sample-data.js: the first
+        // time the pane is asked, a day of the device's use so far (charged
+        // overnight, then down to the battery's level now; the apps a
+        // morning uses), so the charts have something to show. Never on a
+        // device, where the system keeps the real thing.
+        function seedDemo() {
+            if (store.get("batteryDemo", false)) return;
+            store.set("batteryDemo", true);
+            var now = Date.now(), H = 3600 * 1000, level = powerState().percent;
+            var h = [];
+            for (var i = 0; i <= 4; i++) h.push({ t: now - (22 - i) * H, percent: Math.round(30 + i * 17.5), charging: true });
+            for (i = 0; i <= 17; i++) h.push({ t: now - (17 - i) * H - 30 * 60 * 1000, percent: Math.round(100 - (100 - level) * i / 17), charging: false });
+            store.set("batteryHistory", h.concat(store.get("batteryHistory", [])).sort(function (a, b) { return a.t - b.t; }));
+            var u = store.get("batteryUsage", { log: [] });
+            var demo = [["com.palm.app.email", 42], ["org.webosphoenix.messaging", 35], ["com.palm.app.browser", 28],
+                        ["org.webosphoenix.phone", 12], ["", 15], ["org.webosphoenix.music", 9]];
+            u.log = demo.map(function (d, n) { return { t: now - (12 - n) * H, appId: d[0], ms: d[1] * 60 * 1000 }; }).concat(u.log || []);
+            store.set("batteryUsage", u);
+        }
+        function usage() {
+            seedDemo();
+            var now = Date.now(), p = powerState();
+            var u = store.get("batteryUsage", { log: [] });
+            var by = {}, screen = 0;
+            (u.log || []).forEach(function (x) {
+                if (now - x.t > DAY) return;
+                screen += x.ms;
+                var id = x.appId || "";
+                by[id] = (by[id] || 0) + x.ms;
+            });
+            var apps = Object.keys(by).map(function (id) {
+                return { appId: id, title: id ? appTitle(id) : "Card view and launcher", ms: by[id], share: screen ? by[id] / screen : 0 };
+            }).sort(function (a, b) { return b.ms - a.ms; });
+            var h = store.get("batteryHistory", []).filter(function (x) { return now - x.t <= DAY; });
+            if (!h.length || h[h.length - 1].percent !== p.percent) h = h.concat([{ t: now, percent: p.percent, charging: p.charger !== "none" }]);
+            return ok({ percent: p.percent, charging: p.charger !== "none", temperature: typeof p.temperature === "number" ? p.temperature : 31,
+                        history: h, screenOnMs: screen, apps: apps });
+        }
+        register(["org.webosphoenix.battery"], {
+            "/usage": function (p, reply, ctx) { batteryWatch.add(p, reply, ctx, usage); }
         });
     })();
 

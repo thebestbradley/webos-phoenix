@@ -16,13 +16,21 @@
 //
 // LICENSE@@@
 
-// Phoenix compat overlay: the original list, phoenix-power.css for the
-// power menu's rows of two buttons (PowerdAlerts.js), and
-// phoenix-temperature-alert.js (the battery too hot, docs/M6-PLAN.md F4).
+// Phoenix compat overlay: the original list, and data/phoenix-temperature.js
+// after PowerdService.js (the battery's temperature warnings,
+// docs/M6-PLAN.md F4 item 9).
 
-enyo.depends(	
-		"../../stylesheets/notifications.css",
-		"PowerdAlerts.js",
-		"phoenix-power.css",
-		"phoenix-temperature-alert.js"
+enyo.depends(
+		"data/AppManagerService.js",
+		"data/SystemManagerService.js",
+		"data/PowerdService.js",
+		"data/phoenix-temperature.js",
+		"data/StoragedService.js",
+		"data/TelephonyService.js",
+		"data/System-Service.js",
+		"data/SysUpdateService.js",
+		"utils/utils.js",
+		"app/SystemUIApp.js",
+		"$enyo-lib/networkalerts/",
+		"$enyo-lib/syncui/"
 );

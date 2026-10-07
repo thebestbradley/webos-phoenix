@@ -47,6 +47,8 @@ import Phoenix.Sim
 
 Item {
     id: root
+    // The simulated device's status (tests).
+    readonly property var simStatus: status
 
     // ---- The simulated device ----------------------------------------------------
     // The window shows the device as it is held: turned on its side it is a
@@ -172,6 +174,11 @@ Item {
         id: scenePowerTimer
         interval: 10000
         onTriggered: shell.powerKeyHeld()
+    }
+    Timer {
+        id: sceneHotTimer
+        interval: 10000
+        onTriggered: root.setTemperature(51)
     }
     Timer {
         id: sceneWaveTimer
@@ -306,6 +313,75 @@ Item {
     }
     // The light on the sensor, in lux: dark, dim, indoor, outdoor (Ctrl+Shift+L).
     readonly property var lightLevels: [1, 50, 300, 20000]
+
+    // ---- Accessories and health (docs/M6-PLAN.md F4 items 8-9) ----------------------
+    // A game controller (Ctrl+Shift+G; Ctrl+Shift+A presses A), a USB drive
+    // in the device's port (Ctrl+Shift+U), the battery's temperature
+    // (Ctrl+Shift+T). The pages hear them as shell status.
+    function connectGamepad(on) {
+        status.gamepads = on ? [{ index: 0, name: "Phoenix Wireless Controller", connection: "bluetooth", mapping: "standard",
+                                  id: "Phoenix Wireless Controller (STANDARD GAMEPAD Vendor: 2d50 Product: 0001)",
+                                  buttons: [], axes: [0, 0, 0, 0] }] : [];
+        windows.pushSystemStatus({ gamepads: status.gamepads });
+    }
+    function pressGamepadButton(b) {
+        if (!status.gamepads.length)
+            connectGamepad(true);
+        var pad = JSON.parse(JSON.stringify(status.gamepads[0]));
+        pad.buttons = [b];
+        status.gamepads = [pad];
+        windows.pushSystemStatus({ gamepads: status.gamepads });
+        gamepadRelease.restart();
+    }
+    Timer {
+        id: gamepadRelease
+        interval: 300
+        onTriggered: {
+            if (!status.gamepads.length)
+                return;
+            var pad = JSON.parse(JSON.stringify(status.gamepads[0]));
+            pad.buttons = [];
+            status.gamepads = [pad];
+            windows.pushSystemStatus({ gamepads: status.gamepads });
+        }
+    }
+    function attachUsbDrive(on) {
+        status.usbDrives = on ? [{ id: "sda1", label: "PHOENIX", vendor: "SanDisk Cruzer Blade", size: 16008609792, used: 5368709120,
+                                   fs: "vfat" }] : [];
+        windows.pushSystemStatus({ usbDrives: status.usbDrives });
+    }
+    readonly property var temperatures: [31, 46, 51]
+    function setTemperature(t) {
+        status.temperature = t;
+        // powerd's batteryStatus signal carries it (the pages' setPower).
+        windows.simulatePower({ temperature: t });
+        console.info("phoenix-sim: battery " + t + " °C");
+    }
+
+    // Which app is in front with the screen on, for Settings > Battery's
+    // usage (the runtime's battery block): every minute, and when the app
+    // in front changes, the time since goes to the pages.
+    property string _usageApp: ""
+    property real _usageSince: Date.now()
+    function _usageTick() {
+        var now = Date.now(), ms = Math.max(0, now - _usageSince);
+        _usageSince = now;
+        var on = shell.display.state !== "off";
+        if (ms > 0 && on)
+            windows.pushSystemStatus({ usageTick: { appId: shell.locked ? "" : _usageApp, ms: ms, at: now } });
+        var i = windows.cardIndex(windows.focusedUid);
+        _usageApp = i >= 0 && shell.cardView.maximized ? windows.cards.get(i).appId : "";
+    }
+    Timer {
+        interval: 60000
+        running: true
+        repeat: true
+        onTriggered: root._usageTick()
+    }
+    Connections {
+        target: windows
+        function onFocusedUidChanged() { root._usageTick(); }
+    }
 
     // A vibration (com.palm.vibrate, a banner's "vibrate"): the device
     // shakes in the window while it lasts, under a label saying what it is.
@@ -490,6 +566,29 @@ Item {
         { id: "touchToShareTap", menu: "simulate", text: qsTr("Touch to Share: Tap the Phone"), keys: ["Ctrl+F7"],
           run: function () { windows.simulateTouchToShareTap(); } },
         { separator: true, menu: "simulate" },
+        // Accessories (docs/M6-PLAN.md F4 item 8): a Bluetooth game
+        // controller (its A button), a USB drive on the device's own USB
+        // port (host mode, OTG). The pages see them (the runtime's
+        // gamepads and USB blocks): web apps through the Gamepad API.
+        { id: "gamepad", menu: "simulate", text: qsTr("Game Controller Connected"), keys: ["Ctrl+Shift+G"],
+          tip: qsTr("A Bluetooth game controller; web apps see it with the Gamepad API"),
+          run: function () { root.connectGamepad(status.gamepads.length === 0); },
+          checked: function () { return status.gamepads.length > 0; } },
+        { id: "gamepadA", menu: "simulate", text: qsTr("Game Controller: Press A"), keys: ["Ctrl+Shift+A"],
+          run: function () { root.pressGamepadButton(0); } },
+        { id: "usbOtg", menu: "simulate", text: qsTr("USB Drive in the Device (OTG)"), keys: ["Ctrl+Shift+U"],
+          tip: qsTr("A USB drive on the device's own port: Settings > USB"),
+          run: function () { root.attachUsbDrive(status.usbDrives.length === 0); },
+          checked: function () { return status.usbDrives.length > 0; } },
+        // Health (item 9): the battery's temperature, normal, warm (45 °C,
+        // the first warning) or hot (50 °C, the second), as powerd reports it.
+        { id: "temperature", menu: "simulate", text: qsTr("Next Device Temperature"), keys: ["Ctrl+Shift+T"],
+          tip: qsTr("Normal (31 °C), warm (46 °C), hot (51 °C)"),
+          run: function () {
+              var i = root.temperatures.indexOf(status.temperature);
+              root.setTemperature(root.temperatures[(i + 1) % root.temperatures.length]);
+          } },
+        { separator: true, menu: "simulate" },
         // A headset (with its microphone) and its button, twice within a
         // second a double click; the play/pause media key; the light on
         // the sensor (com.palm.keys, com.palm.ambientLightSensor).
@@ -562,7 +661,7 @@ Item {
                                        "phone", "tablet"]
     // The demo scenes (--scene; buildScene()).
     readonly property var scenes: ["locked", "cards", "stacks", "longstack", "reorder", "maximized", "heldcard",
-                                   "launcher", "launcheredit", "launchermenu", "launchergroup", "launchergroupopen", "launchertabs", "launcherinstall", "wave", "powermenu", "pin", "emergency", "firstuse",
+                                   "launcher", "launcheredit", "launchermenu", "launchergroup", "launchergroupopen", "launchertabs", "launcherinstall", "wave", "powermenu", "hot", "pin", "emergency", "firstuse",
                                    "lowbattery", "banner", "notified", "dashboard", "drawer", "capture",
                                    "capturepreview", "justtype", "keyboard", "clipstrip", "assistant", "systemmenu", "empty"]
     readonly property string scene: typeof simScene !== "undefined" ? simScene : ""
@@ -911,6 +1010,9 @@ Item {
         pushOrientation();
         // Settings offers Advanced gestures where there is a gesture area.
         windows.pushSystemStatus({ gestureArea: Theme.gestureAreaHeight > 0 });
+        // The accessories (none at boot) and what the device is: Settings
+        // offers tethering on phones.
+        windows.pushSystemStatus({ gamepads: [], usbDrives: [], formFactor: shell.tablet ? "tablet" : "phone" });
         if (typeof simSettings !== "undefined") {
             windows.launcherLayoutJson = simSettings.value("launcher/layout");
             windows.dockModePositionsJson = simSettings.value("dockmode/positions");
@@ -1045,6 +1147,10 @@ Item {
         } else if (scene === "powermenu") {
             // Power held: luna-systemui's power menu (once its page is up).
             scenePowerTimer.start();
+        } else if (scene === "hot") {
+            // The battery at 51 °C: luna-systemui's temperature alert (once
+            // its page is up).
+            sceneHotTimer.start();
         } else if (scene === "wave") {
             // The wave launcher (Settings > Advanced) over an app, the
             // finger on the dock's second app.

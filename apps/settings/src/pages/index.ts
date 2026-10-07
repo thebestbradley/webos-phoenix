@@ -26,6 +26,10 @@ import { ClipboardPage } from "./Clipboard";
 import { AssistantPage } from "./Assistant";
 import { AdvancedPage } from "./Advanced";
 import { DropSharePage } from "./DropShare";
+import { GameControllersPage } from "./GameControllers";
+import { UsbPage } from "./Usb";
+import { HotspotPage } from "./Hotspot";
+import { BatteryPage } from "./Battery";
 
 export interface PageInfo {
     title: string;
@@ -41,8 +45,10 @@ export const PAGES = {
     airplane: { title: "Airplane Mode", icon: "icons/airplane.png", component: AirplanePage },
     phone: { title: "Phone Preferences", icon: "icons/phoneprefs.png", component: PhonePrefsPage },
     dropshare: { title: "DropShare", icon: "icons/dropshare.png", component: DropSharePage },
+    hotspot: { title: "Hotspot & Tethering", icon: "icons/hotspot.png", component: HotspotPage },
     vpn: { title: "VPN", icon: "icons/vpn.png", component: VpnPage },
     screen: { title: "Screen & Lock", icon: "icons/screen.png", component: ScreenPage },
+    battery: { title: "Battery", icon: "icons/battery.png", component: BatteryPage },
     exhibition: { title: "Exhibition", icon: "icons/exhibition.png", component: ExhibitionPage },
     sounds: { title: "Sounds & Ringtones", icon: "icons/sounds.png", component: SoundsPage },
     datetime: { title: "Date & Time", icon: "icons/datetime.png", component: DateTimePage },
@@ -51,6 +57,8 @@ export const PAGES = {
     justtype: { title: "Just Type", icon: "icons/justtype.png", component: JustTypePage },
     clipboard: { title: "Clipboard", icon: "icons/clipboard.png", component: ClipboardPage },
     assistant: { title: "Assistant", icon: "icons/assistant.png", component: AssistantPage },
+    usb: { title: "USB", icon: "icons/usb.png", component: UsbPage },
+    gamepads: { title: "Game Controllers", icon: "icons/gamepads.png", component: GameControllersPage },
     location: { title: "Location Services", icon: "icons/location.png", component: LocationPage },
     emergency: { title: "Emergency Info", icon: "icons/emergency.png", component: EmergencyPage },
     accessibility: { title: "Accessibility", icon: "icons/accessibility.png", component: AccessibilityPage },

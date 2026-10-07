@@ -128,6 +128,18 @@ QtObject {
     // networkProxy), for phoenix-sim's simBrowser (sim.qml).
     property var browser: ({ contentBlocker: false, userAgent: "mobile" })
     property var proxy: ({ type: "none", host: "", port: 0 })
+
+    // Accessories and health (docs/M6-PLAN.md F4 items 8-9), the
+    // simulator's own (sim.qml simActions), told to the pages:
+    //   gamepads   game controllers connected: [{index, id, name,
+    //              connection ("bluetooth" | "usb"), mapping, buttons
+    //              (pressed, by the standard mapping's index), axes}]
+    //   usbDrives  USB drives on the device's USB port (host / OTG):
+    //              [{id, label, vendor, size, used, fs}]
+    //   temperature the battery's temperature, °C (powerd's temperature_C)
+    property var gamepads: []
+    property var usbDrives: []
+    property int temperature: 31
     // A hardware keyboard is attached (phoenix-sim --hardware-keyboard,
     // Ctrl+Shift+K): the virtual keyboard stays down unless asked for.
     property bool hardwareKeyboard: typeof simHardwareKeyboard !== "undefined" && simHardwareKeyboard === true

@@ -310,10 +310,10 @@ function ProxyGroup() {
                               }} />
                 {type !== "none" && (
                     <>
-                        <Row title="Server"><div className="as-field"><TextField value={host} onChange={setHost} onSubmit={apply}
-                                                                                 placeholder="192.168.1.10" testId="proxy-host" /></div></Row>
-                        <Row title="Port"><div className="as-field"><TextField value={port} onChange={setPort} onSubmit={apply} inputMode="numeric"
-                                                                               placeholder={type === "http" ? "8080" : "1080"} testId="proxy-port" /></div></Row>
+                        <div className="field-row"><TextField label="Server" value={host} onChange={setHost} onSubmit={apply}
+                                                              placeholder="192.168.1.10" testId="proxy-host" /></div>
+                        <div className="field-row"><TextField label="Port" value={port} onChange={setPort} onSubmit={apply} inputMode="numeric"
+                                                              placeholder={type === "http" ? "8080" : "1080"} testId="proxy-port" /></div>
                     </>
                 )}
             </Group>
