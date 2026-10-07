@@ -913,13 +913,28 @@ Item {
 
         // Hold an icon, carry it to `to` and rest there `rest` ms before
         // letting go.
-        function holdDragAndRest(from, to, rest) {
+        // Each step waits for what it causes, not for time: the hold has
+        // opened the menu before the finger moves (a busy machine runs the
+        // hold's timer late, and a move before it would scroll the page),
+        // and the icon is carried before it goes on. Then one move to `to`:
+        // the icons make room once the dragged one rests 150 ms over a
+        // place (Theme.launcherReorderDelay), and on a slow machine small
+        // steps through the target's edge took longer than that, so b made
+        // room and moved from under the finger before it reached b's centre
+        // (macOS CI). target: the id the rest should group with ("" for
+        // none), waited for before letting go.
+        function holdDragAndRest(from, to, rest, target) {
+            var menu = iconMenu();
             mousePress(shell, from.x, from.y);
-            wait(Theme.iconMenuHoldInterval + 150);
-            var steps = 12;
-            for (var i = 1; i <= steps; ++i)
-                mouseMove(shell, from.x + (to.x - from.x) * i / steps, from.y + (to.y - from.y) * i / steps, 10);
-            wait(rest);
+            tryVerify(function() { return menu.open; }, 3000, "the hold opened the icon menu");
+            var d = Qt.styleHints.startDragDistance + 4, len = Math.max(1, Math.hypot(to.x - from.x, to.y - from.y));
+            mouseMove(shell, from.x + (to.x - from.x) * d / len, from.y + (to.y - from.y) * d / len);
+            tryVerify(function() { return launcher.dragging; }, 2000, "the icon is carried");
+            mouseMove(shell, to.x, to.y);
+            if (target)
+                tryCompare(launcher, "groupTarget", target, 3000);
+            else
+                wait(rest);
             mouseRelease(shell, to.x, to.y);
         }
         function groupIds() {
@@ -932,7 +947,8 @@ Item {
             var saved = shell.launcherLayout;
             var page = shell.launcherLayout.pages[0];
             var a = page[0], b = page[1], c = page[2];
-            holdDragAndRest(iconPoint(0), iconPoint(1), Theme.launcherGroupHoverDelay + 200);
+            waitForItemPolished(launcher);
+            holdDragAndRest(iconPoint(0), iconPoint(1), 0, b);
             var g = shell.launcherLayout.pages[0][0];
             verify(LauncherLayout.isGroup(g), "a group where the icon was: " + g);
             compare(shell.launcherLayout.groups[g].members, [b, a]);
@@ -943,7 +959,7 @@ Item {
             // Let go before resting: no group, a move.
             launcher.editMode = false;
             shell.setLauncherLayout(saved);
-            holdDragAndRest(iconPoint(0), iconPoint(2), 0);
+            holdDragAndRest(iconPoint(0), iconPoint(2), 0, "");
             compare(groupIds().length, 0);
             compare(shell.launcherLayout.pages[0].indexOf(a), 2);
             shell.setLauncherLayout(saved);
@@ -1025,7 +1041,7 @@ Item {
             mp = member.mapToItem(shell, member.width / 2, Theme.launcherIconSize / 2);
             var to = iconPoint(5);
             mousePress(shell, mp.x, mp.y);
-            wait(Theme.iconMenuHoldInterval + 150);
+            tryVerify(function() { return iconMenu().open; }, 3000, "the hold opened the icon menu");
             for (var i = 1; i <= 10; ++i)
                 mouseMove(shell, mp.x + (to.x - mp.x) * i / 10, mp.y + (to.y - mp.y) * i / 10, 10);
             compare(launcher.openGroupId, g);
