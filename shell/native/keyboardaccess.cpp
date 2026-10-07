@@ -173,7 +173,9 @@ bool KeyboardAccess::deliverPress(QWindow *window, QKeyEvent *key)
         m_repeatScan = key->nativeScanCode();
         m_repeatVirtual = key->nativeVirtualKey();
         m_repeatNativeMods = key->nativeModifiers();
-        m_repeatTimer.start(m_repeatDelay, this);
+        // Precise: a key's repeat is timing the user feels; a coarse timer
+        // may be coalesced (macOS defers a background process's timers).
+        m_repeatTimer.start(m_repeatDelay, Qt::PreciseTimer, this);
     }
     return sent;
 }
@@ -259,7 +261,7 @@ bool KeyboardAccess::eventFilter(QObject *watched, QEvent *event)
         }
         if (m_slow) {
             // Wait: it counts if still down after slowKeysDelay.
-            m_slowTimer.start(m_slowDelay, this);
+            m_slowTimer.start(m_slowDelay, Qt::PreciseTimer, this);
             m_slowWindow = window;
             m_slowKey = code;
             m_slowMods = key->modifiers();
@@ -311,7 +313,7 @@ void KeyboardAccess::timerEvent(QTimerEvent *event)
             stopRepeat();
             return;
         }
-        m_repeatTimer.start(qMax(10, m_repeatInterval), this);
+        m_repeatTimer.start(qMax(10, m_repeatInterval), Qt::PreciseTimer, this);
         send(m_repeatWindow, QEvent::KeyPress, m_repeatKey, m_repeatMods, m_repeatText, true,
              m_repeatScan, m_repeatVirtual, m_repeatNativeMods);
         return;

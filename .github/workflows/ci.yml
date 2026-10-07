@@ -334,6 +334,11 @@ jobs:
       # so every timed check would wait on that. These tests are of the
       # shell's behaviour; the start-up step below runs the simulator with
       # the Mac's own renderer.
+      # The tests run as a background process, whose timers macOS defers
+      # (App Nap): a 50 ms key repeat could fire 150 ms late.
+      - name: No App Nap for the tests
+        run: defaults write NSGlobalDomain NSAppSleepDisabled -bool YES
+
       - name: Behaviour tests
         env:
           QT_QUICK_BACKEND: software
