@@ -278,7 +278,7 @@ dark and light themes go to 2.0.
 
 Agreed with the owner on 7 October 2026; [M6-PLAN.md](M6-PLAN.md) has the detail.
 
-- [ ] F0: fixes (settings lost on save: done; the original card corners; the Messaging reply bar)
+- [ ] F0: fixes (settings lost on save and the card corners: done; the Messaging reply bar)
 - [ ] F1: press and hold on launcher icons (peek and menu)
 - [ ] F2: clipboard manager (keyboard strip, Clipboard app, Settings > Clipboard)
 - [ ] F3: the Phoenix Assistant 1.0 (commands, optional on-device model, cloud models with permission, Assistant app)

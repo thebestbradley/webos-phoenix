@@ -7,7 +7,7 @@ or more pull requests, merged when CI is green.
 
 | Phase | What | Status |
 | --- | --- | --- |
-| F0 | Fixes: settings lost on save; card corners; Messaging reply bar | Settings done; corners next |
+| F0 | Fixes: settings lost on save; card corners; Messaging reply bar | Settings and corners done; reply bar waits on the owner |
 | F1 | Press and hold on launcher icons | To do |
 | F2 | Clipboard manager | To do |
 | F3 | The Phoenix Assistant 1.0 | To do |
