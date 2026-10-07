@@ -11,7 +11,7 @@ or more pull requests, merged when CI is green.
 | F1 | Press and hold on launcher icons | Done in the simulator (7 October 2026) |
 | F2 | Clipboard manager | Done in the simulator (7 October 2026) |
 | F3 | The Phoenix Assistant 1.0 | Done in the simulator (7 October 2026) |
-| F4 | Community features picked for 1.0 | To do |
+| F4 | Community features picked for 1.0 | Items 1-6 done in the simulator (7 October 2026); 7-9 to do |
 
 ## F0: fixes first
 
