@@ -1,0 +1,6 @@
+{
+    "allowedNames": ["org.webosphoenix.assistant", "org.webosphoenix.tts"],
+    "assistant.ask": ["oem"],
+    "assistant.settings": ["oem"],
+    "tts.speak": ["oem", "dev", "part"]
+}

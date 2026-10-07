@@ -11490,6 +11490,101 @@
     })();
 
     // ================================================================================
+    // Sealing (encryption at rest for the clipboard history and the Assistant's keys)
+    // ================================================================================
+    //
+    // webCryptoSealer(dbName, keyId, fallbackKey, label) -> {seal(text) ->
+    // Promise<{iv, data}>, unseal({iv, data}) -> Promise<text>}: AES-GCM with
+    // one 256-bit key for every page, created once and kept in IndexedDB
+    // (database dbName, store "keys", id keyId) as a non-extractable
+    // CryptoKey: pages can use it but no script can read it out (IndexedDB
+    // "add" refuses a second key, so two pages starting together end up
+    // with the same one). Where there is no IndexedDB (the unit tests) the
+    // raw key is kept in the store under fallbackKey.
+    function webCryptoSealer(dbName, keyId, fallbackKey, label) {
+        function subtle() {
+            var c = global.crypto && global.crypto.subtle ? global.crypto : (typeof crypto !== "undefined" ? crypto : null);
+            return c && c.subtle ? c.subtle : null;
+        }
+        function randomBytes(n) {
+            var a = new Uint8Array(n);
+            (global.crypto || crypto).getRandomValues(a);
+            return a;
+        }
+        function b64(bytes) {
+            var s = "";
+            for (var i = 0; i < bytes.length; ++i) s += String.fromCharCode(bytes[i]);
+            return global.btoa(s);
+        }
+        function unb64(text) {
+            var s = global.atob(text), a = new Uint8Array(s.length);
+            for (var i = 0; i < s.length; ++i) a[i] = s.charCodeAt(i);
+            return a;
+        }
+        var keyPromise = null;
+        function idbKey() {
+            return new Promise(function (resolve, reject) {
+                var open = global.indexedDB.open(dbName, 1);
+                open.onupgradeneeded = function () { open.result.createObjectStore("keys"); };
+                open.onerror = function () { reject(open.error); };
+                open.onsuccess = function () {
+                    var db = open.result;
+                    var get = db.transaction("keys", "readonly").objectStore("keys").get(keyId);
+                    get.onerror = function () { reject(get.error); };
+                    get.onsuccess = function () {
+                        if (get.result) return resolve(get.result);
+                        subtle().generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]).then(function (k) {
+                            var tx = db.transaction("keys", "readwrite");
+                            var add = tx.objectStore("keys").add(k, keyId);
+                            add.onerror = function (e) {
+                                // Another page made it first: use that one.
+                                e.preventDefault();
+                                var again = db.transaction("keys", "readonly").objectStore("keys").get(keyId);
+                                again.onsuccess = function () { again.result ? resolve(again.result) : reject(new Error("no " + label + " key")); };
+                                again.onerror = function () { reject(again.error); };
+                            };
+                            add.onsuccess = function () { resolve(k); };
+                        }, reject);
+                    };
+                };
+            });
+        }
+        function storeKey() {
+            var raw = store.get(fallbackKey, null);
+            if (raw) return subtle().importKey("raw", unb64(raw), "AES-GCM", false, ["encrypt", "decrypt"]);
+            var bytes = randomBytes(32);
+            store.set(fallbackKey, b64(bytes));
+            return subtle().importKey("raw", bytes, "AES-GCM", false, ["encrypt", "decrypt"]);
+        }
+        function key() {
+            if (!subtle()) return Promise.reject(new Error("WebCrypto is not available"));
+            if (!keyPromise) {
+                keyPromise = (global.indexedDB ? idbKey().catch(function (e) {
+                    console.warn("[phoenix-runtime] " + label + ": no IndexedDB key store", e && e.message);
+                    return storeKey();
+                }) : storeKey());
+                keyPromise.catch(function () { keyPromise = null; });
+            }
+            return keyPromise;
+        }
+        return {
+            seal: function (text) {
+                return key().then(function (k) {
+                    var iv = randomBytes(12);
+                    return subtle().encrypt({ name: "AES-GCM", iv: iv }, k, new TextEncoder().encode(text)).then(function (ct) {
+                        return { iv: b64(iv), data: b64(new Uint8Array(ct)) };
+                    });
+                });
+            },
+            unseal: function (enc) {
+                return key().then(function (k) {
+                    return subtle().decrypt({ name: "AES-GCM", iv: unb64(enc.iv) }, k, unb64(enc.data));
+                }).then(function (pt) { return new TextDecoder().decode(pt); });
+            }
+        };
+    }
+
+    // ================================================================================
     // Clipboard history (org.webosphoenix.clipboard; the keyboard's clip strip,
     // apps/clipboard, Settings > Clipboard)
     // ================================================================================
@@ -11558,10 +11653,6 @@
         var SYSTEM_UI = "com.palm.systemui";
         var APP = "org.webosphoenix.clipboard";
 
-        function subtle() {
-            var c = global.crypto && global.crypto.subtle ? global.crypto : (typeof crypto !== "undefined" ? crypto : null);
-            return c && c.subtle ? c.subtle : null;
-        }
         function randomBytes(n) {
             var a = new Uint8Array(n);
             (global.crypto || crypto).getRandomValues(a);
@@ -11571,11 +11662,6 @@
             var s = "";
             for (var i = 0; i < bytes.length; ++i) s += String.fromCharCode(bytes[i]);
             return global.btoa(s);
-        }
-        function unb64(text) {
-            var s = global.atob(text), a = new Uint8Array(s.length);
-            for (var i = 0; i < s.length; ++i) a[i] = s.charCodeAt(i);
-            return a;
         }
 
         // ---- Settings ----------------------------------------------------------------
@@ -11693,68 +11779,10 @@
         }
 
         // ---- The key -------------------------------------------------------------------------
-        // One AES-GCM key for every page: created once (IndexedDB "add"
-        // refuses a second, so two pages starting together end up with the
-        // same one), kept non-extractable.
-        var keyPromise = null;
-        function idbKey() {
-            return new Promise(function (resolve, reject) {
-                var open = global.indexedDB.open("phoenix-clipboard", 1);
-                open.onupgradeneeded = function () { open.result.createObjectStore("keys"); };
-                open.onerror = function () { reject(open.error); };
-                open.onsuccess = function () {
-                    var db = open.result;
-                    var get = db.transaction("keys", "readonly").objectStore("keys").get("clips");
-                    get.onerror = function () { reject(get.error); };
-                    get.onsuccess = function () {
-                        if (get.result) return resolve(get.result);
-                        subtle().generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]).then(function (k) {
-                            var tx = db.transaction("keys", "readwrite");
-                            var add = tx.objectStore("keys").add(k, "clips");
-                            add.onerror = function (e) {
-                                // Another page made it first: use that one.
-                                e.preventDefault();
-                                var again = db.transaction("keys", "readonly").objectStore("keys").get("clips");
-                                again.onsuccess = function () { again.result ? resolve(again.result) : reject(new Error("no clipboard key")); };
-                                again.onerror = function () { reject(again.error); };
-                            };
-                            add.onsuccess = function () { resolve(k); };
-                        }, reject);
-                    };
-                };
-            });
-        }
-        function storeKey() {
-            var raw = store.get("clipboard:key", null);
-            if (raw) return subtle().importKey("raw", unb64(raw), "AES-GCM", false, ["encrypt", "decrypt"]);
-            var bytes = randomBytes(32);
-            store.set("clipboard:key", b64(bytes));
-            return subtle().importKey("raw", bytes, "AES-GCM", false, ["encrypt", "decrypt"]);
-        }
-        function key() {
-            if (!subtle()) return Promise.reject(new Error("WebCrypto is not available"));
-            if (!keyPromise) {
-                keyPromise = (global.indexedDB ? idbKey().catch(function (e) {
-                    console.warn("[phoenix-runtime] clipboard: no IndexedDB key store", e && e.message);
-                    return storeKey();
-                }) : storeKey());
-                keyPromise.catch(function () { keyPromise = null; });
-            }
-            return keyPromise;
-        }
-        function seal(text) {
-            return key().then(function (k) {
-                var iv = randomBytes(12);
-                return subtle().encrypt({ name: "AES-GCM", iv: iv }, k, new TextEncoder().encode(text)).then(function (ct) {
-                    return { iv: b64(iv), data: b64(new Uint8Array(ct)) };
-                });
-            });
-        }
-        function unseal(enc) {
-            return key().then(function (k) {
-                return subtle().decrypt({ name: "AES-GCM", iv: unb64(enc.iv) }, k, unb64(enc.data));
-            }).then(function (pt) { return new TextDecoder().decode(pt); });
-        }
+        // One AES-GCM key for every page, non-extractable ("Sealing" above).
+        var sealer = webCryptoSealer("phoenix-clipboard", "clips", "clipboard:key", "clipboard");
+        function seal(text) { return sealer.seal(text); }
+        function unseal(enc) { return sealer.unseal(enc); }
         // A clip's text, decrypted if need be.
         function textOf(c) {
             if (!c.sensitive) return Promise.resolve(c.type === "image" ? "" : c.text || "");
@@ -12180,6 +12208,222 @@
             raw: readClip,
             prune: prune
         };
+    })();
+
+    // ================================================================================
+    // The Phoenix Assistant (org.webosphoenix.assistant, org.webosphoenix.tts;
+    // the shell's assistant view, apps/assistant, Settings > Assistant)
+    // ================================================================================
+    //
+    // docs/M6-PLAN.md F3. Nothing here reimplements the assistant: this block
+    // runs the device's own service code, apps/assistant/service
+    // (assistant.js and lib/: the grammar, the router, the providers; the
+    // requests and replies are documented there), in the page, loaded from
+    // /usr/palm/services/org.webosphoenix.assistant/ ("Node.js device
+    // services in the page" above), and gives it:
+    //
+    //   - luna calls on the simulated bus;
+    //   - HTTP through the host's proxy (proxiedRequest): the model providers
+    //     and Open-Meteo do not allow cross-origin requests from pages, and
+    //     the proxy runs in phoenix-sim's own process (Qt Network), so a
+    //     provider's key goes from the service to the provider and nowhere
+    //     else (docs/APP-RUNTIME.md "Assistant");
+    //   - storage: the shared store, one key per thread, message and
+    //     provider ("assistant:..."), so the shell's view and the app writing
+    //     at once never write over each other (PR 7);
+    //   - secrets: API keys sealed with AES-GCM under a non-extractable key in
+    //     IndexedDB ("Sealing" above); the service unseals one only to call
+    //     its provider, and gives pages no more than its last four characters;
+    //   - the on-device model and speech: the shell's, when
+    //     /usr/share/phoenix/host.json says {"assistant": true} (phoenix-sim:
+    //     shell/native/localmodels.cpp runs llama.cpp's llama-server and
+    //     downloads models, shell/native/speech.cpp speaks). "assistant" host
+    //     messages ({op, requestId, ...}) go out and the answers come back
+    //     through __phoenixRuntime.assistantHostEvent({requestId, ...}).
+    //     Without the shell (a browser, the tests): no on-device model, and
+    //     speech through the page's speechSynthesis where it has voices.
+    //
+    // Who may call: ask, choose and confirm only the system UI, the
+    // Assistant app and Settings (a request can spend the user's cloud
+    // tokens); providers and allowCloudControl only Settings (assistant.js).
+    //
+    // Subscriptions: threads, thread, getSettings, providers, models and
+    // commands with {subscribe: true} answer again after every change in any
+    // page (the store's storage events, "assistant:" keys).
+    //
+    // org.webosphoenix.tts: speak {text, lang?}, stop {}, getStatus {} ->
+    // {available, engine}: the same speech for any app.
+    //
+    // __phoenixRuntime.assistant: service() (the methods), hostEvent, for tests.
+    (function assistantService() {
+        var SERVICE = "org.webosphoenix.assistant";
+        var DIR = "/usr/palm/services/" + SERVICE + "/";
+        var loadModule = nodeServiceLoader(DIR, "Assistant service");
+        var sealer = webCryptoSealer("phoenix-assistant", "providerKeys", "assistant:sealKey", "assistant");
+
+        var hostInfo = null;
+        function hostHas() {
+            if (hostInfo === null) {
+                try { hostInfo = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/host.json") || "{}") || {}; }
+                catch (e) { hostInfo = {}; }
+            }
+            return hostInfo.assistant === true;
+        }
+
+        // ---- The host (the shell's on-device model and speech) -----------------------------
+        var pending = {}, nextRequest = 1;
+        function hostAsk(op, payload, timeoutMs) {
+            return new Promise(function (resolve, reject) {
+                var id = "a" + (nextRequest++) + "-" + Date.now().toString(36);
+                var timer = setTimeout(function () {
+                    delete pending[id];
+                    reject(new Error("the shell did not answer"));
+                }, timeoutMs || 5000);
+                pending[id] = function (ev) {
+                    clearTimeout(timer);
+                    delete pending[id];
+                    if (ev.error) reject(new Error(ev.error));
+                    else resolve(ev);
+                };
+                host.postToHost("assistant", Object.assign({ op: op, requestId: id }, payload || {}));
+            });
+        }
+        runtime.assistantHostEvent = function (ev) {
+            if (!ev) return;
+            if (ev.requestId && pending[ev.requestId]) pending[ev.requestId](ev);
+            if (ev.changed) changed("models");
+        };
+
+        var NO_LLM = "Install llama.cpp's llama-server (Homebrew: brew install llama.cpp; Linux: build llama.cpp) " +
+                     "and start phoenix-sim with it on the PATH, or with --llama-server <path>.";
+        var llm = {
+            status: function () {
+                if (!hostHas()) return Promise.resolve({ available: false, installed: [], ramBytes: 0, howToInstall: NO_LLM });
+                return hostAsk("status", {}).then(function (st) {
+                    if (!st.available) st.howToInstall = NO_LLM;
+                    return st;
+                }, function () { return { available: false, installed: [], ramBytes: 0, howToInstall: NO_LLM }; });
+            },
+            download: function (m) {
+                if (!hostHas()) return Promise.reject(new Error("Models can only be downloaded in the Phoenix shell."));
+                return hostAsk("download", { id: m.id, url: m.url, sha256: m.sha256, size: m.size, file: m.file });
+            },
+            cancel: function (id) { return hostHas() ? hostAsk("cancel", { id: id }) : Promise.resolve(); },
+            remove: function (m) { return hostHas() ? hostAsk("remove", { id: m.id, file: m.file }) : Promise.resolve(); },
+            // The server for this model: started if need be (loading a model takes a while).
+            ensure: function (m) {
+                if (!hostHas()) return Promise.reject(new Error("no on-device model here"));
+                return hostAsk("ensure", { id: m.id, file: m.file }, 180000).then(function (ev) { return { baseUrl: ev.baseUrl }; });
+            }
+        };
+
+        // ---- Speech ------------------------------------------------------------------------
+        function pageVoices() {
+            var ss = global.speechSynthesis;
+            try { return ss && ss.getVoices ? ss.getVoices() : []; } catch (e) { return []; }
+        }
+        var tts = {
+            speak: function (text, lang) {
+                if (!text) return Promise.resolve();
+                if (hostHas()) return hostAsk("speak", { text: String(text).slice(0, 2000), lang: lang || "en" });
+                var ss = global.speechSynthesis;
+                if (ss && pageVoices().length && global.SpeechSynthesisUtterance) {
+                    var u = new global.SpeechSynthesisUtterance(String(text));
+                    u.lang = lang || "en";
+                    ss.cancel();
+                    ss.speak(u);
+                    return Promise.resolve();
+                }
+                return Promise.reject(new Error("No text-to-speech here"));
+            },
+            stop: function () {
+                if (hostHas()) return hostAsk("stopSpeaking", {}).catch(function () {});
+                if (global.speechSynthesis) global.speechSynthesis.cancel();
+                return Promise.resolve();
+            },
+            status: function () {
+                if (hostHas()) return hostAsk("speechStatus", {}).catch(function () { return { available: false, engine: "" }; });
+                return Promise.resolve({ available: pageVoices().length > 0, engine: pageVoices().length ? "speechSynthesis" : "" });
+            }
+        };
+
+        // ---- Subscriptions -------------------------------------------------------------------
+        var watchers = [], notifyTimer = null;
+        function changed() {
+            if (notifyTimer) return;
+            notifyTimer = setTimeout(function () {
+                notifyTimer = null;
+                watchers = watchers.filter(function (w) { return !w.ctx.cancelled(); });
+                watchers.forEach(function (w) { w.send(); });
+            }, 0);
+        }
+        if (global.addEventListener) {
+            global.addEventListener("storage", function (e) {
+                if (e.key === null || String(e.key).indexOf("phoenix:assistant:") === 0) changed();
+            });
+        }
+
+        var methods = null;
+        function service() {
+            if (!methods) {
+                var lib = loadModule("assistant.js");
+                methods = lib.createAssistantService({
+                    luna: nodeServiceLuna(),
+                    request: proxiedRequest,
+                    storage: {
+                        get: function (k) { return store.get(k, null); },
+                        set: function (k, v) { store.set(k, v); },
+                        remove: function (k) { store.remove(k); },
+                        keys: function (prefix) { return store.keys(prefix); }
+                    },
+                    secrets: sealer,
+                    llm: llm,
+                    tts: tts,
+                    caller: function () { return PalmSystem.appIdentifier; },
+                    locale: function () { return (global.navigator && global.navigator.language) || "en-US"; },
+                    changed: changed,
+                    log: function (m) { console.info("[assistant] " + m); }
+                });
+                methods.__lib = lib;
+            }
+            return methods;
+        }
+
+        var WATCHABLE = { threads: 1, thread: 1, getSettings: 1, providers: 1, models: 1, commands: 1 };
+        var serviceMethods = {};
+        ["ask", "choose", "confirm", "threads", "thread", "newThread", "setCurrent", "deleteThread", "clearHistory",
+         "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
+         "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking"].forEach(function (name) {
+            serviceMethods["/" + name] = function (p, reply, ctx) {
+                var m;
+                try { m = service(); } catch (e) { return reply(fail(-1, String(e.message || e))); }
+                var params = clone(p || {});
+                var watch = !!params.subscribe && WATCHABLE[name];
+                delete params.subscribe;
+                var answer = function (first) {
+                    return m[name](params).then(function (r) {
+                        if (watch && r.returnValue !== false && first) r.subscribed = true;
+                        if (!ctx.cancelled()) reply(r);
+                        return r;
+                    }, function (e) { reply(fail(-1, String(e && e.message || e))); });
+                };
+                answer(true).then(function (r) {
+                    if (watch && r && r.returnValue !== false) watchers.push({ ctx: ctx, send: function () { answer(false); } });
+                });
+            };
+        });
+        register([SERVICE], serviceMethods);
+
+        register(["org.webosphoenix.tts"], {
+            "/speak": function (p, reply) {
+                if (typeof p.text !== "string" || !p.text.trim()) return reply(fail(-1, "need \"text\""));
+                tts.speak(p.text, p.lang).then(function () { reply(ok({})); }, function (e) { reply(fail(1, e.message)); });
+            },
+            "/stop": function (p, reply) { tts.stop().then(function () { reply(ok({})); }); },
+            "/getStatus": function (p, reply) { tts.status().then(function (s) { reply(ok({ available: !!s.available, engine: s.engine || "" })); }); }
+        });
+
+        runtime.assistant = { service: service, llm: llm, tts: tts, hostHas: hostHas };
     })();
 
     // ================================================================================

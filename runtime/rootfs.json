@@ -39,6 +39,7 @@
         "/usr/palm/public/accounts/com.webosphoenix.dav/": "apps/dav/public/accounts/com.webosphoenix.dav/",
         "/usr/share/phoenix/runtime/": "runtime/",
         "/usr/palm/services/org.webosphoenix.service.backup/": "apps/settings/service/",
+        "/usr/palm/services/org.webosphoenix.assistant/": "apps/assistant/service/",
         "/usr/palm/services/org.webosphoenix.service.packages/": "apps/marketplace/service/",
         "/usr/palm/services/com.palm.update/": "services/updates/",
         "/etc/palm/marketplace/": "apps/marketplace/service/etc/palm/marketplace/",

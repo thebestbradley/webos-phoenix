@@ -1,0 +1,12 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+
+[D-BUS Service]
+Name=org.webosphoenix.assistant
+Exec=/usr/bin/run-js-service -n /usr/palm/services/org.webosphoenix.assistant
+Type=dynamic
+
+[D-BUS Service]
+Name=org.webosphoenix.tts
+Exec=/usr/bin/run-js-service -n /usr/palm/services/org.webosphoenix.assistant
+Type=dynamic

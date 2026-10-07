@@ -283,6 +283,9 @@ void Rootfs::rescan()
         record[QStringLiteral("params")] = QVariantMap();
         record[QStringLiteral("hidden")] = entry.value(QStringLiteral("tab")).toInt() < 0;
         record[QStringLiteral("universalSearch")] = app.value(QStringLiteral("universalSearch")).toVariant();
+        // The Assistant's commands the app adds (docs/M6-PLAN.md F3).
+        if (app.contains(QStringLiteral("assistant")))
+            record[QStringLiteral("assistant")] = app.value(QStringLiteral("assistant")).toVariant();
         record[QStringLiteral("removable")] = installed;
         record[QStringLiteral("version")] = app.value(QStringLiteral("version")).toString();
         // LaunchPoint::toJSON (LaunchPoint.cpp:262-310): the vendor, the

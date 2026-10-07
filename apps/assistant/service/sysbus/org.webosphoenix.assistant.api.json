@@ -1,0 +1,35 @@
+{
+    "assistant.ask": [
+        "org.webosphoenix.assistant/ask",
+        "org.webosphoenix.assistant/choose",
+        "org.webosphoenix.assistant/confirm",
+        "org.webosphoenix.assistant/threads",
+        "org.webosphoenix.assistant/thread",
+        "org.webosphoenix.assistant/newThread",
+        "org.webosphoenix.assistant/setCurrent",
+        "org.webosphoenix.assistant/deleteThread",
+        "org.webosphoenix.assistant/clearHistory",
+        "org.webosphoenix.assistant/speak",
+        "org.webosphoenix.assistant/stopSpeaking"
+    ],
+    "assistant.settings": [
+        "org.webosphoenix.assistant/getSettings",
+        "org.webosphoenix.assistant/setSettings",
+        "org.webosphoenix.assistant/commands",
+        "org.webosphoenix.assistant/providers",
+        "org.webosphoenix.assistant/setProvider",
+        "org.webosphoenix.assistant/removeProvider",
+        "org.webosphoenix.assistant/testProvider",
+        "org.webosphoenix.assistant/listModels",
+        "org.webosphoenix.assistant/models",
+        "org.webosphoenix.assistant/downloadModel",
+        "org.webosphoenix.assistant/cancelDownload",
+        "org.webosphoenix.assistant/removeModel",
+        "org.webosphoenix.assistant/selectModel"
+    ],
+    "tts.speak": [
+        "org.webosphoenix.tts/speak",
+        "org.webosphoenix.tts/stop",
+        "org.webosphoenix.tts/getStatus"
+    ]
+}
