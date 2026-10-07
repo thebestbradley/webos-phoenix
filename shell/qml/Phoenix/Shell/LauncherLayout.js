@@ -233,3 +233,30 @@ function drop(layout, id) {
         l.dock.splice(d, 1);
     return l;
 }
+
+// ---- The icon menu (press and hold; docs/M6-PLAN.md F1) -----------------------
+
+// Favorite: the app goes to the Favorites page (the TouchPad's own place
+// for the apps the user picks, LauncherObject::initPages), at its end;
+// Unfavorite sends it back to the page it would have had (pageFor).
+function isFavorite(layout, id) {
+    return pageOf(layout, id) === pageIndex("favorites");
+}
+
+function favorite(layout, id) {
+    return move(layout, id, pageIndex("favorites"), -1);
+}
+
+// entry: as for pageFor. A launch point an app added belongs on Favorites
+// (pageFor), so it goes to Apps instead.
+function unfavorite(layout, id, entry) {
+    var d = entry ? pageFor(entry) : "apps";
+    if (d === "favorites")
+        d = "apps";
+    return move(layout, id, pageIndex(d), -1);
+}
+
+// The dock holds max apps beside the launcher button.
+function dockFull(layout, max) {
+    return layout.dock.length >= max;
+}

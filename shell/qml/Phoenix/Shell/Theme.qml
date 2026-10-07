@@ -243,6 +243,9 @@ QtObject {
     readonly property int launchFeedbackSize: px(90)
     readonly property int launchFeedbackTimeout: 3000
     readonly property int tapAndHoldInterval: 700                             // WebosTapAndHoldGestureRecognizer.cpp:52
+    // Holding a launcher or dock icon this long opens its menu (IconMenu.qml;
+    // the owner's choice, docs/M6-PLAN.md F1: time only, no pressure).
+    readonly property int iconMenuHoldInterval: 500
     // Radius in window (buffer) coordinates, i.e. before the card is scaled.
     readonly property int cardShadowOutset: px(20)                   // CardDropShadowEffect.cpp:34-35
     readonly property int cardShadowOffsetY: px(5)                   // CardDropShadowEffect.cpp:44

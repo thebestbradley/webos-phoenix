@@ -76,6 +76,12 @@
 //   simInstaller; deleting an installed app in the launcher removes it)
 //   apps also has removable: whether the launcher offers to delete the app
 //
+// Optional, for the launcher's icon menu (Shell.iconMenuItems):
+//   launchNewInstance(appId) -> uid  another window of an app whose entry
+//                            has multipleInstances (New Window)
+//   apps also has multipleInstances, size (bytes, App Info), and params /
+//   main (Share sends a launch point's or a site's web address)
+//
 // Simulator only (sim.qml wires these to SimSystemStatus and the shell):
 //   systemStatusReported(status)  signal: a web page reported the device
 //                            state (radios, brightness, ...; see hostStatus()
@@ -212,7 +218,11 @@ Item {
                  // exhibition in dock mode, under exhibitionTitle.
                  exhibition: !!a.exhibition, exhibitionTitle: a.exhibitionTitle || a.title,
                  // appinfo.json tapToShareSupported (Touch to Share).
-                 tapToShare: !!a.tapToShareSupported });
+                 tapToShare: !!a.tapToShareSupported,
+                 // Several windows at once (the icon menu's New Window).
+                 multipleInstances: !!a.multipleInstances || multipleInstanceApps.indexOf(a.id) >= 0,
+                 // The app's files, in bytes (App Info).
+                 size: a.size || 0 });
     }
 
     // The launcher's fields every entry has (Shell._launcherEntries,
@@ -223,8 +233,14 @@ Item {
     function _launcherFields() {
         return { page: "", dynamic: false, category: "", keywords: "", installed: false,
                  installState: "", progress: -1, pending: false, installReason: "",
-                 exhibition: false, exhibitionTitle: "", tapToShare: false };
+                 exhibition: false, exhibitionTitle: "", tapToShare: false,
+                 multipleInstances: false, size: 0 };
     }
+
+    // Apps that run in several windows at once whose appinfo.json cannot
+    // say so ("multipleInstances": true, Rootfs::apps): the original
+    // browser, which opens a card on every launch (BrowserApp.js:132-147).
+    property var multipleInstanceApps: ["com.palm.app.browser"]
 
     // ---- Installing and removing apps (phoenix-sim's SimInstaller) ---------------------
     // The runtime's com.webos.appInstallService unpacks a package and sends
@@ -888,6 +904,9 @@ Item {
         var key = (kind || "system") + (_nextUid++);
         var win = info.web ? _webWindow(appId, mainUrl(appId, params), key, true)
                            : mockApp.createObject(source, { appId: appId, title: info.title, accent: info.color, glyph: info.glyph });
+        // The share sheet over the launcher: only its sheet is drawn.
+        if (kind === "share" && info.web)
+            win.transparent = true;
         _windows[key] = win;
         systemWindows.append({ key: key, appId: appId, kind: kind || "system" });
         return key;
@@ -2004,6 +2023,23 @@ Item {
         var at = afterUid ? _afterGroupOf(afterUid) : cards.count;
         var join = joinStack && afterUid ? cardIndex(afterUid) : -1;
         return _createWindow(appId, info.title, at, join >= 0 ? cards.get(join).groupId : newGroupId(), null, url);
+    }
+
+    // Another window of an app that runs several at once (apps
+    // multipleInstances; the launcher's icon menu, New Window): a fresh
+    // instance in a stack of its own, at the right, even while one runs.
+    function launchNewInstance(appId) {
+        var info = appInfo(appId);
+        if (!info || info.pending || info.noWindow || !info.multipleInstances)
+            return "";
+        if (runningUid(appId) === "")
+            return launch(appId);
+        memory.refresh();
+        if (memory.low && appsAllowedInLowMemory.indexOf(appId) < 0) {
+            showMemoryAlert();
+            return "";
+        }
+        return _createWindow(appId, info.title, cards.count, newGroupId(), null, "");
     }
 
     // A second window from the same app (e.g. an email compose card). It

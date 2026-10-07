@@ -34,6 +34,7 @@ VirtualKeyboard 1.0 VirtualKeyboard.qml
 SystemSounds 1.0 SystemSounds.qml
 EmergencyWindow 1.0 EmergencyWindow.qml
 EditPopup 1.0 EditPopup.qml
+IconMenu 1.0 IconMenu.qml
 EmojiPanel 1.0 EmojiPanel.qml
 EmojiSearchBar 1.0 EmojiSearchBar.qml
 CandidateBar 1.0 CandidateBar.qml

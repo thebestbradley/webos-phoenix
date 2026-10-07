@@ -261,6 +261,9 @@ void Rootfs::rescan()
             .toString(entry.value(QStringLiteral("title")).toString());
         // Touch to Share asks it for what to send (ApplicationDescription.cpp:453-455).
         entry[QStringLiteral("tapToShareSupported")] = app.value(QStringLiteral("tapToShareSupported")).toBool(false);
+        // Runs in several windows at once: the launcher's icon menu offers
+        // New Window (a Phoenix key, docs/APP-RUNTIME.md).
+        entry[QStringLiteral("multipleInstances")] = app.value(QStringLiteral("multipleInstances")).toBool(false);
         // Installed by the user: the launcher may delete it (uninstall).
         entry[QStringLiteral("installed")] = installed;
         // The app's files (getSizeOfApps, getUserInstalledAppSizes).

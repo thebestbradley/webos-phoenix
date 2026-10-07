@@ -41,6 +41,9 @@ Item {
     signal dragStarted(string appId, string from, real x, real y)
     signal dragMoved(real x, real y)
     signal dragEnded(real x, real y)
+    // Press and hold or a right click asks for the icon's menu; iconRect is
+    // the icon in launcher coordinates (IconMenu.qml).
+    signal menuRequested(string appId, string from, rect iconRect)
 
     onOpenChanged: {
         if (!open)
@@ -680,15 +683,23 @@ Item {
                 }
             }
 
-            // One area for the whole page: tap launches, press and hold enters
-            // edit mode and picks the icon up (reorderablepage.cpp:450-540).
+            // One area for the whole page: tap launches; press and hold (or a
+            // right click) opens the icon's menu (IconMenu.qml), and moving
+            // the finger on from there enters edit mode with the icon picked
+            // up, as the hold alone did (reorderablepage.cpp:450-540). In
+            // edit mode, and on an icon still being installed, the hold
+            // picks the icon up at once.
             MouseArea {
                 id: pageMouse
                 width: page.contentWidth
                 height: Math.max(page.contentHeight, page.height)
-                pressAndHoldInterval: Theme.tapAndHoldInterval
-                preventStealing: launcher.dragging
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                pressAndHoldInterval: launcher.editMode ? Theme.tapAndHoldInterval : Theme.iconMenuHoldInterval
+                preventStealing: launcher.dragging || heldId !== ""
                 property string pressedId: ""
+                // The icon whose menu the hold opened, while the finger is down.
+                property string heldId: ""
+                property point heldAt
 
                 function cellAt(mx, my) {
                     var col = Math.floor((mx - launcher.rowLeft) / launcher.cellWidth);
@@ -698,25 +709,61 @@ Item {
                         return null;
                     return { index: i, x: mx - launcher.rowLeft - col * launcher.cellWidth, y: my - launcher.pageTopMargin - row * launcher.cellHeight };
                 }
+                // The icon at index, in launcher coordinates.
+                function iconRect(i) {
+                    var cellW = Theme.tablet ? Theme.launcherCellSize : launcher.cellWidth;
+                    var x = launcher.rowLeft + (i % launcher.columns) * launcher.cellWidth + (cellW - Theme.launcherIconSize) / 2;
+                    var y = launcher.pageTopMargin + Math.floor(i / launcher.columns) * launcher.cellHeight
+                            + (Theme.tablet ? Theme.launcherCellSize / 2 + Theme.launcherIconOffsetY - Theme.launcherIconSize / 2 : 0);
+                    var p = mapToItem(launcher, x, y);
+                    return Qt.rect(p.x, p.y, Theme.launcherIconSize, Theme.launcherIconSize);
+                }
+                // The menu, unless the icon only moves (edit mode, an install).
+                function openMenu(c) {
+                    var item = page.model.get(c.index);
+                    if (launcher.editMode || item.installState !== "")
+                        return false;
+                    launcher.menuRequested(item.appId, "page", iconRect(c.index));
+                    return true;
+                }
 
                 onPressed: (mouse) => {
                     var c = cellAt(mouse.x, mouse.y);
                     pressedId = c ? page.model.get(c.index).appId : "";
+                    heldId = "";
+                    if (mouse.button === Qt.RightButton && c)
+                        openMenu(c);
                 }
                 onPressAndHold: (mouse) => {
-                    if (pressedId === "")
+                    if (pressedId === "" || mouse.button !== Qt.LeftButton)
                         return;
+                    var c = cellAt(mouse.x, mouse.y);
+                    if (c && page.model.get(c.index).appId === pressedId && openMenu(c)) {
+                        heldId = pressedId;
+                        heldAt = Qt.point(mouse.x, mouse.y);
+                        return;
+                    }
                     launcher.editMode = true;
                     var sp = mapToItem(launcher, mouse.x, mouse.y);
                     launcher.dragStarted(pressedId, "page", sp.x, sp.y);
                 }
                 onPositionChanged: (mouse) => {
+                    // Moved on from the hold: the menu gives way to the drag.
+                    if (heldId !== "" && Math.hypot(mouse.x - heldAt.x, mouse.y - heldAt.y) > Qt.styleHints.startDragDistance) {
+                        var id = heldId;
+                        heldId = "";
+                        launcher.editMode = true;
+                        var hp = mapToItem(launcher, mouse.x, mouse.y);
+                        launcher.dragStarted(id, "page", hp.x, hp.y);
+                        return;
+                    }
                     if (launcher.dragging) {
                         var sp = mapToItem(launcher, mouse.x, mouse.y);
                         launcher.dragMoved(sp.x, sp.y);
                     }
                 }
                 onReleased: (mouse) => {
+                    heldId = "";
                     if (launcher.dragging) {
                         var sp = mapToItem(launcher, mouse.x, mouse.y);
                         launcher.dragEnded(sp.x, sp.y);
@@ -724,7 +771,7 @@ Item {
                 }
                 onClicked: (mouse) => {
                     var c = cellAt(mouse.x, mouse.y);
-                    if (!c)
+                    if (!c || mouse.button !== Qt.LeftButton)
                         return;
                     var item = page.model.get(c.index);
                     if (launcher.editMode) {
@@ -745,7 +792,10 @@ Item {
                     launcher.feedbackId = item.appId;
                     launcher.launchRequested(item.appId);
                 }
-                onCanceled: pressedId = ""
+                onCanceled: {
+                    pressedId = "";
+                    heldId = "";
+                }
             }
         }
     }

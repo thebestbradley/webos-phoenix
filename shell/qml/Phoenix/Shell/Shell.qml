@@ -103,6 +103,166 @@ FocusScope {
             launch(info.open.id, info.open.params || null);
     }
 
+    // ---- The icon menu (press and hold, or a right click; docs/M6-PLAN.md F1) -------
+    // IconMenu.qml over the launcher and the dock. Its rows, in this order:
+    // Move, Share (an app with a link), Uninstall (apps the user installed;
+    // Remove for a launch point), Add to Dock / Remove from Dock, Favorite /
+    // Unfavorite (the Favorites page), New Window (apps that run several at
+    // once), App Info.
+    readonly property bool iconMenuOpen: iconMenu.open
+    // The share sheet's page for Share (docs/SHARE-AND-FILES.md).
+    property string shareSheetAppId: "org.webosphoenix.sharesheet"
+    // Haptic feedback as the menu opens: com.palm.vibrate's short effect,
+    // which runs the device's motor where it has one (DeviceServices).
+    property int iconMenuHaptics: 0
+
+    // rect: the icon, in item's coordinates.
+    function openIconMenu(appId, from, item, rect) {
+        var e = launcher.entry(appId);
+        if (!e || locked)
+            return;
+        var p = item.mapToItem(ui, rect.x, rect.y);
+        iconMenu.show(appId, from, Qt.rect(p.x, p.y, rect.width, rect.height), iconMenuItems(appId, from), e);
+        iconMenuHaptics++;
+        devices.vibrate({ name: "tapdown" });
+    }
+
+    // The link Share sends: a launch point's or a site's web address
+    // (appinfo.json "main" an http(s) URL: a web app from the Marketplace);
+    // "" when the app has none.
+    function shareLink(appId) {
+        var e = launcher.entry(appId);
+        if (!e)
+            return "";
+        var params = null;
+        try { params = e.params ? JSON.parse(e.params) : null; } catch (err) { params = null; }
+        var url = params && (params.url || params.target) ? String(params.url || params.target) : "";
+        if (/^https?:\/\//i.test(url))
+            return url;
+        return /^https?:\/\//i.test(String(e.main || "")) ? String(e.main) : "";
+    }
+    readonly property bool shareAvailable: !!source && typeof source.openSystemWindow === "function"
+
+    function _launcherEntryOf(appId) {
+        var all = _launcherEntries();
+        for (var i = 0; i < all.length; ++i)
+            if (all[i].id === appId)
+                return all[i];
+        return null;
+    }
+
+    function iconMenuItems(appId, from) {
+        var e = launcher.entry(appId);
+        var l = launcherLayout;
+        if (!e || !l)
+            return [];
+        var list = [{ name: "move", text: qsTr("Move") }];
+        if (shareAvailable && shareLink(appId) !== "")
+            list.push({ name: "share", text: qsTr("Share") });
+        if (e.removable && !e.installState)
+            list.push({ name: "uninstall", text: e.dynamic ? qsTr("Remove") : qsTr("Uninstall") });
+        if (l.dock.indexOf(appId) >= 0)
+            list.push({ name: "undock", text: qsTr("Remove from Dock") });
+        else
+            list.push({ name: "dock", text: qsTr("Add to Dock"),
+                        available: !LauncherLayout.dockFull(l, Theme.quickLaunchMaxItems - 1) });
+        // A launch point an app added lives on Favorites (LauncherLayout.pageFor).
+        if (!e.dynamic && LauncherLayout.pageOf(l, appId) >= 0)
+            list.push(LauncherLayout.isFavorite(l, appId) ? { name: "unfavorite", text: qsTr("Unfavorite") }
+                                                         : { name: "favorite", text: qsTr("Favorite") });
+        if (e.multipleInstances && source && typeof source.launchNewInstance === "function")
+            list.push({ name: "newWindow", text: qsTr("New Window") });
+        list.push({ name: "info", text: qsTr("App Info") });
+        return list;
+    }
+
+    function iconMenuAction(appId, from, name) {
+        var l = launcherLayout;
+        switch (name) {
+        case "move":
+            // Edit mode with the icon picked up: it follows the next touch
+            // and stays where that lets go (iconDrag.held).
+            if (from === "page")
+                launcher.editMode = true;
+            var r = iconMenu.iconRect;
+            iconDrag.start(appId, from, Qt.point(r.x + r.width / 2, r.y + r.height / 2));
+            iconDrag.held = true;
+            break;
+        case "share":
+            shareApp(appId);
+            break;
+        case "uninstall":
+            deleteDialog.ask(appId);
+            break;
+        case "dock":
+            if (!LauncherLayout.dockFull(l, Theme.quickLaunchMaxItems - 1))
+                setLauncherLayout(LauncherLayout.addToDock(l, appId, l.dock.length, Theme.quickLaunchMaxItems - 1));
+            break;
+        case "undock":
+            setLauncherLayout(LauncherLayout.removeFromDock(l, appId));
+            break;
+        case "favorite":
+            setLauncherLayout(LauncherLayout.favorite(l, appId));
+            break;
+        case "unfavorite":
+            setLauncherLayout(LauncherLayout.unfavorite(l, appId, _launcherEntryOf(appId)));
+            break;
+        case "newWindow":
+            launchNewInstance(appId);
+            break;
+        case "info":
+            deleteDialog.showInfo(appId);
+            break;
+        }
+    }
+
+    // Another window of an app that runs several at once (appinfo.json
+    // "multipleInstances": true; the browser, which opens a card on every
+    // launch, BrowserApp.js:132-147), in a stack of its own.
+    function launchNewInstance(appId) {
+        if (!source || typeof source.launchNewInstance !== "function")
+            return "";
+        if (dockMode)
+            exitDockMode(true);
+        launcher.open = false;
+        justType.open = false;
+        var uid = source.launchNewInstance(appId);
+        if (uid !== "")
+            Qt.callLater(cards.focusLaunched, uid);
+        return uid;
+    }
+
+    // "1.2 MB", for App Info.
+    function formatSize(bytes) {
+        if (bytes < 1024)
+            return qsTr("%1 B").arg(bytes);
+        if (bytes < 1024 * 1024)
+            return qsTr("%1 KB").arg(Math.round(bytes / 1024));
+        return qsTr("%1 MB").arg((bytes / (1024 * 1024)).toFixed(1));
+    }
+
+    // Share: the system's share sheet (org.webosphoenix.share) with the app's
+    // title and link, from its own page laid over everything (a system
+    // window: openSystemWindow(shareSheetAppId, {systemShare}, "share")),
+    // which closes itself when the sheet is done.
+    function shareApp(appId) {
+        var e = launcher.entry(appId);
+        var url = shareLink(appId);
+        if (!e || url === "" || !shareAvailable || shareHost.windowKey !== "")
+            return "";
+        var key = source.openSystemWindow(shareSheetAppId, { systemShare: { title: e.title, url: url } }, "share");
+        shareHost.windowKey = key || "";
+        return shareHost.windowKey;
+    }
+    Connections {
+        target: shell.source
+        ignoreUnknownSignals: true
+        function onSystemWindowClosed(key) {
+            if (key === shareHost.windowKey)
+                shareHost.windowKey = "";
+        }
+    }
+
     // Whether the window's keyboard focus is in item (or below it).
     function _hasFocusInside(item) {
         for (var it = shell.Window.activeFocusItem; it; it = it.parent)
@@ -784,11 +944,21 @@ FocusScope {
                 lockScreen.unlockPanel.entryCanceled();
             return;
         }
+        // The share sheet over the launcher gets it (it goes back inside
+        // the sheet, or closes it).
+        if (shareHost.windowKey !== "") {
+            source.back(shareHost.windowKey);
+            return;
+        }
         // The launcher's app dialog first: Back (or Esc) cancels it.
         if (deleteDialog.appId !== "") {
             _setKeyButton(null);
             deleteDialog.appId = "";
-        } else if (notes.dashboardOpen)
+        } else if (iconMenu.open)
+            iconMenu.open = false;
+        else if (iconDrag.held)
+            iconDrag.cancel();
+        else if (notes.dashboardOpen)
             notes.dashboardOpen = false;
         else if (siteMenu.open)
             siteMenu.open = false;
@@ -1017,10 +1187,18 @@ FocusScope {
         return false;
     }
 
+    // Esc puts an icon picked up by the menu's Move back.
+    function _iconDragKey(event) {
+        if (!iconDrag.held || event.key !== Qt.Key_Escape)
+            return false;
+        iconDrag.cancel();
+        return true;
+    }
+
     // Desktop / hardware keyboard shortcuts.
     Keys.onPressed: (event) => {
         // The system menu's and the launcher's own keys (GAPS V8 (3)).
-        if (systemMenu.handleKey(event) || (!locked && (_dialogKey(event) || siteMenu.handleKey(event) || launcher.handleKey(event) || notes.handleKey(event)))) {
+        if (systemMenu.handleKey(event) || (!locked && (_dialogKey(event) || iconMenu.handleKey(event) || _iconDragKey(event) || siteMenu.handleKey(event) || launcher.handleKey(event) || notes.handleKey(event)))) {
             event.accepted = true;
             return;
         }
@@ -1876,6 +2054,7 @@ FocusScope {
                         onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, launcher.mapToItem(ui, x, y))
                         onDragMoved: (x, y) => iconDrag.move(launcher.mapToItem(ui, x, y))
                         onDragEnded: (x, y) => iconDrag.drop(launcher.mapToItem(ui, x, y))
+                        onMenuRequested: (appId, from, rect) => shell.openIconMenu(appId, from, launcher, rect)
                     }
                 }
 
@@ -1912,6 +2091,43 @@ FocusScope {
                     onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, quickLaunch.mapToItem(ui, x, y))
                     onDragMoved: (x, y) => iconDrag.move(quickLaunch.mapToItem(ui, x, y))
                     onDragEnded: (x, y) => iconDrag.drop(quickLaunch.mapToItem(ui, x, y))
+                    onMenuRequested: (appId, from, rect) => shell.openIconMenu(appId, from, quickLaunch, rect)
+                }
+
+                // The icon menu (press and hold, or a right click), over the
+                // launcher and the dock, under the icon being dragged.
+                IconMenu {
+                    id: iconMenu
+                    anchors.fill: parent
+                    z: 999
+                    onTriggered: (name) => shell.iconMenuAction(iconMenu.appId, iconMenu.from, name)
+                    onCloseRequested: iconMenu.open = false
+                }
+                // The launcher closing (Back, a launch, Home) closes its menu.
+                Connections {
+                    target: launcher
+                    function onOpenChanged() {
+                        if (!launcher.open && iconMenu.from === "page")
+                            iconMenu.open = false;
+                        if (!launcher.open && iconDrag.held && iconDrag.from === "page")
+                            iconDrag.cancel();
+                    }
+                }
+
+                // Move from the icon menu: the icon is picked up without a
+                // finger on it; the next touch takes it (a tap puts it there,
+                // a drag carries it), as if it had been held.
+                MouseArea {
+                    id: moveCatcher
+                    objectName: "iconMoveCatcher"
+                    anchors.fill: parent
+                    z: 998
+                    enabled: iconDrag.held
+                    visible: enabled
+                    preventStealing: true
+                    onPressed: (mouse) => iconDrag.move(Qt.point(mouse.x, mouse.y))
+                    onPositionChanged: (mouse) => iconDrag.move(Qt.point(mouse.x, mouse.y))
+                    onReleased: (mouse) => iconDrag.drop(Qt.point(mouse.x, mouse.y))
                 }
 
                 // ---- Dragging an icon (launcher pages and dock) ----------------------------------
@@ -1925,6 +2141,8 @@ FocusScope {
                     property string appId: ""
                     property string from: ""
                     property int lastIndex: -1
+                    // Picked up by the icon menu's Move, waiting for a touch.
+                    property bool held: false
                     z: 1000
                     visible: appId !== ""
                     width: Theme.launcherIconSize
@@ -1944,6 +2162,9 @@ FocusScope {
                         var e = entry(id);
                         if (!e)
                             return;
+                        // Dragged out of the icon menu: the drag takes over.
+                        iconMenu.open = false;
+                        held = false;
                         proxy.title = e.title;
                         proxy.color = e.color;
                         proxy.glyph = e.glyph;
@@ -1986,7 +2207,14 @@ FocusScope {
                             lastIndex = idx;
                         }
                     }
+                    // Put back where it was (Back or Esc after Move).
+                    function cancel() {
+                        held = false;
+                        launcher.dragDone();
+                        appId = "";
+                    }
                     function drop(p) {
+                        held = false;
                         if (appId === "")
                             return;
                         launcher.dragDone();
@@ -2040,6 +2268,7 @@ FocusScope {
                     property string messageText: ""
                     property bool canRetry: false
                     function ask(id) {
+                        canUninstall = false;
                         var e = iconDrag.entry(id);
                         mode = e && e.installState === "failed" ? "failed" : e && e.dynamic ? "shortcut" : "app";
                         shownId = id;
@@ -2049,6 +2278,28 @@ FocusScope {
                         canRetry = mode === "failed" && !!(i && i.retry);
                         appId = id;
                     }
+                    // App Info (the icon menu): the app's title, then its
+                    // version, id and size, with Uninstall when it can be
+                    // (asking first, as the delete decorator does) and Done.
+                    function showInfo(id) {
+                        var e = iconDrag.entry(id);
+                        if (!e)
+                            return;
+                        mode = "info";
+                        shownId = id;
+                        titleText = e.title;
+                        var lines = [];
+                        if (e.version)
+                            lines.push(qsTr("Version %1").arg(e.version));
+                        lines.push(qsTr("ID: %1").arg(e.dynamic && e.webAppId ? e.webAppId : id));
+                        if (e.size > 0)
+                            lines.push(qsTr("Size: %1").arg(shell.formatSize(e.size)));
+                        messageText = lines.join("\n");
+                        canRetry = false;
+                        canUninstall = !!e.removable && !e.installState;
+                        appId = id;
+                    }
+                    property bool canUninstall: false
                     function info() {
                         return shell.source && typeof shell.source.installInfo === "function" ? shell.source.installInfo(shownId) : null;
                     }
@@ -2138,8 +2389,16 @@ FocusScope {
                                     objectName: "deleteDialogCancel"
                                     width: parent.width
                                     height: Theme.px(52)
-                                    caption: qsTr("Cancel")
+                                    caption: deleteDialog.mode === "info" ? qsTr("Done") : qsTr("Cancel")
                                     onAction: deleteDialog.appId = ""
+                                }
+                                ActionButton {
+                                    objectName: "deleteDialogUninstall"
+                                    width: parent.width
+                                    height: Theme.px(52)
+                                    visible: deleteDialog.mode === "info" && deleteDialog.canUninstall
+                                    caption: iconDrag.entry(deleteDialog.shownId) && iconDrag.entry(deleteDialog.shownId).dynamic ? qsTr("Remove") : qsTr("Uninstall")
+                                    onAction: deleteDialog.ask(deleteDialog.shownId)
                                 }
                                 ActionButton {
                                     objectName: "deleteDialogRetry"
@@ -2153,11 +2412,43 @@ FocusScope {
                                     objectName: "deleteDialogRemove"
                                     width: parent.width
                                     height: Theme.px(52)
+                                    visible: deleteDialog.mode !== "info"
                                     caption: qsTr("Remove")
                                     onAction: deleteDialog.remove()
                                 }
                             }
                         }
+                    }
+                }
+
+                // The share sheet the icon menu's Share opens (shell.shareApp):
+                // its page, see-through but for the sheet, over everything
+                // here until it closes itself.
+                Item {
+                    id: shareHost
+                    objectName: "shareHost"
+                    property string windowKey: ""
+                    anchors.fill: parent
+                    z: 1002
+                    visible: windowKey !== ""
+                    MouseArea { anchors.fill: parent; enabled: shareHost.visible }
+                    Item {
+                        id: shareContent
+                        anchors.fill: parent
+                    }
+                    onWindowKeyChanged: Qt.callLater(attach)
+                    function attach() {
+                        var w = windowKey !== "" && shell.source ? shell.source.windowFor(windowKey) : null;
+                        if (!w)
+                            return;
+                        w.parent = shareContent;
+                        w.x = 0;
+                        w.y = 0;
+                        w.width = Qt.binding(function() { return shareContent.width; });
+                        w.height = Qt.binding(function() { return shareContent.height; });
+                        w.visible = true;
+                        if (typeof w.focusPage === "function")
+                            w.focusPage();
                     }
                 }
 
