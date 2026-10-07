@@ -6,7 +6,7 @@
 // Context properties set by phoenix-sim:
 //   simScene       "locked" | "cards" | "stacks" | "longstack" | "reorder" | "maximized" | "heldcard" | "launcher" |
 //                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" | "drawer" | "capture" | "capturepreview" |
-//                  "justtype" | "keyboard" | "clipstrip" | "systemmenu" | "empty"
+//                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "systemmenu" | "empty"
 //   simFirstUse    start with First Use (--first-use); without it First Use
 //                  runs at start-up until it has been done once
 //                  (simSettings "firstuse/done", set when the app reports the
@@ -503,7 +503,7 @@ Item {
     readonly property var scenes: ["locked", "cards", "stacks", "longstack", "reorder", "maximized", "heldcard",
                                    "launcher", "launcheredit", "launchermenu", "launcherinstall", "pin", "emergency", "firstuse",
                                    "lowbattery", "banner", "notified", "dashboard", "drawer", "capture",
-                                   "capturepreview", "justtype", "keyboard", "clipstrip", "systemmenu", "empty"]
+                                   "capturepreview", "justtype", "keyboard", "clipstrip", "assistant", "systemmenu", "empty"]
     readonly property string scene: typeof simScene !== "undefined" ? simScene : ""
 
     // The keys of the entries that run something, wherever the keyboard
@@ -819,6 +819,9 @@ Item {
                 // --scene clipstrip with --launch: the strip over that app.
                 if (typeof simScene !== "undefined" && simScene === "clipstrip")
                     root.clipStripScene();
+                // --scene assistant with --launch: the assistant over that app.
+                if (typeof simScene !== "undefined" && simScene === "assistant")
+                    root.assistantScene();
                 root.startOnTouchstone();
             });
             return;
@@ -975,6 +978,40 @@ Item {
         } else if (scene === "clipstrip") {
             shell.startJustType("");
             clipStripScene();
+        } else if (scene === "assistant") {
+            assistantScene();
+        }
+    }
+
+    // "assistant": a short conversation with the Phoenix Assistant
+    // (org.webosphoenix.assistant: a sum, a timer, and a question nothing on
+    // the phone can answer), then its view over the screen (the app with
+    // --launch, else the card view). Each request waits for an answer; one
+    // made before a page with the runtime was up is made again.
+    function assistantScene() {
+        assistantSceneSteps.asks = ["What's 15% of 80?", "Set a timer for 10 minutes", "Who wrote the Odyssey?"];
+        assistantSceneSteps.next();
+    }
+    Timer {
+        id: assistantSceneSteps
+        property var asks: []
+        property int serial: 0
+        interval: 3000
+        onTriggered: next()
+        function next() {
+            if (asks.length === 0) {
+                shell.openAssistant(false);
+                return;
+            }
+            var mine = ++serial;
+            restart();
+            windows.lunaCall("luna://org.webosphoenix.assistant/ask", { text: asks[0], speak: false }, function (r) {
+                if (mine !== assistantSceneSteps.serial || r === null)
+                    return;
+                assistantSceneSteps.stop();
+                assistantSceneSteps.asks = assistantSceneSteps.asks.slice(1);
+                assistantSceneSteps.next();
+            });
         }
     }
 

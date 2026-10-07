@@ -36,6 +36,7 @@ FocusScope {
     readonly property bool fullScreen: cards.maximized && cards.currentFullScreen
     readonly property bool launcherOpen: launcher.open
     readonly property bool justTypeOpen: justType.open
+    readonly property bool assistantOpen: assistantView.open
     property alias launcherEditMode: launcher.editMode
     // The launcher page shown (LauncherLayout.PAGES: apps 0, downloads 1,
     // favorites 2, prefs 3).
@@ -276,6 +277,36 @@ FocusScope {
     function startJustType(text) {
         launcher.open = false;
         justType.start(text);
+    }
+
+    // The Phoenix Assistant's view over the screen (AssistantOverlay; docs/
+    // M6-PLAN.md F3): held launcher button. Not over the lock screen nor in
+    // First Use; nothing when the assistant is off (Settings > Assistant).
+    function openAssistant(listen) {
+        if (locked || firstUse || dockMode)
+            return;
+        var show = function () {
+            justType.open = false;
+            iconMenu.open = false;
+            assistantView.listenOnOpen = !!listen;
+            assistantView.open = true;
+        };
+        var src = assistantView.source;
+        if (!src || typeof src.lunaCall !== "function") {
+            show();
+            return;
+        }
+        src.lunaCall("luna://org.webosphoenix.assistant/getSettings", {}, function (r) {
+            if (r && r.returnValue !== false && r.settings && r.settings.enabled === false)
+                return;
+            show();
+        });
+    }
+    function closeAssistant() {
+        if (!assistantView.open)
+            return;
+        assistantView.open = false;
+        shell.forceActiveFocus();
     }
 
     // Not over the lock screen (LockWindow sits above the menus), nor in First Use.
@@ -949,6 +980,11 @@ FocusScope {
             // The back gesture (or Esc) on the passcode panel cancels it.
             if (lockScreen.unlockPanel.shown)
                 lockScreen.unlockPanel.entryCanceled();
+            return;
+        }
+        // The assistant's view closes.
+        if (assistantView.open) {
+            closeAssistant();
             return;
         }
         // The share sheet over the launcher gets it (it goes back inside
@@ -1935,6 +1971,8 @@ FocusScope {
     // Unlocked over a card that is held the other way: back to its
     // orientation (CardWindow::setMaximized, CardWindow.cpp:1756-1760).
     onLockedChanged: {
+        if (locked)
+            assistantView.open = false;
         // Sticky keys' latched modifiers do not outlive the lock.
         if (locked)
             keyboardAccess.clearModifiers();
@@ -2095,6 +2133,7 @@ FocusScope {
                     draggedId: iconDrag.appId
                     onLaunchRequested: (appId) => shell.launch(appId)
                     onLauncherToggled: launcher.open = !launcher.open
+                    onAssistantRequested: shell.openAssistant(false)
                     onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, quickLaunch.mapToItem(ui, x, y))
                     onDragMoved: (x, y) => iconDrag.move(quickLaunch.mapToItem(ui, x, y))
                     onDragEnded: (x, y) => iconDrag.drop(quickLaunch.mapToItem(ui, x, y))
@@ -2468,6 +2507,18 @@ FocusScope {
                     onLaunchRequested: (appId) => shell.launch(appId)
                     onCloseRequested: { justType.open = false; shell.forceActiveFocus(); }
                     onCopied: (text) => clipboardClient.record(text, "com.palm.systemui")
+                }
+
+                // The Phoenix Assistant over everything here (held launcher button).
+                AssistantOverlay {
+                    id: assistantView
+                    anchors.fill: parent
+                    z: 1003
+                    source: shell.source
+                    dictation: shell.dictation
+                    backdrop: sceneBackdrop
+                    bottomInset: notes.negativeSpace
+                    onCloseRequested: shell.closeAssistant()
                 }
 
                 // Phones round the corners of a maximized app (MenuWindowManager.cpp:126-146).

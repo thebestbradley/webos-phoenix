@@ -2119,15 +2119,17 @@ Item {
     Connections {
         target: source.dictation
         ignoreUnknownSignals: true
+        // Only recordings for app windows: the keyboard's (owner "") and the
+        // shell's assistant view's ("assistant") are theirs.
         function onStateChanged() {
             var d = source.dictation;
-            if (d.owner !== "" && d.busy)
+            if (d.owner !== "" && source._windows[d.owner] && d.busy)
                 source._dictationEvent(d.owner, { state: "transcribing" });
         }
         function onTranscribed(text, error) {
             var d = source.dictation;
             var uid = d.owner;
-            if (uid === "")
+            if (uid === "" || !source._windows[uid])
                 return;
             source._dictationDone();
             source._dictationEvent(uid, error ? { state: "error", errorText: error } : { state: "done", text: text });

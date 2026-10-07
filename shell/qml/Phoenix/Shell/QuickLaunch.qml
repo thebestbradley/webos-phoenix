@@ -21,6 +21,11 @@ Item {
 
     signal launchRequested(string appId)
     signal launcherToggled
+    // Press and hold on the launcher button: the Phoenix Assistant
+    // (docs/M6-PLAN.md F3; a tap still opens the launcher).
+    signal assistantRequested
+    // The hold opens it (Shell.assistantEnabled); off, a hold does nothing.
+    property bool assistantEnabled: true
 
     // The app just tapped shows launch feedback for up to 3 s
     // (QuickLaunchBar::setAppLaunchFeedback, quicklaunchbar.cpp:633,
@@ -205,6 +210,12 @@ Item {
         onClicked: (mouse) => { if (mouse.button === Qt.LeftButton) ql.activateSlot(ql.slotAt(mouse.x)); }
         onPressAndHold: (mouse) => {
             var i = ql.slotAt(mouse.x);
+            if (mouse.button === Qt.LeftButton && i === ql.pinned.length && ql.assistantEnabled) {
+                // The press shows as the button's pressed state until it lifts;
+                // no click follows a hold.
+                ql.assistantRequested();
+                return;
+            }
             if (mouse.button !== Qt.LeftButton || i >= ql.pinned.length)
                 return;
             heldSlot = i;
