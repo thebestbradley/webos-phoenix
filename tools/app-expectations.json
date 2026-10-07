@@ -76,6 +76,10 @@
         "status": "works",
         "note": "Phoenix Clipboard (React, apps/clipboard) on the simulated org.webosphoenix.clipboard; tools/test-clipboard.cjs drives it and Settings > Clipboard"
     },
+    "org.webosphoenix.assistant": {
+        "status": "works",
+        "note": "Phoenix Assistant (React, apps/assistant) on the simulated org.webosphoenix.assistant (apps/assistant/service in the page); tools/test-assistant.cjs drives it and Settings > Assistant"
+    },
     "org.webosphoenix.flashlight": {
         "status": "works",
         "note": "Phoenix Flashlight (React, apps/flashlight) on the simulated org.webosports.service.torch (LuneOS torchd's API); tools/test-flashlight.cjs drives it. The simulated LED lights nothing"

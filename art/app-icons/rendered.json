@@ -15,6 +15,22 @@
   "svg": "0622f348e1d66ce04659ee0003538fa07c32e0e40657379fc40c99f7fec3793e",
   "png": "1d6eb2d405b0cf44d062d0c67710964f2fa3e42b59566a5b12e55f9d119e9fa2"
  },
+ "apps/assistant/public/icon-128x128.png": {
+  "svg": "5b0d895e973bf77a2ae42444dcd82c02adcf3adc85a66e727cc3571bbe6f29c7",
+  "png": "279af3205cc90f00c7a1240d117a6c5ce946663daf2cf8f4fd3d01d4e55ce8a9"
+ },
+ "apps/assistant/public/icon-256x256.png": {
+  "svg": "853648b1edfe85f3da632696f70fea792c07794d80df46f3ba9714c54c30646b",
+  "png": "8dc787986125d903e39d5858f2bf24ac51ec630d12ca98889ccddf2b57c69d01"
+ },
+ "apps/assistant/public/icon-512x512.png": {
+  "svg": "b38991eedfaf273c05f80e44eff17391a595dcfd1481a8811dc378450e4619e4",
+  "png": "248b525ec1339670d981ad4e88d632b533b1442e9908e9c47a93c41891e5a94b"
+ },
+ "apps/assistant/public/icon.png": {
+  "svg": "cf79227ae0923e2d2dec0c380ec0de6ca035e827c76d8755bbcb31f0576fc898",
+  "png": "a9b7a063a8521d15dd317043d7a93d914b2b1f71c326d7fb923370c6755533a2"
+ },
  "apps/authenticator/public/icon-128x128.png": {
   "svg": "62eb08c7e32bf1add46e98ded8b49b0173655edb9f0ce532dbac5795462ac1f2",
   "png": "7c1cbce5bbf25b63184af965d11289f5204ff5d46860ca91e5d783a36242c814"
@@ -494,6 +510,22 @@
  "apps/settings/public/icons/airplane.png": {
   "svg": "c5a32e83f86c131955ee0fc679aeb6b71c438f4dd52618c822b0395b93fedbd7",
   "png": "95bd1a19fc9763c9490dab61813f02f3cb144ea4b0e5b618aa9c9780e596395f"
+ },
+ "apps/settings/public/icons/assistant-128x128.png": {
+  "svg": "88984e75cdb7c5fc8228f7e9edb44ab0e4ea899c07a4ee81e011a13324011846",
+  "png": "a693dcb51a7640ef1986c060fd98ff13c4d7d8016b8f7476f75f06e6923b6b79"
+ },
+ "apps/settings/public/icons/assistant-256x256.png": {
+  "svg": "bf8dee60a6cd3a5cd3cf553ce28758fc7f4f426dc958d2bbe03648d7a6154f2d",
+  "png": "16b907c0e0cabebbe698ad7fe0ebcfadab45988e8e49ed59ca295a26f58dc7b2"
+ },
+ "apps/settings/public/icons/assistant-512x512.png": {
+  "svg": "1ac1ce4d7e4285c59e1d9f9fba23c00a582ceb3529e21f863b12e979324e6e53",
+  "png": "7ad68bb55033f0658692882e5ea6e22ae05677f3d754128298e52ddf7fe1c9b0"
+ },
+ "apps/settings/public/icons/assistant.png": {
+  "svg": "d43f6de660189b4a68902daebf9fe773f1913b1399b36fc9d55912c759e48c33",
+  "png": "8b4f8850a5bc6a3087486ea563aa857465520faa9413d2a5dd334220faf820a4"
  },
  "apps/settings/public/icons/backup-128x128.png": {
   "svg": "925416d9564d776d9d0af2c9b510c81b7861c1a97eb93d5eb80a2253745b1185",

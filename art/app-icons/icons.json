@@ -401,5 +401,20 @@
         "out": [
             "apps/settings/public/icons/clipboard"
         ]
+    },
+    "assistant": {
+        "platter": "disc",
+        "out": [
+            "apps/assistant/public/icon"
+        ]
+    },
+    "settings-assistant": {
+        "platter": "diamond",
+        "object": "assistantpane",
+        "base": 176,
+        "foot": 50,
+        "out": [
+            "apps/settings/public/icons/assistant"
+        ]
     }
 }

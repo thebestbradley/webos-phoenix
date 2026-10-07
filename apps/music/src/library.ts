@@ -100,3 +100,25 @@ export function playOrder(n: number, first: number, shuffle: boolean, random: ()
     }
     return n ? [first, ...rest] : [];
 }
+
+/**
+ * What "play <query>" plays (the Assistant's play command, launch params
+ * {play}): an artist's songs, an album, a song, by name (whole, then
+ * starting with it, then containing it); everything for "". null: nothing
+ * matches.
+ */
+export function songsFor(items: AudioItem[], query: string): AudioItem[] | null {
+    const q = query.trim().toLowerCase().replace(/^the\s+/, "");
+    if (!q) return songs(items);
+    const norm = (s: string) => s.toLowerCase().replace(/^the\s+/, "");
+    const tests: ((s: string) => boolean)[] = [(s) => norm(s) === q, (s) => norm(s).startsWith(q), (s) => norm(s).includes(q)];
+    for (const t of tests) {
+        const ar = artists(items).find((a) => t(a.name));
+        if (ar) return ar.songs;
+        const al = albums(items).find((a) => t(a.name));
+        if (al) return al.songs;
+        const so = songs(items).filter((s) => t(titleOf(s)));
+        if (so.length) return so;
+    }
+    return null;
+}

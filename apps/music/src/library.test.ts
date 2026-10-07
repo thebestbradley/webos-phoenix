@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { AudioItem } from "@phoenix/luna";
-import { albums, artists, artistSummary, playOrder, songs, UNKNOWN_ARTIST } from "./library";
+import { albums, artists, artistSummary, playOrder, songs, songsFor, UNKNOWN_ARTIST } from "./library";
 
 const song = (file: string, title: string, artist?: string, album?: string, track?: number): AudioItem =>
     ({ uri: "storage:///media/internal/" + file, file_path: "/media/internal/" + file, title, artist, album, track, thumbnail: album ? `/art/${album}.jpg` : undefined });
@@ -39,5 +39,14 @@ describe("music library", () => {
         const o = playOrder(5, 3, true, () => 0.5);
         expect(o[0]).toBe(3);
         expect([...o].sort()).toEqual([0, 1, 2, 3, 4]);
+    });
+
+    it("finds what the Assistant's play command names", () => {
+        expect(songsFor(LIB, "pixel sunrise")?.map((s) => s.title)).toEqual(["Morning Boot", "Card Shuffle"]);
+        expect(songsFor(LIB, "Service Calls")?.map((s) => s.title)).toEqual(["Just Type"]);
+        expect(songsFor(LIB, "chip harbor")?.map((s) => s.title)).toEqual(["Harbor Lights"]);
+        expect(songsFor(LIB, "morning")?.map((s) => s.title)).toEqual(["Morning Boot"]);
+        expect(songsFor(LIB, "")).toHaveLength(5);
+        expect(songsFor(LIB, "nobody")).toBeNull();
     });
 });

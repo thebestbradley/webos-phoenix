@@ -39,7 +39,8 @@
     "firstuse",
     "marketplace",
     "agenda",
-    "clipboard"
+    "clipboard",
+    "assistant"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

@@ -986,7 +986,8 @@ Item {
     // "assistant": a short conversation with the Phoenix Assistant
     // (org.webosphoenix.assistant: a sum, a timer, and a question nothing on
     // the phone can answer), then its view over the screen (the app with
-    // --launch, else the card view). Each request waits for an answer; one
+    // --launch, else the card view; with --launch org.webosphoenix.assistant
+    // the app shows it instead). Each request waits for an answer; one
     // made before a page with the runtime was up is made again.
     function assistantScene() {
         assistantSceneSteps.asks = ["What's 15% of 80?", "Set a timer for 10 minutes", "Who wrote the Odyssey?"];
@@ -1000,7 +1001,9 @@ Item {
         onTriggered: next()
         function next() {
             if (asks.length === 0) {
-                shell.openAssistant(false);
+                // The Assistant app itself shows the conversation.
+                if (!shell.cardView.maximized || shell._appIdOf(shell.cardView.currentUid) !== "org.webosphoenix.assistant")
+                    shell.openAssistant(false);
                 return;
             }
             var mine = ++serial;
