@@ -158,6 +158,13 @@ Item {
         onTriggered: root.turnDevice(simTurn)
     }
 
+    // --scene launchermenu: once the launcher is up.
+    Timer {
+        id: sceneMenuTimer
+        interval: 1200
+        onTriggered: shell.openLauncherIconMenu(1)
+    }
+
     // How the UI and the device are turned, for the apps
     // (com.palm.systemmanager getSystemStatus).
     function pushOrientation() {
@@ -494,7 +501,7 @@ Item {
                                        "phone", "tablet"]
     // The demo scenes (--scene; buildScene()).
     readonly property var scenes: ["locked", "cards", "stacks", "longstack", "reorder", "maximized", "heldcard",
-                                   "launcher", "launcheredit", "launcherinstall", "pin", "emergency", "firstuse",
+                                   "launcher", "launcheredit", "launchermenu", "launcherinstall", "pin", "emergency", "firstuse",
                                    "lowbattery", "banner", "notified", "dashboard", "drawer", "capture",
                                    "capturepreview", "justtype", "keyboard", "systemmenu", "empty"]
     readonly property string scene: typeof simScene !== "undefined" ? simScene : ""
@@ -902,6 +909,10 @@ Item {
             shell.gestureUp();
             if (scene === "launcheredit")
                 shell.launcherEditMode = true;
+        } else if (scene === "launchermenu") {
+            // The icon menu of the launcher's second icon (press and hold).
+            shell.gestureUp();
+            sceneMenuTimer.start();
         } else if (scene === "launcherinstall") {
             // Downloads with two apps from the Marketplace: one being
             // installed (40%, the progress strip, the icon faded), one

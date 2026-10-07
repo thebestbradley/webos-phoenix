@@ -98,6 +98,7 @@ Item {
     // The rest dims.
     Rectangle {
         id: dim
+        objectName: "iconMenuDim"
         anchors.fill: parent
         color: "#000000"
         opacity: menu.open ? 0.5 : 0

@@ -8,7 +8,7 @@ or more pull requests, merged when CI is green.
 | Phase | What | Status |
 | --- | --- | --- |
 | F0 | Fixes: settings lost on save; card corners; Messaging reply bar | Settings and corners done; reply bar waits on the owner |
-| F1 | Press and hold on launcher icons | To do |
+| F1 | Press and hold on launcher icons | Done in the simulator (7 October 2026) |
 | F2 | Clipboard manager | To do |
 | F3 | The Phoenix Assistant 1.0 | To do |
 | F4 | Community features picked for 1.0 | To do |
@@ -48,6 +48,19 @@ or more pull requests, merged when CI is green.
   - `tst_launcher.qml`: the menu opens on a hold and on a right click.
   - Each item does what it says.
   - Dragging still reorders icons.
+
+**Built (7 October 2026, in the simulator)**
+- `IconMenu.qml` over the launcher and the dock: the held icon at 1.15×, the rest dimmed to half, the menu in the system's popup art (`popup-bg.png`, the app menu's rows, dividers and pressed highlight) beside the icon (right, else left, else below; over a dock icon). A tap outside, Back or Esc closes it; Up / Down and Enter work it from a keyboard, and the Menu key (or Shift+F10) opens it on the launcher's focus ring. `--scene launchermenu` shows it.
+- The hold is 500 ms (`Theme.iconMenuHoldInterval`); a right click opens it at once. Moving the finger past the drag distance while still holding closes the menu and starts the edit mode drag as before (reorder, tabs, page edges, dock). In edit mode, and on an icon still installing, the hold picks the icon up at once, as before. Moving before the 500 ms still scrolls or swipes the page.
+- Haptics: a `tapdown` vibration through com.palm.vibrate (`DeviceServices`), which runs the device's motor where it has one; the simulator only shows it.
+- **Move**: edit mode with the icon picked up; the next touch carries it (a tap puts it there); Back or Esc puts it back.
+- **Share**: only for an app with a web address (a launch point's `url`, or a web app whose `main` is an `http(s)` site). The shell opens the share sheet's page by itself as a see-through system window (`openSystemWindow(sharesheet, {systemShare}, "share")`), which asks `org.webosphoenix.share/open` and closes itself. The built-in apps have no link, so none of them shows Share.
+- **Uninstall** (Remove for a launch point): apps the user installed only; the existing "Remove Application?" dialog.
+- **Add to Dock / Remove from Dock**: at the dock's end; greyed when the dock is full.
+- **Favorite / Unfavorite**: the launcher already has the TouchPad's Favorites page, so Favorite moves the app there and Unfavorite moves it back to the page it would have had (`LauncherLayout.favorite` / `unfavorite`); kept with the layout. Launch points live on Favorites and have neither.
+- **New Window**: for apps whose entry has `multipleInstances` (new `appinfo.json` key `"multipleInstances": true`, read by `rootfs.cpp`), and the original browser, which cannot say so but opens a card on every launch (`BrowserApp.js:132-147`). The window source's `launchNewInstance` opens a fresh window in its own stack. Not on a device yet (`LsmWindowSource` has no `launchNewInstance`, so the row is not shown there).
+- **App Info**: the app dialog with the title, version, id and size (when known), Uninstall (asking first) and Done.
+- Tests: `tst_launcher.qml` (`test_holdOpensTheIconMenu`, `test_rightClickOpensTheIconMenu`, `test_dragOutOfTheMenuReorders`, one per row, `test_dockIconMenu`, `LauncherLayoutFavorites`).
 
 **Moved to 2.0**
 - Lock app, Hide app.

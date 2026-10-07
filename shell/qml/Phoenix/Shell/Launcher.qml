@@ -56,7 +56,8 @@ Item {
     // The arrows move a focus ring over the page's icons (past its left or
     // right edge to the page beside), Tab / Shift+Tab go to the next /
     // previous page (Home is the device's Home button), Enter or Space
-    // opens the icon as a tap would, Esc closes the launcher.
+    // opens the icon as a tap would, the Menu key (or Shift+F10) opens its
+    // icon menu, Esc closes the launcher.
     property int keyIndex: -1
     function _pageCount(i) {
         var m = pageModels[i];
@@ -97,6 +98,11 @@ Item {
             _keyActivate();
             return true;
         }
+        if (k === Qt.Key_Menu || (k === Qt.Key_F10 && (event.modifiers & Qt.ShiftModifier))) {
+            if (keyIndex >= 0)
+                requestMenu(keyIndex);
+            return true;
+        }
         if ([Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down].indexOf(k) < 0)
             return false;
         if (keyIndex < 0) {
@@ -135,6 +141,25 @@ Item {
         running: launcher.feedbackId !== ""
         interval: Theme.launchFeedbackTimeout
         onTriggered: launcher.feedbackId = ""
+    }
+
+    // The icon at index on page (a page of the view), in launcher coordinates.
+    function _iconRect(page, i) {
+        var cellW = Theme.tablet ? Theme.launcherCellSize : cellWidth;
+        var x = rowLeft + (i % columns) * cellWidth + (cellW - Theme.launcherIconSize) / 2;
+        var y = pageTopMargin + Math.floor(i / columns) * cellHeight
+                + (Theme.tablet ? Theme.launcherCellSize / 2 + Theme.launcherIconOffsetY - Theme.launcherIconSize / 2 : 0);
+        var p = page.contentItem.mapToItem(launcher, x, y);
+        return Qt.rect(p.x, p.y, Theme.launcherIconSize, Theme.launcherIconSize);
+    }
+    // The icon menu of the icon at index on the current page (the Menu key
+    // on the keyboard's ring, or Shift+F10; the simulator's scene).
+    function requestMenu(index) {
+        var m = pageModels[currentPage];
+        if (!m || index < 0 || index >= m.count || editMode || m.get(index).installState !== "" || !pages.currentItem)
+            return false;
+        menuRequested(m.get(index).appId, "page", _iconRect(pages.currentItem, index));
+        return true;
     }
 
     // The page titles, in LauncherLayout.PAGES order (apps, downloads,
@@ -709,21 +734,12 @@ Item {
                         return null;
                     return { index: i, x: mx - launcher.rowLeft - col * launcher.cellWidth, y: my - launcher.pageTopMargin - row * launcher.cellHeight };
                 }
-                // The icon at index, in launcher coordinates.
-                function iconRect(i) {
-                    var cellW = Theme.tablet ? Theme.launcherCellSize : launcher.cellWidth;
-                    var x = launcher.rowLeft + (i % launcher.columns) * launcher.cellWidth + (cellW - Theme.launcherIconSize) / 2;
-                    var y = launcher.pageTopMargin + Math.floor(i / launcher.columns) * launcher.cellHeight
-                            + (Theme.tablet ? Theme.launcherCellSize / 2 + Theme.launcherIconOffsetY - Theme.launcherIconSize / 2 : 0);
-                    var p = mapToItem(launcher, x, y);
-                    return Qt.rect(p.x, p.y, Theme.launcherIconSize, Theme.launcherIconSize);
-                }
                 // The menu, unless the icon only moves (edit mode, an install).
                 function openMenu(c) {
                     var item = page.model.get(c.index);
                     if (launcher.editMode || item.installState !== "")
                         return false;
-                    launcher.menuRequested(item.appId, "page", iconRect(c.index));
+                    launcher.menuRequested(item.appId, "page", launcher._iconRect(page, c.index));
                     return true;
                 }
 

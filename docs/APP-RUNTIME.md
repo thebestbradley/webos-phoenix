@@ -587,6 +587,13 @@ apps) or grey diamond (system apps), rendered by `tools/render-app-icons.cjs`
   (`PalmSystem.launchParams`, `?launchParams=` on the page URL). A web app
   whose title matches a placeholder (Wi-Fi, Bluetooth, ...) replaces it.
 
+At the top level of `appinfo.json` (not in `phoenix`), Phoenix also reads
+`"multipleInstances": true`: the app runs in several windows at once, so
+the launcher's icon menu offers New Window, which starts another instance
+in a stack of its own (`launchNewInstance`). The original browser, whose
+`appinfo.json` stays as released, counts as one (`SimWindowSource`
+`multipleInstanceApps`): it opens a card on every launch anyway.
+
 An app can also add launch points of its own at run time, as on webOS
 (`applicationManager/addLaunchPoint {id, title, icon, params, removable}`
 -> `{launchPointId}`, eight digits; `removeLaunchPoint {launchPointId}`).

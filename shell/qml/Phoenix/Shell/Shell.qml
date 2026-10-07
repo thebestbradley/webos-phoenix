@@ -40,6 +40,8 @@ FocusScope {
     // The launcher page shown (LauncherLayout.PAGES: apps 0, downloads 1,
     // favorites 2, prefs 3).
     function showLauncherPage(i) { launcher.showPage(i); }
+    // The icon menu of the icon at index on the launcher's page (IconMenu.qml).
+    function openLauncherIconMenu(index) { return launcher.requestMenu(index); }
     property alias cardView: cards
     property alias notifications: notes
     property alias searchPill: searchPill

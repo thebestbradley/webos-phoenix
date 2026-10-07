@@ -279,7 +279,7 @@ dark and light themes go to 2.0.
 Agreed with the owner on 7 October 2026; [M6-PLAN.md](M6-PLAN.md) has the detail.
 
 - [ ] F0: fixes (settings lost on save and the card corners: done; the Messaging reply bar)
-- [ ] F1: press and hold on launcher icons (peek and menu)
+- [x] F1: press and hold on launcher icons (peek and menu; in the simulator)
 - [ ] F2: clipboard manager (keyboard strip, Clipboard app, Settings > Clipboard)
 - [ ] F3: the Phoenix Assistant 1.0 (commands, optional on-device model, cloud models with permission, Assistant app)
 - [ ] F4: community features picked for 1.0
@@ -336,7 +336,7 @@ every day. The app sources come towards the end of 1.0 (owner, 29 September
       an Assistant app with threads, spoken answers
       ([M6-PLAN.md](M6-PLAN.md) F3, [AI-AND-MCP.md](AI-AND-MCP.md#10-and-20))
 - [ ] Clipboard manager ([M6-PLAN.md](M6-PLAN.md) F2)
-- [ ] Press and hold on launcher icons ([M6-PLAN.md](M6-PLAN.md) F1)
+- [x] Press and hold on launcher icons ([M6-PLAN.md](M6-PLAN.md) F1; in the simulator)
 - [ ] OTA updates with A/B slots ([HARDWARE.md](HARDWARE.md#ota-with-ab-updates)).
       Done in the simulator: `com.palm.update` (Palm's API, so luna-systemui's
       update alerts work) on RAUC, Settings > Updates, the feed publisher

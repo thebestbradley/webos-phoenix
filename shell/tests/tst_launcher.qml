@@ -570,6 +570,9 @@ Item {
             compare(shell.deviceServices.vibration, "tapdown");
             var lifted = findChild(menu, function(o) { return o.objectName === "iconMenuIcon"; });
             tryCompare(lifted, "scale", 1.15, 1000);
+            var dim = findChild(menu, function(o) { return o.objectName === "iconMenuDim"; });
+            tryCompare(dim, "opacity", 0.5, 1000);
+            verify(dim.visible && dim.width === shell.width, "the rest dims");
             var names = menuNames();
             compare(names[0], "move");
             verify(names.indexOf("info") === names.length - 1, "App Info last");
