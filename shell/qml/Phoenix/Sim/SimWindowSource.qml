@@ -105,6 +105,15 @@
 //                            messages ({op: start | stop | cancel, prompt,
 //                            autoStop}) go to it and its states back to the
 //                            window (runtime block "Dictation": Voice Dial)
+//   localModels, speech      the shell's LocalModels and Speech (Shell.localModels,
+//                            Shell.speech; localModels null without a
+//                            models folder): "assistant" host messages
+//                            ({op, requestId, ...}: status, download, cancel,
+//                            remove, ensure, speak, stopSpeaking,
+//                            speechStatus) go to them and their answers back
+//                            to the page (runtime block "The Phoenix
+//                            Assistant"); every page hears {changed: true}
+//                            when the models change (a download's progress)
 //   preferencesReported(prefs)  signal: a page set system preferences
 //                            (com.webos.service.systemservice setPreferences),
 //                            e.g. firstUseComplete when First Use is done
@@ -716,6 +725,8 @@ Item {
         } else if (type === "dictation") {
             if (uid !== "")
                 _dictationRequest(uid, payload || {});
+        } else if (type === "assistant") {
+            _assistantRequest(appId, uid, payload || {});
         } else if (type === "lunaReply") {
             var cb = _lunaCallbacks[payload.id];
             delete _lunaCallbacks[payload.id];
@@ -2133,6 +2144,93 @@ Item {
                 return;
             source._dictationDone();
             source._dictationEvent(uid, error ? { state: "error", errorText: error } : { state: "done", text: text });
+        }
+    }
+
+    // ---- The Assistant's on-device model and speech ("assistant" host messages) -------
+
+    property var localModels: null
+    property var speech: null
+    // requestId -> {appId, uid} of an ensure under way.
+    property var _assistantWaiting: ({})
+
+    function _assistantPage(appId, uid) {
+        return uid !== "" ? _windows[uid] : (_headless[appId] || null);
+    }
+    function _assistantEvent(page, ev) {
+        if (page && page.runScript)
+            page.runScript("window.__phoenixRuntime && __phoenixRuntime.assistantHostEvent && __phoenixRuntime.assistantHostEvent("
+                           + JSON.stringify(ev) + ")");
+    }
+    function _assistantRequest(appId, uid, p) {
+        var page = _assistantPage(appId, uid);
+        var answer = function (o) { o.requestId = p.requestId; _assistantEvent(page, o); };
+        var lm = localModels, sp = speech;
+        switch (p.op) {
+        case "status":
+            answer(lm ? lm.status() : { available: false, installed: [], ramBytes: 0, error: "" });
+            break;
+        case "download":
+            if (!lm) { answer({ error: qsTr("Models cannot be downloaded here.") }); break; }
+            lm.download(String(p.id), String(p.url), String(p.sha256 || ""), Number(p.size) || 0);
+            answer(lm.error && lm.status().downloading === null ? { error: lm.error } : {});
+            break;
+        case "cancel":
+            if (lm) lm.cancel(String(p.id));
+            answer({});
+            break;
+        case "remove":
+            if (lm) lm.remove(String(p.id));
+            answer({});
+            break;
+        case "ensure":
+            if (!lm) { answer({ error: qsTr("No on-device model here.") }); break; }
+            var w = _assistantWaiting;
+            w[p.requestId] = { appId: appId, uid: uid };
+            _assistantWaiting = w;
+            lm.ensure(String(p.id), String(p.requestId));
+            break;
+        case "speak":
+            if (!sp || !sp.available) { answer({ error: qsTr("No text-to-speech here.") }); break; }
+            sp.speak(String(p.text || ""), String(p.lang || "en"));
+            answer({});
+            break;
+        case "stopSpeaking":
+            if (sp) sp.stop();
+            answer({});
+            break;
+        case "speechStatus":
+            answer({ available: !!(sp && sp.available), engine: sp ? sp.engine : "" });
+            break;
+        default:
+            answer({ error: "unknown op " + p.op });
+        }
+    }
+    function _assistantSettle(requestId, ev) {
+        var who = _assistantWaiting[requestId];
+        if (!who)
+            return;
+        var w = _assistantWaiting;
+        delete w[requestId];
+        _assistantWaiting = w;
+        ev.requestId = requestId;
+        _assistantEvent(_assistantPage(who.appId, who.uid), ev);
+    }
+    Connections {
+        target: source.localModels
+        ignoreUnknownSignals: true
+        function onReady(requestId, baseUrl) { source._assistantSettle(requestId, { baseUrl: baseUrl }); }
+        function onFailed(requestId, error) { source._assistantSettle(requestId, { error: error }); }
+        // Every page's subscribers (Settings' download progress), at most twice a second.
+        function onChanged() { if (!assistantChangedTimer.running) assistantChangedTimer.start(); }
+    }
+    Timer {
+        id: assistantChangedTimer
+        interval: 500
+        onTriggered: {
+            var pages = source._webPages();
+            for (var i = 0; i < pages.length; ++i)
+                source._assistantEvent(pages[i], { changed: true });
         }
     }
 

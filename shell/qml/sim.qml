@@ -80,6 +80,9 @@ Item {
             virtualKeyboard: true
             dictationCommand: typeof simTranscriberCommand !== "undefined" ? simTranscriberCommand : []
             dictationInputFiles: typeof simMicrophoneFiles !== "undefined" ? simMicrophoneFiles : []
+            localModelsDir: typeof simModelsDir !== "undefined" ? simModelsDir : ""
+            llamaServerCommand: typeof simLlamaServer !== "undefined" ? simLlamaServer : []
+            speechCommand: typeof simSpeechCommand !== "undefined" ? simSpeechCommand : []
             bootSound: typeof simBootSounds !== "undefined" && simBootSounds
             bootAnimation: typeof simBootAnimation !== "undefined" && simBootAnimation
             bootUpdating: typeof simUpdating !== "undefined" && simUpdating

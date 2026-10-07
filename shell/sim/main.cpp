@@ -28,6 +28,7 @@
 
 #include <QCommandLineParser>
 #include <QDir>
+#include <QProcess>
 #include <QFile>
 #include <QFileInfo>
 #include <QFontDatabase>
@@ -161,6 +162,8 @@ int main(int argc, char *argv[])
     QCommandLineOption stayAwakeOpt(QStringLiteral("stay-awake"), QStringLiteral("The screen never dims or turns off by itself (always so with --screenshot)."));
     QCommandLineOption quietOpt(QStringLiteral("quiet"), QStringLiteral("No boot and shutdown sounds (they are off anyway with --screenshot and the offscreen platform)."));
     QCommandLineOption noHostShellOpt(QStringLiteral("no-host-shell"), QStringLiteral("Do not give the Terminal app a real shell on this computer (it gets the runtime's simulated shell)."));
+    QCommandLineOption llamaServerOpt(QStringLiteral("llama-server"), QStringLiteral("llama.cpp's llama-server program for the Assistant's on-device model (default: llama-server on the PATH)."), QStringLiteral("path"));
+    QCommandLineOption speechCommandOpt(QStringLiteral("speech-command"), QStringLiteral("The program (and arguments, %l for the language) that speaks the Assistant's answers, given the text on its input (default: espeak-ng, or say on a Mac)."), QStringLiteral("command"));
     QCommandLineOption microphoneFileOpt(QStringLiteral("microphone-file"), QStringLiteral("Play this WAV file as the microphone when dictation or Voice Dial listens, followed by quiet; for computers without one and for tests. Repeat it for the following recordings (the last one plays again after that)."), QStringLiteral("file"));
     QCommandLineOption hostShellOpt(QStringLiteral("host-shell"), QStringLiteral("Run this program in the Terminal instead of the shell it asks for."), QStringLiteral("path"));
     QCommandLineOption policyOpt(QStringLiteral("security-policy"), QStringLiteral("A device security policy, as an Exchange account sets one (EAS): comma-separated minLength=N, maxRetries=N (the last wrong try erases the device), alphaNumeric (a password, letters and digits), noSimple (no runs like 1234 or 1111), inactivity=SECONDS (the longest Lock after); \"none\" removes it. It is kept until removed or the device is erased."), QStringLiteral("spec"));
@@ -176,7 +179,8 @@ int main(int argc, char *argv[])
     updatingOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     eraseOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     parser.addOptions({ hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
-                        noHostShellOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, updatingOpt, eraseOpt, microphoneFileOpt });
+                        noHostShellOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, updatingOpt, eraseOpt, microphoneFileOpt,
+                        llamaServerOpt, speechCommandOpt });
     parser.process(app);
 
     // A Full Erase or a security policy's wipe restarted the simulator:
@@ -293,9 +297,9 @@ int main(int argc, char *argv[])
     if (!parser.isSet(noHostShellOpt)) {
         simPty = new SimPty(&app);
         simPty->setShellOverride(parser.value(hostShellOpt));
-        rootfs.setHostInfo(QByteArrayLiteral("{\"pty\":\"host\",\"dictation\":true}"));
+        rootfs.setHostInfo(QByteArrayLiteral("{\"pty\":\"host\",\"dictation\":true,\"assistant\":true}"));
     } else {
-        rootfs.setHostInfo(QByteArrayLiteral("{\"dictation\":true}"));
+        rootfs.setHostInfo(QByteArrayLiteral("{\"dictation\":true,\"assistant\":true}"));
     }
 
     QQuickView view;
@@ -346,6 +350,15 @@ int main(int argc, char *argv[])
     for (const QString &f : parser.values(microphoneFileOpt))
         microphoneFiles << QFileInfo(f).absoluteFilePath();
     view.rootContext()->setContextProperty(QStringLiteral("simMicrophoneFiles"), microphoneFiles);
+    // The Assistant's on-device models (downloaded into the simulator's data)
+    // and its speech: the shell runs them, as "assistant" host messages ask
+    // (the runtime's block "The Phoenix Assistant").
+    view.rootContext()->setContextProperty(QStringLiteral("simModelsDir"),
+        QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath(QStringLiteral("models")));
+    view.rootContext()->setContextProperty(QStringLiteral("simLlamaServer"),
+        parser.isSet(llamaServerOpt) ? QStringList{ parser.value(llamaServerOpt) } : QStringList());
+    view.rootContext()->setContextProperty(QStringLiteral("simSpeechCommand"),
+        parser.isSet(speechCommandOpt) ? QProcess::splitCommand(parser.value(speechCommandOpt)) : QStringList());
     view.rootContext()->setContextProperty(QStringLiteral("simSettings"), &settings);
     view.rootContext()->setContextProperty(QStringLiteral("simPty"), simPty);
     view.rootContext()->setContextProperty(QStringLiteral("simInstaller"), rootfs.isValid() ? &installer : nullptr);

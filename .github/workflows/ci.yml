@@ -144,6 +144,9 @@ jobs:
       - name: The keyboard's dictation (recording format, transcriber replies)
         run: build/dictation-test
 
+      - name: The Assistant's on-device model runner and speech
+        run: build/localmodels-test
+
       - name: Trademark overlays up to date
         run: python3 tools/debrand-overlays.py --check
 
@@ -223,6 +226,8 @@ jobs:
           t node tools/test-authenticator.cjs --tablet --out app-tests/authenticator-tablet
           t node tools/test-clipboard.cjs --out app-tests/clipboard-phone
           t node tools/test-clipboard.cjs --tablet --out app-tests/clipboard-tablet
+          t node tools/test-assistant.cjs --out app-tests/assistant-phone
+          t node tools/test-assistant.cjs --tablet --out app-tests/assistant-tablet
           t node tools/test-terminal.cjs --out app-tests/terminal-phone
           t node tools/test-terminal.cjs --tablet --out app-tests/terminal-tablet
           t node tools/test-videos.cjs --out app-tests/videos-phone
@@ -339,6 +344,7 @@ jobs:
           build/pty/pty-test
           build/siminstaller-test
           build/dictation-test
+          build/localmodels-test
 
       - name: The simulator starts (phone and tablet)
         run: |

@@ -397,6 +397,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-passwords.cjs` | Passwords (KeePass) |
 | `node tools/test-authenticator.cjs` | Authenticator (TOTP/HOTP) |
 | `node tools/test-clipboard.cjs` | Clipboard history: the Clipboard app and Settings > Clipboard |
+| `node tools/test-assistant.cjs` | The Phoenix Assistant: the app's commands, read-backs and choices, Settings > Assistant with a stand-in cloud provider, the permission gate, conversations |
 | `node tools/test-terminal.cjs` | Terminal (simulated shell, then /bin/sh for real) |
 | `build/pty/pty-test` | The Terminal's PTY service |
 | `build/devices/devices-test` | phoenix-devices: the display, keys, vibrator and light sensor services; the hardware found by looking, devices appearing and going, `--probe` |

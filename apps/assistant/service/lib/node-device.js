@@ -226,7 +226,13 @@ function llamaServer(options) {
             var part = fileFor(m) + ".part";
             download = { id: m.id, received: 0, total: m.size, req: null };
             var d = download;
-            fetchTo(m.url, part, function (got, total) { d.received = got; if (total) d.total = total; }).then(function (sha) {
+            var told = 0;
+            fetchTo(m.url, part, function (got, total) {
+                d.received = got;
+                if (total) d.total = total;
+                // Subscribers (Settings) see the progress, once a second.
+                if (options.onChange && Date.now() - told > 1000) { told = Date.now(); options.onChange(); }
+            }).then(function (sha) {
                 if (download !== d) return;
                 download = null;
                 if (m.sha256 && sha !== m.sha256) { fs.unlinkSync(part); lastError = m.name + ": the download is damaged (SHA-256)"; return; }

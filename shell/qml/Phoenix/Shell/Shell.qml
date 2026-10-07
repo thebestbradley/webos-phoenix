@@ -1719,6 +1719,26 @@ FocusScope {
         value: shell.dictation
         when: !!shell.source && ("dictation" in shell.source)
     }
+    // The Assistant's on-device models: where they are downloaded ("" for
+    // none: no downloads), llama-server ([] for the one on the PATH), and
+    // the program that speaks its answers ([] for espeak-ng or say).
+    property string localModelsDir: ""
+    property var llamaServerCommand: []
+    property var speechCommand: []
+    readonly property alias localModels: localModelsEngine
+    readonly property alias speech: speechEngine
+    Binding {
+        target: shell.source
+        property: "localModels"
+        value: shell.localModelsDir !== "" ? localModelsEngine : null
+        when: !!shell.source && ("localModels" in shell.source)
+    }
+    Binding {
+        target: shell.source
+        property: "speech"
+        value: speechEngine
+        when: !!shell.source && ("speech" in shell.source)
+    }
     // IMEController::isIMEOpened (or the platform's keyboard is up). With
     // it the tablet's bezel flick must travel further.
     readonly property bool keyboardOpen: _imeOpened || platformKeyboardHeight > 0
@@ -2746,6 +2766,19 @@ FocusScope {
                 id: dictationEngine
                 command: shell.dictationCommand
                 inputFiles: shell.dictationInputFiles
+            }
+            // The Assistant's on-device model (llama.cpp's llama-server) and
+            // speech (docs/M6-PLAN.md F3), lent to the runtime's
+            // org.webosphoenix.assistant and org.webosphoenix.tts through
+            // the window source ("assistant" host messages).
+            LocalModels {
+                id: localModelsEngine
+                modelsDir: shell.localModelsDir
+                serverCommand: shell.llamaServerCommand
+            }
+            Speech {
+                id: speechEngine
+                command: shell.speechCommand
             }
             VirtualKeyboard {
                 id: ime
