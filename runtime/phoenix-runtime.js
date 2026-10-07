@@ -5423,17 +5423,29 @@
         // the shell sends only what changed, missing keys are left alone.
         // Answers with one "systemStatus" message carrying the result (which
         // may differ: e.g. airplane mode also turns the radios off).
-        runtime.applyHostStatus = function (st) {
+        // The shell sends each change to every page, but only one page, the
+        // writer (opts.writer; the system UI page in phoenix-sim), stores it
+        // in settings:state, and only when it changes something there. The
+        // state is one object that each page reads from its own process's
+        // copy of localStorage and writes back whole: when every page wrote
+        // it back on every push (the keyboard going down as a dialog
+        // closed), an older copy could land after a setting the user had
+        // just saved and undo it (a new PIN lost on the next start).
+        // Without opts (a page on its own, the browser tests) it writes.
+        runtime.applyHostStatus = function (st, opts) {
             if (!st) return;
-            var s = load();
-            if ("airplaneMode" in st) setOffline(s, !!st.airplaneMode);
-            if ("wifiEnabled" in st && !!st.wifiEnabled !== !!s.wifi.enabled) setWifi(s, !!st.wifiEnabled);
-            if ("bluetoothOn" in st) s.bluetooth.powered = !!st.bluetoothOn;
-            if ("brightness" in st) s.settings.picture.backlight = Math.round(st.brightness);
-            if ("muted" in st) s.audio.muted = !!st.muted;
-            // The system menu's volume slider: the master volume.
-            if ("volume" in st) s.audio.volume = Math.max(0, Math.min(100, Math.round(st.volume)));
-            vpnFromShell(s, st);
+            var writer = !opts || opts.writer !== false;
+            var s = writer ? load() : null, before = writer ? toJson(s) : "";
+            if (writer) {
+                if ("airplaneMode" in st) setOffline(s, !!st.airplaneMode);
+                if ("wifiEnabled" in st && !!st.wifiEnabled !== !!s.wifi.enabled) setWifi(s, !!st.wifiEnabled);
+                if ("bluetoothOn" in st) s.bluetooth.powered = !!st.bluetoothOn;
+                if ("brightness" in st) s.settings.picture.backlight = Math.round(st.brightness);
+                if ("muted" in st) s.audio.muted = !!st.muted;
+                // The system menu's volume slider: the master volume.
+                if ("volume" in st) s.audio.volume = Math.max(0, Math.min(100, Math.round(st.volume)));
+                vpnFromShell(s, st);
+            }
             // The shell's lock screen (com.palm.systemmanager getLockStatus).
             if ("deviceLocked" in st && !!st.deviceLocked !== !!store.get("deviceLocked", false)) {
                 store.set("deviceLocked", !!st.deviceLocked);
@@ -5464,6 +5476,10 @@
                 store.set("imeVisible", !!st.ime.visible);
                 changed();
             }
+            if (!writer) {
+                changed();
+                return;
+            }
             suppressHost = true;
             try {
                 // The keyboard's language key chose another keyboard.
@@ -5472,7 +5488,8 @@
                                            function () {}, { cancelled: function () { return false; } });
                 if ("rotationLocked" in st && !!st.rotationLocked !== !!prefs().rotationLock)
                     sys["/setPreferences"]({ rotationLock: !!st.rotationLocked }, function () {}, { cancelled: function () { return false; } });
-                save(s);
+                if (toJson(s) !== before) save(s);
+                else changed();
             } finally {
                 suppressHost = false;
             }
@@ -6101,9 +6118,30 @@
 
         // ---- Demo data (simulator only; fictional people, 555 numbers) ---------------
 
-        var SEED_VERSION = 1;
+        // Version 2: the conversations have fixed ids. Version 1 filed them
+        // with new ids, and on a new profile each page that started at once
+        // seeded them again (six copies of each); those copies go.
+        var SEED_VERSION = 2;
+        var DEMO_TEXTS = ["Did you see the Pre 3 is back?", "Running Phoenix on it right now", "Cards! I missed cards.",
+                          "Landing at 6. Dinner?", "Yes! The usual place", "Can you send me the build notes?",
+                          "Sure, give me a minute", "Thanks, got them. The new dial pad looks great"];
+        // Version 1's demo threads: every message in them one of its texts
+        // (one the user wrote keeps the thread). Not the fixed-id ones.
+        function dropVersion1DemoThreads() {
+            var threads = dbCall("/find", { query: { from: "com.palm.chatthread:1" } }).results || [];
+            threads.forEach(function (t) {
+                if (String(t._id).indexOf("phoenix-demo-") === 0) return;
+                var msgs = (dbCall("/find", { query: { from: "com.palm.smsmessage:1" } }).results || []).filter(function (m) {
+                    return (m.conversations || []).indexOf(t._id) >= 0;
+                });
+                if (!msgs.length || msgs.some(function (m) { return DEMO_TEXTS.indexOf(m.messageText) < 0; })) return;
+                dbCall("/del", { ids: msgs.map(function (m) { return m._id; }).concat([t._id]) });
+            });
+        }
         runtime.seedPhoneDemoData = function (force) {
-            if (!force && store.get("telephony:seeded", 0) === SEED_VERSION) return false;
+            var seeded = store.get("telephony:seeded", 0);
+            if (!force && seeded === SEED_VERSION) return false;
+            if (seeded === 1) dropVersion1DemoThreads();
             // The people come from the sample contacts; a forced reseed restores them too.
             if (force && runtime.loadSampleData) runtime.loadSampleData(true);
             [["com.palm.person:1", []], ["com.palm.message:1", []], ["com.palm.smsmessage:1", ["com.palm.message:1"]],
@@ -6156,16 +6194,34 @@
                 var p = people[conv[0]];
                 if (!p || !p.phoneNumbers || !p.phoneNumbers.length) return;
                 var number = p.phoneNumbers[0].value;
-                conv[1].forEach(function (m, i) {
+                // Fixed ids, as the calls above have: every page loads this
+                // runtime, and on a new profile several start at once, each
+                // finding the store not yet seeded (localStorage is shared
+                // but the pages run in their own processes). Seeding again
+                // then writes the same thread and messages, not more.
+                var threadId = "phoenix-demo-thread-" + (conv[0] + 1);
+                var msgs = conv[1].map(function (m, i) {
                     var t = now - m[0] * min;
                     var last = i === conv[1].length - 1;
-                    assign(m[1] ? { _kind: "com.palm.smsmessage:1", folder: "inbox", status: "successful", serviceName: "sms",
-                                    messageText: m[2], localTimestamp: t, timestamp: t, from: { addr: number },
-                                    flags: { read: !(last && conv[0] === 1), visible: true } }
-                                : { _kind: "com.palm.smsmessage:1", folder: "outbox", status: "successful", serviceName: "sms",
-                                    messageText: m[2], localTimestamp: t, timestamp: t, to: [{ addr: number, name: personName(p) }],
-                                    flags: { read: true, visible: true } });
+                    var o = m[1] ? { _kind: "com.palm.smsmessage:1", folder: "inbox", status: "successful", serviceName: "sms",
+                                     messageText: m[2], localTimestamp: t, timestamp: t, from: { addr: number },
+                                     flags: { read: !(last && conv[0] === 1), visible: true } }
+                                 : { _kind: "com.palm.smsmessage:1", folder: "outbox", status: "successful", serviceName: "sms",
+                                     messageText: m[2], localTimestamp: t, timestamp: t, to: [{ addr: number, name: personName(p) }],
+                                     flags: { read: true, visible: true } };
+                    o._id = threadId + "-msg-" + (i + 1);
+                    o.conversations = [threadId];
+                    return o;
                 });
+                var last = msgs[msgs.length - 1];
+                // The thread as assign() files one (its fields), whole.
+                dbCall("/put", { objects: [{
+                    _id: threadId, _kind: "com.palm.chatthread:1", displayName: personName(p), personId: p._id,
+                    normalizedAddress: digits(number), replyAddress: number, replyService: "sms",
+                    summary: summaryOf(last), timestamp: last.localTimestamp, flags: { visible: true },
+                    unreadCount: msgs.filter(function (o) { return o.folder === "inbox" && !o.flags.read; }).length
+                }] });
+                dbCall("/put", { objects: msgs });
             });
             store.set("telephony:seeded", SEED_VERSION);
             return true;
@@ -9833,7 +9889,7 @@
 
         var pending = {}, lastAppsVersion = -1;
         var baseApply = runtime.applyHostStatus;
-        runtime.applyHostStatus = function (st) {
+        runtime.applyHostStatus = function (st, opts) {
             if (st && st.installerResult && pending[st.installerResult.requestId]) {
                 var cb = pending[st.installerResult.requestId];
                 delete pending[st.installerResult.requestId];
@@ -9849,7 +9905,7 @@
                 installs = st.installs;
                 installWatchers = installWatchers.filter(function (w) { return w() !== false; });
             }
-            baseApply(st);
+            baseApply(st, opts);
         };
         // One request to the host, answered with {ok, error, ...}: install
         // and remove (an app's files), and the application manager's work
@@ -12365,7 +12421,7 @@
             watch(p, reply, ctx, function () { return ok({ finished: true, firstUse: !!store.get("shell:firstUse", false) }); });
         };
         var baseApply = runtime.applyHostStatus;
-        runtime.applyHostStatus = function (st) {
+        runtime.applyHostStatus = function (st, opts) {
             // The launcher's layout, as the shell keeps it: what
             // com.palm.sysMgrDataBackup backs up (see "Backup").
             if (st && typeof st.launcherLayout === "string")
@@ -12379,7 +12435,7 @@
                 store.set("shell:debugOverlays", st.debugOverlays);
                 changed();
             }
-            baseApply(st);
+            baseApply(st, opts);
         };
 
         // ---- Debugging overlays, progress animations, turbo mode ------------------------

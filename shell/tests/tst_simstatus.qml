@@ -107,7 +107,7 @@ Item {
             var page = fakePage.createObject(root);
             windows._pageLoaded(page);
             compare(page.scripts.length, 1);
-            verify(page.scripts[0].indexOf("applyHostStatus({\"wifiEnabled\":false,\"muted\":true})") > 0);
+            verify(page.scripts[0].indexOf("applyHostStatus({\"wifiEnabled\":false,\"muted\":true}, {\"writer\":true})") > 0);
             compare(windows._pendingStatus, null);
             // A report from a page means they are in step again.
             windows.pushSystemStatus({ bluetoothOn: true });
@@ -125,6 +125,27 @@ Item {
             compare(windows._pendingStatus, null);
             delete windows._headless["test.app"];
             page.destroy();
+        }
+
+        // Every page hears each change, but only the system UI page stores it
+        // (applyHostStatus's writer): pages writing their copies of the shared
+        // state over one another could undo a setting just changed.
+        function test_onlyOnePageStoresAChange() {
+            var ui = fakePage.createObject(root), app = fakePage.createObject(root);
+            windows._headless["test.app"] = app;
+            windows._headless["com.palm.systemui"] = ui;
+            var oldUi = windows._systemUiPage;
+            windows._systemUiPage = ui;
+            windows.pushSystemStatus({ brightness: 40 });
+            compare(ui.scripts.length, 1);
+            compare(app.scripts.length, 1);
+            verify(ui.scripts[0].indexOf("{\"writer\":true}") > 0, ui.scripts[0]);
+            verify(app.scripts[0].indexOf("{\"writer\":false}") > 0, app.scripts[0]);
+            windows._systemUiPage = oldUi;
+            delete windows._headless["test.app"];
+            delete windows._headless["com.palm.systemui"];
+            ui.destroy();
+            app.destroy();
         }
 
         function test_launchParamsPickTheLaunchPoint() {

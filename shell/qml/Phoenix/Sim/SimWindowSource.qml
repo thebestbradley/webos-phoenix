@@ -1547,9 +1547,18 @@ Item {
     // page that loads (pages share their state through the runtime's store).
     property var _pendingStatus: null
 
-    function _statusScript(changes) {
+    // writer: whether this page stores the change (runtime applyHostStatus):
+    // one page does, so pages do not write their copies of the shared state
+    // over one another (or over a setting the user just changed).
+    function _statusScript(changes, writer) {
         return "window.__phoenixRuntime && __phoenixRuntime.applyHostStatus && __phoenixRuntime.applyHostStatus("
-               + JSON.stringify(changes) + ")";
+               + JSON.stringify(changes) + ", " + JSON.stringify({ writer: writer !== false }) + ")";
+    }
+    // The page that stores the shell's changes: the system UI page, which
+    // runs as long as the shell does, else the first page.
+    function _writerPage() {
+        var pages = _webPages();
+        return _systemUiPage && pages.indexOf(_systemUiPage) >= 0 ? _systemUiPage : (pages[0] || null);
     }
 
     // ---- Luna calls from the shell ---------------------------------------------
@@ -1604,9 +1613,9 @@ Item {
             _pendingStatus = p;
             return;
         }
-        var js = _statusScript(changes);
+        var writer = _writerPage();
         for (var i = 0; i < pages.length; ++i)
-            pages[i].runScript(js);
+            pages[i].runScript(_statusScript(changes, pages[i] === writer));
     }
 
     // A screen capture for the runtime to save (runtime.saveScreenshot:
@@ -1630,12 +1639,16 @@ Item {
             systemUiLoaded = true;
         while (_pendingCaptures.length > 0)
             win.runScript(_pendingCaptures.shift());
+        var writer = _writerPage();
+        var writes = !writer || win === writer;
         if (_pendingStatus) {
-            win.runScript(_statusScript(_pendingStatus));
-            _pendingStatus = null;
+            // Kept until the page that stores it has it.
+            win.runScript(_statusScript(_pendingStatus, writes));
+            if (writes)
+                _pendingStatus = null;
         }
         if (Object.keys(_shellStatus).length > 0)
-            win.runScript(_statusScript(_shellStatus));
+            win.runScript(_statusScript(_shellStatus, writes));
         if (Object.keys(_deviceState).length > 0)
             win.runScript("window.__phoenixRuntime && __phoenixRuntime.devices && __phoenixRuntime.devices.hostEvent("
                           + JSON.stringify(_deviceState) + ")");
