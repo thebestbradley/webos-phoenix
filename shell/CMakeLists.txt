@@ -61,7 +61,8 @@ if(PHOENIX_BUILD_SIM)
         # Network: the pages' HTTP proxy (RootfsSchemeHandler, /__phoenix/proxy).
         find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Network)
         target_link_libraries(phoenix-sim PRIVATE Qt6::WebEngineQuick Qt6::Network)
-        target_sources(phoenix-sim PRIVATE sim/simbrowser.cpp sim/simbrowser.h sim/contentfilter.h)
+        target_sources(phoenix-sim PRIVATE sim/simbrowser.cpp sim/simbrowser.h sim/contentfilter.h
+                                           sim/simdropshare.cpp sim/simdropshare.h)
         target_compile_definitions(phoenix-sim PRIVATE PHOENIX_HAVE_WEBENGINE)
         message(STATUS "phoenix-sim: web apps enabled (Qt WebEngine found)")
     else()
@@ -83,8 +84,8 @@ if(PHOENIX_BUILD_SIM)
     target_compile_definitions(siminstaller-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
     # The browser's content blocker and user agents, and DropShare's server
     # (CI: build/simnet-test).
-    add_executable(simnet-test sim/simnet_test.cpp sim/contentfilter.h)
-    target_link_libraries(simnet-test PRIVATE Qt6::Core)
+    add_executable(simnet-test sim/simnet_test.cpp sim/contentfilter.h sim/simdropshare.cpp sim/simdropshare.h)
+    target_link_libraries(simnet-test PRIVATE Qt6::Core Qt6::Network)
     target_compile_definitions(simnet-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
     target_compile_definitions(phoenix-sim PRIVATE
         PHOENIX_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"

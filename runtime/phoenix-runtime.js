@@ -1265,6 +1265,9 @@
         // Settings > Wi-Fi > Proxy (Phoenix): {type: "none" | "http" |
         // "socks", host, port}, the system's proxy for every page.
         networkProxy: { type: "none", host: "", port: 0 },
+        // DropShare (Phoenix): files to and from other devices on the
+        // network, off until the user allows it (Settings > DropShare).
+        dropShareEnabled: false,
         firstUse: false
     };
 
@@ -1897,9 +1900,16 @@
           suggestURL: "https://en.wikipedia.org/w/api.php?action=opensearch&search=#{searchTerms}&limit=8&namespace=0&format=json" },
         { id: "amazon", displayName: "Amazon", url: "https://www.amazon.com/s/?k=#{searchTerms}", enabled: false },
         { id: "imdb", displayName: "IMDb", url: "https://www.imdb.com/find?q=#{searchTerms}", enabled: false },
-        { id: "cnn", displayName: "CNN", url: "https://www.cnn.com/search?q=#{searchTerms}", enabled: false },
-        // Phoenix adds the engines the community asked for (docs/M6-PLAN.md
-        // F4 item 7): the default engine of Just Type and the browser alike.
+        { id: "cnn", displayName: "CNN", url: "https://www.cnn.com/search?q=#{searchTerms}", enabled: false }
+    ];
+    // Phoenix's engines beyond the original's list (docs/M6-PLAN.md F4 item
+    // 7): the "optional" engines (luna-universalsearchmgr's
+    // OptionalSearchList, the engines beyond UniversalSearchList.json), so
+    // the shipped list Just Type shows stays as it was. Any of them, or the
+    // user's custom engine, can be the default engine, which the browser
+    // and Just Type share; the default then joins the end of Just Type's
+    // list, which shows only engines from it.
+    var US_OPTIONAL = [
         { id: "duckduckgo", displayName: "DuckDuckGo", url: "https://duckduckgo.com/?q=#{searchTerms}",
           suggestURL: "https://duckduckgo.com/ac/?q=#{searchTerms}&type=list", icon: "web" },
         { id: "bing", displayName: "Bing", url: "https://www.bing.com/search?q=#{searchTerms}",
@@ -1953,18 +1963,29 @@
         var c = usState().custom;
         return c && c.url ? { id: "custom", displayName: c.displayName || "Custom", url: c.url, icon: "web" } : null;
     }
-    function usEngines() {
-        var all = US_ENGINES.slice(), custom = usCustom();
+    function usEngine(e) {
+        var x = { category: "search", type: "web", iconFilePath: US_ICONS + "search-icon-" + e.id + ".png" }, k;
+        for (k in e) x[k] = e[k];
+        // Engines whose own art Phoenix does not ship: a magnifier.
+        if (e.icon === "web") x.iconFilePath = US_WEB_ICON;
+        delete x.icon;
+        return x;
+    }
+    function usOptional() {
+        var all = US_OPTIONAL.slice(), custom = usCustom();
         if (custom) all.push(custom);
-        return usOrdered("search", all.map(function (e) {
-            var x = { category: "search", type: "web", iconFilePath: US_ICONS + "search-icon-" + e.id + ".png" }, k;
-            for (k in e) x[k] = e[k];
-            // Engines whose own art Phoenix does not ship: a magnifier.
-            if (e.icon === "web") x.iconFilePath = US_WEB_ICON;
-            delete x.icon;
+        return all.map(function (e) { var x = usEngine(e); x.enabled = true; return x; });
+    }
+    function usEngines() {
+        var list = usOrdered("search", US_ENGINES.map(function (e) {
+            var x = usEngine(e);
             x.enabled = usEnabled("search:" + e.id, e.enabled);
             return x;
         }));
+        var def = usPrefs().defaultSearchEngine;
+        if (!list.some(function (x) { return x.id === def; }))
+            usOptional().forEach(function (x) { if (x.id === def) list.push(x); });
+        return list;
     }
     // The items of a category in the user's order (reorderSearchItem); new
     // ones keep their place after those.
@@ -1977,12 +1998,15 @@
         }).map(function (e) { return e.x; });
     }
     function usItems(category) {
-        return category === "search" ? usEngines() : category === "action" ? usProviders("action")
+        return category === "search" ? usEngines().concat(usOptional().filter(function (o) {
+            return !US_ENGINES.some(function (e) { return e.id === o.id; }) && o.id !== usPrefs().defaultSearchEngine;
+        })) : category === "action" ? usProviders("action")
              : category === "dbsearch" ? usProviders("dbsearch") : null;
     }
     function usList() {
         return ok({
             UniversalSearchList: usEngines(),
+            OptionalSearchList: usOptional(),
             ActionList: usProviders("action"),
             DBSearchItemList: usProviders("dbsearch"),
             defaultSearchEngine: usPrefs().defaultSearchEngine
@@ -11651,6 +11675,285 @@
                 if (!p.name) return reply(fail(-1, "name is required"));
                 if (p.data === undefined && !p.from) return reply(fail(-1, "from (a path) or data (base64) is required"));
                 save(p).then(function (r) { reply(ok(r)); }, function (e) { reply(fail(-1, String(e && e.message || e))); });
+            }
+        });
+    })();
+
+    // ================================================================================
+    // DropShare (org.webosphoenix.dropshare; apps/dropshare)
+    // ================================================================================
+    //
+    // docs/M6-PLAN.md F4 item 8, docs/APP-RUNTIME.md "DropShare": Phoenix's
+    // own take on the webOS Archive's LuneDrop, as an extension of Touch to
+    // Share. The device serves a page on the local network, with a one-time
+    // token in its address, which any phone or computer opens (the QR code
+    // the DropShare app shows); there they upload files to the device, or
+    // download the ones it offers. phoenix-sim runs the server
+    // (shell/sim/simdropshare.h) and this block drives it through
+    // /__phoenix/dropshare; a device runs it as a service. Off until the
+    // user allows it (system preference dropShareEnabled; Settings >
+    // DropShare).
+    //
+    //   receive {subscribe}  -> {url, state, files: [{name, size, received,
+    //       done, saved (the path in Downloads)}]} as it changes: files
+    //       uploaded land in /media/internal/Downloads (a second of a name
+    //       is numbered), with an ongoing activity while they come and a
+    //       notification once in (a tap opens Files at Downloads).
+    //   send {files: [{path, mimeType?}], subscribe} -> {url, state, files:
+    //       [{name, size, downloads}]}: the other device downloads them.
+    //   stop {}  ends the session; so does the subscriber going away.
+    //   states: waiting, transferring, done, timeout (ten minutes without a
+    //   request), stopped, failed.
+    (function dropShare() {
+        var SERVICE = "org.webosphoenix.dropshare", APP = "org.webosphoenix.dropshare";
+        var DOWNLOADS = "/media/internal/Downloads";
+        var session = null;     // {mode, url, reply, ctx, timer, saved: {id: path}, taking: {}, files}
+
+        function nativeCall(req) {
+            try {
+                var x = new XMLHttpRequest();
+                x.open("GET", "/__phoenix/dropshare?req=" + encodeURIComponent(toJson(req)), false);
+                x.send();
+                var r = JSON.parse(x.responseText || "null");
+                return r && typeof r === "object" ? r : null;
+            } catch (e) {
+                return null;
+            }
+        }
+        function callP(url, params) {
+            return new Promise(function (resolve) {
+                dispatch(url, params || {}, resolve, { cancelled: function () { return false; }, onCancel: null });
+            });
+        }
+        function enabled() {
+            var r = callNow("luna://com.webos.service.systemservice/getPreferences", { keys: ["dropShareEnabled"] });
+            return !!(r && r.dropShareEnabled);
+        }
+        function sizeOf(n) {
+            if (n < 1024) return n + " B";
+            if (n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+            return (n / (1024 * 1024)).toFixed(1) + " MB";
+        }
+        // A free name in Downloads: "photo (2).jpg" after "photo.jpg".
+        function freePath(name) {
+            var dot = name.lastIndexOf("."), base = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : "";
+            var tryN = function (n) {
+                var path = DOWNLOADS + "/" + (n === 1 ? name : base + " (" + n + ")" + ext);
+                return callP("luna://org.webosphoenix.filemanager/stat", { path: path }).then(function (r) {
+                    return r.returnValue === false ? path : tryN(n + 1);
+                });
+            };
+            return tryN(1);
+        }
+        function readBytes(id) {
+            return new Promise(function (resolve, reject) {
+                var x = new XMLHttpRequest();
+                x.open("GET", "/__phoenix/dropshare/file?id=" + id, true);
+                x.responseType = "blob";
+                x.onload = function () { resolve(x.response); };
+                x.onerror = function () { reject(new Error("The file could not be read")); };
+                x.send();
+            });
+        }
+        // A file uploaded: into Downloads, where Files (and Photos, for a
+        // picture) find it.
+        function take(s, f) {
+            s.taking[f.id] = true;
+            readBytes(f.id).then(function (blob) {
+                if (!runtime.mediaFiles) throw new Error("No media store");
+                return freePath(f.name).then(function (path) {
+                    var typed = blob.type || !f.type ? blob : blob.slice(0, blob.size, f.type);
+                    return runtime.mediaFiles.write(path, typed).then(function () { return path; });
+                });
+            }).then(function (path) {
+                s.saved[f.id] = path;
+                nativeCall({ op: "take", id: f.id });
+                return callP("luna://com.webos.service.mediaindexer/requestMediaScan", { path: DOWNLOADS });
+            }, function (e) {
+                console.warn("[phoenix-runtime] DropShare: " + (e && e.message || e));
+                s.failed = (s.failed || 0) + 1;
+            }).then(function () { delete s.taking[f.id]; report(s); });
+        }
+        function view(s, st) {
+            var files = (st.files || s.files || []).map(function (f) {
+                return { id: f.id, name: f.name, type: f.type, size: f.size, received: f.received, done: !!f.done,
+                         downloads: f.downloads || 0, saved: s.saved[f.id] || "" };
+            });
+            if (s.mode === "send" && !files.length) files = s.lastFiles || [];
+            else s.lastFiles = files;
+            // Done sending means every file went (the server forgets them then).
+            if (s.mode === "send" && st.state === "done")
+                files = files.map(function (f) { var x = {}, k; for (k in f) x[k] = f[k]; x.downloads = Math.max(1, f.downloads); return x; });
+            return ok({ mode: s.mode, url: s.ended ? "" : s.url, state: st.state || "stopped", files: files });
+        }
+        function report(s) {
+            var st = s.last || {};
+            var v = view(s, st);
+            if (s.reply && !(s.ctx && s.ctx.cancelled())) s.reply(v);
+            ongoing(s, v);
+        }
+        function ongoing(s, v) {
+            if (s.mode !== "receive") return;
+            var coming = v.files.filter(function (f) { return !f.saved; });
+            if (v.state === "transferring" && coming.length) {
+                var f = coming[0];
+                host.postToHost("ongoing", { id: "dropshare", appId: APP, title: "DropShare",
+                    body: "Receiving " + f.name + (f.size ? " (" + sizeOf(f.received || 0) + " of " + sizeOf(f.size) + ")" : ""),
+                    icon: "", params: null, progress: f.size ? Math.min(100, Math.floor((f.received || 0) * 100 / f.size)) : -1 });
+                s.showing = true;
+            } else if (s.showing) {
+                host.postToHost("ongoing", { id: "dropshare", clear: true });
+                s.showing = false;
+            }
+            // All in: one notification, a tap opens Files at Downloads.
+            var saved = v.files.filter(function (x) { return x.saved; });
+            if (!coming.length && saved.length > (s.notified || 0) && (v.state === "done" || v.state === "timeout" || v.state === "stopped" || v.state === "waiting")) {
+                var n = saved.length - (s.notified || 0);
+                s.notified = saved.length;
+                host.postToHost("notification", { appId: "org.webosphoenix.files", title: "DropShare",
+                    body: n === 1 ? saved[saved.length - 1].name + " is in Downloads" : n + " files are in Downloads",
+                    params: { path: DOWNLOADS }, soundClass: "notifications" });
+            }
+        }
+        function poll(s) {
+            if (session !== s) return;
+            if (s.ctx && s.ctx.cancelled()) return end(s, true);
+            var st = nativeCall({ op: "status" });
+            if (!st) return;
+            s.last = st;
+            if (s.mode === "receive")
+                (st.files || []).forEach(function (f) {
+                    if (f.done && !f.taken && !s.saved[f.id] && !s.taking[f.id]) take(s, f);
+                });
+            var key = toJson(st) + toJson(s.saved);
+            if (key !== s.key) { s.key = key; report(s); }
+            var over = st.state !== "waiting" && st.state !== "transferring";
+            if (over && !Object.keys(s.taking).length && (s.mode !== "receive" || (st.files || []).every(function (f) { return !f.done || s.saved[f.id] || f.taken; }))) {
+                s.ended = true;
+                report(s);
+                session = null;
+                return;
+            }
+            s.timer = setTimeout(function () { poll(s); }, 400);
+        }
+        function end(s, quietly) {
+            if (session === s) session = null;
+            clearTimeout(s.timer);
+            nativeCall({ op: "stop" });
+            if (s.showing) host.postToHost("ongoing", { id: "dropshare", clear: true });
+            if (!quietly) { s.ended = true; s.last = { state: "stopped", files: (s.last && s.last.files) || [] }; report(s); }
+        }
+        function begin(mode, p, reply, ctx, start) {
+            if (!enabled()) return reply(fail(-1, "DropShare is off. Turn it on in Settings > DropShare."));
+            if (session) end(session, true);
+            Promise.resolve(start()).then(function (r) {
+                if (!r || r.returnValue === false)
+                    return reply(fail(-1, (r && r.errorText) || "DropShare needs the simulator or a device: this page has no server"));
+                var s = session = { mode: mode, url: r.url, reply: p.subscribe ? reply : null, ctx: ctx, saved: {}, taking: {},
+                                    files: r.files || [] };
+                s.last = { state: "waiting", files: s.files };
+                if (!p.subscribe) reply(view(s, s.last));
+                else report(s);
+                poll(s);
+            }, function (e) { reply(fail(-1, String(e && e.message || e))); });
+        }
+        // The bytes of a file to send, from wherever the system keeps it.
+        function bytesOf(path) {
+            var mf = runtime.mediaFiles;
+            return Promise.resolve(mf ? mf.read(path) : null).then(function (blob) {
+                if (blob) return blob;
+                return fetch(path).then(function (r) { if (!r.ok) throw new Error("Cannot read " + path); return r.blob(); });
+            });
+        }
+        // A file to send, handed to the server in parts (base64 in the
+        // request: the scheme handler cannot read a large request body).
+        var PART = 192 * 1024;
+        function nativeAsync(req) {
+            return new Promise(function (resolve) {
+                var x = new XMLHttpRequest();
+                x.open("GET", "/__phoenix/dropshare?req=" + encodeURIComponent(toJson(req)), true);
+                x.onload = function () { var r = null; try { r = JSON.parse(x.responseText); } catch (e) { r = null; } resolve(r); };
+                x.onerror = function () { resolve(null); };
+                x.send();
+            });
+        }
+        function base64(bytes) {
+            var s = "";
+            for (var i = 0; i < bytes.length; i += 0x8000)
+                s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            return btoa(s);
+        }
+        function offer(f) {
+            var name = String(f.path).replace(/^.*\//, "");
+            return bytesOf(f.path).then(function (blob) {
+                return new Promise(function (resolve, reject) {
+                    var r = new FileReader();
+                    r.onload = function () { resolve({ blob: blob, bytes: new Uint8Array(r.result) }); };
+                    r.onerror = function () { reject(new Error("Cannot read " + f.path)); };
+                    r.readAsArrayBuffer(blob);
+                });
+            }).then(function (b) {
+                var type = f.mimeType || b.blob.type || "";
+                return nativeAsync({ op: "offerBegin", name: name, type: type, size: b.bytes.length }).then(function (r) {
+                    if (!r || !r.returnValue) throw new Error((r && r.errorText) || "DropShare needs the simulator or a device: this page has no server");
+                    var id = r.id, at = 0;
+                    var next = function () {
+                        if (at >= b.bytes.length) return nativeAsync({ op: "offerEnd", id: id });
+                        var part = b.bytes.subarray(at, at + PART);
+                        at += part.length;
+                        return nativeAsync({ op: "offerPart", id: id, data: base64(part) }).then(function (p) {
+                            if (!p || !p.returnValue) throw new Error("The file could not be handed over");
+                            return next();
+                        });
+                    };
+                    return next().then(function (e) {
+                        if (!e || !e.returnValue) throw new Error("The file could not be handed over");
+                        return { id: id, name: name, type: type, size: b.bytes.length, downloads: 0 };
+                    });
+                });
+            });
+        }
+
+        // The page going (its card closed) ends its session: nobody shows
+        // the address any more. (Ten minutes without use end it anyway.)
+        // A synchronous request is refused while a page goes: a keepalive
+        // fetch takes the stop to the server.
+        if (global.addEventListener)
+            global.addEventListener("pagehide", function () {
+                if (!session) return;
+                var s = session;
+                session = null;
+                clearTimeout(s.timer);
+                try { global.fetch("/__phoenix/dropshare?req=" + encodeURIComponent(toJson({ op: "stop" })), { keepalive: true }); }
+                catch (e) { /* the server's ten minutes end it */ }
+            });
+
+        register([SERVICE], {
+            "/receive": function (p, reply, ctx) {
+                begin("receive", p, reply, ctx, function () { return nativeCall({ op: "start", mode: "receive" }); });
+            },
+            "/send": function (p, reply, ctx) {
+                var files = (p.files || []).filter(function (f) { return f && f.path; });
+                if (!files.length) return reply(fail(-1, "files: [{path}] is required"));
+                begin("send", p, reply, ctx, function () {
+                    // One after another, in order, then the session.
+                    var offered = [];
+                    return files.reduce(function (chain, f) {
+                        return chain.then(function () { return offer(f).then(function (o) { offered.push(o); }); });
+                    }, Promise.resolve()).then(function () {
+                        var r = nativeCall({ op: "start", mode: "send" });
+                        if (r && r.returnValue) r.files = offered;
+                        return r;
+                    });
+                });
+            },
+            "/stop": function (p, reply) {
+                if (session) end(session, false);
+                else nativeCall({ op: "stop" });
+                reply(ok());
+            },
+            "/getStatus": function (p, reply) {
+                reply(session ? view(session, session.last || {}) : ok({ state: "off", url: "", files: [] }));
             }
         });
     })();

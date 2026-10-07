@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- DropShare: a code of squares, the kind a phone's camera reads, on a
+     white card, with a blue arrow curving off it to another device.
+     Original Phoenix art. -->
+<defs>
+  <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="1" stop-color="#dfe3e8"/>
+  </linearGradient>
+  <linearGradient id="arrow" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#8fd0ff"/>
+    <stop offset="0.5" stop-color="#2a8be0"/>
+    <stop offset="1" stop-color="#14589a"/>
+  </linearGradient>
+</defs>
+<g>
+  <rect x="58" y="58" width="122" height="122" rx="14" fill="url(#card)" stroke="#5c636b" stroke-width="3"/>
+  <g fill="#23272b">
+    <rect x="72" y="72" width="30" height="30" rx="3"/><rect x="136" y="72" width="30" height="30" rx="3"/><rect x="72" y="136" width="30" height="30" rx="3"/>
+  </g>
+  <g fill="#ffffff"><rect x="78" y="78" width="18" height="18" rx="2"/><rect x="142" y="78" width="18" height="18" rx="2"/><rect x="78" y="142" width="18" height="18" rx="2"/></g>
+  <g fill="#23272b">
+    <rect x="83" y="83" width="8" height="8"/><rect x="147" y="83" width="8" height="8"/><rect x="83" y="147" width="8" height="8"/>
+    <rect x="110" y="74" width="10" height="10"/><rect x="110" y="94" width="10" height="10"/><rect x="120" y="110" width="10" height="10"/>
+    <rect x="74" y="112" width="10" height="10"/><rect x="94" y="114" width="10" height="10"/><rect x="138" y="114" width="10" height="10"/>
+    <rect x="110" y="128" width="10" height="10"/><rect x="128" y="140" width="10" height="10"/><rect x="112" y="152" width="10" height="10"/>
+    <rect x="146" y="148" width="10" height="10"/><rect x="156" y="132" width="10" height="10"/>
+  </g>
+  <path d="M150 170 C 196 168 214 132 206 92 L 226 98 L 196 58 L 176 102 L 192 98 C 198 124 186 150 150 150 Z"
+        fill="url(#arrow)" stroke="#0f4277" stroke-width="3" stroke-linejoin="round"/>
+</g>
+</svg>

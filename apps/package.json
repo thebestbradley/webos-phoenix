@@ -40,7 +40,8 @@
     "marketplace",
     "agenda",
     "clipboard",
-    "assistant"
+    "assistant",
+    "dropshare"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

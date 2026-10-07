@@ -226,6 +226,8 @@ export interface SystemPreferences {
     browserUserAgent?: "mobile" | "desktop";
     /** Phoenix: Settings > Wi-Fi > Proxy, the system's proxy. */
     networkProxy?: NetworkProxy;
+    /** Phoenix: DropShare may send and receive files (Settings > DropShare). */
+    dropShareEnabled?: boolean;
     [key: string]: unknown;
 }
 

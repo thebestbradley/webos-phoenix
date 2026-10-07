@@ -9,9 +9,11 @@
 //                 (SearchPreference AppSearch, ContactSearch, GAL)
 //   Search        the default engine (Just Type's "Search Google" row,
 //                 shown while defaultSearch is "true"), then every engine
-//                 on or off and in order; Custom Engine, the user's own
-//                 (Phoenix: setCustomSearchEngine; docs/M6-PLAN.md F4). The
-//                 browser's Preferences choose from the same engines.
+//                 on or off and in order; the default may also be one of
+//                 Phoenix's others (DuckDuckGo, Bing, Startpage) or Custom
+//                 Engine, the user's own (OptionalSearchList,
+//                 setCustomSearchEngine; docs/M6-PLAN.md F4). The browser's
+//                 Preferences choose from the same engines.
 //   Content       the apps whose content Just Type searches (DBSearchItemList)
 //   Quick Actions New Memo, New Task, ... (ActionList)
 //
@@ -50,7 +52,9 @@ export function JustTypePage() {
         </Row>
     );
     const engines = list?.engines ?? [];
-    const custom = engines.find((e) => e.id === "custom");
+    // The default can be any engine, the original's or Phoenix's others.
+    const choices = [...engines, ...(list?.optional ?? []).filter((o) => !engines.some((e) => e.id === o.id))];
+    const custom = choices.find((e) => e.id === "custom");
     const [editing, setEditing] = useState(false);
     const defaultEngine = prefs.defaultSearchEngine ?? list?.defaultSearchEngine ?? "";
 
@@ -67,7 +71,7 @@ export function JustTypePage() {
             <Group label="Search">
                 {engines.length > 0 && (
                     <ListSelector title="Default" value={defaultEngine} testId="jt-default-engine"
-                                  options={engines.map((e) => ({ label: e.displayName, value: e.id }))}
+                                  options={choices.map((e) => ({ label: e.displayName, value: e.id }))}
                                   onChange={(id) => void universalSearch.setDefaultEngine(id)} />
                 )}
                 {pref("defaultSearch", "Show it first", "With suggestions as you type")}

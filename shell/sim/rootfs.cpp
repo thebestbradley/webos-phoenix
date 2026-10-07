@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "rootfs.h"
+#ifdef PHOENIX_HAVE_WEBENGINE
+#include "simdropshare.h"
+#endif
 
 #include <QBuffer>
 #include <QFileInfo>
@@ -604,9 +607,31 @@ void RootfsSchemeHandler::proxyProgress(QWebEngineUrlRequestJob *job)
     replyJson(job, out);
 }
 
+void RootfsSchemeHandler::dropShare(QWebEngineUrlRequestJob *job, const QString &devicePath)
+{
+    if (!m_dropShare) {
+        replyJson(job, { { QStringLiteral("returnValue"), false }, { QStringLiteral("errorText"), QStringLiteral("DropShare is not here") } });
+        return;
+    }
+    const QUrlQuery q(job->requestUrl());
+    if (devicePath == QLatin1String("/__phoenix/dropshare/file")) {
+        auto *buffer = new QBuffer(job);
+        buffer->setData(m_dropShare->fileData(q.queryItemValue(QStringLiteral("id")).toInt()));
+        buffer->open(QIODevice::ReadOnly);
+        job->reply("application/octet-stream", buffer);
+        return;
+    }
+    replyJson(job, QJsonObject::fromVariantMap(m_dropShare->request(QJsonDocument::fromJson(
+        q.queryItemValue(QStringLiteral("req"), QUrl::FullyDecoded).toUtf8()).object().toVariantMap())));
+}
+
 void RootfsSchemeHandler::requestStarted(QWebEngineUrlRequestJob *job)
 {
     const QString devicePath = job->requestUrl().path();
+    if (devicePath.startsWith(QLatin1String("/__phoenix/dropshare"))) {
+        dropShare(job, devicePath);
+        return;
+    }
     if (devicePath == QLatin1String("/__phoenix/proxy")) {
         proxy(job);
         return;

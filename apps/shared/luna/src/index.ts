@@ -35,3 +35,4 @@ export * from "./print";
 export * from "./scene";
 export * from "./clipboard";
 export * from "./assistant";
+export * from "./dropshare";

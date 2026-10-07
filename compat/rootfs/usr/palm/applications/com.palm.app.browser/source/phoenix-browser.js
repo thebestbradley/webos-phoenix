@@ -18,10 +18,10 @@
 //                     applies it: shell/sim/simbrowser.h).
 //   Websites          Preferences: Mobile Site (webOS's user agent, the
 //                     default) or Desktop Site (browserUserAgent).
-// The default search engine stays the original's list, which now has
-// DuckDuckGo, Bing, Startpage and a custom engine (Settings > Just Type;
-// com.palm.universalsearch in the runtime): the browser and Just Type
-// share it, as on webOS.
+// Default Web Search Engine: the original's list, then Phoenix's other
+// engines (DuckDuckGo, Bing, Startpage and a custom one from Settings >
+// Just Type: com.palm.universalsearch's OptionalSearchList in the
+// runtime). The browser and Just Type share the default, as on webOS.
 
 /*global enyo, $L, Preferences, BrowserApp, Browser, FindBar */
 (function () {
@@ -91,6 +91,21 @@
 		this.$.systemPrefsService.call({keys: systemPreferences}, {method: "getPreferences", onSuccess: "gotSystemPreferences", subscribe: true});
 		this.$.browserPrefsService.call(undefined, {method: "find", onSuccess: "gotBrowserPreferences", subscribe: true});
 		this.$.universalSearchService.call();
+	};
+
+	// The original's, with Phoenix's other engines (OptionalSearchList:
+	// DuckDuckGo, Bing, Startpage, the custom one) after the shipped ones.
+	A.gotUniversalSearchList = function (inSender, inResponse) {
+		this.searchPreferences = [];
+		var all = (inResponse.UniversalSearchList || []).concat(inResponse.OptionalSearchList || []), seen = {};
+		for (var i = 0, s; (s = all[i]); i++) {
+			if (s.type === "web" && s.enabled && !seen[s.id]) {
+				seen[s.id] = true;
+				this.searchPreferences.push(s);
+			}
+		}
+		this.searchPreferencesChanged();
+		this.setDefaultSearch(inResponse.defaultSearchEngine);
 	};
 
 	var toggleAppMenuItems = A.toggleAppMenuItems;

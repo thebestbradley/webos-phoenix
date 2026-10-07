@@ -25,6 +25,7 @@ import { ExhibitionPage } from "./Exhibition";
 import { ClipboardPage } from "./Clipboard";
 import { AssistantPage } from "./Assistant";
 import { AdvancedPage } from "./Advanced";
+import { DropSharePage } from "./DropShare";
 
 export interface PageInfo {
     title: string;
@@ -39,6 +40,7 @@ export const PAGES = {
     bluetooth: { title: "Bluetooth", icon: "icons/bluetooth.png", component: BluetoothPage },
     airplane: { title: "Airplane Mode", icon: "icons/airplane.png", component: AirplanePage },
     phone: { title: "Phone Preferences", icon: "icons/phoneprefs.png", component: PhonePrefsPage },
+    dropshare: { title: "DropShare", icon: "icons/dropshare.png", component: DropSharePage },
     vpn: { title: "VPN", icon: "icons/vpn.png", component: VpnPage },
     screen: { title: "Screen & Lock", icon: "icons/screen.png", component: ScreenPage },
     exhibition: { title: "Exhibition", icon: "icons/exhibition.png", component: ExhibitionPage },

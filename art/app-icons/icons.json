@@ -425,5 +425,56 @@
         "out": [
             "apps/settings/public/icons/advanced"
         ]
+    },
+    "dropshare": {
+        "platter": "disc",
+        "out": [
+            "apps/dropshare/public/icon"
+        ]
+    },
+    "settings-dropshare": {
+        "platter": "diamond",
+        "object": "dropsharepane",
+        "base": 176,
+        "foot": 48,
+        "out": [
+            "apps/settings/public/icons/dropshare"
+        ]
+    },
+    "settings-battery": {
+        "platter": "diamond",
+        "object": "batterypane",
+        "base": 176,
+        "foot": 40,
+        "out": [
+            "apps/settings/public/icons/battery"
+        ]
+    },
+    "settings-usb": {
+        "platter": "diamond",
+        "object": "usbpane",
+        "base": 176,
+        "foot": 36,
+        "out": [
+            "apps/settings/public/icons/usb"
+        ]
+    },
+    "settings-hotspot": {
+        "platter": "diamond",
+        "object": "hotspotpane",
+        "base": 176,
+        "foot": 28,
+        "out": [
+            "apps/settings/public/icons/hotspot"
+        ]
+    },
+    "settings-gamepads": {
+        "platter": "diamond",
+        "object": "gamepadpane",
+        "base": 176,
+        "foot": 50,
+        "out": [
+            "apps/settings/public/icons/gamepads"
+        ]
     }
 }

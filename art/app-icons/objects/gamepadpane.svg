@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Settings > Game Controllers: a dark game controller standing on the
+     system icons' diamond (its foot at y = 176), its cross pad and four
+     coloured buttons. Original Phoenix art. -->
+<defs>
+  <linearGradient id="pad" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#5a6168"/>
+    <stop offset="0.5" stop-color="#2a2e33"/>
+    <stop offset="1" stop-color="#14171a"/>
+  </linearGradient>
+</defs>
+<g>
+  <path d="M70 100 C 70 84 86 78 100 80 L 156 80 C 170 78 186 84 186 100 L 200 156 C 204 176 182 182 170 168 L 154 148 L 102 148 L 86 168 C 74 182 52 176 56 156 Z"
+        fill="url(#pad)" stroke="#0c0d0e" stroke-width="3" stroke-linejoin="round" transform="translate(0 6)"/>
+  <g fill="#cfd5db" transform="translate(0 6)">
+    <rect x="86" y="104" width="12" height="34" rx="2"/><rect x="75" y="115" width="34" height="12" rx="2"/>
+  </g>
+  <g transform="translate(0 6)">
+    <circle cx="166" cy="104" r="7" fill="#e8c51f"/><circle cx="180" cy="120" r="7" fill="#d23b2f"/>
+    <circle cx="152" cy="120" r="7" fill="#2a8be0"/><circle cx="166" cy="136" r="7" fill="#3aa83a"/>
+    <rect x="118" y="112" width="20" height="7" rx="3" fill="#8a9198"/>
+  </g>
+</g>
+</svg>

@@ -59,6 +59,7 @@
 #include <QQuickWebEngineProfile>
 #include <QtWebEngineQuick>
 #include "simbrowser.h"
+#include "simdropshare.h"
 #endif
 
 #ifndef PHOENIX_QML_DIR
@@ -328,6 +329,14 @@ int main(int argc, char *argv[])
 #endif
         auto *schemeHandler = new RootfsSchemeHandler(&rootfs, profile);
         schemeHandler->setSnapshots(&snapshots);
+        // DropShare's server, which the apps' pages run (the runtime's
+        // org.webosphoenix.dropshare); the pages other devices open are
+        // the DropShare app's own (web/receive.html, web/send.html).
+        auto *dropShare = new SimDropShare([&rootfs](const QString &name) {
+            QFile f(rootfs.resolve(QStringLiteral("/usr/palm/applications/org.webosphoenix.dropshare/web/") + name));
+            return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+        }, &view);
+        schemeHandler->setDropShare(dropShare);
         profile->installUrlSchemeHandler(Rootfs::scheme().toLatin1(), schemeHandler);
         view.rootContext()->setContextProperty(QStringLiteral("phoenixWebProfile"), profile);
         // The pages apps show in a page view (the browser's): a profile of

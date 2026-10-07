@@ -257,6 +257,12 @@ data use "Phoenix Account".
   WebAssembly. Only the reader ships; the writer (which contains zint,
   BSD-3-Clause) is used by the tests alone. The notices are in
   `apps/scanner/public/THIRD-PARTY-NOTICES.txt`, installed with the app.
+- DropShare (`apps/dropshare`) bundles zxing-wasm's **writer** build to
+  draw its QR codes: zxing-cpp (Apache-2.0) and **zint** (libzint,
+  BSD-3-Clause) compiled to WebAssembly. Its notices are in
+  `apps/dropshare/public/THIRD-PARTY-NOTICES.txt`, installed with the app.
+  The pages DropShare serves to other devices (`public/web/`) and its icon
+  are Phoenix's own.
 - **Open-Meteo** forecast data is CC BY 4.0; Weather credits "Weather data
   by Open-Meteo.com" with a link, as the licence asks. Open-Meteo's terms
   (<https://open-meteo.com/en/terms>) allow the free API for

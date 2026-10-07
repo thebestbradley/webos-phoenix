@@ -183,6 +183,12 @@
     "com.palm.systemui": {
         "status": "works",
         "note": "luna-systemui as the shell's headless page: alerts, dashboards and banners (its services now see com.palm.bus registerServerStatus answer). Tested with the mail account signed out, so it opens its Accounts: Action Needed dashboard",
-        "storage": { "accountCredentials": {} }
+        "storage": {
+            "accountCredentials": {}
+        }
+    },
+    "org.webosphoenix.dropshare": {
+        "status": "works",
+        "note": "Phoenix DropShare (React, apps/dropshare): off until allowed (Settings > DropShare); a page has no server of its own, phoenix-sim runs it (shell/sim/simdropshare.h). tools/test-sharing.cjs drives it against a fake server, build/simnet-test the real one"
     }
 }

@@ -7,7 +7,8 @@
 // com.palm.app.searchpreferences changed:
 //
 //   getUniversalSearchList {subscribe}  -> {UniversalSearchList (web search
-//       engines), ActionList (Quick Actions), DBSearchItemList (content
+//       engines), OptionalSearchList (Phoenix: engines beyond those, any of
+//       which can be the default), ActionList (Quick Actions), DBSearchItemList (content
 //       searches), defaultSearchEngine}
 //   getAllSearchPreference {subscribe}  -> {SearchPreference: {key: "true" |
 //       "false" | engine id}}
@@ -41,6 +42,8 @@ export interface SearchItem {
 
 export interface SearchList {
     engines: SearchItem[];
+    /** Phoenix: engines beyond the original's list (DuckDuckGo, Bing, Startpage, the custom one): any can be the default. */
+    optional: SearchItem[];
     actions: SearchItem[];
     content: SearchItem[];
     defaultSearchEngine: string;
@@ -58,8 +61,9 @@ type OnError = (e: LunaError) => void;
 export const universalSearch = {
     watchList(cb: (l: SearchList) => void, onError?: OnError): Subscription {
         return subscribe(`${US}/getUniversalSearchList`, {}, (r) => {
-            const x = r as unknown as { UniversalSearchList?: SearchItem[]; ActionList?: SearchItem[]; DBSearchItemList?: SearchItem[]; defaultSearchEngine?: string };
-            cb({ engines: x.UniversalSearchList ?? [], actions: x.ActionList ?? [], content: x.DBSearchItemList ?? [],
+            const x = r as unknown as { UniversalSearchList?: SearchItem[]; OptionalSearchList?: SearchItem[]; ActionList?: SearchItem[];
+                                        DBSearchItemList?: SearchItem[]; defaultSearchEngine?: string };
+            cb({ engines: x.UniversalSearchList ?? [], optional: x.OptionalSearchList ?? [], actions: x.ActionList ?? [], content: x.DBSearchItemList ?? [],
                  defaultSearchEngine: x.defaultSearchEngine ?? "" });
         }, onError);
     },

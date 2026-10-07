@@ -136,6 +136,45 @@ throws a ghost of it off the top, with `tap_to_share.mp3`. In phoenix-sim
 touches it to the device (`--touch-to-share` starts with one in range); the
 data the phone received is logged (`Touch to Share: <appId> sent {...}`).
 
+### DropShare
+
+DropShare (`org.webosphoenix.dropshare`, `apps/dropshare`) is Phoenix's
+own take on the webOS Archive's LuneDrop, built on Touch to Share
+(docs/M6-PLAN.md F4 item 8). It moves files to and from any phone or
+computer on the same network, through a web page the device serves:
+- **Receive**: the DropShare card shows a QR code of an address like
+  `http://192.168.1.20:41813/<token>/`. Any browser that opens it gets a
+  page to pick files (`web/receive.html`). Each file is a
+  `POST <token>/upload?name=&type=`, then `POST <token>/done`. Files land
+  in `/media/internal/Downloads` (a second of a name is numbered). An
+  ongoing activity shows while they come, and a notification opens Files
+  at Downloads.
+- **Send**: the share sheet offers DropShare for files (its `shareTargets`).
+  The card shows the address of a page listing them (`web/send.html`,
+  `GET <token>/files`, `GET <token>/file/N`).
+- **Touch to Share**: DropShare is `tapToShareSupported`. A webOS phone
+  touched to the device gets the address (`shareData {target}`) and
+  opens it.
+- **Security**: off until the user turns it on (Settings > DropShare,
+  system preference `dropShareEnabled`). Each session has a new token of
+  128 random bits in every address; anything else is 404. A session ends
+  when the transfer is done, after ten minutes without a request, or when
+  the card closes; the port closes with it. Limits: 512 MB a file, 2 GB
+  and 50 files a session.
+
+The service is `org.webosphoenix.dropshare` (`receive`, `send {files}`,
+`stop`, `getStatus`; `@phoenix/luna` `dropShare`). In phoenix-sim the
+server is `SimDropShare` (`shell/sim/simdropshare.h`, plain Qt Network,
+bound to every interface). The runtime drives it through the scheme
+handler's `/__phoenix/dropshare`, and hands it the files to send in
+base64 parts: QtWebEngine's `requestBody()` reads a large POST only part
+way, or blocks. The simulator logs each address (`DropShare: receive at
+...`). A desktop browser has no server, so the service says so.
+`build/simnet-test` runs the server over real sockets;
+`tools/test-sharing.cjs` drives the app against a fake one. On a device a
+small Node service serves the same requests: the same two pages, the
+same JSON operations, the device's LAN address.
+
 ### Editing: Cut, Copy, Paste, Select All
 
 Every app menu starts with **Edit** (Select All, Cut, Copy, Paste), as Mojo
