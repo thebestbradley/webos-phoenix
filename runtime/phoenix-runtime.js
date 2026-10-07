@@ -9621,6 +9621,8 @@
         // And the simulated Jabber (XMPP) account (block "Instant
         // messaging"), whose accounts need the same handling.
         var DAV_TEMPLATES = ["/usr/palm/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json",
+                             // The Subscribed Calendar (a public .ics, one way: lib/webcal.js).
+                             "/usr/palm/public/accounts/com.webosphoenix.webcal/com.webosphoenix.webcal.json",
                              "/usr/share/phoenix/runtime/accounts/com.webosphoenix.xmpp/com.webosphoenix.xmpp.json"];
         var ACCOUNT_KIND = "com.palm.account:1";
         var LOCK_MS = 5 * 60 * 1000;

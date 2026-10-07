@@ -1946,6 +1946,20 @@ and the details of this first transport are in [SYNERGY.md](SYNERGY.md).
   win conflicts. It also keeps `com.palm.person:1` up to date for the
   contacts it syncs.
 
+**Subscribed calendars** (docs/M6-PLAN.md F4 item 8, after the webOS
+Archive's WebCal Sync): the template `com.webosphoenix.webcal` ("Subscribed
+Calendar", `apps/dav/public/accounts/com.webosphoenix.webcal/`) has a
+CALENDAR provider on the same service. Its page (`accounts/webcal.html`)
+takes a public `.ics` address (http, https or webcal) and an optional name.
+The validator, `checkCredentials {templateId: "com.webosphoenix.webcal",
+config: {url}}`, reads the file. The address is kept as the account's
+credentials (`common.url`). Each sync (`lib/webcal.js`) reads the file
+again, one way, into a read-only `com.palm.calendar.dav:1` with the file's
+name. It cuts the file into one calendar per UID for the CalDAV mapping,
+replaces the events when the text changed, and skips it when it did not.
+The periodic activity runs every 30 minutes on a device; in the simulator
+the file is read when the account is created and on "Sync now".
+
 ### In the simulator
 
 The block "CardDAV and CalDAV" at the end of `runtime/phoenix-runtime.js`

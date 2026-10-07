@@ -11,6 +11,9 @@
 //              to Share gives a phone the address. phoenix-sim's server
 //              (/__phoenix/dropshare, shell/sim/simdropshare.h) is played
 //              here by a small fake; build/simnet-test runs the real one.
+//   webcal     a Subscribed Calendar account: its page checks a public
+//              .ics address, the account reads it into a read-only
+//              calendar (the address answered here, through the proxy).
 //
 //   node tools/test-sharing.cjs [--tablet] [--out DIR]
 //
@@ -245,6 +248,58 @@ async function main() {
         await until(() => ds.state === "waiting", "Send Again offers them again");
         await sender.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
         await until(() => ds.state === "stopped", "closing DropShare stops its session");
+
+        // ---- A subscribed calendar (.ics, one way) -------------------------------------
+        const ICS_URL = "https://cal.example.org/holidays.ics";
+        // Days near today, so the Calendar app's first view shows them.
+        const day = (n) => { const d = new Date(Date.now() + n * 86400000); return d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0"); };
+        const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//test//EN", "X-WR-CALNAME:Phoenix Holidays",
+                     "BEGIN:VEVENT", "UID:ny-2027", "DTSTAMP:20260101T000000Z", "DTSTART;VALUE=DATE:" + day(0), "SUMMARY:New Year", "END:VEVENT",
+                     "BEGIN:VEVENT", "UID:may-2027", "DTSTAMP:20260101T000000Z", "DTSTART;VALUE=DATE:" + day(2), "SUMMARY:May Day", "END:VEVENT",
+                     "END:VCALENDAR", ""].join("\r\n");
+        await context.route("**/__phoenix/proxy", (route) => {
+            const req = JSON.parse(route.request().postData() || "{}");
+            if (req.url !== ICS_URL) return route.continue();
+            return route.fulfill({ contentType: "application/json", body: JSON.stringify({ status: 200, headers: { "content-type": "text/calendar" }, url: ICS_URL, body: ics }) });
+        });
+        const templates = await svc(st, "luna://com.palm.service.accounts/listAccountTemplates", {});
+        check((templates.results || []).some((t) => t.templateId === "com.webosphoenix.webcal" && t.loc_name === "Subscribed Calendar"),
+              "the accounts offer a Subscribed Calendar");
+        const wiz = await context.newPage();
+        watch(wiz, "webcal-wizard");
+        await wiz.goto(`${APPS}/org.webosphoenix.dav/accounts/webcal.html?launchParams=` + encodeURIComponent(JSON.stringify({ mode: "create" })));
+        await wiz.waitForSelector("input");
+        await wiz.evaluate(() => { window.__results = []; window.addEventListener("message", (e) => window.__results.push(String(e.data))); });
+        await wiz.locator("input").first().fill("webcal://cal.example.org/holidays.ics");
+        await wiz.screenshot({ path: path.join(outDir, "webcal-wizard.png") });
+        await wiz.getByText("Subscribe", { exact: true }).last().click();
+        let result = null;
+        await until(async () => {
+            const r = (await wiz.evaluate(() => window.__results)).find((m) => m.indexOf("enyoCrossAppResult=") === 0);
+            result = r ? JSON.parse(r.slice(19)) : null;
+            return !!result;
+        }, "the page checks the address (the file is a calendar)");
+        check(!!result && result.returnValue === true && result.username === "Phoenix Holidays" && result.templateId === "com.webosphoenix.webcal"
+              && result.credentials.common.url === ICS_URL, `... and answers the Accounts app (${JSON.stringify(result)})`);
+        const created = await svc(st, "luna://com.palm.service.accounts/createAccount", {
+            templateId: result.templateId, username: result.username, credentials: result.credentials, config: result.config,
+            capabilityProviders: [{ id: "com.webosphoenix.webcal.calendar" }] });
+        check(created.returnValue !== false, "the account is created");
+        const find = async (kind) => ((await svc(st, "luna://com.palm.db/find", { query: { from: kind } })).results || [])
+            .filter((o) => o.accountId === created.result._id);
+        await until(async () => (await find("com.palm.calendarevent.dav:1")).length === 2, "its events are read in", 15000);
+        const cal = (await find("com.palm.calendar.dav:1"))[0];
+        check(!!cal && cal.isReadOnly === true && cal.name === "Phoenix Holidays", "into a read-only calendar of its name");
+        check((await find("com.palm.calendarevent.dav:1")).map((e) => e.subject).sort().join() === "May Day,New Year", "the events, by name");
+        // The Calendar app opens its card in a window of its own.
+        const calStart = await context.newPage();
+        await calStart.goto(`${APPS}/com.palm.app.calendar/index.html`);
+        let calWin = null;
+        await until(async () => {
+            calWin = context.pages().find((p) => p !== calStart && /com\.palm\.app\.calendar/.test(p.url()));
+            return !!calWin && /New Year/.test(await calWin.evaluate(() => document.body.innerText));
+        }, "the Calendar app shows today's subscribed event", 20000);
+        if (calWin) await calWin.screenshot({ path: path.join(outDir, "webcal-calendar.png") });
 
         check(errors.length === 0, `no page errors (${errors.slice(0, 5).join(" | ")})`);
         await browser.close();
