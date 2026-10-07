@@ -58,6 +58,7 @@
 #ifdef PHOENIX_HAVE_WEBENGINE
 #include <QQuickWebEngineProfile>
 #include <QtWebEngineQuick>
+#include "simbrowser.h"
 #endif
 
 #ifndef PHOENIX_QML_DIR
@@ -329,6 +330,10 @@ int main(int argc, char *argv[])
         schemeHandler->setSnapshots(&snapshots);
         profile->installUrlSchemeHandler(Rootfs::scheme().toLatin1(), schemeHandler);
         view.rootContext()->setContextProperty(QStringLiteral("phoenixWebProfile"), profile);
+        // The pages apps show in a page view (the browser's): a profile of
+        // their own, its settings, the system proxy.
+        auto *simBrowser = new SimBrowser(&rootfs, &snapshots, !tablet && qMin(display.width(), display.height()) < 600, &view);
+        view.rootContext()->setContextProperty(QStringLiteral("simBrowser"), simBrowser);
         webEngine = true;
         webApps = rootfs.apps();
     }

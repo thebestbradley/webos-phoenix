@@ -956,6 +956,36 @@ phoenix-sim. The drawer (`enyo.Toaster`) flies in over the page: the native
 view keeps to the part it leaves uncovered (on a phone, none), since
 nothing in the page can draw over it.
 
+**The page views' profile and the community's features** (docs/M6-PLAN.md
+F4 item 7). In phoenix-sim the page views use a web profile of their own
+("phoenix-web"), apart from the apps' pages, as BrowserServer kept its
+own cookies and cache (`simBrowser`, `shell/sim/simbrowser.h`). A compat
+overlay of the browser (`source/phoenix-browser.js`) adds:
+- **Private Browsing**, an app menu check item per card. The toolbars turn
+  red and the card's pages go to no history. The adapter's Phoenix call
+  `setPrivateBrowsing(on)` moves the native view to an off-the-record
+  profile at the same page (host message `webView {op: "private"}`). That
+  profile is dropped once its last view is gone.
+- **Find on Page**: `findInPage(text, backward)`. The count comes back as
+  a `phoenixfindresult` event on the `<object>` (`{active, total}`). The
+  iframe engine finds in same-origin pages with `window.find`.
+- **Block Ads & Trackers** and **Mobile / Desktop Site**: the system
+  preferences `browserContentBlocker` and `browserUserAgent`, which reach
+  the shell as systemStatus `browser`. The profile's request interceptor
+  fails a page's requests to the hosts on
+  `/usr/share/phoenix/runtime/content-blocker/hosts.txt` (and their
+  subdomains), but never the page itself. The user agent is webOS's (mobile,
+  the default) or Chromium's own (desktop).
+- Clear Cookies and Clear Cache (`com.palm.browserServer`) clear that
+  profile.
+The system proxy (Settings > Wi-Fi > Proxy, preference `networkProxy`
+`{type: "none" | "http" | "socks", host, port}`, systemStatus `proxy`) is
+Qt's application proxy in phoenix-sim. Chromium takes it at once for every
+page, and so do the runtime's proxied requests. On a device the
+connection manager sets it (connman's service `Proxy.Configuration`,
+Method "manual"), and the browser's page view will take the profile
+settings above.
+
 phoenix-sim's own proxy, and every request the runtime makes to the host
 there, go through `XMLHttpRequest`: Chromium refuses `fetch()` on the
 `phoenix:` scheme before Qt 6.6 (`FetchApiAllowed`), which left downloads

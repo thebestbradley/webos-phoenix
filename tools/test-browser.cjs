@@ -18,6 +18,13 @@
 //             the Downloads drawer, the Downloads folder, Open in its app
 //   print     Print in the app menu: the print dialog, Save as PDF, the
 //             PDF in Documents and the job in the Print Manager
+//   find      Find on Page (docs/M6-PLAN.md F4): the find bar counts the
+//             matches and steps through them
+//   private   Private Browsing: the red toolbar, no history
+//   prefs     Block Ads & Trackers and Desktop Site are system preferences
+//             the shell hears; the search engines include DuckDuckGo, Bing
+//             and Startpage, and the address bar searches with the one
+//             chosen
 //
 //   node tools/test-browser.cjs [--tablet] [--out DIR]
 
@@ -231,6 +238,100 @@ async function main() {
             "print: the Print Manager shows the job (" + (await jobRow.textContent().catch(() => "")) + ")");
         check(await page.locator(".pm-shown").count() === 1, "print: the job a notification opened is marked");
         await shot("printmanager");
+
+        // ---- The community's browser features (docs/M6-PLAN.md F4 item 7) ----
+        // Same-origin pages the iframe engine can read and search.
+        const FIND = "/__test/find.html", PRIVATE = "/__test/private.html", AFTER = "/__test/after.html";
+        await page.route("**/__test/*.html", (route) => route.fulfill({ contentType: "text/html", body:
+            "<!doctype html><title>" + (route.request().url().includes("private") ? "Private page" : "Fruit") + "</title>" +
+            "<body><p>Apple banana apple cherry apple.</p><p>The apple tree and the apple pie.</p></body>" }));
+        await page.route("https://duckduckgo.com/**", (route) => route.fulfill({ contentType: "text/html", body: "<title>DuckDuckGo</title>ddg" }));
+        const comp = (expr) => page.evaluate((e) => { const c = new Function("return enyo.$.browserApp." + e)(); return c && c.hasNode() ? c.id : null; }, expr);
+        const clickComp = async (expr) => { const id = await comp(expr); if (id) await page.click("#" + id); return !!id; };
+        const menuItem = (name) => page.locator(`.enyo-appmenu .enyo-menuitem:has-text('${name}')`).first();
+        const history = async () => ((await luna("luna://com.palm.db/find", { query: { from: "com.palm.browserhistory:1" } })).results || []).map((h) => h.url);
+
+        await page.goto(browserUrl({ target: origin + FIND }));
+        check(await waitForFrame(FIND), "find: the page loads");
+        await page.evaluate(() => __phoenixRuntime.openAppMenu());
+        check(!!await waitFor(() => menuItem("Find on Page").isVisible()), "find: the app menu has Find on Page");
+        await menuItem("Find on Page").click();
+        const findField = async () => page.locator("#" + await comp("$.browser.$.findBar.$.input") + " input").first();
+        check(!!await waitFor(async () => (await comp("$.browser.$.findBar.$.input")) !== null), "find: the find bar opens");
+        await (await findField()).click();
+        await (await findField()).pressSequentially("apple", { delay: 30 });
+        const count = async () => page.evaluate(() => enyo.$.browserApp.$.browser.$.findBar.$.count.getContent());
+        check(!!await waitFor(async () => (await count()) === "1 of 5"), "find: the bar counts the matches (" + await count() + ")");
+        await shot("find");
+        await clickComp("$.browser.$.findBar.$.next");
+        check(!!await waitFor(async () => (await count()) === "2 of 5"), "find: next goes to the second (" + await count() + ")");
+        await clickComp("$.browser.$.findBar.$.prev");
+        await clickComp("$.browser.$.findBar.$.prev");
+        check(!!await waitFor(async () => (await count()) === "5 of 5"), "find: prev goes back, round to the last (" + await count() + ")");
+        await (await findField()).fill("zebra");
+        check(!!await waitFor(async () => (await count()) === "No matches"), "find: a word not there says so");
+        check(!!await waitFor(async () => (await history()).some((u) => u.endsWith(FIND))), "private: off, the page is in the history");
+
+        // Private Browsing: the toolbar turns red; pages go to no history.
+        await page.evaluate(() => __phoenixRuntime.openAppMenu());
+        await waitFor(() => menuItem("Private Browsing").isVisible());
+        await menuItem("Private Browsing").click();
+        const barColour = () => page.evaluate(() => getComputedStyle(document.querySelector(".actionbar.enyo-toolbar")).backgroundColor);
+        check(!!await waitFor(async () => (await barColour()) === "rgb(155, 27, 27)"), "private: the toolbar is red (" + await barColour() + ")");
+        await address().click();
+        await address().fill(origin + PRIVATE);
+        await page.keyboard.press("Enter");
+        check(await waitForFrame(PRIVATE), "private: browsing goes on");
+        await shot("private");
+        await page.evaluate(() => __phoenixRuntime.openAppMenu());
+        await waitFor(() => menuItem("Private Browsing").isVisible());
+        check(await page.evaluate(() => enyo.$.browserApp.$.phoenixPrivateItem.getChecked()), "private: the menu item is checked");
+        await menuItem("Private Browsing").click();
+        check(!!await waitFor(async () => (await barColour()) !== "rgb(155, 27, 27)"), "private: off again, the toolbar is as before");
+        // A page after it is history again; the private one, before it, never was.
+        await address().click();
+        await address().fill(origin + AFTER);
+        await page.keyboard.press("Enter");
+        check(!!await waitFor(async () => (await history()).some((u) => u.endsWith(AFTER))), "private: off, pages are history again");
+        check(!(await history()).some((u) => u.endsWith(PRIVATE)), "private: the private page is not in the history");
+
+        // Preferences: the content blocker and the user agent, system
+        // preferences the shell applies (systemStatus browser).
+        host.length = 0;
+        await page.evaluate(() => __phoenixRuntime.openAppMenu());
+        await waitFor(() => menuItem("Preferences").isVisible());
+        await menuItem("Preferences").click();
+        check(!!await waitFor(() => page.getByText("Block Ads & Trackers").first().isVisible()), "prefs: Block Ads & Trackers is in Content");
+        await clickComp("$.preferences.$.browserContentBlocker");
+        const sysPref = async (k) => (await luna("luna://com.palm.systemservice/getPreferences", { keys: [k] }))[k];
+        check(!!await waitFor(async () => (await sysPref("browserContentBlocker")) === true), "prefs: blocking is a system preference");
+        const lastStatus = () => (host.filter((m) => m.type === "systemStatus").pop() || { payload: {} }).payload;
+        check(!!await waitFor(() => lastStatus().browser && lastStatus().browser.contentBlocker === true), "prefs: the shell hears it");
+        await clickComp("$.preferences.$.browserUserAgent");
+        const desktop = page.locator(".enyo-popup:visible .enyo-item:has-text('Desktop Site')").first();
+        check(!!await waitFor(() => desktop.isVisible()), "prefs: Websites offers the desktop site");
+        await desktop.click();
+        check(!!await waitFor(async () => (await sysPref("browserUserAgent")) === "desktop"), "prefs: Desktop Site is a system preference");
+        check(!!await waitFor(() => lastStatus().browser && lastStatus().browser.userAgent === "desktop"), "prefs: the shell hears it too");
+        await clickComp("$.preferences.$.searchPreference");
+        const ddg = page.locator(".enyo-popup:visible .enyo-item:has-text('DuckDuckGo')").first();
+        check(!!await waitFor(() => ddg.isVisible()), "prefs: the engines include DuckDuckGo");
+        check(await page.locator(".enyo-popup:visible .enyo-item:has-text('Startpage')").first().isVisible()
+              && await page.locator(".enyo-popup:visible .enyo-item:has-text('Bing')").first().isVisible(), "prefs: ... Bing and Startpage");
+        await shot("prefs-engines");
+        await ddg.click();
+        const engine = async () => (await luna("luna://com.palm.universalsearch/getSearchPreference", { key: "defaultSearchEngine" })).defaultSearchEngine;
+        check(!!await waitFor(async () => (await engine()) === "duckduckgo"), "prefs: the default engine is Just Type's too");
+        await shot("prefs");
+        // Searching from the address bar uses it.
+        await page.goto(browserUrl());
+        await waitFor(() => address().isVisible());
+        await address().click();
+        await address().fill("webos phoenix");
+        await page.keyboard.press("Enter");
+        const frameSrc = () => page.evaluate(() => { const f = document.querySelector("object[type='application/x-palm-browser'] iframe"); return f ? f.src : ""; });
+        check(!!await waitFor(async () => /^https:\/\/duckduckgo\.com\/\?q=webos(%20|\+)phoenix/.test(await frameSrc())),
+            "prefs: the address bar searches DuckDuckGo (" + await frameSrc() + ")");
 
         check(errors.length === 0, "no errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
         await browser.close();

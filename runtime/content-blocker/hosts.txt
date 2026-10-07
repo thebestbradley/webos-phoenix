@@ -1,0 +1,140 @@
+# webOS Phoenix: the browser's content blocker list.
+#
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Written for Phoenix from the names of well-known advertising and tracking
+# services (no other list was copied: the popular community lists are
+# GPL or CC BY-SA, which Phoenix does not ship; docs/LEGAL.md). One host a
+# line; a listed host blocks its subdomains too. Requests a page makes to
+# these fail while Browser > Preferences > Block Ads & Trackers is on; a
+# site on the list opened on purpose still loads (shell/sim/contentfilter.h).
+#
+# Keep it short and certain: only hosts that serve ads, ad measurement or
+# cross-site tracking, never a CDN or a sign-in service a site needs.
+
+# Advertising networks and exchanges
+doubleclick.net
+googlesyndication.com
+googleadservices.com
+adservice.google.com
+pagead2.googlesyndication.com
+googletagservices.com
+adnxs.com
+adsrvr.org
+advertising.com
+adform.net
+admob.com
+adroll.com
+amazon-adsystem.com
+appnexus.com
+bidswitch.net
+casalemedia.com
+criteo.com
+criteo.net
+contextweb.com
+districtm.io
+exponential.com
+gumgum.com
+indexww.com
+media.net
+moatads.com
+mookie1.com
+openx.net
+outbrain.com
+pubmatic.com
+quantserve.com
+revcontent.com
+rubiconproject.com
+sharethrough.com
+smartadserver.com
+spotxchange.com
+taboola.com
+teads.tv
+tremorhub.com
+triplelift.com
+yieldmo.com
+zedo.com
+33across.com
+adcolony.com
+applovin.com
+inmobi.com
+unityads.unity3d.com
+ads.yahoo.com
+adtech.de
+serving-sys.com
+eyeblaster.com
+adsafeprotected.com
+doubleverify.com
+lijit.com
+sovrn.com
+yieldlab.net
+adition.com
+propellerads.com
+popads.net
+popcash.net
+exoclick.com
+trafficjunky.net
+juicyads.com
+mgid.com
+zergnet.com
+
+# Analytics and tracking
+google-analytics.com
+googletagmanager.com
+ssl.google-analytics.com
+scorecardresearch.com
+comscore.com
+chartbeat.com
+chartbeat.net
+hotjar.com
+mixpanel.com
+segment.io
+segment.com
+amplitude.com
+newrelic.com
+nr-data.net
+optimizely.com
+crazyegg.com
+mouseflow.com
+fullstory.com
+inspectlet.com
+kissmetrics.com
+statcounter.com
+clicky.com
+woopra.com
+krxd.net
+bluekai.com
+demdex.net
+omtrdc.net
+2o7.net
+everesttech.net
+rlcdn.com
+agkn.com
+exelator.com
+eyeota.net
+tapad.com
+crwdcntrl.net
+adsymptotic.com
+addthis.com
+sharethis.com
+mathtag.com
+turn.com
+liadm.com
+id5-sync.com
+tiqcdn.com
+branch.io
+app-measurement.com
+appsflyer.com
+adjust.com
+kochava.com
+flurry.com
+pixel.facebook.com
+connect.facebook.net
+analytics.twitter.com
+ads-twitter.com
+analytics.tiktok.com
+ads.linkedin.com
+px.ads.linkedin.com
+bat.bing.com
+clarity.ms

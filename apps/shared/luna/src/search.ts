@@ -15,6 +15,9 @@
 //   updateSearchItem {category, id, enabled, setDefault?}
 //   updateAllSearchItems {category, enabled}
 //   reorderSearchItem {category, id, toIndex}
+//   setCustomSearchEngine {displayName, url} (Phoenix): the user's own
+//       engine, id "custom"; url has %s (or #{searchTerms}) for the words;
+//       url "" removes it
 //
 // The simulator implements them in runtime/phoenix-runtime.js ("Just Type").
 
@@ -80,6 +83,10 @@ export const universalSearch = {
     },
     setAllEnabled(category: SearchCategory, enabled: boolean) {
         return call(`${US}/updateAllSearchItems`, { category, enabled });
+    },
+    /** The user's own engine (id "custom"): `url` has %s where the words go; "" removes it. */
+    setCustomEngine(displayName: string, url: string) {
+        return call(`${US}/setCustomSearchEngine`, { displayName, url });
     },
     /** Move an item to `toIndex` in its category's list. */
     move(category: SearchCategory, id: string, toIndex: number) {

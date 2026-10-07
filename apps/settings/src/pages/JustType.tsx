@@ -9,7 +9,9 @@
 //                 (SearchPreference AppSearch, ContactSearch, GAL)
 //   Search        the default engine (Just Type's "Search Google" row,
 //                 shown while defaultSearch is "true"), then every engine
-//                 on or off and in order
+//                 on or off and in order; Custom Engine, the user's own
+//                 (Phoenix: setCustomSearchEngine; docs/M6-PLAN.md F4). The
+//                 browser's Preferences choose from the same engines.
 //   Content       the apps whose content Just Type searches (DBSearchItemList)
 //   Quick Actions New Memo, New Task, ... (ActionList)
 //
@@ -20,7 +22,8 @@
 
 import { universalSearch, type SearchCategory, type SearchItem, type SearchList, type SearchPreferences } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
-import { Group, ListSelector, Note, Page, PageHeader, Row, ToggleButton } from "@phoenix/ui";
+import { useState } from "react";
+import { Button, Dialog, ErrorText, Group, ListSelector, Note, Page, PageHeader, Row, TextField, ToggleButton } from "@phoenix/ui";
 import { ReorderList } from "../ReorderList";
 
 function ItemList({ category, items, testId }: { category: SearchCategory; items: SearchItem[]; testId: string }) {
@@ -47,6 +50,8 @@ export function JustTypePage() {
         </Row>
     );
     const engines = list?.engines ?? [];
+    const custom = engines.find((e) => e.id === "custom");
+    const [editing, setEditing] = useState(false);
     const defaultEngine = prefs.defaultSearchEngine ?? list?.defaultSearchEngine ?? "";
 
     return (
@@ -67,7 +72,10 @@ export function JustTypePage() {
                 )}
                 {pref("defaultSearch", "Show it first", "With suggestions as you type")}
                 <ItemList category="search" items={engines} testId="jt-engine" />
+                <Row title="Custom Engine" subtitle={custom ? custom.displayName : "Search with any site"} chevron
+                     onClick={() => setEditing(true)} testId="jt-custom" />
             </Group>
+            <CustomEngineDialog open={editing} engine={custom} onClose={() => setEditing(false)} />
 
             {list && list.content.length > 0 && (
                 <Group label="Content">
@@ -81,5 +89,53 @@ export function JustTypePage() {
             )}
             <Note>Drag a row by its grip to change the order Just Type lists them in.</Note>
         </Page>
+    );
+}
+
+/** A search address the service takes: http(s), with %s where the words go. */
+export function customEngineProblem(url: string): string | null {
+    const u = url.trim();
+    if (!/^https?:\/\/\S+$/i.test(u)) return "The address starts with http:// or https://.";
+    if (!u.includes("%s") && !u.includes("#{searchTerms}")) return "Put %s in the address where the words go.";
+    return null;
+}
+
+function CustomEngineDialog({ open, engine, onClose }: { open: boolean; engine?: SearchItem; onClose: () => void }) {
+    const [name, setName] = useState("");
+    const [url, setUrl] = useState("");
+    const [error, setError] = useState<string | null>(null);
+    const [shownOpen, setShownOpen] = useState(false);
+    if (open !== shownOpen) {
+        setShownOpen(open);
+        if (open) {
+            setName(engine?.displayName ?? "");
+            setUrl((engine?.url ?? "").replace(/#\{searchTerms\}/g, "%s"));
+            setError(null);
+        }
+    }
+    const save = async () => {
+        const problem = customEngineProblem(url);
+        if (problem) return setError(problem);
+        try {
+            await universalSearch.setCustomEngine(name.trim() || "Custom", url.trim());
+            onClose();
+        } catch (e) {
+            setError((e as { errorText?: string }).errorText ?? String(e));
+        }
+    };
+    return (
+        <Dialog open={open} title="Custom Engine" onClose={onClose} testId="jt-custom-dialog"
+                message="Search for “phoenix” on the site and copy the address, with %s in place of phoenix.">
+            <TextField label="Name" value={name} onChange={setName} placeholder="My Search" testId="jt-custom-name" />
+            <TextField label="Address" value={url} onChange={(v) => { setUrl(v); setError(null); }} onSubmit={() => void save()}
+                       placeholder="https://example.com/search?q=%s" testId="jt-custom-url" />
+            {error && <ErrorText testId="jt-custom-error">{error}</ErrorText>}
+            <Button variant="affirmative" onClick={() => void save()} data-testid="jt-custom-save">Save</Button>
+            {engine && (
+                <Button variant="negative" data-testid="jt-custom-remove"
+                        onClick={() => void universalSearch.setCustomEngine("", "").then(onClose)}>Remove Engine</Button>
+            )}
+            <Button variant="dark" onClick={onClose}>Cancel</Button>
+        </Dialog>
     );
 }

@@ -238,6 +238,26 @@ Item {
         function onVolumeChanged() { root.statusChanged("volume"); }
         function onKeyboardChanged() { root.statusChanged("keyboard"); }
     }
+    // The browser's page views and the system proxy (the runtime's
+    // systemStatus browser and proxy; shell/sim/simbrowser.h).
+    readonly property bool hasSimBrowser: typeof simBrowser !== "undefined" && simBrowser !== null
+    function applyBrowserSettings() {
+        if (!hasSimBrowser)
+            return;
+        simBrowser.contentBlocker = !!status.browser.contentBlocker;
+        simBrowser.userAgent = status.browser.userAgent === "desktop" ? "desktop" : "mobile";
+    }
+    Connections {
+        target: status
+        function onBrowserChanged() { root.applyBrowserSettings(); }
+        function onProxyChanged() {
+            if (!root.hasSimBrowser)
+                return;
+            simBrowser.setProxy(status.proxy);
+            console.info("phoenix-sim: proxy " + (status.proxy.type === "none" ? "none (the computer's own)"
+                                                   : status.proxy.type + " " + status.proxy.host + ":" + status.proxy.port));
+        }
+    }
     // The lock screen, for the apps (com.palm.systemmanager getLockStatus):
     // the phone answers a ringing call when the user unlocks.
     Connections {

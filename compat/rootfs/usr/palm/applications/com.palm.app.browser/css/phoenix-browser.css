@@ -1,0 +1,31 @@
+/* Phoenix compat: the browser's community features (source/phoenix-browser.js).
+ *
+ * A Private Browsing card's toolbars are red, as the community's Private
+ * Browsing patch (2012) drew them; the toolbar's own edges stay. The find
+ * bar shows the count of matches between the field and prev / next; on a
+ * phone the field takes the room the TouchPad left between them.
+ */
+.phoenix-private .actionbar.enyo-toolbar {
+	background-color: #9b1b1b;
+}
+.phoenix-find-count {
+	color: #666;
+	font-size: 14px;
+	padding: 0 8px;
+	white-space: nowrap;
+	line-height: 46px;
+}
+@media (max-width: 480px) {
+	.phoenix-find-spacer {
+		display: none;
+	}
+	.phoenix-find-count {
+		padding: 0 4px;
+		font-size: 12px;
+	}
+	.phoenix-findbar .enyo-button {
+		min-width: 0;
+		padding-left: 8px;
+		padding-right: 8px;
+	}
+}

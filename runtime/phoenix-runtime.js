@@ -1257,6 +1257,14 @@
         // time, with their times and a delete button (the community's
         // Uber Cycling Email Dashboard; compat overlay of the Email app).
         emailDashboardCycling: false,
+        // The browser's Preferences (Phoenix; docs/M6-PLAN.md F4): its page
+        // views' requests to the content blocker's hosts fail; the user
+        // agent they send, "mobile" (webOS's) or "desktop".
+        browserContentBlocker: false,
+        browserUserAgent: "mobile",
+        // Settings > Wi-Fi > Proxy (Phoenix): {type: "none" | "http" |
+        // "socks", host, port}, the system's proxy for every page.
+        networkProxy: { type: "none", host: "", port: 0 },
         firstUse: false
     };
 
@@ -1285,6 +1293,20 @@
             numberRow: !!p.keyboardNumberRow
         };
     }
+    // The page views' settings and the system proxy, as the shell takes
+    // them (hostStatus browser, proxy; phoenix-sim's simBrowser).
+    function browserSettings(p) {
+        return { contentBlocker: !!p.browserContentBlocker, userAgent: p.browserUserAgent === "desktop" ? "desktop" : "mobile" };
+    }
+    function networkProxy(x) {
+        x = x && typeof x === "object" ? x : {};
+        var type = x.type === "http" || x.type === "socks" ? x.type : "none";
+        var port = Math.round(Number(x.port));
+        var host = String(x.host || "").trim();
+        if (type !== "none" && (!host || !(port > 0 && port < 65536))) type = "none";
+        return type === "none" ? { type: "none", host: "", port: 0 } : { type: type, host: host, port: port };
+    }
+    runtime.networkProxy = networkProxy;
     var TWEAK_KEYS = ["infiniteCardCyclingEnabled", "sysUiEnableMaximizeEdges", "sysUiEnableWaveLauncher", "showReticleAnimation",
                       "animationSpeed", "gestureSensitivity", "hapticFeedback", "launcherGridDensity", "showBatteryPercent",
                       "keyboardNumberRow"];
@@ -1875,7 +1897,14 @@
           suggestURL: "https://en.wikipedia.org/w/api.php?action=opensearch&search=#{searchTerms}&limit=8&namespace=0&format=json" },
         { id: "amazon", displayName: "Amazon", url: "https://www.amazon.com/s/?k=#{searchTerms}", enabled: false },
         { id: "imdb", displayName: "IMDb", url: "https://www.imdb.com/find?q=#{searchTerms}", enabled: false },
-        { id: "cnn", displayName: "CNN", url: "https://www.cnn.com/search?q=#{searchTerms}", enabled: false }
+        { id: "cnn", displayName: "CNN", url: "https://www.cnn.com/search?q=#{searchTerms}", enabled: false },
+        // Phoenix adds the engines the community asked for (docs/M6-PLAN.md
+        // F4 item 7): the default engine of Just Type and the browser alike.
+        { id: "duckduckgo", displayName: "DuckDuckGo", url: "https://duckduckgo.com/?q=#{searchTerms}",
+          suggestURL: "https://duckduckgo.com/ac/?q=#{searchTerms}&type=list", icon: "web" },
+        { id: "bing", displayName: "Bing", url: "https://www.bing.com/search?q=#{searchTerms}",
+          suggestURL: "https://api.bing.com/osjson.aspx?query=#{searchTerms}", icon: "web" },
+        { id: "startpage", displayName: "Startpage", url: "https://www.startpage.com/do/search?q=#{searchTerms}", icon: "web" }
     ];
     var US_DEFAULT_PREFS = { defaultSearchEngine: "google", defaultSearch: "true", ContactSearch: "true", AppSearch: "true", GAL: "false" };
     var usWatchers = [];
@@ -1916,10 +1945,23 @@
         });
         return usOrdered(kind, out);
     }
+    // An engine of the user's own (Settings > Just Type > Custom engine;
+    // Phoenix's setCustomSearchEngine {displayName, url}): its address has
+    // #{searchTerms} (or %s) where the words go.
+    var US_WEB_ICON = "/usr/share/phoenix/runtime/search-icons/search-icon-web.svg";
+    function usCustom() {
+        var c = usState().custom;
+        return c && c.url ? { id: "custom", displayName: c.displayName || "Custom", url: c.url, icon: "web" } : null;
+    }
     function usEngines() {
-        return usOrdered("search", US_ENGINES.map(function (e) {
+        var all = US_ENGINES.slice(), custom = usCustom();
+        if (custom) all.push(custom);
+        return usOrdered("search", all.map(function (e) {
             var x = { category: "search", type: "web", iconFilePath: US_ICONS + "search-icon-" + e.id + ".png" }, k;
             for (k in e) x[k] = e[k];
+            // Engines whose own art Phoenix does not ship: a magnifier.
+            if (e.icon === "web") x.iconFilePath = US_WEB_ICON;
+            delete x.icon;
             x.enabled = usEnabled("search:" + e.id, e.enabled);
             return x;
         }));
@@ -1979,6 +2021,23 @@
             usSave(st);
             reply(ok());
         },
+        // Phoenix: {displayName, url} sets the custom engine, {url: ""}
+        // removes it (the default goes back to Google if it was the one).
+        "/setCustomSearchEngine": function (p, reply) {
+            var url = String(p.url || "").trim(), st = usState();
+            if (!url) {
+                delete st.custom;
+                if (usPrefs().defaultSearchEngine === "custom") st.prefs.defaultSearchEngine = "google";
+                usSave(st);
+                return reply(ok());
+            }
+            url = url.replace(/%s/g, "#{searchTerms}");
+            if (!/^https?:\/\/[^\s]+$/i.test(url) || url.indexOf("#{searchTerms}") < 0)
+                return reply(fail(-1, "The address must start with http:// or https:// and have %s where the words go"));
+            st.custom = { displayName: String(p.displayName || "").trim() || "Custom", url: url };
+            usSave(st);
+            reply(ok());
+        },
         // {category, enabled}: every item of the category on or off.
         "/updateAllSearchItems": function (p, reply) {
             var category = p.category || "search", items = usItems(category);
@@ -2018,6 +2077,15 @@
     //     __phoenixRuntime.webViewEvent;
     //   - elsewhere an <iframe> inside the object, which shows sites that
     //     allow framing (and can only report same-origin titles).
+
+    // BrowserServer's own calls (the browser's Preferences: Clear Cookies,
+    // Clear Cache, isis-browser Browser.js): phoenix-sim clears the page
+    // views' profile (simBrowser). The iframe engine has none of its own.
+    register(["com.palm.browserServer"], {
+        "/clearCookies": function (p, reply) { host.postToHost("browserData", { op: "clearCookies" }); reply(ok()); },
+        "/clearCache": function (p, reply) { host.postToHost("browserData", { op: "clearCache" }); reply(ok()); },
+        "*": function (p, reply) { reply(ok()); }
+    });
 
     var WEBVIEW_TYPE = "application/x-palm-browser";
     var nativeWebViews = global.location && global.location.protocol === "phoenix:";
@@ -2068,7 +2136,7 @@
             if (this.connected) return;
             this.connected = true;
             if (nativeWebViews) {
-                this.post("create", {});
+                this.post("create", { "private": !!this.privateMode });
                 this.track();
             } else {
                 var frame = this.frame = global.document.createElement("iframe");
@@ -2172,6 +2240,28 @@
         frameReport: function () {
             this.listener("urlTitleChanged", this.url, this.title || this.url, this.back.length > 0, this.forward.length > 0);
         },
+        // Find on Page in the iframe's page (same-origin only): the next
+        // match with window.find, counted in the page's text.
+        frameFind: function (text, backward) {
+            var w = null, doc = null;
+            try { w = this.frame && this.frame.contentWindow; doc = this.frame && this.frame.contentDocument; } catch (e) { w = null; }
+            if (!w || !doc) return this.findResult(0, 0);
+            var clear = function () { try { w.getSelection().removeAllRanges(); } catch (e) { /* ignore */ } };
+            if (text !== this.findText) { this.findText = text; this.findIndex = 0; clear(); }
+            if (!text) return this.findResult(0, 0);
+            var body = String(doc.body ? doc.body.innerText : "").toLowerCase(), t = text.toLowerCase(), n = 0, i = -1;
+            while ((i = body.indexOf(t, i + 1)) >= 0) n++;
+            var found = n > 0 && w.find(text, false, !!backward, true);
+            this.findIndex = !found ? 0 : backward ? (this.findIndex <= 1 ? n : this.findIndex - 1)
+                                                   : (this.findIndex >= n ? 1 : this.findIndex + 1);
+            this.findResult(this.findIndex, n);
+        },
+        // The count goes to the page as a "phoenixfindresult" event on the
+        // object ({active, total}); BrowserAdapter had no such callback.
+        findResult: function (active, total) {
+            var E = global.CustomEvent;
+            if (E) this.node.dispatchEvent(new E("phoenixfindresult", { bubbles: true, detail: { active: active, total: total } }));
+        },
         // The plugin's scripting API (the methods BasicWebView and the apps call).
         api: {
             setPageIdentifier: function (id) { this.pageIdentifier = id; },
@@ -2204,7 +2294,21 @@
                 if (nativeWebViews) return this.post("stop", {});
                 this.listener("loadStopped");
             },
-            findInPage: function (text) { if (nativeWebViews) this.post("find", { text: text || "" }); },
+            // (text, backward): Phoenix adds the direction (the find bar's
+            // prev and next) and the count of matches (findResult).
+            findInPage: function (text, backward) {
+                if (nativeWebViews) this.post("find", { text: text || "", backward: !!backward });
+                else this.frameFind(text || "", backward);
+            },
+            // Phoenix: the browser's Private Browsing card. The native view
+            // starts again in the private profile, at the page it showed;
+            // the iframe engine has only the one profile of the page.
+            setPrivateBrowsing: function (on) {
+                on = !!on;
+                if (on === !!this.privateMode) return;
+                this.privateMode = on;
+                if (nativeWebViews && this.connected && !this.destroyed) this.post("private", { on: on, url: this.url || "" });
+            },
             clearHistory: function () { this.back = []; this.forward = []; },
             setVisibleSize: function () {},
             pageFocused: function () {},
@@ -2294,6 +2398,7 @@
     runtime.webViewEvent = function (id, name, args) {
         var a = webViews[id];
         if (!a) return;
+        if (name === "phoenixFindResult") return a.findResult && a.findResult((args || [])[0] || 0, (args || [])[1] || 0);
         if (name === "urlTitleChanged") { a.url = args[0]; a.title = args[1]; }
         a.listener.apply(a, [name].concat(args || []));
     };
@@ -3978,6 +4083,9 @@
                 keyboardAccess: keyboardAccess(p.accessibility || {}),
                 // Settings > Advanced (tweaks above).
                 tweaks: tweaks(p),
+                // The browser's page views and the system proxy (simBrowser).
+                browser: browserSettings(p),
+                proxy: networkProxy(p.networkProxy),
                 wallpaperFile: (p.wallpaper && p.wallpaper.wallpaperFile) || "",
                 // Dock mode (Settings > Exhibition): its wallpaper, the
                 // exhibitions that are on (after the built-in Time), its
@@ -4622,7 +4730,8 @@
             }
             if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "lockScreenPreviews", "notificationRepeat", "screenTimeout", "lockTimeout", "enableALS", "sysUiEnableNextPrevGestures", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
                  "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "x_palm_textinput", "accessibility",
-                 "dockwallpaper", "dockModeSoundPref", "exhibition"].concat(TWEAK_KEYS).some(function (k) { return k in p; })) {
+                 "dockwallpaper", "dockModeSoundPref", "exhibition", "browserContentBlocker", "browserUserAgent",
+                 "networkProxy"].concat(TWEAK_KEYS).some(function (k) { return k in p; })) {
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
                 changed();
             }

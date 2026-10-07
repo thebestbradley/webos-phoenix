@@ -123,6 +123,11 @@ QtObject {
     // batteryPercent, numberRow}. Missing keys are the defaults
     // (Shell.tweak()).
     property var tweaks: ({})
+    // The browser's page views (its Preferences: browserContentBlocker,
+    // browserUserAgent) and the system proxy (Settings > Wi-Fi > Proxy,
+    // networkProxy), for phoenix-sim's simBrowser (sim.qml).
+    property var browser: ({ contentBlocker: false, userAgent: "mobile" })
+    property var proxy: ({ type: "none", host: "", port: 0 })
     // A hardware keyboard is attached (phoenix-sim --hardware-keyboard,
     // Ctrl+Shift+K): the virtual keyboard stays down unless asked for.
     property bool hardwareKeyboard: typeof simHardwareKeyboard !== "undefined" && simHardwareKeyboard === true
@@ -308,7 +313,7 @@ QtObject {
     // screenTimeout, lockTimeout, advancedGestures, keyboardShortcuts,
     // volume, streams, systemSounds, tapSounds, textAssist, keyboards,
     // keyboard, ringtone, alerttone,
-    // notificationtone, callForwarding, reduceMotion, keyboardAccess, tweaks,
+    // notificationtone, callForwarding, reduceMotion, keyboardAccess, tweaks, browser, proxy,
     // vpnProfiles, exhibitionApps, dockModeSound, exhibition {enabled,
     // startAfter, nightMode, nightStart, nightEnd}, dockWallpaperUrl,
     // automaticBrightness, displayOnWhenConnected.
@@ -379,6 +384,10 @@ QtObject {
             keyboardAccess = s.keyboardAccess || ({});
         if (s.tweaks !== undefined && s.tweaks !== null)
             tweaks = s.tweaks;
+        if (s.browser !== undefined && s.browser !== null)
+            browser = s.browser;
+        if (s.proxy !== undefined && s.proxy !== null && JSON.stringify(s.proxy) !== JSON.stringify(proxy))
+            proxy = s.proxy;
         if (s.vpnProfiles !== undefined) {
             _runtimeVpn = true;
             vpnProfiles = s.vpnProfiles;

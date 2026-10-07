@@ -11,7 +11,7 @@ import { resolve } from "node:path";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, it } from "vitest";
 import { call, universalSearch, type SearchList } from "@phoenix/luna";
-import { JustTypePage } from "./JustType";
+import { customEngineProblem, JustTypePage } from "./JustType";
 import { dropIndex } from "../ReorderList";
 
 const hostMessages: { type: string; payload: Record<string, unknown> }[] = [];
@@ -38,10 +38,11 @@ const list = () => new Promise<SearchList>((res) => { const s = universalSearch.
 
 describe("com.palm.universalsearch", () => {
     it("orders, enables and picks the default engine as luna-universalsearchmgr's methods say", async () => {
-        expect((await list()).engines.map((e) => e.id)).toEqual(["google", "wikipedia", "amazon", "imdb", "cnn"]);
+        // The original's engines, then the ones Phoenix adds (docs/M6-PLAN.md F4).
+        expect((await list()).engines.map((e) => e.id)).toEqual(["google", "wikipedia", "amazon", "imdb", "cnn", "duckduckgo", "bing", "startpage"]);
         await universalSearch.move("search", "imdb", 0);
         await universalSearch.move("search", "google", 4);
-        expect((await list()).engines.map((e) => e.id)).toEqual(["imdb", "wikipedia", "amazon", "cnn", "google"]);
+        expect((await list()).engines.map((e) => e.id).slice(0, 5)).toEqual(["imdb", "wikipedia", "amazon", "cnn", "google"]);
         await universalSearch.setDefaultEngine("imdb");
         const l = await list();
         expect(l.defaultSearchEngine).toBe("imdb");
@@ -55,6 +56,25 @@ describe("com.palm.universalsearch", () => {
         for (const [i, id] of ["google", "wikipedia", "amazon", "imdb", "cnn"].entries()) await universalSearch.move("search", id, i);
         await universalSearch.setDefaultEngine("google");
         for (const id of ["amazon", "imdb", "cnn"]) await universalSearch.setEnabled("search", id, false);
+    });
+
+    it("keeps the user's own engine, with %s where the words go (Phoenix)", async () => {
+        await expect(universalSearch.setCustomEngine("Bad", "ftp://example.com/?q=%s")).rejects.toThrow();
+        await expect(universalSearch.setCustomEngine("Bad", "https://example.com/")).rejects.toThrow();
+        await universalSearch.setCustomEngine("Phoenix Search", "https://search.example.org/?q=%s&lang=en");
+        const custom = (await list()).engines.find((e) => e.id === "custom")!;
+        expect(custom).toMatchObject({ displayName: "Phoenix Search", url: "https://search.example.org/?q=#{searchTerms}&lang=en", enabled: true });
+        expect(custom.iconFilePath).toBe("/usr/share/phoenix/runtime/search-icons/search-icon-web.svg");
+        await universalSearch.setDefaultEngine("custom");
+        expect((await list()).defaultSearchEngine).toBe("custom");
+        // Removed: Google is the default again.
+        await universalSearch.setCustomEngine("", "");
+        const l = await list();
+        expect(l.engines.some((e) => e.id === "custom")).toBe(false);
+        expect(l.defaultSearchEngine).toBe("google");
+        expect(customEngineProblem("https://x.org/?q=%s")).toBeNull();
+        expect(customEngineProblem("x.org/?q=%s")).toMatch(/http/);
+        expect(customEngineProblem("https://x.org/")).toMatch(/%s/);
     });
 
     it("opens from Just Type's Preferences (com.palm.app.searchpreferences)", async () => {

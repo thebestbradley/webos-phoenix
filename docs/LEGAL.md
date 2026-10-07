@@ -358,6 +358,18 @@ data use "Phoenix Account".
   fictional CA made for Phoenix with openssl (its key was thrown away),
   CC0 like the other demo documents.
 
+## The browser's content blocker and search icon
+
+- `runtime/content-blocker/hosts.txt`, the content blocker's list (Browser
+  > Preferences > Block Ads & Trackers), was written for Phoenix from the
+  names of well-known advertising and tracking services, Apache-2.0 like
+  our code. No list was copied: the popular community lists (EasyList,
+  AdGuard's, Disconnect's) are GPL or CC BY-SA, which Phoenix does not ship.
+- `runtime/search-icons/search-icon-web.svg`, Just Type's and the
+  browser's icon for DuckDuckGo, Bing, Startpage and a custom engine, was
+  drawn for Phoenix (Apache-2.0). Those engines' own logos are their
+  trademarks and are not shipped.
+
 ## Map data (OpenStreetMap)
 
 Maps shows, searches and routes on **OpenStreetMap** data, © OpenStreetMap

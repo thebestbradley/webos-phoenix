@@ -226,11 +226,30 @@ Item {
                            + JSON.stringify(id) + "," + JSON.stringify(name) + "," + JSON.stringify(args || []) + ")");
     }
 
+    // The page views' profile (simBrowser: the web's own, apart from the
+    // apps' pages, as BrowserServer's was), or the browser's Private
+    // Browsing one; without simBrowser (tests) the apps'.
+    readonly property bool _hasSimBrowser: typeof simBrowser !== "undefined" && simBrowser !== null
+    function _viewProfile(privateMode) {
+        if (!_hasSimBrowser)
+            return phoenixWebProfile;
+        return privateMode ? simBrowser.privateProfile() : simBrowser.profile;
+    }
+    function _makeView(id, privateMode, props) {
+        const o = { viewId: id, visible: false, privateMode: !!privateMode, profile: _viewProfile(privateMode) };
+        for (const k in props || {})
+            o[k] = props[k];
+        const v = nativeView.createObject(win, o);
+        if (privateMode && _hasSimBrowser)
+            simBrowser.trackPrivateView(v);
+        return v;
+    }
+
     function _webView(p) {
         var v = _webViews[p.id];
         if (p.op === "create") {
             if (!v)
-                _webViews[p.id] = nativeView.createObject(win, { viewId: p.id, visible: false });
+                _webViews[p.id] = _makeView(p.id, p.private, {});
             return;
         }
         if (!v)
@@ -249,7 +268,21 @@ Item {
         case "forward": v.goForward(); break;
         case "reload": v.reload(); break;
         case "stop": v.stop(); break;
-        case "find": v.findText(p.text); break;
+        // Find on Page: the next match (or the one before), and the count
+        // back ("phoenixFindResult": active match, matches).
+        case "find":
+            v.findText(p.text || "", p.backward ? WebEngineView.FindBackward : 0);
+            break;
+        // Private Browsing on or off (the browser's app menu): the page
+        // starts again in a view of the other profile, at the same place.
+        case "private":
+            if (!!p.on === v.privateMode)
+                break;
+            _webViews[p.id] = _makeView(p.id, p.on, { x: v.x, y: v.y, width: v.width, height: v.height, visible: v.visible });
+            if (p.url)
+                _webViews[p.id].url = p.url;
+            v.destroy();
+            break;
         case "edit": edit(p.action, v); break;
         case "print": _print(v, p); break;
         case "destroy":
@@ -264,8 +297,8 @@ Item {
         WebEngineView {
             id: page
             property string viewId
+            property bool privateMode: false
             z: 1
-            profile: phoenixWebProfile
             zoomFactor: win.zoom
             settings.javascriptCanOpenWindows: true
             settings.javascriptCanAccessClipboard: true
@@ -281,6 +314,7 @@ Item {
             onUrlChanged: report()
             onTitleChanged: report()
             onLoadProgressChanged: win._webViewEvent(viewId, "loadProgressChanged", [loadProgress])
+            onFindTextFinished: (result) => win._webViewEvent(viewId, "phoenixFindResult", [result.activeMatch, result.numberOfMatches])
             onLoadingChanged: (info) => {
                 switch (info.status) {
                 case WebEngineView.LoadStartedStatus:
@@ -309,7 +343,7 @@ Item {
             // asks the application manager who opens the type and has the
             // download manager fetch it (BrowserApp.gotResourceInfo).
             Connections {
-                target: phoenixWebProfile
+                target: page.profile
                 function onDownloadRequested(download) {
                     if (download.view !== page)
                         return;

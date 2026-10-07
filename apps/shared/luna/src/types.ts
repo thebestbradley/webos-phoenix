@@ -220,7 +220,20 @@ export interface SystemPreferences {
     keyboardNumberRow?: boolean;
     /** Phoenix: Email's new-mail dashboard cycles through the new emails, with a delete button. */
     emailDashboardCycling?: boolean;
+    /** Phoenix: the browser's page views block the content blocker's hosts. */
+    browserContentBlocker?: boolean;
+    /** Phoenix: the user agent the browser's page views send. */
+    browserUserAgent?: "mobile" | "desktop";
+    /** Phoenix: Settings > Wi-Fi > Proxy, the system's proxy. */
+    networkProxy?: NetworkProxy;
     [key: string]: unknown;
+}
+
+/** The system's proxy (Settings > Wi-Fi > Proxy): every page and service goes through it. */
+export interface NetworkProxy {
+    type: "none" | "http" | "socks";
+    host: string;
+    port: number;
 }
 
 /** One of the user's Text Assist shortcuts: typed `shortcut`, the space bar puts in `text`. */

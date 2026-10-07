@@ -144,6 +144,9 @@ jobs:
       - name: The keyboard's dictation (recording format, transcriber replies)
         run: build/dictation-test
 
+      - name: The simulator's network (content blocker, user agents, DropShare's server)
+        run: build/simnet-test
+
       - name: The Assistant's on-device model runner and speech
         run: build/localmodels-test
 
@@ -348,6 +351,7 @@ jobs:
           build/siminstaller-test
           build/dictation-test
           build/localmodels-test
+          build/simnet-test
 
       - name: The simulator starts (phone and tablet)
         run: |

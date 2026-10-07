@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- webOS Phoenix: Just Type's and the browser's icon for a web search
+     engine whose own art Phoenix does not ship (DuckDuckGo, Bing,
+     Startpage, a custom engine). Drawn for Phoenix, Apache-2.0; in the
+     manner of luna-applauncher's 48 px search-icon-*.png tiles. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#d9dde2"/>
+    </linearGradient>
+    <linearGradient id="lens" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#bfe3ff"/>
+      <stop offset="1" stop-color="#5aa6e6"/>
+    </linearGradient>
+  </defs>
+  <rect x="4.5" y="4.5" width="39" height="39" rx="7" fill="url(#tile)" stroke="#8a9098"/>
+  <circle cx="21" cy="21" r="9" fill="url(#lens)" stroke="#2f6fae" stroke-width="3"/>
+  <path d="M27.5 27.5 L36 36" stroke="#3b4048" stroke-width="5" stroke-linecap="round"/>
+  <path d="M16.5 18 a5.5 5.5 0 0 1 5 -3.5" stroke="#ffffff" stroke-width="1.6" fill="none" stroke-linecap="round" opacity="0.85"/>
+</svg>

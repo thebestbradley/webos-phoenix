@@ -643,6 +643,15 @@ Item {
             var launched = launch(target, uid, target === payload.id ? params : null, joins);
             if (launched !== "" && !background)
                 cardFocusRequested(launched);
+        } else if (type === "browserData") {
+            // The browser's Clear Cookies and Clear Cache (com.palm.browserServer):
+            // the page views' profile (phoenix-sim's simBrowser).
+            if (typeof simBrowser !== "undefined" && simBrowser !== null) {
+                if (payload.op === "clearCookies")
+                    simBrowser.clearCookies();
+                else if (payload.op === "clearCache")
+                    simBrowser.clearCache();
+            }
         } else if (type === "banner") {
             // A banner only scrolls by; it leaves nothing in the dashboard
             // (PalmSystem.addBannerMessage).
