@@ -13,7 +13,10 @@ option(PHOENIX_BUILD_SIM "Build the desktop simulator" ON)
 include(GNUInstallDirs)
 set(PHOENIX_DATA_DIR "${CMAKE_INSTALL_DATADIR}/phoenix" CACHE STRING "Install location of QML and assets")
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Gui Qml Quick)
+# Qt 6.8, the LTS release a device's webOS OSE image ships (meta-qt6,
+# scarthgap: docs/HARDWARE.md); the simulator and CI build with it or newer.
+set(PHOENIX_QT_MIN 6.8)
+find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Gui Qml Quick)
 
 # Compiled QML modules (Phoenix.Native) are written here, beside the source
 # QML the simulator loads, and installed next to the QML on the device.
@@ -23,7 +26,7 @@ add_subdirectory(native)
 if(PHOENIX_BUILD_SIM)
     # Qt WebEngine runs the web apps (original webOS apps, Settings, ...).
     # Without it the simulator still runs, with placeholder apps only.
-    find_package(Qt6 6.4 QUIET COMPONENTS WebEngineQuick)
+    find_package(Qt6 ${PHOENIX_QT_MIN} QUIET COMPONENTS WebEngineQuick)
     # The Terminal's PTY core (and its tests, pty-test), shared with the
     # device's org.webosphoenix.pty service.
     add_subdirectory(../services/pty ${CMAKE_CURRENT_BINARY_DIR}/pty)
@@ -37,7 +40,7 @@ if(PHOENIX_BUILD_SIM)
     endif()
     # Widgets: the window's menu bar (the global one on macOS) and toolbar
     # (SimChrome).
-    find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets)
+    find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Widgets)
     add_executable(phoenix-sim sim/main.cpp sim/rootfs.cpp sim/rootfs.h sim/simsettings.h sim/simprocess.h sim/simpty.cpp sim/simpty.h sim/siminstaller.cpp sim/siminstaller.h sim/simsnapshots.cpp sim/simsnapshots.h
                                sim/simchrome.cpp sim/simchrome.h)
     target_link_libraries(phoenix-sim PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets phoenix-pty-core)
@@ -47,7 +50,8 @@ if(PHOENIX_BUILD_SIM)
         sim/icons/power.svg sim/icons/home.svg sim/icons/back.svg sim/icons/rotate-left.svg
         sim/icons/rotate-right.svg sim/icons/screenshot.svg sim/icons/call.svg sim/icons/message.svg
         sim/icons/notification.svg sim/icons/battery.svg sim/icons/charger.svg sim/icons/touchstone.svg
-        sim/icons/phone.svg sim/icons/tablet.svg)
+        sim/icons/phone.svg sim/icons/tablet.svg sim/icons/volume-up.svg sim/icons/volume-down.svg
+        sim/icons/ringer.svg sim/icons/keyboard.svg)
     if(APPLE)
         # Its name in the menu bar's application menu and About box: an
         # Info.plist in the program itself (it is not an .app bundle).
@@ -55,7 +59,7 @@ if(PHOENIX_BUILD_SIM)
     endif()
     if(TARGET Qt6::WebEngineQuick)
         # Network: the pages' HTTP proxy (RootfsSchemeHandler, /__phoenix/proxy).
-        find_package(Qt6 6.4 REQUIRED COMPONENTS Network)
+        find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Network)
         target_link_libraries(phoenix-sim PRIVATE Qt6::WebEngineQuick Qt6::Network)
         target_compile_definitions(phoenix-sim PRIVATE PHOENIX_HAVE_WEBENGINE)
         message(STATUS "phoenix-sim: web apps enabled (Qt WebEngine found)")

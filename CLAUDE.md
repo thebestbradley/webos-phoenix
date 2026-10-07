@@ -32,8 +32,10 @@ cmake -S shell -B build
 cmake --build build
 ```
 
-On a Mac, add `-DCMAKE_PREFIX_PATH="$(brew --prefix qt)"` to the first
-`cmake`. The build also builds `apps/` with npm.
+Add Qt's location to the first `cmake`: on a Mac
+`-DCMAKE_PREFIX_PATH="$(brew --prefix qt)"`, on Ubuntu
+`-DCMAKE_PREFIX_PATH=/opt/Qt/6.8.1/gcc_64` (installed by `scripts/linux-setup.sh`;
+Ubuntu's own Qt is too old). The build also builds `apps/` with npm.
 
 Only the apps: `cd apps && npm run build` (or `npm run build -w settings`).
 Setup from scratch: `scripts/mac-setup.sh` or `scripts/linux-setup.sh`.
@@ -57,7 +59,8 @@ containers): prefix `QTWEBENGINE_DISABLE_SANDBOX=1 xvfb-run -a -s "-screen 0
 Run what covers the change before committing; CI runs all of it.
 
 - QML: `QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -input shell/tests`
-  (`/usr/lib/qt6/bin/qmltestrunner` on Ubuntu, `$(brew --prefix qt)/bin/` on a Mac).
+  (`/opt/Qt/6.8.1/gcc_64/bin/qmltestrunner` on Ubuntu, from `scripts/linux-setup.sh`;
+  `$(brew --prefix qt)/bin/` on a Mac). Qt 6.8 is the minimum: the device's version.
 - Apps: `cd apps && npm run typecheck && npx vitest run` (`--maxWorkers=2` on a busy machine).
 - Web apps in Chromium: `NODE_PATH="$(npm root -g)" node tools/test-<area>.cjs` (the
   README lists them; `test-apps.cjs` covers every app).

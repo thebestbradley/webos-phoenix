@@ -137,7 +137,7 @@ macOS asks for microphone access the first time. Without a microphone,
 
 | Command | What it does |
 | --- | --- |
-| `scripts/linux-setup.sh` | Qt 6, CMake, Node 22; fetch submodules; build |
+| `scripts/linux-setup.sh` | Qt 6.8.1 (into `/opt/Qt`; Ubuntu's own is 6.4), CMake, Node 22; fetch submodules; build |
 | `scripts/linux-setup.sh --tests` | Also the test tools |
 
 Then `./build/phoenix-sim`.
@@ -169,8 +169,8 @@ script put in `.venv` before the DAV and backup tests:
 | Image recipes (parse only) | `scripts/parse-check.sh` (Linux only, about 25 minutes, see [HARDWARE.md](HARDWARE.md#build)) |
 
 `qmltestrunner` is in Qt's `bin` directory: on a Mac
-`"$(brew --prefix qt)/bin/qmltestrunner"`; on Ubuntu
-`/usr/lib/qt6/bin/qmltestrunner`.
+`"$(brew --prefix qt)/bin/qmltestrunner"`; on Ubuntu (Qt 6.8.1 from
+`scripts/linux-setup.sh`) `/opt/Qt/6.8.1/gcc_64/bin/qmltestrunner`.
 
 CI runs all of this on every push (`.github/workflows/ci.yml`); what passes
 there should pass locally, and the reverse.
@@ -214,7 +214,8 @@ what its rules are. It is read automatically at the start of each session.
   scripts/linux-setup.sh --deps
   ```
 
-  The session then builds with `cmake -S shell -B build && cmake --build build`
+  The session then builds with
+  `cmake -S shell -B build -DCMAKE_PREFIX_PATH=/opt/Qt/6.8.1/gcc_64 && cmake --build build`
   and runs the simulator under Xvfb as above.
 - **Agents in parallel:** each works in its own git worktree under
   `.claude/worktrees/`. A worktree needs its own `build/` (CMake) and can
@@ -227,8 +228,11 @@ what its rules are. It is read automatically at the start of each session.
   can't find Homebrew's Qt. Pass `-DCMAKE_PREFIX_PATH="$(brew --prefix qt)"`,
   or delete `build/` and run `scripts/mac-setup.sh` again.
 - **Apps show placeholders instead of web apps:** Qt WebEngine wasn't found
-  at configure time. On Ubuntu install `qt6-webengine-dev
-  qml6-module-qtwebengine`; then delete `build/` and configure again.
+  at configure time. On Ubuntu run `scripts/linux-setup.sh` (its Qt 6.8.1
+  includes it); then delete `build/` and configure again.
+- **"Could not find ... Qt6 (requested version 6.8)" on Ubuntu:** Ubuntu's
+  own Qt is 6.4. Run `scripts/linux-setup.sh`, or configure with
+  `-DCMAKE_PREFIX_PATH=/opt/Qt/6.8.1/gcc_64`.
 - **"phoenix-apps: npm not found" or the Enact demos are skipped:** Node 22
   isn't on the PATH in the terminal you ran CMake from. Add it (above), then
   run `cmake -S shell -B build` again.

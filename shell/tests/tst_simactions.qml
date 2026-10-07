@@ -85,6 +85,36 @@ Item {
             compare(sim.item.simActionChecked("keyboard"), keyboard);
         }
 
+        // The toolbar's keyboard button: with no field in use it opens Just
+        // Type and the keyboard comes up for its field; again, it goes down.
+        // Not over the lock screen, which has no field to type into here.
+        function test_onScreenKeyboard() {
+            var shell = null;
+            (function walk(o) {
+                for (var i = 0; i < o.children.length && !shell; ++i) {
+                    if (o.children[i].hasOwnProperty("justTypeOpen"))
+                        shell = o.children[i];
+                    else
+                        walk(o.children[i]);
+                }
+            })(sim.item);
+            verify(shell.locked);
+            verify(!sim.item.simActionChecked("virtualKeyboard"));
+            sim.item.simTrigger("virtualKeyboard");
+            wait(100);
+            verify(!shell.justTypeOpen && !sim.item.simActionChecked("virtualKeyboard"), "nothing over the lock screen");
+
+            shell.unlock();
+            sim.item.simTrigger("virtualKeyboard");
+            verify(shell.justTypeOpen);
+            tryVerify(function() { return sim.item.simActionChecked("virtualKeyboard"); }, 3000, "the keyboard comes up");
+            keyClick(Qt.Key_O, Qt.ControlModifier | Qt.ShiftModifier);
+            tryVerify(function() { return !sim.item.simActionChecked("virtualKeyboard"); }, 3000, "its key puts it down");
+            shell.gestureBack();
+            tryVerify(function() { return !shell.justTypeOpen; }, 3000);
+            shell.lock();
+        }
+
         function test_turn() {
             // The window turns with the device (no phoenix-sim window here).
             var w = root.Window.window;

@@ -238,6 +238,10 @@ QString SimChrome::allKeys(const Entry &e) const
 
 void SimChrome::trigger(const Entry &e, bool checked)
 {
+    // The screen's window has the focus back first: a toolbar button or a
+    // menu took it, and what the entry does may focus a field in it (the
+    // keyboard button opens Just Type), which needs the window focused.
+    m_container->setFocus();
     if (e.run) {
         QMetaObject::invokeMethod(m_view->rootObject(), "simTrigger", Q_ARG(QVariant, e.id));
     } else if (e.hold && checked) {

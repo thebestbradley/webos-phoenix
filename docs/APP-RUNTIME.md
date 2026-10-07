@@ -297,7 +297,7 @@ laid out for phones and tablets and sharing the Enact demos' notes in db8:
 ## Running apps
 
 **In the simulator.** Build `phoenix-sim` with Qt WebEngine (Homebrew's `qt`
-includes it; on Ubuntu install `qt6-webengine-dev qml6-module-qtwebengine`).
+includes it; on Ubuntu `scripts/linux-setup.sh` installs Qt 6.8.1 with it).
 The apps then appear in the launcher and quick launch with their original
 icons.
 
