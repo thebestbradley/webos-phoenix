@@ -308,17 +308,17 @@ Item {
     readonly property var simActions: [
         // Device: the buttons and switches, how it is held.
         { id: "power", menu: "device", text: qsTr("Power Button"), keys: ["F3"], press: [Qt.Key_F3], icon: "power",
-          tip: qsTr("The screen off and locked, or on again") },
+          tip: qsTr("Lock: the screen off and locked, or on again") },
         { id: "home", menu: "device", text: qsTr("Home Button"), keys: ["Home"], press: [Qt.Key_Home], icon: "home",
           tip: qsTr("With F3: a screen capture") },
         { id: "back", menu: "device", text: qsTr("Back Gesture"), keys: ["Esc"], press: [Qt.Key_Escape], icon: "back" },
         { id: "up", menu: "device", text: qsTr("Up Gesture"), keys: ["F1"], press: [Qt.Key_F1],
           tip: qsTr("Card view, then the launcher") },
         { separator: true, menu: "device" },
-        { id: "volumeUp", menu: "device", text: qsTr("Volume Up"), keys: ["F11"], press: [Qt.Key_F11] },
-        { id: "volumeDown", menu: "device", text: qsTr("Volume Down"), keys: ["F10"], press: [Qt.Key_F10] },
+        { id: "volumeUp", menu: "device", text: qsTr("Volume Up"), keys: ["F11"], press: [Qt.Key_F11], icon: "volume-up" },
+        { id: "volumeDown", menu: "device", text: qsTr("Volume Down"), keys: ["F10"], press: [Qt.Key_F10], icon: "volume-down" },
         // The device's switches (com.palm.keys; DeviceServices): down is silent.
-        { id: "ringer", menu: "device", text: qsTr("Ringer Switch Off (Silent)"), keys: ["Ctrl+Shift+R"],
+        { id: "ringer", menu: "device", text: qsTr("Ringer Switch Off (Silent)"), keys: ["Ctrl+Shift+R"], icon: "ringer",
           run: function () { status.ringerSwitch = status.ringerSwitch === "down" ? "up" : "down"; },
           checked: function () { return status.ringerSwitch === "down"; } },
         { separator: true, menu: "device" },
@@ -340,6 +340,22 @@ Item {
         { id: "keyboard", menu: "device", text: qsTr("Hardware Keyboard Attached"), keys: ["Ctrl+Shift+K"],
           run: function () { status.hardwareKeyboard = !status.hardwareKeyboard; },
           checked: function () { return status.hardwareKeyboard; } },
+        // The on-screen keyboard up or down. It types into the field with
+        // the focus (as on the device, it has nothing to type into
+        // otherwise), so with none Just Type opens, its field focused (not
+        // over the lock screen, where only its PIN or password field takes
+        // the keyboard, nor in First Use).
+        { id: "virtualKeyboard", menu: "device", text: qsTr("On-Screen Keyboard"), keys: ["Ctrl+Shift+O"], icon: "keyboard",
+          tip: qsTr("Up or down; with no text field in use, Just Type opens with it"),
+          run: function () {
+              if (shell.keyboardOpen)
+                  shell.hideKeyboard();
+              else if (shell.imeClient)
+                  shell.showVirtualKeyboard();
+              else if (!shell.locked && !shell.firstUse)
+                  shell.startJustType("");
+          },
+          checked: function () { return shell.keyboardOpen; } },
 
         // Simulate: what happens to the device. Incoming calls and messages
         // (SimWindowSource.simulateIncomingCall / Sms / Mms / Im).
@@ -472,7 +488,8 @@ Item {
         { id: "cardView", menu: "", text: qsTr("Card View"), keyText: Qt.platform.os === "osx" ? "" : qsTr("Super, on its own") }
     ])
     // The toolbar's, in order ("|" separates).
-    readonly property var simToolbar: ["power", "home", "back", "|", "rotateLeft", "rotateRight", "capture", "|",
+    readonly property var simToolbar: ["power", "volumeUp", "volumeDown", "ringer", "|", "home", "back", "virtualKeyboard", "|",
+                                       "rotateLeft", "rotateRight", "capture", "|",
                                        "call", "sms", "notification", "|", "lowBattery", "charger", "touchstone", "|",
                                        "phone", "tablet"]
     // The demo scenes (--scene; buildScene()).

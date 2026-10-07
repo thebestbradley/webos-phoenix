@@ -317,7 +317,7 @@ connection failed"). Left alone the screen dims and turns off as on a device
 (Settings > Screen & Lock > Turn off after; 5 s on the lock screen); a
 click, **F3** or **Home** turns it on (on a Mac, F3 to F11 need **fn**:
 macOS keeps them for itself). `--stay-awake` keeps it on (as `--screenshot`
-does). `--hardware-keyboard` starts with a hardware keyboard attached, and **Ctrl+Shift+K** attaches or detaches one: the virtual keyboard then stays down when a field takes the focus, a keyboard button above the gesture bar brings it up, and typing on the keyboard puts it away. `--low-memory` acts as if memory were low: launching an app shows
+does). `--hardware-keyboard` starts with a hardware keyboard attached, and **Ctrl+Shift+K** attaches or detaches one: the virtual keyboard then stays down when a field takes the focus, a keyboard button above the gesture bar brings it up, and typing on the keyboard puts it away. **Ctrl+Shift+O** (the toolbar's keyboard button) brings the on-screen keyboard up or puts it down; with no text field in use it opens Just Type, whose field it types into. `--low-memory` acts as if memory were low: launching an app shows
 "Sorry, Too Many Cards" instead. On a Touchstone the device goes into dock
 mode, "Exhibition", as on webOS: at once with the screen off (or Power), or
 when the screen would have turned off; an exhibition shows full screen (the

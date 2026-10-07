@@ -47,7 +47,8 @@ if(PHOENIX_BUILD_SIM)
         sim/icons/power.svg sim/icons/home.svg sim/icons/back.svg sim/icons/rotate-left.svg
         sim/icons/rotate-right.svg sim/icons/screenshot.svg sim/icons/call.svg sim/icons/message.svg
         sim/icons/notification.svg sim/icons/battery.svg sim/icons/charger.svg sim/icons/touchstone.svg
-        sim/icons/phone.svg sim/icons/tablet.svg)
+        sim/icons/phone.svg sim/icons/tablet.svg sim/icons/volume-up.svg sim/icons/volume-down.svg
+        sim/icons/ringer.svg sim/icons/keyboard.svg)
     if(APPLE)
         # Its name in the menu bar's application menu and About box: an
         # Info.plist in the program itself (it is not an .app bundle).
