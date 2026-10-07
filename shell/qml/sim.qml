@@ -6,7 +6,7 @@
 // Context properties set by phoenix-sim:
 //   simScene       "locked" | "cards" | "stacks" | "longstack" | "reorder" | "maximized" | "heldcard" | "launcher" |
 //                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" | "drawer" | "capture" | "capturepreview" |
-//                  "justtype" | "keyboard" | "systemmenu" | "empty"
+//                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "systemmenu" | "empty"
 //   simFirstUse    start with First Use (--first-use); without it First Use
 //                  runs at start-up until it has been done once
 //                  (simSettings "firstuse/done", set when the app reports the
@@ -47,6 +47,8 @@ import Phoenix.Sim
 
 Item {
     id: root
+    // The simulated device's status (tests).
+    readonly property var simStatus: status
 
     // ---- The simulated device ----------------------------------------------------
     // The window shows the device as it is held: turned on its side it is a
@@ -80,6 +82,9 @@ Item {
             virtualKeyboard: true
             dictationCommand: typeof simTranscriberCommand !== "undefined" ? simTranscriberCommand : []
             dictationInputFiles: typeof simMicrophoneFiles !== "undefined" ? simMicrophoneFiles : []
+            localModelsDir: typeof simModelsDir !== "undefined" ? simModelsDir : ""
+            llamaServerCommand: typeof simLlamaServer !== "undefined" ? simLlamaServer : []
+            speechCommand: typeof simSpeechCommand !== "undefined" ? simSpeechCommand : []
             bootSound: typeof simBootSounds !== "undefined" && simBootSounds
             bootAnimation: typeof simBootAnimation !== "undefined" && simBootAnimation
             bootUpdating: typeof simUpdating !== "undefined" && simUpdating
@@ -158,6 +163,51 @@ Item {
         onTriggered: root.turnDevice(simTurn)
     }
 
+    // --scene launchermenu: once the launcher is up.
+    Timer {
+        id: sceneMenuTimer
+        interval: 1200
+        onTriggered: shell.openLauncherIconMenu(1)
+    }
+    // (luna-systemui's page has to be up and listening first.)
+    Timer {
+        id: scenePowerTimer
+        interval: 10000
+        onTriggered: shell.powerKeyHeld()
+    }
+    Timer {
+        id: sceneHotTimer
+        interval: 10000
+        onTriggered: root.setTemperature(51)
+    }
+    Timer {
+        id: sceneWaveTimer
+        interval: 1200
+        onTriggered: {
+            var w = shell.waveLauncher;
+            var n = Math.min(shell.launcherLayout.dock.length, Theme.quickLaunchMaxItems - 1) + 1;
+            shell.openWave(w.width * 1.5 / n, w.height - w.baseHeight / 2);
+        }
+    }
+    // --scene launchergroup, launchergroupopen, launchertabs (docs/M6-PLAN.md
+    // F4): the Apps page's second to fifth apps grouped as "Accessories"
+    // (and the group open); a tab "My Stuff" added, in edit mode.
+    Timer {
+        id: sceneGroupTimer
+        interval: 1200
+        onTriggered: {
+            if (root.scene === "launchertabs") {
+                shell.addLauncherTab("My Stuff");
+                shell.launcherEditMode = true;
+                return;
+            }
+            var page = shell.launcherLayout.pages[0];
+            shell.groupLauncherApps(page.slice(1, 5), "Accessories");
+            if (root.scene === "launchergroupopen")
+                shell.openLauncherGroup(shell.launcherLayout.pages[0][1]);
+        }
+    }
+
     // How the UI and the device are turned, for the apps
     // (com.palm.systemmanager getSystemStatus).
     function pushOrientation() {
@@ -194,6 +244,26 @@ Item {
         function onMutedChanged() { root.statusChanged("muted"); }
         function onVolumeChanged() { root.statusChanged("volume"); }
         function onKeyboardChanged() { root.statusChanged("keyboard"); }
+    }
+    // The browser's page views and the system proxy (the runtime's
+    // systemStatus browser and proxy; shell/sim/simbrowser.h).
+    readonly property bool hasSimBrowser: typeof simBrowser !== "undefined" && simBrowser !== null
+    function applyBrowserSettings() {
+        if (!hasSimBrowser)
+            return;
+        simBrowser.contentBlocker = !!status.browser.contentBlocker;
+        simBrowser.userAgent = status.browser.userAgent === "desktop" ? "desktop" : "mobile";
+    }
+    Connections {
+        target: status
+        function onBrowserChanged() { root.applyBrowserSettings(); }
+        function onProxyChanged() {
+            if (!root.hasSimBrowser)
+                return;
+            simBrowser.setProxy(status.proxy);
+            console.info("phoenix-sim: proxy " + (status.proxy.type === "none" ? "none (the computer's own)"
+                                                   : status.proxy.type + " " + status.proxy.host + ":" + status.proxy.port));
+        }
     }
     // The lock screen, for the apps (com.palm.systemmanager getLockStatus):
     // the phone answers a ringing call when the user unlocks.
@@ -243,6 +313,75 @@ Item {
     }
     // The light on the sensor, in lux: dark, dim, indoor, outdoor (Ctrl+Shift+L).
     readonly property var lightLevels: [1, 50, 300, 20000]
+
+    // ---- Accessories and health (docs/M6-PLAN.md F4 items 8-9) ----------------------
+    // A game controller (Ctrl+Shift+G; Ctrl+Shift+A presses A), a USB drive
+    // in the device's port (Ctrl+Shift+U), the battery's temperature
+    // (Ctrl+Shift+T). The pages hear them as shell status.
+    function connectGamepad(on) {
+        status.gamepads = on ? [{ index: 0, name: "Phoenix Wireless Controller", connection: "bluetooth", mapping: "standard",
+                                  id: "Phoenix Wireless Controller (STANDARD GAMEPAD Vendor: 2d50 Product: 0001)",
+                                  buttons: [], axes: [0, 0, 0, 0] }] : [];
+        windows.pushSystemStatus({ gamepads: status.gamepads });
+    }
+    function pressGamepadButton(b) {
+        if (!status.gamepads.length)
+            connectGamepad(true);
+        var pad = JSON.parse(JSON.stringify(status.gamepads[0]));
+        pad.buttons = [b];
+        status.gamepads = [pad];
+        windows.pushSystemStatus({ gamepads: status.gamepads });
+        gamepadRelease.restart();
+    }
+    Timer {
+        id: gamepadRelease
+        interval: 300
+        onTriggered: {
+            if (!status.gamepads.length)
+                return;
+            var pad = JSON.parse(JSON.stringify(status.gamepads[0]));
+            pad.buttons = [];
+            status.gamepads = [pad];
+            windows.pushSystemStatus({ gamepads: status.gamepads });
+        }
+    }
+    function attachUsbDrive(on) {
+        status.usbDrives = on ? [{ id: "sda1", label: "PHOENIX", vendor: "SanDisk Cruzer Blade", size: 16008609792, used: 5368709120,
+                                   fs: "vfat" }] : [];
+        windows.pushSystemStatus({ usbDrives: status.usbDrives });
+    }
+    readonly property var temperatures: [31, 46, 51]
+    function setTemperature(t) {
+        status.temperature = t;
+        // powerd's batteryStatus signal carries it (the pages' setPower).
+        windows.simulatePower({ temperature: t });
+        console.info("phoenix-sim: battery " + t + " °C");
+    }
+
+    // Which app is in front with the screen on, for Settings > Battery's
+    // usage (the runtime's battery block): every minute, and when the app
+    // in front changes, the time since goes to the pages.
+    property string _usageApp: ""
+    property real _usageSince: Date.now()
+    function _usageTick() {
+        var now = Date.now(), ms = Math.max(0, now - _usageSince);
+        _usageSince = now;
+        var on = shell.display.state !== "off";
+        if (ms > 0 && on)
+            windows.pushSystemStatus({ usageTick: { appId: shell.locked ? "" : _usageApp, ms: ms, at: now } });
+        var i = windows.cardIndex(windows.focusedUid);
+        _usageApp = i >= 0 && shell.cardView.maximized ? windows.cards.get(i).appId : "";
+    }
+    Timer {
+        interval: 60000
+        running: true
+        repeat: true
+        onTriggered: root._usageTick()
+    }
+    Connections {
+        target: windows
+        function onFocusedUidChanged() { root._usageTick(); }
+    }
 
     // A vibration (com.palm.vibrate, a banner's "vibrate"): the device
     // shakes in the window while it lasts, under a label saying what it is.
@@ -309,6 +448,11 @@ Item {
         // Device: the buttons and switches, how it is held.
         { id: "power", menu: "device", text: qsTr("Power Button"), keys: ["F3"], press: [Qt.Key_F3], icon: "power",
           tip: qsTr("Lock: the screen off and locked, or on again") },
+        // Power held 3 s: the power menu (Shell.powerKeyHeld; F3 held down
+        // does the same).
+        { id: "powerHold", menu: "device", text: qsTr("Hold Power Button"), keys: ["Shift+F3"],
+          tip: qsTr("The power menu: Airplane Mode, Luna Restart, Device Restart, Shut Down"),
+          run: function () { shell.powerKeyHeld(); } },
         { id: "home", menu: "device", text: qsTr("Home Button"), keys: ["Home"], press: [Qt.Key_Home], icon: "home",
           tip: qsTr("With F3: a screen capture") },
         { id: "back", menu: "device", text: qsTr("Back Gesture"), keys: ["Esc"], press: [Qt.Key_Escape], icon: "back" },
@@ -422,6 +566,29 @@ Item {
         { id: "touchToShareTap", menu: "simulate", text: qsTr("Touch to Share: Tap the Phone"), keys: ["Ctrl+F7"],
           run: function () { windows.simulateTouchToShareTap(); } },
         { separator: true, menu: "simulate" },
+        // Accessories (docs/M6-PLAN.md F4 item 8): a Bluetooth game
+        // controller (its A button), a USB drive on the device's own USB
+        // port (host mode, OTG). The pages see them (the runtime's
+        // gamepads and USB blocks): web apps through the Gamepad API.
+        { id: "gamepad", menu: "simulate", text: qsTr("Game Controller Connected"), keys: ["Ctrl+Shift+G"],
+          tip: qsTr("A Bluetooth game controller; web apps see it with the Gamepad API"),
+          run: function () { root.connectGamepad(status.gamepads.length === 0); },
+          checked: function () { return status.gamepads.length > 0; } },
+        { id: "gamepadA", menu: "simulate", text: qsTr("Game Controller: Press A"), keys: ["Ctrl+Shift+A"],
+          run: function () { root.pressGamepadButton(0); } },
+        { id: "usbOtg", menu: "simulate", text: qsTr("USB Drive in the Device (OTG)"), keys: ["Ctrl+Shift+U"],
+          tip: qsTr("A USB drive on the device's own port: Settings > USB"),
+          run: function () { root.attachUsbDrive(status.usbDrives.length === 0); },
+          checked: function () { return status.usbDrives.length > 0; } },
+        // Health (item 9): the battery's temperature, normal, warm (45 °C,
+        // the first warning) or hot (50 °C, the second), as powerd reports it.
+        { id: "temperature", menu: "simulate", text: qsTr("Next Device Temperature"), keys: ["Ctrl+Shift+T"],
+          tip: qsTr("Normal (31 °C), warm (46 °C), hot (51 °C)"),
+          run: function () {
+              var i = root.temperatures.indexOf(status.temperature);
+              root.setTemperature(root.temperatures[(i + 1) % root.temperatures.length]);
+          } },
+        { separator: true, menu: "simulate" },
         // A headset (with its microphone) and its button, twice within a
         // second a double click; the play/pause media key; the light on
         // the sensor (com.palm.keys, com.palm.ambientLightSensor).
@@ -494,9 +661,9 @@ Item {
                                        "phone", "tablet"]
     // The demo scenes (--scene; buildScene()).
     readonly property var scenes: ["locked", "cards", "stacks", "longstack", "reorder", "maximized", "heldcard",
-                                   "launcher", "launcheredit", "launcherinstall", "pin", "emergency", "firstuse",
+                                   "launcher", "launcheredit", "launchermenu", "launchergroup", "launchergroupopen", "launchertabs", "launcherinstall", "wave", "powermenu", "hot", "pin", "emergency", "firstuse",
                                    "lowbattery", "banner", "notified", "dashboard", "drawer", "capture",
-                                   "capturepreview", "justtype", "keyboard", "systemmenu", "empty"]
+                                   "capturepreview", "justtype", "keyboard", "clipstrip", "assistant", "systemmenu", "empty"]
     readonly property string scene: typeof simScene !== "undefined" ? simScene : ""
 
     // The keys of the entries that run something, wherever the keyboard
@@ -594,6 +761,72 @@ Item {
         } else {
             shutdownTimer.triggered();
         }
+    }
+
+    // The power menu's Shut Down (machineOff; docs/M6-PLAN.md F4): the
+    // screen goes dark as the shutdown sound plays, and the device stays off
+    // until Power (F3) or a click turns it on again: phoenix-sim starts
+    // again, booting.
+    property bool poweredOff: false
+    Connections {
+        target: windows
+        function onShutdownRequested(reason) { root.powerOff(); }
+        // Luna Restart: the system UI again (phoenix-sim restarted at once,
+        // its boot logo, no shutdown sound); the apps start afresh.
+        function onRestartUiRequested() {
+            if (root.shuttingDown)
+                return;
+            root.shuttingDown = true;
+            device.visible = false;
+            if (typeof simProcess === "undefined" || !simProcess || !simProcess.restart([]))
+                Qt.quit();
+        }
+    }
+    function powerOff() {
+        if (root.shuttingDown)
+            return;
+        root.shuttingDown = true;
+        device.visible = false;
+        if (shell.bootSound)
+            shell.sounds.shutdown();
+        offDelay.start();
+    }
+    Timer {
+        id: offDelay
+        interval: shell.bootSound ? 4200 : 300
+        onTriggered: root.poweredOff = true
+    }
+    function powerOn() {
+        if (!root.poweredOff)
+            return;
+        if (typeof simProcess === "undefined" || !simProcess || !simProcess.restart([]))
+            Qt.quit();
+    }
+    Rectangle {
+        objectName: "simPoweredOff"
+        anchors.fill: parent
+        z: 10000
+        color: "black"
+        visible: root.poweredOff
+        Text {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.margins: 16
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+            text: qsTr("Off. Press F3 (Power) or click to turn it on.")
+            color: "#777777"
+            font.family: Theme.fontFamily
+            font.pixelSize: 13
+        }
+        MouseArea { anchors.fill: parent; onClicked: root.powerOn() }
+    }
+    Shortcut {
+        sequence: "F3"
+        enabled: root.poweredOff
+        context: Qt.ApplicationShortcut
+        onActivated: root.powerOn()
     }
 
     // A restart (machineReboot: a system update's "Install now"): the
@@ -777,6 +1010,9 @@ Item {
         pushOrientation();
         // Settings offers Advanced gestures where there is a gesture area.
         windows.pushSystemStatus({ gestureArea: Theme.gestureAreaHeight > 0 });
+        // The accessories (none at boot) and what the device is: Settings
+        // offers tethering on phones.
+        windows.pushSystemStatus({ gamepads: [], usbDrives: [], formFactor: shell.tablet ? "tablet" : "phone" });
         if (typeof simSettings !== "undefined") {
             windows.launcherLayoutJson = simSettings.value("launcher/layout");
             windows.dockModePositionsJson = simSettings.value("dockmode/positions");
@@ -809,6 +1045,12 @@ Item {
                     shell.launch(simLaunch[j]);
                 if (opening)
                     windows.openUrl(simOpen);
+                // --scene clipstrip with --launch: the strip over that app.
+                if (typeof simScene !== "undefined" && simScene === "clipstrip")
+                    root.clipStripScene();
+                // --scene assistant with --launch: the assistant over that app.
+                if (typeof simScene !== "undefined" && simScene === "assistant")
+                    root.assistantScene();
                 root.startOnTouchstone();
             });
             return;
@@ -902,6 +1144,25 @@ Item {
             shell.gestureUp();
             if (scene === "launcheredit")
                 shell.launcherEditMode = true;
+        } else if (scene === "powermenu") {
+            // Power held: luna-systemui's power menu (once its page is up).
+            scenePowerTimer.start();
+        } else if (scene === "hot") {
+            // The battery at 51 °C: luna-systemui's temperature alert (once
+            // its page is up).
+            sceneHotTimer.start();
+        } else if (scene === "wave") {
+            // The wave launcher (Settings > Advanced) over an app, the
+            // finger on the dock's second app.
+            shell.cardView.maximizeProgress = 1;
+            sceneWaveTimer.start();
+        } else if (scene === "launchergroup" || scene === "launchergroupopen" || scene === "launchertabs") {
+            shell.gestureUp();
+            sceneGroupTimer.start();
+        } else if (scene === "launchermenu") {
+            // The icon menu of the launcher's second icon (press and hold).
+            shell.gestureUp();
+            sceneMenuTimer.start();
         } else if (scene === "launcherinstall") {
             // Downloads with two apps from the Marketplace: one being
             // installed (40%, the progress strip, the icon faded), one
@@ -958,7 +1219,110 @@ Item {
         } else if (scene === "keyboard") {
             // Just Type, its field focused: the keyboard comes up.
             shell.startJustType("");
+        } else if (scene === "clipstrip") {
+            shell.startJustType("");
+            clipStripScene();
+        } else if (scene === "assistant") {
+            assistantScene();
         }
+    }
+
+    // "assistant": a short conversation with the Phoenix Assistant
+    // (org.webosphoenix.assistant: a sum, a timer, and a question nothing on
+    // the phone can answer), then its view over the screen (the app with
+    // --launch, else the card view; with --launch org.webosphoenix.assistant
+    // the app shows it instead). Each request waits for an answer; one
+    // made before a page with the runtime was up is made again.
+    function assistantScene() {
+        assistantSceneSteps.asks = ["What's 15% of 80?", "Set a timer for 10 minutes", "Who wrote the Odyssey?"];
+        assistantSceneSteps.next();
+    }
+    Timer {
+        id: assistantSceneSteps
+        property var asks: []
+        property int serial: 0
+        interval: 3000
+        onTriggered: next()
+        function next() {
+            if (asks.length === 0) {
+                // The Assistant app itself shows the conversation.
+                if (!shell.cardView.maximized || shell._appIdOf(shell.cardView.currentUid) !== "org.webosphoenix.assistant")
+                    shell.openAssistant(false);
+                return;
+            }
+            var mine = ++serial;
+            restart();
+            windows.lunaCall("luna://org.webosphoenix.assistant/ask", { text: asks[0], speak: false }, function (r) {
+                if (mine !== assistantSceneSteps.serial || r === null)
+                    return;
+                assistantSceneSteps.stop();
+                assistantSceneSteps.asks = assistantSceneSteps.asks.slice(1);
+                assistantSceneSteps.next();
+            });
+        }
+    }
+
+    // "clipstrip": a few clips in the clipboard history (org.webosphoenix.
+    // clipboard), the keyboard up for the field in front (the app's first
+    // text field, with --launch; else Just Type's), and its clip strip open.
+    function clipStripScene() {
+        var seed = [
+            { text: "Pick up the photos from the lab on Friday", source: "org.webosphoenix.tasks" },
+            { text: "https://webosphoenix.org/news", title: "webOS Phoenix news", source: "org.webosphoenix.browser" },
+            { text: "c0rrect-Horse!battery", sensitive: true, kind: "password", source: "org.webosphoenix.passwords" },
+            { text: "482 913", source: "org.webosphoenix.authenticator", sensitive: true },
+            { text: "350 Main Street, Sunnyvale", source: "org.webosphoenix.maps" },
+            { text: "Thanks! See you at eight.", source: "org.webosphoenix.messaging" }
+        ];
+        var call = function (m, p, done) { windows.lunaCall("luna://org.webosphoenix.clipboard/" + m, p, done || function () {}); };
+        var focusField = function () {
+            var w = shell.cardView.maximized ? windows.windowFor(shell.cardView.currentUid) : null;
+            // The page's view takes the focus first (Chromium sends a page
+            // without it no focus events), as a tap on the card would.
+            var view = w ? windows.inputTarget(shell.cardView.currentUid) : null;
+            if (view)
+                view.forceActiveFocus();
+            if (w && w.runScript)
+                w.runScript("(function f(n) { var e = document.querySelector('input:not([type=checkbox]):not([type=radio]), textarea');"
+                            + " if (e) e.focus(); else if (n > 0) setTimeout(function () { f(n - 1); }, 300); })(20)");
+            var open = function () {
+                if (!shell.keyboardOpen)
+                    return;
+                shell.keyboardOpenChanged.disconnect(open);
+                shell.keyboard.openClips();
+            };
+            if (shell.keyboardOpen)
+                shell.keyboard.openClips();
+            else
+                shell.keyboardOpenChanged.connect(open);
+        };
+        var run = function () {
+            call("addCategory", { name: "Work" }, function (c) {
+                var i = 0;
+                var next = function () {
+                    if (i >= seed.length)
+                        return focusField();
+                    call("add", seed[i++], function (r) {
+                        if (r && r.clip && i === 5)
+                            call("pin", { id: r.clip.id });
+                        if (r && r.clip && i === 1 && c && c.category)
+                            call("setCategory", { id: r.clip.id, category: c.category.id });
+                        next();
+                    });
+                };
+                next();
+            });
+        };
+        if (windows.systemUiLoaded)
+            return run();
+        var once = function () {
+            if (!windows.systemUiLoaded)
+                return;
+            windows.systemUiLoadedChanged.disconnect(once);
+            // The app's page has a moment to come up.
+            Qt.callLater(run);
+        };
+        windows.systemUiLoadedChanged.connect(once);
     }
 
     Timer {

@@ -1,0 +1,19 @@
+<!doctype html>
+<!-- Copyright (c) 2026 webOS Phoenix contributors. SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <!-- Clips can hold secrets: only this app's own files may run; no network, no frames, no
+         forms that post, no eval. Pictures copied from the web are shown from their address.
+         Inline style attributes are allowed for React's style props. See docs/SECURITY-APPS.md. -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http:; font-src 'self'; connect-src 'self' data:; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'none'; media-src 'none'">
+    <meta name="referrer" content="no-referrer">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <title>Clipboard</title>
+</head>
+<body class="pui-app">
+    <div id="root"></div>
+    <script type="module" src="./src/main.tsx"></script>
+</body>
+</html>

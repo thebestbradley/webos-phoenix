@@ -26,6 +26,9 @@ Item {
     property color fillColor: Theme.statusBarFill
     property bool systemMenuOpen: false
     property bool lockScreen: false
+    // Settings > Advanced > Battery percentage (the community's "Battery
+    // Percent and Icon" patches): the charge beside the battery.
+    property bool batteryPercent: false
     // Tablet: an app, the launcher or Just Type is up; the bar's fill fades
     // in under its tiled art (StatusBar::fadeBar, setMaximizedAppTitle).
     property bool filled: false
@@ -309,6 +312,21 @@ Item {
             source: !bar.system ? ""
                     : bar.system.airplaneMode ? Theme.asset("statusBar/rssi-flightmode.png")
                     : Theme.asset("statusBar/rssi-" + Math.max(0, bar.system.signalBars) + ".png")
+        }
+        // The charge, in the bar's 14 px bold beside the icon, coloured as
+        // the patches did: red when low (the battery's own red states, at
+        // 12% and under), amber to 20%, else white; green while charging.
+        Text {
+            objectName: "batteryPercent"
+            readonly property int pct: bar.system ? bar.system.batteryPercent : -1
+            visible: bar.batteryPercent && pct >= 0
+            anchors.verticalCenter: parent.verticalCenter
+            text: pct + "%"
+            color: bar.system && bar.system.charging ? "#8CE05A" : pct <= Theme.batteryChargeLevels[0] ? "#FF4D40"
+                 : pct <= Theme.batteryChargeLevels[1] ? "#FFC21A" : Theme.text
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.statusBarFontSize
+            font.bold: true
         }
         Image {
             objectName: "battery"

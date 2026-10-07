@@ -1,0 +1,27 @@
+{
+    "id": "org.webosphoenix.assistant",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Assistant",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "iconColor": "#3b2a6b",
+    "uiRevision": 2,
+    "keywords": ["Assistant", "Ask", "Voice", "Siri", "Chat", "AI"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launcherTab": 0
+    },
+    "//universalSearch": "Just Type (com.palm.universalsearch): the \"Ask Assistant\" action asks the typed words in the conversation in use.",
+    "universalSearch": {
+        "action": {
+            "displayName": "Ask Assistant",
+            "url": "org.webosphoenix.assistant",
+            "launchParam": "text"
+        }
+    }
+}

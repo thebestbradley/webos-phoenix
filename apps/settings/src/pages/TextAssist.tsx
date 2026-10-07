@@ -12,7 +12,10 @@
 // goes from one to the next. Hardware keyboard: the shell's shortcuts,
 // iPad-style (Ctrl / Command) or desktop-style (Alt, Super), system
 // preference keyboardShortcuts. Shortcuts: the user's text replacements
-// (TextAssistShortcuts.tsx; x_palm_textinput).
+// (TextAssistShortcuts.tsx; x_palm_textinput). Number row (Phoenix; the
+// community's keyboard layout patches, docs/M6-PLAN.md F4): digits above
+// the phone keyboard's letters, system preference keyboardNumberRow, off by
+// default (the tablet keyboard has its own number row).
 //
 // Launch params {page: "textassist"}; com.palm.app.textassist opens it.
 
@@ -34,7 +37,7 @@ const same = (a: { layout: string; language: string }, b: { layout: string; lang
     a.layout === b.layout && a.language === b.language;
 
 export function TextAssistPage() {
-    const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(["x_palm_virtualkeyboard_prefs", "keyboardShortcuts", "x_palm_textinput"], cb, err), []).value ?? {};
+    const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(["x_palm_virtualkeyboard_prefs", "keyboardShortcuts", "x_palm_textinput", "keyboardNumberRow"], cb, err), []).value ?? {};
     const kb = keyboardPrefs(prefs.x_palm_virtualkeyboard_prefs);
     const [confirm, setConfirm] = useState(false);
     const [forgotten, setForgotten] = useState(false);
@@ -73,6 +76,12 @@ export function TextAssistPage() {
                 {toggle("Quick period", "spaces2period", "ta-period", "Two spaces type \". \"")}
             </Group>
             <ShortcutsSection prefs={prefs} />
+            <Group label="Layout">
+                <Row title="Number row" subtitle="Numbers above the letters on a phone" testId="ta-numberrow-row">
+                    <ToggleButton value={!!prefs.keyboardNumberRow} label="Number row" testId="ta-numberrow"
+                                  onChange={(v) => void system.setPreferences({ keyboardNumberRow: v })} />
+                </Row>
+            </Group>
             <Group label="Keyboards">
                 {KEYBOARDS.map((k) => {
                     const on = enabled.some((e) => same(e, k));

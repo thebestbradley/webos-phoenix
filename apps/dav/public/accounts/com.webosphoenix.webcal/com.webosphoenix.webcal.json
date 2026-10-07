@@ -1,0 +1,47 @@
+{
+    "templateId": "com.webosphoenix.webcal",
+    "loc_name": "Subscribed Calendar",
+    "icon": {
+        "loc_32x32": "/usr/palm/public/accounts/com.webosphoenix.dav/images/dav-32x32.png",
+        "loc_48x48": "/usr/palm/public/accounts/com.webosphoenix.dav/images/dav-48x48.png"
+    },
+    "loc_usernameLabel": "CALENDAR ADDRESS",
+    "validator": {
+        "customUI": {
+            "appId": "org.webosphoenix.dav",
+            "name": "accounts/webcal.html"
+        },
+        "address": "palm://org.webosphoenix.service.dav/checkCredentials"
+    },
+    "readPermissions": [
+        "org.webosphoenix.service.dav",
+        "org.webosphoenix.dav"
+    ],
+    "writePermissions": [
+        "org.webosphoenix.dav",
+        "com.palm.app.calendar"
+    ],
+    "capabilityProviders": [
+        {
+            "capability": "CALENDAR",
+            "id": "com.webosphoenix.webcal.calendar",
+            "loc_name": "Calendar",
+            "icon": {
+                "loc_32x32": "/usr/palm/public/accounts/com.webosphoenix.dav/images/dav-32x32.png",
+                "loc_48x48": "/usr/palm/public/accounts/com.webosphoenix.dav/images/dav-48x48.png"
+            },
+            "dbkinds": {
+                "calendar": "com.palm.calendar.dav:1",
+                "calendarevent": "com.palm.calendarevent.dav:1"
+            },
+            "subKind": "com.palm.calendarevent.dav:1",
+            "readOnlyData": true,
+            "implementation": "palm://org.webosphoenix.service.dav/",
+            "onCreate": "palm://org.webosphoenix.service.dav/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.dav/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.dav/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.dav/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.dav/sync"
+        }
+    ]
+}

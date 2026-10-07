@@ -7,7 +7,8 @@
 // com.palm.app.searchpreferences changed:
 //
 //   getUniversalSearchList {subscribe}  -> {UniversalSearchList (web search
-//       engines), ActionList (Quick Actions), DBSearchItemList (content
+//       engines), OptionalSearchList (Phoenix: engines beyond those, any of
+//       which can be the default), ActionList (Quick Actions), DBSearchItemList (content
 //       searches), defaultSearchEngine}
 //   getAllSearchPreference {subscribe}  -> {SearchPreference: {key: "true" |
 //       "false" | engine id}}
@@ -15,6 +16,9 @@
 //   updateSearchItem {category, id, enabled, setDefault?}
 //   updateAllSearchItems {category, enabled}
 //   reorderSearchItem {category, id, toIndex}
+//   setCustomSearchEngine {displayName, url} (Phoenix): the user's own
+//       engine, id "custom"; url has %s (or #{searchTerms}) for the words;
+//       url "" removes it
 //
 // The simulator implements them in runtime/phoenix-runtime.js ("Just Type").
 
@@ -38,6 +42,8 @@ export interface SearchItem {
 
 export interface SearchList {
     engines: SearchItem[];
+    /** Phoenix: engines beyond the original's list (DuckDuckGo, Bing, Startpage, the custom one): any can be the default. */
+    optional: SearchItem[];
     actions: SearchItem[];
     content: SearchItem[];
     defaultSearchEngine: string;
@@ -55,8 +61,9 @@ type OnError = (e: LunaError) => void;
 export const universalSearch = {
     watchList(cb: (l: SearchList) => void, onError?: OnError): Subscription {
         return subscribe(`${US}/getUniversalSearchList`, {}, (r) => {
-            const x = r as unknown as { UniversalSearchList?: SearchItem[]; ActionList?: SearchItem[]; DBSearchItemList?: SearchItem[]; defaultSearchEngine?: string };
-            cb({ engines: x.UniversalSearchList ?? [], actions: x.ActionList ?? [], content: x.DBSearchItemList ?? [],
+            const x = r as unknown as { UniversalSearchList?: SearchItem[]; OptionalSearchList?: SearchItem[]; ActionList?: SearchItem[];
+                                        DBSearchItemList?: SearchItem[]; defaultSearchEngine?: string };
+            cb({ engines: x.UniversalSearchList ?? [], optional: x.OptionalSearchList ?? [], actions: x.ActionList ?? [], content: x.DBSearchItemList ?? [],
                  defaultSearchEngine: x.defaultSearchEngine ?? "" });
         }, onError);
     },
@@ -80,6 +87,10 @@ export const universalSearch = {
     },
     setAllEnabled(category: SearchCategory, enabled: boolean) {
         return call(`${US}/updateAllSearchItems`, { category, enabled });
+    },
+    /** The user's own engine (id "custom"): `url` has %s where the words go; "" removes it. */
+    setCustomEngine(displayName: string, url: string) {
+        return call(`${US}/setCustomSearchEngine`, { displayName, url });
     },
     /** Move an item to `toIndex` in its category's list. */
     move(category: SearchCategory, id: string, toIndex: number) {

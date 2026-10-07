@@ -47,8 +47,14 @@ had HP's logo), the four `notes-*` notebooks, and the system objects
 (a certificate with a seal), `phoneprefs` (the `deviceinfo` phone with a
 call forwarding badge), `location`, `emergency` (the six-armed star of the
 Phone app's emergency button), `accessibility`, `deviceinfo`, `backup`,
-`devmode`, `agenda` (a bedside agenda card) and `exhibition` (a phone on a
-Touchstone, the Time exhibition's glass clock on its screen).
+`devmode`, `agenda` (a bedside agenda card), `exhibition` (a phone on a
+Touchstone, the Time exhibition's glass clock on its screen), `clipboard`
+(a hardboard clipboard with two clips stacked on it like cards;
+`clipboardpane` is the same drawing, smaller, for Settings > Clipboard) and
+`assistant` (a frosted speech balloon with a glowing orb in it, its light in
+bands like a voice's sound waves; `assistantpane` is the same drawing,
+smaller, for Settings > Assistant) and `advancedpane` (Settings > Advanced:
+a brushed metal panel with three sliders).
 
 ## The originals' 512 px icons
 

@@ -1,0 +1,20 @@
+{
+    "id": "org.webosphoenix.clipboard",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Clipboard",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "iconColor": "#7a4718",
+    "uiRevision": 2,
+    "keywords": ["Clipboard", "Copy", "Paste", "Clips", "History"],
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launcherTab": 0
+    },
+    "//universalSearch": "Not declared: clips can hold secrets, so Just Type does not index them (docs/SECURITY-APPS.md)."
+}

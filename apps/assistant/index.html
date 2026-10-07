@@ -1,0 +1,21 @@
+<!doctype html>
+<!-- Copyright (c) 2026 webOS Phoenix contributors. SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <!-- Conversations can hold personal words: only this app's own files run; nothing is
+         loaded from the network (the service's calls to model providers go through the
+         system's proxy, the page's own origin), no frames. 'unsafe-eval': the simulator runs
+         the device's assistant service in the page (phoenix-runtime.js nodeServiceLoader);
+         on a device it is a process of its own. See docs/SECURITY-APPS.md. -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'none'">
+    <meta name="referrer" content="no-referrer">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <title>Assistant</title>
+</head>
+<body class="pui-app">
+    <div id="root"></div>
+    <script type="module" src="./src/main.tsx"></script>
+</body>
+</html>

@@ -69,7 +69,9 @@ detail. Open questions are listed in [STATUS.md](STATUS.md#decisions-for-the-own
 | App sources | Curated PWA catalog shown as apps, an Android catalog, App Museum II and Preware as add-on catalogs; all towards the end of 1.0 | [APP-STORE.md](APP-STORE.md) |
 | Browser | Fix Share > Add to Launcher; "Install Web App" with a coloured dot when a page has a manifest (1.x); a Chromium-based browser for 2.0 | M4, 2.0 below |
 | Synergy | Add cloud drives, the Fediverse and Bluesky; RCS is required; WhatsApp through the EU DMA to be explored | [SYNERGY-MODERN.md](SYNERGY-MODERN.md) |
-| Assistant | On by default, with settings to turn it off; 1.0 is a voice assistant without models, the AI agent and MCP are 2.0; a paid Phoenix AI service and iCloud-style Phoenix cloud services are possible later | [AI-AND-MCP.md](AI-AND-MCP.md) |
+| Assistant | On by default, with settings to turn it off. 1.0 (revised 7 October 2026): commands first, an optional on-device model, then a cloud model (Anthropic, OpenAI, Google, any OpenAI-compatible URL) or a web search; cloud models act only with permission; an Assistant app with threads. The MCP agent is 2.0 | [M6-PLAN.md](M6-PLAN.md), [AI-AND-MCP.md](AI-AND-MCP.md) |
+| Clipboard | A history like Paste on macOS in the webOS style: a keyboard strip, a Clipboard app, sensitive clips masked and encrypted | [M6-PLAN.md](M6-PLAN.md) |
+| Community features | Phoenix's own customizations come first; the owner is asked about clashes | [M6-PLAN.md](M6-PLAN.md) |
 | Keyboard | Dictation, prediction, swipe, emoji and cursor control in 1.0, shared by the webOS Classic keyboard (original look) and a new Phoenix keyboard; keyboards chosen in Settings as on iOS | [spec/GAPS.md](spec/GAPS.md) V2-V8 |
 | Terminal | A real Linux shell: bash by default, zsh available | [TERMINAL.md](TERMINAL.md) |
 | Sounds | Ship the original sounds where their provenance is clean; CC0 mimics for the rest | [LEGAL.md](LEGAL.md) |
@@ -269,10 +271,27 @@ dark and light themes go to 2.0.
       to do: the compositor's capture on a device, secure cards
 - [ ] The light bar's animations, and buttons at the ends of the gesture
       area ([GESTURE-BAR.md](GESTURE-BAR.md) GB1-GB3)
-- [ ] Community features for 1.x, from the top 20 in
-      [COMMUNITY-FEATURES.md](COMMUNITY-FEATURES.md) (launcher groups and
-      tab management, the power menu, battery percentage, game controllers
-      and USB OTG, and more), each added here as it is picked
+- [ ] Community features for 1.x, as picked by the owner on 7 October 2026
+      ([M6-PLAN.md](M6-PLAN.md) F4)
+
+## M6: the last 1.0 features
+
+Agreed with the owner on 7 October 2026; [M6-PLAN.md](M6-PLAN.md) has the detail.
+
+- [ ] F0: fixes (settings lost on save and the card corners: done; the Messaging reply bar)
+- [x] F1: press and hold on launcher icons (peek and menu; in the simulator)
+- [x] F2: clipboard manager (keyboard strip, Clipboard app, Settings > Clipboard; in the simulator)
+- [x] F3: the Phoenix Assistant 1.0 (commands, optional on-device model, cloud models with permission, Assistant app; in the simulator)
+- [x] F4: community features picked for 1.0 (in the simulator; the hardware-dependent ones finish on devices in the image work)
+  - [x] Launcher: app groups (folders), tabs renamed, added and removed, grid density (in the simulator)
+  - [x] Cards: infinite cycling, tap a side card to maximize it, the wave launcher (in the simulator)
+  - [x] System: the power menu (hold Power), a Flashlight row in the system menu, battery percentage (in the simulator)
+  - [x] Notifications: repeat until seen, private lock screen previews, the cycling email dashboard, per-contact tones (in the simulator)
+  - [x] Settings > Advanced (animation speed, tap ripple, gesture sensitivity, haptics and the options above) (in the simulator)
+  - [x] Keyboard: a number row, off by default (in the simulator)
+  - [x] Browser: private browsing, find on page, a content blocker, mobile or desktop sites, more search engines and a custom one, a system proxy (in the simulator)
+  - [x] Sharing and sync: DropShare, subscribed .ics calendars, game controllers, a USB (OTG) page, tethering on phones (in the simulator)
+  - [x] Health: temperature warnings, a battery usage pane (in the simulator)
 
 ## 1.0 release
 
@@ -321,10 +340,12 @@ every day. The app sources come towards the end of 1.0 (owner, 29 September
       file picker back for legacy apps, a save picker (Save to Files in a
       chosen folder), and a share sheet apps join through `appinfo.json`
       ([SHARE-AND-FILES.md](SHARE-AND-FILES.md))
-- [ ] The Phoenix Assistant, a voice assistant like Siri: push-to-talk,
-      on-device speech recognition, commands for the phone's own features
-      and spoken answers, in the classic style
-      ([AI-AND-MCP.md](AI-AND-MCP.md#10-and-20))
+- [x] The Phoenix Assistant, like Siri: on-device speech recognition and
+      commands, an optional on-device model, cloud models with permission,
+      an Assistant app with threads, spoken answers (in the simulator)
+      ([M6-PLAN.md](M6-PLAN.md) F3, [AI-AND-MCP.md](AI-AND-MCP.md#10-and-20))
+- [x] Clipboard manager ([M6-PLAN.md](M6-PLAN.md) F2; in the simulator)
+- [x] Press and hold on launcher icons ([M6-PLAN.md](M6-PLAN.md) F1; in the simulator)
 - [ ] OTA updates with A/B slots ([HARDWARE.md](HARDWARE.md#ota-with-ab-updates)).
       Done in the simulator: `com.palm.update` (Palm's API, so luna-systemui's
       update alerts work) on RAUC, Settings > Updates, the feed publisher

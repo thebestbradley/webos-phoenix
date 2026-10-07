@@ -1199,6 +1199,15 @@
         rotationLock: false,
         muteSound: false,
         showAlertsWhenLocked: true,
+        // Settings > Screen & Lock > Show previews (Phoenix; the community's
+        // private notification patches): off, the lock screen hides who
+        // sent what ("New Message").
+        lockScreenPreviews: true,
+        // Settings > Sounds & Ringtones > Repeat alerts (Phoenix; the
+        // community's Notification Repeat patches): a notification's sound
+        // again every `minutes` until it is seen, for every app but those
+        // set false in `apps`.
+        notificationRepeat: { enabled: false, minutes: 2, apps: {} },
         blinkNotifications: true,
         // Screen & Lock: seconds until the screen turns off (Phoenix's key
         // for the original's com.palm.display timeout), and how long it
@@ -1221,8 +1230,89 @@
         // (Settings > Text Assist > Shortcuts), [{shortcut, text}], which
         // the keyboard's space bar puts in while shortcutChecking is not "off".
         x_palm_textinput: { spellChecking: "autoCorrect", grammarChecking: "autoCorrect", shortcutChecking: "autoCorrect", shortcuts: [] },
+        // Settings > Advanced (docs/M6-PLAN.md F4, the community's Tweaks).
+        // LunaCE's own keys where it had the option (its Tweaks files in
+        // webOS CE 3.1.0, AddToImage/LunaCE-Tweaks/*.json), off as there:
+        // card view wraps from the last card to the first
+        // (abh_features.json), a tap on a side card maximizes it
+        // (maximize-edges.json), the wave launcher (wave-launcher.json), the
+        // tap ripple (tap-ripple.json, on).
+        infiniteCardCyclingEnabled: false,
+        sysUiEnableMaximizeEdges: false,
+        sysUiEnableWaveLauncher: false,
+        showReticleAnimation: true,
+        // Phoenix's: the shell's animations "normal" or "fast" (the Faster
+        // Card Animations patches); how far a swipe goes before it counts,
+        // "low", "normal" or "high" (Buttah); a vibration on every tap
+        // (Haptic Feedback Manager); the launcher's grid, "normal" or
+        // "dense" (the icon grid patches); the battery's percentage in the
+        // status bar (Battery Percent and Icon); the keyboard's number row.
+        animationSpeed: "normal",
+        gestureSensitivity: "normal",
+        hapticFeedback: false,
+        launcherGridDensity: "normal",
+        showBatteryPercent: false,
+        keyboardNumberRow: false,
+        // Email's new-mail dashboard goes through the new emails one at a
+        // time, with their times and a delete button (the community's
+        // Uber Cycling Email Dashboard; compat overlay of the Email app).
+        emailDashboardCycling: false,
+        // The browser's Preferences (Phoenix; docs/M6-PLAN.md F4): its page
+        // views' requests to the content blocker's hosts fail; the user
+        // agent they send, "mobile" (webOS's) or "desktop".
+        browserContentBlocker: false,
+        browserUserAgent: "mobile",
+        // Settings > Wi-Fi > Proxy (Phoenix): {type: "none" | "http" |
+        // "socks", host, port}, the system's proxy for every page.
+        networkProxy: { type: "none", host: "", port: 0 },
+        // DropShare (Phoenix): files to and from other devices on the
+        // network, off until the user allows it (Settings > DropShare).
+        dropShareEnabled: false,
         firstUse: false
     };
+
+    // Settings > Sounds & Ringtones > Repeat alerts, checked.
+    function notificationRepeat(r) {
+        r = r && typeof r === "object" ? r : {};
+        var apps = {};
+        if (r.apps && typeof r.apps === "object")
+            for (var a in r.apps) apps[a] = r.apps[a] !== false;
+        return { enabled: !!r.enabled, minutes: typeof r.minutes === "number" && r.minutes > 0 ? r.minutes : 2, apps: apps };
+    }
+
+    // Settings > Advanced, as the shell takes them (hostStatus tweaks).
+    function tweaks(p) {
+        var pick = function (v, allowed, d) { return allowed.indexOf(v) >= 0 ? v : d; };
+        return {
+            infiniteCardCycling: !!p.infiniteCardCyclingEnabled,
+            maximizeEdges: !!p.sysUiEnableMaximizeEdges,
+            waveLauncher: !!p.sysUiEnableWaveLauncher,
+            tapRipple: p.showReticleAnimation !== false,
+            animationSpeed: pick(p.animationSpeed, ["normal", "fast"], "normal"),
+            gestureSensitivity: pick(p.gestureSensitivity, ["low", "normal", "high"], "normal"),
+            haptics: !!p.hapticFeedback,
+            gridDensity: pick(p.launcherGridDensity, ["normal", "dense"], "normal"),
+            batteryPercent: !!p.showBatteryPercent,
+            numberRow: !!p.keyboardNumberRow
+        };
+    }
+    // The page views' settings and the system proxy, as the shell takes
+    // them (hostStatus browser, proxy; phoenix-sim's simBrowser).
+    function browserSettings(p) {
+        return { contentBlocker: !!p.browserContentBlocker, userAgent: p.browserUserAgent === "desktop" ? "desktop" : "mobile" };
+    }
+    function networkProxy(x) {
+        x = x && typeof x === "object" ? x : {};
+        var type = x.type === "http" || x.type === "socks" ? x.type : "none";
+        var port = Math.round(Number(x.port));
+        var host = String(x.host || "").trim();
+        if (type !== "none" && (!host || !(port > 0 && port < 65536))) type = "none";
+        return type === "none" ? { type: "none", host: "", port: 0 } : { type: type, host: host, port: port };
+    }
+    runtime.networkProxy = networkProxy;
+    var TWEAK_KEYS = ["infiniteCardCyclingEnabled", "sysUiEnableMaximizeEdges", "sysUiEnableWaveLauncher", "showReticleAnimation",
+                      "animationSpeed", "gestureSensitivity", "hapticFeedback", "launcherGridDensity", "showBatteryPercent",
+                      "keyboardNumberRow"];
 
     // Settings > Accessibility's keyboard options, as the shell takes them.
     function keyboardAccess(a) {
@@ -1246,6 +1336,21 @@
     }
 
     var prefWatchers = [];
+    // Another page (another card, Settings) changed the preferences: this
+    // page's getPreferences subscribers hear the keys that changed, as on
+    // the bus (luna-sysservice tells every subscriber).
+    var prefsSeen = JSON.stringify(store.get("prefs", {}));
+    try {
+        global.addEventListener("storage", function (e) {
+            if (e.key !== "phoenix:prefs") return;
+            var before = {}, after = store.get("prefs", {}), changed = {}, any = false, k;
+            try { before = JSON.parse(prefsSeen) || {}; } catch (err) { before = {}; }
+            prefsSeen = JSON.stringify(after);
+            for (k in after)
+                if (JSON.stringify(after[k]) !== JSON.stringify(before[k])) { changed[k] = after[k]; any = true; }
+            if (any) prefWatchers.forEach(function (w) { w(changed); });
+        });
+    } catch (e) { /* no window */ }
 
     function timeInfo() {
         var d = new Date();
@@ -1314,6 +1419,7 @@
             var saved = store.get("prefs", {});
             for (var k in p) if (k !== "subscribe") saved[k] = p[k];
             store.set("prefs", saved);
+            prefsSeen = JSON.stringify(saved);
             reply(ok());
             prefWatchers.forEach(function (w) { w(p); });
             host.postToHost("preferences", p);
@@ -1796,6 +1902,20 @@
         { id: "imdb", displayName: "IMDb", url: "https://www.imdb.com/find?q=#{searchTerms}", enabled: false },
         { id: "cnn", displayName: "CNN", url: "https://www.cnn.com/search?q=#{searchTerms}", enabled: false }
     ];
+    // Phoenix's engines beyond the original's list (docs/M6-PLAN.md F4 item
+    // 7): the "optional" engines (luna-universalsearchmgr's
+    // OptionalSearchList, the engines beyond UniversalSearchList.json), so
+    // the shipped list Just Type shows stays as it was. Any of them, or the
+    // user's custom engine, can be the default engine, which the browser
+    // and Just Type share; the default then joins the end of Just Type's
+    // list, which shows only engines from it.
+    var US_OPTIONAL = [
+        { id: "duckduckgo", displayName: "DuckDuckGo", url: "https://duckduckgo.com/?q=#{searchTerms}",
+          suggestURL: "https://duckduckgo.com/ac/?q=#{searchTerms}&type=list", icon: "web" },
+        { id: "bing", displayName: "Bing", url: "https://www.bing.com/search?q=#{searchTerms}",
+          suggestURL: "https://api.bing.com/osjson.aspx?query=#{searchTerms}", icon: "web" },
+        { id: "startpage", displayName: "Startpage", url: "https://www.startpage.com/do/search?q=#{searchTerms}", icon: "web" }
+    ];
     var US_DEFAULT_PREFS = { defaultSearchEngine: "google", defaultSearch: "true", ContactSearch: "true", AppSearch: "true", GAL: "false" };
     var usWatchers = [];
 
@@ -1835,13 +1955,37 @@
         });
         return usOrdered(kind, out);
     }
+    // An engine of the user's own (Settings > Just Type > Custom engine;
+    // Phoenix's setCustomSearchEngine {displayName, url}): its address has
+    // #{searchTerms} (or %s) where the words go.
+    var US_WEB_ICON = "/usr/share/phoenix/runtime/search-icons/search-icon-web.svg";
+    function usCustom() {
+        var c = usState().custom;
+        return c && c.url ? { id: "custom", displayName: c.displayName || "Custom", url: c.url, icon: "web" } : null;
+    }
+    function usEngine(e) {
+        var x = { category: "search", type: "web", iconFilePath: US_ICONS + "search-icon-" + e.id + ".png" }, k;
+        for (k in e) x[k] = e[k];
+        // Engines whose own art Phoenix does not ship: a magnifier.
+        if (e.icon === "web") x.iconFilePath = US_WEB_ICON;
+        delete x.icon;
+        return x;
+    }
+    function usOptional() {
+        var all = US_OPTIONAL.slice(), custom = usCustom();
+        if (custom) all.push(custom);
+        return all.map(function (e) { var x = usEngine(e); x.enabled = true; return x; });
+    }
     function usEngines() {
-        return usOrdered("search", US_ENGINES.map(function (e) {
-            var x = { category: "search", type: "web", iconFilePath: US_ICONS + "search-icon-" + e.id + ".png" }, k;
-            for (k in e) x[k] = e[k];
+        var list = usOrdered("search", US_ENGINES.map(function (e) {
+            var x = usEngine(e);
             x.enabled = usEnabled("search:" + e.id, e.enabled);
             return x;
         }));
+        var def = usPrefs().defaultSearchEngine;
+        if (!list.some(function (x) { return x.id === def; }))
+            usOptional().forEach(function (x) { if (x.id === def) list.push(x); });
+        return list;
     }
     // The items of a category in the user's order (reorderSearchItem); new
     // ones keep their place after those.
@@ -1854,12 +1998,15 @@
         }).map(function (e) { return e.x; });
     }
     function usItems(category) {
-        return category === "search" ? usEngines() : category === "action" ? usProviders("action")
+        return category === "search" ? usEngines().concat(usOptional().filter(function (o) {
+            return !US_ENGINES.some(function (e) { return e.id === o.id; }) && o.id !== usPrefs().defaultSearchEngine;
+        })) : category === "action" ? usProviders("action")
              : category === "dbsearch" ? usProviders("dbsearch") : null;
     }
     function usList() {
         return ok({
             UniversalSearchList: usEngines(),
+            OptionalSearchList: usOptional(),
             ActionList: usProviders("action"),
             DBSearchItemList: usProviders("dbsearch"),
             defaultSearchEngine: usPrefs().defaultSearchEngine
@@ -1895,6 +2042,23 @@
             if (p.enabled !== undefined) st.enabled[category + ":" + p.id] = !!p.enabled;
             // The default engine (SearchItemsManager::updateSearchItem).
             if (p.setDefault && category === "search") st.prefs.defaultSearchEngine = String(p.id);
+            usSave(st);
+            reply(ok());
+        },
+        // Phoenix: {displayName, url} sets the custom engine, {url: ""}
+        // removes it (the default goes back to Google if it was the one).
+        "/setCustomSearchEngine": function (p, reply) {
+            var url = String(p.url || "").trim(), st = usState();
+            if (!url) {
+                delete st.custom;
+                if (usPrefs().defaultSearchEngine === "custom") st.prefs.defaultSearchEngine = "google";
+                usSave(st);
+                return reply(ok());
+            }
+            url = url.replace(/%s/g, "#{searchTerms}");
+            if (!/^https?:\/\/[^\s]+$/i.test(url) || url.indexOf("#{searchTerms}") < 0)
+                return reply(fail(-1, "The address must start with http:// or https:// and have %s where the words go"));
+            st.custom = { displayName: String(p.displayName || "").trim() || "Custom", url: url };
             usSave(st);
             reply(ok());
         },
@@ -1937,6 +2101,15 @@
     //     __phoenixRuntime.webViewEvent;
     //   - elsewhere an <iframe> inside the object, which shows sites that
     //     allow framing (and can only report same-origin titles).
+
+    // BrowserServer's own calls (the browser's Preferences: Clear Cookies,
+    // Clear Cache, isis-browser Browser.js): phoenix-sim clears the page
+    // views' profile (simBrowser). The iframe engine has none of its own.
+    register(["com.palm.browserServer"], {
+        "/clearCookies": function (p, reply) { host.postToHost("browserData", { op: "clearCookies" }); reply(ok()); },
+        "/clearCache": function (p, reply) { host.postToHost("browserData", { op: "clearCache" }); reply(ok()); },
+        "*": function (p, reply) { reply(ok()); }
+    });
 
     var WEBVIEW_TYPE = "application/x-palm-browser";
     var nativeWebViews = global.location && global.location.protocol === "phoenix:";
@@ -1987,7 +2160,7 @@
             if (this.connected) return;
             this.connected = true;
             if (nativeWebViews) {
-                this.post("create", {});
+                this.post("create", { "private": !!this.privateMode });
                 this.track();
             } else {
                 var frame = this.frame = global.document.createElement("iframe");
@@ -2091,6 +2264,28 @@
         frameReport: function () {
             this.listener("urlTitleChanged", this.url, this.title || this.url, this.back.length > 0, this.forward.length > 0);
         },
+        // Find on Page in the iframe's page (same-origin only): the next
+        // match with window.find, counted in the page's text.
+        frameFind: function (text, backward) {
+            var w = null, doc = null;
+            try { w = this.frame && this.frame.contentWindow; doc = this.frame && this.frame.contentDocument; } catch (e) { w = null; }
+            if (!w || !doc) return this.findResult(0, 0);
+            var clear = function () { try { w.getSelection().removeAllRanges(); } catch (e) { /* ignore */ } };
+            if (text !== this.findText) { this.findText = text; this.findIndex = 0; clear(); }
+            if (!text) return this.findResult(0, 0);
+            var body = String(doc.body ? doc.body.innerText : "").toLowerCase(), t = text.toLowerCase(), n = 0, i = -1;
+            while ((i = body.indexOf(t, i + 1)) >= 0) n++;
+            var found = n > 0 && w.find(text, false, !!backward, true);
+            this.findIndex = !found ? 0 : backward ? (this.findIndex <= 1 ? n : this.findIndex - 1)
+                                                   : (this.findIndex >= n ? 1 : this.findIndex + 1);
+            this.findResult(this.findIndex, n);
+        },
+        // The count goes to the page as a "phoenixfindresult" event on the
+        // object ({active, total}); BrowserAdapter had no such callback.
+        findResult: function (active, total) {
+            var E = global.CustomEvent;
+            if (E) this.node.dispatchEvent(new E("phoenixfindresult", { bubbles: true, detail: { active: active, total: total } }));
+        },
         // The plugin's scripting API (the methods BasicWebView and the apps call).
         api: {
             setPageIdentifier: function (id) { this.pageIdentifier = id; },
@@ -2123,7 +2318,21 @@
                 if (nativeWebViews) return this.post("stop", {});
                 this.listener("loadStopped");
             },
-            findInPage: function (text) { if (nativeWebViews) this.post("find", { text: text || "" }); },
+            // (text, backward): Phoenix adds the direction (the find bar's
+            // prev and next) and the count of matches (findResult).
+            findInPage: function (text, backward) {
+                if (nativeWebViews) this.post("find", { text: text || "", backward: !!backward });
+                else this.frameFind(text || "", backward);
+            },
+            // Phoenix: the browser's Private Browsing card. The native view
+            // starts again in the private profile, at the page it showed;
+            // the iframe engine has only the one profile of the page.
+            setPrivateBrowsing: function (on) {
+                on = !!on;
+                if (on === !!this.privateMode) return;
+                this.privateMode = on;
+                if (nativeWebViews && this.connected && !this.destroyed) this.post("private", { on: on, url: this.url || "" });
+            },
             clearHistory: function () { this.back = []; this.forward = []; },
             setVisibleSize: function () {},
             pageFocused: function () {},
@@ -2213,6 +2422,7 @@
     runtime.webViewEvent = function (id, name, args) {
         var a = webViews[id];
         if (!a) return;
+        if (name === "phoenixFindResult") return a.findResult && a.findResult((args || [])[0] || 0, (args || [])[1] || 0);
         if (name === "urlTitleChanged") { a.url = args[0]; a.title = args[1]; }
         a.listener.apply(a, [name].concat(args || []));
     };
@@ -2298,7 +2508,8 @@
     // (DisplayManager::usbDockCallback, :967-1060).
     function powerState() { return store.get("power", { percent: 76, charger: "none" }); }
     function batteryPayload(st) {
-        return { percent: st.percent, percent_ui: st.percent, temperature_C: 28,
+        // temperature: the simulator's (Ctrl+Shift+T), 31 °C until it says.
+        return { percent: st.percent, percent_ui: st.percent, temperature_C: typeof st.temperature === "number" ? st.temperature : 31,
                  current_mA: st.charger !== "none" ? 800 : -250, capacity_mAh: 1150, voltage_mV: 3900 };
     }
     function chargerPayload(st) {
@@ -2312,6 +2523,7 @@
         var st = powerState(), k;
         for (k in changes) st[k] = changes[k];
         store.set("power", st);
+        if (runtime.recordBattery) runtime.recordBattery(st);
         signal("/com/palm/power", "USBDockStatus", chargerPayload(st));
         signal("/com/palm/power", "batteryStatus", batteryPayload(st));
         return st;
@@ -2331,7 +2543,28 @@
         "/timeout/set": function (p, reply) { reply(ok()); },
         "/timeout/clear": function (p, reply) { reply(ok()); },
         "/com/palm/power/activityStart": function (p, reply) { reply(ok()); },
-        "/com/palm/power/activityEnd": function (p, reply) { reply(ok()); }
+        "/com/palm/power/activityEnd": function (p, reply) { reply(ok()); },
+        // Off (the power menu's Shut Down; shutdown/machineOff): phoenix-sim
+        // plays the shutdown sound and goes dark until Power is pressed. A
+        // page in a browser has nothing to turn off.
+        "/shutdown/machineOff": function (p, reply) {
+            reply(ok());
+            if (!/^https?:$/.test(global.location.protocol))
+                host.postToHost("shutdown", { reason: p.reason || "" });
+        }
+    });
+
+    // The power menu's Luna Restart (the community's Advanced Reset Options,
+    // in webOS CE 3.1.0's power menu): the system UI starts again, the apps
+    // closing, the device staying up. Phoenix's own service: LunaSysMgr had
+    // none (the patch restarted it from a shell script); on a device the
+    // shell is restarted by systemd.
+    register(["org.webosphoenix.system"], {
+        "/restartUi": function (p, reply) {
+            reply(ok());
+            if (!/^https?:$/.test(global.location.protocol))
+                host.postToHost("restartUi", {});
+        }
     });
 
     // com.palm.display, com.palm.keys, com.palm.vibrate: see "LunaSysMgr's
@@ -3531,6 +3764,9 @@
             return true;
         case "cut":
         case "copy":
+            // A password field's copy (see "Clipboard history").
+            if (runtime.clipboard && runtime.clipboard.passwordCopy(action))
+                return true;
             return doc.execCommand(action);
         case "paste":
             PalmSystem.paste();
@@ -3851,6 +4087,8 @@
                 alerttone: (p.alerttone && p.alerttone.fullPath) || "",
                 notificationtone: (p.notificationtone && p.notificationtone.fullPath) || "",
                 showAlertsWhenLocked: p.showAlertsWhenLocked !== false,
+                lockScreenPreviews: p.lockScreenPreviews !== false,
+                notificationRepeat: notificationRepeat(p.notificationRepeat),
                 // What the volume keys adjust, as audiod's scenarios
                 // (NativeAlertManager::actOnChanged): the shell's volume
                 // indicator draws the phone, ringtone or music picture.
@@ -3869,6 +4107,11 @@
                 // ... and the hardware keyboard's sticky, slow and bounce
                 // keys and key repeat (the shell's KeyboardAccess).
                 keyboardAccess: keyboardAccess(p.accessibility || {}),
+                // Settings > Advanced (tweaks above).
+                tweaks: tweaks(p),
+                // The browser's page views and the system proxy (simBrowser).
+                browser: browserSettings(p),
+                proxy: networkProxy(p.networkProxy),
                 wallpaperFile: (p.wallpaper && p.wallpaper.wallpaperFile) || "",
                 // Dock mode (Settings > Exhibition): its wallpaper, the
                 // exhibitions that are on (after the built-in Time), its
@@ -4500,9 +4743,21 @@
         };
         sys["/setPreferences"] = function (p, reply, ctx) {
             baseSetPreferences(p, reply, ctx);
-            if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "screenTimeout", "lockTimeout", "enableALS", "sysUiEnableNextPrevGestures", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
+            // The airplaneMode preference turns the radios off and on, as
+            // LunaSysMgr did when it changed (Preferences
+            // signalAirplaneModeChanged -> StatusBarServicesConnector::
+            // setAirplaneMode): luna-systemui's power menu sets it.
+            if ("airplaneMode" in p) {
+                var st = load();
+                if (!!st.offlineMode !== !!p.airplaneMode) {
+                    setOffline(st, !!p.airplaneMode);
+                    save(st);
+                }
+            }
+            if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "lockScreenPreviews", "notificationRepeat", "screenTimeout", "lockTimeout", "enableALS", "sysUiEnableNextPrevGestures", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
                  "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "x_palm_textinput", "accessibility",
-                 "dockwallpaper", "dockModeSoundPref", "exhibition"].some(function (k) { return k in p; })) {
+                 "dockwallpaper", "dockModeSoundPref", "exhibition", "browserContentBlocker", "browserUserAgent",
+                 "networkProxy"].concat(TWEAK_KEYS).some(function (k) { return k in p; })) {
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
                 changed();
             }
@@ -4963,6 +5218,14 @@
         });
         runtime.storagedSignal = function (method, payload) {
             signal("/storaged", method, payload || {});
+        };
+        // The display's signals (com.palm.display's /com/palm/display):
+        // powerKeyPressed {showDialog: true} when Power is held 3 s with the
+        // screen on (DisplayManager::power, DisplayManager.cpp:3085-3099),
+        // which luna-systemui answers with its power menu (PowerdService.js
+        // powerOffHandleNotifications).
+        runtime.displaySignal = function (method, payload) {
+            signal("/com/palm/display", method, payload || {});
         };
         var usbKnown = /^https?:$/.test(global.location.protocol), usbWaiting = [];
         function usbHostKnown() {
@@ -5435,6 +5698,11 @@
         runtime.applyHostStatus = function (st, opts) {
             if (!st) return;
             var writer = !opts || opts.writer !== false;
+            // Blocks below that follow the shell's own status (the
+            // accessories, the battery's use): hook(status, writer).
+            (runtime.hostStatusHooks || []).forEach(function (h) {
+                try { h(st, writer); } catch (e) { console.warn("[phoenix-runtime] status hook: " + (e && e.message || e)); }
+            });
             var s = writer ? load() : null, before = writer ? toJson(s) : "";
             if (writer) {
                 if ("airplaneMode" in st) setOffline(s, !!st.airplaneMode);
@@ -5935,6 +6203,26 @@
             var n = ((p.name && p.name.givenName) || "") + " " + ((p.name && p.name.familyName) || "");
             return n.trim() || p.nickname || "";
         }
+        // A person's own message tone (docs/M6-PLAN.md F4; the community's
+        // "SMS Tone per Contact" patches): Contacts keeps it beside the
+        // person, in org.webosphoenix.contacttone:1 {personId, messageTone:
+        // {name, location}} (the contacts framework's person, saved whole,
+        // would drop a field of its own). "" for none: the notification tone.
+        var CONTACT_TONE_KIND = "org.webosphoenix.contacttone:1";
+        runtime.contactToneKind = CONTACT_TONE_KIND;
+        function messageToneFor(person) {
+            if (!person || !person._id) return "";
+            var t = (dbCall("/find", { query: { from: CONTACT_TONE_KIND, where: [{ prop: "personId", op: "=", val: person._id }] } }).results || [])[0];
+            return t && t.messageTone && t.messageTone.location ? String(t.messageTone.location) : "";
+        }
+        // The notification for a text from person: its own tone, if it has one.
+        function textNotification(fields, person) {
+            var tone = messageToneFor(person);
+            fields.soundClass = "notifications";
+            if (tone) fields.soundFile = tone;
+            return fields;
+        }
+
         function personFor(addr) {
             var people = dbCall("/find", { query: { from: "com.palm.person:1" } }).results || [];
             for (var i = 0; i < people.length; ++i) {
@@ -6093,9 +6381,9 @@
                     from: { addr: from }, flags: { read: false, visible: true }
                 });
                 var person = personFor(from);
-                host.postToHost("notification", { appId: MESSAGING_APP, title: person ? personName(person) : from,
+                host.postToHost("notification", textNotification({ appId: MESSAGING_APP, title: person ? personName(person) : from,
                                                   body: text ? "Picture: " + text : "Picture message",
-                                                  params: { threadId: r.threadId }, soundClass: "notifications" });
+                                                  params: { threadId: r.threadId } }, person));
                 return r.threadId;
             });
         };
@@ -6111,8 +6399,8 @@
                 from: { addr: from }, flags: { read: false, visible: true }
             });
             var person = personFor(from);
-            host.postToHost("notification", { appId: MESSAGING_APP, title: person ? personName(person) : from, body: text,
-                                              params: { threadId: r.threadId }, soundClass: "notifications" });
+            host.postToHost("notification", textNotification({ appId: MESSAGING_APP, title: person ? personName(person) : from, body: text,
+                                              params: { threadId: r.threadId } }, person));
             return r.threadId;
         };
 
@@ -9340,6 +9628,8 @@
         // And the simulated Jabber (XMPP) account (block "Instant
         // messaging"), whose accounts need the same handling.
         var DAV_TEMPLATES = ["/usr/palm/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json",
+                             // The Subscribed Calendar (a public .ics, one way: lib/webcal.js).
+                             "/usr/palm/public/accounts/com.webosphoenix.webcal/com.webosphoenix.webcal.json",
                              "/usr/share/phoenix/runtime/accounts/com.webosphoenix.xmpp/com.webosphoenix.xmpp.json"];
         var ACCOUNT_KIND = "com.palm.account:1";
         var LOCK_MS = 5 * 60 * 1000;
@@ -11399,6 +11689,583 @@
     })();
 
     // ================================================================================
+    // DropShare (org.webosphoenix.dropshare; apps/dropshare)
+    // ================================================================================
+    //
+    // docs/M6-PLAN.md F4 item 8, docs/APP-RUNTIME.md "DropShare": Phoenix's
+    // own take on the webOS Archive's LuneDrop, as an extension of Touch to
+    // Share. The device serves a page on the local network, with a one-time
+    // token in its address, which any phone or computer opens (the QR code
+    // the DropShare app shows); there they upload files to the device, or
+    // download the ones it offers. phoenix-sim runs the server
+    // (shell/sim/simdropshare.h) and this block drives it through
+    // /__phoenix/dropshare; a device runs it as a service. Off until the
+    // user allows it (system preference dropShareEnabled; Settings >
+    // DropShare).
+    //
+    //   receive {subscribe}  -> {url, state, files: [{name, size, received,
+    //       done, saved (the path in Downloads)}]} as it changes: files
+    //       uploaded land in /media/internal/Downloads (a second of a name
+    //       is numbered), with an ongoing activity while they come and a
+    //       notification once in (a tap opens Files at Downloads).
+    //   send {files: [{path, mimeType?}], subscribe} -> {url, state, files:
+    //       [{name, size, downloads}]}: the other device downloads them.
+    //   stop {}  ends the session; so does the subscriber going away.
+    //   states: waiting, transferring, done, timeout (ten minutes without a
+    //   request), stopped, failed.
+    (function dropShare() {
+        var SERVICE = "org.webosphoenix.dropshare", APP = "org.webosphoenix.dropshare";
+        var DOWNLOADS = "/media/internal/Downloads";
+        var session = null;     // {mode, url, reply, ctx, timer, saved: {id: path}, taking: {}, files}
+
+        function nativeCall(req) {
+            try {
+                var x = new XMLHttpRequest();
+                x.open("GET", "/__phoenix/dropshare?req=" + encodeURIComponent(toJson(req)), false);
+                x.send();
+                var r = JSON.parse(x.responseText || "null");
+                return r && typeof r === "object" ? r : null;
+            } catch (e) {
+                return null;
+            }
+        }
+        function callP(url, params) {
+            return new Promise(function (resolve) {
+                dispatch(url, params || {}, resolve, { cancelled: function () { return false; }, onCancel: null });
+            });
+        }
+        function enabled() {
+            var r = callNow("luna://com.webos.service.systemservice/getPreferences", { keys: ["dropShareEnabled"] });
+            return !!(r && r.dropShareEnabled);
+        }
+        function sizeOf(n) {
+            if (n < 1024) return n + " B";
+            if (n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+            return (n / (1024 * 1024)).toFixed(1) + " MB";
+        }
+        // A free name in Downloads: "photo (2).jpg" after "photo.jpg".
+        function freePath(name) {
+            var dot = name.lastIndexOf("."), base = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : "";
+            var tryN = function (n) {
+                var path = DOWNLOADS + "/" + (n === 1 ? name : base + " (" + n + ")" + ext);
+                return callP("luna://org.webosphoenix.filemanager/stat", { path: path }).then(function (r) {
+                    return r.returnValue === false ? path : tryN(n + 1);
+                });
+            };
+            return tryN(1);
+        }
+        function readBytes(id) {
+            return new Promise(function (resolve, reject) {
+                var x = new XMLHttpRequest();
+                x.open("GET", "/__phoenix/dropshare/file?id=" + id, true);
+                x.responseType = "blob";
+                x.onload = function () { resolve(x.response); };
+                x.onerror = function () { reject(new Error("The file could not be read")); };
+                x.send();
+            });
+        }
+        // A file uploaded: into Downloads, where Files (and Photos, for a
+        // picture) find it.
+        function take(s, f) {
+            s.taking[f.id] = true;
+            readBytes(f.id).then(function (blob) {
+                if (!runtime.mediaFiles) throw new Error("No media store");
+                return freePath(f.name).then(function (path) {
+                    var typed = blob.type || !f.type ? blob : blob.slice(0, blob.size, f.type);
+                    return runtime.mediaFiles.write(path, typed).then(function () { return path; });
+                });
+            }).then(function (path) {
+                s.saved[f.id] = path;
+                nativeCall({ op: "take", id: f.id });
+                return callP("luna://com.webos.service.mediaindexer/requestMediaScan", { path: DOWNLOADS });
+            }, function (e) {
+                console.warn("[phoenix-runtime] DropShare: " + (e && e.message || e));
+                s.failed = (s.failed || 0) + 1;
+            }).then(function () { delete s.taking[f.id]; report(s); });
+        }
+        function view(s, st) {
+            var files = (st.files || s.files || []).map(function (f) {
+                return { id: f.id, name: f.name, type: f.type, size: f.size, received: f.received, done: !!f.done,
+                         downloads: f.downloads || 0, saved: s.saved[f.id] || "" };
+            });
+            if (s.mode === "send" && !files.length) files = s.lastFiles || [];
+            else s.lastFiles = files;
+            // Done sending means every file went (the server forgets them then).
+            if (s.mode === "send" && st.state === "done")
+                files = files.map(function (f) { var x = {}, k; for (k in f) x[k] = f[k]; x.downloads = Math.max(1, f.downloads); return x; });
+            return ok({ mode: s.mode, url: s.ended ? "" : s.url, state: st.state || "stopped", files: files });
+        }
+        function report(s) {
+            var st = s.last || {};
+            var v = view(s, st);
+            if (s.reply && !(s.ctx && s.ctx.cancelled())) s.reply(v);
+            ongoing(s, v);
+        }
+        function ongoing(s, v) {
+            if (s.mode !== "receive") return;
+            var coming = v.files.filter(function (f) { return !f.saved; });
+            if (v.state === "transferring" && coming.length) {
+                var f = coming[0];
+                host.postToHost("ongoing", { id: "dropshare", appId: APP, title: "DropShare",
+                    body: "Receiving " + f.name + (f.size ? " (" + sizeOf(f.received || 0) + " of " + sizeOf(f.size) + ")" : ""),
+                    icon: "", params: null, progress: f.size ? Math.min(100, Math.floor((f.received || 0) * 100 / f.size)) : -1 });
+                s.showing = true;
+            } else if (s.showing) {
+                host.postToHost("ongoing", { id: "dropshare", clear: true });
+                s.showing = false;
+            }
+            // All in: one notification, a tap opens Files at Downloads.
+            var saved = v.files.filter(function (x) { return x.saved; });
+            if (!coming.length && saved.length > (s.notified || 0) && (v.state === "done" || v.state === "timeout" || v.state === "stopped" || v.state === "waiting")) {
+                var n = saved.length - (s.notified || 0);
+                s.notified = saved.length;
+                host.postToHost("notification", { appId: "org.webosphoenix.files", title: "DropShare",
+                    body: n === 1 ? saved[saved.length - 1].name + " is in Downloads" : n + " files are in Downloads",
+                    params: { path: DOWNLOADS }, soundClass: "notifications" });
+            }
+        }
+        function poll(s) {
+            if (session !== s) return;
+            if (s.ctx && s.ctx.cancelled()) return end(s, true);
+            var st = nativeCall({ op: "status" });
+            if (!st) return;
+            s.last = st;
+            if (s.mode === "receive")
+                (st.files || []).forEach(function (f) {
+                    if (f.done && !f.taken && !s.saved[f.id] && !s.taking[f.id]) take(s, f);
+                });
+            var key = toJson(st) + toJson(s.saved);
+            if (key !== s.key) { s.key = key; report(s); }
+            var over = st.state !== "waiting" && st.state !== "transferring";
+            if (over && !Object.keys(s.taking).length && (s.mode !== "receive" || (st.files || []).every(function (f) { return !f.done || s.saved[f.id] || f.taken; }))) {
+                s.ended = true;
+                report(s);
+                session = null;
+                return;
+            }
+            s.timer = setTimeout(function () { poll(s); }, 400);
+        }
+        function end(s, quietly) {
+            if (session === s) session = null;
+            clearTimeout(s.timer);
+            nativeCall({ op: "stop" });
+            if (s.showing) host.postToHost("ongoing", { id: "dropshare", clear: true });
+            if (!quietly) { s.ended = true; s.last = { state: "stopped", files: (s.last && s.last.files) || [] }; report(s); }
+        }
+        function begin(mode, p, reply, ctx, start) {
+            if (!enabled()) return reply(fail(-1, "DropShare is off. Turn it on in Settings > DropShare."));
+            if (session) end(session, true);
+            Promise.resolve(start()).then(function (r) {
+                if (!r || r.returnValue === false)
+                    return reply(fail(-1, (r && r.errorText) || "DropShare needs the simulator or a device: this page has no server"));
+                var s = session = { mode: mode, url: r.url, reply: p.subscribe ? reply : null, ctx: ctx, saved: {}, taking: {},
+                                    files: r.files || [] };
+                s.last = { state: "waiting", files: s.files };
+                if (!p.subscribe) reply(view(s, s.last));
+                else report(s);
+                poll(s);
+            }, function (e) { reply(fail(-1, String(e && e.message || e))); });
+        }
+        // The bytes of a file to send, from wherever the system keeps it.
+        function bytesOf(path) {
+            var mf = runtime.mediaFiles;
+            return Promise.resolve(mf ? mf.read(path) : null).then(function (blob) {
+                if (blob) return blob;
+                return fetch(path).then(function (r) { if (!r.ok) throw new Error("Cannot read " + path); return r.blob(); });
+            });
+        }
+        // A file to send, handed to the server in parts (base64 in the
+        // request: the scheme handler cannot read a large request body).
+        var PART = 192 * 1024;
+        function nativeAsync(req) {
+            return new Promise(function (resolve) {
+                var x = new XMLHttpRequest();
+                x.open("GET", "/__phoenix/dropshare?req=" + encodeURIComponent(toJson(req)), true);
+                x.onload = function () { var r = null; try { r = JSON.parse(x.responseText); } catch (e) { r = null; } resolve(r); };
+                x.onerror = function () { resolve(null); };
+                x.send();
+            });
+        }
+        function base64(bytes) {
+            var s = "";
+            for (var i = 0; i < bytes.length; i += 0x8000)
+                s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            return btoa(s);
+        }
+        function offer(f) {
+            var name = String(f.path).replace(/^.*\//, "");
+            return bytesOf(f.path).then(function (blob) {
+                return new Promise(function (resolve, reject) {
+                    var r = new FileReader();
+                    r.onload = function () { resolve({ blob: blob, bytes: new Uint8Array(r.result) }); };
+                    r.onerror = function () { reject(new Error("Cannot read " + f.path)); };
+                    r.readAsArrayBuffer(blob);
+                });
+            }).then(function (b) {
+                var type = f.mimeType || b.blob.type || "";
+                return nativeAsync({ op: "offerBegin", name: name, type: type, size: b.bytes.length }).then(function (r) {
+                    if (!r || !r.returnValue) throw new Error((r && r.errorText) || "DropShare needs the simulator or a device: this page has no server");
+                    var id = r.id, at = 0;
+                    var next = function () {
+                        if (at >= b.bytes.length) return nativeAsync({ op: "offerEnd", id: id });
+                        var part = b.bytes.subarray(at, at + PART);
+                        at += part.length;
+                        return nativeAsync({ op: "offerPart", id: id, data: base64(part) }).then(function (p) {
+                            if (!p || !p.returnValue) throw new Error("The file could not be handed over");
+                            return next();
+                        });
+                    };
+                    return next().then(function (e) {
+                        if (!e || !e.returnValue) throw new Error("The file could not be handed over");
+                        return { id: id, name: name, type: type, size: b.bytes.length, downloads: 0 };
+                    });
+                });
+            });
+        }
+
+        // The page going (its card closed) ends its session: nobody shows
+        // the address any more. (Ten minutes without use end it anyway.)
+        // A synchronous request is refused while a page goes: a keepalive
+        // fetch takes the stop to the server.
+        if (global.addEventListener)
+            global.addEventListener("pagehide", function () {
+                if (!session) return;
+                var s = session;
+                session = null;
+                clearTimeout(s.timer);
+                try { global.fetch("/__phoenix/dropshare?req=" + encodeURIComponent(toJson({ op: "stop" })), { keepalive: true }); }
+                catch (e) { /* the server's ten minutes end it */ }
+            });
+
+        register([SERVICE], {
+            "/receive": function (p, reply, ctx) {
+                begin("receive", p, reply, ctx, function () { return nativeCall({ op: "start", mode: "receive" }); });
+            },
+            "/send": function (p, reply, ctx) {
+                var files = (p.files || []).filter(function (f) { return f && f.path; });
+                if (!files.length) return reply(fail(-1, "files: [{path}] is required"));
+                begin("send", p, reply, ctx, function () {
+                    // One after another, in order, then the session.
+                    var offered = [];
+                    return files.reduce(function (chain, f) {
+                        return chain.then(function () { return offer(f).then(function (o) { offered.push(o); }); });
+                    }, Promise.resolve()).then(function () {
+                        var r = nativeCall({ op: "start", mode: "send" });
+                        if (r && r.returnValue) r.files = offered;
+                        return r;
+                    });
+                });
+            },
+            "/stop": function (p, reply) {
+                if (session) end(session, false);
+                else nativeCall({ op: "stop" });
+                reply(ok());
+            },
+            "/getStatus": function (p, reply) {
+                reply(session ? view(session, session.last || {}) : ok({ state: "off", url: "", files: [] }));
+            }
+        });
+    })();
+
+    // ================================================================================
+    // Accessories, tethering and the battery's use (docs/M6-PLAN.md F4 items 8-9)
+    // ================================================================================
+    //
+    // Phoenix's services for Settings > Game Controllers, USB, Hotspot &
+    // Tethering and Battery. In the simulator the hardware is phoenix-sim's
+    // (its Simulate menu: a game controller, a USB drive in the device's
+    // port; the app in front, for the battery's use), which reaches the
+    // pages as shell status (hostStatusHooks). On a device each is a small
+    // service on the system's own: see docs/APP-RUNTIME.md "Accessories".
+    //
+    //   org.webosphoenix.gamepads/list {subscribe} -> {gamepads: [{index,
+    //       id, name, connection, mapping, buttons: [pressed indexes], axes}]}:
+    //       the controllers the Gamepad API sees (Chromium's own, from the
+    //       computer's) and the simulator's. Web apps get the simulator's
+    //       through navigator.getGamepads() and gamepadconnected /
+    //       gamepaddisconnected events too.
+    //   org.webosphoenix.usb/listDrives {subscribe} -> {drives: [{id, label,
+    //       vendor, size, used, fs, mounted, path, safeToRemove}]};
+    //       unmount {id} (safe removal), mount {id}.
+    //   org.webosphoenix.tethering/getStatus {subscribe} -> {available,
+    //       wifi: {enabled, ssid, passphrase, security, clients}, usb:
+    //       {enabled, connected}}; setWifi {enabled?, ssid?, passphrase?,
+    //       security? ("wpa2" | "open")}; setUsb {enabled}.
+    //   org.webosphoenix.battery/usage {subscribe} -> {percent, charging,
+    //       history: [{t, percent}] (the last 24 hours), screenOnMs, apps:
+    //       [{appId, title, ms, share}] (estimates from the time each app
+    //       was in front with the screen on), since}.
+    (function accessories() {
+        runtime.hostStatusHooks = runtime.hostStatusHooks || [];
+        var hooks = runtime.hostStatusHooks;
+        function watchers() {
+            var list = [];
+            return {
+                add: function (p, reply, ctx, build) {
+                    reply(build());
+                    if (p.subscribe) list.push({ reply: reply, ctx: ctx, build: build });
+                },
+                fire: function () {
+                    list = list.filter(function (w) { return !w.ctx.cancelled(); });
+                    list.forEach(function (w) { w.reply(w.build()); });
+                }
+            };
+        }
+
+        // ---- Game controllers ---------------------------------------------------------
+        var simPads = [];
+        var padWatch = watchers();
+        var nav = global.navigator;
+        var nativeGetGamepads = nav && typeof nav.getGamepads === "function" ? nav.getGamepads.bind(nav) : null;
+        function gamepadObject(p, slot) {
+            var buttons = [];
+            for (var i = 0; i < 17; i++) {
+                var on = (p.buttons || []).indexOf(i) >= 0;
+                buttons.push({ pressed: on, touched: on, value: on ? 1 : 0 });
+            }
+            return { id: p.id, index: slot, connected: true, mapping: p.mapping || "standard", timestamp: p.at || 0,
+                     axes: (p.axes || [0, 0, 0, 0]).slice(), buttons: buttons, vibrationActuator: null, phoenixSimulated: true };
+        }
+        function allPads() {
+            var real = [];
+            try { real = nativeGetGamepads ? Array.prototype.slice.call(nativeGetGamepads()) : []; } catch (e) { real = []; }
+            var out = real.slice();
+            while (out.length < 4) out.push(null);
+            simPads.forEach(function (p) {
+                var slot = out.indexOf(null);
+                if (slot < 0) { slot = out.length; out.push(null); }
+                out[slot] = gamepadObject(p, slot);
+            });
+            return out;
+        }
+        if (nav) {
+            try {
+                Object.defineProperty(nav, "getGamepads", { configurable: true, value: function () { return allPads(); } });
+            } catch (e) { /* the page keeps Chromium's */ }
+        }
+        function padEvent(type, pad) {
+            if (!global.dispatchEvent) return;
+            var e;
+            try { e = new Event(type); } catch (x) { return; }
+            e.gamepad = pad;
+            global.dispatchEvent(e);
+        }
+        hooks.push(function (st) {
+            if (!("gamepads" in st)) return;
+            var before = simPads.map(function (p) { return p.id; });
+            simPads = (st.gamepads || []).map(function (p) { var x = {}, k; for (k in p) x[k] = p[k]; x.at = Date.now(); return x; });
+            var now = simPads.map(function (p) { return p.id; });
+            var pads = allPads();
+            now.forEach(function (id) {
+                if (before.indexOf(id) < 0) padEvent("gamepadconnected", pads.filter(function (g) { return g && g.id === id; })[0]);
+            });
+            before.forEach(function (id) {
+                if (now.indexOf(id) < 0) padEvent("gamepaddisconnected", { id: id, connected: false });
+            });
+            padWatch.fire();
+        });
+        function padList() {
+            var sims = {};
+            simPads.forEach(function (p) { sims[p.id] = p; });
+            return ok({ gamepads: allPads().filter(Boolean).map(function (g) {
+                var sim = sims[g.id];
+                var name = sim ? sim.name : String(g.id).replace(/\s*\(.*$/, "") || "Game controller";
+                return { index: g.index, id: g.id, name: name, connection: sim ? sim.connection : "",
+                         mapping: g.mapping, axes: Array.prototype.slice.call(g.axes || []),
+                         buttons: Array.prototype.map.call(g.buttons || [], function (b, i) { return b.pressed ? i : -1; })
+                             .filter(function (i) { return i >= 0; }) };
+            }) });
+        }
+        if (global.addEventListener) {
+            global.addEventListener("gamepadconnected", function (e) { if (!(e.gamepad && e.gamepad.phoenixSimulated)) padWatch.fire(); });
+            global.addEventListener("gamepaddisconnected", function () { padWatch.fire(); });
+        }
+        register(["org.webosphoenix.gamepads"], {
+            "/list": function (p, reply, ctx) { padWatch.add(p, reply, ctx, padList); }
+        });
+
+        // ---- USB drives (host mode, OTG) ----------------------------------------------
+        var drives = [];
+        var usbWatch = watchers();
+        function driveState() { return store.get("usbDriveState", {}); }
+        function driveList() {
+            var stt = driveState();
+            return ok({ drives: drives.map(function (d) {
+                var x = {}, k;
+                for (k in d) x[k] = d[k];
+                var mounted = !(stt[d.id] && stt[d.id].unmounted);
+                x.mounted = mounted;
+                x.safeToRemove = !mounted;
+                x.path = mounted ? "/media/usb/" + (d.label || d.id) : "";
+                return x;
+            }) });
+        }
+        hooks.push(function (st, writer) {
+            if (!("usbDrives" in st)) return;
+            var before = drives.map(function (d) { return d.id; });
+            drives = (st.usbDrives || []).slice();
+            var now = drives.map(function (d) { return d.id; });
+            // A drive put in again is mounted again.
+            var stt = driveState(), dirty = false;
+            Object.keys(stt).forEach(function (id) { if (now.indexOf(id) < 0) { delete stt[id]; dirty = true; } });
+            if (dirty && writer) store.set("usbDriveState", stt);
+            // A drive put in: the notification (one page tells it).
+            if (writer) drives.forEach(function (d) {
+                if (before.indexOf(d.id) < 0)
+                    host.postToHost("notification", { appId: "org.webosphoenix.settings", title: (d.label || "USB drive") + " connected",
+                        body: "Tap to see it or remove it safely", params: { page: "usb" } });
+            });
+            usbWatch.fire();
+        });
+        function setMounted(id, mounted, reply) {
+            if (!drives.some(function (d) { return d.id === id; })) return reply(fail(-1, "No such drive: " + id));
+            var stt = driveState();
+            stt[id] = { unmounted: !mounted };
+            store.set("usbDriveState", stt);
+            usbWatch.fire();
+            reply(ok(driveList()));
+        }
+        register(["org.webosphoenix.usb"], {
+            "/listDrives": function (p, reply, ctx) { usbWatch.add(p, reply, ctx, driveList); },
+            // Safe removal: the drive's file systems are written out and let go.
+            "/unmount": function (p, reply) { setMounted(String(p.id || ""), false, reply); },
+            "/mount": function (p, reply) { setMounted(String(p.id || ""), true, reply); }
+        });
+
+        // ---- Hotspot and tethering ------------------------------------------------------
+        var tetherWatch = watchers();
+        var formFactor = "";
+        function tetherState() {
+            var t = store.get("tethering", {});
+            return { wifi: { enabled: !!(t.wifi && t.wifi.enabled), ssid: (t.wifi && t.wifi.ssid) || "Phoenix Hotspot",
+                             passphrase: (t.wifi && t.wifi.passphrase) || "", security: (t.wifi && t.wifi.security) === "open" ? "open" : "wpa2" },
+                     usb: { enabled: !!(t.usb && t.usb.enabled) } };
+        }
+        function tetherStatus() {
+            var t = tetherState();
+            t.available = formFactor !== "tablet";
+            t.wifi.clients = t.wifi.enabled ? [] : [];
+            t.usb.connected = !!store.get("usbHost", false);
+            return ok(t);
+        }
+        function tetherOngoing(t) {
+            var on = [];
+            if (t.wifi.enabled) on.push("Wi-Fi hotspot “" + t.wifi.ssid + "”");
+            if (t.usb.enabled) on.push("USB tethering");
+            if (on.length)
+                host.postToHost("ongoing", { id: "tethering", appId: "org.webosphoenix.settings", title: "Sharing your mobile data",
+                    body: on.join(" and ") + " on", icon: "", params: { page: "hotspot" }, progress: -1 });
+            else host.postToHost("ongoing", { id: "tethering", clear: true });
+        }
+        hooks.push(function (st) {
+            if ("formFactor" in st) { formFactor = String(st.formFactor || ""); tetherWatch.fire(); }
+            if ("usbHost" in st) tetherWatch.fire();
+        });
+        function saveTether(t) {
+            store.set("tethering", { wifi: { enabled: t.wifi.enabled, ssid: t.wifi.ssid, passphrase: t.wifi.passphrase, security: t.wifi.security },
+                                     usb: { enabled: t.usb.enabled } });
+            tetherOngoing(t);
+            tetherWatch.fire();
+        }
+        register(["org.webosphoenix.tethering"], {
+            "/getStatus": function (p, reply, ctx) { tetherWatch.add(p, reply, ctx, tetherStatus); },
+            "/setWifi": function (p, reply) {
+                if (formFactor === "tablet") return reply(fail(-1, "This device has no mobile data to share"));
+                var t = tetherState();
+                if (p.ssid !== undefined) {
+                    var ssid = String(p.ssid).trim();
+                    if (!ssid || ssid.length > 32) return reply(fail(-1, "The network name has 1 to 32 characters"));
+                    t.wifi.ssid = ssid;
+                }
+                if (p.security !== undefined) t.wifi.security = p.security === "open" ? "open" : "wpa2";
+                if (p.passphrase !== undefined) t.wifi.passphrase = String(p.passphrase);
+                if (t.wifi.security === "wpa2" && (p.enabled || t.wifi.enabled) && !(t.wifi.passphrase.length >= 8 && t.wifi.passphrase.length <= 63))
+                    return reply(fail(-1, "The password has 8 to 63 characters"));
+                if (p.enabled !== undefined) t.wifi.enabled = !!p.enabled;
+                saveTether(t);
+                reply(tetherStatus());
+            },
+            "/setUsb": function (p, reply) {
+                if (formFactor === "tablet") return reply(fail(-1, "This device has no mobile data to share"));
+                var t = tetherState();
+                t.usb.enabled = !!p.enabled;
+                saveTether(t);
+                reply(tetherStatus());
+            }
+        });
+
+        // ---- The battery's use ---------------------------------------------------------
+        // The level over time (each change powerd reports) and how long each
+        // app was in front with the screen on (the shell's usageTick), kept
+        // for a day. The estimate gives each app its share of the screen-on
+        // time: the screen is most of a phone's drain.
+        var DAY = 24 * 3600 * 1000;
+        var batteryWatch = watchers();
+        runtime.recordBattery = function (st) {
+            var h = store.get("batteryHistory", []), now = Date.now();
+            var last = h[h.length - 1];
+            if (last && last.percent === st.percent && !!last.charging === (st.charger !== "none")) return;
+            h.push({ t: now, percent: st.percent, charging: st.charger !== "none" });
+            store.set("batteryHistory", h.filter(function (x) { return now - x.t <= DAY; }));
+            batteryWatch.fire();
+        };
+        hooks.push(function (st, writer) {
+            if (!st.usageTick || !writer) return;
+            var u = store.get("batteryUsage", { since: Date.now(), screenOnMs: 0, apps: {}, log: [] });
+            var tick = st.usageTick, now = tick.at || Date.now();
+            u.log = (u.log || []).concat([{ t: now, appId: tick.appId || "", ms: tick.ms }]).filter(function (x) { return now - x.t <= DAY; });
+            store.set("batteryUsage", u);
+            batteryWatch.fire();
+        });
+        // A card's app is an app or one of its launch points (Settings' panes).
+        function appTitle(id) {
+            var lp = launchPoints().filter(function (l) { return l.launchPointId === id || l.id === id; })[0];
+            return lp ? lp.title : id;
+        }
+        // SIMULATOR-ONLY DEMO DATA, as runtime/sample-data.js: the first
+        // time the pane is asked, a day of the device's use so far (charged
+        // overnight, then down to the battery's level now; the apps a
+        // morning uses), so the charts have something to show. Never on a
+        // device, where the system keeps the real thing.
+        function seedDemo() {
+            if (store.get("batteryDemo", false)) return;
+            store.set("batteryDemo", true);
+            var now = Date.now(), H = 3600 * 1000, level = powerState().percent;
+            var h = [];
+            for (var i = 0; i <= 4; i++) h.push({ t: now - (22 - i) * H, percent: Math.round(30 + i * 17.5), charging: true });
+            for (i = 0; i <= 17; i++) h.push({ t: now - (17 - i) * H - 30 * 60 * 1000, percent: Math.round(100 - (100 - level) * i / 17), charging: false });
+            store.set("batteryHistory", h.concat(store.get("batteryHistory", [])).sort(function (a, b) { return a.t - b.t; }));
+            var u = store.get("batteryUsage", { log: [] });
+            var demo = [["com.palm.app.email", 42], ["org.webosphoenix.messaging", 35], ["com.palm.app.browser", 28],
+                        ["org.webosphoenix.phone", 12], ["", 15], ["org.webosphoenix.music", 9]];
+            u.log = demo.map(function (d, n) { return { t: now - (12 - n) * H, appId: d[0], ms: d[1] * 60 * 1000 }; }).concat(u.log || []);
+            store.set("batteryUsage", u);
+        }
+        function usage() {
+            seedDemo();
+            var now = Date.now(), p = powerState();
+            var u = store.get("batteryUsage", { log: [] });
+            var by = {}, screen = 0;
+            (u.log || []).forEach(function (x) {
+                if (now - x.t > DAY) return;
+                screen += x.ms;
+                var id = x.appId || "";
+                by[id] = (by[id] || 0) + x.ms;
+            });
+            var apps = Object.keys(by).map(function (id) {
+                return { appId: id, title: id ? appTitle(id) : "Card view and launcher", ms: by[id], share: screen ? by[id] / screen : 0 };
+            }).sort(function (a, b) { return b.ms - a.ms; });
+            var h = store.get("batteryHistory", []).filter(function (x) { return now - x.t <= DAY; });
+            if (!h.length || h[h.length - 1].percent !== p.percent) h = h.concat([{ t: now, percent: p.percent, charging: p.charger !== "none" }]);
+            return ok({ percent: p.percent, charging: p.charger !== "none", temperature: typeof p.temperature === "number" ? p.temperature : 31,
+                        history: h, screenOnMs: screen, apps: apps });
+        }
+        register(["org.webosphoenix.battery"], {
+            "/usage": function (p, reply, ctx) { batteryWatch.add(p, reply, ctx, usage); }
+        });
+    })();
+
+    // ================================================================================
     // Torch (org.webosports.service.torch; apps/flashlight)
     // ================================================================================
     //
@@ -11484,6 +12351,943 @@
                 torchNotify();
             }
         };
+    })();
+
+    // ================================================================================
+    // Sealing (encryption at rest for the clipboard history and the Assistant's keys)
+    // ================================================================================
+    //
+    // webCryptoSealer(dbName, keyId, fallbackKey, label) -> {seal(text) ->
+    // Promise<{iv, data}>, unseal({iv, data}) -> Promise<text>}: AES-GCM with
+    // one 256-bit key for every page, created once and kept in IndexedDB
+    // (database dbName, store "keys", id keyId) as a non-extractable
+    // CryptoKey: pages can use it but no script can read it out (IndexedDB
+    // "add" refuses a second key, so two pages starting together end up
+    // with the same one). Where there is no IndexedDB (the unit tests) the
+    // raw key is kept in the store under fallbackKey.
+    function webCryptoSealer(dbName, keyId, fallbackKey, label) {
+        function subtle() {
+            var c = global.crypto && global.crypto.subtle ? global.crypto : (typeof crypto !== "undefined" ? crypto : null);
+            return c && c.subtle ? c.subtle : null;
+        }
+        function randomBytes(n) {
+            var a = new Uint8Array(n);
+            (global.crypto || crypto).getRandomValues(a);
+            return a;
+        }
+        function b64(bytes) {
+            var s = "";
+            for (var i = 0; i < bytes.length; ++i) s += String.fromCharCode(bytes[i]);
+            return global.btoa(s);
+        }
+        function unb64(text) {
+            var s = global.atob(text), a = new Uint8Array(s.length);
+            for (var i = 0; i < s.length; ++i) a[i] = s.charCodeAt(i);
+            return a;
+        }
+        var keyPromise = null;
+        function idbKey() {
+            return new Promise(function (resolve, reject) {
+                var open = global.indexedDB.open(dbName, 1);
+                open.onupgradeneeded = function () { open.result.createObjectStore("keys"); };
+                open.onerror = function () { reject(open.error); };
+                open.onsuccess = function () {
+                    var db = open.result;
+                    var get = db.transaction("keys", "readonly").objectStore("keys").get(keyId);
+                    get.onerror = function () { reject(get.error); };
+                    get.onsuccess = function () {
+                        if (get.result) return resolve(get.result);
+                        subtle().generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]).then(function (k) {
+                            var tx = db.transaction("keys", "readwrite");
+                            var add = tx.objectStore("keys").add(k, keyId);
+                            add.onerror = function (e) {
+                                // Another page made it first: use that one.
+                                e.preventDefault();
+                                var again = db.transaction("keys", "readonly").objectStore("keys").get(keyId);
+                                again.onsuccess = function () { again.result ? resolve(again.result) : reject(new Error("no " + label + " key")); };
+                                again.onerror = function () { reject(again.error); };
+                            };
+                            add.onsuccess = function () { resolve(k); };
+                        }, reject);
+                    };
+                };
+            });
+        }
+        function storeKey() {
+            var raw = store.get(fallbackKey, null);
+            if (raw) return subtle().importKey("raw", unb64(raw), "AES-GCM", false, ["encrypt", "decrypt"]);
+            var bytes = randomBytes(32);
+            store.set(fallbackKey, b64(bytes));
+            return subtle().importKey("raw", bytes, "AES-GCM", false, ["encrypt", "decrypt"]);
+        }
+        function key() {
+            if (!subtle()) return Promise.reject(new Error("WebCrypto is not available"));
+            if (!keyPromise) {
+                keyPromise = (global.indexedDB ? idbKey().catch(function (e) {
+                    console.warn("[phoenix-runtime] " + label + ": no IndexedDB key store", e && e.message);
+                    return storeKey();
+                }) : storeKey());
+                keyPromise.catch(function () { keyPromise = null; });
+            }
+            return keyPromise;
+        }
+        return {
+            seal: function (text) {
+                return key().then(function (k) {
+                    var iv = randomBytes(12);
+                    return subtle().encrypt({ name: "AES-GCM", iv: iv }, k, new TextEncoder().encode(text)).then(function (ct) {
+                        return { iv: b64(iv), data: b64(new Uint8Array(ct)) };
+                    });
+                });
+            },
+            unseal: function (enc) {
+                return key().then(function (k) {
+                    return subtle().decrypt({ name: "AES-GCM", iv: unb64(enc.iv) }, k, unb64(enc.data));
+                }).then(function (pt) { return new TextDecoder().decode(pt); });
+            }
+        };
+    }
+
+    // ================================================================================
+    // Clipboard history (org.webosphoenix.clipboard; the keyboard's clip strip,
+    // apps/clipboard, Settings > Clipboard)
+    // ================================================================================
+    //
+    // Phoenix's own service (docs/M6-PLAN.md F2; webOS had no clipboard
+    // history): every copy in every app is recorded with the app it came
+    // from, so the keyboard's clip strip, the Clipboard app and Settings share
+    // one history, as Paste does on macOS.
+    //
+    //   history {category?, query?, limit?, subscribe?} -> {clips, categories, settings}
+    //       newest first; category "recent" (all, the default), "pinned" or a
+    //       category id; with subscribe, again after every change in any page.
+    //       A sensitive clip comes masked: {sensitive: true, kind, length}, no text.
+    //   subscribe {...}: history with subscribe
+    //   add {text | image, title?, source?, sensitive?} -> {clip} or {skipped: why}
+    //   pin {id}, unpin {id}, setCategory {id, category ("" for none)}
+    //   update {id, text} (a text clip edited in the Clipboard app)
+    //   delete {id | ids}, clear {all?} (all: pinned and saved clips too)
+    //   paste {id} -> {clip} with its text (the keyboard: a sensitive clip only
+    //       for the system UI, which pastes it into a password field)
+    //   reveal {id, passCode} -> {text}: a sensitive clip after the device
+    //       passcode (com.palm.systemmanager matchDevicePasscode)
+    //   addCategory {name} -> {category}, renameCategory {id, name},
+    //   deleteCategory {id} (its clips stay, in no category),
+    //   reorderCategories {ids}
+    //   getSettings {subscribe?} -> {settings}, setSettings {...some keys} -> {settings}
+    //
+    // Clip: {id, type: "text" | "link" | "image", text?, title?, image? (a
+    // data: URL or a path), source (app id), time, pinned, category,
+    // sensitive, kind?}. A clip in a category or pinned is "saved": it
+    // neither expires nor counts against the history's size.
+    //
+    // Storage: each clip under its own key (clipboard:clip:<id>), so pages
+    // copying at once in their own processes never write over each other's
+    // clips (PR 7: a page writing back its whole copy of a shared blob undid
+    // other pages' changes). Settings and the category list are one key each,
+    // written only when the user changes them. Expiry and the size limit are
+    // applied by whichever page reads or adds; deleting is safe from any page.
+    //
+    // Sensitive clips (a copy from a password field, a copy an app marks
+    // with __phoenixRuntime.clipboard.markSensitive (@phoenix/secrets'
+    // SecretClipboard: Passwords, Authenticator), or text that looks like a
+    // one-time code, an otpauth:// link, a TOTP secret or a password) are
+    // kept AES-GCM encrypted with a key the runtime keeps in IndexedDB as a
+    // non-extractable CryptoKey (in the store, where there is no IndexedDB:
+    // the unit tests). Threat model: docs/SECURITY-APPS.md "Clipboard history".
+    (function clipboardHistory() {
+        var SERVICE = "org.webosphoenix.clipboard";
+        var CLIP = "clipboard:clip:";
+        var SETTINGS_KEY = "clipboard:settings";
+        var CATS_KEY = "clipboard:categories";
+        var KEEP = { hour: 3600e3, day: 86400e3, week: 7 * 86400e3, month: 30 * 86400e3, forever: 0 };
+        var SIZES = [25, 50, 100, 200, 500];
+        var DEFAULTS = {
+            enabled: true,          // the whole feature: off records nothing and hides the keyboard key
+            keyboardKey: true,      // the clipboard key on the keyboard
+            maxItems: 100,          // history (not saved clips)
+            keepFor: "week",        // hour, day, week, month, forever
+            clearOnLock: false,     // clear the history when the screen locks
+            sensitive: "mask",      // "mask": recorded encrypted and masked; "skip": not recorded
+            detectSecrets: true,    // treat codes and password-like text as sensitive
+            excludedApps: []        // app ids whose copies are not recorded
+        };
+        var MAX_TEXT = 100000;      // characters
+        var MAX_IMAGE = 750000;     // data: URL characters (localStorage is shared and small)
+        var SYSTEM_UI = "com.palm.systemui";
+        var APP = "org.webosphoenix.clipboard";
+
+        function randomBytes(n) {
+            var a = new Uint8Array(n);
+            (global.crypto || crypto).getRandomValues(a);
+            return a;
+        }
+        function b64(bytes) {
+            var s = "";
+            for (var i = 0; i < bytes.length; ++i) s += String.fromCharCode(bytes[i]);
+            return global.btoa(s);
+        }
+
+        // ---- Settings ----------------------------------------------------------------
+        function settings() {
+            var s = store.get(SETTINGS_KEY, null) || {};
+            var out = {};
+            for (var k in DEFAULTS) out[k] = k in s ? s[k] : DEFAULTS[k];
+            if (!(out.keepFor in KEEP)) out.keepFor = DEFAULTS.keepFor;
+            out.maxItems = Math.max(1, Math.min(1000, Math.round(Number(out.maxItems) || DEFAULTS.maxItems)));
+            if (out.sensitive !== "skip") out.sensitive = "mask";
+            out.excludedApps = Array.isArray(out.excludedApps) ? out.excludedApps.filter(function (a) { return typeof a === "string"; }) : [];
+            ["enabled", "keyboardKey", "clearOnLock", "detectSecrets"].forEach(function (b) { out[b] = !!out[b]; });
+            return out;
+        }
+
+        // ---- Categories -------------------------------------------------------------------
+        function categories() {
+            var c = store.get(CATS_KEY, null);
+            return Array.isArray(c) ? c.filter(function (x) { return x && typeof x.id === "string"; }) : [];
+        }
+
+        // ---- Clips --------------------------------------------------------------------------
+        function newId() {
+            return Date.now().toString(36) + "-" + b64(randomBytes(6)).replace(/[+\/=]/g, "x");
+        }
+        function readClip(id) {
+            var c = store.get(CLIP + id, null);
+            return c && c.id === id ? c : null;
+        }
+        function writeClip(c) {
+            try {
+                store.set(CLIP + c.id, c);
+                return true;
+            } catch (e) {
+                // Full: drop the oldest history and try once more.
+                console.warn("[phoenix-runtime] clipboard: storage full", e && e.message);
+                prune(Math.floor(settings().maxItems / 2));
+                try { store.set(CLIP + c.id, c); return true; } catch (e2) { return false; }
+            }
+        }
+        function saved(c) { return !!c.pinned || !!c.category; }
+        function allClips() {
+            var out = [];
+            store.keys(CLIP).forEach(function (k) {
+                var c = store.get(k, null);
+                if (c && c.id) out.push(c);
+            });
+            out.sort(function (a, b) { return (b.time || 0) - (a.time || 0); });
+            return out;
+        }
+        // Expiry and the size limit, for the history only.
+        function prune(limit) {
+            var s = settings(), now = Date.now(), keep = KEEP[s.keepFor], max = limit !== undefined ? limit : s.maxItems;
+            var n = 0, gone = 0;
+            allClips().forEach(function (c) {
+                if (saved(c)) return;
+                if ((keep && now - (c.time || 0) > keep) || ++n > max) {
+                    store.remove(CLIP + c.id);
+                    gone++;
+                }
+            });
+            return gone;
+        }
+        // What pages and the shell get: a sensitive clip without its text.
+        function shown(c) {
+            var o = { id: c.id, type: c.type, source: c.source || "", time: c.time || 0, pinned: !!c.pinned,
+                      category: c.category || "", sensitive: !!c.sensitive };
+            if (c.title) o.title = c.title;
+            if (c.sensitive) {
+                o.kind = c.kind || "secret";
+                o.length = c.length || 0;
+            } else if (c.type === "image") {
+                o.image = c.image;
+            } else {
+                o.text = c.text;
+            }
+            return o;
+        }
+
+        // ---- Sensitive text -----------------------------------------------------------------
+        // What a text looks like: "otpauth", "otp" (a one-time code), "totp"
+        // (a base32 TOTP key), "password", or "" (nothing secret). A secret an
+        // app marked that looks like none of them is a "secret".
+        function sensitiveKind(text) {
+            var t = String(text || "").trim();
+            if (!t || t.length > 256) return "";
+            if (/^otpauth(-migration)?:\/\//i.test(t)) return "otpauth";
+            if (/^\d{3}[ -]?\d{3}$|^\d{7,8}$/.test(t)) return "otp";
+            if (/\s/.test(t)) return "";
+            var compact = t.replace(/=+$/, "");
+            if (compact.length >= 16 && compact.length <= 128 && /^[A-Z2-7]+$/.test(compact)) return "totp";
+            if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t) || /^www\./i.test(t) || /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(t)) return "";
+            if (t.length < 8 || t.length > 64) return "";
+            var classes = (/[a-z]/.test(t) ? 1 : 0) + (/[A-Z]/.test(t) ? 1 : 0) + (/[0-9]/.test(t) ? 1 : 0) + (/[^A-Za-z0-9]/.test(t) ? 1 : 0);
+            // A word with a capital and a number at the end ("Seattle2024")
+            // is a password as often as not; three kinds of characters with
+            // a symbol, or all four, are taken as one.
+            if (classes === 4 || (classes === 3 && /[^A-Za-z0-9]/.test(t))) return "password";
+            return "";
+        }
+        function linkOf(text) {
+            var t = String(text || "").trim();
+            return /^(https?|ftp):\/\/[^\s]+$/i.test(t) || /^www\.[^\s]+\.[^\s]+$/i.test(t) ? t : "";
+        }
+
+        // Text an app said is a secret (SecretClipboard), for the copy that follows.
+        var marked = [];
+        function takeMark(text) {
+            var now = Date.now();
+            marked = marked.filter(function (m) { return now - m.at < 5000; });
+            for (var i = 0; i < marked.length; ++i)
+                if (marked[i].text === text)
+                    return marked.splice(i, 1)[0];
+            return null;
+        }
+
+        // ---- The key -------------------------------------------------------------------------
+        // One AES-GCM key for every page, non-extractable ("Sealing" above).
+        var sealer = webCryptoSealer("phoenix-clipboard", "clips", "clipboard:key", "clipboard");
+        function seal(text) { return sealer.seal(text); }
+        function unseal(enc) { return sealer.unseal(enc); }
+        // A clip's text, decrypted if need be.
+        function textOf(c) {
+            if (!c.sensitive) return Promise.resolve(c.type === "image" ? "" : c.text || "");
+            if (!c.enc) return Promise.reject(new Error("no data"));
+            return unseal(c.enc);
+        }
+
+        // ---- Recording --------------------------------------------------------------------
+        // item: {text} or {image}, title?, source?, sensitive? (true: the app or
+        // a password field said so). Resolves {clip} or {skipped}.
+        function record(item) {
+            var s = settings();
+            var source = String(item.source || PalmSystem.appIdentifier || "");
+            if (!s.enabled) return Promise.resolve({ skipped: "off" });
+            if (s.excludedApps.indexOf(source) >= 0) return Promise.resolve({ skipped: "excluded" });
+            var c = { id: newId(), time: Date.now(), source: source, pinned: false, category: "", sensitive: false };
+            if (item.image) {
+                var img = String(item.image);
+                if (img.length > MAX_IMAGE) return Promise.resolve({ skipped: "too large" });
+                c.type = "image";
+                c.image = img;
+                if (item.title) c.title = String(item.title).slice(0, 200);
+            } else {
+                var text = String(item.text === undefined || item.text === null ? "" : item.text);
+                if (!text.trim()) return Promise.resolve({ skipped: "empty" });
+                if (text.length > MAX_TEXT) text = text.slice(0, MAX_TEXT);
+                var looks = sensitiveKind(text);
+                var mark = takeMark(text);
+                var secret = !!item.sensitive || !!mark || (s.detectSecrets && !!looks);
+                if (secret && s.sensitive === "skip") return Promise.resolve({ skipped: "sensitive" });
+                c.type = !secret && linkOf(text) ? "link" : "text";
+                if (c.type === "link" && item.title) c.title = String(item.title).slice(0, 200);
+                if (secret) {
+                    c.sensitive = true;
+                    // A password field's text is a password, whatever it looks like.
+                    c.kind = item.password ? "password" : (mark && mark.kind) || (item.kind ? String(item.kind) : "") || looks || "secret";
+                    c.length = text.length;
+                }
+                c.text = text;
+            }
+            return dedupe(c).then(function (same) {
+                if (same) {
+                    // Copied again: it moves to the front.
+                    same.time = c.time;
+                    same.source = c.source;
+                    if (c.title && !same.title) same.title = c.title;
+                    writeClip(same);
+                    changed();
+                    return { clip: shown(same) };
+                }
+                var done = c.sensitive ? seal(c.text).then(function (enc) { delete c.text; c.enc = enc; return c; }) : Promise.resolve(c);
+                return done.then(function (clip) {
+                    if (!writeClip(clip)) return { skipped: "storage full" };
+                    prune();
+                    changed();
+                    return { clip: shown(clip) };
+                });
+            });
+        }
+        // The clip already holding this content, among the latest.
+        function dedupe(c) {
+            var recent = allClips().filter(function (x) { return x.type === c.type || (c.type !== "image" && x.type !== "image"); }).slice(0, 50);
+            var i = 0;
+            function next() {
+                if (i >= recent.length) return Promise.resolve(null);
+                var x = recent[i++];
+                if (x.sensitive !== c.sensitive) return next();
+                if (c.type === "image") return x.image === c.image ? Promise.resolve(x) : next();
+                return textOf(x).then(function (t) { return t === c.text ? x : next(); }, next);
+            }
+            return next();
+        }
+
+        // ---- Subscribers -----------------------------------------------------------------------
+        var watchers = [], notifyTimer = null;
+        function changed() {
+            if (notifyTimer) return;
+            notifyTimer = setTimeout(function () {
+                notifyTimer = null;
+                watchers = watchers.filter(function (w) { return !w.ctx.cancelled(); });
+                watchers.forEach(function (w) { w.send(); });
+            }, 0);
+        }
+        global.addEventListener && global.addEventListener("storage", function (e) {
+            if (e.key === null || String(e.key).indexOf("phoenix:clipboard:") === 0) changed();
+        });
+        function watch(p, reply, ctx, make) {
+            var send = function () { reply(make()); };
+            var first = make();
+            if (p.subscribe) {
+                first.subscribed = true;
+                watchers.push({ ctx: ctx, send: send });
+            }
+            reply(first);
+        }
+
+        function history(p) {
+            prune();
+            var cat = p.category || "recent";
+            var q = String(p.query || "").toLowerCase();
+            var list = allClips().filter(function (c) {
+                if (cat === "pinned" && !c.pinned) return false;
+                if (cat !== "recent" && cat !== "pinned" && c.category !== cat) return false;
+                if (!q) return true;
+                if (c.sensitive) return false;
+                return String(c.text || "").toLowerCase().indexOf(q) >= 0 || String(c.title || "").toLowerCase().indexOf(q) >= 0
+                    || String(c.source || "").toLowerCase().indexOf(q) >= 0;
+            });
+            if (p.limit > 0) list = list.slice(0, p.limit);
+            return ok({ clips: list.map(shown), categories: categories(), settings: settings() });
+        }
+
+        function withClip(p, reply, fn) {
+            var c = p && typeof p.id === "string" ? readClip(p.id) : null;
+            if (!c) return reply(fail(-2, "No such clip: " + (p && p.id)));
+            fn(c);
+        }
+        function caller() { return PalmSystem.appIdentifier; }
+
+        var methods = {
+            "/history": function (p, reply, ctx) {
+                watch(p, reply, ctx, function () { return history(p); });
+            },
+            "/add": function (p, reply) {
+                if (typeof p.text !== "string" && typeof p.image !== "string")
+                    return reply(fail(-1, "need \"text\" or \"image\""));
+                record({ text: p.text, image: p.image, title: p.title, source: p.source || caller(), sensitive: !!p.sensitive,
+                         password: p.kind === "password", kind: p.kind })
+                    .then(function (r) { reply(ok(r)); }, function (e) { reply(fail(-1, String(e && e.message || e))); });
+            },
+            "/pin": function (p, reply) {
+                withClip(p, reply, function (c) { c.pinned = true; writeClip(c); changed(); reply(ok({ clip: shown(c) })); });
+            },
+            "/unpin": function (p, reply) {
+                withClip(p, reply, function (c) { c.pinned = false; writeClip(c); changed(); reply(ok({ clip: shown(c) })); });
+            },
+            "/setCategory": function (p, reply) {
+                var cat = String(p.category || "");
+                if (cat && !categories().some(function (x) { return x.id === cat; }))
+                    return reply(fail(-2, "No such category: " + cat));
+                withClip(p, reply, function (c) { c.category = cat; writeClip(c); changed(); reply(ok({ clip: shown(c) })); });
+            },
+            "/update": function (p, reply) {
+                if (typeof p.text !== "string" || !p.text.trim()) return reply(fail(-1, "need \"text\""));
+                withClip(p, reply, function (c) {
+                    if (c.type === "image" || c.sensitive) return reply(fail(-1, "Only text clips can be edited"));
+                    c.text = p.text.slice(0, MAX_TEXT);
+                    c.type = linkOf(c.text) ? "link" : "text";
+                    if (c.type !== "link") delete c.title;
+                    writeClip(c);
+                    changed();
+                    reply(ok({ clip: shown(c) }));
+                });
+            },
+            "/delete": function (p, reply) {
+                var ids = Array.isArray(p.ids) ? p.ids : typeof p.id === "string" ? [p.id] : [];
+                ids.forEach(function (id) { store.remove(CLIP + id); });
+                changed();
+                reply(ok({ deleted: ids.length }));
+            },
+            "/clear": function (p, reply) {
+                var n = 0;
+                allClips().forEach(function (c) {
+                    if (p.all || !saved(c)) { store.remove(CLIP + c.id); n++; }
+                });
+                changed();
+                reply(ok({ deleted: n }));
+            },
+            "/paste": function (p, reply) {
+                withClip(p, reply, function (c) {
+                    if (c.sensitive && caller() !== SYSTEM_UI)
+                        return reply(fail(-3, "A sensitive clip needs the device passcode (reveal)"));
+                    textOf(c).then(function (t) {
+                        var o = shown(c);
+                        if (c.type !== "image") o.text = t;
+                        reply(ok({ clip: o }));
+                    }, function () { reply(fail(-4, "This clip can no longer be read")); });
+                });
+            },
+            "/reveal": function (p, reply, ctx) {
+                withClip(p, reply, function (c) {
+                    dispatch("luna://com.palm.systemmanager/matchDevicePasscode", { passCode: String(p.passCode || "") }, function (r) {
+                        if (!r || !r.succeeded)
+                            return reply(fail(-5, "The passcode is not right"));
+                        textOf(c).then(function (t) { reply(ok({ text: t })); },
+                                       function () { reply(fail(-4, "This clip can no longer be read")); });
+                    }, ctx);
+                });
+            },
+            "/addCategory": function (p, reply) {
+                var name = String(p.name || "").trim().slice(0, 40);
+                if (!name) return reply(fail(-1, "need \"name\""));
+                var cats = categories();
+                var cat = { id: "c" + newId(), name: name };
+                cats.push(cat);
+                store.set(CATS_KEY, cats);
+                changed();
+                reply(ok({ category: cat, categories: cats }));
+            },
+            "/renameCategory": function (p, reply) {
+                var name = String(p.name || "").trim().slice(0, 40);
+                if (!name) return reply(fail(-1, "need \"name\""));
+                var cats = categories(), cat = cats.filter(function (x) { return x.id === p.id; })[0];
+                if (!cat) return reply(fail(-2, "No such category: " + p.id));
+                cat.name = name;
+                store.set(CATS_KEY, cats);
+                changed();
+                reply(ok({ category: cat, categories: cats }));
+            },
+            "/deleteCategory": function (p, reply) {
+                var cats = categories(), left = cats.filter(function (x) { return x.id !== p.id; });
+                if (left.length === cats.length) return reply(fail(-2, "No such category: " + p.id));
+                store.set(CATS_KEY, left);
+                allClips().forEach(function (c) {
+                    if (c.category === p.id) { c.category = ""; writeClip(c); }
+                });
+                changed();
+                reply(ok({ categories: left }));
+            },
+            "/reorderCategories": function (p, reply) {
+                var cats = categories(), ids = Array.isArray(p.ids) ? p.ids : [];
+                var byId = {};
+                cats.forEach(function (c) { byId[c.id] = c; });
+                var out = ids.filter(function (id) { return byId[id]; }).map(function (id) { var c = byId[id]; delete byId[id]; return c; });
+                cats.forEach(function (c) { if (byId[c.id]) out.push(c); });
+                store.set(CATS_KEY, out);
+                changed();
+                reply(ok({ categories: out }));
+            },
+            "/getSettings": function (p, reply, ctx) {
+                watch(p, reply, ctx, function () { return ok({ settings: settings() }); });
+            },
+            "/setSettings": function (p, reply) {
+                var cur = store.get(SETTINGS_KEY, null) || {};
+                var bad = "";
+                Object.keys(p).forEach(function (k) {
+                    if (k === "subscribe" || !(k in DEFAULTS)) return;
+                    var v = p[k];
+                    if (k === "keepFor" && !(v in KEEP)) bad = "keepFor: one of " + Object.keys(KEEP).join(", ");
+                    else if (k === "maxItems" && !(v >= 1 && v <= 1000)) bad = "maxItems: 1-1000";
+                    else if (k === "sensitive" && v !== "mask" && v !== "skip") bad = "sensitive: \"mask\" or \"skip\"";
+                    else if (k === "excludedApps" && !Array.isArray(v)) bad = "excludedApps: a list of app ids";
+                    else cur[k] = v;
+                });
+                if (bad) return reply(fail(-1, bad));
+                store.set(SETTINGS_KEY, cur);
+                var s = settings();
+                if (!s.enabled) {
+                    // Off: the history goes (saved clips stay).
+                    allClips().forEach(function (c) { if (!saved(c)) store.remove(CLIP + c.id); });
+                }
+                prune();
+                changed();
+                reply(ok({ settings: s }));
+            }
+        };
+        methods["/subscribe"] = function (p, reply, ctx) {
+            var q = {};
+            for (var k in p) q[k] = p[k];
+            q.subscribe = true;
+            methods["/history"](q, reply, ctx);
+        };
+        register([SERVICE], methods);
+
+        // ---- Copies in this page ------------------------------------------------------------
+        // Every copy and cut: the page's selection, or what the page put on
+        // the clipboard itself (clipboardData, read after its own handlers,
+        // as this listener is on the window and bubbles last).
+        function onCopy(e) {
+            var data = e.clipboardData;
+            var text = "", image = "", title = "";
+            var target = e.target && e.target.nodeType === 1 ? e.target : null;
+            var password = !!(target && target.tagName === "INPUT" && String(target.type).toLowerCase() === "password");
+            if (e.defaultPrevented && data) {
+                text = data.getData("text/plain") || data.getData("text/uri-list") || "";
+            } else {
+                text = selectedText();
+                if (!text) {
+                    // A picture alone (no text selected).
+                    var sel = global.getSelection && global.getSelection();
+                    var range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+                    var frag = range ? range.cloneContents() : null;
+                    var img = frag && frag.querySelector ? frag.querySelector("img") : null;
+                    if (img && img.getAttribute("src")) {
+                        image = new URL(img.getAttribute("src"), global.location.href).href;
+                        title = img.getAttribute("alt") || "";
+                    }
+                }
+            }
+            if (!text && !image) return;
+            if (text && linkOf(text)) title = linkTitle(text);
+            record({ text: text, image: image, title: title, sensitive: password, password: password })
+                .catch(function (err) { console.warn("[phoenix-runtime] clipboard: not recorded", err && err.message); });
+        }
+        // A link's title: the link's own text where it was copied from, or
+        // the page's title for its own address.
+        function linkTitle(url) {
+            var sel = global.getSelection && global.getSelection();
+            var node = sel && sel.anchorNode;
+            var a = node && (node.nodeType === 1 ? node : node.parentElement);
+            a = a && a.closest ? a.closest("a[href]") : null;
+            if (a && a.textContent.trim() && a.textContent.trim() !== url) return a.textContent.trim();
+            if (global.location && url === global.location.href) return global.document.title || "";
+            return "";
+        }
+        if (global.addEventListener) {
+            global.addEventListener("copy", onCopy);
+            global.addEventListener("cut", onCopy);
+        }
+
+        // navigator.clipboard writes (SecretClipboard, the apps' Copy
+        // buttons) fire no copy event: recorded here.
+        var clip = global.navigator && global.navigator.clipboard;
+        if (clip && typeof clip.writeText === "function") {
+            var writeText = clip.writeText.bind(clip);
+            try {
+                clip.writeText = function (text) {
+                    var r = writeText(text);
+                    Promise.resolve(r).then(function () {
+                        if (text) record({ text: String(text) }).catch(function () {});
+                    }, function () {});
+                    return r;
+                };
+            } catch (e) { /* read-only: copies through it go unrecorded */ }
+        }
+        if (clip && typeof clip.write === "function") {
+            var write = clip.write.bind(clip);
+            try {
+                clip.write = function (items) {
+                    var r = write(items);
+                    Promise.resolve(r).then(function () { recordItems(items); }, function () {});
+                    return r;
+                };
+            } catch (e) { /* as above */ }
+        }
+        function recordItems(items) {
+            (items || []).forEach(function (it) {
+                var types = it && it.types ? Array.prototype.slice.call(it.types) : [];
+                var img = types.filter(function (t) { return /^image\//.test(t); })[0];
+                if (img) {
+                    it.getType(img).then(function (blob) {
+                        var fr = new global.FileReader();
+                        fr.onload = function () { record({ image: String(fr.result) }).catch(function () {}); };
+                        fr.readAsDataURL(blob);
+                    });
+                } else if (types.indexOf("text/plain") >= 0) {
+                    it.getType("text/plain").then(function (blob) { return blob.text(); })
+                        .then(function (t) { record({ text: t }).catch(function () {}); });
+                }
+            });
+        }
+
+        // Copy and Cut in a password field. Chromium refuses both there (and
+        // fires no copy event); webOS let the user copy a password, so the
+        // runtime copies the selection itself and records it as sensitive.
+        function passwordField() {
+            var el = editTarget();
+            return el && el.tagName === "INPUT" && String(el.type).toLowerCase() === "password" ? el : null;
+        }
+        function passwordCopy(action) {
+            var el = passwordField();
+            if (!el || el.selectionStart === el.selectionEnd) return false;
+            var text = el.value.substring(el.selectionStart, el.selectionEnd);
+            runtime.clipboard.markSensitive(text, "password");
+            var put = clip && typeof clip.writeText === "function"
+                ? Promise.resolve(clip.writeText(text)) : Promise.reject(new Error("no clipboard"));
+            put.catch(function () {
+                // execCommand("copy") on a hidden text area.
+                var ta = global.document.createElement("textarea");
+                ta.value = text;
+                ta.style.position = "fixed";
+                ta.style.opacity = "0";
+                global.document.body.appendChild(ta);
+                ta.select();
+                global.document.execCommand("copy");
+                ta.remove();
+                el.focus();
+            });
+            if (action === "cut")
+                global.document.execCommand("insertText", false, "");
+            return true;
+        }
+        if (global.document) {
+            global.document.addEventListener("keydown", function (e) {
+                var k = String(e.key || "").toLowerCase();
+                if ((e.ctrlKey || e.metaKey) && !e.altKey && (k === "c" || k === "x") && passwordCopy(k === "c" ? "copy" : "cut"))
+                    e.preventDefault();
+            }, true);
+        }
+
+        // The screen locked: the history goes, when the user asked for that
+        // (Settings > Clipboard). Only on the change, which one page sees
+        // first (applyHostStatus stores deviceLocked); deleting twice is harmless.
+        var baseApply = runtime.applyHostStatus;
+        runtime.applyHostStatus = function (st, opts) {
+            var was = !!store.get("deviceLocked", false);
+            var r = baseApply.apply(this, arguments);
+            if (st && st.deviceLocked && !was && settings().clearOnLock) {
+                allClips().forEach(function (c) { if (!saved(c)) store.remove(CLIP + c.id); });
+                changed();
+            }
+            return r;
+        };
+
+        runtime.clipboard = {
+            record: record,
+            // The next copy of this text is a secret (@phoenix/secrets SecretClipboard).
+            // kind: "password", "otp", ... ("" to tell from the text).
+            markSensitive: function (text, kind) {
+                if (typeof text === "string" && text) marked.push({ text: text, kind: kind ? String(kind) : "", at: Date.now() });
+            },
+            sensitiveKind: sensitiveKind,
+            passwordCopy: passwordCopy,
+            // A picture from the keyboard's clip strip, into the focused
+            // rich text (contenteditable); a plain field takes none.
+            insertImage: function (src) {
+                var el = editTarget();
+                if (!el || !el.isContentEditable || !src) return false;
+                return global.document.execCommand("insertImage", false, String(src));
+            },
+            settings: settings,
+            // For tests: the stored record (sensitive ones encrypted).
+            raw: readClip,
+            prune: prune
+        };
+    })();
+
+    // ================================================================================
+    // The Phoenix Assistant (org.webosphoenix.assistant, org.webosphoenix.tts;
+    // the shell's assistant view, apps/assistant, Settings > Assistant)
+    // ================================================================================
+    //
+    // docs/M6-PLAN.md F3. Nothing here reimplements the assistant: this block
+    // runs the device's own service code, apps/assistant/service
+    // (assistant.js and lib/: the grammar, the router, the providers; the
+    // requests and replies are documented there), in the page, loaded from
+    // /usr/palm/services/org.webosphoenix.assistant/ ("Node.js device
+    // services in the page" above), and gives it:
+    //
+    //   - luna calls on the simulated bus;
+    //   - HTTP through the host's proxy (proxiedRequest): the model providers
+    //     and Open-Meteo do not allow cross-origin requests from pages, and
+    //     the proxy runs in phoenix-sim's own process (Qt Network), so a
+    //     provider's key goes from the service to the provider and nowhere
+    //     else (docs/APP-RUNTIME.md "Assistant");
+    //   - storage: the shared store, one key per thread, message and
+    //     provider ("assistant:..."), so the shell's view and the app writing
+    //     at once never write over each other (PR 7);
+    //   - secrets: API keys sealed with AES-GCM under a non-extractable key in
+    //     IndexedDB ("Sealing" above); the service unseals one only to call
+    //     its provider, and gives pages no more than its last four characters;
+    //   - the on-device model and speech: the shell's, when
+    //     /usr/share/phoenix/host.json says {"assistant": true} (phoenix-sim:
+    //     shell/native/localmodels.cpp runs llama.cpp's llama-server and
+    //     downloads models, shell/native/speech.cpp speaks). "assistant" host
+    //     messages ({op, requestId, ...}) go out and the answers come back
+    //     through __phoenixRuntime.assistantHostEvent({requestId, ...}).
+    //     Without the shell (a browser, the tests): no on-device model, and
+    //     speech through the page's speechSynthesis where it has voices.
+    //
+    // Who may call: ask, choose and confirm only the system UI, the
+    // Assistant app and Settings (a request can spend the user's cloud
+    // tokens); providers and allowCloudControl only Settings (assistant.js).
+    //
+    // Subscriptions: threads, thread, getSettings, providers, models and
+    // commands with {subscribe: true} answer again after every change in any
+    // page (the store's storage events, "assistant:" keys).
+    //
+    // org.webosphoenix.tts: speak {text, lang?}, stop {}, getStatus {} ->
+    // {available, engine}: the same speech for any app.
+    //
+    // __phoenixRuntime.assistant: service() (the methods), hostEvent, for tests.
+    (function assistantService() {
+        var SERVICE = "org.webosphoenix.assistant";
+        var DIR = "/usr/palm/services/" + SERVICE + "/";
+        var loadModule = nodeServiceLoader(DIR, "Assistant service");
+        var sealer = webCryptoSealer("phoenix-assistant", "providerKeys", "assistant:sealKey", "assistant");
+
+        var hostInfo = null;
+        function hostHas() {
+            if (hostInfo === null) {
+                try { hostInfo = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/host.json") || "{}") || {}; }
+                catch (e) { hostInfo = {}; }
+            }
+            return hostInfo.assistant === true;
+        }
+
+        // ---- The host (the shell's on-device model and speech) -----------------------------
+        var pending = {}, nextRequest = 1;
+        function hostAsk(op, payload, timeoutMs) {
+            return new Promise(function (resolve, reject) {
+                var id = "a" + (nextRequest++) + "-" + Date.now().toString(36);
+                var timer = setTimeout(function () {
+                    delete pending[id];
+                    reject(new Error("the shell did not answer"));
+                }, timeoutMs || 5000);
+                pending[id] = function (ev) {
+                    clearTimeout(timer);
+                    delete pending[id];
+                    if (ev.error) reject(new Error(ev.error));
+                    else resolve(ev);
+                };
+                host.postToHost("assistant", Object.assign({ op: op, requestId: id }, payload || {}));
+            });
+        }
+        runtime.assistantHostEvent = function (ev) {
+            if (!ev) return;
+            if (ev.requestId && pending[ev.requestId]) pending[ev.requestId](ev);
+            if (ev.changed) changed("models");
+        };
+
+        var NO_LLM = "Install llama.cpp's llama-server (Homebrew: brew install llama.cpp; Linux: build llama.cpp) " +
+                     "and start phoenix-sim with it on the PATH, or with --llama-server <path>.";
+        var llm = {
+            status: function () {
+                if (!hostHas()) return Promise.resolve({ available: false, installed: [], ramBytes: 0, howToInstall: NO_LLM });
+                return hostAsk("status", {}).then(function (st) {
+                    if (!st.available) st.howToInstall = NO_LLM;
+                    return st;
+                }, function () { return { available: false, installed: [], ramBytes: 0, howToInstall: NO_LLM }; });
+            },
+            download: function (m) {
+                if (!hostHas()) return Promise.reject(new Error("Models can only be downloaded in the Phoenix shell."));
+                return hostAsk("download", { id: m.id, url: m.url, sha256: m.sha256, size: m.size, file: m.file });
+            },
+            cancel: function (id) { return hostHas() ? hostAsk("cancel", { id: id }) : Promise.resolve(); },
+            remove: function (m) { return hostHas() ? hostAsk("remove", { id: m.id, file: m.file }) : Promise.resolve(); },
+            // The server for this model: started if need be (loading a model takes a while).
+            ensure: function (m) {
+                if (!hostHas()) return Promise.reject(new Error("no on-device model here"));
+                return hostAsk("ensure", { id: m.id, file: m.file }, 180000).then(function (ev) { return { baseUrl: ev.baseUrl }; });
+            }
+        };
+
+        // ---- Speech ------------------------------------------------------------------------
+        function pageVoices() {
+            var ss = global.speechSynthesis;
+            try { return ss && ss.getVoices ? ss.getVoices() : []; } catch (e) { return []; }
+        }
+        var tts = {
+            speak: function (text, lang) {
+                if (!text) return Promise.resolve();
+                if (hostHas()) return hostAsk("speak", { text: String(text).slice(0, 2000), lang: lang || "en" });
+                var ss = global.speechSynthesis;
+                if (ss && pageVoices().length && global.SpeechSynthesisUtterance) {
+                    var u = new global.SpeechSynthesisUtterance(String(text));
+                    u.lang = lang || "en";
+                    ss.cancel();
+                    ss.speak(u);
+                    return Promise.resolve();
+                }
+                return Promise.reject(new Error("No text-to-speech here"));
+            },
+            stop: function () {
+                if (hostHas()) return hostAsk("stopSpeaking", {}).catch(function () {});
+                if (global.speechSynthesis) global.speechSynthesis.cancel();
+                return Promise.resolve();
+            },
+            status: function () {
+                if (hostHas()) return hostAsk("speechStatus", {}).catch(function () { return { available: false, engine: "" }; });
+                return Promise.resolve({ available: pageVoices().length > 0, engine: pageVoices().length ? "speechSynthesis" : "" });
+            }
+        };
+
+        // ---- Subscriptions -------------------------------------------------------------------
+        var watchers = [], notifyTimer = null;
+        function changed() {
+            if (notifyTimer) return;
+            notifyTimer = setTimeout(function () {
+                notifyTimer = null;
+                watchers = watchers.filter(function (w) { return !w.ctx.cancelled(); });
+                watchers.forEach(function (w) { w.send(); });
+            }, 0);
+        }
+        if (global.addEventListener) {
+            global.addEventListener("storage", function (e) {
+                if (e.key === null || String(e.key).indexOf("phoenix:assistant:") === 0) changed();
+            });
+        }
+
+        var methods = null;
+        function service() {
+            if (!methods) {
+                var lib = loadModule("assistant.js");
+                methods = lib.createAssistantService({
+                    luna: nodeServiceLuna(),
+                    request: proxiedRequest,
+                    storage: {
+                        get: function (k) { return store.get(k, null); },
+                        set: function (k, v) { store.set(k, v); },
+                        remove: function (k) { store.remove(k); },
+                        keys: function (prefix) { return store.keys(prefix); }
+                    },
+                    secrets: sealer,
+                    llm: llm,
+                    tts: tts,
+                    caller: function () { return PalmSystem.appIdentifier; },
+                    locale: function () { return (global.navigator && global.navigator.language) || "en-US"; },
+                    changed: changed,
+                    log: function (m) { console.info("[assistant] " + m); }
+                });
+                methods.__lib = lib;
+            }
+            return methods;
+        }
+
+        var WATCHABLE = { threads: 1, thread: 1, getSettings: 1, providers: 1, models: 1, commands: 1 };
+        var serviceMethods = {};
+        ["ask", "choose", "confirm", "threads", "thread", "newThread", "setCurrent", "deleteThread", "clearHistory",
+         "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
+         "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking"].forEach(function (name) {
+            serviceMethods["/" + name] = function (p, reply, ctx) {
+                var m;
+                try { m = service(); } catch (e) { return reply(fail(-1, String(e.message || e))); }
+                var params = clone(p || {});
+                var watch = !!params.subscribe && WATCHABLE[name];
+                delete params.subscribe;
+                var answer = function (first) {
+                    return m[name](params).then(function (r) {
+                        if (watch && r.returnValue !== false && first) r.subscribed = true;
+                        if (!ctx.cancelled()) reply(r);
+                        return r;
+                    }, function (e) { reply(fail(-1, String(e && e.message || e))); });
+                };
+                answer(true).then(function (r) {
+                    if (watch && r && r.returnValue !== false) watchers.push({ ctx: ctx, send: function () { answer(false); } });
+                });
+            };
+        });
+        register([SERVICE], serviceMethods);
+
+        register(["org.webosphoenix.tts"], {
+            "/speak": function (p, reply) {
+                if (typeof p.text !== "string" || !p.text.trim()) return reply(fail(-1, "need \"text\""));
+                tts.speak(p.text, p.lang).then(function () { reply(ok({})); }, function (e) { reply(fail(1, e.message)); });
+            },
+            "/stop": function (p, reply) { tts.stop().then(function () { reply(ok({})); }); },
+            "/getStatus": function (p, reply) { tts.status().then(function (s) { reply(ok({ available: !!s.available, engine: s.engine || "" })); }); }
+        });
+
+        runtime.assistant = { service: service, llm: llm, tts: tts, hostHas: hostHas };
     })();
 
     // ================================================================================

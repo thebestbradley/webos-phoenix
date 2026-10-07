@@ -257,6 +257,12 @@ data use "Phoenix Account".
   WebAssembly. Only the reader ships; the writer (which contains zint,
   BSD-3-Clause) is used by the tests alone. The notices are in
   `apps/scanner/public/THIRD-PARTY-NOTICES.txt`, installed with the app.
+- DropShare (`apps/dropshare`) bundles zxing-wasm's **writer** build to
+  draw its QR codes: zxing-cpp (Apache-2.0) and **zint** (libzint,
+  BSD-3-Clause) compiled to WebAssembly. Its notices are in
+  `apps/dropshare/public/THIRD-PARTY-NOTICES.txt`, installed with the app.
+  The pages DropShare serves to other devices (`public/web/`) and its icon
+  are Phoenix's own.
 - **Open-Meteo** forecast data is CC BY 4.0; Weather credits "Weather data
   by Open-Meteo.com" with a link, as the licence asks. Open-Meteo's terms
   (<https://open-meteo.com/en/terms>) allow the free API for
@@ -358,6 +364,18 @@ data use "Phoenix Account".
   fictional CA made for Phoenix with openssl (its key was thrown away),
   CC0 like the other demo documents.
 
+## The browser's content blocker and search icon
+
+- `runtime/content-blocker/hosts.txt`, the content blocker's list (Browser
+  > Preferences > Block Ads & Trackers), was written for Phoenix from the
+  names of well-known advertising and tracking services, Apache-2.0 like
+  our code. No list was copied: the popular community lists (EasyList,
+  AdGuard's, Disconnect's) are GPL or CC BY-SA, which Phoenix does not ship.
+- `runtime/search-icons/search-icon-web.svg`, Just Type's and the
+  browser's icon for DuckDuckGo, Bing, Startpage and a custom engine, was
+  drawn for Phoenix (Apache-2.0). Those engines' own logos are their
+  trademarks and are not shipped.
+
 ## Map data (OpenStreetMap)
 
 Maps shows, searches and routes on **OpenStreetMap** data, © OpenStreetMap
@@ -411,6 +429,32 @@ shipping one.
 `ffmpeg`, which the service uses to convert audio that is not WAV, is LGPL
 or GPL depending on how it is built and is only called as a program. The app
 records WAV, so it is optional.
+
+## The Assistant's language models and speech
+
+The Phoenix Assistant (`apps/assistant`) runs **llama.cpp**
+(<https://github.com/ggml-org/llama.cpp>, MIT) as a separate program,
+`llama-server`; no llama.cpp code is in this repository. A `meta-phoenix`
+recipe beside `whisper-cpp`'s is still to write, and should ship llama.cpp's
+`LICENSE`.
+
+The on-device models are downloaded by the user, never shipped: Qwen2.5
+0.5B Instruct, Qwen2.5 1.5B Instruct and Qwen3 4B, each **Apache-2.0** per
+its Hugging Face model card (Qwen/Qwen2.5-0.5B-Instruct-GGUF,
+Qwen/Qwen2.5-1.5B-Instruct-GGUF, Qwen/Qwen3-4B-GGUF; checked 7 October
+2026). Left out on purpose: Llama 3.2 (Llama 3.2 Community License, not
+permissive) and Qwen2.5 3B (Qwen Research License). An image that ships a
+model must carry its licence.
+
+Answers are spoken by **espeak-ng** (GPL-3.0) or, on a Mac, `say`, run as
+separate programs and only called, never linked; Phoenix's code stays
+Apache-2.0. An image that includes espeak-ng ships it as its own package
+with its licence and source offer. Piper or another engine can be configured
+instead (`--speech-command`).
+
+Cloud providers (Anthropic, OpenAI, Google, OpenAI-compatible servers) are
+used only with the user's own key, under the provider's terms; nothing of
+theirs is in the repository.
 
 ## Fonts
 

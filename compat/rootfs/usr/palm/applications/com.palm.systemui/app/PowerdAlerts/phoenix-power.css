@@ -1,0 +1,7 @@
+/* Phoenix compat (docs/M6-PLAN.md F4): the power menu's rows of two
+   buttons (PowerdAlerts.js PowerOffAlert), a little apart, as in webOS CE
+   3.1.0's (Screenshots/PowerOptions.jpg). */
+.phoenix-power-row > .enyo-button {
+	margin-left: 2px;
+	margin-right: 2px;
+}

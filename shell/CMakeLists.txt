@@ -61,6 +61,8 @@ if(PHOENIX_BUILD_SIM)
         # Network: the pages' HTTP proxy (RootfsSchemeHandler, /__phoenix/proxy).
         find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Network)
         target_link_libraries(phoenix-sim PRIVATE Qt6::WebEngineQuick Qt6::Network)
+        target_sources(phoenix-sim PRIVATE sim/simbrowser.cpp sim/simbrowser.h sim/contentfilter.h
+                                           sim/simdropshare.cpp sim/simdropshare.h)
         target_compile_definitions(phoenix-sim PRIVATE PHOENIX_HAVE_WEBENGINE)
         message(STATUS "phoenix-sim: web apps enabled (Qt WebEngine found)")
     else()
@@ -71,10 +73,20 @@ if(PHOENIX_BUILD_SIM)
     # The keyboard's dictation, without a microphone (CI: build/dictation-test).
     add_executable(dictation-test native/dictation_test.cpp native/dictation.cpp native/dictation.h)
     target_link_libraries(dictation-test PRIVATE Qt6::Core Qt6::Qml)
+    # The Assistant's on-device model runner and speech (CI: build/localmodels-test).
+    find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Network)
+    add_executable(localmodels-test native/localmodels_test.cpp native/localmodels.cpp native/localmodels.h native/speech.cpp native/speech.h)
+    target_link_libraries(localmodels-test PRIVATE Qt6::Core Qt6::Network Qt6::Qml)
+    target_compile_definitions(localmodels-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
     # phoenix-sim's installed apps, without a window (CI: build/siminstaller-test).
     add_executable(siminstaller-test sim/siminstaller_test.cpp sim/rootfs.cpp sim/rootfs.h sim/siminstaller.cpp sim/siminstaller.h)
     target_link_libraries(siminstaller-test PRIVATE Qt6::Core)
     target_compile_definitions(siminstaller-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
+    # The browser's content blocker and user agents, and DropShare's server
+    # (CI: build/simnet-test).
+    add_executable(simnet-test sim/simnet_test.cpp sim/contentfilter.h sim/simdropshare.cpp sim/simdropshare.h)
+    target_link_libraries(simnet-test PRIVATE Qt6::Core Qt6::Network)
+    target_compile_definitions(simnet-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
     target_compile_definitions(phoenix-sim PRIVATE
         PHOENIX_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
         PHOENIX_QML_BUILD_DIR="${PHOENIX_QML_BUILD_DIR}"

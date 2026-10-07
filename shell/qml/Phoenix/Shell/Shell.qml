@@ -36,10 +36,45 @@ FocusScope {
     readonly property bool fullScreen: cards.maximized && cards.currentFullScreen
     readonly property bool launcherOpen: launcher.open
     readonly property bool justTypeOpen: justType.open
+    readonly property bool assistantOpen: assistantView.open
     property alias launcherEditMode: launcher.editMode
     // The launcher page shown (LauncherLayout.PAGES: apps 0, downloads 1,
     // favorites 2, prefs 3).
     function showLauncherPage(i) { launcher.showPage(i); }
+    // The icon menu of the icon at index on the launcher's page (IconMenu.qml).
+    function openLauncherIconMenu(index) { return launcher.requestMenu(index); }
+    // App groups and tabs (docs/M6-PLAN.md F4), for the simulator's scenes:
+    // ids (on one page) grouped where the first was, named title; a group
+    // opened; a tab added.
+    function groupLauncherApps(ids, title) {
+        var l = launcherLayout;
+        for (var i = 1; i < ids.length; ++i)
+            l = LauncherLayout.makeGroup(l, ids[i], i === 1 ? ids[0] : LauncherLayout.groupOf(l, ids[0]));
+        var g = LauncherLayout.groupOf(l, ids[0]);
+        if (g && title)
+            l = LauncherLayout.renameGroup(l, g, title);
+        setLauncherLayout(l);
+        return g;
+    }
+    function openLauncherGroup(id) { launcher.openGroup(id); }
+    // The wave launcher (WaveLauncher.qml) up, the finger at (x, y) in its
+    // coordinates: the dock's apps, then the launcher button.
+    function openWave(x, y) {
+        var items = [];
+        var dock = launcherLayout ? launcherLayout.dock.slice(0, Theme.quickLaunchMaxItems - 1) : [];
+        for (var i = 0; i < dock.length; ++i) {
+            var e = launcher.entry(dock[i]);
+            if (e)
+                items.push({ appId: e.appId, title: e.title, icon: String(e.icon || ""), largeIcon: String(e.largeIcon || ""),
+                             color: String(e.color), glyph: e.glyph });
+        }
+        items.push({ appId: "" });
+        waveView.items = items;
+        waveView.begin(x);
+        waveView.track(x, y);
+    }
+    readonly property alias waveLauncher: waveView
+    function addLauncherTab(title) { setLauncherLayout(LauncherLayout.addTab(launcherLayout, title)); }
     property alias cardView: cards
     property alias notifications: notes
     property alias searchPill: searchPill
@@ -56,6 +91,15 @@ FocusScope {
     Binding { target: Theme; property: "hardwareHomeButton"; value: shell.hardwareHomeButton }
     // Settings > Accessibility > Reduce motion.
     Binding { target: Theme; property: "reduceMotion"; value: !!(shell.system && shell.system.reduceMotion) }
+    // Settings > Advanced (docs/M6-PLAN.md F4; the system's tweaks, see
+    // SimSystemStatus.tweaks): tweak(name) is the setting, or its default.
+    readonly property var tweaks: shell.system && shell.system.tweaks ? shell.system.tweaks : ({})
+    readonly property var tweakDefaults: ({ infiniteCardCycling: false, maximizeEdges: false, waveLauncher: false, tapRipple: true,
+                                            animationSpeed: "normal", gestureSensitivity: "normal", haptics: false,
+                                            gridDensity: "normal", batteryPercent: false, numberRow: false })
+    function tweak(name) { return tweaks[name] !== undefined ? tweaks[name] : tweakDefaults[name]; }
+    Binding { target: Theme; property: "animationSpeed"; value: shell.tweak("animationSpeed") }
+    Binding { target: Theme; property: "gestureSensitivity"; value: shell.tweak("gestureSensitivity") }
     // Tell the window source which card is in front (apps it launches join
     // its stack).
     Binding {
@@ -103,6 +147,181 @@ FocusScope {
             launch(info.open.id, info.open.params || null);
     }
 
+    // ---- The icon menu (press and hold, or a right click; docs/M6-PLAN.md F1) -------
+    // IconMenu.qml over the launcher and the dock. Its rows, in this order:
+    // Move, Share (an app with a link), Uninstall (apps the user installed;
+    // Remove for a launch point), Add to Dock / Remove from Dock, Favorite /
+    // Unfavorite (the Favorites page), New Window (apps that run several at
+    // once), App Info.
+    readonly property bool iconMenuOpen: iconMenu.open
+    // The share sheet's page for Share (docs/SHARE-AND-FILES.md).
+    property string shareSheetAppId: "org.webosphoenix.sharesheet"
+    // Haptic feedback as the menu opens: com.palm.vibrate's short effect,
+    // which runs the device's motor where it has one (DeviceServices).
+    property int iconMenuHaptics: 0
+    // Taps that buzzed (Settings > Advanced > Haptics), for the tests.
+    property int tapHaptics: 0
+
+    // rect: the icon, in item's coordinates.
+    function openIconMenu(appId, from, item, rect) {
+        var e = launcher.entry(appId);
+        if (!e || locked)
+            return;
+        var p = item.mapToItem(ui, rect.x, rect.y);
+        iconMenu.show(appId, from, Qt.rect(p.x, p.y, rect.width, rect.height), iconMenuItems(appId, from), e);
+        iconMenuHaptics++;
+        devices.vibrate({ name: "tapdown" });
+    }
+
+    // The link Share sends: a launch point's or a site's web address
+    // (appinfo.json "main" an http(s) URL: a web app from the Marketplace);
+    // "" when the app has none.
+    function shareLink(appId) {
+        var e = launcher.entry(appId);
+        if (!e)
+            return "";
+        var params = null;
+        try { params = e.params ? JSON.parse(e.params) : null; } catch (err) { params = null; }
+        var url = params && (params.url || params.target) ? String(params.url || params.target) : "";
+        if (/^https?:\/\//i.test(url))
+            return url;
+        return /^https?:\/\//i.test(String(e.main || "")) ? String(e.main) : "";
+    }
+    readonly property bool shareAvailable: !!source && typeof source.openSystemWindow === "function"
+
+    function _launcherEntryOf(appId) {
+        var all = _launcherEntries();
+        for (var i = 0; i < all.length; ++i)
+            if (all[i].id === appId)
+                return all[i];
+        return null;
+    }
+
+    function iconMenuItems(appId, from) {
+        var e = launcher.entry(appId);
+        var l = launcherLayout;
+        if (!e || !l)
+            return [];
+        var list = [{ name: "move", text: qsTr("Move") }];
+        if (shareAvailable && shareLink(appId) !== "")
+            list.push({ name: "share", text: qsTr("Share") });
+        if (e.removable && !e.installState)
+            list.push({ name: "uninstall", text: e.dynamic ? qsTr("Remove") : qsTr("Uninstall") });
+        if (l.dock.indexOf(appId) >= 0)
+            list.push({ name: "undock", text: qsTr("Remove from Dock") });
+        else
+            list.push({ name: "dock", text: qsTr("Add to Dock"),
+                        available: !LauncherLayout.dockFull(l, Theme.quickLaunchMaxItems - 1) });
+        // A launch point an app added lives on Favorites (LauncherLayout.pageFor).
+        if (!e.dynamic && LauncherLayout.pageOf(l, appId) >= 0)
+            list.push(LauncherLayout.isFavorite(l, appId) ? { name: "unfavorite", text: qsTr("Unfavorite") }
+                                                         : { name: "favorite", text: qsTr("Favorite") });
+        if (e.multipleInstances && source && typeof source.launchNewInstance === "function")
+            list.push({ name: "newWindow", text: qsTr("New Window") });
+        // An app in a group (LunaCE's folders, docs/M6-PLAN.md F4): out of
+        // it, onto the page after the group.
+        if (LauncherLayout.groupOf(l, appId) !== "")
+            list.push({ name: "ungroup", text: qsTr("Remove from Folder") });
+        list.push({ name: "info", text: qsTr("App Info") });
+        return list;
+    }
+
+    function iconMenuAction(appId, from, name) {
+        var l = launcherLayout;
+        switch (name) {
+        case "move":
+            // Edit mode with the icon picked up: it follows the next touch
+            // and stays where that lets go (iconDrag.held). From a group, it
+            // leaves the group first.
+            if (from === "group") {
+                setLauncherLayout(LauncherLayout.removeFromGroup(l, appId));
+                launcher.closeGroup();
+                from = "page";
+            }
+            if (from === "page")
+                launcher.editMode = true;
+            var r = iconMenu.iconRect;
+            iconDrag.start(appId, from, Qt.point(r.x + r.width / 2, r.y + r.height / 2));
+            iconDrag.held = true;
+            break;
+        case "share":
+            shareApp(appId);
+            break;
+        case "uninstall":
+            deleteDialog.ask(appId);
+            break;
+        case "dock":
+            if (!LauncherLayout.dockFull(l, Theme.quickLaunchMaxItems - 1))
+                setLauncherLayout(LauncherLayout.addToDock(l, appId, l.dock.length, Theme.quickLaunchMaxItems - 1));
+            break;
+        case "undock":
+            setLauncherLayout(LauncherLayout.removeFromDock(l, appId));
+            break;
+        case "favorite":
+            setLauncherLayout(LauncherLayout.favorite(l, appId));
+            break;
+        case "unfavorite":
+            setLauncherLayout(LauncherLayout.unfavorite(l, appId, _launcherEntryOf(appId)));
+            break;
+        case "newWindow":
+            launchNewInstance(appId);
+            break;
+        case "info":
+            deleteDialog.showInfo(appId);
+            break;
+        case "ungroup":
+            setLauncherLayout(LauncherLayout.removeFromGroup(l, appId));
+            break;
+        }
+    }
+
+    // Another window of an app that runs several at once (appinfo.json
+    // "multipleInstances": true; the browser, which opens a card on every
+    // launch, BrowserApp.js:132-147), in a stack of its own.
+    function launchNewInstance(appId) {
+        if (!source || typeof source.launchNewInstance !== "function")
+            return "";
+        if (dockMode)
+            exitDockMode(true);
+        launcher.open = false;
+        justType.open = false;
+        var uid = source.launchNewInstance(appId);
+        if (uid !== "")
+            Qt.callLater(cards.focusLaunched, uid);
+        return uid;
+    }
+
+    // "1.2 MB", for App Info.
+    function formatSize(bytes) {
+        if (bytes < 1024)
+            return qsTr("%1 B").arg(bytes);
+        if (bytes < 1024 * 1024)
+            return qsTr("%1 KB").arg(Math.round(bytes / 1024));
+        return qsTr("%1 MB").arg((bytes / (1024 * 1024)).toFixed(1));
+    }
+
+    // Share: the system's share sheet (org.webosphoenix.share) with the app's
+    // title and link, from its own page laid over everything (a system
+    // window: openSystemWindow(shareSheetAppId, {systemShare}, "share")),
+    // which closes itself when the sheet is done.
+    function shareApp(appId) {
+        var e = launcher.entry(appId);
+        var url = shareLink(appId);
+        if (!e || url === "" || !shareAvailable || shareHost.windowKey !== "")
+            return "";
+        var key = source.openSystemWindow(shareSheetAppId, { systemShare: { title: e.title, url: url } }, "share");
+        shareHost.windowKey = key || "";
+        return shareHost.windowKey;
+    }
+    Connections {
+        target: shell.source
+        ignoreUnknownSignals: true
+        function onSystemWindowClosed(key) {
+            if (key === shareHost.windowKey)
+                shareHost.windowKey = "";
+        }
+    }
+
     // Whether the window's keyboard focus is in item (or below it).
     function _hasFocusInside(item) {
         for (var it = shell.Window.activeFocusItem; it; it = it.parent)
@@ -114,6 +333,36 @@ FocusScope {
     function startJustType(text) {
         launcher.open = false;
         justType.start(text);
+    }
+
+    // The Phoenix Assistant's view over the screen (AssistantOverlay; docs/
+    // M6-PLAN.md F3): held launcher button. Not over the lock screen nor in
+    // First Use; nothing when the assistant is off (Settings > Assistant).
+    function openAssistant(listen) {
+        if (locked || firstUse || dockMode)
+            return;
+        var show = function () {
+            justType.open = false;
+            iconMenu.open = false;
+            assistantView.listenOnOpen = !!listen;
+            assistantView.open = true;
+        };
+        var src = assistantView.source;
+        if (!src || typeof src.lunaCall !== "function") {
+            show();
+            return;
+        }
+        src.lunaCall("luna://org.webosphoenix.assistant/getSettings", {}, function (r) {
+            if (r && r.returnValue !== false && r.settings && r.settings.enabled === false)
+                return;
+            show();
+        });
+    }
+    function closeAssistant() {
+        if (!assistantView.open)
+            return;
+        assistantView.open = false;
+        shell.forceActiveFocus();
     }
 
     // Not over the lock screen (LockWindow sits above the menus), nor in First Use.
@@ -188,13 +437,22 @@ FocusScope {
         onActivity: backlight.activity()
         tapRadius: Theme.tapRadius
         onTapped: (pos) => {
+            // Settings > Advanced > Haptics: every tap a short buzz (the
+            // Haptic Feedback Manager patch), keys included.
+            if (shell.tweak("haptics")) {
+                shell.tapHaptics++;
+                devices.vibrate({ name: "tapdown" });
+            }
             var p = shell.mapFromItem(null, pos.x, pos.y);
             // Not over the keyboard, whose keys show their own
             // (InputWindowManager::doReticle).
             var k = ime.mapFromItem(shell, p.x, p.y);
             if (ime.visible && ime.contains(k))
                 return;
-            reticle.startAt(p.x, p.y);
+            // Settings > Advanced > Tap ripple off: none (LunaCE's
+            // showReticleAnimation, tap-ripple.json).
+            if (shell.tweak("tapRipple"))
+                reticle.startAt(p.x, p.y);
         }
     }
     Connections {
@@ -778,17 +1036,37 @@ FocusScope {
                 exitDockMode(true);
             return;
         }
+        // The keyboard's clip strip first: Back brings the keys back.
+        if (ime.clipsOpen && !locked) {
+            ime.closeClips();
+            return;
+        }
         if (locked) {
             // The back gesture (or Esc) on the passcode panel cancels it.
             if (lockScreen.unlockPanel.shown)
                 lockScreen.unlockPanel.entryCanceled();
             return;
         }
+        // The assistant's view closes.
+        if (assistantView.open) {
+            closeAssistant();
+            return;
+        }
+        // The share sheet over the launcher gets it (it goes back inside
+        // the sheet, or closes it).
+        if (shareHost.windowKey !== "") {
+            source.back(shareHost.windowKey);
+            return;
+        }
         // The launcher's app dialog first: Back (or Esc) cancels it.
         if (deleteDialog.appId !== "") {
             _setKeyButton(null);
             deleteDialog.appId = "";
-        } else if (notes.dashboardOpen)
+        } else if (iconMenu.open)
+            iconMenu.open = false;
+        else if (iconDrag.held)
+            iconDrag.cancel();
+        else if (notes.dashboardOpen)
             notes.dashboardOpen = false;
         else if (siteMenu.open)
             siteMenu.open = false;
@@ -800,6 +1078,8 @@ FocusScope {
                 source.justTypeBack();
             else
                 justType.open = false;
+        } else if (launcher.open && launcher.closeOverlay()) {
+            // The launcher's tab name dialog, open group or "+" went first.
         } else if (launcher.open)
             launcher.open = false;
         else if (cards.maximized)
@@ -883,13 +1163,97 @@ FocusScope {
             // (after the ones queued before it).
             notes.showBanner(text, icon, a ? a.color : "#666666", a ? a.glyph : "", appId, params || "", bannerId || "",
                              function () { sounds.notification(appId, soundClass || "", soundFile || "", soundDuration || 0, false); });
+            shell._noteUnseen(appId, soundClass || "", soundFile || "", soundDuration || 0);
         }
         function onBannerRemoved(appId, bannerId) { notes.removeBanner(appId, bannerId); }
         function onBannersCleared(appId) { notes.clearBanners(appId); }
         // PalmSystem.playSoundNotification, or a notification with a sound.
         function onSoundRequested(appId, soundClass, soundFile, duration) {
             sounds.notification(appId, soundClass, soundFile, duration, false);
+            shell._noteUnseen(appId, soundClass, soundFile, duration);
         }
+    }
+
+    // ---- Repeat until seen (docs/M6-PLAN.md F4) ------------------------------------------
+    // Settings > Sounds & Ringtones > Repeat alerts (the community's
+    // Notification Repeat patches for Messaging, Email, Phone and Calendar,
+    // lclarkjr): an app's notification sounds again every so many minutes
+    // (2 by default) while it has a notification nobody has looked at. Seen:
+    // the dashboard opened, the app's card in front, or its notifications
+    // gone. Not ringtones or alarms, which have their own popup alerts.
+    readonly property var notificationRepeat: system && system.notificationRepeat ? system.notificationRepeat : ({})
+    readonly property int notificationRepeatInterval: Math.max(100, Math.round((notificationRepeat.minutes || 2) * 60000))
+    function repeatsFor(appId) {
+        var r = notificationRepeat;
+        return !!r.enabled && !(r.apps && r.apps[appId] === false);
+    }
+    // appId -> the sound it came with.
+    property var _unseen: ({})
+    // How often a repeat sounded, for the tests.
+    property int notificationRepeats: 0
+    function _noteUnseen(appId, soundClass, soundFile, duration) {
+        if (!appId || !repeatsFor(appId) || soundClass === "ringtones" || soundClass === "alarm" || soundClass === "none")
+            return;
+        if (notes.dashboardOpen || (cards.maximized && _appOf(cards.currentUid) === appId))
+            return;
+        var u = Object.assign({}, _unseen);
+        u[appId] = { soundClass: soundClass, soundFile: soundFile, duration: duration };
+        _unseen = u;
+    }
+    function markNotificationsSeen(appId) {
+        if (appId === undefined) {
+            _unseen = {};
+            return;
+        }
+        if (!_unseen[appId])
+            return;
+        var u = Object.assign({}, _unseen);
+        delete u[appId];
+        _unseen = u;
+    }
+    function _appOf(uid) {
+        for (var i = 0; source && source.cards && i < source.cards.count; ++i)
+            if (source.cards.get(i).uid === uid)
+                return source.cards.get(i).appId;
+        return "";
+    }
+    function _hasNotification(appId) {
+        for (var i = 0; notes.model && i < notes.model.count; ++i)
+            if (notes.model.get(i).appId === appId && !notes.model.get(i).ongoing)
+                return true;
+        return false;
+    }
+    Timer {
+        id: repeatTimer
+        interval: shell.notificationRepeatInterval
+        repeat: true
+        running: Object.keys(shell._unseen).length > 0
+        onTriggered: {
+            var u = Object.assign({}, shell._unseen), any = false;
+            for (var appId in u) {
+                if (!shell.repeatsFor(appId) || !shell._hasNotification(appId)) {
+                    delete u[appId];
+                    continue;
+                }
+                var s = u[appId];
+                shell.sounds.notification(appId, s.soundClass, s.soundFile, s.duration, false);
+                any = true;
+            }
+            shell._unseen = u;
+            if (any) {
+                shell.notificationRepeats++;
+                // The screen lights as for a new notification (DisplayManager::alert).
+                backlight.alert(false);
+            }
+        }
+    }
+    Connections {
+        target: notes
+        function onDashboardOpenChanged() { if (notes.dashboardOpen) shell.markNotificationsSeen(); }
+    }
+    Connections {
+        target: cards
+        function onCardMaximized(uid) { shell.markNotificationsSeen(shell._appOf(uid)); }
     }
 
     // ---- System sounds -----------------------------------------------------------------
@@ -1017,10 +1381,18 @@ FocusScope {
         return false;
     }
 
+    // Esc puts an icon picked up by the menu's Move back.
+    function _iconDragKey(event) {
+        if (!iconDrag.held || event.key !== Qt.Key_Escape)
+            return false;
+        iconDrag.cancel();
+        return true;
+    }
+
     // Desktop / hardware keyboard shortcuts.
     Keys.onPressed: (event) => {
         // The system menu's and the launcher's own keys (GAPS V8 (3)).
-        if (systemMenu.handleKey(event) || (!locked && (_dialogKey(event) || siteMenu.handleKey(event) || launcher.handleKey(event) || notes.handleKey(event)))) {
+        if (systemMenu.handleKey(event) || (!locked && (_dialogKey(event) || iconMenu.handleKey(event) || _iconDragKey(event) || siteMenu.handleKey(event) || launcher.handleKey(event) || notes.handleKey(event)))) {
             event.accepted = true;
             return;
         }
@@ -1142,8 +1514,12 @@ FocusScope {
             // Power with a volume key: the Full Erase and USB drive chords
             // (SystemScreens.systemKey); their keys do nothing else.
             if (autoRepeat ? systemScreens.comboDown && systemScreens.isChordKey(key)
-                           : systemScreens.systemKey(key, true))
+                           : systemScreens.systemKey(key, true)) {
+                // A chord, not the power menu (DisplayManager stops m_power
+                // for Power with another key).
+                powerHold.stop();
                 return;
+            }
             // A system screen (USB drive mode, Full Erase...) takes the
             // keys, but for Power and the volume.
             if (systemScreens.blocksInput && (key === Qt.Key_Home || key === Qt.Key_Escape || key === Qt.Key_Back
@@ -1266,11 +1642,45 @@ FocusScope {
             _homeDown = true;
             _eatHomeUp = false;
             _homeDownAt = Date.now();
+            // Home with Power held: a capture, not the power menu.
+            powerHold.stop();
         } else {
             _powerDown = true;
             _eatPowerUp = false;
             _powerDownAt = Date.now();
+            // Held 3 s with the screen on and unlocked (or in dock mode):
+            // the power menu (DisplayManager: DISPLAY_EVENT_POWER_BUTTON_DOWN
+            // starts m_power in DisplayStateOn, OnPuck, DockMode and Dim).
+            if (backlight.on && !_homeDown && (!locked || dockMode))
+                powerHold.restart();
         }
+    }
+
+    // ---- The power menu (docs/M6-PLAN.md F4) ------------------------------------------
+    // Power held 3 s (DisplayManager m_powerKeyTimeout, DisplayManager.cpp:
+    // 232) sends com.palm.display's powerKeyPressed {showDialog: true}
+    // (DisplayManager::power, :3085-3099); luna-systemui answers with its
+    // power menu, the PowerOffAlert popup (PowerdService.js:195-213): in
+    // Phoenix, as in webOS CE 3.1.0, Airplane Mode, Luna Restart, Device
+    // Restart, Shut Down and Cancel (compat overlay of PowerdAlerts.js). The
+    // release that follows is eaten (m_dropPowerKey): the screen stays on.
+    readonly property int powerHoldInterval: 3000
+    Timer {
+        id: powerHold
+        interval: shell.powerHoldInterval
+        onTriggered: shell.powerKeyHeld()
+    }
+    // Power held (also the simulator's Hold Power Button).
+    function powerKeyHeld() {
+        powerHold.stop();
+        if (_powerDown)
+            _eatPowerUp = true;
+        if (locked && !dockMode)
+            return false;
+        backlight.activity();
+        if (source && typeof source.displaySignal === "function")
+            source.displaySignal("powerKeyPressed", { showDialog: true });
+        return true;
     }
     function _buttonUp(home) {
         var now = Date.now();
@@ -1286,6 +1696,7 @@ FocusScope {
             }
         } else {
             _powerDown = false;
+            powerHold.stop();
             if (_eatPowerUp) {
                 _eatPowerUp = false;
             } else if (_homeDown && now - _powerDownAt <= 3000) {
@@ -1497,6 +1908,26 @@ FocusScope {
         property: "dictation"
         value: shell.dictation
         when: !!shell.source && ("dictation" in shell.source)
+    }
+    // The Assistant's on-device models: where they are downloaded ("" for
+    // none: no downloads), llama-server ([] for the one on the PATH), and
+    // the program that speaks its answers ([] for espeak-ng or say).
+    property string localModelsDir: ""
+    property var llamaServerCommand: []
+    property var speechCommand: []
+    readonly property alias localModels: localModelsEngine
+    readonly property alias speech: speechEngine
+    Binding {
+        target: shell.source
+        property: "localModels"
+        value: shell.localModelsDir !== "" ? localModelsEngine : null
+        when: !!shell.source && ("localModels" in shell.source)
+    }
+    Binding {
+        target: shell.source
+        property: "speech"
+        value: speechEngine
+        when: !!shell.source && ("speech" in shell.source)
     }
     // IMEController::isIMEOpened (or the platform's keyboard is up). With
     // it the tablet's bezel flick must travel further.
@@ -1750,6 +2181,8 @@ FocusScope {
     // Unlocked over a card that is held the other way: back to its
     // orientation (CardWindow::setMaximized, CardWindow.cpp:1756-1760).
     onLockedChanged: {
+        if (locked)
+            assistantView.open = false;
         // Sticky keys' latched modifiers do not outlive the lock.
         if (locked)
             keyboardAccess.clearModifiers();
@@ -1848,6 +2281,9 @@ FocusScope {
                         uiPortrait: uiRotation.uiPortrait
                         // First Use's card stays until the app closes it.
                         pinnedUid: shell._firstUseUid
+                        // Settings > Advanced (docs/M6-PLAN.md F4).
+                        infiniteCycling: shell.tweak("infiniteCardCycling")
+                        maximizeEdges: shell.tweak("maximizeEdges")
                     }
 
                     Launcher {
@@ -1876,6 +2312,22 @@ FocusScope {
                         onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, launcher.mapToItem(ui, x, y))
                         onDragMoved: (x, y) => iconDrag.move(launcher.mapToItem(ui, x, y))
                         onDragEnded: (x, y) => iconDrag.drop(launcher.mapToItem(ui, x, y))
+                        onMenuRequested: (appId, from, rect) => shell.openIconMenu(appId, from, launcher, rect)
+                        gridDensity: shell.tweak("gridDensity")
+                        // Groups and tabs (LunaCE; docs/M6-PLAN.md F4).
+                        onGroupRenamed: (groupId, title) => shell.setLauncherLayout(LauncherLayout.renameGroup(shell.launcherLayout, groupId, title))
+                        onTabAdded: (title) => {
+                            shell.setLauncherLayout(LauncherLayout.addTab(shell.launcherLayout, title));
+                            launcher.showPage(shell.launcherLayout.pages.length - 1);
+                        }
+                        onTabRenamed: (index, title) => shell.setLauncherLayout(LauncherLayout.renameTab(shell.launcherLayout, index, title))
+                        onTabRemoved: (index) => {
+                            shell.setLauncherLayout(LauncherLayout.removeTab(shell.launcherLayout, index));
+                            launcher.showPage(Math.min(index, shell.launcherLayout.pages.length - 1));
+                        }
+                        // Carried out of its group: onto the page shown, at its end.
+                        onGroupDragOut: (appId) => shell.setLauncherLayout(LauncherLayout.removeFromGroup(shell.launcherLayout, appId,
+                                                                                                         launcher.currentPage, -1))
                     }
                 }
 
@@ -1909,9 +2361,61 @@ FocusScope {
                     draggedId: iconDrag.appId
                     onLaunchRequested: (appId) => shell.launch(appId)
                     onLauncherToggled: launcher.open = !launcher.open
+                    onAssistantRequested: shell.openAssistant(false)
                     onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, quickLaunch.mapToItem(ui, x, y))
                     onDragMoved: (x, y) => iconDrag.move(quickLaunch.mapToItem(ui, x, y))
                     onDragEnded: (x, y) => iconDrag.drop(quickLaunch.mapToItem(ui, x, y))
+                    onMenuRequested: (appId, from, rect) => shell.openIconMenu(appId, from, quickLaunch, rect)
+                }
+
+                // The icon menu (press and hold, or a right click), over the
+                // launcher and the dock, under the icon being dragged.
+                IconMenu {
+                    id: iconMenu
+                    anchors.fill: parent
+                    z: 999
+                    onTriggered: (name) => shell.iconMenuAction(iconMenu.appId, iconMenu.from, name)
+                    onCloseRequested: iconMenu.open = false
+                }
+                // The wave launcher (Settings > Advanced; docs/M6-PLAN.md F4):
+                // the dock's apps and the launcher button on a wave the
+                // gesture area raises (GestureArea waveStarted).
+                WaveLauncher {
+                    id: waveView
+                    anchors.fill: parent
+                    anchors.bottomMargin: notes.negativeSpace
+                    z: 997
+                    onLaunchRequested: (appId) => shell.launch(appId)
+                    onLauncherRequested: {
+                        justType.open = false;
+                        launcher.open = true;
+                    }
+                }
+                // The launcher closing (Back, a launch, Home) closes its menu.
+                Connections {
+                    target: launcher
+                    function onOpenChanged() {
+                        if (!launcher.open && iconMenu.from === "page")
+                            iconMenu.open = false;
+                        if (!launcher.open && iconDrag.held && iconDrag.from === "page")
+                            iconDrag.cancel();
+                    }
+                }
+
+                // Move from the icon menu: the icon is picked up without a
+                // finger on it; the next touch takes it (a tap puts it there,
+                // a drag carries it), as if it had been held.
+                MouseArea {
+                    id: moveCatcher
+                    objectName: "iconMoveCatcher"
+                    anchors.fill: parent
+                    z: 998
+                    enabled: iconDrag.held
+                    visible: enabled
+                    preventStealing: true
+                    onPressed: (mouse) => iconDrag.move(Qt.point(mouse.x, mouse.y))
+                    onPositionChanged: (mouse) => iconDrag.move(Qt.point(mouse.x, mouse.y))
+                    onReleased: (mouse) => iconDrag.drop(Qt.point(mouse.x, mouse.y))
                 }
 
                 // ---- Dragging an icon (launcher pages and dock) ----------------------------------
@@ -1925,6 +2429,8 @@ FocusScope {
                     property string appId: ""
                     property string from: ""
                     property int lastIndex: -1
+                    // Picked up by the icon menu's Move, waiting for a touch.
+                    property bool held: false
                     z: 1000
                     visible: appId !== ""
                     width: Theme.launcherIconSize
@@ -1940,15 +2446,44 @@ FocusScope {
                         x = p.x - width / 2;
                         y = p.y - height / 2;
                     }
+                    // A group being hovered over (LunaCE: the centre of an
+                    // icon, held there a moment, groups).
+                    property string hoverTarget: ""
+                    Timer {
+                        id: groupHover
+                        interval: Theme.launcherGroupHoverDelay
+                        onTriggered: launcher.groupTarget = iconDrag.hoverTarget
+                    }
+                    function _clearGroupHover() {
+                        groupHover.stop();
+                        hoverTarget = "";
+                        launcher.groupTarget = "";
+                    }
                     function start(id, source, p) {
                         var e = entry(id);
-                        if (!e)
+                        var group = LauncherLayout.isGroup(id);
+                        if (!e && !group)
                             return;
-                        proxy.title = e.title;
-                        proxy.color = e.color;
-                        proxy.glyph = e.glyph;
-                        proxy.source = e.icon || "";
-                        proxy.largeSource = e.largeIcon || "";
+                        // Dragged out of the icon menu: the drag takes over.
+                        iconMenu.open = false;
+                        held = false;
+                        _clearGroupHover();
+                        if (group) {
+                            var g = launcher._cellData(id);
+                            proxy.title = g.title;
+                            proxy.color = g.color;
+                            proxy.glyph = "";
+                            proxy.source = "";
+                            proxy.largeSource = "";
+                            proxy.groupIcons = JSON.parse(g.groupIcons);
+                        } else {
+                            proxy.groupIcons = [];
+                            proxy.title = e.title;
+                            proxy.color = e.color;
+                            proxy.glyph = e.glyph;
+                            proxy.source = e.icon || "";
+                            proxy.largeSource = e.largeIcon || "";
+                        }
                         from = source;
                         lastIndex = -1;
                         appId = id;
@@ -1961,12 +2496,30 @@ FocusScope {
                         if (appId === "")
                             return;
                         place(p);
-                        if (!launcher.open || overDock(p))
+                        if (!launcher.open || overDock(p)) {
+                            _clearGroupHover();
                             return;
+                        }
                         var lp = ui.mapToItem(launcher, p.x, p.y);
                         // At a page's edge: the launcher pans or scrolls.
-                        if (from === "page" && launcher.dragOver(lp.x, lp.y))
+                        if (from === "page" && launcher.dragOver(lp.x, lp.y)) {
+                            _clearGroupHover();
                             return;
+                        }
+                        // Over another icon's centre: it waits to group,
+                        // and the icons stay where they are meanwhile.
+                        var gt = from === "page" ? launcher.groupTargetAt(lp.x, lp.y) : "";
+                        if (gt !== "") {
+                            reorderDelay.stop();
+                            lastIndex = -1;
+                            if (gt !== hoverTarget) {
+                                launcher.groupTarget = "";
+                                hoverTarget = gt;
+                                groupHover.restart();
+                            }
+                            return;
+                        }
+                        _clearGroupHover();
                         var tab = launcher.tabAt(lp.x, lp.y);
                         if (tab >= 0 && tab !== launcher.currentPage) {
                             shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, tab, -1));
@@ -1979,19 +2532,63 @@ FocusScope {
                             var idx = launcher.indexAt(lp.x, lp.y);
                             if (page !== launcher.currentPage) {
                                 shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, launcher.currentPage, idx));
-                            } else if (idx >= 0 && idx !== lastIndex
-                                       && shell.launcherLayout.pages[page].indexOf(appId) !== idx) {
-                                shell.setLauncherLayout(LauncherLayout.move(shell.launcherLayout, appId, page, idx));
+                            } else if (idx >= 0 && idx !== lastIndex) {
+                                // The others make room once the icon rests
+                                // over a place a moment, so that it can pass
+                                // over them on its way to one's centre (a
+                                // group; Phoenix: the original made room at
+                                // once, having no groups).
+                                reorderDelay.restart();
                             }
                             lastIndex = idx;
                         }
                     }
+                    Timer {
+                        id: reorderDelay
+                        interval: Theme.launcherReorderDelay
+                        onTriggered: {
+                            var l = shell.launcherLayout, page = LauncherLayout.pageOf(l, iconDrag.appId);
+                            if (iconDrag.appId !== "" && iconDrag.from === "page" && page === launcher.currentPage
+                                    && iconDrag.lastIndex >= 0 && l.pages[page].indexOf(iconDrag.appId) !== iconDrag.lastIndex)
+                                shell.setLauncherLayout(LauncherLayout.move(l, iconDrag.appId, page, iconDrag.lastIndex));
+                        }
+                    }
+                    // Put back where it was (Back or Esc after Move).
+                    function cancel() {
+                        held = false;
+                        _clearGroupHover();
+                        reorderDelay.stop();
+                        launcher.dragDone();
+                        appId = "";
+                    }
                     function drop(p) {
+                        held = false;
                         if (appId === "")
                             return;
                         launcher.dragDone();
                         var l = shell.launcherLayout;
-                        if (overDock(p)) {
+                        var target = launcher.groupTarget;
+                        _clearGroupHover();
+                        reorderDelay.stop();
+                        if (target !== "" && launcher.open && from === "page") {
+                            // Onto an icon's centre, held there: a group.
+                            shell.setLauncherLayout(LauncherLayout.makeGroup(l, appId, target));
+                            appId = "";
+                            return;
+                        }
+                        // Let go before the others made room (or over an
+                        // icon's centre before it grouped): in the place
+                        // under the finger.
+                        var lp = ui.mapToItem(launcher, p.x, p.y);
+                        if (from === "page" && launcher.open && !overDock(p) && launcher.inPages(lp.x, lp.y)
+                                && launcher.edgeAt(lp.x, lp.y) === "") {
+                            var pg = LauncherLayout.pageOf(l, appId), idx = launcher.indexAt(lp.x, lp.y);
+                            if (pg === launcher.currentPage && idx >= 0 && l.pages[pg].indexOf(appId) !== idx)
+                                l = LauncherLayout.move(l, appId, pg, idx);
+                        }
+                        if (overDock(p) && LauncherLayout.isGroup(appId)) {
+                            // A group stays on its page: the dock holds apps.
+                        } else if (overDock(p)) {
                             var q = ui.mapToItem(quickLaunch, p.x, p.y);
                             l = LauncherLayout.addToDock(l, appId, quickLaunch.slotAt(q.x), Theme.quickLaunchMaxItems - 1);
                         } else if (from === "dock") {
@@ -2040,6 +2637,7 @@ FocusScope {
                     property string messageText: ""
                     property bool canRetry: false
                     function ask(id) {
+                        canUninstall = false;
                         var e = iconDrag.entry(id);
                         mode = e && e.installState === "failed" ? "failed" : e && e.dynamic ? "shortcut" : "app";
                         shownId = id;
@@ -2049,6 +2647,28 @@ FocusScope {
                         canRetry = mode === "failed" && !!(i && i.retry);
                         appId = id;
                     }
+                    // App Info (the icon menu): the app's title, then its
+                    // version, id and size, with Uninstall when it can be
+                    // (asking first, as the delete decorator does) and Done.
+                    function showInfo(id) {
+                        var e = iconDrag.entry(id);
+                        if (!e)
+                            return;
+                        mode = "info";
+                        shownId = id;
+                        titleText = e.title;
+                        var lines = [];
+                        if (e.version)
+                            lines.push(qsTr("Version %1").arg(e.version));
+                        lines.push(qsTr("ID: %1").arg(e.dynamic && e.webAppId ? e.webAppId : id));
+                        if (e.size > 0)
+                            lines.push(qsTr("Size: %1").arg(shell.formatSize(e.size)));
+                        messageText = lines.join("\n");
+                        canRetry = false;
+                        canUninstall = !!e.removable && !e.installState;
+                        appId = id;
+                    }
+                    property bool canUninstall: false
                     function info() {
                         return shell.source && typeof shell.source.installInfo === "function" ? shell.source.installInfo(shownId) : null;
                     }
@@ -2138,8 +2758,16 @@ FocusScope {
                                     objectName: "deleteDialogCancel"
                                     width: parent.width
                                     height: Theme.px(52)
-                                    caption: qsTr("Cancel")
+                                    caption: deleteDialog.mode === "info" ? qsTr("Done") : qsTr("Cancel")
                                     onAction: deleteDialog.appId = ""
+                                }
+                                ActionButton {
+                                    objectName: "deleteDialogUninstall"
+                                    width: parent.width
+                                    height: Theme.px(52)
+                                    visible: deleteDialog.mode === "info" && deleteDialog.canUninstall
+                                    caption: iconDrag.entry(deleteDialog.shownId) && iconDrag.entry(deleteDialog.shownId).dynamic ? qsTr("Remove") : qsTr("Uninstall")
+                                    onAction: deleteDialog.ask(deleteDialog.shownId)
                                 }
                                 ActionButton {
                                     objectName: "deleteDialogRetry"
@@ -2153,11 +2781,43 @@ FocusScope {
                                     objectName: "deleteDialogRemove"
                                     width: parent.width
                                     height: Theme.px(52)
+                                    visible: deleteDialog.mode !== "info"
                                     caption: qsTr("Remove")
                                     onAction: deleteDialog.remove()
                                 }
                             }
                         }
+                    }
+                }
+
+                // The share sheet the icon menu's Share opens (shell.shareApp):
+                // its page, see-through but for the sheet, over everything
+                // here until it closes itself.
+                Item {
+                    id: shareHost
+                    objectName: "shareHost"
+                    property string windowKey: ""
+                    anchors.fill: parent
+                    z: 1002
+                    visible: windowKey !== ""
+                    MouseArea { anchors.fill: parent; enabled: shareHost.visible }
+                    Item {
+                        id: shareContent
+                        anchors.fill: parent
+                    }
+                    onWindowKeyChanged: Qt.callLater(attach)
+                    function attach() {
+                        var w = windowKey !== "" && shell.source ? shell.source.windowFor(windowKey) : null;
+                        if (!w)
+                            return;
+                        w.parent = shareContent;
+                        w.x = 0;
+                        w.y = 0;
+                        w.width = Qt.binding(function() { return shareContent.width; });
+                        w.height = Qt.binding(function() { return shareContent.height; });
+                        w.visible = true;
+                        if (typeof w.focusPage === "function")
+                            w.focusPage();
                     }
                 }
 
@@ -2169,6 +2829,19 @@ FocusScope {
                     source: shell.source
                     onLaunchRequested: (appId) => shell.launch(appId)
                     onCloseRequested: { justType.open = false; shell.forceActiveFocus(); }
+                    onCopied: (text) => clipboardClient.record(text, "com.palm.systemui")
+                }
+
+                // The Phoenix Assistant over everything here (held launcher button).
+                AssistantOverlay {
+                    id: assistantView
+                    anchors.fill: parent
+                    z: 1003
+                    source: shell.source
+                    dictation: shell.dictation
+                    backdrop: sceneBackdrop
+                    bottomInset: notes.negativeSpace
+                    onCloseRequested: shell.closeAssistant()
                 }
 
                 // Phones round the corners of a maximized app (MenuWindowManager.cpp:126-146).
@@ -2208,6 +2881,7 @@ FocusScope {
                     bannerGlyph: notes.bannerGlyph
                     bannerIcon: notes.bannerIcon
                     bannerOpacity: notes.bannerOpacity
+                    bannerAppId: notes.bannerAppId
                     emergencyAvailable: shell.emergencyAvailable
                     onUnlockRequested: shell.unlock()
                     onEmergencyRequested: shell.openEmergency()
@@ -2270,6 +2944,7 @@ FocusScope {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 system: shell.system
+                batteryPercent: shell.tweak("batteryPercent")
                 // SystemUiController::updateStatusBarTitle: Just Type, then the
                 // launcher ("Launcher", com.palm.launcher's title; not actionable),
                 // then the maximized app; else the carrier. Just Type's title
@@ -2364,6 +3039,7 @@ FocusScope {
                 anchors.fill: parent
                 onCloseRequested: siteMenu.open = false
                 onAction: (name) => shell.source.siteAction(cards.currentUid, name)
+                onCopied: (text) => clipboardClient.record(text, shell._appIdOf(cards.currentUid))
                 onOpenChanged: shell._overlayFocus(open)
                 Connections {
                     target: cards
@@ -2377,6 +3053,7 @@ FocusScope {
                 backdrop: sceneBackdrop
                 anchors.fill: parent
                 system: shell.system
+                source: shell.source
                 // The positive space, plus 10 (SystemMenu.cpp:945-953).
                 availableHeight: ui.height - Theme.statusBarHeight - notes.negativeSpace + Theme.px(10)
                 onCloseRequested: systemMenu.open = false
@@ -2396,11 +3073,26 @@ FocusScope {
                 command: shell.dictationCommand
                 inputFiles: shell.dictationInputFiles
             }
+            // The Assistant's on-device model (llama.cpp's llama-server) and
+            // speech (docs/M6-PLAN.md F3), lent to the runtime's
+            // org.webosphoenix.assistant and org.webosphoenix.tts through
+            // the window source ("assistant" host messages).
+            LocalModels {
+                id: localModelsEngine
+                modelsDir: shell.localModelsDir
+                serverCommand: shell.llamaServerCommand
+            }
+            Speech {
+                id: speechEngine
+                command: shell.speechCommand
+            }
             VirtualKeyboard {
                 id: ime
                 objectName: "virtualKeyboard"
                 dictation: shell.dictation
                 tablet: shell.tablet
+                // Settings > Text Assist > Number row (the phone keyboard).
+                numberRow: shell.tweak("numberRow")
                 pixelScale: Theme.keyboardScale
                 availableWidth: ui.width
                 availableHeight: ui.height
@@ -2443,6 +3135,10 @@ FocusScope {
                 keyboard: shell.system && shell.system.keyboard ? shell.system.keyboard : ({ layout: "qwerty", language: "en" })
                 onKeyboardSelected: (k) => { if (shell.system && shell.system.keyboard !== undefined) shell.system.keyboard = k; }
                 onFeedback: (name) => shell.sounds.feedback(name)
+                // The clipboard key and the clip strip (M6 F2).
+                clipboard: clipboardClient
+                onImagePasteRequested: (clip) => shell._pasteImage(clip)
+                onShownChanged: if (shown) clipboardClient.refreshSettings()
             }
             Connections {
                 target: notes
@@ -2494,6 +3190,45 @@ FocusScope {
         }
     }
 
+    // ---- Clipboard history (org.webosphoenix.clipboard, M6 F2) ----------------------
+    ClipboardClient {
+        id: clipboardClient
+        source: shell.source
+        locked: shell.locked
+        titleOf: function (appId) { return shell._appTitle(appId); }
+        onOpenAppRequested: {
+            shell.hideKeyboard();
+            shell.launch("org.webosphoenix.clipboard");
+        }
+    }
+    readonly property alias clipboard: clipboardClient
+    function _appIdOf(uid) {
+        var w = uid && source && typeof source.windowFor === "function" ? source.windowFor(uid) : null;
+        return w && w.appId ? String(w.appId) : "";
+    }
+    function _appTitle(appId) {
+        var apps = source ? source.apps : null;
+        if (!apps || !appId)
+            return "";
+        for (var i = 0; i < apps.count; ++i) {
+            var a = apps.get(i);
+            if (a.appId === appId)
+                return a.title;
+        }
+        return appId === "com.palm.systemui" ? qsTr("System") : "";
+    }
+    // A picture from the clip strip: into the page's editable element (no
+    // IME commit carries one); a plain text field takes none.
+    function _pasteImage(clip) {
+        var c = imeClient;
+        if (!c || c.kind !== "web" || !source)
+            return;
+        var w = c.uid === "justtype" ? null : (typeof source.windowFor === "function" ? source.windowFor(c.uid) : null);
+        if (w && w.runScript)
+            w.runScript("window.__phoenixRuntime && __phoenixRuntime.clipboard && __phoenixRuntime.clipboard.insertImage("
+                        + JSON.stringify(String(clip.image || "")) + ")");
+    }
+
     // What the keyboard's keys go to: the focused text field, or the web
     // view whose page has the field (the window source's inputTarget).
     function _imeTarget() {
@@ -2529,6 +3264,25 @@ FocusScope {
             onPrevious: shell.gestureSwitchApp(true)
             onNext: shell.gestureSwitchApp(false)
             advancedGestures: !!(shell.system && shell.system.advancedGestures)
+            // The wave launcher (Settings > Advanced): not over the lock
+            // screen, First Use, dock mode or the launcher.
+            waveLauncher: shell.tweak("waveLauncher") && !shell.locked && !shell.firstUse && !shell.dockMode && !launcher.open
+            onWaveStarted: (x, y) => {
+                var p = gesture.mapToItem(waveView, x, y);
+                shell.openWave(p.x, p.y);
+            }
+            onWaveMoved: (x, y) => {
+                var p = gesture.mapToItem(waveView, x, y);
+                waveView.track(p.x, p.y);
+            }
+            // Let go on the wave: that app; far above it: the swipe up it
+            // also was; else nothing.
+            onWaveEnded: (x, y) => {
+                var p = gesture.mapToItem(waveView, x, y);
+                if (!waveView.finish(p.x, p.y) && p.y < waveView.waveTop - waveView.iconSize)
+                    shell.gestureUp();
+            }
+            onWaveCanceled: waveView.cancel()
             lit: cards.maximized && !shell.locked
             onTapped: shell.gestureTap()
             // With the keyboard up, hold and slide to move the cursor.

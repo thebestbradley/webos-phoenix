@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<!-- Phoenix compat: the cycling new-email dashboard's window
+     (../source/phoenix-dashboard.js). Enyo's dashboard window
+     (palm/system/dashboard-window/dashboard.html) with
+     PhoenixCyclingDashboardContent in place of DashboardContent. -->
+<html>
+	<head>
+		<title>Email Dashboard</title>
+		<script src="/usr/palm/frameworks/enyo/0.10/framework/enyo.js" type="text/javascript"></script>
+	</head>
+	<body>
+		<script type="text/javascript">
+			(function() {
+				var dashboard = new PhoenixCyclingDashboardContent();
+				dashboard.renderInto(document.body);
+			})();
+		</script>
+	</body>
+</html>

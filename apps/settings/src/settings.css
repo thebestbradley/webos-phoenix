@@ -307,3 +307,60 @@ div.license-text { font-family: var(--pui-font); font-size: 13px; }
 .exhibition-move.down::before { top: 7px; transform: rotate(225deg); }
 .exhibition-move:disabled::before { border-color: #c4c4c4; }
 .exhibition-move:not(:disabled):active { background: rgba(0, 0, 0, 0.08); border-radius: 15px; }
+
+/* Settings > Clipboard: the excluded apps' Remove, a small grey pill. */
+.cb-none { color: var(--pui-text-dim); }
+.cb-remove {
+    padding: 4px 10px;
+    font: inherit;
+    font-size: 14px;
+    color: #333;
+    background: linear-gradient(#fbfbfb, #dadad8);
+    border: 1px solid #a4a4a2;
+    border-radius: 12px;
+    cursor: pointer;
+}
+
+/* Assistant (pages/Assistant.tsx) */
+.as-none { color: var(--pui-text-dim); }
+.as-field { width: 60%; min-width: 180px; }
+/* A labelled field on its own in a group (Wi-Fi > Proxy, Hotspot). */
+.field-row { padding: 8px 12px; border-top: 1px solid #c8c8c8; }
+.as-badge {
+    display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 8px; font-size: 11px; vertical-align: middle;
+    color: #fff; background: #3a8bd9;
+}
+.as-small {
+    border: 1px solid #8a8a8a; border-radius: 12px; padding: 4px 12px;
+    background: linear-gradient(#fdfdfd, #d9d9d9); color: #333; font: inherit; font-size: 13px;
+}
+.as-small.negative { border-color: #b04040; background: linear-gradient(#f8d4d0, #e8a8a0); color: #6a1a14; }
+.as-small:disabled { opacity: 0.45; }
+
+/* Game Controllers, USB, Battery (docs/M6-PLAN.md F4 items 8-9) ------------------------ */
+
+.gp-buttons { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px 12px; }
+.gp-button {
+    min-width: 34px; padding: 4px 6px; text-align: center; font-size: 13px; color: #555;
+    border: 1px solid #a8a8a8; border-radius: 6px; background: linear-gradient(#fafafa, #dcdcdc);
+}
+.gp-button.gp-pressed { color: #fff; border-color: #1d5a99; background: linear-gradient(#5aa6e6, #2a74c0); }
+
+.usb-meter { height: 10px; margin: 0 12px 12px; border-radius: 5px; background: #cfcfcf; overflow: hidden; }
+.usb-meter-used { height: 100%; background: linear-gradient(#5aa6e6, #2a74c0); border-radius: 5px; }
+
+.bat-chart { padding: 8px 12px 10px; }
+.bat-chart svg { display: block; width: 100%; height: 120px; touch-action: none; }
+.bat-tip { font-size: 13px; color: #555; min-height: 18px; text-align: right; }
+.bat-grid { stroke: #cfcfcf; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.bat-area { fill: rgba(63, 154, 51, 0.18); }
+.bat-line { fill: none; stroke: #3f9a33; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.bat-cross { stroke: #888; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.bat-axis { display: flex; justify-content: space-between; font-size: 12px; color: #777; margin-top: 2px; }
+.bat-app { padding: 8px 12px; border-top: 1px solid #c8c8c8; }
+.bat-app:first-child { border-top: 0; }
+.bat-app-text { display: flex; justify-content: space-between; font-size: 16px; color: #333; }
+.bat-app-share { color: #555; }
+.bat-app-bar { height: 8px; margin: 5px 0 3px; border-radius: 4px; background: #d6d6d6; overflow: hidden; }
+.bat-app-bar > div { height: 100%; border-radius: 4px; background: #2a74c0; }
+.bat-app-time { font-size: 12px; color: #777; }

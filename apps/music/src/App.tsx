@@ -4,16 +4,17 @@
 // Music: the library by artist, album and song in the light webOS 2.x list
 // style, and the dark Now Playing view with the transport controls, seek
 // and volume. Songs come from the media indexer
-// (com.webos.service.mediaindexer getAudioList, subscribed).
+// (com.webos.service.mediaindexer getAudioList, subscribed). Launch params
+// {play: "<artist, album or song>"} play it (the Assistant).
 
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { mediaIndexer, type AudioItem } from "@phoenix/luna";
-import { useLuna, useMediaUrl } from "@phoenix/luna/react";
+import { useLaunchParams, useLuna, useMediaUrl } from "@phoenix/luna/react";
 import {
     AppMenu, BackProvider, Divider, Glyph, GroupedToolButtons, Page, PageHeader, Row, Slider, Spinner, IconToolButton, Toolbar, ToolSpacer,
     formatSeconds, useBack,
 } from "@phoenix/ui";
-import { albums, artists, artistOf, artistSummary, songs, titleOf, type AlbumEntry, type ArtistEntry } from "./library";
+import { albums, artists, artistOf, artistSummary, songs, songsFor, titleOf, type AlbumEntry, type ArtistEntry } from "./library";
 import { PlayerProvider, usePlayer } from "./player";
 
 type Tab = "artists" | "albums" | "songs";
@@ -175,6 +176,19 @@ function Library() {
     const byArtist = useMemo(() => artists(items ?? []), [items]);
     const byAlbum = useMemo(() => albums(items ?? []), [items]);
     const bySong = useMemo(() => songs(items ?? []), [items]);
+
+    // {play: "<artist, album or song>"}: the Assistant's "play ..." (docs/M6-PLAN.md F3).
+    const launch = useLaunchParams<{ play?: string }>();
+    const played = useRef<object | null>(null);
+    useEffect(() => {
+        if (!items || launch.play === undefined || played.current === launch) return;
+        played.current = launch;
+        const list = songsFor(items, launch.play);
+        if (list && list.length) {
+            player.play(list, 0);
+            setNowPlaying(true);
+        }
+    }, [items, launch, player]);
 
     useBack(() => { setNowPlaying(false); return true; }, nowPlaying);
     useBack(() => { setView(null); return true; }, !nowPlaying && view !== null);

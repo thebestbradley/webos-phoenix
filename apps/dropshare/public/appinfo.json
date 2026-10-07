@@ -1,0 +1,24 @@
+{
+    "id": "org.webosphoenix.dropshare",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "DropShare",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "iconColor": "#1c1c1c",
+    "uiRevision": 2,
+    "keywords": ["Share", "Send", "Receive", "Files", "QR", "LuneDrop", "Wi-Fi"],
+    "//tapToShareSupported": "Touch to Share: a phone touched to the device gets DropShare's address (com.palm.stservice shareData).",
+    "tapToShareSupported": true,
+    "phoenix": {
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps. shareTargets: the share sheet offers DropShare for files.",
+        "launcherTab": 0,
+        "shareTargets": [
+            { "types": ["image/*", "video/*", "audio/*", "application/*"], "label": "DropShare" }
+        ]
+    }
+}

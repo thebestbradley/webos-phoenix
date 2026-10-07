@@ -15,6 +15,22 @@
   "svg": "0622f348e1d66ce04659ee0003538fa07c32e0e40657379fc40c99f7fec3793e",
   "png": "1d6eb2d405b0cf44d062d0c67710964f2fa3e42b59566a5b12e55f9d119e9fa2"
  },
+ "apps/assistant/public/icon-128x128.png": {
+  "svg": "5b0d895e973bf77a2ae42444dcd82c02adcf3adc85a66e727cc3571bbe6f29c7",
+  "png": "279af3205cc90f00c7a1240d117a6c5ce946663daf2cf8f4fd3d01d4e55ce8a9"
+ },
+ "apps/assistant/public/icon-256x256.png": {
+  "svg": "853648b1edfe85f3da632696f70fea792c07794d80df46f3ba9714c54c30646b",
+  "png": "8dc787986125d903e39d5858f2bf24ac51ec630d12ca98889ccddf2b57c69d01"
+ },
+ "apps/assistant/public/icon-512x512.png": {
+  "svg": "b38991eedfaf273c05f80e44eff17391a595dcfd1481a8811dc378450e4619e4",
+  "png": "248b525ec1339670d981ad4e88d632b533b1442e9908e9c47a93c41891e5a94b"
+ },
+ "apps/assistant/public/icon.png": {
+  "svg": "cf79227ae0923e2d2dec0c380ec0de6ca035e827c76d8755bbcb31f0576fc898",
+  "png": "a9b7a063a8521d15dd317043d7a93d914b2b1f71c326d7fb923370c6755533a2"
+ },
  "apps/authenticator/public/icon-128x128.png": {
   "svg": "62eb08c7e32bf1add46e98ded8b49b0173655edb9f0ce532dbac5795462ac1f2",
   "png": "7c1cbce5bbf25b63184af965d11289f5204ff5d46860ca91e5d783a36242c814"
@@ -47,6 +63,22 @@
   "svg": "ce21ef4600547b3633b39aee075af6ea4f02374b1692649bc31140348d78721f",
   "png": "7f5df23bf361c0681e4395e1ba225998955839d2b3400febeabedd0c4c4d07ba"
  },
+ "apps/clipboard/public/icon-128x128.png": {
+  "svg": "faa9457af9e783c527e338d8d7f87af342c9c274dd27a0f9d06ea7ff42031f48",
+  "png": "1696cc3b0f053767a4d3c0b744bc0bda070092153af3811161cb1cdad0bb1c6d"
+ },
+ "apps/clipboard/public/icon-256x256.png": {
+  "svg": "e09ee4c975e04ad5f0ff6626f37c2f2779a374a2412a128282dbdda7708f6da2",
+  "png": "ee9f4cb127ea9742742b93ea7d72b45905265c337e5be4f12ac527bd26bc34dd"
+ },
+ "apps/clipboard/public/icon-512x512.png": {
+  "svg": "49277ca5196ae3388a58513236c9103733f4b68d907305a8e12973577bdbf707",
+  "png": "d1b5bd79ba7287cc721cfb5c75702a9ef67adf2a2d7da111d51df96ce314307a"
+ },
+ "apps/clipboard/public/icon.png": {
+  "svg": "70c8318b1b0dbe3af51f9601e9cdc41f75520b5db4b13d62dcb2e98ffd35a8de",
+  "png": "dc0997a46eb455a9a65782aa821c87e2b4665fdac032a08b63d78bc8cb4d57e1"
+ },
  "apps/dav/icon-128x128.png": {
   "svg": "abf5ef5f74a6737a7c880235be1c62f39f029ba7ec62efa0792d02f9092a8f91",
   "png": "afd6d75bda2a9a24a23534bf995ab4c98884292d9b41c351da172ee071f86433"
@@ -78,6 +110,22 @@
  "apps/docview/public/icon.png": {
   "svg": "a106df71e5285e0b2d443125fab7c8b1ce6d9e8303e73098e9e2bcd1e2c0d5ae",
   "png": "c6c116ce3a81ebbd17753540f7135030d889eb57ab60aa3fe128eae9d184fc46"
+ },
+ "apps/dropshare/public/icon-128x128.png": {
+  "svg": "d22dc65103d08f79b10fffc2feb3290bb72d607a8d46b629943fba44ca615a26",
+  "png": "b2210a8dbaae8998c4599de31a5da570b3806602678fe967cb83eab81f64be81"
+ },
+ "apps/dropshare/public/icon-256x256.png": {
+  "svg": "c660a85a9baafd91a3e9ffb959dfe69a032d18e85a9c2095977d6f3c48f34e36",
+  "png": "8057214efb798b08ea9ad569180212d3e2a917396a6ba9193f4bb46ac3d38291"
+ },
+ "apps/dropshare/public/icon-512x512.png": {
+  "svg": "da90c523458e78d934fac321cd6ca0e43aaba153116ab6c1afd1e40cc1d9ccb8",
+  "png": "0a37ec5c9b9dd08352d05bfca1179a0fe8c6ae39e602f1079ee151e2f164dffc"
+ },
+ "apps/dropshare/public/icon.png": {
+  "svg": "341e460efe3e0416fd19f9231920d140fbd9509d9c74936c0cb9abcb1e5e0fed",
+  "png": "8ddd6e49defa8068aa980485a8aa96682cca339e7ecd4dd6da0b2eebe32c7372"
  },
  "apps/enact-notes-agate/webos-meta/icon-128x128.png": {
   "svg": "b477e43629347427fc09d57d0cff9de93f364868b32e8e92646ad9e304d8fa2e",
@@ -463,6 +511,22 @@
   "svg": "9f9416ad2b78803477dff9898aac3ead87d41711bd78791ffe766356460ce5c0",
   "png": "3bed389f75219409ae8e4a6dd1630ad58c2afe575bddab23fa39bae378ee8a1a"
  },
+ "apps/settings/public/icons/advanced-128x128.png": {
+  "svg": "4e2487679035e824586cae3f4a5903f4d2ee65834e527ed33dc4730637a94a94",
+  "png": "55b2f002e82241bbe336e8a1a521778312bf509302f51c921e042fba9772e74e"
+ },
+ "apps/settings/public/icons/advanced-256x256.png": {
+  "svg": "cdb8f8a4c96726bd952cf871ec66199a33db2fe1545b9c76914837952123c8a4",
+  "png": "4d13486fa4d6707cd99c5981be8d85347eec25cf363d0484958e17d92f1e5898"
+ },
+ "apps/settings/public/icons/advanced-512x512.png": {
+  "svg": "80daa364410b590a3faa3097cdedf2ab02d671464739073600f2a24dbc883ae3",
+  "png": "ca01ad0b3a793e6458c6c3dfcfde163b53e97912ab515d4b9300969859a7a60a"
+ },
+ "apps/settings/public/icons/advanced.png": {
+  "svg": "c29ad8608e855eb42761a7812a3d9151a7e0b021d3220953e044aaa5414a8385",
+  "png": "ee282f166ff2c52ccdbff835796d37cdc8202bbc26b17ee8bc6223ad03991b6d"
+ },
  "apps/settings/public/icons/airplane-128x128.png": {
   "svg": "0a49663f09cfb02fd9516337f2712659b6cccbebb37556fe8a722597d574fc25",
   "png": "9e60aebd004410d7522512d029a0ec25b50a11ea4cba0a626ba19b02f2e71c6c"
@@ -479,6 +543,22 @@
   "svg": "c5a32e83f86c131955ee0fc679aeb6b71c438f4dd52618c822b0395b93fedbd7",
   "png": "95bd1a19fc9763c9490dab61813f02f3cb144ea4b0e5b618aa9c9780e596395f"
  },
+ "apps/settings/public/icons/assistant-128x128.png": {
+  "svg": "88984e75cdb7c5fc8228f7e9edb44ab0e4ea899c07a4ee81e011a13324011846",
+  "png": "a693dcb51a7640ef1986c060fd98ff13c4d7d8016b8f7476f75f06e6923b6b79"
+ },
+ "apps/settings/public/icons/assistant-256x256.png": {
+  "svg": "bf8dee60a6cd3a5cd3cf553ce28758fc7f4f426dc958d2bbe03648d7a6154f2d",
+  "png": "16b907c0e0cabebbe698ad7fe0ebcfadab45988e8e49ed59ca295a26f58dc7b2"
+ },
+ "apps/settings/public/icons/assistant-512x512.png": {
+  "svg": "1ac1ce4d7e4285c59e1d9f9fba23c00a582ceb3529e21f863b12e979324e6e53",
+  "png": "7ad68bb55033f0658692882e5ea6e22ae05677f3d754128298e52ddf7fe1c9b0"
+ },
+ "apps/settings/public/icons/assistant.png": {
+  "svg": "d43f6de660189b4a68902daebf9fe773f1913b1399b36fc9d55912c759e48c33",
+  "png": "8b4f8850a5bc6a3087486ea563aa857465520faa9413d2a5dd334220faf820a4"
+ },
  "apps/settings/public/icons/backup-128x128.png": {
   "svg": "925416d9564d776d9d0af2c9b510c81b7861c1a97eb93d5eb80a2253745b1185",
   "png": "14b3ba0a3e1ef7864fdf62d2f87eb9c6e6a24a19d398103d68128347d5527c74"
@@ -494,6 +574,22 @@
  "apps/settings/public/icons/backup.png": {
   "svg": "abd28bad613e8c38ba3f7664f7d059a926fa7ce67f4cc3628ecbffddbb7353e2",
   "png": "8a2030a1ebaa342a33a89f1a1789c22229fde816862aa7f7a63625be92c00d2c"
+ },
+ "apps/settings/public/icons/battery-128x128.png": {
+  "svg": "853dd2cfbff303f7c06315180cf0822b22f1072b8dd091798b3ed236c15b882d",
+  "png": "c2d86dcb9f625c9d7abf8c4f115248d315160d3dccf8eb5b3e104407f9f97589"
+ },
+ "apps/settings/public/icons/battery-256x256.png": {
+  "svg": "a313c958696696cdf404e27a538e1068d277ecfdfc4a16246cbd3a9b9fe0cfa6",
+  "png": "326c913061362abb62a906d6d2374ff330d90972e9353990ba774fada2e26262"
+ },
+ "apps/settings/public/icons/battery-512x512.png": {
+  "svg": "63a28f8ad09084ad4f6581e44181bf8ce71c0387fb4f778f5b6ab7c225aa6094",
+  "png": "7428500f21885c941177f0c3bacc06add98a844856db5a46fe2d0dd8884db276"
+ },
+ "apps/settings/public/icons/battery.png": {
+  "svg": "f6d0282423ce69074d3fddcf1f59fb9be9403fe6a0ea118b0da4d1a27db61ce7",
+  "png": "8abd2a3f5154f5f86ae23a8b39cffaab5740037e687cefce7f83971cd52d9f26"
  },
  "apps/settings/public/icons/bluetooth-128x128.png": {
   "svg": "04e835998f07b516432eb67703b999ddfb797d94584b07c965e8808680fa45d2",
@@ -526,6 +622,22 @@
  "apps/settings/public/icons/certificates.png": {
   "svg": "76873ca542a5ce5fc94a5321a3a705a122f4897c79946f022c7795f83382523b",
   "png": "094c0a34620a7729837a18cb3ef908295f676aada6f95442627b8a4394d0589a"
+ },
+ "apps/settings/public/icons/clipboard-128x128.png": {
+  "svg": "c3dfa8b4ac86f997f419ce3b960fd1f998a5e86ce569aec3c6a93f275112bdc9",
+  "png": "492f1b76d1bb974c13d3569e8baad456f8a14379e71e675af8db2b68dc9e13d5"
+ },
+ "apps/settings/public/icons/clipboard-256x256.png": {
+  "svg": "e08b854e74eebf8ef23276a229ad2b562e9093422c31356da7c1aa39be80fd03",
+  "png": "f2899bbf6e1e44167a66a700d04993e3dc6070172b2af3d0f544784116ffd596"
+ },
+ "apps/settings/public/icons/clipboard-512x512.png": {
+  "svg": "34b96c18d81088897ebf836f5eae569b71314271f16a7cb454b16dffb1abf725",
+  "png": "e37da5cce22a712ae4b7f31dd1538c47df42d42ef1b436299fb089959f1d479f"
+ },
+ "apps/settings/public/icons/clipboard.png": {
+  "svg": "1dba531c22d45a8d49080a3e3fa3b0d1371ef7a447474f4d36e670dadcb081de",
+  "png": "7d6a54ab0316432d4dd28607ca335d2b6e0b65ed86a55540ddb3b0d272fe7eb0"
  },
  "apps/settings/public/icons/datetime-128x128.png": {
   "svg": "34cfa77fbecc76fdf51061b0da963c90c08b4e0ba9782b60aa00f9e3b3c37152",
@@ -575,6 +687,22 @@
   "svg": "d373fa769ed707bae4deb9a9aa76c600ca9b3473aebcbe071434b57d81d32422",
   "png": "630e6564bea8c2f5cc598966fe69833b39697f7bad8b5cb7e685fa4803e3bdbe"
  },
+ "apps/settings/public/icons/dropshare-128x128.png": {
+  "svg": "9b69c6f54939af18c3c74065962c0312e91224bb80c64d91312ade768bdd0a3d",
+  "png": "1844d054d87852ca8b6f15ebfd669efd3c33ad76d2e32a98fbdc82e696809afa"
+ },
+ "apps/settings/public/icons/dropshare-256x256.png": {
+  "svg": "ed309a788ab2de7f4b588381e108904dbb6e61d5a6fde8aa19ee3e111108de2d",
+  "png": "fbf9d9001be65029fab0d30390026f1a4013c977ccbfb2e57bf3514747e2d2f3"
+ },
+ "apps/settings/public/icons/dropshare-512x512.png": {
+  "svg": "a57bdb80a2e7da4a2c8e18b06339b6232be16adb9e0816b34dd44c18f89185be",
+  "png": "2ce50e36301c7f4b444b04597d8423efb910713b4602e6ad85b6528a3b324eaa"
+ },
+ "apps/settings/public/icons/dropshare.png": {
+  "svg": "a60d3605b9b4df1ece337c0e56af33b04dbed3250add69067c89cf0ee5714a80",
+  "png": "515d9f007614755a59ef5bb12b073d55544b87b1b3affbc9a4588cf798c03fc1"
+ },
  "apps/settings/public/icons/emergency-128x128.png": {
   "svg": "fba7cd66a4e6ce38ad92146898878113d4b28201ba844c7a8f60319a5213bc30",
   "png": "0fb235e6f4c48f13fe45f850c0b0d678b7ba867632dca33fb5638faf971fb061"
@@ -606,6 +734,38 @@
  "apps/settings/public/icons/exhibition.png": {
   "svg": "2e51edddb9fca240ad3d8bc43e5a034f61e02e175f22be6ede281c675a53dca8",
   "png": "2e498b06fd5fdaf5b1ce2b2b70a037c46e09576b2b4e71c3592be7dd8c11424f"
+ },
+ "apps/settings/public/icons/gamepads-128x128.png": {
+  "svg": "843158b53702d3882115a44a7c39adabeacb4937d50b2b7256c22810788785ea",
+  "png": "496e4347156a3356a93553a5b893434e6fbdbf0c3756d616d4fe90413cebe02d"
+ },
+ "apps/settings/public/icons/gamepads-256x256.png": {
+  "svg": "d5aec79501309d6905f01e4a22e555ce8e37e7f76cc86413308a579d354b544d",
+  "png": "d20f1524e5f4314204d70e8370c13efef102c6ece0d65fba3132fca698066ca6"
+ },
+ "apps/settings/public/icons/gamepads-512x512.png": {
+  "svg": "825c67840400d1d9b0b539e55fe10256b193798a0f99c0095d6e92aaffe516bb",
+  "png": "5696b668767ebcb31f31825ba4e8dccb876cd7333c184f22f4adcae89f01c837"
+ },
+ "apps/settings/public/icons/gamepads.png": {
+  "svg": "fa3dd4480702beaebf75ee9b96fff6040a5baf7cffde6aa37df4993766bff595",
+  "png": "6eec5173222e56d95888313388b008782760777c7ce15ce991ec6fa9d6297df2"
+ },
+ "apps/settings/public/icons/hotspot-128x128.png": {
+  "svg": "cacbcdf84fee1dc29a87626bbc4c663461eed3cbca331f2ee9b84a6e78760265",
+  "png": "6ef2ad691e5a695d30b51297fa3ae45bacf3345974be92a00ecd001d9d8e210f"
+ },
+ "apps/settings/public/icons/hotspot-256x256.png": {
+  "svg": "d944fac971b5bf4eb4ddabd04f93c96af1f548836db509fc33bdcc874b5dbd7c",
+  "png": "a7f7d2ac7171a7a85ddf99aa1349b07e684b43a631419323b255cce988bed45a"
+ },
+ "apps/settings/public/icons/hotspot-512x512.png": {
+  "svg": "64c55fb2a69c9e02af2db505bc88cd1c31f74da5147df373663825833ff39309",
+  "png": "a64b9f471c111ef737891265a763f39dfd5b052293b9d5d9f2c4389ea263e865"
+ },
+ "apps/settings/public/icons/hotspot.png": {
+  "svg": "ba1b74096c43bba9c35bcac6e1549d6f1483c73eb28b0c640997de3c9bd97842",
+  "png": "683b03b8589b218f5b56577ad0c5d621d3d8b4fd51c6c998b51a309316727c81"
  },
  "apps/settings/public/icons/justtype-128x128.png": {
   "svg": "97cb8dd61b45daa489dffe9178e208f96680a797750b5dbfc67ddad77d6ec7f3",
@@ -734,6 +894,22 @@
  "apps/settings/public/icons/updates.png": {
   "svg": "133a8673198bd3bf45e0251a33e5dade17182957df3f88dbbf76ca271bfd7852",
   "png": "af6cd5c3278502414f54eaa49ae1fd0b4cab09128c94e862f29d61783bcf3fe8"
+ },
+ "apps/settings/public/icons/usb-128x128.png": {
+  "svg": "52ca760d0806997f60c5f6f0d368dc5146d315b75b6720a8f93080db0c047369",
+  "png": "707c1d88aa16f89ae5ce02fe9ff8608a310374dbdeda8be177413724814af9fe"
+ },
+ "apps/settings/public/icons/usb-256x256.png": {
+  "svg": "450101845f53483fdb16be4a5ffa6412c3db464862bf5cd4e015c8c065f41d47",
+  "png": "25f06eea6631bf6088db59e41ecbe88c03cbbfe0834fc1a65900323e9d339c32"
+ },
+ "apps/settings/public/icons/usb-512x512.png": {
+  "svg": "a4c50ae5c7592b5f3e5ee37c7ef71551421d9b1f09e0944287059912cc2fa6d5",
+  "png": "ab7e413b67d49bea8b0378449dc117740e07b40eb972b4abb4171c1d409da671"
+ },
+ "apps/settings/public/icons/usb.png": {
+  "svg": "3461b5afbf07b870e672c9ceb0f420b441e613a12d9363394d71867f434df35c",
+  "png": "e69a348237c2299af62d1fd226d867484bd8b0990c6a196ca681ff2fb9a29cd8"
  },
  "apps/settings/public/icons/vpn-128x128.png": {
   "svg": "d8c83d11da8c389aef120405690fbda5d5f023821dc1f466443d0625ac1b8540",

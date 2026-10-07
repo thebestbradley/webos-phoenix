@@ -1,0 +1,43 @@
+/* Copyright (c) 2026 webOS Phoenix contributors. SPDX-License-Identifier: Apache-2.0 */
+/* DropShare: the code on a white card beside what it is for; on a phone,
+   above it. */
+.ds-code {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 12px auto;
+    max-width: 640px;
+}
+.ds-qr {
+    flex: 0 0 auto;
+    width: 220px;
+    height: 220px;
+    /* The code's quiet zone: four modules of white around it. */
+    padding: 24px;
+    box-sizing: border-box;
+    background: #fff;
+    border: 1px solid #9a9a9a;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.ds-qr svg { width: 100%; height: 100%; display: block; }
+.ds-side { flex: 1 1 auto; min-width: 0; }
+.ds-mode { font-size: 20px; font-weight: bold; color: #333; margin-bottom: 6px; }
+.ds-url {
+    font-size: 14px;
+    color: #1f5fa8;
+    word-break: break-all;
+    user-select: text;
+    -webkit-user-select: text;
+    margin-bottom: 8px;
+}
+.ds-status { font-size: 15px; color: #555; line-height: 1.35; }
+@media (max-width: 480px) {
+    .ds-code { flex-direction: column; text-align: center; gap: 8px; margin: 8px auto; }
+    .ds-qr { width: 180px; height: 180px; padding: 18px; }
+}
+/* The session is over: the app's picture, faded, where the code was. */
+.ds-over { width: 70%; opacity: 0.45; }

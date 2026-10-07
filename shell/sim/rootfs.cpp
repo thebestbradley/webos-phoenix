@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "rootfs.h"
+#ifdef PHOENIX_HAVE_WEBENGINE
+#include "simdropshare.h"
+#endif
 
 #include <QBuffer>
 #include <QFileInfo>
@@ -261,6 +264,9 @@ void Rootfs::rescan()
             .toString(entry.value(QStringLiteral("title")).toString());
         // Touch to Share asks it for what to send (ApplicationDescription.cpp:453-455).
         entry[QStringLiteral("tapToShareSupported")] = app.value(QStringLiteral("tapToShareSupported")).toBool(false);
+        // Runs in several windows at once: the launcher's icon menu offers
+        // New Window (a Phoenix key, docs/APP-RUNTIME.md).
+        entry[QStringLiteral("multipleInstances")] = app.value(QStringLiteral("multipleInstances")).toBool(false);
         // Installed by the user: the launcher may delete it (uninstall).
         entry[QStringLiteral("installed")] = installed;
         // The app's files (getSizeOfApps, getUserInstalledAppSizes).
@@ -280,6 +286,9 @@ void Rootfs::rescan()
         record[QStringLiteral("params")] = QVariantMap();
         record[QStringLiteral("hidden")] = entry.value(QStringLiteral("tab")).toInt() < 0;
         record[QStringLiteral("universalSearch")] = app.value(QStringLiteral("universalSearch")).toVariant();
+        // The Assistant's commands the app adds (docs/M6-PLAN.md F3).
+        if (app.contains(QStringLiteral("assistant")))
+            record[QStringLiteral("assistant")] = app.value(QStringLiteral("assistant")).toVariant();
         record[QStringLiteral("removable")] = installed;
         record[QStringLiteral("version")] = app.value(QStringLiteral("version")).toString();
         // LaunchPoint::toJSON (LaunchPoint.cpp:262-310): the vendor, the
@@ -598,9 +607,31 @@ void RootfsSchemeHandler::proxyProgress(QWebEngineUrlRequestJob *job)
     replyJson(job, out);
 }
 
+void RootfsSchemeHandler::dropShare(QWebEngineUrlRequestJob *job, const QString &devicePath)
+{
+    if (!m_dropShare) {
+        replyJson(job, { { QStringLiteral("returnValue"), false }, { QStringLiteral("errorText"), QStringLiteral("DropShare is not here") } });
+        return;
+    }
+    const QUrlQuery q(job->requestUrl());
+    if (devicePath == QLatin1String("/__phoenix/dropshare/file")) {
+        auto *buffer = new QBuffer(job);
+        buffer->setData(m_dropShare->fileData(q.queryItemValue(QStringLiteral("id")).toInt()));
+        buffer->open(QIODevice::ReadOnly);
+        job->reply("application/octet-stream", buffer);
+        return;
+    }
+    replyJson(job, QJsonObject::fromVariantMap(m_dropShare->request(QJsonDocument::fromJson(
+        q.queryItemValue(QStringLiteral("req"), QUrl::FullyDecoded).toUtf8()).object().toVariantMap())));
+}
+
 void RootfsSchemeHandler::requestStarted(QWebEngineUrlRequestJob *job)
 {
     const QString devicePath = job->requestUrl().path();
+    if (devicePath.startsWith(QLatin1String("/__phoenix/dropshare"))) {
+        dropShare(job, devicePath);
+        return;
+    }
     if (devicePath == QLatin1String("/__phoenix/proxy")) {
         proxy(job);
         return;

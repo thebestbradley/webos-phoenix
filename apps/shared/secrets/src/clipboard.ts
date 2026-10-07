@@ -11,12 +11,22 @@
 // execCommand("copy") on a hidden text area is the fallback.
 //
 // Limits (documented in docs/SECURITY-APPS.md): the clipboard is shared
-// with every app while the secret is on it; a clipboard history (none on
-// webOS today) would keep it.
+// with every app while the secret is on it. Phoenix's clipboard history
+// keeps it, marked sensitive: encrypted, masked, revealed only after the
+// device passcode.
 
 export const CLIPBOARD_CLEAR_SECONDS = [10, 20, 30, 60, 90];
 
+// The clipboard history (org.webosphoenix.clipboard) records every copy;
+// this tells it the copy is a secret, which it keeps encrypted and masked
+// (or skips, as the user chose in Settings > Clipboard).
+function markSensitive(text: string) {
+    const rt = (globalThis as { __phoenixRuntime?: { clipboard?: { markSensitive?: (t: string) => void } } }).__phoenixRuntime;
+    try { if (text) rt?.clipboard?.markSensitive?.(text); } catch { /* no history */ }
+}
+
 async function write(text: string): Promise<boolean> {
+    markSensitive(text);
     try {
         if (typeof globalThis.navigator?.clipboard?.writeText === "function") {
             await navigator.clipboard.writeText(text);

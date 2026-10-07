@@ -21,6 +21,11 @@ Item {
 
     signal launchRequested(string appId)
     signal launcherToggled
+    // Press and hold on the launcher button: the Phoenix Assistant
+    // (docs/M6-PLAN.md F3; a tap still opens the launcher).
+    signal assistantRequested
+    // The hold opens it (Shell.assistantEnabled); off, a hold does nothing.
+    property bool assistantEnabled: true
 
     // The app just tapped shows launch feedback for up to 3 s
     // (QuickLaunchBar::setAppLaunchFeedback, quicklaunchbar.cpp:633,
@@ -178,22 +183,61 @@ Item {
         }
     }
 
-    // Tap launches; press and hold picks a dock app up, to move it along the
-    // dock or drag it off (quicklaunchbar.cpp).
+    // Tap launches; press and hold (or a right click) opens a dock app's
+    // menu (IconMenu.qml), and moving the finger on from there picks it
+    // up, to move it along the dock or drag it off, as the hold alone did
+    // (quicklaunchbar.cpp).
+    signal menuRequested(string appId, string from, rect iconRect)
+    function iconRect(i) {
+        return Qt.rect(slotCentre(i) - iconSize / 2, Theme.quickLaunchIconY, iconSize, iconSize);
+    }
     MouseArea {
         id: dockMouse
         anchors.fill: parent
-        pressAndHoldInterval: Theme.tapAndHoldInterval
-        preventStealing: ql.draggedId !== ""
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        pressAndHoldInterval: Theme.iconMenuHoldInterval
+        preventStealing: ql.draggedId !== "" || heldSlot >= 0
         property int pressedSlot: -1
-        onPressed: (mouse) => { pressedSlot = ql.slotAt(mouse.x); }
-        onClicked: (mouse) => ql.activateSlot(ql.slotAt(mouse.x))
+        // The app whose menu the hold opened, while the finger is down.
+        property int heldSlot: -1
+        property point heldAt
+        onPressed: (mouse) => {
+            pressedSlot = ql.slotAt(mouse.x);
+            heldSlot = -1;
+            if (mouse.button === Qt.RightButton && pressedSlot < ql.pinned.length)
+                ql.menuRequested(ql.pinned[pressedSlot].appId, "dock", ql.iconRect(pressedSlot));
+        }
+        onClicked: (mouse) => { if (mouse.button === Qt.LeftButton) ql.activateSlot(ql.slotAt(mouse.x)); }
         onPressAndHold: (mouse) => {
             var i = ql.slotAt(mouse.x);
-            if (i < ql.pinned.length)
-                ql.dragStarted(ql.pinned[i].appId, "dock", mouse.x, mouse.y);
+            if (mouse.button === Qt.LeftButton && i === ql.pinned.length && ql.assistantEnabled) {
+                // The press shows as the button's pressed state until it lifts;
+                // no click follows a hold.
+                ql.assistantRequested();
+                return;
+            }
+            if (mouse.button !== Qt.LeftButton || i >= ql.pinned.length)
+                return;
+            heldSlot = i;
+            heldAt = Qt.point(mouse.x, mouse.y);
+            ql.menuRequested(ql.pinned[i].appId, "dock", ql.iconRect(i));
         }
-        onPositionChanged: (mouse) => { if (ql.draggedId !== "") ql.dragMoved(mouse.x, mouse.y); }
-        onReleased: (mouse) => { if (ql.draggedId !== "") ql.dragEnded(mouse.x, mouse.y); }
+        onPositionChanged: (mouse) => {
+            if (heldSlot >= 0 && Math.hypot(mouse.x - heldAt.x, mouse.y - heldAt.y) > Qt.styleHints.startDragDistance) {
+                var i = heldSlot;
+                heldSlot = -1;
+                if (i < ql.pinned.length)
+                    ql.dragStarted(ql.pinned[i].appId, "dock", mouse.x, mouse.y);
+                return;
+            }
+            if (ql.draggedId !== "")
+                ql.dragMoved(mouse.x, mouse.y);
+        }
+        onReleased: (mouse) => {
+            heldSlot = -1;
+            if (ql.draggedId !== "")
+                ql.dragEnded(mouse.x, mouse.y);
+        }
+        onCanceled: heldSlot = -1
     }
 }

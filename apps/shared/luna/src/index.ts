@@ -33,3 +33,7 @@ export * from "./certificates";
 export * from "./exhibition";
 export * from "./print";
 export * from "./scene";
+export * from "./clipboard";
+export * from "./assistant";
+export * from "./dropshare";
+export * from "./accessories";

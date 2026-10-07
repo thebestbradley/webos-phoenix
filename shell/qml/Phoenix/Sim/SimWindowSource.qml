@@ -76,6 +76,12 @@
 //   simInstaller; deleting an installed app in the launcher removes it)
 //   apps also has removable: whether the launcher offers to delete the app
 //
+// Optional, for the launcher's icon menu (Shell.iconMenuItems):
+//   launchNewInstance(appId) -> uid  another window of an app whose entry
+//                            has multipleInstances (New Window)
+//   apps also has multipleInstances, size (bytes, App Info), and params /
+//   main (Share sends a launch point's or a site's web address)
+//
 // Simulator only (sim.qml wires these to SimSystemStatus and the shell):
 //   systemStatusReported(status)  signal: a web page reported the device
 //                            state (radios, brightness, ...; see hostStatus()
@@ -99,6 +105,15 @@
 //                            messages ({op: start | stop | cancel, prompt,
 //                            autoStop}) go to it and its states back to the
 //                            window (runtime block "Dictation": Voice Dial)
+//   localModels, speech      the shell's LocalModels and Speech (Shell.localModels,
+//                            Shell.speech; localModels null without a
+//                            models folder): "assistant" host messages
+//                            ({op, requestId, ...}: status, download, cancel,
+//                            remove, ensure, speak, stopSpeaking,
+//                            speechStatus) go to them and their answers back
+//                            to the page (runtime block "The Phoenix
+//                            Assistant"); every page hears {changed: true}
+//                            when the models change (a download's progress)
 //   preferencesReported(prefs)  signal: a page set system preferences
 //                            (com.webos.service.systemservice setPreferences),
 //                            e.g. firstUseComplete when First Use is done
@@ -212,7 +227,11 @@ Item {
                  // exhibition in dock mode, under exhibitionTitle.
                  exhibition: !!a.exhibition, exhibitionTitle: a.exhibitionTitle || a.title,
                  // appinfo.json tapToShareSupported (Touch to Share).
-                 tapToShare: !!a.tapToShareSupported });
+                 tapToShare: !!a.tapToShareSupported,
+                 // Several windows at once (the icon menu's New Window).
+                 multipleInstances: !!a.multipleInstances || multipleInstanceApps.indexOf(a.id) >= 0,
+                 // The app's files, in bytes (App Info).
+                 size: a.size || 0 });
     }
 
     // The launcher's fields every entry has (Shell._launcherEntries,
@@ -223,8 +242,14 @@ Item {
     function _launcherFields() {
         return { page: "", dynamic: false, category: "", keywords: "", installed: false,
                  installState: "", progress: -1, pending: false, installReason: "",
-                 exhibition: false, exhibitionTitle: "", tapToShare: false };
+                 exhibition: false, exhibitionTitle: "", tapToShare: false,
+                 multipleInstances: false, size: 0 };
     }
+
+    // Apps that run in several windows at once whose appinfo.json cannot
+    // say so ("multipleInstances": true, Rootfs::apps): the original
+    // browser, which opens a card on every launch (BrowserApp.js:132-147).
+    property var multipleInstanceApps: ["com.palm.app.browser"]
 
     // ---- Installing and removing apps (phoenix-sim's SimInstaller) ---------------------
     // The runtime's com.webos.appInstallService unpacks a package and sends
@@ -618,6 +643,15 @@ Item {
             var launched = launch(target, uid, target === payload.id ? params : null, joins);
             if (launched !== "" && !background)
                 cardFocusRequested(launched);
+        } else if (type === "browserData") {
+            // The browser's Clear Cookies and Clear Cache (com.palm.browserServer):
+            // the page views' profile (phoenix-sim's simBrowser).
+            if (typeof simBrowser !== "undefined" && simBrowser !== null) {
+                if (payload.op === "clearCookies")
+                    simBrowser.clearCookies();
+                else if (payload.op === "clearCache")
+                    simBrowser.clearCache();
+            }
         } else if (type === "banner") {
             // A banner only scrolls by; it leaves nothing in the dashboard
             // (PalmSystem.addBannerMessage).
@@ -700,6 +734,8 @@ Item {
         } else if (type === "dictation") {
             if (uid !== "")
                 _dictationRequest(uid, payload || {});
+        } else if (type === "assistant") {
+            _assistantRequest(appId, uid, payload || {});
         } else if (type === "lunaReply") {
             var cb = _lunaCallbacks[payload.id];
             delete _lunaCallbacks[payload.id];
@@ -711,6 +747,10 @@ Item {
             setOngoing(appId, payload || {});
         } else if (type === "reboot") {
             rebootRequested(payload.reason ? String(payload.reason) : "");
+        } else if (type === "shutdown") {
+            shutdownRequested(payload.reason ? String(payload.reason) : "");
+        } else if (type === "restartUi") {
+            restartUiRequested();
         } else if (type === "erase") {
             // The device was erased (com.palm.storage erase/EraseAll, Wipe;
             // Settings' Full Erase): it restarts into First Use.
@@ -781,6 +821,10 @@ Item {
     // The page asked the device to restart (com.palm.power/shutdown/machineReboot),
     // and why ("System update" for an update's Install Now).
     signal rebootRequested(string reason)
+    // The power menu's Shut Down (com.palm.power/shutdown/machineOff) and
+    // Luna Restart (org.webosphoenix.system/restartUi).
+    signal shutdownRequested(string reason)
+    signal restartUiRequested
     // The device was erased; it restarts into First Use.
     signal eraseRequested
     // USB drive mode was asked for (com.palm.storage diskmode/enterMSM).
@@ -873,6 +917,20 @@ Item {
             pages[i].runScript(js);
     }
 
+    // A /com/palm/display signal for every page's com.palm.bus/signal/addmatch
+    // listeners: powerKeyPressed {showDialog: true} (Power held; luna-systemui
+    // opens its power menu, PowerdService.js).
+    function displaySignal(method, payload) {
+        var js = "window.__phoenixRuntime && __phoenixRuntime.displaySignal && __phoenixRuntime.displaySignal("
+            + JSON.stringify(method) + ", " + JSON.stringify(payload || {}) + ")";
+        var pages = _webPages();
+        for (var i = 0; i < pages.length; ++i)
+            pages[i].runScript(js);
+        displaySignals.push(method);
+    }
+    // The display signals sent, for the tests.
+    property var displaySignals: []
+
     // ---- System windows: the emergency window ---------------------------------------
     // An app page shown by the shell outside the cards: Phone's restricted
     // mode over the lock screen (EmergencyWindowManager's Type_Emergency
@@ -888,6 +946,9 @@ Item {
         var key = (kind || "system") + (_nextUid++);
         var win = info.web ? _webWindow(appId, mainUrl(appId, params), key, true)
                            : mockApp.createObject(source, { appId: appId, title: info.title, accent: info.color, glyph: info.glyph });
+        // The share sheet over the launcher: only its sheet is drawn.
+        if (kind === "share" && info.web)
+            win.transparent = true;
         _windows[key] = win;
         systemWindows.append({ key: key, appId: appId, kind: kind || "system" });
         return key;
@@ -1598,7 +1659,7 @@ Item {
     // are turned), which every page gets as it loads; unlike the rest it is
     // not the pages' to overrule.
     readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse", "launcherLayout", "gestureArea", "dockMode",
-                                        "debugOverlays", "usbHost"]
+                                        "debugOverlays", "usbHost", "gamepads", "usbDrives", "formFactor"]
     property var _shellStatus: ({})
 
     function pushSystemStatus(changes) {
@@ -2006,6 +2067,23 @@ Item {
         return _createWindow(appId, info.title, at, join >= 0 ? cards.get(join).groupId : newGroupId(), null, url);
     }
 
+    // Another window of an app that runs several at once (apps
+    // multipleInstances; the launcher's icon menu, New Window): a fresh
+    // instance in a stack of its own, at the right, even while one runs.
+    function launchNewInstance(appId) {
+        var info = appInfo(appId);
+        if (!info || info.pending || info.noWindow || !info.multipleInstances)
+            return "";
+        if (runningUid(appId) === "")
+            return launch(appId);
+        memory.refresh();
+        if (memory.low && appsAllowedInLowMemory.indexOf(appId) < 0) {
+            showMemoryAlert();
+            return "";
+        }
+        return _createWindow(appId, info.title, cards.count, newGroupId(), null, "");
+    }
+
     // A second window from the same app (e.g. an email compose card). It
     // joins the front of its parent's stack and is shown maximized.
     function openChild(parentUid) {
@@ -2083,18 +2161,107 @@ Item {
     Connections {
         target: source.dictation
         ignoreUnknownSignals: true
+        // Only recordings for app windows: the keyboard's (owner "") and the
+        // shell's assistant view's ("assistant") are theirs.
         function onStateChanged() {
             var d = source.dictation;
-            if (d.owner !== "" && d.busy)
+            if (d.owner !== "" && source._windows[d.owner] && d.busy)
                 source._dictationEvent(d.owner, { state: "transcribing" });
         }
         function onTranscribed(text, error) {
             var d = source.dictation;
             var uid = d.owner;
-            if (uid === "")
+            if (uid === "" || !source._windows[uid])
                 return;
             source._dictationDone();
             source._dictationEvent(uid, error ? { state: "error", errorText: error } : { state: "done", text: text });
+        }
+    }
+
+    // ---- The Assistant's on-device model and speech ("assistant" host messages) -------
+
+    property var localModels: null
+    property var speech: null
+    // requestId -> {appId, uid} of an ensure under way.
+    property var _assistantWaiting: ({})
+
+    function _assistantPage(appId, uid) {
+        return uid !== "" ? _windows[uid] : (_headless[appId] || null);
+    }
+    function _assistantEvent(page, ev) {
+        if (page && page.runScript)
+            page.runScript("window.__phoenixRuntime && __phoenixRuntime.assistantHostEvent && __phoenixRuntime.assistantHostEvent("
+                           + JSON.stringify(ev) + ")");
+    }
+    function _assistantRequest(appId, uid, p) {
+        var page = _assistantPage(appId, uid);
+        var answer = function (o) { o.requestId = p.requestId; _assistantEvent(page, o); };
+        var lm = localModels, sp = speech;
+        switch (p.op) {
+        case "status":
+            answer(lm ? lm.status() : { available: false, installed: [], ramBytes: 0, error: "" });
+            break;
+        case "download":
+            if (!lm) { answer({ error: qsTr("Models cannot be downloaded here.") }); break; }
+            lm.download(String(p.id), String(p.url), String(p.sha256 || ""), Number(p.size) || 0);
+            answer(lm.error && lm.status().downloading === null ? { error: lm.error } : {});
+            break;
+        case "cancel":
+            if (lm) lm.cancel(String(p.id));
+            answer({});
+            break;
+        case "remove":
+            if (lm) lm.remove(String(p.id));
+            answer({});
+            break;
+        case "ensure":
+            if (!lm) { answer({ error: qsTr("No on-device model here.") }); break; }
+            var w = _assistantWaiting;
+            w[p.requestId] = { appId: appId, uid: uid };
+            _assistantWaiting = w;
+            lm.ensure(String(p.id), String(p.requestId));
+            break;
+        case "speak":
+            if (!sp || !sp.available) { answer({ error: qsTr("No text-to-speech here.") }); break; }
+            sp.speak(String(p.text || ""), String(p.lang || "en"));
+            answer({});
+            break;
+        case "stopSpeaking":
+            if (sp) sp.stop();
+            answer({});
+            break;
+        case "speechStatus":
+            answer({ available: !!(sp && sp.available), engine: sp ? sp.engine : "" });
+            break;
+        default:
+            answer({ error: "unknown op " + p.op });
+        }
+    }
+    function _assistantSettle(requestId, ev) {
+        var who = _assistantWaiting[requestId];
+        if (!who)
+            return;
+        var w = _assistantWaiting;
+        delete w[requestId];
+        _assistantWaiting = w;
+        ev.requestId = requestId;
+        _assistantEvent(_assistantPage(who.appId, who.uid), ev);
+    }
+    Connections {
+        target: source.localModels
+        ignoreUnknownSignals: true
+        function onReady(requestId, baseUrl) { source._assistantSettle(requestId, { baseUrl: baseUrl }); }
+        function onFailed(requestId, error) { source._assistantSettle(requestId, { error: error }); }
+        // Every page's subscribers (Settings' download progress), at most twice a second.
+        function onChanged() { if (!assistantChangedTimer.running) assistantChangedTimer.start(); }
+    }
+    Timer {
+        id: assistantChangedTimer
+        interval: 500
+        onTriggered: {
+            var pages = source._webPages();
+            for (var i = 0; i < pages.length; ++i)
+                source._assistantEvent(pages[i], { changed: true });
         }
     }
 

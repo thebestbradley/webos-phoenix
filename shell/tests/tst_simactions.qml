@@ -115,6 +115,35 @@ Item {
             shell.lock();
         }
 
+        // The accessories and the battery's temperature (docs/M6-PLAN.md F4
+        // items 8-9): menu items with keys, checked while connected.
+        function test_accessoriesAndTemperature() {
+            verify(!sim.item.simActionChecked("gamepad"));
+            keyClick(Qt.Key_G, Qt.ControlModifier | Qt.ShiftModifier);
+            verify(sim.item.simActionChecked("gamepad"), "a game controller connects");
+            compare(sim.item.simStatus.gamepads[0].connection, "bluetooth");
+            sim.item.simTrigger("gamepadA");
+            compare(sim.item.simStatus.gamepads[0].buttons, [0]);
+            tryVerify(function() { return sim.item.simStatus.gamepads[0].buttons.length === 0; }, 3000, "A is let go");
+            sim.item.simTrigger("gamepad");
+            verify(!sim.item.simActionChecked("gamepad"), "and goes");
+
+            keyClick(Qt.Key_U, Qt.ControlModifier | Qt.ShiftModifier);
+            verify(sim.item.simActionChecked("usbOtg"), "a USB drive goes in");
+            compare(sim.item.simStatus.usbDrives[0].label, "PHOENIX");
+            sim.item.simTrigger("usbOtg");
+            compare(sim.item.simStatus.usbDrives.length, 0);
+
+            var t = sim.item.simStatus.temperature;
+            compare(t, 31);
+            keyClick(Qt.Key_T, Qt.ControlModifier | Qt.ShiftModifier);
+            compare(sim.item.simStatus.temperature, 46, "warm: past the first warning");
+            sim.item.simTrigger("temperature");
+            compare(sim.item.simStatus.temperature, 51, "hot: past the second");
+            sim.item.simTrigger("temperature");
+            compare(sim.item.simStatus.temperature, 31);
+        }
+
         function test_turn() {
             // The window turns with the device (no phoenix-sim window here).
             var w = root.Window.window;

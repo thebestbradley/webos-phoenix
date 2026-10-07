@@ -54,3 +54,10 @@
 		margin-right: 8px;
 	}
 }
+
+/* Edit's Tones group (app/phoenix-tones.js): the tone's name at the row's
+   right, in the light grey of the field labels. */
+.phoenix-tone-name {
+    color: #8a8a8a;
+    font-size: 16px;
+}

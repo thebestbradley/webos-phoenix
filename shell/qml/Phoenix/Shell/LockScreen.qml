@@ -184,6 +184,28 @@ Item {
     property string bannerGlyph: ""
     property url bannerIcon: ""
     property real bannerOpacity: 1
+    // The banner's app, for its private text.
+    property string bannerAppId: ""
+    // Private previews (docs/M6-PLAN.md F4; the community's "Messaging
+    // Notification Private" patches): Settings > Screen & Lock > Show
+    // previews off, the lock screen's banner and dashboard say only what
+    // came, "New Message", with the app's name and icon, never who sent it
+    // or what it says (a dashboard window is not shown either).
+    readonly property bool privatePreviews: !!system && system.lockScreenPreviews === false
+    function privateText(appId) {
+        var id = String(appId || "");
+        if (/messaging/.test(id))
+            return qsTr("New Message");
+        if (/email/.test(id))
+            return qsTr("New Email");
+        return qsTr("New Notification");
+    }
+    function appTitle(appId) {
+        for (var i = 0; source && source.apps && i < source.apps.count; ++i)
+            if (source.apps.get(i).appId === appId)
+                return source.apps.get(i).title;
+        return "";
+    }
     readonly property bool showAlertsWhenLocked: !system || system.showAlertsWhenLocked !== false
     // The unlock panel or a dialog is up: no padlock, help or alerts.
     readonly property bool _covered: unlockPanel.shown || dialogState !== ""
@@ -525,9 +547,11 @@ Item {
                             objectName: "lockDashboardItem"
                             width: parent.width
                             source: lock.source
-                            windowKey: row.entry.windowKey
-                            title: row.entry.title
-                            body: row.entry.body
+                            // Private: the app's name and "New Message"; not
+                            // its window (which shows what it says).
+                            windowKey: lock.privatePreviews ? "" : row.entry.windowKey
+                            title: lock.privatePreviews ? (lock.appTitle(row.entry.appId) || row.entry.title) : row.entry.title
+                            body: lock.privatePreviews ? lock.privateText(row.entry.appId) : row.entry.body
                             color: row.entry.color
                             glyph: row.entry.glyph
                             icon: row.entry.icon
@@ -597,7 +621,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 width: parent.width - lockBannerIcon.width - parent.spacing
                 elide: Text.ElideRight
-                text: lock.bannerText
+                text: lock.privatePreviews ? lock.privateText(lock.bannerAppId) : lock.bannerText
                 color: Theme.text
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.bannerFontSize

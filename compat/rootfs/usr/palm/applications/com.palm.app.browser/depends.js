@@ -1,5 +1,7 @@
 // Phoenix compat overlay: the original depends.js plus css/phoenix-compat.css,
-// which lays the TouchPad toolbar out for a phone. Nothing else is changed.
+// which lays the TouchPad toolbar out for a phone, and phoenix-browser.js
+// and .css (Private Browsing, Find on Page, the content blocker and the
+// user agent: docs/M6-PLAN.md F4). Nothing else is changed.
 //
 //   Copyright 2012 Hewlett-Packard Development Company, L.P.
 //
@@ -42,5 +44,7 @@ enyo.depends(
 	"source/NoFocusButton.js",
 	"source/clipboard.js",
 	"source/util.js",
-	"source/tld.js"
+	"source/tld.js",
+	"source/phoenix-browser.js",
+	"css/phoenix-browser.css"
 );

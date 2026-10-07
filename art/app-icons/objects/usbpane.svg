@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Settings > USB: a USB flash drive standing on the system icons'
+     diamond (its foot at y = 176), its metal plug up, the USB trident on
+     its body. Original Phoenix art. -->
+<defs>
+  <linearGradient id="metal" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#8a9198"/>
+    <stop offset="0.4" stop-color="#f4f6f8"/>
+    <stop offset="1" stop-color="#7a8188"/>
+  </linearGradient>
+  <linearGradient id="body" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#14589a"/>
+    <stop offset="0.4" stop-color="#3f9bea"/>
+    <stop offset="1" stop-color="#123f70"/>
+  </linearGradient>
+</defs>
+<g>
+  <rect x="104" y="40" width="48" height="44" rx="3" fill="url(#metal)" stroke="#4d545b" stroke-width="3"/>
+  <rect x="114" y="52" width="10" height="10" fill="#4d545b"/><rect x="132" y="52" width="10" height="10" fill="#4d545b"/>
+  <rect x="92" y="80" width="72" height="96" rx="12" fill="url(#body)" stroke="#0f3a66" stroke-width="3"/>
+  <g stroke="#ffffff" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M128 160 V 104"/><path d="M128 104 l-8 10 M128 104 l8 10"/>
+    <path d="M128 146 l-16 -10 v-10"/><path d="M128 138 l16 -10 v-8"/>
+  </g>
+  <circle cx="112" cy="122" r="5" fill="#ffffff"/><rect x="139" y="114" width="10" height="9" fill="#ffffff"/>
+</g>
+</svg>

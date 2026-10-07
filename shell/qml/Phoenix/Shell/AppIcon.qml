@@ -29,6 +29,12 @@ Item {
     // Window pixels per point: 2 on a Retina Mac, where Qt draws the
     // window at twice the size; 1 on a device (the shell scales by Theme.u).
     property real pixelRatio: Screen.devicePixelRatio
+    // An app group (a launcher folder; docs/M6-PLAN.md F4): its first four
+    // apps [{icon, largeIcon, color, glyph}] in a 2 x 2 grid on a dark
+    // rounded tile with a grey edge (LunaCE, webOS CE 3.1.0's
+    // Screenshots/Group-2.jpg), instead of an icon of its own.
+    property var groupIcons: []
+    readonly property bool isGroup: groupIcons && groupIcons.length > 0
 
     signal clicked
 
@@ -49,10 +55,58 @@ Item {
             source: Theme.asset("launcher3/launcher-touch-feedback.png")
         }
 
+        Rectangle {
+            objectName: "groupTile"
+            visible: icon.isGroup
+            anchors.fill: parent
+            anchors.margins: parent.width * 0.04
+            radius: width * 0.14
+            color: "#2A2D31"
+            border.color: "#9AA0A7"
+            border.width: Math.max(1, Math.round(icon.size / 32))
+            Grid {
+                anchors.centerIn: parent
+                columns: 2
+                spacing: parent.width * 0.06
+                Repeater {
+                    model: icon.isGroup ? icon.groupIcons.slice(0, 4) : []
+                    // Each app small: its icon, or its drawn tile.
+                    delegate: Item {
+                        id: mini
+                        required property var modelData
+                        readonly property int pixels: Math.ceil(width * icon.pixelRatio)
+                        width: Math.round(icon.size * 0.38)
+                        height: width
+                        Image {
+                            anchors.fill: parent
+                            visible: (mini.modelData.icon || "") !== ""
+                            source: visible ? Theme.appIcon(mini.modelData.icon, mini.pixels, mini.modelData.largeIcon || "") : ""
+                            sourceSize: Qt.size(mini.pixels, mini.pixels)
+                            smooth: true
+                        }
+                        Rectangle {
+                            visible: (mini.modelData.icon || "") === ""
+                            anchors.fill: parent
+                            anchors.margins: parent.width * 0.08
+                            radius: width * 0.2
+                            color: mini.modelData.color || "#666666"
+                            Text {
+                                anchors.centerIn: parent
+                                text: mini.modelData.glyph || ""
+                                color: "white"
+                                font.pixelSize: parent.height * 0.55
+                                font.bold: true
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Image {
             objectName: "iconImage"
             anchors.fill: parent
-            visible: icon.source != ""
+            visible: icon.source != "" && !icon.isGroup
             // The icon, or a bigger one the app ships once the icon would
             // be magnified (Theme.appIcon). A file bigger than the drawn
             // size (that bigger one, or the 64 px icon in a 22 px
@@ -71,7 +125,7 @@ Item {
         }
 
         Rectangle {
-            visible: icon.source == ""
+            visible: icon.source == "" && !icon.isGroup
             anchors.fill: parent
             anchors.margins: parent.width * 0.08
             radius: width * 0.2

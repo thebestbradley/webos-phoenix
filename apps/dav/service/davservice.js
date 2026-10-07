@@ -25,6 +25,13 @@
 //   accountSettings {accountId}            Phoenix: the server address, for
 //       the account wizard (apps/dav/accounts/) when a password is changed
 //
+// The same service is the transport of the Subscribed Calendar account
+// (template com.webosphoenix.webcal; lib/webcal.js): a public .ics address
+// read one way into a read-only calendar, every 30 minutes. Its validator
+// is checkCredentials {templateId: "com.webosphoenix.webcal", config:
+// {url}}, which reads the file; the address is the account's credentials
+// (common.url).
+//
 // It is written against a luna.call(uri, params) -> Promise<reply>
 // function so it runs unchanged on a device (service.js, webos-service),
 // in the simulator (runtime/phoenix-runtime.js) and in tests.
@@ -33,12 +40,17 @@
 
 var syncLib = require("./lib/sync");
 var davclient = require("./lib/davclient");
+var webcalLib = require("./lib/webcal");
 
 var SERVICE = "org.webosphoenix.service.dav";
 var PROVIDER_CAPABILITY = {
     "com.webosphoenix.dav.contacts": "CONTACTS",
-    "com.webosphoenix.dav.calendar": "CALENDAR"
+    "com.webosphoenix.dav.calendar": "CALENDAR",
+    "com.webosphoenix.webcal.calendar": "CALENDAR"
 };
+var WEBCAL = "com.webosphoenix.webcal";
+// A subscribed calendar is read again this often (WebCal Sync's 30 minutes).
+var WEBCAL_INTERVAL = "30m";
 
 // A thrown error -> an error code the Accounts app can show.
 function errorCodeOf(e) {
@@ -134,19 +146,25 @@ function createDavService(options) {
 
     function activityName(accountId) { return SERVICE + ".sync." + accountId; }
 
+    function isWebcal(accountId) {
+        return accountInfo(accountId).then(function (a) { return a && a.templateId === WEBCAL; }, function () { return false; });
+    }
+
     function schedulePeriodic(accountId) {
         if (options.periodicSync === false) return Promise.resolve();
-        return lunaCall("luna://com.palm.activitymanager/create", {
+        return isWebcal(accountId).then(function (webcal) {
+            return lunaCall("luna://com.palm.activitymanager/create", {
             activity: {
                 name: activityName(accountId),
-                description: "CardDAV / CalDAV sync for account " + accountId,
+                description: (webcal ? "Subscribed calendar refresh for account " : "CardDAV / CalDAV sync for account ") + accountId,
                 type: { background: true, persist: true, explicit: true },
-                schedule: { interval: options.periodicSync || "1h" },
+                schedule: { interval: webcal ? WEBCAL_INTERVAL : options.periodicSync || "1h" },
                 requirements: { internet: true },
                 callback: { method: "luna://" + SERVICE + "/sync", params: { accountId: accountId } }
             },
             start: true,
             replace: true
+            });
         }).catch(function (e) { log("periodic sync not scheduled: " + e.message); });
     }
 
@@ -168,6 +186,18 @@ function createDavService(options) {
 
     var methods = {
         checkCredentials: function (p) {
+            if (p.templateId === WEBCAL) {
+                return Promise.resolve().then(function () {
+                    return webcalLib.createWebcal({ db: db, request: options.request, log: log }).check((p.config || {}).url || p.username);
+                }).then(function (found) {
+                    return {
+                        returnValue: true,
+                        username: (p.config && p.config.name) || found.name,
+                        credentials: { common: { password: "", url: found.url } },
+                        config: { url: found.url, name: (p.config && p.config.name) || found.name, events: found.events }
+                    };
+                }, fail);
+            }
             var config = p.config || {};
             var serverUrl = config.serverUrl || config.server || "";
             return Promise.resolve().then(function () {
@@ -190,6 +220,8 @@ function createDavService(options) {
         },
 
         onCreate: function (p) {
+            // A subscribed calendar keeps nothing but its address (in its credentials).
+            if (p.config && p.config.url && !p.config.serverUrl) return Promise.resolve({ returnValue: true });
             return credentials(p.accountId).then(function (creds) {
                 var serverUrl = (p.config && p.config.serverUrl) || creds.serverUrl;
                 return accountInfo(p.accountId).then(function (account) {
@@ -256,6 +288,10 @@ function createDavService(options) {
                 var caps = enabledCapabilities(account);
                 if (p.capability) caps = caps.filter(function (c) { return c === p.capability; });
                 if (!caps.length) return { returnValue: true, skipped: "no enabled capability" };
+                if (account.templateId === WEBCAL) {
+                    return webcalLib.createWebcal({ db: db, request: options.request, accountId: accountId, localTz: options.localTz, log: log })
+                        .sync(creds.url, account.username).then(function (stats) { return { returnValue: true, stats: stats }; });
+                }
                 return engine(accountId, creds, account.username).sync({ capabilities: caps }).then(function (stats) {
                     return { returnValue: true, stats: stats };
                 });

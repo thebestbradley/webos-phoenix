@@ -38,7 +38,10 @@
     "help",
     "firstuse",
     "marketplace",
-    "agenda"
+    "agenda",
+    "clipboard",
+    "assistant",
+    "dropshare"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

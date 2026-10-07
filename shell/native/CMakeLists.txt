@@ -15,9 +15,12 @@ qt_add_qml_module(phoenix-native
     SOURCES keyinjector.h keyinjector.cpp fonttools.h fonttools.cpp hidpi.h hidpi.cpp deviceconfig.h deviceconfig.cpp
             dictation.h dictation.cpp imagetools.h imagetools.cpp systemkeys.h systemkeys.cpp
             useractivity.h useractivity.cpp memorymonitor.h memorymonitor.cpp
-            keyboardaccess.h keyboardaccess.cpp
+            keyboardaccess.h keyboardaccess.cpp cornermask.h cornermask.cpp
+            localmodels.h localmodels.cpp speech.h speech.cpp
 )
-target_link_libraries(phoenix-native PRIVATE Qt6::Quick Qt6::Gui)
+# Network: the Assistant's model downloads and llama-server's health check.
+find_package(Qt6 REQUIRED COMPONENTS Network)
+target_link_libraries(phoenix-native PRIVATE Qt6::Quick Qt6::Gui Qt6::Network)
 # Dictation records with Qt Multimedia; without it the keyboard has no microphone.
 find_package(Qt6 QUIET COMPONENTS Multimedia)
 if(TARGET Qt6::Multimedia)

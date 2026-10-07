@@ -297,7 +297,10 @@ battery, **Shift+F6** the battery stops reporting (or reports again), **F7** plu
 in or out, **Ctrl+Shift+B** its button (twice within a second: a double
 click), **Ctrl+Shift+M** the play/pause media key, **Ctrl+Shift+L** the
 light on the light sensor (dark, dim, indoor, outdoor: with automatic
-brightness the screen dims in dim and dark light); apps hear them through
+brightness the screen dims in dim and dark light); **Ctrl+Shift+G** a
+Bluetooth game controller (**Ctrl+Shift+A** presses its A), **Ctrl+Shift+U**
+a USB drive in the device's port (OTG), **Ctrl+Shift+T** the battery's
+temperature (31, 46, 51 °C: luna-systemui's heat warnings); apps hear them through
 `com.palm.keys` and `com.palm.ambientLightSensor`, and an app's vibration
 shakes the window under "Vibrating: …",
 **Ctrl+Left** / **Ctrl+Right**
@@ -396,6 +399,10 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-maps.cjs` | Maps (no live map servers) |
 | `node tools/test-passwords.cjs` | Passwords (KeePass) |
 | `node tools/test-authenticator.cjs` | Authenticator (TOTP/HOTP) |
+| `node tools/test-clipboard.cjs` | Clipboard history: the Clipboard app and Settings > Clipboard |
+| `node tools/test-sharing.cjs` | Sharing, sync and health (M6 F4): DropShare (Settings, receiving into Downloads, sending, the share sheet, Touch to Share), a subscribed .ics calendar, the temperature warnings |
+| `node tools/test-community.cjs` | The community's features (M6 F4): Settings > Advanced, repeat alerts and lock screen previews reaching the shell, Contacts' tones and a text's tone, Email's cycling dashboard |
+| `node tools/test-assistant.cjs` | The Phoenix Assistant: the app's commands, read-backs and choices, Settings > Assistant with a stand-in cloud provider, the permission gate, conversations |
 | `node tools/test-terminal.cjs` | Terminal (simulated shell, then /bin/sh for real) |
 | `build/pty/pty-test` | The Terminal's PTY service |
 | `build/devices/devices-test` | phoenix-devices: the display, keys, vibrator and light sensor services; the hardware found by looking, devices appearing and going, `--probe` |
@@ -409,7 +416,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-location.cjs` | Location Services and permissions |
 | `node tools/test-appmanager.cjs` | Launch points apps add, handlers, the installer's queries |
 | `node tools/test-security.cjs` | Security policy, erase, USB drive mode, debugging |
-| `node tools/test-browser.cjs` | The browser: pages, downloads, printing (Save as PDF) |
+| `node tools/test-browser.cjs` | The browser: pages, downloads, printing (Save as PDF), find on page, private browsing, the content blocker, user agent and search engine preferences |
 
 ## Build a webOS OSE image (experimental)
 

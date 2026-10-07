@@ -15,8 +15,18 @@
 > AI work (the agent, local LLMs, bring-your-own LLM, a Phoenix AI service)
 > are **2.0**.
 
-The **Phoenix Assistant in 1.0** is a voice assistant in the classic style,
-with no language model and no MCP:
+> **Revised (7 October 2026, from the project owner).** 1.0 adds language
+> models after all, in layers: the commands below first; then an optional
+> on-device model (llama.cpp, downloaded in Settings), which becomes the
+> default for actions once installed; then, when neither can answer, the
+> choice of a cloud model (Anthropic, OpenAI, Google, any OpenAI-compatible
+> URL) or a web search. A cloud model may run commands only with the user's
+> permission, set in Settings > Assistant. It opens by holding the launcher
+> button, has its own app with chat threads, and shows the active thread
+> over a translucent backdrop. The MCP agent stays 2.0. The plan is
+> [M6-PLAN.md](M6-PLAN.md) F3; the table below is its command layer.
+
+The **Phoenix Assistant in 1.0** starts with a voice assistant in the classic style:
 
 | Part | 1.0 |
 | --- | --- |
@@ -25,6 +35,98 @@ with no language model and no MCP:
 | **Understanding** | Intents: a fixed grammar per command in each supported language ("call Mum", "text Sam I'm late", "set a timer for 10 minutes", "wake me at 7", "turn off Wi-Fi", "open Maps", "navigate home", "play <artist>", "remind me to ...", "what's the weather", "what's 15% of 80"). Apps add their own through `appinfo.json`, the same way they add Just Type Quick Actions |
 | **Doing** | The same Luna calls Just Type's actions and the apps already make: Phone, Messaging, Clock, Settings, Maps, Music, Tasks, Weather, Contacts. Anything that sends or deletes is read back first ("Send 'I'm late' to Sam?") |
 | **Answering** | A popup alert or dashboard in the webOS style with the answer, spoken by the text-to-speech service; for anything it cannot do, "Search the web for ...", as Just Type does |
+
+### 1.0 as built (7 October 2026, in the simulator)
+
+What [M6-PLAN.md](M6-PLAN.md) F3 built, and what runs where. The table
+above was the plan's command layer; this is the whole 1.0 assistant.
+
+| Layer | What runs | Where |
+| --- | --- | --- |
+| 1. Speech to text | The shell's dictation: whisper.cpp through `org.webosphoenix.transcriber` | On the device (in phoenix-sim, the same service code on the computer) |
+| 2. Commands | A grammar per language (`apps/assistant/service/lib/lang/en.js`): call, text, timer, alarm, reminder, Wi-Fi, Bluetooth, airplane mode, flashlight, ringer, open app, directions, play music, weather, sums and percentages, time and date, web search; plus commands apps declare in `appinfo.json` (`"assistant": {"commands": [...]}`, Just Type's Quick Action shape with phrases per language; a Quick Action counts as `"<displayName> {text}"`) | In the service, no model, no network (weather fetches Open-Meteo) |
+| 3. On-device model | llama.cpp's `llama-server` with a GGUF model the user downloads in Settings > Assistant, called with the same commands as tools (Chat Completions, `--jinja`) | On the device. phoenix-sim runs it from the shell (`LocalModels`, Phoenix.Native); the device service runs it itself (`lib/node-device.js`) |
+| 4. Cloud model or web | "Ask <provider (model)>" and "Search the web" as choices on the answer; a thread taken to a cloud model goes on with it | The provider's servers; the browser |
+
+**The router.** Commands first; then the on-device model, if one is chosen
+and installed (it answers free-form requests and picks commands as
+tools); then the choice. Decided on the owner's behalf: the grammar still
+answers first once a model is installed (it is instant and exact; the
+model handles what it does not match), and one tool call per turn (the
+multi-step agent is 2.0). A model's choice runs only when the words name
+that kind of thing and, for a switch, the way it goes (`grounded()` in the
+language file); otherwise it is read back ("Did you mean: turn the
+flashlight off?"). Checked against the real Qwen2.5 0.5B with llama.cpp
+(built from source here; 7 October 2026): it answers questions well, but
+picks the wrong switch or direction often enough that this check is
+needed; the 1.5B and 4B models are recommended where they fit. In
+phoenix-sim the model loaded and answered in about 18 s the first time
+and 2 s after, on four CPU cores.
+
+**Cloud models.** Four API shapes, raw HTTP, no SDKs
+(`lib/providers.js`): Anthropic Messages (`POST /v1/messages`,
+`x-api-key`, `anthropic-version: 2023-06-01`; `claude-sonnet-5-5` by
+default, `claude-opus-5-5` and `claude-haiku-4-5-20251001` offered),
+OpenAI Responses (`POST /v1/responses`; `gpt-5-mini` suggested), Gemini
+`generateContent` (`gemini-2.5-flash` suggested) and Chat Completions for
+any OpenAI-compatible server (Ollama, LM Studio, OpenRouter, vLLM,
+llama-server). Every model field is the user's to type, or to pick from
+the provider's own model list. They chat once set up; they get the
+commands as tools only with **Allow cloud models to control the device**
+(off by default, settable only by Settings), and a tool call from one
+without it is refused. Whatever sends, calls or deletes is read back and
+waits for Send / Call / Yes, whichever layer chose it.
+
+**Where provider calls are made, and CORS.** The providers' APIs refuse
+cross-origin requests from web pages (Anthropic's only with a
+`dangerous-direct-browser-access` header), so a page's `fetch` cannot call
+them. In phoenix-sim the service code runs in the page but its requests
+go through the shell's own HTTP proxy (`/__phoenix/proxy`, Qt Network in
+phoenix-sim's process; `tools/serve-rootfs.py` in the browser tests), the
+same path DAV and the podcast feeds use: no CORS, and the key goes from
+the service to the provider and nowhere else. On a device the service is
+a Node.js Luna service (`apps/assistant/service/service.js`) with Node's
+https. Streaming is not used in 1.0: an answer arrives whole.
+
+**Keys.** Sealed with AES-GCM: in phoenix-sim under a non-extractable
+WebCrypto key in IndexedDB (the clipboard's sealing, shared:
+`webCryptoSealer`), on a device under a key file only the service can read
+(`fileSecrets`). Pages get a key's last four characters at most. Honest
+limit: in the simulator every app page runs the runtime, so a page of the
+same origin could use the sealing key; the service only answers
+`ask`/`choose`/`confirm` for the system UI, the Assistant app and
+Settings, and provider changes only for Settings. On a device the
+Phoenix key store (SYNERGY.md) replaces the key file.
+
+**On-device models** (`lib/models.js`; Apache-2.0, the Qwen team's own
+GGUF builds, SHA-256 from Hugging Face, checked after download; nothing
+shipped in the image): Qwen2.5 0.5B Instruct Q4_K_M (491 MB, for 2 GB),
+Qwen2.5 1.5B Instruct Q4_K_M (1.1 GB, for 4 GB), Qwen3 4B Q4_K_M (2.5 GB,
+for 8 GB). Settings offers what fits the device's memory and recommends
+the largest. Llama 3.2 was left out (its licence is not permissive);
+Qwen2.5 3B too (Qwen Research License); Qwen3.5 and Gemma 4 GGUFs were
+not in the Qwen and Google repositories when checked. `llama-server` is
+found on the PATH or given (`phoenix-sim --llama-server <path>`); on a Mac
+`brew install llama.cpp`, on Linux a build of llama.cpp (`cmake -B b &&
+cmake --build b --target llama-server`). The meta-phoenix recipe is still
+to write (a TODO beside `whisper-cpp`'s). It stops after five idle
+minutes to give the memory back.
+
+**Speech** (`org.webosphoenix.tts`: `speak {text, lang?}`, `stop`,
+`getStatus`). Qt's TextToSpeech module is not part of the Qt installs
+Phoenix builds with, and QtWebEngine's `speechSynthesis` has no voices
+(it needs speech-dispatcher, which Qt's builds do not use), so the shell
+runs a speech program with the text on its input: `espeak-ng` (GPL-3.0,
+run as a separate program, never linked) where it is installed, `say` on
+a Mac, or `--speech-command` (Piper, for instance). The device service
+does the same. A browser page with voices uses `speechSynthesis`.
+Answers are spoken when **Speak answers** is on (on by default).
+
+**Where it shows.** Holding the launcher button opens the system view:
+the conversation in use over a blurred backdrop, a text field and the
+microphone (`AssistantOverlay.qml`). The Assistant app has the
+conversations (new, open, delete). Both show the same thread through the
+service; each thread and message is its own stored key.
 
 **In 2.0** the same assistant grows into the agent this document plans:
 the MCP hub behind it, language models (local or a provider) for open
@@ -41,7 +143,8 @@ A plan for three things (2.0, except where the table above says 1.0):
 3. **Bring your own LLM**, a Settings page to plug in the model you like,
    from a cloud provider, a machine on your network, or the phone itself.
 
-This is a plan, not a status report: none of it is built. Facts are as of
+This is a plan, not a status report: apart from the 1.0 assistant above,
+none of it is built. Facts are as of
 28 September 2026 and each has a source at the end. Where we could not
 check something it says *unverified*. Performance figures for Phoenix's
 devices are **estimates** until measured on them.

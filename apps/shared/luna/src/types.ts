@@ -176,6 +176,10 @@ export interface SystemPreferences {
     x_palm_virtualkeyboard_prefs?: string;
     rotationLock?: boolean;
     showAlertsWhenLocked?: boolean;
+    /** Phoenix: the lock screen shows who sent what (off: "New Message"). */
+    lockScreenPreviews?: boolean;
+    /** Phoenix: a notification's sound again every `minutes` until it is seen; apps set false are left out. */
+    notificationRepeat?: { enabled?: boolean; minutes?: number; apps?: Record<string, boolean> };
     /** Phoenix: seconds until the screen turns off. */
     screenTimeout?: number;
     /** Phoenix: seconds locked before the PIN or password is asked for (0: always). */
@@ -192,7 +196,46 @@ export interface SystemPreferences {
     dockModeSoundPref?: "systemsettings" | "mute";
     /** Phoenix: Settings > Exhibition. */
     exhibition?: ExhibitionPrefs;
+    // Settings > Advanced (the community's Tweaks; docs/M6-PLAN.md F4).
+    // LunaCE's own keys where it had the option:
+    /** Card view wraps from the last card to the first (LunaCE abh_features.json). */
+    infiniteCardCyclingEnabled?: boolean;
+    /** A tap on a side card in card view maximizes it (LunaCE maximize-edges.json). */
+    sysUiEnableMaximizeEdges?: boolean;
+    /** An upward slide from the side of the gesture area opens the wave launcher (LunaCE wave-launcher.json). */
+    sysUiEnableWaveLauncher?: boolean;
+    /** The tap ripple (LunaCE tap-ripple.json; on by default). */
+    showReticleAnimation?: boolean;
+    /** Phoenix: the shell's animations. */
+    animationSpeed?: "normal" | "fast";
+    /** Phoenix: how far a swipe goes before it counts. */
+    gestureSensitivity?: "low" | "normal" | "high";
+    /** Phoenix: a vibration on every tap. */
+    hapticFeedback?: boolean;
+    /** Phoenix: the launcher's icon grid. */
+    launcherGridDensity?: "normal" | "dense";
+    /** Phoenix: the battery's percentage beside its icon in the status bar. */
+    showBatteryPercent?: boolean;
+    /** Phoenix: a row of numbers above the keyboard's letters. */
+    keyboardNumberRow?: boolean;
+    /** Phoenix: Email's new-mail dashboard cycles through the new emails, with a delete button. */
+    emailDashboardCycling?: boolean;
+    /** Phoenix: the browser's page views block the content blocker's hosts. */
+    browserContentBlocker?: boolean;
+    /** Phoenix: the user agent the browser's page views send. */
+    browserUserAgent?: "mobile" | "desktop";
+    /** Phoenix: Settings > Wi-Fi > Proxy, the system's proxy. */
+    networkProxy?: NetworkProxy;
+    /** Phoenix: DropShare may send and receive files (Settings > DropShare). */
+    dropShareEnabled?: boolean;
     [key: string]: unknown;
+}
+
+/** The system's proxy (Settings > Wi-Fi > Proxy): every page and service goes through it. */
+export interface NetworkProxy {
+    type: "none" | "http" | "socks";
+    host: string;
+    port: number;
 }
 
 /** One of the user's Text Assist shortcuts: typed `shortcut`, the space bar puts in `text`. */

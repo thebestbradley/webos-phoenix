@@ -20,13 +20,20 @@
             { "id": "org.webosphoenix.settings.vpn", "title": "VPN", "icon": "icons/vpn.png", "params": { "page": "vpn" } },
             { "id": "org.webosphoenix.settings.airplane", "title": "Airplane Mode", "icon": "icons/airplane.png", "params": { "page": "airplane" } },
             { "id": "org.webosphoenix.settings.phone", "title": "Phone Preferences", "icon": "icons/phoneprefs.png", "params": { "page": "phone" } },
+            { "id": "org.webosphoenix.settings.hotspot", "title": "Hotspot & Tethering", "icon": "icons/hotspot.png", "params": { "page": "hotspot" } },
+            { "id": "org.webosphoenix.settings.dropshare", "title": "DropShare", "icon": "icons/dropshare.png", "params": { "page": "dropshare" } },
             { "id": "org.webosphoenix.settings.screen", "title": "Screen & Lock", "icon": "icons/screen.png", "params": { "page": "screen" } },
+            { "id": "org.webosphoenix.settings.battery", "title": "Battery", "icon": "icons/battery.png", "params": { "page": "battery" } },
+            { "id": "org.webosphoenix.settings.usb", "title": "USB", "icon": "icons/usb.png", "params": { "page": "usb" } },
+            { "id": "org.webosphoenix.settings.gamepads", "title": "Game Controllers", "icon": "icons/gamepads.png", "params": { "page": "gamepads" } },
             { "id": "org.webosphoenix.settings.exhibition", "title": "Exhibition", "icon": "icons/exhibition.png", "params": { "page": "exhibition" } },
             { "id": "org.webosphoenix.settings.sounds", "title": "Sounds & Ringtones", "icon": "icons/sounds.png", "params": { "page": "sounds" } },
             { "id": "org.webosphoenix.settings.datetime", "title": "Date & Time", "icon": "icons/datetime.png", "params": { "page": "datetime" } },
             { "id": "org.webosphoenix.settings.language", "title": "Language & Region", "icon": "icons/language.png", "params": { "page": "language" } },
             { "id": "org.webosphoenix.settings.textassist", "title": "Text Assist", "icon": "icons/textassist.png", "params": { "page": "textassist" } },
             { "id": "org.webosphoenix.settings.justtype", "title": "Just Type", "icon": "icons/justtype.png", "params": { "page": "justtype" } },
+            { "id": "org.webosphoenix.settings.clipboard", "title": "Clipboard", "icon": "icons/clipboard.png", "params": { "page": "clipboard" } },
+            { "id": "org.webosphoenix.settings.assistant", "title": "Assistant", "icon": "icons/assistant.png", "params": { "page": "assistant" } },
             { "id": "org.webosphoenix.settings.location", "title": "Location Services", "icon": "icons/location.png", "params": { "page": "location" } },
             { "id": "org.webosphoenix.settings.emergency", "title": "Emergency Info", "icon": "icons/emergency.png", "params": { "page": "emergency" } },
             { "id": "org.webosphoenix.settings.accessibility", "title": "Accessibility", "icon": "icons/accessibility.png", "params": { "page": "accessibility" } },
@@ -34,7 +41,8 @@
             { "id": "org.webosphoenix.settings.backup", "title": "Backup", "icon": "icons/backup.png", "params": { "page": "backup" } },
             { "id": "org.webosphoenix.settings.updates", "title": "Updates", "icon": "icons/updates.png", "params": { "page": "updates" } },
             { "id": "org.webosphoenix.settings.certificates", "title": "Certificate Manager", "icon": "icons/certificates.png", "params": { "page": "certificates" } },
-            { "id": "org.webosphoenix.settings.devmode", "title": "Developer Mode", "icon": "icons/devmode.png", "params": { "page": "devmode" } }
+            { "id": "org.webosphoenix.settings.devmode", "title": "Developer Mode", "icon": "icons/devmode.png", "params": { "page": "devmode" } },
+            { "id": "org.webosphoenix.settings.advanced", "title": "Advanced", "icon": "icons/advanced.png", "params": { "page": "advanced" } }
         ]
     }
 }

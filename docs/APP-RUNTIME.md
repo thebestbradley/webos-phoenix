@@ -136,6 +136,95 @@ throws a ghost of it off the top, with `tap_to_share.mp3`. In phoenix-sim
 touches it to the device (`--touch-to-share` starts with one in range); the
 data the phone received is logged (`Touch to Share: <appId> sent {...}`).
 
+### DropShare
+
+DropShare (`org.webosphoenix.dropshare`, `apps/dropshare`) is Phoenix's
+own take on the webOS Archive's LuneDrop, built on Touch to Share
+(docs/M6-PLAN.md F4 item 8). It moves files to and from any phone or
+computer on the same network, through a web page the device serves:
+- **Receive**: the DropShare card shows a QR code of an address like
+  `http://192.168.1.20:41813/<token>/`. Any browser that opens it gets a
+  page to pick files (`web/receive.html`). Each file is a
+  `POST <token>/upload?name=&type=`, then `POST <token>/done`. Files land
+  in `/media/internal/Downloads` (a second of a name is numbered). An
+  ongoing activity shows while they come, and a notification opens Files
+  at Downloads.
+- **Send**: the share sheet offers DropShare for files (its `shareTargets`).
+  The card shows the address of a page listing them (`web/send.html`,
+  `GET <token>/files`, `GET <token>/file/N`).
+- **Touch to Share**: DropShare is `tapToShareSupported`. A webOS phone
+  touched to the device gets the address (`shareData {target}`) and
+  opens it.
+- **Security**: off until the user turns it on (Settings > DropShare,
+  system preference `dropShareEnabled`). Each session has a new token of
+  128 random bits in every address; anything else is 404. A session ends
+  when the transfer is done, after ten minutes without a request, or when
+  the card closes; the port closes with it. Limits: 512 MB a file, 2 GB
+  and 50 files a session.
+
+The service is `org.webosphoenix.dropshare` (`receive`, `send {files}`,
+`stop`, `getStatus`; `@phoenix/luna` `dropShare`). In phoenix-sim the
+server is `SimDropShare` (`shell/sim/simdropshare.h`, plain Qt Network,
+bound to every interface). The runtime drives it through the scheme
+handler's `/__phoenix/dropshare`, and hands it the files to send in
+base64 parts: QtWebEngine's `requestBody()` reads a large POST only part
+way, or blocks. The simulator logs each address (`DropShare: receive at
+...`). A desktop browser has no server, so the service says so.
+`build/simnet-test` runs the server over real sockets;
+`tools/test-sharing.cjs` drives the app against a fake one. On a device a
+small Node service serves the same requests: the same two pages, the
+same JSON operations, the device's LAN address.
+
+### Accessories, tethering and the battery
+
+Phoenix's services for Settings > Game Controllers, USB, Hotspot &
+Tethering and Battery (docs/M6-PLAN.md F4 items 8-9; `@phoenix/luna`
+`gamepads`, `usbDrives`, `tethering`, `battery`). In the simulator the
+hardware is phoenix-sim's Simulate menu, which reaches the pages as shell
+status (`gamepads`, `usbDrives`, `formFactor`, `usageTick`; the runtime's
+`hostStatusHooks`):
+- **Game controllers** (`org.webosphoenix.gamepads/list`): the Gamepad API
+  works in every web app under QtWebEngine. Chromium's own controllers (the
+  computer's) and the simulator's (Ctrl+Shift+G, A on Ctrl+Shift+A) both
+  come from `navigator.getGamepads()`, with `gamepadconnected` and
+  `gamepaddisconnected` events. On a device, Bluetooth controllers pair in
+  Settings > Bluetooth (BlueZ's HID profile makes them evdev devices), and
+  USB ones are evdev devices at once. Chromium reads both through udev, so
+  WebAppMgr's Chromium needs the gamepad service (udev) and access to
+  `/dev/input/event*` for the web apps' user.
+- **USB drives** (`org.webosphoenix.usb`: `listDrives`, `unmount`,
+  `mount`): drives in the device's own port, in host mode with an OTG
+  cable (Ctrl+Shift+U in the simulator). A notification says when one
+  goes in, and Safely Remove lets it go. On a device: udisks2 over D-Bus
+  (`org.freedesktop.UDisks2`: `Filesystem.Mount` under `/media/usb/<label>`,
+  `Filesystem.Unmount` then `Drive.PowerOff` for Safely Remove,
+  `InterfacesAdded` / `InterfacesRemoved` for drives coming and going). The
+  kernel needs the port in host or OTG mode (`dr_mode` or the role
+  switch).
+- **Hotspot & Tethering** (`org.webosphoenix.tethering`: `getStatus`,
+  `setWifi {enabled, ssid, passphrase, security}`, `setUsb {enabled}`):
+  phones only (`available` is false where the shell says "tablet"). An
+  ongoing activity shows while it is on. On a device: OSE's connman
+  (`net.connman.Technology` `SetProperty Tethering` with `TetheringIdentifier`
+  and `TetheringPassphrase` for Wi-Fi, the gadget technology for USB), or
+  NetworkManager where it runs (`nmcli connection add type wifi mode ap
+  ipv4.method shared`, and a shared connection on the USB gadget's `usb0`).
+- **Battery** (`org.webosphoenix.battery/usage`): the level over the last
+  24 hours (each change powerd reports, `runtime.recordBattery`), and how
+  long each app was in front with the screen on (the shell's `usageTick`,
+  every minute and when the app in front changes). Each app's share is an
+  estimate from that time. The simulator seeds a demo day the first time,
+  as `runtime/sample-data.js` seeds the apps. On a device the shell keeps
+  the same ticks, and the level comes from powerd's `batteryStatus`.
+- **Temperature**: powerd's `batteryStatus` carries `temperature_C`
+  (Ctrl+Shift+T in the simulator: 31, 46, 51 °C). luna-systemui warns,
+  through a compat overlay (`data/phoenix-temperature.js`, after Jason
+  Robitaille's Device Temperature Warnings patch): a banner at 45 °C, a
+  Device Too Hot alert at 50 °C (`app/PowerdAlerts/
+  phoenix-temperature-alert.js`). It checks every five minutes, and on each
+  signal. Each warning comes once, until the battery cools 2 °C below its
+  mark. `--scene hot` shows the alert.
+
 ### Editing: Cut, Copy, Paste, Select All
 
 Every app menu starts with **Edit** (Select All, Cut, Copy, Paste), as Mojo
@@ -174,6 +263,11 @@ it keeps the field's focus while you choose.
 
 Tests: `tools/test-editing.cjs` (Memos and Files in Chromium) and
 `shell/tests/tst_editpopup.qml`.
+
+Every copy is also kept in the clipboard history (see
+[Clipboard history](#clipboard-history)), and Copy and Cut work in a
+password field, where Chromium refuses them: the runtime copies the
+selection itself and keeps it as a secret.
 
 System sounds follow LunaSysMgr's routes. `PalmSystem.addBannerMessage(msg,
 params, icon, soundClass, soundFile, duration)` puts the sound in the
@@ -587,6 +681,13 @@ apps) or grey diamond (system apps), rendered by `tools/render-app-icons.cjs`
   (`PalmSystem.launchParams`, `?launchParams=` on the page URL). A web app
   whose title matches a placeholder (Wi-Fi, Bluetooth, ...) replaces it.
 
+At the top level of `appinfo.json` (not in `phoenix`), Phoenix also reads
+`"multipleInstances": true`: the app runs in several windows at once, so
+the launcher's icon menu offers New Window, which starts another instance
+in a stack of its own (`launchNewInstance`). The original browser, whose
+`appinfo.json` stays as released, counts as one (`SimWindowSource`
+`multipleInstanceApps`): it opens a card on every launch anyway.
+
 An app can also add launch points of its own at run time, as on webOS
 (`applicationManager/addLaunchPoint {id, title, icon, params, removable}`
 -> `{launchPointId}`, eight digits; `removeLaunchPoint {launchPointId}`).
@@ -943,6 +1044,36 @@ mediaapps.test.ts` check it; the native view's hand-back was checked in
 phoenix-sim. The drawer (`enyo.Toaster`) flies in over the page: the native
 view keeps to the part it leaves uncovered (on a phone, none), since
 nothing in the page can draw over it.
+
+**The page views' profile and the community's features** (docs/M6-PLAN.md
+F4 item 7). In phoenix-sim the page views use a web profile of their own
+("phoenix-web"), apart from the apps' pages, as BrowserServer kept its
+own cookies and cache (`simBrowser`, `shell/sim/simbrowser.h`). A compat
+overlay of the browser (`source/phoenix-browser.js`) adds:
+- **Private Browsing**, an app menu check item per card. The toolbars turn
+  red and the card's pages go to no history. The adapter's Phoenix call
+  `setPrivateBrowsing(on)` moves the native view to an off-the-record
+  profile at the same page (host message `webView {op: "private"}`). That
+  profile is dropped once its last view is gone.
+- **Find on Page**: `findInPage(text, backward)`. The count comes back as
+  a `phoenixfindresult` event on the `<object>` (`{active, total}`). The
+  iframe engine finds in same-origin pages with `window.find`.
+- **Block Ads & Trackers** and **Mobile / Desktop Site**: the system
+  preferences `browserContentBlocker` and `browserUserAgent`, which reach
+  the shell as systemStatus `browser`. The profile's request interceptor
+  fails a page's requests to the hosts on
+  `/usr/share/phoenix/runtime/content-blocker/hosts.txt` (and their
+  subdomains), but never the page itself. The user agent is webOS's (mobile,
+  the default) or Chromium's own (desktop).
+- Clear Cookies and Clear Cache (`com.palm.browserServer`) clear that
+  profile.
+The system proxy (Settings > Wi-Fi > Proxy, preference `networkProxy`
+`{type: "none" | "http" | "socks", host, port}`, systemStatus `proxy`) is
+Qt's application proxy in phoenix-sim. Chromium takes it at once for every
+page, and so do the runtime's proxied requests. On a device the
+connection manager sets it (connman's service `Proxy.Configuration`,
+Method "manual"), and the browser's page view will take the profile
+settings above.
 
 phoenix-sim's own proxy, and every request the runtime makes to the host
 there, go through `XMLHttpRequest`: Chromium refuses `fetch()` on the
@@ -1509,6 +1640,9 @@ password manager:
   time, idle lock, lock when minimized), Lock.
 - **Files**: "Open with" offers Passwords for `.kdbx` files
   (`application/x-keepass2`); the app gets `{target: path}`.
+- Launch params `{newEntry: {password, title?, username?, url?}}` (the
+  Clipboard app's Save to Passwords) open a new entry filled in with them
+  once a database is unlocked; nothing is saved until the user saves it.
 
 `apps/authenticator` (`org.webosphoenix.authenticator`, Apps tab) shows
 two-factor codes:
@@ -1534,6 +1668,199 @@ two-factor codes:
 | Open Website, Screen & Lock | `com.webos.applicationManager` `launch` | |
 
 Neither app declares a Just Type search or writes to db8.
+
+## Clipboard history
+
+Phoenix's own (webOS had none; [M6-PLAN.md](M6-PLAN.md) F2): every copy in
+every app is kept, with the app it came from, as Paste does on macOS. The
+keyboard, the Clipboard app and Settings share one history through
+`org.webosphoenix.clipboard` (`@phoenix/luna` `clipboard`), simulated in the
+runtime (block "Clipboard history"). Threat model:
+[SECURITY-APPS.md](SECURITY-APPS.md#clipboard-history).
+
+**What is recorded**, in every page the runtime runs in:
+
+- `copy` and `cut` events: the selection, or what the page put on the
+  clipboard itself (`clipboardData`, read after the page's handlers); a
+  picture selected alone is kept by its address;
+- `navigator.clipboard.writeText` and `write` (text and pictures as
+  `data:` URLs, up to about 750 kB);
+- the shell's own copies (Just Type, the site menu's Copy Link), through
+  `lunaCall` `add`;
+- Copy and Cut in a password field (keys, the edit popup, the app menu's
+  Edit): `__phoenixRuntime.clipboard.passwordCopy`.
+
+A clip is `{id, type: "text" | "link" | "image", text?, title?, image?,
+source, time, pinned, category, sensitive, kind?}`. A link is a text that is
+one `http(s)`/`ftp` address or `www.` name; its title is the link's own text
+where it was copied, or the page's title for its own address. Copying the
+same thing again moves its clip to the front.
+
+**The service**, `luna://org.webosphoenix.clipboard/`:
+
+| Method | Does |
+| --- | --- |
+| `history {category?, query?, limit?, subscribe?}` | `{clips, categories, settings}`, newest first; `category` is `recent` (default), `pinned` or a category id; a secret comes without its text (`kind`, `length`) |
+| `subscribe` | `history` with `subscribe` |
+| `add {text \| image, title?, source?, sensitive?, kind?}` | `{clip}` or `{skipped: "off" \| "excluded" \| "sensitive" \| "empty" \| "too large"}` |
+| `pin`, `unpin {id}`; `setCategory {id, category}`; `update {id, text}` | change a clip (`update`: text clips only) |
+| `delete {id \| ids}`; `clear {all?}` | `clear` keeps pinned and categorized clips unless `all` |
+| `paste {id}` | `{clip}` with its text; a secret only for the system UI (the keyboard), error -3 otherwise |
+| `reveal {id, passCode}` | `{text}` after `com.palm.systemmanager/matchDevicePasscode`; error -5 when it is wrong |
+| `addCategory {name}`, `renameCategory {id, name}`, `deleteCategory {id}`, `reorderCategories {ids}` | categories; a deleted one's clips stay, in none |
+| `getSettings {subscribe?}`, `setSettings {...}` | `{enabled, keyboardKey, maxItems, keepFor: hour \| day \| week \| month \| forever, clearOnLock, sensitive: mask \| skip, detectSecrets, excludedApps}` |
+
+Pinned clips and clips in a category are "saved": they neither expire nor
+count against `maxItems`. Expiry and the size limit are applied by whichever
+page reads or adds. When the shell says the screen locked
+(`applyHostStatus {deviceLocked}`) and `clearOnLock` is on, the history goes.
+Turning the history off drops it and takes the keyboard key away.
+
+**Storage**: each clip is its own key (`phoenix:clipboard:clip:<id>`), so
+pages copying at once in their own processes never write over one another
+(the shared-blob race of PR 7); settings and categories are one key each,
+written only when the user changes them. Changes in other pages arrive as
+`storage` events and go to subscribers.
+
+**Secrets**: a copy from a password field (`kind: "password"`), a copy an
+app marks with `__phoenixRuntime.clipboard.markSensitive(text, kind?)`
+(`@phoenix/secrets` `SecretClipboard` does, so Passwords and the
+Authenticator's copies are secrets), and, with `detectSecrets`, text that
+looks like a one-time code (`otp`: 6 digits, `123 456`, 7 or 8 digits), an
+`otpauth://` link (`otpauth`), a base32 TOTP key of 16 characters or more
+(`totp`) or a password (8 to 64 characters, no spaces, three kinds of
+characters with a symbol, or all four). They are kept AES-GCM encrypted
+(see SECURITY-APPS.md), shown masked, and searched never.
+
+**The keyboard** (`shell/qml/Phoenix/Shell/ClipStrip.qml`,
+`ClipboardClient.qml`): the clipboard key at the left of the candidate
+bar, in every field while the history and the key are on (not over the
+lock screen). In a field without Text Assist (a password, an address) the
+bar holds only the key. It swaps the keys for the clip strip: Recent,
+Pinned and category tabs; the clips as small cards in the card view's look;
+a tap pastes through the IME's commit and brings the keys back (a secret
+only into a password field; elsewhere the strip says to reveal it in
+Clipboard); a picture goes into rich text (`clipboard.insertImage`); a hold
+opens Pin, Save to…, Delete, Open Clipboard. ABC, Back, the key, or the
+keyboard going away bring the keys back. The shell talks to the service
+with the window source's `lunaCall` (the system UI page in phoenix-sim).
+`phoenix-sim --scene clipstrip [--launch <app>]` shows it.
+
+**The Clipboard app** (`apps/clipboard`, `org.webosphoenix.clipboard`, Apps
+tab): tabs, search, and a clip's page: Copy (a secret through
+`SecretClipboard`, cleared after 30 s), Show (the device passcode), Save to
+Passwords (`{newEntry: {password}}`) or Add to Authenticator (`{otpauth}`;
+a TOTP key becomes `otpauth://totp/Imported%20key?secret=...`), Open in
+Browser, Edit, Pinned, Category, Delete. The app menu: Categories (new,
+rename, move, delete), Clear History, Preferences. Revealed secrets are
+hidden again when the screen locks. No Just Type search.
+
+**Settings > Clipboard** (`apps/settings/src/pages/Clipboard.tsx`, launch
+point `org.webosphoenix.settings.clipboard`): every setting above, Clear
+History and Clear All Clips.
+
+Tests: `apps/shared/luna/src/clipboard.test.ts` (recording, expiry, size,
+pins, categories, detection, encryption, the lock),
+`shell/tests/tst_clipstrip.qml` (the key and the strip),
+`tools/test-clipboard.cjs` (the app and Settings, phone and tablet).
+
+On a device the service must run on the bus (a small Node.js or C++
+service with the same API; today it exists only in the web runtime), and
+the keyboard must be the device's input method (GAPS V5).
+
+## Phoenix Assistant
+
+Phoenix's own (webOS had none; [M6-PLAN.md](M6-PLAN.md) F3,
+[AI-AND-MCP.md](AI-AND-MCP.md#10-as-built-7-october-2026-in-the-simulator)).
+The service is the device's own code, `apps/assistant/service` (a Node.js
+Luna service: `service.js`, `assistant.js`, `lib/`); the runtime runs it in
+the page (block "The Phoenix Assistant", loaded from
+`/usr/palm/services/org.webosphoenix.assistant/` with `nodeServiceLoader`)
+and gives it Luna calls on the simulated bus, HTTP through the host's proxy,
+the shared store and the sealing key. `@phoenix/luna` `assistant` and `tts`
+are the clients.
+
+**The service**, `luna://org.webosphoenix.assistant/` (`threads`, `thread`,
+`getSettings`, `providers`, `models` and `commands` take `subscribe`):
+
+| Method | Does |
+| --- | --- |
+| `ask {text, threadId?, newThread?, speak?}` | `{thread, messages}`: the user's words and the answers. In the thread in use unless told otherwise. System UI, Assistant and Settings only (error -3); error -4 while the assistant is off |
+| `choose {threadId, messageId, choice}` | a message's choice: `cloud:<provider id>` (the thread goes on with that provider), `web`, `settings` |
+| `confirm {threadId, messageId, accept}` | a read-back (`status: "pending"`): run it, or not |
+| `threads` / `thread {id?}` | `{threads, current}` / `{thread, messages}` (the one in use without an id) |
+| `newThread`, `setCurrent {id}`, `deleteThread {id}`, `clearHistory` | conversations |
+| `getSettings` / `setSettings {...}` | `{enabled, speak, language, units, localModel, defaultProvider, allowCloudControl, disabledCommands}`; only Settings may set `allowCloudControl` |
+| `commands` | `{commands: [{id, title, risk, builtIn, appId, enabled, confirms}]}` |
+| `providers` | `{providers: [{id, type, name, model, baseUrl, hasKey, keyHint, label}], defaultProvider, types}` |
+| `setProvider {id?, type, name?, model?, baseUrl?, key?}`, `removeProvider {id}`, `testProvider {id \| type, model, baseUrl, key}`, `listModels {...}` | Settings only. A key is sealed at once; `testProvider` answers `{ok, text}` or `{ok: false, error}` |
+| `models` | the on-device catalogue with `fits`, `recommended`, `installed`, `downloading`, and `status: {available, running, ramBytes, error, howToInstall}` |
+| `downloadModel {id}`, `cancelDownload {id}`, `removeModel {id}`, `selectModel {id}` | on-device models |
+| `speak {text}`, `stopSpeaking` | the device's voice |
+
+A message is `{id, threadId, role, text, time, via: "commands" | "on-device"
+| "cloud", source (who answered), command, status: "pending" | "done" |
+"cancelled" | "failed", confirm: {command, args}, choices: [{id, label}],
+chosen}`. Each thread (`assistant:thread:<id>`), message
+(`assistant:msg:<thread>:<id>`) and provider (`assistant:provider:<id>`) is
+its own stored key, so the shell's view and the app never write over each
+other (PR 7).
+
+`luna://org.webosphoenix.tts/`: `speak {text, lang?}`, `stop`, `getStatus`
+-> `{available, engine}`.
+
+**What the commands do** (`lib/commands.js`): Phone `{number, dial}`; an
+SMS through `org.webosports.service.messaging/putMessage` (Messaging's
+compose without words); a timer as an activity that opens the Assistant app
+with `{timerDone}` (notification, sound, words); the Clock's own alarm
+(a `com.palm.clock.alarm:1` record and the activity the Clock schedules,
+which launches it with `{action: "ring"}`); a task in Tasks with its
+reminder activity; Wi-Fi, Bluetooth, airplane mode, the torch, the
+ringtone volume; `applicationManager/launch`; Maps `{target:
+"mapto:<place>"}`; Music `{play: "<artist, album or song>"}`; Open-Meteo
+for the weather; the browser with Just Type's default engine.
+
+**Apps' commands**: `appinfo.json` `"assistant": {"commands": [{"id",
+"displayName", "url", "launchParam", "phrases": {"en": ["new note {text}"]},
+"risk": "change" | "send" | "delete"}]}`; the app is launched with
+`{<launchParam>: <text>}`, and `send`/`delete` are read back first. An app's
+Just Type Quick Action (`universalSearch.action`) works as "<displayName>
+<text>" without anything more. phoenix-sim and `serve-rootfs.py` pass the
+`assistant` field in `/usr/share/phoenix/apps.json`.
+
+**The shell** (`AssistantOverlay.qml`): holding the launcher button opens
+it over everything but the lock screen (a tap still opens the launcher);
+it shows the thread in use through `lunaCall`, with buttons for choices and
+read-backs, a field (the keyboard comes with a tap; at once where there is
+no microphone) and the microphone (the shell's dictation with `autoStop`,
+owner `"assistant"`). Back, Escape or a tap outside closes it.
+`phoenix-sim --scene assistant [--launch <app>]` shows a short conversation
+over the screen.
+
+**The on-device model and speech in phoenix-sim**: `/usr/share/phoenix/host.json`
+has `"assistant": true`; the runtime sends `assistant` host messages (`{op:
+status | download | cancel | remove | ensure | speak | stopSpeaking |
+speechStatus, requestId}`) and gets `__phoenixRuntime.assistantHostEvent({requestId,
+...})` back; every page hears `{changed: true}` as models change. The shell's
+`LocalModels` (models in the simulator's data folder, `models/<id>.gguf`;
+`--llama-server <path>`) and `Speech` (`--speech-command <command>`) do the
+work.
+
+**The Assistant app** (`apps/assistant`, Apps tab): the conversation, its
+choices and read-backs, the field, the microphone
+(`org.webosphoenix.dictation`), Conversations (new, open, delete), and
+Preferences. Launch params: `{text}` (Just Type's "Ask Assistant"),
+`{threadId}`, `{timerDone}`. Its CSP allows `unsafe-eval` only because the
+simulator runs the service in its page.
+
+**Settings > Assistant** (`apps/settings/src/pages/Assistant.tsx`, launch
+point `org.webosphoenix.settings.assistant`): everything above.
+
+Tests: `apps/assistant/service/*.test.ts` (grammar per command, the router
+against a local mock of each provider API, the permission gate, read-backs,
+the device side with a stand-in llama-server), `apps/shared/luna/src/assistant.test.ts`
+(the runtime), `shell/tests/tst_assistant.qml`, `build/localmodels-test`,
+`tools/test-assistant.cjs`.
 
 ## Terminal
 
@@ -1668,6 +1995,20 @@ and the details of this first transport are in [SYNERGY.md](SYNERGY.md).
   sync-collection or ctag / etag, uploads with If-Match, and lets the server
   win conflicts. It also keeps `com.palm.person:1` up to date for the
   contacts it syncs.
+
+**Subscribed calendars** (docs/M6-PLAN.md F4 item 8, after the webOS
+Archive's WebCal Sync): the template `com.webosphoenix.webcal` ("Subscribed
+Calendar", `apps/dav/public/accounts/com.webosphoenix.webcal/`) has a
+CALENDAR provider on the same service. Its page (`accounts/webcal.html`)
+takes a public `.ics` address (http, https or webcal) and an optional name.
+The validator, `checkCredentials {templateId: "com.webosphoenix.webcal",
+config: {url}}`, reads the file. The address is kept as the account's
+credentials (`common.url`). Each sync (`lib/webcal.js`) reads the file
+again, one way, into a read-only `com.palm.calendar.dav:1` with the file's
+name. It cuts the file into one calendar per UID for the CalDAV mapping,
+replaces the events when the text changed, and skips it when it did not.
+The periodic activity runs every 30 minutes on a device; in the simulator
+the file is read when the account is created and on "Sync now".
 
 ### In the simulator
 
@@ -2300,3 +2641,41 @@ and checks `navigator.geolocation`.
 On a device, the per-app permission is a Phoenix service still to write,
 in front of OSE's location service.
 
+
+## Community features (M6 F4)
+
+What the community's options picked for 1.0 ([M6-PLAN.md](M6-PLAN.md) F4)
+add to the runtime and the original apps:
+
+- **Settings > Advanced** writes system preferences (LunaCE's own keys
+  where it had the option: `infiniteCardCyclingEnabled`,
+  `sysUiEnableMaximizeEdges`, `sysUiEnableWaveLauncher`,
+  `showReticleAnimation`; Phoenix's `animationSpeed`, `gestureSensitivity`,
+  `hapticFeedback`, `launcherGridDensity`, `showBatteryPercent`,
+  `keyboardNumberRow`, `emailDashboardCycling`), and the shell gets them as
+  the systemStatus `tweaks`. Settings > Sounds & Ringtones > Repeat alerts
+  is `notificationRepeat` {enabled, minutes, apps}; Screen & Lock > Show
+  previews is `lockScreenPreviews`.
+- **Preferences across pages**: a page's getPreferences subscribers hear a
+  preference another page changed (the store's storage event), as every
+  subscriber on the bus did.
+- **The power menu**: the shell sends com.palm.display's
+  `/com/palm/display` `powerKeyPressed {showDialog: true}` signal to the
+  pages' `com.palm.bus/signal/addmatch` listeners (`displaySignal`);
+  luna-systemui opens its PowerOffAlert (compat overlay of
+  `app/PowerdAlerts/PowerdAlerts.js`: Airplane Mode, Luna Restart, Device
+  Restart, Shut Down, Cancel). The `airplaneMode` preference now turns the
+  radios off and on. `com.palm.power/shutdown/machineOff` turns the
+  simulator off (dark until Power) and `org.webosphoenix.system/restartUi`
+  restarts its UI.
+- **Contact tones**: Contacts' Edit has a Tones group (compat
+  `app/phoenix-tones.js`): the person's own ringtone (`com.palm.person`
+  ringtone) and a message tone in `org.webosphoenix.contacttone:1`
+  {personId, messageTone: {name, location}}; a text from that person comes
+  with `soundFile` set to it.
+- **Email's cycling dashboard**: with `emailDashboardCycling`, the Email
+  app's new-mail dashboards (compat `source/phoenix-dashboard.js`,
+  `phoenix-dashboard/`) show one new email at a time with its time and a
+  delete button.
+
+Tests: `apps/shared/luna/src/tweaks.test.ts`, `tools/test-community.cjs`.

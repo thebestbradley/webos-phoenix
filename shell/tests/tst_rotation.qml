@@ -25,6 +25,20 @@ Item {
         system: SimSystemStatus { id: sys }
     }
 
+    // When the turn starts and ends, taken as it happens: a test polling
+    // for it can see it late on a busy machine and mismeasure the 300 ms.
+    property double turnStarted: 0
+    property double turnEnded: 0
+    Connections {
+        target: shell.rotator
+        function onRotatingChanged() {
+            if (shell.rotator.rotating)
+                root.turnStarted = Date.now();
+            else
+                root.turnEnded = Date.now();
+        }
+    }
+
     TestCase {
         name: "Rotation"
         when: windowShown
@@ -71,13 +85,16 @@ Item {
             wait(120);
             compare(shell.uiOrientation, "up");
             verify(!rot.rotating);
+            root.turnStarted = 0;
+            root.turnEnded = 0;
             tryVerify(function() { return rot.rotating; }, 400);
             // Mid-turn: the cross-fade runs, InOutCubic over 300 ms.
             tryCompare(rot, "animation", rot.rotateAndCrossFade, 500);
-            var started = Date.now();
             compare(shell.uiOrientation, "left");
             tryVerify(function() { return !rot.rotating; }, 1000);
-            verify(Date.now() - started >= 250, "the turn takes 300 ms");
+            verify(root.turnStarted > 0 && root.turnEnded > root.turnStarted);
+            verify(root.turnEnded - root.turnStarted >= 250,
+                   "the turn takes 300 ms (took " + (root.turnEnded - root.turnStarted) + ")");
             compare(shell.deviceOrientation, "left");
         }
 

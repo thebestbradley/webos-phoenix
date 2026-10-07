@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Settings > Battery: a battery standing on the system icons' diamond
+     (its foot at y = 176), green to three quarters, with a small bar
+     chart of use beside it. Original Phoenix art. -->
+<defs>
+  <linearGradient id="shell" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#5d646b"/>
+    <stop offset="0.35" stop-color="#e9ecef"/>
+    <stop offset="1" stop-color="#6b737a"/>
+  </linearGradient>
+  <linearGradient id="charge" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#2f8a2a"/>
+    <stop offset="0.4" stop-color="#8ee07a"/>
+    <stop offset="1" stop-color="#2b7a26"/>
+  </linearGradient>
+  <linearGradient id="bar" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#8fd0ff"/>
+    <stop offset="1" stop-color="#1f6fbf"/>
+  </linearGradient>
+</defs>
+<g>
+  <rect x="92" y="52" width="24" height="12" rx="3" fill="#5d646b"/>
+  <rect x="72" y="62" width="64" height="114" rx="10" fill="url(#shell)" stroke="#3d4248" stroke-width="3"/>
+  <rect x="80" y="92" width="48" height="76" rx="5" fill="url(#charge)"/>
+  <rect x="148" y="130" width="14" height="46" rx="2" fill="url(#bar)" stroke="#164a80" stroke-width="2"/>
+  <rect x="166" y="104" width="14" height="72" rx="2" fill="url(#bar)" stroke="#164a80" stroke-width="2"/>
+  <rect x="184" y="146" width="14" height="30" rx="2" fill="url(#bar)" stroke="#164a80" stroke-width="2"/>
+</g>
+</svg>

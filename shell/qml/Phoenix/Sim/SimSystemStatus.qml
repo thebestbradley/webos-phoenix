@@ -103,6 +103,12 @@ QtObject {
     // Settings > Screen & Lock "Show notifications when locked"
     // (system preference showAlertsWhenLocked).
     property bool showAlertsWhenLocked: true
+    // Settings > Screen & Lock > Show previews (lockScreenPreviews, Phoenix):
+    // off, the lock screen says "New Message" instead (docs/M6-PLAN.md F4).
+    property bool lockScreenPreviews: true
+    // Settings > Sounds & Ringtones > Repeat alerts (notificationRepeat):
+    // {enabled, minutes, apps: {appId: false}} (docs/M6-PLAN.md F4).
+    property var notificationRepeat: ({ enabled: false, minutes: 2, apps: {} })
     // Settings > Accessibility "Reduce motion" (system preference
     // accessibility.reduceMotion): the shell's animations (Theme.reduceMotion).
     property bool reduceMotion: false
@@ -110,6 +116,30 @@ QtObject {
     // {stickyKeys, slowKeys, bounceKeys (ms, 0 off), customRepeat,
     // repeatDelay, repeatInterval}.
     property var keyboardAccess: ({})
+    // Settings > Advanced (the runtime's tweaks; docs/M6-PLAN.md F4):
+    // {infiniteCardCycling, maximizeEdges, waveLauncher, tapRipple,
+    // animationSpeed ("normal", "fast"), gestureSensitivity ("low",
+    // "normal", "high"), haptics, gridDensity ("normal", "dense"),
+    // batteryPercent, numberRow}. Missing keys are the defaults
+    // (Shell.tweak()).
+    property var tweaks: ({})
+    // The browser's page views (its Preferences: browserContentBlocker,
+    // browserUserAgent) and the system proxy (Settings > Wi-Fi > Proxy,
+    // networkProxy), for phoenix-sim's simBrowser (sim.qml).
+    property var browser: ({ contentBlocker: false, userAgent: "mobile" })
+    property var proxy: ({ type: "none", host: "", port: 0 })
+
+    // Accessories and health (docs/M6-PLAN.md F4 items 8-9), the
+    // simulator's own (sim.qml simActions), told to the pages:
+    //   gamepads   game controllers connected: [{index, id, name,
+    //              connection ("bluetooth" | "usb"), mapping, buttons
+    //              (pressed, by the standard mapping's index), axes}]
+    //   usbDrives  USB drives on the device's USB port (host / OTG):
+    //              [{id, label, vendor, size, used, fs}]
+    //   temperature the battery's temperature, °C (powerd's temperature_C)
+    property var gamepads: []
+    property var usbDrives: []
+    property int temperature: 31
     // A hardware keyboard is attached (phoenix-sim --hardware-keyboard,
     // Ctrl+Shift+K): the virtual keyboard stays down unless asked for.
     property bool hardwareKeyboard: typeof simHardwareKeyboard !== "undefined" && simHardwareKeyboard === true
@@ -295,7 +325,7 @@ QtObject {
     // screenTimeout, lockTimeout, advancedGestures, keyboardShortcuts,
     // volume, streams, systemSounds, tapSounds, textAssist, keyboards,
     // keyboard, ringtone, alerttone,
-    // notificationtone, callForwarding, reduceMotion, keyboardAccess,
+    // notificationtone, callForwarding, reduceMotion, keyboardAccess, tweaks, browser, proxy,
     // vpnProfiles, exhibitionApps, dockModeSound, exhibition {enabled,
     // startAfter, nightMode, nightStart, nightEnd}, dockWallpaperUrl,
     // automaticBrightness, displayOnWhenConnected.
@@ -326,6 +356,10 @@ QtObject {
             twentyFourHour = s.timeFormat === "HH24";
         if (s.showAlertsWhenLocked !== undefined)
             showAlertsWhenLocked = !!s.showAlertsWhenLocked;
+        if (s.lockScreenPreviews !== undefined)
+            lockScreenPreviews = s.lockScreenPreviews !== false;
+        if (s.notificationRepeat !== undefined && s.notificationRepeat !== null)
+            notificationRepeat = s.notificationRepeat;
         if (s.screenTimeout !== undefined)
             screenTimeout = s.screenTimeout;
         if (s.lockTimeout !== undefined)
@@ -360,6 +394,12 @@ QtObject {
             reduceMotion = !!s.reduceMotion;
         if (s.keyboardAccess !== undefined)
             keyboardAccess = s.keyboardAccess || ({});
+        if (s.tweaks !== undefined && s.tweaks !== null)
+            tweaks = s.tweaks;
+        if (s.browser !== undefined && s.browser !== null)
+            browser = s.browser;
+        if (s.proxy !== undefined && s.proxy !== null && JSON.stringify(s.proxy) !== JSON.stringify(proxy))
+            proxy = s.proxy;
         if (s.vpnProfiles !== undefined) {
             _runtimeVpn = true;
             vpnProfiles = s.vpnProfiles;

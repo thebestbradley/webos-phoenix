@@ -1,0 +1,172 @@
+/*
+ * Copyright (c) 2026 webOS Phoenix contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Clipboard: a light Heritage list of clips under the page header, a search
+ * field and tabs in the webOS radio-button look (grey pills, the chosen one
+ * pressed in); a clip's page shows it on a white sheet, a secret on a dark one.
+ */
+
+.cb-search { margin: 4px 0 6px; }
+.cb-search .pui-field { margin: 0; }
+
+.cb-tabs {
+    display: flex;
+    gap: 0;
+    margin: 4px 0 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-radius: 8px;
+}
+.cb-tabs::-webkit-scrollbar { display: none; }
+.cb-tab {
+    flex: 0 0 auto;
+    min-width: 76px;
+    height: 34px;
+    padding: 0 14px;
+    font: inherit;
+    font-size: 15px;
+    color: #3c3c3c;
+    background: linear-gradient(#fbfbfb, #d9d9d7);
+    border: 1px solid #a4a4a2;
+    border-left-width: 0;
+    cursor: pointer;
+    outline: none;
+}
+.cb-tab:first-child { border-left-width: 1px; border-radius: 8px 0 0 8px; }
+.cb-tab:last-child { border-radius: 0 8px 8px 0; }
+.cb-tab.selected {
+    color: #fff;
+    background: linear-gradient(#3e7fbf, #2a65a3);
+    border-color: #1f4f80;
+    box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.35);
+}
+
+.cb-empty { padding: 26px 18px; text-align: center; color: var(--pui-text-dim); font-size: 15px; line-height: 1.35; }
+.cb-empty-row { color: var(--pui-text-dim); }
+
+.cb-clip-row .pui-row-title { overflow: hidden; }
+.cb-clip-title {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+}
+.cb-clip-row.secret .cb-clip-title { letter-spacing: 0.15em; }
+.cb-kind { color: #8a5a1c; }
+.cb-thumb { width: 32px; height: 32px; object-fit: cover; border-radius: 4px; border: 1px solid #b8b8b6; }
+
+/* The type of a clip, drawn: lines of text, a chain link, a padlock. */
+.cb-type {
+    position: relative;
+    display: block;
+    width: 28px;
+    height: 32px;
+    background: linear-gradient(#ffffff, #e8eaec);
+    border: 1px solid #8d949b;
+    border-radius: 3px;
+    box-sizing: border-box;
+}
+.cb-type.text::before, .cb-type.link::before {
+    content: "";
+    position: absolute;
+    left: 5px; right: 5px; top: 7px;
+    height: 12px;
+    background: repeating-linear-gradient(#9aa1a8 0 2px, transparent 2px 5px);
+}
+.cb-type.link::after {
+    content: "";
+    position: absolute;
+    left: 5px; right: 9px; bottom: 6px;
+    height: 2px;
+    background: #2f7fd1;
+}
+.cb-type.secret { background: linear-gradient(#4a4f55, #2b2e32); border-color: #1b1d20; }
+.cb-type.secret::before {
+    content: "";
+    position: absolute;
+    left: 8px; top: 7px;
+    width: 8px; height: 8px;
+    border: 2px solid #e8b836;
+    border-bottom: 0;
+    border-radius: 6px 6px 0 0;
+}
+.cb-type.secret::after {
+    content: "";
+    position: absolute;
+    left: 6px; top: 15px;
+    width: 14px; height: 10px;
+    background: #e8b836;
+    border-radius: 2px;
+}
+
+/* Pinned: the strip's folded corner, in the highlight blue. */
+.cb-pin {
+    display: block;
+    width: 0;
+    height: 0;
+    border-top: 14px solid #3a8bd9;
+    border-left: 14px solid transparent;
+}
+
+/* ---- A clip ------------------------------------------------------------------------------- */
+
+.cb-detail-meta { margin: 2px 4px 6px; font-size: 13px; color: var(--pui-text-dim); }
+.cb-detail-body {
+    margin: 0 0 8px;
+    padding: 12px 14px;
+    min-height: 60px;
+    max-height: 50vh;
+    overflow: auto;
+    background: #fff;
+    border: 1px solid #b4b4b2;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+.cb-detail-body.secret { background: #2b2b2b; border-color: #111; color: #fff; text-align: center; }
+.cb-detail-text { font-size: 16px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
+.cb-detail-text.link { color: #1f5fa8; }
+.cb-link-title { font-weight: bold; font-size: 17px; margin-bottom: 4px; }
+.cb-detail-image { display: block; max-width: 100%; margin: 0 auto; }
+.cb-mask { font-size: 26px; letter-spacing: 0.2em; padding: 6px 0; }
+.cb-secret-text { font-size: 20px; font-family: "DejaVu Sans Mono", monospace; word-break: break-all; padding: 6px 0; }
+.cb-edit {
+    width: 100%;
+    min-height: 140px;
+    box-sizing: border-box;
+    font: inherit;
+    font-size: 16px;
+    border: 0;
+    outline: none;
+    resize: vertical;
+}
+.cb-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; }
+.cb-actions .pui-button { flex: 1 1 200px; margin: 0; }
+
+.cb-small {
+    margin-left: 4px;
+    padding: 4px 8px;
+    font: inherit;
+    font-size: 13px;
+    color: #333;
+    background: linear-gradient(#fbfbfb, #dadad8);
+    border: 1px solid #a4a4a2;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.cb-small:disabled { opacity: 0.4; cursor: default; }
+
+.cb-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    max-width: 90%;
+    padding: 8px 16px;
+    font-size: 14px;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.82);
+    border-radius: 18px;
+    z-index: 50;
+}

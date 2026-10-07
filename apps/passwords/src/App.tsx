@@ -23,7 +23,10 @@
 //   - nothing is logged
 //
 // Launch params: {target: "/media/internal/.../x.kdbx"} opens that file
-// (Files' "Open with").
+// (Files' "Open with"); {newEntry: {password, title?, username?, url?}}
+// opens a new entry filled in with them once a database is unlocked (the
+// Clipboard app's "Save to Passwords"); nothing is saved until the user
+// saves it.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { apps } from "@phoenix/luna";
@@ -333,13 +336,13 @@ function otpFromInput(input: string, issuer: string, account: string): string {
     return buildOtpauth({ type: "totp", secret: parseSecret(s), algorithm: "SHA1", digits: 6, period: 30, counter: 0, issuer, account });
 }
 
-function EntryEditor({ entry, isNew, onSave, onCancel, onGenerate }: {
-    entry: Entry; isNew: boolean; onSave: (edit: EntryEdit) => Promise<void>; onCancel: () => void; onGenerate: (apply: (pw: string) => void) => void;
+function EntryEditor({ entry, isNew, initial, onSave, onCancel, onGenerate }: {
+    entry: Entry; isNew: boolean; initial?: Prefill; onSave: (edit: EntryEdit) => Promise<void>; onCancel: () => void; onGenerate: (apply: (pw: string) => void) => void;
 }) {
     const initialOtp = useMemo(() => otpUriOf(entry), [entry]);
     const [f, setF] = useState(() => ({
         title: text(entry, "Title"), username: text(entry, "UserName"), password: text(entry, "Password"), url: text(entry, "URL"),
-        notes: text(entry, "Notes"), otp: initialOtp,
+        notes: text(entry, "Notes"), otp: initialOtp, ...initial,
     }));
     const [show, setShow] = useState(isNew);
     const [error, setError] = useState("");
@@ -528,16 +531,34 @@ type Sheet =
     | { kind: "new-group" } | { kind: "rename-group"; group: Group } | { kind: "delete-group"; group: Group }
     | { kind: "delete-entry"; entry: Entry } | { kind: "master" } | { kind: "prefs" } | null;
 
-function Database({ session, prefs, setPrefs, onLock }: {
+// What another app asked a new entry to hold ({newEntry} launch params).
+interface Prefill { title?: string; username?: string; password?: string; url?: string }
+function prefillOf(v: unknown): Prefill | null {
+    if (!v || typeof v !== "object") return null;
+    const o = v as Record<string, unknown>, out: Prefill = {};
+    for (const k of ["title", "username", "password", "url"] as const)
+        if (typeof o[k] === "string") out[k] = (o[k] as string).slice(0, 4096);
+    return Object.keys(out).length ? out : null;
+}
+
+function Database({ session, prefs, setPrefs, onLock, prefill, onPrefillUsed }: {
     session: Session; prefs: Prefs; setPrefs: (p: Prefs) => void; onLock: (reason: LockReason) => void;
+    prefill: Prefill | null; onPrefillUsed: () => void;
 }) {
     const { db } = session;
     const [, setRev] = useState(0);
     const bump = () => setRev((r) => r + 1);
     const [group, setGroup] = useState<Group>(() => db.getDefaultGroup());
     const [entry, setEntry] = useState<Entry | null>(null);
-    const [editing, setEditing] = useState<{ entry: Entry; isNew: boolean } | null>(null);
+    const [editing, setEditing] = useState<{ entry: Entry; isNew: boolean; initial?: Prefill } | null>(null);
     const [query, setQuery] = useState("");
+    // Save to Passwords from another app: a new entry, filled in.
+    useEffect(() => {
+        if (!prefill) return;
+        setEntry(null);
+        setEditing({ entry: newEntry(db, db.getDefaultGroup()), isNew: true, initial: { title: "", ...prefill } });
+        onPrefillUsed();
+    }, [prefill, db, onPrefillUsed]);
     const [sheet, setSheet] = useState<Sheet>(null);
     const [menu, setMenu] = useState<{ anchor: HTMLElement; kind: "app" | "add" } | null>(null);
     const [generator, setGenerator] = useState<((pw: string) => void) | null>(null);
@@ -685,7 +706,7 @@ function Database({ session, prefs, setPrefs, onLock }: {
             <div className="pw-scroll" ref={scroller}>
                 <div className="pw-page">
                     {editing ? (
-                        <EntryEditor entry={editing.entry} isNew={editing.isNew} onCancel={cancelEdit}
+                        <EntryEditor key={editing.entry.uuid.id} entry={editing.entry} isNew={editing.isNew} initial={editing.initial} onCancel={cancelEdit}
                                      onGenerate={(apply) => setGenerator(() => apply)}
                                      onSave={(edit) => saveEntry(editing.entry, editing.isNew, edit)} />
                     ) : entry ? (
@@ -767,7 +788,11 @@ function Passwords() {
     const [session, setSession] = useState<Session | null>(null);
     const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
     const [notice, setNotice] = useState("");
-    const params = useLaunchParams<{ target?: string }>();
+    const params = useLaunchParams<{ target?: string; newEntry?: unknown }>();
+    // Kept until a database is open and has taken it.
+    const [prefill, setPrefill] = useState<Prefill | null>(null);
+    useEffect(() => { setPrefill(prefillOf(params.newEntry)); }, [params]);
+    const prefillUsed = useCallback(() => setPrefill(null), []);
     const target = typeof params.target === "string" && isKdbx(params.target) ? params.target.replace(/^file:\/\//, "") : null;
     const [lastPath, setLastPath] = useState<string | null>(null);
 
@@ -781,7 +806,7 @@ function Passwords() {
 
     if (!session)
         return <LockScreen initialPath={target ?? lastPath} notice={notice} onUnlocked={(s) => { setNotice(""); setSession(s); }} />;
-    return <Database key={session.path} session={session} prefs={prefs} setPrefs={setPrefs} onLock={onLock} />;
+    return <Database key={session.path} session={session} prefs={prefs} setPrefs={setPrefs} onLock={onLock} prefill={prefill} onPrefillUsed={prefillUsed} />;
 }
 
 export function App() {

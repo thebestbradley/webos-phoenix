@@ -1,7 +1,8 @@
 // Phoenix compat overlay: the original depends.js plus app/phoenix-phone.js
 // and css/phoenix-compat.css, which show the TouchPad split view (contact
-// list | details) one pane at a time on a phone card. Nothing else is
-// changed.
+// list | details) one pane at a time on a phone card, and
+// app/phoenix-tones.js, a contact's ringtone and message tone (Edit's
+// Tones group). Nothing else is changed.
 //
 // LICENSE@@@
 //
@@ -63,7 +64,9 @@ var pathsToImport = [
 
     // Phoenix: phone layout (see those files)
     "app/phoenix-phone.js",
-    "css/phoenix-compat.css"
+    "css/phoenix-compat.css",
+    // Phoenix: a contact's ringtone and message tone (see that file)
+    "app/phoenix-tones.js"
 ];
 
 var mockPathsToImport = [

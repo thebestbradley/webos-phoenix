@@ -142,6 +142,7 @@ public:
 
 #ifdef PHOENIX_HAVE_WEBENGINE
 class QNetworkAccessManager;
+class SimDropShare;
 
 class RootfsSchemeHandler : public QWebEngineUrlSchemeHandler
 {
@@ -158,7 +159,17 @@ public:
     // being made).
     void setSnapshots(PictureMaker *snapshots) { m_snapshots = snapshots; }
 
+    // DropShare's server (simdropshare.h) for the runtime's
+    // org.webosphoenix.dropshare: GET /__phoenix/dropshare?req={op, ...}
+    // (start, stop, status, take, and a file to send in parts: offerBegin,
+    // offerPart with base64 data, offerEnd), GET
+    // /__phoenix/dropshare/file?id=N (a file received). Not a POST body:
+    // QtWebEngine's requestBody() reads a large one only part way, or
+    // blocks.
+    void setDropShare(SimDropShare *dropShare) { m_dropShare = dropShare; }
+
 private:
+    void dropShare(QWebEngineUrlRequestJob *job, const QString &devicePath);
     void serveFile(QWebEngineUrlRequestJob *job, const QString &devicePath);
     // GET /__phoenix/proxy?req={method, url, headers, body, binary?, follow?}:
     // one HTTP request for the simulated services that talk to servers (DAV
@@ -175,6 +186,7 @@ private:
     const Rootfs *m_rootfs;
     QNetworkAccessManager *m_network = nullptr;
     PictureMaker *m_snapshots = nullptr;
+    SimDropShare *m_dropShare = nullptr;
     QHash<QString, QPair<qint64, qint64>> m_progress;   // progress id -> received, total
 };
 #endif

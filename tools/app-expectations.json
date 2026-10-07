@@ -72,6 +72,14 @@
         "status": "works",
         "note": "Phoenix Voice Memos (React, apps/voicememos); tools/test-voicememos.cjs drives it with Chromium's fake microphone. The simulator transcribes only the demo memos (whisper.cpp runs on the device)"
     },
+    "org.webosphoenix.clipboard": {
+        "status": "works",
+        "note": "Phoenix Clipboard (React, apps/clipboard) on the simulated org.webosphoenix.clipboard; tools/test-clipboard.cjs drives it and Settings > Clipboard"
+    },
+    "org.webosphoenix.assistant": {
+        "status": "works",
+        "note": "Phoenix Assistant (React, apps/assistant) on the simulated org.webosphoenix.assistant (apps/assistant/service in the page); tools/test-assistant.cjs drives it and Settings > Assistant"
+    },
     "org.webosphoenix.flashlight": {
         "status": "works",
         "note": "Phoenix Flashlight (React, apps/flashlight) on the simulated org.webosports.service.torch (LuneOS torchd's API); tools/test-flashlight.cjs drives it. The simulated LED lights nothing"
@@ -175,6 +183,12 @@
     "com.palm.systemui": {
         "status": "works",
         "note": "luna-systemui as the shell's headless page: alerts, dashboards and banners (its services now see com.palm.bus registerServerStatus answer). Tested with the mail account signed out, so it opens its Accounts: Action Needed dashboard",
-        "storage": { "accountCredentials": {} }
+        "storage": {
+            "accountCredentials": {}
+        }
+    },
+    "org.webosphoenix.dropshare": {
+        "status": "works",
+        "note": "Phoenix DropShare (React, apps/dropshare): off until allowed (Settings > DropShare); a page has no server of its own, phoenix-sim runs it (shell/sim/simdropshare.h). tools/test-sharing.cjs drives it against a fake server, build/simnet-test the real one"
     }
 }

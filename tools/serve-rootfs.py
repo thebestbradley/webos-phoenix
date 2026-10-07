@@ -424,6 +424,9 @@ def launch_points():
                 rec["dockMode"] = True
                 rec["exhibitionModeTitle"] = options.get("title") or a["title"]
             rec["universalSearch"] = APPS[app_id][1].get("universalSearch")
+            # The Assistant's commands the app adds (docs/M6-PLAN.md F3).
+            if APPS[app_id][1].get("assistant"):
+                rec["assistant"] = APPS[app_id][1]["assistant"]
             # The types the app opens (appinfo.json "mimeTypes", as on legacy webOS).
             if APPS[app_id][1].get("mimeTypes"):
                 rec["mimeTypes"] = APPS[app_id][1]["mimeTypes"]

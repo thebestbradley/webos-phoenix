@@ -61,6 +61,13 @@ an answer, so changing the sheet changes it everywhere, without
 rebuilding any app. Apps that can receive a share say so in their
 `appinfo.json`, so a newly installed app shows up in every sheet.
 
+**From the shell.** The launcher's icon menu (Share, [M6-PLAN.md](M6-PLAN.md)
+F1) has no app page to lay the sheet over, so the shell opens the sheet's
+own page as a see-through system window with `{systemShare: {title, url}}`
+(`Shell.shareApp`, `openSystemWindow(..., "share")`); that page asks
+`org.webosphoenix.share/open` as an app would and closes its window when the
+sheet is done. The back gesture goes to it while it is up.
+
 **Effort.** SF1 S to M; SF2-SF3 M; SF4 M; SF5 S per app.
 
 ## Open questions for you

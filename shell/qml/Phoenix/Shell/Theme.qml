@@ -44,7 +44,18 @@ QtObject {
     // system.reduceMotion): cards, the launcher and the lock screen appear
     // and go without animating. A Phoenix addition.
     property bool reduceMotion: false
-    function motion(ms) { return reduceMotion ? 1 : ms }
+    // Settings > Advanced > Animation speed (docs/M6-PLAN.md F4; the
+    // community's Faster Card Animations patches): "fast" runs the shell's
+    // animations (those through motion()) in 60% of their time. Set by
+    // Shell.qml from the system's tweaks.
+    property string animationSpeed: "normal"
+    readonly property real animationScale: animationSpeed === "fast" ? 0.6 : 1.0
+    function motion(ms) { return reduceMotion ? 1 : Math.round(ms * animationScale) }
+    // Settings > Advanced > Gesture sensitivity (the Buttah patch): how far
+    // and how fast a swipe or a flick must go before it counts, "low" half
+    // as far again, "high" 60% of it.
+    property string gestureSensitivity: "normal"
+    readonly property real gestureScale: gestureSensitivity === "low" ? 1.5 : gestureSensitivity === "high" ? 0.6 : 1.0
 
     // The density for a screen of `ppi` pixels per inch: legacy pixels are
     // sized like the Pre's (186 ppi at 1.0) and the Pre 3's (260 ppi at 1.5),
@@ -208,8 +219,8 @@ QtObject {
     readonly property int gestureAreaHeight: hardwareHomeButton ? 0 : px(20)
     // Tablet bottom-edge flick (G1): where it starts, and how far it goes.
     readonly property int bezelEdgeHeight: px(8)                     // Phoenix: stands in for the bezel
-    readonly property int bezelFlickMinimum: 30                       // Phoenix: as GestureArea's swipe
-    readonly property int bezelFlickMinimumWithKeyboard: 60           // SystemUiController.cpp:72
+    readonly property int bezelFlickMinimum: Math.round(30 * gestureScale)          // Phoenix: as GestureArea's swipe
+    readonly property int bezelFlickMinimumWithKeyboard: Math.round(60 * gestureScale)  // SystemUiController.cpp:72
 
     // ---- Virtual keyboard (openwebos/keyboard-efigs; VirtualKeyboard.qml) ----------
     // The keyboards work in their own screens' pixels: the tablet's art is
@@ -243,6 +254,9 @@ QtObject {
     readonly property int launchFeedbackSize: px(90)
     readonly property int launchFeedbackTimeout: 3000
     readonly property int tapAndHoldInterval: 700                             // WebosTapAndHoldGestureRecognizer.cpp:52
+    // Holding a launcher or dock icon this long opens its menu (IconMenu.qml;
+    // the owner's choice, docs/M6-PLAN.md F1: time only, no pressure).
+    readonly property int iconMenuHoldInterval: 500
     // Radius in window (buffer) coordinates, i.e. before the card is scaled.
     readonly property int cardShadowOutset: px(20)                   // CardDropShadowEffect.cpp:34-35
     readonly property int cardShadowOffsetY: px(5)                   // CardDropShadowEffect.cpp:44
@@ -251,8 +265,8 @@ QtObject {
 
     // Flick-to-close (CardWindowManager.cpp:63-65,1700-1708). Velocity is
     // in legacy px/ms: the original's touch velocities were px/ms x100.
-    readonly property int cardCloseMinDistance: px(50)
-    readonly property real cardCloseMinVelocity: 5.0 * u
+    readonly property int cardCloseMinDistance: px(50 * gestureScale)
+    readonly property real cardCloseMinVelocity: 5.0 * u * gestureScale
     // Drag-lock axis: horizontal if |dx| > 0.866 |dy| (CardWindowManager.cpp:1464-1476).
     readonly property real horizontalLockRatio: 0.866
     // A trackpad swipe ends when its events (momentum included) stop for this
@@ -346,7 +360,7 @@ QtObject {
     // A flick: the whole gesture's average velocity, |vx| + |vy|, in legacy
     // px/ms (FlickGestureRecognizer.cpp:44-45, 95-104); sideways when
     // |vx| > |vy| (DashboardWindowContainer.cpp:430).
-    readonly property real flickMinVelocity: 2.5 * u
+    readonly property real flickMinVelocity: 2.5 * u * gestureScale
     readonly property real flickMaxVelocity: 11.0 * u
 
     // ---- Notification drawer (Phoenix) --------------------------------------
@@ -455,6 +469,14 @@ QtObject {
     readonly property int launcherScrollDuration: motion(300)
     readonly property real launcherInstallingOpacity: 0.5            // dynamicssettings.cpp:105 iconInstallModeOpacity
     readonly property int launcherProgressFrames: 19                 // iconheap.cpp:47 loading-strip.png's frames
+    // App groups (LunaCE): a dragged icon this near another's centre (a
+    // share of the icon's size, either way) groups with it; further out it
+    // reorders. How long it waits there first.
+    readonly property real launcherGroupCentre: 0.3
+    readonly property int launcherGroupHoverDelay: 400
+    // How long a dragged icon rests over a place before the others make
+    // room (Phoenix: so that it can pass over them to one's centre).
+    readonly property int launcherReorderDelay: 150
     readonly property int launcherDuration: motion(350)                      // conf/lunaAnimations.conf:83-84 (curve 15 InOutQuint)
     readonly property int quickLaunchDuration: motion(350)                   // conf/lunaAnimations.conf:77-82
     readonly property int justTypeFadeDuration: motion(150)                  // conf/lunaAnimations.conf:87-88

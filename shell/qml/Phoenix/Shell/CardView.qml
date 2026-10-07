@@ -230,10 +230,29 @@ Item {
         return -1;
     }
 
+    // Settings > Advanced (docs/M6-PLAN.md F4; LunaCE's Tweaks): card view
+    // wraps from the last stack to the first and back (infinite card
+    // cycling, abh_features.json "infiniteCardCyclingEnabled"), and a tap on
+    // a stack beside the centre one maximizes its card at once instead of
+    // bringing it to the centre (maximize-edges.json
+    // "sysUiEnableMaximizeEdges"). Both off, as in LunaCE.
+    property bool infiniteCycling: false
+    property bool maximizeEdges: false
+    // A stack index one past either end, wrapped round when cycling.
+    function wrapGroup(i) {
+        if (!infiniteCycling || groupCount < 2)
+            return i;
+        if (i === groupCount)
+            return 0;
+        if (i === -1)
+            return groupCount - 1;
+        return i;
+    }
+
     // duration: the trackpad's quicker settle (Theme.wheelSettleDuration).
     function slideTo(groupIndex, duration) {
         slideAnim.stop();
-        slideAnim.to = Math.max(0, Math.min(groupCount - 1, groupIndex));
+        slideAnim.to = Math.max(0, Math.min(groupCount - 1, wrapGroup(groupIndex)));
         slideAnim.duration = duration !== undefined ? duration : Theme.cardSlideDuration;
         slideAnim.start();
     }
@@ -295,10 +314,13 @@ Item {
         var uids = groups[g].uids;
         var i = uids.indexOf(focusOf(groups[g]));
         var next = "";
+        // Cycling, past the last card is the first (and back).
+        var after = wrapGroup(g + 1), before = wrapGroup(g - 1);
         if (toRight)
-            next = i < uids.length - 1 ? uids[i + 1] : g < groupCount - 1 ? groups[g + 1].uids[0] : "";
+            next = i < uids.length - 1 ? uids[i + 1] : after >= 0 && after < groupCount && after !== g ? groups[after].uids[0] : "";
         else
-            next = i > 0 ? uids[i - 1] : g > 0 ? groups[g - 1].uids[groups[g - 1].uids.length - 1] : "";
+            next = i > 0 ? uids[i - 1] : before >= 0 && before < groupCount && before !== g
+                                        ? groups[before].uids[groups[before].uids.length - 1] : "";
         if (next === "") {
             if (maximized) {
                 edgeNudge = (toRight ? -40 : 40) * Theme.u;
@@ -1171,7 +1193,11 @@ Item {
                     view.slideTo(g);
                 }
             } else if (g >= 0) {
-                view.slideTo(g);
+                // A side card (Settings > Advanced): maximized at once.
+                if (view.maximizeEdges)
+                    view.maximize(uid);
+                else
+                    view.slideTo(g);
             } else {
                 var col = view.layout.columns[view.currentGroup];
                 if (col && x >= col.left && x <= col.right)

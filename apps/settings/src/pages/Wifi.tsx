@@ -6,12 +6,20 @@
 // connect / deleteprofile; com.webos.service.connectionmanager getstatus
 // (airplane mode).
 //
+// Proxy (Phoenix; docs/M6-PLAN.md F4 item 7, the community's Proxy Set /
+// ProxySwitch): the system's HTTP or SOCKS proxy, the system preference
+// networkProxy {type, host, port}. phoenix-sim hands it to every page and
+// service (shell/sim/simbrowser.h); a device gives it to the connection
+// manager (docs/APP-RUNTIME.md "The browser and enyo.WebView").
+//
 // Launch params {page: "wifi", join: {ssid, security?: "none" | "psk" |
 // "wep", passKey?, hidden?}} (QR Scanner's Wi-Fi codes) open the join
 // dialog filled in; the user still taps Connect.
 
 import { useEffect, useRef, useState } from "react";
-import { connection, LunaError, wifi, WIFI_ERROR_INVALID_KEY, type WifiNetworkInfo, type WifiStatus } from "@phoenix/luna";
+import {
+    connection, LunaError, system, wifi, WIFI_ERROR_INVALID_KEY, type NetworkProxy, type SystemPreferences, type WifiNetworkInfo, type WifiStatus,
+} from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
 import {
     Button, Dialog, Divider, ErrorText, Group, icons, ListSelector, Note, Page, PageHeader, Row, Spinner, srcSet, TextField, ToggleButton,
@@ -166,6 +174,8 @@ export function WifiPage() {
                 </>
             )}
 
+            <ProxyGroup />
+
             <JoinDialog
                 target={join}
                 onCancel={() => setJoin(null)}
@@ -255,5 +265,63 @@ function JoinDialog({ target, onCancel, onJoin }: {
             </Button>
             <Button variant="dark" disabled={busy} onClick={onCancel}>Cancel</Button>
         </Dialog>
+    );
+}
+
+/** "host:port" checks: a host name or address, a port from 1 to 65535. */
+export function proxyProblem(type: NetworkProxy["type"], host: string, port: string): string | null {
+    if (type === "none") return null;
+    if (!/^[A-Za-z0-9.-]+$|^\[[0-9A-Fa-f:]+\]$/.test(host.trim())) return "Enter the proxy server's name or address.";
+    const n = Number(port);
+    if (!/^\d+$/.test(port.trim()) || n < 1 || n > 65535) return "The port is a number from 1 to 65535.";
+    return null;
+}
+
+function ProxyGroup() {
+    const saved = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(["networkProxy"], cb, err), []).value?.networkProxy;
+    const [type, setType] = useState<NetworkProxy["type"]>("none");
+    const [host, setHost] = useState("");
+    const [port, setPort] = useState("");
+    const [shown, setShown] = useState<NetworkProxy | undefined>(undefined);
+    if (saved !== shown) {
+        // The saved proxy, as it is now (also when another page changed it).
+        setShown(saved);
+        setType(saved?.type ?? "none");
+        setHost(saved?.host ?? "");
+        setPort(saved?.port ? String(saved.port) : "");
+    }
+    const problem = proxyProblem(type, host, port);
+    const changed = type !== (saved?.type ?? "none") || (type !== "none" && (host.trim() !== (saved?.host ?? "") || Number(port) !== (saved?.port ?? 0)));
+    const apply = () => {
+        if (problem) return;
+        void system.setPreferences({ networkProxy: type === "none" ? { type: "none", host: "", port: 0 } : { type, host: host.trim(), port: Number(port) } });
+    };
+    return (
+        <>
+            <Divider caption="Proxy" />
+            <Group>
+                <ListSelector title="Proxy" value={type} testId="proxy-type"
+                              options={[{ label: "None", value: "none" as const }, { label: "HTTP", value: "http" as const },
+                                        { label: "SOCKS", value: "socks" as const }]}
+                              onChange={(t) => {
+                                  setType(t);
+                                  // None takes effect at once; a server needs its address first.
+                                  if (t === "none") void system.setPreferences({ networkProxy: { type: "none", host: "", port: 0 } });
+                              }} />
+                {type !== "none" && (
+                    <>
+                        <div className="field-row"><TextField label="Server" value={host} onChange={setHost} onSubmit={apply}
+                                                              placeholder="192.168.1.10" testId="proxy-host" /></div>
+                        <div className="field-row"><TextField label="Port" value={port} onChange={setPort} onSubmit={apply} inputMode="numeric"
+                                                              placeholder={type === "http" ? "8080" : "1080"} testId="proxy-port" /></div>
+                    </>
+                )}
+            </Group>
+            {type !== "none" && (host || port) && problem && <ErrorText testId="proxy-problem">{problem}</ErrorText>}
+            {type !== "none" && (
+                <Button variant="affirmative" disabled={!!problem || !changed} onClick={apply} data-testid="proxy-save">Save Proxy</Button>
+            )}
+            <Note>Web pages and the apps' connections go through the proxy, on every network.</Note>
+        </>
     );
 }

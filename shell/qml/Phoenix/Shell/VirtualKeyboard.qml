@@ -39,6 +39,10 @@
 // fields opens the emoji page (EmojiPanel): categories, recents, skin tones
 // (hold an emoji), search by name typed on the keys. The symbol page's
 // emoticon keys still type the original's text emoticons.
+// Phoenix: the clipboard (M6 F2). The clipboard key at the left of the
+// candidate bar (in every field while the clipboard history is on) swaps
+// the keys for the clip strip (ClipStrip): recent, pinned and saved clips
+// as small cards; a tap pastes one, a hold pins, files or deletes it.
 // Phoenix: Text Assist (GAPS V2, V3), in place of the XT9 candidate bar
 // and trace typing the original had through a licensed engine
 // (CandidateBar.cpp; never released). A candidate bar above the keys in text
@@ -107,6 +111,17 @@ Item {
     }
     // Tablet: the keyboard size, -2 to 1 (XS, S, M, L).
     property int keyboardSize: 0
+    // Settings > Text Assist > Number row (docs/M6-PLAN.md F4; the
+    // community's keyboard layout patches): the phone keyboard gets a row of
+    // numbers above its letters, three quarters of a letter row tall, and
+    // grows by it. The tablet keyboard has its number row already.
+    property bool numberRow: false
+    onNumberRowChanged: {
+        if (_km && _km.setNumberRow(numberRow)) {
+            _extendedKeys = null;
+            _availableSpaceChanged();
+        }
+    }
 
     // sendKeyDownUp: a key press and release for the input field.
     signal keyTyped(int key, int modifiers)
@@ -162,7 +177,11 @@ Item {
         var t = KM.editorState(editorState).type;
         return t === KM.FieldType.Text || t === KM.FieldType.Search;
     }
-    readonly property bool candidateBarShown: assistField && !emojiOpen && (textSuggestions || swipeTyping || dictation !== null)
+    // Text Assist's part of the bar: candidates, the microphone.
+    readonly property bool assistBarShown: assistField && !emojiOpen && (textSuggestions || swipeTyping || dictation !== null)
+    // The bar shows for Text Assist, or for the clipboard key alone (in any
+    // field: a password is pasted into a password field).
+    readonly property bool candidateBarShown: assistBarShown || (clipboardKeyShown && !emojiOpen)
     // The bar's height, in keyboard pixels.
     readonly property int candidateBarRows: tablet ? 44 : 54
     readonly property real candidateBarHeight: candidateBarShown ? candidateBarRows * pixelScale : 0
@@ -187,7 +206,7 @@ Item {
         _refreshCandidates();
     }
     function _refreshCandidates() {
-        if (!candidateBarShown || !textSuggestions) {
+        if (!assistBarShown || !textSuggestions) {
             candidates = [];
             return;
         }
@@ -418,6 +437,74 @@ Item {
         return "";
     }
 
+    // ---- Clipboard (Phoenix, M6 F2) -------------------------------------------------
+    // The clipboard history (org.webosphoenix.clipboard) through the shell's
+    // ClipboardClient: {keyAvailable, clips, categories, refresh(category),
+    // paste(clip, done(text)), setPinned(clip, on), setCategory(clip, id),
+    // remove(clip), openApp()}; null: no clipboard key.
+    property var clipboard: null
+    readonly property bool clipboardKeyShown: clipboard !== null && clipboard.keyAvailable === true
+    // The clip strip is up in place of the keys.
+    property bool clipsOpen: false
+    // A line the strip shows for a moment (a secret that cannot go here).
+    property string clipsMessage: ""
+    // A picture to paste: the shell puts it in the page (no IME commit for images).
+    signal imagePasteRequested(var clip)
+    function openClips() {
+        if (!clipboardKeyShown)
+            return;
+        closeEmoji();
+        clipsMessage = "";
+        clipsOpen = true;
+    }
+    function closeClips() {
+        clipsOpen = false;
+        clipsMessage = "";
+    }
+    function toggleClips() {
+        if (clipsOpen)
+            closeClips();
+        else
+            openClips();
+    }
+    // Pastes a clip where the cursor is, through the IME's commit (as a
+    // candidate is typed), and goes back to the keys. A sensitive clip goes
+    // only into a password field; elsewhere it stays hidden (it can be
+    // revealed in the Clipboard app, after the device passcode).
+    function pasteClip(clip) {
+        if (!clip || !clipboard)
+            return;
+        if (clip.type === "image") {
+            imagePasteRequested(clip);
+            closeClips();
+            return;
+        }
+        if (clip.sensitive && KM.editorState(editorState).type !== KM.FieldType.Password) {
+            clipsMessage = qsTr("Paste a password into a password field, or reveal it in Clipboard");
+            clipsMessageTimer.restart();
+            return;
+        }
+        if (!clip.sensitive) {
+            _makeSound(KM.Key.A);
+            kb.textCommitted(clip.text);
+            closeClips();
+            return;
+        }
+        clipboard.paste(clip, function (text) {
+            if (typeof text !== "string" || !shown)
+                return;
+            _makeSound(KM.Key.A);
+            kb.textCommitted(text);
+            closeClips();
+        });
+    }
+    Timer {
+        id: clipsMessageTimer
+        interval: 3500
+        onTriggered: kb.clipsMessage = ""
+    }
+    onClipboardKeyShownChanged: if (!clipboardKeyShown) closeClips()
+
     // ---- Emoji (Phoenix, GAPS V6) ---------------------------------------------------
     // Recents and each emoji's skin tone, as JSON {recent: [...], tones:
     // {base: toned}}; the shell keeps it between runs.
@@ -527,6 +614,7 @@ Item {
         onTriggered: if (kb._buildEmoji(60)) stop()
     }
     function openEmoji() {
+        closeClips();
         _buildEmoji(Infinity);
         _touchEnd();
         emojiSearch = false;
@@ -621,6 +709,11 @@ Item {
     // key-*.png: two states stacked, 48x96 phone, 93x140 tablet;
     // key-gray-short.png 93x110 (the tablet's number row).
     readonly property int _keyHalf: tablet ? 70 : 48
+    // The phone's number row: three quarters of a letter row.
+    readonly property int _numberRowHalf: 36
+    function _rowHalf(r) {
+        return tablet && r === 0 ? _shortKeyHalf : _km && _km.numberRow && r === 0 ? _numberRowHalf : _keyHalf;
+    }
     readonly property int _shortKeyHalf: 55
     // 9-tile corners: 22 phone, 13 tablet (PhoneKeyboard.cpp:181, TabletKeyboard.cpp:176).
     readonly property int _corner: tablet ? 13 : 22
@@ -687,7 +780,7 @@ Item {
     // Made once (and again for the other form factor, _reset); the layout
     // changes in place (setLayoutFamily), keeping its size. Not a binding on
     // layoutName: that would make a new, unsized keymap on each change.
-    property var _km: new KM.Keymap(tablet, "qwerty")
+    property var _km: new KM.Keymap(tablet, "qwerty", numberRow)
     onTabletChanged: _reset()
     onLayoutNameChanged: {
         // (Bound to the keyboard in use: it can change before _km is made.)
@@ -709,7 +802,7 @@ Item {
         _refreshCandidates();
     }
     function _reset() {
-        _km = new KM.Keymap(tablet, layoutName);
+        _km = new KM.Keymap(tablet, layoutName, numberRow);
         _km.setCombos(_comboNames, keyboardIndex);
         _touches = ({});
         _extendedKeys = null;
@@ -765,8 +858,10 @@ Item {
     function _presetHeight() {
         if (tablet)
             return _tabletPresets[Math.max(0, Math.min(3, 2 + keyboardSize))];
-        // PhoneKeyboard.cpp:231-232: 377 upright (Phoenix: cPhoneHeight), 260 on its side.
-        return _landscape ? 260 : cPhoneHeight;
+        // PhoneKeyboard.cpp:231-232: 377 upright (Phoenix: cPhoneHeight), 260 on its side;
+        // the number row adds its share (keeping the letter rows' size).
+        var h = _landscape ? 260 : cPhoneHeight;
+        return _km && _km.numberRow ? Math.round(h * (_bgHeight + _numberRowHalf) / _bgHeight) : h;
     }
 
     function _availableSpaceChanged() {
@@ -786,7 +881,7 @@ Item {
         _km.setLayoutFamily(layoutName);
         _km.setCombos(_comboNames, keyboardIndex);
         TA.setLanguage(language, layoutName);
-        _km.setRowHeight(0, tablet ? _shortKeyHalf : _keyHalf);
+        _km.setRowHeight(0, _rowHalf(0));
         _availableSpaceChanged();
         _km.setEditorState(editorState);
         _resetShortcuts(editorState);
@@ -798,7 +893,7 @@ Item {
         var width = _spaceWidth, screenHeight = _spaceHeight;
         var rows = _km.rows;
         for (var r = 0; r < rows; ++r)
-            _km.setRowHeight(r, tablet && r === 0 ? _shortKeyHalf : _keyHalf);
+            _km.setRowHeight(r, _rowHalf(r));
         if (tablet)
             height = Math.min(height, screenHeight - 28);
         else
@@ -806,8 +901,9 @@ Item {
         if (height <= 0 || width <= 0)
             return;
         // The art's "ideal" sizes; the padding above the keys scales with them.
-        var fullHeight = _bgHeight;
-        var fullKeymapHeight = tablet ? Math.floor((2 * _shortKeyHalf + (rows - 1) * 2 * _keyHalf) / 2) : rows * _keyHalf;
+        var fullHeight = _bgHeight + (_km.numberRow ? _numberRowHalf : 0);
+        var fullKeymapHeight = tablet ? Math.floor((2 * _shortKeyHalf + (rows - 1) * 2 * _keyHalf) / 2)
+                                      : (_km.numberRow ? _numberRowHalf + (rows - 1) * _keyHalf : rows * _keyHalf);
         if (fullHeight < fullKeymapHeight)
             fullHeight = fullKeymapHeight;
         var keymapHeight = Math.floor(height * fullKeymapHeight / fullHeight);
@@ -841,6 +937,7 @@ Item {
         } else {
             // visibleChanged(false): back to plain letters.
             closeEmoji();
+            closeClips();
             _cancelSwipe();
             if (dictation && dictation.listening && dictation.owner === "")
                 dictation.cancel();
@@ -1888,7 +1985,7 @@ Item {
     Item {
         id: frame
         objectName: "keyboardFrame"
-        visible: !kb.emojiOpen || kb.emojiSearch
+        visible: (!kb.emojiOpen || kb.emojiSearch) && !kb.clipsOpen
         // Above the candidate bar: the extended keys and the phone's key
         // preview rise from the top row over it.
         z: 1
@@ -2107,7 +2204,7 @@ Item {
         y: whole ? -kb.y : (kb._grace ? -kb.graceZone * kb.pixelScale : 0)
         width: whole ? kb.parent.width : kb.width
         height: whole ? kb.parent.height : kb.height - y
-        enabled: kb.acceptingInput && kb.shown && (!kb.emojiOpen || kb.emojiSearch)
+        enabled: kb.acceptingInput && kb.shown && (!kb.emojiOpen || kb.emojiSearch) && !kb.clipsOpen
         mouseEnabled: true
         maximumTouchPoints: 10
 
@@ -2164,5 +2261,12 @@ Item {
         width: parent.width
         y: -height
         visible: kb.emojiOpen && kb.emojiSearch
+    }
+
+    // The clip strip over the keys (Phoenix, M6 F2).
+    ClipStrip {
+        keyboard: kb
+        anchors.fill: parent
+        visible: kb.clipsOpen
     }
 }

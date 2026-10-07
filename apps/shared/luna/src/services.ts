@@ -280,6 +280,12 @@ export const apps = {
     open(target: string) {
         return call("luna://com.webos.applicationManager/open", { target });
     },
+    /** listApps: the installed apps, by id and title. */
+    async list(): Promise<{ id: string; title: string }[]> {
+        const r = await call("luna://com.webos.applicationManager/listApps", {});
+        const list = (r as { apps?: { id?: string; title?: string }[] }).apps || [];
+        return list.filter((a) => typeof a.id === "string").map((a) => ({ id: a.id!, title: a.title || a.id! }));
+    },
     /** getAppInfo {id}: whether an app is installed (false when it is not). */
     async installed(id: string): Promise<boolean> {
         try {

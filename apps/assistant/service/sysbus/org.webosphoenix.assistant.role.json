@@ -1,0 +1,16 @@
+{
+    "appId": "org.webosphoenix.assistant",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": ["org.webosphoenix.assistant", "org.webosphoenix.tts"],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.assistant",
+            "outbound": ["*"]
+        },
+        {
+            "service": "org.webosphoenix.tts",
+            "outbound": []
+        }
+    ]
+}
