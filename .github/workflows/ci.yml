@@ -199,6 +199,8 @@ jobs:
           node tools/test-passwords.cjs --tablet --out app-tests/passwords-tablet
           node tools/test-authenticator.cjs --out app-tests/authenticator-phone
           node tools/test-authenticator.cjs --tablet --out app-tests/authenticator-tablet
+          node tools/test-clipboard.cjs --out app-tests/clipboard-phone
+          node tools/test-clipboard.cjs --tablet --out app-tests/clipboard-tablet
           node tools/test-terminal.cjs --out app-tests/terminal-phone
           node tools/test-terminal.cjs --tablet --out app-tests/terminal-tablet
           node tools/test-videos.cjs --out app-tests/videos-phone

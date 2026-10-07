@@ -142,7 +142,7 @@
     resize: vertical;
 }
 .cb-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; }
-.cb-actions .pui-button { flex: 1 1 140px; margin: 0; }
+.cb-actions .pui-button { flex: 1 1 200px; margin: 0; }
 
 .cb-small {
     margin-left: 4px;
