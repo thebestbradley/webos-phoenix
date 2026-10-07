@@ -86,6 +86,9 @@ int main(int argc, char **argv)
     check(Dictation::level(QByteArray(3200, 0), 1, false) == 0, "silence is level 0");
     const double toneLevel = Dictation::level(tone, 1, false);
     check(toneLevel > 0.15 && toneLevel < 0.19, "a tone at a quarter of full scale: RMS about 0.17");
+    check(Dictation::loudnessOf(0) == 0 && Dictation::loudnessOf(0.001) == 0, "-60 dBFS and silence: loudness 0");
+    check(std::abs(Dictation::loudnessOf(0.01) - 0.25) < 1e-9 && Dictation::loudnessOf(0.5) == 1,
+          "-40 dBFS a quarter, -6 dBFS full");
     Dictation::EndOfSpeech eos;
     auto r2 = Dictation::EndOfSpeech::Going;
     for (int i = 0; i < 10; ++i)                                          // half a second of speech
@@ -114,7 +117,9 @@ int main(int argc, char **argv)
         d.setCommand({ QStringLiteral("/bin/echo"), QStringLiteral("{\"returnValue\":true,\"text\":\"%p\"}") });
         QString heard, error;
         bool done = false;
+        qreal loudest = 0;
         QObject::connect(&d, &Dictation::transcribed, [&](const QString &t, const QString &e) { heard = t; error = e; done = true; });
+        QObject::connect(&d, &Dictation::loudnessChanged, [&]() { loudest = qMax(loudest, d.loudness()); });
         QElapsedTimer clock;
         clock.start();
         d.start();
@@ -124,6 +129,8 @@ int main(int argc, char **argv)
         check(done && error.isEmpty() && heard == QStringLiteral("Call Ada Palmer"),
               "it stops by itself after the speech and transcribes (the prompt reached the transcriber)");
         check(clock.elapsed() >= 1400 && clock.elapsed() < 4000, "about a second after the speech ended");
+        check(loudest > 0.82 && loudest < 0.92 && d.loudness() == 0,
+              "the tone (-15 dBFS) was loud while listening, and quiet after");
 
         done = false;
         d.start();                                     // the second recording: the next file

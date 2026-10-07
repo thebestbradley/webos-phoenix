@@ -10,6 +10,7 @@ ShortcutSheet 1.0 ShortcutSheet.qml
 ArtBorderImage 1.0 ArtBorderImage.qml
 ArtTiledImage 1.0 ArtTiledImage.qml
 AppIcon 1.0 AppIcon.qml
+AssistantBird 1.0 AssistantBird.qml
 AssistantOverlay 1.0 AssistantOverlay.qml
 BackdropBlur 1.0 BackdropBlur.qml
 Card 1.0 Card.qml
