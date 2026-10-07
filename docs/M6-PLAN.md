@@ -214,6 +214,7 @@ before it's built.
    - Infinite card cycling.
    - Tap an edge card to maximize it.
    - Wave launcher.
+   - **Built (7 October 2026, in the simulator).** All three are LunaCE's Tweaks options under their own preference keys, off by default as there (Settings > Advanced). Infinite card cycling (`infiniteCardCyclingEnabled`): a flick, the keyboard's arrows, a trackpad swipe or an advanced gesture past the last stack goes to the first, and back (`CardView.wrapGroup`). Tap-to-maximize edge cards (`sysUiEnableMaximizeEdges`): a tap on a stack beside the centre one maximizes its card at once. Wave launcher (`sysUiEnableWaveLauncher`): a finger slid up from the left or right quarter of the gesture area raises a glass wave along the bottom with the dock's apps and the launcher button; it swells under the finger, lifting and enlarging that icon with its name above; letting go there opens it, letting go far above it is the ordinary swipe up (card view), anywhere else puts it away (`WaveLauncher.qml`; not over the lock screen, First Use, dock mode or the launcher). The Pre's own wave was not in the open-source release, so it is drawn from the community's descriptions. Tests: `tst_tweaks.qml`; `--scene wave`.
 3. **System**
    - Power menu: hold power for Airplane mode, Restart (the shell), Reboot, Shut down.
    - Richer system menu: battery percentage and quick toggles.

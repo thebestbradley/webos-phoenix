@@ -26,6 +26,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Full-screen apps that hide the status bar. `Src/base/SystemUiController.cpp:1389-1400` *Phoenix: in the simulator (enableFullScreenMode).*
 - [x] Card rotation and orientation lock per app (fixed-orientation apps). `CardWindow.cpp:2536-`; `Src/lunaui/cards/CardHostWindow.cpp:180-240`
 - [x] Keyboard navigation of cards (←/→, Enter, Ctrl+Backspace). `CardWindowManager.cpp:1189-1212`
+- [x] Infinite card cycling and tap-to-maximize side cards (community: LunaCE `abh_features.json`, `maximize-edges.json`). *Phoenix: both off by default, in Settings > Advanced (`CardView.qml`, `tst_tweaks.qml`; M6-PLAN F4).*
 - [x] First-use "dismiss card" tutorial dialog. `CardWindowManager.cpp:1168-1187`; `uiComponents/DismissCardTutorial/dismissDialog.qml` *Phoenix: DismissCardTutorial.qml in the popup alert's place, the first time card view is entered with a card, then never again (phoenix-sim simSettings "cards/usedFirstCard"; not in demo scenes). In the simulator only: the device source has no firstCardAlert yet.*
 - [x] Card limit and low-memory launch blocking, with a low-memory alert dialog. `conf/luna.conf:63-65`; `Src/base/MemoryMonitor.cpp`; `uiComponents/MemoryAlert/alert.qml` *Phoenix: MemoryMonitor (MemAvailable) refuses a launch when memory is low, except phone, contacts and messaging, and MemoryAlert.qml says "Sorry, Too Many Cards" (phoenix-sim --low-memory). The card limit is off in the original too (CardLimit=-1). The device source does not refuse launches yet.*
 - [x] Card-view wallpaper, rotated for landscape. `Src/lunaui/WindowServerLuna.cpp:89-156,900-928`
@@ -92,6 +93,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Empty-page hint. `Src/lunaui/launcher/elements/page/reorderablepage.cpp:64` *Phoenix: done (`Launcher.qml`, `tst_launcher.qml`).*
 - [x] App groups (folders), and tabs renamed, added and removed (community: LunaCE in webOS CE 3.1.0). *Phoenix: an icon held over another's centre groups them; the group's overlay launches, renames, and takes apps out (the icon menu's Remove from Folder); tabs renamed by holding, "+" for a new one (up to six), the trash can for one the user added; kept with the layout (`LauncherGroup.qml`, `LauncherNameDialog.qml`, `LauncherLayout.js`; `tst_launcher.qml`; M6-PLAN F4).*
 - [x] Launcher grid density (community: the icon grid patches). *Phoenix: Settings > Advanced > Icon grid, Normal or Dense (`Launcher.qml`; M6-PLAN F4).*
+- [x] Wave launcher (webOS 1.x's quick launch; community: LunaCE `wave-launcher.json`). *Phoenix: off by default; Settings > Advanced; a slide up from a side of the gesture area (`WaveLauncher.qml`, `tst_tweaks.qml`; M6-PLAN F4). The Pre's own was not released; drawn after descriptions.*
 
 ## 6. Lock screen and security [spec §6]
 
