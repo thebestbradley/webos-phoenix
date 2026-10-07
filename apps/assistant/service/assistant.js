@@ -206,13 +206,18 @@ function createAssistantService(deps) {
 
     // ---- Doing a command ---------------------------------------------------------------------
     // layer: "commands", "on-device" or "cloud"; source: who chose it.
-    function act(thread, cmd, args, layer, source) {
+    // asked: the words a model chose this from (a model's choice they do not
+    // ground is read back first: lang grounded()).
+    function act(thread, cmd, args, layer, source, asked) {
         var e = env(), s = lang().say;
         if (!allowed(cmd)) return Promise.resolve([say(thread, s.notAllowed(cmd.title), { via: layer, source: source, command: cmd.id, status: "failed" })]);
         return commands.prepare(cmd, args, e).then(function (p) {
             if (p.reply) return [say(thread, p.reply, { via: layer, source: source, command: cmd.id, status: "failed" })];
-            if (p.confirm) return [say(thread, p.confirm, { via: layer, source: source, command: cmd.id, status: "pending",
-                                                            confirm: { command: cmd.id, args: p.args } })];
+            var confirm = p.confirm;
+            if (!confirm && asked !== undefined && cmd.builtIn && cmd.risk !== "read" && !lang().grounded(cmd.id, p.args, asked))
+                confirm = s.didYouMean(s.describe(cmd.id, p.args, cmd.title));
+            if (confirm) return [say(thread, confirm, { via: layer, source: source, command: cmd.id, status: "pending",
+                                                        confirm: { command: cmd.id, args: p.args } })];
             return commands.run(cmd, p.args, e).then(function (r) {
                 return [say(thread, r.text, { via: layer, source: source, command: cmd.id, status: "done", data: r.data })];
             });
@@ -227,12 +232,17 @@ function createAssistantService(deps) {
         var d = new Date(now());
         return "You are the Phoenix Assistant on a webOS Phoenix phone. Answer briefly, in one to three sentences, in plain text without markdown; " +
             "your answers are read aloud. Today is " + d.toDateString() + ", the time is " + lang().timeText(now()) + "." +
-            (withTools ? " When the user asks the phone to do something, call the matching tool instead of describing it; call at most one tool. " +
-             "If no tool fits, answer in words." : " You cannot control the phone; if asked to, say the user can do it themselves.");
+            (withTools ? " Most questions need no tool: answer them in words. Call a tool only when the user clearly asks the phone to do " +
+             "the very thing the tool does (\"turn on the flashlight\" calls toggle with flashlight on); call at most one. " +
+             "Never call a tool for a question about the world." : " You cannot control the phone; if asked to, say the user can do it themselves.");
     }
     function history(thread) {
         return messagesOf(thread.id).filter(function (m) { return !m.choices || m.chosen; }).slice(-HISTORY)
             .map(function (m) { return { role: m.role, text: m.text }; });
+    }
+    function lastAsked(thread) {
+        var m = messagesOf(thread.id).filter(function (x) { return x.role === "user"; });
+        return m.length ? m[m.length - 1].text : "";
     }
     function toolsFor(list) {
         return list.filter(allowed).map(function (c) {
@@ -244,7 +254,7 @@ function createAssistantService(deps) {
         return deps.request(req).then(function (r) { return providers.parseChat(provider.type, r.status, r.body); });
     }
     // An answer: words, or a tool call to run (cloud ones only when allowed).
-    function answer(thread, result, cat, layer, source, cloud) {
+    function answer(thread, result, cat, layer, source, cloud, asked) {
         var s = lang().say;
         var call = result.toolCalls[0];
         if (call) {
@@ -254,7 +264,7 @@ function createAssistantService(deps) {
             if (!cmd) return Promise.resolve([say(thread, s.unknownTool(call.name), { via: layer, source: source, status: "failed" })]);
             var args = commands.fromModel(cmd, call.args, env());
             if (cmd.id === "open" && call.args && call.args.name) args.name = call.args.name;
-            return act(thread, cmd, args, layer, source);
+            return act(thread, cmd, args, layer, source, asked);
         }
         return Promise.resolve([say(thread, result.text || s.done(), { via: layer, source: source })]);
     }
@@ -273,13 +283,13 @@ function createAssistantService(deps) {
         return deps.llm.ensure(model).then(function (srv) {
             var p = { type: "local", baseUrl: srv.baseUrl, model: model.id };
             return callModel(p, "", thread, toolsFor(cat.all));
-        }).then(function (r) { return answer(thread, r, cat, "on-device", model.name, false); });
+        }).then(function (r) { return answer(thread, r, cat, "on-device", model.name, false, lastAsked(thread)); });
     }
     function askCloud(thread, p, cat) {
         var source = providers.displayName(p);
         var tools = settings().allowCloudControl ? toolsFor(cat.all) : [];
         return keyOf(p).then(function (key) { return callModel(p, key, thread, tools); })
-            .then(function (r) { return answer(thread, r, cat, "cloud", source, true); },
+            .then(function (r) { return answer(thread, r, cat, "cloud", source, true, lastAsked(thread)); },
                   function (e) { return [say(thread, lang().say.cloudFailed(source, e.message), { via: "cloud", source: source, status: "failed" })]; });
     }
     // Layer 4: nothing here could answer; the user chooses.

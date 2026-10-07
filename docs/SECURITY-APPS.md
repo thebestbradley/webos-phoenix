@@ -168,6 +168,36 @@ key store (hardware-bound where the board allows) and released after
 `matchDevicePasscode` under the device's retry limit, with the service on
 the bus, checking its caller, giving secrets' text only to the keyboard.
 
+## Phoenix Assistant
+
+The assistant ([APP-RUNTIME.md](APP-RUNTIME.md#phoenix-assistant)) holds
+cloud provider API keys and can act on the device.
+
+- **Keys** are sealed at once by the service (AES-GCM; in the simulator
+  under a non-extractable WebCrypto key in IndexedDB, as clipboard secrets
+  are; on a device under a key file only the service reads). No reply
+  carries a key: pages see `hasKey` and at most its last four characters.
+  A key leaves the device only in the request to its own provider, made by
+  the service (the simulator's proxy runs in phoenix-sim's process). In the
+  simulator any page of the shared origin could in principle use the
+  sealing key, as with the clipboard; on a device the service is a process
+  of its own.
+- **Who may call**: `ask`, `choose` and `confirm` only the system UI, the
+  Assistant app and Settings (a request can spend cloud tokens and run
+  commands); provider changes, connection tests and model lists only
+  Settings; `allowCloudControl` can be turned on only by Settings.
+- **Cloud models** chat; they get the commands as tools only with
+  "Allow cloud models to control the device" (off by default), and a tool
+  call from a cloud model without it is refused, not run. Anything that
+  sends, calls or deletes waits for the user's Send / Call / Yes, whichever
+  layer (grammar, on-device model, cloud model) chose it.
+- **What leaves the device**: nothing for the grammar and the on-device
+  model (weather asks Open-Meteo for a place); the conversation's recent
+  turns (at most 20) for a cloud model the user chose to ask.
+- **The app's CSP** allows no network but its own origin and no frames;
+  it allows `unsafe-eval` because the simulator runs the service in the
+  page. Answers are shown as text, never as HTML, and links are not loaded.
+
 ## Just Type and db8
 
 Neither app declares `universalSearch` in `appinfo.json` (the fields are

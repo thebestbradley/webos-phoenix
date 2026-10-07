@@ -279,7 +279,7 @@ describe("the permission gate", () => {
         expect((await t.svc.setSettings({ allowCloudControl: true })).returnValue).toBe(true);
         t.as("com.palm.systemui");
 
-        const allowed = await ask(t, "the flashlight, please", { threadId: r.thread.id });
+        const allowed = await ask(t, "put the flashlight on for me", { threadId: r.thread.id });
         expect(mock.requests.at(-1)!.body.tools.map((x: Reply) => x.name)).toContain("toggle");
         expect(last(allowed)).toMatchObject({ text: "The flashlight is on.", via: "cloud", status: "done" });
         expect(t.called("torch/set")[0].params).toEqual({ on: true });
@@ -329,11 +329,24 @@ describe("the on-device model", () => {
         const r = await ask(t, "why is the sky blue");
         expect(last(r)).toMatchObject({ text: "chat says: why is the sky blue", via: "on-device", source: "Qwen2.5 0.5B Instruct" });
         expect(mock.requests.at(-1)!.body.tools.length).toBeGreaterThan(10);
-        const act = await ask(t, "it's dark, I need some light from the flashlight");
+        const act = await ask(t, "it's dark, put the flashlight on for me");
         expect(last(act)).toMatchObject({ via: "on-device", status: "done", text: "The flashlight is on." });
         // Its times as said: "tomorrow at 6:30 am".
         const wake = await ask(t, "please could you wake me early tomorrow");
         expect(last(wake).text).toBe("Alarm set for 6:30 AM tomorrow.");
+    });
+
+    it("reads back a choice the words did not ask for", async () => {
+        const t = setup({ llm: llm() });
+        t.as("org.webosphoenix.settings");
+        await t.svc.selectModel({ id: MODEL });
+        t.as("com.palm.systemui");
+        // The stand-in calls the toggle tool for "force a tool": nothing said a flashlight.
+        const r = await ask(t, "force a tool");
+        expect(last(r)).toMatchObject({ status: "pending", via: "on-device", text: "Did you mean: turn the flashlight on?" });
+        expect(t.called("torch/set")).toHaveLength(0);
+        await t.svc.confirm({ threadId: r.thread.id, messageId: last(r).id, accept: true });
+        expect(t.called("torch/set")[0].params).toEqual({ on: true });
     });
 
     it("lists the models for the device's memory", async () => {

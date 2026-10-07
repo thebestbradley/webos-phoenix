@@ -178,7 +178,9 @@ async function main() {
         check(true, "the right key: connected");
         await shot(st, "settings-provider");
         await st.click("[data-testid='as-provider-save']");
-        await st.waitForSelector("[data-testid^='as-provider-']:has-text('Anthropic')");
+        // Back on the page once it is saved (the editor's own result note
+        // says "anthropic" too: wait for the page, not for the word).
+        await st.waitForSelector("[data-testid='as-add-provider']");
         const provs = (await svc(st, A + "providers", {})).providers;
         check(provs.length === 1 && provs[0].keyHint === "opic" && provs[0].hasKey && provs[0].model === "claude-sonnet-5-5", "the provider saved, its key hidden");
         const stored = await st.evaluate(() => JSON.stringify({ ...localStorage }));
@@ -198,7 +200,7 @@ async function main() {
         await st.click("[data-testid='as-cloud-control']");
         await until((s) => s.allowCloudControl === true, "Allow cloud models to control the device: on");
         await app.bringToFront();
-        check(await ask("the flashlight please") === "The flashlight is on.", "allowed, the cloud model acts");
+        check(await ask("Put the flashlight on for me") === "The flashlight is on.", "allowed, the cloud model acts");
         check(/Anthropic/.test(await app.locator(".as-via").last().textContent()), "and the answer says it was Anthropic");
         await shot(app, "thread-cloud");
 

@@ -422,6 +422,44 @@ var rules = [
     ["open", openApp]
 ];
 
+// ---- Does a model's choice fit what was said? -----------------------------------------------
+
+// A language model (above all a small one on the device) sometimes picks
+// a command the words never asked for ("why is the sky blue" -> play
+// music). Its choice runs only when the words name that kind of thing;
+// otherwise the assistant reads it back first. Reads (weather, sums, the
+// time, a web search) need nothing.
+var MENTIONS = {
+    toggle: {
+        wifi: /\b(wi-?fi|wi fi|wireless|wlan|internet)\b/,
+        bluetooth: /\bblue ?tooth\b/,
+        airplane: /\b(airplane|aeroplane|flight|plane)\b/,
+        flashlight: /\b(flash ?light|torch|light|dark)\b/,
+        ringer: /\b(ringer|ring|ringtone|silent|silence|mute|unmute|sound|quiet|vibrate)\b/
+    },
+    timer: /\b(timer|countdown|count down|minutes?|seconds?|hours?)\b/,
+    alarm: /\b(alarm|wake|get up)\b/,
+    reminder: /\b(remind|reminder|remember|task|to-?do)\b/,
+    play: /\b(play|music|song|songs|album|listen|put on)\b/,
+    navigate: /\b(navigate|directions?|take me|drive|route|get to|way to|go to)\b/,
+    call: /\b(call|phone|ring|dial)\b/,
+    text: /\b(text|message|sms|tell|send|write)\b/
+};
+function grounded(command, args, text) {
+    var t = String(text || "").toLowerCase();
+    var m = MENTIONS[command];
+    if (command === "toggle") {
+        if (!args || !m[args.setting] || !m[args.setting].test(t)) return false;
+        // And the way it goes ("I need some light" is no "off").
+        if (args.state === "on") return /\b(on|enable|activate|start|unmute)\b/.test(t);
+        if (args.state === "off") return /\b(off|disable|deactivate|stop|mute|silence|quiet)\b/.test(t);
+        return /\b(toggle|switch)\b/.test(t);
+    }
+    if (command === "open") return !!(args && args.title && t.indexOf(String(args.title).toLowerCase()) >= 0);
+    if (!m) return true;
+    return m.test(t);
+}
+
 // ---- What the assistant says ---------------------------------------------------------------
 
 function plural(n, one, many) { return n === 1 ? "1 " + one : n + " " + (many || one + "s"); }
@@ -489,7 +527,19 @@ var say = {
     unknownTool: function (name) { return "The model asked for \"" + name + "\", which isn't a command I know."; },
     done: function () { return "Done."; },
     failed: function (why) { return "That didn't work: " + why; },
-    newThread: function () { return "New conversation"; }
+    newThread: function () { return "New conversation"; },
+    // A model's choice the words did not ask for, read back.
+    didYouMean: function (what) { return "Did you mean: " + what + "?"; },
+    describe: function (command, args, title) {
+        if (command === "toggle") return (args.state === "toggle" ? "switch " : "turn ") + (SETTING_NAMES[args.setting] || args.setting).replace(/^The /, "the ") + (args.state === "toggle" ? "" : " " + args.state);
+        if (command === "play") return "play " + (args.query ? "\"" + args.query + "\"" : "music");
+        if (command === "open") return "open " + (args.title || args.name);
+        if (command === "navigate") return "get directions to " + args.destination;
+        if (command === "timer") return "set a timer for " + durationText(args.seconds || 0);
+        if (command === "alarm") return "set an alarm for " + (args.time ? timeText(args.time) : "that time");
+        if (command === "reminder") return "remind you to " + args.text;
+        return title.toLowerCase() + (args && args.text ? " \"" + args.text + "\"" : "");
+    }
 };
 
 module.exports = {
@@ -505,5 +555,6 @@ module.exports = {
     arithmetic: arithmetic,
     durationText: durationText,
     timeText: timeText,
-    say: say
+    say: say,
+    grounded: grounded
 };

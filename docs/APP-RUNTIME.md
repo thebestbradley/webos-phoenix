@@ -1649,6 +1649,100 @@ On a device the service must run on the bus (a small Node.js or C++
 service with the same API; today it exists only in the web runtime), and
 the keyboard must be the device's input method (GAPS V5).
 
+## Phoenix Assistant
+
+Phoenix's own (webOS had none; [M6-PLAN.md](M6-PLAN.md) F3,
+[AI-AND-MCP.md](AI-AND-MCP.md#10-as-built-7-october-2026-in-the-simulator)).
+The service is the device's own code, `apps/assistant/service` (a Node.js
+Luna service: `service.js`, `assistant.js`, `lib/`); the runtime runs it in
+the page (block "The Phoenix Assistant", loaded from
+`/usr/palm/services/org.webosphoenix.assistant/` with `nodeServiceLoader`)
+and gives it Luna calls on the simulated bus, HTTP through the host's proxy,
+the shared store and the sealing key. `@phoenix/luna` `assistant` and `tts`
+are the clients.
+
+**The service**, `luna://org.webosphoenix.assistant/` (`threads`, `thread`,
+`getSettings`, `providers`, `models` and `commands` take `subscribe`):
+
+| Method | Does |
+| --- | --- |
+| `ask {text, threadId?, newThread?, speak?}` | `{thread, messages}`: the user's words and the answers. In the thread in use unless told otherwise. System UI, Assistant and Settings only (error -3); error -4 while the assistant is off |
+| `choose {threadId, messageId, choice}` | a message's choice: `cloud:<provider id>` (the thread goes on with that provider), `web`, `settings` |
+| `confirm {threadId, messageId, accept}` | a read-back (`status: "pending"`): run it, or not |
+| `threads` / `thread {id?}` | `{threads, current}` / `{thread, messages}` (the one in use without an id) |
+| `newThread`, `setCurrent {id}`, `deleteThread {id}`, `clearHistory` | conversations |
+| `getSettings` / `setSettings {...}` | `{enabled, speak, language, units, localModel, defaultProvider, allowCloudControl, disabledCommands}`; only Settings may set `allowCloudControl` |
+| `commands` | `{commands: [{id, title, risk, builtIn, appId, enabled, confirms}]}` |
+| `providers` | `{providers: [{id, type, name, model, baseUrl, hasKey, keyHint, label}], defaultProvider, types}` |
+| `setProvider {id?, type, name?, model?, baseUrl?, key?}`, `removeProvider {id}`, `testProvider {id \| type, model, baseUrl, key}`, `listModels {...}` | Settings only. A key is sealed at once; `testProvider` answers `{ok, text}` or `{ok: false, error}` |
+| `models` | the on-device catalogue with `fits`, `recommended`, `installed`, `downloading`, and `status: {available, running, ramBytes, error, howToInstall}` |
+| `downloadModel {id}`, `cancelDownload {id}`, `removeModel {id}`, `selectModel {id}` | on-device models |
+| `speak {text}`, `stopSpeaking` | the device's voice |
+
+A message is `{id, threadId, role, text, time, via: "commands" | "on-device"
+| "cloud", source (who answered), command, status: "pending" | "done" |
+"cancelled" | "failed", confirm: {command, args}, choices: [{id, label}],
+chosen}`. Each thread (`assistant:thread:<id>`), message
+(`assistant:msg:<thread>:<id>`) and provider (`assistant:provider:<id>`) is
+its own stored key, so the shell's view and the app never write over each
+other (PR 7).
+
+`luna://org.webosphoenix.tts/`: `speak {text, lang?}`, `stop`, `getStatus`
+-> `{available, engine}`.
+
+**What the commands do** (`lib/commands.js`): Phone `{number, dial}`; an
+SMS through `org.webosports.service.messaging/putMessage` (Messaging's
+compose without words); a timer as an activity that opens the Assistant app
+with `{timerDone}` (notification, sound, words); the Clock's own alarm
+(a `com.palm.clock.alarm:1` record and the activity the Clock schedules,
+which launches it with `{action: "ring"}`); a task in Tasks with its
+reminder activity; Wi-Fi, Bluetooth, airplane mode, the torch, the
+ringtone volume; `applicationManager/launch`; Maps `{target:
+"mapto:<place>"}`; Music `{play: "<artist, album or song>"}`; Open-Meteo
+for the weather; the browser with Just Type's default engine.
+
+**Apps' commands**: `appinfo.json` `"assistant": {"commands": [{"id",
+"displayName", "url", "launchParam", "phrases": {"en": ["new note {text}"]},
+"risk": "change" | "send" | "delete"}]}`; the app is launched with
+`{<launchParam>: <text>}`, and `send`/`delete` are read back first. An app's
+Just Type Quick Action (`universalSearch.action`) works as "<displayName>
+<text>" without anything more. phoenix-sim and `serve-rootfs.py` pass the
+`assistant` field in `/usr/share/phoenix/apps.json`.
+
+**The shell** (`AssistantOverlay.qml`): holding the launcher button opens
+it over everything but the lock screen (a tap still opens the launcher);
+it shows the thread in use through `lunaCall`, with buttons for choices and
+read-backs, a field (the keyboard comes with a tap; at once where there is
+no microphone) and the microphone (the shell's dictation with `autoStop`,
+owner `"assistant"`). Back, Escape or a tap outside closes it.
+`phoenix-sim --scene assistant [--launch <app>]` shows a short conversation
+over the screen.
+
+**The on-device model and speech in phoenix-sim**: `/usr/share/phoenix/host.json`
+has `"assistant": true`; the runtime sends `assistant` host messages (`{op:
+status | download | cancel | remove | ensure | speak | stopSpeaking |
+speechStatus, requestId}`) and gets `__phoenixRuntime.assistantHostEvent({requestId,
+...})` back; every page hears `{changed: true}` as models change. The shell's
+`LocalModels` (models in the simulator's data folder, `models/<id>.gguf`;
+`--llama-server <path>`) and `Speech` (`--speech-command <command>`) do the
+work.
+
+**The Assistant app** (`apps/assistant`, Apps tab): the conversation, its
+choices and read-backs, the field, the microphone
+(`org.webosphoenix.dictation`), Conversations (new, open, delete), and
+Preferences. Launch params: `{text}` (Just Type's "Ask Assistant"),
+`{threadId}`, `{timerDone}`. Its CSP allows `unsafe-eval` only because the
+simulator runs the service in its page.
+
+**Settings > Assistant** (`apps/settings/src/pages/Assistant.tsx`, launch
+point `org.webosphoenix.settings.assistant`): everything above.
+
+Tests: `apps/assistant/service/*.test.ts` (grammar per command, the router
+against a local mock of each provider API, the permission gate, read-backs,
+the device side with a stand-in llama-server), `apps/shared/luna/src/assistant.test.ts`
+(the runtime), `shell/tests/tst_assistant.qml`, `build/localmodels-test`,
+`tools/test-assistant.cjs`.
+
 ## Terminal
 
 `apps/terminal` (`org.webosphoenix.terminal`) is a real Linux terminal:

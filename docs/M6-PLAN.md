@@ -10,7 +10,7 @@ or more pull requests, merged when CI is green.
 | F0 | Fixes: settings lost on save; card corners; Messaging reply bar | Settings and corners done; reply bar waits on the owner |
 | F1 | Press and hold on launcher icons | Done in the simulator (7 October 2026) |
 | F2 | Clipboard manager | Done in the simulator (7 October 2026) |
-| F3 | The Phoenix Assistant 1.0 | To do |
+| F3 | The Phoenix Assistant 1.0 | Done in the simulator (7 October 2026) |
 | F4 | Community features picked for 1.0 | To do |
 
 ## F0: fixes first
@@ -173,6 +173,21 @@ Works like Paste on macOS, in the webOS style.
 **Moved to 2.0**
 - The MCP hub: the agent drives any app, not only the fixed commands.
 - Multi-step tasks, memory, a wake word, and a Phoenix AI service.
+
+**Built (7 October 2026, in the simulator)**
+- **Service** (`apps/assistant/service`, `org.webosphoenix.assistant`; run in the page by the runtime, a Node.js Luna service on a device; `@phoenix/luna` `assistant`, `tts`): `ask`, `choose`, `confirm`, threads (`threads`, `thread`, `newThread`, `setCurrent`, `deleteThread`, `clearHistory`), settings, `commands`, providers (`providers`, `setProvider`, `removeProvider`, `testProvider`, `listModels`), on-device models (`models`, `downloadModel`, `cancelDownload`, `removeModel`, `selectModel`), `speak`. One stored key per thread, message and provider.
+- **Commands** (English grammar, `lib/lang/en.js`; another language is another file): call, text, timer, alarm (the Clock's own), reminder (Tasks), Wi-Fi, Bluetooth, airplane mode, flashlight, ringer, open app, directions (Maps), play music (Music's new `{play}`), weather (Open-Meteo), sums and percentages, time and date, web search. Apps add commands in `appinfo.json` (`assistant.commands`, Quick Action shape with phrases per language); a Quick Action works as "<displayName> <text>".
+- **On-device model**: llama.cpp's `llama-server` (`--jinja`, the commands as tools), run by the shell in phoenix-sim (`LocalModels`) and by the service on a device; Qwen2.5 0.5B, Qwen2.5 1.5B and Qwen3 4B Instruct (Apache-2.0, Q4_K_M GGUFs from the Qwen repositories, SHA-256 checked), offered by device memory; stopped after five idle minutes.
+- **Cloud models**: Anthropic Messages, OpenAI Responses, Gemini `generateContent`, any Chat Completions server; models typed or picked from the provider's list; calls through the host's proxy (no CORS); keys sealed; chat only until "Allow cloud models to control the device" (off by default).
+- **Read-backs**: text, call, and app commands marked `send` or `delete` wait for Send / Call / Yes, from any layer. A model's choice the words do not ground (another switch, the other way, music for a question) is read back too ("Did you mean: ...?").
+- **Checked for real**: llama.cpp built from source, Qwen2.5 0.5B downloaded from Hugging Face (SHA-256 as listed), run by phoenix-sim's `LocalModels` and asked through the runtime: free-form answers and tool calls work; speech went to the speech program. Real cloud keys were not available: the providers are checked against local mocks of each API.
+- **System view** (`AssistantOverlay.qml`): hold the launcher button; the thread in use over a blurred backdrop, choices and read-backs as buttons, field and microphone; a tap outside, Back or Escape closes it. `--scene assistant`.
+- **Assistant app** (`apps/assistant`): the conversation like a Messaging thread with who answered, Conversations (new, open, delete), Preferences; Just Type's "Ask Assistant"; timers ring here. Icon drawn in `art/app-icons` (with Settings > Assistant's).
+- **Settings > Assistant**: on/off, speak answers, weather units, on-device models (download with progress, use, remove; size and memory; how to get llama-server), providers (add, edit, test, remove, the default), cloud control, commands, Clear History.
+- **Speech**: `org.webosphoenix.tts`; espeak-ng (or `say` on a Mac, or `--speech-command`) run by the shell; Qt TextToSpeech is not in Phoenix's Qt, and QtWebEngine has no `speechSynthesis` voices.
+- **Tests**: `apps/assistant/service/grammar.test.ts`, `assistant.test.ts` (each provider's API against a local mock, the permission gate, read-backs, the on-device model), `node-device.test.ts`; `apps/shared/luna/src/assistant.test.ts`; `shell/tests/tst_assistant.qml`; `build/localmodels-test`; `tools/test-assistant.cjs` (phone and tablet, in CI).
+- **Decided on the owner's behalf**: the grammar answers before the on-device model even once one is installed (exact and instant; the model takes the rest); calls are read back like texts; a thread taken to a cloud model goes on with it; one tool call per request; answers are spoken for typed requests too when Speak answers is on; timers are the assistant's own (the Clock has none), alarms the Clock's.
+- **Not yet**: streaming answers; languages other than English; the meta-phoenix recipes for llama.cpp and espeak-ng; the device service untested on hardware; a dashboard for running timers.
 
 Where the line between 1.0 and 2.0 falls may move as F3 is built. Any change is recorded here.
 

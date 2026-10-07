@@ -31,6 +31,11 @@ beforeAll(() => {
     };
 });
 
+// The runtime's first call sets the simulated device up (sample data and
+// all, about 3 s here, more on a busy machine): once, before the tests'
+// own time limits run.
+beforeAll(async () => { await call("luna://com.palm.applicationManager/listLaunchPoints", {}); }, 30000);
+
 beforeEach(() => {
     localStorage.clear();
     ps().appIdentifier = "com.palm.systemui";
