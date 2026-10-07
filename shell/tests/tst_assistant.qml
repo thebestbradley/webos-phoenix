@@ -242,6 +242,12 @@ Item {
             var under = bird.mapToItem(shell, bird.width / 2, bird.height + 20);
             mouseClick(shell, under.x, under.y);
             tryCompare(overlay, "open", false, 2000);
+            // Beside the panel, at the bird's height: outside it too (the
+            // bird takes only taps on itself).
+            openByHold();
+            var beside = bird.mapToItem(shell, 0, bird.height / 2);
+            mouseClick(shell, Theme.px(4), beside.y);
+            tryCompare(overlay, "open", false, 2000);
             openByHold();
             keyClick(Qt.Key_Escape);
             tryCompare(overlay, "open", false, 2000);
