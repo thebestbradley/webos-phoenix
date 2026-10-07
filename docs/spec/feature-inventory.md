@@ -74,6 +74,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Native alert manager. `Src/lunaui/notifications/NativeAlertManager.cpp` *Phoenix: it was only the volume HUD's driver (it watches com.palm.audio's media, phone, ringtone and system status and shows `VolumeControlAlertWindow`); Phoenix shows `VolumeIndicator.qml` from the volume keys and the audio scenario (`Shell.qml`, `tst_volumekeys.qml`). Low battery comes from luna-systemui's popup.*
 - [ ] LED notification throbber and blink-notifications preferences. `conf/defaultPreferences.txt` (`LEDThrobberEnabled`, `BlinkNotifications`); `Src/base/CoreNaviLeds.cpp` *Phoenix: the Blink Notifications preference only; nothing blinks yet.*
 - [x] "Show alerts when locked" preference. `conf/defaultPreferences.txt` (`showAlertsWhenLocked`)
+- [x] Notification options (community: Notification Repeat, Messaging Notification Private, Uber Cycling Email Dashboard, SMS tone per contact). *Phoenix: repeat until seen (Settings > Sounds & Ringtones), "New Message" on the lock screen (Settings > Screen & Lock > Show previews), Email's cycling new-mail dashboard with delete (Settings > Advanced; compat overlay), a contact's ringtone and message tone (Contacts' Tones; compat overlay); M6-PLAN F4.*
 
 ## 5. Launcher, quick launch and search [spec §5]
 

@@ -286,6 +286,7 @@ Agreed with the owner on 7 October 2026; [M6-PLAN.md](M6-PLAN.md) has the detail
   - [x] Launcher: app groups (folders), tabs renamed, added and removed, grid density (in the simulator)
   - [x] Cards: infinite cycling, tap a side card to maximize it, the wave launcher (in the simulator)
   - [x] System: the power menu (hold Power), a Flashlight row in the system menu, battery percentage (in the simulator)
+  - [x] Notifications: repeat until seen, private lock screen previews, the cycling email dashboard, per-contact tones (in the simulator)
 
 ## 1.0 release
 

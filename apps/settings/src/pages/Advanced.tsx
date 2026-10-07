@@ -25,6 +25,9 @@
 //   hapticFeedback           a buzz on every tap (Haptic Feedback Manager)
 //   showBatteryPercent       the charge beside the status bar's battery
 //                            (Battery Percent and Icon)
+//   emailDashboardCycling    Email's new-mail dashboard goes through the new
+//                            emails one at a time, with a delete button
+//                            (Uber Cycling Email Dashboard)
 
 import { system, type SystemPreferences } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
@@ -32,7 +35,7 @@ import { Group, ListSelector, Note, Page, PageHeader, Row, ToggleButton } from "
 
 const KEYS: (keyof SystemPreferences)[] = ["launcherGridDensity", "infiniteCardCyclingEnabled", "sysUiEnableMaximizeEdges",
     "sysUiEnableWaveLauncher", "animationSpeed", "gestureSensitivity", "showReticleAnimation", "hapticFeedback",
-    "showBatteryPercent"];
+    "showBatteryPercent", "emailDashboardCycling"];
 
 export function AdvancedPage() {
     const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(KEYS, cb, err), []).value;
@@ -66,6 +69,9 @@ export function AdvancedPage() {
             </Group>
             <Group label="Status bar">
                 {toggle("showBatteryPercent", "Battery percentage", "The charge beside the battery")}
+            </Group>
+            <Group label="Notifications">
+                {toggle("emailDashboardCycling", "Cycling email dashboard", "New emails one at a time, with their times and a delete button")}
             </Group>
             <Group label="Feedback">
                 <ListSelector title="Animation speed" value={prefs?.animationSpeed ?? "normal"} testId="adv-animationSpeed"

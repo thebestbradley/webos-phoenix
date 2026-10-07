@@ -227,6 +227,8 @@ jobs:
           t node tools/test-authenticator.cjs --tablet --out app-tests/authenticator-tablet
           t node tools/test-clipboard.cjs --out app-tests/clipboard-phone
           t node tools/test-clipboard.cjs --tablet --out app-tests/clipboard-tablet
+          t node tools/test-community.cjs --out app-tests/community-phone
+          t node tools/test-community.cjs --tablet --out app-tests/community-tablet
           t node tools/test-assistant.cjs --out app-tests/assistant-phone
           t node tools/test-assistant.cjs --tablet --out app-tests/assistant-tablet
           t node tools/test-terminal.cjs --out app-tests/terminal-phone

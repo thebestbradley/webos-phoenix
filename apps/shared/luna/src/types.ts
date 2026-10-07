@@ -218,6 +218,8 @@ export interface SystemPreferences {
     showBatteryPercent?: boolean;
     /** Phoenix: a row of numbers above the keyboard's letters. */
     keyboardNumberRow?: boolean;
+    /** Phoenix: Email's new-mail dashboard cycles through the new emails, with a delete button. */
+    emailDashboardCycling?: boolean;
     [key: string]: unknown;
 }
 

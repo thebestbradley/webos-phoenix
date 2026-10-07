@@ -1253,6 +1253,10 @@
         launcherGridDensity: "normal",
         showBatteryPercent: false,
         keyboardNumberRow: false,
+        // Email's new-mail dashboard goes through the new emails one at a
+        // time, with their times and a delete button (the community's
+        // Uber Cycling Email Dashboard; compat overlay of the Email app).
+        emailDashboardCycling: false,
         firstUse: false
     };
 
@@ -1307,6 +1311,21 @@
     }
 
     var prefWatchers = [];
+    // Another page (another card, Settings) changed the preferences: this
+    // page's getPreferences subscribers hear the keys that changed, as on
+    // the bus (luna-sysservice tells every subscriber).
+    var prefsSeen = JSON.stringify(store.get("prefs", {}));
+    try {
+        global.addEventListener("storage", function (e) {
+            if (e.key !== "phoenix:prefs") return;
+            var before = {}, after = store.get("prefs", {}), changed = {}, any = false, k;
+            try { before = JSON.parse(prefsSeen) || {}; } catch (err) { before = {}; }
+            prefsSeen = JSON.stringify(after);
+            for (k in after)
+                if (JSON.stringify(after[k]) !== JSON.stringify(before[k])) { changed[k] = after[k]; any = true; }
+            if (any) prefWatchers.forEach(function (w) { w(changed); });
+        });
+    } catch (e) { /* no window */ }
 
     function timeInfo() {
         var d = new Date();
@@ -1375,6 +1394,7 @@
             var saved = store.get("prefs", {});
             for (var k in p) if (k !== "subscribe") saved[k] = p[k];
             store.set("prefs", saved);
+            prefsSeen = JSON.stringify(saved);
             reply(ok());
             prefWatchers.forEach(function (w) { w(p); });
             host.postToHost("preferences", p);
