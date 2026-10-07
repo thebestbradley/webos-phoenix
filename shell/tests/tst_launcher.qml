@@ -770,7 +770,13 @@ Item {
             verify(uninstall.visible);
             mouseClick(uninstall);
             compare(findChild(shell, function(o) { return o.objectName === "deleteDialogTitle"; }).text, "Remove Application?");
-            mouseClick(findChild(shell, function(o) { return o.objectName === "deleteDialogRemove"; }));
+            // Remove shows in Uninstall's place: the buttons' Column lays
+            // itself out again at its next polish (before a click is
+            // delivered, Qt 6.11), so it is clicked where it ends up.
+            var remove = findChild(shell, function(o) { return o.objectName === "deleteDialogRemove"; });
+            verify(remove.visible);
+            waitForItemPolished(remove.parent);
+            mouseClick(remove);
             compare(LauncherLayout.pageOf(shell.launcherLayout, "com.example.info"), -1);
             removeEntry("com.example.info");
         }
