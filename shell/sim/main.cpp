@@ -23,7 +23,9 @@
 //       Shift+F8 = a USB cable from a computer in / out, Ctrl+F8 = the computer
 //       ejects the USB drive; F3 + F11 held, then Home = Full Erase,
 //       F3 + F10 = USB drive mode; Shift+F7 = a Touch to Share phone in range or
-//       gone, Ctrl+F7 = it touches the device.
+//       gone, Ctrl+F7 = it touches the device; Ctrl+Shift+G = a game
+//       controller (Ctrl+Shift+A presses A), Ctrl+Shift+U = a USB drive in
+//       the device's port, Ctrl+Shift+T = the battery's next temperature.
 //       Type in card view for Just Type.
 
 #include <QCommandLineParser>

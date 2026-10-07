@@ -175,6 +175,56 @@ way, or blocks. The simulator logs each address (`DropShare: receive at
 small Node service serves the same requests: the same two pages, the
 same JSON operations, the device's LAN address.
 
+### Accessories, tethering and the battery
+
+Phoenix's services for Settings > Game Controllers, USB, Hotspot &
+Tethering and Battery (docs/M6-PLAN.md F4 items 8-9; `@phoenix/luna`
+`gamepads`, `usbDrives`, `tethering`, `battery`). In the simulator the
+hardware is phoenix-sim's Simulate menu, which reaches the pages as shell
+status (`gamepads`, `usbDrives`, `formFactor`, `usageTick`; the runtime's
+`hostStatusHooks`):
+- **Game controllers** (`org.webosphoenix.gamepads/list`): the Gamepad API
+  works in every web app under QtWebEngine. Chromium's own controllers (the
+  computer's) and the simulator's (Ctrl+Shift+G, A on Ctrl+Shift+A) both
+  come from `navigator.getGamepads()`, with `gamepadconnected` and
+  `gamepaddisconnected` events. On a device, Bluetooth controllers pair in
+  Settings > Bluetooth (BlueZ's HID profile makes them evdev devices), and
+  USB ones are evdev devices at once. Chromium reads both through udev, so
+  WebAppMgr's Chromium needs the gamepad service (udev) and access to
+  `/dev/input/event*` for the web apps' user.
+- **USB drives** (`org.webosphoenix.usb`: `listDrives`, `unmount`,
+  `mount`): drives in the device's own port, in host mode with an OTG
+  cable (Ctrl+Shift+U in the simulator). A notification says when one
+  goes in, and Safely Remove lets it go. On a device: udisks2 over D-Bus
+  (`org.freedesktop.UDisks2`: `Filesystem.Mount` under `/media/usb/<label>`,
+  `Filesystem.Unmount` then `Drive.PowerOff` for Safely Remove,
+  `InterfacesAdded` / `InterfacesRemoved` for drives coming and going). The
+  kernel needs the port in host or OTG mode (`dr_mode` or the role
+  switch).
+- **Hotspot & Tethering** (`org.webosphoenix.tethering`: `getStatus`,
+  `setWifi {enabled, ssid, passphrase, security}`, `setUsb {enabled}`):
+  phones only (`available` is false where the shell says "tablet"). An
+  ongoing activity shows while it is on. On a device: OSE's connman
+  (`net.connman.Technology` `SetProperty Tethering` with `TetheringIdentifier`
+  and `TetheringPassphrase` for Wi-Fi, the gadget technology for USB), or
+  NetworkManager where it runs (`nmcli connection add type wifi mode ap
+  ipv4.method shared`, and a shared connection on the USB gadget's `usb0`).
+- **Battery** (`org.webosphoenix.battery/usage`): the level over the last
+  24 hours (each change powerd reports, `runtime.recordBattery`), and how
+  long each app was in front with the screen on (the shell's `usageTick`,
+  every minute and when the app in front changes). Each app's share is an
+  estimate from that time. The simulator seeds a demo day the first time,
+  as `runtime/sample-data.js` seeds the apps. On a device the shell keeps
+  the same ticks, and the level comes from powerd's `batteryStatus`.
+- **Temperature**: powerd's `batteryStatus` carries `temperature_C`
+  (Ctrl+Shift+T in the simulator: 31, 46, 51 °C). luna-systemui warns,
+  through a compat overlay (`data/phoenix-temperature.js`, after Jason
+  Robitaille's Device Temperature Warnings patch): a banner at 45 °C, a
+  Device Too Hot alert at 50 °C (`app/PowerdAlerts/
+  phoenix-temperature-alert.js`). It checks every five minutes, and on each
+  signal. Each warning comes once, until the battery cools 2 °C below its
+  mark. `--scene hot` shows the alert.
+
 ### Editing: Cut, Copy, Paste, Select All
 
 Every app menu starts with **Edit** (Select All, Cut, Copy, Paste), as Mojo

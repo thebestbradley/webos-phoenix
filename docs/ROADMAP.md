@@ -282,7 +282,7 @@ Agreed with the owner on 7 October 2026; [M6-PLAN.md](M6-PLAN.md) has the detail
 - [x] F1: press and hold on launcher icons (peek and menu; in the simulator)
 - [x] F2: clipboard manager (keyboard strip, Clipboard app, Settings > Clipboard; in the simulator)
 - [x] F3: the Phoenix Assistant 1.0 (commands, optional on-device model, cloud models with permission, Assistant app; in the simulator)
-- [ ] F4: community features picked for 1.0
+- [x] F4: community features picked for 1.0 (in the simulator; the hardware-dependent ones finish on devices in the image work)
   - [x] Launcher: app groups (folders), tabs renamed, added and removed, grid density (in the simulator)
   - [x] Cards: infinite cycling, tap a side card to maximize it, the wave launcher (in the simulator)
   - [x] System: the power menu (hold Power), a Flashlight row in the system menu, battery percentage (in the simulator)
@@ -290,6 +290,8 @@ Agreed with the owner on 7 October 2026; [M6-PLAN.md](M6-PLAN.md) has the detail
   - [x] Settings > Advanced (animation speed, tap ripple, gesture sensitivity, haptics and the options above) (in the simulator)
   - [x] Keyboard: a number row, off by default (in the simulator)
   - [x] Browser: private browsing, find on page, a content blocker, mobile or desktop sites, more search engines and a custom one, a system proxy (in the simulator)
+  - [x] Sharing and sync: DropShare, subscribed .ics calendars, game controllers, a USB (OTG) page, tethering on phones (in the simulator)
+  - [x] Health: temperature warnings, a battery usage pane (in the simulator)
 
 ## 1.0 release
 

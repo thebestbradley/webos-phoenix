@@ -14,6 +14,9 @@
 //   webcal     a Subscribed Calendar account: its page checks a public
 //              .ics address, the account reads it into a read-only
 //              calendar (the address answered here, through the proxy).
+//   temperature luna-systemui (compat data/phoenix-temperature.js) warns of
+//              the battery's heat: a banner at 45 °C, an alert at 50 °C,
+//              once each until it cools (item 9).
 //
 //   node tools/test-sharing.cjs [--tablet] [--out DIR]
 //
@@ -300,6 +303,34 @@ async function main() {
             return !!calWin && /New Year/.test(await calWin.evaluate(() => document.body.innerText));
         }, "the Calendar app shows today's subscribed event", 20000);
         if (calWin) await calWin.screenshot({ path: path.join(outDir, "webcal-calendar.png") });
+
+        // ---- The battery's temperature (luna-systemui) ----------------------------------
+        const sysui = await context.newPage();
+        watch(sysui, "systemui");
+        const popups = [];
+        context.on("page", (p) => popups.push(p));
+        await sysui.goto(`http://127.0.0.1:${port}/usr/palm/applications/com.palm.systemui/index.html`);
+        // Its powerd listeners are up once it has asked for the charger's state.
+        await until(() => sysui.evaluate(() => !!(window.enyo && enyo.application && enyo.application.powerdService || document.querySelector("body *"))),
+                    "luna-systemui is up", 15000);
+        const heat = (t) => sysui.evaluate((x) => window.__phoenixRuntime.setPower({ temperature: x }), t);
+        const banners = () => host.filter((m) => m.page === "systemui" && m.type === "banner").map((m) => m.payload.message);
+        await until(async () => { await heat(46); return banners().some((b) => /Device is warm: 46 °C/.test(b)); }, "at 46 °C a banner says the device is warm");
+        await heat(47);
+        check(banners().filter((b) => /Device is warm/.test(b)).length === 1, "once, not again while it stays warm");
+        await heat(51);
+        let alert = null;
+        await until(async () => {
+            alert = popups.find((p) => /powerdalerts\.html/.test(p.url()) && /TemperatureAlert/.test(p.url()));
+            return !!alert && /Device Too Hot/.test(await alert.evaluate(() => document.body.innerText)) &&
+                   /51 °C/.test(await alert.evaluate(() => document.body.innerText));
+        }, "at 51 °C the Device Too Hot alert");
+        if (alert) await alert.screenshot({ path: path.join(outDir, "temperature-alert.png") });
+        // Cooled down, then warm again: it warns again.
+        await heat(40);
+        await until(async () => { await heat(45); return banners().filter((b) => /Device is warm: 45 °C/.test(b)).length === 1; },
+                    "cooled and warm again: a new warning");
+        await heat(31);
 
         check(errors.length === 0, `no page errors (${errors.slice(0, 5).join(" | ")})`);
         await browser.close();
