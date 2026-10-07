@@ -993,6 +993,11 @@ Item {
         var call = function (m, p, done) { windows.lunaCall("luna://org.webosphoenix.clipboard/" + m, p, done || function () {}); };
         var focusField = function () {
             var w = shell.cardView.maximized ? windows.windowFor(shell.cardView.currentUid) : null;
+            // The page's view takes the focus first (Chromium sends a page
+            // without it no focus events), as a tap on the card would.
+            var view = w ? windows.inputTarget(shell.cardView.currentUid) : null;
+            if (view)
+                view.forceActiveFocus();
             if (w && w.runScript)
                 w.runScript("(function f(n) { var e = document.querySelector('input:not([type=checkbox]):not([type=radio]), textarea');"
                             + " if (e) e.focus(); else if (n > 0) setTimeout(function () { f(n - 1); }, 300); })(20)");

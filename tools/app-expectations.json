@@ -72,6 +72,10 @@
         "status": "works",
         "note": "Phoenix Voice Memos (React, apps/voicememos); tools/test-voicememos.cjs drives it with Chromium's fake microphone. The simulator transcribes only the demo memos (whisper.cpp runs on the device)"
     },
+    "org.webosphoenix.clipboard": {
+        "status": "works",
+        "note": "Phoenix Clipboard (React, apps/clipboard) on the simulated org.webosphoenix.clipboard; tools/test-clipboard.cjs drives it and Settings > Clipboard"
+    },
     "org.webosphoenix.flashlight": {
         "status": "works",
         "note": "Phoenix Flashlight (React, apps/flashlight) on the simulated org.webosports.service.torch (LuneOS torchd's API); tools/test-flashlight.cjs drives it. The simulated LED lights nothing"

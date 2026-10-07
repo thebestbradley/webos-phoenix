@@ -34,6 +34,7 @@
         "/usr/palm/applications/org.webosphoenix.agenda/": {"icon.png":[[2,"icon-128x128.png"],[4,"icon-256x256.png"],[8,"icon-512x512.png"]]},
         "/usr/palm/applications/org.webosphoenix.authenticator/": {"icon.png":[[2,"icon-128x128.png"],[4,"icon-256x256.png"],[8,"icon-512x512.png"]]},
         "/usr/palm/applications/org.webosphoenix.camera/": {"icon.png":[[2,"icon-128x128.png"],[4,"icon-256x256.png"],[8,"icon-512x512.png"]]},
+        "/usr/palm/applications/org.webosphoenix.clipboard/": {"icon.png":[[2,"icon-128x128.png"],[4,"icon-256x256.png"],[8,"icon-512x512.png"]]},
         "/usr/palm/applications/org.webosphoenix.dav/": {"icon.png":[[2,"icon-128x128.png"],[4,"icon-256x256.png"],[8,"icon-512x512.png"]]},
         "/usr/palm/applications/org.webosphoenix.docview/": {"icon.png":[[2,"icon-128x128.png"],[4,"icon-256x256.png"],[8,"icon-512x512.png"]]},
         "/usr/palm/applications/org.webosphoenix.enyo2demo/": {"icon.png":[[2,"icon-128x128.png"],[4,"icon-256x256.png"],[8,"icon-512x512.png"]]},

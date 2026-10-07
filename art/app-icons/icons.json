@@ -386,5 +386,20 @@
         "out": [
             "apps/settings/public/icons/devmode"
         ]
+    },
+    "clipboard": {
+        "platter": "disc",
+        "out": [
+            "apps/clipboard/public/icon"
+        ]
+    },
+    "settings-clipboard": {
+        "platter": "diamond",
+        "object": "clipboardpane",
+        "base": 176,
+        "foot": 55,
+        "out": [
+            "apps/settings/public/icons/clipboard"
+        ]
     }
 }

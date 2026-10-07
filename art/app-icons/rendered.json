@@ -47,6 +47,22 @@
   "svg": "ce21ef4600547b3633b39aee075af6ea4f02374b1692649bc31140348d78721f",
   "png": "7f5df23bf361c0681e4395e1ba225998955839d2b3400febeabedd0c4c4d07ba"
  },
+ "apps/clipboard/public/icon-128x128.png": {
+  "svg": "faa9457af9e783c527e338d8d7f87af342c9c274dd27a0f9d06ea7ff42031f48",
+  "png": "1696cc3b0f053767a4d3c0b744bc0bda070092153af3811161cb1cdad0bb1c6d"
+ },
+ "apps/clipboard/public/icon-256x256.png": {
+  "svg": "e09ee4c975e04ad5f0ff6626f37c2f2779a374a2412a128282dbdda7708f6da2",
+  "png": "ee9f4cb127ea9742742b93ea7d72b45905265c337e5be4f12ac527bd26bc34dd"
+ },
+ "apps/clipboard/public/icon-512x512.png": {
+  "svg": "49277ca5196ae3388a58513236c9103733f4b68d907305a8e12973577bdbf707",
+  "png": "d1b5bd79ba7287cc721cfb5c75702a9ef67adf2a2d7da111d51df96ce314307a"
+ },
+ "apps/clipboard/public/icon.png": {
+  "svg": "70c8318b1b0dbe3af51f9601e9cdc41f75520b5db4b13d62dcb2e98ffd35a8de",
+  "png": "dc0997a46eb455a9a65782aa821c87e2b4665fdac032a08b63d78bc8cb4d57e1"
+ },
  "apps/dav/icon-128x128.png": {
   "svg": "abf5ef5f74a6737a7c880235be1c62f39f029ba7ec62efa0792d02f9092a8f91",
   "png": "afd6d75bda2a9a24a23534bf995ab4c98884292d9b41c351da172ee071f86433"
@@ -526,6 +542,22 @@
  "apps/settings/public/icons/certificates.png": {
   "svg": "76873ca542a5ce5fc94a5321a3a705a122f4897c79946f022c7795f83382523b",
   "png": "094c0a34620a7729837a18cb3ef908295f676aada6f95442627b8a4394d0589a"
+ },
+ "apps/settings/public/icons/clipboard-128x128.png": {
+  "svg": "c3dfa8b4ac86f997f419ce3b960fd1f998a5e86ce569aec3c6a93f275112bdc9",
+  "png": "492f1b76d1bb974c13d3569e8baad456f8a14379e71e675af8db2b68dc9e13d5"
+ },
+ "apps/settings/public/icons/clipboard-256x256.png": {
+  "svg": "e08b854e74eebf8ef23276a229ad2b562e9093422c31356da7c1aa39be80fd03",
+  "png": "f2899bbf6e1e44167a66a700d04993e3dc6070172b2af3d0f544784116ffd596"
+ },
+ "apps/settings/public/icons/clipboard-512x512.png": {
+  "svg": "34b96c18d81088897ebf836f5eae569b71314271f16a7cb454b16dffb1abf725",
+  "png": "e37da5cce22a712ae4b7f31dd1538c47df42d42ef1b436299fb089959f1d479f"
+ },
+ "apps/settings/public/icons/clipboard.png": {
+  "svg": "1dba531c22d45a8d49080a3e3fa3b0d1371ef7a447474f4d36e670dadcb081de",
+  "png": "7d6a54ab0316432d4dd28607ca335d2b6e0b65ed86a55540ddb3b0d272fe7eb0"
  },
  "apps/settings/public/icons/datetime-128x128.png": {
   "svg": "34cfa77fbecc76fdf51061b0da963c90c08b4e0ba9782b60aa00f9e3b3c37152",
