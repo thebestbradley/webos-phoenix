@@ -120,13 +120,41 @@ Item {
             return findChild(c, "clipCardArea");
         }
 
+        // The menu's entries once the Row has placed them: new delegates
+        // all sit at x 0 (the last on top) until the Row's polish, which
+        // comes with a frame, sooner or later depending on the backend.
+        function menuLaidOut() {
+            var row = findChild(kb, "clipMenuRow");
+            verify(row !== null);
+            waitForItemPolished(row, 2000);
+            tryVerify(function () {
+                var x = 0, n = 0;
+                for (var i = 0; i < row.children.length; ++i) {
+                    var c = row.children[i];
+                    if (String(c.objectName).indexOf("clipMenu-") !== 0)
+                        continue;
+                    if (Math.abs(c.x - x) > 0.5)
+                        return false;
+                    x += c.width;
+                    ++n;
+                }
+                return n > 0 && Math.abs(row.width - x) < 0.5;
+            }, 2000, "the menu's entries laid out");
+        }
+        function menuEntry(id) {
+            menuLaidOut();
+            var e = findChild(kb, "clipMenu-" + id);
+            verify(e !== null, "menu entry " + id);
+            return e;
+        }
+
         // Press and hold a card until its actions are up (and laid out).
         function hold(id) {
             var menu = findChild(kb, "clipMenu");
             mousePress(card(id));
             tryCompare(menu, "visible", true, 2000);
             mouseRelease(card(id));
-            wait(50);
+            menuLaidOut();
         }
 
         function test_keyInEveryFieldWhileOn() {
@@ -181,10 +209,9 @@ Item {
             showKeyboard(false);
             openStrip();
             mouseClick(card("c"));
-            wait(50);
+            tryCompare(findChild(kb, "clipMessage"), "visible", true, 1000);
             compare(field.text, "");
             verify(kb.clipsOpen);
-            verify(findChild(kb, "clipMessage").visible);
             compare(fake.calls.indexOf("paste c"), -1);
             showKeyboard(true);
             openStrip();
@@ -198,8 +225,13 @@ Item {
             showKeyboard(false);
             openStrip();
             // The fourth card, scrolled into view.
-            findChild(kb, "clipCards").positionViewAtEnd();
-            wait(50);
+            var list = findChild(kb, "clipCards");
+            list.positionViewAtEnd();
+            waitForItemPolished(list, 2000);
+            tryVerify(function () {
+                var p = card("d").mapToItem(kb, 0, 0);
+                return p.x >= 0 && p.x + card("d").width <= kb.width;
+            }, 2000, "the fourth card in view");
             mouseClick(card("d"));
             compare(images.count, 1);
             compare(images.signalArguments[0][0].id, "d");
@@ -210,31 +242,24 @@ Item {
             openStrip();
             var menu = findChild(kb, "clipMenu");
             hold("a");
-            var pin = findChild(kb, "clipMenu-pin");
-            verify(pin !== null);
-            mouseClick(pin);
+            mouseClick(menuEntry("pin"));
             verify(fake.calls.indexOf("pin a") >= 0, fake.calls);
             compare(menu.visible, false);
             // Unpin for a pinned one; Save to... lists the categories.
             hold("b");
             verify(findChild(kb, "clipMenu-unpin") !== null);
-            mouseClick(findChild(kb, "clipMenu-save"));
-            // The categories' row is laid out on the next frame.
-            wait(50);
-            var none = findChild(kb, "clipMenu-cat:");
-            verify(none !== null);
-            mouseClick(none);
+            mouseClick(menuEntry("save"));
+            mouseClick(menuEntry("cat:"));
             verify(fake.calls.indexOf("category b ") >= 0, fake.calls);
             hold("a");
-            mouseClick(findChild(kb, "clipMenu-save"));
-            wait(50);
-            mouseClick(findChild(kb, "clipMenu-cat:cwork"));
+            mouseClick(menuEntry("save"));
+            mouseClick(menuEntry("cat:cwork"));
             verify(fake.calls.indexOf("category a cwork") >= 0, fake.calls);
             hold("a");
-            mouseClick(findChild(kb, "clipMenu-delete"));
+            mouseClick(menuEntry("delete"));
             verify(fake.calls.indexOf("delete a") >= 0, fake.calls);
             hold("a");
-            mouseClick(findChild(kb, "clipMenu-app"));
+            mouseClick(menuEntry("app"));
             verify(fake.calls.indexOf("app") >= 0, fake.calls);
             // Nothing was pasted by the holds.
             compare(field.text, "");

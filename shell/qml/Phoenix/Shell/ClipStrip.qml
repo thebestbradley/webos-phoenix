@@ -459,6 +459,7 @@ Item {
                 boundsBehavior: Flickable.StopAtBounds
                 Row {
                     id: row
+                    objectName: "clipMenuRow"
                     height: parent.height
                     Repeater {
                         model: menu.items
