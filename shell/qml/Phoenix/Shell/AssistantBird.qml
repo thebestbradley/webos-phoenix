@@ -279,7 +279,8 @@ Item {
     Timer {
         id: blinkTimer
         running: bird._live && bird.eyesShown > 0.5
-        interval: bird._blink.minGap
+        // At random from the first one on (birds side by side do not blink together).
+        interval: bird._blink.minGap + Math.random() * (bird._blink.maxGap - bird._blink.minGap)
         onTriggered: {
             blinkAnim.loops = Math.random() < bird._blink.twice ? 2 : 1;
             blinkAnim.restart();

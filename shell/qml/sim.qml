@@ -6,7 +6,8 @@
 // Context properties set by phoenix-sim:
 //   simScene       "locked" | "cards" | "stacks" | "longstack" | "reorder" | "maximized" | "heldcard" | "launcher" |
 //                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" | "drawer" | "capture" | "capturepreview" |
-//                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "systemmenu" | "empty"
+//                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "assistantbird" | "assistantbirds" |
+//                  "systemmenu" | "empty"
 //   simFirstUse    start with First Use (--first-use); without it First Use
 //                  runs at start-up until it has been done once
 //                  (simSettings "firstuse/done", set when the app reports the
@@ -100,6 +101,103 @@ Item {
                 // Fixed clock for reproducible screenshots.
                 fixedTime: typeof simScene !== "undefined" && simScene !== "" ? new Date(2009, 5, 6, 9, 41) : null
                 deviceOrientation: typeof simOrientation !== "undefined" && simOrientation !== "" ? simOrientation : "up"
+            }
+        }
+
+        // "assistantbird": the Assistant's bird (docs/ASSISTANT-CHARACTER.md)
+        // going through its twelve poses, a few seconds each, large, for
+        // review; "assistantbirds": all twelve at once, a contact sheet.
+        // Over the shell, on the storyboard's dark ground; the frame rate
+        // counter at the bottom left.
+        Loader {
+            anchors.fill: shell
+            active: root.scene === "assistantbird" || root.scene === "assistantbirds"
+            sourceComponent: Rectangle {
+                id: review
+                color: "#1E1C22"
+                readonly property var poses: Object.keys(reviewProbe.art.poses)
+                property int index: 0
+                MouseArea { anchors.fill: parent }
+                FpsCounter {
+                    id: reviewFps
+                    anchors.left: parent.left
+                    anchors.bottom: parent.bottom
+                    z: 1
+                }
+                // The frame rate over the last two seconds, to the log.
+                Timer {
+                    running: true
+                    interval: 2000
+                    repeat: true
+                    onTriggered: {
+                        var h = reviewFps.history.filter(function (e) { return e.time > Date.now() - 2000; });
+                        if (h.length === 0)
+                            return;
+                        var sum = 0, low = 1000;
+                        h.forEach(function (e) { sum += e.fps; low = Math.min(low, e.fps); });
+                        console.info("Bird review: " + Math.round(sum / h.length) + " fps (lowest " + low + ")");
+                    }
+                }
+                AssistantBird { id: reviewProbe; visible: false }
+                // One at a time.
+                Item {
+                    anchors.fill: parent
+                    visible: root.scene === "assistantbird"
+                    AssistantBird {
+                        id: big
+                        objectName: "reviewBird"
+                        width: Math.round(Math.min(parent.width * 0.6, parent.height * 0.5))
+                        anchors.centerIn: parent
+                        pose: review.poses[review.index]
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.top: big.bottom
+                        anchors.topMargin: Theme.px(8)
+                        text: (review.index + 1) + " / " + review.poses.length + "   " + big.art.poses[big.pose].label
+                        color: "#F4EEE6"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.px(Theme.tablet ? 28 : 20)
+                    }
+                    Timer {
+                        running: root.scene === "assistantbird"
+                        interval: 2600
+                        repeat: true
+                        onTriggered: review.index = (review.index + 1) % review.poses.length
+                    }
+                }
+                // All at once.
+                Grid {
+                    visible: root.scene === "assistantbirds"
+                    anchors.centerIn: parent
+                    columns: review.width > review.height ? 4 : 3
+                    readonly property real cellWidth: Math.floor(review.width / columns)
+                    readonly property real cellHeight: Math.floor((review.height - Theme.statusBarHeight) / Math.ceil(review.poses.length / columns))
+                    Repeater {
+                        model: root.scene === "assistantbirds" ? review.poses : []
+                        delegate: Item {
+                            required property string modelData
+                            width: parent.cellWidth
+                            height: parent.cellHeight
+                            AssistantBird {
+                                id: one
+                                width: Math.round(Math.min(parent.width * 0.7, (parent.height - label.height) * 0.8 / 1.1))
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                y: Math.round(parent.height * 0.12)
+                                pose: parent.modelData
+                            }
+                            Text {
+                                id: label
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                anchors.top: one.bottom
+                                text: one.art.poses[one.pose].label
+                                color: "#F4EEE6"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.px(Theme.tablet ? 18 : 13)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -663,7 +761,8 @@ Item {
     readonly property var scenes: ["locked", "cards", "stacks", "longstack", "reorder", "maximized", "heldcard",
                                    "launcher", "launcheredit", "launchermenu", "launchergroup", "launchergroupopen", "launchertabs", "launcherinstall", "wave", "powermenu", "hot", "pin", "emergency", "firstuse",
                                    "lowbattery", "banner", "notified", "dashboard", "drawer", "capture",
-                                   "capturepreview", "justtype", "keyboard", "clipstrip", "assistant", "systemmenu", "empty"]
+                                   "capturepreview", "justtype", "keyboard", "clipstrip", "assistant", "assistantbird", "assistantbirds",
+                                   "systemmenu", "empty"]
     readonly property string scene: typeof simScene !== "undefined" ? simScene : ""
 
     // The keys of the entries that run something, wherever the keyboard

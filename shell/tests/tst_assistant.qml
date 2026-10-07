@@ -9,8 +9,11 @@
 // assistant off a hold does nothing. Each opening is a new conversation
 // (made by its first request, none for an opening without one); the app
 // button opens the Assistant app on it. It grows out of the held button,
-// messages slide in, dots bounce while it thinks. The service is a
-// stand-in here (its own tests are in apps/assistant/service).
+// messages slide in, dots bounce while it thinks. The bird plays the
+// storyboard: asleep as it opens, hello, then listening, thinking, working
+// and done, speaking, asking, confused and oops as the conversation goes;
+// asleep again as it closes. The service is a stand-in here (its own tests
+// are in apps/assistant/service).
 
 import QtQuick
 import QtTest
@@ -70,10 +73,14 @@ Item {
                 var added = [msg({ role: "user", text: params.text })];
                 if (/^text/.test(params.text))
                     added.push(msg({ role: "assistant", text: "Send \"hi\" to Sam?", command: "text", status: "pending", confirm: { command: "text", args: {} } }));
+                else if (/^break/.test(params.text))
+                    added.push(msg({ role: "assistant", text: "That didn't work: no torch.", command: "flashlight", status: "failed" }));
+                else if (/^hello/.test(params.text))
+                    added.push(msg({ role: "assistant", text: "Hello!" }));
                 else if (/odyssey/.test(params.text))
                     added.push(msg({ role: "assistant", text: "I can't do that on the phone.", choices: [{ id: "web", label: "Search the web" }] }));
                 else
-                    added.push(msg({ role: "assistant", text: "The flashlight is on.", via: "commands", status: "done" }));
+                    added.push(msg({ role: "assistant", text: "The flashlight is on.", via: "commands", command: "flashlight", status: "done" }));
                 messages = messages.concat(added);
                 reply.thread = { id: tid };
                 reply.messages = added;
@@ -98,6 +105,23 @@ Item {
     }
 
     SignalSpy { id: appSpy; target: overlay; signalName: "appRequested" }
+    // Stands in for the shell's speech.
+    QtObject { id: fakeSpeech; property bool speaking: false }
+    // Stands in for the dictation, with a loudness.
+    QtObject {
+        id: fakeDictation
+        property bool listening: false
+        property bool busy: false
+        property real loudness: 0
+        property string owner: ""
+        property string prompt: ""
+        property bool autoStop: false
+        signal stateChanged()
+        signal transcribed(string text, string error)
+        function start() { listening = true; stateChanged(); }
+        function stop() { listening = false; busy = true; stateChanged(); }
+        function cancel() { listening = false; busy = false; stateChanged(); }
+    }
     property var overlay: null
 
     TestCase {
@@ -111,6 +135,7 @@ Item {
             ql = findChild(shell, "quickLaunch");
             verify(overlay && ql);
             overlay.source = fake;
+            overlay.speech = fakeSpeech;
         }
 
         function init() {
@@ -126,6 +151,7 @@ Item {
             fake.threads = 0;
             fake.hold = false;
             fake.held = [];
+            fakeSpeech.speaking = false;
             appSpy.clear();
             tryCompare(overlay, "visible", false, 2000);
             tryVerify(function () { return ql.visible && ql.opacity === 1; }, 3000);
@@ -211,8 +237,10 @@ Item {
             shell.gestureBack();
             tryCompare(overlay, "open", false, 2000);
             openByHold();
-            // Above the conversation: outside it.
-            mouseClick(shell, shell.width / 2, Theme.statusBarHeight + 60);
+            // Under the bird, above the conversation: outside it.
+            var bird = findChild(overlay, "assistantBird");
+            var under = bird.mapToItem(shell, bird.width / 2, bird.height + 20);
+            mouseClick(shell, under.x, under.y);
             tryCompare(overlay, "open", false, 2000);
             openByHold();
             keyClick(Qt.Key_Escape);
@@ -364,6 +392,125 @@ Item {
             tryVerify(function () { return overlay.shown > 0 && overlay.shown < 1; }, 2000, "closing");
             tryCompare(overlay, "visible", false, 3000);
             compare(overlay.shown, 0);
+        }
+
+        // ---- The bird ----------------------------------------------------------------
+        function bird() { return findChild(overlay, "assistantBird"); }
+        // The bird holds a pose once it has reached it.
+        function poseIs(pose, msg) {
+            tryVerify(function () { return overlay.birdPose === pose && bird().pose === pose && bird().atRest(); }, 4000, msg || pose);
+        }
+
+        // Opening: it rises asleep with the panel, wakes and waves, then idles.
+        function test_birdWakesAsItOpens() {
+            var p = launcherButton();
+            tryVerify(function () { return !shell.keyboardOpen && ql.visible && ql.opacity === 1 && ql.shownProgress === 1; }, 3000);
+            hold(p);
+            tryCompare(overlay, "open", true, 2000);
+            verify(overlay.shown < 1 || overlay.birdPose === "asleep" || overlay.birdPose === "hello");
+            tryCompare(overlay, "birdPose", "hello", 3000);
+            poseIs("idle");
+            // At the top in the middle of the panel, 96 px or more.
+            var panel = findChild(overlay, "assistantPanel");
+            verify(!overlay.birdBeside);
+            verify(bird().width >= Theme.px(96) && bird().width <= Theme.px(140));
+            fuzzyCompare(bird().x + bird().width / 2, panel.width / 2, 1);
+            // A tap on it waves, and does not close the view.
+            mouseClick(bird(), bird().width / 2, bird().height / 2);
+            tryCompare(overlay, "birdPose", "hello", 1000);
+            verify(overlay.open);
+            poseIs("idle");
+            // Closing: asleep again, back into the button.
+            keyClick(Qt.Key_Escape);
+            compare(overlay.birdPose, "asleep");
+            tryCompare(overlay, "visible", false, 3000);
+        }
+
+        // Waiting: thinking; a command that ran: working, then done (the
+        // hop), then speaking while the answer is spoken, then idle.
+        function test_birdThinksWorksCheersAndSpeaks() {
+            openByHold();
+            poseIs("idle");
+            fake.hold = true;
+            type("turn on the flashlight");
+            poseIs("thinking");
+            fakeSpeech.speaking = true;
+            fake.release();
+            tryCompare(overlay, "birdPose", "working", 3000);
+            tryCompare(overlay, "birdPose", "done", 3000);
+            tryVerify(function () { return bird().lift > 0; }, 3000, "the hop");
+            poseIs("speaking");
+            tryVerify(function () { return bird().flap < 0.5; }, 3000, "the beak moving");
+            fakeSpeech.speaking = false;
+            poseIs("idle");
+            compare(bird().lift, 0);
+        }
+
+        // A read-back: asking until it is answered; "I can't do that" with
+        // its choices: a shrug, then idle; a failure: oops.
+        function test_birdAsksShrugsAndSaysOops() {
+            openByHold();
+            type("text sam hi");
+            poseIs("asking");
+            var yes = findChild(arrived("Send \"hi\" to Sam?"), "assistantConfirmYes");
+            mouseClick(yes, yes.width / 2, yes.height / 2);
+            tryVerify(function () { return bubbles().indexOf("Sent to Sam.") >= 0; }, 2000);
+            poseIs("idle");
+
+            type("who wrote the odyssey");
+            tryCompare(overlay, "birdPose", "confused", 3000);
+            poseIs("idle");
+
+            type("break the flashlight");
+            tryCompare(overlay, "birdPose", "shy", 3000);
+            poseIs("idle");
+            compare(overlay.outcomeOf([{ role: "assistant", status: "failed" }]), "failed");
+            compare(overlay.outcomeOf([{ role: "assistant", text: "Hello!" }]), "answer");
+            compare(overlay.outcomeOf([]), "answer");
+        }
+
+        // Listening: the bird listens and follows the microphone's loudness;
+        // transcribing, it thinks.
+        function test_birdListensToTheMicrophone() {
+            var real = overlay.dictation;
+            overlay.dictation = fakeDictation;
+            try {
+                openByHold();
+                poseIs("idle");
+                overlay.listen();
+                poseIs("listening");
+                fakeDictation.loudness = 0.7;
+                compare(bird().level, 0.7);
+                tryCompare(bird(), "voice", 0.7, 2000);
+                fakeDictation.stop();
+                tryCompare(overlay, "birdPose", "thinking", 2000);
+                fakeDictation.busy = false;
+                fakeDictation.transcribed("hello there", "");
+                tryVerify(function () { return bubbles().indexOf("Hello!") >= 0; }, 2000);
+                poseIs("idle");
+                compare(bird().level, -1);
+            } finally {
+                overlay.stopListening(true);
+                overlay.dictation = real;
+            }
+        }
+
+        // A short panel (the phone's keyboard up): the bird sits small
+        // beside the field.
+        function test_birdBesideTheFieldWhenShort() {
+            openByHold();
+            var input = findChild(overlay, "assistantInput");
+            mouseClick(input, input.width / 2, input.height / 2);
+            tryCompare(shell, "keyboardOpen", true, 2000);
+            tryVerify(function () { return overlay.birdBeside; }, 2000);
+            var field = findChild(overlay, "assistantField");
+            tryVerify(function () { return bird().width === overlay.birdSize && bird().x === 0 && field.x >= bird().width; }, 2000, "beside the field");
+            verify(bird().width < Theme.px(96));
+            // Its feet on the field's bottom line, its body beside it.
+            tryVerify(function () {
+                var b = bird().mapToItem(field, bird().width / 2, bird().height * 412 / 440);
+                return Math.abs(b.y - field.height) <= 2;
+            }, 2000, "its feet on the field's bottom line");
         }
 
         function test_offDoesNothing() {

@@ -1852,6 +1852,21 @@ all through `Theme.motion` (Animation speed, reduced motion).
 `phoenix-sim --scene assistant [--launch <app>]` shows a short conversation
 over the screen.
 
+**The assistant's bird** ([ASSISTANT-CHARACTER.md](ASSISTANT-CHARACTER.md),
+`AssistantBird.qml`) sits at the top in the middle of the panel (96 to 140
+px by its height; small beside the field where the panel is short, as on a
+phone with the keyboard up) and plays what is going on (`birdPose`):
+asleep as the panel grows, hello, then listening while the microphone is
+on (following the dictation's `loudness`), thinking while a request or a
+transcription waits, then the reply's outcome (`outcomeOf` its new
+messages): a command that ran (`status: "done"` with a `command`) plays
+working then done, `failed` plays shy (Oops), choices play confused, each
+for a moment (`beatsFor`, at Animation speed); speaking while the shell's
+`Speech` speaks; asking while a read-back waits; idle (with a nod for an
+answer that is not spoken); asleep again as it closes. A tap on it waves.
+`phoenix-sim --scene assistantbird` cycles through its poses,
+`--scene assistantbirds` shows them all; both log the frame rate.
+
 **The on-device model and speech in phoenix-sim**: `/usr/share/phoenix/host.json`
 has `"assistant": true`; the runtime sends `assistant` host messages (`{op:
 status | download | cancel | remove | ensure | speak | stopSpeaking |
@@ -1866,7 +1881,10 @@ choices and read-backs, the field, the microphone
 (`org.webosphoenix.dictation`), Conversations (new, open, delete), and
 Preferences. Launch params: `{text}` (Just Type's "Ask Assistant"),
 `{threadId}`, `{timerDone}`. Its CSP allows `unsafe-eval` only because the
-simulator runs the service in its page.
+simulator runs the service in its page. The same bird (`src/bird/Bird.tsx`)
+greets on an empty conversation (thinking while it loads), and stands below
+the conversation while a request runs: thinking, then working and done, a
+shrug or Oops, as the shell's view decides (`src/bird/pose.ts`).
 
 **Settings > Assistant** (`apps/settings/src/pages/Assistant.tsx`, launch
 point `org.webosphoenix.settings.assistant`): everything above.
