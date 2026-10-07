@@ -5423,17 +5423,29 @@
         // the shell sends only what changed, missing keys are left alone.
         // Answers with one "systemStatus" message carrying the result (which
         // may differ: e.g. airplane mode also turns the radios off).
-        runtime.applyHostStatus = function (st) {
+        // The shell sends each change to every page, but only one page, the
+        // writer (opts.writer; the system UI page in phoenix-sim), stores it
+        // in settings:state, and only when it changes something there. The
+        // state is one object that each page reads from its own process's
+        // copy of localStorage and writes back whole: when every page wrote
+        // it back on every push (the keyboard going down as a dialog
+        // closed), an older copy could land after a setting the user had
+        // just saved and undo it (a new PIN lost on the next start).
+        // Without opts (a page on its own, the browser tests) it writes.
+        runtime.applyHostStatus = function (st, opts) {
             if (!st) return;
-            var s = load();
-            if ("airplaneMode" in st) setOffline(s, !!st.airplaneMode);
-            if ("wifiEnabled" in st && !!st.wifiEnabled !== !!s.wifi.enabled) setWifi(s, !!st.wifiEnabled);
-            if ("bluetoothOn" in st) s.bluetooth.powered = !!st.bluetoothOn;
-            if ("brightness" in st) s.settings.picture.backlight = Math.round(st.brightness);
-            if ("muted" in st) s.audio.muted = !!st.muted;
-            // The system menu's volume slider: the master volume.
-            if ("volume" in st) s.audio.volume = Math.max(0, Math.min(100, Math.round(st.volume)));
-            vpnFromShell(s, st);
+            var writer = !opts || opts.writer !== false;
+            var s = writer ? load() : null, before = writer ? toJson(s) : "";
+            if (writer) {
+                if ("airplaneMode" in st) setOffline(s, !!st.airplaneMode);
+                if ("wifiEnabled" in st && !!st.wifiEnabled !== !!s.wifi.enabled) setWifi(s, !!st.wifiEnabled);
+                if ("bluetoothOn" in st) s.bluetooth.powered = !!st.bluetoothOn;
+                if ("brightness" in st) s.settings.picture.backlight = Math.round(st.brightness);
+                if ("muted" in st) s.audio.muted = !!st.muted;
+                // The system menu's volume slider: the master volume.
+                if ("volume" in st) s.audio.volume = Math.max(0, Math.min(100, Math.round(st.volume)));
+                vpnFromShell(s, st);
+            }
             // The shell's lock screen (com.palm.systemmanager getLockStatus).
             if ("deviceLocked" in st && !!st.deviceLocked !== !!store.get("deviceLocked", false)) {
                 store.set("deviceLocked", !!st.deviceLocked);
@@ -5464,6 +5476,10 @@
                 store.set("imeVisible", !!st.ime.visible);
                 changed();
             }
+            if (!writer) {
+                changed();
+                return;
+            }
             suppressHost = true;
             try {
                 // The keyboard's language key chose another keyboard.
@@ -5472,7 +5488,8 @@
                                            function () {}, { cancelled: function () { return false; } });
                 if ("rotationLocked" in st && !!st.rotationLocked !== !!prefs().rotationLock)
                     sys["/setPreferences"]({ rotationLock: !!st.rotationLocked }, function () {}, { cancelled: function () { return false; } });
-                save(s);
+                if (toJson(s) !== before) save(s);
+                else changed();
             } finally {
                 suppressHost = false;
             }
@@ -9872,7 +9889,7 @@
 
         var pending = {}, lastAppsVersion = -1;
         var baseApply = runtime.applyHostStatus;
-        runtime.applyHostStatus = function (st) {
+        runtime.applyHostStatus = function (st, opts) {
             if (st && st.installerResult && pending[st.installerResult.requestId]) {
                 var cb = pending[st.installerResult.requestId];
                 delete pending[st.installerResult.requestId];
@@ -9888,7 +9905,7 @@
                 installs = st.installs;
                 installWatchers = installWatchers.filter(function (w) { return w() !== false; });
             }
-            baseApply(st);
+            baseApply(st, opts);
         };
         // One request to the host, answered with {ok, error, ...}: install
         // and remove (an app's files), and the application manager's work
@@ -12404,7 +12421,7 @@
             watch(p, reply, ctx, function () { return ok({ finished: true, firstUse: !!store.get("shell:firstUse", false) }); });
         };
         var baseApply = runtime.applyHostStatus;
-        runtime.applyHostStatus = function (st) {
+        runtime.applyHostStatus = function (st, opts) {
             // The launcher's layout, as the shell keeps it: what
             // com.palm.sysMgrDataBackup backs up (see "Backup").
             if (st && typeof st.launcherLayout === "string")
@@ -12418,7 +12435,7 @@
                 store.set("shell:debugOverlays", st.debugOverlays);
                 changed();
             }
-            baseApply(st);
+            baseApply(st, opts);
         };
 
         // ---- Debugging overlays, progress animations, turbo mode ------------------------

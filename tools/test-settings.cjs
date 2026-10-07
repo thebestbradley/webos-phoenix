@@ -157,6 +157,28 @@ async function main() {
             b.call("luna://com.palm.systemmanager/getDeviceLockMode", "{}");
         }));
         check(mode === "pin", "service reports lockMode pin");
+        // The shell's changes reach every page; only the writer stores them,
+        // and only when they change the shared state. A page writing back
+        // its own copy of it on every change could undo a setting another
+        // page had just saved (a new PIN lost on the next start).
+        const writes = await page.evaluate(() => {
+            const KEY = "phoenix:settings:state";
+            let n = 0;
+            const setItem = Storage.prototype.setItem;
+            Storage.prototype.setItem = function (k, v) { if (k === KEY) n++; return setItem.call(this, k, v); };
+            const count = (fn) => { n = 0; fn(); return n; };
+            const out = {
+                keyboard: count(() => __phoenixRuntime.applyHostStatus({ ime: { visible: true } }, { writer: true })),
+                notWriter: count(() => __phoenixRuntime.applyHostStatus({ brightness: 33 }, { writer: false })),
+                writer: count(() => __phoenixRuntime.applyHostStatus({ brightness: 33 }, { writer: true }))
+            };
+            Storage.prototype.setItem = setItem;
+            __phoenixRuntime.applyHostStatus({ ime: { visible: false } });
+            return out;
+        });
+        check(writes.keyboard === 0, `a change outside the shared state does not rewrite it (${writes.keyboard})`);
+        check(writes.notWriter === 0, `a page that is not the writer does not store the shell's change (${writes.notWriter})`);
+        check(writes.writer === 1, `the writer stores a real change once (${writes.writer})`);
         // "Turn off after" and, with a PIN, "Lock after" reach the shell
         // (its display and lock screen).
         await page.click("[data-testid='timeout']");
