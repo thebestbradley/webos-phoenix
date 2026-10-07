@@ -121,6 +121,58 @@
 }
 .ab-breath { animation: ab-breath calc(1600ms * var(--ab-speed, 1)) cubic-bezier(0.42, 0, 0.58, 1) infinite alternate; }
 
+@keyframes ab-takeoff {
+    0% { transform: translate(205px, 410px) scale(1, 1) translate(-205px, -410px); }
+    23.0769% { transform: translate(205px, 410px) scale(1.08, 0.88) translate(-205px, -410px); }
+    53.8462% { transform: translate(205px, 410px) scale(0.94, 1.08) translate(-205px, -410px); }
+    100% { transform: translate(205px, 410px) scale(1, 1) translate(-205px, -410px); }
+}
+.ab-takeoff { animation: ab-takeoff calc(390ms * var(--ab-speed, 1)) ease-out; }
+@keyframes ab-landing {
+    0% { transform: translate(205px, 410px) scale(1, 1) translate(-205px, -410px); }
+    47.2727% { transform: translate(205px, 410px) scale(0.94, 1.08) translate(-205px, -410px); }
+    63.6364% { transform: translate(205px, 410px) scale(1.08, 0.88) translate(-205px, -410px); }
+    100% { transform: translate(205px, 410px) scale(1, 1) translate(-205px, -410px); }
+}
+.ab-landing { animation: ab-landing calc(550ms * var(--ab-speed, 1)) ease-in-out; }
+
+@keyframes ab-talk-jaw {
+    0% { transform: translate(211px, 220px) scale(1, 0.658) translate(-211px, -220px); }
+    12.9032% { transform: translate(211px, 220px) scale(1, 1) translate(-211px, -220px); }
+    22.5806% { transform: translate(211px, 220px) scale(1, 0.734) translate(-211px, -220px); }
+    37.6344% { transform: translate(211px, 220px) scale(1, 0.924) translate(-211px, -220px); }
+    46.2366% { transform: translate(211px, 220px) scale(1, 0.677) translate(-211px, -220px); }
+    58.0645% { transform: translate(211px, 220px) scale(1, 0.981) translate(-211px, -220px); }
+    68.8172% { transform: translate(211px, 220px) scale(1, 0.772) translate(-211px, -220px); }
+    86.0215% { transform: translate(211px, 220px) scale(1, 1) translate(-211px, -220px); }
+    100% { transform: translate(211px, 220px) scale(1, 0.658) translate(-211px, -220px); }
+}
+.ab-talk-jaw { animation: ab-talk-jaw calc(930ms * var(--ab-speed, 1)) ease-in-out infinite; }
+@keyframes ab-talk-mouth {
+    0% { transform: translate(211px, 220px) scale(1, 0.1) translate(-211px, -220px); }
+    12.9032% { transform: translate(211px, 220px) scale(1, 1) translate(-211px, -220px); }
+    22.5806% { transform: translate(211px, 220px) scale(1, 0.3) translate(-211px, -220px); }
+    37.6344% { transform: translate(211px, 220px) scale(1, 0.8) translate(-211px, -220px); }
+    46.2366% { transform: translate(211px, 220px) scale(1, 0.15) translate(-211px, -220px); }
+    58.0645% { transform: translate(211px, 220px) scale(1, 0.95) translate(-211px, -220px); }
+    68.8172% { transform: translate(211px, 220px) scale(1, 0.4) translate(-211px, -220px); }
+    86.0215% { transform: translate(211px, 220px) scale(1, 1) translate(-211px, -220px); }
+    100% { transform: translate(211px, 220px) scale(1, 0.1) translate(-211px, -220px); }
+}
+.ab-talk-mouth { animation: ab-talk-mouth calc(930ms * var(--ab-speed, 1)) ease-in-out infinite; }
+@keyframes ab-talk-upper {
+    0% { transform: translate(211px, 202px) scale(1, 0.9733) translate(-211px, -202px); }
+    12.9032% { transform: translate(211px, 202px) scale(1, 0.7333) translate(-211px, -202px); }
+    22.5806% { transform: translate(211px, 202px) scale(1, 0.92) translate(-211px, -202px); }
+    37.6344% { transform: translate(211px, 202px) scale(1, 0.7866) translate(-211px, -202px); }
+    46.2366% { transform: translate(211px, 202px) scale(1, 0.96) translate(-211px, -202px); }
+    58.0645% { transform: translate(211px, 202px) scale(1, 0.7466) translate(-211px, -202px); }
+    68.8172% { transform: translate(211px, 202px) scale(1, 0.8933) translate(-211px, -202px); }
+    86.0215% { transform: translate(211px, 202px) scale(1, 0.7333) translate(-211px, -202px); }
+    100% { transform: translate(211px, 202px) scale(1, 0.9733) translate(-211px, -202px); }
+}
+.ab-talk-upper { animation: ab-talk-upper calc(930ms * var(--ab-speed, 1)) ease-in-out infinite; }
+
 @media (prefers-reduced-motion: reduce) {
     .ab-bird * { animation: none !important; transition: none !important; }
 }

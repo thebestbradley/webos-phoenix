@@ -39,7 +39,10 @@
 
 .as-error { color: #c01e1e; font-size: 14px; margin: 6px; }
 .as-empty { text-align: center; color: var(--pui-text-dim, #666); padding: 40px 24px 0; }
-.as-empty img { width: 96px; height: 96px; opacity: 0.9; }
+.as-empty .ab-bird { display: block; margin: 0 auto; }
+/* The bird at work, below the conversation, with the dots while it waits. */
+.as-work { display: flex; align-items: flex-end; gap: 6px; margin: 4px 0 8px; }
+.as-work .ab-bird { flex: none; margin-top: 18px; }
 .as-empty p { font-size: 17px; line-height: 1.4; margin: 12px auto; max-width: 420px; }
 .as-off { text-align: center; padding: 40px 24px; font-size: 17px; }
 

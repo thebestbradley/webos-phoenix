@@ -106,6 +106,18 @@ async function main() {
         await app.goto(appUrl);
         await app.waitForSelector("[data-testid='as-empty']");
         check(/set a timer/.test(await app.textContent("[data-testid='as-empty']")), "a new conversation says what it can do");
+        // The bird greets, then idles (docs/ASSISTANT-CHARACTER.md).
+        await app.waitForSelector("[data-testid='as-empty'] [data-testid='as-bird'][data-pose='idle']");
+        check(true, "the bird shows on the new conversation, idle after its hello");
+        // Every pose the working bird takes from here on.
+        await app.evaluate(() => {
+            window.__birdPoses = [];
+            const seen = (el) => { if (el && el.getAttribute && el.getAttribute("data-testid") === "as-bird-work") window.__birdPoses.push(el.getAttribute("data-pose")); };
+            new MutationObserver((list) => list.forEach((m) => {
+                if (m.type === "attributes") seen(m.target);
+                m.addedNodes && m.addedNodes.forEach((n) => { seen(n); n.querySelectorAll && n.querySelectorAll("[data-testid='as-bird-work']").forEach(seen); });
+            })).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-pose"] });
+        });
 
         const ask = async (text) => {
             const before = await app.locator(".as-row").count();
@@ -119,6 +131,10 @@ async function main() {
         check(await ask("What's 15% of 80?") === "15% × 80 = 12", "a sum answered on the phone");
         check(await ask("Turn on the flashlight") === "The flashlight is on.", "the flashlight turned on");
         check((await svc(app, "luna://org.webosports.service.torch/getStatus", {})).on === true, "and it is on");
+        // While it ran: thinking, then working and done; then the bird goes.
+        await app.waitForFunction(() => !document.querySelector("[data-testid='as-bird-work']") && window.__birdPoses.includes("done"), null, { timeout: 10000 });
+        const poses = await app.evaluate(() => window.__birdPoses.filter((p, i, a) => a.indexOf(p) === i));
+        check(["thinking", "working", "done"].every((p) => poses.includes(p)), "the bird thinks, works and cheers while a command runs: " + poses.join(", "));
         check((await app.locator(".as-via").last().textContent()) === "On the phone", "the answer says the phone answered");
         // A text: read back, sent only on Send.
         const readBack = await ask("Text Alex I'm running late");

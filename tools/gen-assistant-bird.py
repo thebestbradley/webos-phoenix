@@ -234,6 +234,51 @@ def css(bird):
     out.append("}")
     out.append(".ab-breath { animation: ab-breath calc(%dms * var(--ab-speed, 1)) %s infinite alternate; }" % (b["period"] // 2, EASE_IN_OUT))
     out.append("")
+    # The hop: take-off (down on its feet, up stretched) and landing
+    # (falling stretched, a squash, springing back), about its feet.
+    h = bird["motion"]["hop"]
+    fx, fy = bird["pivots"]["feet"]
+
+    def squash(pct, sx, sy):
+        return "    %s%% { transform: translate(%spx, %spx) scale(%s, %s) translate(%spx, %spx); }" % (
+            num(pct), num(fx), num(fy), num(sx), num(sy), num(-fx), num(-fy))
+    up = h["takeoff"] + h["rise"]
+    out.append("@keyframes ab-takeoff {")
+    out.append(squash(0, 1, 1))
+    out.append(squash(100 * h["takeoff"] / up, *h["squash"]))
+    out.append(squash(100 * (h["takeoff"] + 0.4 * h["rise"]) / up, *h["stretch"]))
+    out.append(squash(100, 1, 1))
+    out.append("}")
+    out.append(".ab-takeoff { animation: ab-takeoff calc(%dms * var(--ab-speed, 1)) ease-out; }" % up)
+    down = h["fall"] + h["land"] + h["settle"]
+    out.append("@keyframes ab-landing {")
+    out.append(squash(0, 1, 1))
+    out.append(squash(100 * h["fall"] / down, *h["stretch"]))
+    out.append(squash(100 * (h["fall"] + h["land"]) / down, *h["squash"]))
+    out.append(squash(100, 1, 1))
+    out.append("}")
+    out.append(".ab-landing { animation: ab-landing calc(%dms * var(--ab-speed, 1)) ease-in-out; }" % down)
+    out.append("")
+    # Speaking: the beak in the syllable rhythm (motion.speech), the lower
+    # jaw and the mouth from the jaw's top, the upper beak from its edge.
+    steps = bird["motion"]["speech"]
+    total = sum(ms for _o, ms in steps)
+    jx, jy = bird["pivots"]["jaw"]
+    ux, uy = bird["pivots"]["upperBeak"]
+    usy = bird["beaks"][bird["poses"]["speaking"]["beak"]]["upper"][1]
+    for name, (px, py), f in (("jaw", (jx, jy), lambda o: 0.62 + 0.38 * o), ("mouth", (jx, jy), lambda o: o),
+                              ("upper", (ux, uy), lambda o: usy + (1 - usy) * (1 - o))):
+        out.append("@keyframes ab-talk-%s {" % name)
+        t = 0
+        out.append("    0%% { transform: translate(%spx, %spx) scale(1, %s) translate(%spx, %spx); }"
+                   % (num(px), num(py), num(f(steps[-1][0])), num(-px), num(-py)))
+        for o, ms in steps:
+            t += ms
+            out.append("    %s%% { transform: translate(%spx, %spx) scale(1, %s) translate(%spx, %spx); }"
+                       % (num(100 * t / total), num(px), num(py), num(f(o)), num(-px), num(-py)))
+        out.append("}")
+        out.append(".ab-talk-%s { animation: ab-talk-%s calc(%dms * var(--ab-speed, 1)) ease-in-out infinite; }" % (name, name, total))
+    out.append("")
     out.append("@media (prefers-reduced-motion: reduce) {")
     out.append("    .ab-bird * { animation: none !important; transition: none !important; }")
     out.append("}")
