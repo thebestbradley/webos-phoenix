@@ -297,7 +297,18 @@ jobs:
       - name: Behaviour tests
         env:
           QT_QUICK_BACKEND: software
-        run: QT_QPA_PLATFORM=offscreen "$(brew --prefix qt)/bin/qmltestrunner" -import shell/qml -import build/qml -input shell/tests
+        # Failures also become annotations, readable without the log.
+        run: |
+          set -o pipefail
+          QT_QPA_PLATFORM=offscreen "$(brew --prefix qt)/bin/qmltestrunner" -import shell/qml -import build/qml -input shell/tests 2>&1 \
+            | tee qml-tests.log
+
+      - name: Report failed behaviour tests
+        if: failure()
+        run: |
+          grep -A4 -E '^(FAIL!|XPASS)' qml-tests.log | head -60 | while IFS= read -r line; do
+            echo "::error title=QML test::$line"
+          done || true
 
       - name: Terminal PTY service, installed apps, dictation
         run: |
