@@ -225,12 +225,14 @@ function Main() {
     useTimerDone(launch, settings ?? null);
     useBack(() => { setView("thread"); return true; }, view === "list");
 
-    // {threadId} opens it; {text} asks it in the conversation in use.
+    // {threadId} opens it (the system's view hands its conversation on
+    // this way); {text} asks it in the conversation in use.
     useEffect(() => {
         if (asked === launch) return;
         setAsked(launch);
         if (launch.threadId) {
             setThreadId(launch.threadId);
+            setView("thread");
             void assistant.setCurrent(launch.threadId).catch(() => undefined);
         }
         if (launch.text) void assistant.ask(launch.text, launch.threadId ? { threadId: launch.threadId } : {}).catch(() => undefined);

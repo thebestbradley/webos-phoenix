@@ -37,6 +37,7 @@ FocusScope {
     readonly property bool launcherOpen: launcher.open
     readonly property bool justTypeOpen: justType.open
     readonly property bool assistantOpen: assistantView.open
+    readonly property alias assistantOverlay: assistantView
     property alias launcherEditMode: launcher.editMode
     // The launcher page shown (LauncherLayout.PAGES: apps 0, downloads 1,
     // favorites 2, prefs 3).
@@ -2361,7 +2362,12 @@ FocusScope {
                     draggedId: iconDrag.appId
                     onLaunchRequested: (appId) => shell.launch(appId)
                     onLauncherToggled: launcher.open = !launcher.open
-                    onAssistantRequested: shell.openAssistant(false)
+                    onAssistantRequested: {
+                        // The view grows out of the held button.
+                        assistantView.origin = quickLaunch.mapToItem(assistantView, quickLaunch.slotCentre(quickLaunch.pinned.length),
+                                                                     Theme.quickLaunchIconY + quickLaunch.iconSize / 2);
+                        shell.openAssistant(false);
+                    }
                     onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, quickLaunch.mapToItem(ui, x, y))
                     onDragMoved: (x, y) => iconDrag.move(quickLaunch.mapToItem(ui, x, y))
                     onDragEnded: (x, y) => iconDrag.drop(quickLaunch.mapToItem(ui, x, y))
@@ -2841,7 +2847,17 @@ FocusScope {
                     dictation: shell.dictation
                     backdrop: sceneBackdrop
                     bottomInset: notes.negativeSpace
+                    appIcon: {
+                        var a = quickLaunch.entry("org.webosphoenix.assistant");
+                        return a && a.icon ? a.icon : "";
+                    }
                     onCloseRequested: shell.closeAssistant()
+                    // The app button: the view goes, the app comes up on
+                    // this conversation (the one in use without one yet).
+                    onAppRequested: (threadId) => {
+                        shell.closeAssistant();
+                        shell.launch("org.webosphoenix.assistant", threadId !== "" ? { threadId: threadId } : null);
+                    }
                 }
 
                 // Phones round the corners of a maximized app (MenuWindowManager.cpp:126-146).

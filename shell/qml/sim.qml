@@ -1229,36 +1229,65 @@ Item {
 
     // "assistant": a short conversation with the Phoenix Assistant
     // (org.webosphoenix.assistant: a sum, a timer, and a question nothing on
-    // the phone can answer), then its view over the screen (the app with
-    // --launch, else the card view; with --launch org.webosphoenix.assistant
-    // the app shows it instead). Each request waits for an answer; one
-    // made before a page with the runtime was up is made again.
+    // the phone can answer) in its view over the screen (the app with
+    // --launch, else the card view), each opening being a conversation of
+    // its own; with --launch org.webosphoenix.assistant the app has it
+    // instead. Each request waits for an answer; one made before a page
+    // with the runtime was up is made again.
     function assistantScene() {
         assistantSceneSteps.asks = ["What's 15% of 80?", "Set a timer for 10 minutes", "Who wrote the Odyssey?"];
+        assistantSceneSteps.inApp = shell.cardView.maximized && shell._appIdOf(shell.cardView.currentUid) === "org.webosphoenix.assistant";
+        assistantSceneSteps.up = false;
         assistantSceneSteps.next();
     }
     Timer {
         id: assistantSceneSteps
         property var asks: []
+        property bool inApp: false
+        property bool up: false         // the service answers (the system UI page is up)
         property int serial: 0
         interval: 3000
         onTriggered: next()
         function next() {
-            if (asks.length === 0) {
-                // The Assistant app itself shows the conversation.
-                if (!shell.cardView.maximized || shell._appIdOf(shell.cardView.currentUid) !== "org.webosphoenix.assistant")
-                    shell.openAssistant(false);
-                return;
-            }
             var mine = ++serial;
             restart();
-            windows.lunaCall("luna://org.webosphoenix.assistant/ask", { text: asks[0], speak: false }, function (r) {
-                if (mine !== assistantSceneSteps.serial || r === null)
+            if (!up) {
+                // The view opens once the service is there to answer it.
+                windows.lunaCall("luna://org.webosphoenix.assistant/getSettings", {}, function (r) {
+                    if (mine !== assistantSceneSteps.serial || !r || r.returnValue === false)
+                        return;
+                    assistantSceneSteps.stop();
+                    assistantSceneSteps.up = true;
+                    if (!assistantSceneSteps.inApp)
+                        shell.openAssistant(false);
+                    assistantSceneSteps.next();
+                });
+                return;
+            }
+            if (asks.length === 0) {
+                stop();
+                return;
+            }
+            var answered = function (r) {
+                if (mine !== assistantSceneSteps.serial || !r || r.returnValue === false)
                     return;
                 assistantSceneSteps.stop();
                 assistantSceneSteps.asks = assistantSceneSteps.asks.slice(1);
                 assistantSceneSteps.next();
-            });
+            };
+            var view = shell.assistantOverlay;
+            if (inApp || !view.open) {
+                windows.lunaCall("luna://org.webosphoenix.assistant/ask", { text: asks[0], speak: false }, answered);
+            } else if (!view.busy) {
+                // A request that failed (no page up yet) is taken back.
+                view.ask(asks[0], function (r) {
+                    if (!r || r.returnValue === false) {
+                        view.messages = [];
+                        view.status = "";
+                    }
+                    answered(r);
+                });
+            }
         }
     }
 

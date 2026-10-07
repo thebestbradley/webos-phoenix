@@ -1829,11 +1829,21 @@ Just Type Quick Action (`universalSearch.action`) works as "<displayName>
 `assistant` field in `/usr/share/phoenix/apps.json`.
 
 **The shell** (`AssistantOverlay.qml`): holding the launcher button opens
-it over everything but the lock screen (a tap still opens the launcher);
-it shows the thread in use through `lunaCall`, with buttons for choices and
+it over everything but the lock screen (a tap still opens the launcher).
+Each opening is a new, empty conversation: its first request is `ask
+{text, newThread: true}`, the next ones `ask {text, threadId}` (through
+`lunaCall`), so an opening without a request leaves no thread, and the
+earlier ones stay in the app's Conversations. Buttons for choices and
 read-backs, a field (the keyboard comes with a tap; at once where there is
 no microphone) and the microphone (the shell's dictation with `autoStop`,
-owner `"assistant"`). Back, Escape or a tap outside closes it.
+owner `"assistant"`). The Assistant's icon at the top left closes it and
+launches the app with `{threadId}` (none before the first request), to go
+on there. Back, Escape or a tap outside closes it. It grows out of the
+held button with the blur and dim fading in, and shrinks back into it
+(`Theme.launcherDuration`); messages slide in from their side
+(`cardTransitionDuration`), choices appear one after another, rings spread
+from the microphone while it listens, three dots bounce while it thinks;
+all through `Theme.motion` (Animation speed, reduced motion).
 `phoenix-sim --scene assistant [--launch <app>]` shows a short conversation
 over the screen.
 

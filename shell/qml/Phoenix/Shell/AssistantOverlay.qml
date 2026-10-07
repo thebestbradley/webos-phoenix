@@ -7,13 +7,26 @@
 // A Phoenix addition: webOS had no assistant. Opened by holding the
 // launcher button in the quick launch bar (QuickLaunch.assistantRequested).
 //
-// It shows the thread in use (org.webosphoenix.assistant thread {}: the
-// same one the Assistant app shows), with a text field (the keyboard comes
-// up for it as for any shell field) and a microphone (the shell's
+// Each opening starts a new, empty conversation: its first request makes
+// the thread (ask {newThread}), so one opened and closed without a word
+// leaves nothing behind, and the ones before stay in the Assistant app's
+// Conversations. The app's icon in the corner closes the view and opens
+// the app on the conversation, to go on there. A text field (the keyboard
+// comes up for it as for any shell field) and a microphone (the shell's
 // dictation, whisper.cpp, ending by itself when the speaker stops). The
 // answers' choices ("Ask <cloud model>", "Search the web") and read-backs
 // ("Send ... to Sam?") are buttons. A tap outside the conversation, Back or
 // Escape closes it.
+//
+// Motion (all through Theme.motion, so Settings > Advanced > Animation
+// speed and reduced motion apply): the blur and the dim fade in while the
+// panel grows out of the launcher button that was held (origin), and go
+// back into it as it closes, over the launcher's own time
+// (Theme.launcherDuration, lunaAnimations.conf:83-84); a message slides in
+// from its side as an app's scene is pushed (cardTransitionDuration, curve
+// 20 OutQuad); its choices follow one after another; rings spread from the
+// microphone while it listens; three dots bounce in a bubble while the
+// assistant thinks.
 //
 // All through the window source's lunaCall (in phoenix-sim the runtime's
 // service in the system UI page; on a device the bus).
@@ -35,8 +48,16 @@ Item {
     property bool open: false
     // Start listening as it opens (a hold that came with the microphone in mind).
     property bool listenOnOpen: false
+    // Where it grows from and goes back to: the held launcher button, in
+    // this item's coordinates (the shell sets it); else the bottom's middle.
+    property point origin: Qt.point(width / 2, height)
+    // The Assistant app's icon (its launcher entry's), for the app button.
+    property url appIcon: ""
 
     signal closeRequested()
+    // The app button: open the Assistant app on this conversation ("" for
+    // none yet).
+    signal appRequested(string threadId)
 
     readonly property string service: "luna://org.webosphoenix.assistant/"
     property string threadId: ""
@@ -45,15 +66,32 @@ Item {
     property bool listening: false
     property string status: ""          // a line under the conversation: "Listening…", an error
 
-    visible: opacity > 0
-    opacity: open ? 1 : 0
-    Behavior on opacity { NumberAnimation { duration: Theme.reduceMotion ? 0 : 200; easing.type: Easing.OutCubic } }
+    // 0 closed, 1 open: the backdrop's fade and the panel's growth.
+    property real shown: open ? 1 : 0
+    Behavior on shown {
+        NumberAnimation {
+            duration: Theme.launcherDuration
+            easing.type: ov.open ? Easing.OutCubic : Easing.InCubic
+        }
+    }
+    visible: shown > 0
     enabled: open
+
+    // Each opening is a conversation of its own: replies to an earlier
+    // one's requests (still on their way as it closed) are dropped.
+    property int _session: 0
+    // Messages already shown (by id): only new ones slide in.
+    property var _seen: ({})
+    property int _pending: 0
 
     onOpenChanged: {
         if (open) {
+            ++_session;
             status = "";
-            refresh();
+            busy = false;
+            threadId = "";
+            messages = [];
+            _seen = {};
             // Voice first where there is a microphone (a tap on the field
             // brings the keyboard); else the keyboard at once.
             if (listenOnOpen && dictation)
@@ -63,6 +101,8 @@ Item {
             else
                 ov.forceActiveFocus();
         } else {
+            ++_session;
+            busy = false;
             stopListening(true);
             input.focus = false;
             input.text = "";
@@ -75,19 +115,40 @@ Item {
                 done(null);
             return;
         }
+        var session = _session;
         source.lunaCall(service + method, params || {}, function (r) {
+            if (session !== ov._session)
+                return;
             if (done)
                 done(r);
         });
     }
 
+    // This conversation's messages, once it has a thread.
     function refresh() {
-        _call("thread", {}, function (r) {
+        if (threadId === "")
+            return;
+        _call("thread", { id: threadId }, function (r) {
             if (!r || r.returnValue === false)
                 return;
-            ov.threadId = r.thread ? r.thread.id : "";
             ov.messages = r.messages || [];
         });
+    }
+
+    // A delegate asks whether its message is new here (it slides in) and
+    // marks it seen. The user's own words were shown at once as they were
+    // sent ("pending-user"): the thread's copy of them does not come in again.
+    function _arrives(m) {
+        if (m && m.thinking)
+            return true;
+        if (!m || !m.id || _seen[m.id])
+            return false;
+        _seen[m.id] = true;
+        if (m.role === "user" && _seen["text:" + m.text]) {
+            delete _seen["text:" + m.text];
+            return false;
+        }
+        return true;
     }
 
     function _settled(r) {
@@ -105,18 +166,27 @@ Item {
         refresh();
     }
 
-    function ask(text) {
+    // done (optional) hears the reply, after the view has.
+    function ask(text, done) {
         text = String(text || "").trim();
         if (!text || busy)
             return;
         busy = true;
         status = "";
         // Shown at once; the thread comes back with the answer.
-        messages = messages.concat([{ id: "pending-user", role: "user", text: text }]);
+        _seen["text:" + text] = true;
+        messages = messages.concat([{ id: "pending-user-" + (++_pending), role: "user", text: text }]);
+        // The first request makes this opening's thread.
         var p = { text: text };
         if (threadId !== "")
             p.threadId = threadId;
-        _call("ask", p, _settled);
+        else
+            p.newThread = true;
+        _call("ask", p, function (r) {
+            _settled(r);
+            if (done)
+                done(r);
+        });
     }
     function choose(message, choice) {
         if (busy)
@@ -135,13 +205,19 @@ Item {
         busy = true;
         _call("confirm", { threadId: threadId, messageId: message.id, accept: accept }, _settled);
     }
+    // New: a fresh conversation here. The one before is kept (it has
+    // words); the new one is made by its first request.
     function newConversation() {
-        _call("newThread", {}, function (r) {
-            ov.threadId = r && r.thread ? r.thread.id : "";
-            ov.messages = [];
-            ov.status = "";
-            input.forceActiveFocus();
-        });
+        ++_session;
+        busy = false;
+        threadId = "";
+        messages = [];
+        status = "";
+        input.forceActiveFocus();
+    }
+    // The app button: on to the Assistant app with this conversation.
+    function openApp() {
+        appRequested(threadId);
     }
 
     // ---- The microphone ----------------------------------------------------------------
@@ -197,17 +273,28 @@ Item {
     }
 
     Keys.onEscapePressed: closeRequested()
+    // Over everything: Enter does not reach the card behind (it would
+    // maximize it).
+    Keys.onReturnPressed: (event) => { event.accepted = true; }
+    Keys.onEnterPressed: (event) => { event.accepted = true; }
 
     // ---- The backdrop ----------------------------------------------------------------
-    BackdropBlur {
+    // The blur and the dim fade in and out together.
+    Item {
+        id: backdropLayer
+        objectName: "assistantBackdrop"
         anchors.fill: parent
-        source: ov.open || ov.visible ? ov.backdrop : null
-        radius: Theme.px(48)
-    }
-    Rectangle {
-        anchors.fill: parent
-        // Darker where nothing blurs (the software renderer).
-        color: GraphicsInfo.api === GraphicsInfo.Software ? "#D8101418" : "#80101418"
+        opacity: ov.shown
+        BackdropBlur {
+            anchors.fill: parent
+            source: ov.visible ? ov.backdrop : null
+            radius: Theme.px(48)
+        }
+        Rectangle {
+            anchors.fill: parent
+            // Darker where nothing blurs (the software renderer).
+            color: GraphicsInfo.api === GraphicsInfo.Software ? "#D8101418" : "#80101418"
+        }
     }
     // The glow along the bottom while it listens or thinks.
     Rectangle {
@@ -217,7 +304,7 @@ Item {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: ov.bottomInset
         height: Theme.px(6)
-        visible: ov.listening || ov.busy
+        visible: ov.open && (ov.listening || ov.busy)
         gradient: Gradient {
             orientation: Gradient.Horizontal
             GradientStop { position: 0.0; color: "#5ac8fa" }
@@ -226,10 +313,10 @@ Item {
             GradientStop { position: 1.0; color: "#ff9500" }
         }
         SequentialAnimation on opacity {
-            running: ov.listening || ov.busy
+            running: ov.visible && (ov.listening || ov.busy)
             loops: Animation.Infinite
-            NumberAnimation { from: 0.4; to: 1; duration: 700; easing.type: Easing.InOutQuad }
-            NumberAnimation { from: 1; to: 0.4; duration: 700; easing.type: Easing.InOutQuad }
+            NumberAnimation { from: 0.4; to: 1; duration: Theme.motion(700); easing.type: Easing.InOutQuad }
+            NumberAnimation { from: 1; to: 0.4; duration: Theme.motion(700); easing.type: Easing.InOutQuad }
         }
     }
 
@@ -242,6 +329,8 @@ Item {
 
     // ---- The conversation ----------------------------------------------------------------
     readonly property real panelWidth: Math.min(width - Theme.px(24), Theme.px(Theme.tablet ? 560 : 420))
+    // The panel's growth: from a fifth of its size at the origin.
+    readonly property real _panelScale: 0.2 + 0.8 * shown
 
     Item {
         id: panel
@@ -252,6 +341,13 @@ Item {
         anchors.topMargin: Theme.statusBarHeight + Theme.px(12)
         anchors.bottom: parent.bottom
         anchors.bottomMargin: ov.bottomInset + Theme.px(16)
+        opacity: Math.min(1, ov.shown * 1.5)
+        transform: Scale {
+            origin.x: ov.origin.x - panel.x
+            origin.y: ov.origin.y - panel.y
+            xScale: ov._panelScale
+            yScale: ov._panelScale
+        }
 
         // Taps on the conversation stay in it.
         MouseArea {
@@ -260,22 +356,69 @@ Item {
             height: parent.height - y
         }
 
+        // The Assistant app: the conversation goes on there.
+        Item {
+            id: appButton
+            objectName: "assistantApp"
+            anchors.left: parent.left
+            anchors.verticalCenter: heading.verticalCenter
+            width: Theme.px(28)
+            height: width
+            scale: appArea.pressed ? 0.9 : 1
+            Behavior on scale { NumberAnimation { duration: Theme.motion(80) } }
+            Image {
+                id: appIconImage
+                anchors.fill: parent
+                source: ov.appIcon
+                sourceSize.width: width * 2
+                sourceSize.height: height * 2
+                smooth: true
+                visible: status === Image.Ready
+            }
+            // No icon file (a test, a bare simulator): a speech bubble.
+            Rectangle {
+                visible: !appIconImage.visible
+                anchors.fill: parent
+                radius: width / 2
+                color: "#40FFFFFF"
+                border.color: "#B0FFFFFF"
+                border.width: Math.max(1, Theme.px(1.5))
+                Row {
+                    anchors.centerIn: parent
+                    spacing: Theme.px(2)
+                    Repeater {
+                        model: 3
+                        delegate: Rectangle { width: Theme.px(3.5); height: width; radius: width / 2; color: "#FFFFFF" }
+                    }
+                }
+            }
+            MouseArea {
+                id: appArea
+                anchors.fill: parent
+                anchors.margins: -Theme.px(10)
+                onClicked: ov.openApp()
+            }
+        }
         Text {
             id: heading
-            anchors.left: parent.left
+            anchors.left: appButton.right
+            anchors.leftMargin: Theme.px(10)
             anchors.right: newButton.left
             anchors.top: parent.top
+            height: Theme.px(28)
+            verticalAlignment: Text.AlignVCenter
             text: qsTr("Phoenix Assistant")
             color: "#B0FFFFFF"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.px(14)
             font.bold: true
+            MouseArea { anchors.fill: parent; onClicked: ov.openApp() }
         }
         Text {
             id: newButton
             objectName: "assistantNew"
             anchors.right: parent.right
-            anchors.top: parent.top
+            anchors.verticalCenter: heading.verticalCenter
             visible: ov.messages.length > 0
             text: qsTr("New")
             color: "#B0FFFFFF"
@@ -295,31 +438,60 @@ Item {
             anchors.bottomMargin: Theme.px(6)
             clip: true
             spacing: Theme.px(8)
-            // The latest at the bottom, as in a conversation.
+            // The latest at the bottom, as in a conversation; while it
+            // thinks, a bubble of bouncing dots after the request.
             verticalLayoutDirection: ListView.BottomToTop
-            model: ov.messages.slice().reverse()
+            model: ov.messages.concat(ov.busy ? [{ id: "thinking", role: "assistant", text: "", thinking: true }] : []).reverse()
             boundsBehavior: Flickable.StopAtBounds
             interactive: contentHeight > height
             delegate: Item {
                 id: row
                 required property var modelData
                 readonly property bool mine: modelData.role === "user"
+                readonly property bool thinking: !!modelData.thinking
+                // 0 to 1 as it arrives (1 at once for one seen before).
+                property real appear: 1
+                property real choicesAppear: 1
                 width: list.width
                 height: bubble.height + (actions.visible ? actions.height + Theme.px(6) : 0)
 
+                Component.onCompleted: {
+                    if (ov._arrives(modelData)) {
+                        appear = 0;
+                        choicesAppear = 0;
+                        arrival.start();
+                    }
+                }
+                // An app's scene push: conf/lunaAnimations.conf:61-62
+                // cardTransitionDuration, curve 20 OutQuad (Theme).
+                ParallelAnimation {
+                    id: arrival
+                    NumberAnimation { target: row; property: "appear"; to: 1; duration: Theme.cardTransitionDuration; easing.type: Easing.OutQuad }
+                    SequentialAnimation {
+                        PauseAnimation { duration: Theme.motion(120) }
+                        NumberAnimation { target: row; property: "choicesAppear"; to: 1; duration: Theme.cardTransitionDuration + Theme.motion(80) * Math.max(0, actions.count - 1) }
+                    }
+                }
+
                 Rectangle {
                     id: bubble
-                    objectName: "assistantBubble"
+                    objectName: row.thinking ? "assistantThinking" : "assistantBubble"
                     anchors.right: row.mine ? parent.right : undefined
                     anchors.left: row.mine ? undefined : parent.left
-                    width: Math.min(list.width * 0.86, words.implicitWidth + Theme.px(24))
-                    height: words.implicitHeight + Theme.px(16) + (via.visible ? via.height : 0)
+                    width: row.thinking ? dotsRow.width + Theme.px(28) : Math.min(list.width * 0.86, words.implicitWidth + Theme.px(24))
+                    height: row.thinking ? Theme.px(36) : words.implicitHeight + Theme.px(16) + (via.visible ? via.height : 0)
                     radius: Theme.px(14)
                     color: row.mine ? "#E8FFFFFF" : (row.modelData.status === "failed" ? "#B04A2020" : "#A0303438")
                     border.color: row.mine ? "transparent" : "#40FFFFFF"
                     border.width: row.mine ? 0 : 1
+                    opacity: row.appear
+                    transform: Translate {
+                        x: (row.mine ? 1 : -1) * (1 - row.appear) * Theme.px(28)
+                        y: (1 - row.appear) * Theme.px(12)
+                    }
                     Text {
                         id: words
+                        visible: !row.thinking
                         x: Theme.px(12)
                         y: Theme.px(8)
                         width: Math.min(list.width * 0.86 - Theme.px(24), implicitWidth)
@@ -334,11 +506,38 @@ Item {
                         id: via
                         anchors.left: words.left
                         anchors.top: words.bottom
-                        visible: !row.mine && !!row.modelData.source
+                        visible: !row.mine && !row.thinking && !!row.modelData.source
                         text: row.modelData.source || ""
                         color: "#90FFFFFF"
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.px(11)
+                    }
+                    // Thinking: three dots rising in turn.
+                    Row {
+                        id: dotsRow
+                        visible: row.thinking
+                        anchors.centerIn: parent
+                        spacing: Theme.px(5)
+                        Repeater {
+                            model: row.thinking ? 3 : 0
+                            delegate: Rectangle {
+                                id: dot
+                                required property int index
+                                width: Theme.px(7); height: width; radius: width / 2
+                                color: "#FFFFFF"
+                                opacity: 0.35 + 0.65 * lift
+                                property real lift: 0
+                                transform: Translate { y: -dot.lift * Theme.px(5) }
+                                SequentialAnimation on lift {
+                                    running: ov.visible && row.thinking
+                                    loops: Animation.Infinite
+                                    PauseAnimation { duration: dot.index * Theme.motion(140) }
+                                    NumberAnimation { from: 0; to: 1; duration: Theme.motion(280); easing.type: Easing.OutQuad }
+                                    NumberAnimation { from: 1; to: 0; duration: Theme.motion(280); easing.type: Easing.InQuad }
+                                    PauseAnimation { duration: (2 - dot.index) * Theme.motion(140) + Theme.motion(200) }
+                                }
+                            }
+                        }
                     }
                 }
                 Flow {
@@ -349,17 +548,30 @@ Item {
                     spacing: Theme.px(8)
                     readonly property bool asking: row.modelData.status === "pending" && !!row.modelData.confirm
                     readonly property var choices: row.modelData.choices && !row.modelData.chosen ? row.modelData.choices : []
+                    readonly property int count: choices.length + (asking ? 2 : 0)
                     visible: asking || choices.length > 0
+                    // Button k of n appears after the ones before it (an
+                    // even share of choicesAppear each, overlapping).
+                    function shareOf(k) {
+                        var n = Math.max(1, count);
+                        var start = k / (n + 1);
+                        return Math.max(0, Math.min(1, (row.choicesAppear - start) / (2 / (n + 1))));
+                    }
                     Repeater {
                         model: actions.choices
                         delegate: ActionButton {
+                            id: choiceButton
                             required property var modelData
+                            required property int index
                             objectName: "assistantChoice-" + modelData.id
                             width: Math.min(list.width, label.implicitWidth + Theme.px(40))
                             height: Theme.px(40)
                             caption: modelData.label
                             affirmative: modelData.id.indexOf("cloud:") === 0
                             onAction: ov.choose(row.modelData, modelData)
+                            readonly property real appear: actions.shareOf(index)
+                            opacity: appear
+                            scale: 0.85 + 0.15 * appear
                             Text { id: label; visible: false; text: parent.caption; font.pixelSize: Theme.px(16); font.bold: true; font.family: Theme.fontFamily }
                         }
                     }
@@ -371,6 +583,9 @@ Item {
                         affirmative: true
                         caption: row.modelData.command === "text" ? qsTr("Send") : row.modelData.command === "call" ? qsTr("Call") : qsTr("Yes")
                         onAction: ov.confirm(row.modelData, true)
+                        readonly property real appear: actions.shareOf(actions.choices.length)
+                        opacity: appear
+                        scale: 0.85 + 0.15 * appear
                     }
                     ActionButton {
                         objectName: "assistantConfirmNo"
@@ -379,12 +594,16 @@ Item {
                         height: Theme.px(40)
                         caption: qsTr("Cancel")
                         onAction: ov.confirm(row.modelData, false)
+                        readonly property real appear: actions.shareOf(actions.choices.length + 1)
+                        opacity: appear
+                        scale: 0.85 + 0.15 * appear
                     }
                 }
             }
 
             // Nothing asked yet.
             Text {
+                objectName: "assistantHint"
                 anchors.bottom: parent.bottom
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: parent.width
@@ -398,40 +617,19 @@ Item {
             }
         }
 
-        // Thinking, listening, or what went wrong.
+        // Listening, transcribing, or what went wrong.
         Item {
             id: statusLine
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: field.top
             anchors.bottomMargin: Theme.px(8)
-            height: ov.busy || ov.status !== "" ? Theme.px(20) : 0
-            Row {
-                id: dots
-                visible: ov.busy
-                spacing: Theme.px(5)
-                anchors.verticalCenter: parent.verticalCenter
-                Repeater {
-                    model: 3
-                    delegate: Rectangle {
-                        required property int index
-                        width: Theme.px(7); height: width; radius: width / 2
-                        color: "#FFFFFF"
-                        SequentialAnimation on opacity {
-                            running: ov.busy
-                            loops: Animation.Infinite
-                            PauseAnimation { duration: index * 150 }
-                            NumberAnimation { from: 0.25; to: 1; duration: 300 }
-                            NumberAnimation { from: 1; to: 0.25; duration: 300 }
-                            PauseAnimation { duration: (2 - index) * 150 }
-                        }
-                    }
-                }
-            }
+            height: ov.status !== "" ? Theme.px(20) : 0
+            Behavior on height { NumberAnimation { duration: Theme.motion(150); easing.type: Easing.OutQuad } }
+            clip: true
             Text {
                 objectName: "assistantStatus"
-                anchors.left: dots.visible ? dots.right : parent.left
-                anchors.leftMargin: dots.visible ? Theme.px(8) : 0
+                anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 text: ov.status
@@ -465,9 +663,24 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.px(17)
                 clip: true
-                enabled: !ov.busy
+                // Not disabled while it thinks: the field keeps the focus,
+                // so the keyboard stays and Enter's release does not reach
+                // the card behind (ask() waits for the answer anyway).
+                readOnly: ov.busy
                 Keys.onEscapePressed: ov.closeRequested()
-                onAccepted: { var t = text; text = ""; ov.ask(t); }
+                // Enter is the field's alone: TextInput lets it go on after
+                // accepted(), and the shell behind would take it (the card
+                // in focus maximized).
+                Keys.onReturnPressed: (event) => { submit(); event.accepted = true; }
+                Keys.onEnterPressed: (event) => { submit(); event.accepted = true; }
+                onAccepted: submit()
+                function submit() {
+                    if (ov.busy)
+                        return;
+                    var t = text;
+                    text = "";
+                    ov.ask(t);
+                }
                 Text {
                     anchors.fill: parent
                     verticalAlignment: Text.AlignVCenter
@@ -475,6 +688,35 @@ Item {
                     text: ov.listening ? qsTr("Listening…") : qsTr("Ask anything")
                     color: "#808890"
                     font: input.font
+                }
+            }
+        }
+        // While it listens, rings spread from the microphone one after
+        // another (the dictation gives no level to follow).
+        Repeater {
+            model: 3
+            delegate: Rectangle {
+                id: ring
+                required property int index
+                objectName: "assistantMicRing"
+                visible: mic.visible && ov.listening
+                x: mic.x
+                y: mic.y
+                width: mic.width
+                height: mic.height
+                radius: width / 2
+                color: "transparent"
+                border.color: "#FF3B30"
+                border.width: Theme.px(2)
+                property real spread: 0
+                scale: 1 + 0.9 * spread
+                opacity: 0.8 * (1 - spread)
+                SequentialAnimation on spread {
+                    running: ring.visible && ov.visible
+                    loops: Animation.Infinite
+                    PauseAnimation { duration: ring.index * Theme.motion(400) }
+                    NumberAnimation { from: 0; to: 1; duration: Theme.motion(1200); easing.type: Easing.OutCubic }
+                    PauseAnimation { duration: (2 - ring.index) * Theme.motion(400) }
                 }
             }
         }
@@ -488,6 +730,15 @@ Item {
             height: width
             radius: width / 2
             color: ov.listening ? "#FF3B30" : "#F2FFFFFF"
+            Behavior on color { ColorAnimation { duration: Theme.motion(150) } }
+            // A gentle breath while it listens.
+            SequentialAnimation on scale {
+                running: ov.listening && ov.visible
+                loops: Animation.Infinite
+                NumberAnimation { from: 1; to: 1.08; duration: Theme.motion(600); easing.type: Easing.InOutQuad }
+                NumberAnimation { from: 1.08; to: 1; duration: Theme.motion(600); easing.type: Easing.InOutQuad }
+                onRunningChanged: if (!running) mic.scale = 1
+            }
             // A microphone: the capsule, its stand and its foot.
             Rectangle {
                 width: Theme.px(10); height: Theme.px(16); radius: width / 2

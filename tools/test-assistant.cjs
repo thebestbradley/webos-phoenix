@@ -16,8 +16,9 @@
 //     connection tested; speech, units and a command switched;
 //   - back in the app, "Ask Anthropic" answers in the thread; a cloud model
 //     asking to act is refused until Settings allows it, then acts;
-//   - Conversations: new, open, delete; Clear History; no key in the
-//     stored data.
+//   - Conversations: new, open, delete; a conversation from the shell's
+//     view (ask {newThread}) opened by a relaunch with {threadId}; Clear
+//     History; no key in the stored data.
 //
 //   node tools/test-assistant.cjs [--tablet] [--out DIR]
 //
@@ -229,6 +230,24 @@ async function main() {
         await app.click("[data-testid='as-delete-ok']");
         await app.waitForFunction(() => document.querySelectorAll("[data-testid^='as-thread-']").length === 1);
         check(true, "a conversation deleted");
+
+        // ---- The system's view hands its conversation on ------------------------------------------
+        // Each opening of the shell's view is a new conversation, made by
+        // its first request (ask {newThread}); its app button relaunches the
+        // app with {threadId}, which shows it even from Conversations
+        // (where the app still is).
+        await app.waitForSelector("[data-testid='as-new']");
+        const before = (await svc(app, A + "threads", {})).threads.length;
+        const viewAsk = await svc(app, A + "ask", { text: "What's 7 times 6?", newThread: true });
+        const viewThread = viewAsk.thread && viewAsk.thread.id;
+        check(!!viewThread && (await svc(app, A + "threads", {})).threads.length === before + 1, "a request from the view makes a new conversation");
+        await app.evaluate((id) => document.dispatchEvent(new CustomEvent("webOSRelaunch", { detail: { threadId: id } })), viewThread);
+        await app.waitForSelector(".as-bubble:has-text('7 times 6')");
+        check(await app.locator("[data-testid='as-new']").count() === 0, "the app, relaunched with it, shows that conversation");
+        check((await svc(app, A + "threads", {})).current === viewThread, "and goes on in it");
+        await shot(app, "from-view");
+        await app.click("[data-testid='as-conversations']");
+        await app.waitForSelector("[data-testid='as-new']");
 
         // ---- Clear History -----------------------------------------------------------------------
         await st.bringToFront();
