@@ -9,6 +9,8 @@
         "org.webosphoenix.assistant/setCurrent",
         "org.webosphoenix.assistant/deleteThread",
         "org.webosphoenix.assistant/clearHistory",
+        "org.webosphoenix.assistant/connect",
+        "org.webosphoenix.assistant/retry",
         "org.webosphoenix.assistant/speak",
         "org.webosphoenix.assistant/stopSpeaking"
     ],

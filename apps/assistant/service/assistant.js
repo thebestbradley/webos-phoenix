@@ -10,7 +10,11 @@
 //   3. the on-device model (llama.cpp, lib/models.js), when one is
 //      installed and chosen: free-form answers, and it picks among the same
 //      commands as tools
-//   4. otherwise the assistant asks: "Ask <cloud model>" or "Search the web"
+//   4. otherwise the assistant asks: "Ask <cloud model>" or "Search the web",
+//      and "Connect model" while no cloud model is set up (the UI asks
+//      which: on-device, cloud or both; connect takes it to Settings, and
+//      retry asks the question again once one is there). Words nothing
+//      understood get the commands they come close to ("Did you mean ...?")
 //
 // A thread the user took to a cloud model goes on with it. Cloud models may
 // chat once a provider is set up; they get the commands as tools only when
@@ -28,8 +32,14 @@
 //   vocabulary {} -> {words, prompt}: the wake phrase and contacts' names, and the transcriber's prompt
 //     (voice: spoken, answered aloud with voiceReplies; locked: over the lock
 //     screen, LOCKED_COMMANDS only; "yes" / "no" answer a read-back waiting)
-//   choose {threadId, messageId, choice: "cloud:<id>" | "web" | "settings" | "open"}
-//     ("open": the app a command's answer offers, "Open Calendar")
+//   choose {threadId, messageId, choice: "cloud:<id>" | "web" | "settings" | "open" | "connect"}
+//     ("open": the app a command's answer offers, "Open Calendar"; "connect"
+//     as connect without a mode)
+//   connect {threadId?, messageId?, mode?: "local" | "cloud" | "both"}: Settings
+//     > Assistant opens to set a model up (mode "": it asks which); the
+//     question before messageId waits to be asked again
+//   retry {threadId} -> {thread, messages}: that question asked again, of
+//     the on-device model (first, unless mode was "cloud") or the cloud one
 //   confirm {threadId, messageId, accept}
 //   threads {} -> {threads, current}; thread {id?} -> {thread, messages}
 //   newThread {} / setCurrent {id} / deleteThread {id} / clearHistory {}
@@ -366,12 +376,16 @@ function createAssistantService(deps) {
     }
     // Layer 4: nothing here could answer; the user chooses.
     // instead: the note replaces "I can't do that on the phone" (it says why).
-    function offer(thread, note, instead) {
+    // asked: the words nothing understood, for the commands they come
+    // close to (not after a model tried).
+    function offer(thread, note, instead, asked) {
         var s = lang().say, choices = [], p = defaultProvider();
         if (p) choices.push({ id: "cloud:" + p.id, label: s.askCloud(providers.displayName(p)) });
         choices.push({ id: "web", label: s.searchWeb() });
-        if (!p) choices.push({ id: "settings", label: s.setUpCloud() });
-        return [say(thread, instead ? note : (note ? note + " " : "") + s.cantDo(), { via: "commands", choices: choices })];
+        if (!p) choices.push({ id: "connect", label: s.connectModel() });
+        var close = asked && !note && s.suggest ? s.suggest(asked) : [];
+        var text = instead ? note : (note ? note + " " : "") + s.cantDo() + (close.length ? " " + s.didYouMeanAny(close) : "");
+        return [say(thread, text, { via: "commands", choices: choices, data: close.length ? { suggest: close } : undefined })];
     }
 
     function route(thread, text) {
@@ -396,13 +410,20 @@ function createAssistantService(deps) {
             var cloud = thread.provider ? getProvider(thread.provider) : null;
             if (cloud) return askCloud(thread, cloud, cat);
             return localReady().then(function (m) {
-                if (!m) return offer(thread, note, !!note);
+                if (!m) return offer(thread, note, !!note, text);
                 return askLocal(thread, m, cat).catch(function (e) {
                     log("on-device model failed: " + (e && e.message));
                     return offer(thread, lang().say.localFailed(e && e.message || "no answer"));
                 });
             });
         });
+    }
+
+    // The user's words before a message (what it answers).
+    function askedBefore(thread, messageId) {
+        var msgs = messagesOf(thread.id), asked = "";
+        for (var i = 0; i < msgs.length && msgs[i].id !== messageId; ++i) if (msgs[i].role === "user") asked = msgs[i].text;
+        return asked;
     }
 
     function speakLast(list, p) {
@@ -462,8 +483,8 @@ function createAssistantService(deps) {
             var thread = getThread(p.threadId), m = thread && getMessage(thread.id, p.messageId);
             if (!m || !m.choices) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to choose there"));
             if (!m.choices.some(function (c) { return c.id === p.choice; })) return Promise.resolve(fail(ERRORS.BAD_PARAMS, "No such choice"));
-            var msgs = messagesOf(thread.id), asked = "";
-            for (var i = 0; i < msgs.length && msgs[i].id !== m.id; ++i) if (msgs[i].role === "user") asked = msgs[i].text;
+            if (p.choice === "connect") return methods.connect({ threadId: thread.id, messageId: m.id });
+            var asked = askedBefore(thread, m.id);
             m.chosen = p.choice;
             putMessage(m);
             var c = String(p.choice);
@@ -486,6 +507,60 @@ function createAssistantService(deps) {
                     .then(function () { return []; });
             }
             return work.then(function (out) { return done(thread, out, p); });
+        },
+        // "Connect model": Settings > Assistant, to set up an on-device model,
+        // a cloud one or both; the question waits on the thread (retry).
+        connect: function (p) {
+            if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
+            var mode = ["local", "cloud", "both"].indexOf(p.mode) >= 0 ? p.mode : "";
+            var thread = p.threadId ? getThread(p.threadId) : null;
+            if (p.threadId && !thread) return Promise.resolve(fail(ERRORS.NOT_FOUND, "No such conversation: " + p.threadId));
+            var m = thread && p.messageId ? getMessage(thread.id, p.messageId) : null;
+            if (m) {
+                var asked = askedBefore(thread, m.id);
+                if (asked) {
+                    thread.retry = { messageId: m.id, text: asked, mode: mode, time: now() };
+                    putThread(thread);
+                }
+            }
+            return deps.luna.call("luna://com.palm.applicationManager/launch",
+                                  { id: SETTINGS_APP, params: { page: "assistant", connect: mode || "choose", threadId: thread ? thread.id : "" } })
+                .then(function () { return ok({ mode: mode, waiting: !!(thread && thread.retry) }); },
+                      function (e) { return fail(ERRORS.FAILED, e && e.message || String(e)); });
+        },
+        // The question that waited for a model (connect), asked again now
+        // that one is there: the on-device model first (as the router
+        // does), the cloud one when it is all there is or was asked for.
+        retry: function (p) {
+            if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
+            var thread = getThread(p.threadId);
+            if (!thread) return Promise.resolve(fail(ERRORS.NOT_FOUND, "No such conversation: " + p.threadId));
+            var r = thread.retry;
+            if (!r) return Promise.resolve(ok({ thread: summary(thread), messages: [] }));
+            if (!settings().enabled) return Promise.resolve(fail(ERRORS.OFF, lang().say.off()));
+            return Promise.all([localReady(), catalogue()]).then(function (got) {
+                var local = got[0], cat = got[1], cloud = defaultProvider();
+                if (!local && !cloud) return [say(thread, lang().say.noModelYet(), { via: "commands" })];
+                delete thread.retry;
+                var m = getMessage(thread.id, r.messageId);
+                if (m && m.choices && !m.chosen) { m.chosen = "connect"; putMessage(m); }
+                // Something else was asked since: the question again, last.
+                var out = [];
+                if (lastAsked(thread) !== r.text) out.push(say(thread, r.text, { role: "user" }));
+                else putThread(thread);
+                var answering;
+                if (local && (r.mode !== "cloud" || !cloud)) {
+                    answering = askLocal(thread, local, cat).catch(function (e) {
+                        log("on-device model failed: " + (e && e.message));
+                        return offer(thread, lang().say.localFailed(e && e.message || "no answer"));
+                    });
+                } else {
+                    thread.provider = cloud.id;
+                    putThread(thread);
+                    answering = askCloud(thread, cloud, cat);
+                }
+                return answering.then(function (list) { return out.concat(list); });
+            }).then(function (out) { return done(thread, out, p); });
         },
         confirm: function (p) {
             if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
@@ -758,6 +833,7 @@ function createAssistantService(deps) {
 
 var METHODS = ["ask", "choose", "confirm", "threads", "thread", "newThread", "setCurrent", "deleteThread", "clearHistory",
                "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
-               "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary"];
+               "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary",
+               "connect", "retry"];
 
 module.exports = { createAssistantService: createAssistantService, METHODS: METHODS, ERRORS: ERRORS, SERVICE: SERVICE, DEFAULTS: DEFAULTS };

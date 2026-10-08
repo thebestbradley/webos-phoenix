@@ -1282,6 +1282,38 @@ function excerpt(s, n) {
     return (sp > n / 2 ? cut.slice(0, sp) : cut).replace(/[\s,;:.-]+$/, "") + "…";
 }
 
+// Requests nothing here understood: the commands their words come close
+// to, as one way each to say them (say.suggest), so "I can't do that" is
+// not a dead end. First matches first; every example is a request the
+// grammar takes as it stands (grammar.test.ts checks).
+var SUGGESTIONS = [
+    [/\b(?:meeting|appointment|event|calendar|schedule|lunch|dinner)\b/, ["add a meeting with Sam tomorrow at 3", "what's on my calendar tomorrow"]],
+    [/\b(?:agenda|busy|free|plans?)\b/, ["what's on my calendar today"]],
+    [/\b(?:remind|reminder|forget)\b/, ["remind me to call mom at 6"]],
+    [/\b(?:alarm|wake|wakeup)\b/, ["set an alarm for 7am weekdays"]],
+    [/\b(?:timer|countdown|minutes?)\b/, ["set a 10 minute timer"]],
+    [/\b(?:stopwatch|stop watch)\b/, ["start a stopwatch"]],
+    [/\b(?:note|notes|memo|jot|write)\b/, ["new note: buy flowers"]],
+    [/\b(?:task|tasks|todo|to-do|to do|list|groceries|shopping)\b/, ["add milk to my shopping list"]],
+    [/\b(?:e-?mail|inbox|mail)\b/, ["send an email to Priya saying see you soon", "do I have any new emails"]],
+    [/\b(?:text|message|messages|sms|tell)\b/, ["text Sam I'm running late", "read my last message"]],
+    [/\b(?:call|phone|dial|ring)\b/, ["call mom"]],
+    [/\b(?:contact|contacts|number|address|birthday)\b/, ["what's Sam's number"]],
+    [/\b(?:music|song|songs|play|album|artist|track|playlist)\b/, ["play some music by Miles Davis", "next song"]],
+    [/\b(?:volume|louder|quieter|mute|sound)\b/, ["turn up the volume"]],
+    [/\b(?:bright|brightness|dim|dimmer|screen)\b/, ["set brightness to 50%"]],
+    [/\b(?:wi-?fi|bluetooth|airplane|flashlight|torch|silent|disturb)\b/, ["turn on Wi-Fi", "turn on the flashlight"]],
+    [/\b(?:settings?|preferences)\b/, ["open Wi-Fi settings"]],
+    [/\b(?:weather|rain|sunny|temperature|forecast|cold|hot)\b/, ["what's the weather tomorrow"]],
+    [/\b(?:convert|miles?|km|kilometers?|pounds?|kg|cups?|liters?|fahrenheit|celsius|dollars?|euros?|usd|eur)\b/, ["convert 10 miles to km"]],
+    [/\b(?:directions|navigate|drive|route|far|distance)\b/, ["navigate to the nearest coffee shop"]],
+    [/\b(?:photos?|pictures?|pics)\b/, ["show my photos from yesterday"]],
+    [/\b(?:time|date|day|clock)\b/, ["what time is it in Tokyo"]],
+    [/\b(?:battery|charge|charging)\b/, ["what's my battery"]],
+    [/\b(?:calculate|plus|minus|times|divided|percent|%)\b/, ["what's 15% of 80"]],
+    [/\b(?:open|launch|start|app)\b/, ["open Maps"]]
+];
+
 var say = {
     off: function () { return "The assistant is turned off. You can turn it on in Settings > Assistant."; },
     notAllowed: function (title) { return "\"" + title + "\" is turned off in Settings > Assistant."; },
@@ -1469,6 +1501,21 @@ var say = {
     askCloud: function (name) { return "Ask " + name; },
     searchWeb: function () { return "Search the web"; },
     setUpCloud: function () { return "Set up a cloud model"; },
+    // Layer 4's other choice when no cloud model is set up: the UI asks
+    // which (on-device, cloud or both) and Settings sets it up.
+    connectModel: function () { return "Connect model"; },
+    // Up to two requests close to what was asked (SUGGESTIONS), and the words that offer them.
+    suggest: function (text) {
+        var t = clean(text), out = [];
+        SUGGESTIONS.forEach(function (s) {
+            if (out.length < 2 && s[0].test(t)) s[1].forEach(function (e) { if (out.length < 2 && out.indexOf(e) < 0) out.push(e); });
+        });
+        return out;
+    },
+    suggestions: function () { return [].concat.apply([], SUGGESTIONS.map(function (s) { return s[1]; })); },
+    didYouMeanAny: function (list) { return "Did you mean " + (list.length > 1 ? "something like " + quote(list[0]) + " or " + quote(list[1]) : quote(list[0])) + "?"; },
+    // A question asked again once a model was connected (retry), with none there.
+    noModelYet: function () { return "No model is connected yet. You can connect one in Settings > Assistant."; },
     cloudNoControl: function (name) { return name + " asked to control the phone, but cloud models may only chat. You can allow it in Settings > Assistant."; },
     cloudFailed: function (name, why) { return name + " didn't answer: " + why; },
     localFailed: function (why) { return "The on-device model didn't answer (" + why + ")."; },

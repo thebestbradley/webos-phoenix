@@ -197,10 +197,10 @@ describe("confirmation for what sends or calls", () => {
 });
 
 describe("when nothing on the phone can answer", () => {
-    it("offers to search the web, and to set up a cloud model", async () => {
+    it("offers to search the web, and to connect a model", async () => {
         const t = setup();
         const r = await ask(t, "who wrote the odyssey");
-        expect(last(r).choices.map((c: Reply) => c.id)).toEqual(["web", "settings"]);
+        expect(last(r).choices).toEqual([{ id: "web", label: "Search the web" }, { id: "connect", label: "Connect model" }]);
         const w = await t.svc.choose({ threadId: r.thread.id, messageId: last(r).id, choice: "web" });
         expect(last(w).text).toBe("Searching the web for \"who wrote the odyssey\".");
         expect(t.called("applicationManager/open")[0].params.target).toBe("https://www.google.com/search?q=who%20wrote%20the%20odyssey");
@@ -218,6 +218,78 @@ describe("when nothing on the phone can answer", () => {
         expect(last(next).text).toBe("anthropic says: and when");
         // The model saw the conversation, starting with the user.
         expect(mock.requests.at(-1)!.body.messages.map((m: Reply) => m.role)).toEqual(["user", "assistant", "user"]);
+    });
+});
+
+describe("Connect model", () => {
+    it("opens Settings > Assistant for the kind chosen, and the question waits for it", async () => {
+        const t = setup();
+        const r = await ask(t, "who wrote the odyssey");
+        const offer = last(r);
+        const c = await t.svc.connect({ threadId: r.thread.id, messageId: offer.id, mode: "cloud" });
+        expect(c).toMatchObject({ returnValue: true, mode: "cloud", waiting: true });
+        expect(t.called("applicationManager/launch").at(-1)!.params).toEqual(
+            { id: "org.webosphoenix.settings", params: { page: "assistant", connect: "cloud", threadId: r.thread.id } });
+        // Not taken: the buttons stay until a model answers.
+        expect((await t.svc.thread({ id: r.thread.id })).messages.find((m: Reply) => m.id === offer.id).chosen).toBeUndefined();
+        // The choice itself (an older client) asks which kind in Settings.
+        await t.svc.choose({ threadId: r.thread.id, messageId: offer.id, choice: "connect" });
+        expect(t.called("applicationManager/launch").at(-1)!.params.params).toMatchObject({ connect: "choose" });
+    });
+
+    it("asks the question again once a cloud model is there", async () => {
+        const t = setup();
+        const r = await ask(t, "who wrote the odyssey");
+        await t.svc.connect({ threadId: r.thread.id, messageId: last(r).id, mode: "cloud" });
+        // Nothing set up yet: it says so, and the question still waits.
+        const early = await t.svc.retry({ threadId: r.thread.id });
+        expect(last(early).text).toBe("No model is connected yet. You can connect one in Settings > Assistant.");
+        await addProvider(t, "anthropic");
+        const again = await t.svc.retry({ threadId: r.thread.id });
+        expect(last(again)).toMatchObject({ text: "anthropic says: who wrote the odyssey", via: "cloud" });
+        const th = await t.svc.thread({ id: r.thread.id });
+        expect(th.messages.find((m: Reply) => m.id === last(r).id).chosen).toBe("connect");
+        expect(th.thread.provider).not.toBe("");
+        // Asked once: a second retry has nothing to do.
+        expect((await t.svc.retry({ threadId: r.thread.id })).messages).toEqual([]);
+    });
+
+    it("asks the on-device model first when both are there", async () => {
+        const MODEL = "qwen2.5-0.5b-instruct-q4_k_m";
+        const t = setup({ llm: {
+            status: () => Promise.resolve({ available: true, installed: [{ id: MODEL }], ramBytes: 4 * 2 ** 30 }),
+            ensure: () => Promise.resolve({ baseUrl: mock.url + "/v1" }),
+            download: () => Promise.resolve(), cancel: () => Promise.resolve(), remove: () => Promise.resolve(),
+        } });
+        const r = await ask(t, "why is the sky blue");
+        await t.svc.connect({ threadId: r.thread.id, messageId: last(r).id, mode: "both" });
+        // Something else asked meanwhile: the question comes again, last.
+        await ask(t, "turn on the flashlight", { threadId: r.thread.id });
+        await addProvider(t, "anthropic");
+        t.as("org.webosphoenix.settings");
+        await t.svc.selectModel({ id: MODEL });
+        t.as("org.webosphoenix.assistant");
+        const again = await t.svc.retry({ threadId: r.thread.id });
+        expect(again.messages.map((m: Reply) => [m.role, m.text])).toEqual([["user", "why is the sky blue"], ["assistant", "chat says: why is the sky blue"]]);
+        expect(last(again).via).toBe("on-device");
+    });
+
+    it("suggests the commands close to words it did not understand", async () => {
+        const t = setup();
+        const r = await ask(t, "I have a meeting thing with the dentist sometime");
+        expect(last(r).text).toBe("I can't do that on the phone. Did you mean something like “add a meeting with Sam tomorrow at 3” or “what's on my calendar tomorrow”?");
+        expect(last(r).data.suggest).toEqual(["add a meeting with Sam tomorrow at 3", "what's on my calendar tomorrow"]);
+        // Nothing close: no suggestion.
+        const q = await ask(t, "who wrote the odyssey");
+        expect(last(q).text).toBe("I can't do that on the phone.");
+        expect(last(q).data).toBeUndefined();
+    });
+
+    it("lets only the system and the Assistant connect and retry", async () => {
+        const t = setup();
+        t.as("org.webosphoenix.somebody");
+        expect((await t.svc.connect({ mode: "local" })).errorCode).toBe(ERRORS.NOT_ALLOWED);
+        expect((await t.svc.retry({ threadId: "x" })).errorCode).toBe(ERRORS.NOT_ALLOWED);
     });
 });
 

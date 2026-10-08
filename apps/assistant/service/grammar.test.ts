@@ -155,6 +155,24 @@ describe("English", () => {
     });
 });
 
+describe("what the assistant suggests", () => {
+    const en = (grammar as unknown as { language(l: string): { say: { suggestions(): string[]; suggest(t: string): string[] } } }).language("en");
+    it("suggests only requests it understands as they stand", () => {
+        const list = en.say.suggestions();
+        expect(list.length).toBeGreaterThan(20);
+        for (const e of list) {
+            const p = parse(e);
+            expect(p, e).not.toBeNull();
+            expect(p!.command, e).not.toBe("beyond");
+        }
+    });
+    it("finds the commands close to words it did not understand", () => {
+        expect(en.say.suggest("something about my dentist appointment")).toEqual(["add a meeting with Sam tomorrow at 3", "what's on my calendar tomorrow"]);
+        expect(en.say.suggest("the song that goes la la")).toEqual(["play some music by Miles Davis", "next song"]);
+        expect(en.say.suggest("who wrote the odyssey")).toEqual([]);
+    });
+});
+
 describe("commands apps declare", () => {
     it("compiles appinfo.json phrases, and Quick Actions as '<name> {text}'", () => {
         const c = CTX.appCommands;

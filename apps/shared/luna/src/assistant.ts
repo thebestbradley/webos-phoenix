@@ -23,10 +23,13 @@ export const ASSISTANT_ERRORS = { BAD_PARAMS: -1, NOT_FOUND: -2, NOT_ALLOWED: -3
 export type AssistantVia = "commands" | "on-device" | "cloud";
 
 export interface AssistantChoice {
-    /** "cloud:<provider id>", "web" or "settings". */
+    /** "cloud:<provider id>", "web", "open", "connect" (no model yet: ask which kind, then connect()) or "settings" (older messages). */
     id: string;
     label: string;
 }
+
+/** What "Connect model" sets up: an on-device model, a cloud one, or both (on-device first). */
+export type ConnectMode = "local" | "cloud" | "both";
 
 export interface AssistantMessage {
     id: string;
@@ -168,6 +171,15 @@ export const assistant = {
     async choose(threadId: string, messageId: string, choice: string): Promise<AskResult> {
         const r = await c("choose", { threadId, messageId, choice });
         return { thread: r.thread, messages: r.messages };
+    },
+    /** "Connect model": Settings > Assistant sets one up ("" asks which); the question before messageId waits for retry(). */
+    async connect(options: { threadId?: string; messageId?: string; mode?: ConnectMode } = {}): Promise<void> {
+        await c("connect", options);
+    },
+    /** The question that waited for a model (connect), asked again; no messages if none waits. */
+    async retry(threadId: string): Promise<AskResult> {
+        const r = await c("retry", { threadId });
+        return { thread: r.thread, messages: r.messages || [] };
     },
     /** Answer a read-back: run it (accept) or not. */
     async confirm(threadId: string, messageId: string, accept: boolean): Promise<AskResult> {
