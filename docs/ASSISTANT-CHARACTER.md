@@ -108,8 +108,9 @@ or play an effect. In the shell `AssistantBird.qml`'s `play()`,
 | `enter` | Embers swirl in from all round, faster as they near, to a point above its place (`swirl`); a fireball blooms there (`fireball`) and the bird is born out of it, small then a little too big then itself, flapping its flippers, its tail streaming, swaying as it hovers. It looks down, folds its flippers up and drops, stretched (gravity: easing in); hits the ground squashed flat, its crest flaring, its eyes squeezed shut, a cloud of dust billowing out both ways from its feet (`dust`); bounces once (a sixth of the height, in the time gravity gives it), lands again with a smaller squash and settles with a spring, grinning. Its shadow grows in as it comes down. | 1.3 s |
 | `leave` | A happy crouch, a leap up stretched with its flippers high and its crest flaring, a flash, and it bursts into embers flying out and rising (`flash`, `burst`) as it shrinks away. It stays gone until it enters again. | 0.42 s |
 
-The system view plays the entrance as the panel grows (it starts at 60% of
-the panel's growth), then the wave (hello) as before; the exit as the
+The system view plays the entrance once the panel has grown out of the
+launcher button (the swirl would be lost in the panel's growth), then the
+wave (hello) as before; the exit as the
 panel goes back into the button. A request asked while it enters plays
 over it (thinking takes the pose). The app plays the entrance on a new
 conversation, then waves. Under Reduce motion both fade instead (250 ms,

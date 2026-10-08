@@ -1968,7 +1968,7 @@ over the screen.
 px by its height; small beside the field where the panel is short, as on a
 phone with the keyboard up), over the conversation, which scrolls on up
 behind it and fades out under the heading rather than being cut off and plays what is going on (`birdPose`):
-its entrance as the panel grows (`bird.enter()`: born of a swirl of embers
+its entrance once the panel has grown (`bird.enter()`: born of a swirl of embers
 and a fireball, it drops in, lands with a dust cloud and bounces), hello,
 then listening while the microphone is
 on (following the dictation's `loudness`), thinking while a request or a

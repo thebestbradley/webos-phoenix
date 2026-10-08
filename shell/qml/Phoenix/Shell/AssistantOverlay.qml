@@ -182,12 +182,15 @@ Item {
         connecting = null;
         if (open) {
             exampleIndex = Math.floor(Math.random() * examples.length);
-            // The bird enters as the panel grows (born of a swirl of
-            // embers, it drops in and lands), then waves.
+            // The bird enters once the panel has grown (born of a swirl
+            // of embers, it drops in and lands), then waves: hidden till
+            // then (onShownChanged starts it, so a first opening that
+            // takes a while to build loses none of it).
             _wake = "enter";
             _taps = 0;
-            wakeTimer.interval = Math.max(1, bird.enter(Math.round(Theme.launcherDuration * 0.6)));
-            wakeTimer.restart();
+            bird.enter(60000);
+            wakeTimer.stop();
+            _entering = true;
             ++_session;
             _fetchVocabulary();
             if (!listening)
@@ -210,6 +213,7 @@ Item {
             if (threadId !== "")
                 _call("followUpLeave", { threadId: threadId });
             _wake = "";
+            _entering = false;
             wakeTimer.stop();
             // It leaves: a leap, and it bursts into embers.
             bird.leave();
@@ -421,8 +425,18 @@ Item {
         beatTimer.restart();
     }
     Timer { id: beatTimer; onTriggered: ov._nextBeat() }
-    // Opening: its entrance while the panel grows, then a wave.
+    // Opening: its entrance once the panel has grown, then a wave.
     property string _wake: ""
+    property bool _entering: false
+    onShownChanged: {
+        if (shown === 1 && _entering) {
+            _entering = false;
+            if (_wake === "enter") {
+                wakeTimer.interval = Math.max(1, bird.enter(0));
+                wakeTimer.restart();
+            }
+        }
+    }
     Timer {
         id: wakeTimer
         onTriggered: {
