@@ -127,6 +127,14 @@ async function main() {
         // addSystemRedirects -> BrowserAdapter addUrlRedirect), the page
         // view hands the link back (urlRedirected) and the browser opens it
         // (BrowserApp.openResource -> applicationManager open {target}).
+        // Just Type, the page shown now, loads the runtime and reads its
+        // appinfo.json with a synchronous request: leaving it before it has
+        // loaded can stall the next navigation behind that request on a
+        // busy machine, so it finishes loading first.
+        await page.waitForFunction(() => {
+            const f = document.querySelector("object[type='application/x-palm-browser'] iframe");
+            try { return !!f && f.contentDocument.readyState === "complete"; } catch (e) { return true; }
+        }, null, { timeout: 30000 });
         const LINKS = "/__links/page.html";
         await page.route("**/__links/page.html", (route) => route.fulfill({ contentType: "text/html", body:
             "<!doctype html><title>Links</title><body><p><a id='mail' href='mailto:ada@example.com?subject=Hi'>Write to Ada</a></p>" +
