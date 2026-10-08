@@ -5,12 +5,17 @@
 // Assistant's conversations. The one in use, drawn like a Messaging thread
 // (the user's words on the right, the assistant's on the left with who
 // answered: the phone's commands, the on-device model or a cloud model),
-// with the answers' choices ("Ask <cloud model>", "Search the web") and
-// read-backs ("Send ... to Sam?") as buttons; a text field and the
+// with the answers' choices ("Ask <cloud model>", "Search the web",
+// "Connect model", which asks which kind and goes on in Settings) and
+// read-backs ("Send ... to Sam?") as buttons, and the requests an answer
+// suggests ("Did you mean ...?"), which go to the field; a text field and the
 // microphone (org.webosphoenix.dictation). Conversations lists the past
 // ones: open one to go on with it, start a new one, delete one. The
 // shell's assistant view (hold the launcher button) shows the same thread
 // in use: both go through org.webosphoenix.assistant.
+//
+// The empty conversation shows a few things to ask (examples.ts), a
+// different few every few seconds; a tap puts one in the field.
 //
 // The assistant's bird (docs/ASSISTANT-CHARACTER.md, bird/) greets on the
 // empty conversation, thinks while it loads and while a request waits,
@@ -18,26 +23,29 @@
 // that", or says oops when something failed, as in the shell's view.
 //
 // Launch params: {text} asks it (Just Type's "Ask Assistant"); {threadId}
-// opens that conversation; {timerDone: {id, label, seconds}} is a timer
+// opens that conversation, and with {retry: true} asks again the question
+// that waited for a model (Settings' "Back to Your Question"); {timerDone: {id, label, seconds}} is a timer
 // the assistant set going off (its activity's callback): a notification,
 // the alarm sound and, when speech is on, the words.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
     apps, assistant, audio, dictation, postNotification, tts, ASSISTANT_APP_ID,
-    type AssistantMessage, type AssistantSettings, type AssistantThread, type Listening, type LunaError,
+    type AssistantMessage, type AssistantSettings, type AssistantThread, type ConnectMode, type Listening, type LunaError,
 } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
 import { AppMenu, BackProvider, Button, cx, Dialog, Page, PageHeader, Row, Spinner, useBack } from "@phoenix/ui";
 import { Bird, useBirdMotion } from "./bird/Bird";
 import type { BirdPose } from "./bird/birdData";
 import { beatsFor, birdPose, outcomeOf, type Beat } from "./bird/pose";
+import { EXAMPLES, examplesFrom } from "./examples";
 
 const errorText = (e: unknown) => (e as LunaError).errorText ?? (e instanceof Error ? e.message : String(e));
 
 interface Launch {
     text?: string;
     threadId?: string;
+    retry?: boolean;
     timerDone?: { id?: string; label?: string; seconds?: number };
 }
 
@@ -53,13 +61,16 @@ const VIA: Record<string, string> = { commands: "On the phone", "on-device": "On
 
 // ---- One message ---------------------------------------------------------------------------
 
-function Bubble({ m, busy, onChoose, onConfirm }: {
+function Bubble({ m, busy, onChoose, onConfirm, onSuggest }: {
     m: AssistantMessage; busy: boolean;
     onChoose: (m: AssistantMessage, id: string) => void; onConfirm: (m: AssistantMessage, yes: boolean) => void;
+    onSuggest: (words: string) => void;
 }) {
     const mine = m.role === "user";
     const asking = m.status === "pending" && !!m.confirm;
     const choices = m.choices && !m.chosen ? m.choices : [];
+    // Requests close to words it did not understand ("Did you mean ...?").
+    const suggest = choices.length && Array.isArray(m.data?.suggest) ? (m.data!.suggest as string[]) : [];
     const yes = m.command === "text" ? "Send" : m.command === "call" ? "Call" : "Yes";
     return (
         <div className={cx("as-row", mine ? "out" : "in")} data-testid={`as-msg-${m.id}`}>
@@ -74,6 +85,9 @@ function Bubble({ m, busy, onChoose, onConfirm }: {
                     {choices.map((c) => (
                         <Button key={c.id} variant={c.id.startsWith("cloud:") ? "affirmative" : undefined} disabled={busy}
                                 data-testid={`as-choice-${c.id}`} onClick={() => onChoose(m, c.id)}>{c.label}</Button>
+                    ))}
+                    {suggest.map((w, i) => (
+                        <button key={w} type="button" className="as-chip" data-testid={`as-suggest-${i}`} onClick={() => onSuggest(w)}>{w}</button>
                     ))}
                     {asking && <Button variant="affirmative" disabled={busy} data-testid="as-confirm-yes" onClick={() => onConfirm(m, true)}>{yes}</Button>}
                     {asking && <Button disabled={busy} data-testid="as-confirm-no" onClick={() => onConfirm(m, false)}>Cancel</Button>}
@@ -102,9 +116,57 @@ function useBeats(speed: number): [BirdPose | null, (beats: Beat[]) => void] {
     return [beat, play];
 }
 
+// ---- Connect model: which kind -------------------------------------------------------------------
+
+const KINDS: { mode: ConnectMode; title: string; detail: string }[] = [
+    { mode: "local", title: "On-Device Model", detail: "Private and offline: nothing leaves the phone. A 0.5 to 2.5 GB download." },
+    { mode: "cloud", title: "Cloud Model", detail: "Anthropic, OpenAI, Gemini or a compatible server, with your API key." },
+    { mode: "both", title: "Both", detail: "On-device first; the cloud model for what it can't do." },
+];
+
+function ConnectChooser({ open, onChoose, onClose }: { open: boolean; onChoose: (mode: ConnectMode) => void; onClose: () => void }) {
+    return (
+        <Dialog open={open} onClose={onClose} testId="as-connect" title="Connect a Model"
+                message="For questions and requests the phone's own commands don't know.">
+            {KINDS.map((k) => (
+                <button key={k.mode} type="button" className="as-kind" data-testid={`as-connect-${k.mode}`} onClick={() => onChoose(k.mode)}>
+                    <b>{k.title}</b><span>{k.detail}</span>
+                </button>
+            ))}
+            <Button onClick={onClose}>Cancel</Button>
+        </Dialog>
+    );
+}
+
+// ---- Things to ask, on an empty conversation ------------------------------------------------------
+
+function Examples({ onPick, speed }: { onPick: (words: string) => void; speed: number }) {
+    const [first, setFirst] = useState(() => Math.floor(Math.random() * EXAMPLES.length));
+    const [fading, setFading] = useState(false);
+    // Two on a phone (all in sight above the field), three on a tablet.
+    const shown = window.innerWidth < 600 ? 2 : 3;
+    useEffect(() => {
+        const t = window.setInterval(() => {
+            setFading(true);
+            window.setTimeout(() => { setFirst((i) => (i + shown) % EXAMPLES.length); setFading(false); }, 250 * speed);
+        }, 5000);
+        return () => window.clearInterval(t);
+    }, [speed, shown]);
+    return (
+        <div className="as-examples" data-testid="as-examples">
+            <div className="as-examples-label">Try asking</div>
+            <div className={cx("as-examples-list", fading && "fading")}>
+                {examplesFrom(first, shown).map((w, i) => (
+                    <button key={w} type="button" className="as-chip" data-testid={`as-example-${i}`} onClick={() => onPick(w)}>{w}</button>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 // ---- The conversation in use -------------------------------------------------------------------
 
-function Conversation({ threadId, onThread }: { threadId: string; onThread: (id: string) => void }) {
+function Conversation({ threadId, onThread, retry }: { threadId: string; onThread: (id: string) => void; retry: object | null }) {
     const [thread, setThread] = useState<AssistantThread | null>(null);
     const [messages, setMessages] = useState<AssistantMessage[]>([]);
     const [text, setText] = useState("");
@@ -118,6 +180,8 @@ function Conversation({ threadId, onThread }: { threadId: string; onThread: (id:
     const [loaded, setLoaded] = useState(false);
     const [greeting, setGreeting] = useState(false);
     const [beat, play] = useBeats(motion.speed);
+    const [connecting, setConnecting] = useState<AssistantMessage | null>(null);
+    const input = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         const sub = assistant.watchThread(threadId || undefined, (t, list) => { setThread(t); setMessages(list); setLoaded(true); },
@@ -146,6 +210,31 @@ function Conversation({ threadId, onThread }: { threadId: string; onThread: (id:
             .finally(() => setBusy(false));
     }, [threadId, onThread, play]);
 
+    // The question that waited for a model, asked again (once per launch that says so).
+    const retried = useRef<object | null>(null);
+    useEffect(() => {
+        if (!retry || retried.current === retry || !threadId) return;
+        retried.current = retry;
+        run(assistant.retry(threadId));
+    }, [retry, threadId, run]);
+    // Words to change or send: an example, a suggestion.
+    const suggest = (words: string) => {
+        setText(words);
+        window.setTimeout(() => {
+            const el = input.current;
+            if (el) { el.focus(); el.setSelectionRange(words.length, words.length); }
+        });
+    };
+    const choose = (m: AssistantMessage, id: string) => {
+        if (id === "connect") setConnecting(m);
+        else run(assistant.choose(m.threadId, m.id, id));
+    };
+    const connect = (mode: ConnectMode) => {
+        const m = connecting;
+        setConnecting(null);
+        if (m) assistant.connect({ threadId: m.threadId, messageId: m.id, mode }).catch((e) => setError(errorText(e)));
+    };
+
     const ask = useCallback((words: string) => {
         const t = words.trim();
         if (!t || busy) return;
@@ -171,13 +260,13 @@ function Conversation({ threadId, onThread }: { threadId: string; onThread: (id:
             <div className="as-scroll" data-testid="as-thread">
                 {messages.length === 0 && !busy && !beat && (
                     <div className="as-empty" data-testid="as-empty">
-                        <Bird pose={birdPose({ loading: !loaded, busy: false, beat: null, greeting })} size={120} speed={motion.speed} still={motion.still} />
-                        {loaded && <p>Ask me to set a timer, text someone, turn on the flashlight, get directions, or anything else.</p>}
+                        <Bird pose={birdPose({ loading: !loaded, busy: false, beat: null, greeting })} size={window.innerHeight < 520 ? 96 : 120} speed={motion.speed} still={motion.still} />
+                        {loaded && <p>Ask me a question, or tell me what to do: events, reminders, alarms, notes, messages, music, settings and more.</p>}
+                        {loaded && <Examples onPick={suggest} speed={motion.speed} />}
                     </div>
                 )}
                 {messages.map((m) => (
-                    <Bubble key={m.id} m={m} busy={busy}
-                            onChoose={(msg, id) => run(assistant.choose(msg.threadId, msg.id, id))}
+                    <Bubble key={m.id} m={m} busy={busy} onChoose={choose} onSuggest={suggest}
                             onConfirm={(msg, yes) => run(assistant.confirm(msg.threadId, msg.id, yes))} />
                 ))}
                 {(busy || beat) && (
@@ -191,7 +280,7 @@ function Conversation({ threadId, onThread }: { threadId: string; onThread: (id:
                 <div ref={end} />
             </div>
             <form className="as-compose" onSubmit={(e) => { e.preventDefault(); ask(text); }}>
-                <input className="as-input" data-testid="as-input" value={text} disabled={busy}
+                <input ref={input} className="as-input" data-testid="as-input" value={text} disabled={busy}
                        placeholder={listening === "listening" ? "Listening…" : listening === "transcribing" ? "Transcribing…" : "Ask anything"}
                        onChange={(e) => setText(e.target.value)} enterKeyHint="send" />
                 {canListen && (
@@ -203,6 +292,7 @@ function Conversation({ threadId, onThread }: { threadId: string; onThread: (id:
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-8-6 16-2.5-6.5z" /></svg>
                 </button>
             </form>
+            <ConnectChooser open={connecting !== null} onChoose={connect} onClose={() => setConnecting(null)} />
         </div>
     );
 }
@@ -268,6 +358,7 @@ function Main() {
     const [view, setView] = useState<"thread" | "list">("thread");
     const [threadId, setThreadId] = useState("");
     const [asked, setAsked] = useState<Launch | null>(null);
+    const [retry, setRetry] = useState<Launch | null>(null);
 
     useTimerDone(launch, settings ?? null);
     useBack(() => { setView("thread"); return true; }, view === "list");
@@ -281,6 +372,7 @@ function Main() {
             setThreadId(launch.threadId);
             setView("thread");
             void assistant.setCurrent(launch.threadId).catch(() => undefined);
+            if (launch.retry) setRetry(launch);
         }
         if (launch.text) void assistant.ask(launch.text, launch.threadId ? { threadId: launch.threadId } : {}).catch(() => undefined);
     }, [launch, asked]);
@@ -311,7 +403,7 @@ function Main() {
                             <p>The assistant is turned off.</p>
                             <Button onClick={prefs}>Settings</Button>
                         </div>
-                    ) : <Conversation key={threadId} threadId={threadId} onThread={setThreadId} />}
+                    ) : <Conversation key={threadId} threadId={threadId} onThread={setThreadId} retry={retry} />}
                 </>
             )}
         </div>

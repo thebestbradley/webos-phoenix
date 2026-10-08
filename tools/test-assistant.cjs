@@ -8,14 +8,18 @@
 //
 //   - the Assistant app (apps/assistant): the phone's commands answer at
 //     once (a sum, the flashlight), a text is read back and sent only on
-//     Send, a question nothing on the phone answers offers "Search the web"
-//     and "Set up a cloud model";
-//   - Settings > Assistant (apps/settings): a cloud provider added (a local
-//     stand-in for Anthropic's Messages API, test/mock-providers.cjs,
+//     Send; a new conversation shows things to ask, which go to the field;
+//     words it does not understand get close commands ("Did you mean
+//     ...?"); a question nothing on the phone answers offers "Search the
+//     web" and "Connect model", which asks which kind;
+//   - Settings > Assistant (apps/settings): speech, units and a command
+//     switched; opened by Connect model, a cloud provider added there (a
+//     local stand-in for Anthropic's Messages API, test/mock-providers.cjs,
 //     reached through serve-rootfs.py's proxy as a real one would be), its
-//     connection tested; speech, units and a command switched;
-//   - back in the app, "Ask Anthropic" answers in the thread; a cloud model
-//     asking to act is refused until Settings allows it, then acts;
+//     connection tested, then "Back to Your Question";
+//   - back in the app, the question is asked again and Anthropic answers in
+//     the thread; a cloud model asking to act is refused until Settings
+//     allows it, then acts;
 //   - Conversations: new, open, delete; a conversation from the shell's
 //     view (ask {newThread}) opened by a relaunch with {threadId}; Clear
 //     History; no key in the stored data.
@@ -105,7 +109,18 @@ async function main() {
         await app.evaluate(() => localStorage.clear());
         await app.goto(appUrl);
         await app.waitForSelector("[data-testid='as-empty']");
-        check(/set a timer/.test(await app.textContent("[data-testid='as-empty']")), "a new conversation says what it can do");
+        check(/events, reminders, alarms, notes/.test(await app.textContent("[data-testid='as-empty']")), "a new conversation says what it can do");
+        // Things to ask: a tap puts them in the field, to change or send.
+        await app.waitForSelector("[data-testid='as-example-1']");
+        const example = (await app.textContent("[data-testid='as-example-0']")).trim();
+        await app.click("[data-testid='as-example-0']");
+        check(await app.inputValue("[data-testid='as-input']") === example && await app.locator(".as-row").count() === 0,
+              "a new conversation shows things to ask; a tap puts one in the field: " + example);
+        await shot(app, "examples");
+        const firstExamples = await app.textContent("[data-testid='as-examples']");
+        await app.waitForFunction((t) => document.querySelector("[data-testid='as-examples']")?.textContent !== t, firstExamples, { timeout: 8000 });
+        check(true, "a different few after a while");
+        await app.fill("[data-testid='as-input']", "");
         // The bird greets, then idles (docs/ASSISTANT-CHARACTER.md).
         await app.waitForSelector("[data-testid='as-empty'] [data-testid='as-bird'][data-pose='idle']");
         check(true, "the bird shows on the new conversation, idle after its hello");
@@ -207,14 +222,27 @@ async function main() {
         check(/^Volume \d+%\.$/.test(await ask("Turn up the volume")), "the volume up");
         check(await ask("Set brightness to 50%") === "Brightness 50%.", "the brightness set");
         await shot(app, "thread-everyday");
+        // Words it does not understand: the commands they come close to.
+        const close = await ask("I need the dentist appointment thing");
+        check(/^I can't do that on the phone\. Did you mean something like \u201cadd a meeting with Sam tomorrow at 3\u201d/.test(close), "close commands suggested: " + close);
+        await app.locator(".as-row").last().locator("[data-testid='as-suggest-0']").click();
+        check(await app.inputValue("[data-testid='as-input']") === "add a meeting with Sam tomorrow at 3", "a suggestion goes to the field");
+        await app.fill("[data-testid='as-input']", "");
         // Nothing here can answer.
         check(await ask("Who wrote the Odyssey?") === "I can't do that on the phone.", "a question the phone cannot answer");
-        check(await app.locator("[data-testid='as-choice-web']").count() === 1 && await app.locator("[data-testid='as-choice-settings']").count() === 1,
-              "it offers Search the web and Set up a cloud model");
-        await app.click("[data-testid='as-choice-settings']");
-        const opened = () => launches.some((l) => l.id === "org.webosphoenix.settings" && l.params && l.params.page === "assistant");
-        for (let i = 0; i < 100 && !opened(); ++i) await app.waitForTimeout(100);
-        check(opened(), "Set up a cloud model opens Settings > Assistant");
+        const offerRow = app.locator(".as-row").last();
+        check(await offerRow.locator("[data-testid='as-choice-web']").count() === 1 && /^Connect model$/.test((await offerRow.locator("[data-testid='as-choice-connect']").textContent()).trim()),
+              "it offers Search the web and Connect model");
+        await offerRow.locator("[data-testid='as-choice-connect']").click();
+        await app.waitForSelector("[data-testid='as-connect-both']");
+        check(/Private and offline/.test(await app.textContent("[data-testid='as-connect']")), "Connect model asks which kind: on-device, cloud or both");
+        await app.waitForTimeout(600);
+        await shot(app, "connect-model");
+        await app.click("[data-testid='as-connect-cloud']");
+        const connectLaunch = () => launches.find((l) => l.id === "org.webosphoenix.settings" && l.params && l.params.page === "assistant" && l.params.connect === "cloud");
+        for (let i = 0; i < 100 && !connectLaunch(); ++i) await app.waitForTimeout(100);
+        const odysseyThread = (await svc(app, A + "threads", {})).current;
+        check(!!connectLaunch() && connectLaunch().params.threadId === odysseyThread, "a cloud model: Settings > Assistant opens for it, with the conversation");
 
         // ---- Settings > Assistant --------------------------------------------------------------
         const st = await context.newPage();
@@ -244,37 +272,55 @@ async function main() {
         await st.click("[data-testid='as-cmd-toggle-weather']");
         await until((s) => !s.disabledCommands.includes("weather"), "and on again");
 
-        // A provider: Anthropic's API, here the local stand-in.
-        await st.click("[data-testid='as-add-provider']");
-        await st.click("role=option[name='Anthropic']");
-        await st.waitForSelector("[data-testid='as-provider-key']");
-        check(await st.inputValue("[data-testid='as-provider-model']") === "claude-sonnet-5-5", "Anthropic's model suggested: claude-sonnet-5-5");
-        await st.fill("[data-testid='as-provider-url']", mockUrl);
-        await st.fill("[data-testid='as-provider-key']", "wrong-key");
-        await st.click("[data-testid='as-provider-test']");
-        await st.waitForSelector("[data-testid='as-provider-result']");
-        check(/401.*check the key/.test(await st.textContent("[data-testid='as-provider-result']")), "a wrong key: the test says so");
-        await st.fill("[data-testid='as-provider-key']", KEY);
-        await st.click("[data-testid='as-provider-test']");
-        await st.waitForSelector("[data-testid='as-provider-result']:has-text('Connected')");
-        check(true, "the right key: connected");
-        await shot(st, "settings-provider");
-        await st.click("[data-testid='as-provider-save']");
-        // Back on the page once it is saved (the editor's own result note
-        // says "anthropic" too: wait for the page, not for the word).
-        await st.waitForSelector("[data-testid='as-add-provider']");
-        const provs = (await svc(st, A + "providers", {})).providers;
-        check(provs.length === 1 && provs[0].keyHint === "opic" && provs[0].hasKey && provs[0].model === "claude-sonnet-5-5", "the provider saved, its key hidden");
-        const stored = await st.evaluate(() => JSON.stringify({ ...localStorage }));
-        check(!stored.includes(KEY), "the key is not in the stored data");
         check(await st.locator("[data-testid='as-cloud-control'][aria-checked='true']").count() === 0, "cloud models may not control the device by default");
 
+        // A provider: Anthropic's API, here the local stand-in, added where
+        // Connect model opened Settings.
+        const cn = await context.newPage();
+        watch(cn, "settings-connect");
+        await cn.goto(`${root}/org.webosphoenix.settings/index.html?launchParams=` + encodeURIComponent(JSON.stringify(connectLaunch().params)));
+        await cn.waitForSelector("[data-testid='as-connect-waiting']");
+        check(/API key/.test(await cn.textContent("[data-testid='as-connect-waiting']")) && await cn.locator("[data-testid='as-connect-back']").count() === 0,
+              "Connect a Model: the cloud model's providers, nothing ready yet");
+        await shot(cn, "settings-connect");
+        await cn.click("[data-testid='as-connect-add-anthropic']");
+        await cn.waitForSelector("[data-testid='as-provider-key']");
+        check(await cn.inputValue("[data-testid='as-provider-model']") === "claude-sonnet-5-5", "Anthropic's model suggested: claude-sonnet-5-5");
+        await cn.fill("[data-testid='as-provider-url']", mockUrl);
+        await cn.fill("[data-testid='as-provider-key']", "wrong-key");
+        await cn.click("[data-testid='as-provider-test']");
+        await cn.waitForSelector("[data-testid='as-provider-result']");
+        check(/401.*check the key/.test(await cn.textContent("[data-testid='as-provider-result']")), "a wrong key: the test says so");
+        await cn.fill("[data-testid='as-provider-key']", KEY);
+        await cn.click("[data-testid='as-provider-test']");
+        await cn.waitForSelector("[data-testid='as-provider-result']:has-text('Connected')");
+        check(true, "the right key: connected");
+        await shot(cn, "settings-provider");
+        await cn.click("[data-testid='as-provider-save']");
+        // Back on Connect a Model once it is saved: ready, and back to the question.
+        await cn.waitForSelector("[data-testid='as-connect-ready']");
+        check(/Anthropic \(claude-sonnet-5-5\) is ready/.test(await cn.textContent("[data-testid='as-connect-ready']")), "the provider saved: ready");
+        await shot(cn, "settings-connect-ready");
+        await cn.click("[data-testid='as-connect-back']");
+        const backLaunch = () => launches.find((l) => l.id === "org.webosphoenix.assistant" && l.params && l.params.retry === true);
+        for (let i = 0; i < 100 && !backLaunch(); ++i) await app.waitForTimeout(100);
+        check(!!backLaunch() && backLaunch().params.threadId === odysseyThread, "Back to Your Question opens the Assistant on the conversation");
+        const provs = (await svc(cn, A + "providers", {})).providers;
+        check(provs.length === 1 && provs[0].keyHint === "opic" && provs[0].hasKey && provs[0].model === "claude-sonnet-5-5", "the provider saved, its key hidden");
+        const stored = await cn.evaluate(() => JSON.stringify({ ...localStorage }));
+        check(!stored.includes(KEY), "the key is not in the stored data");
+        await cn.close();
+
         // ---- Asking the cloud model --------------------------------------------------------------
+        // The question that waited, asked again as the app is relaunched with it.
         await app.bringToFront();
-        await ask("Tell me about the Palm Pre");
-        await app.click("[data-testid^='as-choice-cloud:']");
-        await app.waitForFunction(() => /anthropic says: Tell me about the Palm Pre/.test(document.body.textContent));
-        check(/Anthropic \(claude-sonnet-5-5\)/.test(await app.locator(".as-via").last().textContent()), "Ask Anthropic answers, labelled");
+        await app.evaluate((p) => document.dispatchEvent(new CustomEvent("webOSRelaunch", { detail: p })), backLaunch().params);
+        await app.waitForFunction(() => /anthropic says: [^]*Who wrote the Odyssey\?/.test(document.body.textContent), null, { timeout: 15000 });
+        check(/Anthropic \(claude-sonnet-5-5\)/.test(await app.locator(".as-via").last().textContent()), "the question asked again, Anthropic answers, labelled");
+        check(await app.locator("[data-testid='as-choice-connect']").count() === 1, "Connect model taken on the question asked again (the earlier answer keeps its own)");
+        await shot(app, "thread-retried");
+        // The conversation goes on with it.
+        check(await ask("Tell me about the Palm Pre") === "anthropic says: Tell me about the Palm Pre", "the conversation goes on with Anthropic");
         const refused = await ask("force a tool");
         check(/cloud models may only chat/.test(refused), "a cloud model asking to act is refused");
         check(await ask("Turn off the flashlight") === "The flashlight is off.", "the phone's own commands answer first, in a cloud thread too");

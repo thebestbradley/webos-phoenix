@@ -8,7 +8,10 @@
 // "English" one below with its own phrases.
 
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { EXAMPLES } from "../src/examples";
 
 type Parsed = { command: string; args: Record<string, unknown> } | null;
 const req = createRequire(import.meta.url);
@@ -161,6 +164,17 @@ describe("what the assistant suggests", () => {
         const list = en.say.suggestions();
         expect(list.length).toBeGreaterThan(20);
         for (const e of list) {
+            const p = parse(e);
+            expect(p, e).not.toBeNull();
+            expect(p!.command, e).not.toBe("beyond");
+        }
+    });
+    it("shows, on an empty conversation, things to ask it understands, the same in the app and the shell", () => {
+        const qml = readFileSync(resolve(__dirname, "../../../shell/qml/Phoenix/Shell/AssistantOverlay.qml"), "utf8");
+        const block = /readonly property var examples: \[([\s\S]*?)\n {4}\]/.exec(qml)![1];
+        const shell = [...block.matchAll(/qsTr\("([^"]+)"\)/g)].map((m) => m[1]);
+        expect(shell).toEqual(EXAMPLES);
+        for (const e of EXAMPLES) {
             const p = parse(e);
             expect(p, e).not.toBeNull();
             expect(p!.command, e).not.toBe("beyond");

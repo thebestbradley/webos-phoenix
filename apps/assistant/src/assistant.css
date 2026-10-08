@@ -73,3 +73,29 @@
     border: 1px solid #b04040; border-radius: 12px; padding: 3px 10px; background: linear-gradient(#f8d4d0, #e8a8a0);
     color: #6a1a14; font: inherit; font-size: 13px;
 }
+
+/* Things to ask (an empty conversation) and requests an answer suggests:
+ * chips that put their words in the field. */
+.as-examples { margin: 4px auto 0; max-width: 520px; }
+/* A phone: the bird, the words and the examples all in sight. */
+@media (max-height: 520px) {
+    .as-empty { padding-top: 8px; }
+    .as-empty p { font-size: 15px; margin: 6px auto; }
+    .as-examples-list { gap: 6px; }
+    .as-chip { padding: 5px 10px; font-size: 13px; }
+}
+.as-examples-label { font-size: 13px; color: var(--pui-text-dim, #777); margin-bottom: 6px; }
+.as-examples-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; transition: opacity 0.25s; }
+.as-examples-list.fading { opacity: 0; }
+.as-chip {
+    border: 1px solid #9ab8d0; border-radius: 16px; padding: 6px 12px; background: linear-gradient(#f7fbfe, #e3eef7);
+    color: #1d3c55; font: inherit; font-size: 14px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.as-chip:active { background: linear-gradient(#d6e6f3, #c3d9eb); }
+/* Connect a Model: the kinds, each with what it means. */
+.as-kind {
+    display: block; width: 100%; text-align: left; margin: 0 0 8px; padding: 8px 12px; border-radius: 10px;
+    border: 1px solid #b4b4b2; background: linear-gradient(#fff, #efefed); color: #222; font: inherit;
+}
+.as-kind b { display: block; font-size: 16px; }
+.as-kind span { display: block; font-size: 13px; color: #555; margin-top: 2px; }
