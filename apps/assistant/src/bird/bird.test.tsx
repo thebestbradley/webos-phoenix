@@ -87,7 +87,7 @@ describe("the drawing", () => {
     });
 
     it("acts every pose: each part its loop names plays it, the others not", () => {
-        const acting = BIRD.motion.acting.poses as Record<string, { every?: readonly number[]; tracks: Record<string, unknown> }>;
+        const acting = BIRD.motion.acting.poses as Record<string, { period: number; every?: readonly number[]; tracks: Record<string, unknown> }>;
         expect(Object.keys(acting).length).toBeGreaterThanOrEqual(10);
         for (const pose of BIRD_POSES) {
             const a = acting[pose];

@@ -212,7 +212,9 @@ export function Bird({ pose, size = 120, className, testId = "as-bird", speed, s
             <Part name="shadow" style={{ transform: about(pv.shadow, `scale(${p.lift > 0 ? 0.7 : 1}, 1)`), transition: ease(t.body) }} />
             <g style={{ transform: `translate(0px, ${-p.lift}px)`, transition: liftTransition }}>
                 <g style={{ transform: about(pv.body, `rotate(${p.tilt}deg)`), transition: ease(t.body) }}>
-                    <g key={hop + p.lift} className={hop === "up" ? anim("ab-takeoff") : hop === "down" ? anim("ab-landing") : undefined}>
+                    {/* Not remounted for the hop (its class alternates, take-off and
+                        landing, which restarts it): the parts within ease and blend on. */}
+                    <g className={hop === "up" ? anim("ab-takeoff") : hop === "down" ? anim("ab-landing") : undefined}>
                         <g className={anim("ab-breath")}>
                             {act("body", <>
                                 <g className={anim("ab-flicker-tail")}><Part name="tail" /></g>
