@@ -127,10 +127,10 @@ the user types; a pose change ends one where it is and blends it away.
 | `stretch` | Rises on its toes, flippers stretched high, head back, eyes shut and beak wide in a yawn; drops back with a little shake-out | 2.2 s |
 | `hop` | Crouches, hops a step aside and lands (a puff of dust), and hops back | 1.15 s |
 | `preen` | Turns its head to its tail, which lifts towards it, and nibbles at the flame, content | 2 s |
-| `tap` | Taps its foot three times, a flipper on its hip, looking up and away, its head on the beat | 1.6 s |
+| `tap` | Taps its foot three times, rocking with it, a flipper out, looking up and away, its head on the beat | 1.6 s |
 | `peek` | Leans down and looks at the text field below, tilting its head | 1.8 s |
 | `shiver` | Its crest and tail flames shiver, its body with them, eyes squeezed | 0.9 s |
-| `lookUp` | Looks up (at the status bar), eyes going one way then the other | 1.8 s |
+| `lookUp` | Stretches up and looks up (at the status bar), its crest rising, eyes going one way then the other | 1.8 s |
 
 ### Reactions
 
@@ -141,7 +141,7 @@ enters or leaves.
 | When | Move | What it does | Time |
 | --- | --- | --- | --- |
 | a character typed | `peck` | a quick nod towards the words, the crest bobbing | 0.22 s |
-| a character deleted | `wince` | squeezes its eyes shut, flinches, flippers up by its face, peeks | 0.9 s |
+| a character deleted | `wince` | squeezes its eyes shut and cringes: hunched, flippers up by its head, its crest shrinking; peeks | 0.9 s |
 | a pause in the typing (2.5 s) | `ponder` | a curious tilt of the head, one eye wide (asking's eyes) | 1.6 s |
 | a request sent | `cheer` | crouches and hops up grinning, flippers high, lands with a puff, as it starts thinking | 0.75 s |
 | a tap on it | (the wave) then `giggle` or `spin` at random, never the same twice running | giggle: bounces three times grinning, wiggling; spin: hops and turns round in the air, lands with a puff | 0.9 s |
