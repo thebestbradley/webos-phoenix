@@ -539,15 +539,26 @@ Item {
             tryVerify(function () { return overlay.birdPose === pose && bird().pose === pose && bird().atRest(); }, 4000, msg || pose);
         }
 
-        // Opening: it rises asleep with the panel, wakes and waves, then idles.
+        // Opening: it enters as the panel grows (born of embers, it drops
+        // in and lands, docs/ASSISTANT-CHARACTER.md), waves, then idles.
         function test_birdWakesAsItOpens() {
             var p = launcherButton();
             tryVerify(function () { return !shell.keyboardOpen && ql.visible && ql.opacity === 1 && ql.shownProgress === 1; }, 3000);
-            // Asleep before it opens; it rises so with the panel.
+            // Asleep (gone) before it opens.
             compare(overlay.birdPose, "asleep");
             birdSeen.reset();
-            hold(p, opened);
+            var entered = [];
+            var c = function (name) { entered.push(name); };
+            bird().moveEnded.connect(c);
+            try {
+                hold(p, opened);
+                compare(bird().move, "enter");
+                tryVerify(function () { return entered.indexOf("enter") >= 0 && overlay._wake === ""; }, 8000, "entered, waved");
+            } finally {
+                bird().moveEnded.disconnect(c);
+            }
             poseIs("idle");
+            verify(bird().movesAtRest());
             verify(birdSeen.had(["hello", "idle"]), "hello, then idle: " + birdSeen.poses);
             // At the top in the middle of the panel, 72 to 104 px, over the
             // conversation, which runs on up behind it and, scrolled back
@@ -566,9 +577,11 @@ Item {
             verify(overlay.open);
             poseIs("idle");
             verify(birdSeen.had(["hello", "idle"]), "a wave: " + birdSeen.poses);
-            // Closing: asleep again, back into the button.
+            // Closing: it leaves (bursting into embers), back into the button.
             keyClick(Qt.Key_Escape);
             compare(overlay.birdPose, "asleep");
+            compare(bird().move, "leave");
+            verify(bird().gone);
             tryCompare(overlay, "visible", false, 3000);
         }
 
@@ -646,14 +659,87 @@ Item {
             }
         }
 
+        // The bird reacts to the user (docs/ASSISTANT-CHARACTER.md,
+        // Reactions): it watches the words typed and pecks as they come,
+        // winces at a deletion, ponders a pause, cheers a request sent;
+        // a tap waves, then giggles or spins; it glances along a scroll.
+        // Each recorded as it starts.
+        function test_birdReactsToTheUser() {
+            openByHold();
+            var b = bird();
+            tryVerify(function () { return overlay._wake === "" && b.move === ""; }, 8000, "entered");
+            var started = [];
+            // (The keyboard coming up for the field scoots it, whenever it comes: that is
+            // test_birdBesideTheFieldWhenShort's.)
+            var c = function (name) { if (name !== "scoot") started.push(name); };
+            b.moveStarted.connect(c);
+            try {
+                var input = findChild(overlay, "assistantInput");
+                input.forceActiveFocus();
+                tryVerify(function () { return b.move === ""; }, 3000, "settled (the keyboard may move it)");
+                started = [];
+                input.insert(input.cursorPosition, "h");
+                compare(started.join(" "), "peck");
+                // Watching the words: its eyes on the caret, no idles meanwhile.
+                verify(!b.fidgety);
+                tryVerify(function () { return Math.abs(b._gx) + Math.abs(b._gy) > 0.3; }, 2000, "looking at the caret: " + b._gx + " " + b._gy);
+                tryVerify(function () { return b.move === ""; }, 3000);
+                input.insert(input.cursorPosition, "e");
+                compare(started.join(" "), "peck peck");
+                tryVerify(function () { return b.move === ""; }, 3000);
+                input.remove(input.text.length - 1, input.text.length);
+                compare(started.join(" "), "peck peck wince");
+                // A pause after typing: ponder.
+                tryVerify(function () { return started.indexOf("ponder") >= 0; }, overlay._reactions.pauseAfter + 4000, "a curious tilt: " + started);
+                tryVerify(function () { return b.move === ""; }, 4000);
+                // Sent: a cheer as it starts thinking.
+                fake.hold = true;
+                input.text = "hello there";
+                started = [];
+                input.accepted();
+                compare(overlay.birdPose, "thinking");
+                compare(started.join(" "), "cheer", "no wince as the field is cleared");
+                fake.release();
+                tryVerify(function () { return bubbles().indexOf("Hello!") >= 0; }, 2000);
+                poseIs("idle");
+                tryVerify(function () { return b.move === ""; }, 4000);
+                // A tap: the wave first, then a giggle or a spin.
+                input.focus = false;
+                birdSeen.reset();
+                mouseClick(b, b.width / 2, b.height / 2);
+                tryCompare(overlay, "birdPose", "hello", 1000);
+                poseIs("idle");
+                started = [];
+                mouseClick(b, b.width / 2, b.height / 2);
+                verify(started.length === 1 && overlay._reactions.tap.indexOf(started[0]) >= 0, "a reaction: " + started);
+                tryVerify(function () { return b.move === ""; }, 4000);
+                // A scroll: a glance along it, then ahead again.
+                var list = findChild(overlay, "assistantMessages");
+                list.movementStarted();
+                list.contentY = list.contentY - Theme.px(20);
+                tryVerify(function () { return b.gazeY !== 0; }, 2000, "a glance");
+                list.movementEnded();
+                compare(b.gazeY, 0);
+            } finally {
+                fake.hold = false;
+                b.moveStarted.disconnect(c);
+            }
+        }
+
         // A short panel (the phone's keyboard up): the bird sits small
-        // beside the field.
+        // beside the field, scooting there.
         function test_birdBesideTheFieldWhenShort() {
             openByHold();
+            tryVerify(function () { return overlay._wake === "" && bird().move === ""; }, 8000, "entered");
+            var started = [];
+            var c = function (name) { started.push(name); };
+            bird().moveStarted.connect(c);
             var input = findChild(overlay, "assistantInput");
             mouseClick(input, input.width / 2, input.height / 2);
             tryCompare(shell, "keyboardOpen", true, 2000);
             tryVerify(function () { return overlay.birdBeside; }, 2000);
+            bird().moveStarted.disconnect(c);
+            verify(started.indexOf("scoot") >= 0, "a scoot: " + started);
             var field = findChild(overlay, "assistantField");
             tryVerify(function () { return bird().width === overlay.birdSize && bird().x === 0 && field.x >= bird().width; }, 2000, "beside the field");
             verify(bird().width < Theme.px(72));

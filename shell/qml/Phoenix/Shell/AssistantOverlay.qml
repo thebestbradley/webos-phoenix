@@ -1197,15 +1197,15 @@ Item {
                     // Typed: answered as typed requests are, and it stays open.
                     ov.voice = false;
                     ov.handsFree = false;
-                    ov._sending = true;
                     var t = text;
-                    ov._sending = false;
+                    ov._sending = true;
                     text = "";
+                    ov._sending = false;
+                    ov.ask(t);
                     if (ov.busy)
                         bird.react(ov._reactions.send);
-                    ov.ask(t);
-                onTextChanged: ov._typed()
                 }
+                onTextChanged: ov._typed()
                 Text {
                     anchors.fill: parent
                     verticalAlignment: Text.AlignVCenter

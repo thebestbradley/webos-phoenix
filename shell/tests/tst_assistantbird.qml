@@ -7,7 +7,11 @@
 // flicker; the beak moves while speaking; listening follows a level;
 // each pose acts (motion.acting: its parts move through their loop), a
 // pose change blends from wherever the loop is; with no motion (Reduce
-// motion) it holds every pose still.
+// motion) it holds every pose still. Its moves (motion.moves): the
+// entrance is born of embers, falls, lands with a squash and a dust cloud
+// and settles at rest; the exit bursts into embers and is gone; each idle
+// and reaction plays and comes back to rest; Reduce motion fades it in
+// and out instead; Animation speed scales them.
 
 import QtQuick
 import QtTest
@@ -81,18 +85,69 @@ Item {
         }
     }
 
+    // The moves as they start and end (with when), and the effects played.
+    QtObject {
+        id: moved
+        property var started: []
+        property var ended: []
+        property var fx: []
+        property real startedAt: 0
+        property real endedAt: 0
+        property real minFade: 1
+        property real maxFade: 0
+        function reset() { started = []; ended = []; fx = []; minFade = maxFade = bird.fade; }
+    }
+    Connections {
+        target: bird
+        function onMoveStarted(name) { moved.started = moved.started.concat([name]); moved.startedAt = Date.now(); }
+        function onMoveEnded(name) { moved.ended = moved.ended.concat([name]); moved.endedAt = Date.now(); }
+        function onFxPlayed(name) { moved.fx = moved.fx.concat([name]); }
+        function onFadeChanged() { moved.minFade = Math.min(moved.minFade, bird.fade); moved.maxFade = Math.max(moved.maxFade, bird.fade); }
+    }
+
     TestCase {
         name: "AssistantBird"
         when: windowShown
 
         function init() {
             Theme.reduceMotion = false;
+            Theme.animationSpeed = "normal";
+            bird._endMove(false);
+            bird.gone = false;
+            bird.fade = 1;
+            bird.gazeX = 0;
+            bird.gazeY = 0;
+            // Nothing by itself (but where a test asks for it).
+            bird.fidgety = false;
             bird.level = -1;
             bird.pose = "idle";
-            tryVerify(function () { return bird.atRest(); }, 3000, "idle");
+            tryVerify(function () { return bird.atRest() && bird.movesAtRest(); }, 3000, "idle");
+            moved.reset();
         }
         function cleanupTestCase() {
             Theme.reduceMotion = false;
+            Theme.animationSpeed = "normal";
+        }
+
+        // How far each value a move's keys change must go, by channel.
+        function wanted(m) {
+            var props = ["rot", "tx", "ty", "sx", "sy"], want = [];
+            for (var ch in m.steps) {
+                for (var k = 0; k < props.length; ++k) {
+                    var lo = Infinity, hi = -Infinity;
+                    for (var j = 0; j < m.steps[ch].length; ++j) {
+                        lo = Math.min(lo, m.steps[ch][j][k + 1]);
+                        hi = Math.max(hi, m.steps[ch][j][k + 1]);
+                    }
+                    if (hi - lo > 0)
+                        want.push({ ch: ch, prop: props[k], span: hi - lo });
+                }
+            }
+            return want;
+        }
+        function unmet(want) {
+            return JSON.stringify(want.filter(function (w) { return acted.span(w.ch, w.prop) < 0.6 * w.span; })
+                                  .map(function (w) { return w.ch + "." + w.prop + " " + acted.span(w.ch, w.prop).toFixed(3) + "/" + w.span; }));
         }
 
         function flame(name) {
@@ -239,6 +294,7 @@ Item {
         // loop (waited for as it happens, however late a slow machine runs
         // it), which moves the eyes and the body all the way through.
         function test_idleLooksAroundNowAndThen() {
+            bird.fidgety = true;
             var idle = bird.art.motion.acting.poses.idle;
             var before = bird.fidgets;
             acted.reset();
@@ -283,6 +339,203 @@ Item {
             }
             wait(300);
             compare(acted.changes, 0, "nothing moved");
+        }
+
+        // The entrance: hidden, born of a swirl of embers and a fireball,
+        // up high; it falls stretched, lands with a squash and a dust
+        // cloud, its crest flaring, and settles at rest (recorded as it goes).
+        function test_theEntranceLandsAndSettles() {
+            var m = bird.art.motion.moves.enter;
+            acted.reset();
+            var ms = bird.enter(0);
+            compare(ms, Theme.motion(m.period));
+            compare(bird.move, "enter");
+            verify(bird.acts.whole.sx < 0.05 && bird.acts.whole.sy < 0.05, "hidden at first: " + bird.acts.whole.sx);
+            tryVerify(function () { return moved.ended.indexOf("enter") >= 0; }, m.period * 4 + 3000, "the entrance, over");
+            verify(acted.range.whole.ty[0] < -190, "born up high: " + acted.range.whole.ty[0]);
+            verify(acted.range.body.sy[1] > 1.08, "stretched as it falls: " + acted.range.body.sy[1]);
+            verify(acted.range.body.sy[0] < 0.8, "the landing squash: " + acted.range.body.sy[0]);
+            verify(acted.span("wingL", "rot") > 90 && acted.span("wingR", "rot") > 90, "flapping");
+            verify(acted.range.crest.sy[1] > 1.5, "the crest flaring: " + acted.range.crest.sy[1]);
+            compare(moved.fx.join(" "), "swirl fireball dust");
+            tryVerify(function () { return bird.movesAtRest() && bird.atRest(); }, 3000, "at rest");
+            compare(bird.faceEyes, "");
+            compare(bird.faceBeak, "");
+            compare(bird.fade, 1);
+            verify(!bird.gone);
+            // Each part's acting and the loop's own values back where they were.
+            for (var ch in bird.acts)
+                verify(bird.acts[ch].rot === 0 && bird.acts[ch].tx === 0 && bird.acts[ch].ty === 0 && bird.acts[ch].sx === 1 && bird.acts[ch].sy === 1, ch);
+        }
+
+        // The exit: a crouch, a leap, it bursts into embers and is gone;
+        // it enters again whole.
+        function test_theExitBurstsIntoEmbers() {
+            var m = bird.art.motion.moves.leave;
+            acted.reset();
+            bird.leave();
+            verify(bird.gone);
+            tryVerify(function () { return moved.ended.indexOf("leave") >= 0; }, m.period * 4 + 3000, "the exit, over");
+            verify(acted.range.body.sy[0] < 0.85, "the crouch: " + acted.range.body.sy[0]);
+            verify(acted.range.whole.ty[0] < -80, "the leap: " + acted.range.whole.ty[0]);
+            verify(bird.acts.whole.sx < 0.05, "gone: " + bird.acts.whole.sx);
+            compare(moved.fx.join(" "), "flash burst");
+            // Its embers fly, then it fades away (its motion stops).
+            tryCompare(bird, "fade", 0, 3000);
+            verify(!bird._live);
+            verify(!bird.react("giggle"), "no reactions while gone");
+            moved.reset();
+            bird.enter(0);
+            compare(bird.fade, 1);
+            verify(!bird.gone);
+            tryVerify(function () { return moved.ended.indexOf("enter") >= 0 && bird.movesAtRest(); }, 6000, "back");
+            compare(bird.acts.whole.sx, 1);
+        }
+
+        // Every move but the entrance and the exit (the idle pool, the
+        // reactions) moves each part its keys name most of the way, and
+        // comes back to rest, its face its pose's again.
+        function test_everyMovePlaysAndReturns() {
+            var moves = bird.art.motion.moves;
+            var names = Object.keys(moves).filter(function (n) { return moves[n].kind === "idle" || moves[n].kind === "react"; });
+            verify(names.length >= 14, names.join(" "));
+            for (var i = 0; i < names.length; ++i) {
+                var m = moves[names[i]];
+                moved.reset();
+                acted.reset();
+                verify(bird.play(names[i]) > 0, names[i]);
+                var want = wanted(m);
+                tryVerify(function () { return moved.ended.indexOf(names[i]) >= 0; }, m.period * 4 + 3000, names[i] + " over");
+                verify(want.every(function (w) { return acted.span(w.ch, w.prop) >= 0.6 * w.span; }), names[i] + ": " + unmet(want));
+                // Its effects played.
+                var fx = m.cues.filter(function (c) { return !!c.fx; }).map(function (c) { return c.fx; });
+                compare(moved.fx.join(" "), fx.join(" "), names[i] + " effects");
+                tryVerify(function () { return bird.movesAtRest(); }, 2000, names[i] + " at rest");
+                compare(bird.faceEyes, "", names[i]);
+                compare(bird.faceBeak, "", names[i]);
+                // Its eyes and beak easing back from the face a cue gave.
+                tryVerify(function () { return bird.atRest(); }, 2000, names[i] + " the pose's values");
+            }
+        }
+
+        // A move's face for a moment: the stretch's yawn (sleepy eyes, the beak wide).
+        function test_aMovesFace() {
+            var seen = [];
+            var c = function () { seen.push(bird.faceEyes + "/" + bird.faceBeak); };
+            bird.faceEyesChanged.connect(c);
+            bird.faceBeakChanged.connect(c);
+            try {
+                bird.idle("stretch");
+                compare(bird.lastIdle, "stretch");
+                tryVerify(function () { return moved.ended.indexOf("stretch") >= 0; }, 9000);
+                verify(seen.indexOf("sleepy/wide") >= 0, "the yawn: " + seen);
+            } finally {
+                bird.faceEyesChanged.disconnect(c);
+                bird.faceBeakChanged.disconnect(c);
+            }
+        }
+
+        // Idle by itself: the look around and a full-body idle in turn,
+        // one of the pool at random (never the same twice running).
+        function test_theIdlePoolPlaysByItself() {
+            var idle = bird.art.motion.acting.poses.idle;
+            var pool = bird.art.motion.idles.pool;
+            var before = bird.idles, played = [];
+            var c = function (name) { if (pool.indexOf(name) >= 0) played.push(name); };
+            bird.moveStarted.connect(c);
+            try {
+                bird.fidgety = true;
+                tryVerify(function () { return played.length >= 2; }, 6 * (idle.every[1] + 2500), "two from the pool, by itself: " + played);
+                verify(played[0] !== played[1], "not the same twice: " + played);
+                verify(bird.fidgets > 0, "and looking around between them");
+                verify(bird.idles >= before + 2);
+            } finally {
+                bird.moveStarted.disconnect(c);
+                bird.fidgety = false;
+            }
+        }
+
+        // A pose change ends an idle move where it is, blending away; a
+        // reaction goes on.
+        function test_aPoseChangeEndsAnIdleMove() {
+            bird.idle("stretch");
+            var w = bird.acts.wingL;
+            tryVerify(function () { return w.rot > 60; }, 3000, "flippers up");
+            var rot = w.rot;
+            bird.pose = "thinking";
+            verify(Math.abs(w.rot - rot) < 0.001, "no jump: " + w.rot + " " + rot);
+            compare(bird.move, "");
+            compare(moved.ended.join(" "), "stretch");
+            tryVerify(function () { return bird.movesAtRest(); }, 2000, "blended away");
+            bird.react("cheer");
+            bird.pose = "idle";
+            compare(bird.move, "cheer");
+            tryVerify(function () { return moved.ended.indexOf("cheer") >= 0; }, 4000);
+        }
+
+        // A reaction plays once at a time (typing fast pecks steadily);
+        // none while it enters.
+        function test_reactionsDoNotPileUp() {
+            verify(bird.react("peck"));
+            verify(!bird.react("peck"), "not again while it plays");
+            tryVerify(function () { return bird.move === ""; }, 3000);
+            verify(bird.react("peck"), "again once over");
+            bird.enter(0);
+            verify(!bird.react("giggle"), "not while it enters");
+            compare(bird.move, "enter");
+        }
+
+        // Its gaze moves its eyes and head; held still under Reduce motion.
+        function test_theGazeFollows() {
+            bird.gazeX = 1;
+            bird.gazeY = 1;
+            tryVerify(function () { return bird._gx === 1 && bird._gy === 1; }, 2000, "looking");
+            var eyes = findChild(bird, "assistantBirdEyes");
+            fuzzyCompare(eyes.transform[2].x, bird.art.motion.gaze.eyes[0], 0.001);
+            fuzzyCompare(eyes.transform[2].y, bird.art.motion.gaze.eyes[1], 0.001);
+            bird.gazeX = 0;
+            bird.gazeY = 0;
+            tryVerify(function () { return bird._gx === 0 && bird._gy === 0; }, 2000, "ahead again");
+            Theme.reduceMotion = true;
+            bird.gazeX = -1;
+            compare(bird._gx, 0);
+        }
+
+        // Animation speed scales the moves (Fast: 60% of the time).
+        function test_animationSpeedScalesTheMoves() {
+            Theme.animationSpeed = "fast";
+            var m = bird.art.motion.moves.enter;
+            compare(bird.enter(0), Math.round(m.period * 0.6));
+            tryVerify(function () { return moved.ended.indexOf("enter") >= 0; }, 6000);
+            // An animation never ends before its time, however late a slow machine draws it.
+            verify(moved.endedAt - moved.startedAt >= Math.round(m.period * 0.6) - 20, "fast: " + (moved.endedAt - moved.startedAt));
+        }
+
+        // Reduce motion: it enters and leaves with a plain fade; no moves,
+        // no effects, no reactions.
+        function test_reducedMotionFadesInAndOut() {
+            Theme.reduceMotion = true;
+            var count = bird.moveCount;
+            var ms = bird.leave();
+            verify(bird.gone);
+            tryCompare(bird, "fade", 0, ms + 2000);
+            moved.reset();
+            ms = bird.enter(0);
+            compare(bird.fade, 0);
+            tryCompare(bird, "fade", 1, ms + 2000);
+            verify(moved.maxFade === 1 && moved.minFade === 0);
+            verify(!bird.react("giggle"));
+            compare(bird.play("spin"), 0);
+            compare(bird.moveCount, count);
+            compare(moved.fx.length, 0);
+            verify(bird.movesAtRest());
+            // Turned on as it enters: shown at once, still.
+            Theme.reduceMotion = false;
+            bird.enter(0);
+            Theme.reduceMotion = true;
+            compare(bird.move, "");
+            compare(bird.fade, 1);
+            verify(bird.movesAtRest());
         }
 
         // Reduce motion turned on mid-loop: the parts go to rest at once.

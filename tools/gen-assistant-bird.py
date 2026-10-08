@@ -42,9 +42,18 @@ HEADER = ("Copyright (c) 2026 webOS Phoenix contributors\n"
           "edit that and run the tool; CI checks this file is up to date.")
 
 # Acting (motion.acting): the parts that act, the most keys a loop has, a key at rest.
-ACT_CHANNELS = ("body", "head", "eyes", "lids", "wingL", "wingR", "beak", "crest")
+ACT_CHANNELS = ("body", "head", "eyes", "lids", "wingL", "wingR", "beak", "crest", "whole", "tail", "footL", "footR")
 ACT_KEYS = 6
 ACT_REST = [0, 0, 0, 1, 1]
+# Moves (motion.moves): the most keys a track has, the most cues, their kinds; effects' kinds.
+MOVE_KEYS = 12
+MOVE_CUES = 6
+MOVE_KINDS = ("enter", "leave", "idle", "react")
+FX_KINDS = ("swirl", "glow", "puff", "burst")
+# The easings of the effects' particles (CSS's matches of Qt's curves).
+OUT_CUBIC = "cubic-bezier(0.33, 1, 0.68, 1)"
+OUT_QUAD = "cubic-bezier(0.5, 1, 0.89, 1)"
+IN_QUAD = "cubic-bezier(0.11, 0, 0.5, 0)"
 
 EASE_IN_OUT = "cubic-bezier(0.42, 0, 0.58, 1)"   # CSS ease-in-out; the shell uses the same curve
 
@@ -187,9 +196,102 @@ def build(src):
                 fail("acting %s %s: the first and last keys at rest, so the loop joins up" % (name, ch))
             # Padded to ACT_KEYS for the shell (its loop plays exactly that many steps).
             a["steps"][ch] = full + [full[-1]] * (ACT_KEYS - len(full))
+    build_moves(bird)
     if len(motion["speech"]) != 8 or len(motion["listen"]) != 6:
         fail("motion.speech needs 8 steps and motion.listen 6 (AssistantBird.qml plays that many)")
     return bird
+
+
+def build_moves(bird):
+    """Checks the moves, effects, idles and reactions; fills each move's keys
+    out to MOVE_KEYS of [at, rotation, x, y, scale x, scale y] ("steps") with
+    the curve into each ("curves", the Bezier points), and its cues."""
+    motion = bird["motion"]
+    curves = motion["curves"]
+    curves.pop("about", None)
+    for name, c in curves.items():
+        if len(c) != 4:
+            fail("curve %s: four numbers" % name)
+    effects = bird["effects"]
+    effects.pop("about", None)
+    for name, e in effects.items():
+        if e["kind"] not in FX_KINDS:
+            fail("effect %s: unknown kind %s" % (name, e["kind"]))
+        if e["period"] <= 0:
+            fail("effect %s: a period above 0" % name)
+        if e["kind"] == "glow":
+            keys = e["keys"]
+            if not 2 <= len(keys) <= 4 or keys[0][0] != 0 or keys[-1][0] != 1:
+                fail("effect %s: 2 to 4 keys from 0 to 1" % name)
+            full = [list(k[:3]) + [k[3] if len(k) > 3 else "io"] for k in keys]
+            for k in full:
+                if k[3] not in curves:
+                    fail("effect %s: no curve %s" % (name, k[3]))
+            # Four for the shell (three steps), the last repeated.
+            e["keys4"] = [k[:3] + [curves[k[3]]] for k in full] + [full[-1][:3] + [curves["lin"]]] * (4 - len(full))
+        else:
+            for p in e["particles"]:
+                if p[3] >= e["period"]:
+                    fail("effect %s: a particle's delay within the period" % name)
+                if len(p) > 4 and p[4] not in bird["colors"]:
+                    fail("effect %s: colour %s not in colors" % (name, p[4]))
+    moves = motion["moves"]
+    moves.pop("about", None)
+    channels = motion["acting"]["channels"]
+    for name, m in moves.items():
+        if m["kind"] not in MOVE_KINDS:
+            fail("move %s: unknown kind %s" % (name, m["kind"]))
+        if m["period"] <= 0:
+            fail("move %s: a period above 0" % name)
+        m["steps"], m["curves"] = {}, {}
+        for ch, keys in m["tracks"].items():
+            if ch not in channels:
+                fail("move %s: no channel %s" % (name, ch))
+            if not 2 <= len(keys) <= MOVE_KEYS or keys[0][0] != 0 or keys[-1][0] != 1:
+                fail("move %s %s: 2 to %d keys from 0 to 1" % (name, ch, MOVE_KEYS))
+            full, into = [], []
+            for k in keys:
+                k = list(k)
+                curve = k.pop() if isinstance(k[-1], str) else "io"
+                if curve not in curves:
+                    fail("move %s %s: no curve %s" % (name, ch, curve))
+                if not 1 <= len(k) <= 6:
+                    fail("move %s %s: a key is [at, rotation, x, y, scale x, scale y, curve]" % (name, ch))
+                full.append(k + ACT_REST[len(k) - 1:])
+                into.append(curve)
+            if any(full[i + 1][0] < full[i][0] for i in range(len(full) - 1)):
+                fail("move %s %s: keys out of order" % (name, ch))
+            if m["kind"] != "enter" and full[0][1:] != ACT_REST:
+                fail("move %s %s: the first key at rest (only an enter starts away)" % (name, ch))
+            if m["kind"] != "leave" and full[-1][1:] != ACT_REST:
+                fail("move %s %s: the last key at rest (only a leave holds)" % (name, ch))
+            m["steps"][ch] = full + [full[-1]] * (MOVE_KEYS - len(full))
+            m["curves"][ch] = [curves[c] for c in into[1:]] + [curves["lin"]] * (MOVE_KEYS - len(full))
+        cues = m.setdefault("cues", [])
+        if len(cues) > MOVE_CUES:
+            fail("move %s: at most %d cues" % (name, MOVE_CUES))
+        if any(cues[i + 1]["at"] < cues[i]["at"] for i in range(len(cues) - 1)):
+            fail("move %s: cues out of order" % name)
+        for c in cues:
+            if not 0 <= c["at"] <= 1:
+                fail("move %s: a cue's at is 0 to 1" % name)
+            if c.get("eyes") and c["eyes"] not in bird["eyes"]:
+                fail("move %s: no eyes %s" % (name, c["eyes"]))
+            if c.get("beak") and c["beak"] not in bird["beaks"]:
+                fail("move %s: no beak %s" % (name, c["beak"]))
+            if "fx" in c and c["fx"] not in effects:
+                fail("move %s: no effect %s" % (name, c["fx"]))
+    for name in motion["idles"]["pool"]:
+        if moves.get(name, {}).get("kind") != "idle":
+            fail("idles: %s is no idle move" % name)
+    r = motion["reactions"]
+    for key in ("type", "erase", "pause", "send", "tap", "move"):
+        for name in (r[key] if isinstance(r[key], list) else [r[key]]):
+            if moves.get(name, {}).get("kind") != "react":
+                fail("reactions %s: %s is no react move" % (key, name))
+    for kind in ("enter", "leave"):
+        if moves.get(kind, {}).get("kind") != kind:
+            fail("moves: an %s of kind %s is needed" % (kind, kind))
 
 
 # ---- Writers -----------------------------------------------------------------------------------
@@ -333,11 +435,100 @@ def css(bird):
             out.append(".ab-act-%s-%s { animation: ab-act-%s-%s calc(%dms * var(--ab-speed, 1)) %s %s; }"
                        % (pose, ch, pose, ch, a["period"], EASE_IN_OUT, "1" if "every" in a else "infinite"))
         out.append("")
+    out += css_moves(bird)
+    out += css_effects(bird)
     out.append("@media (prefers-reduced-motion: reduce) {")
     out.append("    .ab-bird * { animation: none !important; transition: none !important; }")
     out.append("}")
     out.append(".ab-bird.ab-still * { animation: none !important; transition: none !important; }")
     return "\n".join(out) + "\n"
+
+
+def bezier(c):
+    return "cubic-bezier(%s)" % ", ".join(num(v) for v in c)
+
+
+def css_moves(bird):
+    """Each move's keyframes per channel, about the channel's pivot, each
+    key's curve on the way into it (CSS takes a keyframe's timing function
+    for the way out of it). Filled both ways: an enter is hidden through its
+    delay (--ab-delay), a leave holds its end."""
+    out = []
+    acting = bird["motion"]["acting"]
+    for name, m in bird["motion"]["moves"].items():
+        for ch, keys in m["tracks"].items():
+            px, py = acting["pivot"][ch]
+            n = len(keys)
+            steps, curves = m["steps"][ch][:n], m["curves"][ch]
+            out.append("@keyframes ab-mv-%s-%s {" % (name, ch))
+            for i, (at, rot, tx, ty, sx, sy) in enumerate(steps):
+                timing = "; animation-timing-function: %s" % bezier(curves[i]) if i < n - 1 else ""
+                out.append("    %s%% { transform: translate(%spx, %spx) translate(%spx, %spx) rotate(%sdeg) scale(%s, %s) translate(%spx, %spx)%s; }"
+                           % (num(at * 100), num(tx), num(ty), num(px), num(py), num(rot), num(sx), num(sy), num(-px), num(-py), timing))
+            out.append("}")
+            out.append(".ab-mv-%s-%s { animation: ab-mv-%s-%s calc(%dms * var(--ab-speed, 1)) linear calc(var(--ab-delay, 0ms) * var(--ab-speed, 1)) both; }"
+                       % (name, ch, name, ch, m["period"]))
+        out.append("")
+    return out
+
+
+def css_effects(bird):
+    """The effects' particles: each a few nested groups (where it goes, how
+    big, how bright), each with its own curve, as the shell plays them."""
+    out = []
+
+    def anim(cls, ms, timing, delay=0):
+        return ".%s { animation: %s calc(%dms * var(--ab-speed, 1)) %s calc(%dms * var(--ab-speed, 1)) both; }" % (
+            cls, cls, ms, timing, delay)
+    for name, e in bird["effects"].items():
+        ox, oy = e["origin"]
+        if e["kind"] == "glow":
+            cls = "ab-fx-%s" % name
+            out.append("@keyframes %s {" % cls)
+            keys = e["keys"]
+            for i, k in enumerate(keys):
+                at, sc, op = k[:3]
+                nxt = keys[i + 1] if i + 1 < len(keys) else None
+                timing = "; animation-timing-function: %s" % bezier(bird["motion"]["curves"][nxt[3] if len(nxt) > 3 else "io"]) if nxt else ""
+                out.append("    %s%% { transform: translate(%spx, %spx) scale(%s); opacity: %s%s; }" % (num(at * 100), num(ox), num(oy), num(sc), num(op), timing))
+            out.append("}")
+            out.append(anim(cls, e["period"], "linear"))
+            out.append("")
+            continue
+        for i, p in enumerate(e["particles"]):
+            cls = "ab-fx-%s-%d" % (name, i + 1)
+            delay = p[3]
+            ms = e["period"] - delay
+            if e["kind"] == "swirl":
+                a, r = p[0], p[1]
+                out.append("@keyframes %s-a { 0%% { transform: translate(%spx, %spx) rotate(%sdeg); } 100%% { transform: translate(%spx, %spx) rotate(%sdeg); } }"
+                           % (cls, num(ox), num(oy), num(a), num(ox), num(oy), num(a + e["spin"])))
+                out.append("@keyframes %s-r { 0%% { transform: translate(%spx, 0px) scale(1); } 100%% { transform: translate(0px, 0px) scale(0.4); } }" % (cls, num(r)))
+                out.append("@keyframes %s-o { 0%% { opacity: 0; } 25%% { opacity: 1; } 100%% { opacity: 1; } }" % cls)
+                out.append(anim(cls + "-a", ms, IN_QUAD, delay))
+                out.append(anim(cls + "-r", ms, IN_QUAD, delay))
+                out.append(anim(cls + "-o", ms, "linear", delay))
+            elif e["kind"] == "puff":
+                dx, dy = p[0], p[1]
+                out.append("@keyframes %s-t { 0%% { transform: translate(%spx, %spx); } 100%% { transform: translate(%spx, %spx); } }"
+                           % (cls, num(ox), num(oy), num(ox + dx), num(oy + dy)))
+                out.append("@keyframes %s-s { 0%% { transform: scale(0.35); } 100%% { transform: scale(1); } }" % cls)
+                out.append("@keyframes %s-o { 0%% { opacity: 0; animation-timing-function: %s; } 15%% { opacity: 0.85; } 40%% { opacity: 0.85; animation-timing-function: %s; } 100%% { opacity: 0; } }"
+                           % (cls, OUT_QUAD, IN_QUAD))
+                out.append(anim(cls + "-t", ms, OUT_CUBIC, delay))
+                out.append(anim(cls + "-s", ms, OUT_QUAD, delay))
+                out.append(anim(cls + "-o", ms, "linear", delay))
+            else:   # burst
+                dx, dy = p[0], p[1]
+                out.append("@keyframes %s-t { 0%% { transform: translate(%spx, %spx); } 100%% { transform: translate(%spx, %spx); } }"
+                           % (cls, num(ox), num(oy), num(ox + dx), num(oy + dy)))
+                out.append("@keyframes %s-s { 0%% { transform: scale(1); } 100%% { transform: scale(0.3); } }" % cls)
+                out.append("@keyframes %s-o { 0%% { opacity: 1; } 100%% { opacity: 0; } }" % cls)
+                out.append(anim(cls + "-t", ms, OUT_CUBIC, delay))
+                out.append(anim(cls + "-s", ms, "linear", delay))
+                out.append(anim(cls + "-o", ms, IN_QUAD, delay))
+        out.append("")
+    return out
 
 
 def main():
