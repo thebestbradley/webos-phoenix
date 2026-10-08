@@ -46,7 +46,7 @@ above was the plan's command layer; this is the whole 1.0 assistant.
 | 1. Speech to text | The shell's dictation: whisper.cpp through `org.webosphoenix.transcriber` | On the device (in phoenix-sim, the same service code on the computer) |
 | 2. Commands | A grammar per language (`apps/assistant/service/lib/lang/en.js`): the 40 commands in the table below, with the days and times people say; plus commands apps declare in `appinfo.json` (`"assistant": {"commands": [...]}`, Just Type's Quick Action shape with phrases per language; a Quick Action counts as `"<displayName> {text}"`, after the built-in commands) | In the service, no model, no network (weather, distances, currencies and unknown cities fetch Open-Meteo or Frankfurter) |
 | 3. On-device model | llama.cpp's `llama-server` with a GGUF model the user downloads in Settings > Assistant, called with the same commands as tools (Chat Completions, `--jinja`) | On the device. phoenix-sim runs it from the shell (`LocalModels`, Phoenix.Native); the device service runs it itself (`lib/node-device.js`) |
-| 4. Cloud model or web | "Ask <provider (model)>" and "Search the web" as choices on the answer; a thread taken to a cloud model goes on with it | The provider's servers; the browser |
+| 4. Cloud model or web | "Ask <provider (model)>" and "Search the web" as choices on the answer, and "Connect model" while no cloud model is set up; a thread taken to a cloud model goes on with it | The provider's servers; the browser |
 
 **The commands** (8 October 2026). The grammar's phrasings are examples:
 each family takes the usual variations ("please", "can you", the order of
@@ -118,6 +118,41 @@ needed; the 1.5B and 4B models are recommended where they fit. In
 phoenix-sim the model loaded and answered in about 18 s the first time
 and 2 s after, on four CPU cores.
 
+**Connect model** (8 October 2026, from the owner: "there is the local
+model option so I think the second button should just be connect model
+and clicking that presents the options to choose local cloud or both").
+While no cloud model is set up, an answer nothing here could give offers
+"Search the web" and "Connect model" (with one set up, "Ask <model>" and
+"Search the web", as before). Connect model asks which kind, in a small
+sheet in the shell's view and a dialog in the app: an **on-device model**
+(private and offline, a 0.5 to 2.5 GB download), a **cloud model**
+(Anthropic, OpenAI, Gemini or a compatible server, with the user's key),
+or **both** (the on-device model first, as the router does; "Ask <cloud
+model>" for what it cannot). The service's `connect` keeps the question on
+the thread and opens Settings > Assistant at **Connect a Model** for that
+kind (the download, or the providers with Allow cloud models to control
+the device beside them, off); once a model is there, **Back to Your
+Question** opens the Assistant app on the conversation and `retry` asks the
+question again: the on-device model when there is one (unless the cloud
+was chosen), else the cloud model, with which the conversation then goes
+on. Decided on the owner's behalf: the shell's view closes as Settings
+opens (Settings is an app card) and the conversation comes back in the
+Assistant app, where it is kept.
+
+**Finding out what it can do.** An empty conversation (the shell's view
+and the app) shows a few things to ask, one of each kind of command
+(events, the agenda, reminders, alarms, timers, notes, tasks, email, texts,
+music, switches, brightness, conversions, weather, the time somewhere,
+directions, photos, sums), a different few every five seconds. A tap puts
+the words in the field to change or send rather than asking at once:
+"Add a meeting with Sam tomorrow at 3" would otherwise make a meeting
+nobody meant (decided on the owner's behalf). Words nothing understood and
+no model answered get up to two requests close to them, by their words
+("Did you mean something like 'add a meeting with Sam tomorrow at 3' or
+'what's on my calendar tomorrow'?", `lib/lang/en.js` `SUGGESTIONS`), as
+chips that go to the field too. Every example and suggestion is a request
+the grammar takes as it stands (`grammar.test.ts`).
+
 **Cloud models.** Four API shapes, raw HTTP, no SDKs
 (`lib/providers.js`): Anthropic Messages (`POST /v1/messages`,
 `x-api-key`, `anthropic-version: 2023-06-01`; `claude-sonnet-5-5` by
@@ -177,7 +212,8 @@ a Mac, or `--speech-command` (Piper, for instance). The device service
 does the same. A browser page with voices uses `speechSynthesis`.
 Answers are spoken when **Speak answers** is on (on by default).
 
-**Where it shows.** Holding the launcher button opens the system view:
+**Where it shows.** Holding the launcher button opens the system view
+(its heading says "Assistant": Phoenix is the UI's version name):
 the conversation in use over a blurred backdrop, a text field and the
 microphone (`AssistantOverlay.qml`). The Assistant app has the
 conversations (new, open, delete). Both show the same thread through the

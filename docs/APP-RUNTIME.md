@@ -1856,7 +1856,9 @@ are the clients.
 | Method | Does |
 | --- | --- |
 | `ask {text, threadId?, newThread?, speak?}` | `{thread, messages}`: the user's words and the answers. In the thread in use unless told otherwise. System UI, Assistant and Settings only (error -3); error -4 while the assistant is off |
-| `choose {threadId, messageId, choice}` | a message's choice: `cloud:<provider id>` (the thread goes on with that provider), `web`, `settings`, `open` (the app a command's answer offers: "Open Calendar" launches `data.open {appId, params}`) |
+| `choose {threadId, messageId, choice}` | a message's choice: `cloud:<provider id>` (the thread goes on with that provider), `web`, `open` (the app a command's answer offers: "Open Calendar" launches `data.open {appId, params}`), `connect` (as `connect` without a mode), `settings` (older messages: Settings > Assistant) |
+| `connect {threadId?, messageId?, mode?}` | "Connect model": launches Settings `{page: "assistant", connect: "local" \| "cloud" \| "both" \| "choose", threadId}` and keeps the question before `messageId` on the thread (`thread.retry`); the choice stays until a model answers. System UI, Assistant and Settings only |
+| `retry {threadId}` | `{thread, messages}`: that question asked again, of the on-device model (unless `mode` was `cloud`) or the default cloud provider (the thread goes on with it); "No model is connected yet" while there is none; no messages when nothing waits |
 | `confirm {threadId, messageId, accept}` | a read-back (`status: "pending"`): run it, or not |
 | `threads` / `thread {id?}` | `{threads, current}` / `{thread, messages}` (the one in use without an id) |
 | `newThread`, `setCurrent {id}`, `deleteThread {id}`, `clearHistory` | conversations |
@@ -1874,7 +1876,8 @@ A message is `{id, threadId, role, text, time, via: "commands" | "on-device"
 chosen, data}`. A command done may carry choices too (`open`: its app);
 its `data` holds `open {appId, params, title}`, `undo` (what takes it back)
 and, for a question the assistant asked ("When is it?"), `awaiting
-{command, args}`: the next words fill it. Each thread (`assistant:thread:<id>`), message
+{command, args}`: the next words fill it; for words nothing understood,
+`suggest`: up to two requests close to them ("Did you mean ...?"). Each thread (`assistant:thread:<id>`), message
 (`assistant:msg:<thread>:<id>`) and provider (`assistant:provider:<id>`) is
 its own stored key, so the shell's view and the app never write over each
 other (PR 7).
@@ -1926,7 +1929,14 @@ read-backs, a field (the keyboard comes with a tap; at once where there is
 no microphone) and the microphone (the shell's dictation with `autoStop`,
 owner `"assistant"`). The Assistant's icon at the top left closes it and
 launches the app with `{threadId}` (none before the first request), to go
-on there. Back, Escape or a tap outside closes it. It grows out of the
+on there. Back, Escape or a tap outside closes it. Empty, it shows a few
+things to ask (`examples`, two on a phone, three on a tablet, others every
+five seconds); a tap on one, or on a suggestion under an answer
+(`data.suggest`), puts the words in the field. "Connect model" opens a
+sheet over the panel (on-device, cloud or both; Back and Escape close the
+sheet first), and the kind chosen goes to `connect`, the view closing as
+Settings opens. Keys typed while the field is not in focus (voice first)
+go to the field. It grows out of the
 held button with the blur and dim fading in, and shrinks back into it
 (`Theme.launcherDuration`); messages slide in from their side
 (`cardTransitionDuration`), choices appear one after another, rings spread
@@ -1968,7 +1978,13 @@ work.
 choices and read-backs, the field, the microphone
 (`org.webosphoenix.dictation`), Conversations (new, open, delete), and
 Preferences. Launch params: `{text}` (Just Type's "Ask Assistant"),
-`{threadId}`, `{timerDone}`. Its CSP allows `unsafe-eval` only because the
+`{threadId}` (with `retry: true`: the question that waited for a model is
+asked again, `retry`), `{timerDone}`. An empty conversation shows things to
+ask (`src/examples.ts`, the same list as the shell's view), Connect model a
+dialog for the kind. Settings > Assistant opened with `{connect, threadId}`
+shows Connect a Model: the kinds (for `choose`), then the on-device models
+(one downloaded there is used once it is in) and/or the providers, and
+"Back to Your Question" once a model is there. Its CSP allows `unsafe-eval` only because the
 simulator runs the service in its page. The same bird (`src/bird/Bird.tsx`)
 greets on an empty conversation (thinking while it loads), and stands below
 the conversation while a request runs: thinking, then working and done, a
