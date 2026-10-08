@@ -1,6 +1,7 @@
 {
     "org.webosphoenix.assistant": ["database.operation", "activity.operation", "applications", "applications.internal",
                                    "networkconnection", "wifi.management", "bluetooth.management", "audio.operation",
-                                   "location", "torch.operation", "messaging.operation", "systemui.searchprovider"],
+                                   "location", "torch.operation", "messaging.operation", "systemui.searchprovider",
+                                   "devices.display.control"],
     "org.webosphoenix.tts": []
 }
