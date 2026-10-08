@@ -426,6 +426,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-appmanager.cjs` | Launch points apps add, handlers, the installer's queries |
 | `node tools/test-security.cjs` | Security policy, erase, USB drive mode, debugging |
 | `node tools/test-browser.cjs` | The browser: pages, downloads, printing (Save as PDF), find on page, private browsing, the content blocker, user agent and search engine preferences |
+| `node tools/test-links.cjs` | Links between apps: web, `mailto:`, `tel:`, `sms:` and web app links tapped in app pages open the right app with the link |
 
 ## Build a webOS OSE image (experimental)
 
