@@ -222,13 +222,19 @@ Item {
     // fading in and out over 200 ms (StatusBarItemGroup::activate /
     // deactivate and paint, :282-330, 381-396; statusBarMenuFade*,
     // lunaAnimations.conf:124-125).
+    // Tablets: as the original's tabRect (StatusBarItemGroup.cpp:360-366)
+    // its right cap lies past the screen's edge, and its left cap and some
+    // padding before the leftmost icon, so the tab holds every icon
+    // (Theme.statusBarTabCap). Phones: the pressed art behind the group.
     ArtBorderImage {
         id: menuTab
         objectName: "systemMenuTab"
         anchors.right: parent.right
+        anchors.rightMargin: Theme.tablet ? -Theme.statusBarTabCap : 0
         anchors.top: parent.top
         height: parent.height
-        width: indicators.width + Theme.px(12)
+        width: Theme.tablet ? indicators.width + indicators.anchors.rightMargin + 2 * Theme.statusBarTabCap + Theme.statusBarTabPadding
+                            : indicators.width + Theme.px(12)
         source: Theme.tablet || !bar.systemMenuOpen ? Theme.asset("statusBar/status-bar-menu-dropdown-tab.png")
                                                     : Theme.asset("statusBar/status-bar-menu-dropdown-tab-pressed.png")
         border { left: Theme.artBorder(Theme.tablet ? 11 : 0, source); right: Theme.artBorder(Theme.tablet ? 11 : 0, source); top: 0; bottom: 0 }

@@ -747,14 +747,16 @@ Item {
         // Tablets: the notification icons are a group of their own, as
         // luna-sysmgr's (StatusBar m_notifGroup): a separator at its left,
         // and its own tab behind the icons while the drop-down is open (the
-        // system menu's tab covers the system group only).
+        // system menu's tab covers the system group only). Its caps lie
+        // outside the icons with some padding (Theme.statusBarTabCap), so
+        // every icon is on the tab's solid part.
         ArtBorderImage {
             id: notifTab
             objectName: "notificationTab"
             visible: tabletIcons.visible && opacity > 0
-            x: notifSeparator.x
+            x: tabletIcons.x - Theme.statusBarTabCap - Theme.statusBarTabPadding
             y: -Theme.statusBarHeight
-            width: tabletIcons.x + tabletIcons.width + Theme.px(5) - x
+            width: tabletIcons.width + 2 * (Theme.statusBarTabCap + Theme.statusBarTabPadding)
             height: Theme.statusBarHeight
             source: Theme.asset("statusBar/status-bar-menu-dropdown-tab.png")
             border { left: Theme.artBorder(11, source); right: Theme.artBorder(11, source); top: 0; bottom: 0 }

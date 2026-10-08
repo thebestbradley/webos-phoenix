@@ -144,6 +144,15 @@ QtObject {
     readonly property int statusBarColorChangeDuration: 300
     readonly property int statusBarItemSlideDuration: 1000           // lunaAnimations.conf:122-123 (curve 3 InOutQuad on the width)
     readonly property int statusBarMenuFadeDuration: 200             // lunaAnimations.conf:124-125 (linear)
+    // Tablets: the drop-down tab behind a status bar group while its menu
+    // is open (status-bar-menu-dropdown-tab.png) has 11 px caps, the
+    // tab's edge with its shadow (StatusBarItemGroup.cpp:358 margin): the
+    // art is solid only from 9 px in. The original put the group's
+    // outermost item right at the cap's end (:362-366), so an icon could
+    // touch the shadow; Phoenix keeps a few pixels of the tab around every
+    // icon on both sides.
+    readonly property int statusBarTabCap: px(11)
+    readonly property int statusBarTabPadding: px(4)
     readonly property int statusBarClockFontSize: px(15)             // StatusBarClock.cpp:34
     // Phones: solid black (StatusBar.cpp:767). Tablet: tiled art over #515558 (StatusBar.cpp:47).
     readonly property color statusBarFill: tablet ? "#515558" : "#000000"
