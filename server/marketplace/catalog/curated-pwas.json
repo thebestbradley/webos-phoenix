@@ -109,9 +109,9 @@
       ],
       "featured": false,
       "summary": "Your WhatsApp chats, linked from your phone.",
-      "manifest": "https://web.whatsapp.com/manifest.json",
+      "manifest": "https://web.whatsapp.com/data/manifest.json",
       "origin": "https://web.whatsapp.com",
-      "icon": "https://web.whatsapp.com/whatsapp_pwa_icon_192.png",
+      "icon": "https://static.whatsapp.net/rsrc.php/yY/r/pxeXQZRzD__.webp",
       "manifestName": "WhatsApp Web"
     },
     {
@@ -1175,20 +1175,6 @@
       "manifestName": "FT"
     },
     {
-      "id": "org.webosphoenix.pwa.groundnews",
-      "title": "Ground News",
-      "developer": "Ground News",
-      "categories": [
-        "News"
-      ],
-      "featured": false,
-      "summary": "See how every side covers a story.",
-      "manifest": "https://ground.news/manifest.json",
-      "origin": "https://ground.news",
-      "icon": "https://ground.news/logo3-192.png",
-      "manifestName": "Ground"
-    },
-    {
       "id": "org.webosphoenix.pwa.googlemaps",
       "title": "Google Maps",
       "developer": "Google",
@@ -1644,20 +1630,6 @@
       "manifestName": "Showdown!"
     },
     {
-      "id": "org.webosphoenix.pwa.nytgames",
-      "title": "NYT Games",
-      "developer": "The New York Times",
-      "categories": [
-        "Games"
-      ],
-      "featured": false,
-      "summary": "The Crossword, Wordle, Connections and more.",
-      "manifest": "https://www.nytimes.com/games-assets/v2/metadata/nyt-web-manifest.json?v=",
-      "origin": "https://www.nytimes.com",
-      "icon": "https://www.nytimes.com/android-chrome-192x192.png",
-      "manifestName": "NYT Games"
-    },
-    {
       "id": "org.webosphoenix.pwa.xboxcloud",
       "title": "Xbox Cloud Gaming",
       "developer": "Microsoft",
@@ -1770,20 +1742,6 @@
       "manifestName": "NBA"
     },
     {
-      "id": "org.webosphoenix.pwa.formula1",
-      "title": "Formula 1",
-      "developer": "Formula One Group",
-      "categories": [
-        "Sports"
-      ],
-      "featured": false,
-      "summary": "Race results, standings and news.",
-      "manifest": "https://www.formula1.com/s/manifest.json",
-      "origin": "https://www.formula1.com",
-      "icon": "https://www.formula1.com/assets/home/_next/static/media/icon192x192.3e6c74b8.png",
-      "manifestName": "Install F1 App"
-    },
-    {
       "id": "org.webosphoenix.pwa.strava",
       "title": "Strava",
       "developer": "Strava",
@@ -1857,6 +1815,20 @@
       "manifestName": "Libby"
     },
     {
+      "id": "org.webosphoenix.pwa.chatgpt",
+      "title": "ChatGPT",
+      "developer": "OpenAI",
+      "categories": [
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "Ask OpenAI's assistant to write, explain and brainstorm.",
+      "manifest": "https://chatgpt.com/manifest.json",
+      "origin": "https://chatgpt.com",
+      "icon": "https://chatgpt.com/images/chatgpt-icon-192x192.png",
+      "manifestName": "ChatGPT"
+    },
+    {
       "id": "org.webosphoenix.pwa.claude",
       "title": "Claude",
       "developer": "Anthropic",
@@ -1895,7 +1867,7 @@
       "summary": "Lists and tasks for every day, synced with Outlook.",
       "manifest": "https://to-do.office.com/tasks/manifest.json",
       "origin": "https://to-do.office.com",
-      "icon": "https://res-1.cdn.office.net/todo/4278219_2.133.3/icons/todo-192.png",
+      "icon": "https://res-1.cdn.office.net/todo/4700804_2.134.1/icons/todo-192.png",
       "manifestName": "To Do"
     },
     {
@@ -1945,9 +1917,19 @@
       "why": "no web app manifest found"
     },
     {
-      "title": "ChatGPT",
-      "url": "https://chatgpt.com/",
-      "why": "the page: HTTP Error 403: Forbidden (a Cloudflare bot check); no web app manifest found"
+      "title": "Ground News",
+      "url": "https://ground.news/",
+      "why": "manifest's icons are missing (https://ground.news/logo3.png: HTTP 404)"
+    },
+    {
+      "title": "NYT Games",
+      "url": "https://www.nytimes.com/crosswords",
+      "why": "manifest's icons are missing (https://www.nytimes.com/android-chrome-512x512.png: HTTP 404)"
+    },
+    {
+      "title": "Formula 1",
+      "url": "https://www.formula1.com/",
+      "why": "manifest's icons are missing (https://www.formula1.com/assets/home/_next/static/media/icon36x36.9fab9254.png: HTTP 404)"
     },
     {
       "title": "Canva",
