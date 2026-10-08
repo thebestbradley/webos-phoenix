@@ -42,6 +42,7 @@
 // service in the system UI page; on a device the bus).
 
 import QtQuick
+import Qt5Compat.GraphicalEffects
 import Phoenix.Shell
 
 Item {
@@ -447,12 +448,13 @@ Item {
     readonly property real panelWidth: Math.min(width - Theme.px(24), Theme.px(Theme.tablet ? 560 : 420))
     // The panel's growth: from a fifth of its size at the origin.
     readonly property real _panelScale: 0.2 + 0.8 * shown
-    // The bird: 96 to 140 px at the top in the middle; where the panel is
-    // too short for that and a conversation (a phone's keyboard up, a
-    // phone on its side), small beside the field.
+    // The bird: 72 to 104 px at the top in the middle, over the
+    // conversation, which scrolls on behind it; where the panel is too
+    // short for that and a conversation (a phone's keyboard up, a phone on
+    // its side), small beside the field.
     readonly property bool birdBeside: panel.height < Theme.px(360)
-    readonly property real birdSize: birdBeside ? Theme.px(52)
-                                                : Math.max(Theme.px(96), Math.min(Theme.px(140), Math.round(panel.height * 0.2)))
+    readonly property real birdSize: birdBeside ? Theme.px(44)
+                                                : Math.max(Theme.px(72), Math.min(Theme.px(104), Math.round(panel.height * 0.15)))
     // Moves between the two only once the panel is up.
     readonly property bool _birdMoves: shown === 1
 
@@ -554,6 +556,8 @@ Item {
         // The assistant's bird. A tap waves hello.
         AssistantBird {
             id: bird
+            // Over the conversation, which passes behind it.
+            z: 1
             pose: ov.birdPose
             glow: true
             // Listening: the microphone's loudness where the dictation has it.
@@ -571,24 +575,45 @@ Item {
             }
         }
 
+        // The conversation's top edge: clear to opaque over 28 px.
+        Rectangle {
+            id: listFade
+            anchors.fill: list
+            visible: false
+            layer.enabled: true
+            gradient: Gradient {
+                GradientStop { position: 0; color: "transparent" }
+                GradientStop { position: Math.min(1, Theme.px(28) / Math.max(1, listFade.height)); color: "black" }
+                GradientStop { position: 1; color: "black" }
+            }
+        }
+
         ListView {
             id: list
             objectName: "assistantMessages"
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: heading.bottom
-            anchors.topMargin: ov.birdBeside ? Theme.px(8) : bird.height + Theme.px(4)
-            Behavior on anchors.topMargin { enabled: ov._birdMoves; NumberAnimation { duration: Theme.motion(250); easing.type: Easing.InOutQuad } }
+            anchors.topMargin: Theme.px(4)
             anchors.bottom: statusLine.top
             anchors.bottomMargin: Theme.px(6)
+            // The conversation runs on up behind the bird; scrolled back to
+            // its start, the first message comes clear below it.
+            topMargin: ov.birdBeside ? Theme.px(4) : bird.height
+            Behavior on topMargin { enabled: ov._birdMoves; NumberAnimation { duration: Theme.motion(250); easing.type: Easing.InOutQuad } }
             clip: true
+            // It fades out under the heading rather than being cut off
+            // (not with the software renderer, which cannot run the effect).
+            layer.enabled: GraphicsInfo.api !== GraphicsInfo.Software
+            layer.smooth: true
+            layer.effect: OpacityMask { maskSource: listFade }
             spacing: Theme.px(8)
             // The latest at the bottom, as in a conversation; while it
             // thinks, a bubble of bouncing dots after the request.
             verticalLayoutDirection: ListView.BottomToTop
             model: ov.messages.concat(ov.busy ? [{ id: "thinking", role: "assistant", text: "", thinking: true }] : []).reverse()
             boundsBehavior: Flickable.StopAtBounds
-            interactive: contentHeight > height
+            interactive: contentHeight + topMargin > height
             delegate: Item {
                 id: row
                 required property var modelData

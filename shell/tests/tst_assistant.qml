@@ -452,10 +452,16 @@ Item {
             tryCompare(overlay, "open", true, 2000);
             poseIs("idle");
             verify(birdSeen.had(["hello", "idle"]), "hello, then idle: " + birdSeen.poses);
-            // At the top in the middle of the panel, 96 px or more.
+            // At the top in the middle of the panel, 72 to 104 px, over the
+            // conversation, which runs on up behind it and, scrolled back
+            // to its start, comes clear below it.
             var panel = findChild(overlay, "assistantPanel");
             verify(!overlay.birdBeside);
-            verify(bird().width >= Theme.px(96) && bird().width <= Theme.px(140));
+            verify(bird().width >= Theme.px(72) && bird().width <= Theme.px(104));
+            var messages = findChild(overlay, "assistantMessages");
+            verify(messages.y < bird().y + bird().height, "the conversation reaches up behind the bird");
+            verify(bird().z > messages.z);
+            compare(messages.topMargin, bird().height);
             fuzzyCompare(bird().x + bird().width / 2, panel.width / 2, 1);
             // A tap on it waves, and does not close the view.
             birdSeen.reset();
@@ -552,7 +558,7 @@ Item {
             tryVerify(function () { return overlay.birdBeside; }, 2000);
             var field = findChild(overlay, "assistantField");
             tryVerify(function () { return bird().width === overlay.birdSize && bird().x === 0 && field.x >= bird().width; }, 2000, "beside the field");
-            verify(bird().width < Theme.px(96));
+            verify(bird().width < Theme.px(72));
             // Its feet on the field's bottom line, its body beside it.
             tryVerify(function () {
                 var b = bird().mapToItem(field, bird().width / 2, bird().height * 412 / 440);
