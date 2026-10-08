@@ -397,3 +397,59 @@ describe("conversations", () => {
         expect((await t.svc.ask({ text: "what's 1 + 1" })).errorCode).toBe(ERRORS.OFF);
     });
 });
+
+describe("asking by voice (docs/AI-AND-MCP.md, Voice)", () => {
+    it("answers \"Yes\" and \"No\" to a read-back in words", async () => {
+        const t = setup();
+        const r = await ask(t, "text Sam I'm running late", { voice: true });
+        expect(last(r).status).toBe("pending");
+        const yes = await ask(t, "Yes.", { threadId: r.thread.id, voice: true });
+        expect(yes.messages.map((m: Reply) => [m.role, m.text])).toEqual([["user", "Yes."], ["assistant", "Sent to Sam Jones."]]);
+        expect(t.called("messaging/putMessage")).toHaveLength(1);
+        const r2 = await ask(t, "text Mary see you soon", { threadId: r.thread.id });
+        const no = await ask(t, "Cancel", { threadId: r.thread.id });
+        expect(last(no).text).toBe("OK, I won't.");
+        expect((await t.svc.thread({ id: r.thread.id })).messages.find((x: Reply) => x.id === last(r2).id).status).toBe("cancelled");
+        expect(t.called("messaging/putMessage")).toHaveLength(1);
+        // Without a read-back waiting, "yes" is just words.
+        expect(last(await ask(t, "yes", { threadId: r.thread.id })).command).toBeUndefined();
+    });
+
+    it("speaks answers to spoken requests with Voice replies, typed ones with Speak answers", async () => {
+        const t = setup();
+        t.as("org.webosphoenix.settings");
+        await t.svc.setSettings({ speak: false });
+        t.as("com.palm.systemui");
+        await ask(t, "Turn on the flashlight");
+        expect(t.spoken).toEqual([]);
+        await ask(t, "Turn off the flashlight", { voice: true });
+        expect(t.spoken).toEqual(["The flashlight is off."]);
+        t.as("org.webosphoenix.settings");
+        await t.svc.setSettings({ voiceReplies: false });
+        t.as("com.palm.systemui");
+        await ask(t, "Turn on the flashlight", { voice: true });
+        expect(t.spoken).toEqual(["The flashlight is off."]);
+    });
+
+    it("keeps the wake word settings, off until turned on", async () => {
+        const t = setup();
+        expect((await t.svc.getSettings({})).settings).toMatchObject({ wakeWord: false, wakeWhenLocked: false, voiceReplies: true });
+        t.as("org.webosphoenix.settings");
+        expect((await t.svc.setSettings({ wakeWord: true, wakeWhenLocked: true })).returnValue).toBe(true);
+        expect((await t.svc.setSettings({ wakeWord: "yes" })).returnValue).toBe(false);
+        expect((await t.svc.getSettings({})).settings).toMatchObject({ wakeWord: true, wakeWhenLocked: true });
+    });
+
+    it("over the lock screen, does only what shows nothing private and sends nothing", async () => {
+        const t = setup();
+        const timer = await ask(t, "set a timer for 5 minutes", { voice: true, locked: true });
+        expect(last(timer)).toMatchObject({ command: "timer", status: "done" });
+        const text = await ask(t, "text Sam I'm running late", { voice: true, locked: true });
+        expect(last(text)).toMatchObject({ command: "text", status: "locked", text: "Unlock your phone first, and I'll do that." });
+        const open = await ask(t, "open Maps", { locked: true });
+        expect(last(open).status).toBe("locked");
+        expect(t.called("applicationManager/launch")).toHaveLength(0);
+        // Unlocked, the same words work.
+        expect(last(await ask(t, "text Sam I'm running late")).status).toBe("pending");
+    });
+});

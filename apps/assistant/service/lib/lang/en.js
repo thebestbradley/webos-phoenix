@@ -1449,6 +1449,7 @@ var say = {
     sent: function (who) { return "Sent to " + who + "."; },
     composing: function (who) { return "What would you like to say to " + who + "? I've opened Messaging."; },
     cancelled: function () { return "OK, I won't."; },
+    unlockFirst: function () { return "Unlock your phone first, and I'll do that."; },
     opening: function (title) { return "Opening " + title + "."; },
     navigating: function (dest) { return "Getting directions to " + dest + "."; },
     playing: function (q) { return q ? "Playing " + q + "." : "Playing your music."; },
@@ -1497,6 +1498,14 @@ var say = {
     }
 };
 
+// The answer to a read-back ("Send it?") in words: "yes", "no", or null for
+// something else (a new request).
+function answer(t) {
+    if (/^(?:yes|yeah|yep|yup|sure|ok|okay|correct|right|that's right|go ahead|do it|please do|yes please|send|send it|call|call (?:him|her|them)|yes send it|yes call)$/.test(t)) return "yes";
+    if (/^(?:no|nope|no thanks|no thank you|don't|do not|don't send it|don't call|cancel|cancel it|stop|never ?mind)$/.test(t)) return "no";
+    return null;
+}
+
 module.exports = {
     id: "en",
     name: "English",
@@ -1516,5 +1525,6 @@ module.exports = {
     whenText: whenText,
     repeatText: repeatText,
     say: say,
-    grounded: grounded
+    grounded: grounded,
+    answer: answer
 };

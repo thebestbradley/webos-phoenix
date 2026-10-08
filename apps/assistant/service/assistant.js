@@ -24,7 +24,9 @@
 // "Assistant": in the page, HTTP through the host's proxy, the shared store).
 //
 // createAssistantService(deps) -> methods, each (params) -> Promise<reply>:
-//   ask {text, threadId?, newThread?, speak?}  -> {thread, messages}
+//   ask {text, threadId?, newThread?, speak?, voice?, locked?}  -> {thread, messages}
+//     (voice: spoken, answered aloud with voiceReplies; locked: over the lock
+//     screen, LOCKED_COMMANDS only; "yes" / "no" answer a read-back waiting)
 //   choose {threadId, messageId, choice: "cloud:<id>" | "web" | "settings" | "open"}
 //     ("open": the app a command's answer offers, "Open Calendar")
 //   confirm {threadId, messageId, accept}
@@ -70,9 +72,16 @@ var DEFAULTS = {
     localModel: "",             // the chosen on-device model (lib/models.js id), "" for none
     defaultProvider: "",        // the cloud provider "Ask ..." offers
     allowCloudControl: false,   // cloud models may run commands
+    voiceReplies: true,         // answers to spoken requests spoken (ask {voice})
+    wakeWord: false,            // the shell listens for "Hey Phoenix" (docs/AI-AND-MCP.md, Voice)
+    wakeWhenLocked: false,      // ... also while the screen is off or locked
     disabledCommands: []        // command ids the assistant must not run
 };
 var HISTORY = 20;               // turns a model sees
+// What a request asked by voice over the lock screen (ask {locked}) may do:
+// nothing that shows what is private, sends, or opens an app.
+var LOCKED_COMMANDS = ["timer", "timerStatus", "timerCancel", "stopwatch", "alarm", "alarmList", "toggle", "media", "volume",
+                       "brightness", "lock", "battery", "weather", "convert", "worldTime", "calculate", "time"];
 
 var MESSAGE_FIELDS = ["id", "threadId", "role", "text", "time", "via", "source", "command", "status", "confirm", "choices", "chosen", "data"];
 
@@ -86,12 +95,13 @@ function createAssistantService(deps) {
     var changed = deps.changed || function () {};
     var caller = deps.caller || function () { return ""; };
     var seq = 0;
+    var lockedAsk = {};         // thread id -> a locked request is being answered
 
     // ---- Settings ----------------------------------------------------------------------------
     function settings() {
         var s = storage.get("assistant:settings") || {}, out = {};
         for (var k in DEFAULTS) out[k] = k in s ? s[k] : DEFAULTS[k];
-        ["enabled", "speak", "allowCloudControl"].forEach(function (b) { out[b] = !!out[b]; });
+        ["enabled", "speak", "allowCloudControl", "voiceReplies", "wakeWord", "wakeWhenLocked"].forEach(function (b) { out[b] = !!out[b]; });
         out.disabledCommands = Array.isArray(out.disabledCommands) ? out.disabledCommands.filter(function (x) { return typeof x === "string"; }) : [];
         if (["metric", "imperial", "auto"].indexOf(out.units) < 0) out.units = "auto";
         return out;
@@ -211,6 +221,10 @@ function createAssistantService(deps) {
     // ground is read back first: lang grounded()).
     function act(thread, cmd, args, layer, source, asked) {
         var e = env(), s = lang().say;
+        // Asked by voice over the lock screen: only what shows nothing
+        // private and sends nothing; the rest waits for the unlock.
+        if (lockedAsk[thread.id] && LOCKED_COMMANDS.indexOf(cmd.id) < 0)
+            return Promise.resolve([say(thread, s.unlockFirst(), { via: layer, source: source, command: cmd.id, status: "locked" })]);
         if (!allowed(cmd)) return Promise.resolve([say(thread, s.notAllowed(cmd.title), { via: layer, source: source, command: cmd.id, status: "failed" })]);
         return commands.prepare(cmd, args, e).then(function (p) {
             // Something is missing: asked for, and the next words fill it (route()).
@@ -391,7 +405,8 @@ function createAssistantService(deps) {
     }
 
     function speakLast(list, p) {
-        if (p.speak === false || !settings().speak || !deps.tts) return;
+        // Spoken requests are answered aloud with Voice replies; typed ones with Speak answers.
+        if (p.speak === false || !(p.voice ? settings().voiceReplies : settings().speak) || !deps.tts) return;
         var last = list[list.length - 1];
         if (last && last.role === "assistant" && last.text) {
             try { Promise.resolve(deps.tts.speak(last.text, settings().language)).catch(function () {}); } catch (e) { /* no speech */ }
@@ -427,7 +442,19 @@ function createAssistantService(deps) {
             if (!thread.title) thread.title = text.slice(0, 80);
             var user = say(thread, text, { role: "user" });
             changed("threads");
-            return route(thread, text).then(function (out) { return done(thread, [user].concat(out), p); });
+            // "Yes" or "No" to a read-back waiting: its answer.
+            var pend = lastPending(thread), yn = pend && lang().answer ? lang().answer(lang().clean(text)) : null;
+            if (yn) {
+                return methods.confirm({ threadId: thread.id, messageId: pend.id, accept: yn === "yes", voice: p.voice, speak: p.speak })
+                    .then(function (r) {
+                        if (r.returnValue !== false) r.messages = [user].concat(r.messages);
+                        return r;
+                    });
+            }
+            if (p.locked) lockedAsk[thread.id] = true;
+            var unlocked = function () { delete lockedAsk[thread.id]; };
+            return route(thread, text).then(function (out) { unlocked(); return done(thread, [user].concat(out), p); },
+                                            function (e) { unlocked(); throw e; });
         },
         choose: function (p) {
             if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
@@ -529,7 +556,7 @@ function createAssistantService(deps) {
             Object.keys(p).forEach(function (k) {
                 if (!(k in DEFAULTS)) return;
                 var v = p[k];
-                if (/^(enabled|speak|allowCloudControl)$/.test(k) && typeof v !== "boolean") bad = k + ": true or false";
+                if (/^(enabled|speak|allowCloudControl|voiceReplies|wakeWord|wakeWhenLocked)$/.test(k) && typeof v !== "boolean") bad = k + ": true or false";
                 else if (k === "disabledCommands" && !Array.isArray(v)) bad = "disabledCommands: a list of command ids";
                 else if (k === "localModel" && v !== "" && !models.find(v)) bad = "localModel: unknown model";
                 else if (k === "defaultProvider" && v !== "" && !getProvider(v)) bad = "defaultProvider: unknown provider";
