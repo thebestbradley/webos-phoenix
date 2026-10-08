@@ -7,6 +7,10 @@
 // (@phoenix/luna assistant); the shell's view and the app follow at once.
 //
 //   Assistant        on or off (on by default), speak answers
+//   Voice            listen for "Hey Phoenix" (off by default), also with
+//                    the screen off or locked (off by default), voice
+//                    replies (on by default), and what listening means for
+//                    privacy (docs/AI-AND-MCP.md, Voice)
 //   On device        llama.cpp models to download, use or remove, with their
 //                    size and the memory they want (what fits is offered);
 //                    how to get llama-server when it is missing
@@ -176,13 +180,27 @@ export function AssistantPage() {
                 <Row title="Assistant" subtitle="Hold the launcher button to ask">
                     <ToggleButton value={s.enabled} label="Assistant" testId="as-enabled" onChange={(v) => set({ enabled: v })} />
                 </Row>
-                <Row title="Speak answers" subtitle="With the device's voice" disabled={off}>
+                <Row title="Speak answers" subtitle="With the device's voice, also when you type" disabled={off}>
                     <ToggleButton value={s.speak} label="Speak answers" testId="as-speak" disabled={off} onChange={(v) => set({ speak: v })} />
                 </Row>
                 <ListSelector title="Weather units" value={s.units} disabled={off} testId="as-units"
                               options={[{ label: "Automatic", value: "auto" as const }, { label: "°C", value: "metric" as const }, { label: "°F", value: "imperial" as const }]}
                               onChange={(v) => set({ units: v })} />
             </Group>
+
+            <Group label="Voice">
+                <Row title={"Listen for \u201cHey Phoenix\u201d"} subtitle="Then say what you want, in the same breath or after the chime" disabled={off}>
+                    <ToggleButton value={s.wakeWord} label="Listen for Hey Phoenix" testId="as-wake" disabled={off} onChange={(v) => set({ wakeWord: v })} />
+                </Row>
+                <Row title="When the screen is off or locked" subtitle="Only what shows nothing private; for the rest it asks you to unlock" disabled={off || !s.wakeWord}>
+                    <ToggleButton value={s.wakeWhenLocked} label="When the screen is off or locked" testId="as-wake-locked" disabled={off || !s.wakeWord}
+                                  onChange={(v) => set({ wakeWhenLocked: v })} />
+                </Row>
+                <Row title="Voice replies" subtitle="Answer spoken requests aloud" disabled={off}>
+                    <ToggleButton value={s.voiceReplies} label="Voice replies" testId="as-voice-replies" disabled={off} onChange={(v) => set({ voiceReplies: v })} />
+                </Row>
+            </Group>
+            <Note testId="as-voice-privacy">{"Listening for \u201cHey Phoenix\u201d happens on this phone. The microphone goes only to the wake word spotter, which keeps the last few seconds in memory and nothing more; nothing is recorded, sent or saved until it hears the phrase, and what you say after it is turned into text on the phone too. A microphone in the status bar shows whenever it is open: faint while it waits for the phrase, orange while it listens to you."}</Note>
 
             {local ? <LocalModels m={local} /> : <Group label="On-device model"><Row title={<Spinner />} /></Group>}
 
