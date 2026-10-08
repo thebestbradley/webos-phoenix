@@ -20,7 +20,7 @@ webOS and does not get these modes
 Nothing here is built yet. What 1.x already gives it: the shell resizes to
 any window, rotates on phone and tablet, sizes art by density
 ([spec/hidpi-art.md](spec/hidpi-art.md)), handles trackpad gestures in card
-view, and reads the device's hardware from `/etc/phoenix/device.json`
+view, the launcher, the keyboard's clips and the notifications, and reads the device's hardware from `/etc/phoenix/device.json`
 ([HARDWARE.md](HARDWARE.md#device-configuration)).
 
 ## 1. Modes

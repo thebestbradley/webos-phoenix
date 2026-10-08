@@ -170,6 +170,10 @@ simulator, the P2 rows are listed there.
 - [x] Gesture bar on every device, turned off only by a hardware home button
 - [x] The shell resizes to any window or screen, from Pre size to large tablets
 - [x] Trackpad and mouse-wheel gestures in card view (swipe through cards, throw them away)
+- [x] The same two-finger swipe elsewhere: launcher pages and keyboard clips snap
+      to one as cards do, notifications are swiped away, the launcher's icons
+      and the notification lists scroll (`TrackpadSwipe.qml`; `tst_trackpad.qml`,
+      `tst_tablettrackpad.qml`)
 - [x] Sharp art at every pixel density ([spec/hidpi-art.md](spec/hidpi-art.md))
 - [x] Phone in landscape: the launcher has as many columns as fit (4 on a
       Pre's side, 5 on a Pre 3's), the lock screen's banner and dashboard keep

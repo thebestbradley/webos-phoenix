@@ -275,7 +275,11 @@ show their names.
 
 Controls: drag with the mouse as you would with a finger. In card view a
 two-finger trackpad swipe sideways moves between cards and a swipe up throws
-the card under the pointer away; a mouse wheel moves one card per notch. The strip at the
+the card under the pointer away; a mouse wheel moves one card per notch. The
+same two-finger swipe moves between the launcher's pages and the keyboard's
+clips (snapping to one, as card view does), scrolls the launcher's icons and
+the notification list, and swiped sideways on a notification dismisses it
+(`TrackpadSwipe.qml`). The strip at the
 bottom is the gesture bar, on phones and tablets alike; it moves to the
 bottom of the screen as you hold it. Press on it and drag (up: card view,
 or out of Just Type; left: back), or swipe two fingers on a trackpad with
