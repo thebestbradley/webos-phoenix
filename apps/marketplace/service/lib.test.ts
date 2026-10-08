@@ -4,7 +4,8 @@
 //
 // The packages service's libraries against independent implementations:
 // Ed25519 signatures made by Node's crypto (OpenSSL), .ipk packages made and
-// read by the system's ar and tar, and opkg's version order.
+// read by the system's ar and tar, opkg's version order, and web app
+// manifests read as browsers do.
 
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
@@ -21,6 +22,7 @@ type Any = any;
 const ed25519 = require("./lib/ed25519.js") as Any;
 const ipkLib = require("./lib/ipk.js") as Any;
 const { compare } = require("./lib/version.js") as Any;
+const pwa = require("./lib/pwa.js") as Any;
 
 const sha512 = async (b: Uint8Array) => new Uint8Array(crypto.createHash("sha512").update(b).digest());
 const gzip = { gzip: async (b: Uint8Array) => new Uint8Array(zlib.gzipSync(b)), gunzip: async (b: Uint8Array) => new Uint8Array(zlib.gunzipSync(b)) };
@@ -125,5 +127,20 @@ describe("versions", () => {
             .sort(compare);
         expect(sorted).toEqual(["0.9.9", "1.0~beta1", "1.0", "1.0-1", "1.0-2", "1.0-10", "1.0a", "1.0+b1", "1.0.1", "1.9", "1.10", "1:0.1"]);
         expect(compare("2.3.4", "2.3.4")).toBe(0);
+    });
+});
+
+describe("web app manifests", () => {
+    it("start where the site's page says, even when the manifest is on a CDN", () => {
+        // open.spotify.com links its manifest on open.spotifycdn.com.
+        const m = pwa.parseManifest({ name: "Spotify", start_url: "https://open.spotify.com/", icons: [{ src: "i/192.png", sizes: "192x192", type: "image/png" }] },
+                                    "https://open.spotifycdn.com/cdn/manifest.json", "https://open.spotify.com/");
+        expect(m.startUrl).toBe("https://open.spotify.com/");
+        expect(m.icons[0].src).toBe("https://open.spotifycdn.com/cdn/i/192.png");
+        // A relative start_url resolves against the CDN, which is not the page's origin: the page is the start.
+        expect(pwa.parseManifest({ name: "Box", start_url: "." }, "https://cdn01.boxcdn.net/m.json", "https://app.box.com/").startUrl)
+            .toBe("https://app.box.com/");
+        expect(pwa.parseManifest({ name: "Tides", start_url: "https://evil.example/" }, "https://tides.example/app/m.json").startUrl)
+            .toBe("https://tides.example/");
     });
 });

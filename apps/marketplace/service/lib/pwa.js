@@ -7,9 +7,11 @@
 // an .ipk the installer takes like any other. Its card then opens the site;
 // it gets its own launcher icon, cards and Just Type entry.
 //
-//   parseManifest(text, manifestUrl) -> {name, shortName, startUrl, scope,
+//   parseManifest(text, manifestUrl, pageUrl) -> {name, shortName, startUrl, scope,
 //       display, themeColor, backgroundColor, icons: [{src, sizes, type,
-//       purpose, size}], id}, or throws (code BAD_MANIFEST)
+//       purpose, size}], id}, or throws (code BAD_MANIFEST); pageUrl is the
+//       page that links the manifest (the site; the manifest's own URL if not
+//       given), which matters when the manifest is kept on a CDN
 //   pickIcons(manifest) -> {small, large}: the icons to fetch (small for the
 //       launcher, at least 64 px if there is one; large for dense screens
 //       and the loading card, the biggest)
@@ -34,16 +36,20 @@ function largest(sizes) {
     return best;
 }
 
-function parseManifest(text, manifestUrl) {
+function parseManifest(text, manifestUrl, pageUrl) {
     var m;
     try { m = typeof text === "string" ? JSON.parse(text) : text; } catch (e) { throw fail("The site's manifest is not valid JSON"); }
     if (!m || typeof m !== "object") throw fail("The site's manifest is empty");
     var base = new URL(manifestUrl);
+    var page = new URL(pageUrl || manifestUrl);
     var start = new URL(typeof m.start_url === "string" && m.start_url ? m.start_url : ".", base);
     var scope = new URL(typeof m.scope === "string" && m.scope ? m.scope : ".", start);
-    // As browsers do: a start URL on another origin, or outside the scope,
-    // makes the manifest's start_url and scope fall back.
-    if (start.origin !== base.origin) start = new URL("/", base);
+    // As browsers do: a start URL on another origin than the page, or
+    // outside the scope, makes the manifest's start_url and scope fall back
+    // (W3C Web Application Manifest, "processing the start_url member": the
+    // page's origin, not the manifest's, so open.spotifycdn.com's manifest
+    // can start at open.spotify.com).
+    if (start.origin !== page.origin) start = new URL("/", page);
     if (scope.origin !== start.origin || start.href.indexOf(scope.href) !== 0) scope = new URL(".", start);
     if (start.protocol !== "https:" && !/^(127\.0\.0\.1|localhost)$/.test(start.hostname))
         throw fail("A web app has to be served over HTTPS");

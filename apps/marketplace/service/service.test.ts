@@ -159,7 +159,7 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         site.setManifest({ name: "Tides", start_url: "https://evil.example/", icons: [] });
         const r = await service.install({ sourceId: "phoenix", id: "org.webosphoenix.pwa.tides" });
         site.setManifest({ name: "Tide Tables for Sailors", short_name: "Tides", start_url: "/app/", icons: [{ src: "icon-192.png", sizes: "192x192", type: "image/png" }] });
-        // A start URL on another origin falls back to the manifest's own site, as browsers do.
+        // A start URL on another origin than the site falls back to the site, as browsers do.
         expect(r.returnValue).toBe(true);
     });
 
