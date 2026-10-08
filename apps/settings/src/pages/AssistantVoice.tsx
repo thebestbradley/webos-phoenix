@@ -24,7 +24,7 @@ export function VoiceMissing() {
         <Note testId="as-voice-missing">
             {missing.map((p) => (
                 <span key={p.id} data-testid={`as-voice-missing-${p.id}`} style={{ display: "block" }}>
-                    {`Not installed here: ${p.name}. ${p.howToInstall}`}
+                    {`${p.name}: ${p.howToInstall}`}
                 </span>
             ))}
         </Note>

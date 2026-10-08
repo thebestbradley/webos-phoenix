@@ -297,7 +297,10 @@ def build_moves(bird):
 # ---- Writers -----------------------------------------------------------------------------------
 
 def dumps(o):
-    return json.dumps(o, indent=1, ensure_ascii=False)
+    """Indented, but each list of plain values on one line (keys, curves, points)."""
+    text = json.dumps(o, indent=1, ensure_ascii=False)
+    flat = re.compile(r"\[\s*((?:-?[\d.e+-]+|\"[^\"\n]*\"|true|false|null)(?:,\s*(?:-?[\d.e+-]+|\"[^\"\n]*\"|true|false|null))*)\s*\]")
+    return flat.sub(lambda m: "[" + re.sub(r",\s+", ", ", m.group(1)) + "]", text)
 
 
 def qml_js(bird):

@@ -26,6 +26,9 @@
 //                    OpenAI-compatible server) with their model and key; add,
 //                    edit, test, remove; the one "Ask ..." offers
 //   Control          whether cloud models may run commands (off by default)
+//   Follow-up        questions after something is made (on by default),
+//   questions        their quiet hours, the ones waiting, and a switch per
+//                    topic (AssistantFollowUps.tsx)
 //   Commands         which commands the assistant may run
 //   History          clear every conversation
 //
@@ -40,6 +43,7 @@ import {
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
 import { Button, Dialog, Group, ListSelector, Note, Page, PageHeader, PopupMenu, Row, Spinner, TextField, ToggleButton } from "@phoenix/ui";
 import { useBack } from "../nav";
+import { FollowUpQuestions } from "./AssistantFollowUps";
 import { VoiceMissing } from "./AssistantVoice";
 
 const errorText = (e: unknown) => (e as LunaError).errorText ?? (e instanceof Error ? e.message : String(e));
@@ -328,6 +332,8 @@ export function AssistantPage() {
             </Group>
             <VoiceMissing />
             <Note testId="as-voice-privacy">{"Listening for \u201cHey Phoenix\u201d happens on this phone. The microphone goes only to the wake word spotter, which keeps the last few seconds in memory and nothing more; nothing is recorded, sent or saved until it hears the phrase, and what you say after it is turned into text on the phone too. A microphone in the status bar shows whenever it is open: faint while it waits for the phrase, orange while it listens to you."}</Note>
+
+            <FollowUpQuestions settings={s} set={set} off={off} />
 
             {local ? <LocalModels m={local} /> : <Group label="On-device model"><Row title={<Spinner />} /></Group>}
 

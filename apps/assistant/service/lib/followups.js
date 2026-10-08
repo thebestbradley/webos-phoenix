@@ -25,14 +25,28 @@
 //     anything is due), as webOS services were woken.
 //   - Restraint: a question whose detail the user filled in themselves
 //     (the field changed since it was asked) or whose thing is gone is
-//     dropped; two Skips on one thing end the questions about it;
-//     RULES.kindSkips Skips in a row of one kind (across things) stop that
-//     kind until an answer of it or reset(); Settings > Assistant >
-//     Follow-up questions turns it all off.
+//     dropped; two Skips on one thing end the questions about it. After
+//     RULES.kindSkips Skips in a row of one kind (across things) it does not
+//     stop on its own: it asks whether that kind of question helps ("I've
+//     been asking about where your meetings are. Is that helpful, or
+//     should I stop?" Keep asking / Stop asking), and stops only on "Stop
+//     asking": the topic is then off in Settings > Assistant > Follow-up
+//     topics (settings followUpTopicsOff), where it can be turned on again;
+//     Follow-up questions turns them all off.
+//   - Words: the language file's (lang.followUp), said as conversation and
+//     naming the thing as people would ("your 3 o'clock tomorrow",
+//     "tomorrow's lunch with Sam"), a few phrasings per question taken in
+//     turn so they do not repeat.
+//   - Where: in the conversation the thing was made in. A question sent
+//     later arrives there too, as a message (deps.delivered), counted unread
+//     until the conversation is opened, as well as in its notification.
 //
 // create(deps) -> {afterCreate, answer, answerable, leave, leaveOne, reopen, attach, wake, list, reset}
 //   deps: {storage, now() -> ms, env() -> the commands' env (luna, lang, now),
-//          settings() -> {followUps, quietStart, quietEnd}, notify(n) (a
+//          settings() -> {followUps, quietStart, quietEnd, followUpTopicsOff},
+//          stopTopic(kind) (turns a topic off in the settings),
+//          delivered(question, text, choices) -> messageId (a question sent
+//          later, said in its conversation), notify(n) (a
 //          notification: {appId, tag, title, body, params, actions} or
 //          {appId, tag, remove: true}), log, changed}
 //
@@ -64,7 +78,7 @@ var RULES = {
     attempts: 2,              // notifications per question
     perItem: 2,               // questions about one thing, in the conversation
     itemSkips: 2,             // Skips that end the questions about a thing
-    kindSkips: 3,             // Skips in a row of one kind, across things, that stop asking it
+    kindSkips: 3,             // Skips in a row of one kind, across things, before asking whether it helps
     callWaitMs: 10 * MIN,     // in a call: tried again then
     dndWaitMs: 30 * MIN,      // Do Not Disturb: tried again then
     beforeMs: 30 * MIN,       // about something soon: this long before it at the latest
@@ -317,6 +331,9 @@ function describe(item, rec, now) {
     if (item.type === "event") {
         out.title = rec.subject || "";
         out.at = rec.rrule ? null : Number(rec.dtstart) || null;
+        out.start = Number(rec.dtstart) || null;
+        out.allDay = !!rec.allDay;
+        out.people = (rec.attendees || []).map(function (a) { return String(a.commonName || a.email || "").split(" ")[0]; }).filter(Boolean);
     } else if (item.type === "reminder" || item.type === "task") {
         out.title = rec.summary || "";
         out.at = rec.due || null;
@@ -350,7 +367,7 @@ function create(deps) {
     }
     function stats() {
         var s = storage.get(STATS) || {};
-        return { kinds: s.kinds || {}, items: s.items || {} };
+        return { kinds: s.kinds || {}, items: s.items || {}, said: s.said || {} };
     }
     function itemKey(item) { return item.type + ":" + item.id; }
     function itemStats(s, item) {
@@ -358,7 +375,10 @@ function create(deps) {
         if (!s.items[k]) s.items[k] = { asked: [], skips: 0, at: now() };
         return s.items[k];
     }
-    function muted(s, kind) { return (s.kinds[kind] || 0) >= RULES.kindSkips; }
+    // A topic turned off (Settings, or "Stop asking").
+    function muted(s, kind) { return (settings().followUpTopicsOff || []).indexOf(kind) >= 0; }
+    // Skipped so often that it is time to ask whether it helps.
+    function doubtful(s, kind) { return (s.kinds[kind] || 0) >= RULES.kindSkips; }
     function loadItem(item) {
         return dbGet(env(), item.id);
     }
@@ -373,6 +393,10 @@ function create(deps) {
         function from(i) {
             if (i >= kinds.length) return Promise.resolve(null);
             var k = kinds[i];
+            if (doubtful(s, k)) {
+                var w = e.lang.followUp.chip;
+                return Promise.resolve({ kind: k, meta: true, options: [{ label: w.keepAsking, value: "keep" }, { label: w.stopAsking, value: "stop" }] });
+            }
             return Q[k].options(e, rec, item).then(function (opts) {
                 if (Q[k].needsOptions && !opts.length) return from(i + 1);
                 return { kind: k, options: opts };
@@ -382,23 +406,29 @@ function create(deps) {
     }
     function newId() { return now().toString(36) + "-" + (seq++ % 1296).toString(36) + Math.random().toString(36).slice(2, 6); }
     function choicesOf(r) {
-        return r.options.map(function (o, i) { return { id: "fu:" + i, label: o.label }; })
-            .concat([{ id: "fu:skip", label: words2().chip.skip }]);
+        var list = r.options.map(function (o, i) { return { id: "fu:" + i, label: o.label }; });
+        return r.meta ? list : list.concat([{ id: "fu:skip", label: words2().chip.skip }]);
     }
-    function textOf(r, inConversation) { return words2().question(r.kind, r.item, now(), inConversation); }
+    function textOf(r) {
+        return r.meta ? words2().doubt(r.kind, r.variant || 0) : words2().question(r.kind, r.item, now(), r.variant || 0);
+    }
     // Asked in the conversation: kept open for an answer.
     function open(item, rec, q, args, threadId) {
         var s = stats(), st = itemStats(s, item);
-        st.asked.push(q.kind);
+        st.asked.push(q.meta ? "?" + q.kind : q.kind);
+        // The phrasings in turn, per kind.
+        s.said = s.said || {};
+        var said = (q.meta ? "?" : "") + q.kind, variant = s.said[said] || 0;
+        s.said[said] = variant + 1;
         storage.set(STATS, s);
         var at = now();
-        var r = { id: newId(), kind: q.kind, item: describe(item, rec, at), threadId: threadId, messageId: "", state: "open",
+        var r = { id: newId(), kind: q.kind, meta: !!q.meta, variant: variant, item: describe(item, rec, at), threadId: threadId, messageId: "", state: "open",
                   askedAt: at, openUntil: at + RULES.windowMs, queuedAt: 0, nextAt: 0, attempts: 0,
                   snapshot: Q[q.kind].field(rec), options: q.options, args: { end: args && args.end || null, start: args && args.start || null,
                   duration_minutes: args && args.duration_minutes || null, list: args && args.list || "", label: args && args.label || "" } };
         put(r);
         reschedule();
-        return { id: r.id, kind: r.kind, text: textOf(r, true), choices: choicesOf(r) };
+        return { id: r.id, kind: r.kind, meta: r.meta, text: textOf(r), choices: choicesOf(r) };
     }
 
     // After a command made something: the first question about it, or null.
@@ -438,7 +468,7 @@ function create(deps) {
             if (r.item.at && at >= r.item.at) return { why: "passed" };
             if (item.at && at >= item.at) return { why: "passed" };
             var s = stats();
-            if (itemStats(s, r.item).skips >= RULES.itemSkips || muted(s, r.kind)) return { why: "stopped" };
+            if ((!r.meta && itemStats(s, r.item).skips >= RULES.itemSkips) || muted(s, r.kind)) return { why: "stopped" };
             return { rec: rec };
         });
     }
@@ -454,7 +484,7 @@ function create(deps) {
         var r = get(id), w = words2();
         if (!r || FINAL[r.state]) return Promise.resolve({ text: w.alreadySet(), done: true });
         var parsed = input.parsed || null;
-        if (!parsed && input.text !== undefined) parsed = w.answer(r.kind, input.text, now());
+        if (!parsed && input.text !== undefined) parsed = w.answer(r.meta ? "doubt" : r.kind, input.text, now());
         if (!parsed && input.choice === undefined) return Promise.resolve(null);
         var skip = input.choice === "fu:skip" || (parsed && parsed.skip);
         var e = env();
@@ -464,6 +494,22 @@ function create(deps) {
                 return { text: c.why === "gone" ? w.gone() : w.alreadySet(), kind: r.kind, dropped: c.why };
             }
             var s = stats(), st = itemStats(s, r.item);
+            // Whether this kind of question helps: asked again, or stopped.
+            if (r.meta) {
+                var keep = skip ? null : input.choice !== undefined ? (r.options[Number(String(input.choice).slice(3))] || {}).value
+                    : parsed && parsed.value;
+                if (keep === "stop") {
+                    if (deps.stopTopic) deps.stopTopic(r.kind);
+                    s.kinds[r.kind] = 0;
+                    storage.set(STATS, s);
+                    finish(r, "answered");
+                    return { text: w.stopped(r.kind), kind: r.kind, stopped: true };
+                }
+                if (keep === "keep") s.kinds[r.kind] = 0;
+                storage.set(STATS, s);
+                finish(r, keep ? "answered" : "skipped");
+                return { text: keep ? w.keeping() : w.skipped(), kind: r.kind, rec: c.rec };
+            }
             if (skip) {
                 st.skips++;
                 s.kinds[r.kind] = (s.kinds[r.kind] || 0) + 1;
@@ -508,7 +554,7 @@ function create(deps) {
         }).then(function (out) {
             changed("followUps");
             reschedule();
-            if (!chain || out.dropped === "gone" || out.retry) return out;
+            if (!chain || out.dropped === "gone" || out.retry || out.stopped) return out;
             // The next question about the same thing, in the conversation.
             return loadItem(r.item).then(function (rec) {
                 if (!rec || !settings().followUps) return out;
@@ -553,7 +599,8 @@ function create(deps) {
         return check(r, at).then(function (c) {
             if (c.why) { finish(r, "dropped", c.why); changed("followUps"); reschedule(); return { why: c.why }; }
             if (r.state === "delivered") notify({ appId: ASSISTANT_APP, tag: "followup:" + r.id, remove: true });
-            return Q[r.kind].options(env(), c.rec, r.item).then(function (opts) {
+            // Its message keeps its answers (a notification's and the conversation's are the same).
+            return (r.meta || r.state === "delivered" ? Promise.resolve(r.options) : Q[r.kind].options(env(), c.rec, r.item)).then(function (opts) {
                 r.options = opts;
                 r.state = "open";
                 r.openUntil = at + RULES.windowMs;
@@ -561,7 +608,7 @@ function create(deps) {
                 put(r);
                 reschedule();
                 changed("followUps");
-                return { id: r.id, kind: r.kind, text: textOf(r, false), choices: choicesOf(r), threadId: r.threadId };
+                return { id: r.id, kind: r.kind, meta: r.meta, text: textOf(r), choices: choicesOf(r), threadId: r.threadId, messageId: r.messageId };
             });
         });
     }
@@ -591,8 +638,9 @@ function create(deps) {
         return Promise.all([dnd, call]).then(function (x) { return { dnd: x[0], call: x[1] }; });
     }
     function deliver(r, at) {
+        var rec0 = r.rec;
         // The answers offered again: times and places as they are now.
-        return Q[r.kind].options(env(), r.rec, r.item).catch(function () { return r.options; }).then(function (opts) {
+        return (r.meta ? Promise.resolve(r.options) : Q[r.kind].options(env(), r.rec, r.item)).catch(function () { return r.options; }).then(function (opts) {
             r.options = opts && opts.length ? opts : r.options;
             r.attempts++;
             r.state = "delivered";
@@ -600,11 +648,17 @@ function create(deps) {
             r.nextAt = at + RULES.againMs;
             if (r.item.at && r.nextAt > r.item.at) r.nextAt = r.item.at;
             delete r.rec;
+            r.item = describe(r.item, rec0, at);
+            // Said in its conversation too, waiting there (unread).
+            if (deps.delivered) {
+                var mid = deps.delivered(r, textOf(r), choicesOf(r));
+                if (mid) r.messageId = mid;
+            }
             put(r);
             // Room for two answers and Skip in a dashboard row.
             var items = choicesOf(r);
             items = items.length > 3 ? items.slice(0, 2).concat(items.slice(-1)) : items;
-            notify({ appId: ASSISTANT_APP, tag: "followup:" + r.id, title: textOf(r, false), body: "",
+            notify({ appId: ASSISTANT_APP, tag: "followup:" + r.id, title: textOf(r), body: "",
                      params: { followUp: r.id },
                      actions: { uri: SERVICE_URI + "answerFollowUp", params: { id: r.id }, items: items } });
         });
@@ -675,16 +729,17 @@ function create(deps) {
         var s = stats();
         return {
             followUps: all().filter(function (r) { return !FINAL[r.state]; }).map(function (r) {
-                return { id: r.id, kind: r.kind, question: textOf(r, false), item: r.item, state: r.state, attempts: r.attempts,
+                return { id: r.id, kind: r.kind, meta: !!r.meta, question: textOf(r), item: r.item, state: r.state, attempts: r.attempts,
                          nextAt: r.state === "open" ? r.openUntil : r.nextAt, threadId: r.threadId, choices: choicesOf(r) };
             }),
-            muted: Object.keys(s.kinds).filter(function (k) { return muted(s, k); })
+            topicsOff: (settings().followUpTopicsOff || []).slice()
         };
     }
-    // Ask every kind again (Settings > Assistant).
+    // Forget the Skips counted (the kinds' and the things').
     function reset() {
         var s = stats();
         s.kinds = {};
+        Object.keys(s.items).forEach(function (k) { s.items[k].skips = 0; });
         storage.set(STATS, s);
         changed("followUps");
     }

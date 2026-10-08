@@ -105,7 +105,8 @@ var DEFAULTS = {
     disabledCommands: [],       // command ids the assistant must not run
     followUps: true,            // questions after something is made (lib/followups.js)
     quietStart: "22:00",        // ... never asked later, in a notification, between these
-    quietEnd: "08:00"
+    quietEnd: "08:00",
+    followUpTopicsOff: []       // follow-up topics turned off (Settings, or "Stop asking"): lib/followups.js KINDS
 };
 var HISTORY = 20;               // turns a model sees
 // What a request asked by voice over the lock screen (ask {locked}) may do:
@@ -118,7 +119,9 @@ var HHMM = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 // Follow-up answers read even when the words could be a command too ("in
 // an hour", "every day"); the others (a place, a label, a list, names)
 // only when they are not one.
-var STRICT_ANSWERS = ["duration", "alert", "due", "repeat", "email", "phone"];
+var STRICT_ANSWERS = ["duration", "alert", "due", "repeat", "email", "phone", "doubt"];
+// Every follow-up topic (lib/followups.js KINDS), for followUpTopicsOff.
+var TOPICS = ["location", "invitees", "duration", "alert", "due", "list", "repeat", "label", "email", "phone"];
 
 function ok(o) { var r = { returnValue: true }; for (var k in o) r[k] = o[k]; return r; }
 function fail(code, text) { return { returnValue: false, errorCode: code, errorText: text }; }
@@ -139,6 +142,7 @@ function createAssistantService(deps) {
         ["enabled", "speak", "allowCloudControl", "voiceReplies", "wakeWord", "wakeWhenLocked", "followUps"].forEach(function (b) { out[b] = !!out[b]; });
         if (!HHMM.test(out.quietStart)) out.quietStart = DEFAULTS.quietStart;
         if (!HHMM.test(out.quietEnd)) out.quietEnd = DEFAULTS.quietEnd;
+        out.followUpTopicsOff = Array.isArray(out.followUpTopicsOff) ? out.followUpTopicsOff.filter(function (k) { return TOPICS.indexOf(k) >= 0; }) : [];
         out.disabledCommands = Array.isArray(out.disabledCommands) ? out.disabledCommands.filter(function (x) { return typeof x === "string"; }) : [];
         if (["metric", "imperial", "auto"].indexOf(out.units) < 0) out.units = "auto";
         return out;
@@ -198,7 +202,7 @@ function createAssistantService(deps) {
     function summary(t) {
         var msgs = messagesOf(t.id), last = msgs[msgs.length - 1];
         return { id: t.id, title: t.title || (msgs[0] ? msgs[0].text : ""), created: t.created, updated: t.updated,
-                 provider: t.provider || "", count: msgs.length, last: last ? last.text : "" };
+                 provider: t.provider || "", count: msgs.length, last: last ? last.text : "", unread: t.unread || 0 };
     }
 
     function say(thread, text, extra) {
@@ -252,7 +256,29 @@ function createAssistantService(deps) {
                  apps: apps };
     }
     var followUps = followups.create({ storage: storage, now: now, env: env, settings: settings, log: log, changed: changed,
-                                       notify: deps.notify || function () {} });
+                                       notify: deps.notify || function () {},
+                                       // "Stop asking": the topic off, as Settings would turn it off.
+                                       stopTopic: function (kind) {
+                                           var cur = storage.get("assistant:settings") || {};
+                                           var off = Array.isArray(cur.followUpTopicsOff) ? cur.followUpTopicsOff : [];
+                                           if (off.indexOf(kind) < 0) cur.followUpTopicsOff = off.concat([kind]);
+                                           storage.set("assistant:settings", cur);
+                                           changed("settings");
+                                       },
+                                       // A question sent later: said in its conversation, unread there.
+                                       delivered: function (q, text, choices) {
+                                           var thread = getThread(q.threadId);
+                                           if (!thread) return "";
+                                           var old = q.messageId ? getMessage(thread.id, q.messageId) : null;
+                                           if (old && !old.chosen) { old.chosen = "later"; putMessage(old); }
+                                           var command = { event: "event", reminder: "reminder", task: "task", alarm: "alarm", contact: "contactAdd" }[q.item.type];
+                                           var m = say(thread, text, { via: "commands", command: command, followUp: { id: q.id, kind: q.kind }, choices: choices });
+                                           thread = getThread(thread.id);
+                                           thread.unread = (thread.unread || 0) + 1;
+                                           putThread(thread);
+                                           changed("threads");
+                                           return m.id;
+                                       } });
 
     // ---- Doing a command ---------------------------------------------------------------------
     // layer: "commands", "on-device" or "cloud"; source: who chose it.
@@ -294,7 +320,7 @@ function createAssistantService(deps) {
         });
     }
     function askFollowUp(thread, q, command) {
-        var m = say(thread, q.text, { via: "commands", command: command, followUp: { id: q.id, kind: q.kind }, choices: q.choices });
+        var m = say(thread, q.text, { via: "commands", command: command, followUp: { id: q.id, kind: q.meta ? "doubt" : q.kind }, choices: q.choices });
         followUps.attach(q.id, thread.id, m.id);
         return m;
     }
@@ -721,6 +747,7 @@ function createAssistantService(deps) {
                 var v = p[k];
                 if (/^(enabled|speak|allowCloudControl|voiceReplies|wakeWord|wakeWhenLocked|followUps)$/.test(k) && typeof v !== "boolean") bad = k + ": true or false";
                 else if ((k === "quietStart" || k === "quietEnd") && !HHMM.test(String(v))) bad = k + ": a time, \"22:00\"";
+                else if (k === "followUpTopicsOff" && !(Array.isArray(v) && v.every(function (x) { return TOPICS.indexOf(x) >= 0; }))) bad = "followUpTopicsOff: a list of " + TOPICS.join(", ");
                 else if (k === "disabledCommands" && !Array.isArray(v)) bad = "disabledCommands: a list of command ids";
                 else if (k === "localModel" && v !== "" && !models.find(v)) bad = "localModel: unknown model";
                 else if (k === "defaultProvider" && v !== "" && !getProvider(v)) bad = "defaultProvider: unknown provider";
@@ -909,11 +936,22 @@ function createAssistantService(deps) {
                 if (!thread.title) { thread.title = q.text || ""; putThread(thread); }
                 storage.set("assistant:current", thread.id);
                 var command = { event: "event", reminder: "reminder", task: "task", alarm: "alarm", contact: "contactAdd" }[q0.item.type];
+                // Already waiting there (sent later): opened on it, not asked twice.
+                var waiting = !q.why && q.messageId && getThread(q0.threadId) ? getMessage(thread.id, q.messageId) : null;
                 var list = q.why ? [say(thread, q.why === "gone" ? lang().followUp.gone() : lang().followUp.alreadySet(), { via: "commands", command: command, status: "cancelled" })]
-                                 : [askFollowUp(thread, q, command)];
+                         : waiting && !waiting.chosen ? [] : [askFollowUp(thread, q, command)];
+                thread = getThread(thread.id);
+                if (thread.unread) { thread.unread = 0; putThread(thread); }
                 changed("threads");
                 return ok({ thread: summary(thread), messages: list });
             });
+        },
+        // The conversation was read: nothing unread in it.
+        markRead: function (p) {
+            var t = getThread(String(p.id || ""));
+            if (!t) return Promise.resolve(fail(ERRORS.NOT_FOUND, "No such conversation: " + p.id));
+            if (t.unread) { t.unread = 0; putThread(t); changed("threads"); }
+            return Promise.resolve(ok({}));
         },
         followUpLeave: function (p) {
             if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
@@ -991,6 +1029,6 @@ var METHODS = ["ask", "choose", "confirm", "threads", "thread", "newThread", "se
                "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
                "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary", "voice",
                "connect", "retry",
-               "followUps", "answerFollowUp", "followUpOpen", "followUpLeave", "followUpWake", "resetFollowUps"];
+               "followUps", "answerFollowUp", "followUpOpen", "followUpLeave", "followUpWake", "resetFollowUps", "markRead"];
 
 module.exports = { createAssistantService: createAssistantService, METHODS: METHODS, ERRORS: ERRORS, SERVICE: SERVICE, DEFAULTS: DEFAULTS };

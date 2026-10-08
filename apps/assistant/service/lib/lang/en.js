@@ -1554,32 +1554,74 @@ function answer(t) {
 }
 
 // ---- Follow-up questions (lib/followups.js) -------------------------------------------------
+var TOPICS = { location: "where your meetings are", invitees: "who's coming to things", duration: "how long things last",
+               alert: "reminders before events", due: "when things are due", list: "which list things go on",
+               repeat: "whether alarms repeat", label: "what alarms are for", email: "email addresses for new contacts",
+               phone: "phone numbers for new contacts" };
+var COMMON_NOUNS = /^(?:meeting|lunch|dinner|breakfast|brunch|coffee|call|phone call|video call|appointment|event|drinks|catch-up|catch up|interview|party|class|session|game|practice|date)\b/i;
+// "3 o'clock", "3:30" (people say the hour; 12-hour clock).
+function clockWords(ms) {
+    var d = new Date(ms), h = d.getHours() % 12 || 12, m = d.getMinutes();
+    return m ? h + ":" + (m < 10 ? "0" : "") + m : h + " o'clock";
+}
+// "today", "tomorrow", "Friday", "October 20".
+function dayWord(ms, now) {
+    var days = D.daysBetween(now, ms);
+    if (days === 0) return "today";
+    if (days === 1) return "tomorrow";
+    if (days > 1 && days < 7) return cap(WEEKDAYS[new Date(ms).getDay()]);
+    return new Date(ms).toLocaleDateString("en", { month: "long", day: "numeric" });
+}
+// An event as people name it: "tomorrow's lunch with Sam", "“Dentist” on
+// Friday", "your 3 o'clock tomorrow" (not an event: its title quoted).
+function eventThing(item, now) {
+    var t = String(item.title || "");
+    if (item.type !== "event") return quote(t);
+    if (!item.start) return COMMON_NOUNS.test(t) ? "your " + t.charAt(0).toLowerCase() + t.slice(1) : quote(t);
+    var day = dayWord(item.start, now), named = /^(?:today|tomorrow|[A-Z][a-z]+day)$/.test(day);
+    if (COMMON_NOUNS.test(t) && named) return day + "'s " + t.charAt(0).toLowerCase() + t.slice(1);
+    if (COMMON_NOUNS.test(t)) return "your " + t.charAt(0).toLowerCase() + t.slice(1) + " on " + day;
+    return quote(t) + (named ? (day === "today" || day === "tomorrow" ? " " : " on ") + day : " on " + day);
+}
 // After something is made, one short question about what it still lacks;
 // the answer as typed or said (a chip's label also matches).
 var EMAIL_ONLY = /^(?:(?:it's|it is|her|his|their|the)?\s*(?:e-?mail(?: address)?(?: is)?)?\s*)([^\s@,]+@[^\s@,]+\.[a-z]{2,})$/;
 var followUp = {
-    // in: the question in the conversation (the item was just made, "it");
-    // else in a notification, later (the item named).
-    question: function (kind, item, now, inConversation) {
-        var it = inConversation ? "it" : quote(item.title);
-        var when = item.at ? " (" + whenText(item.at, null, false, now).replace(/^on /, "") + ")" : "";
+    // The question, as conversation: the thing named as people would, one
+    // of a few phrasings (variant: how many of the kind were asked before).
+    question: function (kind, item, now, variant) {
+        var v = variant || 0, t = item.title || "";
+        function pick(list) { return list[v % list.length]; }
+        var thing = eventThing(item, now), q = quote(t);
         switch (kind) {
-        case "location": return inConversation ? "Where is it?" : "Where is " + it + when + "?";
-        case "invitees": return inConversation ? "Who's coming?" : "Who's coming to " + it + when + "?";
-        case "duration": return inConversation ? "How long is it?" : "How long is " + it + when + "?";
-        case "alert": return inConversation ? "When should I remind you?" : "When should I remind you of " + it + when + "?";
-        case "due": return item.type === "reminder" ? (inConversation ? "When should I remind you?" : "When should I remind you to " + item.title + "?")
-                                                    : (inConversation ? "When is it due?" : "When is " + it + " due?");
-        case "list": return inConversation ? "Which list is it for?" : "Which list is " + it + " for?";
-        case "repeat": return inConversation ? "Should it repeat?" : "Should your " + item.title + " alarm repeat?";
-        case "label": return inConversation ? "What's it for?" : "What's your " + item.title + " alarm for?";
-        case "email": return "What's " + item.title + "'s email address?";
-        case "phone": return "What's " + item.title + "'s phone number?";
+        case "location":
+            return pick([item.people && item.people.length && !item.allDay && item.start
+                             ? "Hey, where are you and " + list(item.people) + " meeting for your " + clockWords(item.start) + " " + dayWord(item.start, now) + "?"
+                             : "Hey, where's " + thing + " happening?",
+                         "Quick one: where is " + thing + "?",
+                         "Where should I say " + thing + " is?"]);
+        case "invitees": return pick(["Is anyone joining you for " + thing + "?", "Who's coming to " + thing + "?", "Want me to invite anyone to " + thing + "?"]);
+        case "duration": return pick(["How long do you think " + thing + " will run?", "How much time should I block out for " + thing + "?"]);
+        case "alert": return pick(["Quick one about " + thing + ": should I remind you beforehand?", "Want a heads-up before " + thing + "?"]);
+        case "due": return item.type === "reminder" ? pick(["When should I remind you to " + t + "?", "When's a good time to nudge you to " + t + "?"])
+                                                    : pick(["Is there a day you want " + q + " done by?", "When's " + q + " due?"]);
+        case "list": return pick(["Which list should " + q + " go on?", "Want me to file " + q + " on one of your lists?"]);
+        case "repeat": return pick(["Should your " + t + " alarm go off every day, or just this once?", "Is the " + t + " alarm a one-off, or should it repeat?"]);
+        case "label": return pick(["What's the " + t + " alarm for?", "Want to give your " + t + " alarm a name?"]);
+        case "email": return pick(["Do you have an email address for " + t + "?", "What's " + t + "'s email, if you have it?"]);
+        case "phone": return pick(["Do you have a phone number for " + t + "?", "What's " + t + "'s number, if you have it?"]);
         }
         return "";
     },
+    // Skipped a few times: whether that kind of question helps.
+    doubt: function (kind, variant) {
+        var list = ["I've been asking about " + TOPICS[kind] + ". Is that helpful, or should I stop asking?",
+                    "You've skipped a few questions about " + TOPICS[kind] + ". Want me to keep asking those?"];
+        return list[(variant || 0) % list.length];
+    },
+    topic: function (kind) { return TOPICS[kind] || kind; },
     chip: {
-        skip: "Skip", videoCall: "Video call", justOnce: "Just once",
+        skip: "Skip", videoCall: "Video call", justOnce: "Just once", keepAsking: "Keep asking", stopAsking: "Stop asking",
         minutes: function (n) { return n < 60 ? n + " min" : n === 60 ? "1 hour" : n % 60 ? (n / 60).toFixed(1) + " hours" : n / 60 + " hours"; },
         before: function (n) { return (n < 60 ? n + " min" : n === 60 ? "1 hour" : n / 60 + " hours") + " before"; },
         inAnHour: "In 1 hour", thisEvening: "This evening", tomorrowMorning: "Tomorrow morning",
@@ -1589,20 +1631,22 @@ var followUp = {
     // What changed, said back.
     done: function (kind, value, now) {
         switch (kind) {
-        case "location": return "Added " + value + " as the place.";
-        case "invitees": return "Invited " + list(value) + ".";
-        case "duration": return "It's " + durationText(value * 60) + " long now.";
-        case "alert": return value ? "I'll remind you " + durationText(value * 60) + " before." : "I'll remind you when it starts.";
-        case "due": return "Set for " + whenText(value, null, false, now) + ".";
-        case "list": return "It's on your " + value + " list now.";
-        case "repeat": return value === "once" ? "OK, just once." : "It repeats " + repeatText(value) + " now.";
+        case "location": return "Got it, I've put " + value + " as the place.";
+        case "invitees": return "Done, I've invited " + list(value) + ".";
+        case "duration": return "OK, I've blocked out " + durationText(value * 60) + ".";
+        case "alert": return value ? "I'll give you a heads-up " + durationText(value * 60) + " before." : "I'll remind you when it starts.";
+        case "due": return "OK, that's set for " + whenText(value, null, false, now) + ".";
+        case "list": return "Filed it on your " + value + " list.";
+        case "repeat": return value === "once" ? "Just this once, then." : "It'll go off " + repeatText(value) + " now.";
         case "label": return "Labelled it " + quote(value) + ".";
-        case "email": return "Saved the email address.";
-        case "phone": return "Saved the phone number.";
+        case "email": return "Saved " + value + ".";
+        case "phone": return "Saved " + value + ".";
         }
         return "Done.";
     },
-    skipped: function () { return "OK, I'll leave it."; },
+    skipped: function () { return "No problem, I'll leave it."; },
+    keeping: function () { return "Good to know. I'll keep asking."; },
+    stopped: function (kind) { return "OK, I'll stop asking about " + TOPICS[kind] + ". You can turn it back on in Settings > Assistant."; },
     alreadySet: function () { return "That's been set already, so I'll leave it."; },
     gone: function () { return "That's gone now, so there's nothing to add."; },
     noContacts: function (names) { return "I couldn't find " + list(names) + " with an email address in your contacts."; },
@@ -1611,6 +1655,11 @@ var followUp = {
     // (not an answer: a new request).
     answer: function (kind, text, now) {
         var t = clean(text).replace(/[.!]$/, "").trim();
+        if (kind === "doubt") {
+            if (/^(?:keep(?: asking| going)?|yes|yeah|yep|sure|it's (?:helpful|fine|useful)|(?:it's )?helpful|it helps|go on|carry on|ok|okay)$/.test(t)) return { value: "keep" };
+            if (/^(?:stop(?: asking| it)?|no|nope|please stop|not (?:really )?helpful|no thanks|don't|don't ask)$/.test(t)) return { value: "stop" };
+            return null;
+        }
         if (/^(?:skip|skip it|skip that|no|nope|no thanks|no thank you|not now|never ?mind|leave it|pass|i don't know|don't know|dunno|not sure)$/.test(t)) return { skip: true };
         var m;
         switch (kind) {

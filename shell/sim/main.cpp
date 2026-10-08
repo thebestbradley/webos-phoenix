@@ -422,11 +422,13 @@ int main(int argc, char *argv[])
         // get it (scripts/mac-setup.sh and scripts/linux-setup.sh install
         // them all; docs/AI-AND-MCP.md, "What's installed where").
         QJsonObject voice;
-        const auto part = [&voice](const char *id, bool available, const QString &engine, const QString &hint) {
+        // hint: what is missing and how to get it, after the part's name
+        // ("speech recognition: its model is missing; run ...").
+        const auto part = [&voice](const char *id, const char *what, bool available, const QString &engine, const QString &hint) {
             voice.insert(QLatin1String(id), QJsonObject{ { QStringLiteral("available"), available },
                 { QStringLiteral("engine"), engine }, { QStringLiteral("howToInstall"), available ? QString() : hint } });
             if (!available)
-                qInfo("phoenix-sim: %s", qPrintable(hint));
+                qInfo("phoenix-sim: %s: %s", what, qPrintable(hint));
         };
 #ifdef Q_OS_MACOS
         const QString setup = QStringLiteral("scripts/mac-setup.sh");
@@ -456,28 +458,35 @@ int main(int argc, char *argv[])
 #else
         const QString getWhisper = QStringLiteral("%1 builds it (or set PHOENIX_WHISPER_CLI)").arg(setup);
 #endif
-        part("recognition", node && !whisper.isEmpty() && QFileInfo::exists(whisperModel), QStringLiteral("whisper.cpp"),
-             !node ? QStringLiteral("Speech recognition needs Node.js on the PATH (%1 installs it).").arg(setup)
-             : whisper.isEmpty() ? QStringLiteral("Speech recognition needs whisper.cpp's whisper-cli: %1.").arg(getWhisper)
-             : QStringLiteral("Speech recognition needs its model: run tools/get-whisper-model.py (or set PHOENIX_WHISPER_MODEL)."));
-        part("wakeWord", !wakeCommand.isEmpty(), QStringLiteral("Vosk"),
-             !QFileInfo::exists(spotter) ? QStringLiteral("\"Hey Phoenix\" needs phoenix-wakeword, built with phoenix-sim.")
-             : QStringLiteral("\"Hey Phoenix\" needs Vosk and its model: run tools/get-wakeword.py, then start phoenix-sim again "
+        part("recognition", "speech recognition", node && !whisper.isEmpty() && QFileInfo::exists(whisperModel), QStringLiteral("whisper.cpp"),
+             !node ? QStringLiteral("Node.js is not on the PATH (%1 installs it).").arg(setup)
+             : whisper.isEmpty() ? QStringLiteral("whisper.cpp's whisper-cli is missing; %1.").arg(getWhisper)
+             : QStringLiteral("its model is missing; run tools/get-whisper-model.py (or set PHOENIX_WHISPER_MODEL)."));
+        part("wakeWord", "the wake word", !wakeCommand.isEmpty(), QStringLiteral("Vosk"),
+             !QFileInfo::exists(spotter) ? QStringLiteral("phoenix-wakeword is missing; it is built with phoenix-sim.")
+             : QStringLiteral("Vosk and its model are missing; run tools/get-wakeword.py, then start phoenix-sim again "
                               "(or pass --wake-model and --vosk-library)."));
         // The program shell/native/speech.cpp would run (the runtime asks it
         // whether there is one; this is for the hint).
-        QString speaker = parser.isSet(speechCommandOpt) ? parser.value(speechCommandOpt) : QString();
-        for (const char *name : { "espeak-ng", "say", "flite" })
-            if (speaker.isEmpty() && !QStandardPaths::findExecutable(QLatin1String(name)).isEmpty())
-                speaker = QLatin1String(name);
-        part("speech", !speaker.isEmpty(), speaker.section(QLatin1Char(' '), 0, 0),
-             QStringLiteral("Spoken answers need a speech program: sudo apt install espeak-ng (%1 does it), or --speech-command.").arg(setup));
+        QString speaker;
+        if (parser.isSet(speechCommandOpt)) {
+            const QString p = QProcess::splitCommand(parser.value(speechCommandOpt)).value(0);
+            if (QFileInfo(p).isAbsolute() ? QFileInfo(p).isExecutable() : !QStandardPaths::findExecutable(p).isEmpty())
+                speaker = QFileInfo(p).fileName();
+        } else {
+            for (const char *name : { "espeak-ng", "say", "flite" })
+                if (speaker.isEmpty() && !QStandardPaths::findExecutable(QLatin1String(name)).isEmpty())
+                    speaker = QLatin1String(name);
+        }
+        part("speech", "spoken answers", !speaker.isEmpty(), speaker,
+             parser.isSet(speechCommandOpt) ? QStringLiteral("the --speech-command program was not found.")
+             : QStringLiteral("no speech program; sudo apt install espeak-ng (%1 does it), or start phoenix-sim with --speech-command.").arg(setup));
         hostInfo.insert(QStringLiteral("voice"), voice);
         if (!parser.isSet(llamaServerOpt) && QStandardPaths::findExecutable(QStringLiteral("llama-server")).isEmpty())
 #ifdef Q_OS_MACOS
-            qInfo("phoenix-sim: on-device models need llama.cpp's llama-server: brew install llama.cpp (scripts/mac-setup.sh does it), or --llama-server");
+            qInfo("phoenix-sim: on-device models: llama.cpp's llama-server is missing; brew install llama.cpp (scripts/mac-setup.sh does it), or --llama-server");
 #else
-            qInfo("phoenix-sim: on-device models need llama.cpp's llama-server: scripts/linux-setup.sh builds it, or --llama-server");
+            qInfo("phoenix-sim: on-device models: llama.cpp's llama-server is missing; scripts/linux-setup.sh builds it, or --llama-server");
 #endif
     }
     rootfs.setHostInfo(QJsonDocument(hostInfo).toJson(QJsonDocument::Compact));

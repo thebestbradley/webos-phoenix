@@ -50,6 +50,31 @@ export interface AssistantMessage {
     /** The choice taken. */
     chosen?: string;
     data?: Record<string, unknown>;
+    /** A follow-up question about what a command just made; its choices
+     *  ("fu:<n>", "fu:skip") are the answers, and so are the next words. */
+    followUp?: { id: string; kind: FollowUpKind | "doubt" };
+}
+
+/** What a follow-up question asks for. */
+export type FollowUpKind = "location" | "invitees" | "duration" | "alert" | "due" | "list" | "repeat" | "label" | "email" | "phone";
+
+/** A follow-up question waiting (followUps()): in a conversation ("open"),
+ *  for later ("queued") or shown as a notification ("delivered"). */
+export interface FollowUp {
+    id: string;
+    kind: FollowUpKind;
+    /** Whether this kind of question helps (asked after several Skips): Keep asking / Stop asking. */
+    meta: boolean;
+    /** The question as a notification asks it ("Where is “Dentist” (Friday at 3:00 PM)?"). */
+    question: string;
+    item: { type: "event" | "reminder" | "task" | "alarm" | "contact"; id: string; title: string; at: number | null };
+    state: "open" | "queued" | "delivered";
+    /** Notifications shown so far. */
+    attempts: number;
+    /** When it is next looked at (ms). */
+    nextAt: number;
+    threadId: string;
+    choices: AssistantChoice[];
 }
 
 export interface AssistantThread {
@@ -63,6 +88,8 @@ export interface AssistantThread {
     count: number;
     /** The last message's words. */
     last: string;
+    /** Follow-up questions sent here later and not yet seen. */
+    unread?: number;
 }
 
 export interface AssistantSettings {
@@ -82,6 +109,13 @@ export interface AssistantSettings {
     wakeWord: boolean;
     /** ... also while the screen is off or locked (off by default). */
     wakeWhenLocked: boolean;
+    /** Questions after something is made, and later as notifications (on by default). */
+    followUps: boolean;
+    /** No follow-up notifications between these ("22:00" to "08:00" by default). */
+    quietStart: string;
+    quietEnd: string;
+    /** Follow-up topics turned off (Settings, or "Stop asking" when it asked whether they help). */
+    followUpTopicsOff: FollowUpKind[];
 }
 
 export interface AssistantCommand {
@@ -245,6 +279,24 @@ export const assistant = {
         const r = await c("listModels", p);
         return r.ok === false ? { error: r.error } : { models: r.models || [] };
     },
+
+    /** The follow-up questions waiting, and the topics turned off. */
+    watchFollowUps(cb: (r: { followUps: FollowUp[]; topicsOff: FollowUpKind[] }) => void, onError?: OnError): Subscription {
+        return s("followUps", {}, (r) => cb({ followUps: r.followUps || [], topicsOff: r.topicsOff || [] }), onError);
+    },
+    /** A conversation read: its unread follow-ups counted no more. */
+    async markRead(id: string): Promise<void> { await c("markRead", { id }); },
+    /** A notification tapped: the question asked again in its conversation. */
+    async openFollowUp(id: string): Promise<AskResult> {
+        const r = await c("followUpOpen", { id });
+        return { thread: r.thread, messages: r.messages || [] };
+    },
+    /** Answer one without the conversation ("fu:<n>" or "fu:skip"): what changed, said. */
+    async answerFollowUp(id: string, action: string): Promise<string> { return (await c("answerFollowUp", { id, action })).text || ""; },
+    /** The assistant closed: the question it was asking waits for later. */
+    async leaveFollowUps(threadId?: string): Promise<void> { await c("followUpLeave", threadId ? { threadId } : {}); },
+    /** Forget the Skips counted. */
+    async resetFollowUps(): Promise<void> { await c("resetFollowUps"); },
 
     /** What the voice needs and what this device is missing ([] where nobody knows, e.g. a browser). */
     async voice(): Promise<VoicePart[]> { return (await c("voice")).parts || []; },

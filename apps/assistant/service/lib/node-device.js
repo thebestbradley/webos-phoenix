@@ -325,19 +325,19 @@ function voiceStatus(options) {
                 : !r.binary ? "whisper.cpp's whisper-cli is not installed"
                 : r.modelInstalled === false ? "its model " + (r.model || "") + " is not installed" : "";
             return { id: "recognition", available: !missing && r.installed !== false, engine: r.engine || "whisper.cpp",
-                     howToInstall: missing ? "Not in this image: " + missing + " (whisper-cpp, whisper-cpp-model-base-en; " + IMAGE_HINT + ")." : "" };
+                     howToInstall: missing ? "not in this image: " + missing + " (whisper-cpp, whisper-cpp-model-base-en; " + IMAGE_HINT + ")." : "" };
         }, function () {
-            return { id: "recognition", available: false, howToInstall: "Not in this image: the transcriber service (" + IMAGE_HINT + ")." };
+            return { id: "recognition", available: false, howToInstall: "not in this image: the transcriber service (" + IMAGE_HINT + ")." };
         });
         var model = o.wakeModel || WAKE_MODEL;
         var wakeMissing = !findProgram(["phoenix-wakeword"]) ? "phoenix-wakeword (phoenix-shell)"
             : !hasVosk() ? "libvosk (libvosk)"
             : !fs.existsSync(model) ? "the Vosk model " + model + " (vosk-model-small-en-us)" : "";
         var wake = { id: "wakeWord", available: !wakeMissing, engine: "Vosk",
-                     howToInstall: wakeMissing ? "Not in this image: " + wakeMissing + "; " + IMAGE_HINT + "." : "" };
+                     howToInstall: wakeMissing ? "not in this image: " + wakeMissing + "; " + IMAGE_HINT + "." : "" };
         var speaking = Promise.resolve(o.tts ? o.tts.status() : { available: false, engine: "" }).then(function (st) {
             return { id: "speech", available: !!st.available, engine: st.engine || "",
-                     howToInstall: st.available ? "" : "Not in this image: a speech program (Flite or espeak-ng; " + IMAGE_HINT + ")." };
+                     howToInstall: st.available ? "" : "not in this image: a speech program (Flite or espeak-ng; " + IMAGE_HINT + ")." };
         });
         return Promise.all([recognition, wake, speaking]);
     };

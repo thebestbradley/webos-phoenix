@@ -17,14 +17,14 @@ afterEach(() => { vi.restoreAllMocks(); });
 describe("Settings > Assistant: what the voice is missing", () => {
     it("says each missing part and how to get it", async () => {
         vi.spyOn(assistant, "voice").mockResolvedValue([
-            part("recognition", false, "Speech recognition needs its model: run tools/get-whisper-model.py."),
+            part("recognition", false, "its model is missing; run tools/get-whisper-model.py."),
             part("wakeWord", true),
-            part("speech", false, "Spoken answers need a speech program: sudo apt install espeak-ng."),
+            part("speech", false, "no speech program; sudo apt install espeak-ng."),
         ]);
         render(<VoiceMissing />);
         await waitFor(() => expect(screen.getByTestId("as-voice-missing")).toBeTruthy());
         expect(screen.getByTestId("as-voice-missing-recognition").textContent)
-            .toBe("Not installed here: Speech recognition (whisper.cpp). Speech recognition needs its model: run tools/get-whisper-model.py.");
+            .toBe("Speech recognition (whisper.cpp): its model is missing; run tools/get-whisper-model.py.");
         expect(screen.queryByTestId("as-voice-missing-wakeWord")).toBeNull();
         expect(screen.getByTestId("as-voice-missing-speech").textContent).toMatch(/apt install espeak-ng/);
     });
