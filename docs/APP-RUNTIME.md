@@ -1865,7 +1865,11 @@ working then done, `failed` plays shy (Oops), choices play confused, each
 for a moment (`beatsFor`, at Animation speed); speaking while the shell's
 `Speech` speaks; asking while a read-back waits; idle (with a nod for an
 answer that is not spoken); asleep again as it closes. A tap on it waves.
-`phoenix-sim --scene assistantbird` cycles through its poses,
+Every pose acts, never a still: hello waves, thinking taps its chin,
+working bobs and pumps its flippers, speaking gestures with its words,
+idle shifts its weight and looks around now and then (each pose's loop in
+`bird.json`'s `motion.acting`; a pose change blends from wherever the loop
+is; Reduce motion holds it still). `phoenix-sim --scene assistantbird` cycles through its poses,
 `--scene assistantbirds` shows them all; both log the frame rate.
 
 **The on-device model and speech in phoenix-sim**: `/usr/share/phoenix/host.json`
@@ -1885,7 +1889,10 @@ Preferences. Launch params: `{text}` (Just Type's "Ask Assistant"),
 simulator runs the service in its page. The same bird (`src/bird/Bird.tsx`)
 greets on an empty conversation (thinking while it loads), and stands below
 the conversation while a request runs: thinking, then working and done, a
-shrug or Oops, as the shell's view decides (`src/bird/pose.ts`).
+shrug or Oops, as the shell's view decides (`src/bird/pose.ts`). It acts
+as the shell's does, with the generated CSS keyframes (the CSP allows no
+style made at run time); the blend between poses sets the part's drawn
+transform through the CSSOM, which the CSP allows.
 
 **Settings > Assistant** (`apps/settings/src/pages/Assistant.tsx`, launch
 point `org.webosphoenix.settings.assistant`): everything above.

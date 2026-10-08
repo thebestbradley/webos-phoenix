@@ -117,6 +117,15 @@ async function main() {
                 if (m.type === "attributes") seen(m.target);
                 m.addedNodes && m.addedNodes.forEach((n) => { seen(n); n.querySelectorAll && n.querySelectorAll("[data-testid='as-bird-work']").forEach(seen); });
             })).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-pose"] });
+            // And how its right flipper moves as it acts (motion.acting): each
+            // transform it is drawn with, frame by frame.
+            window.__birdFlipper = new Set();
+            const frame = () => {
+                const w = document.querySelector("[data-testid='as-bird-work'] [data-act='wingR'] > g");
+                if (w) window.__birdFlipper.add(getComputedStyle(w).transform);
+                requestAnimationFrame(frame);
+            };
+            requestAnimationFrame(frame);
         });
 
         const ask = async (text) => {
@@ -135,6 +144,8 @@ async function main() {
         await app.waitForFunction(() => !document.querySelector("[data-testid='as-bird-work']") && window.__birdPoses.includes("done"), null, { timeout: 10000 });
         const poses = await app.evaluate(() => window.__birdPoses.filter((p, i, a) => a.indexOf(p) === i));
         check(["thinking", "working", "done"].every((p) => poses.includes(p)), "the bird thinks, works and cheers while a command runs: " + poses.join(", "));
+        const flipper = await app.evaluate(() => window.__birdFlipper.size);
+        check(flipper >= 4, "and acts doing it, never a still (its flipper drawn " + flipper + " ways)");
         check((await app.locator(".as-via").last().textContent()) === "On the phone", "the answer says the phone answered");
         // A text: read back, sent only on Send.
         const readBack = await ask("Text Alex I'm running late");

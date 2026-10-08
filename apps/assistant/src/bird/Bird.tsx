@@ -12,7 +12,7 @@
 // motion, and the browser's prefers-reduced-motion: with either it holds
 // each pose still.
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { Component, createRef, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { accessibility, system } from "@phoenix/luna";
 import { BIRD, type BirdPose } from "./birdData";
 import "./bird.generated.css";
@@ -54,6 +54,59 @@ function Part({ name, style, className }: { name: PartName; style?: CSSPropertie
               strokeLinecap={p.stroke ? "round" : undefined} strokeLinejoin={p.stroke ? "round" : undefined}
               opacity={p.opacity} />
     );
+}
+
+type Channel = keyof typeof BIRD.motion.acting.channels;
+interface Acting { period: number; every?: readonly number[]; tracks: Partial<Record<Channel, unknown>> }
+const ACTING = BIRD.motion.acting.poses as unknown as Partial<Record<BirdPose, Acting>>;
+
+interface ActProps { pose: BirdPose; channel: Channel; calm: boolean; speed: number; fidget: boolean; children: ReactNode }
+
+/** A part's acting: the pose's loop for `channel` (the class of its generated
+ *  keyframes), on top of the pose's values. Each loop starts and ends at
+ *  rest; when the pose changes, the outer group takes over where the part
+ *  was (its transform as drawn just then) and eases back to none over
+ *  motion.acting.lead, so the new loop never jumps. A class component for
+ *  getSnapshotBeforeUpdate: the old loop's transform is read before the
+ *  class changes. Styles are set through the CSSOM (the CSP allows that). */
+class Act extends Component<ActProps> {
+    private outer = createRef<SVGGElement>();
+    private inner = createRef<SVGGElement>();
+
+    static className(p: ActProps): string | undefined {
+        const a = ACTING[p.pose];
+        if (p.calm || !a || !(p.channel in a.tracks) || (a.every && !p.fidget)) return undefined;
+        return `ab-act-${p.pose}-${p.channel}`;
+    }
+
+    getSnapshotBeforeUpdate(prev: ActProps): string | null {
+        if (this.props.calm || Act.className(prev) === Act.className(this.props)) return null;
+        const o = this.outer.current, i = this.inner.current;
+        if (!o || !i) return null;
+        const t = (el: Element) => { const v = getComputedStyle(el).transform; return v && v !== "none" ? v : ""; };
+        const ot = t(o), it = t(i);
+        if (!ot && !it) return null;
+        if (!ot || !it || typeof DOMMatrix === "undefined") return ot || it;
+        return new DOMMatrix(ot).multiply(new DOMMatrix(it)).toString();
+    }
+
+    componentDidUpdate(_prev: ActProps, _state: unknown, snapshot: string | null) {
+        const o = this.outer.current;
+        if (!o || !snapshot) return;
+        o.style.transition = "none";
+        o.style.transform = snapshot;
+        o.getBoundingClientRect();    // the start, drawn before the ease begins
+        o.style.transition = `transform ${Math.round(BIRD.motion.acting.lead * this.props.speed)}ms cubic-bezier(0.33, 1, 0.68, 1)`;
+        o.style.transform = "";
+    }
+
+    render() {
+        return (
+            <g ref={this.outer} data-act={this.props.channel}>
+                <g ref={this.inner} className={Act.className(this.props)}>{this.props.children}</g>
+            </g>
+        );
+    }
 }
 
 export interface BirdProps {
@@ -116,6 +169,28 @@ export function Bird({ pose, size = 120, className, testId = "as-bird", speed, s
         return () => window.clearTimeout(timer);
     }, [calm, eyes.show, k]);
 
+    // Idle's look around: now and then, after a random gap (motion.acting's every).
+    const [fidget, setFidget] = useState(false);
+    const every = ACTING[pose]?.every;
+    useEffect(() => {
+        setFidget(false);
+        const a = ACTING[pose];
+        if (calm || !a?.every) return undefined;
+        const [lo, hi] = a.every;
+        let timer = 0;
+        const next = () => {
+            timer = window.setTimeout(() => {
+                setFidget(true);
+                timer = window.setTimeout(() => { setFidget(false); next(); }, a.period * k);
+            }, (lo + Math.random() * (hi - lo)) * k);
+        };
+        next();
+        return () => window.clearTimeout(timer);
+    }, [pose, calm, every, k]);
+    const act = (channel: Channel, children: ReactNode) => (
+        <Act pose={pose} channel={channel} calm={calm} speed={k} fidget={fidget}>{children}</Act>
+    );
+
     const talking = pose === "speaking" && !calm;
     const anim = (cls: string) => (calm ? undefined : cls);
     const eye = (side: "L" | "R") => {
@@ -139,51 +214,62 @@ export function Bird({ pose, size = 120, className, testId = "as-bird", speed, s
                 <g style={{ transform: about(pv.body, `rotate(${p.tilt}deg)`), transition: ease(t.body) }}>
                     <g key={hop + p.lift} className={hop === "up" ? anim("ab-takeoff") : hop === "down" ? anim("ab-landing") : undefined}>
                         <g className={anim("ab-breath")}>
-                            <g className={anim("ab-flicker-tail")}><Part name="tail" /></g>
-                            <g className={anim("ab-flicker-tailInner")}><Part name="tailInner" /></g>
-                            <g style={{ transform: `translate(${pv.crest[0]}px, ${pv.crest[1]}px) rotate(${p.crestRotation}deg) scale(${p.crestScale})`, transition: ease(t.crest, back) }}>
-                                <g className={anim("ab-flicker-crestGust")}>
-                                    <g className={anim("ab-flicker-crest")}><Part name="crest" /></g>
-                                    <g className={anim("ab-flicker-crestInner")}><Part name="crestInner" /></g>
-                                    <g className={anim("ab-flicker-crestCore")}><Part name="crestCore" /></g>
+                            {act("body", <>
+                                <g className={anim("ab-flicker-tail")}><Part name="tail" /></g>
+                                <g className={anim("ab-flicker-tailInner")}><Part name="tailInner" /></g>
+                                {act("head",
+                                    <g style={{ transform: `translate(${pv.crest[0]}px, ${pv.crest[1]}px) rotate(${p.crestRotation}deg) scale(${p.crestScale})`, transition: ease(t.crest, back) }}>
+                                        {act("crest",
+                                            <g className={anim("ab-flicker-crestGust")}>
+                                                <g className={anim("ab-flicker-crest")}><Part name="crest" /></g>
+                                                <g className={anim("ab-flicker-crestInner")}><Part name="crestInner" /></g>
+                                                <g className={anim("ab-flicker-crestCore")}><Part name="crestCore" /></g>
+                                            </g>)}
+                                    </g>)}
+                                <Part name="footL" />
+                                <Part name="footR" />
+                                <Part name="body" />
+                                <Part name="belly" />
+                                <g style={{ transform: about(pv.wingL, `rotate(${p.wingL}deg)`), transition: ease(t.wings, back) }}>
+                                    {act("wingL", <><Part name="wingL" /><Part name="wingTipL" /></>)}
                                 </g>
-                            </g>
-                            <Part name="footL" />
-                            <Part name="footR" />
-                            <Part name="body" />
-                            <Part name="belly" />
-                            <g style={{ transform: about(pv.wingL, `rotate(${p.wingL}deg)`), transition: ease(t.wings, back) }}>
-                                <Part name="wingL" /><Part name="wingTipL" />
-                            </g>
-                            <g style={{ transform: about(pv.wingR, `rotate(${p.wingR}deg)`), transition: ease(t.wings, back) }}>
-                                <Part name="wingR" /><Part name="wingTipR" />
-                            </g>
-                            {eye("L")}
-                            {eye("R")}
-                            {(Object.keys(BIRD.overlays) as (keyof typeof BIRD.overlays)[]).map((o) => {
-                                const on = (eyes.overlays as readonly string[]).includes(o);
-                                return (
-                                    <g key={o} data-overlay={o} style={{ opacity: on ? 1 : 0, transform: `translate(0px, ${on ? 0 : BIRD.overlays[o].dy}px)`, transition: ease(t.eyes) }}>
-                                        <Part name={o} />
+                                <g style={{ transform: about(pv.wingR, `rotate(${p.wingR}deg)`), transition: ease(t.wings, back) }}>
+                                    {act("wingR", <><Part name="wingR" /><Part name="wingTipR" /></>)}
+                                </g>
+                                {/* The face (eyes, lids, beak) acts as the head, with the crest. */}
+                                {act("head", <>
+                                    {act("eyes", <>
+                                        {eye("L")}
+                                        {eye("R")}
+                                        {act("lids", (Object.keys(BIRD.overlays) as (keyof typeof BIRD.overlays)[]).map((o) => {
+                                            const on = (eyes.overlays as readonly string[]).includes(o);
+                                            return (
+                                                <g key={o} data-overlay={o} style={{ opacity: on ? 1 : 0, transform: `translate(0px, ${on ? 0 : BIRD.overlays[o].dy}px)`, transition: ease(t.eyes) }}>
+                                                    <Part name={o} />
+                                                </g>
+                                            );
+                                        }))}
+                                    </>)}
+                                    <g style={{ transform: about(pv.beak, `rotate(${p.beakTilt}deg)`), transition: ease(t.beak) }}>
+                                        {act("beak", <>
+                                            <g style={{ opacity: 1 - beak.grin, transform: `translate(0px, ${beak.jaw[0]}px) ${about(pv.jaw, `scale(${beak.jaw[1]}, ${beak.jaw[2]})`)}`, transition: ease(t.beak) }}>
+                                                <g className={talking ? "ab-talk-jaw" : undefined}><Part name="jaw" /></g>
+                                            </g>
+                                            <g style={{ opacity: beak.mouth[2], transform: about(pv.jaw, `scale(${beak.mouth[0]}, ${beak.mouth[1]})`), transition: ease(t.beak) }}>
+                                                <g className={talking ? "ab-talk-mouth" : undefined}><Part name="mouth" /></g>
+                                            </g>
+                                            <g style={{ opacity: beak.tongue, transition: ease(t.beak) }}><Part name="tongue" /></g>
+                                            <g style={{ opacity: beak.grin, transition: ease(t.beak) }}><Part name="grinJaw" /><Part name="grinMouth" /></g>
+                                            <g style={{ transform: `translate(0px, ${beak.upper[0]}px) ${about(pv.upperBeak, `scale(1, ${talking ? 1 : beak.upper[1]})`)}`, transition: ease(t.beak) }}>
+                                                <g className={talking ? "ab-talk-upper" : undefined}><Part name="upperBeak" /></g>
+                                            </g>
+                                            <g style={{ transform: `translate(0px, ${beak.upper[0]}px)`, transition: ease(t.beak) }}>
+                                                <Part name="beakShine" /><Part name="nostrilL" /><Part name="nostrilR" />
+                                            </g>
+                                        </>)}
                                     </g>
-                                );
-                            })}
-                            <g style={{ transform: about(pv.beak, `rotate(${p.beakTilt}deg)`), transition: ease(t.beak) }}>
-                                <g style={{ opacity: 1 - beak.grin, transform: `translate(0px, ${beak.jaw[0]}px) ${about(pv.jaw, `scale(${beak.jaw[1]}, ${beak.jaw[2]})`)}`, transition: ease(t.beak) }}>
-                                    <g className={talking ? "ab-talk-jaw" : undefined}><Part name="jaw" /></g>
-                                </g>
-                                <g style={{ opacity: beak.mouth[2], transform: about(pv.jaw, `scale(${beak.mouth[0]}, ${beak.mouth[1]})`), transition: ease(t.beak) }}>
-                                    <g className={talking ? "ab-talk-mouth" : undefined}><Part name="mouth" /></g>
-                                </g>
-                                <g style={{ opacity: beak.tongue, transition: ease(t.beak) }}><Part name="tongue" /></g>
-                                <g style={{ opacity: beak.grin, transition: ease(t.beak) }}><Part name="grinJaw" /><Part name="grinMouth" /></g>
-                                <g style={{ transform: `translate(0px, ${beak.upper[0]}px) ${about(pv.upperBeak, `scale(1, ${talking ? 1 : beak.upper[1]})`)}`, transition: ease(t.beak) }}>
-                                    <g className={talking ? "ab-talk-upper" : undefined}><Part name="upperBeak" /></g>
-                                </g>
-                                <g style={{ transform: `translate(0px, ${beak.upper[0]}px)`, transition: ease(t.beak) }}>
-                                    <Part name="beakShine" /><Part name="nostrilL" /><Part name="nostrilR" />
-                                </g>
-                            </g>
+                                </>)}
+                            </>)}
                         </g>
                     </g>
                 </g>
