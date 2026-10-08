@@ -77,6 +77,9 @@ Item {
                     added.push(msg({ role: "assistant", text: "That didn't work: no torch.", command: "flashlight", status: "failed" }));
                 else if (/^hello/.test(params.text))
                     added.push(msg({ role: "assistant", text: "Hello!" }));
+                else if (/^add a meeting/.test(params.text))
+                    added.push(msg({ role: "assistant", text: "Added \u201cMeeting with Sam\u201d to your calendar, tomorrow at 3:00 PM.", via: "commands",
+                                     command: "event", status: "done", choices: [{ id: "open", label: "Open Calendar" }] }));
                 else if (/odyssey/.test(params.text))
                     added.push(msg({ role: "assistant", text: "I can't do that on the phone.", choices: [{ id: "web", label: "Search the web" }] }));
                 else
@@ -346,6 +349,23 @@ Item {
             tryCompare(overlay, "open", false, 2000);
         }
 
+        // A command done that offers its app ("Open Calendar"): the bird
+        // cheers (no shrug), and the button opens the app, the view out of
+        // its way.
+        function test_doneOffersItsApp() {
+            openByHold();
+            birdSeen.reset();
+            type("add a meeting with Sam tomorrow at 3");
+            var row = arrived("Added \u201cMeeting with Sam\u201d to your calendar, tomorrow at 3:00 PM.");
+            poseIs("idle");
+            verify(birdSeen.had(["done"]) && birdSeen.poses.indexOf("confused") < 0, "a cheer, no shrug: " + birdSeen.poses);
+            var open = findChild(row, "assistantChoice-open");
+            verify(open && open.visible);
+            mouseClick(open, open.width / 2, open.height / 2);
+            tryVerify(function () { return fake.calls.indexOf("choose open") >= 0; }, 2000);
+            tryCompare(overlay, "open", false, 2000);
+        }
+
         // Each opening is a conversation of its own: the first request makes
         // its thread, the next ones go on in it; one opened and closed
         // without a word leaves no thread behind.
@@ -518,6 +538,7 @@ Item {
             poseIs("idle");
             verify(birdSeen.had(["thinking", "shy", "idle"]), "oops: " + birdSeen.poses);
             compare(overlay.outcomeOf([{ role: "assistant", status: "failed" }]), "failed");
+            compare(overlay.outcomeOf([{ role: "assistant", status: "done", command: "event", choices: [{ id: "open", label: "Open Calendar" }] }]), "done");
             compare(overlay.outcomeOf([{ role: "assistant", text: "Hello!" }]), "answer");
             compare(overlay.outcomeOf([]), "answer");
         }

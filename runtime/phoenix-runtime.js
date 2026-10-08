@@ -2568,6 +2568,16 @@
             reply(ok());
             if (!/^https?:$/.test(global.location.protocol))
                 host.postToHost("restartUi", {});
+        },
+        // mediaKey {key}: a media key pressed (the Assistant's "pause",
+        // "next song"): the shell sends it to every page as the hardware
+        // key's com.palm.keys /media events, down then up, and the player
+        // holding the audio focus acts (@phoenix/luna mediakeys.ts).
+        "/mediaKey": function (p, reply) {
+            if (["play", "pause", "togglePausePlay", "stop", "next", "prev"].indexOf(p.key) < 0)
+                return reply(fail(-1, "key: play, pause, togglePausePlay, stop, next or prev"));
+            reply(ok());
+            host.postToHost("mediaKey", { key: p.key });
         }
     });
 
@@ -4997,6 +5007,14 @@
 
         var stub = runtime.services["com.palm.systemmanager"] || { "*": function (p, reply) { reply(ok()); } };
         register(["com.palm.systemmanager"], {
+            // takeScreenShot {file} (SystemService.cpp cbTakeScreenShot): the
+            // shell captures the screen as the key combination does, into
+            // the screen captures (Photos); Phoenix names the file itself.
+            "/takeScreenShot": function (p, reply) {
+                if (typeof p.file !== "string") return reply(fail(-1, "file is required"));
+                reply(ok());
+                host.postToHost("takeScreenshot", { file: p.file });
+            },
             // The lock screen is up, as the shell last said (SystemService
             // getLockStatus); subscribe to hear it lock and unlock. The phone
             // app answers a ringing call when the user unlocks.

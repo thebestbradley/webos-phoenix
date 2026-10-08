@@ -31,6 +31,8 @@ describe("the bird's poses", () => {
         expect(outcomeOf([msg({ command: "flashlight", status: "failed" })])).toBe("failed");
         expect(outcomeOf([msg({ command: "text", status: "pending", confirm: { command: "text", args: {} } })])).toBe("asking");
         expect(outcomeOf([msg({ choices: [{ id: "web", label: "Search the web" }] })])).toBe("choices");
+        // A command done that offers its app is done.
+        expect(outcomeOf([msg({ command: "event", status: "done", choices: [{ id: "open", label: "Open Calendar" }] })])).toBe("done");
         expect(outcomeOf([msg({ choices: [{ id: "web", label: "Search the web" }], chosen: "web" })])).toBe("answer");
         expect(outcomeOf([msg({ status: "cancelled" })])).toBe("cancelled");
         expect(outcomeOf([msg({ text: "Paris." })])).toBe("answer");

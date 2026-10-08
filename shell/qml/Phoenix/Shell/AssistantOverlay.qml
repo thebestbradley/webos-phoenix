@@ -220,8 +220,8 @@ Item {
         busy = true;
         _call("choose", { threadId: threadId, messageId: message.id, choice: choice.id }, function (r) {
             _settled(r);
-            // Settings or the browser came up: out of their way.
-            if (r && r.returnValue !== false && (choice.id === "settings" || choice.id === "web"))
+            // Settings, the browser or the app offered came up: out of their way.
+            if (r && r.returnValue !== false && (choice.id === "settings" || choice.id === "web" || choice.id === "open"))
                 ov.closeRequested();
         });
     }
@@ -262,10 +262,11 @@ Item {
             return "failed";
         if (last.status === "pending" && last.confirm)
             return "asking";
-        if (last.choices && last.choices.length && !last.chosen)
-            return "choices";
+        // (A command done may offer its app, "Open Calendar": still done.)
         if (last.status === "done" && last.command)
             return "done";
+        if (last.choices && last.choices.length && !last.chosen)
+            return "choices";
         if (last.status === "cancelled")
             return "cancelled";
         return "answer";

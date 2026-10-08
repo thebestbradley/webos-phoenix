@@ -17,8 +17,9 @@ export function outcomeOf(messages: readonly AssistantMessage[] | undefined): Ou
     if (!last) return "answer";
     if (last.status === "failed") return "failed";
     if (last.status === "pending" && last.confirm) return "asking";
-    if (last.choices?.length && !last.chosen) return "choices";
+    // A command done may offer its app ("Open Calendar"): still done.
     if (last.status === "done" && last.command) return "done";
+    if (last.choices?.length && !last.chosen) return "choices";
     if (last.status === "cancelled") return "cancelled";
     return "answer";
 }

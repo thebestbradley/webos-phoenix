@@ -751,6 +751,10 @@ Item {
             shutdownRequested(payload.reason ? String(payload.reason) : "");
         } else if (type === "restartUi") {
             restartUiRequested();
+        } else if (type === "mediaKey") {
+            mediaKeyRequested(String(payload.key || ""));
+        } else if (type === "takeScreenshot") {
+            screenshotRequested();
         } else if (type === "erase") {
             // The device was erased (com.palm.storage erase/EraseAll, Wipe;
             // Settings' Full Erase): it restarts into First Use.
@@ -825,6 +829,10 @@ Item {
     // Luna Restart (org.webosphoenix.system/restartUi).
     signal shutdownRequested(string reason)
     signal restartUiRequested
+    // A media key pressed by a service (org.webosphoenix.system/mediaKey),
+    // and a screen capture asked for (com.palm.systemmanager/takeScreenShot).
+    signal mediaKeyRequested(string key)
+    signal screenshotRequested
     // The device was erased; it restarts into First Use.
     signal eraseRequested
     // USB drive mode was asked for (com.palm.storage diskmode/enterMSM).

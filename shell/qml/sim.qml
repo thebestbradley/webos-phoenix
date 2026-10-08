@@ -870,6 +870,17 @@ Item {
     Connections {
         target: windows
         function onShutdownRequested(reason) { root.powerOff(); }
+        function onMediaKeyRequested(key) { shell.deviceServices.mediaKey(key); }
+        // The Assistant's "take a screenshot": its view closes first, so
+        // the capture shows what it was over.
+        function onScreenshotRequested() {
+            if (shell.assistantOpen) {
+                shell.closeAssistant();
+                screenshotDelay.start();
+            } else {
+                shell.takeScreenshot();
+            }
+        }
         // Luna Restart: the system UI again (phoenix-sim restarted at once,
         // its boot logo, no shutdown sound); the apps start afresh.
         function onRestartUiRequested() {
@@ -880,6 +891,11 @@ Item {
             if (typeof simProcess === "undefined" || !simProcess || !simProcess.restart([]))
                 Qt.quit();
         }
+    }
+    Timer {
+        id: screenshotDelay
+        interval: Theme.cardTransitionDuration + 100
+        onTriggered: shell.takeScreenshot()
     }
     function powerOff() {
         if (root.shuttingDown)

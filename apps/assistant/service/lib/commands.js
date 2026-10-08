@@ -835,7 +835,7 @@ function run(cmd, args, env) {
     case "agenda":
         return agenda(args, env);
     case "timer": {
-        var id = "assistant.timer." + now.toString(36);
+        var id = "assistant.timer." + now.toString(36) + Math.random().toString(36).slice(2, 6);
         var label = String(args.label || "");
         return lunaCall(env, AM + "create", { start: true, replace: true, activity: {
             name: id, description: "Assistant timer" + (label ? ": " + label : ""),
