@@ -211,11 +211,13 @@ Item {
         id: lunaBus
         appId: LS.appId
         property var pending: ({})
+        property var subscriptions: ({})
         onResponse: (method, payload, token) => {
             var cb = pending[token];
             if (!cb)
                 return;
-            delete pending[token];
+            if (!subscriptions[token])
+                delete pending[token];
             var r = null;
             try { r = JSON.parse(payload); } catch (e) { /* not JSON */ }
             cb(r);
@@ -228,6 +230,18 @@ Item {
             lunaBus.pending[token] = callback;
         else
             callback(null);
+    }
+
+    // A subscription ({subscribe: true}): callback hears every reply.
+    function lunaSubscribe(uri, params, callback) {
+        var m = /^(?:palm|luna):\/\/([^\/]+)(\/.*)$/.exec(uri);
+        var token = m ? lunaBus.call("luna://" + m[1], m[2], JSON.stringify(params || {})) : 0;
+        if (token > 0) {
+            lunaBus.pending[token] = callback;
+            lunaBus.subscriptions[token] = true;
+        } else {
+            callback(null);
+        }
     }
 
     // The back gesture is the webOS Back key, delivered to the card's

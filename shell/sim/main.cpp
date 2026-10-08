@@ -174,6 +174,9 @@ int main(int argc, char *argv[])
     QCommandLineOption llamaServerOpt(QStringLiteral("llama-server"), QStringLiteral("llama.cpp's llama-server program for the Assistant's on-device model (default: llama-server on the PATH)."), QStringLiteral("path"));
     QCommandLineOption marketplaceOpt(QStringLiteral("marketplace"), QStringLiteral("Start the Marketplace's catalog service on this computer (server/marketplace/bin/serve.sh: PHP 8; set up the first time) where the simulator's Marketplace reads it, http://127.0.0.1:8088/, and open the Marketplace. It stops with the simulator; one already running is used."));
     QCommandLineOption speechCommandOpt(QStringLiteral("speech-command"), QStringLiteral("The program (and arguments, %l for the language) that speaks the Assistant's answers, given the text on its input (default: espeak-ng, or say on a Mac)."), QStringLiteral("command"));
+    QCommandLineOption wakeModelOpt(QStringLiteral("wake-model"), QStringLiteral("The wake word's Vosk model folder (default: wakeword/vosk-model-small-en-us-0.15 beside phoenix-sim, which tools/get-wakeword.py fetches)."), QStringLiteral("dir"));
+    QCommandLineOption voskLibraryOpt(QStringLiteral("vosk-library"), QStringLiteral("libvosk for the wake word (default: wakeword/libvosk.so, or .dylib, beside phoenix-sim)."), QStringLiteral("file"));
+    QCommandLineOption wakeFileOpt(QStringLiteral("wake-file"), QStringLiteral("The WAV file Simulate > Say \"Hey Phoenix\" plays into the microphone (default: the tests' hey-phoenix.wav)."), QStringLiteral("file"));
     QCommandLineOption microphoneFileOpt(QStringLiteral("microphone-file"), QStringLiteral("Play this WAV file as the microphone when dictation or Voice Dial listens, followed by quiet; for computers without one and for tests. Repeat it for the following recordings (the last one plays again after that)."), QStringLiteral("file"));
     QCommandLineOption hostShellOpt(QStringLiteral("host-shell"), QStringLiteral("Run this program in the Terminal instead of the shell it asks for."), QStringLiteral("path"));
     QCommandLineOption policyOpt(QStringLiteral("security-policy"), QStringLiteral("A device security policy, as an Exchange account sets one (EAS): comma-separated minLength=N, maxRetries=N (the last wrong try erases the device), alphaNumeric (a password, letters and digits), noSimple (no runs like 1234 or 1111), inactivity=SECONDS (the longest Lock after); \"none\" removes it. It is kept until removed or the device is erased."), QStringLiteral("spec"));
@@ -190,7 +193,7 @@ int main(int argc, char *argv[])
     eraseOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     parser.addOptions({ hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
                         noHostShellOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, updatingOpt, eraseOpt, microphoneFileOpt,
-                        llamaServerOpt, speechCommandOpt, marketplaceOpt });
+                        llamaServerOpt, speechCommandOpt, marketplaceOpt, wakeModelOpt, voskLibraryOpt, wakeFileOpt });
     parser.process(app);
 
     // A Full Erase or a security policy's wipe restarted the simulator:
@@ -392,6 +395,30 @@ int main(int argc, char *argv[])
     for (const QString &f : parser.values(microphoneFileOpt))
         microphoneFiles << QFileInfo(f).absoluteFilePath();
     view.rootContext()->setContextProperty(QStringLiteral("simMicrophoneFiles"), microphoneFiles);
+    // "Hey Phoenix": phoenix-wakeword (built beside phoenix-sim) with Vosk's
+    // library and model (tools/get-wakeword.py puts them in wakeword/ here).
+    {
+        const QDir here(QCoreApplication::applicationDirPath());
+#ifdef Q_OS_MACOS
+        const QString lib = QStringLiteral("wakeword/libvosk.dylib");
+#else
+        const QString lib = QStringLiteral("wakeword/libvosk.so");
+#endif
+        const QString model = parser.isSet(wakeModelOpt) ? parser.value(wakeModelOpt)
+                                                         : here.filePath(QStringLiteral("wakeword/vosk-model-small-en-us-0.15"));
+        const QString vosk = parser.isSet(voskLibraryOpt) ? parser.value(voskLibraryOpt) : here.filePath(lib);
+        const QString spotter = here.filePath(QStringLiteral("phoenix-wakeword"));
+        QStringList wakeCommand;
+        if (QFileInfo::exists(spotter) && QFileInfo(model).isDir() && QFileInfo::exists(vosk))
+            wakeCommand = { spotter, QStringLiteral("--model"), QFileInfo(model).absoluteFilePath(),
+                            QStringLiteral("--vosk"), QFileInfo(vosk).absoluteFilePath() };
+        else
+            qInfo("phoenix-sim: no wake word (run tools/get-wakeword.py, or pass --wake-model and --vosk-library)");
+        view.rootContext()->setContextProperty(QStringLiteral("simWakeWordCommand"), wakeCommand);
+        view.rootContext()->setContextProperty(QStringLiteral("simWakeFile"),
+            parser.isSet(wakeFileOpt) ? QFileInfo(parser.value(wakeFileOpt)).absoluteFilePath()
+                                      : QDir(repoDir).filePath(QStringLiteral("services/wakeword/tests/data/hey-phoenix.wav")));
+    }
     // The Assistant's on-device models (downloaded into the simulator's data)
     // and its speech: the shell runs them, as "assistant" host messages ask
     // (the runtime's block "The Phoenix Assistant").

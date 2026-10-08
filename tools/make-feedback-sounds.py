@@ -98,6 +98,20 @@ def shutter(seed):
     return x
 
 
+def chime(notes, step):
+    """Soft bell notes one after another: a sine with a quieter octave, a
+    5 ms attack and a 0.18 s decay (Phoenix's own; webOS had no assistant)."""
+    length = step * (len(notes) - 1) + 0.45
+    x = np.zeros(int(length * RATE))
+    for i, f in enumerate(notes):
+        n = int(0.45 * RATE)
+        t = np.arange(n) / RATE
+        tone = (np.sin(2 * np.pi * f * t) + 0.25 * np.sin(2 * np.pi * 2 * f * t)) * envelope(n, 0.005, 0.18)
+        at = int(i * step * RATE)
+        x[at:at + n] += tone
+    return x
+
+
 SOUNDS = {
     # name: (make, peak level)
     "key": (lambda: click(2300.0, 0.030, 0.0045, 0.55, 0.8, 1), 0.50),
@@ -107,6 +121,9 @@ SOUNDS = {
     "appclose": (lambda: whoosh(0.26, 5), 0.35),
     # A screen capture (WindowServer::takeAndSaveScreenShot played "shutter").
     "shutter": (lambda: shutter(6), 0.55),
+    # The assistant starts listening (the wake word heard, docs/AI-AND-MCP.md
+    # Voice): two notes up, E6 then A6.
+    "listen": (lambda: chime([1318.5, 1760.0], 0.085), 0.40),
 }
 
 

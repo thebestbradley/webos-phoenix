@@ -38,6 +38,15 @@
 // panel goes back into the button. Where the panel is short (a phone's
 // keyboard up, landscape) it sits small beside the field.
 //
+// Voice (docs/AI-AND-MCP.md, Voice): a request spoken into the microphone
+// is answered aloud (the service's Voice replies), and a read-back ("Send
+// it?") listens for the answer at once, without the wake word. Opened by
+// the wake word ("Hey Phoenix", handsFree), it listens as it opens and
+// closes by itself once the conversation is idle. Over the lock screen
+// (locked) the service does only what shows nothing private; for the rest
+// it says to unlock, and unlockNeeded hands the words to the shell, which
+// asks again once the phone is unlocked.
+//
 // All through the window source's lunaCall (in phoenix-sim the runtime's
 // service in the system UI page; on a device the bus).
 
@@ -68,7 +77,20 @@ Item {
     // while it does.
     property var speech: null
 
+    // Over the lock screen (opened by the wake word there).
+    property bool locked: false
+    // The turn in progress was spoken: answered aloud, a read-back listens
+    // for its answer.
+    property bool voice: false
+    // Opened by the wake word: closes by itself after a quiet moment.
+    property bool handsFree: false
+    // How long a hands-free conversation stays open once it is idle.
+    property int idleCloseMs: 4000
+
     signal closeRequested()
+    // Asked over the lock screen for what needs it unlocked: the words, to
+    // ask again then.
+    signal unlockNeeded(string text)
     // The app button: open the Assistant app on this conversation ("" for
     // none yet).
     signal appRequested(string threadId)
@@ -108,7 +130,8 @@ Item {
             wakeTimer.interval = Theme.launcherDuration + _beatMs(80);
             wakeTimer.restart();
             ++_session;
-            status = "";
+            if (!listening)
+                status = "";
             busy = false;
             threadId = "";
             messages = [];
@@ -124,8 +147,11 @@ Item {
         } else {
             _wake = "";
             wakeTimer.stop();
+            followTimer.stop();
             ++_session;
             busy = false;
+            voice = false;
+            handsFree = false;
             stopListening(true);
             input.focus = false;
             input.text = "";
@@ -204,12 +230,17 @@ Item {
         messages = messages.concat([{ id: "pending-user-" + (++_pending), role: "user", text: text }]);
         // The first request makes this opening's thread.
         var p = { text: text };
+        if (voice)
+            p.voice = true;
+        if (locked)
+            p.locked = true;
         if (threadId !== "")
             p.threadId = threadId;
         else
             p.newThread = true;
         _call("ask", p, function (r) {
             _settled(r);
+            ov._afterReply();
             if (done)
                 done(r);
         });
@@ -229,7 +260,13 @@ Item {
         if (busy)
             return;
         busy = true;
-        _call("confirm", { threadId: threadId, messageId: message.id, accept: accept }, _settled);
+        var p = { threadId: threadId, messageId: message.id, accept: accept };
+        if (voice)
+            p.voice = true;
+        _call("confirm", p, function (r) {
+            _settled(r);
+            ov._afterReply();
+        });
     }
     // New: a fresh conversation here. The one before is kept (it has
     // words); the new one is made by its first request.
@@ -338,11 +375,93 @@ Item {
         : asking ? "asking"
         : "idle"
 
+    // ---- Voice --------------------------------------------------------------------------
+    // The wake word was heard: listening at once (the words after "Hey
+    // Phoenix" in the same breath are already on their way).
+    function startVoice() {
+        handsFree = true;
+        listen();
+    }
+    // Asked again by voice (after the unlock).
+    function askByVoice(text) {
+        voice = true;
+        handsFree = true;
+        ask(text);
+    }
+    // A spoken turn's reply: once it has been said (and its beats played),
+    // a read-back listens for Yes or No; over the lock screen, what needs
+    // the unlock goes to the shell; hands-free, it closes after a moment.
+    function _afterReply() {
+        if (!voice && !handsFree)
+            return;
+        _followGrace = 3;
+        _idleMs = 0;
+        _followDone = false;
+        followTimer.restart();
+    }
+    property int _followGrace: 0
+    property int _idleMs: 0
+    property bool _followDone: false
+    function _lastAssistant() {
+        for (var i = messages.length - 1; i >= 0; --i)
+            if (messages[i].role === "assistant")
+                return messages[i];
+        return null;
+    }
+    function _lastUserText() {
+        for (var i = messages.length - 1; i >= 0; --i)
+            if (messages[i].role === "user")
+                return messages[i].text;
+        return "";
+    }
+    Timer {
+        id: followTimer
+        interval: 250
+        repeat: true
+        onTriggered: {
+            // Speech starts a moment after the reply: a little grace.
+            if (!ov.open || ov.busy || ov.listening || ov.beat !== "" || ov.speaking || ov._followGrace > 0) {
+                ov._followGrace = Math.max(0, ov._followGrace - 1);
+                ov._idleMs = 0;
+                return;
+            }
+            if (!ov._followDone) {
+                ov._followDone = true;
+                var last = ov._lastAssistant();
+                if (ov.voice && ov.asking) {
+                    stop();
+                    ov.listen();
+                    return;
+                }
+                if (last && last.status === "locked") {
+                    stop();
+                    ov.unlockNeeded(ov._lastUserText());
+                    ov.closeRequested();
+                    return;
+                }
+            }
+            if (!ov.handsFree) {
+                stop();
+                return;
+            }
+            ov._idleMs += interval;
+            if (ov._idleMs >= ov.idleCloseMs) {
+                stop();
+                ov.closeRequested();
+            }
+        }
+    }
+    // "Hey Phoenix, ..." came through whole: the request is what follows.
+    function withoutWakeWord(text) {
+        return String(text || "").replace(/^\s*(?:hey|hi|okay|ok|a|hay)[,.!]?\s+(?:phoenix|fenix)\b[,.!?]*\s*/i, "").trim();
+    }
+
     // ---- The microphone ----------------------------------------------------------------
     readonly property string _owner: "assistant"
     function listen() {
         if (!dictation || dictation.busy)
             return;
+        voice = true;
         if (dictation.listening) {
             if (dictation.owner === _owner)
                 dictation.stop();
@@ -385,8 +504,11 @@ Item {
             // only after every listener has seen this one.
             Qt.callLater(ov._releaseMicrophone);
             ov.status = error ? String(error) : "";
-            if (!error && String(text || "").trim())
-                ov.ask(text);
+            var words = ov.withoutWakeWord(text);
+            if (!error && words)
+                ov.ask(words);
+            else if (ov.handsFree)
+                ov._afterReply();           // nothing (more) said: it closes after a moment
         }
     }
 
@@ -840,6 +962,15 @@ Item {
                 // so the keyboard stays and Enter's release does not reach
                 // the card behind (ask() waits for the answer anyway).
                 readOnly: ov.busy
+                // A tap on the field: the user is here, it does not close by itself.
+                // Listening for a read-back's answer stops: it will be typed.
+                onActiveFocusChanged: {
+                    if (!activeFocus)
+                        return;
+                    ov.handsFree = false;
+                    followTimer.stop();
+                    ov.stopListening(true);
+                }
                 Keys.onEscapePressed: ov.closeRequested()
                 // Enter is the field's alone: TextInput lets it go on after
                 // accepted(), and the shell behind would take it (the card
@@ -850,6 +981,9 @@ Item {
                 function submit() {
                     if (ov.busy)
                         return;
+                    // Typed: answered as typed requests are, and it stays open.
+                    ov.voice = false;
+                    ov.handsFree = false;
                     var t = text;
                     text = "";
                     ov.ask(t);

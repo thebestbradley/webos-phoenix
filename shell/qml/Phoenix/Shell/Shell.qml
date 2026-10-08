@@ -412,7 +412,9 @@ FocusScope {
         onPuckTimedOut: shell.enterDockMode()
         // An app holding it on (com.palm.display requestBlock), and the
         // backlight's level (DeviceServices.qml).
-        held: devices.holdsDisplay
+        // The assistant's view stays lit while it is up, also over the
+        // lock screen (opened there by "Hey Phoenix").
+        held: devices.holdsDisplay || assistantView.open
         maximumBrightness: shell.system && shell.system.brightness > 0 ? Math.round(shell.system.brightness * 100) : 100
         automaticBrightness: !shell.system || shell.system.automaticBrightness !== false
         lightRegion: devices.lightRegion
@@ -1947,6 +1949,86 @@ FocusScope {
         value: shell.dictation
         when: !!shell.source && ("dictation" in shell.source)
     }
+    // ---- "Hey Phoenix" (docs/AI-AND-MCP.md, Voice) -----------------------------------
+    // The wake word spotter (Dictation.wakeCommand: services/wakeword's
+    // phoenix-wakeword with its model); [] for none. Settings > Assistant
+    // turns it on (wakeWord, off by default) and lets it listen while the
+    // screen is off or locked (wakeWhenLocked, off by default). It listens
+    // only while nothing else uses the microphone, the assistant's view is
+    // closed and nothing is being spoken; the status bar shows its own
+    // subtle microphone meanwhile. Heard: a chime and a tap of the motor,
+    // the screen on, and the view opens listening (the words said after it
+    // in the same breath kept).
+    property var wakeWordCommand: []
+    // Settings > Assistant's (org.webosphoenix.assistant getSettings, subscribed).
+    property var assistantSettings: ({})
+    readonly property bool wakeWordOn: !!dictation && dictation.wakeAvailable && assistantSettings.enabled !== false
+                                       && assistantSettings.wakeWord === true
+    readonly property bool wakeWordListening: wakeWordOn && !firstUse && !dockMode && !assistantView.open
+                                              && !speechEngine.speaking
+                                              && (assistantSettings.wakeWhenLocked === true || (!locked && backlight.on))
+    // Times it was heard, for the tests.
+    property int wakeWordHeard: 0
+    Binding { target: dictationEngine; property: "wakeWord"; value: shell.wakeWordOn }
+    Binding { target: dictationEngine; property: "standby"; value: shell.wakeWordListening }
+    function _watchAssistantSettings() {
+        if (!source || typeof source.lunaSubscribe !== "function")
+            return;
+        source.lunaSubscribe("luna://org.webosphoenix.assistant/getSettings", { subscribe: true }, function (r) {
+            if (r && r.returnValue !== false && r.settings) {
+                shell.assistantSettings = r.settings;
+                assistantSettingsRetry.stop();
+            }
+        });
+    }
+    // Until the system UI's page answers (it starts with the shell).
+    Timer {
+        id: assistantSettingsRetry
+        interval: 2000
+        repeat: true
+        running: true
+        triggeredOnStart: true
+        onTriggered: shell._watchAssistantSettings()
+    }
+    Connections {
+        target: dictationEngine
+        function onWakeHeard(heard) { shell.wakeAssistant(); }
+    }
+    function wakeAssistant() {
+        if (!wakeWordListening)
+            return;
+        wakeWordHeard++;
+        backlight.turnOn();
+        sounds.feedback("listen");
+        devices.vibrate({ name: "tapdown" });
+        justType.open = false;
+        iconMenu.open = false;
+        assistantView.listenOnOpen = false;
+        assistantView.origin = Qt.point(assistantView.width / 2, assistantView.height);
+        // Listening first, while the microphone is still the spotter's: the
+        // recording goes on from the end of the phrase.
+        assistantView.startVoice();
+        assistantView.open = true;
+    }
+    // Asked over the lock screen for something that needs it unlocked: asked
+    // again once it is (within two minutes).
+    property var _afterUnlock: null
+    function _askAfterUnlock() {
+        var a = _afterUnlock;
+        _afterUnlock = null;
+        if (locked || !a || Date.now() - a.time > 120000)
+            return;
+        // After the view's own binding to locked has followed.
+        Qt.callLater(function () {
+            if (shell.locked)
+                return;
+            assistantView.origin = Qt.point(assistantView.width / 2, assistantView.height);
+            assistantView.listenOnOpen = false;
+            assistantView.open = true;
+            assistantView.askByVoice(a.text);
+        });
+    }
+
     // The Assistant's on-device models: where they are downloaded ("" for
     // none: no downloads), llama-server ([] for the one on the PATH), and
     // the program that speaks its answers ([] for espeak-ng or say).
@@ -2224,6 +2306,7 @@ FocusScope {
         // Sticky keys' latched modifiers do not outlive the lock.
         if (locked)
             keyboardAccess.clearModifiers();
+        _askAfterUnlock();
         var o = maximizedCardOrientation();
         if (!locked && o !== "free")
             uiRotation.setRotationMode(o, true);
@@ -2883,6 +2966,7 @@ FocusScope {
                     source: shell.source
                     dictation: shell.dictation
                     speech: shell.speech
+                    locked: shell.locked
                     backdrop: sceneBackdrop
                     bottomInset: notes.negativeSpace
                     appIcon: {
@@ -2890,6 +2974,7 @@ FocusScope {
                         return a && a.icon ? a.icon : "";
                     }
                     onCloseRequested: shell.closeAssistant()
+                    onUnlockNeeded: (text) => { shell._afterUnlock = { text: text, time: Date.now() }; }
                     // The app button: the view goes, the app comes up on
                     // this conversation (the one in use without one yet).
                     onAppRequested: (threadId) => {
@@ -2999,6 +3084,9 @@ FocusScope {
                 anchors.top: parent.top
                 system: shell.system
                 batteryPercent: shell.tweak("batteryPercent")
+                // Whenever the microphone is open: recording, or (subtly)
+                // listening for "Hey Phoenix".
+                microphone: !shell.dictation ? "" : shell.dictation.listening ? "on" : shell.dictation.standingBy ? "standby" : ""
                 // SystemUiController::updateStatusBarTitle: Just Type, then the
                 // launcher ("Launcher", com.palm.launcher's title; not actionable),
                 // then the maximized app; else the carrier. Just Type's title
@@ -3126,6 +3214,7 @@ FocusScope {
                 id: dictationEngine
                 command: shell.dictationCommand
                 inputFiles: shell.dictationInputFiles
+                wakeCommand: shell.wakeWordCommand
             }
             // The Assistant's on-device model (llama.cpp's llama-server) and
             // speech (docs/M6-PLAN.md F3), lent to the runtime's

@@ -55,6 +55,7 @@ Dictation::Dictation(QObject *parent)
 Dictation::~Dictation()
 {
     m_standby = false;
+    m_wakeWord = false;
     cancel();
     stopSpotter();
     if (m_capturing)
@@ -127,8 +128,6 @@ void Dictation::setStandby(bool s)
     if (s == m_standby)
         return;
     m_standby = s;
-    if (s)
-        setWakeError(QString());          // another try
     emit standbyChanged();
     updateStandby();
 }
@@ -141,27 +140,38 @@ void Dictation::setWakeError(const QString &e)
     emit wakeErrorChanged();
 }
 
-// Standing by: the microphone open and the spotter running while nothing
-// records; else, between recordings, both closed.
+// The spotter runs while the wake word is on (its model stays loaded);
+// standing by, the microphone is open for it while nothing records; else,
+// between recordings, the microphone is closed.
 void Dictation::updateStandby()
 {
-    const bool want = m_standby && wakeAvailable() && m_wakeError.isEmpty();
-    if (want) {
-        if (!m_spotter)
-            startSpotter();
+    const bool on = m_wakeWord && wakeAvailable() && m_wakeError.isEmpty();
+    if (on && !m_spotter)
+        startSpotter();
+    else if (!on)
+        stopSpotter();
+    if (on && m_standby) {
         if (!m_capturing && !m_listening) {
             QString error;
             if (!openCapture(true, &error))
                 setWakeError(error);
             emit stateChanged();
         }
-    } else {
-        stopSpotter();
-        if (m_capturing && !m_listening) {
-            closeCapture();
-            emit stateChanged();
-        }
+    } else if (m_capturing && !m_listening) {
+        closeCapture();
+        emit stateChanged();
     }
+}
+
+void Dictation::setWakeWord(bool w)
+{
+    if (w == m_wakeWord)
+        return;
+    m_wakeWord = w;
+    if (w)
+        setWakeError(QString());          // another try
+    emit wakeWordChanged();
+    updateStandby();
 }
 
 void Dictation::startSpotter()
@@ -225,7 +235,7 @@ void Dictation::spotterOutput()
             setWakeError(o.value(QStringLiteral("error")).toString());
             continue;
         }
-        if (!o.contains(QStringLiteral("wake")) || m_listening || m_busy || !m_standby)
+        if (!o.contains(QStringLiteral("wake")) || m_listening || m_busy || !standbyWanted())
             continue;
         // What was said after the phrase, kept for a recording started now.
         const qint64 end = qint64(o.value(QStringLiteral("end")).toDouble() * kWhisperRate);
@@ -413,7 +423,7 @@ void Dictation::recorded(const QByteArray &raw)
         m_inject.remove(0, n * 2);
     }
     if (!m_listening) {
-        if (m_spotter && m_standby && !m_busy && m_spotter->state() == QProcess::Running) {
+        if (m_spotter && standbyWanted() && !m_busy && m_spotter->state() == QProcess::Running) {
             m_spotter->write(chunk);
             m_spotterFed += chunk.size() / 2;
             m_ring += chunk;
@@ -525,7 +535,7 @@ void Dictation::finishRecording(bool transcribe)
     m_limit->stop();
     m_listening = false;
     // Standing by goes on with the microphone open; else it closes.
-    if (m_standby && wakeAvailable() && m_wakeError.isEmpty()) {
+    if (standbyWanted()) {
 #ifdef PHOENIX_HAVE_MULTIMEDIA
         if (m_io)
             m_pcm.append(toWhisperPcm(m_io->readAll(), m_channels, m_rate, m_float));

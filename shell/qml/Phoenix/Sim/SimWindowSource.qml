@@ -779,7 +779,8 @@ Item {
             _assistantRequest(appId, uid, payload || {});
         } else if (type === "lunaReply") {
             var cb = _lunaCallbacks[payload.id];
-            delete _lunaCallbacks[payload.id];
+            if (!payload.keep)
+                delete _lunaCallbacks[payload.id];
             if (cb)
                 cb(payload.reply);
         } else if (type === "preferences") {
@@ -1691,6 +1692,22 @@ Item {
             + " if (!window.__phoenixRuntime) return back(null);"
             + " __phoenixRuntime.dispatch(" + JSON.stringify(uri) + ", " + JSON.stringify(params || {}) + ", back,"
             + " { cancelled: function () { return done; }, onCancel: null }); })()");
+    }
+
+    // A subscription ({subscribe: true}): callback hears every reply.
+    function lunaSubscribe(uri, params, callback) {
+        var page = _headless["com.palm.systemui"] || _webPages()[0];
+        if (!page) {
+            callback(null);
+            return;
+        }
+        var id = _nextLunaCall++;
+        _lunaCallbacks[id] = callback;
+        page.runScript("(function () { var id = " + id + ";"
+            + " function back(r) { phoenixHost.postToHost('lunaReply', { id: id, reply: r, keep: true }); }"
+            + " if (!window.__phoenixRuntime) return back(null);"
+            + " __phoenixRuntime.dispatch(" + JSON.stringify(uri) + ", " + JSON.stringify(params || {}) + ", back,"
+            + " { cancelled: function () { return false; }, onCancel: null }); })()");
     }
 
     function _webPages() {

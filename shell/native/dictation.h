@@ -38,7 +38,8 @@
 //   wakeCommand  the spotter, services/wakeword's phoenix-wakeword with its
 //                model; it reads the microphone (16 kHz mono 16-bit) on its
 //                input and writes a JSON line each time it hears the phrase
-//   standby      listen for it: the microphone stays open between
+//   wakeWord     the spotter runs (its model loaded), ready to stand by
+//   standby      listen for it now: the microphone stays open between
 //                recordings and goes to the spotter, nowhere else (nothing
 //                is kept but the last few seconds, in memory)
 //   standingBy   the microphone is open for it (the status bar's subtle
@@ -79,6 +80,7 @@ class Dictation : public QObject
     Q_PROPERTY(qreal loudness READ loudness NOTIFY loudnessChanged)
     Q_PROPERTY(QStringList wakeCommand READ wakeCommand WRITE setWakeCommand NOTIFY wakeCommandChanged)
     Q_PROPERTY(bool wakeAvailable READ wakeAvailable NOTIFY wakeCommandChanged)
+    Q_PROPERTY(bool wakeWord READ wakeWord WRITE setWakeWord NOTIFY wakeWordChanged)
     Q_PROPERTY(bool standby READ standby WRITE setStandby NOTIFY standbyChanged)
     Q_PROPERTY(bool standingBy READ standingBy NOTIFY stateChanged)
     Q_PROPERTY(QString wakeError READ wakeError NOTIFY wakeErrorChanged)
@@ -106,9 +108,11 @@ public:
     QStringList wakeCommand() const { return m_wakeCommand; }
     void setWakeCommand(const QStringList &c);
     bool wakeAvailable() const { return !m_wakeCommand.isEmpty() && (available() || !m_inputFiles.isEmpty()); }
+    bool wakeWord() const { return m_wakeWord; }
+    void setWakeWord(bool w);
     bool standby() const { return m_standby; }
     void setStandby(bool s);
-    bool standingBy() const { return m_capturing && !m_listening && m_standby; }
+    bool standingBy() const { return m_capturing && !m_listening && standbyWanted(); }
     QString wakeError() const { return m_wakeError; }
 
     // Plays a WAV file into the microphone from now (over it), while it is
@@ -165,6 +169,7 @@ signals:
     void ownerChanged();
     void loudnessChanged();
     void wakeCommandChanged();
+    void wakeWordChanged();
     void standbyChanged();
     void wakeErrorChanged();
     void wakeHeard(const QString &heard);
@@ -175,6 +180,7 @@ private:
     bool loadFile(QString *error);
     void closeCapture();
     void updateStandby();
+    bool standbyWanted() const { return m_wakeWord && m_standby && wakeAvailable() && m_wakeError.isEmpty(); }
     void startSpotter();
     void stopSpotter();
     void spotterOutput();
@@ -203,6 +209,7 @@ private:
     bool m_fileDone = true;      // the file being played has ended (quiet follows)
     QByteArray m_inject;         // hear(): 16 kHz mono 16-bit, mixed in
     QStringList m_wakeCommand;
+    bool m_wakeWord = false;
     bool m_standby = false;
     QString m_wakeError;
     QProcess *m_spotter = nullptr;

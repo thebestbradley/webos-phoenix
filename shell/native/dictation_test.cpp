@@ -169,6 +169,8 @@ int main(int argc, char **argv)
         });
         QObject::connect(&d, &Dictation::transcribed, [&](const QString &t, const QString &e) { heard = t; error = e; done = true; });
         d.setStandby(true);
+        check(!d.standingBy(), "standby without the wake word on: nothing");
+        d.setWakeWord(true);
         check(d.standingBy() && !d.listening(), "standing by: the microphone open, not recording");
         QElapsedTimer clock;
         clock.start();
@@ -194,8 +196,10 @@ int main(int argc, char **argv)
         check(d.hear(data + QStringLiteral("hey-phoenix.wav")), "a WAV played into the open microphone");
         d.setStandby(false);
         check(!d.standingBy() && !d.listening(), "standby off: the microphone closed");
+        d.setWakeWord(false);
         check(!d.hear(data + QStringLiteral("hey-phoenix.wav")), "nothing to play into once it is closed");
         d.setWakeCommand({ QStringLiteral("/nonexistent/phoenix-wakeword") });
+        d.setWakeWord(true);
         d.setStandby(true);
         clock.restart();
         while (d.wakeError().isEmpty() && clock.elapsed() < 3000)
