@@ -1688,26 +1688,50 @@ Item {
     }
 
     // A screen capture for the runtime to save (runtime.saveScreenshot:
-    // /media/internal/screencaptures, the media index, its notification).
-    // One page saves it; with none running it waits for the next.
+    // /media/internal/screencaptures, the media index, its notification
+    // with {path, capture: captureId}). One page saves it: the system UI
+    // page, which runs as long as the shell does, else another app page
+    // that has the runtime. Never a site (an https:// web app has no
+    // runtime: the capture was lost when one was the first page), and a
+    // page that turns out not to have it (still loading) passes it on.
+    // With none running it waits for the next page that loads.
     property var _pendingCaptures: []
-    function saveScreenshot(dataUrl, appTitle) {
-        var js = "window.__phoenixRuntime && __phoenixRuntime.saveScreenshot && __phoenixRuntime.saveScreenshot("
-            + JSON.stringify({ data: String(dataUrl), app: appTitle || "", time: Date.now() }) + ")";
-        var pages = _webPages();
+    function saveScreenshot(dataUrl, appTitle, captureId) {
+        var js = "!!(window.__phoenixRuntime && __phoenixRuntime.saveScreenshot && (__phoenixRuntime.saveScreenshot("
+            + JSON.stringify({ data: String(dataUrl), app: appTitle || "", time: Date.now(), capture: captureId || "" })
+            + "), true))";
+        return _saveCaptureOn(_capturePages(), js);
+    }
+    function _capturePages() {
+        var pages = _webPages().filter(function(p) { return !p.site; });
+        var writer = _writerPage();
+        if (writer && pages.indexOf(writer) > 0) {
+            pages.splice(pages.indexOf(writer), 1);
+            pages.unshift(writer);
+        }
+        return pages;
+    }
+    function _saveCaptureOn(pages, js) {
         if (pages.length === 0) {
             _pendingCaptures.push(js);
             return false;
         }
-        pages[0].runScript(js);
+        pages[0].runScript(js, function(saved) {
+            if (saved !== true)
+                source._saveCaptureOn(pages.slice(1), js);
+        });
         return true;
     }
 
     function _pageLoaded(win) {
         if (win === _systemUiPage)
             systemUiLoaded = true;
-        while (_pendingCaptures.length > 0)
-            win.runScript(_pendingCaptures.shift());
+        if (!win.site && _pendingCaptures.length > 0) {
+            var captures = _pendingCaptures;
+            _pendingCaptures = [];
+            for (var c = 0; c < captures.length; ++c)
+                _saveCaptureOn([win], captures[c]);
+        }
         var writer = _writerPage();
         var writes = !writer || win === writer;
         if (_pendingStatus) {

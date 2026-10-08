@@ -1758,22 +1758,57 @@ FocusScope {
         }
     }
     property var _captureResult: null
-    // The runtime's "Screen captured" notification names the file: the
-    // thumbnail opens that one.
+    property int _captureCount: 0
+    // The runtime's "Screen captured" notification names the file and the
+    // capture (params {path, capture}): the thumbnail opens that file. A
+    // tap on the thumbnail before it is saved (a big capture takes a
+    // moment to encode and store) opens it once it is, rather than the
+    // newest capture saved before it.
+    property string _openWhenSaved: ""
+    readonly property string screenshotAppId: "org.webosphoenix.screenshot"
     Connections {
         target: shell.source && shell.source.notifications ? shell.source.notifications : null
         ignoreUnknownSignals: true
         function onRowsInserted(parent, first, last) {
             for (var i = first; i <= last; ++i) {
                 var n = shell.source.notifications.get(i);
-                if (n.appId !== "org.webosphoenix.screenshot" || !n.params)
+                if (n.appId !== shell.screenshotAppId || !n.params)
                     continue;
-                try {
-                    var p = JSON.parse(n.params);
-                    if (p.path && captureThumbnail.shown)
-                        captureThumbnail.path = p.path;
-                } catch (e) { /* not ours */ }
+                var p = null;
+                try { p = JSON.parse(n.params); } catch (e) { /* not ours */ }
+                if (!p || !p.path)
+                    continue;
+                if (p.capture && p.capture === shell._openWhenSaved) {
+                    shell._openWhenSaved = "";
+                    openWhenSavedTimer.stop();
+                    shell._openPreview(p.path);
+                } else if (captureThumbnail.shown && (!p.capture || p.capture === captureThumbnail.capture)) {
+                    captureThumbnail.path = p.path;
+                }
             }
+        }
+    }
+    // Not saved after all (no page could): the preview's newest capture.
+    Timer {
+        id: openWhenSavedTimer
+        interval: 10000
+        onTriggered: {
+            shell._openWhenSaved = "";
+            shell._openPreview("");
+        }
+    }
+    // The preview opened on a capture ("": the newest).
+    signal capturePreviewOpened(string path)
+    function _openPreview(path) {
+        shell.launch(screenshotAppId, path ? { path: path } : null);
+        capturePreviewOpened(path);
+    }
+    function openCapture(path, capture) {
+        if (path || !capture) {
+            _openPreview(path);
+        } else {
+            _openWhenSaved = capture;
+            openWhenSavedTimer.restart();
         }
     }
     function takeScreenshot() {
@@ -1787,10 +1822,11 @@ FocusScope {
             captureFlash.start();
             // Kept while its thumbnail shows (the url lives as long as it).
             shell._captureResult = result;
-            captureThumbnail.show(result.url);
+            var id = "capture-" + Date.now() + "-" + (++shell._captureCount);
+            captureThumbnail.show(result.url, id);
             var png = ImageTools.pngBase64(result.image);
             if (png !== "" && source && typeof source.saveScreenshot === "function")
-                source.saveScreenshot(png, name);
+                source.saveScreenshot(png, name, id);
             shell.screenshotTaken(name, png.length);
         });
         if (!ok)
@@ -3469,7 +3505,7 @@ FocusScope {
         // Above the phone's notification area (its banner says "Screen captured").
         anchors.bottomMargin: Theme.px(24) + notes.negativeSpaceTarget
         z: 99999
-        onActivated: (path) => shell.launch("org.webosphoenix.screenshot", path ? { path: path } : null)
+        onActivated: (path, capture) => shell.openCapture(path, capture)
     }
 
     // Over everything, the gesture area too (WindowServer's UI elements group).

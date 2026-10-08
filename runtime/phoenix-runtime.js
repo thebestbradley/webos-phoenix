@@ -6903,12 +6903,13 @@
                 });
             },
             /** A URL to show or play a media path: a blob: URL for stored files, else the path (rootfs). */
+            // A path with no stored file is not remembered: it may be one
+            // another page is still writing (a screen capture being saved).
             url: function (path) {
                 if (urlCache[path]) return Promise.resolve(urlCache[path]);
                 return files.read(path).then(function (blob) {
-                    var u = blob && global.URL && URL.createObjectURL ? URL.createObjectURL(blob) : path;
-                    urlCache[path] = u;
-                    return u;
+                    if (!blob || !global.URL || !URL.createObjectURL) return path;
+                    return (urlCache[path] = URL.createObjectURL(blob));
                 }, function () { return path; });
             }
         };
@@ -7185,7 +7186,7 @@
         //
         // The shell grabs the screen and hands the picture to one page:
         // runtime.saveScreenshot({data: base64 PNG, app: the app in front's
-        // title}). It is saved where the original saved them,
+        // title, capture: the shell's id for it}). It is saved where the original saved them,
         // /media/internal/screencaptures, named "<app> YYYY-MM-DD at
         // HH.MM.SS.png" (the original's name had the day before the month),
         // indexed for Photos' Screen captures album, and a notification
@@ -7207,9 +7208,13 @@
             return files.write(path, blob).then(function () {
                 return scan(CAPTURE_DIR);
             }).then(function () {
+                // capture: the shell's id for it, so its thumbnail opens
+                // this file and no other.
+                var params = { path: path };
+                if (p.capture) params.capture = String(p.capture);
                 host.postToHost("notification", { appId: SCREENSHOT_APP, title: "Screen captured",
                                                   body: path.slice(CAPTURE_DIR.length + 1).replace(/\.png$/, ""),
-                                                  params: { path: path } });
+                                                  params: params });
                 return path;
             });
         };

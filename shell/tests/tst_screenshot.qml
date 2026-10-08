@@ -123,6 +123,7 @@ Item {
         // opens the file the runtime saved in the preview, a swipe to the
         // left puts it away, and it goes by itself after a few seconds.
         SignalSpy { id: thumbTapped; signalName: "activated" }
+        SignalSpy { id: previewOpened; target: shell; signalName: "capturePreviewOpened" }
         function test_thumbnail() {
             var thumb = findChild(shell, "screenCaptureThumbnail");
             thumbTapped.target = thumb;
@@ -134,16 +135,28 @@ Item {
             verify(thumb.visible && thumb.shown);
             verify(String(findChild(thumb, "screenCaptureThumbnailImage").source) !== "", "the capture in it");
             verify(thumb.x + thumb.width < root.width / 2 && thumb.y + thumb.height > root.height / 2, "bottom left");
+            // The page saving it was handed the capture's id.
+            verify(thumb.capture !== "");
+            verify(windows._pendingCaptures[windows._pendingCaptures.length - 1].indexOf('"capture":"' + thumb.capture + '"') >= 0);
+            // Another capture's notification (an earlier one, saved late)
+            // is not this one's file.
+            windows.notify("org.webosphoenix.screenshot", "Screen captured", "Older",
+                           { path: "/media/internal/screencaptures/Older.png", capture: "capture-older" });
+            compare(thumb.path, "");
             // The runtime saved it and posted its notification: the path.
             var path = "/media/internal/screencaptures/Card View 2026-10-02 at 01.05.09.png";
-            windows.notify("org.webosphoenix.screenshot", "Screen captured", "Card View 2026-10-02 at 01.05.09", { path: path });
+            windows.notify("org.webosphoenix.screenshot", "Screen captured", "Card View 2026-10-02 at 01.05.09",
+                           { path: path, capture: thumb.capture });
             compare(thumb.path, path);
+            previewOpened.clear();
             mouseClick(findChild(thumb, "screenCaptureThumbnailArea"));
             compare(thumbTapped.count, 1);
             compare(thumbTapped.signalArguments[0][0], path);
             verify(!thumb.shown);
-            // (The shell then launches org.webosphoenix.screenshot with
-            // {path}; this test's window source has no such app.)
+            // The shell launches org.webosphoenix.screenshot with {path}
+            // (this test's window source has no such app).
+            compare(previewOpened.count, 1);
+            compare(previewOpened.signalArguments[0][0], path);
             tryCompare(thumb, "visible", false, 2000);
 
             // Swiped to the left: gone, nothing opened.
@@ -166,6 +179,71 @@ Item {
             tryCompare(taken, "count", 3, 2000);
             tryVerify(function() { return thumb.shown; }, 1000);
             tryVerify(function() { return !thumb.visible; }, Theme.screenCaptureThumbnailDuration + 2000);
+        }
+
+        // Tapped before the capture is stored (a big one takes a moment to
+        // encode and save): the preview opens on it once it is, not on
+        // the newest capture saved before it.
+        function test_thumbnailTappedBeforeTheCaptureIsSaved() {
+            var thumb = findChild(shell, "screenCaptureThumbnail");
+            previewOpened.clear();
+            keyClick(Qt.Key_F9);
+            tryCompare(taken, "count", 1, 2000);
+            tryCompare(thumb, "x", Theme.px(16), 1000);
+            var id = thumb.capture;
+            compare(thumb.path, "");
+            mouseClick(findChild(thumb, "screenCaptureThumbnailArea"));
+            verify(!thumb.shown);
+            compare(previewOpened.count, 0, "nothing to open yet");
+            // Another capture's file: not it.
+            windows.notify("org.webosphoenix.screenshot", "Screen captured", "Older",
+                           { path: "/media/internal/screencaptures/Older.png", capture: "capture-older" });
+            compare(previewOpened.count, 0);
+            var path = "/media/internal/screencaptures/Card View 2026-10-08 at 02.00.04.png";
+            windows.notify("org.webosphoenix.screenshot", "Screen captured", "Card View 2026-10-08 at 02.00.04",
+                           { path: path, capture: id });
+            compare(previewOpened.count, 1);
+            compare(previewOpened.signalArguments[0][0], path);
+            // Only once.
+            windows.notify("org.webosphoenix.screenshot", "Screen captured", "again", { path: path, capture: id });
+            compare(previewOpened.count, 1);
+        }
+
+        // The page that saves a capture has the runtime: never a site (an
+        // https:// web app, whose page has none), and the next page when
+        // the first turns out not to have it.
+        Component {
+            id: fakePage
+            QtObject {
+                property bool site: false
+                property var scripts: []
+                property var answer: true
+                function runScript(js, done) {
+                    scripts.push(js);
+                    if (done)
+                        done(answer);
+                }
+            }
+        }
+        function test_captureSavedOnAPageWithTheRuntime() {
+            var site = createTemporaryObject(fakePage, root, { site: true });
+            var loading = createTemporaryObject(fakePage, root, { answer: null });
+            var app = createTemporaryObject(fakePage, root);
+            windows._windows["fake-site"] = site;
+            windows._windows["fake-loading"] = loading;
+            windows._windows["fake-app"] = app;
+            try {
+                windows.saveScreenshot("iVBORw0KGgo=", "Site", "capture-x");
+                compare(site.scripts.length, 0, "not the site");
+                compare(loading.scripts.length, 1, "tried");
+                compare(app.scripts.length, 1, "then the next page");
+                verify(/__phoenixRuntime\.saveScreenshot\(.*"capture":"capture-x"/.test(app.scripts[0]));
+                compare(windows._pendingCaptures.length, 0);
+            } finally {
+                delete windows._windows["fake-site"];
+                delete windows._windows["fake-loading"];
+                delete windows._windows["fake-app"];
+            }
         }
 
         // The simulator's other keys work with an app's page focused too:
