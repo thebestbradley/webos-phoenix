@@ -43,6 +43,11 @@ QStringList Speech::resolved() const
     const QString say = QStandardPaths::findExecutable(QStringLiteral("say"));
     if (!say.isEmpty())
         return { say };   // reads the text from stdin
+    // Flite (BSD-3-Clause, English only): what meta-phoenix's image ships
+    // (packagegroup-phoenix-assistant); it too reads stdin and plays.
+    const QString flite = QStandardPaths::findExecutable(QStringLiteral("flite"));
+    if (!flite.isEmpty())
+        return { flite };
     return {};
 }
 

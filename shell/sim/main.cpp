@@ -327,12 +327,11 @@ int main(int argc, char *argv[])
     // The shell's dictation (the microphone and the transcriber) serves the
     // apps too: org.webosphoenix.dictation (Voice Dial).
     SimPty *simPty = nullptr;
+    QJsonObject hostInfo{ { QStringLiteral("dictation"), true }, { QStringLiteral("assistant"), true } };
     if (!parser.isSet(noHostShellOpt)) {
         simPty = new SimPty(&app);
         simPty->setShellOverride(parser.value(hostShellOpt));
-        rootfs.setHostInfo(QByteArrayLiteral("{\"pty\":\"host\",\"dictation\":true,\"assistant\":true}"));
-    } else {
-        rootfs.setHostInfo(QByteArrayLiteral("{\"dictation\":true,\"assistant\":true}"));
+        hostInfo.insert(QStringLiteral("pty"), QStringLiteral("host"));
     }
 
     QQuickView view;
@@ -412,13 +411,76 @@ int main(int argc, char *argv[])
         if (QFileInfo::exists(spotter) && QFileInfo(model).isDir() && QFileInfo::exists(vosk))
             wakeCommand = { spotter, QStringLiteral("--model"), QFileInfo(model).absoluteFilePath(),
                             QStringLiteral("--vosk"), QFileInfo(vosk).absoluteFilePath() };
-        else
-            qInfo("phoenix-sim: no wake word (run tools/get-wakeword.py, or pass --wake-model and --vosk-library)");
         view.rootContext()->setContextProperty(QStringLiteral("simWakeWordCommand"), wakeCommand);
         view.rootContext()->setContextProperty(QStringLiteral("simWakeFile"),
             parser.isSet(wakeFileOpt) ? QFileInfo(parser.value(wakeFileOpt)).absoluteFilePath()
                                       : QDir(repoDir).filePath(QStringLiteral("services/wakeword/tests/data/hey-phoenix.wav")));
+
+        // What the assistant's voice and model have on this computer, for
+        // Settings > Assistant (the runtime's voice reads host.json's
+        // "voice") and for this log, each missing one with a line on how to
+        // get it (scripts/mac-setup.sh and scripts/linux-setup.sh install
+        // them all; docs/AI-AND-MCP.md, "What's installed where").
+        QJsonObject voice;
+        const auto part = [&voice](const char *id, bool available, const QString &engine, const QString &hint) {
+            voice.insert(QLatin1String(id), QJsonObject{ { QStringLiteral("available"), available },
+                { QStringLiteral("engine"), engine }, { QStringLiteral("howToInstall"), available ? QString() : hint } });
+            if (!available)
+                qInfo("phoenix-sim: %s", qPrintable(hint));
+        };
+#ifdef Q_OS_MACOS
+        const QString setup = QStringLiteral("scripts/mac-setup.sh");
+#else
+        const QString setup = QStringLiteral("scripts/linux-setup.sh");
+#endif
+        // Dictation runs the transcriber (apps/voicememos/service/
+        // transcribe-cli.js) with Node.js, which finds whisper-cli and its
+        // model as on a device: PHOENIX_WHISPER_CLI or the PATH, and
+        // PHOENIX_WHISPER_MODEL, here build/whisper's model when that is
+        // not set (tools/get-whisper-model.py).
+        QString whisper = qEnvironmentVariable("PHOENIX_WHISPER_CLI");
+        for (const char *name : { "whisper-cli", "whisper-cpp" })
+            if (whisper.isEmpty())
+                whisper = QStandardPaths::findExecutable(QLatin1String(name));
+        QString whisperModel = qEnvironmentVariable("PHOENIX_WHISPER_MODEL");
+        if (whisperModel.isEmpty()) {
+            whisperModel = here.filePath(QStringLiteral("whisper/ggml-base.en.bin"));
+            if (QFileInfo::exists(whisperModel))
+                qputenv("PHOENIX_WHISPER_MODEL", QFile::encodeName(whisperModel));
+            else if (QFileInfo::exists(QStringLiteral("/usr/share/whisper/ggml-base.en.bin")))
+                whisperModel = QStringLiteral("/usr/share/whisper/ggml-base.en.bin");
+        }
+        const bool node = !QStandardPaths::findExecutable(QStringLiteral("node")).isEmpty();
+#ifdef Q_OS_MACOS
+        const QString getWhisper = QStringLiteral("brew install whisper-cpp (%1 does it)").arg(setup);
+#else
+        const QString getWhisper = QStringLiteral("%1 builds it (or set PHOENIX_WHISPER_CLI)").arg(setup);
+#endif
+        part("recognition", node && !whisper.isEmpty() && QFileInfo::exists(whisperModel), QStringLiteral("whisper.cpp"),
+             !node ? QStringLiteral("Speech recognition needs Node.js on the PATH (%1 installs it).").arg(setup)
+             : whisper.isEmpty() ? QStringLiteral("Speech recognition needs whisper.cpp's whisper-cli: %1.").arg(getWhisper)
+             : QStringLiteral("Speech recognition needs its model: run tools/get-whisper-model.py (or set PHOENIX_WHISPER_MODEL)."));
+        part("wakeWord", !wakeCommand.isEmpty(), QStringLiteral("Vosk"),
+             !QFileInfo::exists(spotter) ? QStringLiteral("\"Hey Phoenix\" needs phoenix-wakeword, built with phoenix-sim.")
+             : QStringLiteral("\"Hey Phoenix\" needs Vosk and its model: run tools/get-wakeword.py, then start phoenix-sim again "
+                              "(or pass --wake-model and --vosk-library)."));
+        // The program shell/native/speech.cpp would run (the runtime asks it
+        // whether there is one; this is for the hint).
+        QString speaker = parser.isSet(speechCommandOpt) ? parser.value(speechCommandOpt) : QString();
+        for (const char *name : { "espeak-ng", "say", "flite" })
+            if (speaker.isEmpty() && !QStandardPaths::findExecutable(QLatin1String(name)).isEmpty())
+                speaker = QLatin1String(name);
+        part("speech", !speaker.isEmpty(), speaker.section(QLatin1Char(' '), 0, 0),
+             QStringLiteral("Spoken answers need a speech program: sudo apt install espeak-ng (%1 does it), or --speech-command.").arg(setup));
+        hostInfo.insert(QStringLiteral("voice"), voice);
+        if (!parser.isSet(llamaServerOpt) && QStandardPaths::findExecutable(QStringLiteral("llama-server")).isEmpty())
+#ifdef Q_OS_MACOS
+            qInfo("phoenix-sim: on-device models need llama.cpp's llama-server: brew install llama.cpp (scripts/mac-setup.sh does it), or --llama-server");
+#else
+            qInfo("phoenix-sim: on-device models need llama.cpp's llama-server: scripts/linux-setup.sh builds it, or --llama-server");
+#endif
     }
+    rootfs.setHostInfo(QJsonDocument(hostInfo).toJson(QJsonDocument::Compact));
     // The Assistant's on-device models (downloaded into the simulator's data)
     // and its speech: the shell runs them, as "assistant" host messages ask
     // (the runtime's block "The Assistant").

@@ -10,7 +10,8 @@
 //   Voice            listen for "Hey Phoenix" (off by default), also with
 //                    the screen off or locked (off by default), voice
 //                    replies (on by default), and what listening means for
-//                    privacy (docs/AI-AND-MCP.md, Voice)
+//                    privacy (docs/AI-AND-MCP.md, Voice); what the voice
+//                    is missing here and how to get it (AssistantVoice.tsx)
 //   On device        llama.cpp models to download, use or remove, with their
 //                    size and the memory they want (what fits is offered);
 //                    how to get llama-server when it is missing
@@ -32,6 +33,7 @@ import {
 import { useLuna } from "@phoenix/luna/react";
 import { Button, Dialog, Group, ListSelector, Note, Page, PageHeader, PopupMenu, Row, Spinner, TextField, ToggleButton } from "@phoenix/ui";
 import { useBack } from "../nav";
+import { VoiceMissing } from "./AssistantVoice";
 
 const errorText = (e: unknown) => (e as LunaError).errorText ?? (e instanceof Error ? e.message : String(e));
 const gb = (n: number) => `${Math.round(n / 2 ** 30)} GB`;
@@ -200,6 +202,7 @@ export function AssistantPage() {
                     <ToggleButton value={s.voiceReplies} label="Voice replies" testId="as-voice-replies" disabled={off} onChange={(v) => set({ voiceReplies: v })} />
                 </Row>
             </Group>
+            <VoiceMissing />
             <Note testId="as-voice-privacy">{"Listening for \u201cHey Phoenix\u201d happens on this phone. The microphone goes only to the wake word spotter, which keeps the last few seconds in memory and nothing more; nothing is recorded, sent or saved until it hears the phrase, and what you say after it is turned into text on the phone too. A microphone in the status bar shows whenever it is open: faint while it waits for the phrase, orange while it listens to you."}</Note>
 
             {local ? <LocalModels m={local} /> : <Group label="On-device model"><Row title={<Spinner />} /></Group>}

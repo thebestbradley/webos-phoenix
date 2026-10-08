@@ -7,7 +7,8 @@
 //
 // command: the program and its arguments, "%l" for the language ("en");
 // empty for the default: espeak-ng (-v %l --stdin, GPL-3.0, run as a
-// program of its own, not linked) where it is installed, else macOS's say.
+// program of its own, not linked) where it is installed, else macOS's say,
+// else Flite (BSD-3-Clause; meta-phoenix's image ships it).
 // Piper or another engine is a command of its own (phoenix-sim
 // --speech-command). Neither Qt's TextToSpeech module (not in the Qt
 // installs Phoenix builds with) nor QtWebEngine's speechSynthesis (no
