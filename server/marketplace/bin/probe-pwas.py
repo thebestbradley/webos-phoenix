@@ -10,7 +10,6 @@ manifest is gone are left out (and listed).
 """
 
 import concurrent.futures
-import gzip
 import html.parser
 import http.client
 import json
@@ -21,6 +20,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import zlib
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # A phone first (Phoenix's own browser), then desktop Chrome: some sites only
@@ -29,25 +29,47 @@ UAS = ["Mozilla/5.0 (Linux; webOS Phoenix) AppleWebKit/537.36 (KHTML, like Gecko
        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"]
 
 
-def get(url, ua=UAS[0], accept="text/html,application/json,*/*", limit=3_000_000):
-    req = urllib.request.Request(url, headers={"User-Agent": ua, "Accept": accept, "Accept-Language": "en-US,en;q=0.8"})
-    for attempt in range(3):
+def get(url, ua=UAS[0], accept="text/html,application/json,*/*", limit=3_000_000, page=None):
+    """GET url as a browser does: a page when page is None (a navigation), else
+    the manifest that page links. Returns (final URL, body)."""
+    headers = {"User-Agent": ua, "Accept": accept, "Accept-Language": "en-US,en;q=0.8",
+               # gzip, as a browser offers (get() undoes it): Microsoft's front end
+               # (outlook.live.com, to-do.office.com) answers 417 Expectation Failed
+               # to a request that offers none, as urllib's default does not.
+               "Accept-Encoding": "gzip"}
+    # The Fetch Metadata a browser sends: Meta (facebook.com, web.whatsapp.com)
+    # answers 400 to a page request that is not a navigation.
+    if page is None:
+        headers.update({"Sec-Fetch-Dest": "document", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Site": "none", "Sec-Fetch-User": "?1"})
+    else:
+        headers.update({"Sec-Fetch-Dest": "manifest", "Sec-Fetch-Mode": "cors",
+                        "Sec-Fetch-Site": "same-origin" if origin(url) == origin(page) else "cross-site"})
+    req = urllib.request.Request(url, headers=headers)
+    for attempt in range(4):
         try:
             with urllib.request.urlopen(req, timeout=20) as res:
                 final, data, encoding = res.geturl(), res.read(limit), res.headers.get("Content-Encoding")
             break
-        except urllib.error.HTTPError:
-            raise
+        except urllib.error.HTTPError as e:
+            # Too many requests: wait as asked (within reason) and ask again.
+            if e.code != 429 or attempt == 3:
+                raise
+            try:
+                wait = min(int(e.headers.get("Retry-After") or 0), 30)
+            except ValueError:
+                wait = 0
+            time.sleep(max(wait, 3 * 2 ** attempt))
         except (OSError, http.client.HTTPException):
             # A reset connection, a cut-off answer or a timeout says nothing about the site:
             # try again rather than leave a site out for a network hiccup.
-            if attempt == 2:
+            if attempt >= 2:
                 raise
             time.sleep(2 * (attempt + 1))
     if encoding == "gzip" or data[:2] == b"\x1f\x8b":
         try:
-            data = gzip.decompress(data)
-        except (OSError, EOFError) as e:
+            # A stream decompressor, so a page cut at the limit still reads.
+            data = zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(data)
+        except zlib.error as e:
             raise ValueError("not gzip: %s" % e) from e
     return final, data
 
@@ -58,6 +80,24 @@ GUESSES = ["manifest.json", "manifest.webmanifest", "site.webmanifest", "app.web
 # A manifest's URL written in the page's own script (a <link> added later by
 # JavaScript): a quoted path whose file is manifest*.json or *.webmanifest.
 IN_SCRIPT = re.compile(r"""["'(]((?:https?:)?[\w./~%-]*?/?(?:manifest[\w.-]*\.json|[\w.-]*\.webmanifest)(?:\?[\w=&.%-]*)?)["')]""")
+
+
+def bot_check(e):
+    """Which bot check refused a request, as its answer says (" (a Cloudflare
+    bot check)"), or "": a site behind one cannot be checked from a server or a
+    cloud network, only from an ordinary connection (README, "The curated web apps")."""
+    h = getattr(e, "headers", None)
+    if not isinstance(e, urllib.error.HTTPError) or h is None or e.code not in (401, 403, 429):
+        return ""
+    if h.get("cf-mitigated"):
+        return " (a Cloudflare bot check)"
+    if h.get("x-datadome") or "datadome" in (h.get("server") or "").lower():
+        return " (a DataDome bot check)"
+    if "akamai" in (h.get("server") or "").lower():
+        return " (Akamai bot protection)"
+    if (h.get("server") or "").lower() == "cloudflare":
+        return " (refused by Cloudflare)"
+    return ""
 
 
 def find_manifest(asked, final, page, explicit):
@@ -129,9 +169,9 @@ def best_icon(icons, base):
     return urllib.parse.urljoin(base, pick["src"])
 
 
-def manifest_of(murl, ua):
-    """The manifest at murl, checked: a name and an icon a launcher can show."""
-    _, raw = get(murl, ua, "application/manifest+json,application/json,*/*")
+def manifest_of(murl, ua, page):
+    """The manifest at murl (linked from page), checked: a name and an icon a launcher can show."""
+    _, raw = get(murl, ua, "application/manifest+json,application/json,*/*", page=page)
     m = json.loads(raw.decode("utf-8-sig"))
     if not isinstance(m, dict):
         raise ValueError("not a web app manifest")
@@ -153,7 +193,7 @@ def probe(s):
             final, page = get(s["url"], ua)
         except Exception as e:   # noqa: BLE001 - a page that refuses robots may still serve its manifest
             final, page = s["url"], b""
-            why = "the page: %s; no web app manifest found" % e
+            why = "the page: %s%s; no web app manifest found" % (e, bot_check(e))
             if isinstance(e, OSError) and not isinstance(e, urllib.error.HTTPError):
                 unreachable.add(urllib.parse.urlsplit(s["url"]).netloc)
         for murl, doc in find_manifest(s["url"], final, page, s.get("manifest")):
@@ -162,8 +202,10 @@ def probe(s):
                 continue
             tried.add(murl)
             try:
-                m, name, icon = manifest_of(murl, ua)
-            except urllib.error.HTTPError:
+                m, name, icon = manifest_of(murl, ua, doc)
+            except urllib.error.HTTPError as e:
+                if bot_check(e) and why == "no web app manifest found":
+                    why = "%s: %s%s" % (murl, e, bot_check(e))
                 continue
             except ValueError as e:
                 if "manifest" in str(e) and not isinstance(e, json.JSONDecodeError):
