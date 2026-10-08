@@ -257,11 +257,10 @@ for 8 GB). Settings offers what fits the device's memory and recommends
 the largest. Llama 3.2 was left out (its licence is not permissive);
 Qwen2.5 3B too (Qwen Research License); Qwen3.5 and Gemma 4 GGUFs were
 not in the Qwen and Google repositories when checked. `llama-server` is
-found on the PATH or given (`phoenix-sim --llama-server <path>`); on a Mac
-`brew install llama.cpp`, on Linux a build of llama.cpp (`cmake -B b &&
-cmake --build b --target llama-server`). The meta-phoenix recipe is still
-to write (a TODO beside `whisper-cpp`'s). It stops after five idle
-minutes to give the memory back.
+found on the PATH or given (`phoenix-sim --llama-server <path>`); the
+setup scripts install it (below), and on a device meta-phoenix's
+`llama-cpp` recipe does. It stops after five idle minutes to give the
+memory back.
 
 **Speech** (`org.webosphoenix.tts`: `speak {text, lang?}`, `stop`,
 `getStatus`). Qt's TextToSpeech module is not part of the Qt installs
@@ -269,9 +268,58 @@ Phoenix builds with, and QtWebEngine's `speechSynthesis` has no voices
 (it needs speech-dispatcher, which Qt's builds do not use), so the shell
 runs a speech program with the text on its input: `espeak-ng` (GPL-3.0,
 run as a separate program, never linked) where it is installed, `say` on
-a Mac, or `--speech-command` (Piper, for instance). The device service
-does the same. A browser page with voices uses `speechSynthesis`.
-Answers are spoken when **Speak answers** is on (on by default).
+a Mac, else Flite (BSD-3-Clause, English only), or `--speech-command`
+(Piper, for instance). The device service does the same. A browser page
+with voices uses `speechSynthesis`. Answers are spoken when **Speak
+answers** is on (on by default).
+
+**What's installed where** (8 October 2026). The command grammar needs
+nothing extra. Everything else is a program or a model beside Phoenix,
+installed by the setup scripts on a computer and by meta-phoenix's
+`packagegroup-phoenix-assistant` in `webos-phoenix-image`:
+
+| Part | Simulator on a Mac (`scripts/mac-setup.sh`) | Simulator on Linux (`scripts/linux-setup.sh`) | Device image (meta-phoenix) | Licence |
+| --- | --- | --- | --- | --- |
+| Speech recognition: `whisper-cli` | Homebrew `whisper-cpp` | Built from whisper.cpp `d09f61a` into `/usr/local/bin` (3 MB) | `whisper-cpp` (static) | MIT |
+| Its model, `ggml-base.en.bin` (148 MB) | `build/whisper` (`tools/get-whisper-model.py`) | `build/whisper` | `whisper-cpp-model-base-en`, in the image, `/usr/share/whisper` | MIT (OpenAI's Whisper weights) |
+| On-device model runner: `llama-server` | Homebrew `llama.cpp` | Built from llama.cpp b11239 into `/usr/local/bin` (15 MB) | `llama-cpp-server` (static, b11239) | MIT |
+| The language models (0.5 to 2.5 GB) | Downloaded in Settings > Assistant | Same | Same, into `/media/internal/.phoenix/models` | Apache-2.0 (Qwen) |
+| Wake word: `phoenix-wakeword` | Built with phoenix-sim | Built with phoenix-sim | `phoenix-shell` | Apache-2.0 (Phoenix) |
+| Wake word: libvosk | `build/wakeword` (`tools/get-wakeword.py`, 13 MB) | `build/wakeword` (26 MB) | `libvosk`, prebuilt from Alpha Cephei's PyPI wheels (x86-64, aarch64, armv7) | Apache-2.0; Kaldi, OpenFST Apache-2.0; OpenBLAS, CLAPACK BSD-3-Clause |
+| Wake word: `vosk-model-small-en-us-0.15` (40 MB download, 71 MB) | `build/wakeword` | `build/wakeword` | `vosk-model-small-en-us`, in the image, `/usr/share/phoenix/wakeword` | Apache-2.0 |
+| Spoken answers | `say` (part of macOS) | `espeak-ng` (apt) | `flite` (meta-multimedia; `PHOENIX_TTS` to change) | Flite BSD-3-Clause; espeak-ng GPL-3.0 |
+
+Each setup script installs all of it by default, skips what is already
+there, checks downloads against their SHA-256 (or a pinned git commit),
+and leaves it out with `--no-assistant`. On a Mac it is about 230 MB of
+models plus the two Homebrew packages; on Linux about 280 MB, and a few
+minutes to build the two programs.
+
+In the image, by device class (HARDWARE.md: 4 GB is the practical
+minimum): whisper's base.en and the Vosk model ship in the image, since
+dictation and "Hey Phoenix" must work offline from the first boot and
+together they take about 220 MB of storage, which every supported device
+has; tiny.en (78 MB, about twice as fast, less exact) is the choice to
+make for a 2-3 GB community device. The language models are never in the
+image: they are 0.5 to 2.5 GB, the right one depends on the memory
+(Settings offers what fits), and many users will not want one. Flite is
+the image's voice because it is permissive; espeak-ng (more languages)
+is GPL-3.0, which docs/LEGAL.md allows only as a separate program with its
+own licence and source offer, and GPL-3.0 also asks a device maker who
+locks the bootloader to give the user a way to install a changed version.
+So it is the owner's choice per image, not the default. Piper is no way
+round that: even the original MIT `rhasspy/piper` phonemizes with
+espeak-ng's library (`piper-phonemize`). OSE's own
+`com.webos.service.tts` (meta-webos) is a Google Cloud Text-to-Speech
+client (it builds against googleapis and gRPC), so it is not used.
+
+When a part is missing the assistant says so instead of failing
+silently: phoenix-sim logs one line per missing part with how to get it,
+and Settings > Assistant lists them under Voice (service method `voice`:
+the simulator's from what phoenix-sim found at start, the device's from
+the transcriber, the wake word's files and the speech program; on a
+device the hint names the meta-phoenix package). The on-device model's
+note says how to get `llama-server`.
 
 **Where it shows.** Holding the launcher button opens the system view
 (its heading says "Assistant": Phoenix is the UI's version name):
@@ -873,20 +921,22 @@ against a list shipped with Phoenix.
   - **Privacy.** Nothing leaves the phone; the spotter keeps the last few
     seconds in memory only. The status bar shows a microphone whenever it
     is open: faint while standing by, orange while recording.
-  - **On a device** (to do): meta-phoenix recipes for libvosk (Kaldi,
-    OpenFST, OpenBLAS: all Apache/BSD; or the prebuilt aarch64 libvosk)
-    and the model in `/usr/share/phoenix/wakeword/`, and `phoenix-wakeword`
-    installed; LsmWindowSource's shell sets `wakeWordCommand`. The
-    microphone is the shell's Qt Multimedia input (PulseAudio on OSE, as
-    dictation uses); with the screen off the shell process must keep
+  - **On a device**: meta-phoenix's `libvosk` (Alpha Cephei's prebuilt
+    library; a from-source recipe with Kaldi, OpenFST and OpenBLAS is to
+    do) and `vosk-model-small-en-us` (in `/usr/share/phoenix/wakeword/`),
+    `phoenix-wakeword` installed with `phoenix-shell`, and
+    `PhoenixViewsRoot.qml` sets `wakeWordCommand` (written 8 October 2026;
+    not yet run on hardware). The microphone is the shell's Qt Multimedia
+    input (PulseAudio on OSE, as dictation uses); with the screen off the
+    shell process must keep
     running and audio stay open (OSE's audiod/PulseAudio input while
     suspended is unverified), and a DSP/low-power hotword path would be the
     next step for battery.
-- **Speaking answers**: OSE has `com.webos.service.tts` (engine per build,
-  *unverified*). Piper is the usual open alternative; the original
-  `rhasspy/piper` was MIT and its successor is GPL-3.0 (*unverified*;
-  either would run as a separate program, like whisper-cli). Off by
-  default; on for voice-started turns.
+- **Speaking answers**: OSE's `com.webos.service.tts` is a Google Cloud
+  client (its meta-webos recipe builds against googleapis and gRPC), so
+  Phoenix runs a speech program: Flite in the image, espeak-ng or Piper
+  by choice (see "What's installed where"; Piper's phonemizer is
+  espeak-ng's library, GPL-3.0, even in the original MIT `rhasspy/piper`).
 - OSE's `com.webos.service.ai.voice` is a Google Assistant client with
   cloud recognition. Phoenix does not use it.
 

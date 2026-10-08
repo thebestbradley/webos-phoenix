@@ -13,8 +13,11 @@ as webOS OSE and Open webOS.
 `tools/get-wakeword.py` downloads, SHA-256 checked: Vosk's library (libvosk
 from the `vosk` wheel on PyPI, Apache-2.0; Kaldi, OpenFST and OpenBLAS
 inside are Apache-2.0 / BSD) and `vosk-model-small-en-us-0.15` (Apache-2.0,
-Alpha Cephei, <https://alphacephei.com/vosk/models>). An image may ship
-both. openWakeWord's pre-trained models (CC BY-NC-SA 4.0) are not used.
+Alpha Cephei, <https://alphacephei.com/vosk/models>; checked again 8
+October 2026). `webos-phoenix-image` ships both (meta-phoenix's `libvosk`,
+the same prebuilt library, and `vosk-model-small-en-us`), with OE's
+Apache-2.0 and BSD-3-Clause texts, as neither download carries a licence
+file. openWakeWord's pre-trained models (CC BY-NC-SA 4.0) are not used.
 The test recordings in `services/wakeword/tests/data` are made by
 espeak-ng (`tools/gen-voice-fixtures.sh`; espeak-ng runs as a program, its
 GPL does not cover the speech it outputs). The voices and LibriSpeech used
@@ -425,16 +428,19 @@ contributors, available under the **Open Database License (ODbL) 1.0**
 Voice Memos' transcription service (`apps/voicememos/service`) runs
 **whisper.cpp** (<https://github.com/ggml-org/whisper.cpp>) as a separate
 program, `whisper-cli`; no whisper.cpp code is in this repository.
-whisper.cpp and ggml are MIT-licensed. The `meta-phoenix` recipe stub
-(`recipes-support/whisper-cpp`) would build it from source and ship its
-`LICENSE` with the package, as the MIT license asks.
+whisper.cpp and ggml are MIT-licensed. The `meta-phoenix` recipe
+(`recipes-support/whisper-cpp`) builds it from source and ships its
+`LICENSE` with the package, as the MIT license asks; on Linux
+`scripts/linux-setup.sh` builds the same commit for the simulator.
 
 The models are OpenAI's **Whisper** weights, released under the MIT license
 (<https://github.com/openai/whisper>, including the model card), converted to
 ggml's format by the whisper.cpp authors and published at
 <https://huggingface.co/ggerganov/whisper.cpp>. The default,
-`ggml-base.en.bin`, is not in this repository; an image that includes it
-should carry OpenAI's MIT notice with it. Other models (for instance
+`ggml-base.en.bin`, is not in this repository (`tools/get-whisper-model.py`
+fetches it for the simulator). `webos-phoenix-image` includes it
+(`whisper-cpp-model-base-en`) with OpenAI's MIT notice beside it
+(`/usr/share/whisper/LICENSE.openai-whisper`, from openai/whisper). Other models (for instance
 fine-tuned ones found elsewhere) may have other licenses: check before
 shipping one.
 
@@ -446,9 +452,11 @@ records WAV, so it is optional.
 
 The Assistant (`apps/assistant`) runs **llama.cpp**
 (<https://github.com/ggml-org/llama.cpp>, MIT) as a separate program,
-`llama-server`; no llama.cpp code is in this repository. A `meta-phoenix`
-recipe beside `whisper-cpp`'s is still to write, and should ship llama.cpp's
-`LICENSE`.
+`llama-server`; no llama.cpp code is in this repository. The `meta-phoenix`
+recipe (`recipes-support/llama-cpp`, release b11239) builds it from source
+without OpenSSL or the downloaded web UI, and ships llama.cpp's `LICENSE`;
+`scripts/linux-setup.sh` builds the same release for the simulator,
+Homebrew's `llama.cpp` on a Mac.
 
 The on-device models are downloaded by the user, never shipped: Qwen2.5
 0.5B Instruct, Qwen2.5 1.5B Instruct and Qwen3 4B, each **Apache-2.0** per
@@ -458,11 +466,19 @@ Qwen/Qwen2.5-1.5B-Instruct-GGUF, Qwen/Qwen3-4B-GGUF; checked 7 October
 permissive) and Qwen2.5 3B (Qwen Research License). An image that ships a
 model must carry its licence.
 
-Answers are spoken by **espeak-ng** (GPL-3.0) or, on a Mac, `say`, run as
-separate programs and only called, never linked; Phoenix's code stays
-Apache-2.0. An image that includes espeak-ng ships it as its own package
-with its licence and source offer. Piper or another engine can be configured
-instead (`--speech-command`).
+Answers are spoken by a speech program, run as a separate program and
+only called, never linked; Phoenix's code stays Apache-2.0. On the device
+image it is **Flite** (CMU, BSD-3-Clause, meta-multimedia's `flite`), so the
+image stays permissive. In the simulator it is **espeak-ng** (GPL-3.0) on
+Linux, which `scripts/linux-setup.sh` installs from Ubuntu, or `say` on a
+Mac. espeak-ng may go into an image only as its own package with its
+licence and source offer (`PHOENIX_TTS` in local.conf; meta-oe has the
+older eSpeak 1.48, also GPL-3.0); note that GPL-3.0 also asks whoever
+ships it on a device with a locked bootloader to give users a way to
+install a changed version (its "Installation Information"), so it is the
+image maker's decision. Piper does not avoid this: its phonemizer is
+espeak-ng's library, also in the original MIT `rhasspy/piper`. Other
+engines can be configured (`--speech-command`).
 
 Cloud providers (Anthropic, OpenAI, Google, OpenAI-compatible servers) are
 used only with the user's own key, under the provider's terms; nothing of

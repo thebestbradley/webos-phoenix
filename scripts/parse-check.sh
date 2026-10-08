@@ -23,7 +23,7 @@
 #   PHOENIX_PARSE_DIR     build directory (default: ${TMPDIR:-/tmp}/webos-phoenix-parse);
 #                         keep it to rerun quickly, delete it to free the space
 #   PHOENIX_PARSE_TARGET  what to resolve (default: webos-phoenix-image, plus
-#                         the torchd and whisper-cpp stubs, which are not in it)
+#                         the torchd stub, which is not in it, and whisper-cpp)
 #
 # bitbake refuses to run as root (OE's sanity check, with no setting to
 # allow it). As root, run it as an ordinary user, or in a user namespace

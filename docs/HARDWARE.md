@@ -580,6 +580,12 @@ keyboard handling Maliit already has (V7 settled it).
   differs, set per machine in `meta-phoenix`.
 - **RAM:** OSE recommends 4 GB on the Pi. Plan for 4 GB as the practical
   minimum for phones; 2–3 GB devices get "Community" at most.
+- **The assistant's share:** `packagegroup-phoenix-assistant` adds about
+  270 MB to the image (whisper's base.en model 148 MB, the wake word's Vosk
+  model 71 MB and library 7-26 MB, `whisper-cli`, `llama-server`, Flite).
+  The on-device language model is downloaded later, 0.5 to 2.5 GB by the
+  device's memory (2, 4 or 8 GB; AI-AND-MCP.md, "What's installed where").
+  A 2-3 GB community image can take whisper's tiny.en instead.
 
 ## Distribution and updates
 
@@ -657,7 +663,7 @@ Verizon Pixels) cannot be unlocked and are out.
   commit, clones its layers without history (about 200 MB), adds `meta-phoenix`, and for each machine runs `bitbake -p`
   (parse every recipe) and `bitbake -n webos-phoenix-image` (a dry run that
   resolves the whole task graph, including every `RDEPENDS`, and runs
-  nothing; the `torchd` and `whisper-cpp` stubs are resolved too). Nothing
+  nothing; the `torchd` stub is resolved too). Nothing
   is fetched (`BB_NO_NETWORK`) or built. Each machine adds about 300 MB
   and about 12 minutes on 4 cores. The build directory is
   `${TMPDIR:-/tmp}/webos-phoenix-parse` unless `PHOENIX_PARSE_DIR` says

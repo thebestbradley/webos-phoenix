@@ -48,6 +48,12 @@ FocusScope {
         // (positive space, the tablet's bezel flick). BaseView.isOpen
         // (luna-surfacemanager views/base/BaseView.qml:29).
         platformKeyboardHeight: keyboardViewId.isOpen ? keyboardViewId.height : 0
+        // "Hey Phoenix" (docs/AI-AND-MCP.md, Voice): phoenix-wakeword (built
+        // and installed with this shell) with the Vosk model meta-phoenix's
+        // packagegroup-phoenix-assistant installs; it finds libvosk.so by
+        // its usual name. Missing pieces: the spotter fails to start and
+        // Settings > Assistant says what is not in the image.
+        wakeWordCommand: ["/usr/bin/phoenix-wakeword", "--model", "/usr/share/phoenix/wakeword/vosk-model-small-en-us-0.15"]
         Component.onCompleted: phoenix.unlock()
     }
 

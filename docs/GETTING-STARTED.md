@@ -48,8 +48,9 @@ paste, so don't paste notes after a command):
 | Command | What it does |
 | --- | --- |
 | `scripts/mac-setup.sh --check` | What is installed and what is missing |
-| `scripts/mac-setup.sh` | Install Qt, CMake, Ninja, Node 22, Python; build |
-| `scripts/mac-setup.sh --all` | The same, plus the test tools and voice (whisper.cpp) |
+| `scripts/mac-setup.sh` | Install Qt, CMake, Ninja, Node 22, Python; build; the assistant's voice and model runner (see 4) |
+| `scripts/mac-setup.sh --all` | The same, plus the test tools |
+| `scripts/mac-setup.sh --no-assistant` | Without the assistant's parts (about 230 MB of models and two Homebrew packages) |
 
 The script uses Homebrew's `qt` (it includes Qt WebEngine and Qt 5 Compat,
 which the simulator needs), `cmake`, `ninja`, `node@22` and
@@ -115,15 +116,20 @@ device's data the way a phone does. On Linux they are
 `~/.local/share/webos-phoenix/phoenix-sim/` and
 `~/.config/webos-phoenix/phoenix-sim.conf`.
 
-### 4. Voice (optional)
+### 4. Voice and the assistant
 
-The keyboard's microphone, Voice Memos and Voice Dial transcribe with
-whisper.cpp. `scripts/mac-setup.sh --voice` installs it with the English
-model, then:
-
-```sh
-echo 'export PHOENIX_WHISPER_MODEL="$HOME/Library/Application Support/webos-phoenix/whisper/ggml-base.en.bin"' >> ~/.zprofile
-```
+The keyboard's microphone, Voice Memos, Voice Dial and the assistant
+transcribe with whisper.cpp; the assistant's on-device model runs on
+llama.cpp, "Hey Phoenix" on Vosk, and answers are spoken with `say`.
+`scripts/mac-setup.sh` installs them by default: Homebrew's `whisper-cpp`
+and `llama.cpp`, whisper's English model (148 MB) into `build/whisper`
+and the wake word (Vosk, 84 MB) into `build/wakeword`, each checked by its
+SHA-256 (`tools/get-whisper-model.py` and `tools/get-wakeword.py` fetch
+them on their own). phoenix-sim finds them there; it logs a line for
+anything missing, and Settings > Assistant says what is missing and how
+to get it. The language models are downloaded in Settings > Assistant.
+What goes where, on the simulator and the device:
+[AI-AND-MCP.md](AI-AND-MCP.md), "What's installed where".
 
 macOS asks for microphone access the first time. Without a microphone,
 `--microphone-file some.wav` plays a WAV file as one.
@@ -137,8 +143,16 @@ macOS asks for microphone access the first time. Without a microphone,
 
 | Command | What it does |
 | --- | --- |
-| `scripts/linux-setup.sh` | Qt 6.8.1 (into `/opt/Qt`; Ubuntu's own is 6.4), CMake, Node 22; fetch submodules; build |
+| `scripts/linux-setup.sh` | Qt 6.8.1 (into `/opt/Qt`; Ubuntu's own is 6.4), CMake, Node 22; fetch submodules; build; the assistant's parts |
 | `scripts/linux-setup.sh --tests` | Also the test tools |
+| `scripts/linux-setup.sh --no-assistant` | Without the assistant's parts |
+
+The assistant's parts, installed by default: espeak-ng (apt), whisper.cpp's
+`whisper-cli` and llama.cpp's `llama-server` built from the commits
+meta-phoenix pins into `/usr/local/bin` (a few minutes), whisper's English
+model into `build/whisper` and the wake word into `build/wakeword` (about
+280 MB in all). As on a Mac, phoenix-sim and Settings > Assistant say what
+is missing.
 
 Then `./build/phoenix-sim`.
 
