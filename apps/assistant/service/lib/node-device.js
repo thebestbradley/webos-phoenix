@@ -13,8 +13,13 @@
 //                           in use; stopped after idleMs without requests
 //                           to give the memory back
 //   speech(options)         text to speech with a program reading stdin
-//                           (espeak-ng by default; piper and others with
-//                           their own command)
+//                           (espeak-ng where the image has it, else Flite,
+//                           which meta-phoenix's image ships; piper and
+//                           others with their own command)
+//   voiceStatus(options)    what the voice needs and what is missing, for
+//                           assistant.js's voice: whisper.cpp (the
+//                           transcriber's getStatus), the wake word's
+//                           program, library and model, and speech
 //
 // The simulator does the same in the shell (shell/native/localmodels.cpp,
 // shell/native/speech.cpp); the runtime passes the service's calls there.
@@ -269,9 +274,17 @@ function llamaServer(options) {
 // ---- Speech -----------------------------------------------------------------------------------
 
 // options: {command: [program, args...] with %l for the language; text on stdin}
+function defaultSpeechCommand() {
+    var espeak = findProgram(["espeak-ng"]);
+    if (espeak) return [espeak, "-v", "%l", "--stdin"];
+    // Flite (BSD-3-Clause; meta-multimedia's flite, packagegroup-phoenix-
+    // assistant) reads the text on stdin and plays it; English only.
+    var flite = findProgram(["flite"]);
+    return flite ? [flite] : null;
+}
+
 function speech(options) {
-    var cmd = options && options.command ? options.command
-        : findProgram(["espeak-ng"]) ? [findProgram(["espeak-ng"]), "-v", "%l", "--stdin"] : null;
+    var cmd = options && options.command ? options.command : defaultSpeechCommand();
     var child = null;
     return {
         speak: function (text, lang) {
@@ -290,4 +303,44 @@ function speech(options) {
     };
 }
 
-module.exports = { fileStorage: fileStorage, fileSecrets: fileSecrets, llamaServer: llamaServer, speech: speech, findProgram: findProgram };
+// ---- What the voice needs ---------------------------------------------------------------------
+
+// Where meta-phoenix's packagegroup-phoenix-assistant puts the wake word
+// (recipes-support/vosk) and what the shell runs (PhoenixViewsRoot.qml).
+var WAKE_MODEL = "/usr/share/phoenix/wakeword/vosk-model-small-en-us-0.15";
+var IMAGE_HINT = "meta-phoenix's packagegroup-phoenix-assistant adds it to the image";
+
+// options: {luna: {call(uri, params) -> Promise<payload>}, tts: speech(),
+// wakeModel?, libDirs?}
+function voiceStatus(options) {
+    var o = options || {};
+    var libDirs = o.libDirs || ["/usr/lib", "/usr/lib64", "/lib", "/usr/local/lib"];
+    function hasVosk() {
+        return libDirs.some(function (d) { return fs.existsSync(path.join(d, "libvosk.so")); });
+    }
+    return function () {
+        var recognition = o.luna.call("luna://org.webosphoenix.transcriber/getStatus", {}).then(function (r) {
+            r = r || {};
+            var missing = r.returnValue === false ? "the transcriber service is not installed"
+                : !r.binary ? "whisper.cpp's whisper-cli is not installed"
+                : r.modelInstalled === false ? "its model " + (r.model || "") + " is not installed" : "";
+            return { id: "recognition", available: !missing && r.installed !== false, engine: r.engine || "whisper.cpp",
+                     howToInstall: missing ? "Not in this image: " + missing + " (whisper-cpp, whisper-cpp-model-base-en; " + IMAGE_HINT + ")." : "" };
+        }, function () {
+            return { id: "recognition", available: false, howToInstall: "Not in this image: the transcriber service (" + IMAGE_HINT + ")." };
+        });
+        var model = o.wakeModel || WAKE_MODEL;
+        var wakeMissing = !findProgram(["phoenix-wakeword"]) ? "phoenix-wakeword (phoenix-shell)"
+            : !hasVosk() ? "libvosk (libvosk)"
+            : !fs.existsSync(model) ? "the Vosk model " + model + " (vosk-model-small-en-us)" : "";
+        var wake = { id: "wakeWord", available: !wakeMissing, engine: "Vosk",
+                     howToInstall: wakeMissing ? "Not in this image: " + wakeMissing + "; " + IMAGE_HINT + "." : "" };
+        var speaking = Promise.resolve(o.tts ? o.tts.status() : { available: false, engine: "" }).then(function (st) {
+            return { id: "speech", available: !!st.available, engine: st.engine || "",
+                     howToInstall: st.available ? "" : "Not in this image: a speech program (Flite or espeak-ng; " + IMAGE_HINT + ")." };
+        });
+        return Promise.all([recognition, wake, speaking]);
+    };
+}
+
+module.exports = { fileStorage: fileStorage, fileSecrets: fileSecrets, llamaServer: llamaServer, speech: speech, voiceStatus: voiceStatus, findProgram: findProgram };

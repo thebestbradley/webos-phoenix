@@ -12,7 +12,7 @@
 // the real llama.cpp on a real model.
 
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -30,6 +30,7 @@ const device = req("./lib/node-device.js") as {
         ensure(m: Model): Promise<{ baseUrl: string }>; stop(): void;
     };
     speech(o: object): { speak(t: string, l?: string): Promise<void>; status(): Promise<{ available: boolean; engine: string }> };
+    voiceStatus(o: object): () => Promise<{ id: string; available: boolean; engine?: string; howToInstall: string }[]>;
 };
 const providers = req("./lib/providers.js") as { chatRequest(p: object, r: object, k: string): { url: string; body: string; headers: Record<string, string>; method: string }; parseChat(t: string, s: number, b: string): { text: string; toolCalls: { name: string }[] } };
 const { createRequest } = req("./lib/node-http.js") as { createRequest(): (r: object) => Promise<{ status: number; body: string }> };
@@ -134,5 +135,47 @@ describe("speech", () => {
         await sp.speak("The flashlight is on.", "en");
         expect(readFileSync(out, "utf8")).toBe("en:The flashlight is on.");
         expect((await sp.status()).available).toBe(true);
+    });
+});
+
+describe("what the voice needs (voiceStatus)", () => {
+    const luna = (reply: object | null) => ({ call: () => (reply ? Promise.resolve(reply) : Promise.reject(new Error("no service"))) });
+    const tts = (available: boolean) => ({ status: () => Promise.resolve({ available, engine: available ? "flite" : "" }) });
+
+    it("says what is missing from the image and which package has it", async () => {
+        const parts = await device.voiceStatus({
+            luna: luna({ returnValue: true, engine: "whisper.cpp", installed: false, binary: "/usr/bin/whisper-cli",
+                         model: "/usr/share/whisper/ggml-base.en.bin", modelInstalled: false }),
+            tts: tts(false), libDirs: [dir], wakeModel: join(dir, "no-model"),
+        })();
+        const by = Object.fromEntries(parts.map((p) => [p.id, p]));
+        expect(by.recognition.available).toBe(false);
+        expect(by.recognition.howToInstall).toMatch(/ggml-base\.en\.bin is not installed.*whisper-cpp-model-base-en/);
+        expect(by.wakeWord.available).toBe(false);
+        expect(by.wakeWord.howToInstall).toMatch(/packagegroup-phoenix-assistant/);
+        expect(by.speech).toMatchObject({ available: false });
+        expect(by.speech.howToInstall).toMatch(/Flite or espeak-ng/);
+        // No transcriber at all.
+        const none = await device.voiceStatus({ luna: luna(null), tts: tts(true), libDirs: [dir] })();
+        expect(none[0]).toMatchObject({ id: "recognition", available: false });
+        expect(none[2]).toMatchObject({ id: "speech", available: true, engine: "flite", howToInstall: "" });
+    });
+
+    it("finds the wake word's program, library and model", async () => {
+        const bin = join(dir, "bin"), lib = join(dir, "lib"), wakeModel = join(dir, "vosk-model");
+        for (const d of [bin, lib, wakeModel]) mkdirSync(d, { recursive: true });
+        writeFileSync(join(bin, "phoenix-wakeword"), "#!/bin/sh\n");
+        chmodSync(join(bin, "phoenix-wakeword"), 0o755);
+        writeFileSync(join(lib, "libvosk.so"), "");
+        const path = process.env.PATH;
+        process.env.PATH = bin + ":" + path;
+        try {
+            const parts = await device.voiceStatus({ luna: luna({ returnValue: true, installed: true, binary: "/x", modelInstalled: true }),
+                                                     tts: tts(true), libDirs: [lib], wakeModel })();
+            expect(parts.map((p) => [p.id, p.available, p.howToInstall])).toEqual([
+                ["recognition", true, ""], ["wakeWord", true, ""], ["speech", true, ""]]);
+        } finally {
+            process.env.PATH = path;
+        }
     });
 });

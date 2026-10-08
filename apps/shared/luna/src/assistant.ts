@@ -148,6 +148,17 @@ export interface LocalModelStatus {
     howToInstall: string;
 }
 
+/** One thing the voice needs (voice): whether this device has it, and how to get it. */
+export interface VoicePart {
+    id: "recognition" | "wakeWord" | "speech";
+    name: string;
+    available: boolean;
+    /** "whisper.cpp", "espeak-ng", "say", ... */
+    engine: string;
+    /** One line on how to get it, when it is missing. */
+    howToInstall: string;
+}
+
 export interface AskResult {
     thread: AssistantThread;
     /** What this request added: the user's words and the answers. */
@@ -234,6 +245,9 @@ export const assistant = {
         const r = await c("listModels", p);
         return r.ok === false ? { error: r.error } : { models: r.models || [] };
     },
+
+    /** What the voice needs and what this device is missing ([] where nobody knows, e.g. a browser). */
+    async voice(): Promise<VoicePart[]> { return (await c("voice")).parts || []; },
 
     watchModels(cb: (r: { models: LocalModel[]; selected: string; status: LocalModelStatus }) => void, onError?: OnError): Subscription {
         return s("models", {}, (r) => cb({ models: r.models || [], selected: r.selected || "", status: r.status }), onError);

@@ -52,6 +52,10 @@
 //   models {} -> {models: [catalogue + installed, fits, recommended], status, selected}
 //   downloadModel {id} / cancelDownload {id} / removeModel {id} / selectModel {id}
 //   speak {text} / stopSpeaking {}
+//   voice {} -> {parts: [{id: "recognition" | "wakeWord" | "speech", name,
+//     available, engine, howToInstall}]}: what the voice needs and whether
+//     this device has it, with a one-line hint for what is missing
+//     (deps.voice; Settings > Assistant shows it)
 //   Follow-up questions (lib/followups.js; docs/AI-AND-MCP.md): after a command
 //   made something, a message {followUp: {id, kind}, choices: [{id: "fu:<n>" |
 //   "fu:skip", label}]} asks for a missing detail; choose answers it, and so
@@ -69,7 +73,7 @@
 //   {seal(text) -> Promise<sealed>, unseal(sealed) -> Promise<text>},
 //   llm (the on-device model runner: status(), download(model), cancel(id),
 //   remove(id), ensure(model) -> Promise<{baseUrl}>), tts: {speak(text,
-//   lang), stop()}, caller() -> app id, now() -> ms, changed(what), log,
+//   lang), stop()}, voice() -> parts as voice answers them (optional), caller() -> app id, now() -> ms, changed(what), log,
 //   notify(n) (a notification: lib/followups.js)}
 
 "use strict";
@@ -934,6 +938,15 @@ function createAssistantService(deps) {
         stopSpeaking: function () {
             if (deps.tts) try { deps.tts.stop(); } catch (e) { /* nothing speaking */ }
             return Promise.resolve(ok({}));
+        },
+        voice: function () {
+            return Promise.resolve(deps.voice ? deps.voice() : []).then(function (parts) {
+                return ok({ parts: VOICE_PARTS.map(function (v) {
+                    var p = (parts || []).filter(function (x) { return x && x.id === v.id; })[0];
+                    return p ? { id: v.id, name: v.name, available: !!p.available, engine: String(p.engine || ""),
+                                 howToInstall: p.available ? "" : String(p.howToInstall || "") } : null;
+                }).filter(Boolean) });
+            }, function () { return ok({ parts: [] }); });
         }
     };
 
@@ -967,9 +980,16 @@ function createAssistantService(deps) {
     return safe;
 }
 
+// What the voice needs (voice), in the order Settings lists them.
+var VOICE_PARTS = [
+    { id: "recognition", name: "Speech recognition (whisper.cpp)" },
+    { id: "wakeWord", name: "\u201cHey Phoenix\u201d (Vosk)" },
+    { id: "speech", name: "Spoken answers" }
+];
+
 var METHODS = ["ask", "choose", "confirm", "threads", "thread", "newThread", "setCurrent", "deleteThread", "clearHistory",
                "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
-               "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary",
+               "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary", "voice",
                "connect", "retry",
                "followUps", "answerFollowUp", "followUpOpen", "followUpLeave", "followUpWake", "resetFollowUps"];
 

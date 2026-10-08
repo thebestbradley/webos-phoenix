@@ -13306,8 +13306,8 @@
             if (ev.changed) changed("models");
         };
 
-        var NO_LLM = "Install llama.cpp's llama-server (Homebrew: brew install llama.cpp; Linux: build llama.cpp) " +
-                     "and start phoenix-sim with it on the PATH, or with --llama-server <path>.";
+        var NO_LLM = "Install llama.cpp's llama-server (scripts/mac-setup.sh or brew install llama.cpp on a Mac, " +
+                     "scripts/linux-setup.sh on Linux) and start phoenix-sim with it on the PATH, or with --llama-server <path>.";
         var llm = {
             status: function () {
                 if (!hostHas()) return Promise.resolve({ available: false, installed: [], ramBytes: 0, howToInstall: NO_LLM });
@@ -13359,6 +13359,25 @@
             }
         };
 
+        // ---- What the voice needs (voice) --------------------------------------------------
+        // phoenix-sim says in host.json what it found when it started
+        // ({"voice": {"recognition" | "wakeWord" | "speech": {available,
+        // engine, howToInstall}}}, shell/sim/main.cpp); speech is asked of
+        // the shell now. Without the shell: nothing to say.
+        function voiceParts() {
+            if (!hostHas() || !hostInfo.voice) return [];
+            var part = function (id) {
+                var x = hostInfo.voice[id] || {};
+                return { id: id, available: !!x.available, engine: x.engine || "", howToInstall: x.howToInstall || "" };
+            };
+            return tts.status().then(function (st) {
+                var sp = part("speech");
+                sp.available = !!st.available;
+                sp.engine = st.engine || "";
+                return [part("recognition"), part("wakeWord"), sp];
+            });
+        }
+
         // ---- Subscriptions -------------------------------------------------------------------
         var watchers = [], notifyTimer = null;
         function changed() {
@@ -13391,6 +13410,7 @@
                     secrets: sealer,
                     llm: llm,
                     tts: tts,
+                    voice: voiceParts,
                     caller: function () { return PalmSystem.appIdentifier; },
                     locale: function () { return (global.navigator && global.navigator.language) || "en-US"; },
                     changed: changed,
@@ -13406,7 +13426,7 @@
         ["ask", "choose", "confirm", "threads", "thread", "newThread", "setCurrent", "deleteThread", "clearHistory",
          "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
          "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary",
-         "connect", "retry"].forEach(function (name) {
+         "connect", "retry", "voice"].forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
                 var m;
                 try { m = service(); } catch (e) { return reply(fail(-1, String(e.message || e))); }

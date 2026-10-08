@@ -33,7 +33,7 @@ const PEOPLE = [
 ];
 const APPS = [{ id: "org.webosphoenix.maps", title: "Maps" }, { id: "org.webosphoenix.music", title: "Music" }];
 
-function setup(opts: { llm?: object } = {}) {
+function setup(opts: { llm?: object; voice?: () => unknown } = {}) {
     const data = new Map<string, unknown>();
     const calls: { uri: string; params: any }[] = [];
     const spoken: string[] = [];
@@ -66,7 +66,7 @@ function setup(opts: { llm?: object } = {}) {
     const svc = createAssistantService({
         luna, storage, secrets, request: createRequest({ timeoutMs: 5000 }), now: () => NOW,
         caller: () => who, tts: { speak: (t: string) => { spoken.push(t); return Promise.resolve(); }, stop() {} },
-        llm: opts.llm, locale: () => "en-GB",
+        llm: opts.llm, voice: opts.voice, locale: () => "en-GB",
     });
     return {
         svc, calls, data, spoken,
@@ -534,5 +534,25 @@ describe("asking by voice (docs/AI-AND-MCP.md, Voice)", () => {
         expect(v.prompt).toContain("Sam Jones.");
         t.as("com.example.app");
         expect((await t.svc.vocabulary({})).returnValue).toBe(false);
+    });
+});
+
+describe("what the voice needs (voice)", () => {
+    it("lists the parts in order, with a hint only for what is missing", async () => {
+        const t = setup({ voice: () => Promise.resolve([
+            { id: "speech", available: false, engine: "", howToInstall: "Install espeak-ng." },
+            { id: "recognition", available: true, engine: "whisper.cpp", howToInstall: "never shown" },
+            { id: "wakeWord", available: false, howToInstall: "Run tools/get-wakeword.py." },
+        ]) });
+        const r = await t.svc.voice({});
+        expect(r.returnValue).toBe(true);
+        expect(r.parts.map((p: Reply) => [p.id, p.available, p.howToInstall])).toEqual([
+            ["recognition", true, ""], ["wakeWord", false, "Run tools/get-wakeword.py."], ["speech", false, "Install espeak-ng."]]);
+        expect(r.parts[0].name).toMatch(/whisper/);
+    });
+
+    it("answers with nothing where nobody knows (a browser), and when asking fails", async () => {
+        expect((await setup().svc.voice({})).parts).toEqual([]);
+        expect((await setup({ voice: () => Promise.reject(new Error("no")) }).svc.voice({})).parts).toEqual([]);
     });
 });
