@@ -70,7 +70,7 @@ Item {
                 shell.gestureUp();
             tryCompare(launcher, "hidden", 0, 2000);
             launcher.showPage(0);
-            tryVerify(function() { return Math.abs(pages.contentX - pages.originX) < 0.5; }, 2000);
+            restAt(0);
             for (var i = 0; i < pages.contentItem.children.length; ++i) {
                 var page = pages.contentItem.children[i];
                 if (page.hasOwnProperty("contentY"))
@@ -83,9 +83,15 @@ Item {
             tryCompare(launcher, "hidden", 1, 2000);
         }
         function pagePos() { return (pages.contentX - pages.originX) / pages.width; }
-        // The pages' farthest position from `from` while `fn` runs and the
-        // swipe settles.
-        function farthest(from, fn) {
+        // The pages at rest on page i: there exactly, not a frame of the
+        // slide there that happens to be close (a slow machine samples
+        // the slide's last frames).
+        function restAt(i) {
+            tryVerify(function() { return Math.abs(pagePos() - i) < 1e-6; }, 3000, "at rest on page " + i + ": " + pagePos());
+        }
+        // The pages' farthest positions while `fn` runs and the swipe
+        // settles on page `to` (until they are at rest there).
+        function farthest(to, fn) {
             var far = { max: pagePos(), min: pagePos() };
             function track() {
                 far.max = Math.max(far.max, pagePos());
@@ -93,7 +99,7 @@ Item {
             }
             pages.contentXChanged.connect(track);
             fn();
-            wait(Theme.wheelSettleDuration + 200);
+            restAt(to);
             pages.contentXChanged.disconnect(track);
             return far;
         }
@@ -105,20 +111,20 @@ Item {
         function test_launcherSwipeSnapsToThePageAhead() {
             openLauncher();
             var c = centre();
-            var far = farthest(0, function () {
+            var far = farthest(1, function () {
                 Trackpad.swipe(testCase, KeyInjector, pages, c.x, c.y, -pages.width * 0.45, 0, { momentum: 12 });
             });
             tryCompare(pages, "currentIndex", 1, 1000);
-            fuzzyCompare(pagePos(), 1, 0.001);
+            restAt(1);
             verify(far.max <= 1.0005, "never past the page it settles on: " + far.max);
             verify(far.min >= -0.0005, "never back before the page it left: " + far.min);
             // And back, with the fingers' ScrollEnd before the momentum
             // (the momentum begins with a ScrollBegin).
-            far = farthest(1, function () {
+            far = farthest(0, function () {
                 Trackpad.swipe(testCase, KeyInjector, pages, c.x, c.y, pages.width * 0.45, 0, { momentum: 12, endBeforeMomentum: true });
             });
             tryCompare(pages, "currentIndex", 0, 1000);
-            fuzzyCompare(pagePos(), 0, 0.001);
+            restAt(0);
             verify(far.min >= -0.0005, "no overscroll past the first page: " + far.min);
             closeLauncher();
         }
@@ -127,13 +133,13 @@ Item {
         function test_launcherShortSwipeSettlesBack() {
             openLauncher();
             launcher.showPage(1);
-            tryVerify(function() { return Math.abs(pagePos() - 1) < 0.001; }, 2000);
+            restAt(1);
             var c = centre();
             var far = farthest(1, function () {
                 Trackpad.swipe(testCase, KeyInjector, pages, c.x, c.y, -pages.width * 0.2, 0, { steps: 20, interval: 30, momentum: 6 });
             });
             compare(pages.currentIndex, 1);
-            fuzzyCompare(pagePos(), 1, 0.001);
+            restAt(1);
             verify(far.min >= 0.9995, "never back past the page: " + far.min);
             closeLauncher();
         }
@@ -143,13 +149,13 @@ Item {
             openLauncher();
             var last = launcher.tabs.length - 1;
             launcher.showPage(last);
-            tryVerify(function() { return Math.abs(pagePos() - last) < 0.001; }, 2000);
+            restAt(last);
             var c = centre();
             var far = farthest(last, function () {
                 Trackpad.swipe(testCase, KeyInjector, pages, c.x, c.y, -pages.width * 0.6, 0, { momentum: 12 });
             });
             compare(pages.currentIndex, last);
-            fuzzyCompare(pagePos(), last, 0.001);
+            restAt(last);
             verify(far.max < last + 0.25, "a little give past the end: " + far.max);
             closeLauncher();
         }
@@ -171,7 +177,7 @@ Item {
             Trackpad.swipe(testCase, KeyInjector, pages, c.x, c.y, 0, -50, { momentum: 10 });
             verify(page.contentY > 65, "the momentum carries it on: " + page.contentY);
             compare(pages.currentIndex, 0);
-            fuzzyCompare(pagePos(), 0, 0.001);
+            restAt(0);
             // A long one stops at the end, not past it.
             Trackpad.swipe(testCase, KeyInjector, pages, c.x, c.y, 0, -(maxY + 400), { momentum: 10 });
             compare(page.contentY, maxY);
@@ -189,10 +195,12 @@ Item {
             tryCompare(pages, "currentIndex", 1, 1000);
             Trackpad.notch(testCase, KeyInjector, pages, c.x, c.y, 1, 0);
             tryCompare(pages, "currentIndex", 0, 1000);
-            tryVerify(function() { return Math.abs(pagePos()) < 0.001; }, 2000);
+            restAt(0);
             var page = pages.currentItem, cardPos = shell.cardView.position;
             Trackpad.notch(testCase, KeyInjector, pages, c.x, c.y, 0, -1);
-            tryCompare(page, "contentY", launcher.cellHeight, 2000, "a notch down scrolls the page a row");
+            // Exactly there: the scroll's last frames are near enough for
+            // tryCompare's fuzzy compare, and would overwrite contentY below.
+            tryVerify(function() { return page.contentY === launcher.cellHeight; }, 2000, "a notch down scrolls the page a row: " + page.contentY);
             compare(pages.currentIndex, 0);
             // At the bottom it stays there, and the wheel stays in the launcher.
             var maxY = page.contentHeight - page.height;
@@ -204,16 +212,29 @@ Item {
             closeLauncher();
         }
 
-        // A finger's drag still pans between pages as it did.
+        // A finger's drag still pans between pages as it did. On an empty
+        // page (Favorites): on an icon, a press that a slow machine holds
+        // for iconMenuHoldInterval before the first move arrives opens the
+        // icon's menu and keeps the finger (Launcher.qml pageMouse), and the
+        // pages never move; on an empty page a hold does nothing.
         function test_launcherFingerDragUnchanged() {
             openLauncher();
+            var from = -1;
+            for (var t = 0; t < launcher.tabs.length - 1 && from < 0; ++t)
+                if (launcher.pageModels[t] && launcher.pageModels[t].count === 0)
+                    from = t;
+            verify(from >= 0, "an empty page with a page after it");
+            launcher.showPage(from);
+            restAt(from);
             var y = pages.height / 2, x0 = pages.width * 0.8;
             mousePress(pages, x0, y);
+            // However long the machine takes, no hold gets in the way.
+            wait(Theme.iconMenuHoldInterval + 100);
             for (var i = 1; i <= 10; ++i)
                 mouseMove(pages, x0 - i * pages.width * 0.06, y, 16);
             mouseRelease(pages, x0 - pages.width * 0.6, y, Qt.LeftButton, Qt.NoModifier, 16);
-            tryCompare(pages, "currentIndex", 1, 2000);
-            tryVerify(function() { return Math.abs(pagePos() - 1) < 0.001; }, 3000);
+            tryCompare(pages, "currentIndex", from + 1, 2000);
+            restAt(from + 1);
             closeLauncher();
         }
 
@@ -266,6 +287,10 @@ Item {
         function test_dashboardListScrolls() {
             var list = openDashboard(12);
             shell.notifications.setDrawerExpanded(false);
+            // The dashboard at its height and the list laid out, so its
+            // ends stay where they are while it scrolls.
+            tryCompare(shell.notifications, "negativeSpace", shell.notifications.dashboardHeight, 3000);
+            waitForItemPolished(list, 2000);
             verify(list.contentHeight > list.height, "the list scrolls");
             list.contentY = list.originY;
             var p = Qt.point(list.width / 2, list.height / 2);
@@ -273,9 +298,10 @@ Item {
             Trackpad.swipe(testCase, KeyInjector, list, p.x, p.y, 0, -60, { momentum: 8 });
             verify(list.contentY > top + 55, "scrolled down: " + (list.contentY - top));
             compare(windows.notifications.count, 12);
-            Trackpad.swipe(testCase, KeyInjector, list, p.x, p.y, 0, 2000, {});
+            Trackpad.swipe(testCase, KeyInjector, list, p.x, p.y, 0, 2000, { settle: 0 });
             compare(list.contentY, top);
-            // A mouse wheel's notch: a row.
+            // A mouse wheel's notch: a row, even straight after the swipe,
+            // before the swipe's end of events has passed.
             Trackpad.notch(testCase, KeyInjector, list, p.x, p.y, 0, -1);
             fuzzyCompare(list.contentY, top + Theme.dashboardItemHeight, 0.5);
         }

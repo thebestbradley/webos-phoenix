@@ -139,16 +139,18 @@ Item {
                 shell.gestureUp();
             tryCompare(launcher, "hidden", 0, 2000);
             launcher.showPage(0);
-            tryVerify(function() { return Math.abs(pages.contentX - pages.originX) < 0.5; }, 2000);
+            // At rest there, not a frame of the slide that happens to be close.
+            tryVerify(function() { return Math.abs(pages.contentX - pages.originX) < 1e-6; }, 3000);
             var far = 0;
             function track() { far = Math.max(far, (pages.contentX - pages.originX) / pages.width); }
             pages.contentXChanged.connect(track);
             var p = pages.mapToItem(root, pages.width / 2, pages.height / 2);
             Trackpad.swipe(testCase, KeyInjector, root, p.x, p.y, -pages.width * 0.4, 0, { momentum: 14 });
-            tryCompare(pages, "currentIndex", 1, 1000);
-            wait(Theme.wheelSettleDuration + 100);
+            // At rest on the next page (currentIndex follows the pages as
+            // they move, so it says nothing of the settle being done).
+            tryVerify(function() { return Math.abs((pages.contentX - pages.originX) / pages.width - 1) < 1e-6; }, 3000);
+            compare(pages.currentIndex, 1);
             pages.contentXChanged.disconnect(track);
-            fuzzyCompare((pages.contentX - pages.originX) / pages.width, 1, 0.001);
             verify(far <= 1.0005, "never past the page: " + far);
             shell.gestureUp();
             tryCompare(launcher, "hidden", 1, 2000);

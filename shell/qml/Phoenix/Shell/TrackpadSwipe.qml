@@ -63,6 +63,8 @@ MouseArea {
     property real endedAt: 0
     // ms after a swipe's end within which a ScrollBegin is its momentum.
     property int momentumGap: 50
+    // When the fingers of a list's scroll lifted (0: not yet).
+    property real liftedAt: 0
 
     signal started(real x, real y)
     signal moved(real dx, real dy)
@@ -86,11 +88,21 @@ MouseArea {
             return;
         }
         var momentum = e.phase === Qt.ScrollMomentum, end = e.phase === Qt.ScrollEnd;
-        // A list scrolling on with the momentum: until the events stop.
+        // A list scrolling on with the momentum: until the events stop, a
+        // mouse wheel turns, or the fingers come down again (a ScrollBegin
+        // later than momentumGap after the fingers' ScrollEnd).
         if (axis === "v" && verticalMomentum) {
-            if (!end)
-                swipe(e.x, e.y, e.pixelDelta.x, e.pixelDelta.y);
-            return;
+            var notch = e.phase === Qt.NoScrollPhase && e.pixelDelta.x === 0 && e.pixelDelta.y === 0;
+            var again = e.phase === Qt.ScrollBegin && liftedAt > 0 && Date.now() - liftedAt > momentumGap;
+            if (notch || again) {
+                finish();
+            } else {
+                if (end)
+                    liftedAt = Date.now();
+                else
+                    swipe(e.x, e.y, e.pixelDelta.x, e.pixelDelta.y);
+                return;
+            }
         }
         // Fingers down again: a new swipe, whatever is still settling. Not
         // the momentum begun as a ScrollBegin right after the fingers'
@@ -167,6 +179,7 @@ MouseArea {
             settleEnd.restart();
         }
         axis = "";
+        liftedAt = 0;
         sumX = 0;
         sumY = 0;
         lastTime = 0;
