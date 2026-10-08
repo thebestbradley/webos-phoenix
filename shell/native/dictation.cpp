@@ -14,7 +14,6 @@
 #include <QtEndian>
 
 #include <cmath>
-#include <cmath>
 #include <cstring>
 
 #ifdef PHOENIX_HAVE_MULTIMEDIA
@@ -34,6 +33,7 @@ constexpr int kSpeechMinMs = 150;
 constexpr int kQuietEndMs = 1000;
 constexpr int kNoSpeechMs = 7000;
 constexpr int kFileChunkMs = 50;
+constexpr int kRingSeconds = 4;      // standing by: what the spotter had, for the words after the phrase
 
 QStringList defaultCommand()
 {
@@ -54,7 +54,11 @@ Dictation::Dictation(QObject *parent)
 
 Dictation::~Dictation()
 {
+    m_standby = false;
     cancel();
+    stopSpotter();
+    if (m_capturing)
+        closeCapture();
 }
 
 bool Dictation::available() const
@@ -107,27 +111,150 @@ void Dictation::setInputFiles(const QStringList &f)
     emit inputFilesChanged();
 }
 
-void Dictation::start()
+void Dictation::setWakeCommand(const QStringList &c)
 {
-    if (m_listening || m_busy)
+    if (c == m_wakeCommand)
         return;
-    m_end = EndOfSpeech();
-    m_pcm.clear();
+    stopSpotter();
+    m_wakeCommand = c;
+    setWakeError(QString());
+    emit wakeCommandChanged();
+    updateStandby();
+}
+
+void Dictation::setStandby(bool s)
+{
+    if (s == m_standby)
+        return;
+    m_standby = s;
+    if (s)
+        setWakeError(QString());          // another try
+    emit standbyChanged();
+    updateStandby();
+}
+
+void Dictation::setWakeError(const QString &e)
+{
+    if (e == m_wakeError)
+        return;
+    m_wakeError = e;
+    emit wakeErrorChanged();
+}
+
+// Standing by: the microphone open and the spotter running while nothing
+// records; else, between recordings, both closed.
+void Dictation::updateStandby()
+{
+    const bool want = m_standby && wakeAvailable() && m_wakeError.isEmpty();
+    if (want) {
+        if (!m_spotter)
+            startSpotter();
+        if (!m_capturing && !m_listening) {
+            QString error;
+            if (!openCapture(true, &error))
+                setWakeError(error);
+            emit stateChanged();
+        }
+    } else {
+        stopSpotter();
+        if (m_capturing && !m_listening) {
+            closeCapture();
+            emit stateChanged();
+        }
+    }
+}
+
+void Dictation::startSpotter()
+{
+    m_spotter = new QProcess(this);
+    QProcess *proc = m_spotter;
+    m_spotterLine.clear();
+    m_spotterFed = 0;
+    m_ring.clear();
+    m_ringStart = 0;
+    proc->setProcessChannelMode(QProcess::SeparateChannels);
+    connect(proc, &QProcess::readyReadStandardOutput, this, &Dictation::spotterOutput);
+    connect(proc, &QProcess::finished, this, [this, proc](int code, QProcess::ExitStatus) {
+        proc->deleteLater();
+        if (m_spotter != proc)
+            return;
+        spotterOutput();
+        m_spotter = nullptr;
+        if (m_wakeError.isEmpty())
+            setWakeError(code ? tr("The wake word stopped (exit code %1).").arg(code) : tr("The wake word stopped."));
+        updateStandby();
+    });
+    connect(proc, &QProcess::errorOccurred, this, [this, proc](QProcess::ProcessError e) {
+        if (e != QProcess::FailedToStart || m_spotter != proc)
+            return;
+        proc->deleteLater();
+        m_spotter = nullptr;
+        setWakeError(tr("The wake word is not installed (%1 could not be started).").arg(m_wakeCommand.value(0)));
+        updateStandby();
+    });
+    QStringList args = m_wakeCommand;
+    const QString program = args.takeFirst();
+    proc->start(program, args);
+}
+
+void Dictation::stopSpotter()
+{
+    if (!m_spotter)
+        return;
+    QProcess *proc = m_spotter;
+    m_spotter = nullptr;
+    proc->disconnect(this);
+    proc->closeWriteChannel();
+    proc->kill();
+    proc->waitForFinished(1000);
+    proc->deleteLater();
+}
+
+// The spotter's lines: {"ready"}, {"wake", "end", "heard"}, {"error"}.
+void Dictation::spotterOutput()
+{
+    if (!m_spotter)
+        return;
+    m_spotterLine += m_spotter->readAllStandardOutput();
+    qsizetype nl;
+    while ((nl = m_spotterLine.indexOf('\n')) >= 0) {
+        const QByteArray line = m_spotterLine.left(nl);
+        m_spotterLine.remove(0, nl + 1);
+        const QJsonObject o = QJsonDocument::fromJson(line).object();
+        if (o.contains(QStringLiteral("error"))) {
+            setWakeError(o.value(QStringLiteral("error")).toString());
+            continue;
+        }
+        if (!o.contains(QStringLiteral("wake")) || m_listening || m_busy || !m_standby)
+            continue;
+        // What was said after the phrase, kept for a recording started now.
+        const qint64 end = qint64(o.value(QStringLiteral("end")).toDouble() * kWhisperRate);
+        const qint64 from = qBound<qint64>(0, end - m_ringStart, m_ring.size() / 2);
+        m_preroll = m_ring.mid(from * 2);
+        m_inWake = true;
+        emit wakeHeard(o.value(QStringLiteral("heard")).toString());
+        m_inWake = false;
+        m_preroll.clear();
+    }
+}
+
+// Opens the microphone, or the next file (nextFile) or the one playing.
+bool Dictation::openCapture(bool standby, QString *error)
+{
     if (!m_inputFiles.isEmpty()) {
         // A file as the microphone: in real time, a stretch every 50 ms,
-        // then quiet until the recording is stopped.
-        const QString name = m_inputFiles.at(qMin<qsizetype>(m_nextInput, m_inputFiles.size() - 1));
-        ++m_nextInput;
-        QFile f(name);
-        m_fileWav = f.open(QIODevice::ReadOnly) ? readWav(f.readAll()) : Wav();
-        if (!m_fileWav.ok) {
-            emit transcribed(QString(), tr("The microphone file %1 is not a WAV recording.").arg(name));
-            return;
+        // then quiet. Standing by plays only files not yet played.
+        if (!standby || m_nextInput < m_inputFiles.size()) {
+            if (!loadFile(error))
+                return false;
+        } else {
+            m_fileWav = Wav();
+            m_fileWav.ok = true;
+            m_rate = kWhisperRate;
+            m_channels = 1;
+            m_float = false;
+            m_fileDone = true;
         }
-        m_channels = m_fileWav.channels;
-        m_rate = m_fileWav.rate;
-        m_float = m_fileWav.isFloat;
-        m_filePos = 0;
         if (!m_fileTimer) {
             m_fileTimer = new QTimer(this);
             m_fileTimer->setInterval(kFileChunkMs);
@@ -135,25 +262,25 @@ void Dictation::start()
                 const qsizetype bytes = qsizetype(m_rate) * kFileChunkMs / 1000 * m_channels * (m_float ? 4 : 2);
                 QByteArray chunk = m_fileWav.pcm.mid(m_filePos, bytes);
                 m_filePos += chunk.size();
-                if (chunk.size() < bytes)
+                if (chunk.size() < bytes) {
+                    m_fileDone = true;
                     chunk.append(QByteArray(bytes - chunk.size(), 0));
+                }
                 recorded(chunk);
             });
         }
-        m_listening = true;
-        m_limit->start();
+        m_capturing = true;
         m_fileTimer->start();
-        emit stateChanged();
-        return;
+        return true;
     }
 #ifdef PHOENIX_HAVE_MULTIMEDIA
     const QAudioDevice device = QMediaDevices::defaultAudioInput();
     if (device.isNull()) {
-        emit transcribed(QString(), tr("There is no microphone."));
-        return;
+        *error = tr("There is no microphone.");
+        return false;
     }
     // 16 kHz mono if the microphone takes it; otherwise its own format,
-    // converted when the recording ends.
+    // converted as it comes.
     QAudioFormat format;
     format.setSampleRate(kWhisperRate);
     format.setChannelCount(1);
@@ -163,8 +290,8 @@ void Dictation::start()
     if (format.sampleFormat() != QAudioFormat::Int16 && format.sampleFormat() != QAudioFormat::Float) {
         format.setSampleFormat(QAudioFormat::Int16);
         if (!device.isFormatSupported(format)) {
-            emit transcribed(QString(), tr("The microphone's sound format is not supported."));
-            return;
+            *error = tr("The microphone's sound format is not supported.");
+            return false;
         }
     }
     m_channels = format.channelCount();
@@ -175,33 +302,134 @@ void Dictation::start()
     if (!m_io) {
         delete m_source;
         m_source = nullptr;
-        emit transcribed(QString(), tr("The microphone could not be opened."));
-        return;
+        *error = tr("The microphone could not be opened.");
+        return false;
     }
     connect(m_io, &QIODevice::readyRead, this, [this]() {
         if (m_io)
             recorded(m_io->readAll());
     });
-    m_listening = true;
-    m_limit->start();
-    emit stateChanged();
+    m_capturing = true;
+    return true;
 #else
-    emit transcribed(QString(), tr("Dictation is not available on this device."));
+    Q_UNUSED(standby);
+    *error = tr("Dictation is not available on this device.");
+    return false;
 #endif
 }
 
-// A stretch of the recording; with autoStop, the end of speech ends it.
-void Dictation::recorded(const QByteArray &chunk)
+// The next microphone file (the last one again after them all).
+bool Dictation::loadFile(QString *error)
 {
-    m_pcm.append(chunk);
-    if (!m_listening || chunk.isEmpty())
+    const QString name = m_inputFiles.at(qMin<qsizetype>(m_nextInput, m_inputFiles.size() - 1));
+    ++m_nextInput;
+    QFile f(name);
+    m_fileWav = f.open(QIODevice::ReadOnly) ? readWav(f.readAll()) : Wav();
+    if (!m_fileWav.ok) {
+        *error = tr("The microphone file %1 is not a WAV recording.").arg(name);
+        return false;
+    }
+    m_channels = m_fileWav.channels;
+    m_rate = m_fileWav.rate;
+    m_float = m_fileWav.isFloat;
+    m_filePos = 0;
+    m_fileDone = false;
+    return true;
+}
+
+void Dictation::closeCapture()
+{
+    if (m_fileTimer)
+        m_fileTimer->stop();
+#ifdef PHOENIX_HAVE_MULTIMEDIA
+    if (m_io)
+        recorded(m_io->readAll());
+    if (m_source) {
+        m_source->stop();
+        m_source->deleteLater();
+    }
+    m_source = nullptr;
+    m_io = nullptr;
+#endif
+    m_capturing = false;
+    m_inject.clear();
+}
+
+bool Dictation::hear(const QString &file)
+{
+    if (!m_capturing)
+        return false;
+    QFile f(file);
+    const Wav w = f.open(QIODevice::ReadOnly) ? readWav(f.readAll()) : Wav();
+    if (!w.ok)
+        return false;
+    m_inject += toWhisperPcm(w.pcm, w.channels, w.rate, w.isFloat);
+    return true;
+}
+
+void Dictation::start()
+{
+    if (m_listening || m_busy)
         return;
-    const double lvl = level(chunk, m_channels, m_float);
+    m_end = EndOfSpeech();
+    m_pcm.clear();
+    QString error;
+    if (m_capturing) {
+        // Open already, standing by: after the wake word, on from the end
+        // of the phrase (the same file); else a recording of its own (the
+        // next file).
+        if (m_inWake) {
+            m_pcm = m_preroll;
+            for (qsizetype i = 0; i < m_pcm.size(); i += kWhisperRate / 1000 * kFileChunkMs * 2) {
+                const QByteArray part = m_pcm.mid(i, kWhisperRate / 1000 * kFileChunkMs * 2);
+                m_end.feed(level(part, 1, false), int(part.size() / 2 * 1000 / kWhisperRate));
+            }
+        } else if (!m_inputFiles.isEmpty() && !loadFile(&error)) {
+            emit transcribed(QString(), error);
+            return;
+        }
+    } else if (!openCapture(false, &error)) {
+        emit transcribed(QString(), error);
+        return;
+    }
+    m_listening = true;
+    m_limit->start();
+    emit stateChanged();
+}
+
+// A stretch from the microphone: to the recording (with autoStop, the end
+// of speech ends it), or, standing by, to the wake word's spotter.
+void Dictation::recorded(const QByteArray &raw)
+{
+    if (raw.isEmpty())
+        return;
+    QByteArray chunk = toWhisperPcm(raw, m_channels, m_rate, m_float);
+    if (!m_inject.isEmpty()) {
+        const qsizetype n = qMin(chunk.size(), m_inject.size()) / 2;
+        for (qsizetype i = 0; i < n; ++i) {
+            const int v = qFromLittleEndian<qint16>(chunk.constData() + i * 2) + qFromLittleEndian<qint16>(m_inject.constData() + i * 2);
+            qToLittleEndian<qint16>(qint16(qBound(-32768, v, 32767)), chunk.data() + i * 2);
+        }
+        m_inject.remove(0, n * 2);
+    }
+    if (!m_listening) {
+        if (m_spotter && m_standby && !m_busy && m_spotter->state() == QProcess::Running) {
+            m_spotter->write(chunk);
+            m_spotterFed += chunk.size() / 2;
+            m_ring += chunk;
+            const qsizetype keep = kWhisperRate * 2 * kRingSeconds;
+            if (m_ring.size() > keep + kWhisperRate * 2)
+                m_ring.remove(0, m_ring.size() - keep);
+            m_ringStart = m_spotterFed - m_ring.size() / 2;
+        }
+        return;
+    }
+    m_pcm.append(chunk);
+    const double lvl = level(chunk, 1, false);
     setLoudness(loudnessOf(lvl));
     if (!m_autoStop)
         return;
-    const int frameBytes = (m_float ? 4 : 2) * qMax(1, m_channels);
-    const int ms = int(chunk.size() / frameBytes * 1000 / qMax(1, m_rate));
+    const int ms = int(chunk.size() / 2 * 1000 / kWhisperRate);
     switch (m_end.feed(lvl, ms)) {
     case EndOfSpeech::Ended:
         QMetaObject::invokeMethod(this, &Dictation::stop, Qt::QueuedConnection);
@@ -294,27 +522,26 @@ void Dictation::cancel()
 
 void Dictation::finishRecording(bool transcribe)
 {
-    if (m_fileTimer)
-        m_fileTimer->stop();
-#ifdef PHOENIX_HAVE_MULTIMEDIA
     m_limit->stop();
-    if (m_io)
-        m_pcm.append(m_io->readAll());
-    if (m_source) {
-        m_source->stop();
-        m_source->deleteLater();
-    }
-    m_source = nullptr;
-    m_io = nullptr;
-#endif
     m_listening = false;
+    // Standing by goes on with the microphone open; else it closes.
+    if (m_standby && wakeAvailable() && m_wakeError.isEmpty()) {
+#ifdef PHOENIX_HAVE_MULTIMEDIA
+        if (m_io)
+            m_pcm.append(toWhisperPcm(m_io->readAll(), m_channels, m_rate, m_float));
+#endif
+    } else {
+        m_listening = true;              // the last of it still goes to the recording
+        closeCapture();
+        m_listening = false;
+    }
     setLoudness(0);
     if (!transcribe) {
         m_pcm.clear();
         emit stateChanged();
         return;
     }
-    const QByteArray pcm = toWhisperPcm(m_pcm, m_channels, m_rate, m_float);
+    const QByteArray pcm = m_pcm;
     m_pcm.clear();
     if (pcm.size() < kWhisperRate / 4 * 2) {          // under a quarter of a second
         emit stateChanged();

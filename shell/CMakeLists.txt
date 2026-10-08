@@ -77,6 +77,7 @@ if(PHOENIX_BUILD_SIM)
     # The keyboard's dictation, without a microphone (CI: build/dictation-test).
     add_executable(dictation-test native/dictation_test.cpp native/dictation.cpp native/dictation.h)
     target_link_libraries(dictation-test PRIVATE Qt6::Core Qt6::Qml)
+    target_compile_definitions(dictation-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
     # The Assistant's on-device model runner and speech (CI: build/localmodels-test).
     find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Network)
     add_executable(localmodels-test native/localmodels_test.cpp native/localmodels.cpp native/localmodels.h native/speech.cpp native/speech.h)
