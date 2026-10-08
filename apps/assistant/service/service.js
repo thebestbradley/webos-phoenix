@@ -12,8 +12,8 @@
 // Where things live: conversations, settings and sealed keys in
 // /var/lib/phoenix/assistant (the service's own, 0700); downloaded models
 // in /media/internal/.phoenix/models (they are large); llama-server and
-// espeak-ng from the image (meta-phoenix; see docs/AI-AND-MCP.md for the
-// recipes still to write).
+// a speech program from the image (meta-phoenix's packagegroup-phoenix-assistant;
+// docs/AI-AND-MCP.md, "What's installed where").
 
 "use strict";
 
@@ -41,6 +41,10 @@ var methods = assistant.createAssistantService({
     llm: device.llamaServer({ modelsDir: "/media/internal/.phoenix/models", log: function (m) { console.log("[assistant] " + m); },
                               onChange: function () { notify(); } }),
     tts: tts,
+    // What the voice needs, and how to get what is missing (Settings > Assistant).
+    voice: device.voiceStatus({ tts: tts, luna: { call: function (uri, params) {
+        return new Promise(function (resolve) { service.call(uri, params, function (message) { resolve(message.payload); }); });
+    } } }),
     caller: function () { return current ? current.sender || current.applicationID || "" : ""; },
     changed: function () { notify(); },
     log: function (m) { console.log("[assistant] " + m); }

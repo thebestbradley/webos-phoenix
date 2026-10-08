@@ -23,6 +23,7 @@
         "org.webosphoenix.assistant/removeProvider",
         "org.webosphoenix.assistant/testProvider",
         "org.webosphoenix.assistant/listModels",
+        "org.webosphoenix.assistant/voice",
         "org.webosphoenix.assistant/models",
         "org.webosphoenix.assistant/downloadModel",
         "org.webosphoenix.assistant/cancelDownload",

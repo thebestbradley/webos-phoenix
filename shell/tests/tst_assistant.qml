@@ -52,7 +52,8 @@ Item {
         function msg(o) { n++; o.id = "m" + n; o.threadId = tid; o.time = n; return o; }
         function lunaCall(uri, params, cb) {
             var method = uri.replace(/^.*\//, "");
-            calls.push(method + (params.text ? " " + params.text : params.choice ? " " + params.choice : params.accept !== undefined ? " " + params.accept : ""));
+            calls.push(method + (params.text ? " " + params.text : params.choice ? " " + params.choice : params.accept !== undefined ? " " + params.accept
+                                 : params.mode ? " " + params.mode + " " + params.messageId : ""));
             var reply = { returnValue: true };
             if (method === "getSettings") {
                 reply.settings = { enabled: enabled };
@@ -81,7 +82,12 @@ Item {
                     added.push(msg({ role: "assistant", text: "Added \u201cMeeting with Sam\u201d to your calendar, tomorrow at 3:00 PM.", via: "commands",
                                      command: "event", status: "done", choices: [{ id: "open", label: "Open Calendar" }] }));
                 else if (/odyssey/.test(params.text))
-                    added.push(msg({ role: "assistant", text: "I can't do that on the phone.", choices: [{ id: "web", label: "Search the web" }] }));
+                    added.push(msg({ role: "assistant", text: "I can't do that on the phone.",
+                                     choices: [{ id: "web", label: "Search the web" }, { id: "connect", label: "Connect model" }] }));
+                else if (/dentist/.test(params.text))
+                    added.push(msg({ role: "assistant", text: "I can't do that on the phone. Did you mean \u201cadd a meeting with Sam tomorrow at 3\u201d?",
+                                     choices: [{ id: "web", label: "Search the web" }, { id: "connect", label: "Connect model" }],
+                                     data: { suggest: ["add a meeting with Sam tomorrow at 3"] } }));
                 else
                     added.push(msg({ role: "assistant", text: "The flashlight is on.", via: "commands", command: "flashlight", status: "done" }));
                 messages = messages.concat(added);
@@ -352,6 +358,69 @@ Item {
             tryVerify(function () { return fake.calls.indexOf("choose web") >= 0; }, 2000);
             // The browser comes up: the view gets out of its way.
             tryCompare(overlay, "open", false, 2000);
+        }
+
+        // "Connect model" asks which kind in a sheet over the panel (Escape
+        // and Back let the sheet go, not the view); the kind chosen goes to
+        // the service with the message, which opens Settings: the view
+        // gets out of its way.
+        function test_connectModelAsksWhichKind() {
+            openByHold();
+            type("who wrote the odyssey");
+            var row = arrived("I can't do that on the phone.");
+            var connect = findChild(row, "assistantChoice-connect");
+            verify(connect && connect.visible);
+            compare(connect.caption, "Connect model");
+            var sheet = findChild(overlay, "assistantConnect");
+            verify(!sheet.visible);
+            mouseClick(connect, connect.width / 2, connect.height / 2);
+            tryVerify(function () { return sheet.visible; }, 2000);
+            compare(fake.calls.filter(function (c) { return /^choose|^connect/.test(c); }).length, 0, "nothing asked of the service yet");
+            keyClick(Qt.Key_Escape);
+            tryVerify(function () { return !sheet.visible; }, 2000);
+            compare(overlay.open, true);
+            mouseClick(connect, connect.width / 2, connect.height / 2);
+            tryVerify(function () { return sheet.visible; }, 2000);
+            shell.gestureBack();
+            tryVerify(function () { return !sheet.visible; }, 2000);
+            compare(overlay.open, true);
+            mouseClick(connect, connect.width / 2, connect.height / 2);
+            tryVerify(function () { return sheet.visible; }, 2000);
+            for (var k = 0; k < 3; ++k)
+                verify(findChild(sheet, "assistantConnect-" + ["local", "cloud", "both"][k]).visible);
+            var cloud = findChild(sheet, "assistantConnect-cloud");
+            mouseClick(cloud, cloud.width / 2, cloud.height / 2);
+            tryVerify(function () { return fake.calls.indexOf("connect cloud " + row.modelData.id) >= 0; }, 2000, fake.calls.join(", "));
+            tryCompare(overlay, "open", false, 2000);
+        }
+
+        // Empty, it shows things to ask, a few at a time, a different few
+        // after a while; a tap puts one in the field. So do the requests an
+        // answer suggests.
+        function test_examplesAndSuggestionsGoToTheField() {
+            openByHold();
+            var hint = findChild(overlay, "assistantHint");
+            verify(hint.visible);
+            var first = findChild(hint, "assistantExample-0");
+            verify(first && first.visible && first.text !== "");
+            verify(findChild(hint, "assistantExample-1").visible);
+            var before = overlay.examplesNow().join("|");
+            tryVerify(function () { return overlay.examplesNow().join("|") !== before; }, 9000, "a different few");
+            first = findChild(hint, "assistantExample-0");
+            tryVerify(function () { return first.opacity === 1 && hint.fade === 1; }, 2000);
+            var words = first.text;
+            mouseClick(first, first.width / 2, first.height / 2);
+            var input = findChild(overlay, "assistantInput");
+            compare(input.text, words);
+            verify(input.activeFocus);
+            compare(fake.asks.length, 0, "not asked: the words to change or send");
+            type("I have a dentist thing");
+            var row = arrived("I can't do that on the phone. Did you mean \u201cadd a meeting with Sam tomorrow at 3\u201d?");
+            verify(!hint.visible);
+            var s = findChild(row, "assistantSuggest-0");
+            verify(s && s.visible);
+            mouseClick(s, s.width / 2, s.height / 2);
+            compare(input.text, "add a meeting with Sam tomorrow at 3");
         }
 
         // A command done that offers its app ("Open Calendar"): the bird

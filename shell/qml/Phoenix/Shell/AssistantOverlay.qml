@@ -14,8 +14,14 @@
 // the app on the conversation, to go on there. A text field (the keyboard
 // comes up for it as for any shell field) and a microphone (the shell's
 // dictation, whisper.cpp, ending by itself when the speaker stops). The
-// answers' choices ("Ask <cloud model>", "Search the web") and read-backs
-// ("Send ... to Sam?") are buttons. A tap outside the conversation, Back or
+// answers' choices ("Ask <cloud model>", "Search the web", "Connect
+// model") and read-backs ("Send ... to Sam?") are buttons. Connect model
+// asks which kind (on-device, cloud or both) in a small sheet, then the
+// service opens Settings > Assistant for it and the question waits there
+// (connect; the Assistant app asks it again once the model is in). Empty,
+// it shows a few things to ask, a different few every few seconds; a tap
+// puts one in the field to change or send, as do the requests an answer
+// suggests ("Did you mean ...?"). A tap outside the conversation, Back or
 // Escape closes it.
 //
 // Motion (all through Theme.motion, so Settings > Advanced > Animation
@@ -102,6 +108,55 @@ Item {
     property bool listening: false
     property string status: ""          // a line under the conversation: "Listening…", an error
 
+    // What to ask, for the empty conversation: one of each kind of command
+    // (docs/AI-AND-MCP.md, the commands), shown a few at a time. Each one
+    // the grammar takes as it stands (apps/assistant/service/grammar.test.ts
+    // reads this list).
+    readonly property var examples: [
+        qsTr("Add a meeting with Sam tomorrow at 3"), qsTr("What's on my calendar this week?"),
+        qsTr("Remind me to call Mom at 6"), qsTr("Set an alarm for 7am weekdays"),
+        qsTr("Set a timer for 10 minutes"), qsTr("New note: buy flowers"),
+        qsTr("Add milk to my shopping list"), qsTr("Email Priya saying see you soon"),
+        qsTr("Play some music by Miles Davis"), qsTr("Turn on the flashlight"),
+        qsTr("Convert 10 miles to km"), qsTr("What's the weather tomorrow?"),
+        qsTr("Text Sam I'm running late"), qsTr("Set brightness to 50%"),
+        qsTr("What time is it in Tokyo?"), qsTr("Navigate to the nearest coffee shop"),
+        qsTr("Show my photos from yesterday"), qsTr("What's 15% of 80?")
+    ]
+    // How many show at once, and the first of them.
+    readonly property int examplesShown: Theme.tablet ? 3 : 2
+    property int exampleIndex: 0
+    function examplesNow() {
+        var out = [];
+        for (var i = 0; i < examplesShown; ++i)
+            out.push(examples[(exampleIndex + i) % examples.length]);
+        return out;
+    }
+    // Put words in the field, to change or send (an example, a suggestion).
+    function suggest(text) {
+        input.text = text;
+        input.forceActiveFocus();
+        input.cursorPosition = input.text.length;
+    }
+
+    // "Connect model": the message whose choice it was, while the sheet
+    // asking which kind shows; then connect takes it to Settings.
+    property var connecting: null
+    function connectModel(mode) {
+        var m = connecting;
+        connecting = null;
+        if (!m || busy)
+            return;
+        busy = true;
+        _call("connect", { threadId: threadId, messageId: m.id, mode: mode }, function (r) {
+            ov.busy = false;
+            if (r && r.returnValue !== false)
+                ov.closeRequested();
+            else
+                ov.status = String((r && r.errorText) || qsTr("Something went wrong."));
+        });
+    }
+
     // 0 closed, 1 open: the backdrop's fade and the panel's growth.
     property real shown: open ? 1 : 0
     Behavior on shown {
@@ -124,7 +179,9 @@ Item {
         _beats = [];
         beat = "";
         beatTimer.stop();
+        connecting = null;
         if (open) {
+            exampleIndex = Math.floor(Math.random() * examples.length);
             // The bird rises asleep with the panel, then wakes and waves.
             _wake = "asleep";
             wakeTimer.interval = Theme.launcherDuration + _beatMs(80);
@@ -249,6 +306,11 @@ Item {
     function choose(message, choice) {
         if (busy)
             return;
+        // Which kind first, here; then on to Settings.
+        if (choice.id === "connect") {
+            connecting = message;
+            return;
+        }
         busy = true;
         _call("choose", { threadId: threadId, messageId: message.id, choice: choice.id }, function (r) {
             _settled(r);
@@ -277,6 +339,7 @@ Item {
         threadId = "";
         messages = [];
         status = "";
+        connecting = null;
         input.forceActiveFocus();
     }
     // The app button: on to the Assistant app with this conversation.
@@ -526,7 +589,7 @@ Item {
         }
     }
 
-    Keys.onEscapePressed: closeRequested()
+    Keys.onEscapePressed: { if (connecting !== null) connecting = null; else closeRequested(); }
     // Over everything: Enter does not reach the card behind (it would
     // maximize it).
     Keys.onReturnPressed: (event) => { event.accepted = true; }
@@ -855,7 +918,10 @@ Item {
                     spacing: Theme.px(8)
                     readonly property bool asking: row.modelData.status === "pending" && !!row.modelData.confirm
                     readonly property var choices: row.modelData.choices && !row.modelData.chosen ? row.modelData.choices : []
-                    readonly property int count: choices.length + (asking ? 2 : 0)
+                    // Requests close to words it did not understand: to the field.
+                    readonly property var suggestions: row.modelData.data && row.modelData.data.suggest && choices.length > 0 ? row.modelData.data.suggest : []
+                    readonly property int count: choices.length + suggestions.length + (asking ? 2 : 0)
+
                     visible: asking || choices.length > 0
                     // Button k of n appears after the ones before it (an
                     // even share of choicesAppear each, overlapping).
@@ -882,6 +948,20 @@ Item {
                             Text { id: label; visible: false; text: parent.caption; font.pixelSize: Theme.px(16); font.bold: true; font.family: Theme.fontFamily }
                         }
                     }
+                    Repeater {
+                        model: actions.suggestions
+                        delegate: AssistantChip {
+                            required property var modelData
+                            required property int index
+                            objectName: "assistantSuggest-" + index
+                            text: modelData
+                            maxWidth: list.width
+                            onClicked: ov.suggest(modelData)
+                            readonly property real appear: actions.shareOf(actions.choices.length + index)
+                            opacity: appear
+                            scale: 0.85 + 0.15 * appear
+                        }
+                    }
                     ActionButton {
                         objectName: "assistantConfirmYes"
                         visible: actions.asking
@@ -890,7 +970,7 @@ Item {
                         affirmative: true
                         caption: row.modelData.command === "text" ? qsTr("Send") : row.modelData.command === "call" ? qsTr("Call") : qsTr("Yes")
                         onAction: ov.confirm(row.modelData, true)
-                        readonly property real appear: actions.shareOf(actions.choices.length)
+                        readonly property real appear: actions.shareOf(actions.choices.length + actions.suggestions.length)
                         opacity: appear
                         scale: 0.85 + 0.15 * appear
                     }
@@ -901,26 +981,71 @@ Item {
                         height: Theme.px(40)
                         caption: qsTr("Cancel")
                         onAction: ov.confirm(row.modelData, false)
-                        readonly property real appear: actions.shareOf(actions.choices.length + 1)
+                        readonly property real appear: actions.shareOf(actions.choices.length + actions.suggestions.length + 1)
                         opacity: appear
                         scale: 0.85 + 0.15 * appear
                     }
                 }
             }
 
-            // Nothing asked yet.
-            Text {
+            // Nothing asked yet: a few things to ask, a different few
+            // every few seconds (faded over; held still while one is
+            // being typed or said).
+            Column {
+                id: hint
                 objectName: "assistantHint"
                 anchors.bottom: parent.bottom
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                visible: ov.messages.length === 0
-                wrapMode: Text.Wrap
-                text: qsTr("Ask me to set a timer, text someone, turn on the flashlight, open an app, or anything else.")
-                color: "#C0FFFFFF"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.px(Theme.tablet ? 20 : 17)
+                spacing: Theme.px(8)
+                visible: ov.messages.length === 0 && !ov.busy
+                property real fade: 1
+                Text {
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    text: qsTr("Try asking")
+                    color: "#A0FFFFFF"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.px(Theme.tablet ? 15 : 13)
+                }
+                Flow {
+                    id: exampleFlow
+                    width: parent.width
+                    spacing: Theme.px(8)
+                    opacity: hint.fade
+                    // Centred: each line's width is what its chips take.
+                    leftPadding: Math.max(0, (width - implicitRowWidth) / 2)
+                    readonly property real implicitRowWidth: {
+                        var w = 0;
+                        for (var i = 0; i < children.length; ++i)
+                            if (children[i].visible && children[i].width > 0)
+                                w += children[i].width + spacing;
+                        return Math.min(width, Math.max(0, w - spacing));
+                    }
+                    Repeater {
+                        model: ov.examplesNow()
+                        delegate: AssistantChip {
+                            required property var modelData
+                            required property int index
+                            objectName: "assistantExample-" + index
+                            text: modelData
+                            maxWidth: exampleFlow.width
+                            onClicked: ov.suggest(modelData)
+                        }
+                    }
+                }
+                SequentialAnimation {
+                    id: nextExamples
+                    NumberAnimation { target: hint; property: "fade"; to: 0; duration: Theme.motion(250); easing.type: Easing.InQuad }
+                    ScriptAction { script: ov.exampleIndex = (ov.exampleIndex + ov.examplesShown) % ov.examples.length }
+                    NumberAnimation { target: hint; property: "fade"; to: 1; duration: Theme.motion(250); easing.type: Easing.OutQuad }
+                }
+                Timer {
+                    interval: 5000
+                    repeat: true
+                    running: hint.visible && ov.open && input.text === "" && !ov.listening && ov.connecting === null
+                    onTriggered: nextExamples.restart()
+                }
             }
         }
 
@@ -985,7 +1110,7 @@ Item {
                     followTimer.stop();
                     ov.stopListening(true);
                 }
-                Keys.onEscapePressed: ov.closeRequested()
+                Keys.onEscapePressed: { if (ov.connecting !== null) ov.connecting = null; else ov.closeRequested(); }
                 // Enter is the field's alone: TextInput lets it go on after
                 // accepted(), and the shell behind would take it (the card
                 // in focus maximized).
@@ -1070,6 +1195,110 @@ Item {
             MouseArea {
                 anchors.fill: parent
                 onClicked: ov.listening ? ov.dictation.stop() : ov.listen()
+            }
+        }
+        // "Connect model": which kind, over the bottom of the panel (a
+        // tap on its backdrop, Back or Escape lets it go).
+        MouseArea {
+            objectName: "assistantConnectScrim"
+            anchors.fill: parent
+            visible: ov.connecting !== null
+            onClicked: ov.connecting = null
+        }
+        Rectangle {
+            id: connectSheet
+            objectName: "assistantConnect"
+            visible: ov.connecting !== null
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: connectColumn.implicitHeight + Theme.px(24)
+            radius: Theme.px(16)
+            color: "#F0202428"
+            border.color: "#50FFFFFF"
+            border.width: 1
+            opacity: visible ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.motion(150) } }
+            MouseArea { anchors.fill: parent }       // taps stay on it
+            Column {
+                id: connectColumn
+                x: Theme.px(16)
+                y: Theme.px(12)
+                width: parent.width - Theme.px(32)
+                spacing: Theme.px(4)
+                Text {
+                    width: parent.width
+                    text: qsTr("Connect a model")
+                    color: "#FFFFFF"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.px(Theme.tablet ? 19 : 17)
+                    font.bold: true
+                }
+                Text {
+                    width: parent.width
+                    bottomPadding: Theme.px(4)
+                    wrapMode: Text.Wrap
+                    text: qsTr("For questions and requests the phone's own commands don't know.")
+                    color: "#B0FFFFFF"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.px(13)
+                }
+                Repeater {
+                    model: [
+                        { mode: "local", title: qsTr("On-device model"),
+                          detail: qsTr("Private and offline: nothing leaves the phone. A 0.5 to 2.5 GB download.") },
+                        { mode: "cloud", title: qsTr("Cloud model"),
+                          detail: qsTr("Anthropic, OpenAI, Gemini or a compatible server, with your API key.") },
+                        { mode: "both", title: qsTr("Both"),
+                          detail: qsTr("On-device first; the cloud model for what it can't do.") }
+                    ]
+                    delegate: Rectangle {
+                        required property var modelData
+                        objectName: "assistantConnect-" + modelData.mode
+                        width: connectColumn.width
+                        height: kindText.implicitHeight + Theme.px(16)
+                        radius: Theme.px(10)
+                        color: kindArea.pressed ? "#40FFFFFF" : "#1AFFFFFF"
+                        Column {
+                            id: kindText
+                            x: Theme.px(12)
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - Theme.px(24)
+                            Text {
+                                width: parent.width
+                                text: modelData.title
+                                color: "#FFFFFF"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.px(Theme.tablet ? 17 : 15)
+                                font.bold: true
+                            }
+                            Text {
+                                width: parent.width
+                                wrapMode: Text.Wrap
+                                text: modelData.detail
+                                color: "#C0FFFFFF"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.px(Theme.tablet ? 14 : 12)
+                            }
+                        }
+                        MouseArea {
+                            id: kindArea
+                            anchors.fill: parent
+                            onClicked: ov.connectModel(modelData.mode)
+                        }
+                    }
+                }
+                Text {
+                    objectName: "assistantConnectCancel"
+                    width: parent.width
+                    topPadding: Theme.px(6)
+                    horizontalAlignment: Text.AlignHCenter
+                    text: qsTr("Cancel")
+                    color: "#D0FFFFFF"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.px(15)
+                    MouseArea { anchors.fill: parent; anchors.margins: -Theme.px(6); onClicked: ov.connecting = null }
+                }
             }
         }
     }

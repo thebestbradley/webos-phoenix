@@ -1051,9 +1051,12 @@ FocusScope {
                 lockScreen.unlockPanel.entryCanceled();
             return;
         }
-        // The assistant's view closes.
+        // The assistant's view closes (its "Connect model" sheet first).
         if (assistantView.open) {
-            closeAssistant();
+            if (assistantView.connecting !== null)
+                assistantView.connecting = null;
+            else
+                closeAssistant();
             return;
         }
         // The share sheet over the launcher gets it (it goes back inside
