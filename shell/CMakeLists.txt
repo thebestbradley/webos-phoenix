@@ -22,6 +22,9 @@ find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Gui Qml Quick)
 # QML the simulator loads, and installed next to the QML on the device.
 set(PHOENIX_QML_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/qml")
 add_subdirectory(native)
+# The assistant's wake word spotter (phoenix-wakeword, wakeword-test), run by
+# the shell's Dictation; libvosk and its model are found at run time.
+add_subdirectory(../services/wakeword ${CMAKE_CURRENT_BINARY_DIR}/services-wakeword)
 
 if(PHOENIX_BUILD_SIM)
     # Qt WebEngine runs the web apps (original webOS apps, Settings, ...).
