@@ -1485,9 +1485,15 @@ Item {
         onTriggered: shell.launch("org.webosphoenix.screenshot")
     }
 
+    // Once luna-systemui is up and listening (its page loads after the
+    // scene starts on a busy computer), as Simulate > Low Battery does.
     Timer {
         id: lowBatteryTimer
         interval: 3000
-        onTriggered: windows.simulatePower({ percent: 4, charger: "none" })
+        onTriggered: {
+            if (!windows.systemUiLoaded)
+                return restart();
+            root.power({ percent: 4, charger: "none" });
+        }
     }
 }

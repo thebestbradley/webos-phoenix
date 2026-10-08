@@ -237,6 +237,10 @@ Item {
     // of the one showing changes the front without changing alertShown.)
     readonly property string alertKey: alerts !== null && alerts.count > 0 ? alerts.get(0).key : ""
     readonly property real alertHeight: alerts !== null && alerts.count > 0 ? Theme.px(alerts.get(0).height) : 0
+    // Phones: the room above the front alert when it is a web page (the
+    // shell's own alerts keep their margins themselves); set as it is put
+    // in place (attachAlert).
+    property real alertTopPadding: 0
 
     // A full-screen app has the whole screen: no bar, no banners, no
     // dashboard; popup alerts (a call) still make room
@@ -263,7 +267,7 @@ Item {
     // immediate)); showing and hiding it animates.
     property bool spaceImmediate: false
     readonly property real negativeSpaceTarget: locked ? keyboardHeight
-        : alertShown && !overlay ? alertHeight
+        : alertShown && !overlay ? alertHeight + alertTopPadding
         : keyboardHeight > 0 ? keyboardHeight
         : overlay || fullScreen ? 0
         : dashboardOpen ? dashboardHeight
@@ -450,14 +454,19 @@ Item {
     onLockedChanged: Qt.callLater(attachAlert)
     function attachAlert() {
         var w = alertKey !== "" && source ? source.windowFor(alertKey) : null;
-        if (!w)
+        if (!w) {
+            alertTopPadding = 0;
             return;
+        }
         var host = locked && lockAlertHost ? lockAlertHost : overlay ? tabletAlertHost : phoneAlertHost;
+        // A page (a WebAppWindow runs scripts); the shell's own alerts do not.
+        var web = typeof w.runScript === "function";
+        alertTopPadding = host === phoneAlertHost && web ? Theme.phoneAlertTopPadding : 0;
         w.parent = host;
         w.x = 0;
-        w.y = 0;
+        w.y = Qt.binding(function() { return host === phoneAlertHost ? root.alertTopPadding : 0; });
         w.width = Qt.binding(function() { return host.width; });
-        w.height = Qt.binding(function() { return host.height; });
+        w.height = Qt.binding(function() { return host === phoneAlertHost ? root.alertHeight : host.height; });
         w.visible = true;
     }
 
@@ -702,10 +711,11 @@ Item {
             MouseArea { anchors.fill: parent }
             Item {
                 id: phoneAlertHost
+                objectName: "phoneAlertHost"
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                height: root.alertHeight
+                height: root.alertHeight + root.alertTopPadding
             }
         }
 

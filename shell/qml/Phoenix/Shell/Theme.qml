@@ -357,6 +357,14 @@ QtObject {
     readonly property int lockDashboardTopPadding: px(1)             // LockWindow.cpp:2615
     readonly property int lockDashboardBottomPadding: px(3)          // LockWindow.cpp:2614
     readonly property int alertFadeDuration: 400                     // DashboardWindowManager.cpp:559,589
+    // Phones: room above a web page's popup alert (luna-systemui's Low
+    // Battery, an alarm, a reminder) in the negative space. The phone's alert
+    // container put the window at its very top (DashboardWindowManager.cpp:
+    // 244, 1239-1240) and luna-systemui's content has no top margin
+    // (notifications.css:13-15, "margin: 0 10px 10px"), so its title sat
+    // against the app's bottom edge. 10 px, as the shell's own alerts have
+    // above their titles (6 px margin + 4 px, uiComponents/MemoryAlert).
+    readonly property int phoneAlertTopPadding: px(10)
     readonly property int positiveSpaceDuration: 400                 // conf/lunaAnimations.conf:73-74, curve 6 OutCubic
     readonly property real dashboardDismissRatio: 0.25               // DashboardWindowContainer.cpp:350-363
     readonly property int dashboardTopPadding: px(10)                // DashboardWindowContainer.cpp:107 (phones)
