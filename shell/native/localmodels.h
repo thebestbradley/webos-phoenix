@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// The Phoenix Assistant's on-device model (docs/M6-PLAN.md F3, layer 3) as
+// The Assistant's on-device model (docs/M6-PLAN.md F3, layer 3) as
 // the shell runs it: GGUF models downloaded into modelsDir (redirects
 // followed, as Hugging Face sends them from a CDN; the SHA-256 checked) and
 // llama.cpp's llama-server started for the one in use on 127.0.0.1, with

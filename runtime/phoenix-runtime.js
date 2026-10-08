@@ -13223,7 +13223,7 @@
     })();
 
     // ================================================================================
-    // The Phoenix Assistant (org.webosphoenix.assistant, org.webosphoenix.tts;
+    // The Assistant (org.webosphoenix.assistant, org.webosphoenix.tts;
     // the shell's assistant view, apps/assistant, Settings > Assistant)
     // ================================================================================
     //

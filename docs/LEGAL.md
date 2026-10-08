@@ -444,7 +444,7 @@ records WAV, so it is optional.
 
 ## The Assistant's language models and speech
 
-The Phoenix Assistant (`apps/assistant`) runs **llama.cpp**
+The Assistant (`apps/assistant`) runs **llama.cpp**
 (<https://github.com/ggml-org/llama.cpp>, MIT) as a separate program,
 `llama-server`; no llama.cpp code is in this repository. A `meta-phoenix`
 recipe beside `whisper-cpp`'s is still to write, and should ship llama.cpp's

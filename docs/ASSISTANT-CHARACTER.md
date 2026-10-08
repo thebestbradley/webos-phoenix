@@ -1,6 +1,6 @@
 # The Assistant's character
 
-The Phoenix Assistant has a face: a small bird that shows what the
+The Assistant has a face: a small bird that shows what the
 assistant is doing. It is original art for Phoenix (Apache-2.0), designed
 with the project's owner on 7–8 October 2026 ([art/assistant-bird/PROVENANCE.md](../art/assistant-bird/PROVENANCE.md)).
 

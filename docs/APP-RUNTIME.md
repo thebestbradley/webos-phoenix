@@ -1838,13 +1838,13 @@ On a device the service must run on the bus (a small Node.js or C++
 service with the same API; today it exists only in the web runtime), and
 the keyboard must be the device's input method (GAPS V5).
 
-## Phoenix Assistant
+## Assistant
 
 Phoenix's own (webOS had none; [M6-PLAN.md](M6-PLAN.md) F3,
 [AI-AND-MCP.md](AI-AND-MCP.md#10-as-built-7-october-2026-in-the-simulator)).
 The service is the device's own code, `apps/assistant/service` (a Node.js
 Luna service: `service.js`, `assistant.js`, `lib/`); the runtime runs it in
-the page (block "The Phoenix Assistant", loaded from
+the page (block "The Assistant", loaded from
 `/usr/palm/services/org.webosphoenix.assistant/` with `nodeServiceLoader`)
 and gives it Luna calls on the simulated bus, HTTP through the host's proxy,
 the shared store and the sealing key. `@phoenix/luna` `assistant` and `tts`

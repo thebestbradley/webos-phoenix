@@ -10,7 +10,7 @@ or more pull requests, merged when CI is green.
 | F0 | Fixes: settings lost on save; card corners; Messaging reply bar | Settings and corners done; reply bar waits on the owner |
 | F1 | Press and hold on launcher icons | Done in the simulator (7 October 2026) |
 | F2 | Clipboard manager | Done in the simulator (7 October 2026) |
-| F3 | The Phoenix Assistant 1.0 | Done in the simulator (7 October 2026) |
+| F3 | The Assistant 1.0 | Done in the simulator (7 October 2026) |
 | F4 | Community features picked for 1.0 | Done in the simulator (7 October 2026); the hardware-dependent ones finish on devices in the image work |
 
 ## F0: fixes first
@@ -120,7 +120,7 @@ Works like Paste on macOS, in the webOS style.
 - **Refined 8 Oct** (the owner's notes): the strip's tabs are the launcher's tab bar (`launcher3/tab-bg.png`, `tab-selected-bg.png`, dividers, bold white / #C8C8C8 titles) with less padding, ABC as its first cell. The clips behave as card view's cards: the one in focus centred, as wide as an active card is of the screen; its neighbours peek in beside it at the non-active card scale and dimmed to `cardDimming`, card view's gap apart; a swipe drags them and they snap clip to clip with card view's flick rule and slide (`cardSlideDuration`, OutQuart). A tap on the middle clip pastes it, on a side clip centres it; holds as before. Another tab cross-slides the clips in from its side; the strip rises and fades in over the keys. Decided: the side clips are only as much smaller as card view's are (about 92%), not more.
 - **Not yet**: on a device the service has to be a real bus service (it lives in the web runtime), and the keyboard must be the device's (GAPS V5). Pictures paste only into rich text (`contenteditable`); a plain field takes none.
 
-## F3: the Phoenix Assistant 1.0
+## F3: the Assistant 1.0
 
 **Layers.** Each request goes down these in order:
 1. **Speech to text**, on the device, with whisper.cpp (the dictation service).

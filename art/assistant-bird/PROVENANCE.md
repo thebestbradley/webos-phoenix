@@ -1,4 +1,4 @@
-# The Phoenix Assistant's character
+# The Assistant's character
 
 | File | From | License |
 | --- | --- | --- |

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // The assistant client against the simulator's org.webosphoenix.assistant
-// (runtime/phoenix-runtime.js "The Phoenix Assistant", which runs
+// (runtime/phoenix-runtime.js "The Assistant", which runs
 // apps/assistant/service in the page): commands on the simulated bus,
 // threads and their subscriptions, keys sealed at rest, who may call.
 // The router itself is tested in apps/assistant/service.

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Calendar arithmetic for the Phoenix Assistant, the same in every
+// Calendar arithmetic for the Assistant, the same in every
 // language (the words are in lib/lang/<code>.js): local days, weeks,
 // clock times resolved to moments, and the repeat rules of webOS calendar
 // events and Clock alarms.

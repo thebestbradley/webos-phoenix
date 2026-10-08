@@ -421,7 +421,7 @@ int main(int argc, char *argv[])
     }
     // The Assistant's on-device models (downloaded into the simulator's data)
     // and its speech: the shell runs them, as "assistant" host messages ask
-    // (the runtime's block "The Phoenix Assistant").
+    // (the runtime's block "The Assistant").
     view.rootContext()->setContextProperty(QStringLiteral("simModelsDir"),
         QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath(QStringLiteral("models")));
     view.rootContext()->setContextProperty(QStringLiteral("simLlamaServer"),

@@ -285,7 +285,7 @@ Agreed with the owner on 7 October 2026; [M6-PLAN.md](M6-PLAN.md) has the detail
 - [ ] F0: fixes (settings lost on save and the card corners: done; the Messaging reply bar)
 - [x] F1: press and hold on launcher icons (peek and menu; in the simulator)
 - [x] F2: clipboard manager (keyboard strip, Clipboard app, Settings > Clipboard; in the simulator)
-- [x] F3: the Phoenix Assistant 1.0 (commands, optional on-device model, cloud models with permission, Assistant app; in the simulator)
+- [x] F3: the Assistant 1.0 (commands, optional on-device model, cloud models with permission, Assistant app; in the simulator)
 - [x] F4: community features picked for 1.0 (in the simulator; the hardware-dependent ones finish on devices in the image work)
   - [x] Launcher: app groups (folders), tabs renamed, added and removed, grid density (in the simulator)
   - [x] Cards: infinite cycling, tap a side card to maximize it, the wave launcher (in the simulator)
@@ -344,7 +344,7 @@ every day. The app sources come towards the end of 1.0 (owner, 29 September
       file picker back for legacy apps, a save picker (Save to Files in a
       chosen folder), and a share sheet apps join through `appinfo.json`
       ([SHARE-AND-FILES.md](SHARE-AND-FILES.md))
-- [x] The Phoenix Assistant, like Siri: on-device speech recognition and
+- [x] The Assistant, like Siri: on-device speech recognition and
       commands, an optional on-device model, cloud models with permission,
       an Assistant app with threads, spoken answers, "Hey Phoenix" (in the simulator)
       ([M6-PLAN.md](M6-PLAN.md) F3, [AI-AND-MCP.md](AI-AND-MCP.md#10-and-20))

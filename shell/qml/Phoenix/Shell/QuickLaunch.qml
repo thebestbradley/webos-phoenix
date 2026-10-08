@@ -21,7 +21,7 @@ Item {
 
     signal launchRequested(string appId)
     signal launcherToggled
-    // Press and hold on the launcher button: the Phoenix Assistant
+    // Press and hold on the launcher button: the Assistant
     // (docs/M6-PLAN.md F3; a tap still opens the launcher).
     signal assistantRequested
     // The hold opens it (Shell.assistantEnabled); off, a hold does nothing.

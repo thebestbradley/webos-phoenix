@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// The Phoenix Assistant's view (AssistantOverlay.qml, M6 F3): holding the
+// The Assistant's view (AssistantOverlay.qml, M6 F3): holding the
 // launcher button in the quick launch bar opens it while a tap still opens
 // the launcher; Back, Escape and a tap outside close it; typed requests go
 // to org.webosphoenix.assistant and the thread comes back with its answers,

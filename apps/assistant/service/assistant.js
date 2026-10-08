@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// The Phoenix Assistant service, org.webosphoenix.assistant (docs/M6-PLAN.md
+// The Assistant service, org.webosphoenix.assistant (docs/M6-PLAN.md
 // F3). Each request goes down the layers in order:
 //
 //   1. speech to text: done before it gets here (the shell's dictation,
@@ -302,7 +302,7 @@ function createAssistantService(deps) {
     // ---- Language models (layers 3 and 4) -------------------------------------------------------
     function systemPrompt(withTools) {
         var d = new Date(now());
-        return "You are the Phoenix Assistant on a webOS Phoenix phone. Answer briefly, in one to three sentences, in plain text without markdown; " +
+        return "You are Assistant, the voice assistant on a webOS phone. Answer briefly, in one to three sentences, in plain text without markdown; " +
             "your answers are read aloud. Today is " + d.toDateString() + ", the time is " + lang().timeText(now()) + "." +
             (withTools ? " Most questions need no tool: answer them in words. Call a tool only when the user clearly asks the phone to do " +
              "the very thing the tool does (\"turn on the flashlight\" calls toggle with flashlight on); call at most one. " +

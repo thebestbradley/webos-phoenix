@@ -2,7 +2,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Drives the Phoenix Assistant (docs/M6-PLAN.md F3) in headless Chromium
+// Drives the Assistant (docs/M6-PLAN.md F3) in headless Chromium
 // against the simulated org.webosphoenix.assistant (the device's service
 // code, apps/assistant/service, run in the page by runtime/phoenix-runtime.js):
 //

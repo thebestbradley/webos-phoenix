@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Text to speech for the Phoenix Assistant's answers (docs/M6-PLAN.md F3)
+// Text to speech for the Assistant's answers (docs/M6-PLAN.md F3)
 // and org.webosphoenix.tts: a speech program run with the text on its
 // standard input, one utterance at a time (a new one stops the last).
 //

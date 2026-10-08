@@ -26,7 +26,7 @@
 > over a translucent backdrop. The MCP agent stays 2.0. The plan is
 > [M6-PLAN.md](M6-PLAN.md) F3; the table below is its command layer.
 
-The **Phoenix Assistant in 1.0** starts with a voice assistant in the classic style:
+The **Assistant in 1.0** starts with a voice assistant in the classic style:
 
 | Part | 1.0 |
 | --- | --- |

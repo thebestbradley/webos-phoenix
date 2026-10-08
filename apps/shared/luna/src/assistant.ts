@@ -1,12 +1,12 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// org.webosphoenix.assistant: the Phoenix Assistant (docs/M6-PLAN.md F3).
+// org.webosphoenix.assistant: the Assistant (docs/M6-PLAN.md F3).
 // Conversations ("threads"), the router between the command grammar, the
 // on-device model and cloud models, settings, providers and on-device
 // models. The service is apps/assistant/service (assistant.js documents
 // every request); the simulator runs that code in the page
-// (runtime/phoenix-runtime.js, block "The Phoenix Assistant").
+// (runtime/phoenix-runtime.js, block "The Assistant").
 //
 // org.webosphoenix.tts: text to speech for any app.
 

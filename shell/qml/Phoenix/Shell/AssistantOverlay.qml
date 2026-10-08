@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// The Phoenix Assistant's system view (docs/M6-PLAN.md F3): the
+// The Assistant's system view (docs/M6-PLAN.md F3): the
 // conversation in use floats over whatever is on screen, on a translucent,
 // blurred backdrop (BackdropBlur over Shell.backdrop), like the recent Siri.
 // A Phoenix addition: webOS had no assistant. Opened by holding the
@@ -670,7 +670,7 @@ Item {
             anchors.top: parent.top
             height: Theme.px(28)
             verticalAlignment: Text.AlignVCenter
-            text: qsTr("Phoenix Assistant")
+            text: qsTr("Assistant")
             color: "#B0FFFFFF"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.px(14)

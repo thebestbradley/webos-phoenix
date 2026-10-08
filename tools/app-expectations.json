@@ -78,7 +78,7 @@
     },
     "org.webosphoenix.assistant": {
         "status": "works",
-        "note": "Phoenix Assistant (React, apps/assistant) on the simulated org.webosphoenix.assistant (apps/assistant/service in the page); tools/test-assistant.cjs drives it and Settings > Assistant"
+        "note": "Assistant (React, apps/assistant) on the simulated org.webosphoenix.assistant (apps/assistant/service in the page); tools/test-assistant.cjs drives it and Settings > Assistant"
     },
     "org.webosphoenix.flashlight": {
         "status": "works",

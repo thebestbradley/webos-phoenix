@@ -2,7 +2,7 @@
   "name": "@phoenix/assistant",
   "version": "0.1.0",
   "private": true,
-  "description": "webOS Phoenix Assistant: conversations with the assistant, by voice or typing",
+  "description": "Assistant for webOS Phoenix: conversations with the assistant, by voice or typing",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// What the Phoenix Assistant can do: the commands the grammar recognises,
+// What the Assistant can do: the commands the grammar recognises,
 // which the on-device model (and a cloud model, when the user allows it)
 // choose among as tools. Each does what the apps themselves do, with the
 // same Luna calls and the same db8 records, so what the assistant makes

@@ -2,7 +2,7 @@
   "name": "org.webosphoenix.assistant",
   "version": "0.1.0",
   "private": true,
-  "description": "webOS Phoenix Assistant service (Luna): the command grammar, the router between the on-device model and cloud models, conversations and settings",
+  "description": "Assistant service for webOS Phoenix (Luna): the command grammar, the router between the on-device model and cloud models, conversations and settings",
   "license": "Apache-2.0",
   "main": "service.js"
 }

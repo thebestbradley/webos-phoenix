@@ -337,7 +337,7 @@ FocusScope {
         justType.start(text);
     }
 
-    // The Phoenix Assistant's view over the screen (AssistantOverlay; docs/
+    // The Assistant's view over the screen (AssistantOverlay; docs/
     // M6-PLAN.md F3): held launcher button. Not over the lock screen nor in
     // First Use; nothing when the assistant is off (Settings > Assistant).
     function openAssistant(listen) {
@@ -2960,7 +2960,7 @@ FocusScope {
                     onCopied: (text) => clipboardClient.record(text, "com.palm.systemui")
                 }
 
-                // The Phoenix Assistant over everything here (held launcher button).
+                // The Assistant over everything here (held launcher button).
                 AssistantOverlay {
                     id: assistantView
                     anchors.fill: parent

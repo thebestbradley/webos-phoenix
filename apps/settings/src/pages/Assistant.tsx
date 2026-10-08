@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Assistant: the Phoenix Assistant (docs/M6-PLAN.md F3; launch params
+// Assistant: settings for the Assistant (docs/M6-PLAN.md F3; launch params
 // {page: "assistant"}, which the Assistant app's Preferences and its "Set
 // up a cloud model" open). All through org.webosphoenix.assistant
 // (@phoenix/luna assistant); the shell's view and the app follow at once.

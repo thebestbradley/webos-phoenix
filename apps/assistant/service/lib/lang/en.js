@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// The Phoenix Assistant's English: the command grammar (layer 2 of
+// The Assistant's English: the command grammar (layer 2 of
 // docs/M6-PLAN.md F3: no language model, instant, offline) and what the
 // assistant says back. Another language is another file shaped like this
 // one (lib/lang/<code>.js) registered in lib/grammar.js:

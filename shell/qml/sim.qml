@@ -1376,7 +1376,7 @@ Item {
         }
     }
 
-    // "assistant": a short conversation with the Phoenix Assistant
+    // "assistant": a short conversation with the Assistant
     // (org.webosphoenix.assistant: a sum, a timer, and a question nothing on
     // the phone can answer) in its view over the screen (the app with
     // --launch, else the card view), each opening being a conversation of

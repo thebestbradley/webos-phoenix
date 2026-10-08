@@ -168,9 +168,9 @@ key store (hardware-bound where the board allows) and released after
 `matchDevicePasscode` under the device's retry limit, with the service on
 the bus, checking its caller, giving secrets' text only to the keyboard.
 
-## Phoenix Assistant
+## Assistant
 
-The assistant ([APP-RUNTIME.md](APP-RUNTIME.md#phoenix-assistant)) holds
+The assistant ([APP-RUNTIME.md](APP-RUNTIME.md#assistant)) holds
 cloud provider API keys and can act on the device.
 
 - **Keys** are sealed at once by the service (AES-GCM; in the simulator
