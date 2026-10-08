@@ -116,7 +116,8 @@ Item {
         property var poses: []
         property real maxLift: 0
         property real minFlap: 1
-        function reset() { poses = []; maxLift = 0; minFlap = 1; }
+        property real shutAt: 0
+        function reset() { poses = []; maxLift = 0; minFlap = 1; shutAt = 0; }
         function had(list) {
             // list in this order (others between allowed).
             var i = 0;
@@ -128,6 +129,8 @@ Item {
     Connections {
         target: root.overlay
         function onBirdPoseChanged() { birdSeen.poses = birdSeen.poses.concat([root.overlay.birdPose]); }
+        // When the panel ended up shut.
+        function onShownChanged() { if (root.overlay.shown === 0) birdSeen.shutAt = Date.now(); }
     }
     Connections {
         target: root.overlay ? findBird() : null
@@ -197,17 +200,23 @@ Item {
         function launcherButton() {
             return ql.mapToItem(shell, ql.slotCentre(ql.pinned.length), Theme.quickLaunchIconY + ql.iconSize / 2);
         }
-        function hold(p) {
+        // A press held: until `held` says the hold took (waited for as it
+        // happens: a slow machine runs the hold's timer late), else for the
+        // hold's time and a little more.
+        function hold(p, held) {
             mousePress(shell, p.x, p.y);
-            wait(Theme.iconMenuHoldInterval + 150);
+            if (held)
+                tryVerify(held, 5000, "the hold taken");
+            else
+                wait(Theme.iconMenuHoldInterval + 150);
             mouseRelease(shell, p.x, p.y);
         }
+        function opened() { return overlay.open; }
         function openByHold() {
             // The dock back in place (it slides away under the keyboard and
             // back as the keyboard goes), so the hold lands on the button.
             tryVerify(function () { return !shell.keyboardOpen && ql.visible && ql.opacity === 1 && ql.shownProgress === 1; }, 3000, "the dock in place");
-            hold(launcherButton());
-            tryCompare(overlay, "open", true, 2000);
+            hold(launcherButton(), opened);
             // Grown out of the button, the backdrop faded in.
             tryCompare(overlay, "shown", 1, 3000);
         }
@@ -265,8 +274,7 @@ Item {
             shell.closeAssistant();
             ql.launcherToggled();
             tryCompare(shell, "launcherOpen", true, 2000);
-            hold(launcherButton());
-            tryCompare(overlay, "open", true, 2000);
+            hold(launcherButton(), opened);
         }
 
         function test_backEscapeAndATapOutsideCloseIt() {
@@ -446,12 +454,17 @@ Item {
             var panel = findChild(overlay, "assistantPanel");
             compare(panel.opacity, 1);
             compare(findChild(overlay, "assistantBackdrop").opacity, 1);
+            birdSeen.reset();
+            var t0 = Date.now();
             keyClick(Qt.Key_Escape);
             compare(overlay.open, false);
             verify(overlay.visible);
-            tryVerify(function () { return overlay.shown > 0 && overlay.shown < 1; }, 2000, "closing");
             tryCompare(overlay, "visible", false, 3000);
             compare(overlay.shown, 0);
+            // It took its time closing (when it shut, recorded as it came: an
+            // animation never ends before its duration, however a slow
+            // machine draws it in between).
+            verify(birdSeen.shutAt - t0 >= Theme.launcherDuration - 20, "closing: " + (birdSeen.shutAt - t0) + " ms");
         }
 
         // ---- The bird ----------------------------------------------------------------
@@ -468,8 +481,7 @@ Item {
             // Asleep before it opens; it rises so with the panel.
             compare(overlay.birdPose, "asleep");
             birdSeen.reset();
-            hold(p);
-            tryCompare(overlay, "open", true, 2000);
+            hold(p, opened);
             poseIs("idle");
             verify(birdSeen.had(["hello", "idle"]), "hello, then idle: " + birdSeen.poses);
             // At the top in the middle of the panel, 72 to 104 px, over the
