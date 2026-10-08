@@ -1246,13 +1246,16 @@
         // "low", "normal" or "high" (Buttah); a vibration on every tap
         // (Haptic Feedback Manager); the launcher's grid, "normal" or
         // "dense" (the icon grid patches); the battery's percentage in the
-        // status bar (Battery Percent and Icon); the keyboard's number row.
+        // status bar (Battery Percent and Icon); the keyboard's number row;
+        // the keyboard's look, "auto" (the phone's black keys on a phone,
+        // the TouchPad's on a tablet), "black" or "touchpad".
         animationSpeed: "normal",
         gestureSensitivity: "normal",
         hapticFeedback: false,
         launcherGridDensity: "normal",
         showBatteryPercent: false,
         keyboardNumberRow: false,
+        keyboardStyle: "auto",
         // Email's new-mail dashboard goes through the new emails one at a
         // time, with their times and a delete button (the community's
         // Uber Cycling Email Dashboard; compat overlay of the Email app).
@@ -1293,7 +1296,8 @@
             haptics: !!p.hapticFeedback,
             gridDensity: pick(p.launcherGridDensity, ["normal", "dense"], "normal"),
             batteryPercent: !!p.showBatteryPercent,
-            numberRow: !!p.keyboardNumberRow
+            numberRow: !!p.keyboardNumberRow,
+            keyboardStyle: pick(p.keyboardStyle, ["auto", "black", "touchpad"], "auto")
         };
     }
     // The page views' settings and the system proxy, as the shell takes
@@ -1312,7 +1316,7 @@
     runtime.networkProxy = networkProxy;
     var TWEAK_KEYS = ["infiniteCardCyclingEnabled", "sysUiEnableMaximizeEdges", "sysUiEnableWaveLauncher", "showReticleAnimation",
                       "animationSpeed", "gestureSensitivity", "hapticFeedback", "launcherGridDensity", "showBatteryPercent",
-                      "keyboardNumberRow"];
+                      "keyboardNumberRow", "keyboardStyle"];
 
     // Settings > Accessibility's keyboard options, as the shell takes them.
     function keyboardAccess(a) {
@@ -1494,6 +1498,20 @@
     function resourceHandler(target) {
         return runtime.redirectHandlerFor(target);
     }
+    // An installed web app's scope as its redirect pattern: http or https,
+    // the site with or without "www." or "m.", and the scope's path (the
+    // shell's Links.scopePattern, shell/qml/Phoenix/Sim/Links.js, keeps the
+    // site's own links in its card by the same pattern).
+    function sitePattern(scope) {
+        var esc = function (x) { return x.replace(/[.*+?^${}()|[\]\\\/]/g, "\\$&"); };
+        var m = /^https?:\/\/(?:www\.|m\.)?([^\/?#]+)(.*)$/i.exec(String(scope || ""));
+        if (!m) return "";
+        var path = m[2] || "/";
+        if (path.charAt(0) !== "/") path = "/" + path;
+        var tail = path.charAt(path.length - 1) === "/" ? esc(path.slice(0, -1)) + "(?:[/?#]|$)" : esc(path);
+        return "^https?://(?:www\\.|m\\.)?" + esc(m[1]) + "(?::\\d+)?" + tail;
+    }
+    runtime.sitePattern = sitePattern;
 
     // The handler registry apps add to (addResourceHandler,
     // addRedirectHandler), and the handlers made active
@@ -1603,14 +1621,20 @@
         },
         // As on webOS: {id, params} launches the app; {target} goes to the
         // app that handles it (command-resource-handlers.json: mailto: to
-        // Email...), web pages to the browser. Other targets go to the shell.
+        // Email...), web pages to the browser or the web app whose site it
+        // is. A target nothing handles fails, "No handler for <target>"
+        // (ApplicationManagerService.cpp:1438-1446), and the shell says so.
+        // $from (the shell's, for a link in a card that has no runtime of
+        // its own): the card the app is opened from.
         "/open": function (p, reply) {
             var handler = appId(p.id) || (p.target && resourceHandler(p.target));
-            if (handler)
-                host.postToHost("launch", { id: handler, params: p.id ? aliasParams(p.id, p.params) : { target: p.target } });
-            else
-                host.postToHost("open", { target: p.target, params: p.params || {} });
-            reply(ok({ processId: String(Date.now()) }));
+            var from = typeof p.$from === "string" ? { from: p.$from } : {};
+            if (handler) {
+                host.postToHost("launch", Object.assign({ id: handler, params: p.id ? aliasParams(p.id, p.params) : { target: p.target } }, from));
+                return reply(ok({ processId: String(Date.now()) }));
+            }
+            host.postToHost("open", Object.assign({ target: p.target, params: p.params || {} }, from));
+            reply({ returnValue: false, errorCode: -1, errorText: "No handler for " + (p.target || p.id || "") });
         },
         "/listApps": function (p, reply) {
             reply(ok({ apps: launchPoints().filter(function (lp) { return /_default$/.test(lp.launchPointId); }) }));
@@ -1792,19 +1816,36 @@
 
         // ---- Redirect handlers: apps for web addresses and schemes -----------------------
         // From /usr/palm/command-resource-handlers.json and http(s) to the
-        // browser (tag "system-default"), and those apps add
+        // browser (tag "system-default"), the installed web apps' sites
+        // (their manifest's scope, "siteScope" in the app list; tag "user"
+        // like those apps add, and gone with the app), and those apps add
         // (addRedirectHandler; tag "user"), kept in the shared store as
         // MimeSystem saved its table. The first for a pattern is active
         // until swapRedirectHandler picks another; each has an index.
+        // A scheme form is a whole scheme ("^mailto:", "^https?:"); the
+        // others are web addresses ("^https?://maps\.google\.").
+        function schemeForm(pattern) { return /^\^[a-z][a-z0-9+.-]*\??:$/i.test(pattern); }
         function urlHandlers() {
             var reg = runtime.handlerRegistry(), out = [], i = 0;
             redirectList().forEach(function (h) {
-                out.push({ url: h.url, appId: h.appId, index: ++i, tag: "system-default", schemeForm: /^\^[a-z][a-z0-9+.-]*[:?]/i.test(h.url) });
+                out.push({ url: h.url, appId: h.appId, index: ++i, tag: "system-default", schemeForm: h.schemeForm !== undefined ? !!h.schemeForm : schemeForm(h.url) });
             });
             out.push({ url: "^https?:", appId: "com.palm.app.browser", index: ++i, tag: "system-default", schemeForm: true });
+            launchPoints().filter(function (lp) { return lp.siteScope && /_default$/.test(lp.launchPointId); })
+                .sort(function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; })
+                .forEach(function (lp, k) {
+                    var pattern = sitePattern(lp.siteScope);
+                    if (pattern) out.push({ url: pattern, appId: lp.id, index: 2000 + k, tag: "user", schemeForm: false });
+                });
             reg.redirects.forEach(function (h) { out.push(Object.assign({ tag: "user" }, h)); });
             return out;
         }
+        // The handlers whose pattern matches, a group per pattern: web
+        // addresses before whole schemes, as the original looked for a
+        // redirect handler first and a scheme ("command") handler last
+        // (ApplicationManagerService.cpp:1320 and :1428, MimeSystem.cpp:
+        // getActiveHandlerForRedirect with disallowSchemeForms), so a site's
+        // own app wins over the browser.
         function urlMatches(url) {
             var reg = runtime.handlerRegistry(), groups = {}, order = [];
             urlHandlers().forEach(function (h) {
@@ -1814,6 +1855,8 @@
                 if (!groups[h.url]) { groups[h.url] = []; order.push(h.url); }
                 groups[h.url].push(h);
             });
+            order = order.filter(function (u) { return !groups[u][0].schemeForm; })
+                .concat(order.filter(function (u) { return groups[u][0].schemeForm; }));
             return order.map(function (pattern) {
                 var list = groups[pattern], active = reg.activeRedirect[pattern];
                 var a = list.filter(function (h) { return h.index === active; })[0] || list[0];
@@ -2256,10 +2299,36 @@
             } else {
                 this.title = "";
             }
+            this.frameLinks(doc);
             this.frameReport();
             this.listener("loadProgressChanged", 100);
             this.listener("loadStopped");
             this.listener("documentLoadFinished");
+        },
+        // The redirects for the links of the iframe's page (same-origin
+        // pages only: the others' links cannot be seen from here).
+        redirectFor: function (url) {
+            var list = this.redirects || [];
+            for (var i = 0; i < list.length; i++) {
+                var re;
+                try { re = new RegExp(list[i].regex, "i"); } catch (e) { continue; }
+                if (re.test(url)) return list[i].enable ? list[i].cookie : null;
+            }
+            return null;
+        },
+        frameLinks: function (doc) {
+            var self = this;
+            if (!doc || !doc.addEventListener || doc.__phoenixRedirects) return;
+            doc.__phoenixRedirects = true;
+            doc.addEventListener("click", function (e) {
+                if (e.defaultPrevented || e.button !== 0) return;
+                var a = e.target && e.target.closest && e.target.closest("a[href]");
+                if (!a) return;
+                var cookie = self.redirectFor(a.href);
+                if (cookie === null) return;
+                e.preventDefault();
+                self.listener("urlRedirected", a.href, cookie);
+            }, false);
         },
         frameReport: function () {
             this.listener("urlTitleChanged", this.url, this.title || this.url, this.back.length > 0, this.forward.length > 0);
@@ -2344,7 +2413,28 @@
             setMinFontSize: function () {},
             setHeaderHeight: function () {},
             ignoreMetaTags: function () {},
-            addUrlRedirect: function () {},
+            // (regex, enable, cookie, type): links the page follows that
+            // match an enabled redirect are not loaded; the page hears
+            // urlRedirected(url, cookie) instead (BrowserAdapter.cpp
+            // js_addUrlRedirect :1945-1981, msgUrlRedirected :4760-4767).
+            // The browser's are the system's handlers (enyo WebView
+            // addSystemRedirects: mailto:, tel:...; it opens them with
+            // applicationManager open), Email's every link of a message
+            // but its own file: ones (MessageDisplay.js:906-909). In order;
+            // the first that matches decides, and adding a regex again
+            // changes it (Enyo turns the old ones off that way).
+            addUrlRedirect: function (regex, enable, cookie, type) {
+                regex = String(regex || "");
+                if (!regex) return;
+                try { new RegExp(regex); } catch (e) { throw new Error("addUrlRedirect: Can't compile RE '" + regex + "'"); }
+                var list = this.redirects = this.redirects || [];
+                var r = list.filter(function (x) { return x.regex === regex; })[0];
+                if (!r) list.push(r = { regex: regex });
+                r.enable = !!enable;
+                r.cookie = cookie === undefined || cookie === null ? "" : String(cookie);
+                r.type = type | 0;
+                if (nativeWebViews) this.post("redirects", { list: list });
+            },
             setNetworkInterface: function () {},
             setDNSServers: function () {},
             handleFlick: function () {},
@@ -2449,6 +2539,33 @@
             }
         };
     } : null;
+
+    // ---- Links in an app's page -----------------------------------------------------------
+    // A link the user follows in an app's page to another site or to
+    // another scheme (mailto:, tel:, sms:...) does not load in the app's
+    // card: the application manager opens it, open {target}, in the app
+    // for it (the browser, Email, Phone, the web app whose site it is), as
+    // WebAppMgr handed such a URL over (WebAppManager::mimeHandoffUrl,
+    // webappmanager Src/webbase/WebAppManager.cpp:1747-1773). target=_blank
+    // the same. Links to the app's own pages, and clicks the page handles
+    // itself (preventDefault), are the page's. phoenix-sim's window also
+    // catches what gets past this (WebAppWindow.qml, Links.js).
+    runtime.linkLeavesApp = function (href) {
+        href = String(href || "");
+        if (!href || /^(javascript|about|data|blob):/i.test(href)) return false;
+        if (!/^https?:/i.test(href)) return !/^(phoenix|file):/i.test(href);
+        try { return new URL(href).origin !== global.location.origin; } catch (e) { return false; }
+    };
+    try {
+        if (global.document && global.addEventListener) global.addEventListener("click", function (e) {
+            if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            var a = e.target && e.target.closest && e.target.closest("a[href]");
+            if (!a || a.hasAttribute("download") || !runtime.linkLeavesApp(a.href)) return;
+            e.preventDefault();
+            dispatch("luna://com.palm.applicationManager/open", { target: a.href }, function () {},
+                     { cancelled: function () { return false; }, onCancel: null });
+        }, false);
+    } catch (e) { /* ignore */ }
 
     // ---- Connectivity, power, accounts and friends -------------------------------------
 
@@ -2564,6 +2681,16 @@
             reply(ok());
             if (!/^https?:$/.test(global.location.protocol))
                 host.postToHost("restartUi", {});
+        },
+        // mediaKey {key}: a media key pressed (the Assistant's "pause",
+        // "next song"): the shell sends it to every page as the hardware
+        // key's com.palm.keys /media events, down then up, and the player
+        // holding the audio focus acts (@phoenix/luna mediakeys.ts).
+        "/mediaKey": function (p, reply) {
+            if (["play", "pause", "togglePausePlay", "stop", "next", "prev"].indexOf(p.key) < 0)
+                return reply(fail(-1, "key: play, pause, togglePausePlay, stop, next or prev"));
+            reply(ok());
+            host.postToHost("mediaKey", { key: p.key });
         }
     });
 
@@ -4993,6 +5120,14 @@
 
         var stub = runtime.services["com.palm.systemmanager"] || { "*": function (p, reply) { reply(ok()); } };
         register(["com.palm.systemmanager"], {
+            // takeScreenShot {file} (SystemService.cpp cbTakeScreenShot): the
+            // shell captures the screen as the key combination does, into
+            // the screen captures (Photos); Phoenix names the file itself.
+            "/takeScreenShot": function (p, reply) {
+                if (typeof p.file !== "string") return reply(fail(-1, "file is required"));
+                reply(ok());
+                host.postToHost("takeScreenshot", { file: p.file });
+            },
             // The lock screen is up, as the shell last said (SystemService
             // getLockStatus); subscribe to hear it lock and unlock. The phone
             // app answers a ringing call when the user unlocks.
@@ -6881,12 +7016,13 @@
                 });
             },
             /** A URL to show or play a media path: a blob: URL for stored files, else the path (rootfs). */
+            // A path with no stored file is not remembered: it may be one
+            // another page is still writing (a screen capture being saved).
             url: function (path) {
                 if (urlCache[path]) return Promise.resolve(urlCache[path]);
                 return files.read(path).then(function (blob) {
-                    var u = blob && global.URL && URL.createObjectURL ? URL.createObjectURL(blob) : path;
-                    urlCache[path] = u;
-                    return u;
+                    if (!blob || !global.URL || !URL.createObjectURL) return path;
+                    return (urlCache[path] = URL.createObjectURL(blob));
                 }, function () { return path; });
             }
         };
@@ -7163,7 +7299,7 @@
         //
         // The shell grabs the screen and hands the picture to one page:
         // runtime.saveScreenshot({data: base64 PNG, app: the app in front's
-        // title}). It is saved where the original saved them,
+        // title, capture: the shell's id for it}). It is saved where the original saved them,
         // /media/internal/screencaptures, named "<app> YYYY-MM-DD at
         // HH.MM.SS.png" (the original's name had the day before the month),
         // indexed for Photos' Screen captures album, and a notification
@@ -7185,9 +7321,13 @@
             return files.write(path, blob).then(function () {
                 return scan(CAPTURE_DIR);
             }).then(function () {
+                // capture: the shell's id for it, so its thumbnail opens
+                // this file and no other.
+                var params = { path: path };
+                if (p.capture) params.capture = String(p.capture);
                 host.postToHost("notification", { appId: SCREENSHOT_APP, title: "Screen captured",
                                                   body: path.slice(CAPTURE_DIR.length + 1).replace(/\.png$/, ""),
-                                                  params: { path: path } });
+                                                  params: params });
                 return path;
             });
         };
@@ -8105,7 +8245,8 @@
             am["/open"] = function (p, reply, ctx) {
                 var app = !p.id && p.target && handlerForTarget(p.target);
                 if (app) {
-                    host.postToHost("launch", { id: app, params: { target: p.target } });
+                    host.postToHost("launch", Object.assign({ id: app, params: { target: p.target } },
+                                                            typeof p.$from === "string" ? { from: p.$from } : {}));
                     return reply(ok({ processId: String(Date.now()), appId: app }));
                 }
                 baseOpen(p, reply, ctx);
@@ -13264,7 +13405,7 @@
         var serviceMethods = {};
         ["ask", "choose", "confirm", "threads", "thread", "newThread", "setCurrent", "deleteThread", "clearHistory",
          "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
-         "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking"].forEach(function (name) {
+         "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary"].forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
                 var m;
                 try { m = service(); } catch (e) { return reply(fail(-1, String(e.message || e))); }

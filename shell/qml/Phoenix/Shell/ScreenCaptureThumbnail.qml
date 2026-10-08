@@ -15,15 +15,21 @@ Item {
 
     // The capture to show (an ItemGrabResult's url).
     property url image
+    // The shell's id for the capture, which the runtime's "Screen
+    // captured" notification names (params.capture).
+    property string capture: ""
     // Its file, once the runtime has saved it ("" until then).
     property string path: ""
     readonly property bool shown: state === "shown"
 
-    signal activated(string path)
+    // Tapped: the capture's file, or "" while it is still being saved
+    // (with the capture's id, for the shell to open it once it is).
+    signal activated(string path, string capture)
 
-    function show(url) {
+    function show(url, captureId) {
         dismissTimer.stop();
         path = "";
+        capture = captureId || "";
         image = url;
         swipe.x = 0;
         state = "";             // from the left edge again, if one was up
@@ -115,7 +121,7 @@ Item {
                     return;
                 var p = thumb.path;
                 thumb.hide();
-                thumb.activated(p);
+                thumb.activated(p, thumb.capture);
             }
         }
         NumberAnimation { id: back; target: swipe; property: "x"; to: 0; duration: Theme.motion(200); easing.type: Easing.OutCubic }

@@ -4,6 +4,13 @@ on:
   push:
   pull_request:
 
+# A newer push to a branch or PR cancels its older runs, which would only
+# report on code already replaced (many pushes queue up behind each other).
+# Every commit on main still runs to the end.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -144,6 +151,9 @@ jobs:
       - name: The keyboard's dictation (recording format, transcriber replies)
         run: build/dictation-test
 
+      - name: The wake word ("Hey Phoenix" in the test recordings, with Vosk's model)
+        run: python3 tools/get-wakeword.py && build/wakeword-test
+
       - name: The simulator's network (content blocker, user agents, DropShare's server)
         run: build/simnet-test
 
@@ -207,6 +217,7 @@ jobs:
           t node tools/test-justtype.cjs --tablet --out app-tests/justtype-tablet
           t node tools/test-browser.cjs --out app-tests/browser-phone
           t node tools/test-browser.cjs --tablet --out app-tests/browser-tablet
+          t node tools/test-links.cjs --out app-tests/links-phone
           t node tools/test-files.cjs --out app-tests/files-phone
           t node tools/test-files.cjs --tablet --out app-tests/files-tablet
           t node tools/test-tasks.cjs --out app-tests/tasks-phone
@@ -360,6 +371,7 @@ jobs:
           build/pty/pty-test
           build/siminstaller-test
           build/dictation-test
+          python3 tools/get-wakeword.py && build/wakeword-test
           build/localmodels-test
           build/simnet-test
 

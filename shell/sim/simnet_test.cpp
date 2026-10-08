@@ -62,11 +62,13 @@ static void userAgents()
                                             "QtWebEngine/6.8.1 Chrome/122.0.6261.171 Safari/537.36");
     check(ContentFilter::userAgent(chromium, QStringLiteral("desktop"), true) == chromium, "desktop: Chromium's own");
     const QString phone = ContentFilter::userAgent(chromium, QStringLiteral("mobile"), true);
-    check(phone == QStringLiteral("Mozilla/5.0 (Linux; webOS/3.0.5; Phoenix) AppleWebKit/537.36 (KHTML, like Gecko) "
-                                  "Chrome/122.0.6261.171 Mobile Safari/537.36"), "phone: webOS, Mobile, no QtWebEngine token");
+    check(phone == QStringLiteral("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) "
+                                  "Chrome/122.0.0.0 Mobile Safari/537.36"), "phone: Chrome on Android, Mobile, no QtWebEngine token");
     const QString tablet = ContentFilter::userAgent(chromium, QStringLiteral("mobile"), false);
-    check(tablet.startsWith(QStringLiteral("Mozilla/5.0 (Linux; hpwOS/3.0.5; Phoenix Tablet)")) && !tablet.contains(QLatin1String("Mobile"))
-              && tablet.endsWith(QLatin1String("Chrome/122.0.6261.171 Safari/537.36")), "tablet: hpwOS, not Mobile");
+    check(tablet == QStringLiteral("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) "
+                                   "Chrome/122.0.0.0 Safari/537.36"), "tablet: Chrome on an Android tablet, not Mobile");
+    check(!phone.contains(QLatin1String("webOS")) && !tablet.contains(QLatin1String("hpwOS")),
+          "no webOS token, which sites turn away as an old or TV browser");
 }
 
 struct Http {

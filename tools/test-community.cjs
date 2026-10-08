@@ -119,6 +119,13 @@ async function main() {
             await st.click(`role=option[name='${option}']`);
             await until(() => tweaks()[key] === want, `Advanced: ${key} ${want} reaches the shell`);
         }
+        // Switch apps (Screen & Lock's Advanced gestures, here beside the
+        // wave launcher): only where there is a gesture area.
+        check(await st.locator("[data-testid='adv-sysUiEnableNextPrevGestures']").count() === 0, "Advanced: no Switch apps without a gesture area");
+        await st.evaluate(() => window.__phoenixRuntime.applyHostStatus({ gestureArea: true }));
+        await st.waitForSelector("[data-testid='adv-sysUiEnableNextPrevGestures']", { timeout: 3000 });
+        await st.click("[data-testid='adv-sysUiEnableNextPrevGestures']");
+        await until(() => lastStatus().advancedGestures === true, "Advanced: Switch apps reaches the shell");
         await st.click("[data-testid='adv-emailDashboardCycling']");
         await until(async () => (await svc(st, "luna://com.webos.service.systemservice/getPreferences", { keys: ["emailDashboardCycling"] })).emailDashboardCycling === true,
                     "Advanced: the cycling email dashboard is a preference");

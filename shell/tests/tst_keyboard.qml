@@ -886,10 +886,9 @@ Item {
             sys.keyboard = sys.keyboards[0];
         }
 
-        function test_swipeTyping() {
-            showKeyboard();
-            // Across h, e, l, o: one finger, without lifting.
-            var pts = ["h", "e", "l", "o"].map(function (k) {
+        // One finger across the keys, without lifting.
+        function swipe(keys) {
+            var pts = keys.map(function (k) {
                 var r = kb.keyRect(k);
                 return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
             });
@@ -900,12 +899,208 @@ Item {
                     wait(10);
                 }
             }
+            mouseRelease(kb, pts[pts.length - 1].x, pts[pts.length - 1].y);
+            wait(20);
+        }
+
+        function test_swipeTyping() {
+            showKeyboard();
+            swipe(["h", "e", "l", "o"]);
             verify(findChild(kb, "swipeTrail") !== null);
-            mouseRelease(kb, pts[3].x, pts[3].y);
-            compare(field.text.toLowerCase(), "hello");
-            // The other words it may have been, in the bar; a second swipe gets a space.
+            // A space after it (the owner, 8 October 2026).
+            compare(field.text.toLowerCase(), "hello ");
+            // The other words it may have been, in the bar.
             verify(kb.candidates.length > 1);
             compare(kb.candidates[0].text.toLowerCase(), "hello");
+        }
+
+        // The space after a swiped word: the next swipe needs none, a space
+        // typed is not a second, punctuation goes before it, backspace
+        // takes it and the word is being typed again; a candidate picked
+        // keeps it.
+        function test_swipeAutoSpace() {
+            showKeyboard();
+            swipe(["h", "e", "l", "o"]);
+            compare(field.text, "Hello ");
+            swipe(["t", "h", "e", "r", "e"]);
+            compare(field.text, "Hello there ");
+            // Punctuation before the space, and the space after it.
+            tapKey(",");
+            compare(field.text, "Hello there, ");
+            // A space typed now is not a second one.
+            tapKey("Space");
+            compare(field.text, "Hello there, ");
+            // A typed space after that is the user's.
+            type(["h", "i"]);
+            compare(field.text, "Hello there, hi");
+            tapKey("Space");
+            compare(field.text, "Hello there, hi ");
+            // A swipe right after typed letters gets a space before it.
+            field.text = "";
+            kb._sentenceStart = true;
+            kb._assistReset();
+            type(["o", "k"]);
+            swipe(["h", "e", "l", "o"]);
+            compare(field.text.toLowerCase(), "ok hello ");
+            // Backspace takes the space: the word is being typed again.
+            tapKey("Backspace");
+            compare(field.text.toLowerCase(), "ok hello");
+            compare(kb._word.toLowerCase(), "hello");
+            type(["s"]);
+            compare(field.text.toLowerCase(), "ok hellos");
+        }
+
+        function test_swipeAutoSpaceSentence() {
+            showKeyboard();
+            swipe(["h", "e", "l", "o"]);
+            // A period before the space; the next swipe is capitalized.
+            tapKey(".");
+            compare(field.text, "Hello. ");
+            swipe(["t", "h", "e", "r", "e"]);
+            compare(field.text, "Hello. There ");
+            // Two spaces after the word: the first is the automatic one,
+            // the second types ". " (Quick period).
+            tapKey("Space");
+            tapKey("Space");
+            compare(field.text, "Hello. There. ");
+        }
+
+        // After a swipe, a candidate replaces the word and keeps one space.
+        function test_swipeCandidateKeepsTheSpace() {
+            showKeyboard();
+            swipe(["h", "e", "l", "o"]);
+            compare(field.text, "Hello ");
+            verify(kb.candidates.length > 1, JSON.stringify(kb.candidates));
+            var other = kb.candidates[1].text;
+            tapCandidate(other);
+            compare(field.text, other + " ");
+            // And a space typed after it is not a second one.
+            tapKey("Space");
+            compare(field.text, other + " ");
+        }
+
+        // A candidate tapped while typing: its space too is the automatic one.
+        function test_candidateAutoSpace() {
+            kb.textAssistData = "";
+            showKeyboard();
+            type(["h", "e", "l"]);
+            tryVerify(function() { return kb.candidates.length === 3; }, 1000);
+            var word = kb.candidates[1].text;
+            tapCandidate(word);
+            compare(field.text, word + " ");
+            tapKey(",");
+            compare(field.text, word + ", ");
+        }
+
+        // Tapped typing is as it was: every space typed is typed.
+        function test_tappedTypingUnchanged() {
+            var before = sys.textAssist;
+            sys.textAssist = { suggestions: true, autoCorrect: false, swipe: true, spaces2period: false, forgetWords: 0,
+                               shortcuts: {}, shortcutsOn: true };
+            showKeyboard();
+            type(["h", "i", "Space", "Space"]);
+            compare(field.text.toLowerCase(), "hi  ");
+            tapKey(",");
+            compare(field.text.toLowerCase(), "hi  ,");
+            sys.textAssist = before;
+        }
+
+        // The trail keeps only the swipe's recent end, fading and thinning
+        // toward its older end (deterministic: the segments at a time).
+        function test_swipeTrailFades() {
+            showKeyboard();
+            var key = 48;
+            // A long swipe, 1 px per ms, left to right.
+            var path = [];
+            for (var i = 0; i <= 1000; i += 10)
+                path.push({ x: i, y: 50, t: i });
+            var segs = kb._trailSegments(path, 1000, key);
+            verify(segs.length > 0);
+            // At most cTrailKeys keys long, and no older than cTrailTime.
+            var head = segs[segs.length - 1], tail = segs[0];
+            compare(head.x1, 1000);
+            var reach = Math.min(kb.cTrailKeys * key, kb.cTrailTime);
+            fuzzyCompare(head.x1 - tail.x0, reach, 0.5);
+            // Fading and thinning toward the old end.
+            for (i = 1; i < segs.length; ++i) {
+                verify(segs[i].alpha >= segs[i - 1].alpha, "alpha rises toward the finger");
+                verify(segs[i].width >= segs[i - 1].width, "width rises toward the finger");
+                fuzzyCompare(segs[i].alpha, segs[i - 1].alpha1, 1e-9);
+            }
+            verify(tail.alpha < 0.15 * kb.cTrailAlpha, "the old end nearly gone: " + tail.alpha);
+            verify(head.alpha > 0.9 * kb.cTrailAlpha, "the finger's end strong: " + head.alpha);
+            compare(head.alpha1, kb.cTrailAlpha);
+            // The finger resting: the trail fades away with time.
+            var later = kb._trailSegments(path, 1000 + kb.cTrailTime / 2, key);
+            verify(later.length > 0 && later[later.length - 1].alpha < 0.6 * kb.cTrailAlpha);
+            compare(kb._trailSegments(path, 1000 + kb.cTrailTime, key).length, 0);
+            // A slow swipe: cut by time, not length.
+            var slow = [];
+            for (i = 0; i <= 100; i += 10)
+                slow.push({ x: i, y: 50, t: i * 20 });
+            segs = kb._trailSegments(slow, 2000, key);
+            fuzzyCompare(segs[segs.length - 1].x1 - segs[0].x0, kb.cTrailTime / 20, 0.5);
+        }
+
+        // Mid-swipe, the trail on the screen: blue near the finger, none at
+        // the start of a long swipe (cut by length: the tail's time is made
+        // long here, so how late a slow machine draws or grabs the frame
+        // does not matter; the fade with time is test_swipeTrailFades').
+        function test_swipeTrailOnScreen() {
+            showKeyboard();
+            var time = kb.cTrailTime;
+            kb.cTrailTime = 60000;
+            var a = kb.keyRect("q"), b = kb.keyRect("p");
+            var y = a.y + a.height / 2;
+            mousePress(kb, a.x + a.width / 2, y);
+            for (var s = 1; s <= 30; ++s) {
+                mouseMove(kb, a.x + a.width / 2 + (b.x - a.x) * s / 30, y);
+                wait(16);
+            }
+            var blue = function (shot, x) {
+                var p = kb.mapToItem(shell, x, y);
+                var c = shot.pixel(Math.round(p.x), Math.round(p.y));
+                return c.b - c.r;
+            };
+            var behind = 0, start = 1;
+            // Painted on a coming frame (Canvas.requestPaint).
+            for (var n = 0; n < 50 && behind <= 0.2; ++n) {
+                wait(20);
+                var shot = grabImage(shell);
+                behind = blue(shot, b.x + b.width / 2 - 8);
+                start = blue(shot, a.x + a.width / 2 + 4);
+            }
+            // Let go before checking: a failure must not leave the finger down.
+            mouseRelease(kb, b.x + b.width / 2, y);
+            kb.cTrailTime = time;
+            verify(behind > 0.2, "the trail behind the finger: " + behind);
+            verify(start < 0.05, "the swipe's start no longer shown: " + start);
+        }
+
+        // Settings > Text Assist > Keyboard style: the phone takes the
+        // TouchPad's look at once, and back.
+        function test_keyboardStyle() {
+            showKeyboard();
+            compare(kb.touchpadLook, false);
+            verify(kb._art.indexOf("keyboard-phone/") >= 0);
+            var lum = function () {
+                var r = kb.keyRect("g");
+                var c = kb.mapToItem(shell, r.x + r.width * 0.2, r.y + r.height / 2);
+                var p = grabImage(shell).pixel(Math.round(c.x), Math.round(c.y));
+                return (p.r + p.g + p.b) / 3;
+            };
+            verify(lum() < 0.1, "black letters");
+            sys.tweaks = { keyboardStyle: "touchpad" };
+            tryCompare(kb, "touchpadLook", true, 1000);
+            verify(kb._art.indexOf("keyboard-tablet/") >= 0);
+            tryVerify(function () { return lum() > 0.6; }, 1000, "the TouchPad's light letter keys");
+            // The letters still type, in the same places.
+            type(["h", "i"]);
+            compare(field.text, "hi");
+            sys.tweaks = { keyboardStyle: "black" };
+            tryCompare(kb, "touchpadLook", false, 1000);
+            tryVerify(function () { return lum() < 0.1; }, 1000);
+            sys.tweaks = {};
         }
 
         // Dictation: the bar's microphone; what was said is typed at the cursor.

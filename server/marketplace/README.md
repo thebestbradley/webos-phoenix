@@ -56,15 +56,57 @@ Phoenix lists popular sites that ship a web app manifest; a site can ask to
 be taken off (`POST /api/optout`, then an admin accepts it). The list is
 `catalog/curated-sites.json`; `bin/probe-pwas.py` finds each site's manifest
 and writes `catalog/curated-pwas.json` (checked live), which `init` and
-`seed` load. The probe reads the page as a phone and then as a desktop
-browser, follows a manifest `<link>` or a manifest URL in the page's scripts,
-then guesses the usual names next to the page and at its root (and next to
-the URL asked for, when the page redirected to a sign-in page). A site is
-listed only with a manifest that has a name and a picture icon on the web;
-the others stay in the file's `notFound` with the reason. Its start page is
-the manifest's `start_url` when that is on the site, else the site (as
+`seed` load. The probe asks as a browser does (gzip, Fetch Metadata: some
+sites refuse other requests), reads the page as a phone and then as a
+desktop browser, follows a manifest `<link>` or a manifest URL in the page's
+scripts, then guesses the usual names next to the page and at its root (and
+next to the URL asked for, when the page redirected to a sign-in page). A
+site whose page adds its manifest link with JavaScript from a file of its
+own can name the manifest in `curated-sites.json` (`"manifest"`, as
+Outlook's); the probe still checks it. A site is listed only with a manifest
+that has a name and a picture icon that is there on the web (the probe
+loads it, and prefers one another site's page may show); the others stay in
+the file's `notFound` with the reason, naming the bot check (Cloudflare,
+DataDome, Akamai) when one refused the probe. Its start page is the
+manifest's `start_url` when that is on the site, else the site (as
 browsers do, so a manifest kept on a CDN still starts on the site).
-Refresh the list with `python3 server/marketplace/bin/probe-pwas.py`.
+
+Today 132 of the 160 sites are listed. Of the rest, some show a visitor
+who is not signed in no manifest at all (Bluesky, Discord, Notion, Trello,
+Word, OneDrive, Tuta, Zoho Mail, Yahoo Mail, Evernote, McDonald's,
+trivago), three name
+icons that are all missing (Ground News, NYT Games, Formula 1), and the
+others turned the probe away with a bot check from the cloud network it ran
+on (Canva, The New York Times, Reuters, The Economist, Skyscanner,
+Tripadvisor, DoorDash, Revolut, Stack Overflow, CodePen, Yelp, VSCO,
+Reddit). ChatGPT's Cloudflare check lets the probe through only at times.
+From an ordinary home connection more of them get through.
+
+### Refreshing the list (on a Mac)
+
+From the checkout, on a home connection (bot checks refuse many sites from
+servers and cloud networks):
+
+    python3 server/marketplace/bin/probe-pwas.py
+    git diff --stat server/marketplace/catalog/curated-pwas.json
+
+It prints `ok` or `skip` (with the reason) for each site and rewrites
+`curated-pwas.json`; look at what came and went before committing it. (If
+Python cannot check certificates, run `/Applications/Python 3.x/Install
+Certificates.command` once.) Then load it into the catalog and publish:
+
+    php server/marketplace/bin/marketplace.php seed
+    php server/marketplace/bin/marketplace.php publish
+
+`seed` updates and lists the curated web apps in the file, sets the ones
+it no longer has to `gone` (listed again when a later list has them back;
+`seed FILE` only adds and updates the apps in FILE),
+and leaves opted-out sites and listings an admin pulled alone; `publish`
+signs and writes the catalog devices read. With the server's database
+elsewhere, set `MARKETPLACE_DSN` (and the account) and `MARKETPLACE_DATA`
+as on the server first, or run the two commands there. Add a site by
+adding a line to `curated-sites.json` (our own summary, its developer,
+categories from the ones already used) and running the probe.
 
 ## Tests
 

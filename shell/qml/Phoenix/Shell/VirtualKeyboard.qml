@@ -116,6 +116,20 @@ Item {
     // numbers above its letters, three quarters of a letter row tall, and
     // grows by it. The tablet keyboard has its number row already.
     property bool numberRow: false
+    // Settings > Text Assist > Keyboard style (Phoenix; the owner, 8 October
+    // 2026): the keys' look, apart from the layout (`tablet`). "auto": the
+    // phone's black keys on a phone, the TouchPad's on a tablet, as each
+    // was; "black": the phone's look everywhere (its art, 9-tiled to the
+    // tablet's keys); "touchpad": the TouchPad's everywhere (its art in the
+    // phone's keys).
+    property string keyboardStyle: "auto"
+    readonly property bool touchpadLook: keyboardStyle === "touchpad" || (keyboardStyle !== "black" && tablet)
+    onTouchpadLookChanged: {
+        // The keys' trim follows the art (_setKeyboardHeight).
+        if (_km && _keymapHeight > 0)
+            _setKeyboardHeight(_requestedHeight > 0 ? _requestedHeight : _presetHeight());
+        _triggerRepaint();
+    }
     onNumberRowChanged: {
         if (_km && _km.setNumberRow(numberRow)) {
             _extendedKeys = null;
@@ -199,6 +213,8 @@ Item {
     property bool _assistOwnText: false
 
     function _assistReset() {
+        _autoSpace = null;
+        _swipeWords = false;
         _word = "";
         _prevWord = "";
         _lastCorrection = null;
@@ -309,21 +325,27 @@ Item {
         _refreshCandidates();
         return true;
     }
-    // A candidate tapped: it replaces the word being typed, and a space follows.
+    // A candidate tapped: it replaces the word being typed, and a space follows
+    // (an automatic one: see _autoSpace).
     function pickCandidate(index) {
         var c = candidates[index];
         if (!c)
             return;
         _makeSound(KM.Key.A);
         _assistBackspaces(_word.length);
+        var before = { word: c.text, prev: _prevWord, sentence: _sentenceStart };
         _assistCommit(c.text + " ");
         _word = c.text;
         _lastCorrection = null;
         _endWord(false);
+        _setAutoSpace(before);
         if (_km.setAutoCap(false))
             _layoutChanged();
     }
-    // A swipe's word: after a space unless one is there already.
+    // A swipe's word, and a space after it (as mainstream swipe keyboards
+    // do; the owner, 8 October 2026). A space goes before it only after a
+    // word still being typed (or dictated text): an automatic space is
+    // there already.
     function _commitSwipe(words) {
         if (!words.length)
             return;
@@ -333,12 +355,15 @@ Item {
         var space = _word !== "" || _swipeNeedsSpace;
         if (_word)
             _endWord(false);
-        _assistCommit((space ? " " : "") + w);
+        var before = { word: w, prev: _prevWord, sentence: _sentenceStart };
+        _assistCommit((space ? " " : "") + w + " ");
+        _swipeNeedsSpace = false;
         _word = w;
-        _swipeNeedsSpace = true;
+        _endWord(false);
+        _setAutoSpace(before);
         // The other words it may have been, in the bar.
         candidates = [{ text: w, kind: "correction" }].concat(words.slice(1).map(function (x) {
-            var t = _sentenceStart ? x.text.charAt(0).toUpperCase() + x.text.slice(1) : x.text;
+            var t = before.sentence ? x.text.charAt(0).toUpperCase() + x.text.slice(1) : x.text;
             return { text: t, kind: "word" };
         })).slice(0, tablet ? 5 : 3);
         _swipeWords = true;
@@ -347,24 +372,75 @@ Item {
         if (_km.setAutoCap(false))
             _layoutChanged();
     }
-    // After a swipe, a candidate replaces the swiped word (and no space follows).
+    // After a swipe, a candidate replaces the swiped word (its space stays).
     property bool _swipeWords: false
     property bool _swipeNeedsSpace: false
     function _pickSwipe(index) {
         var c = candidates[index];
-        if (!c)
+        if (!c || !_autoSpace)
             return;
         _makeSound(KM.Key.A);
-        _assistBackspaces(_word.length);
-        _assistCommit(c.text);
-        _word = c.text;
+        var before = { word: c.text, prev: _autoSpace.prev, sentence: _autoSpace.sentence };
+        _assistBackspaces(_autoSpace.word.length + 1);
+        _assistCommit(c.text + " ");
+        _prevWord = c.text;
+        _setAutoSpace(before);
         candidates = [{ text: c.text, kind: "correction" }].concat(candidates.filter(function (x) { return x.text !== c.text; })).slice(0, tablet ? 5 : 3);
+        _swipeWords = true;
     }
     function candidateTapped(index) {
         if (_swipeWords)
             _pickSwipe(index);
         else
             pickCandidate(index);
+    }
+
+    // The space the keyboard put in itself after a swiped or picked word,
+    // until the next key: {word, prev, sentence} (the word and the state
+    // before it), else null. While it is there:
+    //  * a space typed is not a second one (it is taken as the first of
+    //    the two that type ". ", ShortcutsHandler's rule);
+    //  * punctuation (.,!?;:) goes before it: "word. ";
+    //  * backspace takes it away and the word is the one being typed again;
+    //  * a swipe needs no space before its word.
+    // Tapped typing never makes one: the space bar's space is the user's.
+    property var _autoSpace: null
+    function _setAutoSpace(state) {
+        _autoSpace = state;
+        // The word ended in a letter: the next two spaces may be ". ".
+        _resetShortcuts();
+    }
+    // A key while the automatic space is there: true if it was handled here.
+    function _autoSpaceKey(qtkey) {
+        var a = _autoSpace;
+        if (!a)
+            return false;
+        if (qtkey === KM.Key.Space) {
+            _autoSpace = null;
+            _swipeWords = false;
+            _filterShortcut(KM.Key.Space);    // the first of two spaces
+            _refreshCandidates();
+            return true;
+        }
+        if (qtkey === KM.Key.Backspace) {
+            _sendKeyDownUp(KM.Key.Backspace, Qt.NoModifier);
+            _word = a.word;
+            _prevWord = a.prev;
+            _sentenceStart = a.sentence;
+            _refreshCandidates();
+            return true;
+        }
+        if (qtkey > 0 && qtkey < 128 && ".,!?;:".indexOf(String.fromCharCode(qtkey)) >= 0) {
+            _assistBackspaces(1);
+            _sendKeyDownUp(qtkey, Qt.NoModifier);
+            _assistCommit(" ");
+            // Another one goes before this space too ("?!"); its state is
+            // after the punctuation.
+            _setAutoSpace({ word: "", prev: _prevWord, sentence: _sentenceStart, punctuation: true });
+            _lastKey = qtkey;                  // no ". " after punctuation
+            return true;
+        }
+        return false;
     }
 
     // ---- Dictation (GAPS V2) ------------------------------------------------------------
@@ -403,6 +479,8 @@ Item {
             if (kb._sentenceStart || kb._km.isCapActive())
                 text = text.charAt(0).toUpperCase() + text.slice(1);
             kb._assistCommit((space ? " " : "") + text);
+            kb._autoSpace = null;
+            kb._swipeWords = false;
             kb._word = "";
             kb._prevWord = "";
             kb._sentenceStart = /[.!?]$/.test(text);
@@ -415,7 +493,49 @@ Item {
 
     // ---- Swipe typing ---------------------------------------------------------------------
     property string _swipeId: ""
-    property var _swipePath: []          // frame pixels
+    property var _swipePath: []          // frame pixels, and when: {x, y, t}
+    // The trail shows only the swipe's recent end, fading and thinning
+    // toward its older end, so a long word's trail does not cover the keys
+    // (the owner, 8 October 2026): its last cTrailTime ms, at most
+    // cTrailKeys letter keys long.
+    // (Writable for the tests: on a slow machine a frame can come later.)
+    property int cTrailTime: 300
+    readonly property real cTrailKeys: 2.5
+    readonly property real cTrailAlpha: 0.85
+    readonly property real cTrailWidth: tablet ? 10 : 12
+    // The trail's segments to draw at `now`, newest last: {x0, y0, x1, y1,
+    // alpha, width} at the older end (x0, y0), alpha1 and width1 at the
+    // newer; it fades and thins with its age and its distance from the
+    // finger, whichever is further along.
+    function _trailSegments(path, now, keyWidth) {
+        var out = [];
+        if (!path || path.length < 2)
+            return out;
+        var maxLength = cTrailKeys * keyWidth, along = 0;
+        for (var i = path.length - 1; i > 0; --i) {
+            var a = path[i - 1], b = path[i];
+            var tb = b.t !== undefined ? now - b.t : 0;
+            if (tb >= cTrailTime || along >= maxLength)
+                break;
+            var len = Math.hypot(b.x - a.x, b.y - a.y);
+            // The far end of this segment (cut where the tail ends).
+            var ta = a.t !== undefined ? now - a.t : 0;
+            var k = 1;
+            if (along + len > maxLength && len > 0)
+                k = Math.min(k, (maxLength - along) / len);
+            if (ta > cTrailTime && ta > tb)
+                k = Math.min(k, (cTrailTime - tb) / (ta - tb));
+            var ax = b.x + (a.x - b.x) * k, ay = b.y + (a.y - b.y) * k;
+            var fade = function (age, dist) {
+                return Math.max(0, Math.min(1, Math.min(1 - age / cTrailTime, 1 - dist / maxLength)));
+            };
+            var f = fade(tb + (ta - tb) * k, along + len * k), f1 = fade(tb, along);
+            out.unshift({ x0: ax, y0: ay, x1: b.x, y1: b.y, alpha: cTrailAlpha * f, alpha1: cTrailAlpha * f1,
+                          width: cTrailWidth * (0.3 + 0.7 * f), width1: cTrailWidth * (0.3 + 0.7 * f1) });
+            along += len * k;
+        }
+        return out;
+    }
     // The letter keys' centres (frame pixels) and their width.
     function _letterKeys() {
         var keys = {}, w = 0;
@@ -693,7 +813,8 @@ Item {
 
     // ---- Art (sizes in pixels, as the plugin read them from the pixmaps) ---------
 
-    readonly property string _art: Theme.assetUrl(tablet ? "keyboard-tablet/" : "keyboard-phone/")
+    // By the look, not the layout (keyboardStyle).
+    readonly property string _art: Theme.assetUrl(touchpadLook ? "keyboard-tablet/" : "keyboard-phone/")
     // An art file at this keyboard's scale: its @2x / @3x variant on a
     // denser screen (Theme.variant), drawn in the art's pixels like the 1x
     // file, since Qt reads @2x / @3x files as having that pixel ratio
@@ -707,8 +828,10 @@ Item {
     // keyboard-bg.png: 3x200 phone, 3x340 tablet.
     readonly property int _bgHeight: tablet ? 340 : 200
     // key-*.png: two states stacked, 48x96 phone, 93x140 tablet;
-    // key-gray-short.png 93x110 (the tablet's number row).
+    // key-gray-short.png 93x110 (the tablet's number row). _keyHalf is the
+    // layout's row (in keyboard pixels), _artKeyHalf the art's.
     readonly property int _keyHalf: tablet ? 70 : 48
+    readonly property int _artKeyHalf: touchpadLook ? 70 : 48
     // The phone's number row: three quarters of a letter row.
     readonly property int _numberRowHalf: 36
     function _rowHalf(r) {
@@ -716,7 +839,7 @@ Item {
     }
     readonly property int _shortKeyHalf: 55
     // 9-tile corners: 22 phone, 13 tablet (PhoneKeyboard.cpp:181, TabletKeyboard.cpp:176).
-    readonly property int _corner: tablet ? 13 : 22
+    readonly property int _corner: touchpadLook ? 13 : 22
     // Phoenix: the phone's bordered keys (shift, delete, the bottom row)
     // trimmed of 3 of their art's 5 black pixels a side, so they stand 4 px
     // apart, not 10, nearer the letters' spacing (the plugin never trimmed
@@ -764,12 +887,13 @@ Item {
     readonly property int graceZone: 40
 
     // Colours (PhoneKeyboard.cpp:87-96, TabletKeyboard.cpp:84-91).
-    readonly property color cActiveColor: tablet ? Qt.rgba(20 / 255, 20 / 255, 20 / 255, 1) : "#d2d2d2"
-    readonly property color cActiveColorBack: tablet ? "#e2e2e2" : "#d2d2d2"
-    readonly property color cDisabledColor: tablet ? Qt.rgba(100 / 255, 100 / 255, 100 / 255, 1) : "#808080"
-    readonly property color cDisabledColorBack: tablet ? Qt.rgba(200 / 255, 200 / 255, 200 / 255, 1) : "#808080"
+    // By the look (keyboardStyle): the TouchPad's or the phone's.
+    readonly property color cActiveColor: touchpadLook ? Qt.rgba(20 / 255, 20 / 255, 20 / 255, 1) : "#d2d2d2"
+    readonly property color cActiveColorBack: touchpadLook ? "#e2e2e2" : "#d2d2d2"
+    readonly property color cDisabledColor: touchpadLook ? Qt.rgba(100 / 255, 100 / 255, 100 / 255, 1) : "#808080"
+    readonly property color cDisabledColorBack: touchpadLook ? Qt.rgba(200 / 255, 200 / 255, 200 / 255, 1) : "#808080"
     readonly property color cFunctionColor: "#d2d2d2"
-    readonly property color cFunctionColorBack: tablet ? "#000000" : "#d2d2d2"
+    readonly property color cFunctionColorBack: touchpadLook ? "#000000" : "#d2d2d2"
     readonly property color cBlueColor: Qt.rgba(75 / 255, 151 / 255, 222 / 255, 1)
     readonly property color cBlueColorBack: "#ffffff"
     readonly property color cPopoutTextColor: Qt.rgba(20 / 255, 20 / 255, 20 / 255, 1)
@@ -913,7 +1037,7 @@ Item {
         // TabletKeyboard.cpp:527-540: narrow or small keyboards trim the
         // keys' 9-tile edges; the phone's are never trimmed (:478-479).
         var trim = 0;
-        if (tablet) {
+        if (touchpadLook) {          // the TouchPad's art (keyboardStyle)
             if (width < 480)
                 trim = 5;
             else if (width === 480)
@@ -1004,9 +1128,11 @@ Item {
     // function keys black, others gray; PhoneKeyboard.cpp:1364-1382), the
     // tablet's number row short gray and shift by its mode
     // (TabletKeyboard.cpp:1488-1504).
+    // By the look (keyboardStyle); the phone's number row has the tablet's
+    // short keys in the TouchPad's look.
     function _keyBackground(x, y, key) {
-        if (tablet) {
-            if (y === 0)
+        if (touchpadLook) {
+            if (y === 0 && (tablet || _km.numberRow))
                 return "key-gray-short.png";
             if (key === KM.Key.Shift)
                 return _km.shiftMode === KM.ShiftMode.CapsLock ? "key-shift-lock.png"
@@ -1016,12 +1142,12 @@ Item {
         // Phoenix: the phone's bordered keys in charcoal (key-charcoal.png,
         // tools/keyboard-charcoal.py) where the plugin drew key-black.png /
         // key-gray.png (the same art: a near-black face in a grey rim).
-        var bordered = tablet ? null : "key-charcoal.png";
+        var bordered = touchpadLook ? null : "key-charcoal.png";
         if (KM.isFunctionKey(plain) && !KM.isTextShortcutKey(plain))
             return bordered || "key-black.png";
         return KM.isLetter(plain) ? "key-white.png" : (bordered || "key-gray.png");
     }
-    function _keyHalfFor(bg) { return bg === "key-gray-short.png" ? _shortKeyHalf : _keyHalf; }
+    function _keyHalfFor(bg) { return bg === "key-gray-short.png" ? _shortKeyHalf : _artKeyHalf; }
 
     // ---- Key caps (drawKeyCap) ---------------------------------------------------------
     // use: 0 unpressed, 1 pressed, 2 preview (phone popup), 3 extended.
@@ -1065,10 +1191,10 @@ Item {
         }
         var useWhite = use === 0 || use === 1;
         var extraLarge = !tablet && (use === 1 || use === 2);
-        if (tablet && use === 1)
-            loc.y += 2;                                          // pressed: 2 px lower
-        var activeColor = tablet ? cActiveColor : (useWhite ? cActiveColor : cPopoutTextColor);
-        var activeBack = tablet ? cActiveColorBack : (useWhite ? cActiveColorBack : cPopoutTextColorBack);
+        if (touchpadLook && use === 1)
+            loc.y += 2;                                          // pressed: 2 px lower (the TouchPad's art)
+        var activeColor = touchpadLook ? cActiveColor : (useWhite ? cActiveColor : cPopoutTextColor);
+        var activeBack = touchpadLook ? cActiveColorBack : (useWhite ? cActiveColorBack : cPopoutTextColorBack);
         var mainColor = activeColor, mainBack = activeBack;
         var altColor = cDisabledColor, altBack = cDisabledColorBack;
         var capitalize = _km.isCapOrAutoCapActive();
@@ -1177,11 +1303,11 @@ Item {
                 ops.push({ text: text, x: loc.x, y: loc.y, w: Math.floor(loc.w * 85 / 100 + _trim), h: rh, size: Math.min(height, fontSize - 2), bold: bold, color: cFunctionColor, back: cFunctionColorBack, align: "bottomRight" });
         } else {
             var size = Math.min(height, fontSize);
-            var color = mainColor, back = tablet ? mainBack : cFunctionColorBack;
-            if (tablet && cy > 0 && KM.isFunctionKey(key) && !KM.isTextShortcutKey(key)) {
+            var color = mainColor, back = touchpadLook ? mainBack : cFunctionColorBack;
+            if (touchpadLook && (cy > 0 || !tablet) && KM.isFunctionKey(key) && !KM.isTextShortcutKey(key)) {
                 color = cFunctionColor;
                 back = cFunctionColorBack;
-            } else if (tablet) {
+            } else if (touchpadLook) {
                 color = cActiveColor;
                 back = cActiveColorBack;
             }
@@ -1225,13 +1351,13 @@ Item {
         // Swipe typing: one finger from a letter across to other letters.
         if (_swipeId !== "") {
             if (String(id) === _swipeId) {
-                _swipePath.push({ x: px, y: py });
+                _swipePath.push({ x: px, y: py, t: now });
                 swipeTrail.requestPaint();
             }
             return;
         }
         if (spaceTouch && _swipeCanStart(spaceTouch)) {
-            spaceTouch.path.push({ x: px, y: py });
+            spaceTouch.path.push({ x: px, y: py, t: now });
             var from = spaceTouch.path[0];
             var startLetter = _letterAt(from.x, from.y), here = _letterAt(px, py);
             if (startLetter && here && here !== startLetter
@@ -1252,7 +1378,7 @@ Item {
         var newTouch = touches[id] === undefined;
         if (newTouch)
             touches[id] = { visible: true, consumed: false, coord: null, first: { x: tpx, y: tpy }, last: { x: tpx, y: tpy }, time: 0,
-                            path: [{ x: px, y: py }] };
+                            path: [{ x: px, y: py, t: now }] };
         var touch = touches[id];
         var newKey = keyCoord ? _km.map(keyCoord.x, keyCoord.y) : KM.Key.None;
         if (newTouch)
@@ -1546,7 +1672,11 @@ Item {
             consumeMode = true;
             // Text Assist: backspace takes a correction back; a space or
             // punctuation puts one in first.
-            if (qtkey === KM.Key.Backspace && _undoCorrection()) {
+            if (_autoSpace && !KM.isTextShortcutKey(key) && _autoSpaceKey(qtkey)) {
+                if (qtkey === KM.Key.Space)
+                    symbolMode = KM.SymbolMode.Off;    // as a typed space does
+                qtkey = 0;
+            } else if (qtkey === KM.Key.Backspace && _undoCorrection()) {
                 qtkey = 0;
                 _resetShortcuts();        // the space before it is gone: no ". " on the next
             } else if (qtkey === KM.Key.Space || (KM.isUnicodeKey(key) && key < 128 && ".,!?;:".indexOf(String.fromCharCode(key)) >= 0)) {
@@ -1592,6 +1722,7 @@ Item {
     function _sendKeyDownUp(key, modifiers) {
         kb.keyTyped(key, modifiers);
         _swipeWords = false;
+        _autoSpace = null;
         _swipeNeedsSpace = false;
         _trackKey(key, modifiers);
     }
@@ -2019,8 +2150,8 @@ Item {
                     source: String(Theme.variant(keyItem.modelData.art + keyItem.modelData.background, kb.pixelScale))
                     half: kb._keyHalfFor(keyItem.modelData.background)
                     corner: kb._corner
-                    trim: kb.tablet ? kb._trim : kb.cPhoneKeyTrim
-                    insetV: kb.tablet ? 0 : kb.cPhoneKeyInsetV
+                    trim: kb.touchpadLook ? kb._trim : kb.cPhoneKeyTrim
+                    insetV: kb.touchpadLook ? 0 : kb.cPhoneKeyInsetV
                 }
                 Caps {
                     x: -keyItem.x
@@ -2043,18 +2174,41 @@ Item {
             onPaint: {
                 var ctx = getContext("2d");
                 ctx.clearRect(0, 0, width, height);
-                var pts = kb._swipePath;
-                if (kb._swipeId === "" || pts.length < 2)
+                if (kb._swipeId === "")
                     return;
-                ctx.lineCap = "round";
-                ctx.lineJoin = "round";
-                ctx.strokeStyle = Qt.rgba(75 / 255, 151 / 255, 222 / 255, 0.85);
-                ctx.lineWidth = kb.tablet ? 10 : 12;
-                ctx.beginPath();
-                ctx.moveTo(pts[0].x, pts[0].y);
-                for (var i = 1; i < pts.length; ++i)
-                    ctx.lineTo(pts[i].x, pts[i].y);
-                ctx.stroke();
+                var segs = kb._trailSegments(kb._swipePath, kb._now(), kb._letterKeys().width);
+                // Butt ends: round ones would overlap, darker dots at
+                // every joint of the translucent segments.
+                ctx.lineCap = "butt";
+                for (var i = 0; i < segs.length; ++i) {
+                    var g = segs[i];
+                    // Smooth along the segment, however far apart the
+                    // touch points were.
+                    var grad = ctx.createLinearGradient(g.x0, g.y0, g.x1, g.y1);
+                    grad.addColorStop(0, Qt.rgba(75 / 255, 151 / 255, 222 / 255, g.alpha));
+                    grad.addColorStop(1, Qt.rgba(75 / 255, 151 / 255, 222 / 255, g.alpha1));
+                    ctx.strokeStyle = grad;
+                    ctx.lineWidth = (g.width + g.width1) / 2;
+                    ctx.beginPath();
+                    ctx.moveTo(g.x0, g.y0);
+                    ctx.lineTo(g.x1, g.y1);
+                    ctx.stroke();
+                }
+                // The finger's end, rounded.
+                if (segs.length) {
+                    var head = segs[segs.length - 1];
+                    ctx.fillStyle = Qt.rgba(75 / 255, 151 / 255, 222 / 255, head.alpha1);
+                    ctx.beginPath();
+                    ctx.arc(head.x1, head.y1, head.width1 / 2, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            }
+            // While the finger rests, its tail still fades away.
+            Timer {
+                interval: 16
+                repeat: true
+                running: kb._swipeId !== ""
+                onTriggered: swipeTrail.requestPaint()
             }
         }
 
@@ -2085,8 +2239,8 @@ Item {
                         pressed: true
                         half: kb._keyHalfFor(pressedItem.modelData.background)
                         corner: kb._corner
-                        trim: kb.tablet ? kb._trim : kb.cPhoneKeyTrim
-                    insetV: kb.tablet ? 0 : kb.cPhoneKeyInsetV
+                        trim: kb.touchpadLook ? kb._trim : kb.cPhoneKeyTrim
+                        insetV: kb.touchpadLook ? 0 : kb.cPhoneKeyInsetV
                     }
                     Ellipsis {
                         visible: pressedItem.modelData.ellipsis

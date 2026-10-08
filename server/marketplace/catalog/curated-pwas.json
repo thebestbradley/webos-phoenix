@@ -30,6 +30,35 @@
       "manifestName": "Mastodon"
     },
     {
+      "id": "org.webosphoenix.pwa.instagram",
+      "title": "Instagram",
+      "developer": "Meta",
+      "categories": [
+        "Social",
+        "Photography"
+      ],
+      "featured": false,
+      "summary": "Photos, reels and stories from people you follow.",
+      "manifest": "https://www.instagram.com/data/manifest.json",
+      "origin": "https://www.instagram.com",
+      "icon": "https://static.cdninstagram.com/rsrc.php/yA/r/7iktsTA_C-T.webp",
+      "manifestName": "Instagram"
+    },
+    {
+      "id": "org.webosphoenix.pwa.facebook",
+      "title": "Facebook",
+      "developer": "Meta",
+      "categories": [
+        "Social"
+      ],
+      "featured": false,
+      "summary": "News feed, groups and events.",
+      "manifest": "https://m.facebook.com/data/manifest/?is_workplace_mobile_pwa_dogfooding=0",
+      "origin": "https://m.facebook.com",
+      "icon": "https://static.xx.fbcdn.net/rsrc.php/yk/r/Czs2nwUnhiR.webp",
+      "manifestName": "Facebook"
+    },
+    {
       "id": "org.webosphoenix.pwa.pinterest",
       "title": "Pinterest",
       "developer": "Pinterest",
@@ -72,6 +101,20 @@
       "manifestName": "Element"
     },
     {
+      "id": "org.webosphoenix.pwa.whatsapp",
+      "title": "WhatsApp",
+      "developer": "Meta",
+      "categories": [
+        "Communication"
+      ],
+      "featured": false,
+      "summary": "Your WhatsApp chats, linked from your phone.",
+      "manifest": "https://web.whatsapp.com/data/manifest.json",
+      "origin": "https://web.whatsapp.com",
+      "icon": "https://static.whatsapp.net/rsrc.php/yY/r/pxeXQZRzD__.webp",
+      "manifestName": "WhatsApp Web"
+    },
+    {
       "id": "org.webosphoenix.pwa.protonmail",
       "title": "Proton Mail",
       "developer": "Proton AG",
@@ -85,6 +128,21 @@
       "origin": "https://mail.proton.me",
       "icon": "https://mail.proton.me/assets/android-chrome-192x192.png",
       "manifestName": "Proton Mail"
+    },
+    {
+      "id": "org.webosphoenix.pwa.outlook",
+      "title": "Outlook",
+      "developer": "Microsoft",
+      "manifest": "https://outlook.live.com/mail/manifests/pwa.json",
+      "categories": [
+        "Communication",
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "Outlook.com mail and calendar.",
+      "origin": "https://outlook.live.com",
+      "icon": "https://res.public.onecdn.static.microsoft/assets/mail/pwa/v4/pngs/Outlook.192x192.png",
+      "manifestName": "Outlook"
     },
     {
       "id": "org.webosphoenix.pwa.spotify",
@@ -1117,20 +1175,6 @@
       "manifestName": "FT"
     },
     {
-      "id": "org.webosphoenix.pwa.groundnews",
-      "title": "Ground News",
-      "developer": "Ground News",
-      "categories": [
-        "News"
-      ],
-      "featured": false,
-      "summary": "See how every side covers a story.",
-      "manifest": "https://ground.news/manifest.json",
-      "origin": "https://ground.news",
-      "icon": "https://ground.news/logo3-192.png",
-      "manifestName": "Ground"
-    },
-    {
       "id": "org.webosphoenix.pwa.googlemaps",
       "title": "Google Maps",
       "developer": "Google",
@@ -1586,20 +1630,6 @@
       "manifestName": "Showdown!"
     },
     {
-      "id": "org.webosphoenix.pwa.nytgames",
-      "title": "NYT Games",
-      "developer": "The New York Times",
-      "categories": [
-        "Games"
-      ],
-      "featured": false,
-      "summary": "The Crossword, Wordle, Connections and more.",
-      "manifest": "https://www.nytimes.com/games-assets/v2/metadata/nyt-web-manifest.json?v=",
-      "origin": "https://www.nytimes.com",
-      "icon": "https://www.nytimes.com/android-chrome-192x192.png",
-      "manifestName": "NYT Games"
-    },
-    {
       "id": "org.webosphoenix.pwa.xboxcloud",
       "title": "Xbox Cloud Gaming",
       "developer": "Microsoft",
@@ -1712,20 +1742,6 @@
       "manifestName": "NBA"
     },
     {
-      "id": "org.webosphoenix.pwa.formula1",
-      "title": "Formula 1",
-      "developer": "Formula One Group",
-      "categories": [
-        "Sports"
-      ],
-      "featured": false,
-      "summary": "Race results, standings and news.",
-      "manifest": "https://www.formula1.com/s/manifest.json",
-      "origin": "https://www.formula1.com",
-      "icon": "https://www.formula1.com/assets/home/_next/static/media/icon192x192.3e6c74b8.png",
-      "manifestName": "Install F1 App"
-    },
-    {
       "id": "org.webosphoenix.pwa.strava",
       "title": "Strava",
       "developer": "Strava",
@@ -1797,6 +1813,76 @@
       "origin": "https://libbyapp.com",
       "icon": "https://libbyapp.com/icons/libby-icon-android-192.png?v=1",
       "manifestName": "Libby"
+    },
+    {
+      "id": "org.webosphoenix.pwa.chatgpt",
+      "title": "ChatGPT",
+      "developer": "OpenAI",
+      "categories": [
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "Ask OpenAI's assistant to write, explain and brainstorm.",
+      "manifest": "https://chatgpt.com/manifest.json",
+      "origin": "https://chatgpt.com",
+      "icon": "https://chatgpt.com/images/chatgpt-icon-192x192.png",
+      "manifestName": "ChatGPT"
+    },
+    {
+      "id": "org.webosphoenix.pwa.claude",
+      "title": "Claude",
+      "developer": "Anthropic",
+      "categories": [
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "Anthropic's assistant for writing, analysis and code.",
+      "manifest": "https://claude.ai/manifest.json",
+      "origin": "https://claude.ai",
+      "icon": "https://claude.ai/images/icon-192x192.png",
+      "manifestName": "Claude"
+    },
+    {
+      "id": "org.webosphoenix.pwa.github",
+      "title": "GitHub",
+      "developer": "GitHub",
+      "categories": [
+        "Developer"
+      ],
+      "featured": false,
+      "summary": "Repositories, issues and pull requests.",
+      "manifest": "https://github.com/manifest.json",
+      "origin": "https://github.com",
+      "icon": "https://github.githubassets.com/assets/app-icon-192-bcc967ab9829.png",
+      "manifestName": "GitHub"
+    },
+    {
+      "id": "org.webosphoenix.pwa.mstodo",
+      "title": "Microsoft To Do",
+      "developer": "Microsoft",
+      "categories": [
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "Lists and tasks for every day, synced with Outlook.",
+      "manifest": "https://to-do.office.com/tasks/manifest.json",
+      "origin": "https://to-do.office.com",
+      "icon": "https://res-1.cdn.office.net/todo/4700804_2.134.1/icons/todo-192.png",
+      "manifestName": "To Do"
+    },
+    {
+      "id": "org.webosphoenix.pwa.apnews",
+      "title": "AP News",
+      "developer": "The Associated Press",
+      "categories": [
+        "News"
+      ],
+      "featured": false,
+      "summary": "Breaking news from the Associated Press.",
+      "manifest": "https://apnews.com/manifest.json",
+      "origin": "https://apnews.com",
+      "icon": "https://assets.apnews.com/4f/85/c7bfcd884788ad50e6ec57acc8ef/android-app-icon-197.png",
+      "manifestName": "AP News"
     }
   ],
   "notFound": [
@@ -1804,16 +1890,6 @@
       "title": "Bluesky",
       "url": "https://bsky.app/",
       "why": "no web app manifest found"
-    },
-    {
-      "title": "Instagram",
-      "url": "https://www.instagram.com/",
-      "why": "no web app manifest found"
-    },
-    {
-      "title": "Facebook",
-      "url": "https://www.facebook.com/",
-      "why": "the page: HTTP Error 400: Bad Request; no web app manifest found"
     },
     {
       "title": "Reddit",
@@ -1824,16 +1900,6 @@
       "title": "Discord",
       "url": "https://discord.com/app",
       "why": "no web app manifest found"
-    },
-    {
-      "title": "WhatsApp",
-      "url": "https://web.whatsapp.com/",
-      "why": "the page: HTTP Error 400: Bad Request; no web app manifest found"
-    },
-    {
-      "title": "Outlook",
-      "url": "https://outlook.live.com/mail/",
-      "why": "the page: HTTP Error 417: Expectation Failed; no web app manifest found"
     },
     {
       "title": "trivago",
@@ -1848,6 +1914,116 @@
     {
       "title": "Trello",
       "url": "https://trello.com/",
+      "why": "no web app manifest found"
+    },
+    {
+      "title": "Ground News",
+      "url": "https://ground.news/",
+      "why": "manifest's icons are missing (https://ground.news/logo3.png: HTTP 404)"
+    },
+    {
+      "title": "NYT Games",
+      "url": "https://www.nytimes.com/crosswords",
+      "why": "manifest's icons are missing (https://www.nytimes.com/android-chrome-512x512.png: HTTP 404)"
+    },
+    {
+      "title": "Formula 1",
+      "url": "https://www.formula1.com/",
+      "why": "manifest's icons are missing (https://www.formula1.com/assets/home/_next/static/media/icon36x36.9fab9254.png: HTTP 404)"
+    },
+    {
+      "title": "Canva",
+      "url": "https://www.canva.com/",
+      "why": "the page: HTTP Error 403: Forbidden (a Cloudflare bot check); no web app manifest found"
+    },
+    {
+      "title": "OneDrive",
+      "url": "https://onedrive.live.com/",
+      "why": "https://www.microsoft.com/manifest.json: HTTP Error 403: Forbidden (Akamai bot protection)"
+    },
+    {
+      "title": "Word",
+      "url": "https://word.cloud.microsoft/",
+      "why": "no web app manifest found"
+    },
+    {
+      "title": "The New York Times",
+      "url": "https://www.nytimes.com/",
+      "why": "the page: HTTP Error 403: Forbidden (a DataDome bot check); no web app manifest found"
+    },
+    {
+      "title": "Reuters",
+      "url": "https://www.reuters.com/",
+      "why": "the page: HTTP Error 401: HTTP Forbidden (a DataDome bot check); no web app manifest found"
+    },
+    {
+      "title": "The Economist",
+      "url": "https://www.economist.com/",
+      "why": "the page: HTTP Error 403: Forbidden (a Cloudflare bot check); no web app manifest found"
+    },
+    {
+      "title": "Skyscanner",
+      "url": "https://www.skyscanner.com/",
+      "why": "the page: HTTP Error 403: Forbidden; no web app manifest found"
+    },
+    {
+      "title": "Tripadvisor",
+      "url": "https://www.tripadvisor.com/",
+      "why": "the page: HTTP Error 403: Forbidden (a DataDome bot check); no web app manifest found"
+    },
+    {
+      "title": "DoorDash",
+      "url": "https://www.doordash.com/",
+      "why": "the page: HTTP Error 403: Forbidden (a Cloudflare bot check); no web app manifest found"
+    },
+    {
+      "title": "McDonald's",
+      "url": "https://www.mcdonalds.com/",
+      "why": "no web app manifest found"
+    },
+    {
+      "title": "Revolut",
+      "url": "https://app.revolut.com/",
+      "why": "the page: HTTP Error 403: Forbidden (a Cloudflare bot check); no web app manifest found"
+    },
+    {
+      "title": "Stack Overflow",
+      "url": "https://stackoverflow.com/",
+      "why": "the page: HTTP Error 403: Forbidden (a Cloudflare bot check); no web app manifest found"
+    },
+    {
+      "title": "CodePen",
+      "url": "https://codepen.io/",
+      "why": "the page: HTTP Error 403: Forbidden (a Cloudflare bot check); no web app manifest found"
+    },
+    {
+      "title": "Yelp",
+      "url": "https://www.yelp.com/",
+      "why": "the page: HTTP Error 403: Forbidden (a DataDome bot check); no web app manifest found"
+    },
+    {
+      "title": "VSCO",
+      "url": "https://vsco.co/",
+      "why": "the page: HTTP Error 403: Forbidden (refused by Cloudflare); no web app manifest found"
+    },
+    {
+      "title": "Tuta Mail",
+      "url": "https://app.tuta.com/",
+      "why": "no web app manifest found"
+    },
+    {
+      "title": "Zoho Mail",
+      "url": "https://mail.zoho.com/",
+      "why": "no web app manifest found"
+    },
+    {
+      "title": "Yahoo Mail",
+      "url": "https://mail.yahoo.com/",
+      "why": "no web app manifest found"
+    },
+    {
+      "title": "Evernote",
+      "url": "https://www.evernote.com/client/web",
       "why": "no web app manifest found"
     }
   ]

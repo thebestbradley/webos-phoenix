@@ -22,6 +22,9 @@ find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Gui Qml Quick)
 # QML the simulator loads, and installed next to the QML on the device.
 set(PHOENIX_QML_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/qml")
 add_subdirectory(native)
+# The assistant's wake word spotter (phoenix-wakeword, wakeword-test), run by
+# the shell's Dictation; libvosk and its model are found at run time.
+add_subdirectory(../services/wakeword ${CMAKE_CURRENT_BINARY_DIR}/services-wakeword)
 
 if(PHOENIX_BUILD_SIM)
     # Qt WebEngine runs the web apps (original webOS apps, Settings, ...).
@@ -74,6 +77,7 @@ if(PHOENIX_BUILD_SIM)
     # The keyboard's dictation, without a microphone (CI: build/dictation-test).
     add_executable(dictation-test native/dictation_test.cpp native/dictation.cpp native/dictation.h)
     target_link_libraries(dictation-test PRIVATE Qt6::Core Qt6::Qml)
+    target_compile_definitions(dictation-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
     # The Assistant's on-device model runner and speech (CI: build/localmodels-test).
     find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Network)
     add_executable(localmodels-test native/localmodels_test.cpp native/localmodels.cpp native/localmodels.h native/speech.cpp native/speech.h)

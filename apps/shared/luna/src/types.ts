@@ -218,6 +218,8 @@ export interface SystemPreferences {
     showBatteryPercent?: boolean;
     /** Phoenix: a row of numbers above the keyboard's letters. */
     keyboardNumberRow?: boolean;
+    /** Phoenix: the keyboard's look: "auto" (phone: black, tablet: TouchPad), "black" or "touchpad". */
+    keyboardStyle?: "auto" | "black" | "touchpad";
     /** Phoenix: Email's new-mail dashboard cycles through the new emails, with a delete button. */
     emailDashboardCycling?: boolean;
     /** Phoenix: the browser's page views block the content blocker's hosts. */

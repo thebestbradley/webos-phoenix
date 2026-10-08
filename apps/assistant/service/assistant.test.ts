@@ -127,7 +127,7 @@ describe("the command layer", () => {
     it("adds a reminder to Tasks with its reminder activity", async () => {
         const t = setup();
         const r = await ask(t, "remind me to buy milk at 5");
-        expect(last(r).text).toBe("I'll remind you to buy milk at 5:00 PM today.");
+        expect(last(r).text).toBe("I'll remind you to buy milk today at 5:00 PM.");
         const puts = t.called("com.palm.db/put").map((c) => c.params.objects[0]);
         expect(puts.map((o) => o._kind)).toEqual(["com.palm.tasklist:1", "com.palm.task:1"]);
         expect(puts[1]).toMatchObject({ summary: "buy milk", remind: new Date(2026, 9, 7, 17).getTime() });
@@ -161,12 +161,12 @@ describe("confirmation for what sends or calls", () => {
         const t = setup();
         const r = await ask(t, "text Sam I'm running late");
         const m = last(r);
-        expect(m).toMatchObject({ status: "pending", text: "Send \"i'm running late\" to Sam Jones?" });
+        expect(m).toMatchObject({ status: "pending", text: "Send \"I'm running late\" to Sam Jones?" });
         expect(t.called("messaging/putMessage")).toHaveLength(0);
         const done = await t.svc.confirm({ threadId: r.thread.id, messageId: m.id, accept: true });
         expect(last(done).text).toBe("Sent to Sam Jones.");
         expect(t.called("messaging/putMessage")[0].params.message).toMatchObject({
-            _kind: "com.palm.smsmessage:1", folder: "outbox", messageText: "i'm running late", to: [{ addr: "555-0100", name: "Sam Jones" }] });
+            _kind: "com.palm.smsmessage:1", folder: "outbox", messageText: "I'm running late", to: [{ addr: "555-0100", name: "Sam Jones" }] });
         // Answered once.
         expect((await t.svc.confirm({ threadId: r.thread.id, messageId: m.id, accept: true })).returnValue).toBe(false);
     });
@@ -395,5 +395,72 @@ describe("conversations", () => {
         await t.svc.setSettings({ enabled: false });
         t.as("com.palm.systemui");
         expect((await t.svc.ask({ text: "what's 1 + 1" })).errorCode).toBe(ERRORS.OFF);
+    });
+});
+
+describe("asking by voice (docs/AI-AND-MCP.md, Voice)", () => {
+    it("answers \"Yes\" and \"No\" to a read-back in words", async () => {
+        const t = setup();
+        const r = await ask(t, "text Sam I'm running late", { voice: true });
+        expect(last(r).status).toBe("pending");
+        const yes = await ask(t, "Yes.", { threadId: r.thread.id, voice: true });
+        expect(yes.messages.map((m: Reply) => [m.role, m.text])).toEqual([["user", "Yes."], ["assistant", "Sent to Sam Jones."]]);
+        expect(t.called("messaging/putMessage")).toHaveLength(1);
+        const r2 = await ask(t, "text Mary see you soon", { threadId: r.thread.id });
+        const no = await ask(t, "Cancel", { threadId: r.thread.id });
+        expect(last(no).text).toBe("OK, I won't.");
+        expect((await t.svc.thread({ id: r.thread.id })).messages.find((x: Reply) => x.id === last(r2).id).status).toBe("cancelled");
+        expect(t.called("messaging/putMessage")).toHaveLength(1);
+        // Without a read-back waiting, "yes" is just words.
+        expect(last(await ask(t, "yes", { threadId: r.thread.id })).command).toBeUndefined();
+    });
+
+    it("speaks answers to spoken requests with Voice replies, typed ones with Speak answers", async () => {
+        const t = setup();
+        t.as("org.webosphoenix.settings");
+        await t.svc.setSettings({ speak: false });
+        t.as("com.palm.systemui");
+        await ask(t, "Turn on the flashlight");
+        expect(t.spoken).toEqual([]);
+        await ask(t, "Turn off the flashlight", { voice: true });
+        expect(t.spoken).toEqual(["The flashlight is off."]);
+        t.as("org.webosphoenix.settings");
+        await t.svc.setSettings({ voiceReplies: false });
+        t.as("com.palm.systemui");
+        await ask(t, "Turn on the flashlight", { voice: true });
+        expect(t.spoken).toEqual(["The flashlight is off."]);
+    });
+
+    it("keeps the wake word settings, off until turned on", async () => {
+        const t = setup();
+        expect((await t.svc.getSettings({})).settings).toMatchObject({ wakeWord: false, wakeWhenLocked: false, voiceReplies: true });
+        t.as("org.webosphoenix.settings");
+        expect((await t.svc.setSettings({ wakeWord: true, wakeWhenLocked: true })).returnValue).toBe(true);
+        expect((await t.svc.setSettings({ wakeWord: "yes" })).returnValue).toBe(false);
+        expect((await t.svc.getSettings({})).settings).toMatchObject({ wakeWord: true, wakeWhenLocked: true });
+    });
+
+    it("over the lock screen, does only what shows nothing private and sends nothing", async () => {
+        const t = setup();
+        const timer = await ask(t, "set a timer for 5 minutes", { voice: true, locked: true });
+        expect(last(timer)).toMatchObject({ command: "timer", status: "done" });
+        const text = await ask(t, "text Sam I'm running late", { voice: true, locked: true });
+        expect(last(text)).toMatchObject({ command: "text", status: "locked", text: "Unlock your phone first, and I'll do that." });
+        const open = await ask(t, "open Maps", { locked: true });
+        expect(last(open).status).toBe("locked");
+        expect(t.called("applicationManager/launch")).toHaveLength(0);
+        // Unlocked, the same words work.
+        expect(last(await ask(t, "text Sam I'm running late")).status).toBe("pending");
+    });
+
+    it("gives the words to expect: the wake phrase and the contacts' names, to the system UI only", async () => {
+        const t = setup();
+        const v = await t.svc.vocabulary({});
+        expect(v.words[0]).toBe("Hey Phoenix");
+        expect(v.words).toContain("Sam Jones");
+        expect(v.prompt).toMatch(/^Hey Phoenix, set a timer\. Call [A-Z][a-z]+ [A-Z][a-z]+\. Text /);
+        expect(v.prompt).toContain("Sam Jones.");
+        t.as("com.example.app");
+        expect((await t.svc.vocabulary({})).returnValue).toBe(false);
     });
 });

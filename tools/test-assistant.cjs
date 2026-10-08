@@ -117,6 +117,15 @@ async function main() {
                 if (m.type === "attributes") seen(m.target);
                 m.addedNodes && m.addedNodes.forEach((n) => { seen(n); n.querySelectorAll && n.querySelectorAll("[data-testid='as-bird-work']").forEach(seen); });
             })).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-pose"] });
+            // And how its right flipper moves as it acts (motion.acting): each
+            // transform it is drawn with, frame by frame.
+            window.__birdFlipper = new Set();
+            const frame = () => {
+                const w = document.querySelector("[data-testid='as-bird-work'] [data-act='wingR'] > g");
+                if (w) window.__birdFlipper.add(getComputedStyle(w).transform);
+                requestAnimationFrame(frame);
+            };
+            requestAnimationFrame(frame);
         });
 
         const ask = async (text) => {
@@ -135,16 +144,69 @@ async function main() {
         await app.waitForFunction(() => !document.querySelector("[data-testid='as-bird-work']") && window.__birdPoses.includes("done"), null, { timeout: 10000 });
         const poses = await app.evaluate(() => window.__birdPoses.filter((p, i, a) => a.indexOf(p) === i));
         check(["thinking", "working", "done"].every((p) => poses.includes(p)), "the bird thinks, works and cheers while a command runs: " + poses.join(", "));
+        const flipper = await app.evaluate(() => window.__birdFlipper.size);
+        check(flipper >= 4, "and acts doing it, never a still (its flipper drawn " + flipper + " ways)");
         check((await app.locator(".as-via").last().textContent()) === "On the phone", "the answer says the phone answered");
         // A text: read back, sent only on Send.
         const readBack = await ask("Text Alex I'm running late");
-        check(/^Send "i'm running late" to Alex Rivera\?$/.test(readBack), "a text is read back first: " + readBack);
+        check(/^Send "I'm running late" to Alex Rivera\?$/.test(readBack), "a text is read back first, as typed: " + readBack);
         const sentBefore = (await svc(app, "luna://com.palm.db/find", { query: { from: "com.palm.smsmessage:1" } })).results.length;
         await app.click("[data-testid='as-confirm-yes']");
         await app.waitForFunction(() => /^Sent to /.test(document.querySelectorAll(".as-row.in .as-bubble")[document.querySelectorAll(".as-row.in .as-bubble").length - 1]?.textContent || ""));
         const sent = (await svc(app, "luna://com.palm.db/find", { query: { from: "com.palm.smsmessage:1" } })).results;
-        check(sent.length === sentBefore + 1 && sent.some((m) => m.messageText === "i'm running late" && m.folder === "outbox"), "Send puts the text in the outbox");
+        check(sent.length === sentBefore + 1 && sent.some((m) => m.messageText === "I'm running late" && m.folder === "outbox"), "Send puts the text in the outbox");
         await shot(app, "thread-commands");
+
+        // ---- Everyday commands, in the apps' own data ------------------------------------------
+        const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+        const at3 = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 15, 0, 0).getTime();
+        const added = await ask("Add a meeting with Sam tomorrow at 3 at Bistro Verde");
+        check(added === "Added \u201cMeeting with Sam\u201d to your calendar, tomorrow at 3:00 PM, at Bistro Verde.", "an event added: " + added);
+        const events = (await svc(app, "luna://com.palm.db/find", { query: { from: "com.palm.calendarevent:1" } })).results;
+        const ev = events.find((e) => e.subject === "Meeting with Sam");
+        check(!!ev && ev.dtstart === at3 && ev.dtend === at3 + 3600000 && ev.location === "Bistro Verde" && ev.calendarId,
+              "it is in db8 as the Calendar saves one, in a calendar, an hour long");
+        const openCal = app.locator(".as-row").last().locator("[data-testid='as-choice-open']");
+        check(await openCal.count() === 1 && /Open Calendar/.test(await openCal.textContent()), "the answer offers Open Calendar");
+        await openCal.click();
+        const calOpened = () => launches.some((l) => l.id === "com.palm.app.calendar" && l.params && l.params.showEventDetail === ev._id);
+        for (let i = 0; i < 100 && !calOpened(); ++i) await app.waitForTimeout(100);
+        check(calOpened(), "Open Calendar opens the event in Calendar");
+        // The Calendar app itself shows it: launched with {showEventDetail}
+        // (a headless app: its page opens the card's window).
+        const calApp = await context.newPage();
+        await calApp.goto(`${root}/com.palm.app.calendar/index.html?launchParams=` + encodeURIComponent(JSON.stringify({ showEventDetail: ev._id })));
+        let shown = false, calWin = null;
+        for (let i = 0; i < 200 && !shown; ++i) {
+            calWin = context.pages().find((p) => p !== calApp && p !== app && /com\.palm\.app\.calendar/.test(p.url())) || calWin;
+            if (calWin) shown = await calWin.evaluate(() => /Meeting with Sam/.test(document.body.innerText) && /Bistro Verde/.test(document.body.innerText)).catch(() => false);
+            if (!shown) await app.waitForTimeout(100);
+        }
+        check(shown, "the Calendar app shows the event");
+        if (calWin) await shot(calWin, "calendar-event");
+        for (const p of context.pages()) if (p !== app) await p.close();
+        await app.bringToFront();
+        const agenda = await ask("What's on my calendar tomorrow?");
+        check(/^Tomorrow you have \d+ events?: .*\u201cMeeting with Sam\u201d at 3:00 PM/.test(agenda), "the agenda reads it back: " + agenda);
+        check(/^Added \u201cMilk\u201d to your Shopping list/.test(await ask("Add milk to my shopping list")), "an item on a list made for it");
+        const lists = (await svc(app, "luna://com.palm.db/find", { query: { from: "com.palm.tasklist:1" } })).results;
+        const shopping = lists.find((l) => l.name === "Shopping");
+        const tasks = (await svc(app, "luna://com.palm.db/find", { query: { from: "com.palm.task:1" } })).results;
+        check(!!shopping && tasks.some((t) => t.summary === "Milk" && t.listId === shopping._id), "the task is in Tasks' Shopping list");
+        check(/^Alarm set for 7:00 AM on weekdays/.test(await ask("Set an alarm for 7am weekdays")), "a repeating alarm");
+        const alarms = (await svc(app, "luna://com.palm.db/find", { query: { from: "com.palm.clock.alarm:1" } })).results;
+        check(alarms.some((a) => a.hour === 7 && a.minute === 0 && a.occurs === "weekdays" && a.enabled), "the Clock's alarm repeats on weekdays");
+        check(await ask("New note: parking on level 3") === "Saved to Memos.", "a memo saved");
+        const memoIds = () => svc(app, "luna://com.palm.db/find", { query: { from: "com.palm.note:1" } }).then((r) => r.results.filter((n) => /parking/i.test(n.text)).length);
+        check(await memoIds() === 1, "the memo is in db8");
+        check(/^Undo: delete that memo\?$/.test(await ask("Undo")), "undo reads back what it takes back");
+        await app.click("[data-testid='as-confirm-yes']");
+        await app.waitForFunction(() => /^Undone\.$/.test(document.querySelectorAll(".as-row.in .as-bubble")[document.querySelectorAll(".as-row.in .as-bubble").length - 1]?.textContent || ""));
+        check(await memoIds() === 0, "and Yes takes it back");
+        check(await ask("Convert 10 miles to km") === "10 miles is 16.09 kilometres.", "a conversion, offline");
+        check(/^Volume \d+%\.$/.test(await ask("Turn up the volume")), "the volume up");
+        check(await ask("Set brightness to 50%") === "Brightness 50%.", "the brightness set");
+        await shot(app, "thread-everyday");
         // Nothing here can answer.
         check(await ask("Who wrote the Odyssey?") === "I can't do that on the phone.", "a question the phone cannot answer");
         check(await app.locator("[data-testid='as-choice-web']").count() === 1 && await app.locator("[data-testid='as-choice-settings']").count() === 1,

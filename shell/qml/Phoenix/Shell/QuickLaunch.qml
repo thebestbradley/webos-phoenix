@@ -193,6 +193,7 @@ Item {
     }
     MouseArea {
         id: dockMouse
+        objectName: "quickLaunchMouse"
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         pressAndHoldInterval: Theme.iconMenuHoldInterval

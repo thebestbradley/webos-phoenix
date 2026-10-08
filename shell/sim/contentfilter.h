@@ -74,20 +74,24 @@ public:
     // "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like
     // Gecko) QtWebEngine/6.8.1 Chrome/122.0.0.0 Safari/537.36").
     //   "desktop"  Chromium's own, as a desktop browser sends it.
-    //   "mobile"   webOS in place of the platform, as the original's
-    //              ("Mozilla/5.0 (webOS/1.4.5; U; en-US) ... Pre/1.0",
-    //              "(hp-tablet; Linux; hpwOS/3.0.5; U; en-US) ...
-    //              TouchPad/1.0"); a phone adds "Mobile", which sites read
-    //              as a phone, a tablet does not (as Chrome on Android).
-    //              The QtWebEngine token goes: some sites refuse it.
+    //   "mobile"   what Chrome on Android sends (its reduced user agent:
+    //              "Mozilla/5.0 (Linux; Android 10; K) ... Chrome/<major>.0.0.0
+    //              Mobile Safari/537.36"); a phone adds "Mobile", which
+    //              sites read as a phone, a tablet does not (as Chrome on
+    //              an Android tablet). Not the original's webOS token
+    //              ("webOS/1.4.5", "hpwOS/3.0.5"): sites read it as Palm's
+    //              2011 browser, or LG's TVs, and turn it away ("browser
+    //              not supported"). The QtWebEngine token goes too: some
+    //              sites refuse it.
     static QString userAgent(const QString &chromium, const QString &mode, bool phone)
     {
         if (mode == QLatin1String("desktop"))
             return chromium;
         QString ua = chromium;
         ua.replace(QRegularExpression(QStringLiteral("^Mozilla/5\\.0 \\([^)]*\\)")),
-                   phone ? QStringLiteral("Mozilla/5.0 (Linux; webOS/3.0.5; Phoenix)")
-                         : QStringLiteral("Mozilla/5.0 (Linux; hpwOS/3.0.5; Phoenix Tablet)"));
+                   QStringLiteral("Mozilla/5.0 (Linux; Android 10; K)"));
+        // Chrome sends only the major version (User-Agent reduction).
+        ua.replace(QRegularExpression(QStringLiteral(" Chrome/(\\d+)\\.[\\d.]+")), QStringLiteral(" Chrome/\\1.0.0.0"));
         ua.replace(QRegularExpression(QStringLiteral(" QtWebEngine/\\S+")), QString());
         if (phone && !ua.contains(QLatin1String(" Mobile ")))
             ua.replace(QStringLiteral(" Safari/"), QStringLiteral(" Mobile Safari/"));

@@ -7,6 +7,7 @@
 //   simScene       "locked" | "cards" | "stacks" | "longstack" | "reorder" | "maximized" | "heldcard" | "launcher" |
 //                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" | "drawer" | "capture" | "capturepreview" |
 //                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "assistantbird" | "assistantbirds" |
+//                  "wakeword" | "wakewordlocked" |
 //                  "systemmenu" | "empty"
 //   simFirstUse    start with First Use (--first-use); without it First Use
 //                  runs at start-up until it has been done once
@@ -83,6 +84,7 @@ Item {
             virtualKeyboard: true
             dictationCommand: typeof simTranscriberCommand !== "undefined" ? simTranscriberCommand : []
             dictationInputFiles: typeof simMicrophoneFiles !== "undefined" ? simMicrophoneFiles : []
+            wakeWordCommand: typeof simWakeWordCommand !== "undefined" ? simWakeWordCommand : []
             localModelsDir: typeof simModelsDir !== "undefined" ? simModelsDir : ""
             llamaServerCommand: typeof simLlamaServer !== "undefined" ? simLlamaServer : []
             speechCommand: typeof simSpeechCommand !== "undefined" ? simSpeechCommand : []
@@ -609,6 +611,14 @@ Item {
           run: function () { windows.simulateIncomingMms(); } },
         { id: "im", menu: "simulate", text: qsTr("Incoming Instant Message"), keys: ["Ctrl+F5"],
           tip: qsTr("From a buddy, once an IM account is set up"), run: function () { windows.simulateIncomingIm(); } },
+        // The assistant's wake word, played into the microphone (on while
+        // Settings > Assistant listens for it; --wake-file).
+        { id: "wakeWord", menu: "simulate", text: qsTr("Say \"Hey Phoenix\""), keys: ["Ctrl+Shift+Y"],
+          tip: qsTr("Plays a recording of the wake word into the microphone (Settings > Assistant must be listening for it)"),
+          run: function () {
+              if (!shell.dictation || typeof simWakeFile === "undefined" || !shell.dictation.hear(simWakeFile))
+                  console.log("phoenix-sim: the microphone is not listening for \"Hey Phoenix\" (Settings > Assistant)");
+          } },
         { id: "notification", menu: "simulate", text: qsTr("Demo Notification"), keys: ["F2"], press: [Qt.Key_F2], icon: "notification" },
         { separator: true, menu: "simulate" },
         // The battery and chargers: 5% and under is luna-systemui's Low
@@ -762,7 +772,7 @@ Item {
                                    "launcher", "launcheredit", "launchermenu", "launchergroup", "launchergroupopen", "launchertabs", "launcherinstall", "wave", "powermenu", "hot", "pin", "emergency", "firstuse",
                                    "lowbattery", "banner", "notified", "dashboard", "drawer", "capture",
                                    "capturepreview", "justtype", "keyboard", "clipstrip", "assistant", "assistantbird", "assistantbirds",
-                                   "systemmenu", "empty"]
+                                   "wakeword", "wakewordlocked", "systemmenu", "empty"]
     readonly property string scene: typeof simScene !== "undefined" ? simScene : ""
 
     // The keys of the entries that run something, wherever the keyboard
@@ -870,6 +880,17 @@ Item {
     Connections {
         target: windows
         function onShutdownRequested(reason) { root.powerOff(); }
+        function onMediaKeyRequested(key) { shell.deviceServices.mediaKey(key); }
+        // The Assistant's "take a screenshot": its view closes first, so
+        // the capture shows what it was over.
+        function onScreenshotRequested() {
+            if (shell.assistantOpen) {
+                shell.closeAssistant();
+                screenshotDelay.start();
+            } else {
+                shell.takeScreenshot();
+            }
+        }
         // Luna Restart: the system UI again (phoenix-sim restarted at once,
         // its boot logo, no shutdown sound); the apps start afresh.
         function onRestartUiRequested() {
@@ -880,6 +901,11 @@ Item {
             if (typeof simProcess === "undefined" || !simProcess || !simProcess.restart([]))
                 Qt.quit();
         }
+    }
+    Timer {
+        id: screenshotDelay
+        interval: Theme.cardTransitionDuration + 100
+        onTriggered: shell.takeScreenshot()
     }
     function powerOff() {
         if (root.shuttingDown)
@@ -1323,6 +1349,30 @@ Item {
             clipStripScene();
         } else if (scene === "assistant") {
             assistantScene();
+        } else if (scene === "wakeword" || scene === "wakewordlocked") {
+            wakeWordScene.locked = scene === "wakewordlocked";
+            wakeWordScene.start();
+        }
+    }
+
+    // "wakeword": Settings > Assistant listening for "Hey Phoenix" (the
+    // microphone files, --microphone-file, then play as the microphone: a
+    // wake word and request first, an answer to a read-back next);
+    // "wakewordlocked" also over the lock screen, and locked.
+    Timer {
+        id: wakeWordScene
+        property bool locked: false
+        interval: 1000
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
+            windows.lunaCall("luna://org.webosphoenix.assistant/setSettings", { wakeWord: true, wakeWhenLocked: locked }, function (r) {
+                if (!r || r.returnValue === false || !wakeWordScene.running)
+                    return;
+                wakeWordScene.stop();
+                if (wakeWordScene.locked)
+                    shell.lock();
+            });
         }
     }
 
@@ -1469,9 +1519,15 @@ Item {
         onTriggered: shell.launch("org.webosphoenix.screenshot")
     }
 
+    // Once luna-systemui is up and listening (its page loads after the
+    // scene starts on a busy computer), as Simulate > Low Battery does.
     Timer {
         id: lowBatteryTimer
         interval: 3000
-        onTriggered: windows.simulatePower({ percent: 4, charger: "none" })
+        onTriggered: {
+            if (!windows.systemUiLoaded)
+                return restart();
+            root.power({ percent: 4, charger: "none" });
+        }
     }
 }

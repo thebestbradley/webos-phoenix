@@ -225,8 +225,13 @@ final class Catalog
 
     // ---- The curated web apps -----------------------------------------------------------------
 
-    /** catalog/curated-pwas.json (bin/probe-pwas.py) into the catalog, listed; opted-out origins stay out. */
-    public function seedCurated(string $file): int
+    /**
+     * catalog/curated-pwas.json (bin/probe-pwas.py) into the catalog, listed; opted-out origins stay
+     * out. With $whole (the file is the whole list), a curated web app it no longer has (its
+     * manifest gone) is set 'gone', not listed; a later list that has it back lists it again. One
+     * an admin pulled stays pulled.
+     */
+    public function seedCurated(string $file, bool $whole = false): int
     {
         $list = json_decode((string) file_get_contents($file), true)['apps'] ?? [];
         $optedOut = array_column($this->db->all("SELECT origin FROM optouts WHERE state = 'accepted'"), 'origin');
@@ -239,14 +244,23 @@ final class Catalog
                     'categories' => $e['categories'] ?? [], 'icon' => $e['icon'] ?? '', 'featured' => !empty($e['featured']),
                     'homepage' => $e['origin'] . '/'];
             if ($this->db->one('SELECT id FROM apps WHERE id = ?', [$e['id']])) {
-                $this->db->run('UPDATE apps SET title = ?, developer_name = ?, summary = ?, categories = ?, icon = ?, featured = ?,
-                                manifest = ?, origin = ?, updated = ? WHERE id = ? AND curated = 1',
+                $this->db->run("UPDATE apps SET title = ?, developer_name = ?, summary = ?, categories = ?, icon = ?, featured = ?,
+                                manifest = ?, origin = ?, updated = ?, status = CASE WHEN status = 'gone' THEN 'listed' ELSE status END
+                                WHERE id = ? AND curated = 1",
                     [$row['title'], $row['developer'], $row['summary'], json_encode($row['categories']), $row['icon'],
                      $row['featured'] ? 1 : 0, $e['manifest'], $e['origin'], Db::now(), $e['id']]);
             } else {
                 $this->insertApp($e['id'], 'pwa', null, $row, 'listed', ['manifest' => $e['manifest'], 'origin' => $e['origin'], 'curated' => 1]);
             }
             $n++;
+        }
+        if ($whole) {
+            $ids = array_column($list, 'id');
+            foreach ($this->db->all("SELECT id FROM apps WHERE kind = 'pwa' AND curated = 1 AND status = 'listed'") as $r) {
+                if (!in_array($r['id'], $ids, true)) {
+                    $this->db->run("UPDATE apps SET status = 'gone', updated = ? WHERE id = ?", [Db::now(), $r['id']]);
+                }
+            }
         }
         return $n;
     }

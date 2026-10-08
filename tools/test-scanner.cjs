@@ -190,7 +190,10 @@ async function main() {
             check(/www\.webosphoenix\.org/.test(body) && /from=qr/.test(body), `URL: the host and the whole address (${body.trim()})`);
             await shot("url");
             await page.click("[data-testid='act-open']");
-            await page.waitForTimeout(200);
+            // The first web address the page opens reads the installed apps
+            // (the application manager's handlers include the web apps'
+            // sites), synchronously, through this test's route: wait for it.
+            for (let t = 0; t < 5000 && !launched("com.palm.app.browser").length; t += 100) await page.waitForTimeout(100);
             const b = launched("com.palm.app.browser")[0];
             check(b && b.target === "https://www.webosphoenix.org/apps/scanner?from=qr", "URL: Open in Browser opens it in the browser");
         });

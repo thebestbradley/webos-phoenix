@@ -61,6 +61,12 @@ to charcoal, the rest unchanged; `key-charcoal@2x.png` and `@3x` the same of
 `key-gray@2x.png` and `@3x`. `tools/keyboard-charcoal.py` makes them and
 checks them (`--check`, in CI).
 
+The black tablet keyboard (Settings > Text Assist > Keyboard style) adds no
+art: it draws the phone's `keyboard-phone/` images above (`key-white.png`,
+`key-charcoal.png`, `keyboard-bg.png` and their @2x / @3x), 9-tiled into the
+tablet's keys; the TouchPad style on a phone draws `keyboard-tablet/`'s in
+the phone's keys.
+
 ## Phoenix system screens art
 
 Drawn for Phoenix (Apache-2.0, like the rest of the repository) by

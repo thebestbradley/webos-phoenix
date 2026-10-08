@@ -19,13 +19,14 @@
 // requestDelete.
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { filePicker, mediaFiles, mediaIndexer, shareSheet, MEDIA_ROOT } from "@phoenix/luna";
-import { useLaunchParams, useMediaUrl } from "@phoenix/luna/react";
+import { filePicker, mediaFiles, mediaIndexer, mediaUrl, shareSheet, MEDIA_ROOT } from "@phoenix/luna";
+import { useLaunchParams } from "@phoenix/luna/react";
 import { BackProvider, Button, Dialog, IconToolButton, PopupMenu, Toolbar, ToolSpacer, useBack } from "@phoenix/ui";
 import {
     dragCrop, drawStrokes, fit, isEdited, noEdits, normalizeCrop, PEN_COLORS, penWidth, visibleRect,
     type Edits, type Handle, type Point, type Rect, type Size,
 } from "./editor";
+import { retryFor } from "./retry";
 
 export const CAPTURE_DIR = MEDIA_ROOT + "/screencaptures";
 type Mode = "view" | "crop" | "markup";
@@ -94,7 +95,6 @@ function Preview() {
 }
 
 function Editor({ path }: { path: string }) {
-    const url = useMediaUrl(path);
     const [image, setImage] = useState<HTMLImageElement | null>(null);
     const [failed, setFailed] = useState(false);
     const [edits, setEdits] = useState<Edits>(noEdits);
@@ -114,9 +114,13 @@ function Editor({ path }: { path: string }) {
     const canvas = useRef<HTMLCanvasElement>(null);
     const [box, setBox] = useState<Size>({ width: 0, height: 0 });
 
+    // The picture; a capture still being stored is waited for (retry.ts).
     useEffect(() => {
-        if (url) loadImage(url).then(setImage, () => setFailed(true));
-    }, [url]);
+        let live = true;
+        retryFor(() => mediaUrl(path).then(loadImage), undefined, undefined, () => live)
+            .then((img) => { if (live) setImage(img); }, () => { if (live) setFailed(true); });
+        return () => { live = false; };
+    }, [path]);
     useEffect(() => {
         const el = stage.current;
         if (!el) return;

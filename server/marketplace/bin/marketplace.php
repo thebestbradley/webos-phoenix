@@ -7,7 +7,10 @@
 //   php bin/marketplace.php init              database, signing key, the curated
 //                                             web apps, an admin, a first publish
 //   php bin/marketplace.php seed [FILE]       the curated web apps again
-//                                             (catalog/curated-pwas.json)
+//                                             (catalog/curated-pwas.json, the
+//                                             whole list: the ones it no longer
+//                                             has are set gone); FILE only adds
+//                                             and updates the ones it has
 //   php bin/marketplace.php publish           sign and write the catalog
 //   php bin/marketplace.php admin NAME EMAIL  an admin account; prints its token
 //   php bin/marketplace.php queue             what waits for review
@@ -41,7 +44,7 @@ switch ($cmd) {
         echo "Key fingerprint: " . $app->signer->fingerprint() . "\n";
         break;
     case 'seed':
-        echo 'Curated web apps: ' . $app->catalog->seedCurated($argv[2] ?? $curated) . "\n";
+        echo 'Curated web apps: ' . $app->catalog->seedCurated($argv[2] ?? $curated, !isset($argv[2])) . "\n";
         break;
     case 'publish':
         $p = $app->catalog->publish();

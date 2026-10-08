@@ -140,6 +140,75 @@ int main(int argc, char **argv)
         check(done && error.contains(QStringLiteral("nonexistent")), "the last file again after that");
     }
 
+    // Standing by for the wake word: the microphone goes to the spotter (here
+    // a stand-in that hears it after 1.2 s of audio, as phoenix-wakeword
+    // would in hey-phoenix-timer.wav), and a recording started when it is
+    // heard goes on from the end of the phrase, in the same breath.
+    {
+        const QString data = QStringLiteral(PHOENIX_REPO_DIR "/services/wakeword/tests/data/");
+        Dictation d;
+        d.setInputFiles({ data + QStringLiteral("hey-phoenix-timer.wav"), data + QStringLiteral("yes.wav") });
+        d.setAutoStop(true);
+        // The transcriber says how long the recording was (bytes of WAV).
+        d.setCommand({ QStringLiteral("sh"), QStringLiteral("-c"),
+                       QStringLiteral("printf '{\"returnValue\":true,\"text\":\"%s\"}' $(wc -c < \"$0\")"),
+                       QStringLiteral("%f") });
+        check(!d.wakeAvailable(), "no spotter: no wake word");
+        d.setWakeCommand({ QStringLiteral("sh"), QStringLiteral("-c"),
+                           QStringLiteral("echo '{\"ready\":true}'; head -c 38400 >/dev/null; "
+                                          "echo '{\"wake\":\"hey phoenix\",\"start\":0.5,\"end\":1.2,\"heard\":\"hey phoenix\"}'; "
+                                          "cat >/dev/null") });
+        check(d.wakeAvailable() && !d.standingBy(), "a spotter: available, not yet standing by");
+        QString heard, error, wakeWords;
+        int wakes = 0;
+        bool done = false;
+        QObject::connect(&d, &Dictation::wakeHeard, [&](const QString &w) {
+            ++wakes;
+            wakeWords = w;
+            d.start();                                  // as the assistant does
+        });
+        QObject::connect(&d, &Dictation::transcribed, [&](const QString &t, const QString &e) { heard = t; error = e; done = true; });
+        d.setStandby(true);
+        check(!d.standingBy(), "standby without the wake word on: nothing");
+        d.setWakeWord(true);
+        check(d.standingBy() && !d.listening(), "standing by: the microphone open, not recording");
+        QElapsedTimer clock;
+        clock.start();
+        while (!d.listening() && clock.elapsed() < 5000)
+            QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+        check(wakes == 1 && wakeWords == QStringLiteral("hey phoenix") && d.listening() && !d.standingBy(),
+              "the wake word heard: recording at once");
+        while (!done && clock.elapsed() < 10000)
+            QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+        // The file is 4.8 s: from just before the phrase's start (0.5 s) on, less the
+        // quiet that ends it.
+        const double seconds = (heard.toInt() - 44) / 32000.0;
+        check(done && error.isEmpty() && seconds > 3.4 && seconds < 4.7,
+              QStringLiteral("the phrase and the request after it recorded, in the same breath (%1 s)").arg(seconds).toUtf8().constData());
+        check(d.standingBy(), "and standing by again after it");
+        // A follow-up without the wake word: the next file.
+        done = false;
+        d.start();
+        while (!done && clock.elapsed() < 20000)
+            QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+        const double yes = (heard.toInt() - 44) / 32000.0;
+        check(done && yes > 1.2 && yes < 2.6, QStringLiteral("a follow-up hears the next file (%1 s)").arg(yes).toUtf8().constData());
+        check(wakes == 1, "the spotter does not hear the recordings");
+        check(d.hear(data + QStringLiteral("hey-phoenix.wav")), "a WAV played into the open microphone");
+        d.setStandby(false);
+        check(!d.standingBy() && !d.listening(), "standby off: the microphone closed");
+        d.setWakeWord(false);
+        check(!d.hear(data + QStringLiteral("hey-phoenix.wav")), "nothing to play into once it is closed");
+        d.setWakeCommand({ QStringLiteral("/nonexistent/phoenix-wakeword") });
+        d.setWakeWord(true);
+        d.setStandby(true);
+        clock.restart();
+        while (d.wakeError().isEmpty() && clock.elapsed() < 3000)
+            QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+        check(d.wakeError().contains(QStringLiteral("not installed")) && !d.standingBy(),
+              "a missing spotter: an error, and the microphone not kept open");
+    }
+
     std::printf(failures ? "%d failed\n" : "all passed\n", failures);
     return failures ? 1 : 0;
 }

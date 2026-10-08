@@ -97,7 +97,8 @@ FocusScope {
     readonly property var tweaks: shell.system && shell.system.tweaks ? shell.system.tweaks : ({})
     readonly property var tweakDefaults: ({ infiniteCardCycling: false, maximizeEdges: false, waveLauncher: false, tapRipple: true,
                                             animationSpeed: "normal", gestureSensitivity: "normal", haptics: false,
-                                            gridDensity: "normal", batteryPercent: false, numberRow: false })
+                                            gridDensity: "normal", batteryPercent: false, numberRow: false,
+                                            keyboardStyle: "auto" })
     function tweak(name) { return tweaks[name] !== undefined ? tweaks[name] : tweakDefaults[name]; }
     Binding { target: Theme; property: "animationSpeed"; value: shell.tweak("animationSpeed") }
     Binding { target: Theme; property: "gestureSensitivity"; value: shell.tweak("gestureSensitivity") }
@@ -411,7 +412,9 @@ FocusScope {
         onPuckTimedOut: shell.enterDockMode()
         // An app holding it on (com.palm.display requestBlock), and the
         // backlight's level (DeviceServices.qml).
-        held: devices.holdsDisplay
+        // The assistant's view stays lit while it is up, also over the
+        // lock screen (opened there by "Hey Phoenix").
+        held: devices.holdsDisplay || assistantView.open
         maximumBrightness: shell.system && shell.system.brightness > 0 ? Math.round(shell.system.brightness * 100) : 100
         automaticBrightness: !shell.system || shell.system.automaticBrightness !== false
         lightRegion: devices.lightRegion
@@ -1757,22 +1760,57 @@ FocusScope {
         }
     }
     property var _captureResult: null
-    // The runtime's "Screen captured" notification names the file: the
-    // thumbnail opens that one.
+    property int _captureCount: 0
+    // The runtime's "Screen captured" notification names the file and the
+    // capture (params {path, capture}): the thumbnail opens that file. A
+    // tap on the thumbnail before it is saved (a big capture takes a
+    // moment to encode and store) opens it once it is, rather than the
+    // newest capture saved before it.
+    property string _openWhenSaved: ""
+    readonly property string screenshotAppId: "org.webosphoenix.screenshot"
     Connections {
         target: shell.source && shell.source.notifications ? shell.source.notifications : null
         ignoreUnknownSignals: true
         function onRowsInserted(parent, first, last) {
             for (var i = first; i <= last; ++i) {
                 var n = shell.source.notifications.get(i);
-                if (n.appId !== "org.webosphoenix.screenshot" || !n.params)
+                if (n.appId !== shell.screenshotAppId || !n.params)
                     continue;
-                try {
-                    var p = JSON.parse(n.params);
-                    if (p.path && captureThumbnail.shown)
-                        captureThumbnail.path = p.path;
-                } catch (e) { /* not ours */ }
+                var p = null;
+                try { p = JSON.parse(n.params); } catch (e) { /* not ours */ }
+                if (!p || !p.path)
+                    continue;
+                if (p.capture && p.capture === shell._openWhenSaved) {
+                    shell._openWhenSaved = "";
+                    openWhenSavedTimer.stop();
+                    shell._openPreview(p.path);
+                } else if (captureThumbnail.shown && (!p.capture || p.capture === captureThumbnail.capture)) {
+                    captureThumbnail.path = p.path;
+                }
             }
+        }
+    }
+    // Not saved after all (no page could): the preview's newest capture.
+    Timer {
+        id: openWhenSavedTimer
+        interval: 10000
+        onTriggered: {
+            shell._openWhenSaved = "";
+            shell._openPreview("");
+        }
+    }
+    // The preview opened on a capture ("": the newest).
+    signal capturePreviewOpened(string path)
+    function _openPreview(path) {
+        shell.launch(screenshotAppId, path ? { path: path } : null);
+        capturePreviewOpened(path);
+    }
+    function openCapture(path, capture) {
+        if (path || !capture) {
+            _openPreview(path);
+        } else {
+            _openWhenSaved = capture;
+            openWhenSavedTimer.restart();
         }
     }
     function takeScreenshot() {
@@ -1786,10 +1824,11 @@ FocusScope {
             captureFlash.start();
             // Kept while its thumbnail shows (the url lives as long as it).
             shell._captureResult = result;
-            captureThumbnail.show(result.url);
+            var id = "capture-" + Date.now() + "-" + (++shell._captureCount);
+            captureThumbnail.show(result.url, id);
             var png = ImageTools.pngBase64(result.image);
             if (png !== "" && source && typeof source.saveScreenshot === "function")
-                source.saveScreenshot(png, name);
+                source.saveScreenshot(png, name, id);
             shell.screenshotTaken(name, png.length);
         });
         if (!ok)
@@ -1910,6 +1949,88 @@ FocusScope {
         value: shell.dictation
         when: !!shell.source && ("dictation" in shell.source)
     }
+    // ---- "Hey Phoenix" (docs/AI-AND-MCP.md, Voice) -----------------------------------
+    // The wake word spotter (Dictation.wakeCommand: services/wakeword's
+    // phoenix-wakeword with its model); [] for none. Settings > Assistant
+    // turns it on (wakeWord, off by default) and lets it listen while the
+    // screen is off or locked (wakeWhenLocked, off by default). It listens
+    // only while nothing else uses the microphone, the assistant's view is
+    // closed and nothing is being spoken; the status bar shows its own
+    // subtle microphone meanwhile. Heard: a chime and a tap of the motor,
+    // the screen on, and the view opens listening (the words said after it
+    // in the same breath kept).
+    property var wakeWordCommand: []
+    // Settings > Assistant's (org.webosphoenix.assistant getSettings, subscribed).
+    property var assistantSettings: ({})
+    readonly property bool wakeWordOn: !!dictation && dictation.wakeAvailable && assistantSettings.enabled !== false
+                                       && assistantSettings.wakeWord === true
+    readonly property bool wakeWordListening: wakeWordOn && !firstUse && !dockMode && !assistantView.open
+                                              && !speechEngine.speaking
+                                              // Not on a call, nor with one ringing: the call has the microphone.
+                                              && !notes.incomingCall && !(source && source.activeCallBanner)
+                                              && (assistantSettings.wakeWhenLocked === true || (!locked && backlight.on))
+    // Times it was heard, for the tests.
+    property int wakeWordHeard: 0
+    Binding { target: dictationEngine; property: "wakeWord"; value: shell.wakeWordOn }
+    Binding { target: dictationEngine; property: "standby"; value: shell.wakeWordListening }
+    function _watchAssistantSettings() {
+        if (!source || typeof source.lunaSubscribe !== "function")
+            return;
+        source.lunaSubscribe("luna://org.webosphoenix.assistant/getSettings", { subscribe: true }, function (r) {
+            if (r && r.returnValue !== false && r.settings) {
+                shell.assistantSettings = r.settings;
+                assistantSettingsRetry.stop();
+            }
+        });
+    }
+    // Until the system UI's page answers (it starts with the shell).
+    Timer {
+        id: assistantSettingsRetry
+        interval: 2000
+        repeat: true
+        running: true
+        triggeredOnStart: true
+        onTriggered: shell._watchAssistantSettings()
+    }
+    Connections {
+        target: dictationEngine
+        function onWakeHeard(heard) { shell.wakeAssistant(); }
+    }
+    function wakeAssistant() {
+        if (!wakeWordListening)
+            return;
+        wakeWordHeard++;
+        backlight.turnOn();
+        sounds.feedback("listen");
+        devices.vibrate({ name: "tapdown" });
+        justType.open = false;
+        iconMenu.open = false;
+        assistantView.listenOnOpen = false;
+        assistantView.origin = Qt.point(assistantView.width / 2, assistantView.height);
+        // Listening first, while the microphone is still the spotter's: the
+        // recording goes on from the end of the phrase.
+        assistantView.startVoice();
+        assistantView.open = true;
+    }
+    // Asked over the lock screen for something that needs it unlocked: asked
+    // again once it is (within two minutes).
+    property var _afterUnlock: null
+    function _askAfterUnlock() {
+        var a = _afterUnlock;
+        _afterUnlock = null;
+        if (locked || !a || Date.now() - a.time > 120000)
+            return;
+        // After the view's own binding to locked has followed.
+        Qt.callLater(function () {
+            if (shell.locked)
+                return;
+            assistantView.origin = Qt.point(assistantView.width / 2, assistantView.height);
+            assistantView.listenOnOpen = false;
+            assistantView.open = true;
+            assistantView.askByVoice(a.text);
+        });
+    }
+
     // The Assistant's on-device models: where they are downloaded ("" for
     // none: no downloads), llama-server ([] for the one on the PATH), and
     // the program that speaks its answers ([] for espeak-ng or say).
@@ -2187,6 +2308,7 @@ FocusScope {
         // Sticky keys' latched modifiers do not outlive the lock.
         if (locked)
             keyboardAccess.clearModifiers();
+        _askAfterUnlock();
         var o = maximizedCardOrientation();
         if (!locked && o !== "free")
             uiRotation.setRotationMode(o, true);
@@ -2846,13 +2968,18 @@ FocusScope {
                     source: shell.source
                     dictation: shell.dictation
                     speech: shell.speech
-                    backdrop: sceneBackdrop
+                    locked: shell.locked
+                    // Over the lock screen it blurs nothing: the apps
+                    // behind the lock stay hidden (the lock screen shows
+                    // through the dim instead).
+                    backdrop: shell.locked ? null : sceneBackdrop
                     bottomInset: notes.negativeSpace
                     appIcon: {
                         var a = quickLaunch.entry("org.webosphoenix.assistant");
                         return a && a.icon ? a.icon : "";
                     }
                     onCloseRequested: shell.closeAssistant()
+                    onUnlockNeeded: (text) => { shell._afterUnlock = { text: text, time: Date.now() }; }
                     // The app button: the view goes, the app comes up on
                     // this conversation (the one in use without one yet).
                     onAppRequested: (threadId) => {
@@ -2962,6 +3089,9 @@ FocusScope {
                 anchors.top: parent.top
                 system: shell.system
                 batteryPercent: shell.tweak("batteryPercent")
+                // Whenever the microphone is open: recording, or (subtly)
+                // listening for "Hey Phoenix".
+                microphone: !shell.dictation ? "" : shell.dictation.listening ? "on" : shell.dictation.standingBy ? "standby" : ""
                 // SystemUiController::updateStatusBarTitle: Just Type, then the
                 // launcher ("Launcher", com.palm.launcher's title; not actionable),
                 // then the maximized app; else the carrier. Just Type's title
@@ -3089,6 +3219,7 @@ FocusScope {
                 id: dictationEngine
                 command: shell.dictationCommand
                 inputFiles: shell.dictationInputFiles
+                wakeCommand: shell.wakeWordCommand
             }
             // The Assistant's on-device model (llama.cpp's llama-server) and
             // speech (docs/M6-PLAN.md F3), lent to the runtime's
@@ -3110,6 +3241,8 @@ FocusScope {
                 tablet: shell.tablet
                 // Settings > Text Assist > Number row (the phone keyboard).
                 numberRow: shell.tweak("numberRow")
+                // Settings > Text Assist > Keyboard style: "auto", "black", "touchpad".
+                keyboardStyle: shell.tweak("keyboardStyle")
                 pixelScale: Theme.keyboardScale
                 availableWidth: ui.width
                 availableHeight: ui.height
@@ -3466,7 +3599,7 @@ FocusScope {
         // Above the phone's notification area (its banner says "Screen captured").
         anchors.bottomMargin: Theme.px(24) + notes.negativeSpaceTarget
         z: 99999
-        onActivated: (path) => shell.launch("org.webosphoenix.screenshot", path ? { path: path } : null)
+        onActivated: (path, capture) => shell.openCapture(path, capture)
     }
 
     // Over everything, the gesture area too (WindowServer's UI elements group).

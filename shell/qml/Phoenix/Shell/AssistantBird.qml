@@ -28,11 +28,14 @@
 // never repeats in step; speaking, the beak opens and closes in a
 // syllable rhythm (the speech program gives no word timings); listening,
 // the crest and the rings follow `level` (the microphone's loudness), or
-// a lively rhythm without one.
+// a lively rhythm without one. And every pose acts (motion.acting, `Act`
+// below): a loop over its parts on top of the pose's values (hello waves,
+// working bobs and pumps its flippers...; idle looks around now and then),
+// and a pose change blends from wherever the loop is.
 //
 // All of it through Theme.motion (Settings > Advanced > Animation speed).
 // With `animated` false (Reduce motion) every pose is held still: no
-// flicker, breath, blink, hop or beak flapping; poses change at once. The
+// flicker, breath, blink, hop, acting or beak flapping; poses change at once. The
 // animations are plain property animations (no script runs per frame);
 // Animators cannot scale unevenly about a point.
 
@@ -254,6 +257,52 @@ Item {
         _was = pose;
     }
 
+    // ---- Acting: each pose's loops (motion.acting) ------------------------------------------------
+    // Each part that acts plays its pose's loop on top of the pose's values:
+    // hello waves, thinking taps its chin, working bobs and pumps... (the
+    // table in docs/ASSISTANT-CHARACTER.md). Idle's look around comes now and
+    // then, after a random gap like the blink.
+    Act { id: actBody; channel: "body" }
+    Act { id: actHead; channel: "head" }
+    Act { id: actEyes; channel: "eyes" }
+    Act { id: actLids; channel: "lids" }
+    Act { id: actWingL; channel: "wingL" }
+    Act { id: actWingR; channel: "wingR" }
+    Act { id: actBeak; channel: "beak" }
+    Act { id: actCrest; channel: "crest" }
+    readonly property var acts: ({ body: actBody, head: actHead, eyes: actEyes, lids: actLids, wingL: actWingL, wingR: actWingR,
+                                   beak: actBeak, crest: actCrest })
+    readonly property var _every: (art.motion.acting.poses[pose] || {}).every
+    // The occasional acting (idle's look around), now.
+    function fidget() {
+        for (var k in acts)
+            acts[k].once();
+        ++fidgets;
+    }
+    // Is any part acting?
+    function isActing() {
+        for (var k in acts)
+            if (acts[k].isRunning())
+                return true;
+        return false;
+    }
+    property int fidgets: 0
+    // Every random gap (like the blink's) plus the loop's own length, so a
+    // look around has ended before the next begins.
+    function _fidgetInterval() {
+        var a = art.motion.acting.poses[pose];
+        return a && a.every ? a.every[0] + Math.random() * (a.every[1] - a.every[0]) + Theme.motion(a.period) : 1000;
+    }
+    Timer {
+        running: bird._live && bird._every !== undefined
+        repeat: true
+        interval: bird._fidgetInterval()
+        onTriggered: {
+            bird.fidget();
+            interval = bird._fidgetInterval();
+        }
+    }
+
     // ---- Breathing and blinking -----------------------------------------------------------------
     readonly property var _breath: art.motion.breath
     property real breathX: 1
@@ -459,6 +508,122 @@ Item {
         }
     }
 
+    // One step of a part's acting loop: to key `to` ([at, rotation, x, y,
+    // scale x, scale y]) from key `from`, in its share of the period.
+    component ActStep: ParallelAnimation {
+        id: astep
+        property QtObject act
+        property var from
+        property var to
+        property int length
+        NumberAnimation { target: astep.act; property: "lrot"; to: astep.to[1]; duration: astep.length; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.42, 0, 0.58, 1, 1, 1] }
+        NumberAnimation { target: astep.act; property: "ltx"; to: astep.to[2]; duration: astep.length; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.42, 0, 0.58, 1, 1, 1] }
+        NumberAnimation { target: astep.act; property: "lty"; to: astep.to[3]; duration: astep.length; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.42, 0, 0.58, 1, 1, 1] }
+        NumberAnimation { target: astep.act; property: "lsx"; to: astep.to[4]; duration: astep.length; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.42, 0, 0.58, 1, 1, 1] }
+        NumberAnimation { target: astep.act; property: "lsy"; to: astep.to[5]; duration: astep.length; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.42, 0, 0.58, 1, 1, 1] }
+    }
+    // A part's acting (motion.acting): the pose's loop for `channel`, on top
+    // of the pose's values. rot, tx, ty, sx, sy are what the part's
+    // transforms read: the loop's values (l...) with a blend (b...) that
+    // starts where the part was when the pose changed and fades out over
+    // `lead`, so a new loop never jumps (each loop starts and ends at rest).
+    component Act: QtObject {
+        id: act
+        property string channel
+        objectName: "assistantBirdAct-" + channel
+        readonly property var acting: BirdData.bird.motion.acting
+        readonly property var pivot: acting.pivot[channel]
+        readonly property var spec: acting.poses[bird.pose] || null
+        readonly property var keys: spec && spec.steps[channel] ? spec.steps[channel] : null
+        readonly property bool live: bird._live
+        // Whether it moves now (read when asked; see _steps for why a loop's
+        // running is not to be trusted to notify if its children change).
+        function isRunning() { return loop.running || blend.running; }
+        property real lrot: 0
+        property real ltx: 0
+        property real lty: 0
+        property real lsx: 1
+        property real lsy: 1
+        property real brot: 0
+        property real btx: 0
+        property real bty: 0
+        property real bsx: 1
+        property real bsy: 1
+        readonly property real rot: lrot + brot
+        readonly property real tx: ltx + btx
+        readonly property real ty: lty + bty
+        readonly property real sx: lsx * bsx
+        readonly property real sy: lsy * bsy
+
+        // What the loop plays, set only while it is stopped: a running
+        // animation group whose children change is rebuilt by Qt at its next
+        // loop (or at once at its start) with its signals blocked, so a loop
+        // bound to the pose would jump to the new pose's keys and could stop
+        // without runningChanged (QQuickAnimationGroupPrivate::restartFromCurrentLoop).
+        property var _steps: [_rest, _rest, _rest, _rest, _rest, _rest]
+        property var _lengths: [0, 0, 0, 0, 0]
+        function _load(k, period) {
+            var l = [];
+            for (var i = 0; i < 5; ++i)
+                l.push(Theme.motion((k[i + 1][0] - k[i][0]) * period));
+            _steps = k;
+            _lengths = l;
+        }
+        function play() {
+            var r = rot, x = tx, y = ty, w = sx, h = sy;
+            loop.stop();
+            blend.stop();
+            lrot = 0; ltx = 0; lty = 0; lsx = 1; lsy = 1;
+            if (!live) {
+                brot = 0; btx = 0; bty = 0; bsx = 1; bsy = 1;
+                return;
+            }
+            brot = r; btx = x; bty = y; bsx = w; bsy = h;
+            blend.start();
+            // From the pose itself (the bindings on it may not all have caught up).
+            var a = acting.poses[bird.pose];
+            // Over and over, or (idle's look around: every) now and then by bird.fidget().
+            if (a && a.steps[channel] && a.every === undefined) {
+                _load(a.steps[channel], a.period);
+                loop.loops = Animation.Infinite;
+                loop.start();
+            }
+        }
+        // Played once now (the occasional ones).
+        function once() {
+            var a = acting.poses[bird.pose];
+            if (live && a && a.steps[channel]) {
+                loop.stop();
+                _load(a.steps[channel], a.period);
+                loop.loops = 1;
+                loop.start();
+            }
+        }
+        onKeysChanged: play()
+        onLiveChanged: play()
+        Component.onCompleted: play()
+
+        property list<QtObject> _anims: [
+            ParallelAnimation {
+                id: blend
+                NumberAnimation { target: act; property: "brot"; to: 0; duration: Theme.motion(act.acting.lead); easing.type: Easing.OutCubic }
+                NumberAnimation { target: act; property: "btx"; to: 0; duration: Theme.motion(act.acting.lead); easing.type: Easing.OutCubic }
+                NumberAnimation { target: act; property: "bty"; to: 0; duration: Theme.motion(act.acting.lead); easing.type: Easing.OutCubic }
+                NumberAnimation { target: act; property: "bsx"; to: 1; duration: Theme.motion(act.acting.lead); easing.type: Easing.OutCubic }
+                NumberAnimation { target: act; property: "bsy"; to: 1; duration: Theme.motion(act.acting.lead); easing.type: Easing.OutCubic }
+            },
+            SequentialAnimation {
+                id: loop
+                ActStep { act: act; from: act._steps[0]; to: act._steps[1]; length: act._lengths[0] }
+                ActStep { act: act; from: act._steps[1]; to: act._steps[2]; length: act._lengths[1] }
+                ActStep { act: act; from: act._steps[2]; to: act._steps[3]; length: act._lengths[2] }
+                ActStep { act: act; from: act._steps[3]; to: act._steps[4]; length: act._lengths[3] }
+                ActStep { act: act; from: act._steps[4]; to: act._steps[5]; length: act._lengths[4] }
+            }
+        ]
+        readonly property var _rest: [0, 0, 0, 0, 1, 1]
+    }
+
     Item {
         id: drawing
         width: bird.art.viewBox[0]
@@ -475,6 +640,9 @@ Item {
             id: body
             objectName: "assistantBirdBody"
             transform: [
+                Scale { origin.x: actBody.pivot[0]; origin.y: actBody.pivot[1]; xScale: actBody.sx; yScale: actBody.sy },
+                Rotation { origin.x: actBody.pivot[0]; origin.y: actBody.pivot[1]; angle: actBody.rot },
+                Translate { x: actBody.tx; y: actBody.ty },
                 Scale { origin.x: bird._pv.breath[0]; origin.y: bird._pv.breath[1]; xScale: bird.breathX; yScale: bird.breathY },
                 Scale { origin.x: bird._pv.feet[0]; origin.y: bird._pv.feet[1]; xScale: bird.squashX; yScale: bird.squashY },
                 Rotation { origin.x: bird._pv.body[0]; origin.y: bird._pv.body[1]; angle: bird.tilt + bird.shake },
@@ -506,6 +674,9 @@ Item {
                 id: crest
                 objectName: "assistantBirdCrest"
                 transform: [
+                    Scale { xScale: actCrest.sx; yScale: actCrest.sy },
+                    Rotation { angle: actCrest.rot },
+                    Translate { x: actCrest.tx; y: actCrest.ty },
                     Scale {
                         origin.x: 0; origin.y: 6
                         xScale: 1 + bird.art.motion.level.crest * bird._voiced
@@ -513,7 +684,10 @@ Item {
                     },
                     Scale { xScale: bird.crestScale; yScale: bird.crestScale },
                     Rotation { angle: bird.crestRotation },
-                    Translate { x: bird._pv.crest[0]; y: bird._pv.crest[1] }
+                    Translate { x: bird._pv.crest[0]; y: bird._pv.crest[1] },
+                    Scale { origin.x: actHead.pivot[0]; origin.y: actHead.pivot[1]; xScale: actHead.sx; yScale: actHead.sy },
+                    Rotation { origin.x: actHead.pivot[0]; origin.y: actHead.pivot[1]; angle: actHead.rot },
+                    Translate { x: actHead.tx; y: actHead.ty }
                 ]
                 Flicker {
                     name: "crestGust"
@@ -529,96 +703,136 @@ Item {
             Part { name: "body" }
             Part { name: "belly" }
             Item {
-                transform: Rotation { origin.x: bird._pv.wingL[0]; origin.y: bird._pv.wingL[1]; angle: bird.wingL }
+                transform: [
+                    Scale { origin.x: actWingL.pivot[0]; origin.y: actWingL.pivot[1]; xScale: actWingL.sx; yScale: actWingL.sy },
+                    Rotation { origin.x: actWingL.pivot[0]; origin.y: actWingL.pivot[1]; angle: actWingL.rot },
+                    Translate { x: actWingL.tx; y: actWingL.ty },
+                    Rotation { origin.x: bird._pv.wingL[0]; origin.y: bird._pv.wingL[1]; angle: bird.wingL }
+                ]
                 Part { name: "wingL" }
                 Part { name: "wingTipL" }
             }
             Item {
-                transform: Rotation { origin.x: bird._pv.wingR[0]; origin.y: bird._pv.wingR[1]; angle: bird.wingR }
+                transform: [
+                    Scale { origin.x: actWingR.pivot[0]; origin.y: actWingR.pivot[1]; xScale: actWingR.sx; yScale: actWingR.sy },
+                    Rotation { origin.x: actWingR.pivot[0]; origin.y: actWingR.pivot[1]; angle: actWingR.rot },
+                    Translate { x: actWingR.tx; y: actWingR.ty },
+                    Rotation { origin.x: bird._pv.wingR[0]; origin.y: bird._pv.wingR[1]; angle: bird.wingR }
+                ]
                 Part { name: "wingR" }
                 Part { name: "wingTipR" }
             }
 
-            // The eyes: ovals of radius 10 scaled to their radii, shut a
-            // little by a blink.
-            Part {
-                objectName: "assistantBirdEyeL"
-                name: "eye"
-                opacity: bird.eyesShown
-                visible: opacity > 0
-                transform: [
-                    Scale { xScale: eyeL.width / 10; yScale: eyeL.height / 10 * bird.blink },
-                    Translate { x: eyeL.x; y: eyeL.y }
-                ]
-            }
-            Part {
-                objectName: "assistantBirdEyeR"
-                name: "eye"
-                opacity: bird.eyesShown
-                visible: opacity > 0
-                transform: [
-                    Scale { xScale: eyeR.width / 10; yScale: eyeR.height / 10 * bird.blink },
-                    Translate { x: eyeR.x; y: eyeR.y }
-                ]
-            }
-            // Lids and closed eyes: slide in from their side as they appear.
-            Repeater {
-                model: Object.keys(bird.art.overlays)
-                delegate: Part {
-                    id: overlay
-                    required property string modelData
-                    objectName: "assistantBirdOverlay-" + modelData
-                    name: modelData
-                    readonly property bool on: bird._eyes.overlays.indexOf(modelData) >= 0
-                    opacity: on ? 1 : 0
-                    visible: opacity > 0
-                    Behavior on opacity { NumberAnimation { duration: Theme.motion(bird._t.eyes) } }
-                    property real dy: on ? 0 : bird.art.overlays[modelData].dy
-                    Behavior on dy { NumberAnimation { duration: Theme.motion(bird._t.eyes); easing.type: Easing.OutQuad } }
-                    transform: Translate { y: overlay.dy }
-                }
-            }
-
-            // The beak.
+            // The face (eyes, lids, beak) acts as the head (with the crest),
+            // the eyes glance, the lids narrow.
             Item {
-                id: beak
-                objectName: "assistantBirdBeak"
-                transform: Rotation { origin.x: bird._pv.beak[0]; origin.y: bird._pv.beak[1]; angle: bird.beakTilt }
-                readonly property real open: bird.flap
-                Part {
-                    name: "jaw"
-                    opacity: 1 - bird.grin
-                    transform: [
-                        Scale { origin.x: bird._pv.jaw[0]; origin.y: bird._pv.jaw[1]; xScale: bird.jawSx; yScale: bird.jawSy * (0.62 + 0.38 * beak.open) },
-                        Translate { y: bird.jawDy }
-                    ]
-                }
-                Part {
-                    name: "mouth"
-                    opacity: bird.mouthShown
-                    visible: opacity > 0
-                    transform: Scale { origin.x: bird._pv.jaw[0]; origin.y: bird._pv.jaw[1]; xScale: bird.mouthSx; yScale: bird.mouthSy * beak.open }
-                }
-                Part {
-                    name: "tongue"
-                    opacity: bird.tongue
-                    visible: opacity > 0
-                    transform: Scale { origin.x: bird._pv.jaw[0]; origin.y: bird._pv.jaw[1]; yScale: 0.4 + 0.6 * beak.open }
-                }
-                Part { name: "grinJaw"; opacity: bird.grin; visible: opacity > 0 }
-                Part { name: "grinMouth"; opacity: bird.grin; visible: opacity > 0 }
+                id: face
+                transform: [
+                    Scale { origin.x: actHead.pivot[0]; origin.y: actHead.pivot[1]; xScale: actHead.sx; yScale: actHead.sy },
+                    Rotation { origin.x: actHead.pivot[0]; origin.y: actHead.pivot[1]; angle: actHead.rot },
+                    Translate { x: actHead.tx; y: actHead.ty }
+                ]
                 Item {
+                    id: eyeGroup
                     transform: [
-                        Scale { origin.x: bird._pv.upperBeak[0]; origin.y: bird._pv.upperBeak[1]; yScale: bird.upperSy + (1 - bird.upperSy) * (1 - beak.open) },
-                        Translate { y: bird.upperDy * beak.open }
+                        Scale { origin.x: actEyes.pivot[0]; origin.y: actEyes.pivot[1]; xScale: actEyes.sx; yScale: actEyes.sy },
+                        Rotation { origin.x: actEyes.pivot[0]; origin.y: actEyes.pivot[1]; angle: actEyes.rot },
+                        Translate { x: actEyes.tx; y: actEyes.ty }
                     ]
-                    Part { name: "upperBeak" }
+                    // The eyes: ovals of radius 10 scaled to their radii, shut a
+                    // little by a blink.
+                    Part {
+                        objectName: "assistantBirdEyeL"
+                        name: "eye"
+                        opacity: bird.eyesShown
+                        visible: opacity > 0
+                        transform: [
+                            Scale { xScale: eyeL.width / 10; yScale: eyeL.height / 10 * bird.blink },
+                            Translate { x: eyeL.x; y: eyeL.y }
+                        ]
+                    }
+                    Part {
+                        objectName: "assistantBirdEyeR"
+                        name: "eye"
+                        opacity: bird.eyesShown
+                        visible: opacity > 0
+                        transform: [
+                            Scale { xScale: eyeR.width / 10; yScale: eyeR.height / 10 * bird.blink },
+                            Translate { x: eyeR.x; y: eyeR.y }
+                        ]
+                    }
+                    Item {
+                        transform: [
+                            Scale { origin.x: actLids.pivot[0]; origin.y: actLids.pivot[1]; xScale: actLids.sx; yScale: actLids.sy },
+                            Rotation { origin.x: actLids.pivot[0]; origin.y: actLids.pivot[1]; angle: actLids.rot },
+                            Translate { x: actLids.tx; y: actLids.ty }
+                        ]
+                        // Lids and closed eyes: slide in from their side as they appear.
+                        Repeater {
+                            model: Object.keys(bird.art.overlays)
+                            delegate: Part {
+                                id: overlay
+                                required property string modelData
+                                objectName: "assistantBirdOverlay-" + modelData
+                                name: modelData
+                                readonly property bool on: bird._eyes.overlays.indexOf(modelData) >= 0
+                                opacity: on ? 1 : 0
+                                visible: opacity > 0
+                                Behavior on opacity { NumberAnimation { duration: Theme.motion(bird._t.eyes) } }
+                                property real dy: on ? 0 : bird.art.overlays[modelData].dy
+                                Behavior on dy { NumberAnimation { duration: Theme.motion(bird._t.eyes); easing.type: Easing.OutQuad } }
+                                transform: Translate { y: overlay.dy }
+                            }
+                        }
+                    }
                 }
+
+                // The beak.
                 Item {
-                    transform: Translate { y: bird.upperDy * beak.open }
-                    Part { name: "beakShine" }
-                    Part { name: "nostrilL" }
-                    Part { name: "nostrilR" }
+                    id: beak
+                    objectName: "assistantBirdBeak"
+                    transform: [
+                        Scale { origin.x: actBeak.pivot[0]; origin.y: actBeak.pivot[1]; xScale: actBeak.sx; yScale: actBeak.sy },
+                        Rotation { origin.x: actBeak.pivot[0]; origin.y: actBeak.pivot[1]; angle: actBeak.rot },
+                        Translate { x: actBeak.tx; y: actBeak.ty },
+                        Rotation { origin.x: bird._pv.beak[0]; origin.y: bird._pv.beak[1]; angle: bird.beakTilt }
+                    ]
+                    readonly property real open: bird.flap
+                    Part {
+                        name: "jaw"
+                        opacity: 1 - bird.grin
+                        transform: [
+                            Scale { origin.x: bird._pv.jaw[0]; origin.y: bird._pv.jaw[1]; xScale: bird.jawSx; yScale: bird.jawSy * (0.62 + 0.38 * beak.open) },
+                            Translate { y: bird.jawDy }
+                        ]
+                    }
+                    Part {
+                        name: "mouth"
+                        opacity: bird.mouthShown
+                        visible: opacity > 0
+                        transform: Scale { origin.x: bird._pv.jaw[0]; origin.y: bird._pv.jaw[1]; xScale: bird.mouthSx; yScale: bird.mouthSy * beak.open }
+                    }
+                    Part {
+                        name: "tongue"
+                        opacity: bird.tongue
+                        visible: opacity > 0
+                        transform: Scale { origin.x: bird._pv.jaw[0]; origin.y: bird._pv.jaw[1]; yScale: 0.4 + 0.6 * beak.open }
+                    }
+                    Part { name: "grinJaw"; opacity: bird.grin; visible: opacity > 0 }
+                    Part { name: "grinMouth"; opacity: bird.grin; visible: opacity > 0 }
+                    Item {
+                        transform: [
+                            Scale { origin.x: bird._pv.upperBeak[0]; origin.y: bird._pv.upperBeak[1]; yScale: bird.upperSy + (1 - bird.upperSy) * (1 - beak.open) },
+                            Translate { y: bird.upperDy * beak.open }
+                        ]
+                        Part { name: "upperBeak" }
+                    }
+                    Item {
+                        transform: Translate { y: bird.upperDy * beak.open }
+                        Part { name: "beakShine" }
+                        Part { name: "nostrilL" }
+                        Part { name: "nostrilR" }
+                    }
                 }
             }
         }

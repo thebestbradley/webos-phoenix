@@ -122,15 +122,34 @@ async function main() {
         await button("menu-icon-forward").click();
         check(await waitForFrame(JUSTTYPE), "history: forward goes on again");
 
-        // A mailto: link in a page is handed to Email.
+        // A mailto: link in a page is handed to Email: the browser's
+        // WebView redirects the system's schemes (enyo WebView
+        // addSystemRedirects -> BrowserAdapter addUrlRedirect), the page
+        // view hands the link back (urlRedirected) and the browser opens it
+        // (BrowserApp.openResource -> applicationManager open {target}).
+        // Just Type, the page shown now, loads the runtime and reads its
+        // appinfo.json with a synchronous request: leaving it before it has
+        // loaded can stall the next navigation behind that request on a
+        // busy machine, so it finishes loading first.
+        await page.waitForFunction(() => {
+            const f = document.querySelector("object[type='application/x-palm-browser'] iframe");
+            try { return !!f && f.contentDocument.readyState === "complete"; } catch (e) { return true; }
+        }, null, { timeout: 30000 });
+        const LINKS = "/__links/page.html";
+        await page.route("**/__links/page.html", (route) => route.fulfill({ contentType: "text/html", body:
+            "<!doctype html><title>Links</title><body><p><a id='mail' href='mailto:ada@example.com?subject=Hi'>Write to Ada</a></p>" +
+            "<p><a id='here' href='" + CALCULATOR + "'>Calculator</a></p></body>" }));
+        await page.goto(browserUrl({ target: origin + LINKS }));
+        check(await waitForFrame(LINKS), "handlers: a page with links loads");
+        await page.waitForTimeout(500);
         host.length = 0;
-        await page.evaluate(() => {
-            const f = document.querySelector("object[type='application/x-palm-browser']");
-            f.eventListener.urlRedirected("mailto:ada@example.com", "com.palm.app.email");
-        });
+        await page.frameLocator("object[type='application/x-palm-browser'] iframe").locator("#mail").click();
         await page.waitForTimeout(800);
         const mail = host.find((m) => m.type === "launch" && m.payload.id === "com.palm.app.email");
-        check(!!mail, "handlers: mailto: opens Email");
+        check(!!mail && mail.payload.params.target === "mailto:ada@example.com?subject=Hi", "handlers: a tapped mailto: link opens Email with it");
+        check(await waitForFrame(LINKS), "handlers: the page stays where it was");
+        await page.frameLocator("object[type='application/x-palm-browser'] iframe").locator("#here").click();
+        check(await waitForFrame(CALCULATOR), "handlers: a web link loads in the page view");
 
         // Downloads. A file the page view does not show comes back to the
         // browser as BrowserAdapter's mimeNotSupported (phoenix-sim's native

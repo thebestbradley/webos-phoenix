@@ -237,6 +237,10 @@ Item {
     // of the one showing changes the front without changing alertShown.)
     readonly property string alertKey: alerts !== null && alerts.count > 0 ? alerts.get(0).key : ""
     readonly property real alertHeight: alerts !== null && alerts.count > 0 ? Theme.px(alerts.get(0).height) : 0
+    // Phones: the room above the front alert when it is a web page (the
+    // shell's own alerts keep their margins themselves); set as it is put
+    // in place (attachAlert).
+    property real alertTopPadding: 0
 
     // A full-screen app has the whole screen: no bar, no banners, no
     // dashboard; popup alerts (a call) still make room
@@ -263,7 +267,7 @@ Item {
     // immediate)); showing and hiding it animates.
     property bool spaceImmediate: false
     readonly property real negativeSpaceTarget: locked ? keyboardHeight
-        : alertShown && !overlay ? alertHeight
+        : alertShown && !overlay ? alertHeight + alertTopPadding
         : keyboardHeight > 0 ? keyboardHeight
         : overlay || fullScreen ? 0
         : dashboardOpen ? dashboardHeight
@@ -450,14 +454,19 @@ Item {
     onLockedChanged: Qt.callLater(attachAlert)
     function attachAlert() {
         var w = alertKey !== "" && source ? source.windowFor(alertKey) : null;
-        if (!w)
+        if (!w) {
+            alertTopPadding = 0;
             return;
+        }
         var host = locked && lockAlertHost ? lockAlertHost : overlay ? tabletAlertHost : phoneAlertHost;
+        // A page (a WebAppWindow runs scripts); the shell's own alerts do not.
+        var web = typeof w.runScript === "function";
+        alertTopPadding = host === phoneAlertHost && web ? Theme.phoneAlertTopPadding : 0;
         w.parent = host;
         w.x = 0;
-        w.y = 0;
+        w.y = Qt.binding(function() { return host === phoneAlertHost ? root.alertTopPadding : 0; });
         w.width = Qt.binding(function() { return host.width; });
-        w.height = Qt.binding(function() { return host.height; });
+        w.height = Qt.binding(function() { return host === phoneAlertHost ? root.alertHeight : host.height; });
         w.visible = true;
     }
 
@@ -702,10 +711,11 @@ Item {
             MouseArea { anchors.fill: parent }
             Item {
                 id: phoneAlertHost
+                objectName: "phoneAlertHost"
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                height: root.alertHeight
+                height: root.alertHeight + root.alertTopPadding
             }
         }
 
@@ -747,14 +757,16 @@ Item {
         // Tablets: the notification icons are a group of their own, as
         // luna-sysmgr's (StatusBar m_notifGroup): a separator at its left,
         // and its own tab behind the icons while the drop-down is open (the
-        // system menu's tab covers the system group only).
+        // system menu's tab covers the system group only). Its caps lie
+        // outside the icons with some padding (Theme.statusBarTabCap), so
+        // every icon is on the tab's solid part.
         ArtBorderImage {
             id: notifTab
             objectName: "notificationTab"
             visible: tabletIcons.visible && opacity > 0
-            x: notifSeparator.x
+            x: tabletIcons.x - Theme.statusBarTabCap - Theme.statusBarTabPadding
             y: -Theme.statusBarHeight
-            width: tabletIcons.x + tabletIcons.width + Theme.px(5) - x
+            width: tabletIcons.width + 2 * (Theme.statusBarTabCap + Theme.statusBarTabPadding)
             height: Theme.statusBarHeight
             source: Theme.asset("statusBar/status-bar-menu-dropdown-tab.png")
             border { left: Theme.artBorder(11, source); right: Theme.artBorder(11, source); top: 0; bottom: 0 }
@@ -850,6 +862,44 @@ Item {
             model: root.model
             interactive: contentHeight > height
 
+            // A trackpad's two-finger swipe sideways on a row moves it as a
+            // finger does and, once the fingers lift, dismisses it (past a
+            // quarter of the width, or quick: card view's trackpad flick) or
+            // springs it back; up or down it scrolls the list, momentum and
+            // all, within its ends. A mouse wheel scrolls it (Phoenix).
+            TrackpadSwipe {
+                parent: list
+                objectName: "phoneDashboardWheel"
+                anchors.fill: parent
+                z: 5
+                verticalMomentum: true
+                property Item row: null
+                onNotched: (dx, dy) => scrollBy(list, dy / 120 * Theme.dashboardItemHeight)
+                onStarted: (x, y) => {
+                    row = null;
+                    if (axis === "h") {
+                        var r = list.itemAt(x, y + list.contentY);
+                        if (r && r.wheelSwipeable)
+                            row = r;
+                        else
+                            axis = "done";
+                    } else if (!list.interactive) {
+                        axis = "done";
+                    }
+                }
+                onMoved: (dx, dy) => {
+                    if (axis === "h")
+                        row.wheelMove(sumX);
+                    else
+                        scrollBy(list, dy);
+                }
+                onEnded: {
+                    if (axis === "h" && row)
+                        row.wheelRelease(vx);
+                    row = null;
+                }
+            }
+
             delegate: Item {
                 id: item
                 required property int index
@@ -868,6 +918,20 @@ Item {
                 readonly property bool selectable: root.selecting && !ongoing
                 width: list.width
                 height: Theme.dashboardItemHeight
+
+                // A trackpad's swipe (the list's TrackpadSwipe): as the
+                // finger's drag below, and its release.
+                readonly property bool wheelSwipeable: !item.ongoing && !root.selecting && !remove.running
+                function wheelMove(x) {
+                    snap.stop();
+                    content.x = x;
+                }
+                function wheelRelease(vx) {
+                    if (Math.abs(vx) > Theme.wheelFlickVelocity || Math.abs(content.x) > content.width * Theme.dashboardDismissRatio)
+                        remove.start();
+                    else if (content.x !== 0)
+                        snap.start();
+                }
 
                 // The keyboard's highlight.
                 Rectangle {

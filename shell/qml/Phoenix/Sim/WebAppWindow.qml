@@ -12,6 +12,7 @@
 import QtQuick
 import QtWebEngine
 import Phoenix.Shell
+import "Links.js" as Links
 
 Item {
     id: win
@@ -28,6 +29,10 @@ Item {
     signal hostMessage(string type, var payload)
     // The page opened a window (window.open / enyo.windows.activate).
     signal windowRequested(var request)
+    // A link (or a window, or a navigation) the page should not show
+    // itself: the app for it opens it (applicationManager open {target};
+    // Links.js).
+    signal linkRequested(string url)
     // The page asked to close its window (window.close()).
     signal closeRequested
     // The page finished loading (the runtime and the app's scripts ran).
@@ -59,6 +64,11 @@ Item {
     // page is the site, without the runtime; the shell gives it navigation
     // (the back gesture goes back in its history; SiteMenu).
     readonly property bool site: /^https?:/.test(String(url))
+    // The part of the web the site covers (its manifest's scope; the
+    // window's start page's origin when it has none): links out of it go
+    // to the browser or the web app whose site it is.
+    property string scope: ""
+    readonly property string _scope: Links.scopeOf(url, scope)
 
     function back() {
         if (site) {
@@ -87,8 +97,53 @@ Item {
 
     // Relaunch with new launch params (webOSRelaunch event in the page).
     function relaunch(params) {
+        // A site launched with a page of its own ({target}, a link to it
+        // from another app) goes there.
+        if (site) {
+            if (params && typeof params.target === "string" && Links.inScope(params.target, _scope))
+                view.url = params.target;
+            return;
+        }
         runScript("window.__phoenixRuntime && __phoenixRuntime.relaunch && __phoenixRuntime.relaunch("
                   + JSON.stringify(params || {}) + ")");
+    }
+
+    // ---- Links: where the page's navigations go (Links.js) ---------------------------
+
+    function _kind(type) {
+        switch (type) {
+        case WebEngineNavigationRequest.LinkClickedNavigation: return "link";
+        case WebEngineNavigationRequest.TypedNavigation: return "typed";
+        case WebEngineNavigationRequest.FormSubmittedNavigation: return "form";
+        case WebEngineNavigationRequest.BackForwardNavigation: return "backforward";
+        case WebEngineNavigationRequest.ReloadNavigation: return "reload";
+        case WebEngineNavigationRequest.RedirectNavigation: return "redirect";
+        default: return "other";
+        }
+    }
+    function _navigation(request) {
+        if (Links.navigation(request.url, _kind(request.navigationType), request.isMainFrame, site, _scope) === "route") {
+            request.reject();
+            linkRequested(String(request.url));
+        }
+    }
+    function _newWindow(request) {
+        const url = String(request.requestedUrl);
+        if (Links.newWindow(url, request.destination === WebEngineNewWindowRequest.InNewDialog, site, _scope) === "route")
+            linkRequested(url);
+        else
+            windowRequested(request);
+    }
+    // The script that reports links to other schemes (Links.linkScript), in
+    // pages without the runtime: sites and page views.
+    function _addLinkScript(target) {
+        const script = WebEngine.script();
+        script.name = "phoenix-links";
+        script.worldId = WebEngineScript.ApplicationWorld;
+        script.injectionPoint = WebEngineScript.DocumentCreation;
+        script.runsOnSubFrames = true;
+        script.sourceCode = Links.linkScript;
+        target.userScripts.insert(script);
     }
 
     // Let a window opened by another page load into this view.
@@ -263,6 +318,7 @@ Item {
             v.visible = p.visible;
             break;
         case "open": v.url = p.url; break;
+        case "redirects": v.redirects = p.list || []; break;
         case "html": v.loadHtml(p.html, p.url); break;
         case "back": v.goBack(); break;
         case "forward": v.goForward(); break;
@@ -278,7 +334,8 @@ Item {
         case "private":
             if (!!p.on === v.privateMode)
                 break;
-            _webViews[p.id] = _makeView(p.id, p.on, { x: v.x, y: v.y, width: v.width, height: v.height, visible: v.visible });
+            _webViews[p.id] = _makeView(p.id, p.on, { x: v.x, y: v.y, width: v.width, height: v.height, visible: v.visible,
+                                                      redirects: v.redirects });
             if (p.url)
                 _webViews[p.id].url = p.url;
             v.destroy();
@@ -298,12 +355,26 @@ Item {
             id: page
             property string viewId
             property bool privateMode: false
+            // The page's redirects (BrowserAdapter addUrlRedirect, from the
+            // runtime): links matching one go back to the page as
+            // urlRedirected(url, cookie) instead of loading.
+            property var redirects: []
+            function redirected(url) {
+                const cookie = Links.redirectFor(url, redirects);
+                if (cookie === null)
+                    return false;
+                win._webViewEvent(viewId, "urlRedirected", [String(url), cookie]);
+                return true;
+            }
             z: 1
             zoomFactor: win.zoom
             settings.javascriptCanOpenWindows: true
             settings.javascriptCanAccessClipboard: true
             settings.javascriptCanPaste: true
             settings.playbackRequiresUserGesture: false
+            // Links to other schemes never reach the computer's own apps.
+            settings.unknownUrlSchemePolicy: WebEngineSettings.DisallowUnknownUrlSchemes
+            Component.onCompleted: win._addLinkScript(page)
             touchHandleDelegate: selectionHandle
             onContextMenuRequested: (request) => win._contextMenu(page, request)
             onTouchSelectionMenuRequested: (request) => win._touchMenu(page, request)
@@ -333,8 +404,24 @@ Item {
                     win._webViewEvent(viewId, "loadStopped", []);
                 }
             }
-            // Links that open a new window stay in this view.
-            onNewWindowRequested: (request) => { page.url = request.requestedUrl; }
+            // What the page follows (not what the app loads in it,
+            // openURL / setHTML, or history) is checked against the redirects.
+            onNavigationRequested: (request) => {
+                const kind = win._kind(request.navigationType);
+                if (request.isMainFrame && kind !== "typed" && kind !== "backforward" && kind !== "reload"
+                        && !Links.isLocal(request.url) && page.redirected(request.url))
+                    request.reject();
+            }
+            onJavaScriptConsoleMessage: (level, message) => {
+                if (message.indexOf(Links.LINK_PREFIX) === 0)
+                    page.redirected(message.substring(Links.LINK_PREFIX.length));
+            }
+            // Links that open a new window stay in this view, unless the
+            // app takes them.
+            onNewWindowRequested: (request) => {
+                if (!page.redirected(request.requestedUrl))
+                    page.url = request.requestedUrl;
+            }
 
             // A file the view does not show (a PDF, a zip, a link with
             // "download"): Chromium would download it itself. BrowserAdapter
@@ -373,7 +460,25 @@ Item {
         // Apps start and continue media themselves (Music's next song), as under WebAppMgr.
         settings.playbackRequiresUserGesture: false
 
+        // Links to other schemes never reach the computer's own apps: the
+        // runtime hands them to the application manager, and in a site the
+        // link script reports them (linkRequested).
+        settings.unknownUrlSchemePolicy: WebEngineSettings.DisallowUnknownUrlSchemes
+        Component.onCompleted: {
+            if (win.site)
+                win._addLinkScript(view);
+        }
+        onNavigationRequested: (request) => win._navigation(request)
+
         onJavaScriptConsoleMessage: (level, message, lineNumber, sourceID) => {
+            if (message.indexOf(Links.LINK_PREFIX) === 0) {
+                if (win.site)
+                    win.linkRequested(message.substring(Links.LINK_PREFIX.length));
+                return;
+            }
+            // A site has no runtime: it does not talk to the shell.
+            if (message.indexOf("__phoenix__") === 0 && win.site)
+                return;
             if (message.indexOf("__phoenix__") === 0) {
                 try {
                     const m = JSON.parse(message.substring(11));
@@ -403,7 +508,7 @@ Item {
             if (info.status === WebEngineView.LoadSucceededStatus)
                 win.loaded();
         }
-        onNewWindowRequested: (request) => win.windowRequested(request)
+        onNewWindowRequested: (request) => win._newWindow(request)
         onWindowCloseRequested: win.closeRequested()
         touchHandleDelegate: selectionHandle
         onContextMenuRequested: (request) => win._contextMenu(view, request)

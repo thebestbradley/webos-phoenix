@@ -29,6 +29,10 @@ Item {
     // Settings > Advanced > Battery percentage (the community's "Battery
     // Percent and Icon" patches): the charge beside the battery.
     property bool batteryPercent: false
+    // The microphone (a Phoenix addition; webOS showed none): "on" while
+    // something records (dictation, the assistant), "standby" while it
+    // listens for "Hey Phoenix" only (subtle), "" when it is closed.
+    property string microphone: ""
     // Tablet: an app, the launcher or Just Type is up; the bar's fill fades
     // in under its tiled art (StatusBar::fadeBar, setMaximizedAppTitle).
     property bool filled: false
@@ -222,13 +226,19 @@ Item {
     // fading in and out over 200 ms (StatusBarItemGroup::activate /
     // deactivate and paint, :282-330, 381-396; statusBarMenuFade*,
     // lunaAnimations.conf:124-125).
+    // Tablets: as the original's tabRect (StatusBarItemGroup.cpp:360-366)
+    // its right cap lies past the screen's edge, and its left cap and some
+    // padding before the leftmost icon, so the tab holds every icon
+    // (Theme.statusBarTabCap). Phones: the pressed art behind the group.
     ArtBorderImage {
         id: menuTab
         objectName: "systemMenuTab"
         anchors.right: parent.right
+        anchors.rightMargin: Theme.tablet ? -Theme.statusBarTabCap : 0
         anchors.top: parent.top
         height: parent.height
-        width: indicators.width + Theme.px(12)
+        width: Theme.tablet ? indicators.width + indicators.anchors.rightMargin + 2 * Theme.statusBarTabCap + Theme.statusBarTabPadding
+                            : indicators.width + Theme.px(12)
         source: Theme.tablet || !bar.systemMenuOpen ? Theme.asset("statusBar/status-bar-menu-dropdown-tab.png")
                                                     : Theme.asset("statusBar/status-bar-menu-dropdown-tab-pressed.png")
         border { left: Theme.artBorder(Theme.tablet ? 11 : 0, source); right: Theme.artBorder(Theme.tablet ? 11 : 0, source); top: 0; bottom: 0 }
@@ -266,6 +276,30 @@ Item {
         // lock, mute, airplane (StatusBarInfo.cpp:143-275). This Row runs
         // left to right, so the reverse. Not shown yet, for want of the
         // state: WAN, TTY, HAC, roaming.
+        // Leftmost, the microphone: orange while recording, a dim outline
+        // of itself while it waits for the wake word.
+        Item {
+            id: micIndicator
+            objectName: "microphoneIcon"
+            readonly property bool shown: bar.microphone !== ""
+            readonly property bool recording: bar.microphone === "on"
+            property real progress: shown ? 1 : 0
+            Behavior on progress { NumberAnimation { duration: Theme.statusBarItemSlideDuration / 2 } }
+            visible: progress > 0
+            anchors.verticalCenter: parent.verticalCenter
+            width: Math.round(Theme.px(14) * progress)
+            height: Theme.px(16)
+            clip: true
+            opacity: progress * (recording ? 1 : 0.55)
+            MicGlyph {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                width: Theme.px(14)
+                height: Theme.px(16)
+                color: micIndicator.recording ? "#FF9F0A" : Theme.text
+                lineWidth: 2.2
+            }
+        }
         Indicator {
             objectName: "airplaneIcon"
             shown: bar.system !== null && bar.system !== undefined && bar.system.airplaneMode

@@ -465,6 +465,69 @@ lines come from the original code doing what it always did:
 - `tile memory limits exceeded, some content may not draw`: Chromium's
   compositor on a very tall page; the page draws as it scrolls.
 
+## Links between apps
+
+A link in an app that belongs to another app opens that app, as on webOS:
+the application manager's `open {target}` finds the app for it and
+launches it with the link, `{target: "<the link>"}`
+(`ApplicationManagerService.cpp:1290-1446`). Which app that is comes from
+the redirect handlers (`listRedirectHandlers`):
+
+| Link | Opens |
+|---|---|
+| `https://` page | the browser (`^https?:`), unless a more specific handler matches |
+| an installed web app's site | that web app, at the page (its manifest `scope`, with or without `www.` / `m.`; gone with the app) |
+| `https://maps.google.com/...`, `https://www.google.com/maps...` | Maps |
+| `mailto:` | Email, a new message to the address (subject and body too) |
+| `tel:` | Phone, the number on the dial pad |
+| `sms:` / `smsto:` / `im:` | Messaging, a new message to the number or address, with `?body=` |
+| `geo:`, `maploc:`, `mapto:` | Maps |
+| what an app registers | that app (`addRedirectHandler`) |
+
+Web address patterns are tried before whole schemes, as the original looked
+for a redirect handler before a scheme ("command") handler (`:1320`, then
+`:1428`): so a site's web app wins over the browser. A link no app opens
+fails with `No handler for <link>`, as on webOS, and the shell shows "No
+app can open this link" in a banner. Phone and Messaging read the number
+and text from `target` (`@phoenix/luna` `telTarget`, `messageTarget`).
+
+How a link gets there:
+
+- **In an app's page** (anything with the runtime): a tapped link to
+  another site or another scheme, `target=_blank` too, does not load in
+  the app's card; the runtime hands it to `open {target}`, as WebAppMgr
+  handed over what an app's page should not load
+  (`WebAppManager::mimeHandoffUrl`, `WebAppManager.cpp:1747-1773`). Links
+  to the app's own pages, and clicks the page handles itself
+  (`preventDefault`), are the page's. In phoenix-sim the window also
+  catches the rest (`WebAppWindow.qml`, `shell/qml/Phoenix/Sim/Links.js`):
+  a navigation by script out of the app, `window.open` of a web page (a
+  card of the same app before). The app launched joins the card's stack.
+- **In a site** (an installed web app, which has no runtime): its own
+  pages stay in its card, and so do redirects, scripts and pop-ups with
+  features (signing in on another domain); a tapped link out of its scope
+  goes to the browser (or the web app whose site it is). "Open in Browser"
+  in its menu is unchanged. Launched with `{target}` in its scope, it opens
+  that page.
+- **In the browser and Email's message view** (`enyo.WebView`): the page
+  view follows BrowserAdapter's redirects (`addUrlRedirect(regex, enable,
+  cookie, type)`, `BrowserAdapter.cpp:1945-1981`): a followed link that
+  matches the first enabled one is not loaded, and the page hears
+  `urlRedirected(url, cookie)` (`:4760-4767`). The browser's are the
+  system's handlers (enyo `WebView.addSystemRedirects`); Email's are every
+  link but its own `file:` pages (`MessageDisplay.js:906-909`). Both then
+  call `open {target}`.
+
+Chromium never hands a link to the computer's own apps
+(`unknownUrlSchemePolicy`); in pages without the runtime a small script
+reports links to other schemes to the window. Not covered: a script that
+sets `location` to a `tel:` or `mailto:` address (Chromium refuses it
+without telling the window).
+
+Tests: `tools/test-links.cjs` (links clicked in Notes, Weather, Scanner,
+and the apps they open), `tools/test-appmanager.cjs` (the handler table),
+`tools/test-browser.cjs`, `shell/tests/tst_links.qml` (the window's rules).
+
 ## Phone layouts
 
 The core apps are the TouchPad (1024×768) versions. On a phone card (320
@@ -731,7 +794,7 @@ same request and reply shapes:
 | Screen & Lock | `com.webos.settingsservice` `get/setSystemSettings {category: "picture", backlight}`; `com.webos.service.systemservice` `get/setPreferences` (`screenTimeout`, `rotationLock`, `wallpaper`, `showAlertsWhenLocked`, `blinkNotifications`) | `settingsservice` `inc/SettingsServiceApi.h`; `luna-sysservice` `Src/PrefsFactory.cpp` (stores any key) |
 | Screen & Lock (PIN) | `com.palm.systemmanager` `getDeviceLockMode`, `setDevicePasscode`, `matchDevicePasscode` (and `getSecurityPolicy`: a security policy's rules; see [Device security](#device-security-erase-usb-drive-mode-and-debugging)): the legacy webOS API; OSE has none, so Phoenix will have to provide it | `openwebos/luna-sysmgr` `Src/base/SystemService.cpp` |
 | Sounds | `com.webos.service.audio` `master/getVolume`, `master/setVolume`, `master/muteVolume`, `getInputVolume` / `setInputVolume` (`streamType` `pringtones`, `palerts`, `pfeedback`, `pmedia`), `playFeedback`, `playSound`, `controlPlayback`; system service `ringtone`, `alerttone`, `notificationtone` (`{name, fullPath}`: Open webOS's alert.wav and notification.wav or any ringtone; the shell plays them for alerts, alarms and reminders, and for notifications, that name no sound of their own, as LunaSysMgr's `AlertWindow` and `BannerMessageHandler` did), `systemSounds`, `x_palm_virtualkeyboard_prefs` (`TapSounds`: Keyboard clicks), `ringtone/listRingtones` | `audiod-pro` `src/modules/masterVolumeManager`, `audioPolicyManager`, `systemSoundsManager`; `luna-sysmgr` `conf/defaultPreferences.txt`, `Src/base/settings/Preferences.cpp` |
-| Text Assist | system service `get/setPreferences`: `x_palm_virtualkeyboard_prefs` (`WordSuggestions`, `AutoCorrect`, `SwipeTyping`, `spaces2period`, `ForgetWords`, `keyboards`), `keyboardShortcuts`, and `x_palm_textinput` (`shortcutChecking` `"autoCorrect"` / `"off"`; Phoenix adds `shortcuts: [{shortcut, text}]`, the user's text replacements). The runtime gives the shell's keyboard `systemStatus` `textAssist` (`suggestions`, `autoCorrect`, `swipe`, `spaces2period`, `forgetWords`, `shortcuts` as `{typed: text}`, `shortcutsOn`); the space bar puts a shortcut's text in (`TextAssist.js` `shortcut()`), in any keyboard language, and backspace puts the shortcut back | `luna-sysmgr` `conf/defaultPreferences.txt` (`x_palm_textinput`), `Src/ime/VirtualKeyboardPreferences.cpp` |
+| Text Assist | system service `get/setPreferences`: `x_palm_virtualkeyboard_prefs` (`WordSuggestions`, `AutoCorrect`, `SwipeTyping`, `spaces2period`, `ForgetWords`, `keyboards`), `keyboardShortcuts`, `keyboardNumberRow`, `keyboardStyle` (Phoenix: the keys' look, `"auto"` = black on a phone and the TouchPad's on a tablet, `"black"`, `"touchpad"`; systemStatus `tweaks.keyboardStyle`), and `x_palm_textinput` (`shortcutChecking` `"autoCorrect"` / `"off"`; Phoenix adds `shortcuts: [{shortcut, text}]`, the user's text replacements). The runtime gives the shell's keyboard `systemStatus` `textAssist` (`suggestions`, `autoCorrect`, `swipe`, `spaces2period`, `forgetWords`, `shortcuts` as `{typed: text}`, `shortcutsOn`); the space bar puts a shortcut's text in (`TextAssist.js` `shortcut()`), in any keyboard language, and backspace puts the shortcut back | `luna-sysmgr` `conf/defaultPreferences.txt` (`x_palm_textinput`), `Src/ime/VirtualKeyboardPreferences.cpp` |
 | Date & Time | system service `get/setPreferences` (`timeFormat`, `useNetworkTime`, `useNetworkTimeZone`, `timeZone`), `getPreferenceValues {key: "timeZone"}`, `time/getSystemTime`, `time/setSystemTime {utc}` | `luna-sysservice` `Src/TimePrefsHandler.cpp` |
 | Language & Region | `com.webos.settingsservice` `get/setSystemSettings {keys: ["localeInfo"]}` (`locales.UI`, `locales.FMT`) | `settingsservice` |
 | Device Info | system service `deviceInfo/query`, `osInfo/query`; `com.palm.power` `batteryStatusQuery` (legacy); `com.palm.telephony` `platformQuery` (IMEI/MEID, carrier), `subscriberIdQuery` (`msisdn`: the phone number), `simStatusQuery`, `networkStatusQuery`; settings service `resetSystemSettings`; `org.webosphoenix.service.reset` `eraseUserData` (apps' data and settings; the user's files on the USB drive are kept, as legacy webOS's "Erase Apps & Data") and `fullErase` (everything, files too) (Phoenix, simulator only so far); "Help and tips" and "Run setup again" launch Help and First Use (`{rerun: true}`) | `luna-sysservice` `Src/DeviceInfoService.cpp`, `OsInfoService.cpp` |
@@ -1016,10 +1079,12 @@ card. The calls return at once, as the plugin's did; a picture still being
 made is served when it is ready. In a desktop browser the page is an
 `<iframe>`, so there is no picture and the shortcut gets the browser's icon.
 
-Links for other apps (`mailto:`, `tel:`, `sms:`) go to them through
-`/usr/palm/command-resource-handlers.json` (a compat file), as the
-application manager's `open` does on webOS. `tools/test-browser.cjs` browses
-with it end to end.
+Links for other apps (`mailto:`, `tel:`, `sms:`, Google Maps) are not
+loaded: the page view hands them back to the browser, which opens them with
+the application manager (see [Links between apps](#links-between-apps):
+BrowserAdapter's `addUrlRedirect` and `urlRedirected`, with the patterns of
+`/usr/palm/command-resource-handlers.json`). `tools/test-browser.cjs` browses
+with it end to end, tapping a real `mailto:` link.
 
 **Downloads.** A file the page view does not show (a PDF, a link with
 `download`) is not downloaded by Chromium: phoenix-sim's view hands it
@@ -1791,7 +1856,7 @@ are the clients.
 | Method | Does |
 | --- | --- |
 | `ask {text, threadId?, newThread?, speak?}` | `{thread, messages}`: the user's words and the answers. In the thread in use unless told otherwise. System UI, Assistant and Settings only (error -3); error -4 while the assistant is off |
-| `choose {threadId, messageId, choice}` | a message's choice: `cloud:<provider id>` (the thread goes on with that provider), `web`, `settings` |
+| `choose {threadId, messageId, choice}` | a message's choice: `cloud:<provider id>` (the thread goes on with that provider), `web`, `settings`, `open` (the app a command's answer offers: "Open Calendar" launches `data.open {appId, params}`) |
 | `confirm {threadId, messageId, accept}` | a read-back (`status: "pending"`): run it, or not |
 | `threads` / `thread {id?}` | `{threads, current}` / `{thread, messages}` (the one in use without an id) |
 | `newThread`, `setCurrent {id}`, `deleteThread {id}`, `clearHistory` | conversations |
@@ -1806,7 +1871,10 @@ are the clients.
 A message is `{id, threadId, role, text, time, via: "commands" | "on-device"
 | "cloud", source (who answered), command, status: "pending" | "done" |
 "cancelled" | "failed", confirm: {command, args}, choices: [{id, label}],
-chosen}`. Each thread (`assistant:thread:<id>`), message
+chosen, data}`. A command done may carry choices too (`open`: its app);
+its `data` holds `open {appId, params, title}`, `undo` (what takes it back)
+and, for a question the assistant asked ("When is it?"), `awaiting
+{command, args}`: the next words fill it. Each thread (`assistant:thread:<id>`), message
 (`assistant:msg:<thread>:<id>`) and provider (`assistant:provider:<id>`) is
 its own stored key, so the shell's view and the app never write over each
 other (PR 7).
@@ -1814,23 +1882,38 @@ other (PR 7).
 `luna://org.webosphoenix.tts/`: `speak {text, lang?}`, `stop`, `getStatus`
 -> `{available, engine}`.
 
-**What the commands do** (`lib/commands.js`): Phone `{number, dial}`; an
-SMS through `org.webosports.service.messaging/putMessage` (Messaging's
-compose without words); a timer as an activity that opens the Assistant app
-with `{timerDone}` (notification, sound, words); the Clock's own alarm
-(a `com.palm.clock.alarm:1` record and the activity the Clock schedules,
-which launches it with `{action: "ring"}`); a task in Tasks with its
-reminder activity; Wi-Fi, Bluetooth, airplane mode, the torch, the
-ringtone volume; `applicationManager/launch`; Maps `{target:
-"mapto:<place>"}`; Music `{play: "<artist, album or song>"}`; Open-Meteo
-for the weather; the browser with Just Type's default engine.
+**What the commands do** (`lib/commands.js`; the full list with phrasings
+is in [AI-AND-MCP.md](AI-AND-MCP.md#10-as-built-7-october-2026-in-the-simulator)).
+Each makes the records and calls the apps themselves make, so the apps
+show the result at once:
+
+| Command | Luna calls and records |
+| --- | --- |
+| `event`, `agenda` | a `com.palm.calendarevent:1` in the first writable calendar (the local one first), shaped as the Calendar saves one (`CalendarEvent.js`: `dtstart`/`dtend` ms, all day midnight to 23:59:59, `tzId`, a 15-minute `alarm`, `attendees` for contacts with an email, `rrule` as `RepeatView.js` writes it); the agenda reads them with repeats expanded (`lib/dates.js` `occurrences`). Calendar `{showEventDetail: id}` |
+| `alarm`, `alarmList`, `alarmManage` | the Clock's `com.palm.clock.alarm:1` (`occurs` once, daily, weekdays, weekends) and the activity the Clock schedules (`{action: "ring"}`); turned off: `enabled: false` and the activity cancelled; deleted: `db8 del` (read back first) |
+| `timer`, `timerStatus`, `timerCancel`, `stopwatch` | an activity that opens the Assistant app with `{timerDone}`; the assistant keeps the running ones (`assistant:timer:<id>`) and its stopwatch (`assistant:stopwatch`) in its store |
+| `reminder`, `task` | a `com.palm.task:1` in the default list or a named one (`com.palm.tasklist:1`, made if new), with the reminder activity when there is a time. Tasks `{taskId}` |
+| `note`, `findNotes` | a `com.palm.note:1` first on the wall (`Memo.getMemoPosition('a', first)`, the next colour), as Memos makes one; found by its words |
+| `contactAdd`, `contactInfo` | a `com.palm.contact.palmprofile:1` and its `com.palm.person:1`, as the linker stores them; Contacts `{launchType: "showPerson", id}` |
+| `text`, `readMessages` | `org.webosports.service.messaging/putMessage` (read back first; Messaging's compose without words); the last `com.palm.smsmessage:1` received, named from Contacts |
+| `email`, `searchEmail` | `com.palm.smtp/sendMail {accountId, email}` (read back first); without a body Email's compose `{recipients, summary}`; `com.palm.email:1` by words, sender or unread |
+| `call` | Phone `{number, dial}` (read back first) |
+| `toggle` | Wi-Fi, Bluetooth, airplane mode, the torch, the ringtone volume; Do Not Disturb is the ringer off (webOS had none; its ringer switch silenced calls and alerts) |
+| `media` | `org.webosphoenix.system/mediaKey {key}`: the shell sends the `com.palm.keys` `/media` key to every page, as the hardware key; the player with the audio focus acts |
+| `volume`, `brightness` | `com.webos.service.audio` `master/getVolume`, `setVolume`, `muteVolume`; `com.palm.display` `control/getProperty`, `control/setProperty {maximumBrightness}` |
+| `screenshot`, `lock`, `battery`, `settings` | `com.palm.systemmanager/takeScreenShot` (phoenix-sim closes the assistant's view first); `com.palm.display/control/setState {state: "off"}`; `com.palm.power` battery and charger queries; Settings `{page}` (Settings' list without one) |
+| `open`, `navigate`, `play`, `photos`, `search` | `applicationManager/launch` (a launch point's own params: Settings' panes); Maps `{target: "mapto:<place>"}`; Music `{play}`; Photos `{imageList}` of the `com.palm.media.image.file:1` taken those days; the browser with Just Type's default engine |
+| `weather`, `distance`, `worldTime`, `convert` | Open-Meteo (forecast, geocoder with time zones) and `com.webos.service.location`; `lib/places.js` for big cities offline; `lib/units.js` offline; currencies with Frankfurter's ECB rates (online; offline it says so and offers the web) |
+| `undo` | takes back what the last answer made (`data.undo`): deletes the record, cancels the activity, turns an alarm back on; read back first |
 
 **Apps' commands**: `appinfo.json` `"assistant": {"commands": [{"id",
 "displayName", "url", "launchParam", "phrases": {"en": ["new note {text}"]},
 "risk": "change" | "send" | "delete"}]}`; the app is launched with
 `{<launchParam>: <text>}`, and `send`/`delete` are read back first. An app's
 Just Type Quick Action (`universalSearch.action`) works as "<displayName>
-<text>" without anything more. phoenix-sim and `serve-rootfs.py` pass the
+<text>" without anything more, after the built-in commands (which do the
+thing: "new event dentist Friday at 2" adds the event rather than opening
+Calendar's editor); phrases an app declares come before them. phoenix-sim and `serve-rootfs.py` pass the
 `assistant` field in `/usr/share/phoenix/apps.json`.
 
 **The shell** (`AssistantOverlay.qml`): holding the launcher button opens
@@ -1865,7 +1948,11 @@ working then done, `failed` plays shy (Oops), choices play confused, each
 for a moment (`beatsFor`, at Animation speed); speaking while the shell's
 `Speech` speaks; asking while a read-back waits; idle (with a nod for an
 answer that is not spoken); asleep again as it closes. A tap on it waves.
-`phoenix-sim --scene assistantbird` cycles through its poses,
+Every pose acts, never a still: hello waves, thinking taps its chin,
+working bobs and pumps its flippers, speaking gestures with its words,
+idle shifts its weight and looks around now and then (each pose's loop in
+`bird.json`'s `motion.acting`; a pose change blends from wherever the loop
+is; Reduce motion holds it still). `phoenix-sim --scene assistantbird` cycles through its poses,
 `--scene assistantbirds` shows them all; both log the frame rate.
 
 **The on-device model and speech in phoenix-sim**: `/usr/share/phoenix/host.json`
@@ -1885,7 +1972,28 @@ Preferences. Launch params: `{text}` (Just Type's "Ask Assistant"),
 simulator runs the service in its page. The same bird (`src/bird/Bird.tsx`)
 greets on an empty conversation (thinking while it loads), and stands below
 the conversation while a request runs: thinking, then working and done, a
-shrug or Oops, as the shell's view decides (`src/bird/pose.ts`).
+shrug or Oops, as the shell's view decides (`src/bird/pose.ts`). It acts
+as the shell's does, with the generated CSS keyframes (the CSP allows no
+style made at run time); the blend between poses sets the part's drawn
+transform through the CSSOM, which the CSP allows.
+
+**Voice** ([AI-AND-MCP.md](AI-AND-MCP.md#voice)): `ask {voice: true}` is
+answered aloud with the setting `voiceReplies`; "yes" / "no" (send it,
+cancel...) answer a read-back waiting; `ask {locked: true}` runs only
+`LOCKED_COMMANDS` and answers the rest with `status: "locked"`;
+`vocabulary` gives the transcriber's prompt (the wake phrase and the
+contacts' names as requests). Settings `wakeWord` and `wakeWhenLocked`
+(off by default) turn on the shell's wake word: `Dictation.wakeCommand`
+runs `phoenix-wakeword` (`services/wakeword`), `wakeWord` keeps it loaded,
+`standby` gives it the microphone, `wakeHeard` opens the view listening
+(`Shell.wakeAssistant`), and a recording started then begins just before
+the phrase. The shell follows the settings with the window sources' new
+`lunaSubscribe`. phoenix-sim: `tools/get-wakeword.py` fetches libvosk and
+the model into `build/wakeword/` (or `--wake-model`, `--vosk-library`);
+Simulate > Say "Hey Phoenix" (Ctrl+Shift+Y) plays `--wake-file` (default
+`services/wakeword/tests/data/hey-phoenix.wav`) into the microphone;
+`--scene wakeword` / `wakewordlocked` turn it on; `--microphone-file`
+plays as before, standing by taking the next file not yet played.
 
 **Settings > Assistant** (`apps/settings/src/pages/Assistant.tsx`, launch
 point `org.webosphoenix.settings.assistant`): everything above.
@@ -2173,7 +2281,7 @@ app site, an App Museum stand-in and a Preware feed), `tools/test-marketplace.cj
 The catalog service is `server/marketplace` (PHP 8 + PDO; MySQL/MariaDB on a
 server, SQLite on one computer): accounts, submissions with the same
 automatic checks, a review queue (`/admin`), ratings and reviews, reports,
-opt-outs for the curated web apps (126 popular sites' PWAs, found and
+opt-outs for the curated web apps (132 popular sites' PWAs, found and
 checked by `bin/probe-pwas.py`), and publishing the signed index (its
 README).
 
@@ -2689,8 +2797,9 @@ add to the runtime and the original apps:
   `sysUiEnableMaximizeEdges`, `sysUiEnableWaveLauncher`,
   `showReticleAnimation`; Phoenix's `animationSpeed`, `gestureSensitivity`,
   `hapticFeedback`, `launcherGridDensity`, `showBatteryPercent`,
-  `keyboardNumberRow`, `emailDashboardCycling`), and the shell gets them as
-  the systemStatus `tweaks`. Settings > Sounds & Ringtones > Repeat alerts
+  `keyboardNumberRow`, `emailDashboardCycling`; Settings > Text Assist's
+  `keyboardStyle`, `"auto"`, `"black"` or `"touchpad"`), and the shell gets
+  them as the systemStatus `tweaks` (the keyboard changes its look at once). Settings > Sounds & Ringtones > Repeat alerts
   is `notificationRepeat` {enabled, minutes, apps}; Screen & Lock > Show
   previews is `lockScreenPreviews`.
 - **Preferences across pages**: a page's getPreferences subscribers hear a

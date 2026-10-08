@@ -37,6 +37,7 @@ describe("Settings > Advanced", () => {
         expect(last("systemStatus")?.tweaks).toEqual({
             infiniteCardCycling: true, maximizeEdges: false, waveLauncher: false, tapRipple: true, animationSpeed: "normal",
             gestureSensitivity: "normal", haptics: false, gridDensity: "dense", batteryPercent: false, numberRow: false,
+            keyboardStyle: "auto",
         });
         await call("luna://com.webos.service.systemservice/setPreferences", { showReticleAnimation: false, animationSpeed: "warp" });
         const t = last("systemStatus")?.tweaks as Record<string, unknown>;

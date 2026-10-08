@@ -30,7 +30,7 @@ The **Phoenix Assistant in 1.0** starts with a voice assistant in the classic st
 
 | Part | 1.0 |
 | --- | --- |
-| **Asking** | Push-to-talk from the gesture area (press and hold while the keyboard is down; see [spec/GAPS.md](spec/GAPS.md) V4 for the keyboard-up case), a mic button in Just Type, a headset button. A wake word stays for later |
+| **Asking** | Push-to-talk from the gesture area (press and hold while the keyboard is down; see [spec/GAPS.md](spec/GAPS.md) V4 for the keyboard-up case), a mic button in Just Type, a headset button, and "Hey Phoenix" (an on-device wake word, off by default; see Voice) |
 | **Hearing** | On-device speech recognition with the transcriber Voice Memos already uses (`org.webosphoenix.transcriber`, whisper.cpp); nothing leaves the phone |
 | **Understanding** | Intents: a fixed grammar per command in each supported language ("call Mum", "text Sam I'm late", "set a timer for 10 minutes", "wake me at 7", "turn off Wi-Fi", "open Maps", "navigate home", "play <artist>", "remind me to ...", "what's the weather", "what's 15% of 80"). Apps add their own through `appinfo.json`, the same way they add Just Type Quick Actions |
 | **Doing** | The same Luna calls Just Type's actions and the apps already make: Phone, Messaging, Clock, Settings, Maps, Music, Tasks, Weather, Contacts. Anything that sends or deletes is read back first ("Send 'I'm late' to Sam?") |
@@ -44,9 +44,64 @@ above was the plan's command layer; this is the whole 1.0 assistant.
 | Layer | What runs | Where |
 | --- | --- | --- |
 | 1. Speech to text | The shell's dictation: whisper.cpp through `org.webosphoenix.transcriber` | On the device (in phoenix-sim, the same service code on the computer) |
-| 2. Commands | A grammar per language (`apps/assistant/service/lib/lang/en.js`): call, text, timer, alarm, reminder, Wi-Fi, Bluetooth, airplane mode, flashlight, ringer, open app, directions, play music, weather, sums and percentages, time and date, web search; plus commands apps declare in `appinfo.json` (`"assistant": {"commands": [...]}`, Just Type's Quick Action shape with phrases per language; a Quick Action counts as `"<displayName> {text}"`) | In the service, no model, no network (weather fetches Open-Meteo) |
+| 2. Commands | A grammar per language (`apps/assistant/service/lib/lang/en.js`): the 40 commands in the table below, with the days and times people say; plus commands apps declare in `appinfo.json` (`"assistant": {"commands": [...]}`, Just Type's Quick Action shape with phrases per language; a Quick Action counts as `"<displayName> {text}"`, after the built-in commands) | In the service, no model, no network (weather, distances, currencies and unknown cities fetch Open-Meteo or Frankfurter) |
 | 3. On-device model | llama.cpp's `llama-server` with a GGUF model the user downloads in Settings > Assistant, called with the same commands as tools (Chat Completions, `--jinja`) | On the device. phoenix-sim runs it from the shell (`LocalModels`, Phoenix.Native); the device service runs it itself (`lib/node-device.js`) |
 | 4. Cloud model or web | "Ask <provider (model)>" and "Search the web" as choices on the answer; a thread taken to a cloud model goes on with it | The provider's servers; the browser |
+
+**The commands** (8 October 2026). The grammar's phrasings are examples:
+each family takes the usual variations ("please", "can you", the order of
+the parts), and the tests have more (`apps/assistant/service/everyday.test.ts`,
+`grammar.test.ts`). Every command is also a tool the models are given, with
+the same arguments (`lib/commands.js` `BUILT_IN`); times a model writes
+("friday at 10am", ISO 8601) go through the same date reading. Answers are
+one short sentence and offer the app where it helps ("Open Calendar"); the
+bird plays done, asking (a read-back), confused (nothing here can) or oops
+(it could not).
+
+| Command | Say, for example | Does | Asks first |
+| --- | --- | --- | --- |
+| `event` | "add a meeting with Sam tomorrow at 3", "create an event called dentist on Friday at 10am", "schedule lunch with Priya next Tuesday at noon at Bistro Verde", "put yoga on my calendar every Monday at 7pm for 90 minutes", "team offsite on the 20th all day" | A calendar event: title, day and time, end or length (an hour by default), place, invitees (contacts with an email), repeats; without a time it asks "When is it?" and the next words say it | |
+| `agenda` | "what's on my calendar today / tomorrow / this week / next week", "do I have anything on Friday", "what's my next meeting", "when is my dentist appointment" | Reads the events, repeats included | |
+| `alarm` | "set an alarm for 7am weekdays", "wake me up at 6:30 every day", "alarm at half past six tomorrow called gym" | The Clock's alarm; repeats daily, on weekdays or at weekends (the Clock's own; "every Monday" is set once and says so) | |
+| `alarmList`, `alarmManage` | "what alarms do I have", "cancel my 7am alarm", "turn off all alarms", "delete all alarms" | Lists, turns off, deletes | Deleting |
+| `timer`, `timerStatus`, `timerCancel` | "set a 5 minute timer for the eggs", "how much time is left", "cancel the timer" | Timers that ring in the Assistant app | |
+| `stopwatch` | "start a stopwatch", "how long has the stopwatch been running", "stop the stopwatch" | A stopwatch in the assistant (webOS's Clock had none) | |
+| `reminder` | "remind me to call mom at 6", "remind me in 2 hours to check the oven", "remind me tomorrow morning to call the bank" | A task with a reminder | |
+| `task` | "add milk to my shopping list", "create a task pay rent", "add a task to call the bank tomorrow" | A task, in a named list (made if new) or the default one | |
+| `note`, `findNotes` | "new note: buy flowers for Ada", "take a note that ...", "find my notes about Wi-Fi" | A memo, first on the wall; memos found by their words | |
+| `contactAdd`, `contactInfo` | "add Sam to contacts with number 555 0100", "new contact Jo March email jo@example.com", "what's Sam's number" | A contact; a contact's number, email, address or birthday | |
+| `call` | "call mom", "call Sam on his mobile", "dial 555 123 4567" | Phone dials | Yes (Call) |
+| `text`, `readMessages` | "text Sam I'm running late", "read my last message", "what did Priya say" | Sends an SMS (the words as typed); reads the last one received | Yes (Send) |
+| `email`, `searchEmail` | "send an email to Priya saying see you soon", "email Alex about the report", "search my email for invoice", "do I have any new emails" | Sends (with words) or opens a new email (without); finds email | Yes (Send) |
+| `toggle` | "turn on Wi-Fi", "turn off Bluetooth", "airplane mode on", "turn on the flashlight", "silence the phone", "turn on do not disturb" | The switch; Do Not Disturb is the ringer off | |
+| `media` | "pause", "resume the music", "next song", "previous track" | The media keys, for whichever player plays | |
+| `volume` | "turn up the volume", "set the volume to 30%", "mute", "unmute" | The master volume | |
+| `brightness` | "set brightness to 50%", "turn the brightness up", "make the screen dimmer" | The screen's brightness | |
+| `screenshot`, `lock`, `battery` | "take a screenshot", "lock the screen", "what's my battery" | A screen capture (the assistant's view out of the way); the screen off and locked; the level and charging | |
+| `settings`, `open` | "open Wi-Fi settings", "open settings", "open Maps" | Settings at a pane (or its list); an app | |
+| `navigate`, `distance` | "navigate to the nearest coffee shop", "how far is Paris" | Directions in Maps; the distance as the crow flies | |
+| `play`, `photos` | "play some music by Miles Davis", "show my photos from yesterday / last week" | Music plays; Photos opens on the photos taken then | |
+| `weather` | "what's the weather tomorrow", "will it rain in London" | Open-Meteo, here or there | |
+| `convert` | "convert 10 miles to km", "how many cups in a liter", "100 fahrenheit in celsius", "what's 20 USD in EUR" | Units offline; currencies with the day's ECB rates (offline it says so and offers the web) | |
+| `worldTime`, `time` | "what time is it in Tokyo", "what time is it", "what's the date" | The time there (big cities offline), here, the date | |
+| `calculate` | "what's 15% of 80", "twelve times seven" | The sum | |
+| `search` | "search the web for palm pre", "look up webos history" | The browser | |
+| `undo` | "undo", "cancel that", "never mind" | Cancels a read-back waiting; else takes back what was just made (deletes the event, task, memo, contact or alarm, cancels the timer, turns alarms back on) | Yes |
+| (models) | "translate hello into French", questions | Not a command: the on-device model, else "Ask <cloud model>" / "Search the web" (it says why) | |
+
+Days and times (`lib/lang/en.js` `extract`, `resolve`; `lib/dates.js`):
+"today", "tonight", "tomorrow morning", "the day after tomorrow", "on
+Friday", "next Tuesday" (the coming one), "last Monday", "this weekend",
+"next week", "in 2 hours", "in 3 days", "half an hour from now", "October
+20th", "the 15th", "at 3", "3pm", "noon", "half past six", "seven thirty",
+"from 2 to 3:30", "3-4pm", "until 5", "for 90 minutes", "all day", "every
+day", "every weekday", "every Monday and Wednesday", "every other week",
+"monthly". An hour said without am or pm is read as people mean it: 1 to 6
+in the afternoon and 7 to 11 in the morning for events and reminders, the
+next of the two for an alarm (the morning on a given day), the morning for
+waking up. Another
+language writes its own `extract` and words; the calendar arithmetic is
+shared.
 
 **The router.** Commands first; then the on-device model, if one is chosen
 and installed (it answers free-form requests and picks commands as
@@ -662,11 +717,74 @@ against a list shipped with Phoenix.
   short command (*estimate*); `tiny.en` halves that. The transcript goes
   into the text field first so the user can fix it; a setting runs it
   directly.
-- **Wake word later**: whisper is not a wake-word engine. openWakeWord runs
-  many models on one Raspberry Pi 3 core, and its **code is Apache-2.0 but
-  its pre-trained models are CC BY-NC-SA 4.0**, so Phoenix would have to
-  train its own "Hey Phoenix" model with its tools. Off by default; a
-  status bar mic indicator whenever the microphone is open.
+- **Wake word: "Hey Phoenix" (built 8 October 2026, in the simulator).**
+  - **Choice.** whisper is not a wake-word engine; openWakeWord's code is
+    Apache-2.0 but its pre-trained models are CC BY-NC-SA 4.0 and training
+    our own needs its NC-licensed negative feature set and a GPU, so it was
+    left out. Chosen: **Vosk** (Kaldi; library Apache-2.0) with its **small
+    English model `vosk-model-small-en-us-0.15` (40 MB, Apache-2.0** per
+    alphacephei.com/vosk/models) and a grammar of the phrase and `[unk]`.
+    "Hey Phoenix" is kept: four syllables, a rare word, already in the
+    model's vocabulary.
+  - **How** (`services/wakeword`, `phoenix-wakeword`, plain C++17, libvosk
+    loaded at run time): a gate decodes only while there is sound over the
+    room's floor; the grammar spotter hears the phrase; each candidate is
+    checked by decoding that stretch again against words that sound like
+    it ("Felix", "Phoebe", "hay"...), and the phrase must win. The shell's
+    Dictation pipes the microphone to it while it stands by.
+  - **Measured** (x86 Xeon 2.8 GHz, one core; 8 October 2026). Test speech
+    from espeak-ng and two multi-speaker Piper voices (LibriTTS-R 904
+    speakers, VCTK 109; used only to measure, not shipped), real speech
+    from LibriSpeech dev-clean (CC BY 4.0, 5.4 h, not shipped):
+
+    | Set | Result |
+    | --- | --- |
+    | "Hey Phoenix", Piper voices (240 clips) | 236 heard (98.3%) |
+    | "Hey Phoenix", espeak-ng voices (160) | 115 heard (72%; its robotic variants) |
+    | "Hey Phoenix, <request>" in one breath (100) | 93 heard |
+    | Near misses ("Hey Felix", "I flew to Phoenix", "Say Phoenix", "Hey Siri"... 26 phrases, 416 clips) | 18 accepted (4.3%); 12 of them "Hey, fee nicks", which is the phrase. Without the check: 87 (21%) |
+    | Piper "Hey Phoenix" with white noise at 10 / 5 dB SNR | 90% / 63% |
+    | ... with other speech (babble) at 10 / 5 dB | 63% / 32% |
+    | LibriSpeech dev-clean, 5.4 h of continuous speech | **0 false accepts** (3 candidates, all turned down by the check) |
+    | CPU, continuous speech | 0.027 of one core (2.7%) |
+    | CPU, a quiet room (10 min) | 0.04 s in all (the gate decodes nothing) |
+    | Memory / start | 150 MB resident; 0.55 s to load |
+
+    On a phone-class ARM core (Cortex-A55/A76) expect several times the CPU
+    figure while people talk (*estimate*, not measured: no ARM device
+    here), and next to nothing in quiet. Real human recordings of the
+    phrase were not available; the Piper voices stand in for them. Weak
+    spots: competing speech, and the 150 MB.
+  - **The flow.** Settings > Assistant > Listen for "Hey Phoenix" (off by
+    default) -> a chime (`listen.wav`) and a tap of the motor, the screen
+    on, the assistant's view listening (the bird follows the loudness) ->
+    the recording ends after a second of quiet -> whisper.cpp (its prompt
+    made of the contacts' names, as Voice Dial does) -> the command ->
+    the answer spoken (Voice replies, on by default) -> a read-back ("Call
+    Marcus Reyes?") listens for Yes / No / Send / Cancel without the wake
+    word; otherwise the view closes after 4 s idle. "Hey Phoenix, <request>"
+    in one breath works (the recording starts just before the phrase; the
+    phrase is dropped from the transcript). The microphone button stays
+    push-to-talk. Listening pauses while the view is open, while anything
+    is spoken, during a call and while one rings.
+  - **Locked.** "When the screen is off or locked" (off by default): over
+    the lock screen (nothing of the apps blurred behind it) the service
+    runs only what shows nothing private and sends nothing (timers, alarms,
+    toggles, media, volume, weather, sums, time...; `ask {locked}`); for
+    the rest it says "Unlock your phone first" and the shell asks again
+    once unlocked (within two minutes).
+  - **Privacy.** Nothing leaves the phone; the spotter keeps the last few
+    seconds in memory only. The status bar shows a microphone whenever it
+    is open: faint while standing by, orange while recording.
+  - **On a device** (to do): meta-phoenix recipes for libvosk (Kaldi,
+    OpenFST, OpenBLAS: all Apache/BSD; or the prebuilt aarch64 libvosk)
+    and the model in `/usr/share/phoenix/wakeword/`, and `phoenix-wakeword`
+    installed; LsmWindowSource's shell sets `wakeWordCommand`. The
+    microphone is the shell's Qt Multimedia input (PulseAudio on OSE, as
+    dictation uses); with the screen off the shell process must keep
+    running and audio stay open (OSE's audiod/PulseAudio input while
+    suspended is unverified), and a DSP/low-power hotword path would be the
+    next step for battery.
 - **Speaking answers**: OSE has `com.webos.service.tts` (engine per build,
   *unverified*). Piper is the usual open alternative; the original
   `rhasspy/piper` was MIT and its successor is GPL-3.0 (*unverified*;

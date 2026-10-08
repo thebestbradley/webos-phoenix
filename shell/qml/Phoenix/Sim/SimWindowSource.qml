@@ -141,6 +141,7 @@ import QtQuick
 import Phoenix.Native
 import Phoenix.Shell
 import "../Shell/NotificationPolicy.js" as Policy
+import "Links.js" as Links
 
 Item {
     id: source
@@ -231,7 +232,10 @@ Item {
                  // Several windows at once (the icon menu's New Window).
                  multipleInstances: !!a.multipleInstances || multipleInstanceApps.indexOf(a.id) >= 0,
                  // The app's files, in bytes (App Info).
-                 size: a.size || 0 });
+                 size: a.size || 0,
+                 // A site's part of the web (an installed web app's manifest
+                 // scope): its links out of it go elsewhere (Links.js).
+                 scope: a.scope || "" });
     }
 
     // The launcher's fields every entry has (Shell._launcherEntries,
@@ -243,7 +247,7 @@ Item {
         return { page: "", dynamic: false, category: "", keywords: "", installed: false,
                  installState: "", progress: -1, pending: false, installReason: "",
                  exhibition: false, exhibitionTitle: "", tapToShare: false,
-                 multipleInstances: false, size: 0 };
+                 multipleInstances: false, size: 0, scope: "" };
     }
 
     // Apps that run in several windows at once whose appinfo.json cannot
@@ -568,7 +572,8 @@ Item {
     function _webWindow(appId, url, uid, system) {
         if (!_webComponent)
             _webComponent = Qt.createComponent("WebAppWindow.qml");
-        var win = _webComponent.createObject(source, { appId: appId, url: url });
+        var info = appInfo(appId);
+        var win = _webComponent.createObject(source, { appId: appId, url: url, scope: (info && info.scope) || "" });
         if (!win) {
             console.warn("phoenix-sim: cannot create web window:", _webComponent.errorString());
             return mockApp.createObject(source, { appId: appId, title: appId });
@@ -584,6 +589,8 @@ Item {
         if (win.gone)
             win.gone.connect(function() { source._pageGone(pageKey); });
         win.windowRequested.connect(function(request) { source._openWindow(appId, request); });
+        if (win.linkRequested)
+            win.linkRequested.connect(function(url) { source.openLink(appId, uid, url); });
         if (system)
             win.closeRequested.connect(function() { source.closeSystemWindow(uid); });
         else if (uid !== "")
@@ -612,6 +619,28 @@ Item {
         cardFocusRequested(uid);
     }
 
+    // A link the window does not show itself (WebAppWindow linkRequested):
+    // the application manager opens it, open {target} (WebAppMgr's
+    // mimeHandoffUrl, WebAppManager.cpp:1747-1773), in the window's own page
+    // when it has the runtime, else in the system UI's (a site's link); the
+    // app it launches joins the card's stack ($from).
+    function openLink(appId, uid, url) {
+        var win = _windows[uid] || null;
+        var page = win && win.runScript && !win.site ? win : (_headless["com.palm.systemui"] || _webPages()[0] || null);
+        if (!page) {
+            // Nothing runs the application manager (tests): web pages go
+            // to the browser.
+            if (/^https?:/i.test(url))
+                _hostMessage(appId, uid, "launch", { id: "com.palm.app.browser", params: { target: url } });
+            else
+                _hostMessage(appId, uid, "open", { target: url });
+            return;
+        }
+        page.runScript("window.__phoenixRuntime && __phoenixRuntime.dispatch('luna://com.palm.applicationManager/open', "
+                       + JSON.stringify({ target: url, $from: uid }) + ", function () {},"
+                       + " { cancelled: function () { return false; }, onCancel: null })");
+    }
+
     function _soundArgs(payload) {
         return [payload.soundClass ? String(payload.soundClass) : "", payload.soundFile ? String(payload.soundFile) : "",
                 payload.duration | 0];
@@ -620,6 +649,18 @@ Item {
     function _hostMessage(appId, uid, type, payload) {
         if (appId === justTypeAppId && (type === "launch" || type === "open"))
             Qt.callLater(source.justTypeDismissed);
+        // A link opened for a card from another page (openLink): as if
+        // that card's page had asked.
+        if ((type === "launch" || type === "open") && uid === "" && payload && typeof payload.from === "string" && _windows[payload.from]) {
+            uid = payload.from;
+            appId = cards.get(cardIndex(uid)) ? cards.get(cardIndex(uid)).appId : appId;
+        }
+        if (type === "open") {
+            // No app opens it (the application manager answered "No
+            // handler for ..."): the user hears so, rather than nothing.
+            bannerRequested(appId, qsTr("No app can open this link"), _iconUrl("", appId), "", "", "", 0, "");
+            return;
+        }
         if (type === "launch" && payload.id) {
             // A launch point whose params match wins (e.g. {id: settings,
             // params: {page: "wifi"}} opens the Wi-Fi card).
@@ -738,7 +779,8 @@ Item {
             _assistantRequest(appId, uid, payload || {});
         } else if (type === "lunaReply") {
             var cb = _lunaCallbacks[payload.id];
-            delete _lunaCallbacks[payload.id];
+            if (!payload.keep)
+                delete _lunaCallbacks[payload.id];
             if (cb)
                 cb(payload.reply);
         } else if (type === "preferences") {
@@ -751,6 +793,10 @@ Item {
             shutdownRequested(payload.reason ? String(payload.reason) : "");
         } else if (type === "restartUi") {
             restartUiRequested();
+        } else if (type === "mediaKey") {
+            mediaKeyRequested(String(payload.key || ""));
+        } else if (type === "takeScreenshot") {
+            screenshotRequested();
         } else if (type === "erase") {
             // The device was erased (com.palm.storage erase/EraseAll, Wipe;
             // Settings' Full Erase): it restarts into First Use.
@@ -825,6 +871,10 @@ Item {
     // Luna Restart (org.webosphoenix.system/restartUi).
     signal shutdownRequested(string reason)
     signal restartUiRequested
+    // A media key pressed by a service (org.webosphoenix.system/mediaKey),
+    // and a screen capture asked for (com.palm.systemmanager/takeScreenShot).
+    signal mediaKeyRequested(string key)
+    signal screenshotRequested
     // The device was erased; it restarts into First Use.
     signal eraseRequested
     // USB drive mode was asked for (com.palm.storage diskmode/enterMSM).
@@ -1644,6 +1694,22 @@ Item {
             + " { cancelled: function () { return done; }, onCancel: null }); })()");
     }
 
+    // A subscription ({subscribe: true}): callback hears every reply.
+    function lunaSubscribe(uri, params, callback) {
+        var page = _headless["com.palm.systemui"] || _webPages()[0];
+        if (!page) {
+            callback(null);
+            return;
+        }
+        var id = _nextLunaCall++;
+        _lunaCallbacks[id] = callback;
+        page.runScript("(function () { var id = " + id + ";"
+            + " function back(r) { if (window.phoenixHost) phoenixHost.postToHost('lunaReply', { id: id, reply: r, keep: true }); }"
+            + " if (!window.__phoenixRuntime) return back(null);"
+            + " __phoenixRuntime.dispatch(" + JSON.stringify(uri) + ", " + JSON.stringify(params || {}) + ", back,"
+            + " { cancelled: function () { return false; }, onCancel: null }); })()");
+    }
+
     function _webPages() {
         var out = [];
         for (var u in _windows)
@@ -1680,26 +1746,50 @@ Item {
     }
 
     // A screen capture for the runtime to save (runtime.saveScreenshot:
-    // /media/internal/screencaptures, the media index, its notification).
-    // One page saves it; with none running it waits for the next.
+    // /media/internal/screencaptures, the media index, its notification
+    // with {path, capture: captureId}). One page saves it: the system UI
+    // page, which runs as long as the shell does, else another app page
+    // that has the runtime. Never a site (an https:// web app has no
+    // runtime: the capture was lost when one was the first page), and a
+    // page that turns out not to have it (still loading) passes it on.
+    // With none running it waits for the next page that loads.
     property var _pendingCaptures: []
-    function saveScreenshot(dataUrl, appTitle) {
-        var js = "window.__phoenixRuntime && __phoenixRuntime.saveScreenshot && __phoenixRuntime.saveScreenshot("
-            + JSON.stringify({ data: String(dataUrl), app: appTitle || "", time: Date.now() }) + ")";
-        var pages = _webPages();
+    function saveScreenshot(dataUrl, appTitle, captureId) {
+        var js = "!!(window.__phoenixRuntime && __phoenixRuntime.saveScreenshot && (__phoenixRuntime.saveScreenshot("
+            + JSON.stringify({ data: String(dataUrl), app: appTitle || "", time: Date.now(), capture: captureId || "" })
+            + "), true))";
+        return _saveCaptureOn(_capturePages(), js);
+    }
+    function _capturePages() {
+        var pages = _webPages().filter(function(p) { return !p.site; });
+        var writer = _writerPage();
+        if (writer && pages.indexOf(writer) > 0) {
+            pages.splice(pages.indexOf(writer), 1);
+            pages.unshift(writer);
+        }
+        return pages;
+    }
+    function _saveCaptureOn(pages, js) {
         if (pages.length === 0) {
             _pendingCaptures.push(js);
             return false;
         }
-        pages[0].runScript(js);
+        pages[0].runScript(js, function(saved) {
+            if (saved !== true)
+                source._saveCaptureOn(pages.slice(1), js);
+        });
         return true;
     }
 
     function _pageLoaded(win) {
         if (win === _systemUiPage)
             systemUiLoaded = true;
-        while (_pendingCaptures.length > 0)
-            win.runScript(_pendingCaptures.shift());
+        if (!win.site && _pendingCaptures.length > 0) {
+            var captures = _pendingCaptures;
+            _pendingCaptures = [];
+            for (var c = 0; c < captures.length; ++c)
+                _saveCaptureOn([win], captures[c]);
+        }
         var writer = _writerPage();
         var writes = !writer || win === writer;
         if (_pendingStatus) {
@@ -1742,6 +1832,13 @@ Item {
             return "";
         if (!params || Object.keys(params).length === 0)
             return info.main;
+        // A site (an installed web app) has no runtime to read launch params:
+        // launched for a page of its own ({target}, a link to it) it opens
+        // that page, else its start page.
+        if (/^https?:/i.test(String(info.main))) {
+            var t = typeof params.target === "string" ? params.target : "";
+            return t !== "" && Links.inScope(t, Links.scopeOf(info.main, info.scope || "")) ? t : info.main;
+        }
         return String(info.main).split("?")[0] + "?launchParams=" + encodeURIComponent(JSON.stringify(params));
     }
 

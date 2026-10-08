@@ -77,6 +77,9 @@ Item {
                     added.push(msg({ role: "assistant", text: "That didn't work: no torch.", command: "flashlight", status: "failed" }));
                 else if (/^hello/.test(params.text))
                     added.push(msg({ role: "assistant", text: "Hello!" }));
+                else if (/^add a meeting/.test(params.text))
+                    added.push(msg({ role: "assistant", text: "Added \u201cMeeting with Sam\u201d to your calendar, tomorrow at 3:00 PM.", via: "commands",
+                                     command: "event", status: "done", choices: [{ id: "open", label: "Open Calendar" }] }));
                 else if (/odyssey/.test(params.text))
                     added.push(msg({ role: "assistant", text: "I can't do that on the phone.", choices: [{ id: "web", label: "Search the web" }] }));
                 else
@@ -113,7 +116,8 @@ Item {
         property var poses: []
         property real maxLift: 0
         property real minFlap: 1
-        function reset() { poses = []; maxLift = 0; minFlap = 1; }
+        property real shutAt: 0
+        function reset() { poses = []; maxLift = 0; minFlap = 1; shutAt = 0; }
         function had(list) {
             // list in this order (others between allowed).
             var i = 0;
@@ -125,6 +129,8 @@ Item {
     Connections {
         target: root.overlay
         function onBirdPoseChanged() { birdSeen.poses = birdSeen.poses.concat([root.overlay.birdPose]); }
+        // When the panel ended up shut.
+        function onShownChanged() { if (root.overlay.shown === 0) birdSeen.shutAt = Date.now(); }
     }
     Connections {
         target: root.overlay ? findBird() : null
@@ -194,17 +200,20 @@ Item {
         function launcherButton() {
             return ql.mapToItem(shell, ql.slotCentre(ql.pinned.length), Theme.quickLaunchIconY + ql.iconSize / 2);
         }
-        function hold(p) {
+        // A press held until `held` says the hold took: waited for as it
+        // happens, since a slow machine runs the hold's timer late (a fixed
+        // wait may release first, and the press counts as a tap).
+        function hold(p, held) {
             mousePress(shell, p.x, p.y);
-            wait(Theme.iconMenuHoldInterval + 150);
+            tryVerify(held, 5000, "the hold taken");
             mouseRelease(shell, p.x, p.y);
         }
+        function opened() { return overlay.open; }
         function openByHold() {
             // The dock back in place (it slides away under the keyboard and
             // back as the keyboard goes), so the hold lands on the button.
             tryVerify(function () { return !shell.keyboardOpen && ql.visible && ql.opacity === 1 && ql.shownProgress === 1; }, 3000, "the dock in place");
-            hold(launcherButton());
-            tryCompare(overlay, "open", true, 2000);
+            hold(launcherButton(), opened);
             // Grown out of the button, the backdrop faded in.
             tryCompare(overlay, "shown", 1, 3000);
         }
@@ -262,8 +271,7 @@ Item {
             shell.closeAssistant();
             ql.launcherToggled();
             tryCompare(shell, "launcherOpen", true, 2000);
-            hold(launcherButton());
-            tryCompare(overlay, "open", true, 2000);
+            hold(launcherButton(), opened);
         }
 
         function test_backEscapeAndATapOutsideCloseIt() {
@@ -343,6 +351,23 @@ Item {
             mouseClick(web, web.width / 2, web.height / 2);
             tryVerify(function () { return fake.calls.indexOf("choose web") >= 0; }, 2000);
             // The browser comes up: the view gets out of its way.
+            tryCompare(overlay, "open", false, 2000);
+        }
+
+        // A command done that offers its app ("Open Calendar"): the bird
+        // cheers (no shrug), and the button opens the app, the view out of
+        // its way.
+        function test_doneOffersItsApp() {
+            openByHold();
+            birdSeen.reset();
+            type("add a meeting with Sam tomorrow at 3");
+            var row = arrived("Added \u201cMeeting with Sam\u201d to your calendar, tomorrow at 3:00 PM.");
+            poseIs("idle");
+            verify(birdSeen.had(["done"]) && birdSeen.poses.indexOf("confused") < 0, "a cheer, no shrug: " + birdSeen.poses);
+            var open = findChild(row, "assistantChoice-open");
+            verify(open && open.visible);
+            mouseClick(open, open.width / 2, open.height / 2);
+            tryVerify(function () { return fake.calls.indexOf("choose open") >= 0; }, 2000);
             tryCompare(overlay, "open", false, 2000);
         }
 
@@ -426,12 +451,16 @@ Item {
             var panel = findChild(overlay, "assistantPanel");
             compare(panel.opacity, 1);
             compare(findChild(overlay, "assistantBackdrop").opacity, 1);
+            birdSeen.reset();
+            var t0 = Date.now();
             keyClick(Qt.Key_Escape);
             compare(overlay.open, false);
-            verify(overlay.visible);
-            tryVerify(function () { return overlay.shown > 0 && overlay.shown < 1; }, 2000, "closing");
             tryCompare(overlay, "visible", false, 3000);
             compare(overlay.shown, 0);
+            // It took its time closing (when it shut, recorded as it came: an
+            // animation never ends before its duration, however a slow
+            // machine draws it in between).
+            verify(birdSeen.shutAt - t0 >= Theme.launcherDuration - 20, "closing: " + (birdSeen.shutAt - t0) + " ms");
         }
 
         // ---- The bird ----------------------------------------------------------------
@@ -448,8 +477,7 @@ Item {
             // Asleep before it opens; it rises so with the panel.
             compare(overlay.birdPose, "asleep");
             birdSeen.reset();
-            hold(p);
-            tryCompare(overlay, "open", true, 2000);
+            hold(p, opened);
             poseIs("idle");
             verify(birdSeen.had(["hello", "idle"]), "hello, then idle: " + birdSeen.poses);
             // At the top in the middle of the panel, 72 to 104 px, over the
@@ -518,6 +546,7 @@ Item {
             poseIs("idle");
             verify(birdSeen.had(["thinking", "shy", "idle"]), "oops: " + birdSeen.poses);
             compare(overlay.outcomeOf([{ role: "assistant", status: "failed" }]), "failed");
+            compare(overlay.outcomeOf([{ role: "assistant", status: "done", command: "event", choices: [{ id: "open", label: "Open Calendar" }] }]), "done");
             compare(overlay.outcomeOf([{ role: "assistant", text: "Hello!" }]), "answer");
             compare(overlay.outcomeOf([]), "answer");
         }
@@ -566,9 +595,13 @@ Item {
             }, 2000, "its feet on the field's bottom line");
         }
 
+        SignalSpy { id: dockHeld; signalName: "pressAndHold" }
         function test_offDoesNothing() {
             fake.enabled = false;
-            hold(launcherButton());
+            dockHeld.target = findChild(ql, "quickLaunchMouse");
+            dockHeld.clear();
+            // Held until the dock takes it as a hold (not a tap, which opens the launcher).
+            hold(launcherButton(), function () { return dockHeld.count > 0; });
             wait(300);
             compare(overlay.open, false);
             compare(shell.launcherOpen, false);

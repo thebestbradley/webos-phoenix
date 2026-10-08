@@ -33,6 +33,25 @@
 //              (phoenix-sim --microphone-file), one per recording in turn
 //              (the last one again after that), each followed by quiet; for
 //              testing on computers without a microphone
+//
+// The assistant's wake word ("Hey Phoenix"; docs/AI-AND-MCP.md, Voice):
+//   wakeCommand  the spotter, services/wakeword's phoenix-wakeword with its
+//                model; it reads the microphone (16 kHz mono 16-bit) on its
+//                input and writes a JSON line each time it hears the phrase
+//   wakeWord     the spotter runs (its model loaded), ready to stand by
+//   standby      listen for it now: the microphone stays open between
+//                recordings and goes to the spotter, nowhere else (nothing
+//                is kept but the last few seconds, in memory)
+//   standingBy   the microphone is open for it (the status bar's subtle
+//                microphone)
+//   wakeHeard()  it was heard. A start() from its handler records on from
+//                the start of the phrase, so "Hey Phoenix, set a timer" in
+//                one breath keeps "set a timer" (the listener drops the
+//                phrase from the transcript). With inputFiles, standing by
+//                plays the next file not yet played (else quiet), and a
+//                recording that follows the wake word goes on in the same
+//                file; hear(file) plays a WAV into the microphone now (the
+//                simulator's "Say 'Hey Phoenix'")
 
 #pragma once
 
@@ -60,6 +79,12 @@ class Dictation : public QObject
     Q_PROPERTY(QStringList inputFiles READ inputFiles WRITE setInputFiles NOTIFY inputFilesChanged)
     Q_PROPERTY(QString owner READ owner WRITE setOwner NOTIFY ownerChanged)
     Q_PROPERTY(qreal loudness READ loudness NOTIFY loudnessChanged)
+    Q_PROPERTY(QStringList wakeCommand READ wakeCommand WRITE setWakeCommand NOTIFY wakeCommandChanged)
+    Q_PROPERTY(bool wakeAvailable READ wakeAvailable NOTIFY wakeCommandChanged)
+    Q_PROPERTY(bool wakeWord READ wakeWord WRITE setWakeWord NOTIFY wakeWordChanged)
+    Q_PROPERTY(bool standby READ standby WRITE setStandby NOTIFY standbyChanged)
+    Q_PROPERTY(bool standingBy READ standingBy NOTIFY stateChanged)
+    Q_PROPERTY(QString wakeError READ wakeError NOTIFY wakeErrorChanged)
 
 public:
     explicit Dictation(QObject *parent = nullptr);
@@ -81,6 +106,19 @@ public:
     QString owner() const { return m_owner; }
     void setOwner(const QString &o) { if (o != m_owner) { m_owner = o; emit ownerChanged(); } }
     qreal loudness() const { return m_loudness; }
+    QStringList wakeCommand() const { return m_wakeCommand; }
+    void setWakeCommand(const QStringList &c);
+    bool wakeAvailable() const { return !m_wakeCommand.isEmpty() && (available() || !m_inputFiles.isEmpty()); }
+    bool wakeWord() const { return m_wakeWord; }
+    void setWakeWord(bool w);
+    bool standby() const { return m_standby; }
+    void setStandby(bool s);
+    bool standingBy() const { return m_capturing && !m_listening && standbyWanted(); }
+    QString wakeError() const { return m_wakeError; }
+
+    // Plays a WAV file into the microphone from now (over it), while it is
+    // open; false when it is not, or the file is not a WAV recording.
+    Q_INVOKABLE bool hear(const QString &file);
 
     Q_INVOKABLE void start();
     Q_INVOKABLE void stop();
@@ -131,9 +169,23 @@ signals:
     void inputFilesChanged();
     void ownerChanged();
     void loudnessChanged();
+    void wakeCommandChanged();
+    void wakeWordChanged();
+    void standbyChanged();
+    void wakeErrorChanged();
+    void wakeHeard(const QString &heard);
     void transcribed(const QString &text, const QString &error);
 
 private:
+    bool openCapture(bool standby, QString *error);
+    bool loadFile(QString *error);
+    void closeCapture();
+    void updateStandby();
+    bool standbyWanted() const { return m_wakeWord && m_standby && wakeAvailable() && m_wakeError.isEmpty(); }
+    void startSpotter();
+    void stopSpotter();
+    void spotterOutput();
+    void setWakeError(const QString &e);
     void finishRecording(bool transcribe);
     void runTranscriber(const QString &file, bool removeAfter);
     void recorded(const QByteArray &chunk);
@@ -153,7 +205,21 @@ private:
     qsizetype m_filePos = 0;
     bool m_listening = false;
     bool m_busy = false;
-    QByteArray m_pcm;            // as recorded (m_channels, m_rate, m_float)
+    QByteArray m_pcm;            // the recording, 16 kHz mono 16-bit
+    bool m_capturing = false;    // the microphone (or file) is open
+    bool m_fileDone = true;      // the file being played has ended (quiet follows)
+    QByteArray m_inject;         // hear(): 16 kHz mono 16-bit, mixed in
+    QStringList m_wakeCommand;
+    bool m_wakeWord = false;
+    bool m_standby = false;
+    QString m_wakeError;
+    QProcess *m_spotter = nullptr;
+    QByteArray m_spotterLine;
+    qint64 m_spotterFed = 0;     // samples written to the spotter (its clock)
+    QByteArray m_ring;           // the last seconds it was given
+    qint64 m_ringStart = 0;      // the sample (its clock) at m_ring's start
+    QByteArray m_preroll;        // after the phrase, for a start() in wakeHeard
+    bool m_inWake = false;
     int m_channels = 1;
     int m_rate = 16000;
     bool m_float = false;

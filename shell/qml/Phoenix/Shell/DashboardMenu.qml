@@ -181,6 +181,20 @@ Item {
         readonly property alias swipeX: content.x
         readonly property bool removing: remove.running
 
+        // A trackpad's swipe (the menu's TrackpadSwipe): as the finger's
+        // drag below, rightwards only, and its release (no flick).
+        function wheelMove(x) {
+            snap.stop();
+            if (!(menu.drawer && menu.drawer.selecting))
+                content.x = Math.max(0, x);
+        }
+        function wheelRelease() {
+            if (!row.persistent && Math.abs(content.x) > content.width * Theme.dashboardDismissRatio)
+                remove.start();
+            else if (content.x !== 0)
+                snap.start();
+        }
+
         // The next row down, whose top closes the gap under this one.
         readonly property Item below: {
             var deps = menu.rowsRevision;
@@ -478,6 +492,47 @@ Item {
                     onItemRemoved: Qt.callLater(function() { menu.rowsRevision++; })
                 }
             }
+        }
+    }
+
+    // A trackpad's two-finger swipe sideways on a row moves it as a finger
+    // does and, once the fingers lift, dismisses it past a quarter of the
+    // width or puts it back; up or down it scrolls the list, momentum and
+    // all, within its ends. A mouse wheel scrolls it (Phoenix).
+    TrackpadSwipe {
+        objectName: "dashboardMenuWheel"
+        anchors.fill: clipRect
+        z: 5
+        enabled: menu.open
+        verticalMomentum: true
+        property Item row: null
+        onNotched: (dx, dy) => scrollBy(flick, dy / 120 * menu.rowHeight)
+        onStarted: (x, y) => {
+            row = null;
+            if (axis !== "h") {
+                if (flick.contentHeight <= flick.height)
+                    axis = "done";
+                return;
+            }
+            var cy = y + flick.contentY;
+            for (var i = 0; i < rows.count; ++i) {
+                var r = rows.itemAt(i);
+                if (r && !r.removing && x >= r.x && x < r.x + r.width && cy >= r.y && cy < r.y + menu.rowHeight)
+                    row = r;
+            }
+            if (!row)
+                axis = "done";
+        }
+        onMoved: (dx, dy) => {
+            if (axis === "h")
+                row.wheelMove(sumX);
+            else
+                scrollBy(flick, dy);
+        }
+        onEnded: {
+            if (axis === "h" && row)
+                row.wheelRelease();
+            row = null;
         }
     }
 

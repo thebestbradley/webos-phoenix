@@ -140,6 +140,27 @@ async function main() {
         const list = await luna("luna://com.webos.service.mediaindexer/getImageList", { uri: "storage:///media/internal" });
         check(list.imageList.results.some((i) => i.file_path === want), "indexed: Photos shows it");
 
+        // The capture's id goes back in the notification: the shell's thumbnail opens that file.
+        const when2 = new Date(2026, 9, 1, 21, 6, 0).getTime();
+        await page.evaluate(([d, t]) => window.__phoenixRuntime.saveScreenshot({ data: d, app: "Email", time: t, capture: "capture-7" }), [data, when2]);
+        const note2 = host.filter((m) => m.type === "notification" && m.payload.appId === APP).pop();
+        check(note2 && note2.payload.params.capture === "capture-7", "the notification names the shell's capture");
+
+        // ---- Opened before it is stored --------------------------------------------------------------
+        // A tap on the thumbnail can open the preview on a capture another page is still storing (a
+        // big one takes a moment): the preview waits for it instead of saying it is gone.
+        const late = "/media/internal/screencaptures/Email 2026-10-01 at 21.07.00.png";
+        await page.goto(appUrl({ path: late }));
+        await page.waitForTimeout(800);
+        check(await page.locator("[data-testid=missing]").count() === 0, "not stored yet: not \"no longer on the device\"");
+        await page.evaluate(([d, t]) => window.__phoenixRuntime.saveScreenshot({ data: d, app: "Email", time: t }),
+                            [data, new Date(2026, 9, 1, 21, 7, 0).getTime()]);
+        await page.waitForSelector("[data-testid=preview][data-image-width='320']", { timeout: 5000 });
+        check(true, "shown once it is stored");
+        await page.goto(appUrl({ path: "/media/internal/screencaptures/Never saved.png" }));
+        await page.waitForSelector("[data-testid=missing]", { timeout: 8000 });
+        check(true, "a capture that never comes: gone, after a few seconds");
+
         // ---- The preview ------------------------------------------------------------------------------
         await page.goto(appUrl({ path: want }));
         await page.waitForSelector("[data-testid=preview][data-image-width='320']");

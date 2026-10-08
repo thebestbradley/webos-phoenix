@@ -134,6 +134,90 @@ Item {
                 windows.dismissNotification(0);
         }
 
+        // The tab behind a status bar group while its menu is open holds
+        // every icon of the group on its solid part: past each of its
+        // caps (the art's shadowed edge) by the padding, on both sides, at
+        // any count of icons, turned either way and at 1x and 2x.
+        function checkTabHolds(tab, icons, what) {
+            verify(tab.visible && tab.opacity === 1, what + ": the tab shows");
+            // In the UI's own frame (turned with it in portrait).
+            var ui = shell.uiRoot;
+            var t = tab.mapToItem(ui, 0, 0);
+            var room = Theme.statusBarTabCap + Theme.statusBarTabPadding;
+            verify(icons.length > 0, what + ": icons");
+            for (var i = 0; i < icons.length; ++i) {
+                var ic = icons[i];
+                var p = ic.mapToItem(ui, 0, 0);
+                var name = what + " " + (ic.objectName || ic.toString());
+                verify(p.x - t.x >= room - 0.5, name + ": left of it " + (p.x - t.x) + " >= " + room);
+                verify(t.x + tab.width - (p.x + ic.width) >= room - 0.5,
+                       name + ": right of it " + (t.x + tab.width - p.x - ic.width) + " >= " + room);
+                verify(p.y >= t.y - 0.5 && p.y + ic.height <= t.y + tab.height + 0.5, name + ": within its height");
+            }
+        }
+        function shownChildren(row) {
+            var out = [];
+            for (var i = 0; i < row.children.length; ++i) {
+                var c = row.children[i];
+                if (c.visible && c.width > 0 && c.opacity > 0)
+                    out.push(c);
+            }
+            return out;
+        }
+        function test_menuTabsHoldTheirIcons_data() {
+            return [
+                { tag: "1x landscape, few icons", density: 1, turn: "up", extras: false, notes: 1 },
+                { tag: "1x landscape, many icons", density: 1, turn: "up", extras: true, notes: 12 },
+                { tag: "1x portrait", density: 1, turn: "right", extras: true, notes: 3 },
+                { tag: "2x landscape", density: 2, turn: "up", extras: false, notes: 3 },
+                { tag: "2x portrait, many icons", density: 2, turn: "right", extras: true, notes: 2 },
+            ];
+        }
+        function test_menuTabsHoldTheirIcons(data) {
+            sys.rotationLocked = false;
+            shell.density = data.density;
+            sys.deviceOrientation = data.turn;
+            tryCompare(shell, "uiOrientation", data.turn, 3000);
+            tryVerify(function() { return !shell.rotator.rotating; }, 3000);
+            sys.muted = data.extras;
+            sys.rotationLocked = data.extras;
+            sys.bluetoothOn = data.extras;
+            var bar = findChild(shell, "statusBar");
+            var row = findChild(bar, "wifiIcon").parent;
+            // The icons slide in over a second (statusBarItemSlideDuration).
+            wait(Theme.statusBarItemSlideDuration + 100);
+            shell.openSystemMenu();
+            var tab = findChild(bar, "systemMenuTab");
+            tryCompare(tab, "opacity", 1, 1000);
+            var icons = shownChildren(row);
+            if (data.extras)
+                verify(icons.length >= 6, "the extra icons show: " + icons.length);
+            checkTabHolds(tab, icons, "system menu");
+            findChild(shell, "systemMenu").open = false;
+
+            for (var i = 0; i < data.notes; ++i)
+                windows.notify("org.webosphoenix.messaging", "Palm Pre", "Hi " + i);
+            shell.notifications.bannerActive = false;
+            var notes = findChild(shell, "tabletNotificationIcons");
+            tryVerify(function() { return notes.visible; }, 3000);
+            shell.notifications.dashboardOpen = true;
+            var ntab = findChild(shell, "notificationTab");
+            tryCompare(ntab, "opacity", 1, 1000);
+            // The icons the row shows (past ten the leftmost is cut off:
+            // the clipped area is what the tab must hold).
+            checkTabHolds(ntab, [notes], "notification");
+            var shown = shownChildren(notes.children[0]).filter(function (c) { return c.width > 0; });
+            verify(shown.length >= Math.min(data.notes, 10));
+
+            shell.notifications.dashboardOpen = false;
+            sys.muted = false;
+            sys.rotationLocked = false;
+            sys.bluetoothOn = false;
+            shell.density = 1;
+            sys.deviceOrientation = "up";
+            tryCompare(shell, "uiOrientation", "up", 3000);
+        }
+
         // Turned to portrait (the TouchPad held with its home button down):
         // still the tablet layout, laid out 768 wide; the bottom-edge flick
         // comes from the UI's bottom edge, wherever that is on the screen

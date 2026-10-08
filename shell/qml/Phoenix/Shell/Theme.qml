@@ -144,6 +144,15 @@ QtObject {
     readonly property int statusBarColorChangeDuration: 300
     readonly property int statusBarItemSlideDuration: 1000           // lunaAnimations.conf:122-123 (curve 3 InOutQuad on the width)
     readonly property int statusBarMenuFadeDuration: 200             // lunaAnimations.conf:124-125 (linear)
+    // Tablets: the drop-down tab behind a status bar group while its menu
+    // is open (status-bar-menu-dropdown-tab.png) has 11 px caps, the
+    // tab's edge with its shadow (StatusBarItemGroup.cpp:358 margin): the
+    // art is solid only from 9 px in. The original put the group's
+    // outermost item right at the cap's end (:362-366), so an icon could
+    // touch the shadow; Phoenix keeps a few pixels of the tab around every
+    // icon on both sides.
+    readonly property int statusBarTabCap: px(11)
+    readonly property int statusBarTabPadding: px(4)
     readonly property int statusBarClockFontSize: px(15)             // StatusBarClock.cpp:34
     // Phones: solid black (StatusBar.cpp:767). Tablet: tiled art over #515558 (StatusBar.cpp:47).
     readonly property color statusBarFill: tablet ? "#515558" : "#000000"
@@ -348,6 +357,14 @@ QtObject {
     readonly property int lockDashboardTopPadding: px(1)             // LockWindow.cpp:2615
     readonly property int lockDashboardBottomPadding: px(3)          // LockWindow.cpp:2614
     readonly property int alertFadeDuration: 400                     // DashboardWindowManager.cpp:559,589
+    // Phones: room above a web page's popup alert (luna-systemui's Low
+    // Battery, an alarm, a reminder) in the negative space. The phone's alert
+    // container put the window at its very top (DashboardWindowManager.cpp:
+    // 244, 1239-1240) and luna-systemui's content has no top margin
+    // (notifications.css:13-15, "margin: 0 10px 10px"), so its title sat
+    // against the app's bottom edge. 10 px, as the shell's own alerts have
+    // above their titles (6 px margin + 4 px, uiComponents/MemoryAlert).
+    readonly property int phoneAlertTopPadding: px(10)
     readonly property int positiveSpaceDuration: 400                 // conf/lunaAnimations.conf:73-74, curve 6 OutCubic
     readonly property real dashboardDismissRatio: 0.25               // DashboardWindowContainer.cpp:350-363
     readonly property int dashboardTopPadding: px(10)                // DashboardWindowContainer.cpp:107 (phones)

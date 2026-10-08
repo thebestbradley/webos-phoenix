@@ -260,7 +260,8 @@ describe("installing and opening files (simulated)", () => {
         await openWith.launch("org.webosphoenix.photos", "/media/internal/Pictures/aurora.jpg");
         expect(hostMessages.find((m) => m.type === "launch")?.payload).toMatchObject(
             { id: "org.webosphoenix.photos", params: { target: "/media/internal/Pictures/aurora.jpg" } });
-        await openWith.open("/media/internal/Documents/Trip notes.md");
+        // No app opens it: open fails, "No handler for ..." (as on webOS), and the shell hears of it.
+        expect(await openWith.open("/media/internal/Documents/Trip notes.md").catch((e) => e.message)).toMatch(/No handler for file:/);
         expect(hostMessages.find((m) => m.type === "open")?.payload.target).toBe("file:///media/internal/Documents/Trip%20notes.md");
     });
 });

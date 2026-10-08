@@ -7,7 +7,8 @@
 // tools/serve-rootfs.py's installer: launch points apps add and remove
 // (addLaunchPoint, removeLaunchPoint, launchPointChanges), getSizeOfApps,
 // dock mode launch points, the handler registry (redirect and resource
-// handlers, swapped and removed), install progress for the launcher
+// handlers, swapped and removed; web addresses before whole schemes, an
+// installed web app's site, open's error for a link nothing opens), install progress for the launcher
 // (installStatus host messages, installProgressQuery), notifyOnChange,
 // queryInstallCapacity, getUserInstalledAppSizes and revoke (an Ed25519
 // signature by a trusted catalog key), in headless Chromium.
@@ -128,6 +129,29 @@ async function main() {
         check((await luna(AM + "swapRedirectHandler", { url: "^osm:", index: all.redirectHandlers.alternates[0].index })).returnValue, "swapRedirectHandler");
         check((await luna(AM + "getHandlerForUrl", { url: "osm:52.5,13.4" })).appId === "com.palm.app.browser", "the swapped one is used");
         check((await luna(AM + "swapRedirectHandler", { url: "^osm:", index: 99999 })).errorCode === "swap failed (incorrect index for url, perhaps?)", "a wrong index is refused");
+        // A web address handler wins over the browser's whole scheme, though
+        // the browser's comes first in the list (ApplicationManagerService.cpp:
+        // redirects at :1320, scheme handlers at :1428).
+        check((await luna(AM + "addRedirectHandler", { appId: "org.webosphoenix.maps", urlPattern: "^https?://www\\.openstreetmap\\.org/", schemeForm: false })).returnValue,
+              "addRedirectHandler: a web address");
+        check((await luna(AM + "getHandlerForUrl", { url: "https://www.openstreetmap.org/#map=12/52.5/13.4" })).appId === "org.webosphoenix.maps",
+              "a web address handler wins over the browser's ^https?:");
+        all = await luna(AM + "listAllHandlersForUrl", { url: "https://www.openstreetmap.org/" });
+        check(all.redirectHandlers.activeHandler.url === "^https?://www\\.openstreetmap\\.org/" && !all.redirectHandlers.alternates,
+              "listAllHandlersForUrl: the web address's own handlers");
+        check((await luna(AM + "getHandlerForUrl", { url: "https://maps.google.com/?q=Berlin" })).appId === "org.webosphoenix.maps"
+              && (await luna(AM + "getHandlerForUrl", { url: "https://www.google.com/maps/place/Berlin" })).appId === "org.webosphoenix.maps"
+              && (await luna(AM + "getHandlerForUrl", { url: "https://www.google.com/search?q=maps" })).appId === "com.palm.app.browser",
+              "Google Maps links are Maps' (command-resource-handlers.json); other Google pages the browser's");
+        // open {target}: the app for it, with the link as {target}.
+        host.length = 0;
+        check((await luna(AM + "open", { target: "tel:+15550100" })).returnValue, "open tel:");
+        check(host.some((m) => m.type === "launch" && m.payload.id === "org.webosphoenix.phone" && m.payload.params.target === "tel:+15550100"),
+              "tel: launches Phone with the link");
+        host.length = 0;
+        const nothing = await luna(AM + "open", { target: "nosuchscheme:42" });
+        check(nothing.returnValue === false && nothing.errorText === "No handler for nosuchscheme:42", "open: a link nothing opens fails, as on webOS");
+        check(host.some((m) => m.type === "open" && m.payload.target === "nosuchscheme:42"), "and the shell hears of it (it tells the user)");
 
         // ---- Resource handlers ------------------------------------------------------------------
         check((await luna(AM + "mimeTypeForExtension", { extension: "mp3" })).mimeType === "audio/mpeg", "mimeTypeForExtension");
@@ -164,6 +188,30 @@ async function main() {
         const mine = appSizes.apps.find((a) => a.appName === "com.example.notes");
         check(!!mine && mine.size > 0 && appSizes.totalSize >= mine.size, "getUserInstalledAppSizes: KB per app the user installed");
         check((await launcherApps()).find((a) => a.id === "com.example.notes").installed === true, "the launcher knows it was installed by the user (Downloads)");
+
+        // ---- An installed web app handles its own site -------------------------------------------
+        const site = Buffer.from(await servers.webApp("com.example.tunes", "1.0.0", {
+            title: "Tunes", appinfo: { main: "https://m.tunes.example/home", phoenix: { pwa: { scope: "https://m.tunes.example/" } } } }));
+        await page.evaluate((b64) => __phoenixRuntime.tmpFiles.write("/tmp/tunes.ipk", Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))), site.toString("base64"));
+        await subscribe("tunes", "luna://com.webos.appInstallService/install", { id: "com.example.tunes", ipkUrl: "/tmp/tunes.ipk" });
+        await page.waitForFunction(() => window.__subs.tunes.some((r) => r.statusValue === 30), null, { timeout: 15000 });
+        await page.waitForTimeout(200);
+        check((await luna(AM + "getHandlerForUrl", { url: "https://www.tunes.example/album/7" })).appId === "com.example.tunes"
+              && (await luna(AM + "getHandlerForUrl", { url: "http://m.tunes.example/" })).appId === "com.example.tunes",
+              "a link to an installed web app's site is the web app's (its scope, with or without www. / m.)");
+        check((await luna(AM + "getHandlerForUrl", { url: "https://tunes.example.org/" })).appId === "com.palm.app.browser",
+              "a site that only looks like it is the browser's");
+        check((await luna(AM + "listRedirectHandlers", {})).redirectHandlers.some((h) => h.appId === "com.example.tunes" && h.appName === "Tunes" && !h.schemeForm),
+              "listRedirectHandlers lists the web app's site");
+        host.length = 0;
+        await luna(AM + "open", { target: "https://m.tunes.example/album/7" });
+        check(host.some((m) => m.type === "launch" && m.payload.id === "com.example.tunes" && m.payload.params.target === "https://m.tunes.example/album/7"),
+              "open: the web app is launched with the link");
+        await subscribe("untunes", "luna://com.webos.appInstallService/remove", { id: "com.example.tunes" });
+        await page.waitForFunction(() => !__phoenixRuntime.redirectHandlerFor("https://m.tunes.example/").startsWith("com.example"), null, { timeout: 10000 })
+            .catch(() => null);
+        check((await luna(AM + "getHandlerForUrl", { url: "https://m.tunes.example/album/7" })).appId === "com.palm.app.browser",
+              "removed, its site is the browser's again");
 
         // ---- Capacity ----------------------------------------------------------------------------------
         const cap = await luna(AI + "queryInstallCapacity", { packageId: "com.example.other", size: "300", uncompressedSize: "1200" });

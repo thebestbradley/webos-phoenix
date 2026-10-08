@@ -24,8 +24,12 @@
 // "Assistant": in the page, HTTP through the host's proxy, the shared store).
 //
 // createAssistantService(deps) -> methods, each (params) -> Promise<reply>:
-//   ask {text, threadId?, newThread?, speak?}  -> {thread, messages}
-//   choose {threadId, messageId, choice: "cloud:<id>" | "web" | "settings"}
+//   ask {text, threadId?, newThread?, speak?, voice?, locked?}  -> {thread, messages}
+//   vocabulary {} -> {words, prompt}: the wake phrase and contacts' names, and the transcriber's prompt
+//     (voice: spoken, answered aloud with voiceReplies; locked: over the lock
+//     screen, LOCKED_COMMANDS only; "yes" / "no" answer a read-back waiting)
+//   choose {threadId, messageId, choice: "cloud:<id>" | "web" | "settings" | "open"}
+//     ("open": the app a command's answer offers, "Open Calendar")
 //   confirm {threadId, messageId, accept}
 //   threads {} -> {threads, current}; thread {id?} -> {thread, messages}
 //   newThread {} / setCurrent {id} / deleteThread {id} / clearHistory {}
@@ -69,9 +73,16 @@ var DEFAULTS = {
     localModel: "",             // the chosen on-device model (lib/models.js id), "" for none
     defaultProvider: "",        // the cloud provider "Ask ..." offers
     allowCloudControl: false,   // cloud models may run commands
+    voiceReplies: true,         // answers to spoken requests spoken (ask {voice})
+    wakeWord: false,            // the shell listens for "Hey Phoenix" (docs/AI-AND-MCP.md, Voice)
+    wakeWhenLocked: false,      // ... also while the screen is off or locked
     disabledCommands: []        // command ids the assistant must not run
 };
 var HISTORY = 20;               // turns a model sees
+// What a request asked by voice over the lock screen (ask {locked}) may do:
+// nothing that shows what is private, sends, or opens an app.
+var LOCKED_COMMANDS = ["timer", "timerStatus", "timerCancel", "stopwatch", "alarm", "alarmList", "toggle", "media", "volume",
+                       "brightness", "lock", "battery", "weather", "convert", "worldTime", "calculate", "time"];
 
 var MESSAGE_FIELDS = ["id", "threadId", "role", "text", "time", "via", "source", "command", "status", "confirm", "choices", "chosen", "data"];
 
@@ -85,12 +96,13 @@ function createAssistantService(deps) {
     var changed = deps.changed || function () {};
     var caller = deps.caller || function () { return ""; };
     var seq = 0;
+    var lockedAsk = {};         // thread id -> a locked request is being answered
 
     // ---- Settings ----------------------------------------------------------------------------
     function settings() {
         var s = storage.get("assistant:settings") || {}, out = {};
         for (var k in DEFAULTS) out[k] = k in s ? s[k] : DEFAULTS[k];
-        ["enabled", "speak", "allowCloudControl"].forEach(function (b) { out[b] = !!out[b]; });
+        ["enabled", "speak", "allowCloudControl", "voiceReplies", "wakeWord", "wakeWhenLocked"].forEach(function (b) { out[b] = !!out[b]; });
         out.disabledCommands = Array.isArray(out.disabledCommands) ? out.disabledCommands.filter(function (x) { return typeof x === "string"; }) : [];
         if (["metric", "imperial", "auto"].indexOf(out.units) < 0) out.units = "auto";
         return out;
@@ -186,7 +198,7 @@ function createAssistantService(deps) {
             var list = (r && r.launchPoints) || [];
             appsCache = list.filter(function (a) { return a && a.title && (a.id || a.appId); }).map(function (a) {
                 return { id: a.id || a.appId, title: a.title, keywords: a.keywords || [], assistant: a.assistant,
-                         universalSearch: a.universalSearch };
+                         universalSearch: a.universalSearch, params: a.params || null };
             });
             appsAt = now();
             return appsCache;
@@ -210,21 +222,81 @@ function createAssistantService(deps) {
     // ground is read back first: lang grounded()).
     function act(thread, cmd, args, layer, source, asked) {
         var e = env(), s = lang().say;
+        // Asked by voice over the lock screen: only what shows nothing
+        // private and sends nothing; the rest waits for the unlock.
+        if (lockedAsk[thread.id] && LOCKED_COMMANDS.indexOf(cmd.id) < 0)
+            return Promise.resolve([say(thread, s.unlockFirst(), { via: layer, source: source, command: cmd.id, status: "locked" })]);
         if (!allowed(cmd)) return Promise.resolve([say(thread, s.notAllowed(cmd.title), { via: layer, source: source, command: cmd.id, status: "failed" })]);
         return commands.prepare(cmd, args, e).then(function (p) {
+            // Something is missing: asked for, and the next words fill it (route()).
+            if (p.awaiting) return [say(thread, p.reply, { via: layer, source: source, command: cmd.id, data: { awaiting: p.awaiting } })];
             if (p.reply) return [say(thread, p.reply, { via: layer, source: source, command: cmd.id, status: "failed" })];
             var confirm = p.confirm;
             if (!confirm && asked !== undefined && cmd.builtIn && cmd.risk !== "read" && !lang().grounded(cmd.id, p.args, asked))
                 confirm = s.didYouMean(s.describe(cmd.id, p.args, cmd.title));
             if (confirm) return [say(thread, confirm, { via: layer, source: source, command: cmd.id, status: "pending",
                                                         confirm: { command: cmd.id, args: p.args } })];
-            return commands.run(cmd, p.args, e).then(function (r) {
-                return [say(thread, r.text, { via: layer, source: source, command: cmd.id, status: "done", data: r.data })];
-            });
+            return commands.run(cmd, p.args, e).then(function (r) { return [say(thread, r.text, outcome(r, layer, source, cmd))]; });
         }).catch(function (err) {
             log("command " + cmd.id + " failed: " + (err && err.message));
             return [say(thread, s.failed(err && err.message || String(err)), { via: layer, source: source, command: cmd.id, status: "failed" })];
         });
+    }
+
+    // A command's answer as a message: done, with the app it offers ("Open
+    // Calendar", choice "open") and what takes it back (undo).
+    function outcome(r, layer, source, cmd) {
+        var data = r.data ? Object.assign({}, r.data) : {}, extra = {};
+        if (r.open) data.open = r.open;
+        if (r.undo) data.undo = r.undo;
+        var choices = [];
+        if (r.open) choices.push({ id: "open", label: lang().say.openApp(r.open.title) });
+        if (r.offerWeb) choices.push({ id: "web", label: lang().say.searchWeb() });
+        if (choices.length) extra.choices = choices;
+        return Object.assign({ via: layer, source: source, command: cmd.id, status: r.offerWeb ? "failed" : "done",
+                               data: Object.keys(data).length ? data : undefined }, extra);
+    }
+    // The last thing the assistant did that can be taken back.
+    function lastUndoable(thread) {
+        var msgs = messagesOf(thread.id);
+        for (var i = msgs.length - 1; i >= 0; --i) {
+            var m = msgs[i];
+            if (m.role === "assistant" && m.status === "done" && m.data && m.data.undo && !m.data.undone) return m;
+        }
+        return null;
+    }
+    function lastPending(thread) {
+        var msgs = messagesOf(thread.id);
+        for (var i = msgs.length - 1; i >= 0; --i) {
+            if (msgs[i].role === "assistant" && msgs[i].status === "pending" && msgs[i].confirm) return msgs[i];
+            if (msgs[i].role === "assistant" && msgs[i].status) return null;
+        }
+        return null;
+    }
+    // "Undo", "cancel that": a read-back waiting is cancelled; else what was
+    // just made is read back, and taken back on Yes.
+    function undoLast(thread, cat, args) {
+        var s = lang().say, pend = lastPending(thread);
+        if (pend && args.pending !== undefined) {
+            pend.status = "cancelled";
+            putMessage(pend);
+            return Promise.resolve([say(thread, s.cancelled(), { via: "commands", command: pend.command, status: "cancelled" })]);
+        }
+        var m = lastUndoable(thread);
+        return act(thread, commands.find(cat.all, "undo"), m ? { undo: m.data.undo, messageId: m.id } : {}, "commands", "");
+    }
+    // The words after "When is it?": a time for the event asked about.
+    function fillAwaiting(thread, text, cat) {
+        var msgs = messagesOf(thread.id), last = null;
+        for (var i = msgs.length - 1; i >= 0 && !last; --i) if (msgs[i].role === "assistant") last = msgs[i];
+        var w = last && last.data && last.data.awaiting;
+        if (!w || w.command !== "event") return null;
+        var l = lang(), info = l.extract(l.clean(text), now());
+        if (info.rest.replace(/\b(?:at|on|for|the|it's|it is|its)\b/g, "").trim()) return null;
+        var r = l.resolve(info, now(), "day");
+        if (r.start === null) return null;
+        var args = Object.assign({}, w.args, { start: r.start, end: r.end, allDay: r.allDay, repeat: r.repeat || w.args.repeat || null });
+        return act(thread, commands.find(cat.all, "event"), args, "commands", "");
     }
 
     // ---- Language models (layers 3 and 4) -------------------------------------------------------
@@ -237,7 +309,7 @@ function createAssistantService(deps) {
              "Never call a tool for a question about the world." : " You cannot control the phone; if asked to, say the user can do it themselves.");
     }
     function history(thread) {
-        return messagesOf(thread.id).filter(function (m) { return !m.choices || m.chosen; }).slice(-HISTORY)
+        return messagesOf(thread.id).filter(function (m) { return !m.choices || m.chosen || m.status === "done"; }).slice(-HISTORY)
             .map(function (m) { return { role: m.role, text: m.text }; });
     }
     function lastAsked(thread) {
@@ -245,7 +317,7 @@ function createAssistantService(deps) {
         return m.length ? m[m.length - 1].text : "";
     }
     function toolsFor(list) {
-        return list.filter(allowed).map(function (c) {
+        return list.filter(function (c) { return allowed(c) && !c.internal; }).map(function (c) {
             return { name: commands.toolName(c.id), description: c.description, parameters: c.parameters };
         });
     }
@@ -293,29 +365,38 @@ function createAssistantService(deps) {
                   function (e) { return [say(thread, lang().say.cloudFailed(source, e.message), { via: "cloud", source: source, status: "failed" })]; });
     }
     // Layer 4: nothing here could answer; the user chooses.
-    function offer(thread, note) {
+    // instead: the note replaces "I can't do that on the phone" (it says why).
+    function offer(thread, note, instead) {
         var s = lang().say, choices = [], p = defaultProvider();
         if (p) choices.push({ id: "cloud:" + p.id, label: s.askCloud(providers.displayName(p)) });
         choices.push({ id: "web", label: s.searchWeb() });
         if (!p) choices.push({ id: "settings", label: s.setUpCloud() });
-        return [say(thread, (note ? note + " " : "") + s.cantDo(), { via: "commands", choices: choices })];
+        return [say(thread, instead ? note : (note ? note + " " : "") + s.cantDo(), { via: "commands", choices: choices })];
     }
 
     function route(thread, text) {
         return Promise.all([catalogue(), commands.contactNames(env())]).then(function (got) {
             var cat = got[0];
             var parsed = grammar.parse(text, { lang: settings().language, now: now(), apps: cat.apps, names: got[1], appCommands: cat.compiled });
+            if (!parsed) {
+                var filled = fillAwaiting(thread, text, cat);
+                if (filled) return filled;
+            }
+            if (parsed && parsed.command === "undo") return undoLast(thread, cat, parsed.args);
+            // Only a model or the web can: noted, and on to them.
+            var note = parsed && parsed.command === "beyond" ? lang().say.beyond(parsed.args.what) : "";
+            if (note) parsed = null;
             if (parsed) {
                 var id = parsed.command === "app" ? "app:" + parsed.args.key : parsed.command;
                 var cmd = commands.find(cat.all, id);
                 var args = parsed.command === "app" ? { text: parsed.args.text } : parsed.args;
-                if (parsed.command === "open") args = { appId: parsed.args.appId, title: parsed.args.title, name: parsed.args.title };
+                if (parsed.command === "open") args = { appId: parsed.args.appId, title: parsed.args.title, name: parsed.args.title, params: parsed.args.params };
                 if (cmd) return act(thread, cmd, args, "commands", "");
             }
             var cloud = thread.provider ? getProvider(thread.provider) : null;
             if (cloud) return askCloud(thread, cloud, cat);
             return localReady().then(function (m) {
-                if (!m) return offer(thread);
+                if (!m) return offer(thread, note, !!note);
                 return askLocal(thread, m, cat).catch(function (e) {
                     log("on-device model failed: " + (e && e.message));
                     return offer(thread, lang().say.localFailed(e && e.message || "no answer"));
@@ -325,7 +406,8 @@ function createAssistantService(deps) {
     }
 
     function speakLast(list, p) {
-        if (p.speak === false || !settings().speak || !deps.tts) return;
+        // Spoken requests are answered aloud with Voice replies; typed ones with Speak answers.
+        if (p.speak === false || !(p.voice ? settings().voiceReplies : settings().speak) || !deps.tts) return;
         var last = list[list.length - 1];
         if (last && last.role === "assistant" && last.text) {
             try { Promise.resolve(deps.tts.speak(last.text, settings().language)).catch(function () {}); } catch (e) { /* no speech */ }
@@ -361,7 +443,19 @@ function createAssistantService(deps) {
             if (!thread.title) thread.title = text.slice(0, 80);
             var user = say(thread, text, { role: "user" });
             changed("threads");
-            return route(thread, text).then(function (out) { return done(thread, [user].concat(out), p); });
+            // "Yes" or "No" to a read-back waiting: its answer.
+            var pend = lastPending(thread), yn = pend && lang().answer ? lang().answer(lang().clean(text)) : null;
+            if (yn) {
+                return methods.confirm({ threadId: thread.id, messageId: pend.id, accept: yn === "yes", voice: p.voice, speak: p.speak })
+                    .then(function (r) {
+                        if (r.returnValue !== false) r.messages = [user].concat(r.messages);
+                        return r;
+                    });
+            }
+            if (p.locked) lockedAsk[thread.id] = true;
+            var unlocked = function () { delete lockedAsk[thread.id]; };
+            return route(thread, text).then(function (out) { unlocked(); return done(thread, [user].concat(out), p); },
+                                            function (e) { unlocked(); throw e; });
         },
         choose: function (p) {
             if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
@@ -380,6 +474,11 @@ function createAssistantService(deps) {
                 thread.provider = prov.id;
                 putThread(thread);
                 work = catalogue().then(function (cat) { return askCloud(thread, prov, cat); });
+            } else if (c === "open") {
+                var o = m.data && m.data.open;
+                if (!o || !o.appId) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to open there"));
+                work = deps.luna.call("luna://com.palm.applicationManager/launch", { id: o.appId, params: o.params || {} })
+                    .then(function () { return []; });
             } else if (c === "web") {
                 work = catalogue().then(function (cat) { return act(thread, commands.find(cat.all, "search"), { query: asked }, "commands", ""); });
             } else {
@@ -407,7 +506,11 @@ function createAssistantService(deps) {
                 return commands.run(cmd, m.confirm.args, env()).then(function (r) {
                     m.status = "done";
                     putMessage(m);
-                    return [say(thread, r.text, { via: m.via, source: m.source, command: cmd.id, status: "done" })];
+                    if (cmd.id === "undo" && m.confirm.args.messageId) {
+                        var target = getMessage(thread.id, m.confirm.args.messageId);
+                        if (target && target.data) { target.data.undone = true; putMessage(target); }
+                    }
+                    return [say(thread, r.text, outcome(r, m.via, m.source, cmd))];
                 }, function (e) {
                     m.status = "failed";
                     putMessage(m);
@@ -454,7 +557,7 @@ function createAssistantService(deps) {
             Object.keys(p).forEach(function (k) {
                 if (!(k in DEFAULTS)) return;
                 var v = p[k];
-                if (/^(enabled|speak|allowCloudControl)$/.test(k) && typeof v !== "boolean") bad = k + ": true or false";
+                if (/^(enabled|speak|allowCloudControl|voiceReplies|wakeWord|wakeWhenLocked)$/.test(k) && typeof v !== "boolean") bad = k + ": true or false";
                 else if (k === "disabledCommands" && !Array.isArray(v)) bad = "disabledCommands: a list of command ids";
                 else if (k === "localModel" && v !== "" && !models.find(v)) bad = "localModel: unknown model";
                 else if (k === "defaultProvider" && v !== "" && !getProvider(v)) bad = "defaultProvider: unknown provider";
@@ -469,6 +572,23 @@ function createAssistantService(deps) {
             storage.set("assistant:settings", cur);
             changed("settings");
             return Promise.resolve(ok({ settings: settings() }));
+        },
+        // Words to expect in a spoken request, and the transcriber's prompt made of them
+        // (whisper writes them as spelled): the wake phrase and the
+        // contacts' names, as Voice Dial passes them. The system UI and the
+        // Assistant only (names are private).
+        vocabulary: function () {
+            if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
+            // The prompt as requests, not a bare list: a list of names makes
+            // whisper hear names everywhere ("call Marcus" as "Karl Marcus").
+            return commands.contactNames(env()).then(function (names) {
+                var seen = {}, words = ["Hey Phoenix"], prompt = "Hey Phoenix, set a timer.";
+                names.forEach(function (n) { if (!seen[n] && words.length < 101) { seen[n] = true; words.push(n); } });
+                words.filter(function (n) { return n.indexOf(" ") > 0; }).slice(0, 30).forEach(function (n, i) {
+                    prompt += (i % 2 ? " Text " : " Call ") + n + ".";
+                });
+                return ok({ words: words, prompt: prompt });
+            }, function () { return ok({ words: ["Hey Phoenix"], prompt: "Hey Phoenix, set a timer." }); });
         },
         commands: function () {
             return catalogue().then(function (cat) {
@@ -638,6 +758,6 @@ function createAssistantService(deps) {
 
 var METHODS = ["ask", "choose", "confirm", "threads", "thread", "newThread", "setCurrent", "deleteThread", "clearHistory",
                "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
-               "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking"];
+               "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary"];
 
 module.exports = { createAssistantService: createAssistantService, METHODS: METHODS, ERRORS: ERRORS, SERVICE: SERVICE, DEFAULTS: DEFAULTS };

@@ -15,6 +15,7 @@ AssistantOverlay 1.0 AssistantOverlay.qml
 BackdropBlur 1.0 BackdropBlur.qml
 Card 1.0 Card.qml
 CardView 1.0 CardView.qml
+TrackpadSwipe 1.0 TrackpadSwipe.qml
 CardLoading 1.0 CardLoading.qml
 DashboardItem 1.0 DashboardItem.qml
 DashboardMenu 1.0 DashboardMenu.qml

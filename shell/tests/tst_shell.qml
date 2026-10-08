@@ -26,6 +26,15 @@ Item {
         id: spyComponent
         SignalSpy {}
     }
+    // A popup alert's page as the window source gives it (WebAppWindow
+    // runs scripts), without a browser engine.
+    Component {
+        id: fakeAlertPage
+        Rectangle {
+            color: "#202020"
+            function runScript(js, done) {}
+        }
+    }
 
     TestCase {
         name: "Shell"
@@ -1243,6 +1252,34 @@ Item {
             compare(windows.alerts.count, 0);
             windows.memory.forceLow = false;
             verify(shell.launch("org.webosphoenix.email") !== "");
+        }
+
+        // A web page's popup alert on the phone (luna-systemui's Low
+        // Battery) has room above its title: the negative space is the
+        // alert's height and the padding, the page below the padding at
+        // its own height. The shell's own alerts keep theirs.
+        function test_phoneWebAlertTopPadding() {
+            var pad = Theme.phoneAlertTopPadding;
+            verify(pad >= Theme.px(10));
+            var page = createTemporaryObject(fakeAlertPage, root);
+            windows._windows["lowbattery-test"] = page;
+            windows.alerts.append({ key: "lowbattery-test", appId: "com.palm.systemui", name: "LowBatteryAlert", height: 150,
+                                    sound: "", soundClass: "" });
+            var notes = shell.notifications;
+            tryCompare(notes, "alertTopPadding", pad, 1000);
+            tryCompare(notes, "negativeSpace", Theme.px(150) + pad, 2000);
+            var host = findChild(shell, "phoneAlertHost");
+            compare(page.parent, host);
+            compare(page.y, pad);
+            compare(page.height, Theme.px(150));
+            compare(host.height, Theme.px(150) + pad);
+            // The page's top is that far below the negative space's top.
+            var area = host.parent;
+            compare(area.height, notes.negativeSpace);
+            compare(page.mapToItem(area, 0, 0).y, pad);
+            windows.alerts.clear();
+            delete windows._windows["lowbattery-test"];
+            tryCompare(notes, "negativeSpace", 0, 2000);
         }
 
         // G8: the reticle where a tap lands, gone after 200 ms; not for a

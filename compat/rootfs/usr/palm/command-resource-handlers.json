@@ -1,5 +1,5 @@
 {
-    "//": "Phoenix compat: the system's URL handlers, which luna-sysmgr kept in this file. enyo.WebView (the browser) reads it to hand these links to their apps instead of loading them.",
+    "//": "Phoenix compat: the system's URL handlers, which luna-sysmgr kept in this file. enyo.WebView (the browser) reads it to hand these links to their apps instead of loading them. Scheme patterns (^mailto:) are tried after web address patterns (^https?://maps.google...), as luna-sysmgr's applicationManager did.",
     "redirects": [
         { "url": "^mailto:", "appId": "com.palm.app.email" },
         { "url": "^tel:", "appId": "org.webosphoenix.phone" },
@@ -7,7 +7,9 @@
         { "url": "^im:", "appId": "org.webosphoenix.messaging" },
         { "url": "^geo:", "appId": "org.webosphoenix.maps" },
         { "url": "^maploc:", "appId": "org.webosphoenix.maps" },
-        { "url": "^mapto:", "appId": "org.webosphoenix.maps" }
+        { "url": "^mapto:", "appId": "org.webosphoenix.maps" },
+        { "url": "^https?://maps\\.google\\.[a-z.]+/", "appId": "org.webosphoenix.maps" },
+        { "url": "^https?://(www\\.)?google\\.[a-z.]+/maps([/?#]|$)", "appId": "org.webosphoenix.maps" }
     ],
     "commands": []
 }

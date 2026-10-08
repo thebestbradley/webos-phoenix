@@ -18,6 +18,8 @@ import QtQuick
 import QtTest
 import Phoenix.Shell
 import Phoenix.Sim
+import Phoenix.Native
+import "trackpad.js" as Trackpad
 
 Item {
     id: root
@@ -62,6 +64,7 @@ Item {
     SignalSpy { id: images; target: shell.keyboard; signalName: "imagePasteRequested" }
 
     TestCase {
+        id: testCase
         name: "ClipStrip"
         when: windowShown
 
@@ -337,6 +340,51 @@ Item {
             settle();
             compare(s.position, 0);
             // A swipe pastes nothing.
+            compare(field.text, "");
+            verify(kb.clipsOpen);
+        }
+
+        // A trackpad's two-finger swipe (TrackpadSwipe): the clips follow
+        // it and, once the fingers lift, snap to the clip they were heading
+        // for, the momentum after it ignored (never past it, never back); a
+        // mouse wheel moves a clip a notch.
+        function test_trackpadSnapsClipToClip() {
+            showKeyboard(false);
+            var s = openStrip();
+            var area = findChild(kb, "clipCards");
+            var x = area.width / 2, y = s.cardTop + s.cardHeight / 2;
+            var far = { max: 0, min: 0 };
+            function track() {
+                far.max = Math.max(far.max, s.position);
+                far.min = Math.min(far.min, s.position);
+            }
+            s.positionChanged.connect(track);
+            // Past a third of the way: the next clip, momentum and all.
+            Trackpad.swipe(testCase, KeyInjector, area, x, y, -s.innerPitch * 0.45, 0, { steps: 20, interval: 30, momentum: 12 });
+            settle();
+            compare(s.position, 1);
+            verify(far.max <= 1.0005, "never past the clip it settles on: " + far.max);
+            // A short slow one: back.
+            far.max = 1;
+            far.min = 1;
+            Trackpad.swipe(testCase, KeyInjector, area, x, y, -s.innerPitch * 0.2, 0, { steps: 20, interval: 30, momentum: 6 });
+            settle();
+            compare(s.position, 1);
+            verify(far.min >= 0.9995, "no drift back past it: " + far.min);
+            // The other way, the fingers' ScrollEnd before the momentum.
+            Trackpad.swipe(testCase, KeyInjector, area, x, y, s.innerPitch * 0.6, 0, { momentum: 12, endBeforeMomentum: true });
+            settle();
+            compare(s.position, 0);
+            s.positionChanged.disconnect(track);
+            verify(far.min >= -0.0005, "no overscroll before the first clip: " + far.min);
+            // Mouse wheel notches.
+            Trackpad.notch(testCase, KeyInjector, area, x, y, 0, -1);
+            settle();
+            compare(s.position, 1);
+            Trackpad.notch(testCase, KeyInjector, area, x, y, 1, 0);
+            settle();
+            compare(s.position, 0);
+            // Nothing pasted.
             compare(field.text, "");
             verify(kb.clipsOpen);
         }

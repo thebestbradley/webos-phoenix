@@ -73,6 +73,12 @@ export interface AssistantSettings {
     /** Cloud models may run commands (off by default). */
     allowCloudControl: boolean;
     disabledCommands: string[];
+    /** Answers to spoken requests spoken (on by default). */
+    voiceReplies: boolean;
+    /** The shell listens for "Hey Phoenix" (off by default). */
+    wakeWord: boolean;
+    /** ... also while the screen is off or locked (off by default). */
+    wakeWhenLocked: boolean;
 }
 
 export interface AssistantCommand {
@@ -154,7 +160,7 @@ const s = (method: string, params: object, cb: (r: Any) => void, onError?: OnErr
 
 export const assistant = {
     /** Ask: in the thread in use (or threadId, or a new one). */
-    async ask(text: string, options: { threadId?: string; newThread?: boolean; speak?: boolean } = {}): Promise<AskResult> {
+    async ask(text: string, options: { threadId?: string; newThread?: boolean; speak?: boolean; voice?: boolean; locked?: boolean } = {}): Promise<AskResult> {
         const r = await c("ask", { text, ...options });
         return { thread: r.thread, messages: r.messages };
     },

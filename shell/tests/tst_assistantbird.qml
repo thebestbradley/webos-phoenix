@@ -5,7 +5,9 @@
 // every pose of art/assistant-bird/bird.json reaches its values; a lifted
 // pose takes off with a squash and lands again; it blinks; the flames
 // flicker; the beak moves while speaking; listening follows a level;
-// with no motion (Reduce motion) it holds every pose still.
+// each pose acts (motion.acting: its parts move through their loop), a
+// pose change blends from wherever the loop is; with no motion (Reduce
+// motion) it holds every pose still.
 
 import QtQuick
 import QtTest
@@ -39,6 +41,44 @@ Item {
         function onSquashYChanged() { seen.minSquash = Math.min(seen.minSquash, bird.squashY); seen.maxSquash = Math.max(seen.maxSquash, bird.squashY); }
         function onFlapChanged() { seen.minFlap = Math.min(seen.minFlap, bird.flap); seen.maxFlap = Math.max(seen.maxFlap, bird.flap); }
         function onBlinkChanged() { seen.minBlink = Math.min(seen.minBlink, bird.blink); }
+    }
+
+    // Each acting part's values as they change: the extremes reached, the changes made.
+    QtObject {
+        id: acted
+        property var range: ({})
+        property int changes: 0
+        function reset() {
+            var r = {};
+            for (var ch in bird.acts) {
+                var a = bird.acts[ch];
+                r[ch] = { rot: [a.rot, a.rot], tx: [a.tx, a.tx], ty: [a.ty, a.ty], sx: [a.sx, a.sx], sy: [a.sy, a.sy] };
+            }
+            range = r;
+            changes = 0;
+        }
+        function note(ch, prop, v) {
+            if (!range[ch])
+                return;
+            var r = range[ch][prop];
+            r[0] = Math.min(r[0], v);
+            r[1] = Math.max(r[1], v);
+            ++changes;
+        }
+        // How far a value went (max - min).
+        function span(ch, prop) { return range[ch][prop][1] - range[ch][prop][0]; }
+    }
+    Instantiator {
+        model: Object.keys(bird.acts)
+        delegate: Connections {
+            required property string modelData
+            target: bird.acts[modelData]
+            function onRotChanged() { acted.note(modelData, "rot", target.rot); }
+            function onTxChanged() { acted.note(modelData, "tx", target.tx); }
+            function onTyChanged() { acted.note(modelData, "ty", target.ty); }
+            function onSxChanged() { acted.note(modelData, "sx", target.sx); }
+            function onSyChanged() { acted.note(modelData, "sy", target.sy); }
+        }
     }
 
     TestCase {
@@ -146,6 +186,71 @@ Item {
             tryVerify(function () { seen[bird.voice.toFixed(1)] = true; return Object.keys(seen).length >= 3; }, 3000, "its own rhythm");
         }
 
+        // Every pose with acting moves each of its parts through its loop:
+        // each value a key changes, recorded as it goes, reaches most of
+        // the way to the keys' extremes (idle's occasional one played now).
+        function test_everyPoseActs() {
+            var acting = bird.art.motion.acting.poses;
+            var props = ["rot", "tx", "ty", "sx", "sy"];
+            var poses = Object.keys(acting);
+            verify(poses.length >= 10, "most poses act: " + poses.join(" "));
+            for (var i = 0; i < poses.length; ++i) {
+                var a = acting[poses[i]];
+                bird.pose = poses[i];
+                acted.reset();
+                if (a.every)
+                    bird.fidget();
+                var want = [];
+                for (var ch in a.steps) {
+                    for (var k = 0; k < props.length; ++k) {
+                        var lo = Infinity, hi = -Infinity;
+                        for (var j = 0; j < a.steps[ch].length; ++j) {
+                            lo = Math.min(lo, a.steps[ch][j][k + 1]);
+                            hi = Math.max(hi, a.steps[ch][j][k + 1]);
+                        }
+                        if (hi - lo > 0)
+                            want.push({ ch: ch, prop: props[k], span: hi - lo });
+                    }
+                }
+                verify(want.length > 0, poses[i] + " moves something");
+                tryVerify(function () {
+                    return want.every(function (w) { return acted.span(w.ch, w.prop) >= 0.7 * w.span; });
+                }, a.period * 2 + 1500, poses[i] + " acting: " + JSON.stringify(want.filter(function (w) {
+                    return acted.span(w.ch, w.prop) < 0.7 * w.span;
+                }).map(function (w) { return w.ch + "." + w.prop + " " + acted.span(w.ch, w.prop).toFixed(3) + "/" + w.span; })));
+            }
+        }
+
+        // A pose change goes on from wherever the loop is: no jump, then
+        // the new pose's own loop (here, idle: at rest).
+        function test_aPoseChangeBlendsFromTheLoop() {
+            bird.pose = "hello";
+            var w = bird.acts.wingR;
+            tryVerify(function () { return w.rot < -12; }, 2000, "the wave under way");
+            var rot = w.rot, ty = bird.acts.head.ty, hr = bird.acts.head.rot;
+            bird.pose = "idle";
+            verify(Math.abs(w.rot - rot) < 0.001, "the flipper where it was: " + w.rot + " " + rot);
+            verify(Math.abs(bird.acts.head.rot - hr) < 0.001, "the head where it was: " + bird.acts.head.rot + " " + hr);
+            verify(Math.abs(bird.acts.head.ty - ty) < 0.001, "the head where it was: " + bird.acts.head.ty + " " + ty);
+            tryVerify(function () { return w.rot === 0 && !w.isRunning(); }, 2000, "eased back to rest");
+        }
+
+        // Idle looks around now and then, by itself: its timer plays the
+        // loop (waited for as it happens, however late a slow machine runs
+        // it), which moves the eyes and the body all the way through.
+        function test_idleLooksAroundNowAndThen() {
+            var idle = bird.art.motion.acting.poses.idle;
+            var before = bird.fidgets;
+            acted.reset();
+            tryVerify(function () { return bird.fidgets > before; }, 4 * (idle.every[1] + idle.period), "a look around, by itself");
+            acted.reset();
+            tryVerify(function () { return acted.span("eyes", "tx") > 10 && acted.span("body", "rot") > 3; }, 4 * idle.period + 4000,
+                      "looking one way and the other");
+            tryVerify(function () { return !bird.isActing(); }, 4 * idle.period + 4000, "and settled");
+            for (var ch in bird.acts)
+                verify(bird.acts[ch].rot === 0 && bird.acts[ch].tx === 0 && bird.acts[ch].ty === 0, "at rest again: " + ch);
+        }
+
         // Reduce motion: no flicker, breath, blink or hop; poses change at once.
         function test_reducedMotionHoldsStill() {
             Theme.reduceMotion = true;
@@ -165,6 +270,28 @@ Item {
             bird.pose = "listening";
             verify(!f.running);
             compare(bird._voiced, 0);
+            // No acting: every part at rest, whatever the pose, and nothing changes.
+            acted.reset();
+            var poses = Object.keys(bird.art.poses);
+            for (var i = 0; i < poses.length; ++i) {
+                bird.pose = poses[i];
+                bird.fidget();
+                for (var ch in bird.acts) {
+                    var a = bird.acts[ch];
+                    verify(!a.isRunning() && a.rot === 0 && a.tx === 0 && a.ty === 0 && a.sx === 1 && a.sy === 1, poses[i] + " " + ch + " still");
+                }
+            }
+            wait(300);
+            compare(acted.changes, 0, "nothing moved");
+        }
+
+        // Reduce motion turned on mid-loop: the parts go to rest at once.
+        function test_reducedMotionStopsTheActing() {
+            bird.pose = "working";
+            tryVerify(function () { return bird.acts.wingL.rot > 5; }, 2000, "pumping");
+            Theme.reduceMotion = true;
+            for (var ch in bird.acts)
+                verify(!bird.acts[ch].isRunning() && bird.acts[ch].rot === 0 && bird.acts[ch].ty === 0 && bird.acts[ch].sy === 1, ch);
         }
     }
 }

@@ -67,7 +67,9 @@ sweeping low-pass filter); the shutter is two clicks 70 ms apart. They are synth
 downloaded), 44.1 kHz mono 16-bit WAV, and dedicated to the public domain
 (CC0 1.0). `python3 tools/make-feedback-sounds.py --check` confirms the
 files match the script. On the device they live in
-`/usr/share/phoenix/sounds/feedback`.
+`/usr/share/phoenix/sounds/feedback`. `listen.wav`, the assistant's chime
+when it hears "Hey Phoenix" (webOS had none), is made the same way: two
+soft bell notes up (E6, A6).
 
 ## Not shipped
 
