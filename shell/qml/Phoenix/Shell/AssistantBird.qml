@@ -540,7 +540,14 @@ Item {
         readonly property real sx: lsx * bsx
         readonly property real sy: lsy * bsy
 
+        // A pose change waiting to be played (see onKeysChanged).
+        property bool _pending: false
+        function _catchUp() {
+            if (_pending)
+                play();
+        }
         function play() {
+            _pending = false;
             var r = rot, x = tx, y = ty, w = sx, h = sy;
             loop.stop();
             blend.stop();
@@ -559,6 +566,7 @@ Item {
         }
         // Played once now (the occasional ones).
         function once() {
+            _catchUp();
             if (live && keys !== null) {
                 loop.stop();
                 loop.loops = 1;
@@ -567,8 +575,8 @@ Item {
         }
         // Once the pose's bindings (the steps' keys and lengths) have caught up;
         // stopping is at once.
-        onKeysChanged: Qt.callLater(play)
-        onLiveChanged: if (live) Qt.callLater(play); else play()
+        onKeysChanged: { _pending = true; Qt.callLater(_catchUp); }
+        onLiveChanged: if (live) { _pending = true; Qt.callLater(_catchUp); } else play()
         Component.onCompleted: play()
 
         property list<QtObject> _anims: [
