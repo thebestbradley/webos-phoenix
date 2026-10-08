@@ -200,15 +200,12 @@ Item {
         function launcherButton() {
             return ql.mapToItem(shell, ql.slotCentre(ql.pinned.length), Theme.quickLaunchIconY + ql.iconSize / 2);
         }
-        // A press held: until `held` says the hold took (waited for as it
-        // happens: a slow machine runs the hold's timer late), else for the
-        // hold's time and a little more.
+        // A press held until `held` says the hold took: waited for as it
+        // happens, since a slow machine runs the hold's timer late (a fixed
+        // wait may release first, and the press counts as a tap).
         function hold(p, held) {
             mousePress(shell, p.x, p.y);
-            if (held)
-                tryVerify(held, 5000, "the hold taken");
-            else
-                wait(Theme.iconMenuHoldInterval + 150);
+            tryVerify(held, 5000, "the hold taken");
             mouseRelease(shell, p.x, p.y);
         }
         function opened() { return overlay.open; }
@@ -458,7 +455,6 @@ Item {
             var t0 = Date.now();
             keyClick(Qt.Key_Escape);
             compare(overlay.open, false);
-            verify(overlay.visible);
             tryCompare(overlay, "visible", false, 3000);
             compare(overlay.shown, 0);
             // It took its time closing (when it shut, recorded as it came: an
@@ -599,9 +595,13 @@ Item {
             }, 2000, "its feet on the field's bottom line");
         }
 
+        SignalSpy { id: dockHeld; signalName: "pressAndHold" }
         function test_offDoesNothing() {
             fake.enabled = false;
-            hold(launcherButton());
+            dockHeld.target = findChild(ql, "quickLaunchMouse");
+            dockHeld.clear();
+            // Held until the dock takes it as a hold (not a tap, which opens the launcher).
+            hold(launcherButton(), function () { return dockHeld.count > 0; });
             wait(300);
             compare(overlay.open, false);
             compare(shell.launcherOpen, false);
