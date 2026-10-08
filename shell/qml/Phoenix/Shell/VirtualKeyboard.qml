@@ -498,7 +498,8 @@ Item {
     // toward its older end, so a long word's trail does not cover the keys
     // (the owner, 8 October 2026): its last cTrailTime ms, at most
     // cTrailKeys letter keys long.
-    readonly property int cTrailTime: 300
+    // (Writable for the tests: on a slow machine a frame can come later.)
+    property int cTrailTime: 300
     readonly property real cTrailKeys: 2.5
     readonly property real cTrailAlpha: 0.85
     readonly property real cTrailWidth: tablet ? 10 : 12

@@ -1043,9 +1043,13 @@ Item {
         }
 
         // Mid-swipe, the trail on the screen: blue near the finger, none at
-        // the start of a long swipe.
+        // the start of a long swipe (cut by length: the tail's time is made
+        // long here, so how late a slow machine draws or grabs the frame
+        // does not matter; the fade with time is test_swipeTrailFades').
         function test_swipeTrailOnScreen() {
             showKeyboard();
+            var time = kb.cTrailTime;
+            kb.cTrailTime = 60000;
             var a = kb.keyRect("q"), b = kb.keyRect("p");
             var y = a.y + a.height / 2;
             mousePress(kb, a.x + a.width / 2, y);
@@ -1053,16 +1057,24 @@ Item {
                 mouseMove(kb, a.x + a.width / 2 + (b.x - a.x) * s / 30, y);
                 wait(16);
             }
-            wait(50);
-            var shot = grabImage(shell);
-            var blue = function (x) {
+            var blue = function (shot, x) {
                 var p = kb.mapToItem(shell, x, y);
                 var c = shot.pixel(Math.round(p.x), Math.round(p.y));
                 return c.b - c.r;
             };
-            verify(blue(b.x + b.width / 2 - 8) > 0.2, "the trail behind the finger");
-            compare(blue(a.x + a.width / 2 + 4) < 0.05, true, "the swipe's start no longer shown");
+            var behind = 0, start = 1;
+            // Painted on a coming frame (Canvas.requestPaint).
+            for (var n = 0; n < 50 && behind <= 0.2; ++n) {
+                wait(20);
+                var shot = grabImage(shell);
+                behind = blue(shot, b.x + b.width / 2 - 8);
+                start = blue(shot, a.x + a.width / 2 + 4);
+            }
+            // Let go before checking: a failure must not leave the finger down.
             mouseRelease(kb, b.x + b.width / 2, y);
+            kb.cTrailTime = time;
+            verify(behind > 0.2, "the trail behind the finger: " + behind);
+            verify(start < 0.05, "the swipe's start no longer shown: " + start);
         }
 
         // Settings > Text Assist > Keyboard style: the phone takes the
