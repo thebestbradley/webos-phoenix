@@ -276,6 +276,7 @@ Item {
     property real blink: 1
     readonly property var _blink: art.motion.blink
     property int blinks: 0
+    readonly property bool blinking: blinkAnim.running
     Timer {
         id: blinkTimer
         running: bird._live && bird.eyesShown > 0.5

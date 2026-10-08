@@ -105,6 +105,40 @@ Item {
     }
 
     SignalSpy { id: appSpy; target: overlay; signalName: "appRequested" }
+    // The bird's poses as they come (a beat lasts under a second, which
+    // polling may miss on a slow machine), its highest hop and its beak's
+    // narrowest opening.
+    QtObject {
+        id: birdSeen
+        property var poses: []
+        property real maxLift: 0
+        property real minFlap: 1
+        function reset() { poses = []; maxLift = 0; minFlap = 1; }
+        function had(list) {
+            // list in this order (others between allowed).
+            var i = 0;
+            for (var k = 0; k < poses.length && i < list.length; ++k)
+                if (poses[k] === list[i]) ++i;
+            return i === list.length;
+        }
+    }
+    Connections {
+        target: root.overlay
+        function onBirdPoseChanged() { birdSeen.poses = birdSeen.poses.concat([root.overlay.birdPose]); }
+    }
+    Connections {
+        target: root.overlay ? findBird() : null
+        function onLiftChanged() { birdSeen.maxLift = Math.max(birdSeen.maxLift, target.lift); }
+        function onFlapChanged() { birdSeen.minFlap = Math.min(birdSeen.minFlap, target.flap); }
+    }
+    function findBird() {
+        for (var stack = [root.overlay]; stack.length; ) {
+            var it = stack.pop();
+            if (it.objectName === "assistantBird") return it;
+            for (var i = 0; i < it.children.length; ++i) stack.push(it.children[i]);
+        }
+        return null;
+    }
     // Stands in for the shell's speech.
     QtObject { id: fakeSpeech; property bool speaking: false }
     // Stands in for the dictation, with a loudness.
@@ -411,21 +445,24 @@ Item {
         function test_birdWakesAsItOpens() {
             var p = launcherButton();
             tryVerify(function () { return !shell.keyboardOpen && ql.visible && ql.opacity === 1 && ql.shownProgress === 1; }, 3000);
+            // Asleep before it opens; it rises so with the panel.
+            compare(overlay.birdPose, "asleep");
+            birdSeen.reset();
             hold(p);
             tryCompare(overlay, "open", true, 2000);
-            verify(overlay.shown < 1 || overlay.birdPose === "asleep" || overlay.birdPose === "hello");
-            tryCompare(overlay, "birdPose", "hello", 3000);
             poseIs("idle");
+            verify(birdSeen.had(["hello", "idle"]), "hello, then idle: " + birdSeen.poses);
             // At the top in the middle of the panel, 96 px or more.
             var panel = findChild(overlay, "assistantPanel");
             verify(!overlay.birdBeside);
             verify(bird().width >= Theme.px(96) && bird().width <= Theme.px(140));
             fuzzyCompare(bird().x + bird().width / 2, panel.width / 2, 1);
             // A tap on it waves, and does not close the view.
+            birdSeen.reset();
             mouseClick(bird(), bird().width / 2, bird().height / 2);
-            tryCompare(overlay, "birdPose", "hello", 1000);
             verify(overlay.open);
             poseIs("idle");
+            verify(birdSeen.had(["hello", "idle"]), "a wave: " + birdSeen.poses);
             // Closing: asleep again, back into the button.
             keyClick(Qt.Key_Escape);
             compare(overlay.birdPose, "asleep");
@@ -440,13 +477,13 @@ Item {
             fake.hold = true;
             type("turn on the flashlight");
             poseIs("thinking");
+            birdSeen.reset();
             fakeSpeech.speaking = true;
             fake.release();
-            tryCompare(overlay, "birdPose", "working", 3000);
-            tryCompare(overlay, "birdPose", "done", 3000);
-            tryVerify(function () { return bird().lift > 0; }, 3000, "the hop");
             poseIs("speaking");
-            tryVerify(function () { return bird().flap < 0.5; }, 3000, "the beak moving");
+            verify(birdSeen.had(["working", "done", "speaking"]), "working, done, speaking: " + birdSeen.poses);
+            verify(birdSeen.maxLift > 40, "the hop: " + birdSeen.maxLift);
+            tryVerify(function () { return birdSeen.minFlap < 0.5; }, 3000, "the beak moving");
             fakeSpeech.speaking = false;
             poseIs("idle");
             compare(bird().lift, 0);
@@ -463,13 +500,17 @@ Item {
             tryVerify(function () { return bubbles().indexOf("Sent to Sam.") >= 0; }, 2000);
             poseIs("idle");
 
+            birdSeen.reset();
             type("who wrote the odyssey");
-            tryCompare(overlay, "birdPose", "confused", 3000);
+            arrived("I can't do that on the phone.");
             poseIs("idle");
+            verify(birdSeen.had(["thinking", "confused", "idle"]), "a shrug: " + birdSeen.poses);
 
+            birdSeen.reset();
             type("break the flashlight");
-            tryCompare(overlay, "birdPose", "shy", 3000);
+            arrived("That didn't work: no torch.");
             poseIs("idle");
+            verify(birdSeen.had(["thinking", "shy", "idle"]), "oops: " + birdSeen.poses);
             compare(overlay.outcomeOf([{ role: "assistant", status: "failed" }]), "failed");
             compare(overlay.outcomeOf([{ role: "assistant", text: "Hello!" }]), "answer");
             compare(overlay.outcomeOf([]), "answer");

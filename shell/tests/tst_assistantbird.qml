@@ -23,6 +23,24 @@ Item {
         y: 120
     }
 
+    // The extremes values reach as they change: a squash or a blink lasts
+    // a few frames, which polling may not see on a slow machine.
+    QtObject {
+        id: seen
+        property real minSquash: 1
+        property real maxSquash: 1
+        property real minFlap: 1
+        property real maxFlap: 0
+        property real minBlink: 1
+        function reset() { minSquash = maxSquash = bird.squashY; minFlap = maxFlap = bird.flap; minBlink = bird.blink; }
+    }
+    Connections {
+        target: bird
+        function onSquashYChanged() { seen.minSquash = Math.min(seen.minSquash, bird.squashY); seen.maxSquash = Math.max(seen.maxSquash, bird.squashY); }
+        function onFlapChanged() { seen.minFlap = Math.min(seen.minFlap, bird.flap); seen.maxFlap = Math.max(seen.maxFlap, bird.flap); }
+        function onBlinkChanged() { seen.minBlink = Math.min(seen.minBlink, bird.blink); }
+    }
+
     TestCase {
         name: "AssistantBird"
         when: windowShown
@@ -76,21 +94,27 @@ Item {
 
         // Done hops: down on its feet, up stretched, and back down with a squash.
         function test_aLiftedPoseHopsWithSquashAndStretch() {
+            seen.reset();
             bird.pose = "done";
-            tryVerify(function () { return bird.squashY < 0.95; }, 2000, "the take-off squash");
-            tryVerify(function () { return bird.squashY > 1.02; }, 2000, "the stretch going up");
             tryVerify(function () { return bird.atRest(); }, 3000, "up");
             compare(bird.lift, 46);
+            verify(seen.minSquash < 0.95, "the take-off squash: " + seen.minSquash);
+            verify(seen.maxSquash > 1.02, "the stretch going up: " + seen.maxSquash);
+            seen.reset();
             bird.pose = "idle";
-            tryVerify(function () { return bird.squashY < 0.95 && bird.lift === 0; }, 2000, "the landing squash");
             tryVerify(function () { return bird.atRest(); }, 3000, "down");
+            compare(bird.lift, 0);
             compare(bird.squashY, 1);
+            verify(seen.maxSquash > 1.02, "stretched as it falls: " + seen.maxSquash);
+            verify(seen.minSquash < 0.95, "the landing squash: " + seen.minSquash);
         }
 
         function test_itBlinks() {
             var before = bird.blinks;
-            tryVerify(function () { return bird.blink < 0.5; }, 9000, "a blink");
-            tryVerify(function () { return bird.blink === 1 && bird.blinks > before; }, 2000, "eyes open again");
+            seen.reset();
+            tryVerify(function () { return bird.blinks > before && !bird.blinking; }, 9000, "a blink, over");
+            verify(seen.minBlink < 0.5, "the eyes shut: " + seen.minBlink);
+            compare(bird.blink, 1);
         }
 
         // The flames never stop: each layer moves on its own.
@@ -102,9 +126,10 @@ Item {
         }
 
         function test_theBeakMovesWhileSpeaking() {
+            seen.reset();
             bird.pose = "speaking";
-            tryVerify(function () { return bird.flap < 0.4; }, 3000, "the beak shut between syllables");
-            tryVerify(function () { return bird.flap > 0.9; }, 3000, "and open again");
+            // A whole round of syllables: shut between them, open again.
+            tryVerify(function () { return seen.minFlap < 0.4 && seen.maxFlap > 0.9 && bird.flap > 0.9; }, 4000, "the beak moving");
             bird.pose = "idle";
             tryCompare(bird, "flap", 1, 2000);
         }
