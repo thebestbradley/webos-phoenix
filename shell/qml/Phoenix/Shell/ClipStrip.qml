@@ -639,8 +639,10 @@ Item {
             strip.slideTo(strip.current + (d < 0 ? 1 : -1));
         }
         onStarted: {
+            // Up or down there is nothing to scroll; it goes no further
+            // (not to the cards behind the keyboard).
             if (axis !== "h") {
-                axis = "pass";
+                axis = "done";
                 return;
             }
             slide.stop();

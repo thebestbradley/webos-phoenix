@@ -1057,7 +1057,7 @@ Item {
     // ignored, so the page neither runs past its neighbour nor drifts back.
     // Up or down it scrolls the page's icons, momentum and all, within
     // their bounds. A mouse wheel turned sideways (or a horizontal wheel)
-    // moves a page a notch; turned up or down it scrolls the page.
+    // moves a page a notch; turned up or down it scrolls the page a row.
     TrackpadSwipe {
         id: wheel
         objectName: "launcherWheel"
@@ -1071,13 +1071,24 @@ Item {
         property real startPosition: 0
         readonly property real pageWidth: Math.max(1, pages.width)
 
-        onNotched: (dx, dy, e) => {
+        onNotched: (dx, dy) => {
             if (Math.abs(dx) > Math.abs(dy)) {
                 launcher.showPage(Math.max(0, Math.min(launcher.tabs.length - 1, pages.currentIndex + (dx < 0 ? 1 : -1))));
                 return;
             }
-            // Up or down: the page scrolls as a list does under a wheel.
-            e.accepted = false;
+            // Up or down: a row a notch, as the edge of a drag scrolls it
+            // (pageScroll), within the page; it stays in the launcher.
+            var page = pages.currentItem;
+            if (!page)
+                return;
+            var from = pageScroll.running && pageScroll.target === page ? pageScroll.to : page.contentY;
+            var y = Math.max(0, Math.min(Math.max(0, page.contentHeight - page.height), from - dy / 120 * launcher.cellHeight));
+            if (y === page.contentY)
+                return;
+            pageScroll.stop();
+            pageScroll.target = page;
+            pageScroll.to = y;
+            pageScroll.start();
         }
         onStarted: {
             pageSettle.stop();
