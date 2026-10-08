@@ -229,18 +229,26 @@ Item {
             tryVerify(function () { return w.rot < -12; }, 2000, "the wave under way");
             var rot = w.rot, ty = bird.acts.head.ty, hr = bird.acts.head.rot;
             bird.pose = "idle";
-            fuzzyCompare(w.rot, rot, 0.001);
-            fuzzyCompare(bird.acts.head.rot, hr, 0.001);
-            fuzzyCompare(bird.acts.head.ty, ty, 0.001);
-            tryVerify(function () { return w.rot === 0 && !w.running; }, 2000, "eased back to rest");
+            verify(Math.abs(w.rot - rot) < 0.001, "the flipper where it was: " + w.rot + " " + rot);
+            verify(Math.abs(bird.acts.head.rot - hr) < 0.001, "the head where it was: " + bird.acts.head.rot + " " + hr);
+            verify(Math.abs(bird.acts.head.ty - ty) < 0.001, "the head where it was: " + bird.acts.head.ty + " " + ty);
+            tryVerify(function () { return w.rot === 0 && !w.isRunning(); }, 2000, "eased back to rest");
         }
 
-        // Idle looks around now and then, by itself.
+        // Idle looks around now and then, by itself: its timer plays the
+        // loop (waited for as it happens, however late a slow machine runs
+        // it), which moves the eyes and the body all the way through.
         function test_idleLooksAroundNowAndThen() {
-            var every = bird.art.motion.acting.poses.idle.every;
+            var idle = bird.art.motion.acting.poses.idle;
+            var before = bird.fidgets;
             acted.reset();
-            tryVerify(function () { return acted.span("eyes", "tx") > 5 && acted.span("body", "rot") > 1; },
-                      every[1] + bird.art.motion.acting.poses.idle.period + 2000, "a look around");
+            tryVerify(function () { return bird.fidgets > before; }, 4 * (idle.every[1] + idle.period), "a look around, by itself");
+            acted.reset();
+            tryVerify(function () { return acted.span("eyes", "tx") > 10 && acted.span("body", "rot") > 3; }, 4 * idle.period + 4000,
+                      "looking one way and the other");
+            tryVerify(function () { return !bird.isActing(); }, 4 * idle.period + 4000, "and settled");
+            for (var ch in bird.acts)
+                verify(bird.acts[ch].rot === 0 && bird.acts[ch].tx === 0 && bird.acts[ch].ty === 0, "at rest again: " + ch);
         }
 
         // Reduce motion: no flicker, breath, blink or hop; poses change at once.
@@ -270,7 +278,7 @@ Item {
                 bird.fidget();
                 for (var ch in bird.acts) {
                     var a = bird.acts[ch];
-                    verify(!a.running && a.rot === 0 && a.tx === 0 && a.ty === 0 && a.sx === 1 && a.sy === 1, poses[i] + " " + ch + " still");
+                    verify(!a.isRunning() && a.rot === 0 && a.tx === 0 && a.ty === 0 && a.sx === 1 && a.sy === 1, poses[i] + " " + ch + " still");
                 }
             }
             wait(300);
@@ -283,7 +291,7 @@ Item {
             tryVerify(function () { return bird.acts.wingL.rot > 5; }, 2000, "pumping");
             Theme.reduceMotion = true;
             for (var ch in bird.acts)
-                verify(!bird.acts[ch].running && bird.acts[ch].rot === 0 && bird.acts[ch].ty === 0 && bird.acts[ch].sy === 1, ch);
+                verify(!bird.acts[ch].isRunning() && bird.acts[ch].rot === 0 && bird.acts[ch].ty === 0 && bird.acts[ch].sy === 1, ch);
         }
     }
 }

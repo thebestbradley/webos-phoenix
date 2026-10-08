@@ -273,19 +273,33 @@ Item {
     readonly property var acts: ({ body: actBody, head: actHead, eyes: actEyes, lids: actLids, wingL: actWingL, wingR: actWingR,
                                    beak: actBeak, crest: actCrest })
     readonly property var _every: (art.motion.acting.poses[pose] || {}).every
-    readonly property bool acting: actBody.running || actHead.running || actEyes.running || actLids.running
-                                   || actWingL.running || actWingR.running || actBeak.running || actCrest.running
     // The occasional acting (idle's look around), now.
     function fidget() {
         for (var k in acts)
             acts[k].once();
+        ++fidgets;
+    }
+    // Is any part acting?
+    function isActing() {
+        for (var k in acts)
+            if (acts[k].isRunning())
+                return true;
+        return false;
+    }
+    property int fidgets: 0
+    // Every random gap (like the blink's) plus the loop's own length, so a
+    // look around has ended before the next begins.
+    function _fidgetInterval() {
+        var a = art.motion.acting.poses[pose];
+        return a && a.every ? a.every[0] + Math.random() * (a.every[1] - a.every[0]) + Theme.motion(a.period) : 1000;
     }
     Timer {
-        running: bird._live && bird._every !== undefined && !bird.acting
-        interval: bird._every ? bird._every[0] + Math.random() * (bird._every[1] - bird._every[0]) : 1000
+        running: bird._live && bird._every !== undefined
+        repeat: true
+        interval: bird._fidgetInterval()
         onTriggered: {
             bird.fidget();
-            interval = bird._every[0] + Math.random() * (bird._every[1] - bird._every[0]);
+            interval = bird._fidgetInterval();
         }
     }
 
@@ -501,7 +515,7 @@ Item {
         property QtObject act
         property var from
         property var to
-        readonly property int length: Theme.motion(Math.abs(to[0] - from[0]) * act.period)
+        property int length
         NumberAnimation { target: astep.act; property: "lrot"; to: astep.to[1]; duration: astep.length; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.42, 0, 0.58, 1, 1, 1] }
         NumberAnimation { target: astep.act; property: "ltx"; to: astep.to[2]; duration: astep.length; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.42, 0, 0.58, 1, 1, 1] }
         NumberAnimation { target: astep.act; property: "lty"; to: astep.to[3]; duration: astep.length; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.42, 0, 0.58, 1, 1, 1] }
@@ -521,9 +535,10 @@ Item {
         readonly property var pivot: acting.pivot[channel]
         readonly property var spec: acting.poses[bird.pose] || null
         readonly property var keys: spec && spec.steps[channel] ? spec.steps[channel] : null
-        readonly property real period: spec ? spec.period : 1
         readonly property bool live: bird._live
-        readonly property bool running: loop.running || blend.running
+        // Whether it moves now (read when asked; see _steps for why a loop's
+        // running is not to be trusted to notify if its children change).
+        function isRunning() { return loop.running || blend.running; }
         property real lrot: 0
         property real ltx: 0
         property real lty: 0
@@ -540,14 +555,21 @@ Item {
         readonly property real sx: lsx * bsx
         readonly property real sy: lsy * bsy
 
-        // A pose change waiting to be played (see onKeysChanged).
-        property bool _pending: false
-        function _catchUp() {
-            if (_pending)
-                play();
+        // What the loop plays, set only while it is stopped: a running
+        // animation group whose children change is rebuilt by Qt at its next
+        // loop (or at once at its start) with its signals blocked, so a loop
+        // bound to the pose would jump to the new pose's keys and could stop
+        // without runningChanged (QQuickAnimationGroupPrivate::restartFromCurrentLoop).
+        property var _steps: [_rest, _rest, _rest, _rest, _rest, _rest]
+        property var _lengths: [0, 0, 0, 0, 0]
+        function _load(k, period) {
+            var l = [];
+            for (var i = 0; i < 5; ++i)
+                l.push(Theme.motion((k[i + 1][0] - k[i][0]) * period));
+            _steps = k;
+            _lengths = l;
         }
         function play() {
-            _pending = false;
             var r = rot, x = tx, y = ty, w = sx, h = sy;
             loop.stop();
             blend.stop();
@@ -558,25 +580,27 @@ Item {
             }
             brot = r; btx = x; bty = y; bsx = w; bsy = h;
             blend.start();
+            // From the pose itself (the bindings on it may not all have caught up).
+            var a = acting.poses[bird.pose];
             // Over and over, or (idle's look around: every) now and then by bird.fidget().
-            if (keys !== null && spec.every === undefined) {
+            if (a && a.steps[channel] && a.every === undefined) {
+                _load(a.steps[channel], a.period);
                 loop.loops = Animation.Infinite;
                 loop.start();
             }
         }
         // Played once now (the occasional ones).
         function once() {
-            _catchUp();
-            if (live && keys !== null) {
+            var a = acting.poses[bird.pose];
+            if (live && a && a.steps[channel]) {
                 loop.stop();
+                _load(a.steps[channel], a.period);
                 loop.loops = 1;
                 loop.start();
             }
         }
-        // Once the pose's bindings (the steps' keys and lengths) have caught up;
-        // stopping is at once.
-        onKeysChanged: { _pending = true; Qt.callLater(_catchUp); }
-        onLiveChanged: if (live) { _pending = true; Qt.callLater(_catchUp); } else play()
+        onKeysChanged: play()
+        onLiveChanged: play()
         Component.onCompleted: play()
 
         property list<QtObject> _anims: [
@@ -590,11 +614,11 @@ Item {
             },
             SequentialAnimation {
                 id: loop
-                ActStep { act: act; from: act.keys ? act.keys[0] : act._rest; to: act.keys ? act.keys[1] : act._rest }
-                ActStep { act: act; from: act.keys ? act.keys[1] : act._rest; to: act.keys ? act.keys[2] : act._rest }
-                ActStep { act: act; from: act.keys ? act.keys[2] : act._rest; to: act.keys ? act.keys[3] : act._rest }
-                ActStep { act: act; from: act.keys ? act.keys[3] : act._rest; to: act.keys ? act.keys[4] : act._rest }
-                ActStep { act: act; from: act.keys ? act.keys[4] : act._rest; to: act.keys ? act.keys[5] : act._rest }
+                ActStep { act: act; from: act._steps[0]; to: act._steps[1]; length: act._lengths[0] }
+                ActStep { act: act; from: act._steps[1]; to: act._steps[2]; length: act._lengths[1] }
+                ActStep { act: act; from: act._steps[2]; to: act._steps[3]; length: act._lengths[2] }
+                ActStep { act: act; from: act._steps[3]; to: act._steps[4]; length: act._lengths[3] }
+                ActStep { act: act; from: act._steps[4]; to: act._steps[5]; length: act._lengths[4] }
             }
         ]
         readonly property var _rest: [0, 0, 0, 0, 1, 1]
