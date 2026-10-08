@@ -732,12 +732,12 @@ function note(t, ctx) {
     if (/^(?:note|memo)s? (?:about|for|on)$/.test(t)) return null;
     return { text: capital(cased(m[1], ctx)) };
 }
-function findNotes(t) {
+function findNotes(t, ctx) {
     var m = /^(?:find|search|show(?: me)?|look (?:for|up|through|in)|get|open|read(?: me)?|search through|check) (?:in |through )?(?:all )?(?:my |the )?(?:notes|memos)(?: (?:about|for|on|with|containing|mentioning|that mention|called|named|that say|with the word) (.+))?$/.exec(t)
         || /^(?:find|search|look for|look up) (?:my )?(.+?) in (?:my |the )?(?:notes|memos)$/.exec(t)
         || /^(?:find|show(?: me)?|open) (?:my |the )?(?:note|memo)s? (?:about|for|on|called) (.+)$/.exec(t);
     if (!m) return null;
-    return { query: (m[1] || "").trim() };
+    return { query: cased((m[1] || "").trim(), ctx) };
 }
 
 // "add milk to my shopping list", "create a task pay rent", "add a task to
@@ -823,13 +823,13 @@ function email(t, ctx) {
     if (!who || /^(?:me|myself)$/.test(who)) return null;
     return { who: who, subject: subject ? capital(cased(subject, ctx)) : "", body: body ? capital(cased(body, ctx)) : "" };
 }
-function searchEmail(t) {
+function searchEmail(t, ctx) {
     var m = /^(?:find|show(?: me)?|look for|search for|get|open) (?:the |my |any )?(?:e-?mails?|mail) from (.+)$/.exec(t);
     if (m) return { query: m[1], from: true, unread: false };
     m = /^(?:search|find|look (?:for|through|in)|check|search through)(?: in| through)? (?:my |the )?(?:e-?mails?|inbox|mail(?:box)?)(?: for| about)? (.+)$/.exec(t)
         || /^(?:find|show(?: me)?|look for|search for|get|open) (?:the |my |any )?(?:e-?mails?|mail|messages in my inbox) (?:about|with|mentioning|regarding|on|containing) (.+)$/.exec(t)
         || /^(?:find|search for|look for) (.+?) in (?:my )?(?:e-?mails?|inbox|mail)$/.exec(t);
-    if (m) return { query: m[1].replace(/^(?:for|about) /, ""), from: false, unread: false };
+    if (m) return { query: cased(m[1].replace(/^(?:for|about) /, ""), ctx), from: false, unread: false };
     m = /^(?:do i have|have i got|any|check(?: my)?|read(?: me)?|show(?: me)?|what(?:'s| is| are)(?: in)?) (?:any )?(?:my |the )?(new |unread |latest |recent )?(?:e-?mails?|mail|inbox)(?: from (.+))?$/.exec(t);
     if (m) return { query: m[2] || "", from: !!m[2], unread: !!m[1] && !/latest|recent/.test(m[1]) };
     return null;
@@ -906,6 +906,8 @@ var SETTINGS_PAGES = [
     ["devmode", /^(?:developer(?: mode)?|dev mode)$/], ["advanced", /^advanced$/]
 ];
 function settingsPage(t) {
+    // Settings itself: its list of panes (webOS 2.x had a launch point per pane, no "Settings").
+    if (/^(?:open|show(?: me)?|go to|take me to|launch|bring up) (?:the |my )?(?:settings|preferences)(?: app)?$|^settings$/.test(t)) return { page: "" };
     var m = /^(?:open|show(?: me)?|go to|take me to|launch|bring up|get to|change|adjust) (?:the |my )?(.+?) (?:settings|preferences|options|prefs|panel|pane)$/.exec(t)
         || /^(?:open |show )?(?:the )?settings (?:for|of) (?:the )?(.+)$/.exec(t)
         || /^(.+?) settings$/.exec(t);
@@ -1080,7 +1082,8 @@ function openApp(t, ctx) {
         if (!found && (a.keywords || []).some(function (k) { return norm(k) === w; })) found = a;
     });
     apps.forEach(function (a) { if (!found && w.length >= 3 && norm(a.title).indexOf(w) === 0) found = a; });
-    return found ? { appId: found.id, title: found.title } : null;
+    if (!found) return null;
+    return found.params && Object.keys(found.params).length ? { appId: found.id, title: found.title, params: found.params } : { appId: found.id, title: found.title };
 }
 
 // Commands apps declare (appinfo.json; lib/grammar.js compiles their
@@ -1272,6 +1275,12 @@ function amount(v, unit) {
     return /^°/.test(words) ? v + words : v + " " + words;
 }
 function quote(s) { return "“" + s + "”"; }
+// At most n characters, cut between words.
+function excerpt(s, n) {
+    if (s.length <= n) return s;
+    var cut = s.slice(0, n), sp = cut.lastIndexOf(" ");
+    return (sp > n / 2 ? cut.slice(0, sp) : cut).replace(/[\s,;:.-]+$/, "") + "…";
+}
 
 var say = {
     off: function () { return "The assistant is turned off. You can turn it on in Settings > Assistant."; },
@@ -1314,8 +1323,14 @@ var say = {
         return (alarms.length === 1 ? "You have one alarm: " : "You have " + alarms.length + " alarms" + (on.length !== alarms.length ? ", " + on.length + " on" : "") + ": ") + list(items) + ".";
     },
     alarmNoMatch: function (what) { return "You have no alarm for " + what + "."; },
-    alarmsOff: function (items) { return items.length === 1 ? "Turned off your " + items[0] + " alarm." : "Turned off " + items.length + " alarms."; },
-    confirmAlarmDelete: function (items) { return items.length === 1 ? "Delete your " + items[0] + " alarm?" : "Delete " + items.length + " alarms (" + list(items) + ")?"; },
+    alarmsOff: function (items) {
+        var seen = {}, unique = items.filter(function (x) { return seen[x] ? false : (seen[x] = true); });
+        return items.length === 1 ? "Turned off your alarm for " + items[0] + "." : "Turned off " + items.length + " alarms (" + list(unique) + ").";
+    },
+    confirmAlarmDelete: function (items) {
+        var seen = {}, unique = items.filter(function (x) { return seen[x] ? false : (seen[x] = true); });
+        return items.length === 1 ? "Delete your alarm for " + items[0] + "?" : "Delete " + items.length + " alarms (" + list(unique) + ")?";
+    },
     alarmsDeleted: function (n) { return n === 1 ? "Alarm deleted." : n + " alarms deleted."; },
     clockTime: function (h, m, mer) {
         var hh = mer === "pm" ? h % 12 + 12 : mer === "am" ? h % 12 : h;
@@ -1331,7 +1346,7 @@ var say = {
     noteSaved: function () { return "Saved to Memos."; },
     notesFound: function (q, notes) {
         if (!notes.length) return q ? "I found no memos about " + quote(q) + "." : "You have no memos.";
-        var first = notes.slice(0, 3).map(function (n) { return quote(String(n.text || n.title || "").split("\n")[0].slice(0, 60)); });
+        var first = notes.slice(0, 3).map(function (n) { return quote(excerpt(String(n.text || n.title || "").split("\n")[0], 60)); });
         return (notes.length === 1 ? "One memo" : notes.length + " memos") + (q ? " about " + quote(q) : "") + ": " + list(first) + (notes.length > 3 ? ", and more" : "") + ".";
     },
     // Calendar
@@ -1390,7 +1405,7 @@ var say = {
     dnd: function (on) { return on ? "Do Not Disturb is on: the ringer and alerts are silent." : "Do Not Disturb is off: the ringer is back on."; },
     screenshot: function () { return "Screenshot taken. It's in Photos."; },
     locked: function () { return "Locked."; },
-    openingSettings: function (page) { return "Opening " + (PAGE_NAMES[page] || "Settings") + " settings."; },
+    openingSettings: function (page) { return page ? "Opening " + (PAGE_NAMES[page] || "Settings") + " settings." : "Opening Settings."; },
     battery: function (percent, charging) { return "Your battery is at " + percent + "%" + (charging ? " and charging" : "") + "."; },
     // Conversions, the world
     converted: function (v, from, out, to) { return amount(v, from) + " is " + amount(out, to) + "."; },
@@ -1400,6 +1415,7 @@ var say = {
     worldTime: function (place, text, diff) {
         return "It's " + text + " in " + place + (diff === 0 ? ", the same as here." : diff ? ", " + Math.abs(diff) + (Math.abs(diff) === 1 ? " hour " : " hours ") + (diff > 0 ? "ahead." : "behind.") : ".");
     },
+    noLookup: function (place) { return "I couldn't look up " + place + " right now: are you online?"; },
     noZone: function (place) { return "I don't know what time it is in " + place + "."; },
     distance: function (place, km, imperial) {
         var d = imperial ? km / 1.609344 : km;

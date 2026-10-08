@@ -168,9 +168,9 @@ var BUILT_IN = [
     { id: "lock", title: "Locking the screen", risk: "change", description: "Turn the screen off and lock the device.", parameters: { type: "object", properties: {} } },
     { id: "battery", title: "Battery", risk: "read", description: "Tell the battery level and whether it is charging.", parameters: { type: "object", properties: {} } },
     { id: "settings", title: "Settings pages", risk: "open", description: "Open a page of Settings.",
-      parameters: { type: "object", properties: { page: { type: "string", enum: ["wifi", "bluetooth", "airplane", "phone", "hotspot", "vpn", "screen", "battery", "sounds", "datetime",
+      parameters: { type: "object", properties: { page: { type: "string", enum: ["", "wifi", "bluetooth", "airplane", "phone", "hotspot", "vpn", "screen", "battery", "sounds", "datetime",
         "language", "textassist", "justtype", "clipboard", "assistant", "usb", "gamepads", "location", "emergency", "accessibility", "deviceinfo", "backup",
-        "updates", "certificates", "devmode", "advanced"] } }, required: ["page"] } },
+        "updates", "certificates", "devmode", "advanced"], description: "\"\" for the list of all" } } } },
     { id: "open", title: "Opening apps", risk: "open", description: "Open an app by its name.",
       parameters: { type: "object", properties: { name: { type: "string", description: "The app's name, e.g. Maps" } }, required: ["name"] } },
     { id: "navigate", title: "Directions", risk: "open", description: "Get directions to a place in Maps.",
@@ -480,7 +480,7 @@ function prepare(cmd, args, env) {
             }
             args.ids = hit.map(function (a) { return a._id; });
             args.keys = hit.map(function (a) { return a.key; });
-            args.items = hit.map(function (a) { return a.niceTime || say.clockTime(a.hour, a.minute, "24"); });
+            args.items = hit.map(function (a) { return (a.niceTime || say.clockTime(a.hour, a.minute, "24")) + (a.occurs && a.occurs !== "once" ? " " + env.lang.repeatText(a.occurs) : ""); });
             if (args.action === "delete") return { args: args, confirm: say.confirmAlarmDelete(args.items) };
             return { args: args };
         });
@@ -558,7 +558,7 @@ function geocode(env, place) {
 function here(env) {
     return lunaCall(env, "luna://com.webos.service.location/getCurrentPosition", { responseTime: 2, maximumAge: 600 })
         .then(function (r) {
-            if (typeof r.latitude !== "number" || (r.errorCode && r.errorCode !== 0)) throw new Error("no fix");
+            if (typeof r.latitude !== "number" || (r.errorCode && r.errorCode !== 0)) throw Object.assign(new Error("no fix"), { said: env.lang.say.noLocation() });
             return { lat: r.latitude, lon: r.longitude, name: "" };
         }, function () { throw Object.assign(new Error("no location"), { said: env.lang.say.noLocation() }); });
 }
@@ -1029,14 +1029,16 @@ function run(cmd, args, env) {
                          open: { appId: SETTINGS_APP, params: { page: "battery" }, title: "Battery" } };
             });
     case "settings":
-        return launch(env, SETTINGS_APP, { page: args.page }).then(function () { return { text: say.openingSettings(args.page) }; });
+        return launch(env, SETTINGS_APP, args.page ? { page: args.page } : {}).then(function () { return { text: say.openingSettings(args.page) }; });
     case "open":
-        return launch(env, args.appId, {}).then(function () { return { text: say.opening(args.title || args.appId) }; });
+        // A launch point's own params (Settings' panes: {page}).
+        return launch(env, args.appId, args.params || {}).then(function () { return { text: say.opening(args.title || args.appId) }; });
     case "navigate":
         return launch(env, MAPS_APP, { target: "mapto:" + args.destination })
             .then(function () { return { text: say.navigating(args.destination) }; });
     case "distance":
-        return Promise.all([geocode(env, args.place), here(env)]).then(function (r) {
+        return Promise.all([geocode(env, args.place).catch(function (e) { throw e.said ? e : Object.assign(e, { said: say.noLookup(args.place) }); }),
+                            here(env)]).then(function (r) {
             var a = r[0], b = r[1], rad = Math.PI / 180;
             var x = Math.sin((a.lat - b.lat) * rad / 2), y = Math.sin((a.lon - b.lon) * rad / 2);
             var km = 2 * 6371 * Math.asin(Math.sqrt(x * x + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * y * y));

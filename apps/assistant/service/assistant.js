@@ -187,7 +187,7 @@ function createAssistantService(deps) {
             var list = (r && r.launchPoints) || [];
             appsCache = list.filter(function (a) { return a && a.title && (a.id || a.appId); }).map(function (a) {
                 return { id: a.id || a.appId, title: a.title, keywords: a.keywords || [], assistant: a.assistant,
-                         universalSearch: a.universalSearch };
+                         universalSearch: a.universalSearch, params: a.params || null };
             });
             appsAt = now();
             return appsCache;
@@ -350,12 +350,13 @@ function createAssistantService(deps) {
                   function (e) { return [say(thread, lang().say.cloudFailed(source, e.message), { via: "cloud", source: source, status: "failed" })]; });
     }
     // Layer 4: nothing here could answer; the user chooses.
-    function offer(thread, note) {
+    // instead: the note replaces "I can't do that on the phone" (it says why).
+    function offer(thread, note, instead) {
         var s = lang().say, choices = [], p = defaultProvider();
         if (p) choices.push({ id: "cloud:" + p.id, label: s.askCloud(providers.displayName(p)) });
         choices.push({ id: "web", label: s.searchWeb() });
         if (!p) choices.push({ id: "settings", label: s.setUpCloud() });
-        return [say(thread, (note ? note + " " : "") + s.cantDo(), { via: "commands", choices: choices })];
+        return [say(thread, instead ? note : (note ? note + " " : "") + s.cantDo(), { via: "commands", choices: choices })];
     }
 
     function route(thread, text) {
@@ -374,13 +375,13 @@ function createAssistantService(deps) {
                 var id = parsed.command === "app" ? "app:" + parsed.args.key : parsed.command;
                 var cmd = commands.find(cat.all, id);
                 var args = parsed.command === "app" ? { text: parsed.args.text } : parsed.args;
-                if (parsed.command === "open") args = { appId: parsed.args.appId, title: parsed.args.title, name: parsed.args.title };
+                if (parsed.command === "open") args = { appId: parsed.args.appId, title: parsed.args.title, name: parsed.args.title, params: parsed.args.params };
                 if (cmd) return act(thread, cmd, args, "commands", "");
             }
             var cloud = thread.provider ? getProvider(thread.provider) : null;
             if (cloud) return askCloud(thread, cloud, cat);
             return localReady().then(function (m) {
-                if (!m) return offer(thread, note);
+                if (!m) return offer(thread, note, !!note);
                 return askLocal(thread, m, cat).catch(function (e) {
                     log("on-device model failed: " + (e && e.message));
                     return offer(thread, lang().say.localFailed(e && e.message || "no answer"));

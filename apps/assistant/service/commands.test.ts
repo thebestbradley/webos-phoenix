@@ -57,7 +57,8 @@ function device(opts: { offline?: boolean } = {}) {
             calls.push({ uri, params: p });
             const m = uri.replace(/^luna:\/\//, "");
             if (m === "com.palm.applicationManager/listLaunchPoints")
-                return okr({ launchPoints: [{ id: "com.palm.app.calendar", title: "Calendar" }, { id: "org.webosphoenix.settings", title: "Settings" }] });
+                return okr({ launchPoints: [{ id: "com.palm.app.calendar", title: "Calendar" },
+                                            { id: "org.webosphoenix.settings", title: "Sounds & Ringtones", params: { page: "sounds" } }] });
             if (m === "com.palm.db/find") {
                 const kind = p.query.from;
                 return okr({ results: [...db.values()].filter((o) => o._kind === kind || (kind === "com.palm.email:1" && /email:1$/.test(o._kind))) });
@@ -194,7 +195,7 @@ describe("alarms, timers, the stopwatch", () => {
     it("alarms listed, turned off (and back on by undo), deleted after Yes", async () => {
         const d = device();
         expect((await d.ask("what alarms do I have")).text).toBe("You have 2 alarms: 7:00 AM on weekdays and 6:30 PM.");
-        expect((await d.ask("cancel my 7am alarm")).text).toBe("Turned off your 7:00 AM alarm.");
+        expect((await d.ask("cancel my 7am alarm")).text).toBe("Turned off your alarm for 7:00 AM on weekdays.");
         expect(d.db.get("alarm-7").enabled).toBe(false);
         expect(d.called("activitymanager/cancel").map((c) => c.params.activityName)).toEqual(["clockAlarm1"]);
         await d.confirm(await d.ask("undo"));
@@ -202,7 +203,7 @@ describe("alarms, timers, the stopwatch", () => {
         expect(d.state.activities.get("clockAlarm1").schedule.start).toBe("2026-10-08 07:00:00");
         expect((await d.ask("cancel my 9am alarm")).text).toBe("You have no alarm for 9:00 AM.");
         const q = await d.ask("delete all alarms");
-        expect(q).toMatchObject({ status: "pending", text: "Delete 2 alarms (7:00 AM and 6:30 PM)?" });
+        expect(q).toMatchObject({ status: "pending", text: "Delete 2 alarms (7:00 AM on weekdays and 6:30 PM)?" });
         expect(d.of("com.palm.clock.alarm:1")).toHaveLength(2);
         expect((await d.confirm(q)).text).toBe("2 alarms deleted.");
         expect(d.of("com.palm.clock.alarm:1")).toHaveLength(0);
@@ -317,6 +318,12 @@ describe("the device", () => {
         expect((await d.ask("what's my battery")).text).toBe("Your battery is at 76% and charging.");
         expect((await d.ask("open Wi-Fi settings")).text).toBe("Opening Wi-Fi settings.");
         expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.settings", params: { page: "wifi" } });
+        // webOS 2.x has a launch point per pane and none called Settings: the list of them.
+        expect((await d.ask("open settings")).text).toBe("Opening Settings.");
+        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.settings", params: {} });
+        // A pane's launch point opens with its own params.
+        expect((await d.ask("open sounds & ringtones")).text).toBe("Opening Sounds & Ringtones.");
+        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.settings", params: { page: "sounds" } });
     });
     it("photos from a day open in Photos", async () => {
         const d = device();
@@ -350,11 +357,12 @@ describe("conversions and the world", () => {
         const d = device();
         // From Sunnyvale (the stand-in location), in miles for en-US.
         expect((await d.ask("how far is Paris")).text).toBe("Paris is about 5,580 miles away, as the crow flies.");
+        expect((await device({ offline: true }).ask("how far is Paris")).text).toBe("I couldn't look up paris right now: are you online?");
     });
     it("translation goes on to a model or the web", async () => {
         const d = device();
         const m = await d.ask("translate hello into French");
-        expect(m.text).toBe("I can't translate on the phone. I can't do that on the phone.");
+        expect(m.text).toBe("I can't translate on the phone.");
         expect(m.choices!.map((c) => c.id)).toContain("web");
     });
 });

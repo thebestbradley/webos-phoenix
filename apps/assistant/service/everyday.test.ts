@@ -201,7 +201,7 @@ describe("reminders, tasks, lists, memos", () => {
         expect(args("take a note that the wifi password is on the fridge")).toEqual({ text: "The wifi password is on the fridge" });
         expect(args("note down: Parking on level 3")).toEqual({ text: "Parking on level 3" });
         expect(args("make a memo saying call the plumber")).toEqual({ text: "Call the plumber" });
-        expect(args("find my notes about Wi-Fi")).toEqual({ query: "wi-fi" });
+        expect(args("find my notes about Wi-Fi")).toEqual({ query: "Wi-Fi" });
         expect(args("search my memos for books")).toEqual({ query: "books" });
         expect(args("show me my notes")).toEqual({ query: "" });
         expect(cmd("notes about")).toBeNull();
@@ -288,7 +288,9 @@ describe("music, sound, the screen and the system", () => {
         expect(args("open bluetooth settings")).toEqual({ page: "bluetooth" });
         expect(args("show me the battery settings")).toEqual({ page: "battery" });
         expect(args("sound settings")).toEqual({ page: "sounds" });
-        expect(args("open settings")).toEqual({ appId: "org.webosphoenix.settings", title: "Settings" });
+        // Settings itself: the list of its panes (each a launch point of its own).
+        expect(args("open settings")).toEqual({ page: "" });
+        expect(args("open the settings app")).toEqual({ page: "" });
         expect(cmd("open the pod bay doors settings")).toBeNull();
     });
 });
