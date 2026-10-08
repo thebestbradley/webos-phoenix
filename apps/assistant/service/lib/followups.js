@@ -409,8 +409,9 @@ function create(deps) {
         var list = r.options.map(function (o, i) { return { id: "fu:" + i, label: o.label }; });
         return r.meta ? list : list.concat([{ id: "fu:skip", label: words2().chip.skip }]);
     }
-    function textOf(r) {
-        return r.meta ? words2().doubt(r.kind, r.variant || 0) : words2().question(r.kind, r.item, now(), r.variant || 0);
+    // at: the time it is said at (a fast-forward's, else now).
+    function textOf(r, at) {
+        return r.meta ? words2().doubt(r.kind, r.variant || 0) : words2().question(r.kind, r.item, at || now(), r.variant || 0);
     }
     // Asked in the conversation: kept open for an answer.
     function open(item, rec, q, args, threadId) {
@@ -651,14 +652,14 @@ function create(deps) {
             r.item = describe(r.item, rec0, at);
             // Said in its conversation too, waiting there (unread).
             if (deps.delivered) {
-                var mid = deps.delivered(r, textOf(r), choicesOf(r));
+                var mid = deps.delivered(r, textOf(r, at), choicesOf(r));
                 if (mid) r.messageId = mid;
             }
             put(r);
             // Room for two answers and Skip in a dashboard row.
             var items = choicesOf(r);
             items = items.length > 3 ? items.slice(0, 2).concat(items.slice(-1)) : items;
-            notify({ appId: ASSISTANT_APP, tag: "followup:" + r.id, title: textOf(r), body: "",
+            notify({ appId: ASSISTANT_APP, tag: "followup:" + r.id, title: textOf(r, at), body: "",
                      params: { followUp: r.id },
                      actions: { uri: SERVICE_URI + "answerFollowUp", params: { id: r.id }, items: items } });
         });

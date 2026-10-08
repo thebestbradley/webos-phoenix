@@ -312,6 +312,104 @@ Item {
         onTriggered: root.turnDevice(simTurn)
     }
 
+    // ---- The assistant's follow-up questions (docs/AI-AND-MCP.md) ------------------------
+    // Assistant Follow-ups Now: the service's clock moved on to when the next
+    // question waiting for later is due (followUpWake {at}), again until one
+    // is shown as a notification (past the quiet hours, Do Not Disturb and
+    // calls) or none waits. done() after.
+    function followUpsNow(done, left) {
+        var svc = "luna://org.webosphoenix.assistant/";
+        if (left === undefined)
+            left = 8;
+        windows.lunaCall(svc + "followUps", {}, function (q) {
+            var list = q && q.followUps ? q.followUps.filter(function (f) { return f.state !== "delivered"; }) : [];
+            if (!list.length || left <= 0) {
+                if (done) done();
+                return;
+            }
+            var at = Math.max(Date.now(), Math.min.apply(null, list.map(function (f) { return f.nextAt; })));
+            windows.lunaCall(svc + "followUpWake", { at: at }, function (r) {
+                console.log("phoenix-sim: assistant follow-ups at " + new Date(at).toString() + ": " + JSON.stringify(r));
+                if (r && r.delivered) {
+                    if (done) done();
+                    return;
+                }
+                root.followUpsNow(done, left - 1);
+            });
+        });
+    }
+    // --scene followup: the assistant's view, an event made and the
+    // question after it; followuplater: an event made and left unanswered,
+    // the clock moved on, its notification in the dashboard; followupchat:
+    // then the Assistant app opened from it (its conversation).
+    Timer {
+        id: sceneFollowUpTimer
+        interval: 9000
+        onTriggered: {
+            var svc = "luna://org.webosphoenix.assistant/";
+            if (root.scene === "followup" || root.scene === "followupanswer") {
+                shell.openAssistant();
+                sceneFollowUpAsk.start();
+                return;
+            }
+            windows.lunaCall(svc + "ask", { text: "schedule lunch with Sam on friday at noon", newThread: true }, function () {
+                windows.lunaCall(svc + "followUpLeave", {}, function () {
+                    root.followUpsNow(function () {
+                        if (root.scene === "followupchat") {
+                            windows.lunaCall(svc + "followUps", {}, function (q) {
+                                var f = q && q.followUps && q.followUps[0];
+                                if (f)
+                                    shell.launch("org.webosphoenix.assistant", { followUp: f.id });
+                            });
+                        } else {
+                            shell.notifications.bannerActive = false;
+                            shell.notifications.dashboardOpen = root.scene !== "followupaction";
+                            // followupaction: its first answer tapped, the confirmation in the banner.
+                            if (root.scene === "followupaction")
+                                sceneFollowUpAction.start();
+                        }
+                    });
+                });
+            });
+        }
+    }
+
+    Timer {
+        id: sceneFollowUpAsk
+        interval: 1500
+        onTriggered: {
+            shell.assistantOverlay.ask("add a meeting with Sam tomorrow at 3");
+            if (root.scene === "followupanswer")
+                sceneFollowUpChoose.start();
+        }
+    }
+    Timer {
+        id: sceneFollowUpAction
+        interval: 2000
+        onTriggered: {
+            for (var i = 0; i < windows.notifications.count; ++i)
+                if (windows.notifications.get(i).actions) {
+                    console.log("phoenix-sim: follow-up answered from its notification, " + (Date.now() - root.startedAt) + " ms in");
+                    shell.notifications.runAction(i, "fu:0");
+                    break;
+                }
+        }
+    }
+    readonly property double startedAt: Date.now()
+    // --scene followupanswer: its first answer tapped.
+    Timer {
+        id: sceneFollowUpChoose
+        interval: 2500
+        onTriggered: {
+            var ov = shell.assistantOverlay, list = ov.messages;
+            for (var i = list.length - 1; i >= 0; --i)
+                if (list[i].followUp && !list[i].chosen) {
+                    ov.choose(list[i], list[i].choices[0]);
+                    return;
+                }
+        }
+    }
+
     // --scene launchermenu: once the launcher is up.
     Timer {
         id: sceneMenuTimer
@@ -669,6 +767,11 @@ Item {
                   console.log("phoenix-sim: the microphone is not listening for \"Hey Phoenix\" (Settings > Assistant)");
           } },
         { id: "notification", menu: "simulate", text: qsTr("Demo Notification"), keys: ["F2"], press: [Qt.Key_F2], icon: "notification" },
+        // The assistant's follow-up questions waiting for later: the clock
+        // moved on to when the next is due (docs/AI-AND-MCP.md).
+        { id: "followUpsNow", menu: "simulate", text: qsTr("Assistant Follow-ups Now"), keys: ["Ctrl+Shift+U"],
+          tip: qsTr("Moves the assistant's clock on until a follow-up question waiting for later is shown as a notification"),
+          run: function () { root.followUpsNow(); } },
         { separator: true, menu: "simulate" },
         // The battery and chargers: 5% and under is luna-systemui's Low
         // Battery alert (battery_low.mp3); a wall charger "Charging Battery"
@@ -1341,6 +1444,8 @@ Item {
         } else if (scene === "launchergroup" || scene === "launchergroupopen" || scene === "launchertabs") {
             shell.gestureUp();
             sceneGroupTimer.start();
+        } else if (/^followup(?:answer|later|action|chat)?$/.test(scene)) {
+            sceneFollowUpTimer.start();
         } else if (scene === "launchermenu") {
             // The icon menu of the launcher's second icon (press and hold).
             shell.gestureUp();

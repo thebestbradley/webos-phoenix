@@ -270,9 +270,19 @@ function createAssistantService(deps) {
                                            var thread = getThread(q.threadId);
                                            if (!thread) return "";
                                            var old = q.messageId ? getMessage(thread.id, q.messageId) : null;
-                                           if (old && !old.chosen) { old.chosen = "later"; putMessage(old); }
-                                           var command = { event: "event", reminder: "reminder", task: "task", alarm: "alarm", contact: "contactAdd" }[q.item.type];
-                                           var m = say(thread, text, { via: "commands", command: command, followUp: { id: q.id, kind: q.kind }, choices: choices });
+                                           var msgs = messagesOf(thread.id), latest = msgs[msgs.length - 1];
+                                           var m;
+                                           // Still the last word there: it stands, and waits unread.
+                                           if (old && !old.chosen && latest && latest.id === old.id) {
+                                               m = old;
+                                               m.choices = choices;   // the notification's (times as they are now)
+                                               putMessage(m);
+                                           }
+                                           else {
+                                               if (old && !old.chosen) { old.chosen = "later"; putMessage(old); }
+                                               var command = { event: "event", reminder: "reminder", task: "task", alarm: "alarm", contact: "contactAdd" }[q.item.type];
+                                               m = say(thread, text, { via: "commands", command: command, followUp: { id: q.id, kind: q.meta ? "doubt" : q.kind }, choices: choices });
+                                           }
                                            thread = getThread(thread.id);
                                            thread.unread = (thread.unread || 0) + 1;
                                            putThread(thread);
