@@ -2129,7 +2129,9 @@ which runs unchanged in the simulator:
 
 - **Sources** (`/etc/palm/marketplace/sources.json`, then the user's):
   the Phoenix Marketplace (a signed catalog; for now at
-  `http://127.0.0.1:8088/v1/`, `server/marketplace/bin/serve.sh`), the
+  `http://127.0.0.1:8088/v1/`, `server/marketplace/bin/serve.sh`, or
+  `phoenix-sim --marketplace`, which starts it with the simulator and opens
+  the Marketplace), the
   webOS Archive's App Museum II and the PreCentral homebrew feed (both off
   until switched on). Catalogs can be added by address.
 - **Signed catalogs** (`lib/catalog.js`, `lib/ed25519.js`): `index.json`,

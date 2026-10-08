@@ -9,7 +9,7 @@
 //               [--orientation up|left|down|right] [--turn ORIENTATION]
 //               [--home-button] [--first-use] [--screenshot FILE [--delay MS]] [--stay-awake] [--low-memory] [--hardware-keyboard] [--touchstone] [--no-host-shell]
 //               [--host-shell PATH] [--security-policy SPEC] [--usb] [--usb-busy] [--touch-to-share]
-//               [--boot-animation | --no-boot-animation] [--no-toolbar]
+//               [--boot-animation | --no-boot-animation] [--no-toolbar] [--marketplace]
 //
 // Keys: Esc = back gesture, Home/F1 = up gesture, F2 = demo notification,
 //       F3 = Power (screen off and locked / on), F4 = incoming call, F5 = incoming text message
@@ -45,6 +45,8 @@
 #include <QScopeGuard>
 #include <QTimer>
 
+#include <memory>
+
 #ifdef Q_OS_LINUX
 #include <unistd.h>
 #endif
@@ -56,6 +58,9 @@
 #include "simpty.h"
 #include "simsettings.h"
 #include "simprocess.h"
+#ifdef PHOENIX_HAVE_WEBENGINE
+#include "simmarketplace.h"
+#endif
 
 #ifdef PHOENIX_HAVE_WEBENGINE
 #include <QQuickWebEngineProfile>
@@ -167,6 +172,7 @@ int main(int argc, char *argv[])
     QCommandLineOption quietOpt(QStringLiteral("quiet"), QStringLiteral("No boot and shutdown sounds (they are off anyway with --screenshot and the offscreen platform)."));
     QCommandLineOption noHostShellOpt(QStringLiteral("no-host-shell"), QStringLiteral("Do not give the Terminal app a real shell on this computer (it gets the runtime's simulated shell)."));
     QCommandLineOption llamaServerOpt(QStringLiteral("llama-server"), QStringLiteral("llama.cpp's llama-server program for the Assistant's on-device model (default: llama-server on the PATH)."), QStringLiteral("path"));
+    QCommandLineOption marketplaceOpt(QStringLiteral("marketplace"), QStringLiteral("Start the Marketplace's catalog service on this computer (server/marketplace/bin/serve.sh: PHP 8; set up the first time) where the simulator's Marketplace reads it, http://127.0.0.1:8088/, and open the Marketplace. It stops with the simulator; one already running is used."));
     QCommandLineOption speechCommandOpt(QStringLiteral("speech-command"), QStringLiteral("The program (and arguments, %l for the language) that speaks the Assistant's answers, given the text on its input (default: espeak-ng, or say on a Mac)."), QStringLiteral("command"));
     QCommandLineOption microphoneFileOpt(QStringLiteral("microphone-file"), QStringLiteral("Play this WAV file as the microphone when dictation or Voice Dial listens, followed by quiet; for computers without one and for tests. Repeat it for the following recordings (the last one plays again after that)."), QStringLiteral("file"));
     QCommandLineOption hostShellOpt(QStringLiteral("host-shell"), QStringLiteral("Run this program in the Terminal instead of the shell it asks for."), QStringLiteral("path"));
@@ -184,7 +190,7 @@ int main(int argc, char *argv[])
     eraseOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     parser.addOptions({ hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
                         noHostShellOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, updatingOpt, eraseOpt, microphoneFileOpt,
-                        llamaServerOpt, speechCommandOpt });
+                        llamaServerOpt, speechCommandOpt, marketplaceOpt });
     parser.process(app);
 
     // A Full Erase or a security policy's wipe restarted the simulator:
@@ -293,6 +299,26 @@ int main(int argc, char *argv[])
     // The browser's page pictures (saveViewToFile, generateIconFromFile).
     SimSnapshots snapshots(&rootfs);
 
+    // --marketplace: the catalog service, answering before the Marketplace
+    // first reads it.
+    QStringList launch = parser.values(launchOpt);
+#ifdef PHOENIX_HAVE_WEBENGINE
+    std::unique_ptr<SimMarketplace> marketplace;
+    if (parser.isSet(marketplaceOpt)) {
+        marketplace = std::make_unique<SimMarketplace>(repoDir);
+        if (marketplace->start())
+            qInfo("phoenix-sim: the Marketplace's catalog at %s%s", qPrintable(marketplace->url()),
+                  marketplace->ownsServer() ? qPrintable(QStringLiteral(" (log: ") + marketplace->logFile() + QLatin1Char(')')) : " (already running)");
+        else
+            qWarning("phoenix-sim: --marketplace: %s", qPrintable(marketplace->error()));
+        if (!launch.contains(QStringLiteral("org.webosphoenix.marketplace")))
+            launch << QStringLiteral("org.webosphoenix.marketplace");
+    }
+#else
+    if (parser.isSet(marketplaceOpt))
+        qWarning("phoenix-sim: --marketplace needs web apps (Qt WebEngine)");
+#endif
+
     // The Terminal's shells: real ones on this computer (docs/TERMINAL.md),
     // unless turned off. The runtime learns which from /usr/share/phoenix/host.json.
     // The shell's dictation (the microphone and the transcriber) serves the
@@ -351,7 +377,7 @@ int main(int argc, char *argv[])
 #endif
     view.rootContext()->setContextProperty(QStringLiteral("simWebEngine"), webEngine);
     view.rootContext()->setContextProperty(QStringLiteral("simWebApps"), webApps);
-    view.rootContext()->setContextProperty(QStringLiteral("simLaunch"), parser.values(launchOpt));
+    view.rootContext()->setContextProperty(QStringLiteral("simLaunch"), launch);
     view.rootContext()->setContextProperty(QStringLiteral("simLowMemory"), parser.isSet(lowMemoryOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simTouchstone"), parser.isSet(touchstoneOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simHardwareKeyboard"), parser.isSet(hardwareKeyboardOpt));
