@@ -46,13 +46,21 @@ var methods = assistant.createAssistantService({
         return new Promise(function (resolve) { service.call(uri, params, function (message) { resolve(message.payload); }); });
     } } }),
     caller: function () { return current ? current.sender || current.applicationID || "" : ""; },
+    // A follow-up question later (lib/followups.js). OSE's notification
+    // manager has no buttons: a toast that opens the Assistant on the
+    // question (the shell's buttons are phoenix-sim's for now, docs/AI-AND-MCP.md).
+    notify: function (n) {
+        if (n.remove) return;
+        service.call("luna://com.webos.notification/createToast",
+                     { sourceId: assistant.SERVICE, message: n.title, onclick: { appId: n.appId, params: n.params || {} } }, function () {});
+    },
     changed: function () { notify(); },
     log: function (m) { console.log("[assistant] " + m); }
 });
 
 // The caller of the request being answered (luna-service2 tells the app id).
 var current = null;
-var WATCHABLE = ["threads", "thread", "getSettings", "providers", "models", "commands"];
+var WATCHABLE = ["threads", "thread", "getSettings", "providers", "models", "commands", "followUps"];
 function notify() {
     watchers = watchers.filter(function (w) { return !w.cancelled; });
     watchers.forEach(function (w) {

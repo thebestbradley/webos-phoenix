@@ -103,6 +103,29 @@ Item {
     signal dismissRequested(int index)
     signal activated(string appId, string params)
 
+    // A notification's button (DashboardItem actions; Phoenix): the app's
+    // own service called, as the system UI, with the notification's params
+    // and {action: id}, the notification done with, and what the service
+    // says back ({text}) shown as the app's banner, without opening it
+    // (e.g. the Assistant's follow-up answers, answerFollowUp). Only the
+    // app's own service: luna://<appId>/...
+    function runAction(index, actionId) {
+        if (!model || index < 0 || index >= model.count)
+            return;
+        var n = model.get(index), a = null;
+        try { a = n.actions ? JSON.parse(n.actions) : null; } catch (e) { a = null; }
+        if (!a || typeof a.uri !== "string" || a.uri.indexOf("luna://" + n.appId + "/") !== 0)
+            return;
+        var note = { appId: n.appId, icon: n.icon, color: n.color, glyph: n.glyph };
+        dismissRequested(index);
+        if (!source || typeof source.lunaCall !== "function")
+            return;
+        source.lunaCall(a.uri, Object.assign({}, a.params || {}, { action: String(actionId) }), function (r) {
+            if (r && r.returnValue !== false && r.text)
+                root.showBanner(String(r.text), note.icon, note.color, note.glyph, note.appId, "", "");
+        });
+    }
+
     readonly property bool overlay: Theme.tablet
     readonly property bool hasNotifications: model && model.count > 0
     property bool bannerActive: false
@@ -841,6 +864,7 @@ Item {
             backdrop: root.backdrop
             locked: root.locked
             onActivated: (appId, params) => root.activated(appId, params)
+            onActionRequested: (index, actionId) => root.runAction(index, actionId)
             onDismissRequested: (index) => root.dismissRequested(index)
         }
     }
@@ -977,6 +1001,8 @@ Item {
                     glyph: item.glyph
                     icon: item.icon
                     progress: item.progress
+                    actions: item.model.actions || ""
+                    onActionTapped: (actionId) => root.runAction(item.index, actionId)
 
                     // The lock screen showed the window while locked; it
                     // comes back here (LockScreen's dashboard).

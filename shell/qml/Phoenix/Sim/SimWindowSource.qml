@@ -726,8 +726,17 @@ Item {
             // A notification for another app (e.g. a text the telephony
             // service received for Messaging, a Tasks reminder): {appId,
             // title, body, params?}; tapping it launches the app with params.
+            // Phoenix: {tag} replaces the app's notification of that tag,
+            // {tag, remove: true} takes it away; {actions: {uri, params,
+            // items: [{id, label}]}} adds buttons (Notifications.qml
+            // runAction), e.g. the Assistant's follow-up answers.
             var target = payload.appId && appInfo(payload.appId) ? payload.appId : appId;
-            notify(target, payload.title || "", payload.body || "", payload.params);
+            if (payload.tag)
+                removeTagged(target, String(payload.tag));
+            if (payload.remove)
+                return;
+            notify(target, payload.title || "", payload.body || "", payload.params,
+                   { tag: payload.tag ? String(payload.tag) : "", actions: payload.actions || null });
             if (payload.soundClass || payload.soundFile) {
                 var ns = _soundArgs(payload);
                 soundRequested(target, ns[0], ns[1], ns[2]);
@@ -1220,7 +1229,7 @@ Item {
                 color: info.color, glyph: info.glyph, icon: _iconUrl(_param(url, "phoenixIcon"), appId),
                 params: "", windowKey: key,
                 clickableWhenLocked: _param(url, "phoenixClickableWhenLocked") === "1",
-                ongoing: false, progress: -1
+                ongoing: false, progress: -1, tag: "", actions: ""
             });
         }
     }
@@ -2417,16 +2426,28 @@ Item {
     }
 
     // params: launch params for the app when the notification is tapped.
-    function notify(appId, titleText, body, params) {
+    // extra: {tag, actions} (see the "notification" host message).
+    function notify(appId, titleText, body, params, extra) {
         var info = appInfo(appId) || { color: "#666666", glyph: "!", icon: "" };
+        var acts = extra && extra.actions && Array.isArray(extra.actions.items) && extra.actions.items.length ? extra.actions : null;
         notifications.append({
             id: "n" + Date.now() + "_" + notifications.count,
             appId: appId, title: titleText, body: body,
             color: info.color, glyph: info.glyph, icon: info.icon || "",
             params: params && typeof params === "object" ? JSON.stringify(params) : "",
             windowKey: "", clickableWhenLocked: false,
-            ongoing: false, progress: -1
+            ongoing: false, progress: -1,
+            tag: extra && extra.tag ? extra.tag : "",
+            actions: acts ? JSON.stringify(acts) : ""
         });
+    }
+    // The app's notification of that tag, gone (replaced or taken back).
+    function removeTagged(appId, tag) {
+        for (var i = notifications.count - 1; i >= 0; --i) {
+            var n = notifications.get(i);
+            if (n.appId === appId && n.tag === tag)
+                notifications.remove(i);
+        }
     }
 
     // An ongoing activity (a download, an install; org.webosphoenix.ongoing
@@ -2462,7 +2483,7 @@ Item {
             id: key, appId: target, title: p.title || "", body: p.body || "",
             color: info.color, glyph: info.glyph, icon: p.icon ? _iconUrl(p.icon, target) : (info.icon || ""),
             params: params, windowKey: "", clickableWhenLocked: false,
-            ongoing: true, progress: progress
+            ongoing: true, progress: progress, tag: "", actions: ""
         });
     }
 

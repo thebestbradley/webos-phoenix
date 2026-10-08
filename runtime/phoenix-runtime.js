@@ -13413,6 +13413,10 @@
                     voice: voiceParts,
                     caller: function () { return PalmSystem.appIdentifier; },
                     locale: function () { return (global.navigator && global.navigator.language) || "en-US"; },
+                    // A follow-up question later (lib/followups.js): the
+                    // Assistant's notification, with its answers as buttons
+                    // ({actions}), or {tag, remove} to take it back.
+                    notify: function (n) { host.postToHost("notification", n); },
                     changed: changed,
                     log: function (m) { console.info("[assistant] " + m); }
                 });
@@ -13421,11 +13425,12 @@
             return methods;
         }
 
-        var WATCHABLE = { threads: 1, thread: 1, getSettings: 1, providers: 1, models: 1, commands: 1 };
+        var WATCHABLE = { threads: 1, thread: 1, getSettings: 1, providers: 1, models: 1, commands: 1, followUps: 1 };
         var serviceMethods = {};
         ["ask", "choose", "confirm", "threads", "thread", "newThread", "setCurrent", "deleteThread", "clearHistory",
          "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
          "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary",
+         "followUps", "answerFollowUp", "followUpOpen", "followUpLeave", "followUpWake", "resetFollowUps",
          "connect", "retry", "voice"].forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
                 var m;
@@ -13456,7 +13461,25 @@
             "/getStatus": function (p, reply) { tts.status().then(function (s) { reply(ok({ available: !!s.available, engine: s.engine || "" })); }); }
         });
 
-        runtime.assistant = { service: service, llm: llm, tts: tts, hostHas: hostHas };
+        // The simulator's and the tests' fast-forward for follow-up questions
+        // (sim.qml "Assistant Follow-ups Now"): the clock moved on to the next
+        // time one is due, again until one is shown as a notification (past
+        // the quiet hours, Do Not Disturb and calls) or none waits. Resolves
+        // the last wake's {queued, delivered, dropped, postponed, at}.
+        function fastForward(limit) {
+            var m = service(), n = limit || 8;
+            function step(last) {
+                return m.followUps({}).then(function (q) {
+                    var waiting = q.followUps || [];
+                    if (!waiting.length || n-- <= 0 || (last && last.delivered)) return last || { delivered: 0 };
+                    var at = Math.max(Date.now(), Math.min.apply(null, waiting.map(function (f) { return f.nextAt; })));
+                    return m.followUpWake({ at: at }).then(function (r) { r.at = at; return step(r); });
+                });
+            }
+            return step(null);
+        }
+
+        runtime.assistant = { service: service, llm: llm, tts: tts, hostHas: hostHas, fastForward: fastForward };
     })();
 
     // ================================================================================
