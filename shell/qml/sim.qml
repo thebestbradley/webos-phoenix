@@ -769,7 +769,7 @@ Item {
         { id: "notification", menu: "simulate", text: qsTr("Demo Notification"), keys: ["F2"], press: [Qt.Key_F2], icon: "notification" },
         // The assistant's follow-up questions waiting for later: the clock
         // moved on to when the next is due (docs/AI-AND-MCP.md).
-        { id: "followUpsNow", menu: "simulate", text: qsTr("Assistant Follow-ups Now"), keys: ["Ctrl+Shift+U"],
+        { id: "followUpsNow", menu: "simulate", text: qsTr("Assistant Follow-ups Now"), keys: ["Shift+F2"],
           tip: qsTr("Moves the assistant's clock on until a follow-up question waiting for later is shown as a notification"),
           run: function () { root.followUpsNow(); } },
         { separator: true, menu: "simulate" },

@@ -12,6 +12,9 @@
 //     words it does not understand get close commands ("Did you mean
 //     ...?"); a question nothing on the phone answers offers "Search the
 //     web" and "Connect model", which asks which kind;
+//   - an event made asks a follow-up question after it (as conversation,
+//     with quick replies): Skip leaves it and the next comes, a tap answers
+//     it (the whole flow: test-assistant-followups.cjs);
 //   - Settings > Assistant (apps/settings): speech, units and a command
 //     switched; opened by Connect model, a cloud provider added there (a
 //     local stand-in for Anthropic's Messages API, test/mock-providers.cjs,
@@ -108,9 +111,6 @@ async function main() {
         await app.goto(appUrl);
         await app.evaluate(() => localStorage.clear());
         await app.goto(appUrl);
-        // The commands' answers on their own: the questions after them have
-        // their own test (test-assistant-followups.cjs).
-        await svc(app, A + "setSettings", { followUps: false });
         await app.waitForSelector("[data-testid='as-empty']");
         check(/events, reminders, alarms, notes/.test(await app.textContent("[data-testid='as-empty']")), "a new conversation says what it can do");
         // Things to ask: a tap puts them in the field, to change or send.
@@ -175,7 +175,12 @@ async function main() {
             await app.fill("[data-testid='as-input']", text);
             await app.click("[data-testid='as-send']");
             await app.waitForFunction((n) => document.querySelectorAll(".as-row").length >= n + 2 && !document.querySelector("[data-testid='as-thinking']"), before, { timeout: 15000 });
-            return (await app.locator(".as-row.in .as-bubble").last().textContent()).trim();
+            // A follow-up question after what was made (docs/AI-AND-MCP.md):
+            // the answer is the message before it; the question waits (the
+            // next request leaves it for later).
+            const bubbles = app.locator(".as-row.in .as-bubble");
+            const asking = await app.locator(".as-row").last().locator("[data-testid^='as-replies-']").count();
+            return (await bubbles.nth((await bubbles.count()) - (asking ? 2 : 1)).textContent()).trim();
         };
 
         // ---- The phone's own commands -----------------------------------------------------
@@ -208,7 +213,20 @@ async function main() {
         const ev = events.find((e) => e.subject === "Meeting with Sam");
         check(!!ev && ev.dtstart === at3 && ev.dtend === at3 + 3600000 && ev.location === "Bistro Verde" && ev.calendarId,
               "it is in db8 as the Calendar saves one, in a calendar, an hour long");
-        const openCal = app.locator(".as-row").last().locator("[data-testid='as-choice-open']");
+        // Then a follow-up question about it, as conversation, with answers to tap.
+        const question = (await app.locator(".as-row.in .as-bubble").last().textContent()).trim();
+        const replies = app.locator(".as-row").last().locator("[data-testid^='as-replies-'] .as-reply");
+        check(/meeting with Sam.*\?$/.test(question) && (await replies.allTextContents()).includes("Skip"),
+              "a follow-up question after the event: " + question + " (" + (await replies.allTextContents()).join(" · ") + ")");
+        await app.locator(".as-row").last().locator("[data-testid='as-choice-fu:skip']").click();
+        await app.waitForFunction(() => [...document.querySelectorAll(".as-row.in .as-bubble")].some((b) => b.textContent === "No problem, I'll leave it."));
+        await app.waitForFunction(() => /^How long .*meeting with Sam.*\?$/.test([...document.querySelectorAll(".as-row.in .as-bubble")].pop().textContent));
+        check(true, "Skip leaves it, and the next question is how long");
+        await app.locator(".as-row").last().locator(".as-reply", { hasText: "1 hour" }).click();
+        await app.waitForFunction(() => [...document.querySelectorAll(".as-row.in .as-bubble")].pop().textContent === "OK, I've blocked out 1 hour.");
+        check(true, "a tap answers it, said back");
+        await shot(app, "follow-up");
+        const openCal = app.locator(".as-row", { hasText: "Added \u201cMeeting with Sam\u201d" }).locator("[data-testid='as-choice-open']");
         check(await openCal.count() === 1 && /Open Calendar/.test(await openCal.textContent()), "the answer offers Open Calendar");
         await openCal.click();
         const calOpened = () => launches.some((l) => l.id === "com.palm.app.calendar" && l.params && l.params.showEventDetail === ev._id);
