@@ -117,7 +117,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Back gesture. `SystemUiController.cpp:424-443`
 - [x] Up-swipe to card view / launcher toggle. `SystemUiController.cpp:445-497`
 - [x] Down-swipe to re-maximize the active card. `SystemUiController.cpp:499-526`
-- [x] Optional advanced gestures: previous/next app (full-width swipe). `SystemUiController.cpp:308-315,394-408`; `Src/base/settings/Preferences.cpp:66,598-604` *Phoenix: Settings > Screen & Lock > Advanced gestures, where there is a gesture area; a swipe across its centre over half its width.*
+- [x] Optional advanced gestures: previous/next app (full-width swipe). `SystemUiController.cpp:308-315,394-408`; `Src/base/settings/Preferences.cpp:66,598-604` *Phoenix: Settings > Screen & Lock > Advanced gestures (or Advanced > Switch apps), where there is a gesture area; a swipe across its centre over half its width, at most 160 px; a two-finger trackpad swipe too.*
 - [x] Meta key (gesture-area hold) for copy/cut/paste/select-all. `Src/base/MetaKeyManager.cpp`; `SystemUiController.cpp:180-184` *Phoenix: a finger resting on the gesture bar is the meta key (`GestureArea.metaHeld`); A, C, X, V typed on a keyboard or the virtual keyboard are Select All, Copy, Cut, Paste in the app in front or Just Type; the bar glows while held (`tst_gesturebar` test_metaKey).*
 - [x] Home button: minimize, launcher toggle, double-press. `SystemUiController.cpp:528-584`
 - [x] TouchPad bezel edge-flick. `SystemUiController.cpp:2041-2121`; `Src/base/gesture/ScreenEdgeFlickGestureRecognizer.cpp`
