@@ -2969,7 +2969,10 @@ FocusScope {
                     dictation: shell.dictation
                     speech: shell.speech
                     locked: shell.locked
-                    backdrop: sceneBackdrop
+                    // Over the lock screen it blurs nothing: the apps
+                    // behind the lock stay hidden (the lock screen shows
+                    // through the dim instead).
+                    backdrop: shell.locked ? null : sceneBackdrop
                     bottomInset: notes.negativeSpace
                     appIcon: {
                         var a = quickLaunch.entry("org.webosphoenix.assistant");

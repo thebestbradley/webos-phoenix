@@ -346,7 +346,7 @@ every day. The app sources come towards the end of 1.0 (owner, 29 September
       ([SHARE-AND-FILES.md](SHARE-AND-FILES.md))
 - [x] The Phoenix Assistant, like Siri: on-device speech recognition and
       commands, an optional on-device model, cloud models with permission,
-      an Assistant app with threads, spoken answers (in the simulator)
+      an Assistant app with threads, spoken answers, "Hey Phoenix" (in the simulator)
       ([M6-PLAN.md](M6-PLAN.md) F3, [AI-AND-MCP.md](AI-AND-MCP.md#10-and-20))
 - [x] Clipboard manager ([M6-PLAN.md](M6-PLAN.md) F2; in the simulator)
 - [x] Press and hold on launcher icons ([M6-PLAN.md](M6-PLAN.md) F1; in the simulator)

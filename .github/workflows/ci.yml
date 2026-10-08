@@ -151,6 +151,9 @@ jobs:
       - name: The keyboard's dictation (recording format, transcriber replies)
         run: build/dictation-test
 
+      - name: The wake word ("Hey Phoenix" in the test recordings, with Vosk's model)
+        run: python3 tools/get-wakeword.py && build/wakeword-test
+
       - name: The simulator's network (content blocker, user agents, DropShare's server)
         run: build/simnet-test
 
@@ -368,6 +371,7 @@ jobs:
           build/pty/pty-test
           build/siminstaller-test
           build/dictation-test
+          python3 tools/get-wakeword.py && build/wakeword-test
           build/localmodels-test
           build/simnet-test
 

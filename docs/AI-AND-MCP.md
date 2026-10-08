@@ -30,7 +30,7 @@ The **Phoenix Assistant in 1.0** starts with a voice assistant in the classic st
 
 | Part | 1.0 |
 | --- | --- |
-| **Asking** | Push-to-talk from the gesture area (press and hold while the keyboard is down; see [spec/GAPS.md](spec/GAPS.md) V4 for the keyboard-up case), a mic button in Just Type, a headset button. A wake word stays for later |
+| **Asking** | Push-to-talk from the gesture area (press and hold while the keyboard is down; see [spec/GAPS.md](spec/GAPS.md) V4 for the keyboard-up case), a mic button in Just Type, a headset button, and "Hey Phoenix" (an on-device wake word, off by default; see Voice) |
 | **Hearing** | On-device speech recognition with the transcriber Voice Memos already uses (`org.webosphoenix.transcriber`, whisper.cpp); nothing leaves the phone |
 | **Understanding** | Intents: a fixed grammar per command in each supported language ("call Mum", "text Sam I'm late", "set a timer for 10 minutes", "wake me at 7", "turn off Wi-Fi", "open Maps", "navigate home", "play <artist>", "remind me to ...", "what's the weather", "what's 15% of 80"). Apps add their own through `appinfo.json`, the same way they add Just Type Quick Actions |
 | **Doing** | The same Luna calls Just Type's actions and the apps already make: Phone, Messaging, Clock, Settings, Maps, Music, Tasks, Weather, Contacts. Anything that sends or deletes is read back first ("Send 'I'm late' to Sam?") |
@@ -717,11 +717,74 @@ against a list shipped with Phoenix.
   short command (*estimate*); `tiny.en` halves that. The transcript goes
   into the text field first so the user can fix it; a setting runs it
   directly.
-- **Wake word later**: whisper is not a wake-word engine. openWakeWord runs
-  many models on one Raspberry Pi 3 core, and its **code is Apache-2.0 but
-  its pre-trained models are CC BY-NC-SA 4.0**, so Phoenix would have to
-  train its own "Hey Phoenix" model with its tools. Off by default; a
-  status bar mic indicator whenever the microphone is open.
+- **Wake word: "Hey Phoenix" (built 8 October 2026, in the simulator).**
+  - **Choice.** whisper is not a wake-word engine; openWakeWord's code is
+    Apache-2.0 but its pre-trained models are CC BY-NC-SA 4.0 and training
+    our own needs its NC-licensed negative feature set and a GPU, so it was
+    left out. Chosen: **Vosk** (Kaldi; library Apache-2.0) with its **small
+    English model `vosk-model-small-en-us-0.15` (40 MB, Apache-2.0** per
+    alphacephei.com/vosk/models) and a grammar of the phrase and `[unk]`.
+    "Hey Phoenix" is kept: four syllables, a rare word, already in the
+    model's vocabulary.
+  - **How** (`services/wakeword`, `phoenix-wakeword`, plain C++17, libvosk
+    loaded at run time): a gate decodes only while there is sound over the
+    room's floor; the grammar spotter hears the phrase; each candidate is
+    checked by decoding that stretch again against words that sound like
+    it ("Felix", "Phoebe", "hay"...), and the phrase must win. The shell's
+    Dictation pipes the microphone to it while it stands by.
+  - **Measured** (x86 Xeon 2.8 GHz, one core; 8 October 2026). Test speech
+    from espeak-ng and two multi-speaker Piper voices (LibriTTS-R 904
+    speakers, VCTK 109; used only to measure, not shipped), real speech
+    from LibriSpeech dev-clean (CC BY 4.0, 5.4 h, not shipped):
+
+    | Set | Result |
+    | --- | --- |
+    | "Hey Phoenix", Piper voices (240 clips) | 236 heard (98.3%) |
+    | "Hey Phoenix", espeak-ng voices (160) | 115 heard (72%; its robotic variants) |
+    | "Hey Phoenix, <request>" in one breath (100) | 93 heard |
+    | Near misses ("Hey Felix", "I flew to Phoenix", "Say Phoenix", "Hey Siri"... 26 phrases, 416 clips) | 18 accepted (4.3%); 12 of them "Hey, fee nicks", which is the phrase. Without the check: 87 (21%) |
+    | Piper "Hey Phoenix" with white noise at 10 / 5 dB SNR | 90% / 63% |
+    | ... with other speech (babble) at 10 / 5 dB | 63% / 32% |
+    | LibriSpeech dev-clean, 5.4 h of continuous speech | **0 false accepts** (3 candidates, all turned down by the check) |
+    | CPU, continuous speech | 0.027 of one core (2.7%) |
+    | CPU, a quiet room (10 min) | 0.04 s in all (the gate decodes nothing) |
+    | Memory / start | 150 MB resident; 0.55 s to load |
+
+    On a phone-class ARM core (Cortex-A55/A76) expect several times the CPU
+    figure while people talk (*estimate*, not measured: no ARM device
+    here), and next to nothing in quiet. Real human recordings of the
+    phrase were not available; the Piper voices stand in for them. Weak
+    spots: competing speech, and the 150 MB.
+  - **The flow.** Settings > Assistant > Listen for "Hey Phoenix" (off by
+    default) -> a chime (`listen.wav`) and a tap of the motor, the screen
+    on, the assistant's view listening (the bird follows the loudness) ->
+    the recording ends after a second of quiet -> whisper.cpp (its prompt
+    made of the contacts' names, as Voice Dial does) -> the command ->
+    the answer spoken (Voice replies, on by default) -> a read-back ("Call
+    Marcus Reyes?") listens for Yes / No / Send / Cancel without the wake
+    word; otherwise the view closes after 4 s idle. "Hey Phoenix, <request>"
+    in one breath works (the recording starts just before the phrase; the
+    phrase is dropped from the transcript). The microphone button stays
+    push-to-talk. Listening pauses while the view is open, while anything
+    is spoken, during a call and while one rings.
+  - **Locked.** "When the screen is off or locked" (off by default): over
+    the lock screen (nothing of the apps blurred behind it) the service
+    runs only what shows nothing private and sends nothing (timers, alarms,
+    toggles, media, volume, weather, sums, time...; `ask {locked}`); for
+    the rest it says "Unlock your phone first" and the shell asks again
+    once unlocked (within two minutes).
+  - **Privacy.** Nothing leaves the phone; the spotter keeps the last few
+    seconds in memory only. The status bar shows a microphone whenever it
+    is open: faint while standing by, orange while recording.
+  - **On a device** (to do): meta-phoenix recipes for libvosk (Kaldi,
+    OpenFST, OpenBLAS: all Apache/BSD; or the prebuilt aarch64 libvosk)
+    and the model in `/usr/share/phoenix/wakeword/`, and `phoenix-wakeword`
+    installed; LsmWindowSource's shell sets `wakeWordCommand`. The
+    microphone is the shell's Qt Multimedia input (PulseAudio on OSE, as
+    dictation uses); with the screen off the shell process must keep
+    running and audio stay open (OSE's audiod/PulseAudio input while
+    suspended is unverified), and a DSP/low-power hotword path would be the
+    next step for battery.
 - **Speaking answers**: OSE has `com.webos.service.tts` (engine per build,
   *unverified*). Piper is the usual open alternative; the original
   `rhasspy/piper` was MIT and its successor is GPL-3.0 (*unverified*;

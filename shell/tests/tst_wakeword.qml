@@ -229,6 +229,8 @@ Item {
             tryVerify(function () { return fake.asks.length === 1; }, 8000);
             compare(fake.asks[0].locked, true);
             compare(fake.asks[0].voice, true);
+            // Nothing of the apps behind the lock shows through.
+            compare(overlay.backdrop, null);
             // "Unlock first": the view goes; unlocked, the same words again.
             tryCompare(overlay, "open", false, 5000);
             compare(shell.locked, true);

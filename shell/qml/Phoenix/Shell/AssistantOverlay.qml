@@ -546,8 +546,8 @@ Item {
         }
         Rectangle {
             anchors.fill: parent
-            // Darker where nothing blurs (the software renderer).
-            color: GraphicsInfo.api === GraphicsInfo.Software ? "#D8101418" : "#80101418"
+            // Darker where nothing blurs (the software renderer, the lock screen).
+            color: GraphicsInfo.api === GraphicsInfo.Software || !ov.backdrop ? "#D8101418" : "#80101418"
         }
     }
     // The glow along the bottom while it listens or thinks.

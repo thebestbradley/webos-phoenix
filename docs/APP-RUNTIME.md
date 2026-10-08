@@ -1977,6 +1977,24 @@ as the shell's does, with the generated CSS keyframes (the CSP allows no
 style made at run time); the blend between poses sets the part's drawn
 transform through the CSSOM, which the CSP allows.
 
+**Voice** ([AI-AND-MCP.md](AI-AND-MCP.md#voice)): `ask {voice: true}` is
+answered aloud with the setting `voiceReplies`; "yes" / "no" (send it,
+cancel...) answer a read-back waiting; `ask {locked: true}` runs only
+`LOCKED_COMMANDS` and answers the rest with `status: "locked"`;
+`vocabulary` gives the transcriber's prompt (the wake phrase and the
+contacts' names as requests). Settings `wakeWord` and `wakeWhenLocked`
+(off by default) turn on the shell's wake word: `Dictation.wakeCommand`
+runs `phoenix-wakeword` (`services/wakeword`), `wakeWord` keeps it loaded,
+`standby` gives it the microphone, `wakeHeard` opens the view listening
+(`Shell.wakeAssistant`), and a recording started then begins just before
+the phrase. The shell follows the settings with the window sources' new
+`lunaSubscribe`. phoenix-sim: `tools/get-wakeword.py` fetches libvosk and
+the model into `build/wakeword/` (or `--wake-model`, `--vosk-library`);
+Simulate > Say "Hey Phoenix" (Ctrl+Shift+Y) plays `--wake-file` (default
+`services/wakeword/tests/data/hey-phoenix.wav`) into the microphone;
+`--scene wakeword` / `wakewordlocked` turn it on; `--microphone-file`
+plays as before, standing by taking the next file not yet played.
+
 **Settings > Assistant** (`apps/settings/src/pages/Assistant.tsx`, launch
 point `org.webosphoenix.settings.assistant`): everything above.
 

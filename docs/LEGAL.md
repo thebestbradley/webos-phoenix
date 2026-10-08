@@ -8,6 +8,18 @@ allowed, so contributors can keep it that way.
 Everything in this repository is Apache-2.0 (see `LICENSE`), the same license
 as webOS OSE and Open webOS.
 
+## The wake word (not in the repository)
+
+`tools/get-wakeword.py` downloads, SHA-256 checked: Vosk's library (libvosk
+from the `vosk` wheel on PyPI, Apache-2.0; Kaldi, OpenFST and OpenBLAS
+inside are Apache-2.0 / BSD) and `vosk-model-small-en-us-0.15` (Apache-2.0,
+Alpha Cephei, <https://alphacephei.com/vosk/models>). An image may ship
+both. openWakeWord's pre-trained models (CC BY-NC-SA 4.0) are not used.
+The test recordings in `services/wakeword/tests/data` are made by
+espeak-ng (`tools/gen-voice-fixtures.sh`; espeak-ng runs as a program, its
+GPL does not cover the speech it outputs). The voices and LibriSpeech used
+to measure accuracy (AI-AND-MCP.md) were not committed.
+
 ## Open webOS artwork (`shell/assets/openwebos/`)
 
 Copied from `openwebos/luna-sysmgr/images`
