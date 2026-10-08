@@ -15,6 +15,17 @@
 #                                    Chromium, Radicale, WsgiDAV, PHP, xvfb)
 #   scripts/linux-setup.sh --deps    only install packages (no build); for a
 #                                    cloud environment's setup script
+#   ... --no-assistant               without what the assistant and dictation
+#                                    use (installed by default, about 280 MB
+#                                    on disk; see below)
+#
+# The assistant (docs/AI-AND-MCP.md, "What's installed where"): espeak-ng
+# (apt), whisper.cpp's whisper-cli and llama.cpp's llama-server (built from
+# pinned commits into /usr/local/bin, a few minutes), whisper's base.en
+# model (148 MB) into build/whisper and the wake word (Vosk, 26 + 71 MB)
+# into build/wakeword, each checked by its SHA-256 or git commit. Skipped
+# when already there. The on-device language models are not fetched here:
+# Settings > Assistant downloads them.
 #
 # Run it as a user with sudo, or as root (cloud containers).
 
@@ -23,11 +34,13 @@ set -euo pipefail
 REPO_DIR=$(cd "$(dirname "$0")/.." && pwd)
 WANT_TESTS=0
 BUILD=1
+WANT_ASSISTANT=1
 for arg in "$@"; do
     case "$arg" in
         --tests) WANT_TESTS=1 ;;
+        --no-assistant) WANT_ASSISTANT=0 ;;
         --deps) BUILD=0; WANT_TESTS=1 ;;
-        -h|--help) sed -n '5,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '5,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown option: $arg (see --help)" >&2; exit 2 ;;
     esac
 done
@@ -85,6 +98,43 @@ if [ $WANT_TESTS = 1 ]; then
     # which need NODE_PATH="$(npm root -g)").
     $SUDO npm install -g playwright@1
     $SUDO npx --yes playwright@1 install --with-deps chromium
+fi
+
+# ---- The assistant's programs and models -------------------------------------------
+# whisper.cpp and llama.cpp at the commits meta-phoenix's recipes pin
+# (meta-phoenix/recipes-support), as static programs (their ggml inside).
+# Ubuntu 24.04 packages neither.
+WHISPER_COMMIT=d09f61a708f3487afa956ff578e60eae5e7a233c   # whisper.cpp master, 2026-09-24 (1.9.4)
+LLAMA_COMMIT=66e665c4276ee46f3ec9872dd7e5a496842bc44f     # llama.cpp b11239, 2026-09-28
+build_ggml_program() {  # NAME REPO COMMIT TARGET CMAKE_FLAGS...
+    local name=$1 repo=$2 commit=$3 target=$4; shift 4
+    if command -v "$target" >/dev/null 2>&1; then
+        echo "  $target: $(command -v "$target") (already there)"
+        return
+    fi
+    say "$target ($name ${commit:0:7}, built from source into /usr/local/bin)"
+    local src
+    src=$(mktemp -d)
+    git -C "$src" init -q
+    git -C "$src" fetch -q --depth 1 "$repo" "$commit"
+    git -C "$src" checkout -q FETCH_HEAD
+    cmake -S "$src" -B "$src/build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=ON "$@" >/dev/null
+    cmake --build "$src/build" --target "$target"
+    $SUDO install -m 0755 "$src/build/bin/$target" "/usr/local/bin/$target"
+    rm -rf "$src"
+    echo "  /usr/local/bin/$target ($(du -h "/usr/local/bin/$target" | cut -f1))"
+}
+if [ $WANT_ASSISTANT = 1 ]; then
+    say "The assistant: speech (espeak-ng), recognition (whisper.cpp), on-device model runner (llama.cpp)"
+    $SUDO apt-get install -y --no-install-recommends espeak-ng
+    build_ggml_program whisper.cpp https://github.com/ggml-org/whisper.cpp.git "$WHISPER_COMMIT" whisper-cli \
+        -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF -DWHISPER_SDL2=OFF -DWHISPER_CURL=OFF
+    build_ggml_program llama.cpp https://github.com/ggml-org/llama.cpp.git "$LLAMA_COMMIT" llama-server \
+        -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_APP=OFF -DLLAMA_BUILD_UI=OFF \
+        -DLLAMA_USE_PREBUILT_UI=OFF -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_NUMBER=11239
+    say "Models: whisper base.en (148 MB) and the wake word (Vosk, 26 + 71 MB), into build/"
+    python3 "$REPO_DIR/tools/get-whisper-model.py"
+    python3 "$REPO_DIR/tools/get-wakeword.py"
 fi
 
 [ $BUILD = 1 ] || { say "Packages and Qt $QT_VERSION installed (configure with -DCMAKE_PREFIX_PATH=$QT_DIR)"; exit 0; }

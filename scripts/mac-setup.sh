@@ -8,10 +8,19 @@
 #   scripts/mac-setup.sh            install what the simulator needs, build it
 #   scripts/mac-setup.sh --tests    also what the test suites need (Playwright,
 #                                   Python and PHP packages)
-#   scripts/mac-setup.sh --voice    also whisper.cpp and its English model, for
-#                                   dictation, Voice Memos and Voice Dial
-#   scripts/mac-setup.sh --all      all of the above
+#   scripts/mac-setup.sh --all      the same as --tests
+#   scripts/mac-setup.sh --no-assistant
+#                                   without what the assistant and dictation
+#                                   use (installed by default; see below)
 #   scripts/mac-setup.sh --check    only report what is installed and missing
+#
+# The assistant (docs/AI-AND-MCP.md, "What's installed where"): whisper.cpp
+# (whisper-cpp) and llama.cpp (llama.cpp) from Homebrew, whisper's base.en
+# model (148 MB) into build/whisper and the wake word (Vosk, 13 + 71 MB)
+# into build/wakeword, checked by their SHA-256; the Mac's own `say`
+# speaks. About 230 MB of models plus the Homebrew packages; skipped when
+# already there. The on-device language models are not fetched here:
+# Settings > Assistant downloads them.
 #
 # Safe to run again: it skips what is already there. It needs Homebrew
 # (https://brew.sh) and Xcode's command line tools, and says how to get them
@@ -21,15 +30,16 @@ set -euo pipefail
 
 REPO_DIR=$(cd "$(dirname "$0")/.." && pwd)
 WANT_TESTS=0
-WANT_VOICE=0
+WANT_ASSISTANT=1
 CHECK_ONLY=0
 for arg in "$@"; do
     case "$arg" in
         --tests) WANT_TESTS=1 ;;
-        --voice) WANT_VOICE=1 ;;
-        --all) WANT_TESTS=1; WANT_VOICE=1 ;;
+        --voice) ;;     # the assistant's voice is installed by default now
+        --no-assistant) WANT_ASSISTANT=0 ;;
+        --all) WANT_TESTS=1 ;;
         --check) CHECK_ONLY=1 ;;
-        -h|--help) sed -n '5,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '5,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown option: $arg (see --help)" >&2; exit 2 ;;
     esac
 done
@@ -65,11 +75,13 @@ NODE22_BIN="$BREW_PREFIX/opt/node@22/bin"
 # Homebrew formulae: (formula, what it is for)
 CORE_FORMULAE="qt cmake ninja node@22 git python@3.12"
 TEST_FORMULAE="php"
-VOICE_FORMULAE="whisper-cpp"
+# whisper-cpp: whisper-cli (dictation, Voice Memos, Voice Dial, the
+# assistant's ears); llama.cpp: llama-server (the assistant's on-device model).
+ASSISTANT_FORMULAE="whisper-cpp llama.cpp"
 
 formulae=$CORE_FORMULAE
 [ $WANT_TESTS = 1 ] && formulae="$formulae $TEST_FORMULAE"
-[ $WANT_VOICE = 1 ] && formulae="$formulae $VOICE_FORMULAE"
+[ $WANT_ASSISTANT = 1 ] && formulae="$formulae $ASSISTANT_FORMULAE"
 
 say "Homebrew packages"
 to_install=""
@@ -80,6 +92,16 @@ done
 say "Source"
 if [ -e "$REPO_DIR/third_party/enyo-1.0/framework" ]; then subs=1; else subs=0; fi
 report "git submodules (original Open webOS apps and frameworks)" $subs "git submodule update --init"
+
+if [ $WANT_ASSISTANT = 1 ]; then
+    say "The assistant's models and voice"
+    if [ -s "$REPO_DIR/build/whisper/ggml-base.en.bin" ]; then m=1; else m=0; fi
+    report "whisper base.en model, 148 MB (build/whisper)" $m "tools/get-whisper-model.py"
+    if [ -d "$REPO_DIR/build/wakeword/vosk-model-small-en-us-0.15" ] && [ -s "$REPO_DIR/build/wakeword/libvosk.dylib" ]; then m=1; else m=0; fi
+    report "wake word: Vosk and its model, 84 MB (build/wakeword)" $m "tools/get-wakeword.py"
+    if have say; then m=1; else m=0; fi
+    report "say (speaks the answers)" $m
+fi
 
 if [ $CHECK_ONLY = 1 ]; then
     say "Node.js on the PATH"
@@ -116,21 +138,6 @@ esac
 say "git submodules"
 git -C "$REPO_DIR" submodule update --init
 
-if [ $WANT_VOICE = 1 ]; then
-    say "whisper.cpp model (ggml-base.en.bin, about 150 MB)"
-    MODEL_DIR="$HOME/Library/Application Support/webos-phoenix/whisper"
-    MODEL="$MODEL_DIR/ggml-base.en.bin"
-    mkdir -p "$MODEL_DIR"
-    if [ ! -s "$MODEL" ]; then
-        curl -fL --progress-bar -o "$MODEL.part" \
-            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
-        mv "$MODEL.part" "$MODEL"
-    fi
-    echo "  $MODEL"
-    echo "  The simulator finds whisper-cli on the PATH; tell it where the model is:"
-    echo "    echo 'export PHOENIX_WHISPER_MODEL=\"$MODEL\"' >> ~/.zprofile"
-fi
-
 say "Building the simulator and the apps (the first build takes a few minutes)"
 # Ninja for a new build directory; an existing one keeps its generator.
 gen=()
@@ -139,6 +146,20 @@ cmake -S "$REPO_DIR/shell" -B "$REPO_DIR/build" ${gen[@]+"${gen[@]}"} \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCMAKE_PREFIX_PATH="$BREW_PREFIX/opt/qt"
 cmake --build "$REPO_DIR/build"
+
+if [ $WANT_ASSISTANT = 1 ]; then
+    say "The assistant's models: whisper base.en (148 MB) and the wake word (Vosk, 13 + 71 MB)"
+    PY="$BREW_PREFIX/opt/python@3.12/bin/python3.12"
+    # A model an earlier version of this script put elsewhere.
+    OLD_MODEL="$HOME/Library/Application Support/webos-phoenix/whisper/ggml-base.en.bin"
+    if [ -s "$OLD_MODEL" ] && [ ! -e "$REPO_DIR/build/whisper/ggml-base.en.bin" ]; then
+        mkdir -p "$REPO_DIR/build/whisper"
+        mv "$OLD_MODEL" "$REPO_DIR/build/whisper/"
+    fi
+    "$PY" "$REPO_DIR/tools/get-whisper-model.py"
+    "$PY" "$REPO_DIR/tools/get-wakeword.py"
+    echo "  phoenix-sim finds whisper-cli and llama-server on the PATH, the models in build/, and speaks with say."
+fi
 
 if [ $WANT_TESTS = 1 ]; then
     say "Test tools"

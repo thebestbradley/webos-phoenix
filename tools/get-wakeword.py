@@ -38,8 +38,9 @@ WHEELS = {
 
 
 def fetch(url, sha256):
-    print("downloading", url)
     with urllib.request.urlopen(url) as r:
+        size = int(r.headers.get("Content-Length") or 0)
+        print("downloading", url, f"({size / 1e6:.0f} MB)" if size else "")
         data = r.read()
     got = hashlib.sha256(data).hexdigest()
     if got != sha256:
@@ -74,7 +75,7 @@ def main():
             z.extractall(tmp)
             os.replace(os.path.join(tmp, MODEL[0]), model_dir)
             shutil.rmtree(tmp, ignore_errors=True)
-    print("library:", lib)
+    print("library:", lib, f"({os.path.getsize(lib) / 1e6:.0f} MB)")
     print("model:", model_dir)
 
 
