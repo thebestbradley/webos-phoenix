@@ -44,9 +44,64 @@ above was the plan's command layer; this is the whole 1.0 assistant.
 | Layer | What runs | Where |
 | --- | --- | --- |
 | 1. Speech to text | The shell's dictation: whisper.cpp through `org.webosphoenix.transcriber` | On the device (in phoenix-sim, the same service code on the computer) |
-| 2. Commands | A grammar per language (`apps/assistant/service/lib/lang/en.js`): call, text, timer, alarm, reminder, Wi-Fi, Bluetooth, airplane mode, flashlight, ringer, open app, directions, play music, weather, sums and percentages, time and date, web search; plus commands apps declare in `appinfo.json` (`"assistant": {"commands": [...]}`, Just Type's Quick Action shape with phrases per language; a Quick Action counts as `"<displayName> {text}"`) | In the service, no model, no network (weather fetches Open-Meteo) |
+| 2. Commands | A grammar per language (`apps/assistant/service/lib/lang/en.js`): the 40 commands in the table below, with the days and times people say; plus commands apps declare in `appinfo.json` (`"assistant": {"commands": [...]}`, Just Type's Quick Action shape with phrases per language; a Quick Action counts as `"<displayName> {text}"`, after the built-in commands) | In the service, no model, no network (weather, distances, currencies and unknown cities fetch Open-Meteo or Frankfurter) |
 | 3. On-device model | llama.cpp's `llama-server` with a GGUF model the user downloads in Settings > Assistant, called with the same commands as tools (Chat Completions, `--jinja`) | On the device. phoenix-sim runs it from the shell (`LocalModels`, Phoenix.Native); the device service runs it itself (`lib/node-device.js`) |
 | 4. Cloud model or web | "Ask <provider (model)>" and "Search the web" as choices on the answer; a thread taken to a cloud model goes on with it | The provider's servers; the browser |
+
+**The commands** (8 October 2026). The grammar's phrasings are examples:
+each family takes the usual variations ("please", "can you", the order of
+the parts), and the tests have more (`apps/assistant/service/everyday.test.ts`,
+`grammar.test.ts`). Every command is also a tool the models are given, with
+the same arguments (`lib/commands.js` `BUILT_IN`); times a model writes
+("friday at 10am", ISO 8601) go through the same date reading. Answers are
+one short sentence and offer the app where it helps ("Open Calendar"); the
+bird plays done, asking (a read-back), confused (nothing here can) or oops
+(it could not).
+
+| Command | Say, for example | Does | Asks first |
+| --- | --- | --- | --- |
+| `event` | "add a meeting with Sam tomorrow at 3", "create an event called dentist on Friday at 10am", "schedule lunch with Priya next Tuesday at noon at Bistro Verde", "put yoga on my calendar every Monday at 7pm for 90 minutes", "team offsite on the 20th all day" | A calendar event: title, day and time, end or length (an hour by default), place, invitees (contacts with an email), repeats; without a time it asks "When is it?" and the next words say it | |
+| `agenda` | "what's on my calendar today / tomorrow / this week / next week", "do I have anything on Friday", "what's my next meeting", "when is my dentist appointment" | Reads the events, repeats included | |
+| `alarm` | "set an alarm for 7am weekdays", "wake me up at 6:30 every day", "alarm at half past six tomorrow called gym" | The Clock's alarm; repeats daily, on weekdays or at weekends (the Clock's own; "every Monday" is set once and says so) | |
+| `alarmList`, `alarmManage` | "what alarms do I have", "cancel my 7am alarm", "turn off all alarms", "delete all alarms" | Lists, turns off, deletes | Deleting |
+| `timer`, `timerStatus`, `timerCancel` | "set a 5 minute timer for the eggs", "how much time is left", "cancel the timer" | Timers that ring in the Assistant app | |
+| `stopwatch` | "start a stopwatch", "how long has the stopwatch been running", "stop the stopwatch" | A stopwatch in the assistant (webOS's Clock had none) | |
+| `reminder` | "remind me to call mom at 6", "remind me in 2 hours to check the oven", "remind me tomorrow morning to call the bank" | A task with a reminder | |
+| `task` | "add milk to my shopping list", "create a task pay rent", "add a task to call the bank tomorrow" | A task, in a named list (made if new) or the default one | |
+| `note`, `findNotes` | "new note: buy flowers for Ada", "take a note that ...", "find my notes about Wi-Fi" | A memo, first on the wall; memos found by their words | |
+| `contactAdd`, `contactInfo` | "add Sam to contacts with number 555 0100", "new contact Jo March email jo@example.com", "what's Sam's number" | A contact; a contact's number, email, address or birthday | |
+| `call` | "call mom", "call Sam on his mobile", "dial 555 123 4567" | Phone dials | Yes (Call) |
+| `text`, `readMessages` | "text Sam I'm running late", "read my last message", "what did Priya say" | Sends an SMS (the words as typed); reads the last one received | Yes (Send) |
+| `email`, `searchEmail` | "send an email to Priya saying see you soon", "email Alex about the report", "search my email for invoice", "do I have any new emails" | Sends (with words) or opens a new email (without); finds email | Yes (Send) |
+| `toggle` | "turn on Wi-Fi", "turn off Bluetooth", "airplane mode on", "turn on the flashlight", "silence the phone", "turn on do not disturb" | The switch; Do Not Disturb is the ringer off | |
+| `media` | "pause", "resume the music", "next song", "previous track" | The media keys, for whichever player plays | |
+| `volume` | "turn up the volume", "set the volume to 30%", "mute", "unmute" | The master volume | |
+| `brightness` | "set brightness to 50%", "turn the brightness up", "make the screen dimmer" | The screen's brightness | |
+| `screenshot`, `lock`, `battery` | "take a screenshot", "lock the screen", "what's my battery" | A screen capture (the assistant's view out of the way); the screen off and locked; the level and charging | |
+| `settings`, `open` | "open Wi-Fi settings", "open settings", "open Maps" | Settings at a pane (or its list); an app | |
+| `navigate`, `distance` | "navigate to the nearest coffee shop", "how far is Paris" | Directions in Maps; the distance as the crow flies | |
+| `play`, `photos` | "play some music by Miles Davis", "show my photos from yesterday / last week" | Music plays; Photos opens on the photos taken then | |
+| `weather` | "what's the weather tomorrow", "will it rain in London" | Open-Meteo, here or there | |
+| `convert` | "convert 10 miles to km", "how many cups in a liter", "100 fahrenheit in celsius", "what's 20 USD in EUR" | Units offline; currencies with the day's ECB rates (offline it says so and offers the web) | |
+| `worldTime`, `time` | "what time is it in Tokyo", "what time is it", "what's the date" | The time there (big cities offline), here, the date | |
+| `calculate` | "what's 15% of 80", "twelve times seven" | The sum | |
+| `search` | "search the web for palm pre", "look up webos history" | The browser | |
+| `undo` | "undo", "cancel that", "never mind" | Cancels a read-back waiting; else takes back what was just made (deletes the event, task, memo, contact or alarm, cancels the timer, turns alarms back on) | Yes |
+| (models) | "translate hello into French", questions | Not a command: the on-device model, else "Ask <cloud model>" / "Search the web" (it says why) | |
+
+Days and times (`lib/lang/en.js` `extract`, `resolve`; `lib/dates.js`):
+"today", "tonight", "tomorrow morning", "the day after tomorrow", "on
+Friday", "next Tuesday" (the coming one), "last Monday", "this weekend",
+"next week", "in 2 hours", "in 3 days", "half an hour from now", "October
+20th", "the 15th", "at 3", "3pm", "noon", "half past six", "seven thirty",
+"from 2 to 3:30", "3-4pm", "until 5", "for 90 minutes", "all day", "every
+day", "every weekday", "every Monday and Wednesday", "every other week",
+"monthly". An hour said without am or pm is read as people mean it: 1 to 6
+in the afternoon and 7 to 11 in the morning for events and reminders, the
+next of the two for an alarm (the morning on a given day), the morning for
+waking up. Another
+language writes its own `extract` and words; the calendar arithmetic is
+shared.
 
 **The router.** Commands first; then the on-device model, if one is chosen
 and installed (it answers free-form requests and picks commands as

@@ -1856,7 +1856,7 @@ are the clients.
 | Method | Does |
 | --- | --- |
 | `ask {text, threadId?, newThread?, speak?}` | `{thread, messages}`: the user's words and the answers. In the thread in use unless told otherwise. System UI, Assistant and Settings only (error -3); error -4 while the assistant is off |
-| `choose {threadId, messageId, choice}` | a message's choice: `cloud:<provider id>` (the thread goes on with that provider), `web`, `settings` |
+| `choose {threadId, messageId, choice}` | a message's choice: `cloud:<provider id>` (the thread goes on with that provider), `web`, `settings`, `open` (the app a command's answer offers: "Open Calendar" launches `data.open {appId, params}`) |
 | `confirm {threadId, messageId, accept}` | a read-back (`status: "pending"`): run it, or not |
 | `threads` / `thread {id?}` | `{threads, current}` / `{thread, messages}` (the one in use without an id) |
 | `newThread`, `setCurrent {id}`, `deleteThread {id}`, `clearHistory` | conversations |
@@ -1871,7 +1871,10 @@ are the clients.
 A message is `{id, threadId, role, text, time, via: "commands" | "on-device"
 | "cloud", source (who answered), command, status: "pending" | "done" |
 "cancelled" | "failed", confirm: {command, args}, choices: [{id, label}],
-chosen}`. Each thread (`assistant:thread:<id>`), message
+chosen, data}`. A command done may carry choices too (`open`: its app);
+its `data` holds `open {appId, params, title}`, `undo` (what takes it back)
+and, for a question the assistant asked ("When is it?"), `awaiting
+{command, args}`: the next words fill it. Each thread (`assistant:thread:<id>`), message
 (`assistant:msg:<thread>:<id>`) and provider (`assistant:provider:<id>`) is
 its own stored key, so the shell's view and the app never write over each
 other (PR 7).
@@ -1879,23 +1882,38 @@ other (PR 7).
 `luna://org.webosphoenix.tts/`: `speak {text, lang?}`, `stop`, `getStatus`
 -> `{available, engine}`.
 
-**What the commands do** (`lib/commands.js`): Phone `{number, dial}`; an
-SMS through `org.webosports.service.messaging/putMessage` (Messaging's
-compose without words); a timer as an activity that opens the Assistant app
-with `{timerDone}` (notification, sound, words); the Clock's own alarm
-(a `com.palm.clock.alarm:1` record and the activity the Clock schedules,
-which launches it with `{action: "ring"}`); a task in Tasks with its
-reminder activity; Wi-Fi, Bluetooth, airplane mode, the torch, the
-ringtone volume; `applicationManager/launch`; Maps `{target:
-"mapto:<place>"}`; Music `{play: "<artist, album or song>"}`; Open-Meteo
-for the weather; the browser with Just Type's default engine.
+**What the commands do** (`lib/commands.js`; the full list with phrasings
+is in [AI-AND-MCP.md](AI-AND-MCP.md#10-as-built-7-october-2026-in-the-simulator)).
+Each makes the records and calls the apps themselves make, so the apps
+show the result at once:
+
+| Command | Luna calls and records |
+| --- | --- |
+| `event`, `agenda` | a `com.palm.calendarevent:1` in the first writable calendar (the local one first), shaped as the Calendar saves one (`CalendarEvent.js`: `dtstart`/`dtend` ms, all day midnight to 23:59:59, `tzId`, a 15-minute `alarm`, `attendees` for contacts with an email, `rrule` as `RepeatView.js` writes it); the agenda reads them with repeats expanded (`lib/dates.js` `occurrences`). Calendar `{showEventDetail: id}` |
+| `alarm`, `alarmList`, `alarmManage` | the Clock's `com.palm.clock.alarm:1` (`occurs` once, daily, weekdays, weekends) and the activity the Clock schedules (`{action: "ring"}`); turned off: `enabled: false` and the activity cancelled; deleted: `db8 del` (read back first) |
+| `timer`, `timerStatus`, `timerCancel`, `stopwatch` | an activity that opens the Assistant app with `{timerDone}`; the assistant keeps the running ones (`assistant:timer:<id>`) and its stopwatch (`assistant:stopwatch`) in its store |
+| `reminder`, `task` | a `com.palm.task:1` in the default list or a named one (`com.palm.tasklist:1`, made if new), with the reminder activity when there is a time. Tasks `{taskId}` |
+| `note`, `findNotes` | a `com.palm.note:1` first on the wall (`Memo.getMemoPosition('a', first)`, the next colour), as Memos makes one; found by its words |
+| `contactAdd`, `contactInfo` | a `com.palm.contact.palmprofile:1` and its `com.palm.person:1`, as the linker stores them; Contacts `{launchType: "showPerson", id}` |
+| `text`, `readMessages` | `org.webosports.service.messaging/putMessage` (read back first; Messaging's compose without words); the last `com.palm.smsmessage:1` received, named from Contacts |
+| `email`, `searchEmail` | `com.palm.smtp/sendMail {accountId, email}` (read back first); without a body Email's compose `{recipients, summary}`; `com.palm.email:1` by words, sender or unread |
+| `call` | Phone `{number, dial}` (read back first) |
+| `toggle` | Wi-Fi, Bluetooth, airplane mode, the torch, the ringtone volume; Do Not Disturb is the ringer off (webOS had none; its ringer switch silenced calls and alerts) |
+| `media` | `org.webosphoenix.system/mediaKey {key}`: the shell sends the `com.palm.keys` `/media` key to every page, as the hardware key; the player with the audio focus acts |
+| `volume`, `brightness` | `com.webos.service.audio` `master/getVolume`, `setVolume`, `muteVolume`; `com.palm.display` `control/getProperty`, `control/setProperty {maximumBrightness}` |
+| `screenshot`, `lock`, `battery`, `settings` | `com.palm.systemmanager/takeScreenShot` (phoenix-sim closes the assistant's view first); `com.palm.display/control/setState {state: "off"}`; `com.palm.power` battery and charger queries; Settings `{page}` (Settings' list without one) |
+| `open`, `navigate`, `play`, `photos`, `search` | `applicationManager/launch` (a launch point's own params: Settings' panes); Maps `{target: "mapto:<place>"}`; Music `{play}`; Photos `{imageList}` of the `com.palm.media.image.file:1` taken those days; the browser with Just Type's default engine |
+| `weather`, `distance`, `worldTime`, `convert` | Open-Meteo (forecast, geocoder with time zones) and `com.webos.service.location`; `lib/places.js` for big cities offline; `lib/units.js` offline; currencies with Frankfurter's ECB rates (online; offline it says so and offers the web) |
+| `undo` | takes back what the last answer made (`data.undo`): deletes the record, cancels the activity, turns an alarm back on; read back first |
 
 **Apps' commands**: `appinfo.json` `"assistant": {"commands": [{"id",
 "displayName", "url", "launchParam", "phrases": {"en": ["new note {text}"]},
 "risk": "change" | "send" | "delete"}]}`; the app is launched with
 `{<launchParam>: <text>}`, and `send`/`delete` are read back first. An app's
 Just Type Quick Action (`universalSearch.action`) works as "<displayName>
-<text>" without anything more. phoenix-sim and `serve-rootfs.py` pass the
+<text>" without anything more, after the built-in commands (which do the
+thing: "new event dentist Friday at 2" adds the event rather than opening
+Calendar's editor); phrases an app declares come before them. phoenix-sim and `serve-rootfs.py` pass the
 `assistant` field in `/usr/share/phoenix/apps.json`.
 
 **The shell** (`AssistantOverlay.qml`): holding the launcher button opens

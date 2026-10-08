@@ -126,6 +126,7 @@ Works like Paste on macOS, in the webOS style.
 1. **Speech to text**, on the device, with whisper.cpp (the dictation service).
 2. **Commands**: a fixed grammar per language matched against the text. No language model; instant; works offline.
    - Commands: call, text, timer, alarm, reminder, toggles (Wi-Fi, Bluetooth, airplane, flashlight), open app, navigate, play music, weather, arithmetic.
+   - Expanded 8 October 2026 to the everyday basics (40 commands: calendar events and agenda, alarms managed, tasks and lists, memos, contacts, email, media, volume, brightness, screenshots, conversions, undo, ...), each on the apps' own data; the table is in [AI-AND-MCP.md](AI-AND-MCP.md#10-as-built-7-october-2026-in-the-simulator).
    - Apps add commands through `appinfo.json`.
 3. **On-device language model** (llama.cpp): optional.
    - Downloaded in Settings > Assistant (a small model, chosen by the device's memory).
