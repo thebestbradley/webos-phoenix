@@ -1966,6 +1966,8 @@ FocusScope {
                                        && assistantSettings.wakeWord === true
     readonly property bool wakeWordListening: wakeWordOn && !firstUse && !dockMode && !assistantView.open
                                               && !speechEngine.speaking
+                                              // Not on a call, nor with one ringing: the call has the microphone.
+                                              && !notes.incomingCall && !(source && source.activeCallBanner)
                                               && (assistantSettings.wakeWhenLocked === true || (!locked && backlight.on))
     // Times it was heard, for the tests.
     property int wakeWordHeard: 0

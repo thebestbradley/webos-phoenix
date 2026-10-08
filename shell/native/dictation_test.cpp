@@ -180,10 +180,11 @@ int main(int argc, char **argv)
               "the wake word heard: recording at once");
         while (!done && clock.elapsed() < 10000)
             QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
-        // The file is 4.8 s: 3.6 s after the phrase, less the quiet that ends it.
+        // The file is 4.8 s: from just before the phrase's start (0.5 s) on, less the
+        // quiet that ends it.
         const double seconds = (heard.toInt() - 44) / 32000.0;
-        check(done && error.isEmpty() && seconds > 2.4 && seconds < 3.8,
-              QStringLiteral("the request after the phrase recorded, in the same breath (%1 s)").arg(seconds).toUtf8().constData());
+        check(done && error.isEmpty() && seconds > 3.4 && seconds < 4.7,
+              QStringLiteral("the phrase and the request after it recorded, in the same breath (%1 s)").arg(seconds).toUtf8().constData());
         check(d.standingBy(), "and standing by again after it");
         // A follow-up without the wake word: the next file.
         done = false;

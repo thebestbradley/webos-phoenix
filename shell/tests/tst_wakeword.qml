@@ -138,6 +138,13 @@ Item {
             verify(dictation && dictation.wakeAvailable);
         }
 
+        function test_theTranscriptWithoutThePhrase() {
+            compare(overlay.withoutWakeWord("Hey Phoenix, text Sam I'm running late."), "text Sam I'm running late.");
+            compare(overlay.withoutWakeWord("hey, phoenix set a timer"), "set a timer");
+            compare(overlay.withoutWakeWord("Hey Phoenix."), "");
+            compare(overlay.withoutWakeWord("Phoenix weather"), "Phoenix weather");
+        }
+
         function test_offUntilTurnedOn() {
             shell.dictationInputFiles = [root.recordings + "hey-phoenix-timer.wav"];
             compare(shell.wakeWordOn, false);

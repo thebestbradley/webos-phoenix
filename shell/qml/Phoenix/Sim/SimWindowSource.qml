@@ -1704,7 +1704,7 @@ Item {
         var id = _nextLunaCall++;
         _lunaCallbacks[id] = callback;
         page.runScript("(function () { var id = " + id + ";"
-            + " function back(r) { phoenixHost.postToHost('lunaReply', { id: id, reply: r, keep: true }); }"
+            + " function back(r) { if (window.phoenixHost) phoenixHost.postToHost('lunaReply', { id: id, reply: r, keep: true }); }"
             + " if (!window.__phoenixRuntime) return back(null);"
             + " __phoenixRuntime.dispatch(" + JSON.stringify(uri) + ", " + JSON.stringify(params || {}) + ", back,"
             + " { cancelled: function () { return false; }, onCancel: null }); })()");

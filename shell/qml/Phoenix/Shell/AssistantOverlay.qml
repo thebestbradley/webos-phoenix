@@ -130,6 +130,7 @@ Item {
             wakeTimer.interval = Theme.launcherDuration + _beatMs(80);
             wakeTimer.restart();
             ++_session;
+            _fetchVocabulary();
             if (!listening)
                 status = "";
             busy = false;
@@ -453,11 +454,24 @@ Item {
     }
     // "Hey Phoenix, ..." came through whole: the request is what follows.
     function withoutWakeWord(text) {
-        return String(text || "").replace(/^\s*(?:hey|hi|okay|ok|a|hay)[,.!]?\s+(?:phoenix|fenix)\b[,.!?]*\s*/i, "").trim();
+        return String(text || "").replace(/^\s*(?:hey|hi|okay|ok|a|hay|eh)[,.!]?\s+(?:phoenix|ph?oenix|fenix|feenix|phenix)\b[,.!?]*\s*/i, "").trim();
     }
 
     // ---- The microphone ----------------------------------------------------------------
     readonly property string _owner: "assistant"
+    // Words to expect, whisper's prompt (the service's vocabulary: the wake
+    // phrase and the contacts' names, so "call Marcus" is not "Carl
+    // Marquez"), fetched as the view opens.
+    property string _vocabulary: "Hey Phoenix, set a timer."
+    function _fetchVocabulary() {
+        _call("vocabulary", {}, function (r) {
+            if (!r || r.returnValue === false || !r.prompt)
+                return;
+            ov._vocabulary = r.prompt;
+            if (ov.dictation && ov.dictation.owner === ov._owner)
+                ov.dictation.prompt = ov._vocabulary;
+        });
+    }
     function listen() {
         if (!dictation || dictation.busy)
             return;
@@ -469,7 +483,7 @@ Item {
         }
         input.focus = false;
         dictation.owner = _owner;
-        dictation.prompt = "";
+        dictation.prompt = _vocabulary;
         dictation.autoStop = true;
         dictation.start();
         listening = dictation.listening;

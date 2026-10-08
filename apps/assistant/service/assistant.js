@@ -25,6 +25,7 @@
 //
 // createAssistantService(deps) -> methods, each (params) -> Promise<reply>:
 //   ask {text, threadId?, newThread?, speak?, voice?, locked?}  -> {thread, messages}
+//   vocabulary {} -> {words, prompt}: the wake phrase and contacts' names, and the transcriber's prompt
 //     (voice: spoken, answered aloud with voiceReplies; locked: over the lock
 //     screen, LOCKED_COMMANDS only; "yes" / "no" answer a read-back waiting)
 //   choose {threadId, messageId, choice: "cloud:<id>" | "web" | "settings" | "open"}
@@ -572,6 +573,23 @@ function createAssistantService(deps) {
             changed("settings");
             return Promise.resolve(ok({ settings: settings() }));
         },
+        // Words to expect in a spoken request, and the transcriber's prompt made of them
+        // (whisper writes them as spelled): the wake phrase and the
+        // contacts' names, as Voice Dial passes them. The system UI and the
+        // Assistant only (names are private).
+        vocabulary: function () {
+            if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
+            // The prompt as requests, not a bare list: a list of names makes
+            // whisper hear names everywhere ("call Marcus" as "Karl Marcus").
+            return commands.contactNames(env()).then(function (names) {
+                var seen = {}, words = ["Hey Phoenix"], prompt = "Hey Phoenix, set a timer.";
+                names.forEach(function (n) { if (!seen[n] && words.length < 101) { seen[n] = true; words.push(n); } });
+                words.filter(function (n) { return n.indexOf(" ") > 0; }).slice(0, 30).forEach(function (n, i) {
+                    prompt += (i % 2 ? " Text " : " Call ") + n + ".";
+                });
+                return ok({ words: words, prompt: prompt });
+            }, function () { return ok({ words: ["Hey Phoenix"], prompt: "Hey Phoenix, set a timer." }); });
+        },
         commands: function () {
             return catalogue().then(function (cat) {
                 return ok({ commands: cat.all.map(function (c) {
@@ -740,6 +758,6 @@ function createAssistantService(deps) {
 
 var METHODS = ["ask", "choose", "confirm", "threads", "thread", "newThread", "setCurrent", "deleteThread", "clearHistory",
                "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
-               "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking"];
+               "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary"];
 
 module.exports = { createAssistantService: createAssistantService, METHODS: METHODS, ERRORS: ERRORS, SERVICE: SERVICE, DEFAULTS: DEFAULTS };

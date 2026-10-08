@@ -13405,7 +13405,7 @@
         var serviceMethods = {};
         ["ask", "choose", "confirm", "threads", "thread", "newThread", "setCurrent", "deleteThread", "clearHistory",
          "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
-         "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking"].forEach(function (name) {
+         "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary"].forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
                 var m;
                 try { m = service(); } catch (e) { return reply(fail(-1, String(e.message || e))); }

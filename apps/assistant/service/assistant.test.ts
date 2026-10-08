@@ -452,4 +452,15 @@ describe("asking by voice (docs/AI-AND-MCP.md, Voice)", () => {
         // Unlocked, the same words work.
         expect(last(await ask(t, "text Sam I'm running late")).status).toBe("pending");
     });
+
+    it("gives the words to expect: the wake phrase and the contacts' names, to the system UI only", async () => {
+        const t = setup();
+        const v = await t.svc.vocabulary({});
+        expect(v.words[0]).toBe("Hey Phoenix");
+        expect(v.words).toContain("Sam Jones");
+        expect(v.prompt).toMatch(/^Hey Phoenix, set a timer\. Call [A-Z][a-z]+ [A-Z][a-z]+\. Text /);
+        expect(v.prompt).toContain("Sam Jones.");
+        t.as("com.example.app");
+        expect((await t.svc.vocabulary({})).returnValue).toBe(false);
+    });
 });

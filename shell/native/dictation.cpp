@@ -33,7 +33,8 @@ constexpr int kSpeechMinMs = 150;
 constexpr int kQuietEndMs = 1000;
 constexpr int kNoSpeechMs = 7000;
 constexpr int kFileChunkMs = 50;
-constexpr int kRingSeconds = 4;      // standing by: what the spotter had, for the words after the phrase
+constexpr int kRingSeconds = 4;
+constexpr double kPhraseLeadS = 0.3;   // recorded before the phrase's start      // standing by: what the spotter had, for the words after the phrase
 
 QStringList defaultCommand()
 {
@@ -237,9 +238,15 @@ void Dictation::spotterOutput()
         }
         if (!o.contains(QStringLiteral("wake")) || m_listening || m_busy || !standbyWanted())
             continue;
-        // What was said after the phrase, kept for a recording started now.
-        const qint64 end = qint64(o.value(QStringLiteral("end")).toDouble() * kWhisperRate);
-        const qint64 from = qBound<qint64>(0, end - m_ringStart, m_ring.size() / 2);
+        // The phrase and what was said after it, kept for a recording
+        // started now. From the phrase's start: where it ends is less sure
+        // (a word run on, "Phoenix, text Sam", lost its "t"), and the
+        // transcript of the phrase is easily dropped (withoutWakeWord).
+        // A little before it too: the spotter's word times are a guess,
+        // and a clipped "hey" can take the next word with it ("Karl
+        // Marcus").
+        const qint64 at = qint64((o.value(QStringLiteral("start")).toDouble() - kPhraseLeadS) * kWhisperRate);
+        const qint64 from = qBound<qint64>(0, at - m_ringStart, m_ring.size() / 2);
         m_preroll = m_ring.mid(from * 2);
         m_inWake = true;
         emit wakeHeard(o.value(QStringLiteral("heard")).toString());

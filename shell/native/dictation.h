@@ -45,8 +45,9 @@
 //   standingBy   the microphone is open for it (the status bar's subtle
 //                microphone)
 //   wakeHeard()  it was heard. A start() from its handler records on from
-//                the end of the phrase, so "Hey Phoenix, set a timer" in one
-//                breath keeps "set a timer". With inputFiles, standing by
+//                the start of the phrase, so "Hey Phoenix, set a timer" in
+//                one breath keeps "set a timer" (the listener drops the
+//                phrase from the transcript). With inputFiles, standing by
 //                plays the next file not yet played (else quiet), and a
 //                recording that follows the wake word goes on in the same
 //                file; hear(file) plays a WAV into the microphone now (the
