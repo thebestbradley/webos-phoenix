@@ -1553,6 +1553,116 @@ function answer(t) {
     return null;
 }
 
+// ---- Follow-up questions (lib/followups.js) -------------------------------------------------
+// After something is made, one short question about what it still lacks;
+// the answer as typed or said (a chip's label also matches).
+var EMAIL_ONLY = /^(?:(?:it's|it is|her|his|their|the)?\s*(?:e-?mail(?: address)?(?: is)?)?\s*)([^\s@,]+@[^\s@,]+\.[a-z]{2,})$/;
+var followUp = {
+    // in: the question in the conversation (the item was just made, "it");
+    // else in a notification, later (the item named).
+    question: function (kind, item, now, inConversation) {
+        var it = inConversation ? "it" : quote(item.title);
+        var when = item.at ? " (" + whenText(item.at, null, false, now).replace(/^on /, "") + ")" : "";
+        switch (kind) {
+        case "location": return inConversation ? "Where is it?" : "Where is " + it + when + "?";
+        case "invitees": return inConversation ? "Who's coming?" : "Who's coming to " + it + when + "?";
+        case "duration": return inConversation ? "How long is it?" : "How long is " + it + when + "?";
+        case "alert": return inConversation ? "When should I remind you?" : "When should I remind you of " + it + when + "?";
+        case "due": return item.type === "reminder" ? (inConversation ? "When should I remind you?" : "When should I remind you to " + item.title + "?")
+                                                    : (inConversation ? "When is it due?" : "When is " + it + " due?");
+        case "list": return inConversation ? "Which list is it for?" : "Which list is " + it + " for?";
+        case "repeat": return inConversation ? "Should it repeat?" : "Should your " + item.title + " alarm repeat?";
+        case "label": return inConversation ? "What's it for?" : "What's your " + item.title + " alarm for?";
+        case "email": return "What's " + item.title + "'s email address?";
+        case "phone": return "What's " + item.title + "'s phone number?";
+        }
+        return "";
+    },
+    chip: {
+        skip: "Skip", videoCall: "Video call", justOnce: "Just once",
+        minutes: function (n) { return n < 60 ? n + " min" : n === 60 ? "1 hour" : n % 60 ? (n / 60).toFixed(1) + " hours" : n / 60 + " hours"; },
+        before: function (n) { return (n < 60 ? n + " min" : n === 60 ? "1 hour" : n / 60 + " hours") + " before"; },
+        inAnHour: "In 1 hour", thisEvening: "This evening", tomorrowMorning: "Tomorrow morning",
+        today: "Today", tomorrow: "Tomorrow", nextWeek: "Next week",
+        daily: "Every day", weekdays: "Weekdays", weekends: "Weekends"
+    },
+    // What changed, said back.
+    done: function (kind, value, now) {
+        switch (kind) {
+        case "location": return "Added " + value + " as the place.";
+        case "invitees": return "Invited " + list(value) + ".";
+        case "duration": return "It's " + durationText(value * 60) + " long now.";
+        case "alert": return value ? "I'll remind you " + durationText(value * 60) + " before." : "I'll remind you when it starts.";
+        case "due": return "Set for " + whenText(value, null, false, now) + ".";
+        case "list": return "It's on your " + value + " list now.";
+        case "repeat": return value === "once" ? "OK, just once." : "It repeats " + repeatText(value) + " now.";
+        case "label": return "Labelled it " + quote(value) + ".";
+        case "email": return "Saved the email address.";
+        case "phone": return "Saved the phone number.";
+        }
+        return "Done.";
+    },
+    skipped: function () { return "OK, I'll leave it."; },
+    alreadySet: function () { return "That's been set already, so I'll leave it."; },
+    gone: function () { return "That's gone now, so there's nothing to add."; },
+    noContacts: function (names) { return "I couldn't find " + list(names) + " with an email address in your contacts."; },
+    // A typed or spoken answer to kind: {skip: true}, {value} (words for
+    // the free-text kinds, a number of minutes, ms for a time), or null
+    // (not an answer: a new request).
+    answer: function (kind, text, now) {
+        var t = clean(text).replace(/[.!]$/, "").trim();
+        if (/^(?:skip|skip it|skip that|no|nope|no thanks|no thank you|not now|never ?mind|leave it|pass|i don't know|don't know|dunno|not sure)$/.test(t)) return { skip: true };
+        var m;
+        switch (kind) {
+        case "location":
+            if (/^(?:a )?(?:video(?: call| chat| meeting)?|online|zoom|on zoom|virtual|remote|remotely)$/.test(t)) return { value: "Video call" };
+            t = t.replace(/^(?:it's |it is |it'll be |it will be |we're meeting |we are meeting |the place is |the location is )?(?:at |in |@ )?/, "").trim();
+            return t ? { value: capital(cased(t, { original: text })) } : null;
+        case "duration": {
+            var s = duration(t.replace(/^(?:it's |it is |it lasts |it'll be |about |around |roughly |for |make it )+/, "").replace(/ long$/, ""));
+            return s && s >= 300 && s <= 86400 ? { value: Math.round(s / 60) } : null;
+        }
+        case "alert":
+            if (/^(?:when it starts|at the start|at the time|on time|at start)$/.test(t)) return { value: 0 };
+            if ((m = /^(?:remind me |tell me )?(.+?) (?:before|earlier|ahead|beforehand|in advance)$/.exec(t))) {
+                var b = duration(m[1].replace(/^(?:about |around )/, ""));
+                return b && b <= 7 * 86400 ? { value: Math.round(b / 60) } : null;
+            }
+            return null;
+        case "due": {
+            var due = when(t.replace(/^(?:it's due |it is due |due |remind me |by )/, ""), now, { prefer: "day" });
+            return due && due > now ? { value: due } : null;
+        }
+        case "list":
+            t = t.replace(/^(?:it's for |it's on |put it on |put it in |on |in |for |to )?(?:my |the )?/, "").replace(/ list$/, "").trim();
+            return t && t.split(" ").length <= 4 ? { value: capital(cased(t, { original: text })) } : null;
+        case "repeat":
+            if (/^(?:every ?day|daily|each day|all week|every day of the week)$/.test(t)) return { value: "daily" };
+            if (/^(?:(?:on |every )?weekdays|monday to friday|mon-fri|work ?days|on work ?days|every weekday)$/.test(t)) return { value: "weekdays" };
+            if (/^(?:(?:on |at |every )?weekends?|saturday and sunday)$/.test(t)) return { value: "weekends" };
+            if (/^(?:just once|once|only once|no repeat|don't repeat|do not repeat|not repeat)$/.test(t)) return { value: "once" };
+            return null;
+        case "label":
+            t = t.replace(/^(?:it's for |it is for |for |call it |label it |name it |it's |to )/, "").trim();
+            return t && t.split(" ").length <= 5 ? { value: capital(cased(t, { original: text })) } : null;
+        case "invitees": {
+            t = t.replace(/^(?:invite |with |it's with |just |only )/, "");
+            var names = t.split(/\s*(?:,|\band\b|&)\s*/).map(function (x) { return x.trim(); }).filter(Boolean);
+            return names.length && names.length <= 6 && names.every(function (n) { return n.split(" ").length <= 3; })
+                ? { names: names.map(function (n) { return cased(n, { original: text }); }) } : null;
+        }
+        case "email":
+            m = EMAIL_ONLY.exec(String(text).trim().toLowerCase());
+            return m ? { value: m[1] } : null;
+        case "phone": {
+            var d = digits(t).replace(/^(?:it's |it is |the number is |number |call )/, "");
+            return /^\+?[\d\s().-]{3,}$/.test(d) && d.replace(/\D/g, "").length >= 3 ? { value: d.trim() } : null;
+        }
+        }
+        return null;
+    }
+};
+
 module.exports = {
     id: "en",
     name: "English",
@@ -1573,5 +1683,6 @@ module.exports = {
     repeatText: repeatText,
     say: say,
     grounded: grounded,
-    answer: answer
+    answer: answer,
+    followUp: followUp
 };

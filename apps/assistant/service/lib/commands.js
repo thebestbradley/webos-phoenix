@@ -322,6 +322,11 @@ function emailOf(p) {
     return pick ? pick.value : null;
 }
 // Who a number or address belongs to, for messages and email.
+// A person's phoneNumbers[].normalizedValue, as the contacts linker writes it.
+function normalizedPhone(number) {
+    var d = digitsOnly(number), rev = function (s) { return s.split("").reverse().join(""); };
+    return d.length === 10 ? "-" + rev(d.slice(6)) + rev(d.slice(3, 6)) + "-" + rev(d.slice(0, 3)) + "--" : "-" + rev(d) + "---";
+}
 function nameForPhone(all, addr) {
     var p = all.filter(function (x) { return (x.phoneNumbers || []).some(function (n) { return samePhone(n.value, addr); }); })[0];
     return p ? personName(p) : "";
@@ -760,13 +765,17 @@ function addTask(env, text, list, due, remind) {
             var taskId = ids[0];
             var done = { task: task, taskId: taskId, list: l };
             if (!remind || !due) return done;
-            return lunaCall(env, AM + "create", { start: true, replace: true, activity: {
-                name: "org.webosphoenix.tasks.remind." + taskId, description: "Tasks reminder",
-                type: { foreground: true, persist: true }, schedule: { start: activityDate(due) },
-                callback: { method: "palm://com.palm.applicationManager/launch",
-                            params: { id: TASKS_APP, params: { reminder: taskId } } } } }).then(function () { return done; });
+            return remindTask(env, taskId, due).then(function () { return done; });
         });
     });
+}
+// A task's reminder: the activity Tasks schedules (@phoenix/luna tasks.scheduleReminder).
+function remindTask(env, taskId, due) {
+    return lunaCall(env, AM + "create", { start: true, replace: true, activity: {
+        name: "org.webosphoenix.tasks.remind." + taskId, description: "Tasks reminder",
+        type: { foreground: true, persist: true }, schedule: { start: activityDate(due) },
+        callback: { method: "palm://com.palm.applicationManager/launch",
+                    params: { id: TASKS_APP, params: { reminder: taskId } } } } });
 }
 
 // ---- The run ------------------------------------------------------------------------------------
@@ -883,7 +892,7 @@ function run(cmd, args, env) {
             return scheduleAlarm(env, record, at).then(function () {
                 var text = say.alarmSet(args.time, now, args.label, occurs);
                 if (args.unrepeated) text += " " + say.alarmRepeatNot(args.unrepeated);
-                return { text: text, open: { appId: CLOCK_APP, params: {}, title: "Clock" },
+                return { text: text, open: { appId: CLOCK_APP, params: {}, title: "Clock" }, data: { alarmId: ids[0] },
                          undo: { kind: "alarm", ids: ids, keys: [key], what: say.undoWhat.alarm(record.niceTime) } };
             });
         });
@@ -909,12 +918,13 @@ function run(cmd, args, env) {
     case "reminder":
         return addTask(env, args.text, "", args.due > now ? args.due : null, true).then(function (r) {
             return { text: say.reminderSet(r.task.summary, r.task.due, now), open: { appId: TASKS_APP, params: { taskId: r.taskId }, title: "Tasks" },
+                     data: { taskId: r.taskId },
                      undo: { kind: "db", ids: [r.taskId], activities: r.task.due ? ["org.webosphoenix.tasks.remind." + r.taskId] : [], what: say.undoWhat.task(r.task.summary) } };
         });
     case "task":
         return addTask(env, args.text, args.list || "", args.due || null, false).then(function (r) {
             return { text: say.taskAdded(r.task.summary, r.list.name, r.task.due, now, r.list.made),
-                     open: { appId: TASKS_APP, params: { taskId: r.taskId }, title: "Tasks" },
+                     open: { appId: TASKS_APP, params: { taskId: r.taskId }, title: "Tasks" }, data: { taskId: r.taskId },
                      undo: { kind: "db", ids: r.list.made ? [r.taskId, r.list.id] : [r.taskId], what: say.undoWhat.task(r.task.summary) } };
         });
     case "note":
@@ -953,8 +963,7 @@ function run(cmd, args, env) {
                 var contact = { _id: cid, _kind: "com.palm.contact.palmprofile:1", accountId: profile ? profile._id : "", name: name, nickname: "",
                     emails: emails, phoneNumbers: phones, addresses: [], organizations: [], urls: [], ims: [], photos: [], relations: [], tags: [],
                     birthday: "", anniversary: "", gender: "", note: "" };
-                var d = digitsOnly(args.number), rev = function (s) { return s.split("").reverse().join(""); };
-                var norm = d.length === 10 ? "-" + rev(d.slice(6)) + rev(d.slice(3, 6)) + "-" + rev(d.slice(0, 3)) + "--" : "-" + rev(d) + "---";
+                var norm = normalizedPhone(args.number);
                 var person = { _id: pid, _kind: "com.palm.person:1", contactIds: [cid], name: name, names: [name], nickname: "",
                     emails: emails.map(function (e) { return Object.assign({ normalizedValue: e.value.toLowerCase(), favoriteData: {} }, e); }),
                     phoneNumbers: phones.map(function (p) { return Object.assign({ normalizedValue: norm, speedDial: "", favoriteData: {} }, p); }),
@@ -966,6 +975,7 @@ function run(cmd, args, env) {
                     searchTerms: [(given.charAt(0) + family).toLowerCase(), (family + given).toLowerCase()] };
                 return dbPut(env, [contact, person]).then(function () {
                     return { text: say.contactAdded(String(args.name)), open: { appId: CONTACTS_APP, params: { launchType: "showPerson", id: pid }, title: "Contacts" },
+                             data: { personId: pid, contactId: cid },
                              undo: { kind: "db", ids: [cid, pid], what: say.undoWhat.contact(String(args.name)) } };
                 });
             });
@@ -1165,5 +1175,18 @@ module.exports = {
     run: run,
     contactNames: contactNames,
     activityDate: activityDate,
-    memoPosition: memoPosition
+    memoPosition: memoPosition,
+    // For the follow-up questions (lib/followups.js), which change what a
+    // command made the way the command made it.
+    lunaCall: lunaCall,
+    dbFind: dbFind,
+    people: people,
+    findPerson: findPerson,
+    personName: personName,
+    emailOf: emailOf,
+    taskList: taskList,
+    remindTask: remindTask,
+    scheduleAlarm: scheduleAlarm,
+    nextRing: nextRing,
+    normalizedPhone: normalizedPhone
 };

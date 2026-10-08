@@ -99,6 +99,8 @@ function device(opts: { offline?: boolean } = {}) {
         return Promise.resolve({ status: 404, body: "" });
     };
     let clock = NOW;
+    // The commands alone: the questions after them have their own tests (followups.test.ts).
+    data.set("assistant:settings", { followUps: false });
     const svc = createAssistantService({ luna, storage, request, now: () => clock, caller: () => "com.palm.systemui",
                                          secrets: { seal: () => Promise.resolve({}), unseal: () => Promise.resolve("") }, locale: () => "en-US" });
     let thread = "";
