@@ -6,13 +6,17 @@
 // same source (art/assistant-bird/bird.json, through birdData.ts and
 // bird.generated.css). SVG paths; pose changes are CSS transitions, the
 // flames' flicker, the breath, the extras, the hop and the speaking beak
-// are the generated keyframes; blinks come at random times.
+// are the generated keyframes; blinks come at random times. Moves (the
+// entrance, the idle pool, the reactions: motion.moves) are the generated
+// ab-mv-* keyframes on a group of their own over each part's acting, their
+// cues (a face for a moment, an effect) timed here; the effects (embers,
+// the fireball, dust) the generated ab-fx-* keyframes over SVG shapes.
 //
 // Follows the system's Animation speed (Fast: 60% of the time) and Reduce
 // motion, and the browser's prefers-reduced-motion: with either it holds
 // each pose still.
 
-import { Component, createRef, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Component, createRef, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { accessibility, system } from "@phoenix/luna";
 import { BIRD, type BirdPose } from "./birdData";
 import "./bird.generated.css";
@@ -60,7 +64,18 @@ type Channel = keyof typeof BIRD.motion.acting.channels;
 interface Acting { period: number; every?: readonly number[]; tracks: Partial<Record<Channel, unknown>> }
 const ACTING = BIRD.motion.acting.poses as unknown as Partial<Record<BirdPose, Acting>>;
 
-interface ActProps { pose: BirdPose; channel: Channel; calm: boolean; speed: number; fidget: boolean; children: ReactNode }
+export type MoveName = keyof typeof BIRD.motion.moves;
+interface Cue { at: number; eyes?: string; beak?: string; fx?: string }
+interface Move { kind: "enter" | "leave" | "idle" | "react"; period: number; tracks: Partial<Record<Channel, unknown>>; cues: readonly Cue[] }
+const MOVES = BIRD.motion.moves as unknown as Record<MoveName, Move>;
+type FxName = keyof typeof BIRD.effects;
+interface Effect { kind: "swirl" | "glow" | "puff" | "burst"; origin: readonly number[]; period: number; radius?: number; particles?: readonly (readonly (number | string)[])[] }
+const EFFECTS = BIRD.effects as unknown as Record<FxName, Effect>;
+
+/** A move playing: its name and a key (a new one for each time it plays). */
+interface Playing { name: MoveName; key: number }
+
+interface ActProps { pose: BirdPose; channel: Channel; calm: boolean; speed: number; fidget: boolean; move: Playing | null; children: ReactNode }
 
 /** A part's acting: the pose's loop for `channel` (the class of its generated
  *  keyframes), on top of the pose's values. Each loop starts and ends at
@@ -71,6 +86,7 @@ interface ActProps { pose: BirdPose; channel: Channel; calm: boolean; speed: num
  *  class changes. Styles are set through the CSSOM (the CSP allows that). */
 class Act extends Component<ActProps> {
     private outer = createRef<SVGGElement>();
+    private mover = createRef<SVGGElement>();
     private inner = createRef<SVGGElement>();
 
     static className(p: ActProps): string | undefined {
@@ -79,18 +95,36 @@ class Act extends Component<ActProps> {
         return `ab-act-${p.pose}-${p.channel}`;
     }
 
-    getSnapshotBeforeUpdate(prev: ActProps): string | null {
-        if (this.props.calm || Act.className(prev) === Act.className(this.props)) return null;
-        const o = this.outer.current, i = this.inner.current;
-        if (!o || !i) return null;
-        const t = (el: Element) => { const v = getComputedStyle(el).transform; return v && v !== "none" ? v : ""; };
-        const ot = t(o), it = t(i);
-        if (!ot && !it) return null;
-        if (!ot || !it || typeof DOMMatrix === "undefined") return ot || it;
-        return new DOMMatrix(ot).multiply(new DOMMatrix(it)).toString();
+    /** The move's class for this part, if it moves it. */
+    static moveClass(p: ActProps): string | undefined {
+        if (p.calm || !p.move || !(p.channel in MOVES[p.move.name].tracks)) return undefined;
+        return `ab-mv-${p.move.name}-${p.channel}`;
     }
 
-    componentDidUpdate(_prev: ActProps, _state: unknown, snapshot: string | null) {
+    getSnapshotBeforeUpdate(prev: ActProps): string | null {
+        if (this.props.calm) return null;
+        const loopChanged = Act.className(prev) !== Act.className(this.props);
+        // A move ending early (an idle one, as the pose changes) blends away too; one
+        // ending as it should is at rest.
+        const moveChanged = Act.moveClass(prev) !== Act.moveClass(this.props) || prev.move?.key !== this.props.move?.key;
+        if (!loopChanged && !moveChanged) return null;
+        const o = this.outer.current, m = this.mover.current, i = this.inner.current;
+        if (!o || !m || !i) return null;
+        const t = (el: Element) => { const v = getComputedStyle(el).transform; return v && v !== "none" ? v : ""; };
+        const all = [t(o), t(m), t(i)].filter(Boolean);
+        if (all.length === 0) return null;
+        if (all.length === 1 || typeof DOMMatrix === "undefined") return all[0];
+        return all.reduce((a, b) => new DOMMatrix(a).multiply(new DOMMatrix(b)).toString());
+    }
+
+    componentDidUpdate(prev: ActProps, _state: unknown, snapshot: string | null) {
+        // The same move again: its animation from the start.
+        const m = this.mover.current, cls = Act.moveClass(this.props);
+        if (m && cls && prev.move && this.props.move && prev.move.key !== this.props.move.key && Act.moveClass(prev) === cls) {
+            m.setAttribute("class", "");
+            m.getBoundingClientRect();
+            m.setAttribute("class", cls);
+        }
         const o = this.outer.current;
         if (!o || !snapshot) return;
         o.style.transition = "none";
@@ -103,7 +137,9 @@ class Act extends Component<ActProps> {
     render() {
         return (
             <g ref={this.outer} data-act={this.props.channel}>
-                <g ref={this.inner} className={Act.className(this.props)}>{this.props.children}</g>
+                <g ref={this.mover} className={Act.moveClass(this.props)} data-mover={this.props.channel}>
+                    <g ref={this.inner} className={Act.className(this.props)}>{this.props.children}</g>
+                </g>
             </g>
         );
     }
@@ -118,15 +154,79 @@ export interface BirdProps {
     /** Overrides for tests and reviews: else the system's settings. */
     speed?: number;
     still?: boolean;
+    /** A move to play as it appears (the entrance: "enter"; a cheer as a request is sent). */
+    start?: MoveName;
+    /** A reaction to play: a new n plays it (once at a time; not while it enters). */
+    react?: { name: MoveName; n: number } | null;
+    /** Where it looks, x and y from -1 to 1 (the words typed, a scroll). */
+    gaze?: readonly [number, number];
+    /** Plays the idle pool now and then (off while the user types). */
+    fidgety?: boolean;
+    onClick?: () => void;
 }
 
-export function Bird({ pose, size = 120, className, testId = "as-bird", speed, still }: BirdProps) {
+/** How long a move takes at a speed (0 held still). */
+export function moveMs(name: MoveName, speed: number, still: boolean): number {
+    return still ? 0 : Math.round(MOVES[name].period * speed);
+}
+
+export function Bird({ pose, size = 120, className, testId = "as-bird", speed, still, start, react, gaze, fidgety = true, onClick }: BirdProps) {
     const motion = useBirdMotion();
     const k = speed ?? motion.speed;
     const calm = still ?? motion.still;
     const p = BIRD.poses[pose] ?? BIRD.poses.idle;
-    const eyes = BIRD.eyes[p.eyes];
-    const beak = BIRD.beaks[p.beak];
+
+    // ---- Moves: the one playing, its face for a moment, the effects it plays ----
+    const [move, setMove] = useState<Playing | null>(null);
+    const [face, setFace] = useState<{ eyes?: string; beak?: string }>({});
+    const [fx, setFx] = useState<{ name: FxName; key: number }[]>([]);
+    const serial = useRef(0);
+    const timers = useRef<number[]>([]);
+    const moveRef = useRef<Playing | null>(null);
+    moveRef.current = move;
+    const clearTimers = () => { timers.current.forEach((t) => window.clearTimeout(t)); timers.current = []; };
+    const play = useCallback((name: MoveName): boolean => {
+        const m = MOVES[name];
+        if (calm || !m) return false;
+        clearTimers();
+        const key = ++serial.current;
+        setMove({ name, key });
+        setFace({});
+        const later = (ms: number, f: () => void) => { timers.current.push(window.setTimeout(f, ms * k)); };
+        for (const c of m.cues) {
+            later(c.at * m.period, () => {
+                if (c.eyes !== undefined || c.beak !== undefined)
+                    setFace((f) => ({ eyes: c.eyes !== undefined ? c.eyes : f.eyes, beak: c.beak !== undefined ? c.beak : f.beak }));
+                if (c.fx) {
+                    const e = { name: c.fx as FxName, key: ++serial.current };
+                    setFx((list) => [...list, e]);
+                    window.setTimeout(() => setFx((list) => list.filter((x) => x !== e)), (EFFECTS[e.name].period + 50) * k);
+                }
+            });
+        }
+        later(m.period, () => { setMove((cur) => (cur && cur.key === key ? null : cur)); setFace({}); });
+        return true;
+    }, [calm, k]);
+    useEffect(() => () => clearTimers(), []);
+    // Held still: none.
+    useEffect(() => { if (calm) { clearTimers(); setMove(null); setFace({}); setFx([]); } }, [calm]);
+    // The move to play as it appears.
+    useEffect(() => { if (start) play(start); }, []);    // eslint-disable-line react-hooks/exhaustive-deps
+    // An idle move ends with the pose (blending away).
+    useEffect(() => {
+        if (moveRef.current && MOVES[moveRef.current.name].kind === "idle") { clearTimers(); setMove(null); setFace({}); }
+    }, [pose]);
+    // A reaction asked for: once at a time, not while it enters.
+    const reactN = react?.n;
+    useEffect(() => {
+        if (!react) return;
+        const cur = moveRef.current;
+        if (cur && (cur.name === react.name || MOVES[cur.name].kind === "enter" || MOVES[cur.name].kind === "leave")) return;
+        play(react.name);
+    }, [reactN]);    // eslint-disable-line react-hooks/exhaustive-deps
+
+    const eyes = BIRD.eyes[(face.eyes || p.eyes) as keyof typeof BIRD.eyes];
+    const beak = BIRD.beaks[(face.beak || p.beak) as keyof typeof BIRD.beaks];
     const t = BIRD.motion.transition;
     const pv = BIRD.pivots;
     const ms = (v: number) => (calm ? 0 : Math.round(v * k));
@@ -169,27 +269,45 @@ export function Bird({ pose, size = 120, className, testId = "as-bird", speed, s
         return () => window.clearTimeout(timer);
     }, [calm, eyes.show, k]);
 
-    // Idle's look around: now and then, after a random gap (motion.acting's every).
+    // Idle, now and then, after a random gap (motion.acting's every): the
+    // look around and a full-body move from the pool (motion.idles) in turn.
     const [fidget, setFidget] = useState(false);
     const every = ACTING[pose]?.every;
+    const lastIdle = useRef("");
     useEffect(() => {
         setFidget(false);
         const a = ACTING[pose];
-        if (calm || !a?.every) return undefined;
+        if (calm || !a?.every || !fidgety) return undefined;
         const [lo, hi] = a.every;
-        let timer = 0;
+        let timer = 0, pool = false;
         const next = () => {
             timer = window.setTimeout(() => {
+                if (moveRef.current) { next(); return; }
+                if (pool) {
+                    const others = BIRD.motion.idles.pool.filter((n) => n !== lastIdle.current);
+                    const name = others[Math.floor(Math.random() * others.length)] as MoveName;
+                    lastIdle.current = name;
+                    play(name);
+                    pool = false;
+                    timer = window.setTimeout(next, MOVES[name].period * k);
+                    return;
+                }
+                pool = true;
                 setFidget(true);
                 timer = window.setTimeout(() => { setFidget(false); next(); }, a.period * k);
             }, (lo + Math.random() * (hi - lo)) * k);
         };
         next();
         return () => window.clearTimeout(timer);
-    }, [pose, calm, every, k]);
+    }, [pose, calm, every, k, fidgety, play]);
     const act = (channel: Channel, children: ReactNode) => (
-        <Act pose={pose} channel={channel} calm={calm} speed={k} fidget={fidget}>{children}</Act>
+        <Act pose={pose} channel={channel} calm={calm} speed={k} fidget={fidget} move={move}>{children}</Act>
     );
+    // Its gaze: the eyes, the head, a lean of the body.
+    const gz = BIRD.motion.gaze;
+    const [gx, gy] = calm || !gaze ? [0, 0] : [Math.max(-1, Math.min(1, gaze[0])), Math.max(-1, Math.min(1, gaze[1]))];
+    const gazeEase = `transform ${ms(gz.ms)}ms cubic-bezier(0.33, 1, 0.68, 1)`;
+    const headGaze = { transform: `${about(pv.neck, `rotate(${gx * gz.head}deg)`)} translate(0px, ${gy * gz.headY}px)`, transition: gazeEase };
 
     const talking = pose === "speaking" && !calm;
     const anim = (cls: string) => (calm ? undefined : cls);
@@ -204,22 +322,48 @@ export function Bird({ pose, size = 120, className, testId = "as-bird", speed, s
         );
     };
 
+    // Held still, it enters with a plain fade (Reduce motion).
+    const [shown, setShown] = useState(!(start === "enter" && calm));
+    useEffect(() => { if (!shown) { const r = requestAnimationFrame(() => setShown(true)); return () => cancelAnimationFrame(r); } return undefined; }, [shown]);
+
+    const shadowMove = move && !calm && ("whole" in MOVES[move.name].tracks || "body" in MOVES[move.name].tracks) ? `ab-mv-${move.name}-shadow` : undefined;
     return (
         <svg className={["ab-bird", calm && "ab-still", className].filter(Boolean).join(" ")} data-testid={testId} data-pose={pose}
+             data-move={move?.name ?? ""} onClick={onClick}
              viewBox={`0 0 ${BIRD.viewBox[0]} ${BIRD.viewBox[1]}`} width={size} height={Math.round(size * 1.1)}
-             style={{ overflow: "visible", ["--ab-speed" as string]: k } as CSSProperties}
+             style={{ overflow: "visible", ["--ab-speed" as string]: k, opacity: shown ? 1 : 0,
+                      transition: `opacity ${Math.round(250 * k)}ms ease` } as CSSProperties}
              role="img" aria-label={`The assistant: ${p.label}`}>
-            <Part name="shadow" style={{ transform: about(pv.shadow, `scale(${p.lift > 0 ? 0.7 : 1}, 1)`), transition: ease(t.body) }} />
+            <defs>
+                <radialGradient id="ab-fire">
+                    <stop offset="0" stopColor={BIRD.colors.flameCore} />
+                    <stop offset="0.3" stopColor={BIRD.colors.flame} />
+                    <stop offset="0.6" stopColor={BIRD.colors.ember} stopOpacity={0.75} />
+                    <stop offset="1" stopColor={BIRD.colors.ember} stopOpacity={0} />
+                </radialGradient>
+                <radialGradient id="ab-dust">
+                    <stop offset="0" stopColor={BIRD.colors.dust} stopOpacity={0.88} />
+                    <stop offset="0.55" stopColor={BIRD.colors.dust} stopOpacity={0.56} />
+                    <stop offset="1" stopColor={BIRD.colors.dust} stopOpacity={0} />
+                </radialGradient>
+            </defs>
+            {fx.filter((e) => EFFECTS[e.name].kind === "glow").map((e) => <FxView key={e.key} name={e.name} />)}
+            <g className={shadowMove} key={shadowMove ? move?.key : 0}>
+                <Part name="shadow" style={{ transform: about(pv.shadow, `scale(${p.lift > 0 ? 0.7 : 1}, 1)`), transition: ease(t.body) }} />
+            </g>
+            {act("whole",
             <g style={{ transform: `translate(0px, ${-p.lift}px)`, transition: liftTransition }}>
                 <g style={{ transform: about(pv.body, `rotate(${p.tilt}deg)`), transition: ease(t.body) }}>
                     {/* Not remounted for the hop (its class alternates, take-off and
                         landing, which restarts it): the parts within ease and blend on. */}
                     <g className={hop === "up" ? anim("ab-takeoff") : hop === "down" ? anim("ab-landing") : undefined}>
                         <g className={anim("ab-breath")}>
-                            {act("body", <>
-                                <g className={anim("ab-flicker-tail")}><Part name="tail" /></g>
-                                <g className={anim("ab-flicker-tailInner")}><Part name="tailInner" /></g>
-                                {act("head",
+                            {act("body", <g style={{ transform: about(pv.feet, `rotate(${gx * gz.body}deg)`), transition: gazeEase }}>
+                                {act("tail", <>
+                                    <g className={anim("ab-flicker-tail")}><Part name="tail" /></g>
+                                    <g className={anim("ab-flicker-tailInner")}><Part name="tailInner" /></g>
+                                </>)}
+                                {act("head", <g style={headGaze}>
                                     <g style={{ transform: `translate(${pv.crest[0]}px, ${pv.crest[1]}px) rotate(${p.crestRotation}deg) scale(${p.crestScale})`, transition: ease(t.crest, back) }}>
                                         {act("crest",
                                             <g className={anim("ab-flicker-crestGust")}>
@@ -227,9 +371,10 @@ export function Bird({ pose, size = 120, className, testId = "as-bird", speed, s
                                                 <g className={anim("ab-flicker-crestInner")}><Part name="crestInner" /></g>
                                                 <g className={anim("ab-flicker-crestCore")}><Part name="crestCore" /></g>
                                             </g>)}
-                                    </g>)}
-                                <Part name="footL" />
-                                <Part name="footR" />
+                                    </g>
+                                </g>)}
+                                {act("footL", <Part name="footL" />)}
+                                {act("footR", <Part name="footR" />)}
                                 <Part name="body" />
                                 <Part name="belly" />
                                 <g style={{ transform: about(pv.wingL, `rotate(${p.wingL}deg)`), transition: ease(t.wings, back) }}>
@@ -239,8 +384,8 @@ export function Bird({ pose, size = 120, className, testId = "as-bird", speed, s
                                     {act("wingR", <><Part name="wingR" /><Part name="wingTipR" /></>)}
                                 </g>
                                 {/* The face (eyes, lids, beak) acts as the head, with the crest. */}
-                                {act("head", <>
-                                    {act("eyes", <>
+                                {act("head", <g style={headGaze}>
+                                    {act("eyes", <g style={{ transform: `translate(${gx * gz.eyes[0]}px, ${gy * gz.eyes[1]}px)`, transition: gazeEase }} data-gaze="eyes">
                                         {eye("L")}
                                         {eye("R")}
                                         {act("lids", (Object.keys(BIRD.overlays) as (keyof typeof BIRD.overlays)[]).map((o) => {
@@ -251,7 +396,7 @@ export function Bird({ pose, size = 120, className, testId = "as-bird", speed, s
                                                 </g>
                                             );
                                         }))}
-                                    </>)}
+                                    </g>)}
                                     <g style={{ transform: about(pv.beak, `rotate(${p.beakTilt}deg)`), transition: ease(t.beak) }}>
                                         {act("beak", <>
                                             <g style={{ opacity: 1 - beak.grin, transform: `translate(0px, ${beak.jaw[0]}px) ${about(pv.jaw, `scale(${beak.jaw[1]}, ${beak.jaw[2]})`)}`, transition: ease(t.beak) }}>
@@ -270,12 +415,12 @@ export function Bird({ pose, size = 120, className, testId = "as-bird", speed, s
                                             </g>
                                         </>)}
                                     </g>
-                                </>)}
-                            </>)}
+                                </g>)}
+                            </g>)}
                         </g>
                     </g>
                 </g>
-            </g>
+            </g>)}
             {(Object.keys(BIRD.extras) as (keyof typeof BIRD.extras)[]).map((x) => {
                 const on = (p.extras as readonly string[]).includes(x);
                 return (
@@ -286,6 +431,41 @@ export function Bird({ pose, size = 120, className, testId = "as-bird", speed, s
                     </g>
                 );
             })}
+            {fx.filter((e) => EFFECTS[e.name].kind !== "glow").map((e) => <FxView key={e.key} name={e.name} />)}
         </svg>
+    );
+}
+
+/** An effect (art's effects) playing: its particles, each a few nested
+ *  groups with their generated keyframes (bird.generated.css). */
+function FxView({ name }: { name: FxName }) {
+    const e = EFFECTS[name];
+    const c = (v: number | string | undefined) => BIRD.colors[(v ?? "dust") as keyof typeof BIRD.colors];
+    if (e.kind === "glow")
+        return <g data-fx={name}><g className={`ab-fx-${name}`}><circle r={e.radius} fill="url(#ab-fire)" /></g></g>;
+    return (
+        <g data-fx={name}>
+            {(e.particles ?? []).map((pt, i) => {
+                const cls = `ab-fx-${name}-${i + 1}`;
+                const size = Number(pt[2]);
+                if (e.kind === "swirl")
+                    return (
+                        <g key={i} className={`${cls}-a`}><g className={`${cls}-r`}><g className={`${cls}-o`}>
+                            <circle r={size * 1.3} fill={c(pt[4])} opacity={0.3} />
+                            <rect x={-size / 2} y={-size * 1.2} width={size} height={size * 2.4} rx={size / 2} fill={c(pt[4])} />
+                            <ellipse rx={size * 0.22} ry={size * 0.54} fill={BIRD.colors.flameCore} />
+                        </g></g></g>
+                    );
+                if (e.kind === "puff")
+                    return <g key={i} className={`${cls}-t`}><g className={`${cls}-s`}><circle className={`${cls}-o`} r={size} fill="url(#ab-dust)" /></g></g>;
+                return (
+                    <g key={i} className={`${cls}-t`}><g className={`${cls}-s`}><g className={`${cls}-o`}>
+                        <circle r={size * 1.3} fill={c(pt[4])} opacity={0.3} />
+                        <circle r={size / 2} fill={c(pt[4])} />
+                        <circle r={size * 0.22} fill={BIRD.colors.flameCore} />
+                    </g></g></g>
+                );
+            })}
+        </g>
     );
 }

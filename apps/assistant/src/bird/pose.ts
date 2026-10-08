@@ -38,9 +38,12 @@ export function beatsFor(outcome: Outcome): Beat[] {
 }
 
 /** The bird's pose: loading the conversation or waiting for an answer it
- *  thinks; then the beat playing; else as it greets (hello) or idles. */
-export function birdPose(s: { loading: boolean; busy: boolean; beat: BirdPose | null; greeting: boolean }): BirdPose {
+ *  thinks; listening to the microphone it listens (transcribing, thinks);
+ *  then the beat playing; else as it greets (hello) or idles. */
+export function birdPose(s: { loading: boolean; busy: boolean; beat: BirdPose | null; greeting: boolean;
+                              listening?: "" | "listening" | "transcribing" }): BirdPose {
     if (s.loading || s.busy) return "thinking";
+    if (s.listening) return s.listening === "listening" ? "listening" : "thinking";
     if (s.beat) return s.beat;
     return s.greeting ? "hello" : "idle";
 }

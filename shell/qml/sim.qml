@@ -6,7 +6,7 @@
 // Context properties set by phoenix-sim:
 //   simScene       "locked" | "cards" | "stacks" | "longstack" | "reorder" | "maximized" | "heldcard" | "launcher" |
 //                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" | "drawer" | "capture" | "capturepreview" |
-//                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "assistantbird" | "assistantbirds" |
+//                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "assistantbird" | "assistantbirds" | "assistantbirdmoves" |
 //                  "wakeword" | "wakewordlocked" |
 //                  "systemmenu" | "empty"
 //   simFirstUse    start with First Use (--first-use); without it First Use
@@ -108,12 +108,14 @@ Item {
 
         // "assistantbird": the Assistant's bird (docs/ASSISTANT-CHARACTER.md)
         // going through its twelve poses, a few seconds each, large, for
-        // review; "assistantbirds": all twelve at once, a contact sheet.
+        // review; "assistantbirds": all twelve at once, a contact sheet;
+        // "assistantbirdmoves": its moves one after another (the entrance,
+        // each idle of the pool, each reaction, the exit), large.
         // Over the shell, on the storyboard's dark ground; the frame rate
         // counter at the bottom left.
         Loader {
             anchors.fill: shell
-            active: root.scene === "assistantbird" || root.scene === "assistantbirds"
+            active: root.scene === "assistantbird" || root.scene === "assistantbirds" || root.scene === "assistantbirdmoves"
             sourceComponent: Rectangle {
                 id: review
                 color: "#1E1C22"
@@ -166,6 +168,53 @@ Item {
                         interval: 2600
                         repeat: true
                         onTriggered: review.index = (review.index + 1) % review.poses.length
+                    }
+                }
+                // Its moves, one after another, with a pause between.
+                Item {
+                    anchors.fill: parent
+                    visible: root.scene === "assistantbirdmoves"
+                    readonly property var moves: {
+                        var m = reviewProbe.art.motion.moves, order = ["enter"];
+                        Object.keys(m).forEach(function (n) { if (m[n].kind === "idle") order.push(n); });
+                        Object.keys(m).forEach(function (n) { if (m[n].kind === "react") order.push(n); });
+                        return order.concat(["leave"]);
+                    }
+                    property int at: -1
+                    AssistantBird {
+                        id: mover
+                        objectName: "reviewMoves"
+                        width: Math.round(Math.min(parent.width * 0.45, parent.height * 0.4))
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        y: Math.round(parent.height * 0.3)
+                        glow: true
+                        fidgety: false
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.top: mover.bottom
+                        anchors.topMargin: Theme.px(8)
+                        text: parent.at >= 0 ? (parent.at + 1) + " / " + parent.moves.length + "   " + parent.moves[parent.at] : ""
+                        color: "#F4EEE6"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.px(Theme.tablet ? 28 : 20)
+                    }
+                    Timer {
+                        running: root.scene === "assistantbirdmoves"
+                        interval: 2800
+                        repeat: true
+                        triggeredOnStart: true
+                        onTriggered: {
+                            var p = parent;
+                            p.at = (p.at + 1) % p.moves.length;
+                            var name = p.moves[p.at];
+                            if (name === "enter")
+                                mover.enter(0);
+                            else if (name === "leave")
+                                mover.leave();
+                            else
+                                mover.play(name);
+                        }
                     }
                 }
                 // All at once.
@@ -771,7 +820,7 @@ Item {
     readonly property var scenes: ["locked", "cards", "stacks", "longstack", "reorder", "maximized", "heldcard",
                                    "launcher", "launcheredit", "launchermenu", "launchergroup", "launchergroupopen", "launchertabs", "launcherinstall", "wave", "powermenu", "hot", "pin", "emergency", "firstuse",
                                    "lowbattery", "banner", "notified", "dashboard", "drawer", "capture",
-                                   "capturepreview", "justtype", "keyboard", "clipstrip", "assistant", "assistantbird", "assistantbirds",
+                                   "capturepreview", "justtype", "keyboard", "clipstrip", "assistant", "assistantbird", "assistantbirds", "assistantbirdmoves",
                                    "wakeword", "wakewordlocked", "systemmenu", "empty"]
     readonly property string scene: typeof simScene !== "undefined" ? simScene : ""
 

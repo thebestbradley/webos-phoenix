@@ -1950,20 +1950,31 @@ over the screen.
 px by its height; small beside the field where the panel is short, as on a
 phone with the keyboard up), over the conversation, which scrolls on up
 behind it and fades out under the heading rather than being cut off and plays what is going on (`birdPose`):
-asleep as the panel grows, hello, then listening while the microphone is
+its entrance as the panel grows (`bird.enter()`: born of a swirl of embers
+and a fireball, it drops in, lands with a dust cloud and bounces), hello,
+then listening while the microphone is
 on (following the dictation's `loudness`), thinking while a request or a
 transcription waits, then the reply's outcome (`outcomeOf` its new
 messages): a command that ran (`status: "done"` with a `command`) plays
 working then done, `failed` plays shy (Oops), choices play confused, each
 for a moment (`beatsFor`, at Animation speed); speaking while the shell's
 `Speech` speaks; asking while a read-back waits; idle (with a nod for an
-answer that is not spoken); asleep again as it closes. A tap on it waves.
+answer that is not spoken); as it closes it leaves (`bird.leave()`: a
+leap, and it bursts into embers). A tap on it waves, then giggles or spins.
+It reacts to the user (`bird.react()`, `motion.reactions`): it watches the
+words typed (`gazeX`/`gazeY` at the caret) and pecks as each comes, winces
+at a deletion, tilts its head after a pause in the typing, cheers a request
+sent, scoots when the keyboard moves it beside the field, and glances along
+a scroll of the conversation. Idle, a full-body move from `motion.idles`'
+pool comes in turn with the look around (not while the user types).
 Every pose acts, never a still: hello waves, thinking taps its chin,
 working bobs and pumps its flippers, speaking gestures with its words,
 idle shifts its weight and looks around now and then (each pose's loop in
 `bird.json`'s `motion.acting`; a pose change blends from wherever the loop
-is; Reduce motion holds it still). `phoenix-sim --scene assistantbird` cycles through its poses,
-`--scene assistantbirds` shows them all; both log the frame rate.
+is; Reduce motion holds it still, and it fades in and out instead of its
+entrance and exit). `phoenix-sim --scene assistantbird` cycles through its poses,
+`--scene assistantbirds` shows them all, `--scene assistantbirdmoves` plays
+its entrance, each idle and reaction and its exit; all log the frame rate.
 
 **The on-device model and speech in phoenix-sim**: `/usr/share/phoenix/host.json`
 has `"assistant": true`; the runtime sends `assistant` host messages (`{op:
@@ -1991,7 +2002,12 @@ the conversation while a request runs: thinking, then working and done, a
 shrug or Oops, as the shell's view decides (`src/bird/pose.ts`). It acts
 as the shell's does, with the generated CSS keyframes (the CSP allows no
 style made at run time); the blend between poses sets the part's drawn
-transform through the CSSOM, which the CSP allows.
+transform through the CSSOM, which the CSP allows. It enters as the
+conversation opens (`start="enter"`, its effects SVG shapes with generated
+keyframes), cheers as a request is sent, listens while the microphone does,
+and reacts as the shell's does (`src/bird/reactions.ts`): pecks at typing,
+winces at a deletion, ponders a pause, glances along a scroll, and a tap
+waves, giggles or spins.
 
 **Voice** ([AI-AND-MCP.md](AI-AND-MCP.md#voice)): `ask {voice: true}` is
 answered aloud with the setting `voiceReplies`; "yes" / "no" (send it,

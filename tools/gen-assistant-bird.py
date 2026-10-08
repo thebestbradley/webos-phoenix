@@ -471,7 +471,40 @@ def css_moves(bird):
             out.append("}")
             out.append(".ab-mv-%s-%s { animation: ab-mv-%s-%s calc(%dms * var(--ab-speed, 1)) linear calc(var(--ab-delay, 0ms) * var(--ab-speed, 1)) both; }"
                        % (name, ch, name, ch, m["period"]))
+        out += css_shadow(bird, name, m)
         out.append("")
+    return out
+
+
+def css_shadow(bird, name, m):
+    """The shadow under a move that lifts the bird (its body or whole): as
+    the shell's (AssistantBird.qml), narrower and fainter the higher it is,
+    none while the bird is not there (an entrance's start), at the keys'
+    times (the heights between them taken as straight)."""
+    tracks = {ch: m["steps"][ch][:len(m["tracks"][ch])] for ch in ("body", "whole") if ch in m["tracks"]}
+    if not tracks:
+        return []
+
+    def at(ch, t, i):
+        keys = tracks.get(ch)
+        if not keys:
+            return ACT_REST[i - 1]
+        for a, b in zip(keys, keys[1:]):
+            if a[0] <= t <= b[0]:
+                f = 0 if b[0] == a[0] else (t - a[0]) / (b[0] - a[0])
+                return a[i] + (b[i] - a[i]) * f
+        return keys[-1][i]
+    times = sorted({k[0] for keys in tracks.values() for k in keys})
+    px, py = bird["pivots"]["shadow"]
+    out = ["@keyframes ab-mv-%s-shadow {" % name]
+    for t in times:
+        air = max(0, -(at("body", t, 3) + at("whole", t, 3)))
+        sx = (1 - 0.25 * min(1, air / 60)) * min(1, abs(at("whole", t, 5)))
+        out.append("    %s%% { transform: translate(%spx, %spx) scale(%s, 1) translate(%spx, %spx); opacity: %s; }"
+                   % (num(t * 100), num(px), num(py), num(sx), num(-px), num(-py), num(1 - 0.6 * min(1, air / 220))))
+    out.append("}")
+    out.append(".ab-mv-%s-shadow { animation: ab-mv-%s-shadow calc(%dms * var(--ab-speed, 1)) linear calc(var(--ab-delay, 0ms) * var(--ab-speed, 1)) both; }"
+               % (name, name, m["period"]))
     return out
 
 

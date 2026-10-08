@@ -42,7 +42,8 @@ import {
 } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
 import { AppMenu, BackProvider, Button, cx, Dialog, Page, PageHeader, Row, Spinner, useBack } from "@phoenix/ui";
-import { Bird, useBirdMotion } from "./bird/Bird";
+import { Bird, moveMs, useBirdMotion } from "./bird/Bird";
+import { useBirdReactions } from "./bird/reactions";
 import type { BirdPose } from "./bird/birdData";
 import { beatsFor, birdPose, outcomeOf, type Beat } from "./bird/pose";
 import { EXAMPLES, examplesFrom } from "./examples";
@@ -200,6 +201,8 @@ function Conversation({ threadId, onThread, retry, onPose }: {
     const [loaded, setLoaded] = useState(false);
     const [greeting, setGreeting] = useState(false);
     const [beat, play] = useBeats(motion.speed);
+    // The bird reacting to the typing, a scroll, a tap (bird/reactions.ts).
+    const birdr = useBirdReactions({ speed: motion.speed });
     const [connecting, setConnecting] = useState<AssistantMessage | null>(null);
     const input = useRef<HTMLInputElement>(null);
 
@@ -208,13 +211,14 @@ function Conversation({ threadId, onThread, retry, onPose }: {
                                           (e) => { setError(errorText(e)); setLoaded(true); });
         return () => sub.cancel();
     }, [threadId]);
-    // Loaded: a wave, then it idles.
-    useEffect(() => {
-        if (!loaded) return undefined;
-        setGreeting(true);
-        const t = window.setTimeout(() => setGreeting(false), 900 * motion.speed);
-        return () => window.clearTimeout(t);
-    }, [loaded, motion.speed]);
+    // Loaded: once it has entered (born of embers, it drops in), a wave,
+    // then it idles; a tap waves again, or giggles or spins.
+    const wave = useCallback((after: number) => {
+        const a = window.setTimeout(() => setGreeting(true), after);
+        const b = window.setTimeout(() => setGreeting(false), after + 900 * motion.speed);
+        return () => { window.clearTimeout(a); window.clearTimeout(b); };
+    }, [motion.speed]);
+    useEffect(() => (loaded ? wave(moveMs("enter", motion.speed, motion.still)) : undefined), [loaded]);    // eslint-disable-line react-hooks/exhaustive-deps
     useEffect(() => { dictation.status().then((s) => setCanListen(s.available), () => setCanListen(false)); }, []);
     useEffect(() => { end.current?.scrollIntoView?.({ block: "end" }); }, [messages.length, busy]);
     useEffect(() => () => mic.current?.cancel(), []);
@@ -266,8 +270,10 @@ function Conversation({ threadId, onThread, retry, onPose }: {
         const t = words.trim();
         if (!t || busy) return;
         setText("");
+        birdr.sent();
+        birdr.typed("");
         run(assistant.ask(t, thread ? { threadId: thread.id } : {}));
-    }, [busy, run, thread]);
+    }, [busy, run, thread, birdr]);
 
     const listen = () => {
         if (mic.current) { mic.current.stop(); return; }
@@ -284,10 +290,12 @@ function Conversation({ threadId, onThread, retry, onPose }: {
 
     return (
         <div className="as-conversation">
-            <div className="as-scroll" data-testid="as-thread">
+            <div className="as-scroll" data-testid="as-thread" onScroll={birdr.scrolled}>
                 {messages.length === 0 && !busy && !beat && (
                     <div className="as-empty" data-testid="as-empty">
-                        <Bird pose={birdPose({ loading: !loaded, busy: false, beat: null, greeting })} size={window.innerHeight < 520 ? 96 : 120} speed={motion.speed} still={motion.still} />
+                        <Bird pose={birdPose({ loading: !loaded, busy: false, beat: null, greeting, listening })} size={window.innerHeight < 520 ? 96 : 120} speed={motion.speed} still={motion.still}
+                              start="enter" react={birdr.react} gaze={birdr.gaze} fidgety={birdr.fidgety}
+                              onClick={() => { if (!greeting && birdr.tap() === "wave") wave(0); }} />
                         {loaded && <p>Ask me a question, or tell me what to do: events, reminders, alarms, notes, messages, music, settings and more.</p>}
                         {loaded && <Examples onPick={suggest} speed={motion.speed} />}
                     </div>
@@ -301,7 +309,7 @@ function Conversation({ threadId, onThread, retry, onPose }: {
                 {(busy || beat) && (
                     <div className="as-work" data-testid="as-work">
                         <Bird pose={birdPose({ loading: false, busy, beat, greeting: false })} size={72} testId="as-bird-work"
-                              speed={motion.speed} still={motion.still} />
+                              speed={motion.speed} still={motion.still} start={busy ? "cheer" : undefined} />
                         {busy && <div className="as-bubble in as-thinking" data-testid="as-thinking"><span /><span /><span /></div>}
                     </div>
                 )}
@@ -311,7 +319,7 @@ function Conversation({ threadId, onThread, retry, onPose }: {
             <form className="as-compose" onSubmit={(e) => { e.preventDefault(); ask(text); }}>
                 <input ref={input} className="as-input" data-testid="as-input" value={text} disabled={busy}
                        placeholder={listening === "listening" ? "Listening…" : listening === "transcribing" ? "Transcribing…" : waiting ? "Reply" : "Ask anything"}
-                       onChange={(e) => setText(e.target.value)} enterKeyHint="send" />
+                       onChange={(e) => { birdr.typed(e.target.value, e.target.selectionStart); setText(e.target.value); }} enterKeyHint="send" />
                 {canListen && (
                     <button type="button" className={cx("as-mic", listening && "on")} aria-label="Speak" data-testid="as-mic" onClick={listen}>
                         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M6 11a6 6 0 0 0 12 0M12 17v4M8.5 21h7" /></svg>

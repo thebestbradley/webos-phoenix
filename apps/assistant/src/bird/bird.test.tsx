@@ -4,7 +4,9 @@
 // The Assistant app's bird (docs/ASSISTANT-CHARACTER.md): which pose a
 // request's reply plays (as the shell's view does: AssistantOverlay.qml
 // outcomeOf, beatsFor; tst_assistant.qml), and the drawing a pose makes
-// from the shared source (art/assistant-bird/bird.json).
+// from the shared source (art/assistant-bird/bird.json): its acting, and
+// its moves (the entrance, the idle pool, the reactions) with their faces
+// and effects.
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -97,7 +99,7 @@ describe("the drawing", () => {
             for (const g of container.querySelectorAll<SVGGElement>("[data-act]")) {
                 const ch = g.dataset.act!;
                 const loops = !!a && ch in a.tracks && !a.every;
-                expect(g.firstElementChild!.getAttribute("class"), `${pose} ${ch}`).toBe(loops ? `ab-act-${pose}-${ch}` : null);
+                expect(g.querySelector(":scope > [data-mover] > g")!.getAttribute("class"), `${pose} ${ch}`).toBe(loops ? `ab-act-${pose}-${ch}` : null);
             }
             unmount();
         }
@@ -116,7 +118,7 @@ describe("the drawing", () => {
         const idle = BIRD.motion.acting.poses.idle;
         const gap = idle.every[0] + 0.5 * (idle.every[1] - idle.every[0]);
         const { container, unmount } = render(<Bird pose="idle" still={false} speed={1} />);
-        const body = () => container.querySelector("[data-act='body'] > g")!.getAttribute("class");
+        const body = () => container.querySelector("[data-act='body'] > [data-mover] > g")!.getAttribute("class");
         expect(body()).toBeNull();
         act(() => { vi.advanceTimersByTime(gap - 10); });
         expect(body()).toBeNull();
@@ -146,5 +148,99 @@ describe("the drawing", () => {
     it("follows the animation speed", () => {
         const { getByTestId } = render(<Bird pose="idle" speed={0.6} />);
         expect(getByTestId("as-bird").style.getPropertyValue("--ab-speed")).toBe("0.6");
+    });
+
+    it("enters: born of embers, it drops in and lands in a dust cloud, then rests", () => {
+        vi.useFakeTimers();
+        const enter = BIRD.motion.moves.enter;
+        const { getByTestId, container } = render(<Bird pose="idle" start="enter" still={false} speed={1} />);
+        const svg = getByTestId("as-bird");
+        expect(svg.dataset.move).toBe("enter");
+        for (const ch of Object.keys(enter.tracks))
+            expect(container.querySelector(`[data-mover='${ch}']`)!.getAttribute("class")).toBe(`ab-mv-enter-${ch}`);
+        // The parts it does not move: no class.
+        expect(container.querySelector("[data-mover='beak']")!.getAttribute("class")).toBeNull();
+        act(() => { vi.advanceTimersByTime(1); });
+        expect(container.querySelector("[data-fx='swirl']")).not.toBeNull();
+        const dust = enter.cues.find((c) => "fx" in c && c.fx === "dust")!;
+        act(() => { vi.advanceTimersByTime(dust.at * enter.period); });
+        expect(container.querySelector("[data-fx='dust']")).not.toBeNull();
+        // The landing's squeezed eyes: the shut overlays show.
+        expect((container.querySelector("[data-overlay='shutL']") as SVGGElement).style.opacity).toBe("1");
+        act(() => { vi.advanceTimersByTime(enter.period); });
+        expect(svg.dataset.move).toBe("");
+        expect(container.querySelector("[class*='ab-mv-']")).toBeNull();
+        expect((container.querySelector("[data-overlay='shutL']") as SVGGElement).style.opacity).toBe("0");
+        act(() => { vi.advanceTimersByTime(1000); });
+        expect(container.querySelector("[data-fx]")).toBeNull();
+    });
+
+    it("enters with a plain fade when held still", () => {
+        const { getByTestId, container } = render(<Bird pose="idle" start="enter" still speed={1} />);
+        const svg = getByTestId("as-bird");
+        expect(svg.dataset.move).toBe("");
+        expect(container.querySelector("[class*='ab-mv-'], [data-fx]")).toBeNull();
+        expect(svg.style.transition).toBe("opacity 250ms ease");
+    });
+
+    it("plays each reaction asked for once at a time, none while it enters", () => {
+        vi.useFakeTimers();
+        const { getByTestId, rerender } = render(<Bird pose="idle" still={false} speed={1} />);
+        const svg = getByTestId("as-bird");
+        rerender(<Bird pose="idle" still={false} speed={1} react={{ name: "peck", n: 1 }} />);
+        expect(svg.dataset.move).toBe("peck");
+        act(() => { vi.advanceTimersByTime(BIRD.motion.moves.peck.period + 1); });
+        expect(svg.dataset.move).toBe("");
+        for (const name of ["wince", "ponder", "cheer", "giggle", "spin", "scoot"] as const) {
+            rerender(<Bird pose="idle" still={false} speed={1} react={{ name, n: name.length + 10 }} />);
+            expect(svg.dataset.move, name).toBe(name);
+            act(() => { vi.advanceTimersByTime(BIRD.motion.moves[name].period + 1); });
+            expect(svg.dataset.move, name).toBe("");
+        }
+        const entering = render(<Bird pose="idle" start="enter" still={false} speed={1} testId="b2" />);
+        entering.rerender(<Bird pose="idle" start="enter" still={false} speed={1} testId="b2" react={{ name: "giggle", n: 1 }} />);
+        expect(entering.getByTestId("b2").dataset.move).toBe("enter");
+    });
+
+    it("idles in turn: the look around, then a move from the pool; the pose ends it", () => {
+        vi.useFakeTimers();
+        vi.spyOn(Math, "random").mockReturnValue(0.5);
+        const idle = BIRD.motion.acting.poses.idle;
+        const gap = idle.every[0] + 0.5 * (idle.every[1] - idle.every[0]);
+        const { getByTestId, container, rerender } = render(<Bird pose="idle" still={false} speed={1} />);
+        const svg = getByTestId("as-bird");
+        act(() => { vi.advanceTimersByTime(gap + 1); });
+        expect(container.querySelector("[data-act='body'] > [data-mover] > g")!.getAttribute("class")).toBe("ab-act-idle-body");
+        act(() => { vi.advanceTimersByTime(idle.period + gap + 1); });
+        const pool = BIRD.motion.idles.pool as readonly string[];
+        expect(pool).toContain(svg.dataset.move);
+        rerender(<Bird pose="thinking" still={false} speed={1} />);
+        expect(svg.dataset.move).toBe("");
+        // Not while the user types.
+        const typing = render(<Bird pose="idle" still={false} speed={1} fidgety={false} testId="b3" />);
+        act(() => { vi.advanceTimersByTime(4 * (idle.every[1] + idle.period)); });
+        expect(typing.getByTestId("b3").dataset.move).toBe("");
+        expect(typing.container.querySelector("[class*='ab-act-idle']")).toBeNull();
+    });
+
+    it("looks where it is told", () => {
+        const { container } = render(<Bird pose="idle" still={false} speed={1} gaze={[1, 1]} />);
+        const g = BIRD.motion.gaze;
+        expect((container.querySelector("[data-gaze='eyes']") as SVGGElement).style.transform).toBe(`translate(${g.eyes[0]}px, ${g.eyes[1]}px)`);
+        const still = render(<Bird pose="idle" still speed={1} gaze={[1, 1]} testId="b4" />);
+        expect((still.container.querySelector("[data-gaze='eyes']") as SVGGElement).style.transform).toBe("translate(0px, 0px)");
+    });
+
+    it("has every move's and effect's keyframes, filled both ways", () => {
+        const css = readFileSync(resolve(__dirname, "bird.generated.css"), "utf8");
+        for (const [name, m] of Object.entries(BIRD.motion.moves))
+            for (const ch of Object.keys(m.tracks)) {
+                expect(css).toContain(`@keyframes ab-mv-${name}-${ch} {`);
+                expect(css).toMatch(new RegExp(`\\.ab-mv-${name}-${ch} \\{ animation: ab-mv-${name}-${ch} calc\\(${m.period}ms \\* var\\(--ab-speed, 1\\)\\) linear [^;]* both;`));
+            }
+        for (const [name, e] of Object.entries(BIRD.effects)) {
+            if (e.kind === "glow") expect(css).toContain(`.ab-fx-${name} {`);
+            else expect(css).toContain(`.ab-fx-${name}-${e.particles.length}-o {`);
+        }
     });
 });

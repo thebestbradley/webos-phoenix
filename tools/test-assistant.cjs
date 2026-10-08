@@ -108,6 +108,9 @@ async function main() {
         await app.goto(appUrl);
         await app.evaluate(() => localStorage.clear());
         await app.goto(appUrl);
+        // The commands' answers on their own: the questions after them have
+        // their own test (test-assistant-followups.cjs).
+        await svc(app, A + "setSettings", { followUps: false });
         await app.waitForSelector("[data-testid='as-empty']");
         check(/events, reminders, alarms, notes/.test(await app.textContent("[data-testid='as-empty']")), "a new conversation says what it can do");
         // Things to ask: a tap puts them in the field, to change or send.
@@ -124,6 +127,30 @@ async function main() {
         // The bird greets, then idles (docs/ASSISTANT-CHARACTER.md).
         await app.waitForSelector("[data-testid='as-empty'] [data-testid='as-bird'][data-pose='idle']");
         check(true, "the bird shows on the new conversation, idle after its hello");
+        // It entered (born of embers, it drops in: its whole drawn by the
+        // entrance's keyframes until it ends) and reacts to typing: a peck
+        // as a character comes, a wince as one goes (docs/ASSISTANT-CHARACTER.md).
+        await app.waitForFunction(() => {
+            const b = document.querySelector("[data-testid='as-empty'] [data-testid='as-bird']");
+            return b && b.dataset.move === "" && !b.querySelector("[class*='ab-mv-']");
+        });
+        const moves = await app.evaluate(async () => {
+            const b = document.querySelector("[data-testid='as-empty'] [data-testid='as-bird']");
+            const seen = [];
+            new MutationObserver(() => { if (b.dataset.move && seen[seen.length - 1] !== b.dataset.move) seen.push(b.dataset.move); })
+                .observe(b, { attributes: true, attributeFilter: ["data-move"] });
+            window.__birdMoves = seen;
+            return true;
+        });
+        await app.focus("[data-testid='as-input']");
+        const typedBefore = await app.inputValue("[data-testid='as-input']");
+        await app.keyboard.type("x");
+        await app.waitForFunction(() => window.__birdMoves.includes("peck"));
+        await app.waitForFunction(() => document.querySelector("[data-testid='as-empty'] [data-testid='as-bird']").dataset.move === "");
+        await app.keyboard.press("Backspace");
+        await app.waitForFunction(() => window.__birdMoves.includes("wince"));
+        check(moves && (await app.inputValue("[data-testid='as-input']")) === typedBefore, "the bird pecks at a character typed and winces at one deleted: " +
+              (await app.evaluate(() => window.__birdMoves.join(", "))));
         // Every pose the working bird takes from here on.
         await app.evaluate(() => {
             window.__birdPoses = [];
@@ -136,7 +163,7 @@ async function main() {
             // transform it is drawn with, frame by frame.
             window.__birdFlipper = new Set();
             const frame = () => {
-                const w = document.querySelector("[data-testid='as-bird-work'] [data-act='wingR'] > g");
+                const w = document.querySelector("[data-testid='as-bird-work'] [data-act='wingR'] > [data-mover] > g");
                 if (w) window.__birdFlipper.add(getComputedStyle(w).transform);
                 requestAnimationFrame(frame);
             };
