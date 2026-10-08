@@ -120,7 +120,8 @@ QtObject {
     // {infiniteCardCycling, maximizeEdges, waveLauncher, tapRipple,
     // animationSpeed ("normal", "fast"), gestureSensitivity ("low",
     // "normal", "high"), haptics, gridDensity ("normal", "dense"),
-    // batteryPercent, numberRow}. Missing keys are the defaults
+    // batteryPercent, numberRow, keyboardStyle ("auto", "black",
+    // "touchpad")}. Missing keys are the defaults
     // (Shell.tweak()).
     property var tweaks: ({})
     // The browser's page views (its Preferences: browserContentBlocker,

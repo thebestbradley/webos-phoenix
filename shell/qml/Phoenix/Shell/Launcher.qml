@@ -1049,6 +1049,78 @@ Item {
         fillMode: Image.Stretch
     }
 
+    // ---- Trackpad and mouse wheel (Phoenix) ------------------------------------------
+    // A two-finger swipe sideways over the tabs or the pages pans between
+    // the pages as a finger does and, once the fingers lift, settles at once
+    // on the page it was heading for (a quick one goes on to the next), as
+    // card view's stacks do (TrackpadSwipe); the momentum that follows is
+    // ignored, so the page neither runs past its neighbour nor drifts back.
+    // Up or down it scrolls the page's icons, momentum and all, within
+    // their bounds. A mouse wheel turned sideways (or a horizontal wheel)
+    // moves a page a notch; turned up or down it scrolls the page.
+    TrackpadSwipe {
+        id: wheel
+        objectName: "launcherWheel"
+        anchors.top: tabBar.top
+        anchors.bottom: pages.bottom
+        width: parent.width
+        enabled: launcher.open && !launcher.dragging && !groupView.open && !nameDialog.visible
+        blocked: function () { return pages.dragging || pages.flicking; }
+        verticalMomentum: true
+        // The page the swipe began on, as a fractional index.
+        property real startPosition: 0
+        readonly property real pageWidth: Math.max(1, pages.width)
+
+        onNotched: (dx, dy, e) => {
+            if (Math.abs(dx) > Math.abs(dy)) {
+                launcher.showPage(Math.max(0, Math.min(launcher.tabs.length - 1, pages.currentIndex + (dx < 0 ? 1 : -1))));
+                return;
+            }
+            // Up or down: the page scrolls as a list does under a wheel.
+            e.accepted = false;
+        }
+        onStarted: {
+            pageSettle.stop();
+            if (axis === "h") {
+                startPosition = (pages.contentX - pages.originX) / pageWidth;
+                launcher.addTabShown = false;
+            } else if (!pages.currentItem) {
+                axis = "done";
+            }
+        }
+        onMoved: (dx, dy) => {
+            if (axis === "h") {
+                // Past the first or the last page it gives a little, as
+                // card view's ends do.
+                var pos = startPosition - sumX / pageWidth;
+                var last = Math.max(0, launcher.tabs.length - 1);
+                if (pos < 0) pos = pos / 3;
+                if (pos > last) pos = last + (pos - last) / 3;
+                pages.contentX = pages.originX + pos * pageWidth;
+            } else {
+                scrollBy(pages.currentItem, dy);
+            }
+        }
+        onEnded: {
+            if (axis !== "h")
+                return;
+            var pos = (pages.contentX - pages.originX) / pageWidth;
+            var to = Math.max(0, Math.min(launcher.tabs.length - 1, settleTarget(startPosition, pos)));
+            pageSettle.page = to;
+            pageSettle.to = pages.originX + to * pageWidth;
+            pageSettle.restart();
+        }
+    }
+    NumberAnimation {
+        id: pageSettle
+        property int page: 0
+        target: pages
+        property: "contentX"
+        duration: Theme.wheelSettleDuration
+        easing.type: Theme.cardEasing
+        onFinished: pages.currentIndex = page
+    }
+
     // The open group, over the pages (and the dock's room).
     LauncherGroup {
         id: groupView

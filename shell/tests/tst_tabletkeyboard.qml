@@ -3,7 +3,8 @@
 //
 // The TouchPad's virtual keyboard (VirtualKeyboard.qml; openwebos/keyboard-efigs
 // TabletKeyboard): five rows at the art's own size, the hide key, the
-// keyboard sizes on its long press, and the negative space it takes.
+// keyboard sizes on its long press, and the negative space it takes; in
+// the phone's black look too (Keyboard style).
 // Needs Phoenix.Native (KeyInjector): run with the build tree's modules.
 
 import QtQuick
@@ -200,6 +201,43 @@ Item {
             tryCompare(shell.notifications, "negativeSpace", 340 + 44, 3000);
             tapKey("z");
             compare(field.text, "z");
+        }
+
+        // Settings > Text Assist > Keyboard style "black": the phone's look
+        // on the TouchPad's layout (the owner, 8 October 2026): the same
+        // rows and sizes, the phone's art and colours, at once and back.
+        function test_blackStyle() {
+            showKeyboard();
+            var q = kb.keyRect("q"), height = kb.keysHeight;
+            compare(kb.touchpadLook, true);
+            sys.tweaks = { keyboardStyle: "black" };
+            tryCompare(kb, "touchpadLook", false, 1000);
+            verify(kb._art.indexOf("keyboard-phone/") >= 0, kb._art);
+            tryVerify(function() { return keyBackground("q") === "key-white.png" && kb._keys[0].art === kb._art; }, 1000);
+            compare(keyBackground("1"), "key-charcoal.png");
+            compare(keyBackground("Enter"), "key-charcoal.png");
+            compare(keyBackground("Shift"), "key-charcoal.png");
+            // The layout is the tablet's still.
+            compare(kb.keysHeight, height);
+            compare(kb.keyRect("q"), q);
+            compare(kb.cActiveColor, Qt.color("#d2d2d2"));
+            var shot = grabImage(shell);
+            var at = function(name, fx, fy) {
+                var r = kb.keyRect(name);
+                var c = kb.mapToItem(shell, r.x + r.width * fx, r.y + r.height * fy);
+                return shot.pixel(Math.round(c.x), Math.round(c.y));
+            };
+            // Black letter keys, a charcoal Enter, as the phone's.
+            verify(at("q", 0.2, 0.5).r < 0.05, "a black letter key " + at("q", 0.2, 0.5));
+            var enter = at("Enter", 0.15, 0.5);
+            verify(enter.r > 0.10 && enter.r < 0.16, "a charcoal Enter " + enter);
+            // It still types.
+            tapKey("1");
+            tapKey("a");
+            compare(field.text, "1a");
+            sys.tweaks = {};
+            tryCompare(kb, "touchpadLook", true, 1000);
+            tryVerify(function() { return keyBackground("1") === "key-gray-short.png"; }, 1000);
         }
 
         // With the keyboard up the bezel flick must travel 60 px.

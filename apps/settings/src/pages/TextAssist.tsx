@@ -15,7 +15,11 @@
 // (TextAssistShortcuts.tsx; x_palm_textinput). Number row (Phoenix; the
 // community's keyboard layout patches, docs/M6-PLAN.md F4): digits above
 // the phone keyboard's letters, system preference keyboardNumberRow, off by
-// default (the tablet keyboard has its own number row).
+// default (the tablet keyboard has its own number row). Keyboard style
+// (Phoenix; the owner, 8 October 2026): the keys' look, system preference
+// keyboardStyle: "auto" (the phone's black keys on a phone, the TouchPad's on
+// a tablet), "black" or "touchpad" on every device; the keyboard changes at
+// once.
 //
 // Launch params {page: "textassist"}; com.palm.app.textassist opens it.
 
@@ -36,8 +40,17 @@ const DEFAULT_KEYBOARDS = [{ layout: "qwerty", language: "en" }];
 const same = (a: { layout: string; language: string }, b: { layout: string; language: string }) =>
     a.layout === b.layout && a.language === b.language;
 
+/** The keyboard's looks (system preference keyboardStyle). */
+export const KEYBOARD_STYLES: { label: string; value: KeyboardStyle }[] = [
+    { label: "Automatic (phone: black, tablet: TouchPad)", value: "auto" },
+    { label: "Black", value: "black" },
+    { label: "TouchPad", value: "touchpad" },
+];
+type KeyboardStyle = "auto" | "black" | "touchpad";
+export const keyboardStyle = (v: unknown): KeyboardStyle => (v === "black" || v === "touchpad" ? v : "auto");
+
 export function TextAssistPage() {
-    const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(["x_palm_virtualkeyboard_prefs", "keyboardShortcuts", "x_palm_textinput", "keyboardNumberRow"], cb, err), []).value ?? {};
+    const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(["x_palm_virtualkeyboard_prefs", "keyboardShortcuts", "x_palm_textinput", "keyboardNumberRow", "keyboardStyle"], cb, err), []).value ?? {};
     const kb = keyboardPrefs(prefs.x_palm_virtualkeyboard_prefs);
     const [confirm, setConfirm] = useState(false);
     const [forgotten, setForgotten] = useState(false);
@@ -77,6 +90,8 @@ export function TextAssistPage() {
             </Group>
             <ShortcutsSection prefs={prefs} />
             <Group label="Layout">
+                <ListSelector<KeyboardStyle> title="Keyboard style" value={keyboardStyle(prefs.keyboardStyle)} testId="ta-keyboard-style"
+                    options={KEYBOARD_STYLES} onChange={(v) => void system.setPreferences({ keyboardStyle: v })} />
                 <Row title="Number row" subtitle="Numbers above the letters on a phone" testId="ta-numberrow-row">
                     <ToggleButton value={!!prefs.keyboardNumberRow} label="Number row" testId="ta-numberrow"
                                   onChange={(v) => void system.setPreferences({ keyboardNumberRow: v })} />

@@ -269,7 +269,8 @@ Item {
         return d < 0 ? -o : o;
     }
     function scaleOf(d) { return 1 - (1 - sideScale) * Math.min(1, Math.abs(d)); }
-    function slideTo(i) {
+    // duration: the trackpad's quicker settle (Theme.wheelSettleDuration).
+    function slideTo(i, duration) {
         i = Math.max(0, Math.min(clips.length - 1, i));
         slide.stop();
         if (Math.abs(position - i) < 0.0005) {
@@ -277,6 +278,7 @@ Item {
             return;
         }
         slide.to = i;
+        slide.duration = duration !== undefined ? duration : Theme.cardSlideDuration;
         slide.start();
     }
     NumberAnimation {
@@ -617,6 +619,47 @@ Item {
             if (strip.dragging || i < 0 || i >= strip.clips.length)
                 return;
             menu.openFor(strip.clips[i], i);
+        }
+    }
+
+    // A trackpad's two-finger swipe sideways moves the clips as a finger
+    // does and, once the fingers lift, snaps to the clip it was heading for
+    // as card view's stacks do (TrackpadSwipe); a mouse wheel moves one clip
+    // a notch (Phoenix).
+    TrackpadSwipe {
+        id: wheel
+        objectName: "clipWheel"
+        anchors.fill: cards
+        enabled: cards.count > 0
+        blocked: function () { return touch.pressed || menu.visible; }
+        property real startPosition: 0
+
+        onNotched: (dx, dy) => {
+            var d = Math.abs(dx) > Math.abs(dy) ? dx : dy;
+            strip.slideTo(strip.current + (d < 0 ? 1 : -1));
+        }
+        onStarted: {
+            if (axis !== "h") {
+                axis = "pass";
+                return;
+            }
+            slide.stop();
+            strip.dragging = true;
+            startPosition = strip.position;
+        }
+        onMoved: {
+            // Past either end it goes half as far, as under a finger.
+            var p = startPosition - sumX / strip.innerPitch;
+            var last = Math.max(0, strip.clips.length - 1);
+            if (p < 0)
+                p = p / 2;
+            else if (p > last)
+                p = last + (p - last) / 2;
+            strip.position = p;
+        }
+        onEnded: {
+            strip.dragging = false;
+            strip.slideTo(settleTarget(startPosition, strip.position), Theme.wheelSettleDuration);
         }
     }
 

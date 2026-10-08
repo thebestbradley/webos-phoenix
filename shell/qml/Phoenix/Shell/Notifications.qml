@@ -850,6 +850,44 @@ Item {
             model: root.model
             interactive: contentHeight > height
 
+            // A trackpad's two-finger swipe sideways on a row moves it as a
+            // finger does and, once the fingers lift, dismisses it (past a
+            // quarter of the width, or quick: card view's trackpad flick) or
+            // springs it back; up or down it scrolls the list, momentum and
+            // all, within its ends. A mouse wheel scrolls it (Phoenix).
+            TrackpadSwipe {
+                parent: list
+                objectName: "phoneDashboardWheel"
+                anchors.fill: parent
+                z: 5
+                verticalMomentum: true
+                property Item row: null
+                onNotched: (dx, dy) => scrollBy(list, dy / 120 * Theme.dashboardItemHeight)
+                onStarted: (x, y) => {
+                    row = null;
+                    if (axis === "h") {
+                        var r = list.itemAt(x, y + list.contentY);
+                        if (r && r.wheelSwipeable)
+                            row = r;
+                        else
+                            axis = "done";
+                    } else if (!list.interactive) {
+                        axis = "done";
+                    }
+                }
+                onMoved: (dx, dy) => {
+                    if (axis === "h")
+                        row.wheelMove(sumX);
+                    else
+                        scrollBy(list, dy);
+                }
+                onEnded: {
+                    if (axis === "h" && row)
+                        row.wheelRelease(vx);
+                    row = null;
+                }
+            }
+
             delegate: Item {
                 id: item
                 required property int index
@@ -868,6 +906,20 @@ Item {
                 readonly property bool selectable: root.selecting && !ongoing
                 width: list.width
                 height: Theme.dashboardItemHeight
+
+                // A trackpad's swipe (the list's TrackpadSwipe): as the
+                // finger's drag below, and its release.
+                readonly property bool wheelSwipeable: !item.ongoing && !root.selecting && !remove.running
+                function wheelMove(x) {
+                    snap.stop();
+                    content.x = x;
+                }
+                function wheelRelease(vx) {
+                    if (Math.abs(vx) > Theme.wheelFlickVelocity || Math.abs(content.x) > content.width * Theme.dashboardDismissRatio)
+                        remove.start();
+                    else if (content.x !== 0)
+                        snap.start();
+                }
 
                 // The keyboard's highlight.
                 Rectangle {

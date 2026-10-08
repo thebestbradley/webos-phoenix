@@ -97,7 +97,8 @@ FocusScope {
     readonly property var tweaks: shell.system && shell.system.tweaks ? shell.system.tweaks : ({})
     readonly property var tweakDefaults: ({ infiniteCardCycling: false, maximizeEdges: false, waveLauncher: false, tapRipple: true,
                                             animationSpeed: "normal", gestureSensitivity: "normal", haptics: false,
-                                            gridDensity: "normal", batteryPercent: false, numberRow: false })
+                                            gridDensity: "normal", batteryPercent: false, numberRow: false,
+                                            keyboardStyle: "auto" })
     function tweak(name) { return tweaks[name] !== undefined ? tweaks[name] : tweakDefaults[name]; }
     Binding { target: Theme; property: "animationSpeed"; value: shell.tweak("animationSpeed") }
     Binding { target: Theme; property: "gestureSensitivity"; value: shell.tweak("gestureSensitivity") }
@@ -3110,6 +3111,8 @@ FocusScope {
                 tablet: shell.tablet
                 // Settings > Text Assist > Number row (the phone keyboard).
                 numberRow: shell.tweak("numberRow")
+                // Settings > Text Assist > Keyboard style: "auto", "black", "touchpad".
+                keyboardStyle: shell.tweak("keyboardStyle")
                 pixelScale: Theme.keyboardScale
                 availableWidth: ui.width
                 availableHeight: ui.height

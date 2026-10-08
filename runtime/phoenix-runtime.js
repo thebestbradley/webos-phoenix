@@ -1246,13 +1246,16 @@
         // "low", "normal" or "high" (Buttah); a vibration on every tap
         // (Haptic Feedback Manager); the launcher's grid, "normal" or
         // "dense" (the icon grid patches); the battery's percentage in the
-        // status bar (Battery Percent and Icon); the keyboard's number row.
+        // status bar (Battery Percent and Icon); the keyboard's number row;
+        // the keyboard's look, "auto" (the phone's black keys on a phone,
+        // the TouchPad's on a tablet), "black" or "touchpad".
         animationSpeed: "normal",
         gestureSensitivity: "normal",
         hapticFeedback: false,
         launcherGridDensity: "normal",
         showBatteryPercent: false,
         keyboardNumberRow: false,
+        keyboardStyle: "auto",
         // Email's new-mail dashboard goes through the new emails one at a
         // time, with their times and a delete button (the community's
         // Uber Cycling Email Dashboard; compat overlay of the Email app).
@@ -1293,7 +1296,8 @@
             haptics: !!p.hapticFeedback,
             gridDensity: pick(p.launcherGridDensity, ["normal", "dense"], "normal"),
             batteryPercent: !!p.showBatteryPercent,
-            numberRow: !!p.keyboardNumberRow
+            numberRow: !!p.keyboardNumberRow,
+            keyboardStyle: pick(p.keyboardStyle, ["auto", "black", "touchpad"], "auto")
         };
     }
     // The page views' settings and the system proxy, as the shell takes
@@ -1312,7 +1316,7 @@
     runtime.networkProxy = networkProxy;
     var TWEAK_KEYS = ["infiniteCardCyclingEnabled", "sysUiEnableMaximizeEdges", "sysUiEnableWaveLauncher", "showReticleAnimation",
                       "animationSpeed", "gestureSensitivity", "hapticFeedback", "launcherGridDensity", "showBatteryPercent",
-                      "keyboardNumberRow"];
+                      "keyboardNumberRow", "keyboardStyle"];
 
     // Settings > Accessibility's keyboard options, as the shell takes them.
     function keyboardAccess(a) {

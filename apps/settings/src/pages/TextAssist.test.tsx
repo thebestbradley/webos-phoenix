@@ -1,18 +1,18 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Text Assist > Shortcuts and Sounds > the alert and notification tones,
-// against the simulated system service: what is saved (x_palm_textinput,
-// alerttone, notificationtone) and what the runtime tells the shell's
-// keyboard and sounds (systemStatus textAssist.shortcuts, alerttone,
-// notificationtone).
+// Text Assist > Shortcuts and Keyboard style, and Sounds > the alert and
+// notification tones, against the simulated system service: what is saved
+// (x_palm_textinput, keyboardStyle, alerttone, notificationtone) and what the
+// runtime tells the shell's keyboard and sounds (systemStatus
+// textAssist.shortcuts, tweaks.keyboardStyle, alerttone, notificationtone).
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, it } from "vitest";
 import { system } from "@phoenix/luna";
-import { TextAssistPage } from "./TextAssist";
+import { keyboardStyle, TextAssistPage } from "./TextAssist";
 import { SoundsPage, toneOptions, SYSTEM_TONES } from "./Sounds";
 import { shortcutProblem, textInputPrefs, withShortcut, withoutShortcut } from "./shortcuts";
 
@@ -93,6 +93,28 @@ describe("Text Assist > Shortcuts", () => {
             const sub = system.watchPreferences(["x_palm_textinput"], (v) => { sub.cancel(); res(v); });
         });
         expect(p.x_palm_textinput).toMatchObject({ spellChecking: "autoCorrect", shortcutChecking: "autoCorrect", shortcuts: [] });
+    });
+});
+
+describe("Text Assist > Keyboard style", () => {
+    it("reads anything else as Automatic", () => {
+        expect(keyboardStyle(undefined)).toBe("auto");
+        expect(keyboardStyle("neon")).toBe("auto");
+        expect(keyboardStyle("touchpad")).toBe("touchpad");
+    });
+    it("picks the look, and the shell's keyboard is told at once", async () => {
+        render(<TextAssistPage />);
+        const style = await screen.findByTestId("ta-keyboard-style");
+        await waitFor(() => expect(style.textContent).toContain("Automatic (phone: black, tablet: TouchPad)"));
+        fireEvent.click(style);
+        expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(
+            ["Automatic (phone: black, tablet: TouchPad)", "Black", "TouchPad"]);
+        fireEvent.click(screen.getByRole("option", { name: "TouchPad" }));
+        await waitFor(() => expect((lastStatus().tweaks as { keyboardStyle: string }).keyboardStyle).toBe("touchpad"));
+        await waitFor(() => expect(screen.getByTestId("ta-keyboard-style").textContent).toContain("TouchPad"));
+        fireEvent.click(screen.getByTestId("ta-keyboard-style"));
+        fireEvent.click(screen.getByRole("option", { name: "Black" }));
+        await waitFor(() => expect((runtime().hostStatus().tweaks as { keyboardStyle: string }).keyboardStyle).toBe("black"));
     });
 });
 
