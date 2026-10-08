@@ -465,6 +465,69 @@ lines come from the original code doing what it always did:
 - `tile memory limits exceeded, some content may not draw`: Chromium's
   compositor on a very tall page; the page draws as it scrolls.
 
+## Links between apps
+
+A link in an app that belongs to another app opens that app, as on webOS:
+the application manager's `open {target}` finds the app for it and
+launches it with the link, `{target: "<the link>"}`
+(`ApplicationManagerService.cpp:1290-1446`). Which app that is comes from
+the redirect handlers (`listRedirectHandlers`):
+
+| Link | Opens |
+|---|---|
+| `https://` page | the browser (`^https?:`), unless a more specific handler matches |
+| an installed web app's site | that web app, at the page (its manifest `scope`, with or without `www.` / `m.`; gone with the app) |
+| `https://maps.google.com/...`, `https://www.google.com/maps...` | Maps |
+| `mailto:` | Email, a new message to the address (subject and body too) |
+| `tel:` | Phone, the number on the dial pad |
+| `sms:` / `smsto:` / `im:` | Messaging, a new message to the number or address, with `?body=` |
+| `geo:`, `maploc:`, `mapto:` | Maps |
+| what an app registers | that app (`addRedirectHandler`) |
+
+Web address patterns are tried before whole schemes, as the original looked
+for a redirect handler before a scheme ("command") handler (`:1320`, then
+`:1428`): so a site's web app wins over the browser. A link no app opens
+fails with `No handler for <link>`, as on webOS, and the shell shows "No
+app can open this link" in a banner. Phone and Messaging read the number
+and text from `target` (`@phoenix/luna` `telTarget`, `messageTarget`).
+
+How a link gets there:
+
+- **In an app's page** (anything with the runtime): a tapped link to
+  another site or another scheme, `target=_blank` too, does not load in
+  the app's card; the runtime hands it to `open {target}`, as WebAppMgr
+  handed over what an app's page should not load
+  (`WebAppManager::mimeHandoffUrl`, `WebAppManager.cpp:1747-1773`). Links
+  to the app's own pages, and clicks the page handles itself
+  (`preventDefault`), are the page's. In phoenix-sim the window also
+  catches the rest (`WebAppWindow.qml`, `shell/qml/Phoenix/Sim/Links.js`):
+  a navigation by script out of the app, `window.open` of a web page (a
+  card of the same app before). The app launched joins the card's stack.
+- **In a site** (an installed web app, which has no runtime): its own
+  pages stay in its card, and so do redirects, scripts and pop-ups with
+  features (signing in on another domain); a tapped link out of its scope
+  goes to the browser (or the web app whose site it is). "Open in Browser"
+  in its menu is unchanged. Launched with `{target}` in its scope, it opens
+  that page.
+- **In the browser and Email's message view** (`enyo.WebView`): the page
+  view follows BrowserAdapter's redirects (`addUrlRedirect(regex, enable,
+  cookie, type)`, `BrowserAdapter.cpp:1945-1981`): a followed link that
+  matches the first enabled one is not loaded, and the page hears
+  `urlRedirected(url, cookie)` (`:4760-4767`). The browser's are the
+  system's handlers (enyo `WebView.addSystemRedirects`); Email's are every
+  link but its own `file:` pages (`MessageDisplay.js:906-909`). Both then
+  call `open {target}`.
+
+Chromium never hands a link to the computer's own apps
+(`unknownUrlSchemePolicy`); in pages without the runtime a small script
+reports links to other schemes to the window. Not covered: a script that
+sets `location` to a `tel:` or `mailto:` address (Chromium refuses it
+without telling the window).
+
+Tests: `tools/test-links.cjs` (links clicked in Notes, Weather, Scanner,
+and the apps they open), `tools/test-appmanager.cjs` (the handler table),
+`tools/test-browser.cjs`, `shell/tests/tst_links.qml` (the window's rules).
+
 ## Phone layouts
 
 The core apps are the TouchPad (1024×768) versions. On a phone card (320
@@ -731,7 +794,7 @@ same request and reply shapes:
 | Screen & Lock | `com.webos.settingsservice` `get/setSystemSettings {category: "picture", backlight}`; `com.webos.service.systemservice` `get/setPreferences` (`screenTimeout`, `rotationLock`, `wallpaper`, `showAlertsWhenLocked`, `blinkNotifications`) | `settingsservice` `inc/SettingsServiceApi.h`; `luna-sysservice` `Src/PrefsFactory.cpp` (stores any key) |
 | Screen & Lock (PIN) | `com.palm.systemmanager` `getDeviceLockMode`, `setDevicePasscode`, `matchDevicePasscode` (and `getSecurityPolicy`: a security policy's rules; see [Device security](#device-security-erase-usb-drive-mode-and-debugging)): the legacy webOS API; OSE has none, so Phoenix will have to provide it | `openwebos/luna-sysmgr` `Src/base/SystemService.cpp` |
 | Sounds | `com.webos.service.audio` `master/getVolume`, `master/setVolume`, `master/muteVolume`, `getInputVolume` / `setInputVolume` (`streamType` `pringtones`, `palerts`, `pfeedback`, `pmedia`), `playFeedback`, `playSound`, `controlPlayback`; system service `ringtone`, `alerttone`, `notificationtone` (`{name, fullPath}`: Open webOS's alert.wav and notification.wav or any ringtone; the shell plays them for alerts, alarms and reminders, and for notifications, that name no sound of their own, as LunaSysMgr's `AlertWindow` and `BannerMessageHandler` did), `systemSounds`, `x_palm_virtualkeyboard_prefs` (`TapSounds`: Keyboard clicks), `ringtone/listRingtones` | `audiod-pro` `src/modules/masterVolumeManager`, `audioPolicyManager`, `systemSoundsManager`; `luna-sysmgr` `conf/defaultPreferences.txt`, `Src/base/settings/Preferences.cpp` |
-| Text Assist | system service `get/setPreferences`: `x_palm_virtualkeyboard_prefs` (`WordSuggestions`, `AutoCorrect`, `SwipeTyping`, `spaces2period`, `ForgetWords`, `keyboards`), `keyboardShortcuts`, and `x_palm_textinput` (`shortcutChecking` `"autoCorrect"` / `"off"`; Phoenix adds `shortcuts: [{shortcut, text}]`, the user's text replacements). The runtime gives the shell's keyboard `systemStatus` `textAssist` (`suggestions`, `autoCorrect`, `swipe`, `spaces2period`, `forgetWords`, `shortcuts` as `{typed: text}`, `shortcutsOn`); the space bar puts a shortcut's text in (`TextAssist.js` `shortcut()`), in any keyboard language, and backspace puts the shortcut back | `luna-sysmgr` `conf/defaultPreferences.txt` (`x_palm_textinput`), `Src/ime/VirtualKeyboardPreferences.cpp` |
+| Text Assist | system service `get/setPreferences`: `x_palm_virtualkeyboard_prefs` (`WordSuggestions`, `AutoCorrect`, `SwipeTyping`, `spaces2period`, `ForgetWords`, `keyboards`), `keyboardShortcuts`, `keyboardNumberRow`, `keyboardStyle` (Phoenix: the keys' look, `"auto"` = black on a phone and the TouchPad's on a tablet, `"black"`, `"touchpad"`; systemStatus `tweaks.keyboardStyle`), and `x_palm_textinput` (`shortcutChecking` `"autoCorrect"` / `"off"`; Phoenix adds `shortcuts: [{shortcut, text}]`, the user's text replacements). The runtime gives the shell's keyboard `systemStatus` `textAssist` (`suggestions`, `autoCorrect`, `swipe`, `spaces2period`, `forgetWords`, `shortcuts` as `{typed: text}`, `shortcutsOn`); the space bar puts a shortcut's text in (`TextAssist.js` `shortcut()`), in any keyboard language, and backspace puts the shortcut back | `luna-sysmgr` `conf/defaultPreferences.txt` (`x_palm_textinput`), `Src/ime/VirtualKeyboardPreferences.cpp` |
 | Date & Time | system service `get/setPreferences` (`timeFormat`, `useNetworkTime`, `useNetworkTimeZone`, `timeZone`), `getPreferenceValues {key: "timeZone"}`, `time/getSystemTime`, `time/setSystemTime {utc}` | `luna-sysservice` `Src/TimePrefsHandler.cpp` |
 | Language & Region | `com.webos.settingsservice` `get/setSystemSettings {keys: ["localeInfo"]}` (`locales.UI`, `locales.FMT`) | `settingsservice` |
 | Device Info | system service `deviceInfo/query`, `osInfo/query`; `com.palm.power` `batteryStatusQuery` (legacy); `com.palm.telephony` `platformQuery` (IMEI/MEID, carrier), `subscriberIdQuery` (`msisdn`: the phone number), `simStatusQuery`, `networkStatusQuery`; settings service `resetSystemSettings`; `org.webosphoenix.service.reset` `eraseUserData` (apps' data and settings; the user's files on the USB drive are kept, as legacy webOS's "Erase Apps & Data") and `fullErase` (everything, files too) (Phoenix, simulator only so far); "Help and tips" and "Run setup again" launch Help and First Use (`{rerun: true}`) | `luna-sysservice` `Src/DeviceInfoService.cpp`, `OsInfoService.cpp` |
@@ -1016,10 +1079,12 @@ card. The calls return at once, as the plugin's did; a picture still being
 made is served when it is ready. In a desktop browser the page is an
 `<iframe>`, so there is no picture and the shortcut gets the browser's icon.
 
-Links for other apps (`mailto:`, `tel:`, `sms:`) go to them through
-`/usr/palm/command-resource-handlers.json` (a compat file), as the
-application manager's `open` does on webOS. `tools/test-browser.cjs` browses
-with it end to end.
+Links for other apps (`mailto:`, `tel:`, `sms:`, Google Maps) are not
+loaded: the page view hands them back to the browser, which opens them with
+the application manager (see [Links between apps](#links-between-apps):
+BrowserAdapter's `addUrlRedirect` and `urlRedirected`, with the patterns of
+`/usr/palm/command-resource-handlers.json`). `tools/test-browser.cjs` browses
+with it end to end, tapping a real `mailto:` link.
 
 **Downloads.** A file the page view does not show (a PDF, a link with
 `download`) is not downloaded by Chromium: phoenix-sim's view hands it
@@ -2696,8 +2761,9 @@ add to the runtime and the original apps:
   `sysUiEnableMaximizeEdges`, `sysUiEnableWaveLauncher`,
   `showReticleAnimation`; Phoenix's `animationSpeed`, `gestureSensitivity`,
   `hapticFeedback`, `launcherGridDensity`, `showBatteryPercent`,
-  `keyboardNumberRow`, `emailDashboardCycling`), and the shell gets them as
-  the systemStatus `tweaks`. Settings > Sounds & Ringtones > Repeat alerts
+  `keyboardNumberRow`, `emailDashboardCycling`; Settings > Text Assist's
+  `keyboardStyle`, `"auto"`, `"black"` or `"touchpad"`), and the shell gets
+  them as the systemStatus `tweaks` (the keyboard changes its look at once). Settings > Sounds & Ringtones > Repeat alerts
   is `notificationRepeat` {enabled, minutes, apps}; Screen & Lock > Show
   previews is `lockScreenPreviews`.
 - **Preferences across pages**: a page's getPreferences subscribers hear a
