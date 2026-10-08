@@ -4,8 +4,11 @@
 // The keyboard's clipboard key and clip strip (Phoenix, M6 F2;
 // ClipStrip.qml, CandidateBar.qml, VirtualKeyboard.qml "Clipboard"): the
 // key at the left of the candidate bar in every field, the strip of clip
-// cards in place of the keys with its category tabs, a tap pasting through
-// the IME's commit, a hold's actions, and Back, ABC or the key bringing
+// cards in place of the keys with its category tabs (the launcher's tab
+// bar), the clips as card view's cards (the one in focus centred, the
+// others smaller and dimmed beside it, a swipe snapping clip to clip), a
+// tap on the middle clip pasting through the IME's commit and on a side
+// clip centring it, a hold's actions, and Back, ABC or the key bringing
 // the keys back. The clipboard service is a stand-in (the shell's
 // ClipboardClient talks to org.webosphoenix.clipboard; its own tests are
 // in apps/shared/luna/src/clipboard.test.ts).
@@ -109,15 +112,74 @@ Item {
             tryCompare(key, "visible", true, 1000);
             mouseClick(key);
             tryCompare(kb, "clipsOpen", true, 1000);
-            var strip = findChild(kb, "clipStrip");
-            tryCompare(strip, "visible", true, 1000);
-            return strip;
+            var s = findChild(kb, "clipStrip");
+            tryCompare(s, "visible", true, 1000);
+            tryCompare(s, "settled", true, 3000);
+            return s;
         }
 
         function card(id) {
             var c;
             tryVerify(function () { c = findChild(kb, "clipCard-" + id); return c !== null; }, 1000, "card " + id);
             return findChild(c, "clipCardArea");
+        }
+        function strip() { return findChild(kb, "clipStrip"); }
+        function indexOf(id) {
+            for (var i = 0; i < fake.clips.length; ++i)
+                if (fake.clips[i].id === id)
+                    return i;
+            return -1;
+        }
+        // At rest: nothing sliding, opening or switching tabs.
+        function settle() {
+            tryCompare(strip(), "settled", true, 3000);
+        }
+        // The clip's face centre, on the screen.
+        function centreOf(id) {
+            var a = card(id);
+            return a.mapToItem(kb, a.width / 2, a.height / 2);
+        }
+        // A tap on the part of a clip's face that is on the screen (a side
+        // clip peeks in).
+        function visiblePoint(id) {
+            var a = card(id);
+            var tl = a.mapToItem(kb, 0, 0), br = a.mapToItem(kb, a.width, a.height);
+            var x0 = Math.max(tl.x, 0), x1 = Math.min(br.x, kb.width);
+            verify(x1 - x0 > 4, "clip " + id + " on the screen");
+            return Qt.point((x0 + x1) / 2, (tl.y + br.y) / 2);
+        }
+        function clickClip(id) {
+            var p = visiblePoint(id);
+            mouseClick(kb, p.x, p.y);
+        }
+        // A tap on a clip, brought to the middle first when it is not
+        // there (a tap on each neighbour on the way, as a finger would).
+        function tapClip(id) {
+            settle();
+            var target = indexOf(id);
+            while (strip().current !== target) {
+                var next = strip().current + (target > strip().current ? 1 : -1);
+                clickClip(fake.clips[next].id);
+                tryCompare(strip(), "current", next, 2000);
+                settle();
+            }
+            clickClip(id);
+        }
+        // A finger across the clips: dx in steps, over ms of the strip's clock.
+        function swipe(dx, ms) {
+            var s = strip();
+            var area = findChild(kb, "clipCardsTouch");
+            var t = 1000;
+            s.clock = function () { return t; };
+            var x = area.width / 2, y = s.cardTop + s.cardHeight / 2;
+            mousePress(area, x, y);
+            var steps = 8;
+            for (var i = 1; i <= steps; ++i) {
+                t += ms / steps;
+                mouseMove(area, x + dx * i / steps, y);
+            }
+            mouseRelease(area, x + dx, y);
+            s.clock = function () { return Date.now(); };
         }
 
         // The menu's entries once the Row has placed them: new delegates
@@ -151,9 +213,10 @@ Item {
         // Press and hold a card until its actions are up (and laid out).
         function hold(id) {
             var menu = findChild(kb, "clipMenu");
-            mousePress(card(id));
+            var p = visiblePoint(id);
+            mousePress(kb, p.x, p.y);
             tryCompare(menu, "visible", true, 2000);
-            mouseRelease(card(id));
+            mouseRelease(kb, p.x, p.y);
             menuLaidOut();
         }
 
@@ -208,14 +271,14 @@ Item {
         function test_secretPastesOnlyIntoAPasswordField() {
             showKeyboard(false);
             openStrip();
-            mouseClick(card("c"));
+            tapClip("c");
             tryCompare(findChild(kb, "clipMessage"), "visible", true, 1000);
             compare(field.text, "");
             verify(kb.clipsOpen);
             compare(fake.calls.indexOf("paste c"), -1);
             showKeyboard(true);
             openStrip();
-            mouseClick(card("c"));
+            tapClip("c");
             tryCompare(field, "text", fake.secret, 1000);
             verify(fake.calls.indexOf("paste c") >= 0);
             verify(!kb.clipsOpen);
@@ -224,17 +287,93 @@ Item {
         function test_imageGoesToTheShell() {
             showKeyboard(false);
             openStrip();
-            // The fourth card, scrolled into view.
-            var list = findChild(kb, "clipCards");
-            list.positionViewAtEnd();
-            waitForItemPolished(list, 2000);
-            tryVerify(function () {
-                var p = card("d").mapToItem(kb, 0, 0);
-                return p.x >= 0 && p.x + card("d").width <= kb.width;
-            }, 2000, "the fourth card in view");
-            mouseClick(card("d"));
+            // The fourth card, brought to the middle.
+            tapClip("d");
             compare(images.count, 1);
             compare(images.signalArguments[0][0].id, "d");
+        }
+
+        // As card view: the clip in focus centred, its neighbours beside
+        // it smaller (the non-active card scale) and dimmed.
+        function test_clipsSitAsCards() {
+            showKeyboard(false);
+            var s = openStrip();
+            compare(s.current, 0);
+            compare(s.position, 0);
+            var a = centreOf("a"), b = centreOf("b");
+            fuzzyCompare(a.x, kb.width / 2, 1);
+            verify(b.x > a.x + card("a").width / 2, "the next one to the right");
+            verify(b.x - card("b").width * s.sideScale / 2 < kb.width, "peeking in");
+            verify(s.sideScale < 1);
+            fuzzyCompare(s.sideScale, Theme.nonActiveCardRatio / Theme.activeCardRatio, 0.001);
+            var bScale = card("b").mapToItem(kb, card("b").width, 0).x - card("b").mapToItem(kb, 0, 0).x;
+            fuzzyCompare(bScale / card("b").width, s.sideScale, 0.01);
+            fuzzyCompare(findChild(findChild(kb, "clipCard-b"), "clipDim").opacity, 1 - Theme.cardDimming, 0.001);
+            compare(findChild(findChild(kb, "clipCard-a"), "clipDim").opacity, 0);
+        }
+
+        // A short slow swipe goes back; a longer one goes on to the clip it
+        // passed half of; a flick goes to the next; each ends on a clip.
+        function test_swipeSnapsClipToClip() {
+            showKeyboard(false);
+            var s = openStrip();
+            swipe(-s.innerPitch * 0.3, 600);
+            settle();
+            compare(s.position, 0);
+            swipe(-s.innerPitch * 0.7, 900);
+            settle();
+            compare(s.position, 1);
+            fuzzyCompare(centreOf("b").x, kb.width / 2, 1);
+            // A flick: past Theme.flickMinVelocity, though short.
+            var dx = Math.max(s.innerPitch * 0.25, Theme.flickMinVelocity * 60);
+            swipe(-dx, 30);
+            settle();
+            compare(s.position, 2);
+            swipe(dx, 30);
+            settle();
+            compare(s.position, 1);
+            // Past the first, it comes back.
+            swipe(s.innerPitch * 1.6, 900);
+            settle();
+            compare(s.position, 0);
+            // A swipe pastes nothing.
+            compare(field.text, "");
+            verify(kb.clipsOpen);
+        }
+
+        // A tap on a side clip brings it to the middle; on the middle one, pastes.
+        function test_tapSideCentresTapMiddlePastes() {
+            showKeyboard(false);
+            var s = openStrip();
+            clickClip("b");
+            tryCompare(s, "current", 1, 2000);
+            settle();
+            compare(s.position, 1);
+            compare(field.text, "");
+            verify(kb.clipsOpen);
+            clickClip("a");
+            settle();
+            compare(s.position, 0);
+            compare(field.text, "");
+            clickClip("a");
+            tryCompare(field, "text", "Hello from Notes", 1000);
+            compare(kb.clipsOpen, false);
+        }
+
+        // Another tab: the clips slide in from its side, from the first.
+        function test_tabsSlideTheClips() {
+            showKeyboard(false);
+            var s = openStrip();
+            clickClip("b");
+            settle();
+            compare(s.position, 1);
+            mouseClick(findChild(kb, "clipTab-pinned"));
+            compare(s.category, "pinned");
+            compare(s.position, 0);
+            settle();
+            compare(findChild(kb, "clipCards").opacity, 1);
+            // The tab bar is the launcher's.
+            verify(String(findChild(kb, "clipTabBar").source).indexOf("launcher3/tab-bg") >= 0);
         }
 
         function test_holdOpensTheActions() {

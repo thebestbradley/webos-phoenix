@@ -12,6 +12,11 @@
 // shell's assistant view (hold the launcher button) shows the same thread
 // in use: both go through org.webosphoenix.assistant.
 //
+// The assistant's bird (docs/ASSISTANT-CHARACTER.md, bird/) greets on the
+// empty conversation, thinks while it loads and while a request waits,
+// then works and cheers (done) when a command ran, shrugs at "I can't do
+// that", or says oops when something failed, as in the shell's view.
+//
 // Launch params: {text} asks it (Just Type's "Ask Assistant"); {threadId}
 // opens that conversation; {timerDone: {id, label, seconds}} is a timer
 // the assistant set going off (its activity's callback): a notification,
@@ -24,6 +29,9 @@ import {
 } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
 import { AppMenu, BackProvider, Button, cx, Dialog, Page, PageHeader, Row, Spinner, useBack } from "@phoenix/ui";
+import { Bird, useBirdMotion } from "./bird/Bird";
+import type { BirdPose } from "./bird/birdData";
+import { beatsFor, birdPose, outcomeOf, type Beat } from "./bird/pose";
 
 const errorText = (e: unknown) => (e as LunaError).errorText ?? (e instanceof Error ? e.message : String(e));
 
@@ -75,6 +83,25 @@ function Bubble({ m, busy, onChoose, onConfirm }: {
     );
 }
 
+// ---- The bird's beats ------------------------------------------------------------------------------
+
+/** Plays beats (poses for a time) one after another; the one playing, or null. */
+function useBeats(speed: number): [BirdPose | null, (beats: Beat[]) => void] {
+    const [beat, setBeat] = useState<BirdPose | null>(null);
+    const timer = useRef(0);
+    const play = useCallback((beats: Beat[]) => {
+        window.clearTimeout(timer.current);
+        const next = (rest: Beat[]) => {
+            const [b, ...more] = rest;
+            setBeat(b ? b.pose : null);
+            if (b) timer.current = window.setTimeout(() => next(more), Math.max(1, b.ms * speed));
+        };
+        next(beats);
+    }, [speed]);
+    useEffect(() => () => window.clearTimeout(timer.current), []);
+    return [beat, play];
+}
+
 // ---- The conversation in use -------------------------------------------------------------------
 
 function Conversation({ threadId, onThread }: { threadId: string; onThread: (id: string) => void }) {
@@ -87,23 +114,37 @@ function Conversation({ threadId, onThread }: { threadId: string; onThread: (id:
     const [canListen, setCanListen] = useState(false);
     const mic = useRef<Listening | null>(null);
     const end = useRef<HTMLDivElement>(null);
+    const motion = useBirdMotion();
+    const [loaded, setLoaded] = useState(false);
+    const [greeting, setGreeting] = useState(false);
+    const [beat, play] = useBeats(motion.speed);
 
     useEffect(() => {
-        const sub = assistant.watchThread(threadId || undefined, (t, list) => { setThread(t); setMessages(list); },
-                                          (e) => setError(errorText(e)));
+        const sub = assistant.watchThread(threadId || undefined, (t, list) => { setThread(t); setMessages(list); setLoaded(true); },
+                                          (e) => { setError(errorText(e)); setLoaded(true); });
         return () => sub.cancel();
     }, [threadId]);
+    // Loaded: a wave, then it idles.
+    useEffect(() => {
+        if (!loaded) return undefined;
+        setGreeting(true);
+        const t = window.setTimeout(() => setGreeting(false), 900 * motion.speed);
+        return () => window.clearTimeout(t);
+    }, [loaded, motion.speed]);
     useEffect(() => { dictation.status().then((s) => setCanListen(s.available), () => setCanListen(false)); }, []);
     useEffect(() => { end.current?.scrollIntoView?.({ block: "end" }); }, [messages.length, busy]);
     useEffect(() => () => mic.current?.cancel(), []);
 
-    const run = useCallback((p: Promise<{ thread: AssistantThread }>) => {
+    const run = useCallback((p: Promise<{ thread: AssistantThread; messages?: AssistantMessage[] }>) => {
         setBusy(true);
         setError("");
-        p.then((r) => { if (r.thread && r.thread.id !== threadId) onThread(r.thread.id); },
-               (e) => setError(errorText(e)))
+        play([]);
+        p.then((r) => {
+            if (r.thread && r.thread.id !== threadId) onThread(r.thread.id);
+            play(beatsFor(outcomeOf(r.messages)));
+        }, (e) => { setError(errorText(e)); play(beatsFor("failed")); })
             .finally(() => setBusy(false));
-    }, [threadId, onThread]);
+    }, [threadId, onThread, play]);
 
     const ask = useCallback((words: string) => {
         const t = words.trim();
@@ -128,10 +169,10 @@ function Conversation({ threadId, onThread }: { threadId: string; onThread: (id:
     return (
         <div className="as-conversation">
             <div className="as-scroll" data-testid="as-thread">
-                {messages.length === 0 && !busy && (
+                {messages.length === 0 && !busy && !beat && (
                     <div className="as-empty" data-testid="as-empty">
-                        <img src="icon-256x256.png" alt="" />
-                        <p>Ask me to set a timer, text someone, turn on the flashlight, get directions, or anything else.</p>
+                        <Bird pose={birdPose({ loading: !loaded, busy: false, beat: null, greeting })} size={120} speed={motion.speed} still={motion.still} />
+                        {loaded && <p>Ask me to set a timer, text someone, turn on the flashlight, get directions, or anything else.</p>}
                     </div>
                 )}
                 {messages.map((m) => (
@@ -139,7 +180,13 @@ function Conversation({ threadId, onThread }: { threadId: string; onThread: (id:
                             onChoose={(msg, id) => run(assistant.choose(msg.threadId, msg.id, id))}
                             onConfirm={(msg, yes) => run(assistant.confirm(msg.threadId, msg.id, yes))} />
                 ))}
-                {busy && <div className="as-row in"><div className="as-bubble in as-thinking" data-testid="as-thinking"><span /><span /><span /></div></div>}
+                {(busy || beat) && (
+                    <div className="as-work" data-testid="as-work">
+                        <Bird pose={birdPose({ loading: false, busy, beat, greeting: false })} size={72} testId="as-bird-work"
+                              speed={motion.speed} still={motion.still} />
+                        {busy && <div className="as-bubble in as-thinking" data-testid="as-thinking"><span /><span /><span /></div>}
+                    </div>
+                )}
                 {error && <div className="as-error" data-testid="as-error">{error}</div>}
                 <div ref={end} />
             </div>
@@ -225,12 +272,14 @@ function Main() {
     useTimerDone(launch, settings ?? null);
     useBack(() => { setView("thread"); return true; }, view === "list");
 
-    // {threadId} opens it; {text} asks it in the conversation in use.
+    // {threadId} opens it (the system's view hands its conversation on
+    // this way); {text} asks it in the conversation in use.
     useEffect(() => {
         if (asked === launch) return;
         setAsked(launch);
         if (launch.threadId) {
             setThreadId(launch.threadId);
+            setView("thread");
             void assistant.setCurrent(launch.threadId).catch(() => undefined);
         }
         if (launch.text) void assistant.ask(launch.text, launch.threadId ? { threadId: launch.threadId } : {}).catch(() => undefined);

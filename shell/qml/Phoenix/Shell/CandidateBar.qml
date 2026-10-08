@@ -192,36 +192,13 @@ Item {
             radius: width / 2
             color: bar.listening ? "#c0392b" : micTap.pressed ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
         }
-        // A microphone, drawn.
-        Item {
+        // A microphone (MicGlyph).
+        MicGlyph {
             anchors.centerIn: parent
-            width: bar.height * 0.5
+            width: bar.height * 0.56
             height: width
             opacity: bar.transcribing ? 0.4 : 1
-            Rectangle {
-                x: parent.width * 0.32
-                width: parent.width * 0.36
-                height: parent.height * 0.62
-                radius: width / 2
-                color: bar.strongColor
-            }
-            Rectangle {
-                x: parent.width * 0.16
-                y: parent.height * 0.3
-                width: parent.width * 0.68
-                height: parent.height * 0.46
-                radius: width / 2
-                color: "transparent"
-                border.color: bar.strongColor
-                border.width: Math.max(1.5, parent.width * 0.07)
-            }
-            Rectangle {
-                x: parent.width * 0.47
-                y: parent.height * 0.76
-                width: parent.width * 0.07
-                height: parent.height * 0.18
-                color: bar.strongColor
-            }
+            color: bar.strongColor
         }
         MouseArea {
             id: micTap

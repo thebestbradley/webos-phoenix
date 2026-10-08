@@ -1736,9 +1736,14 @@ characters with a symbol, or all four). They are kept AES-GCM encrypted
 `ClipboardClient.qml`): the clipboard key at the left of the candidate
 bar, in every field while the history and the key are on (not over the
 lock screen). In a field without Text Assist (a password, an address) the
-bar holds only the key. It swaps the keys for the clip strip: Recent,
-Pinned and category tabs; the clips as small cards in the card view's look;
-a tap pastes through the IME's commit and brings the keys back (a secret
+bar holds only the key. It swaps the keys for the clip strip (rising and
+fading in over them): Recent, Pinned and category tabs in the launcher's
+tab bar art; the clips as card view's cards, the one in focus centred and
+its neighbours peeking in beside it, smaller (the non-active card scale)
+and dimmed (`cardDimming`); a swipe moves them and they snap clip to clip
+with card view's flick and slide; another tab slides its clips in from its
+side. A tap on a side clip centres it; a tap on the middle clip pastes
+through the IME's commit and brings the keys back (a secret
 only into a password field; elsewhere the strip says to reveal it in
 Clipboard); a picture goes into rich text (`clipboard.insertImage`); a hold
 opens Pin, Save to…, Delete, Open Clipboard. ABC, Back, the key, or the
@@ -1829,13 +1834,39 @@ Just Type Quick Action (`universalSearch.action`) works as "<displayName>
 `assistant` field in `/usr/share/phoenix/apps.json`.
 
 **The shell** (`AssistantOverlay.qml`): holding the launcher button opens
-it over everything but the lock screen (a tap still opens the launcher);
-it shows the thread in use through `lunaCall`, with buttons for choices and
+it over everything but the lock screen (a tap still opens the launcher).
+Each opening is a new, empty conversation: its first request is `ask
+{text, newThread: true}`, the next ones `ask {text, threadId}` (through
+`lunaCall`), so an opening without a request leaves no thread, and the
+earlier ones stay in the app's Conversations. Buttons for choices and
 read-backs, a field (the keyboard comes with a tap; at once where there is
 no microphone) and the microphone (the shell's dictation with `autoStop`,
-owner `"assistant"`). Back, Escape or a tap outside closes it.
+owner `"assistant"`). The Assistant's icon at the top left closes it and
+launches the app with `{threadId}` (none before the first request), to go
+on there. Back, Escape or a tap outside closes it. It grows out of the
+held button with the blur and dim fading in, and shrinks back into it
+(`Theme.launcherDuration`); messages slide in from their side
+(`cardTransitionDuration`), choices appear one after another, rings spread
+from the microphone while it listens, three dots bounce while it thinks;
+all through `Theme.motion` (Animation speed, reduced motion).
 `phoenix-sim --scene assistant [--launch <app>]` shows a short conversation
 over the screen.
+
+**The assistant's bird** ([ASSISTANT-CHARACTER.md](ASSISTANT-CHARACTER.md),
+`AssistantBird.qml`) sits at the top in the middle of the panel (72 to 104
+px by its height; small beside the field where the panel is short, as on a
+phone with the keyboard up), over the conversation, which scrolls on up
+behind it and fades out under the heading rather than being cut off and plays what is going on (`birdPose`):
+asleep as the panel grows, hello, then listening while the microphone is
+on (following the dictation's `loudness`), thinking while a request or a
+transcription waits, then the reply's outcome (`outcomeOf` its new
+messages): a command that ran (`status: "done"` with a `command`) plays
+working then done, `failed` plays shy (Oops), choices play confused, each
+for a moment (`beatsFor`, at Animation speed); speaking while the shell's
+`Speech` speaks; asking while a read-back waits; idle (with a nod for an
+answer that is not spoken); asleep again as it closes. A tap on it waves.
+`phoenix-sim --scene assistantbird` cycles through its poses,
+`--scene assistantbirds` shows them all; both log the frame rate.
 
 **The on-device model and speech in phoenix-sim**: `/usr/share/phoenix/host.json`
 has `"assistant": true`; the runtime sends `assistant` host messages (`{op:
@@ -1851,7 +1882,10 @@ choices and read-backs, the field, the microphone
 (`org.webosphoenix.dictation`), Conversations (new, open, delete), and
 Preferences. Launch params: `{text}` (Just Type's "Ask Assistant"),
 `{threadId}`, `{timerDone}`. Its CSP allows `unsafe-eval` only because the
-simulator runs the service in its page.
+simulator runs the service in its page. The same bird (`src/bird/Bird.tsx`)
+greets on an empty conversation (thinking while it loads), and stands below
+the conversation while a request runs: thinking, then working and done, a
+shrug or Oops, as the shell's view decides (`src/bird/pose.ts`).
 
 **Settings > Assistant** (`apps/settings/src/pages/Assistant.tsx`, launch
 point `org.webosphoenix.settings.assistant`): everything above.
@@ -2096,7 +2130,9 @@ which runs unchanged in the simulator:
 
 - **Sources** (`/etc/palm/marketplace/sources.json`, then the user's):
   the Phoenix Marketplace (a signed catalog; for now at
-  `http://127.0.0.1:8088/v1/`, `server/marketplace/bin/serve.sh`), the
+  `http://127.0.0.1:8088/v1/`, `server/marketplace/bin/serve.sh`, or
+  `phoenix-sim --marketplace`, which starts it with the simulator and opens
+  the Marketplace), the
   webOS Archive's App Museum II and the PreCentral homebrew feed (both off
   until switched on). Catalogs can be added by address.
 - **Signed catalogs** (`lib/catalog.js`, `lib/ed25519.js`): `index.json`,
@@ -2137,7 +2173,8 @@ app site, an App Museum stand-in and a Preware feed), `tools/test-marketplace.cj
 The catalog service is `server/marketplace` (PHP 8 + PDO; MySQL/MariaDB on a
 server, SQLite on one computer): accounts, submissions with the same
 automatic checks, a review queue (`/admin`), ratings and reviews, reports,
-opt-outs for the curated web apps, and publishing the signed index (its
+opt-outs for the curated web apps (126 popular sites' PWAs, found and
+checked by `bin/probe-pwas.py`), and publishing the signed index (its
 README).
 
 ### Installing apps

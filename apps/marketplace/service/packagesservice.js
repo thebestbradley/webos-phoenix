@@ -379,7 +379,7 @@ function createPackagesService(deps) {
         if (entry.kind === "pwa") {
             progress({ state: "downloading", progress: 10 });
             return getText(entry.pwa.manifest).then(function (text) {
-                var m = pwa.parseManifest(text, entry.pwa.manifest);
+                var m = pwa.parseManifest(text, entry.pwa.manifest, entry.pwa.origin + "/");
                 if (new URL(m.startUrl).origin !== entry.pwa.origin)
                     throw err("BAD_MANIFEST", "The site's start page is not on " + entry.pwa.origin);
                 var icons = pwa.pickIcons(m);

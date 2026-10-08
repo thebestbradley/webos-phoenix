@@ -13,6 +13,13 @@ sets itself up the first time (`bin/marketplace.php init`: the database, the
 signing key, the curated web apps, an admin account, a first publish) and
 serves at <http://127.0.0.1:8088/>, which is where the simulator's
 Marketplace looks (`apps/marketplace/service/etc/palm/marketplace/sources.json`).
+Or let the simulator do it: `./build/phoenix-sim --marketplace` starts
+`serve.sh` (setting it up the first time), waits until it answers, opens
+the Marketplace, and stops it on quitting (one already running is used as
+it is; its log is `data/simulator.log`). It needs PHP 8 with sodium and
+pdo_sqlite, which `scripts/mac-setup.sh` and `scripts/linux-setup.sh`
+install.
+
 The first time the Marketplace reads it, it shows the key's fingerprint
 (`php server/marketplace/bin/marketplace.php key` prints it) and asks to
 trust it.
@@ -49,7 +56,15 @@ Phoenix lists popular sites that ship a web app manifest; a site can ask to
 be taken off (`POST /api/optout`, then an admin accepts it). The list is
 `catalog/curated-sites.json`; `bin/probe-pwas.py` finds each site's manifest
 and writes `catalog/curated-pwas.json` (checked live), which `init` and
-`seed` load.
+`seed` load. The probe reads the page as a phone and then as a desktop
+browser, follows a manifest `<link>` or a manifest URL in the page's scripts,
+then guesses the usual names next to the page and at its root (and next to
+the URL asked for, when the page redirected to a sign-in page). A site is
+listed only with a manifest that has a name and a picture icon on the web;
+the others stay in the file's `notFound` with the reason. Its start page is
+the manifest's `start_url` when that is on the site, else the site (as
+browsers do, so a manifest kept on a CDN still starts on the site).
+Refresh the list with `python3 server/marketplace/bin/probe-pwas.py`.
 
 ## Tests
 

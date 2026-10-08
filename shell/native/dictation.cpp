@@ -12,6 +12,8 @@
 #include <QTemporaryFile>
 #include <QTimer>
 #include <QtEndian>
+
+#include <cmath>
 #include <cmath>
 #include <cstring>
 
@@ -192,11 +194,15 @@ void Dictation::start()
 void Dictation::recorded(const QByteArray &chunk)
 {
     m_pcm.append(chunk);
-    if (!m_autoStop || !m_listening || chunk.isEmpty())
+    if (!m_listening || chunk.isEmpty())
+        return;
+    const double lvl = level(chunk, m_channels, m_float);
+    setLoudness(loudnessOf(lvl));
+    if (!m_autoStop)
         return;
     const int frameBytes = (m_float ? 4 : 2) * qMax(1, m_channels);
     const int ms = int(chunk.size() / frameBytes * 1000 / qMax(1, m_rate));
-    switch (m_end.feed(level(chunk, m_channels, m_float), ms)) {
+    switch (m_end.feed(lvl, ms)) {
     case EndOfSpeech::Ended:
         QMetaObject::invokeMethod(this, &Dictation::stop, Qt::QueuedConnection);
         break;
@@ -250,6 +256,22 @@ double Dictation::level(const QByteArray &in, int channels, bool isFloat)
     return std::sqrt(sum / n);
 }
 
+double Dictation::loudnessOf(double level)
+{
+    if (level <= 0)
+        return 0;
+    const double db = 20 * std::log10(level);
+    return qBound(0.0, (db + 50) / 40, 1.0);
+}
+
+void Dictation::setLoudness(qreal l)
+{
+    if (qFuzzyCompare(l + 1, m_loudness + 1))
+        return;
+    m_loudness = l;
+    emit loudnessChanged();
+}
+
 void Dictation::stop()
 {
     if (m_listening)
@@ -286,6 +308,7 @@ void Dictation::finishRecording(bool transcribe)
     m_io = nullptr;
 #endif
     m_listening = false;
+    setLoudness(0);
     if (!transcribe) {
         m_pcm.clear();
         emit stateChanged();

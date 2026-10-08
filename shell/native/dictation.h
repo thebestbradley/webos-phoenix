@@ -25,6 +25,10 @@
 //   owner      who the recording is for: "" the keyboard, else the window
 //              of the app that asked (the window source sets it), so each
 //              takes only its own transcriptions
+//   loudness   while it listens, how loud the microphone is, 0 (-50 dBFS
+//              and quieter) to 1 (-10 dBFS and louder), for each stretch
+//              of the recording (the Assistant's bird follows it); 0 when
+//              not listening
 //   inputFiles WAV files played as the microphone instead of the real one
 //              (phoenix-sim --microphone-file), one per recording in turn
 //              (the last one again after that), each followed by quiet; for
@@ -55,6 +59,7 @@ class Dictation : public QObject
     Q_PROPERTY(bool autoStop READ autoStop WRITE setAutoStop NOTIFY autoStopChanged)
     Q_PROPERTY(QStringList inputFiles READ inputFiles WRITE setInputFiles NOTIFY inputFilesChanged)
     Q_PROPERTY(QString owner READ owner WRITE setOwner NOTIFY ownerChanged)
+    Q_PROPERTY(qreal loudness READ loudness NOTIFY loudnessChanged)
 
 public:
     explicit Dictation(QObject *parent = nullptr);
@@ -75,6 +80,7 @@ public:
     void setInputFiles(const QStringList &f);
     QString owner() const { return m_owner; }
     void setOwner(const QString &o) { if (o != m_owner) { m_owner = o; emit ownerChanged(); } }
+    qreal loudness() const { return m_loudness; }
 
     Q_INVOKABLE void start();
     Q_INVOKABLE void stop();
@@ -92,6 +98,9 @@ public:
     static QByteArray toWhisperPcm(const QByteArray &in, int channels, int rate, bool isFloat);
     // The loudness of a stretch of samples: RMS, 0..1.
     static double level(const QByteArray &in, int channels, bool isFloat);
+    // A level (RMS) as loudness: -50 dBFS and under 0, -10 dBFS and over 1,
+    // even steps of decibels between.
+    static double loudnessOf(double level);
     // The transcriber's command line for a file: %f the file, %l the
     // language, %p the prompt; in an argument that is JSON (luna-send's
     // payload) the values are JSON-escaped.
@@ -121,12 +130,14 @@ signals:
     void autoStopChanged();
     void inputFilesChanged();
     void ownerChanged();
+    void loudnessChanged();
     void transcribed(const QString &text, const QString &error);
 
 private:
     void finishRecording(bool transcribe);
     void runTranscriber(const QString &file, bool removeAfter);
     void recorded(const QByteArray &chunk);
+    void setLoudness(qreal l);
 
     QStringList m_command;
     QString m_language;
@@ -135,6 +146,7 @@ private:
     QStringList m_inputFiles;
     int m_nextInput = 0;
     QString m_owner;
+    qreal m_loudness = 0;
     EndOfSpeech m_end;
     QTimer *m_fileTimer = nullptr;   // inputFiles: plays one as the microphone
     Wav m_fileWav;

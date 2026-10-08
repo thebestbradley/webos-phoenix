@@ -18,6 +18,14 @@
 > `server/marketplace`) are done in the simulator; see
 > [APP-RUNTIME.md](APP-RUNTIME.md#marketplace). Still to do: the server
 > online, A1 and A4 on a device, the Android catalog.
+>
+> **Curated web apps (8 October 2026):** 126 sites in 23 categories
+> (`server/marketplace/catalog/curated-sites.json`; `bin/probe-pwas.py`
+> checks each manifest live and leaves out the ones it cannot find, with the
+> reason, in `curated-pwas.json`): social networks and messaging, Google's and
+> Microsoft's apps, Proton's, task and note apps, streaming video and music,
+> news, maps, shopping, finance, learning, developer tools, games, weather,
+> sports and fitness. Sites without a usable manifest are not listed.
 
 How people will find, install and update apps on Phoenix: installable web
 apps (PWAs) as first-class cards, the original webOS `.ipk` apps from the
