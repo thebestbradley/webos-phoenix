@@ -99,3 +99,24 @@
 }
 .as-kind b { display: block; font-size: 16px; }
 .as-kind span { display: block; font-size: 13px; color: #555; margin-top: 2px; }
+
+/* A text-messaging chat (chat.tsx): the bird as the assistant's avatar
+ * beside its words (as Messaging shows a contact's picture), quick replies
+ * under a follow-up question, the unread count in Conversations, the bird
+ * in the header. */
+.as-line { display: flex; align-items: flex-end; gap: 6px; max-width: 100%; }
+.as-row.out .as-line { justify-content: flex-end; }
+.as-row.with-avatar .as-bubble { max-width: calc(80% - 36px); }
+.as-avatar { flex: none; width: 30px; height: 33px; margin-bottom: 1px; }
+.as-avatar .ab-bird { display: block; }
+.as-row.with-avatar .as-via, .as-replies { margin-left: 42px; }
+.as-replies { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.as-reply { cursor: pointer; }
+.as-reply.skip { color: #555; border-color: #b4b4b2; background: linear-gradient(#fff, #efefed); }
+.as-reply:disabled { opacity: 0.5; }
+.as-unread {
+    display: inline-block; min-width: 20px; height: 20px; line-height: 20px; padding: 0 6px; margin-right: 8px; border-radius: 10px;
+    background: #2f6fb0; color: #fff; font-size: 13px; font-weight: bold; text-align: center;
+}
+.as-header-bird { position: absolute; left: 10px; top: 50%; transform: translateY(-55%); width: 30px; height: 33px; pointer-events: none; }
+.as-header .pui-header-title { padding-left: 34px; }

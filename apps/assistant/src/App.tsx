@@ -22,13 +22,20 @@
 // then works and cheers (done) when a command ran, shrugs at "I can't do
 // that", or says oops when something failed, as in the shell's view.
 //
+// A text-messaging chat (chat.tsx): a small bird is the assistant's avatar
+// beside its words and in the header, asking while a follow-up question
+// waits; a follow-up's answers are quick-reply chips; Conversations shows
+// how many follow-ups wait unread in each.
+//
 // Launch params: {text} asks it (Just Type's "Ask Assistant"); {threadId}
 // opens that conversation, and with {retry: true} asks again the question
-// that waited for a model (Settings' "Back to Your Question"); {timerDone: {id, label, seconds}} is a timer
+// that waited for a model (Settings' "Back to Your Question"); {followUp:
+// id} is a follow-up's notification tapped: the conversation it waits in
+// (followUpOpen); {timerDone: {id, label, seconds}} is a timer
 // the assistant set going off (its activity's callback): a notification,
 // the alarm sound and, when speech is on, the words.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
     apps, assistant, audio, dictation, postNotification, tts, ASSISTANT_APP_ID,
     type AssistantMessage, type AssistantSettings, type AssistantThread, type ConnectMode, type Listening, type LunaError,
@@ -39,6 +46,7 @@ import { Bird, useBirdMotion } from "./bird/Bird";
 import type { BirdPose } from "./bird/birdData";
 import { beatsFor, birdPose, outcomeOf, type Beat } from "./bird/pose";
 import { EXAMPLES, examplesFrom } from "./examples";
+import { Avatar, QuickReplies, restingPose, Unread, waitingFollowUp, withoutFollowUps } from "./chat";
 
 const errorText = (e: unknown) => (e as LunaError).errorText ?? (e instanceof Error ? e.message : String(e));
 
@@ -46,6 +54,8 @@ interface Launch {
     text?: string;
     threadId?: string;
     retry?: boolean;
+    /** A follow-up question's notification tapped: the conversation it waits in. */
+    followUp?: string;
     timerDone?: { id?: string; label?: string; seconds?: number };
 }
 
@@ -61,10 +71,12 @@ const VIA: Record<string, string> = { commands: "On the phone", "on-device": "On
 
 // ---- One message ---------------------------------------------------------------------------
 
-function Bubble({ m, busy, onChoose, onConfirm, onSuggest }: {
+function Bubble({ m, busy, onChoose, onConfirm, onSuggest, avatar }: {
     m: AssistantMessage; busy: boolean;
     onChoose: (m: AssistantMessage, id: string) => void; onConfirm: (m: AssistantMessage, yes: boolean) => void;
     onSuggest: (words: string) => void;
+    /** The bird beside the assistant's words (chat.tsx). */
+    avatar?: ReactNode;
 }) {
     const mine = m.role === "user";
     const asking = m.status === "pending" && !!m.confirm;
@@ -73,14 +85,18 @@ function Bubble({ m, busy, onChoose, onConfirm, onSuggest }: {
     const suggest = choices.length && Array.isArray(m.data?.suggest) ? (m.data!.suggest as string[]) : [];
     const yes = m.command === "text" ? "Send" : m.command === "call" ? "Call" : "Yes";
     return (
-        <div className={cx("as-row", mine ? "out" : "in")} data-testid={`as-msg-${m.id}`}>
-            <div className={cx("as-bubble", mine ? "out" : "in", m.status === "failed" && "failed", m.status === "cancelled" && "cancelled")}>
-                {m.text}
+        <div className={cx("as-row", mine ? "out" : "in", !!avatar && "with-avatar")} data-testid={`as-msg-${m.id}`}>
+            <div className="as-line">
+                {avatar}
+                <div className={cx("as-bubble", mine ? "out" : "in", m.status === "failed" && "failed", m.status === "cancelled" && "cancelled")}>
+                    {m.text}
+                </div>
             </div>
+            {m.followUp && choices.length > 0 && <QuickReplies m={m} busy={busy} onChoose={onChoose} />}
             {!mine && (m.source || m.via) && (
                 <div className="as-via">{m.source || VIA[m.via ?? ""] || ""}</div>
             )}
-            {(asking || choices.length > 0) && (
+            {(asking || (choices.length > 0 && !m.followUp)) && (
                 <div className="as-actions">
                     {choices.map((c) => (
                         <Button key={c.id} variant={c.id.startsWith("cloud:") ? "affirmative" : undefined} disabled={busy}
@@ -166,7 +182,11 @@ function Examples({ onPick, speed }: { onPick: (words: string) => void; speed: n
 
 // ---- The conversation in use -------------------------------------------------------------------
 
-function Conversation({ threadId, onThread, retry }: { threadId: string; onThread: (id: string) => void; retry: object | null }) {
+function Conversation({ threadId, onThread, retry, onPose }: {
+    threadId: string; onThread: (id: string) => void; retry: object | null;
+    /** The bird's pose as the conversation goes, for the header's. */
+    onPose?: (pose: BirdPose) => void;
+}) {
     const [thread, setThread] = useState<AssistantThread | null>(null);
     const [messages, setMessages] = useState<AssistantMessage[]>([]);
     const [text, setText] = useState("");
@@ -205,7 +225,7 @@ function Conversation({ threadId, onThread, retry }: { threadId: string; onThrea
         play([]);
         p.then((r) => {
             if (r.thread && r.thread.id !== threadId) onThread(r.thread.id);
-            play(beatsFor(outcomeOf(r.messages)));
+            play(beatsFor(outcomeOf(withoutFollowUps(r.messages))));
         }, (e) => { setError(errorText(e)); play(beatsFor("failed")); })
             .finally(() => setBusy(false));
     }, [threadId, onThread, play]);
@@ -234,6 +254,13 @@ function Conversation({ threadId, onThread, retry }: { threadId: string; onThrea
         setConnecting(null);
         if (m) assistant.connect({ threadId: m.threadId, messageId: m.id, mode }).catch((e) => setError(errorText(e)));
     };
+
+    // Read: follow-ups that arrived here count unread no more.
+    useEffect(() => { if (thread?.unread) void assistant.markRead(thread.id).catch(() => undefined); }, [thread]);
+    const waiting = waitingFollowUp(messages);
+    const pose = restingPose(birdPose({ loading: !loaded, busy, beat, greeting: false }), !!waiting);
+    useEffect(() => { onPose?.(pose); }, [pose, onPose]);
+    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
 
     const ask = useCallback((words: string) => {
         const t = words.trim();
@@ -267,7 +294,9 @@ function Conversation({ threadId, onThread, retry }: { threadId: string; onThrea
                 )}
                 {messages.map((m) => (
                     <Bubble key={m.id} m={m} busy={busy} onChoose={choose} onSuggest={suggest}
-                            onConfirm={(msg, yes) => run(assistant.confirm(msg.threadId, msg.id, yes))} />
+                            onConfirm={(msg, yes) => run(assistant.confirm(msg.threadId, msg.id, yes))}
+                            avatar={m.role === "assistant" ? <Avatar pose={pose} live={m === lastAssistant && !busy && !beat}
+                                                                     speed={motion.speed} still={motion.still} /> : undefined} />
                 ))}
                 {(busy || beat) && (
                     <div className="as-work" data-testid="as-work">
@@ -281,7 +310,7 @@ function Conversation({ threadId, onThread, retry }: { threadId: string; onThrea
             </div>
             <form className="as-compose" onSubmit={(e) => { e.preventDefault(); ask(text); }}>
                 <input ref={input} className="as-input" data-testid="as-input" value={text} disabled={busy}
-                       placeholder={listening === "listening" ? "Listening…" : listening === "transcribing" ? "Transcribing…" : "Ask anything"}
+                       placeholder={listening === "listening" ? "Listening…" : listening === "transcribing" ? "Transcribing…" : waiting ? "Reply" : "Ask anything"}
                        onChange={(e) => setText(e.target.value)} enterKeyHint="send" />
                 {canListen && (
                     <button type="button" className={cx("as-mic", listening && "on")} aria-label="Speak" data-testid="as-mic" onClick={listen}>
@@ -318,6 +347,7 @@ function Conversations({ onOpen, onNew }: { onOpen: (id: string) => void; onNew:
             {threads?.map((t) => (
                 <Row key={t.id} testId={`as-thread-${t.id}`} title={<span className={cx(t.id === current && "as-current")}>{t.title || "New conversation"}</span>}
                      subtitle={`${when(t.updated)} · ${t.last}`} onClick={() => onOpen(t.id)}>
+                    <Unread n={t.unread} />
                     <button type="button" className="as-delete" data-testid={`as-delete-${t.id}`} aria-label="Delete"
                             onClick={(e) => { e.stopPropagation(); setDeleting(t); }}>Delete</button>
                 </Row>
@@ -359,6 +389,8 @@ function Main() {
     const [threadId, setThreadId] = useState("");
     const [asked, setAsked] = useState<Launch | null>(null);
     const [retry, setRetry] = useState<Launch | null>(null);
+    const [pose, setPose] = useState<BirdPose>("idle");
+    const motion = useBirdMotion();
 
     useTimerDone(launch, settings ?? null);
     useBack(() => { setView("thread"); return true; }, view === "list");
@@ -375,6 +407,10 @@ function Main() {
             if (launch.retry) setRetry(launch);
         }
         if (launch.text) void assistant.ask(launch.text, launch.threadId ? { threadId: launch.threadId } : {}).catch(() => undefined);
+        // A follow-up's notification: its conversation, where the question waits.
+        if (launch.followUp) {
+            void assistant.openFollowUp(launch.followUp).then((r) => { setThreadId(r.thread.id); setView("thread"); }, () => undefined);
+        }
     }, [launch, asked]);
 
     const open = (id: string) => {
@@ -395,7 +431,8 @@ function Main() {
             {view === "list" ? <Conversations onOpen={open} onNew={fresh} /> : (
                 <>
                     <div className="as-header">
-                        <PageHeader title="Assistant" icon="icon.png" />
+                        <PageHeader title="Assistant" />
+                        <div className="as-header-bird"><Bird pose={pose} size={30} testId="as-header-bird" speed={motion.speed} still={motion.still} /></div>
                         <button type="button" className="as-header-button" data-testid="as-conversations" onClick={() => setView("list")}>Conversations</button>
                     </div>
                     {settings && !settings.enabled ? (
@@ -403,7 +440,7 @@ function Main() {
                             <p>The assistant is turned off.</p>
                             <Button onClick={prefs}>Settings</Button>
                         </div>
-                    ) : <Conversation key={threadId} threadId={threadId} onThread={setThreadId} retry={retry} />}
+                    ) : <Conversation key={threadId} threadId={threadId} onThread={setThreadId} retry={retry} onPose={setPose} />}
                 </>
             )}
         </div>

@@ -205,6 +205,10 @@ Item {
             else
                 ov.forceActiveFocus();
         } else {
+            // A follow-up question left unanswered waits for later (a
+            // notification, lib/followups.js).
+            if (threadId !== "")
+                _call("followUpLeave", { threadId: threadId });
             _wake = "";
             wakeTimer.stop();
             // It leaves: a leap, and it bursts into embers.
@@ -358,8 +362,10 @@ Item {
     // ("I can't do that" with Ask/Search), "cancelled", or "answer".
     function outcomeOf(list) {
         var last = null;
+        // A follow-up question after a command is not the outcome: done
+        // plays, then the bird asks.
         for (var i = (list || []).length - 1; i >= 0 && !last; --i)
-            if (list[i] && list[i].role === "assistant")
+            if (list[i] && list[i].role === "assistant" && !(list[i].followUp && list[i].status !== "failed"))
                 last = list[i];
         if (!last)
             return "answer";
@@ -428,11 +434,13 @@ Item {
         }
     }
     readonly property bool speaking: !!speech && !!speech.speaking
-    // A read-back waiting for its answer.
+    // A read-back waiting for its answer, or a follow-up question (the
+    // service's lib/followups.js: "Where is it?" with its answers): the bird
+    // asks, and a spoken turn listens for the answer.
     readonly property bool asking: {
         for (var i = messages.length - 1; i >= 0; --i)
             if (messages[i].role === "assistant")
-                return messages[i].status === "pending" && !!messages[i].confirm;
+                return (messages[i].status === "pending" && !!messages[i].confirm) || (!!messages[i].followUp && !messages[i].chosen);
         return false;
     }
     // (What goes on comes before the opening's wave: a request asked
