@@ -182,9 +182,11 @@ Item {
         connecting = null;
         if (open) {
             exampleIndex = Math.floor(Math.random() * examples.length);
-            // The bird rises asleep with the panel, then wakes and waves.
-            _wake = "asleep";
-            wakeTimer.interval = Theme.launcherDuration + _beatMs(80);
+            // The bird enters as the panel grows (born of a swirl of
+            // embers, it drops in and lands), then waves.
+            _wake = "enter";
+            _taps = 0;
+            wakeTimer.interval = Math.max(1, bird.enter(Math.round(Theme.launcherDuration * 0.6)));
             wakeTimer.restart();
             ++_session;
             _fetchVocabulary();
@@ -205,6 +207,8 @@ Item {
         } else {
             _wake = "";
             wakeTimer.stop();
+            // It leaves: a leap, and it bursts into embers.
+            bird.leave();
             followTimer.stop();
             ++_session;
             busy = false;
@@ -408,12 +412,13 @@ Item {
         beatTimer.restart();
     }
     Timer { id: beatTimer; onTriggered: ov._nextBeat() }
-    // Opening: asleep while the panel grows, then a wave.
+    // Opening: its entrance while the panel grows, then a wave.
     property string _wake: ""
     Timer {
         id: wakeTimer
         onTriggered: {
-            if (ov._wake === "asleep") {
+            // The wave, unless something has gone on meanwhile.
+            if (ov._wake === "enter" && ov.messages.length === 0 && !ov.busy && !ov.listening) {
                 ov._wake = "hello";
                 interval = ov._beatMs(650);
                 restart();
@@ -430,14 +435,71 @@ Item {
                 return messages[i].status === "pending" && !!messages[i].confirm;
         return false;
     }
+    // (What goes on comes before the opening's wave: a request asked
+    // while it enters plays over the entrance.)
     readonly property string birdPose: !open ? "asleep"
-        : _wake !== "" ? _wake
         : listening ? (dictation && dictation.busy ? "thinking" : "listening")
         : busy ? "thinking"
         : beat !== "" ? beat
+        : _wake === "hello" ? "hello"
         : speaking ? "speaking"
         : asking ? "asking"
         : "idle"
+
+    // ---- The bird's reactions (docs/ASSISTANT-CHARACTER.md, Reactions) ----------------
+    // While words are typed it watches them (its eyes on the caret) and
+    // pecks as each comes; a deletion makes it wince; a pause, ponder; a
+    // request sent, cheer; a tap waves (the first) or giggles or spins; the
+    // keyboard moving it, a scoot; a scroll, a glance along.
+    readonly property var _reactions: bird.art.motion.reactions
+    readonly property bool _typing: input.activeFocus && input.text !== ""
+    property int _typedLength: 0
+    // Clearing the field as a request is sent is no deletion.
+    property bool _sending: false
+    function _typed() {
+        var n = input.text.length, was = _typedLength;
+        _typedLength = n;
+        if (!open || _sending || !input.activeFocus || birdPose !== "idle" || n === was)
+            return;
+        bird.react(n > was ? _reactions.type : _reactions.erase);
+        pauseTimer.restart();
+    }
+    // A pause after typing: a curious tilt.
+    Timer {
+        id: pauseTimer
+        interval: ov._reactions.pauseAfter
+        onTriggered: if (ov._typing && ov.birdPose === "idle") bird.react(ov._reactions.pause)
+    }
+    // Its gaze: at the caret while words are typed, along a scroll; else ahead.
+    property real _glance: 0
+    readonly property point _gaze: {
+        if (_glance !== 0)
+            return Qt.point(0, _glance);
+        if (!_typing)
+            return Qt.point(0, 0);
+        var c = input.cursorRectangle;
+        var p = input.mapToItem(bird, c.x + c.width / 2, c.y + c.height / 2);
+        return Qt.point(Math.max(-1, Math.min(1, (p.x - bird.width / 2) / (bird.width * 1.5))),
+                        Math.max(-1, Math.min(1, (p.y - bird.height * 0.4) / (bird.height * 1.2))));
+    }
+    // A tap: the wave first, then the wave or a reaction at random (never
+    // the same twice running).
+    property int _taps: 0
+    property string _lastTap: ""
+    function tapBird() {
+        if (birdPose !== "idle" || bird.move !== "")
+            return;
+        var all = ["wave"].concat(_reactions.tap);
+        var pick = _taps === 0 ? "wave" : all.filter(function (n) { return n !== ov._lastTap; })[Math.floor(Math.random() * (all.length - 1))];
+        ++_taps;
+        _lastTap = pick;
+        if (pick === "wave")
+            _play([{ pose: "hello", ms: 900 }]);
+        else
+            bird.react(pick);
+    }
+    // The keyboard moving it beside the field and back: a scoot.
+    onBirdBesideChanged: if (_birdMoves) bird.react(_reactions.move)
 
     // ---- Voice --------------------------------------------------------------------------
     // The wake word was heard: listening at once (the words after "Hey
@@ -771,8 +833,11 @@ Item {
             Behavior on y { enabled: ov._birdMoves; NumberAnimation { duration: Theme.motion(250); easing.type: Easing.InOutQuad } }
             MouseArea {
                 anchors.fill: parent
-                onClicked: if (ov.birdPose === "idle") ov._play([{ pose: "hello", ms: 900 }])
+                onClicked: ov.tapBird()
             }
+            gazeX: ov._gaze.x
+            gazeY: ov._gaze.y
+            fidgety: !ov._typing
         }
 
         // The conversation's top edge: clear to opaque over 28 px.
@@ -814,6 +879,15 @@ Item {
             model: ov.messages.concat(ov.busy ? [{ id: "thinking", role: "assistant", text: "", thinking: true }] : []).reverse()
             boundsBehavior: Flickable.StopAtBounds
             interactive: contentHeight + topMargin > height
+            // The bird glances along a scroll, the way the words go.
+            property real _from: 0
+            onMovementStarted: { _from = contentY; glanceTimer.restart(); }
+            onMovementEnded: { glanceTimer.stop(); ov._glance = 0; }
+            Timer {
+                id: glanceTimer
+                interval: 120
+                onTriggered: if (list.contentY !== list._from) ov._glance = list.contentY > list._from ? -1 : 1
+            }
             delegate: Item {
                 id: row
                 required property var modelData
@@ -1123,9 +1197,14 @@ Item {
                     // Typed: answered as typed requests are, and it stays open.
                     ov.voice = false;
                     ov.handsFree = false;
+                    ov._sending = true;
                     var t = text;
+                    ov._sending = false;
                     text = "";
+                    if (ov.busy)
+                        bird.react(ov._reactions.send);
                     ov.ask(t);
+                onTextChanged: ov._typed()
                 }
                 Text {
                     anchors.fill: parent
