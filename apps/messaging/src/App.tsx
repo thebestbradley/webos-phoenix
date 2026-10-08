@@ -17,8 +17,8 @@
 // picture attached; {attachment} (a path: Photos' Share) attaches that
 // picture.
 
-import { useEffect, useState } from "react";
-import { messaging, type MessagePart } from "@phoenix/luna";
+import { useEffect, useMemo, useState } from "react";
+import { messageTarget, messaging, type MessagePart } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import { AppMenu, BackProvider, RadioToolGroup, ToolBar, ToolButton, useBack } from "@phoenix/ui";
 import { useBuddies, useImAccounts, usePeople, useThreads, useWide } from "./lib/hooks";
@@ -37,8 +37,14 @@ const pictureType = (path: string, mime?: string) =>
     mime || (/\.png$/i.test(path) ? "image/png" : /\.gif$/i.test(path) ? "image/gif" : /\.webp$/i.test(path) ? "image/webp" : "image/jpeg");
 
 function Messaging() {
-    const params = useLaunchParams<{ threadId?: string; to?: string; name?: string; messageText?: string; attachment?: string;
+    // {target: "sms:..." | "im:..."}: a link (the application manager's,
+    // @phoenix/luna links.ts), a new message to its recipient with its text.
+    const launch = useLaunchParams<{ threadId?: string; to?: string; name?: string; messageText?: string; attachment?: string; target?: string;
                                      share?: { title?: string; text?: string; url?: string; files?: { path: string; mimeType?: string }[] } }>();
+    const params = useMemo(() => {
+        const m = messageTarget(launch.target);
+        return m ? { ...launch, ...m } : launch;
+    }, [launch]);
     const people = usePeople();
     const threads = useThreads();
     const buddies = useBuddies();

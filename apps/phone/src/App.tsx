@@ -14,7 +14,7 @@
 // (views/Emergency).
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { apps, primaryCall, ringingCall, telephony, type Call } from "@phoenix/luna";
+import { apps, primaryCall, ringingCall, telephony, telTarget, type Call } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import { AppMenu, BackProvider, RadioToolGroup, ToolBar, dialable, useBack } from "@phoenix/ui";
 import { callLog, otherParty, type PhoneCall } from "./lib/calllog";
@@ -60,8 +60,13 @@ function Phone() {
     const voicemail = useVoicemail();
     const wide = useWide();
     // {number}: on the dial pad; {number, dial: true}: called at once
-    // (Voice Dial, after you said yes).
-    const params = useLaunchParams<{ number?: string; dial?: boolean }>();
+    // (Voice Dial, after you said yes); {target: "tel:..."}: a tel: link
+    // (the application manager's, @phoenix/luna links.ts), on the dial pad.
+    const launch = useLaunchParams<{ number?: string; dial?: boolean; target?: string }>();
+    const params = useMemo(() => {
+        const n = launch.number ?? telTarget(launch.target);
+        return n ? { ...launch, number: n } : launch;
+    }, [launch]);
     const dialedFor = useRef<object | null>(null);
     const [tab, setTab] = useState<Tab>("dial");
     const [number, setNumber] = useState(params.number ? dialable(params.number) : "");

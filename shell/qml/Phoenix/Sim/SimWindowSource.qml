@@ -141,6 +141,7 @@ import QtQuick
 import Phoenix.Native
 import Phoenix.Shell
 import "../Shell/NotificationPolicy.js" as Policy
+import "Links.js" as Links
 
 Item {
     id: source
@@ -231,7 +232,10 @@ Item {
                  // Several windows at once (the icon menu's New Window).
                  multipleInstances: !!a.multipleInstances || multipleInstanceApps.indexOf(a.id) >= 0,
                  // The app's files, in bytes (App Info).
-                 size: a.size || 0 });
+                 size: a.size || 0,
+                 // A site's part of the web (an installed web app's manifest
+                 // scope): its links out of it go elsewhere (Links.js).
+                 scope: a.scope || "" });
     }
 
     // The launcher's fields every entry has (Shell._launcherEntries,
@@ -243,7 +247,7 @@ Item {
         return { page: "", dynamic: false, category: "", keywords: "", installed: false,
                  installState: "", progress: -1, pending: false, installReason: "",
                  exhibition: false, exhibitionTitle: "", tapToShare: false,
-                 multipleInstances: false, size: 0 };
+                 multipleInstances: false, size: 0, scope: "" };
     }
 
     // Apps that run in several windows at once whose appinfo.json cannot
@@ -568,7 +572,8 @@ Item {
     function _webWindow(appId, url, uid, system) {
         if (!_webComponent)
             _webComponent = Qt.createComponent("WebAppWindow.qml");
-        var win = _webComponent.createObject(source, { appId: appId, url: url });
+        var info = appInfo(appId);
+        var win = _webComponent.createObject(source, { appId: appId, url: url, scope: (info && info.scope) || "" });
         if (!win) {
             console.warn("phoenix-sim: cannot create web window:", _webComponent.errorString());
             return mockApp.createObject(source, { appId: appId, title: appId });
@@ -584,6 +589,8 @@ Item {
         if (win.gone)
             win.gone.connect(function() { source._pageGone(pageKey); });
         win.windowRequested.connect(function(request) { source._openWindow(appId, request); });
+        if (win.linkRequested)
+            win.linkRequested.connect(function(url) { source.openLink(appId, uid, url); });
         if (system)
             win.closeRequested.connect(function() { source.closeSystemWindow(uid); });
         else if (uid !== "")
@@ -612,6 +619,28 @@ Item {
         cardFocusRequested(uid);
     }
 
+    // A link the window does not show itself (WebAppWindow linkRequested):
+    // the application manager opens it, open {target} (WebAppMgr's
+    // mimeHandoffUrl, WebAppManager.cpp:1747-1773), in the window's own page
+    // when it has the runtime, else in the system UI's (a site's link); the
+    // app it launches joins the card's stack ($from).
+    function openLink(appId, uid, url) {
+        var win = _windows[uid] || null;
+        var page = win && win.runScript && !win.site ? win : (_headless["com.palm.systemui"] || _webPages()[0] || null);
+        if (!page) {
+            // Nothing runs the application manager (tests): web pages go
+            // to the browser.
+            if (/^https?:/i.test(url))
+                _hostMessage(appId, uid, "launch", { id: "com.palm.app.browser", params: { target: url } });
+            else
+                _hostMessage(appId, uid, "open", { target: url });
+            return;
+        }
+        page.runScript("window.__phoenixRuntime && __phoenixRuntime.dispatch('luna://com.palm.applicationManager/open', "
+                       + JSON.stringify({ target: url, $from: uid }) + ", function () {},"
+                       + " { cancelled: function () { return false; }, onCancel: null })");
+    }
+
     function _soundArgs(payload) {
         return [payload.soundClass ? String(payload.soundClass) : "", payload.soundFile ? String(payload.soundFile) : "",
                 payload.duration | 0];
@@ -620,6 +649,18 @@ Item {
     function _hostMessage(appId, uid, type, payload) {
         if (appId === justTypeAppId && (type === "launch" || type === "open"))
             Qt.callLater(source.justTypeDismissed);
+        // A link opened for a card from another page (openLink): as if
+        // that card's page had asked.
+        if ((type === "launch" || type === "open") && uid === "" && payload && typeof payload.from === "string" && _windows[payload.from]) {
+            uid = payload.from;
+            appId = cards.get(cardIndex(uid)) ? cards.get(cardIndex(uid)).appId : appId;
+        }
+        if (type === "open") {
+            // No app opens it (the application manager answered "No
+            // handler for ..."): the user hears so, rather than nothing.
+            bannerRequested(appId, qsTr("No app can open this link"), _iconUrl("", appId), "", "", "", 0, "");
+            return;
+        }
         if (type === "launch" && payload.id) {
             // A launch point whose params match wins (e.g. {id: settings,
             // params: {page: "wifi"}} opens the Wi-Fi card).
@@ -1774,6 +1815,13 @@ Item {
             return "";
         if (!params || Object.keys(params).length === 0)
             return info.main;
+        // A site (an installed web app) has no runtime to read launch params:
+        // launched for a page of its own ({target}, a link to it) it opens
+        // that page, else its start page.
+        if (/^https?:/i.test(String(info.main))) {
+            var t = typeof params.target === "string" ? params.target : "";
+            return t !== "" && Links.inScope(t, Links.scopeOf(info.main, info.scope || "")) ? t : info.main;
+        }
         return String(info.main).split("?")[0] + "?launchParams=" + encodeURIComponent(JSON.stringify(params));
     }
 

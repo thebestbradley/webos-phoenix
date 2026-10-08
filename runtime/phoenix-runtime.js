@@ -1498,6 +1498,20 @@
     function resourceHandler(target) {
         return runtime.redirectHandlerFor(target);
     }
+    // An installed web app's scope as its redirect pattern: http or https,
+    // the site with or without "www." or "m.", and the scope's path (the
+    // shell's Links.scopePattern, shell/qml/Phoenix/Sim/Links.js, keeps the
+    // site's own links in its card by the same pattern).
+    function sitePattern(scope) {
+        var esc = function (x) { return x.replace(/[.*+?^${}()|[\]\\\/]/g, "\\$&"); };
+        var m = /^https?:\/\/(?:www\.|m\.)?([^\/?#]+)(.*)$/i.exec(String(scope || ""));
+        if (!m) return "";
+        var path = m[2] || "/";
+        if (path.charAt(0) !== "/") path = "/" + path;
+        var tail = path.charAt(path.length - 1) === "/" ? esc(path.slice(0, -1)) + "(?:[/?#]|$)" : esc(path);
+        return "^https?://(?:www\\.|m\\.)?" + esc(m[1]) + "(?::\\d+)?" + tail;
+    }
+    runtime.sitePattern = sitePattern;
 
     // The handler registry apps add to (addResourceHandler,
     // addRedirectHandler), and the handlers made active
@@ -1607,14 +1621,20 @@
         },
         // As on webOS: {id, params} launches the app; {target} goes to the
         // app that handles it (command-resource-handlers.json: mailto: to
-        // Email...), web pages to the browser. Other targets go to the shell.
+        // Email...), web pages to the browser or the web app whose site it
+        // is. A target nothing handles fails, "No handler for <target>"
+        // (ApplicationManagerService.cpp:1438-1446), and the shell says so.
+        // $from (the shell's, for a link in a card that has no runtime of
+        // its own): the card the app is opened from.
         "/open": function (p, reply) {
             var handler = appId(p.id) || (p.target && resourceHandler(p.target));
-            if (handler)
-                host.postToHost("launch", { id: handler, params: p.id ? aliasParams(p.id, p.params) : { target: p.target } });
-            else
-                host.postToHost("open", { target: p.target, params: p.params || {} });
-            reply(ok({ processId: String(Date.now()) }));
+            var from = typeof p.$from === "string" ? { from: p.$from } : {};
+            if (handler) {
+                host.postToHost("launch", Object.assign({ id: handler, params: p.id ? aliasParams(p.id, p.params) : { target: p.target } }, from));
+                return reply(ok({ processId: String(Date.now()) }));
+            }
+            host.postToHost("open", Object.assign({ target: p.target, params: p.params || {} }, from));
+            reply({ returnValue: false, errorCode: -1, errorText: "No handler for " + (p.target || p.id || "") });
         },
         "/listApps": function (p, reply) {
             reply(ok({ apps: launchPoints().filter(function (lp) { return /_default$/.test(lp.launchPointId); }) }));
@@ -1796,19 +1816,36 @@
 
         // ---- Redirect handlers: apps for web addresses and schemes -----------------------
         // From /usr/palm/command-resource-handlers.json and http(s) to the
-        // browser (tag "system-default"), and those apps add
+        // browser (tag "system-default"), the installed web apps' sites
+        // (their manifest's scope, "siteScope" in the app list; tag "user"
+        // like those apps add, and gone with the app), and those apps add
         // (addRedirectHandler; tag "user"), kept in the shared store as
         // MimeSystem saved its table. The first for a pattern is active
         // until swapRedirectHandler picks another; each has an index.
+        // A scheme form is a whole scheme ("^mailto:", "^https?:"); the
+        // others are web addresses ("^https?://maps\.google\.").
+        function schemeForm(pattern) { return /^\^[a-z][a-z0-9+.-]*\??:$/i.test(pattern); }
         function urlHandlers() {
             var reg = runtime.handlerRegistry(), out = [], i = 0;
             redirectList().forEach(function (h) {
-                out.push({ url: h.url, appId: h.appId, index: ++i, tag: "system-default", schemeForm: /^\^[a-z][a-z0-9+.-]*[:?]/i.test(h.url) });
+                out.push({ url: h.url, appId: h.appId, index: ++i, tag: "system-default", schemeForm: h.schemeForm !== undefined ? !!h.schemeForm : schemeForm(h.url) });
             });
             out.push({ url: "^https?:", appId: "com.palm.app.browser", index: ++i, tag: "system-default", schemeForm: true });
+            launchPoints().filter(function (lp) { return lp.siteScope && /_default$/.test(lp.launchPointId); })
+                .sort(function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; })
+                .forEach(function (lp, k) {
+                    var pattern = sitePattern(lp.siteScope);
+                    if (pattern) out.push({ url: pattern, appId: lp.id, index: 2000 + k, tag: "user", schemeForm: false });
+                });
             reg.redirects.forEach(function (h) { out.push(Object.assign({ tag: "user" }, h)); });
             return out;
         }
+        // The handlers whose pattern matches, a group per pattern: web
+        // addresses before whole schemes, as the original looked for a
+        // redirect handler first and a scheme ("command") handler last
+        // (ApplicationManagerService.cpp:1320 and :1428, MimeSystem.cpp:
+        // getActiveHandlerForRedirect with disallowSchemeForms), so a site's
+        // own app wins over the browser.
         function urlMatches(url) {
             var reg = runtime.handlerRegistry(), groups = {}, order = [];
             urlHandlers().forEach(function (h) {
@@ -1818,6 +1855,8 @@
                 if (!groups[h.url]) { groups[h.url] = []; order.push(h.url); }
                 groups[h.url].push(h);
             });
+            order = order.filter(function (u) { return !groups[u][0].schemeForm; })
+                .concat(order.filter(function (u) { return groups[u][0].schemeForm; }));
             return order.map(function (pattern) {
                 var list = groups[pattern], active = reg.activeRedirect[pattern];
                 var a = list.filter(function (h) { return h.index === active; })[0] || list[0];
@@ -2260,10 +2299,36 @@
             } else {
                 this.title = "";
             }
+            this.frameLinks(doc);
             this.frameReport();
             this.listener("loadProgressChanged", 100);
             this.listener("loadStopped");
             this.listener("documentLoadFinished");
+        },
+        // The redirects for the links of the iframe's page (same-origin
+        // pages only: the others' links cannot be seen from here).
+        redirectFor: function (url) {
+            var list = this.redirects || [];
+            for (var i = 0; i < list.length; i++) {
+                var re;
+                try { re = new RegExp(list[i].regex, "i"); } catch (e) { continue; }
+                if (re.test(url)) return list[i].enable ? list[i].cookie : null;
+            }
+            return null;
+        },
+        frameLinks: function (doc) {
+            var self = this;
+            if (!doc || !doc.addEventListener || doc.__phoenixRedirects) return;
+            doc.__phoenixRedirects = true;
+            doc.addEventListener("click", function (e) {
+                if (e.defaultPrevented || e.button !== 0) return;
+                var a = e.target && e.target.closest && e.target.closest("a[href]");
+                if (!a) return;
+                var cookie = self.redirectFor(a.href);
+                if (cookie === null) return;
+                e.preventDefault();
+                self.listener("urlRedirected", a.href, cookie);
+            }, false);
         },
         frameReport: function () {
             this.listener("urlTitleChanged", this.url, this.title || this.url, this.back.length > 0, this.forward.length > 0);
@@ -2348,7 +2413,28 @@
             setMinFontSize: function () {},
             setHeaderHeight: function () {},
             ignoreMetaTags: function () {},
-            addUrlRedirect: function () {},
+            // (regex, enable, cookie, type): links the page follows that
+            // match an enabled redirect are not loaded; the page hears
+            // urlRedirected(url, cookie) instead (BrowserAdapter.cpp
+            // js_addUrlRedirect :1945-1981, msgUrlRedirected :4760-4767).
+            // The browser's are the system's handlers (enyo WebView
+            // addSystemRedirects: mailto:, tel:...; it opens them with
+            // applicationManager open), Email's every link of a message
+            // but its own file: ones (MessageDisplay.js:906-909). In order;
+            // the first that matches decides, and adding a regex again
+            // changes it (Enyo turns the old ones off that way).
+            addUrlRedirect: function (regex, enable, cookie, type) {
+                regex = String(regex || "");
+                if (!regex) return;
+                try { new RegExp(regex); } catch (e) { throw new Error("addUrlRedirect: Can't compile RE '" + regex + "'"); }
+                var list = this.redirects = this.redirects || [];
+                var r = list.filter(function (x) { return x.regex === regex; })[0];
+                if (!r) list.push(r = { regex: regex });
+                r.enable = !!enable;
+                r.cookie = cookie === undefined || cookie === null ? "" : String(cookie);
+                r.type = type | 0;
+                if (nativeWebViews) this.post("redirects", { list: list });
+            },
             setNetworkInterface: function () {},
             setDNSServers: function () {},
             handleFlick: function () {},
@@ -2453,6 +2539,33 @@
             }
         };
     } : null;
+
+    // ---- Links in an app's page -----------------------------------------------------------
+    // A link the user follows in an app's page to another site or to
+    // another scheme (mailto:, tel:, sms:...) does not load in the app's
+    // card: the application manager opens it, open {target}, in the app
+    // for it (the browser, Email, Phone, the web app whose site it is), as
+    // WebAppMgr handed such a URL over (WebAppManager::mimeHandoffUrl,
+    // webappmanager Src/webbase/WebAppManager.cpp:1747-1773). target=_blank
+    // the same. Links to the app's own pages, and clicks the page handles
+    // itself (preventDefault), are the page's. phoenix-sim's window also
+    // catches what gets past this (WebAppWindow.qml, Links.js).
+    runtime.linkLeavesApp = function (href) {
+        href = String(href || "");
+        if (!href || /^(javascript|about|data|blob):/i.test(href)) return false;
+        if (!/^https?:/i.test(href)) return !/^(phoenix|file):/i.test(href);
+        try { return new URL(href).origin !== global.location.origin; } catch (e) { return false; }
+    };
+    try {
+        if (global.document && global.addEventListener) global.addEventListener("click", function (e) {
+            if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            var a = e.target && e.target.closest && e.target.closest("a[href]");
+            if (!a || a.hasAttribute("download") || !runtime.linkLeavesApp(a.href)) return;
+            e.preventDefault();
+            dispatch("luna://com.palm.applicationManager/open", { target: a.href }, function () {},
+                     { cancelled: function () { return false; }, onCancel: null });
+        }, false);
+    } catch (e) { /* ignore */ }
 
     // ---- Connectivity, power, accounts and friends -------------------------------------
 
@@ -8132,7 +8245,8 @@
             am["/open"] = function (p, reply, ctx) {
                 var app = !p.id && p.target && handlerForTarget(p.target);
                 if (app) {
-                    host.postToHost("launch", { id: app, params: { target: p.target } });
+                    host.postToHost("launch", Object.assign({ id: app, params: { target: p.target } },
+                                                            typeof p.$from === "string" ? { from: p.$from } : {}));
                     return reply(ok({ processId: String(Date.now()), appId: app }));
                 }
                 baseOpen(p, reply, ctx);

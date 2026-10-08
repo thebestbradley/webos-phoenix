@@ -410,6 +410,12 @@ def launch_points():
         }
         if a.get("dynamic"):
             rec["dynamic"] = True
+        main = info.get("main", "")
+        if "appId" not in a and re.match(r"^https?://", main):
+            # A site's part of the web, for the application manager's
+            # handler of it (as shell/sim/rootfs.cpp: "siteScope").
+            scope = ((info.get("phoenix") or {}).get("pwa") or {}).get("scope")
+            rec["siteScope"] = scope or re.match(r"^https?://[^/?#]+", main).group(0) + "/"
         if "appId" not in a:
             # LaunchPoint::toJSON: the vendor, the package and its size
             # (user-installed apps; 0 for the built-in ones).

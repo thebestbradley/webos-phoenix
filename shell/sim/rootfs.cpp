@@ -171,8 +171,8 @@ void Rootfs::rescan()
         const QString root = QString::fromLatin1(kAppsPrefix) + id + QLatin1Char('/');
         const QString mainFile = app.value(QStringLiteral("main")).toString(QStringLiteral("index.html"));
         // A hosted web app (an installed PWA) starts at its site's URL.
-        const QString main = mainFile.startsWith(QLatin1String("https://")) || mainFile.startsWith(QLatin1String("http://"))
-            ? mainFile : urlFor(root + mainFile);
+        const bool hosted = mainFile.startsWith(QLatin1String("https://")) || mainFile.startsWith(QLatin1String("http://"));
+        const QString main = hosted ? mainFile : urlFor(root + mainFile);
         // Phoenix launcher metadata (see docs/APP-RUNTIME.md): launcherTab
         // (0 Apps, 1 Downloads, 2 Settings), hidden, quickLaunch (slot
         // 1-4), launchPoints.
@@ -211,6 +211,19 @@ void Rootfs::rescan()
         // (luna-sysmgr ApplicationDescription.cpp:464-469).
         entry[QStringLiteral("requestedWindowOrientation")] = app.value(QStringLiteral("requestedWindowOrientation")).toString();
         entry[QStringLiteral("main")] = main;
+        // A site's part of the web: its web app manifest's scope (the
+        // marketplace's "phoenix": {"pwa": {"scope"}}), else its start
+        // page's origin. Links to it from other apps open it, and its own
+        // links out of it go to the browser (docs/APP-RUNTIME.md "Links").
+        QString scope;
+        if (hosted) {
+            scope = phoenix.value(QStringLiteral("pwa")).toObject().value(QStringLiteral("scope")).toString();
+            if (scope.isEmpty()) {
+                const QUrl start(main);
+                scope = start.scheme() + QStringLiteral("://") + start.authority() + QLatin1Char('/');
+            }
+        }
+        entry[QStringLiteral("scope")] = scope;
         entry[QStringLiteral("params")] = QString();
         // -1 keeps an app out of the launcher.
         entry[QStringLiteral("tab")] = system || phoenix.value(QStringLiteral("hidden")).toBool() ? -1 : tab;
@@ -300,6 +313,9 @@ void Rootfs::rescan()
         record[QStringLiteral("appSize")] = size;
         record[QStringLiteral("system")] = system;
         record[QStringLiteral("noWindow")] = app.value(QStringLiteral("noWindow")).toBool();
+        // The site's handler (the application manager's urlHandlers).
+        if (!scope.isEmpty())
+            record[QStringLiteral("siteScope")] = scope;
         if (dock.toBool()) {
             // For listDockModeLaunchPoints (ApplicationDescription::toJSON, :770-774).
             record[QStringLiteral("exhibitionMode")] = true;
