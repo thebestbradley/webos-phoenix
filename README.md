@@ -361,7 +361,10 @@ shutdown sounds (so do `--screenshot` and the offscreen platform).
 The boot animation shows at start-up, as on a device, until the system UI
 has loaded (not with `--screenshot` or `--no-boot-animation`;
 `--boot-animation` shows it anyway, e.g. for a screenshot). After a system
-update's Install Now it says "Updating the system" first.
+update's Install Now it says "Updating the system" first. It takes every
+touch while it shows, as on a device, so a script that drives the
+simulator (`xdotool`) waits for `phoenix-sim: booted` in its output, plus
+the logo's 700 ms fade, or passes `--no-boot-animation`.
 
 `--security-policy minLength=6,maxRetries=4,alphaNumeric,noSimple,inactivity=300`
 sets a device security policy, as an Exchange account did (any of the

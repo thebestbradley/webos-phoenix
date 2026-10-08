@@ -992,7 +992,15 @@ Item {
     readonly property bool _systemUiUp: !simWebEngineOn || windows.systemUiLoaded
     readonly property bool simWebEngineOn: typeof simWebEngine !== "undefined" && simWebEngine
     readonly property bool _bootDone: bootMinimum.done && _systemUiUp
-    on_BootDoneChanged: if (_bootDone) shell.systemScreens.finishBoot()
+    // Said on the output too, for scripts that drive the simulator (xdotool):
+    // until then the boot animation takes every touch (BootAnimation.qml).
+    on_BootDoneChanged: {
+        if (!_bootDone)
+            return;
+        shell.systemScreens.finishBoot();
+        if (shell.bootAnimation)
+            console.info("phoenix-sim: booted (touches reach the UI once the logo has gone, " + Theme.motion(700) + " ms)");
+    }
     Connections {
         target: windows
         function onSystemUiProgressChanged() { shell.systemScreens.bootProgress(windows.systemUiProgress, 100); }

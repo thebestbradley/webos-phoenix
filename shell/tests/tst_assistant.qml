@@ -335,6 +335,25 @@ Item {
             }
         }
 
+        // Voice first (the field not in focus), keys typed on a hardware
+        // keyboard go to the field, not to Just Type behind the view.
+        function test_typingGoesToTheField() {
+            shell.dictationInputFiles = ["/nonexistent/quiet.wav"];
+            try {
+                openByHold();
+                var input = findChild(overlay, "assistantInput");
+                tryVerify(function () { return overlay.activeFocus; }, 2000);
+                verify(!input.activeFocus);
+                keyClick(Qt.Key_H);
+                keyClick(Qt.Key_I);
+                compare(input.text, "hi");
+                verify(input.activeFocus);
+                compare(shell.justTypeOpen, false);
+            } finally {
+                shell.dictationInputFiles = [];
+            }
+        }
+
         function test_readBackWaitsForSend() {
             openByHold();
             type("text sam hi");

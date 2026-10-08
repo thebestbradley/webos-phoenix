@@ -317,6 +317,9 @@ Item {
         // Which kind first, here; then on to Settings.
         if (choice.id === "connect") {
             connecting = message;
+            // The keyboard down: the sheet has the panel's height.
+            input.focus = false;
+            ov.forceActiveFocus();
             return;
         }
         busy = true;
@@ -660,6 +663,16 @@ Item {
     }
 
     Keys.onEscapePressed: { if (connecting !== null) connecting = null; else closeRequested(); }
+    // Typed with the field not in focus (voice first, a hardware keyboard):
+    // the words go to the field, not to Just Type behind the view.
+    Keys.onPressed: (event) => {
+        if (event.text.length !== 1 || event.text < " " || event.text === "\u007f"
+                || (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) || busy || connecting !== null)
+            return;
+        input.forceActiveFocus();
+        input.insert(input.cursorPosition, event.text);
+        event.accepted = true;
+    }
     // Over everything: Enter does not reach the card behind (it would
     // maximize it).
     Keys.onReturnPressed: (event) => { event.accepted = true; }
@@ -1090,19 +1103,20 @@ Item {
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.px(Theme.tablet ? 15 : 13)
                 }
-                Flow {
+                // In a line where they fit, else one under another; centred.
+                Grid {
                     id: exampleFlow
-                    width: parent.width
+                    anchors.horizontalCenter: parent.horizontalCenter
                     spacing: Theme.px(8)
                     opacity: hint.fade
-                    // Centred: each line's width is what its chips take.
-                    leftPadding: Math.max(0, (width - implicitRowWidth) / 2)
-                    readonly property real implicitRowWidth: {
-                        var w = 0;
+                    horizontalItemAlignment: Grid.AlignHCenter
+                    columns: oneLine ? ov.examplesShown : 1
+                    readonly property bool oneLine: {
+                        var w = -spacing;
                         for (var i = 0; i < children.length; ++i)
-                            if (children[i].visible && children[i].width > 0)
+                            if (children[i].text !== undefined)
                                 w += children[i].width + spacing;
-                        return Math.min(width, Math.max(0, w - spacing));
+                        return w <= hint.width;
                     }
                     Repeater {
                         model: ov.examplesNow()
@@ -1111,7 +1125,7 @@ Item {
                             required property int index
                             objectName: "assistantExample-" + index
                             text: modelData
-                            maxWidth: exampleFlow.width
+                            maxWidth: hint.width
                             onClicked: ov.suggest(modelData)
                         }
                     }
@@ -1284,10 +1298,12 @@ Item {
                 onClicked: ov.listening ? ov.dictation.stop() : ov.listen()
             }
         }
+
         // "Connect model": which kind, over the bottom of the panel (a
         // tap on its backdrop, Back or Escape lets it go).
         MouseArea {
             objectName: "assistantConnectScrim"
+            z: 2                                    // over the bird
             anchors.fill: parent
             visible: ov.connecting !== null
             onClicked: ov.connecting = null
@@ -1295,96 +1311,105 @@ Item {
         Rectangle {
             id: connectSheet
             objectName: "assistantConnect"
+            z: 2
             visible: ov.connecting !== null
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: connectColumn.implicitHeight + Theme.px(24)
+            // Scrolls where the panel is short (a phone on its side).
+            height: Math.min(parent.height, connectColumn.implicitHeight + Theme.px(24))
             radius: Theme.px(16)
-            color: "#F0202428"
+            clip: true
+            color: "#FA1C2024"
             border.color: "#50FFFFFF"
             border.width: 1
             opacity: visible ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: Theme.motion(150) } }
             MouseArea { anchors.fill: parent }       // taps stay on it
-            Column {
-                id: connectColumn
-                x: Theme.px(16)
-                y: Theme.px(12)
-                width: parent.width - Theme.px(32)
-                spacing: Theme.px(4)
-                Text {
-                    width: parent.width
-                    text: qsTr("Connect a model")
-                    color: "#FFFFFF"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.px(Theme.tablet ? 19 : 17)
-                    font.bold: true
-                }
-                Text {
-                    width: parent.width
-                    bottomPadding: Theme.px(4)
-                    wrapMode: Text.Wrap
-                    text: qsTr("For questions and requests the phone's own commands don't know.")
-                    color: "#B0FFFFFF"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.px(13)
-                }
-                Repeater {
-                    model: [
-                        { mode: "local", title: qsTr("On-device model"),
-                          detail: qsTr("Private and offline: nothing leaves the phone. A 0.5 to 2.5 GB download.") },
-                        { mode: "cloud", title: qsTr("Cloud model"),
-                          detail: qsTr("Anthropic, OpenAI, Gemini or a compatible server, with your API key.") },
-                        { mode: "both", title: qsTr("Both"),
-                          detail: qsTr("On-device first; the cloud model for what it can't do.") }
-                    ]
-                    delegate: Rectangle {
-                        required property var modelData
-                        objectName: "assistantConnect-" + modelData.mode
-                        width: connectColumn.width
-                        height: kindText.implicitHeight + Theme.px(16)
-                        radius: Theme.px(10)
-                        color: kindArea.pressed ? "#40FFFFFF" : "#1AFFFFFF"
-                        Column {
-                            id: kindText
-                            x: Theme.px(12)
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: parent.width - Theme.px(24)
-                            Text {
-                                width: parent.width
-                                text: modelData.title
-                                color: "#FFFFFF"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.px(Theme.tablet ? 17 : 15)
-                                font.bold: true
+            Flickable {
+                anchors.fill: parent
+                contentHeight: connectColumn.implicitHeight + Theme.px(24)
+                interactive: contentHeight > height
+                boundsBehavior: Flickable.StopAtBounds
+                Column {
+                    id: connectColumn
+                    x: Theme.px(16)
+                    y: Theme.px(12)
+                    width: connectSheet.width - Theme.px(32)
+                    spacing: Theme.px(4)
+                    Text {
+                        width: parent.width
+                        text: qsTr("Connect a model")
+                        color: "#FFFFFF"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.px(Theme.tablet ? 19 : 17)
+                        font.bold: true
+                    }
+                    Text {
+                        width: parent.width
+                        bottomPadding: Theme.px(4)
+                        wrapMode: Text.Wrap
+                        text: qsTr("For questions and requests the phone's own commands don't know.")
+                        color: "#B0FFFFFF"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.px(13)
+                    }
+                    Repeater {
+                        model: [
+                            { mode: "local", title: qsTr("On-device model"),
+                              detail: qsTr("Private and offline: nothing leaves the phone. A 0.5 to 2.5 GB download.") },
+                            { mode: "cloud", title: qsTr("Cloud model"),
+                              detail: qsTr("Anthropic, OpenAI, Gemini or a compatible server, with your API key.") },
+                            { mode: "both", title: qsTr("Both"),
+                              detail: qsTr("On-device first; the cloud model for what it can't do.") }
+                        ]
+                        delegate: Rectangle {
+                            required property var modelData
+                            objectName: "assistantConnect-" + modelData.mode
+                            width: connectColumn.width
+                            height: kindText.implicitHeight + Theme.px(16)
+                            radius: Theme.px(10)
+                            color: kindArea.pressed ? "#40FFFFFF" : "#1AFFFFFF"
+                            Column {
+                                id: kindText
+                                x: Theme.px(12)
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width - Theme.px(24)
+                                Text {
+                                    width: parent.width
+                                    text: modelData.title
+                                    color: "#FFFFFF"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.px(Theme.tablet ? 17 : 15)
+                                    font.bold: true
+                                }
+                                Text {
+                                    width: parent.width
+                                    wrapMode: Text.Wrap
+                                    text: modelData.detail
+                                    color: "#C0FFFFFF"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.px(Theme.tablet ? 14 : 12)
+                                }
                             }
-                            Text {
-                                width: parent.width
-                                wrapMode: Text.Wrap
-                                text: modelData.detail
-                                color: "#C0FFFFFF"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.px(Theme.tablet ? 14 : 12)
+                            MouseArea {
+                                id: kindArea
+                                anchors.fill: parent
+                                onClicked: ov.connectModel(modelData.mode)
                             }
-                        }
-                        MouseArea {
-                            id: kindArea
-                            anchors.fill: parent
-                            onClicked: ov.connectModel(modelData.mode)
                         }
                     }
-                }
-                Text {
-                    objectName: "assistantConnectCancel"
-                    width: parent.width
-                    topPadding: Theme.px(6)
-                    horizontalAlignment: Text.AlignHCenter
-                    text: qsTr("Cancel")
-                    color: "#D0FFFFFF"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.px(15)
-                    MouseArea { anchors.fill: parent; anchors.margins: -Theme.px(6); onClicked: ov.connecting = null }
+                    Text {
+                        objectName: "assistantConnectCancel"
+                        width: parent.width
+                        topPadding: Theme.px(6)
+                        horizontalAlignment: Text.AlignHCenter
+                        text: qsTr("Cancel")
+                        color: "#D0FFFFFF"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.px(15)
+                        MouseArea { anchors.fill: parent; anchors.margins: -Theme.px(6); onClicked: ov.connecting = null }
+                    }
                 }
             }
         }
