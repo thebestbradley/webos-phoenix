@@ -19,13 +19,17 @@
 > [APP-RUNTIME.md](APP-RUNTIME.md#marketplace). Still to do: the server
 > online, A1 and A4 on a device, the Android catalog.
 >
-> **Curated web apps (8 October 2026):** 126 sites in 23 categories
+> **Curated web apps (8 October 2026):** 132 of 160 sites in 23 categories
 > (`server/marketplace/catalog/curated-sites.json`; `bin/probe-pwas.py`
 > checks each manifest live and leaves out the ones it cannot find, with the
 > reason, in `curated-pwas.json`): social networks and messaging, Google's and
 > Microsoft's apps, Proton's, task and note apps, streaming video and music,
 > news, maps, shopping, finance, learning, developer tools, games, weather,
-> sports and fitness. Sites without a usable manifest are not listed.
+> sports and fitness, AI assistants (ChatGPT, Claude). Sites without a
+> usable manifest are not listed; many of the rest turned the probe away
+> with a bot check from the cloud network it ran on, so the owner refreshes
+> the list from a home connection (`server/marketplace/README.md`,
+> "Refreshing the list"), and `seed` then `publish` put it in the catalog.
 
 How people will find, install and update apps on Phoenix: installable web
 apps (PWAs) as first-class cards, the original webOS `.ipk` apps from the

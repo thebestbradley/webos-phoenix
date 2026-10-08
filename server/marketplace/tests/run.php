@@ -184,6 +184,18 @@ check($r['pulled'] === 1 && !array_filter($idx['apps'], fn ($a) => $a['id'] === 
 $app->catalog->seedCurated(dirname(__DIR__) . '/catalog/curated-pwas.json');
 $row = $app->db->one('SELECT status FROM apps WHERE id = ?', ['org.webosphoenix.pwa.x']);
 check($row['status'] === 'pulled', '... and seeding the curated list again does not bring it back');
+$list = json_decode(file_get_contents(dirname(__DIR__) . '/catalog/curated-pwas.json'), true);
+$gone = array_shift($list['apps']);
+if ($gone['id'] === 'org.webosphoenix.pwa.x') {
+    $gone = array_shift($list['apps']);
+}
+file_put_contents("$tmp/fewer.json", json_encode($list));
+$app->catalog->seedCurated("$tmp/fewer.json");
+$st = fn (string $id) => $app->db->one('SELECT status FROM apps WHERE id = ?', [$id])['status'];
+check($st($gone['id']) === 'gone' && $st('org.webosphoenix.pwa.x') === 'pulled',
+      'a curated web app the probe no longer finds is not listed (a pulled one stays pulled)');
+$app->catalog->seedCurated(dirname(__DIR__) . '/catalog/curated-pwas.json');
+check($st($gone['id']) === 'listed' && $st('org.webosphoenix.pwa.x') === 'pulled', '... and is listed again when the list has it back');
 [$s] = $call('POST', '/api/reports', ['appId' => 'com.example.notes', 'kind' => 'malware', 'text' => 'mines coins']);
 [$s2] = $call('POST', '/api/reports', ['appId' => 'com.example.notes', 'kind' => 'meh']);
 check($s === 200 && $s2 === 400, 'reports of a known kind are taken');
