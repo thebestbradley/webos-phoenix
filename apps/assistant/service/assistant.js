@@ -25,7 +25,8 @@
 //
 // createAssistantService(deps) -> methods, each (params) -> Promise<reply>:
 //   ask {text, threadId?, newThread?, speak?}  -> {thread, messages}
-//   choose {threadId, messageId, choice: "cloud:<id>" | "web" | "settings"}
+//   choose {threadId, messageId, choice: "cloud:<id>" | "web" | "settings" | "open"}
+//     ("open": the app a command's answer offers, "Open Calendar")
 //   confirm {threadId, messageId, accept}
 //   threads {} -> {threads, current}; thread {id?} -> {thread, messages}
 //   newThread {} / setCurrent {id} / deleteThread {id} / clearHistory {}
@@ -212,19 +213,75 @@ function createAssistantService(deps) {
         var e = env(), s = lang().say;
         if (!allowed(cmd)) return Promise.resolve([say(thread, s.notAllowed(cmd.title), { via: layer, source: source, command: cmd.id, status: "failed" })]);
         return commands.prepare(cmd, args, e).then(function (p) {
+            // Something is missing: asked for, and the next words fill it (route()).
+            if (p.awaiting) return [say(thread, p.reply, { via: layer, source: source, command: cmd.id, data: { awaiting: p.awaiting } })];
             if (p.reply) return [say(thread, p.reply, { via: layer, source: source, command: cmd.id, status: "failed" })];
             var confirm = p.confirm;
             if (!confirm && asked !== undefined && cmd.builtIn && cmd.risk !== "read" && !lang().grounded(cmd.id, p.args, asked))
                 confirm = s.didYouMean(s.describe(cmd.id, p.args, cmd.title));
             if (confirm) return [say(thread, confirm, { via: layer, source: source, command: cmd.id, status: "pending",
                                                         confirm: { command: cmd.id, args: p.args } })];
-            return commands.run(cmd, p.args, e).then(function (r) {
-                return [say(thread, r.text, { via: layer, source: source, command: cmd.id, status: "done", data: r.data })];
-            });
+            return commands.run(cmd, p.args, e).then(function (r) { return [say(thread, r.text, outcome(r, layer, source, cmd))]; });
         }).catch(function (err) {
             log("command " + cmd.id + " failed: " + (err && err.message));
             return [say(thread, s.failed(err && err.message || String(err)), { via: layer, source: source, command: cmd.id, status: "failed" })];
         });
+    }
+
+    // A command's answer as a message: done, with the app it offers ("Open
+    // Calendar", choice "open") and what takes it back (undo).
+    function outcome(r, layer, source, cmd) {
+        var data = r.data ? Object.assign({}, r.data) : {}, extra = {};
+        if (r.open) data.open = r.open;
+        if (r.undo) data.undo = r.undo;
+        var choices = [];
+        if (r.open) choices.push({ id: "open", label: lang().say.openApp(r.open.title) });
+        if (r.offerWeb) choices.push({ id: "web", label: lang().say.searchWeb() });
+        if (choices.length) extra.choices = choices;
+        return Object.assign({ via: layer, source: source, command: cmd.id, status: r.offerWeb ? "failed" : "done",
+                               data: Object.keys(data).length ? data : undefined }, extra);
+    }
+    // The last thing the assistant did that can be taken back.
+    function lastUndoable(thread) {
+        var msgs = messagesOf(thread.id);
+        for (var i = msgs.length - 1; i >= 0; --i) {
+            var m = msgs[i];
+            if (m.role === "assistant" && m.status === "done" && m.data && m.data.undo && !m.data.undone) return m;
+        }
+        return null;
+    }
+    function lastPending(thread) {
+        var msgs = messagesOf(thread.id);
+        for (var i = msgs.length - 1; i >= 0; --i) {
+            if (msgs[i].role === "assistant" && msgs[i].status === "pending" && msgs[i].confirm) return msgs[i];
+            if (msgs[i].role === "assistant" && msgs[i].status) return null;
+        }
+        return null;
+    }
+    // "Undo", "cancel that": a read-back waiting is cancelled; else what was
+    // just made is read back, and taken back on Yes.
+    function undoLast(thread, cat, args) {
+        var s = lang().say, pend = lastPending(thread);
+        if (pend && args.pending !== undefined) {
+            pend.status = "cancelled";
+            putMessage(pend);
+            return Promise.resolve([say(thread, s.cancelled(), { via: "commands", command: pend.command, status: "cancelled" })]);
+        }
+        var m = lastUndoable(thread);
+        return act(thread, commands.find(cat.all, "undo"), m ? { undo: m.data.undo, messageId: m.id } : {}, "commands", "");
+    }
+    // The words after "When is it?": a time for the event asked about.
+    function fillAwaiting(thread, text, cat) {
+        var msgs = messagesOf(thread.id), last = null;
+        for (var i = msgs.length - 1; i >= 0 && !last; --i) if (msgs[i].role === "assistant") last = msgs[i];
+        var w = last && last.data && last.data.awaiting;
+        if (!w || w.command !== "event") return null;
+        var l = lang(), info = l.extract(l.clean(text), now());
+        if (info.rest.replace(/\b(?:at|on|for|the|it's|it is|its)\b/g, "").trim()) return null;
+        var r = l.resolve(info, now(), "day");
+        if (r.start === null) return null;
+        var args = Object.assign({}, w.args, { start: r.start, end: r.end, allDay: r.allDay, repeat: r.repeat || w.args.repeat || null });
+        return act(thread, commands.find(cat.all, "event"), args, "commands", "");
     }
 
     // ---- Language models (layers 3 and 4) -------------------------------------------------------
@@ -237,7 +294,7 @@ function createAssistantService(deps) {
              "Never call a tool for a question about the world." : " You cannot control the phone; if asked to, say the user can do it themselves.");
     }
     function history(thread) {
-        return messagesOf(thread.id).filter(function (m) { return !m.choices || m.chosen; }).slice(-HISTORY)
+        return messagesOf(thread.id).filter(function (m) { return !m.choices || m.chosen || m.status === "done"; }).slice(-HISTORY)
             .map(function (m) { return { role: m.role, text: m.text }; });
     }
     function lastAsked(thread) {
@@ -245,7 +302,7 @@ function createAssistantService(deps) {
         return m.length ? m[m.length - 1].text : "";
     }
     function toolsFor(list) {
-        return list.filter(allowed).map(function (c) {
+        return list.filter(function (c) { return allowed(c) && !c.internal; }).map(function (c) {
             return { name: commands.toolName(c.id), description: c.description, parameters: c.parameters };
         });
     }
@@ -305,6 +362,14 @@ function createAssistantService(deps) {
         return Promise.all([catalogue(), commands.contactNames(env())]).then(function (got) {
             var cat = got[0];
             var parsed = grammar.parse(text, { lang: settings().language, now: now(), apps: cat.apps, names: got[1], appCommands: cat.compiled });
+            if (!parsed) {
+                var filled = fillAwaiting(thread, text, cat);
+                if (filled) return filled;
+            }
+            if (parsed && parsed.command === "undo") return undoLast(thread, cat, parsed.args);
+            // Only a model or the web can: noted, and on to them.
+            var note = parsed && parsed.command === "beyond" ? lang().say.beyond(parsed.args.what) : "";
+            if (note) parsed = null;
             if (parsed) {
                 var id = parsed.command === "app" ? "app:" + parsed.args.key : parsed.command;
                 var cmd = commands.find(cat.all, id);
@@ -315,7 +380,7 @@ function createAssistantService(deps) {
             var cloud = thread.provider ? getProvider(thread.provider) : null;
             if (cloud) return askCloud(thread, cloud, cat);
             return localReady().then(function (m) {
-                if (!m) return offer(thread);
+                if (!m) return offer(thread, note);
                 return askLocal(thread, m, cat).catch(function (e) {
                     log("on-device model failed: " + (e && e.message));
                     return offer(thread, lang().say.localFailed(e && e.message || "no answer"));
@@ -380,6 +445,11 @@ function createAssistantService(deps) {
                 thread.provider = prov.id;
                 putThread(thread);
                 work = catalogue().then(function (cat) { return askCloud(thread, prov, cat); });
+            } else if (c === "open") {
+                var o = m.data && m.data.open;
+                if (!o || !o.appId) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to open there"));
+                work = deps.luna.call("luna://com.palm.applicationManager/launch", { id: o.appId, params: o.params || {} })
+                    .then(function () { return []; });
             } else if (c === "web") {
                 work = catalogue().then(function (cat) { return act(thread, commands.find(cat.all, "search"), { query: asked }, "commands", ""); });
             } else {
@@ -407,7 +477,11 @@ function createAssistantService(deps) {
                 return commands.run(cmd, m.confirm.args, env()).then(function (r) {
                     m.status = "done";
                     putMessage(m);
-                    return [say(thread, r.text, { via: m.via, source: m.source, command: cmd.id, status: "done" })];
+                    if (cmd.id === "undo" && m.confirm.args.messageId) {
+                        var target = getMessage(thread.id, m.confirm.args.messageId);
+                        if (target && target.data) { target.data.undone = true; putMessage(target); }
+                    }
+                    return [say(thread, r.text, outcome(r, m.via, m.source, cmd))];
                 }, function (e) {
                     m.status = "failed";
                     putMessage(m);

@@ -23,7 +23,8 @@ const arith = req("./lib/arith.js") as { evaluate(e: string): number; format(v: 
 const NOW = new Date(2026, 9, 7, 10, 0, 0).getTime();
 const at = (d: number, h: number, m = 0) => new Date(2026, 9, d, h, m, 0).getTime();
 const APPS = [
-    { id: "org.webosphoenix.maps", title: "Maps" },
+    { id: "org.webosphoenix.maps", title: "Maps",
+      universalSearch: { action: { displayName: "Search Maps", url: "org.webosphoenix.maps", launchParam: "query" } } },
     { id: "org.webosphoenix.voicememos", title: "Voice Memos", keywords: ["recorder"] },
     { id: "com.palm.app.calculator", title: "Calculator" },
     { id: "org.webosphoenix.tasks", title: "Tasks",
@@ -47,7 +48,7 @@ describe("English", () => {
     });
 
     it("texts a contact, splitting the name from the words", () => {
-        expect(parse("text Sam I'm late")).toEqual({ command: "text", args: { who: "sam", message: "i'm late" } });
+        expect(parse("text Sam I'm late")).toEqual({ command: "text", args: { who: "sam", message: "I'm late" } });
         expect(parse("text Mary Spetzler see you at 6")).toEqual({ command: "text", args: { who: "mary spetzler", message: "see you at 6" } });
         expect(parse("send a message to Sam saying on my way")).toEqual({ command: "text", args: { who: "sam", message: "on my way" } });
         expect(parse("tell Mary that dinner is ready")).toEqual({ command: "text", args: { who: "mary", message: "dinner is ready" } });
@@ -157,11 +158,14 @@ describe("English", () => {
 describe("commands apps declare", () => {
     it("compiles appinfo.json phrases, and Quick Actions as '<name> {text}'", () => {
         const c = CTX.appCommands;
-        expect(c.map((x) => x.key)).toEqual(["org.webosphoenix.tasks#quickAction", "org.example.notes#note", "org.example.notes#wipe"]);
+        expect(c.map((x) => x.key)).toEqual(["org.webosphoenix.maps#quickAction", "org.webosphoenix.tasks#quickAction", "org.example.notes#note", "org.example.notes#wipe"]);
         expect(c.find((x) => x.key === "org.example.notes#wipe")?.risk).toBe("delete");
     });
     it("matches them with what follows as the text", () => {
-        expect(parse("new task buy milk")).toEqual({ command: "app", args: { key: "org.webosphoenix.tasks#quickAction", text: "buy milk" } });
+        // A Quick Action comes after the built-in commands, which do the
+        // thing rather than open the app on it.
+        expect(parse("search maps coffee")).toEqual({ command: "app", args: { key: "org.webosphoenix.maps#quickAction", text: "coffee" } });
+        expect(parse("new task buy milk")).toEqual({ command: "task", args: { text: "Buy milk", list: "", due: null } });
         expect(parse("Take a note the gate code is 1234")).toEqual({ command: "app", args: { key: "org.example.notes#note", text: "the gate code is 1234" } });
         expect(parse("note that milk is low")).toEqual({ command: "app", args: { key: "org.example.notes#note", text: "milk is low" } });
     });

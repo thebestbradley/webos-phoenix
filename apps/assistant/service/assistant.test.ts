@@ -127,7 +127,7 @@ describe("the command layer", () => {
     it("adds a reminder to Tasks with its reminder activity", async () => {
         const t = setup();
         const r = await ask(t, "remind me to buy milk at 5");
-        expect(last(r).text).toBe("I'll remind you to buy milk at 5:00 PM today.");
+        expect(last(r).text).toBe("I'll remind you to buy milk today at 5:00 PM.");
         const puts = t.called("com.palm.db/put").map((c) => c.params.objects[0]);
         expect(puts.map((o) => o._kind)).toEqual(["com.palm.tasklist:1", "com.palm.task:1"]);
         expect(puts[1]).toMatchObject({ summary: "buy milk", remind: new Date(2026, 9, 7, 17).getTime() });
@@ -161,12 +161,12 @@ describe("confirmation for what sends or calls", () => {
         const t = setup();
         const r = await ask(t, "text Sam I'm running late");
         const m = last(r);
-        expect(m).toMatchObject({ status: "pending", text: "Send \"i'm running late\" to Sam Jones?" });
+        expect(m).toMatchObject({ status: "pending", text: "Send \"I'm running late\" to Sam Jones?" });
         expect(t.called("messaging/putMessage")).toHaveLength(0);
         const done = await t.svc.confirm({ threadId: r.thread.id, messageId: m.id, accept: true });
         expect(last(done).text).toBe("Sent to Sam Jones.");
         expect(t.called("messaging/putMessage")[0].params.message).toMatchObject({
-            _kind: "com.palm.smsmessage:1", folder: "outbox", messageText: "i'm running late", to: [{ addr: "555-0100", name: "Sam Jones" }] });
+            _kind: "com.palm.smsmessage:1", folder: "outbox", messageText: "I'm running late", to: [{ addr: "555-0100", name: "Sam Jones" }] });
         // Answered once.
         expect((await t.svc.confirm({ threadId: r.thread.id, messageId: m.id, accept: true })).returnValue).toBe(false);
     });

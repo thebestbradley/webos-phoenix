@@ -10,7 +10,7 @@
 //     ctx: {lang ("en"), now (ms), apps: [{id, title, keywords}],
 //           names: [contact names], appCommands: compiled (below)}
 //   compileAppCommands(apps, lang) -> [{key, appId, title, url, launchParam,
-//           risk, phrases}]
+//           risk, quickAction, phrases}]
 //
 // Apps add commands in appinfo.json, in the shape of Just Type's Quick
 // Actions (universalSearch.action: displayName, url, launchParam) with the
@@ -22,7 +22,10 @@
 //       "risk": "change"}]}
 //
 // An app's Just Type Quick Action counts too, as "<displayName> {text}"
-// ("new task buy milk", "search maps coffee"). risk "send" or "delete" makes
+// ("search maps coffee"), after the built-in commands (which do the thing,
+// where a Quick Action only opens the app on it: "new event ..." adds the
+// event rather than opening Calendar's editor). Phrases an app declares
+// come before the built-in commands. risk "send" or "delete" makes
 // the assistant read the command back and ask first.
 
 "use strict";
@@ -72,6 +75,7 @@ function compileAppCommands(apps, langId) {
                 url: String(qa.url || a.id),
                 launchParam: qa.launchParam ? String(qa.launchParam) : "",
                 risk: "change",
+                quickAction: true,
                 phrases: [phrasePattern(qa.displayName + " {text}", lang)]
             });
         }
@@ -84,7 +88,7 @@ function parse(text, ctx) {
     var lang = language(ctx.lang);
     var t = lang.clean(text);
     if (!t) return null;
-    var c = { now: ctx.now || Date.now(), apps: ctx.apps || [], names: ctx.names || [], appCommands: ctx.appCommands || [] };
+    var c = { now: ctx.now || Date.now(), original: String(text), apps: ctx.apps || [], names: ctx.names || [], appCommands: ctx.appCommands || [] };
     for (var i = 0; i < lang.rules.length; ++i) {
         var args = lang.rules[i][1](t, c);
         if (args) return { command: lang.rules[i][0], args: args };
