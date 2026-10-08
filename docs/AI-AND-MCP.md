@@ -153,6 +153,67 @@ no model answered get up to two requests close to them, by their words
 chips that go to the field too. Every example and suggestion is a request
 the grammar takes as it stands (`grammar.test.ts`).
 
+**Follow-up questions** (8 October 2026; `lib/followups.js`, the words in
+`lib/lang/en.js` `followUp`). After a command makes something, the
+assistant asks one short question about the most useful detail it still
+lacks, instead of leaving it to the user, with answers to tap; a typed or
+spoken answer works too (a spoken turn listens for it, as for a read-back).
+The same service code serves the system view, the app, voice and the
+models' tool calls.
+
+| Made | Asked, most useful first (two at most per thing) | Answers offered |
+| --- | --- | --- |
+| Event | where; who's coming (when contacts have an email); how long (unless said); a reminder before | other events' places, the invitees' addresses, Video call; favourites and people of other events; 30 min / 1 hour / 2 hours; 10 min / 1 hour before |
+| Reminder | when (if no time) | In 1 hour, This evening, Tomorrow morning (as said when answered) |
+| Task | when it is due; which list (when put in the default one) | Today, Tomorrow, Next week; the other lists |
+| Alarm | whether it repeats; what it is for | Every day, Weekdays, Weekends, Just once; other alarms' labels |
+| Contact | the email or the number it lacks | (typed or said) |
+| Memo | nothing (Memos has no tags, and its title is its first line) | |
+
+Never what was said ("for 2 hours at Bistro Verde" asks neither). The
+answer changes the real record through the same calls the command made
+(db8 merge; the Tasks reminder and the Clock's activity rescheduled) and is
+said back ("Got it, I've put Office as the place."). The questions are
+conversation, naming the thing as people do ("Hey, where are you and Sam
+meeting for your 3 o'clock tomorrow?", "Quick one about tomorrow's lunch:
+should I remind you beforehand?"), two or three phrasings each, taken in
+turn.
+
+Not answered: when the view closes, the next words are another request, or
+two minutes pass, the question is queued in the service's store (it
+survives a restart). The activity manager wakes the service
+(`followUpWake`, one activity at the next time anything is due, as webOS
+services were woken). Decided for the owner, with these defaults: the
+question goes out an hour after it was queued (for something sooner, half
+an hour before it, but not within ten minutes of queueing), as a
+notification with the same answers as buttons (two and Skip) and as a
+message in the conversation the thing was made in, counted unread there
+until it is opened; unanswered, once more four hours later, then dropped.
+Never in the quiet hours (22:00 to 08:00, Settings), never with Do Not
+Disturb on (tried again in 30 minutes) or in a call (in 10), and dropped
+once the thing's time has passed, it is gone, or the user filled the
+detail in themselves (the field changed since). With the screen off it is
+posted silently and waits there for the unlock. A button applies the answer
+without opening anything and says so in a banner; tapping the notification
+opens the Assistant app on its conversation, where the question waits.
+Where they live: the conversation the thing was made in (it reads best
+with what was made just above), not one ongoing thread.
+
+Restraint: two Skips on one thing end the questions about it. After three
+Skips in a row of one kind (across things) it asks whether that kind helps
+("I've been asking about where your meetings are. Is that helpful, or
+should I stop asking?" Keep asking / Stop asking) and stops only on Stop
+asking. Settings > Assistant has Follow-up questions (on by default), the
+quiet hours, the questions waiting and Follow-up topics, a switch per kind
+(one stopped shows off there). The app reads like a text chat: the bird is
+the assistant's avatar beside its words and in the header, asking while a
+question waits; the answers are quick replies. phoenix-sim: Simulate >
+Assistant Follow-ups Now moves the service's clock on until one is sent;
+`--scene followup`, `followupanswer`, `followuplater`, `followupaction`,
+`followupchat`. On a device the notification is OSE's toast (no buttons;
+it opens the Assistant on the question) until the device shell shows
+Phoenix's notifications.
+
 **Cloud models.** Four API shapes, raw HTTP, no SDKs
 (`lib/providers.js`): Anthropic Messages (`POST /v1/messages`,
 `x-api-key`, `anthropic-version: 2023-06-01`; `claude-sonnet-5-5` by

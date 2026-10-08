@@ -1851,7 +1851,7 @@ the shared store and the sealing key. `@phoenix/luna` `assistant` and `tts`
 are the clients.
 
 **The service**, `luna://org.webosphoenix.assistant/` (`threads`, `thread`,
-`getSettings`, `providers`, `models` and `commands` take `subscribe`):
+`getSettings`, `providers`, `models`, `commands` and `followUps` take `subscribe`):
 
 | Method | Does |
 | --- | --- |
@@ -1869,6 +1869,13 @@ are the clients.
 | `models` | the on-device catalogue with `fits`, `recommended`, `installed`, `downloading`, and `status: {available, running, ramBytes, error, howToInstall}` |
 | `downloadModel {id}`, `cancelDownload {id}`, `removeModel {id}`, `selectModel {id}` | on-device models |
 | `speak {text}`, `stopSpeaking` | the device's voice |
+| `followUps` | follow-up questions waiting (`lib/followups.js`): `{followUps: [{id, kind, meta, question, item: {type, id, title, at}, state: "open" \| "queued" \| "delivered", attempts, nextAt, threadId, choices}], topicsOff}` |
+| `answerFollowUp {id, action: "fu:<n>" \| "fu:skip"}` | a follow-up's notification button: the answer applied, said in its conversation, `{text, answered}` (the banner's words). System UI, Assistant and Settings only |
+| `followUpOpen {id}` | a follow-up's notification tapped: `{thread, messages}`, the question in its conversation (not again if it is waiting there), unread cleared |
+| `followUpLeave {threadId?}` | the assistant closed: its open questions wait for later |
+| `followUpWake {at?}` | the activity manager's call (activity `org.webosphoenix.assistant.followups`, at the next time one is due): queues, sends, postpones and drops; `at` (system UI, the simulator's and tests' fast-forward) is the time to act as. `{queued, delivered, dropped, postponed}` |
+| `markRead {id}` | a conversation read: `thread.unread` to 0 |
+| `resetFollowUps` | forget the Skips counted |
 
 A message is `{id, threadId, role, text, time, via: "commands" | "on-device"
 | "cloud", source (who answered), command, status: "pending" | "done" |
@@ -1877,7 +1884,18 @@ chosen, data}`. A command done may carry choices too (`open`: its app);
 its `data` holds `open {appId, params, title}`, `undo` (what takes it back)
 and, for a question the assistant asked ("When is it?"), `awaiting
 {command, args}`: the next words fill it; for words nothing understood,
-`suggest`: up to two requests close to them ("Did you mean ...?"). Each thread (`assistant:thread:<id>`), message
+`suggest`: up to two requests close to them ("Did you mean ...?"). A
+follow-up question is a message with `followUp {id, kind}` (`kind`
+`"doubt"`: whether that kind of question helps) and its answers as
+`choices` (`fu:<n>`, `fu:skip`), answered by `choose` or by the next words;
+a thread counts the ones sent to it later in `unread`. Settings add
+`followUps` (on), `quietStart` / `quietEnd` ("22:00" / "08:00") and
+`followUpTopicsOff` (kinds). The runtime gives the service `notify`: the
+"notification" host message, with `tag` (replaces the app's notification
+of that tag; `remove: true` takes it back) and `actions {uri, params,
+items: [{id, label}]}`, the row's buttons (Notifications.qml `runAction`:
+the app's own service called with `{action}` as the system UI, the reply's
+`text` as its banner, without opening it). Each thread (`assistant:thread:<id>`), message
 (`assistant:msg:<thread>:<id>`) and provider (`assistant:provider:<id>`) is
 its own stored key, so the shell's view and the app never write over each
 other (PR 7).
