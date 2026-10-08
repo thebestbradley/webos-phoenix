@@ -227,10 +227,11 @@ final class Catalog
 
     /**
      * catalog/curated-pwas.json (bin/probe-pwas.py) into the catalog, listed; opted-out origins stay
-     * out. A curated web app the list no longer has (its manifest gone) is set 'gone', not listed,
-     * and listed again when a later list has it back; one an admin pulled stays pulled.
+     * out. With $whole (the file is the whole list), a curated web app it no longer has (its
+     * manifest gone) is set 'gone', not listed; a later list that has it back lists it again. One
+     * an admin pulled stays pulled.
      */
-    public function seedCurated(string $file): int
+    public function seedCurated(string $file, bool $whole = false): int
     {
         $list = json_decode((string) file_get_contents($file), true)['apps'] ?? [];
         $optedOut = array_column($this->db->all("SELECT origin FROM optouts WHERE state = 'accepted'"), 'origin');
@@ -253,10 +254,12 @@ final class Catalog
             }
             $n++;
         }
-        $ids = array_column($list, 'id');
-        foreach ($this->db->all("SELECT id FROM apps WHERE kind = 'pwa' AND curated = 1 AND status = 'listed'") as $r) {
-            if (!in_array($r['id'], $ids, true)) {
-                $this->db->run("UPDATE apps SET status = 'gone', updated = ? WHERE id = ?", [Db::now(), $r['id']]);
+        if ($whole) {
+            $ids = array_column($list, 'id');
+            foreach ($this->db->all("SELECT id FROM apps WHERE kind = 'pwa' AND curated = 1 AND status = 'listed'") as $r) {
+                if (!in_array($r['id'], $ids, true)) {
+                    $this->db->run("UPDATE apps SET status = 'gone', updated = ? WHERE id = ?", [Db::now(), $r['id']]);
+                }
             }
         }
         return $n;

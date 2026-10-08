@@ -190,11 +190,13 @@ if ($gone['id'] === 'org.webosphoenix.pwa.x') {
     $gone = array_shift($list['apps']);
 }
 file_put_contents("$tmp/fewer.json", json_encode($list));
-$app->catalog->seedCurated("$tmp/fewer.json");
 $st = fn (string $id) => $app->db->one('SELECT status FROM apps WHERE id = ?', [$id])['status'];
+$app->catalog->seedCurated("$tmp/fewer.json");
+check($st($gone['id']) === 'listed', 'seeding a few curated web apps leaves the others listed');
+$app->catalog->seedCurated("$tmp/fewer.json", true);
 check($st($gone['id']) === 'gone' && $st('org.webosphoenix.pwa.x') === 'pulled',
-      'a curated web app the probe no longer finds is not listed (a pulled one stays pulled)');
-$app->catalog->seedCurated(dirname(__DIR__) . '/catalog/curated-pwas.json');
+      'seeding the whole list: a curated web app it no longer has is not listed (a pulled one stays pulled)');
+$app->catalog->seedCurated(dirname(__DIR__) . '/catalog/curated-pwas.json', true);
 check($st($gone['id']) === 'listed' && $st('org.webosphoenix.pwa.x') === 'pulled', '... and is listed again when the list has it back');
 [$s] = $call('POST', '/api/reports', ['appId' => 'com.example.notes', 'kind' => 'malware', 'text' => 'mines coins']);
 [$s2] = $call('POST', '/api/reports', ['appId' => 'com.example.notes', 'kind' => 'meh']);

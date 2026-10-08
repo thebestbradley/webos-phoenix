@@ -99,7 +99,8 @@ Certificates.command` once.) Then load it into the catalog and publish:
     php server/marketplace/bin/marketplace.php publish
 
 `seed` updates and lists the curated web apps in the file, sets the ones
-it no longer has to `gone` (listed again when a later list has them back),
+it no longer has to `gone` (listed again when a later list has them back;
+`seed FILE` only adds and updates the apps in FILE),
 and leaves opted-out sites and listings an admin pulled alone; `publish`
 signs and writes the catalog devices read. With the server's database
 elsewhere, set `MARKETPLACE_DSN` (and the account) and `MARKETPLACE_DATA`
