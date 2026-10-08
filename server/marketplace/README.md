@@ -56,7 +56,15 @@ Phoenix lists popular sites that ship a web app manifest; a site can ask to
 be taken off (`POST /api/optout`, then an admin accepts it). The list is
 `catalog/curated-sites.json`; `bin/probe-pwas.py` finds each site's manifest
 and writes `catalog/curated-pwas.json` (checked live), which `init` and
-`seed` load.
+`seed` load. The probe reads the page as a phone and then as a desktop
+browser, follows a manifest `<link>` or a manifest URL in the page's scripts,
+then guesses the usual names next to the page and at its root (and next to
+the URL asked for, when the page redirected to a sign-in page). A site is
+listed only with a manifest that has a name and a picture icon on the web;
+the others stay in the file's `notFound` with the reason. Its start page is
+the manifest's `start_url` when that is on the site, else the site (as
+browsers do, so a manifest kept on a CDN still starts on the site).
+Refresh the list with `python3 server/marketplace/bin/probe-pwas.py`.
 
 ## Tests
 

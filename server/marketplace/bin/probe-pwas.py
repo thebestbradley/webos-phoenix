@@ -12,10 +12,13 @@ manifest is gone are left out (and listed).
 import concurrent.futures
 import gzip
 import html.parser
+import http.client
 import json
 import os
 import re
 import sys
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -28,11 +31,25 @@ UAS = ["Mozilla/5.0 (Linux; webOS Phoenix) AppleWebKit/537.36 (KHTML, like Gecko
 
 def get(url, ua=UAS[0], accept="text/html,application/json,*/*", limit=3_000_000):
     req = urllib.request.Request(url, headers={"User-Agent": ua, "Accept": accept, "Accept-Language": "en-US,en;q=0.8"})
-    with urllib.request.urlopen(req, timeout=20) as res:
-        data = res.read(limit)
-        if res.headers.get("Content-Encoding") == "gzip" or data[:2] == b"\x1f\x8b":
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=20) as res:
+                final, data, encoding = res.geturl(), res.read(limit), res.headers.get("Content-Encoding")
+            break
+        except urllib.error.HTTPError:
+            raise
+        except (OSError, http.client.HTTPException):
+            # A reset connection, a cut-off answer or a timeout says nothing about the site:
+            # try again rather than leave a site out for a network hiccup.
+            if attempt == 2:
+                raise
+            time.sleep(2 * (attempt + 1))
+    if encoding == "gzip" or data[:2] == b"\x1f\x8b":
+        try:
             data = gzip.decompress(data)
-        return res.geturl(), data
+        except (OSError, EOFError) as e:
+            raise ValueError("not gzip: %s" % e) from e
+    return final, data
 
 
 # Where sites that add their manifest link with JavaScript usually keep it:
@@ -101,8 +118,10 @@ def best_icon(icons, base):
                 except ValueError:
                     pass
         return best
-    ok = [i for i in icons if isinstance(i, dict) and i.get("src") and "any" in (i.get("purpose") or "any").split()
-          and not (i.get("type") or "").endswith("svg+xml") and not i["src"].split("?")[0].endswith(".svg")]
+    # As the device's lib/pwa.js: a picture (not SVG) on the web, for any purpose.
+    ok = [i for i in icons if isinstance(i, dict) and isinstance(i.get("src"), str) and "any" in (i.get("purpose") or "any").split()
+          and not (i.get("type") or "").endswith("svg+xml") and not i["src"].split("?")[0].endswith(".svg")
+          and urllib.parse.urljoin(base, i["src"]).startswith(("https://", "http://"))]
     if not ok:
         return None
     ok.sort(key=size)
@@ -128,24 +147,33 @@ def manifest_of(murl, ua):
 def probe(s):
     """(entry, None) for a site whose manifest is found, (None, why) otherwise."""
     why = "no web app manifest found"
-    tried = set()
+    tried, unreachable = set(), set()   # unreachable: hosts that did not answer, even when asked again
     for ua in UAS:
         try:
             final, page = get(s["url"], ua)
         except Exception as e:   # noqa: BLE001 - a page that refuses robots may still serve its manifest
             final, page = s["url"], b""
             why = "the page: %s; no web app manifest found" % e
+            if isinstance(e, OSError) and not isinstance(e, urllib.error.HTTPError):
+                unreachable.add(urllib.parse.urlsplit(s["url"]).netloc)
         for murl, doc in find_manifest(s["url"], final, page, s.get("manifest")):
-            if murl in tried:
+            host = urllib.parse.urlsplit(murl).netloc
+            if murl in tried or host in unreachable:
                 continue
             tried.add(murl)
             try:
                 m, name, icon = manifest_of(murl, ua)
+            except urllib.error.HTTPError:
+                continue
             except ValueError as e:
                 if "manifest" in str(e) and not isinstance(e, json.JSONDecodeError):
                     why = str(e)
                 continue
-            except Exception:   # noqa: BLE001 - not there; try the next place
+            except OSError as e:
+                unreachable.add(host)
+                why = "%s did not answer: %s" % (host, e)
+                continue
+            except Exception:   # noqa: BLE001 - not there (a broken answer, say); try the next place
                 continue
             # A start_url on another origin than the page is ignored and the
             # page itself is the start (the Web App Manifest spec, "processing

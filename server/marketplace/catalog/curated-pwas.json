@@ -44,6 +44,20 @@
       "manifestName": "Pinterest"
     },
     {
+      "id": "org.webosphoenix.pwa.telegram",
+      "title": "Telegram",
+      "developer": "Telegram",
+      "categories": [
+        "Communication"
+      ],
+      "featured": true,
+      "summary": "Fast, cloud-synced messaging.",
+      "manifest": "https://web.telegram.org/k/site.webmanifest",
+      "origin": "https://web.telegram.org",
+      "icon": "https://web.telegram.org/k/assets/img/android-chrome-192x192.png?v=jw3mK7G9Ry",
+      "manifestName": "Telegram Web"
+    },
+    {
       "id": "org.webosphoenix.pwa.element",
       "title": "Element",
       "developer": "Element",
@@ -99,6 +113,20 @@
       "origin": "https://music.youtube.com",
       "icon": "https://www.gstatic.com/youtube/media/ytm/images/applauncher/music_icon_192x192.png",
       "manifestName": "YT Music"
+    },
+    {
+      "id": "org.webosphoenix.pwa.youtube",
+      "title": "YouTube",
+      "developer": "Google",
+      "categories": [
+        "Entertainment"
+      ],
+      "featured": false,
+      "summary": "Videos from creators everywhere.",
+      "manifest": "https://www.youtube.com/manifest.webmanifest",
+      "origin": "https://www.youtube.com",
+      "icon": "https://www.gstatic.com/youtube/img/branding/favicon/favicon_192x192_v2.png",
+      "manifestName": "YouTube"
     },
     {
       "id": "org.webosphoenix.pwa.tidal",
@@ -340,8 +368,1435 @@
       "summary": "Forecasts and radar.",
       "manifest": "https://weather.com/manifest.webmanifest",
       "origin": "https://weather.com",
-      "icon": "https://weather.com/_next/static/media/twc_192x192.1tox2feob5cac.png?dpl=dpl_4n9Q2YGedKwV9knqiQs6bHyCA8GK",
+      "icon": "https://weather.com/_next/static/media/twc_192x192.1tox2feob5cac.png?dpl=dpl_33q7uibWgMpgaJXftekLnL19PpDX",
       "manifestName": "Weather.com"
+    },
+    {
+      "id": "org.webosphoenix.pwa.tiktok",
+      "title": "TikTok",
+      "developer": "TikTok",
+      "categories": [
+        "Social",
+        "Entertainment"
+      ],
+      "featured": false,
+      "summary": "Short videos from creators around the world.",
+      "manifest": "https://www.tiktok.com/manifest.json",
+      "origin": "https://www.tiktok.com",
+      "icon": "https://sf16-sg.tiktokcdn.com/obj/eden-sg/uvkuhyieh7lpqpbj/pwa/192x192.png",
+      "manifestName": "TikTok"
+    },
+    {
+      "id": "org.webosphoenix.pwa.snapchat",
+      "title": "Snapchat",
+      "developer": "Snap Inc.",
+      "categories": [
+        "Social",
+        "Communication"
+      ],
+      "featured": false,
+      "summary": "Snaps, chats and calls with friends.",
+      "manifest": "https://cf-st.sc-cdn.net/dw/favicons/e9b6d2d3-dweb_slash_web-prod-web-v9/manifest.json",
+      "origin": "https://www.snapchat.com",
+      "icon": "https://cf-st.sc-cdn.net/dw/favicons/e9b6d2d3-dweb_slash_web-prod-web-v9/android-chrome-192x192.png",
+      "manifestName": "Snapchat"
+    },
+    {
+      "id": "org.webosphoenix.pwa.tumblr",
+      "title": "Tumblr",
+      "developer": "Automattic",
+      "categories": [
+        "Social"
+      ],
+      "featured": false,
+      "summary": "Blogs, fandoms and reblogs.",
+      "manifest": "https://www.tumblr.com/manifest.json",
+      "origin": "https://www.tumblr.com",
+      "icon": "https://assets.tumblr.com/pop/manifest/icon_transparent_192-11c337ee.png",
+      "manifestName": "Tumblr"
+    },
+    {
+      "id": "org.webosphoenix.pwa.weibo",
+      "title": "Weibo",
+      "developer": "Weibo Corporation",
+      "categories": [
+        "Social"
+      ],
+      "featured": false,
+      "summary": "China's microblogging network.",
+      "manifest": "https://m.weibo.cn/manifest.json",
+      "origin": "https://m.weibo.cn",
+      "icon": "https://h5.sinaimg.cn/m/weibo-lite/icon-default-192.png",
+      "manifestName": "微博"
+    },
+    {
+      "id": "org.webosphoenix.pwa.pixelfed",
+      "title": "Pixelfed",
+      "developer": "Pixelfed",
+      "categories": [
+        "Social",
+        "Photography"
+      ],
+      "featured": false,
+      "summary": "Photo sharing on the fediverse, without ads.",
+      "manifest": "https://pixelfed.social/manifest.json",
+      "origin": "https://pixelfed.social",
+      "icon": "https://pixelfed.social/img/logo/pwa/192.png",
+      "manifestName": "Pixelfed"
+    },
+    {
+      "id": "org.webosphoenix.pwa.deviantart",
+      "title": "DeviantArt",
+      "developer": "DeviantArt",
+      "categories": [
+        "Social",
+        "Graphics"
+      ],
+      "featured": false,
+      "summary": "A community of artists and their work.",
+      "manifest": "https://www.deviantart.com/manifest.json",
+      "origin": "https://www.deviantart.com",
+      "icon": "https://st.deviantart.net/eclipse/icons/pwa/launchericon-192-192.png?2",
+      "manifestName": "DeviantArt"
+    },
+    {
+      "id": "org.webosphoenix.pwa.letterboxd",
+      "title": "Letterboxd",
+      "developer": "Letterboxd",
+      "categories": [
+        "Social",
+        "Entertainment"
+      ],
+      "featured": false,
+      "summary": "Log, rate and review the films you watch.",
+      "manifest": "https://letterboxd.com/manifest.json",
+      "origin": "https://letterboxd.com",
+      "icon": "https://s.ltrbxd.com/static/img/touch-icon-192x192-lO1g3Ot4.png",
+      "manifestName": "Letterboxd"
+    },
+    {
+      "id": "org.webosphoenix.pwa.gmail",
+      "title": "Gmail",
+      "developer": "Google",
+      "categories": [
+        "Communication",
+        "Productivity"
+      ],
+      "featured": true,
+      "summary": "Google's email, with search and labels.",
+      "manifest": "https://mail.google.com/mail/manifest.json",
+      "origin": "https://mail.google.com",
+      "icon": "https://ssl.gstatic.com/images/branding/productlogos/gmail_2026/v2/web-96dp/logo_gmail_2026_color_2x_web_96dp.png",
+      "manifestName": "Gmail"
+    },
+    {
+      "id": "org.webosphoenix.pwa.googlemessages",
+      "title": "Google Messages",
+      "developer": "Google",
+      "categories": [
+        "Communication"
+      ],
+      "featured": false,
+      "summary": "Text from your computer with your Android phone's messages.",
+      "manifest": "https://messages.google.com/web/manifest.json",
+      "origin": "https://messages.google.com",
+      "icon": "https://ssl.gstatic.com/android-messages-web/images/2022.3/2x/messages_2022_round_96dp.png",
+      "manifestName": "Messages"
+    },
+    {
+      "id": "org.webosphoenix.pwa.googlechat",
+      "title": "Google Chat",
+      "developer": "Google",
+      "categories": [
+        "Communication"
+      ],
+      "featured": false,
+      "summary": "Direct messages and group spaces.",
+      "manifest": "https://chat.google.com/manifest.json",
+      "origin": "https://chat.google.com",
+      "icon": "https://ssl.gstatic.com/dynamite/images/favicons_20260501245/chat_2026_logo_favicon_no_dot_256px.png",
+      "manifestName": "Chat"
+    },
+    {
+      "id": "org.webosphoenix.pwa.teams",
+      "title": "Microsoft Teams",
+      "developer": "Microsoft",
+      "categories": [
+        "Communication",
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "Chat, meetings and calls for work and school.",
+      "manifest": "https://teams.microsoft.com/manifest.json",
+      "origin": "https://teams.microsoft.com",
+      "icon": "https://teams.microsoft.com/favicon/prod/favicon-192x192.png",
+      "manifestName": "Teams"
+    },
+    {
+      "id": "org.webosphoenix.pwa.jitsimeet",
+      "title": "Jitsi Meet",
+      "developer": "8x8",
+      "categories": [
+        "Communication"
+      ],
+      "featured": false,
+      "summary": "Free, open-source video meetings without an account.",
+      "manifest": "https://meet.jit.si/manifest.json",
+      "origin": "https://meet.jit.si",
+      "icon": "https://meet.jit.si/static/pwa/icons/icon192.png",
+      "manifestName": "Jitsi Meet"
+    },
+    {
+      "id": "org.webosphoenix.pwa.whereby",
+      "title": "Whereby",
+      "developer": "Whereby",
+      "categories": [
+        "Communication"
+      ],
+      "featured": false,
+      "summary": "Video meetings in a link, nothing to install.",
+      "manifest": "https://whereby.com/manifest.json",
+      "origin": "https://whereby.com",
+      "icon": "https://d32wid4gq0d4kh.cloudfront.net/icons/whereby/icon_192x192.png",
+      "manifestName": "Whereby"
+    },
+    {
+      "id": "org.webosphoenix.pwa.fastmail",
+      "title": "Fastmail",
+      "developer": "Fastmail",
+      "categories": [
+        "Communication",
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "Private email, calendar and contacts.",
+      "manifest": "https://app.fastmail.com/static/jmapui/c5725622c9-7b3562371c4c1abc/app.webmanifest",
+      "origin": "https://app.fastmail.com",
+      "icon": "https://app.fastmail.com/static/appicons/Icon-MacOS-512x512@1x.png",
+      "manifestName": "Fastmail"
+    },
+    {
+      "id": "org.webosphoenix.pwa.googledocs",
+      "title": "Google Docs",
+      "developer": "Google",
+      "categories": [
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "Write and edit documents together.",
+      "manifest": "https://docs.google.com/document/manifest.json",
+      "origin": "https://docs.google.com",
+      "icon": "https://www.gstatic.com/images/branding/productlogos/docs_2026/v2/web-144dp/logo_docs_2026_color_1x_web_144dp.png",
+      "manifestName": "Docs"
+    },
+    {
+      "id": "org.webosphoenix.pwa.googlesheets",
+      "title": "Google Sheets",
+      "developer": "Google",
+      "categories": [
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "Spreadsheets you share and edit together.",
+      "manifest": "https://docs.google.com/spreadsheets/manifest.json",
+      "origin": "https://docs.google.com",
+      "icon": "https://www.gstatic.com/images/branding/productlogos/sheets_2026q3/v1/web-144dp/logo_sheets_2026q3_color_1x_web_144dp.png",
+      "manifestName": "Sheets"
+    },
+    {
+      "id": "org.webosphoenix.pwa.googleslides",
+      "title": "Google Slides",
+      "developer": "Google",
+      "categories": [
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "Presentations you build together.",
+      "manifest": "https://docs.google.com/presentation/manifest.json",
+      "origin": "https://docs.google.com",
+      "icon": "https://www.gstatic.com/images/branding/productlogos/slides_2026/v2/web-144dp/logo_slides_2026_color_1x_web_144dp.png",
+      "manifestName": "Slides"
+    },
+    {
+      "id": "org.webosphoenix.pwa.googlecalendar",
+      "title": "Google Calendar",
+      "developer": "Google",
+      "categories": [
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "Your schedule, events and invitations.",
+      "manifest": "https://calendar.google.com/calendar/manifest.json",
+      "origin": "https://calendar.google.com",
+      "icon": "https://www.gstatic.com/images/branding/productlogos/calendar_2026/v2/web-96dp/logo_calendar_2026_color_2x_web_96dp.png",
+      "manifestName": "Calendar"
+    },
+    {
+      "id": "org.webosphoenix.pwa.asana",
+      "title": "Asana",
+      "developer": "Asana",
+      "categories": [
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "Plan and track your team's work.",
+      "manifest": "https://app.asana.com/manifest.json",
+      "origin": "https://app.asana.com",
+      "icon": "https://d3ki9tyy5l5ruj.cloudfront.net/obj/7e5dfbdaea5868b87a9a2e0e0e35cb3d2cb782fb/AsanaSquareLogoPng.png",
+      "manifestName": "asana"
+    },
+    {
+      "id": "org.webosphoenix.pwa.linear",
+      "title": "Linear",
+      "developer": "Linear",
+      "categories": [
+        "Productivity",
+        "Developer"
+      ],
+      "featured": false,
+      "summary": "Issue tracking and project planning for software teams.",
+      "manifest": "https://linear.app/static/pwa.webmanifest?v=4",
+      "origin": "https://linear.app",
+      "icon": "https://static.linear.app/assets/pwa/icon_192.png?v=3",
+      "manifestName": "Linear"
+    },
+    {
+      "id": "org.webosphoenix.pwa.clickup",
+      "title": "ClickUp",
+      "developer": "ClickUp",
+      "categories": [
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "Tasks, docs and goals in one workspace.",
+      "manifest": "https://app.clickup.com/assets/favicons/manifest.json",
+      "origin": "https://app.clickup.com",
+      "icon": "https://app.clickup.com/assets/icons/icon-192x192.png",
+      "manifestName": "ClickUp"
+    },
+    {
+      "id": "org.webosphoenix.pwa.anydo",
+      "title": "Any.do",
+      "developer": "Any.do",
+      "categories": [
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "To-do list, planner and reminders.",
+      "manifest": "https://app.any.do/manifest.json",
+      "origin": "https://app.any.do",
+      "icon": "https://app.any.do/icon_192.png",
+      "manifestName": "Any.do"
+    },
+    {
+      "id": "org.webosphoenix.pwa.protondrive",
+      "title": "Proton Drive",
+      "developer": "Proton AG",
+      "categories": [
+        "Productivity",
+        "Utilities"
+      ],
+      "featured": false,
+      "summary": "End-to-end encrypted cloud storage for your files and photos.",
+      "manifest": "https://drive.proton.me/assets/manifest.webmanifest",
+      "origin": "https://drive.proton.me",
+      "icon": "https://drive.proton.me/assets/android-chrome-192x192.png",
+      "manifestName": "Proton Drive"
+    },
+    {
+      "id": "org.webosphoenix.pwa.protoncalendar",
+      "title": "Proton Calendar",
+      "developer": "Proton AG",
+      "categories": [
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "An encrypted calendar.",
+      "manifest": "https://calendar.proton.me/assets/manifest.webmanifest",
+      "origin": "https://calendar.proton.me",
+      "icon": "https://calendar.proton.me/assets/android-chrome-192x192.png",
+      "manifestName": "Proton Calendar"
+    },
+    {
+      "id": "org.webosphoenix.pwa.protonpass",
+      "title": "Proton Pass",
+      "developer": "Proton AG",
+      "categories": [
+        "Utilities"
+      ],
+      "featured": false,
+      "summary": "An encrypted password manager.",
+      "manifest": "https://pass.proton.me/assets/manifest.webmanifest",
+      "origin": "https://pass.proton.me",
+      "icon": "https://pass.proton.me/assets/android-chrome-192x192.png",
+      "manifestName": "Proton Pass Web App"
+    },
+    {
+      "id": "org.webosphoenix.pwa.protondocs",
+      "title": "Proton Docs",
+      "developer": "Proton AG",
+      "categories": [
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "End-to-end encrypted documents.",
+      "manifest": "https://docs.proton.me/assets/manifest.webmanifest",
+      "origin": "https://docs.proton.me",
+      "icon": "https://docs.proton.me/assets/android-chrome-192x192.png",
+      "manifestName": "Proton Docs"
+    },
+    {
+      "id": "org.webosphoenix.pwa.bitwarden",
+      "title": "Bitwarden",
+      "developer": "Bitwarden",
+      "categories": [
+        "Utilities"
+      ],
+      "featured": false,
+      "summary": "An open-source password manager.",
+      "manifest": "https://vault.bitwarden.com/70501c97b33df95adb32.json",
+      "origin": "https://vault.bitwarden.com",
+      "icon": "https://vault.bitwarden.com/images/icons/android-chrome-192x192.png",
+      "manifestName": "Bitwarden Vault"
+    },
+    {
+      "id": "org.webosphoenix.pwa.tldraw",
+      "title": "tldraw",
+      "developer": "tldraw",
+      "categories": [
+        "Productivity",
+        "Graphics"
+      ],
+      "featured": false,
+      "summary": "A whiteboard for sketching and diagrams.",
+      "manifest": "https://www.tldraw.com/manifest.webmanifest",
+      "origin": "https://www.tldraw.com",
+      "icon": "https://www.tldraw.com/android-chrome-192x192.png",
+      "manifestName": "tldraw"
+    },
+    {
+      "id": "org.webosphoenix.pwa.diagramsnet",
+      "title": "draw.io",
+      "developer": "JGraph",
+      "categories": [
+        "Productivity",
+        "Graphics"
+      ],
+      "featured": false,
+      "summary": "Flowcharts, diagrams and wireframes.",
+      "manifest": "https://app.diagrams.net/images/manifest.json",
+      "origin": "https://app.diagrams.net",
+      "icon": "https://app.diagrams.net/images/icon-192.png",
+      "manifestName": "draw.io"
+    },
+    {
+      "id": "org.webosphoenix.pwa.standardnotes",
+      "title": "Standard Notes",
+      "developer": "Standard Notes",
+      "categories": [
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "Encrypted notes that sync everywhere.",
+      "manifest": "https://app.standardnotes.com/manifest.webmanifest",
+      "origin": "https://app.standardnotes.com",
+      "icon": "https://app.standardnotes.com/favicon/android-chrome-192x192.png",
+      "manifestName": "Standard Notes"
+    },
+    {
+      "id": "org.webosphoenix.pwa.notesnook",
+      "title": "Notesnook",
+      "developer": "Streetwriters",
+      "categories": [
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "Private, end-to-end encrypted notes.",
+      "manifest": "https://app.notesnook.com/manifest.webmanifest",
+      "origin": "https://app.notesnook.com",
+      "icon": "https://app.notesnook.com/android-chrome-192x192.png",
+      "manifestName": "Notesnook"
+    },
+    {
+      "id": "org.webosphoenix.pwa.lucid",
+      "title": "Lucid",
+      "developer": "Lucid Software",
+      "categories": [
+        "Productivity",
+        "Graphics"
+      ],
+      "featured": false,
+      "summary": "Diagrams and whiteboards with Lucidchart and Lucidspark.",
+      "manifest": "https://lucid.app/manifest.json",
+      "origin": "https://lucid.app",
+      "icon": "https://cdn-cashy-static-assets.lucidchart.com/app/progressive-web-app/Lucid-L-512.png",
+      "manifestName": "Lucid"
+    },
+    {
+      "id": "org.webosphoenix.pwa.raindrop",
+      "title": "Raindrop.io",
+      "developer": "Raindrop.io",
+      "categories": [
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "Save and organize bookmarks.",
+      "manifest": "https://app.raindrop.io/manifest.webmanifest",
+      "origin": "https://app.raindrop.io",
+      "icon": "https://app.raindrop.io/assets/icon_512x512.fb6fceee7da1f79f22748ea7eb6d9cf5.png",
+      "manifestName": "Raindrop"
+    },
+    {
+      "id": "org.webosphoenix.pwa.perplexity",
+      "title": "Perplexity",
+      "developer": "Perplexity AI",
+      "categories": [
+        "Reference",
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "Ask questions, get answers with sources.",
+      "manifest": "https://www.perplexity.ai/manifest.json",
+      "origin": "https://www.perplexity.ai",
+      "icon": "https://www.perplexity.ai/static/icons/icon-192.png",
+      "manifestName": "Perplexity"
+    },
+    {
+      "id": "org.webosphoenix.pwa.gemini",
+      "title": "Gemini",
+      "developer": "Google",
+      "categories": [
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "Google's AI assistant.",
+      "manifest": "https://gemini.google.com/_/BardChatUi/manifest.json",
+      "origin": "https://gemini.google.com",
+      "icon": "https://www.gstatic.com/lamda/images/gemini_sparkle_4g_512_lt_f94943af3be039176192d.png",
+      "manifestName": "Gemini"
+    },
+    {
+      "id": "org.webosphoenix.pwa.duckduckgo",
+      "title": "DuckDuckGo",
+      "developer": "DuckDuckGo",
+      "categories": [
+        "Utilities",
+        "Reference"
+      ],
+      "featured": false,
+      "summary": "Private search.",
+      "manifest": "https://duckduckgo.com/manifest.json",
+      "origin": "https://duckduckgo.com",
+      "icon": "https://duckduckgo.com/assets/manifest-logos/192.png",
+      "manifestName": "DuckDuckGo"
+    },
+    {
+      "id": "org.webosphoenix.pwa.googletranslate",
+      "title": "Google Translate",
+      "developer": "Google",
+      "categories": [
+        "Utilities",
+        "Reference"
+      ],
+      "featured": false,
+      "summary": "Translate text between more than 100 languages.",
+      "manifest": "https://translate.google.com/_/TranslateWebserverUi/manifest.json",
+      "origin": "https://translate.google.com",
+      "icon": "https://www.gstatic.com/translate/favicon.ico",
+      "manifestName": "Google Translate"
+    },
+    {
+      "id": "org.webosphoenix.pwa.applemusic",
+      "title": "Apple Music",
+      "developer": "Apple",
+      "categories": [
+        "Music"
+      ],
+      "featured": true,
+      "summary": "Songs, albums and radio.",
+      "manifest": "https://music.apple.com/manifest.json",
+      "origin": "https://music.apple.com",
+      "icon": "https://music.apple.com/assets/app-icons/pwa-manifest/music-icon_192.png",
+      "manifestName": "Apple Music"
+    },
+    {
+      "id": "org.webosphoenix.pwa.audiomack",
+      "title": "Audiomack",
+      "developer": "Audiomack",
+      "categories": [
+        "Music"
+      ],
+      "featured": false,
+      "summary": "Free streaming from new and independent artists.",
+      "manifest": "https://audiomack.com/manifest.json",
+      "origin": "https://audiomack.com",
+      "icon": "https://audiomack.com/images/manifest/logo-192.png",
+      "manifestName": "Audiomack"
+    },
+    {
+      "id": "org.webosphoenix.pwa.pocketcasts",
+      "title": "Pocket Casts",
+      "developer": "Automattic",
+      "categories": [
+        "Music"
+      ],
+      "featured": false,
+      "summary": "A podcast player.",
+      "manifest": "https://pocketcasts.com/manifest.webmanifest",
+      "origin": "https://pocketcasts.com",
+      "icon": "https://pocketcasts.com/favicons/favicon-192x192.png",
+      "manifestName": "Pocket Casts"
+    },
+    {
+      "id": "org.webosphoenix.pwa.netflix",
+      "title": "Netflix",
+      "developer": "Netflix",
+      "categories": [
+        "Entertainment"
+      ],
+      "featured": true,
+      "summary": "Series and films.",
+      "manifest": "https://www.netflix.com/site.webmanifest",
+      "origin": "https://www.netflix.com",
+      "icon": "https://www.netflix.com/nficon_512.png",
+      "manifestName": "Netflix"
+    },
+    {
+      "id": "org.webosphoenix.pwa.disneyplus",
+      "title": "Disney+",
+      "developer": "Disney",
+      "categories": [
+        "Entertainment"
+      ],
+      "featured": false,
+      "summary": "Disney, Pixar, Marvel and Star Wars.",
+      "manifest": "https://www.disneyplus.com/manifest.json",
+      "origin": "https://www.disneyplus.com",
+      "icon": "https://static-assets.bamgrid.com/product/disneyplus/favicons/msftpwa-192x192-aurora.97f08a1eb58995c81687d0cf3f953796.png",
+      "manifestName": "Disney+"
+    },
+    {
+      "id": "org.webosphoenix.pwa.primevideo",
+      "title": "Prime Video",
+      "developer": "Amazon",
+      "categories": [
+        "Entertainment"
+      ],
+      "featured": false,
+      "summary": "Amazon's films and series.",
+      "manifest": "https://www.primevideo.com/app.webmanifest",
+      "origin": "https://www.primevideo.com",
+      "icon": "https://m.media-amazon.com/images/G/01/digital/video/web/prime-video-app-tile-192.png",
+      "manifestName": "Prime Video"
+    },
+    {
+      "id": "org.webosphoenix.pwa.appletv",
+      "title": "Apple TV",
+      "developer": "Apple",
+      "categories": [
+        "Entertainment"
+      ],
+      "featured": false,
+      "summary": "Apple's films and series.",
+      "manifest": "https://tv.apple.com/manifest.json",
+      "origin": "https://tv.apple.com",
+      "icon": "https://tv.apple.com/assets/app-icons/pwa-manifest/tv-icon_192.png",
+      "manifestName": "Apple TV"
+    },
+    {
+      "id": "org.webosphoenix.pwa.crunchyroll",
+      "title": "Crunchyroll",
+      "developer": "Crunchyroll",
+      "categories": [
+        "Entertainment"
+      ],
+      "featured": false,
+      "summary": "Anime, streamed.",
+      "manifest": "https://www.crunchyroll.com/manifest.json",
+      "origin": "https://www.crunchyroll.com",
+      "icon": "https://crunchyroll.com/build/assets/img/pwa/v2/512.png",
+      "manifestName": "Crunchyroll"
+    },
+    {
+      "id": "org.webosphoenix.pwa.plutotv",
+      "title": "Pluto TV",
+      "developer": "Paramount",
+      "categories": [
+        "Entertainment"
+      ],
+      "featured": false,
+      "summary": "Free live channels and films.",
+      "manifest": "https://pluto.tv/api/manifest/",
+      "origin": "https://pluto.tv",
+      "icon": "https://pluto.tv/favicon/large.png",
+      "manifestName": "Pluto TV"
+    },
+    {
+      "id": "org.webosphoenix.pwa.twitch",
+      "title": "Twitch",
+      "developer": "Twitch",
+      "categories": [
+        "Entertainment"
+      ],
+      "featured": false,
+      "summary": "Live streams of games, music and chat.",
+      "manifest": "https://m.twitch.tv/manifest.json",
+      "origin": "https://m.twitch.tv",
+      "icon": "https://m.twitch.tv/splash_icon_x512.png",
+      "manifestName": "Twitch"
+    },
+    {
+      "id": "org.webosphoenix.pwa.justwatch",
+      "title": "JustWatch",
+      "developer": "JustWatch",
+      "categories": [
+        "Entertainment"
+      ],
+      "featured": false,
+      "summary": "Find where a film or show is streaming.",
+      "manifest": "https://www.justwatch.com/manifest.json",
+      "origin": "https://www.justwatch.com",
+      "icon": "https://www.justwatch.com/android_icon_192x192.png",
+      "manifestName": "JustWatch"
+    },
+    {
+      "id": "org.webosphoenix.pwa.googlenews",
+      "title": "Google News",
+      "developer": "Google",
+      "categories": [
+        "News"
+      ],
+      "featured": false,
+      "summary": "Headlines from sources around the world.",
+      "manifest": "https://news.google.com/_/DotsSplashUi/manifest.json",
+      "origin": "https://news.google.com",
+      "icon": "https://www.gstatic.com/gnews/logo/google_news_192.png",
+      "manifestName": "News"
+    },
+    {
+      "id": "org.webosphoenix.pwa.inoreader",
+      "title": "Inoreader",
+      "developer": "Innologica",
+      "categories": [
+        "News"
+      ],
+      "featured": false,
+      "summary": "A feed reader for news, blogs and newsletters.",
+      "manifest": "https://www.inoreader.com/manifest.webmanifest?v=3",
+      "origin": "https://www.inoreader.com",
+      "icon": "https://www.inoreader.com/icon-192-rounded.png",
+      "manifestName": "Inoreader"
+    },
+    {
+      "id": "org.webosphoenix.pwa.substack",
+      "title": "Substack",
+      "developer": "Substack",
+      "categories": [
+        "News"
+      ],
+      "featured": false,
+      "summary": "Newsletters and writers you subscribe to.",
+      "manifest": "https://substack.com/manifest.json",
+      "origin": "https://substack.com",
+      "icon": "https://substack.com/img/manifest-icons/app-192.png",
+      "manifestName": "Substack"
+    },
+    {
+      "id": "org.webosphoenix.pwa.ft",
+      "title": "Financial Times",
+      "developer": "The Financial Times",
+      "categories": [
+        "News",
+        "Finance"
+      ],
+      "featured": false,
+      "summary": "Business and world news.",
+      "manifest": "https://app.ft.com/dist/metatags.json",
+      "origin": "https://app.ft.com",
+      "icon": "https://app.ft.com/dist/img/icons/xxhdpi.png?v2",
+      "manifestName": "FT"
+    },
+    {
+      "id": "org.webosphoenix.pwa.groundnews",
+      "title": "Ground News",
+      "developer": "Ground News",
+      "categories": [
+        "News"
+      ],
+      "featured": false,
+      "summary": "See how every side covers a story.",
+      "manifest": "https://ground.news/manifest.json",
+      "origin": "https://ground.news",
+      "icon": "https://ground.news/logo3-192.png",
+      "manifestName": "Ground"
+    },
+    {
+      "id": "org.webosphoenix.pwa.googlemaps",
+      "title": "Google Maps",
+      "developer": "Google",
+      "categories": [
+        "Navigation",
+        "Travel"
+      ],
+      "featured": true,
+      "summary": "Maps, directions and places.",
+      "manifest": "https://www.google.com/maps/preview/pwa/manifest",
+      "origin": "https://www.google.com",
+      "icon": "https://maps.gstatic.com/mapfiles/maps_lite/pwa/icons/maps15_bnuw3a_round_192x192.png",
+      "manifestName": "Google Maps"
+    },
+    {
+      "id": "org.webosphoenix.pwa.herewego",
+      "title": "HERE WeGo",
+      "developer": "HERE Technologies",
+      "categories": [
+        "Navigation"
+      ],
+      "featured": false,
+      "summary": "Maps and directions by car, transit and on foot.",
+      "manifest": "https://wego.here.com/manifest.json",
+      "origin": "https://wego.here.com",
+      "icon": "https://wego.here.com/images/icon-192.png",
+      "manifestName": "HERE WeGo"
+    },
+    {
+      "id": "org.webosphoenix.pwa.mapy",
+      "title": "Mapy.com",
+      "developer": "Seznam.cz",
+      "categories": [
+        "Navigation"
+      ],
+      "featured": false,
+      "summary": "Hiking, cycling and outdoor maps.",
+      "manifest": "https://mapy.com/img/favicon/common/manifest.webmanifest",
+      "origin": "https://mapy.com",
+      "icon": "https://mapy.com/img/favicon/common/web-app-manifest-192x192.png",
+      "manifestName": "Mapy.cz"
+    },
+    {
+      "id": "org.webosphoenix.pwa.ebay",
+      "title": "eBay",
+      "developer": "eBay",
+      "categories": [
+        "Shopping"
+      ],
+      "featured": false,
+      "summary": "Buy and sell almost anything.",
+      "manifest": "https://www.ebay.com/manifest.json",
+      "origin": "https://www.ebay.com",
+      "icon": "https://ir.ebaystatic.com/cr/v/c1/chauffeur/pwa-app-icons/v1/icon-192x192.png",
+      "manifestName": "eBay"
+    },
+    {
+      "id": "org.webosphoenix.pwa.aliexpress",
+      "title": "AliExpress",
+      "developer": "Alibaba Group",
+      "categories": [
+        "Shopping"
+      ],
+      "featured": false,
+      "summary": "Products shipped from China.",
+      "manifest": "https://m.aliexpress.com/manifest.json",
+      "origin": "https://m.aliexpress.com",
+      "icon": "https://ae-pic-a1.aliexpress-media.com/kf/H0311bf6a4027463b80de1fe6f0d9d754J.png",
+      "manifestName": "AliExpress"
+    },
+    {
+      "id": "org.webosphoenix.pwa.temu",
+      "title": "Temu",
+      "developer": "PDD Holdings",
+      "categories": [
+        "Shopping"
+      ],
+      "featured": false,
+      "summary": "Low-priced goods.",
+      "manifest": "https://www.temu.com/app.webmanifest",
+      "origin": "https://www.temu.com",
+      "icon": "https://aimg.kwcdn.com/upload_aimg/kpp/a9c18bb2-d009-4598-9685-be5171b614c4.png.slim.png?imageView2/2/w/192",
+      "manifestName": "Temu"
+    },
+    {
+      "id": "org.webosphoenix.pwa.shein",
+      "title": "SHEIN",
+      "developer": "SHEIN",
+      "categories": [
+        "Shopping"
+      ],
+      "featured": false,
+      "summary": "Fashion and home at low prices.",
+      "manifest": "https://m.shein.com/us/manifest/us.json",
+      "origin": "https://m.shein.com",
+      "icon": "https://m.shein.com/us/logo/192.png",
+      "manifestName": "SHEIN"
+    },
+    {
+      "id": "org.webosphoenix.pwa.ubereats",
+      "title": "Uber Eats",
+      "developer": "Uber",
+      "categories": [
+        "Food & Drink"
+      ],
+      "featured": false,
+      "summary": "Order food and groceries.",
+      "manifest": "https://www.ubereats.com/manifest.json",
+      "origin": "https://www.ubereats.com",
+      "icon": "https://www.ubereats.com/_static/35b3b9a3182fec82.png",
+      "manifestName": "Uber EATS"
+    },
+    {
+      "id": "org.webosphoenix.pwa.grubhub",
+      "title": "Grubhub",
+      "developer": "Grubhub",
+      "categories": [
+        "Food & Drink"
+      ],
+      "featured": false,
+      "summary": "Food delivery from local restaurants.",
+      "manifest": "https://assets.grubhub.com/manifest.json",
+      "origin": "https://www.grubhub.com",
+      "icon": "https://assets.grubhub.com/assets/img/brand/grubhub/android/raster/smart_banner/android-chrome-192x192.png",
+      "manifestName": "Grubhub Web"
+    },
+    {
+      "id": "org.webosphoenix.pwa.allrecipes",
+      "title": "Allrecipes",
+      "developer": "Dotdash Meredith",
+      "categories": [
+        "Food & Drink"
+      ],
+      "featured": false,
+      "summary": "Recipes rated and reviewed by home cooks.",
+      "manifest": "https://www.allrecipes.com/manifest.json",
+      "origin": "https://www.allrecipes.com",
+      "icon": "https://www.allrecipes.com/static/5.150.0/icons/favicons/apple-touch-icon-152x152.png",
+      "manifestName": "Allrecipes"
+    },
+    {
+      "id": "org.webosphoenix.pwa.coinbase",
+      "title": "Coinbase",
+      "developer": "Coinbase",
+      "categories": [
+        "Finance"
+      ],
+      "featured": false,
+      "summary": "Buy, sell and keep cryptocurrency.",
+      "manifest": "https://www.coinbase.com/manifest.json",
+      "origin": "https://www.coinbase.com",
+      "icon": "https://www.coinbase.com/img/favicon/favicon-192.png",
+      "manifestName": "Coinbase"
+    },
+    {
+      "id": "org.webosphoenix.pwa.tradingview",
+      "title": "TradingView",
+      "developer": "TradingView",
+      "categories": [
+        "Finance"
+      ],
+      "featured": false,
+      "summary": "Charts and ideas for markets.",
+      "manifest": "https://static.tradingview.com/static/images/favicon/manifest.json",
+      "origin": "https://www.tradingview.com",
+      "icon": "https://static.tradingview.com/static/images/favicon/android-chrome-192x192.png",
+      "manifestName": "TradingView"
+    },
+    {
+      "id": "org.webosphoenix.pwa.yahoofinance",
+      "title": "Yahoo Finance",
+      "developer": "Yahoo",
+      "categories": [
+        "Finance",
+        "News"
+      ],
+      "featured": false,
+      "summary": "Quotes, markets and business news.",
+      "manifest": "https://finance.yahoo.com/manifest.json",
+      "origin": "https://finance.yahoo.com",
+      "icon": "https://s.yimg.com/cv/apiv2/default/finance/favicon-192x192.png",
+      "manifestName": "Yahoo Finance"
+    },
+    {
+      "id": "org.webosphoenix.pwa.coursera",
+      "title": "Coursera",
+      "developer": "Coursera",
+      "categories": [
+        "Education"
+      ],
+      "featured": false,
+      "summary": "Courses from universities and companies.",
+      "manifest": "https://www.coursera.org/manifest.json",
+      "origin": "https://www.coursera.org",
+      "icon": "https://d3njjcbhbojbot.cloudfront.net/web/images/favicons/android-chrome-192x192.png",
+      "manifestName": "Coursera"
+    },
+    {
+      "id": "org.webosphoenix.pwa.quizlet",
+      "title": "Quizlet",
+      "developer": "Quizlet",
+      "categories": [
+        "Education"
+      ],
+      "featured": false,
+      "summary": "Flashcards and study sets.",
+      "manifest": "https://quizlet.com/manifest.webmanifest",
+      "origin": "https://quizlet.com",
+      "icon": "https://assets.quizlet.com/static/brandmark/192.png",
+      "manifestName": "Quizlet"
+    },
+    {
+      "id": "org.webosphoenix.pwa.codecademy",
+      "title": "Codecademy",
+      "developer": "Codecademy",
+      "categories": [
+        "Education",
+        "Developer"
+      ],
+      "featured": false,
+      "summary": "Learn to code, interactively.",
+      "manifest": "https://www.codecademy.com/manifest.json",
+      "origin": "https://www.codecademy.com",
+      "icon": "https://www.codecademy.com/webpack/icon_192x192.fbb327ad81ee40e5d6a38b4c674810d9.png",
+      "manifestName": "Codecademy"
+    },
+    {
+      "id": "org.webosphoenix.pwa.freecodecamp",
+      "title": "freeCodeCamp",
+      "developer": "freeCodeCamp",
+      "categories": [
+        "Education",
+        "Developer"
+      ],
+      "featured": false,
+      "summary": "Free coding lessons and certifications.",
+      "manifest": "https://www.freecodecamp.org/manifest.webmanifest",
+      "origin": "https://www.freecodecamp.org",
+      "icon": "https://www.freecodecamp.org/icons/icon-192x192.png?v=6cba562cbd10e31af925a976f3db73f7",
+      "manifestName": "fCC"
+    },
+    {
+      "id": "org.webosphoenix.pwa.geogebra",
+      "title": "GeoGebra",
+      "developer": "GeoGebra",
+      "categories": [
+        "Education"
+      ],
+      "featured": false,
+      "summary": "Graphing, geometry and math tools.",
+      "manifest": "https://www.geogebra.org/apps/manifest/suite.json",
+      "origin": "https://www.geogebra.org",
+      "icon": "https://www.geogebra.org/apps/icons/suite_192.png",
+      "manifestName": "GeoGebra Calculator"
+    },
+    {
+      "id": "org.webosphoenix.pwa.googleclassroom",
+      "title": "Google Classroom",
+      "developer": "Google",
+      "categories": [
+        "Education"
+      ],
+      "featured": false,
+      "summary": "Classes, assignments and grades.",
+      "manifest": "https://classroom.google.com/manifest.json",
+      "origin": "https://classroom.google.com",
+      "icon": "https://www.gstatic.com/classroom/ic_product_classroom_144.png",
+      "manifestName": "Google Classroom"
+    },
+    {
+      "id": "org.webosphoenix.pwa.mdn",
+      "title": "MDN Web Docs",
+      "developer": "Mozilla",
+      "categories": [
+        "Developer",
+        "Reference"
+      ],
+      "featured": false,
+      "summary": "Documentation for HTML, CSS and JavaScript.",
+      "manifest": "https://developer.mozilla.org/manifest.json",
+      "origin": "https://developer.mozilla.org",
+      "icon": "https://developer.mozilla.org/favicon-192x192.png",
+      "manifestName": "MDN"
+    },
+    {
+      "id": "org.webosphoenix.pwa.stackblitz",
+      "title": "StackBlitz",
+      "developer": "StackBlitz",
+      "categories": [
+        "Developer"
+      ],
+      "featured": false,
+      "summary": "Web development environments that run in the browser.",
+      "manifest": "https://stackblitz.com/manifest.json",
+      "origin": "https://stackblitz.com",
+      "icon": "https://c.staticblitz.com/assets/icons/icon-192x192-13160e5780ab1d9de1a5bff0fa12d051d120546ba33f207c1645016eff13d11b.png",
+      "manifestName": "StackBlitz"
+    },
+    {
+      "id": "org.webosphoenix.pwa.replit",
+      "title": "Replit",
+      "developer": "Replit",
+      "categories": [
+        "Developer"
+      ],
+      "featured": false,
+      "summary": "Write, run and share code online.",
+      "manifest": "https://replit.com/public/manifest.json",
+      "origin": "https://replit.com",
+      "icon": "https://replit.com/public/icons/icon-rebrand-192x192.png",
+      "manifestName": "Replit"
+    },
+    {
+      "id": "org.webosphoenix.pwa.regex101",
+      "title": "regex101",
+      "developer": "regex101",
+      "categories": [
+        "Developer"
+      ],
+      "featured": false,
+      "summary": "Build and test regular expressions.",
+      "manifest": "https://regex101.com/static/assets/manifest.webmanifest",
+      "origin": "https://regex101.com",
+      "icon": "https://regex101.com/static/assets/icons/manifest-icon-192.maskable.png",
+      "manifestName": "regex101"
+    },
+    {
+      "id": "org.webosphoenix.pwa.photoshop",
+      "title": "Photoshop",
+      "developer": "Adobe",
+      "categories": [
+        "Graphics",
+        "Photography"
+      ],
+      "featured": false,
+      "summary": "Adobe's image editor on the web.",
+      "manifest": "https://photoshop.adobe.com/app.webmanifest",
+      "origin": "https://photoshop.adobe.com",
+      "icon": "https://photoshop.adobe.com/favicon-256x256.png",
+      "manifestName": "PsWeb"
+    },
+    {
+      "id": "org.webosphoenix.pwa.adobeexpress",
+      "title": "Adobe Express",
+      "developer": "Adobe",
+      "categories": [
+        "Graphics"
+      ],
+      "featured": false,
+      "summary": "Graphics, flyers and short videos from templates.",
+      "manifest": "https://express.adobe.com/static/assets/manifest.json",
+      "origin": "https://express.adobe.com",
+      "icon": "https://express.adobe.com/static/assets/pwaIcons/192x192_v2.80dd97d711.png",
+      "manifestName": "Adobe Express"
+    },
+    {
+      "id": "org.webosphoenix.pwa.removebg",
+      "title": "remove.bg",
+      "developer": "Kaleido AI",
+      "categories": [
+        "Graphics",
+        "Photography"
+      ],
+      "featured": false,
+      "summary": "Remove the background from a photo.",
+      "manifest": "https://www.remove.bg/site.webmanifest?v=fc0bfce6e1310f1539afec9729716721",
+      "origin": "https://www.remove.bg",
+      "icon": "https://www.remove.bg/android-chrome-192x192.png?v=fc0bfce6e1310f1539afec9729716721",
+      "manifestName": "remove.bg"
+    },
+    {
+      "id": "org.webosphoenix.pwa.pairdrop",
+      "title": "PairDrop",
+      "developer": "PairDrop",
+      "categories": [
+        "Utilities"
+      ],
+      "featured": false,
+      "summary": "Send files between nearby devices.",
+      "manifest": "https://pairdrop.net/manifest.json",
+      "origin": "https://pairdrop.net",
+      "icon": "https://pairdrop.net/images/android-chrome-192x192.png",
+      "manifestName": "PairDrop"
+    },
+    {
+      "id": "org.webosphoenix.pwa.lichess",
+      "title": "Lichess",
+      "developer": "lichess.org",
+      "categories": [
+        "Games"
+      ],
+      "featured": true,
+      "summary": "Free, open-source chess.",
+      "manifest": "https://lichess.org/manifest.json",
+      "origin": "https://lichess.org",
+      "icon": "https://lichess1.org/assets/logo/lichess-favicon-192.png",
+      "manifestName": "Lichess"
+    },
+    {
+      "id": "org.webosphoenix.pwa.chesscom",
+      "title": "Chess.com",
+      "developer": "Chess.com",
+      "categories": [
+        "Games"
+      ],
+      "featured": false,
+      "summary": "Play chess, solve puzzles and take lessons.",
+      "manifest": "https://www.chess.com/manifest.json",
+      "origin": "https://www.chess.com",
+      "icon": "https://www.chess.com/bundles/web/favicons/android-chrome-192x192.25da7247.png",
+      "manifestName": "Chess"
+    },
+    {
+      "id": "org.webosphoenix.pwa.game2048",
+      "title": "2048",
+      "developer": "Gabriele Cirulli",
+      "categories": [
+        "Games"
+      ],
+      "featured": false,
+      "summary": "Slide the tiles to reach 2048.",
+      "manifest": "https://play2048.co/manifest.json",
+      "origin": "https://play2048.co",
+      "icon": "https://play2048.co/favicon192.png",
+      "manifestName": "2048"
+    },
+    {
+      "id": "org.webosphoenix.pwa.geoguessr",
+      "title": "GeoGuessr",
+      "developer": "GeoGuessr",
+      "categories": [
+        "Games"
+      ],
+      "featured": false,
+      "summary": "Guess where in the world you are.",
+      "manifest": "https://www.geoguessr.com/static/manifest.json",
+      "origin": "https://www.geoguessr.com",
+      "icon": "https://www.geoguessr.com/static/icon-192x192.png",
+      "manifestName": "GeoGuessr"
+    },
+    {
+      "id": "org.webosphoenix.pwa.pokemonshowdown",
+      "title": "Pokémon Showdown",
+      "developer": "Smogon",
+      "categories": [
+        "Games"
+      ],
+      "featured": false,
+      "summary": "Pokémon battles in the browser.",
+      "manifest": "https://play.pokemonshowdown.com/manifest.json",
+      "origin": "https://play.pokemonshowdown.com",
+      "icon": "https://play.pokemonshowdown.com/favicon-256.png",
+      "manifestName": "Showdown!"
+    },
+    {
+      "id": "org.webosphoenix.pwa.nytgames",
+      "title": "NYT Games",
+      "developer": "The New York Times",
+      "categories": [
+        "Games"
+      ],
+      "featured": false,
+      "summary": "The Crossword, Wordle, Connections and more.",
+      "manifest": "https://www.nytimes.com/games-assets/v2/metadata/nyt-web-manifest.json?v=",
+      "origin": "https://www.nytimes.com",
+      "icon": "https://www.nytimes.com/android-chrome-192x192.png",
+      "manifestName": "NYT Games"
+    },
+    {
+      "id": "org.webosphoenix.pwa.xboxcloud",
+      "title": "Xbox Cloud Gaming",
+      "developer": "Microsoft",
+      "categories": [
+        "Games"
+      ],
+      "featured": false,
+      "summary": "Play Xbox games streamed from the cloud.",
+      "manifest": "https://www.xbox.com/en-US/play/manifest.webmanifest?page.name=Home",
+      "origin": "https://www.xbox.com",
+      "icon": "https://assets.play.xbox.com/playxbox/static/media/manifest-icon-192.d3ef356e.png",
+      "manifestName": "Cloud Gaming"
+    },
+    {
+      "id": "org.webosphoenix.pwa.geforcenow",
+      "title": "GeForce NOW",
+      "developer": "NVIDIA",
+      "categories": [
+        "Games"
+      ],
+      "featured": false,
+      "summary": "Play your PC games streamed from the cloud.",
+      "manifest": "https://play.geforcenow.com/mall/manifest.webmanifest",
+      "origin": "https://play.geforcenow.com",
+      "icon": "https://play.geforcenow.com/mall/assets/icons/GFN-Logo-192.webp",
+      "manifestName": "GeForce NOW"
+    },
+    {
+      "id": "org.webosphoenix.pwa.accuweather",
+      "title": "AccuWeather",
+      "developer": "AccuWeather",
+      "categories": [
+        "Weather"
+      ],
+      "featured": false,
+      "summary": "Forecasts, radar and alerts.",
+      "manifest": "https://www.accuweather.com/manifest.json",
+      "origin": "https://www.accuweather.com",
+      "icon": "https://www.accuweather.com/images/webapp/accuweather-192.png",
+      "manifestName": "AccuWeather"
+    },
+    {
+      "id": "org.webosphoenix.pwa.windy",
+      "title": "Windy",
+      "developer": "Windyty",
+      "categories": [
+        "Weather"
+      ],
+      "featured": false,
+      "summary": "Wind, rain and weather maps.",
+      "manifest": "https://www.windy.com/v/51.3.1.ind.c170/manifest.json",
+      "origin": "https://www.windy.com",
+      "icon": "https://img.windy.com/albums/icons/icon512x512.png?w=192",
+      "manifestName": "Windy"
+    },
+    {
+      "id": "org.webosphoenix.pwa.ventusky",
+      "title": "Ventusky",
+      "developer": "InMeteo",
+      "categories": [
+        "Weather"
+      ],
+      "featured": false,
+      "summary": "Weather maps of the whole world.",
+      "manifest": "https://www.ventusky.com/manifest.json",
+      "origin": "https://www.ventusky.com",
+      "icon": "https://cdnstatic.ventusky.com/images_v2/safe-icon-192x192.png",
+      "manifestName": "Ventusky"
+    },
+    {
+      "id": "org.webosphoenix.pwa.fotmob",
+      "title": "FotMob",
+      "developer": "FotMob",
+      "categories": [
+        "Sports"
+      ],
+      "featured": false,
+      "summary": "Football scores, news and stats.",
+      "manifest": "https://www.fotmob.com/manifest.json",
+      "origin": "https://www.fotmob.com",
+      "icon": "https://www.fotmob.com/img/android-icon-192x192.png",
+      "manifestName": "FotMob"
+    },
+    {
+      "id": "org.webosphoenix.pwa.sofascore",
+      "title": "Sofascore",
+      "developer": "Sofascore",
+      "categories": [
+        "Sports"
+      ],
+      "featured": false,
+      "summary": "Live scores for many sports.",
+      "manifest": "https://www.sofascore.com/static/manifest.json",
+      "origin": "https://www.sofascore.com",
+      "icon": "https://www.sofascore.com/static/images/icon-192x192.png",
+      "manifestName": "Sofascore"
+    },
+    {
+      "id": "org.webosphoenix.pwa.nba",
+      "title": "NBA",
+      "developer": "NBA",
+      "categories": [
+        "Sports"
+      ],
+      "featured": false,
+      "summary": "Scores, news and highlights.",
+      "manifest": "https://www.nba.com/site-manifest.json",
+      "origin": "https://www.nba.com",
+      "icon": "https://www.nba.com/android-chrome-192x192.png",
+      "manifestName": "NBA"
+    },
+    {
+      "id": "org.webosphoenix.pwa.formula1",
+      "title": "Formula 1",
+      "developer": "Formula One Group",
+      "categories": [
+        "Sports"
+      ],
+      "featured": false,
+      "summary": "Race results, standings and news.",
+      "manifest": "https://www.formula1.com/s/manifest.json",
+      "origin": "https://www.formula1.com",
+      "icon": "https://www.formula1.com/assets/home/_next/static/media/icon192x192.3e6c74b8.png",
+      "manifestName": "Install F1 App"
+    },
+    {
+      "id": "org.webosphoenix.pwa.strava",
+      "title": "Strava",
+      "developer": "Strava",
+      "categories": [
+        "Health & Fitness"
+      ],
+      "featured": true,
+      "summary": "Track runs and rides, and follow friends.",
+      "manifest": "https://www.strava.com/manifest.json",
+      "origin": "https://www.strava.com",
+      "icon": "https://www.strava.com/icon-strava-chrome-192.png?v=dLlWydWlG6",
+      "manifestName": "Strava"
+    },
+    {
+      "id": "org.webosphoenix.pwa.komoot",
+      "title": "komoot",
+      "developer": "komoot",
+      "categories": [
+        "Health & Fitness",
+        "Navigation"
+      ],
+      "featured": false,
+      "summary": "Plan hikes and bike rides.",
+      "manifest": "https://www.komoot.com/manifest.json",
+      "origin": "https://www.komoot.com",
+      "icon": "https://www.komoot.com/assets/db7e4cc80e9c7149.png",
+      "manifestName": "Komoot Web"
+    },
+    {
+      "id": "org.webosphoenix.pwa.alltrails",
+      "title": "AllTrails",
+      "developer": "AllTrails",
+      "categories": [
+        "Health & Fitness",
+        "Navigation"
+      ],
+      "featured": false,
+      "summary": "Find trails for hiking and running.",
+      "manifest": "https://www.alltrails.com/manifest.json",
+      "origin": "https://www.alltrails.com",
+      "icon": "https://www.alltrails.com/app-icon-512.png",
+      "manifestName": "AllTrails"
+    },
+    {
+      "id": "org.webosphoenix.pwa.openlibrary",
+      "title": "Open Library",
+      "developer": "Internet Archive",
+      "categories": [
+        "Books",
+        "Reference"
+      ],
+      "featured": false,
+      "summary": "Borrow and read books, free.",
+      "manifest": "https://openlibrary.org/static/manifest.json?v=fbf2b3dc370d159ad53f12260ad27c9c",
+      "origin": "https://openlibrary.org",
+      "icon": "https://openlibrary.org/static/images/openlibrary-192x192.png",
+      "manifestName": "Open Library"
+    },
+    {
+      "id": "org.webosphoenix.pwa.libby",
+      "title": "Libby",
+      "developer": "OverDrive",
+      "categories": [
+        "Books"
+      ],
+      "featured": false,
+      "summary": "Borrow ebooks and audiobooks from your library.",
+      "manifest": "https://libbyapp.com/dewey-22.1.2/inc/web-app-manifest.json",
+      "origin": "https://libbyapp.com",
+      "icon": "https://libbyapp.com/icons/libby-icon-android-192.png?v=1",
+      "manifestName": "Libby"
     }
   ],
   "notFound": [
@@ -358,17 +1813,12 @@
     {
       "title": "Facebook",
       "url": "https://www.facebook.com/",
-      "why": "no web app manifest found"
+      "why": "the page: HTTP Error 400: Bad Request; no web app manifest found"
     },
     {
       "title": "Reddit",
       "url": "https://www.reddit.com/",
       "why": "no web app manifest found"
-    },
-    {
-      "title": "Telegram",
-      "url": "https://web.telegram.org/k/",
-      "why": "manifest has no usable icon"
     },
     {
       "title": "Discord",
@@ -378,17 +1828,12 @@
     {
       "title": "WhatsApp",
       "url": "https://web.whatsapp.com/",
-      "why": "no web app manifest found"
+      "why": "the page: HTTP Error 400: Bad Request; no web app manifest found"
     },
     {
       "title": "Outlook",
       "url": "https://outlook.live.com/mail/",
-      "why": "no web app manifest found"
-    },
-    {
-      "title": "YouTube",
-      "url": "https://m.youtube.com/",
-      "why": "no web app manifest found"
+      "why": "the page: HTTP Error 417: Expectation Failed; no web app manifest found"
     },
     {
       "title": "trivago",
