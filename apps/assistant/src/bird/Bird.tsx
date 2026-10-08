@@ -177,7 +177,10 @@ export function Bird({ pose, size = 120, className, testId = "as-bird", speed, s
     const p = BIRD.poses[pose] ?? BIRD.poses.idle;
 
     // ---- Moves: the one playing, its face for a moment, the effects it plays ----
-    const [move, setMove] = useState<Playing | null>(null);
+    // The move to play as it appears is there from the first paint (an
+    // entrance would else show the bird at rest for a frame); its cues are
+    // timed as it mounts (below).
+    const [move, setMove] = useState<Playing | null>(() => (start && !(still ?? matchReduced()) ? { name: start, key: 0 } : null));
     const [face, setFace] = useState<{ eyes?: string; beak?: string }>({});
     const [fx, setFx] = useState<{ name: FxName; key: number }[]>([]);
     const serial = useRef(0);
@@ -185,12 +188,14 @@ export function Bird({ pose, size = 120, className, testId = "as-bird", speed, s
     const moveRef = useRef<Playing | null>(null);
     moveRef.current = move;
     const clearTimers = () => { timers.current.forEach((t) => window.clearTimeout(t)); timers.current = []; };
-    const play = useCallback((name: MoveName): boolean => {
+    const play = useCallback((name: MoveName, mounting = false): boolean => {
         const m = MOVES[name];
         if (calm || !m) return false;
         clearTimers();
-        const key = ++serial.current;
-        setMove({ name, key });
+        // As it mounts, the move already drawn goes on (only its cues to time).
+        const cur = moveRef.current;
+        const key = mounting && cur && cur.name === name ? cur.key : ++serial.current;
+        if (key !== cur?.key) setMove({ name, key });
         setFace({});
         const later = (ms: number, f: () => void) => { timers.current.push(window.setTimeout(f, ms * k)); };
         for (const c of m.cues) {
@@ -211,7 +216,7 @@ export function Bird({ pose, size = 120, className, testId = "as-bird", speed, s
     // Held still: none.
     useEffect(() => { if (calm) { clearTimers(); setMove(null); setFace({}); setFx([]); } }, [calm]);
     // The move to play as it appears.
-    useEffect(() => { if (start) play(start); }, []);    // eslint-disable-line react-hooks/exhaustive-deps
+    useEffect(() => { if (start) play(start, true); }, []);    // eslint-disable-line react-hooks/exhaustive-deps
     // An idle move ends with the pose (blending away).
     useEffect(() => {
         if (moveRef.current && MOVES[moveRef.current.name].kind === "idle") { clearTimers(); setMove(null); setFace({}); }
