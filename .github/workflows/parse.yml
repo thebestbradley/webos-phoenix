@@ -16,6 +16,13 @@ on:
       - scripts/parse-check.sh
       - .github/workflows/parse.yml
 
+# A newer push to a branch or PR cancels its older runs, which would only
+# report on code already replaced (many pushes queue up behind each other).
+# Every commit on main still runs to the end.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   parse:
     runs-on: ubuntu-24.04
