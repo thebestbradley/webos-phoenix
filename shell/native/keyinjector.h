@@ -43,4 +43,13 @@ public:
     // Text the keyboard enters in one go (".com", "http://":
     // IMEController::commitText), as an input method commit.
     Q_INVOKABLE bool commitText(QQuickItem *client, const QString &text);
+
+    // A wheel event at (x, y) in `item`, delivered through its window as
+    // the platform delivers one: a trackpad's has a pixel delta, a scroll
+    // phase (Qt::ScrollPhase) and, with natural scrolling, `inverted`; a
+    // mouse wheel's only an angle delta. QML's TestCase.mouseWheel sends
+    // only the latter, so the tests of trackpad gestures use this.
+    // Returns whether it was accepted.
+    Q_INVOKABLE bool sendWheel(QQuickItem *item, qreal x, qreal y, const QPoint &pixelDelta,
+                               const QPoint &angleDelta, int phase, bool inverted);
 };

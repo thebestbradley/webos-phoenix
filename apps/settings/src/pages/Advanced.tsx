@@ -17,6 +17,10 @@
 //   sysUiEnableWaveLauncher  a slide up from a side of the gesture area
 //                            raises the wave launcher (LunaCE
 //                            wave-launcher.json; off)
+//   sysUiEnableNextPrevGestures  Screen & Lock's Advanced gestures (a long
+//                            swipe across the gesture area switches apps),
+//                            here too beside the wave launcher, where there
+//                            is a gesture area
 //   animationSpeed           the shell's animations: Normal or Fast (Faster
 //                            Card Animations)
 //   gestureSensitivity       how far a swipe or flick goes before it counts:
@@ -29,17 +33,18 @@
 //                            emails one at a time, with a delete button
 //                            (Uber Cycling Email Dashboard)
 
-import { system, type SystemPreferences } from "@phoenix/luna";
+import { system, systemStatus, type SystemPreferences, type SystemStatus } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
 import { Group, ListSelector, Note, Page, PageHeader, Row, ToggleButton } from "@phoenix/ui";
 
 const KEYS: (keyof SystemPreferences)[] = ["launcherGridDensity", "infiniteCardCyclingEnabled", "sysUiEnableMaximizeEdges",
     "sysUiEnableWaveLauncher", "animationSpeed", "gestureSensitivity", "showReticleAnimation", "hapticFeedback",
-    "showBatteryPercent", "emailDashboardCycling"];
+    "showBatteryPercent", "emailDashboardCycling", "sysUiEnableNextPrevGestures"];
 
 export function AdvancedPage() {
     const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(KEYS, cb, err), []).value;
     const set = (p: SystemPreferences) => void system.setPreferences(p);
+    const gestureArea = useLuna<SystemStatus>((cb, err) => systemStatus.watch(cb, err), []).value?.gestureArea === true;
     const toggle = (key: keyof SystemPreferences, title: string, subtitle: string, fallback = false) => (
         <Row title={title} subtitle={subtitle} testId={`adv-row-${key}`}>
             <ToggleButton value={prefs ? (prefs[key] === undefined ? fallback : !!prefs[key]) : fallback} disabled={!prefs}
@@ -61,6 +66,7 @@ export function AdvancedPage() {
             </Group>
             <Group label="Gestures">
                 {toggle("sysUiEnableWaveLauncher", "Wave launcher", "Slide up from a side of the gesture area for your dock's apps")}
+                {gestureArea && toggle("sysUiEnableNextPrevGestures", "Switch apps", "Swipe across the gesture area for the next app")}
                 <ListSelector title="Gesture sensitivity" value={prefs?.gestureSensitivity ?? "normal"} testId="adv-gestureSensitivity"
                               options={[{ label: "Low", value: "low" as const }, { label: "Normal", value: "normal" as const },
                                         { label: "High", value: "high" as const }]}

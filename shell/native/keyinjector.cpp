@@ -7,6 +7,7 @@
 #include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QQuickWindow>
+#include <QWheelEvent>
 
 bool KeyInjector::sendKey(QQuickItem *item, int key, quint32 nativeScanCode)
 {
@@ -76,5 +77,18 @@ bool KeyInjector::commitText(QQuickItem *client, const QString &text)
     QInputMethodEvent event;
     event.setCommitString(text);
     QCoreApplication::sendEvent(target, &event);
+    return event.isAccepted();
+}
+
+bool KeyInjector::sendWheel(QQuickItem *item, qreal x, qreal y, const QPoint &pixelDelta,
+                            const QPoint &angleDelta, int phase, bool inverted)
+{
+    if (!item || !item->window())
+        return false;
+    QQuickWindow *window = item->window();
+    const QPointF pos = item->mapToScene(QPointF(x, y));
+    QWheelEvent event(pos, window->mapToGlobal(pos), pixelDelta, angleDelta, Qt::NoButton, Qt::NoModifier,
+                      Qt::ScrollPhase(phase), inverted);
+    QCoreApplication::sendEvent(window, &event);
     return event.isAccepted();
 }

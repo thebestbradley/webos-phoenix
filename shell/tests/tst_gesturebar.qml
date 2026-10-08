@@ -146,6 +146,32 @@ Item {
             tryCompare(shell.cardView, "maximizeProgress", 0, 2000);
         }
 
+        // Advanced gestures' long swipe: the bar is three times a phone's
+        // width; the swipe stays the Pre's length (half a phone's area), not
+        // half the bar's (512px, more than one mouse or trackpad stroke).
+        function test_longSwipeOnATablet() {
+            shell.unlock();
+            sys.advancedGestures = true;
+            var bar = findChild(shell, "gestureBar");
+            var m = findChild(shell, "gestureMouse");
+            tryVerify(function() { return bar.advancedGestures; }, 1000);
+            compare(bar.longSwipe, Theme.px(160));
+            var prev = createTemporaryObject(spyComponent, root, { target: bar, signalName: "previous" });
+            var backs = createTemporaryObject(spyComponent, root, { target: bar, signalName: "back" });
+            // 240px across the centre: the app beside.
+            mousePress(m, m.width / 2 + 120, m.height / 2);
+            for (var i = 1; i <= 10; ++i)
+                mouseMove(m, m.width / 2 + 120 - 24 * i, m.height / 2);
+            mouseRelease(m, m.width / 2 - 120, m.height / 2);
+            compare(prev.count, 1);
+            compare(backs.count, 0);
+            // Not across the centre: back.
+            mouseDrag(m, m.width * 0.4, m.height / 2, -240, 0);
+            compare(backs.count, 1);
+            compare(prev.count, 1);
+            sys.advancedGestures = false;
+        }
+
         function test_hardwareHomeButtonRemovesTheBar() {
             shell.unlock();
             shell.hardwareHomeButton = true;

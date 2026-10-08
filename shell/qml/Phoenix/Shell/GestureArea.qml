@@ -9,13 +9,15 @@
 //   swipe right     -> forward (Key_CoreNavi_Menu): closes the dashboard
 //                      and menus; a site goes forward
 //   long swipe      -> with advanced gestures on (Screen & Lock), a swipe
-//                      across the area's centre over half its width is
-//                      Key_CoreNavi_Previous (leftward) / Next (rightward):
-//                      the app beside this one. Off, it is Back / forward,
-//                      as the gesture driver reported it (setAdvancedGestures)
+//                      across the area's centre over half a phone's width
+//                      (longSwipe) is Key_CoreNavi_Previous (leftward) /
+//                      Next (rightward): the app beside this one. Off, it is
+//                      Back / forward, as the gesture driver reported it
+//                      (setAdvancedGestures)
 //   tap             -> toggle between the app and card view
 //   hold and slide  -> with the keyboard up, moves the cursor a character
-//                      per step (Phoenix, GAPS V4)
+//                      per step (Phoenix, GAPS V4); slid up or down instead,
+//                      it is the swipe after all
 //   slide up from a side -> with the wave launcher on (Settings > Advanced;
 //                      LunaCE's sysUiEnableWaveLauncher), a finger slid up
 //                      from the area's left or right quarter raises the
@@ -26,6 +28,9 @@
 //                      down, C, X, V and A typed are Copy, Cut, Paste and
 //                      Select All (metaHeld). Held a moment the bar glows
 //                      until it lifts (CoreNaviManager setMetaGlow)
+//   two-finger swipe -> on a trackpad, with the pointer on the area: the
+//                      same swipes, the way the fingers went (Phoenix; see
+//                      trackpadSwipe)
 // A thin glowing bar hints where it is, like the Pre 2 / Pre 3 light bar.
 
 import QtQuick
@@ -70,6 +75,11 @@ Item {
     // A short swipe; the legacy thresholds were tuned for a 320px wide area.
     // Settings > Advanced > Gesture sensitivity scales it (Theme.gestureScale).
     readonly property real threshold: Theme.px(30 * Theme.gestureScale)
+    // A long swipe (advanced gestures): half the Pre's 320px wide area, the
+    // whole of a phone's half. A tablet's bar is three times as wide; half
+    // of it (512px) is more than a mouse or trackpad drag goes in one
+    // stroke, and more than a thumb crosses, so the Pre's length holds there.
+    readonly property real longSwipe: Math.min(width / 2, Theme.px(160 * Theme.gestureScale))
 
     // The light bar is on while an app is maximized (and the screen
     // unlocked), off in card view (CoreNaviManager::restoreLightbar).
@@ -187,6 +197,14 @@ Item {
                 area.waveStarted(m.x, m.y);
                 return;
             }
+            // Held still a moment (cursor control) and then slid up or
+            // down: a swipe after all, not the cursor. A mouse or trackpad
+            // drag often rests a moment after the press before it moves.
+            if (cursor && Math.abs(m.y - sy) > area.threshold && Math.abs(m.y - sy) > Math.abs(m.x - sx)) {
+                cursor = false;
+                swiped = true;
+                return;
+            }
             if (cursor) {
                 var n = Math.trunc((m.x - anchorX) / area.cursorStepWidth);
                 for (var i = 0; i < Math.abs(n); ++i)
@@ -240,22 +258,79 @@ Item {
                 cursor = false;
                 return;
             }
-            var dx = m.x - sx, dy = m.y - sy;
-            if (-dy > area.threshold && -dy > Math.abs(dx)) {
-                area.light("waterdrop"); area.up();
-            } else if (dy > area.threshold && dy > Math.abs(dx)) {
-                area.light("reverse"); area.down();
-            } else if (Math.abs(dx) > area.threshold && area.advancedGestures && Math.abs(dx) >= area.width / 2
-                       && (sx - area.width / 2) * (m.x - area.width / 2) < 0) {
-                area.light(dx < 0 ? "left" : "right");
-                if (dx < 0) area.previous(); else area.next();
-            } else if (dx < -area.threshold) {
-                area.light("left"); area.back();
-            } else if (dx > area.threshold) {
-                area.light("right"); area.forward();
-            } else if (Math.abs(dx) < area.threshold / 2 && Math.abs(dy) < area.threshold / 2) {
+            if (!area._swipe(sx, sy, m.x, m.y)
+                    && Math.abs(m.x - sx) < area.threshold / 2 && Math.abs(m.y - sy) < area.threshold / 2) {
                 area.flash(); area.tapped();
             }
         }
+
+        // Trackpad (Phoenix): a two-finger swipe with the pointer on the
+        // area. A mouse wheel's notches (no pixel delta) are not gestures.
+        onWheel: (e) => {
+            if (pressed || (e.pixelDelta.x === 0 && e.pixelDelta.y === 0 && e.phase === Qt.NoScrollPhase)) {
+                e.accepted = false;
+                return;
+            }
+            if (e.phase === Qt.ScrollBegin)
+                area._pad = null;
+            // The fingers lifted: the swipe is done; the momentum the
+            // system sends after it is not part of it.
+            if (e.phase === Qt.ScrollEnd || e.phase === Qt.ScrollMomentum) {
+                area.trackpadEnd();
+                return;
+            }
+            // The content follows the fingers with natural scrolling
+            // (inverted); otherwise it goes the other way.
+            var s = e.inverted ? 1 : -1;
+            area.trackpadSwipe(e.x, s * e.pixelDelta.x, s * e.pixelDelta.y);
+        }
+    }
+
+    // A swipe from (x0, y0) to (x1, y1) in this item: emits its gesture and
+    // returns true, or false when it went too short a way to be one.
+    // centred: a trackpad's swipe, which has no place on the area; a long
+    // one need not cross the centre.
+    function _swipe(x0, y0, x1, y1, centred) {
+        var dx = x1 - x0, dy = y1 - y0;
+        if (-dy > threshold && -dy > Math.abs(dx)) {
+            light("waterdrop"); up();
+        } else if (dy > threshold && dy > Math.abs(dx)) {
+            light("reverse"); down();
+        } else if (Math.abs(dx) > threshold && advancedGestures && Math.abs(dx) >= longSwipe
+                   && (centred || (x0 - width / 2) * (x1 - width / 2) < 0)) {
+            light(dx < 0 ? "left" : "right");
+            if (dx < 0) previous(); else next();
+        } else if (dx < -threshold) {
+            light("left"); back();
+        } else if (dx > threshold) {
+            light("right"); forward();
+        } else {
+            return false;
+        }
+        return true;
+    }
+
+    // One step of a two-finger trackpad swipe at x, the fingers moving by
+    // (dx, dy). It ends when they lift (trackpadEnd: the scroll's end phase,
+    // or its events stop for Theme.wheelGestureEndDelay, as in card view).
+    property var _pad: null
+    function trackpadSwipe(x, dx, dy) {
+        if (!_pad)
+            _pad = { x: x, dx: 0, dy: 0 };
+        _pad.dx += dx;
+        _pad.dy += dy;
+        padEnd.restart();
+    }
+    function trackpadEnd() {
+        padEnd.stop();
+        var p = _pad;
+        _pad = null;
+        if (p)
+            _swipe(p.x, height / 2, p.x + p.dx, height / 2 + p.dy, true);
+    }
+    Timer {
+        id: padEnd
+        interval: Theme.wheelGestureEndDelay
+        onTriggered: area.trackpadEnd()
     }
 }
