@@ -423,9 +423,9 @@ hand-over.
 
 Open, for the owner:
 
-1. **Image size**: accept about 550-600 MB of firmware, or compress it and
-   keep one `iwlwifi` version per chip (a bbappend), or leave the GPU
-   firmware out of ARM images by default (`PHOENIX_FIRMWARE_EXCLUDE`)?
+1. **Image size** (decided): the owner chose to ship all of it as is, about
+   550-600 MB uncompressed, so as much hardware as possible works out of the
+   box. `PHOENIX_FIRMWARE_EXCLUDE` stays for anyone building a small image.
 2. **Synaptics' Pi firmware**: `meta-raspberrypi` puts the BCM43456 firmware
    (Pi 400, CM4) under `Synaptics-rpidistro` with a licence flag
    (`synaptics-killswitch`, which OSE's `webos.conf` accepts). It allows
