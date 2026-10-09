@@ -1619,5 +1619,57 @@ Item {
             compare(focusSpy.count, 0);
             compare(shell.cardView.maximizeProgress, 0);
         }
+
+        // An app launched by another app or a service while the launcher
+        // (or Just Type, or the dashboard) is open comes to the front: they
+        // give way as its card maximizes
+        // (SystemUiController::setCardWindowAboutToMaximize).
+        function test_cardLaunchedByAnAppHidesTheLauncher() {
+            shell.gestureUp();
+            tryCompare(shell, "launcherOpen", true, 2000);
+            windows._hostMessage("org.webosphoenix.calendar", "", "launch", { id: "org.webosphoenix.email" });
+            tryCompare(shell, "launcherOpen", false, 2000);
+            tryCompare(shell.cardView, "maximizeProgress", 1, 3000);
+
+            shell.cardView.minimize();
+            tryCompare(shell.cardView, "maximizeProgress", 0, 3000);
+            shell.startJustType("abc");
+            verify(shell.justTypeOpen);
+            shell.notifications.dashboardOpen = true;
+            windows._hostMessage("com.palm.systemui", "", "launch", { id: "org.webosphoenix.email" });
+            tryCompare(shell, "justTypeOpen", false, 2000);
+            compare(shell.notifications.dashboardOpen, false);
+            tryCompare(shell.cardView, "maximizeProgress", 1, 3000);
+            // An app opening in the background leaves the launcher open.
+            shell.cardView.minimize();
+            tryCompare(shell.cardView, "maximizeProgress", 0, 3000);
+            shell.gestureUp();
+            tryCompare(shell, "launcherOpen", true, 2000);
+            windows._hostMessage("org.webosphoenix.calendar", "", "launch",
+                                 { id: "org.webosphoenix.memos", params: { $activity: { activityId: 2 } } });
+            wait(300);
+            compare(shell.launcherOpen, true);
+            shell.gestureUp();
+            tryCompare(shell, "launcherOpen", false, 2000);
+        }
+
+        // The launcher opened over a card still on its way up (not ready
+        // yet): the card stays in card view, the launcher open
+        // (CardWindowManager::slotLauncherShown).
+        function test_launcherOverARisingCardKeepsItInCardView() {
+            var uid = windows.launch("org.webosphoenix.email", "");
+            windows.windowFor(uid).ready = false;
+            shell.cardView.focusLaunched(uid);
+            verify(shell.cardView.risingUid === uid);
+            shell.gestureUp();
+            tryCompare(shell, "launcherOpen", true, 2000);
+            compare(shell.cardView.risingUid, "");
+            windows.windowFor(uid).ready = true;
+            wait(1500);
+            compare(shell.launcherOpen, true);
+            compare(shell.cardView.maximizeProgress, 0);
+            shell.gestureUp();
+            tryCompare(shell, "launcherOpen", false, 2000);
+        }
     }
 }

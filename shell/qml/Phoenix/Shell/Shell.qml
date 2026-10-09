@@ -921,6 +921,12 @@ FocusScope {
     Connections {
         target: launcher
         function onOpenChanged() {
+            // The launcher opened over a card still getting ready to rise
+            // (PreparingState, LoadingState): the card stays in card view
+            // rather than maximizing over it later
+            // (CardWindowManager::slotLauncherShown, CardWindowManager.cpp:3069-3078).
+            if (launcher.open && (cards.risingUid !== "" || cards.loadingUid !== ""))
+                cards.minimize();
             if (launcher.open)
                 shell._showDock();
             else if (cards.maximizeProgress > 0 && !cards.minimizing)
@@ -1351,7 +1357,20 @@ FocusScope {
     }
     Connections {
         target: cards
-        function onCardMaximized(uid) { shell.markNotificationsSeen(shell._appOf(uid)); }
+        function onCardMaximized(uid) {
+            // A card about to maximize, whoever asked (an app or a service
+            // launching one, a window it opened): the launcher, Just Type
+            // and the dashboard give way, and dock mode ends, so the card is
+            // not left hidden under them
+            // (SystemUiController::setCardWindowAboutToMaximize,
+            // SystemUiController.cpp:692-708).
+            if (shell.dockMode)
+                shell.exitDockMode(true);
+            launcher.open = false;
+            justType.open = false;
+            notes.dashboardOpen = false;
+            shell.markNotificationsSeen(shell._appOf(uid));
+        }
     }
 
     // ---- System sounds -----------------------------------------------------------------
