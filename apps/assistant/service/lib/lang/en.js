@@ -709,6 +709,13 @@ function agenda(t, ctx) {
         && !/\b(?:sunset|sunrise|easter|christmas|thanksgiving|halloween)\b/.test(m[1]) && !/^(?:my )?next alarm/.test(m[1]))
         return { range: "find", query: m[1].replace(/^next /, "") };
     var dayish = /\b(?:today|tonight|tomorrow|yesterday|this week|next week|this weekend|next weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|\bon the \d/.test(timeWords(t));
+    // One event by its name: "show me the dentist appointment", "check the
+    // meeting with Sam", "I need the dentist appointment thing" (casual:
+    // "open dentist appointment thing"); not the day's ("show me my
+    // appointments", "my meetings today", "the next meeting").
+    if ((m = /^(?:show(?: me)?|check|open|find|look up) (?:my |the |our )?(?:(.+?) )?(?:appointment|meeting|event|appt)(?: with (.+?))?(?: thing)?$/.exec(t))
+        && (m[1] || m[2]) && !dayish && !/^(?:next|first|last|upcoming|\d|today|tomorrow|this|that|calendar|a|an|any)\b/.test(m[1] || ""))
+        return { range: "find", query: m[1] || m[2] };
     if (!(asks && (mentions || (dayish && /\b(?:have|got|on|busy|free|planned|happening)\b/.test(t)))) && !/^(?:my )?(?:calendar|schedule|agenda)(?: for)?(?: .+)?$/.test(t))
         return null;
     if (/^(?:add|create|new|schedule|book|put|make|set up)\b/.test(t)) return null;

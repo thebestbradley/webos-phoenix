@@ -132,3 +132,16 @@ describe("what casual words leave alone", () => {
         expect(parse("play some music")).toEqual({ command: "play", args: { query: "" } });
     });
 });
+
+describe("one event by its name", () => {
+    // "I need the dentist appointment thing" was said again as "open
+    // dentist appointment thing", which the agenda read as today's.
+    it("is found, not the day read", () => {
+        expect(parse("I need the dentist appointment thing")).toEqual({ command: "agenda", args: { range: "find", query: "dentist" } });
+        expect(parse("pull up the meeting with Sam")).toEqual({ command: "agenda", args: { range: "find", query: "sam" } });
+        expect(parse("show me the dentist appointment")).toEqual({ command: "agenda", args: { range: "find", query: "dentist" } });
+        expect(parse("check the meeting with Sam")).toEqual({ command: "agenda", args: { range: "find", query: "sam" } });
+        expect(parse("show me my appointments")?.args).toMatchObject({ range: "day" });
+        expect(parse("show me my meeting tomorrow")?.args).toMatchObject({ range: "day", from: at(8, 0) });
+    });
+});

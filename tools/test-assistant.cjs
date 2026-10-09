@@ -426,8 +426,14 @@ async function main() {
         await ph.waitForTimeout(300);
         check(await closed(), "Back at the picture it was opened on: back to the Assistant");
         await ph.close();
+        // One event by its name, not the day's agenda (there is no dentist
+        // in the simulator's calendar).
+        check(await ask("I need the dentist appointment thing") === "I couldn't find \u201cdentist\u201d on your calendar.",
+              "an event by its name is looked for, not today's agenda read");
+        const priya = await ask("check the meeting with Priya");
+        check(/^\u201cLunch with Priya\u201d is /.test(priya), "and found when it is there: " + priya);
         // Words it does not understand: the commands they come close to.
-        const close = await ask("I need the dentist appointment thing");
+        const close = await ask("the appointment situation is a mess");
         check(/^I don't have the tools for that yet, but I can open Calendar for you\. Did you mean something like \u201cadd a meeting with Sam tomorrow at 3\u201d/.test(close),
               "the app that does it offered, and close commands suggested: " + close);
         check(await app.locator(".as-row").last().locator("[data-testid='as-choice-open:0']").textContent() === "Open Calendar", "an Open Calendar button");
