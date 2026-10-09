@@ -49,6 +49,7 @@ const GROUPS: [RegExp, string][] = [
     [/^org\.webosphoenix\.transcriber\//, "transcriber.operation"],                                       // apps/voicememos/service
     [/^org\.webosphoenix\.filemanager\/search$/, "filemanager.operation"],                               // apps/files/service
     [/^org\.webosphoenix\.tethering\//, "phoenix.tethering"],
+    [/^org\.webosphoenix\.clipboard\/add$/, "phoenix.clipboard"],
     [/^com\.webos\.service\.vpn\//, "vpn.management"],                                                     // LuneOS's luneos-vpn-adapter
     [/^org\.webosphoenix\.service\.location\//, "phoenix.location.permissions"],
     [/^org\.webosphoenix\.system\/mediaKey$/, "phoenix.system.media"],
@@ -69,7 +70,7 @@ const DB_PERMS = JSON.parse(readFileSync(resolve(__dirname, "../public/configura
 // A request for each command (test/phrases.cjs); confirm: accept the read-back.
 const PHRASES = req("./test/phrases.cjs") as Record<string, string>;
 // Commands run as another one's action (locationAccess: the Allow button).
-const ACTIONS: Record<string, true> = { locationAccess: true };
+const ACTIONS: Record<string, true> = { locationAccess: true, copyText: true };
 
 const NOW = new Date(2026, 9, 7, 10, 0, 0).getTime();
 const at = (d: number, h: number) => new Date(2026, 9, d, h, 0, 0).getTime();
@@ -96,7 +97,7 @@ function device() {
     // What it did: [method, kind, operation].
     const used: [string, string, string][] = [];
     // eslint-disable-next-line prefer-const
-    let dev: { allowed: boolean | null } = { allowed: true };
+    let dev: { allowed: boolean | null; lose: string } = { allowed: true, lose: "" };
     const kindOf = (o: any) => o && (o._kind || db.get(o._id)?._kind);
     const ok = (o: object = {}) => Promise.resolve({ returnValue: true, ...o });
     const luna = {
@@ -105,7 +106,11 @@ function device() {
             const record = (kind: string, op: string) => used.push([m, kind, op]);
             if (m === "com.palm.db/find") { record(p.query.from, "read"); return ok({ results: [...db.values()].filter((o) => o._kind === p.query.from) }); }
             if (m === "com.palm.db/get") { p.ids.forEach((id: string) => record(kindOf({ _id: id }), "read")); return ok({ results: p.ids.map((id: string) => db.get(id)).filter(Boolean) }); }
-            if (m === "com.palm.db/put") { p.objects.forEach((o: any) => record(o._kind, db.has(o._id) ? "update" : "create")); return ok({ results: p.objects.map((o: any) => ({ id: put(o) })) }); }
+            if (m === "com.palm.db/put") {
+                p.objects.forEach((o: any) => record(o._kind, db.has(o._id) ? "update" : "create"));
+                // dev.lose: a kind db8 answers for but does not keep (what the read-back catches).
+                return ok({ results: p.objects.map((o: any) => (o._kind === dev.lose ? { id: "lost" + ++n } : { id: put(o) })) });
+            }
             if (m === "com.palm.db/merge") { p.objects.forEach((o: any) => { record(kindOf(o), "update"); db.set(o._id, { ...db.get(o._id), ...o }); }); return ok(); }
             if (m === "com.palm.db/del") { (p.ids || []).forEach((id: string) => { record(kindOf({ _id: id }), "delete"); db.delete(id); }); return ok(); }
             if (m === "com.palm.db/reserveIds") { used.push([m, "", ""]); return ok({ ids: Array.from({ length: p.count }, () => "r" + ++n) }); }
@@ -173,13 +178,20 @@ describe("what each command may do on a device", () => {
             };
             if (c.id === "undo") await ask("new note: something");
             let m: any;
-            if (ACTIONS[c.id]) {
+            if (c.id === "locationAccess") {
                 // Run as its button: the Assistant asks before it uses the location; Allow.
                 d.allowed = null;
                 m = await ask("what's the weather");
                 const r = await d.svc.choose({ threadId: thread, messageId: m.id, choice: "do:0" });
                 expect(r.messages.map((x: Reply) => x.command)).toContain(c.id);
                 expect(r.messages.at(-1).text).toMatch(/°/);
+            } else if (c.id === "copyText") {
+                // Run as its button: a memo db8 took but does not have; Copy It Instead.
+                d.lose = "com.palm.note:1";
+                m = await ask("new note: buy flowers");
+                expect(m).toMatchObject({ status: "failed", text: "I couldn't save it to Memos: it isn't there when I check." });
+                const r = await d.svc.choose({ threadId: thread, messageId: m.id, choice: "do:0" });
+                expect(r.messages.at(-1)).toMatchObject({ command: "copyText", text: "Copied. You can paste it anywhere." });
             } else {
                 m = await ask(PHRASES[c.id]);
                 expect(m.command, `"${PHRASES[c.id]}" runs ${c.id}`).toBe(c.id);

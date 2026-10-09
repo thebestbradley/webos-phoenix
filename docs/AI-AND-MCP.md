@@ -216,6 +216,24 @@ alert; denied, or Location Services off, it says so with Allow Location or
 Turn On Location Services and Location Settings, then answers what was
 asked.
 
+**Said only when done** (9 October 2026, the owner's "Save as Memo" with
+no memo in Memos). The memo was saved; Memos was already running, and
+"Open Memos" brought its card forward as it was (launched with no
+params, a running app is not relaunched), its grid read before the memo
+was made. Now the Assistant opens Memos on the memo (`{memoId}`, a
+compat overlay of Memos' `GridView.js`: the memos read again, that one
+opened), as Calendar is opened on an event. And every command's db8
+writes are read back before it says it is done (`commands.js` `run`:
+what it put is there with the words, numbers and switches it wrote, what
+it merged has them, what it deleted is gone); otherwise it says "I
+couldn't save it to Memos: ..." with Copy It Instead and the app. Other
+services' failures (`returnValue: false`) already fail the command with
+their reason. `tools/test-assistant.cjs` runs each command that writes
+(memos, events moved and cancelled, alarms, lists, tasks completed,
+reminders, contacts, texts) on the simulated services and reads the
+effect back from the store the app reads; it found a text to "555 0142"
+going to "555".
+
 **Permissions** (9 October 2026). On a device a command can only do what
 luna-service2 and db8 let the service do; `permissions.test.ts` runs every
 command through a recording stand-in and checks each Luna method against

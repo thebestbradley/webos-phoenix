@@ -237,6 +237,8 @@ var BUILT_IN = [
       parameters: { type: "object", properties: { who: S, body: { type: "string", description: "The words; empty to write them in Email" } } } },
     { id: "travelTime", title: "Travel time", risk: "read", description: "Tell how long it takes to drive, walk or cycle to a place from here (no live traffic).",
       parameters: { type: "object", properties: { place: S, mode: { type: "string", enum: ["drive", "walk", "bike"] }, traffic: B }, required: ["place"] } },
+    { id: "copyText", title: "Copying", risk: "change", internal: true, description: "Put words on the clipboard.",
+      parameters: { type: "object", properties: { text: S }, required: ["text"] } },
     { id: "locationAccess", title: "Location", risk: "change", internal: true, description: "Let the Assistant use the device's location, or not.",
       parameters: { type: "object", properties: { allow: B }, required: ["allow"] } },
     { id: "undo", title: "Undo", risk: "delete", internal: true, description: "Take back what the assistant just did.",
@@ -1201,7 +1203,7 @@ function helpNow(env) {
 
 // ---- The run ------------------------------------------------------------------------------------
 
-function run(cmd, args, env) {
+function runInner(cmd, args, env) {
     var say = env.lang.say, now = env.now();
     switch (cmd.id) {
     case "call":
@@ -1370,7 +1372,9 @@ function run(cmd, args, env) {
                 color: first ? MEMO_COLORS[(MEMO_COLORS.indexOf(first.color) + 1) % MEMO_COLORS.length] : "yellow",
                 position: memoPosition("a", (first && first.position) || "z"), createdTimestamp: now, modifiedTimestamp: now };
             return dbPut(env, [memo]).then(function (ids) {
-                return { text: say.noteSaved(), open: { appId: MEMOS_APP, params: {}, title: "Memos" },
+                // Memos opened on it ({memoId}: compat GridView.js), which also
+                // makes a running Memos read its memos again.
+                return { text: say.noteSaved(), open: { appId: MEMOS_APP, params: { memoId: ids[0] }, title: "Memos" }, data: { memoId: ids[0] },
                          undo: { kind: "db", ids: ids, what: say.undoWhat.note() } };
             });
         });
@@ -1382,7 +1386,7 @@ function run(cmd, args, env) {
             return { text: say.notesFound(q, hits), open: { appId: MEMOS_APP, params: {}, title: "Memos" },
                      attachments: cards(hits.map(function (n) {
                          var text = String(n.text || n.title || "");
-                         return { title: text.split("\n")[0].slice(0, 60), detail: text.split("\n").slice(1).join("\n").trim(), open: { appId: MEMOS_APP, params: {}, title: "Memos" } };
+                         return { title: text.split("\n")[0].slice(0, 60), detail: text.split("\n").slice(1).join("\n").trim(), open: { appId: MEMOS_APP, params: { memoId: n._id }, title: "Memos" } };
                      })) };
         });
     case "contactAdd": {
@@ -1619,7 +1623,7 @@ function run(cmd, args, env) {
                                  actions: [{ label: say.replyTo(fromName), run: { command: "emailReply", args: { who: args.from.addr || fromName, body: "" } } }] });
     }
     case "emailReply":
-        return run(find(BUILT_IN, "email"), { who: args.addr, addr: args.addr, name: args.name, subject: args.subject, body: args.body }, env);
+        return runInner(find(BUILT_IN, "email"), { who: args.addr, addr: args.addr, name: args.name, subject: args.subject, body: args.body }, env);
     case "findFiles":
         return lunaCall(env, FILES + "search", { query: String(args.query), limit: 20 }).then(function (r) {
             var hits = (r.entries || []).filter(function (e) { return args.kind !== "pdf" || /\.pdf$/i.test(e.name); });
@@ -1633,6 +1637,11 @@ function run(cmd, args, env) {
         }, function () { return { text: say.noFilesService(), open: { appId: FILES_APP, params: {}, title: "Files" } }; });
     case "travelTime":
         return travel(args, env);
+    case "copyText":
+        // The clipboard history (org.webosphoenix.clipboard add), as a copy in any app.
+        return lunaCall(env, "luna://org.webosphoenix.clipboard/add", { text: String(args.text || ""), source: ASSISTANT_APP }).then(function () {
+            return { text: say.copied() };
+        });
     case "callLog":
         return Promise.all([phoneCalls(env), people(env)]).then(function (got) {
             var all = got[0], ppl = got[1];
@@ -1647,7 +1656,7 @@ function run(cmd, args, env) {
                      attachments: cards(shown.map(function (c) { return { title: c.name, subtitle: say.callKind(c.type) + " · " + whenShown(env, c.at, null, false), open: phone }; })) };
         });
     case "replyMessage":
-        return run(find(BUILT_IN, "text"), args, env);
+        return runInner(find(BUILT_IN, "text"), args, env);
     case "eventMove": {
         var shown = function (id) {
             var cal = { appId: CALENDAR_APP, params: { showEventDetail: id }, title: "Calendar" };
@@ -1702,8 +1711,9 @@ function run(cmd, args, env) {
     case "noteAppend": {
         var text2 = String(args.oldText).replace(/\s+$/, "") + "\n" + String(args.text).trim();
         return lunaCall(env, DB + "merge", { objects: [{ _id: args.id, text: text2, title: text2.substring(0, 50), modifiedTimestamp: now }] }).then(function () {
-            return { text: say.noteAppended(args.title), open: { appId: MEMOS_APP, params: {}, title: "Memos" },
-                     attachments: cards([{ title: args.title, detail: text2.split("\n").slice(1).join("\n"), open: { appId: MEMOS_APP, params: {}, title: "Memos" } }]),
+            var memo = { appId: MEMOS_APP, params: { memoId: args.id }, title: "Memos" };
+            return { text: say.noteAppended(args.title), open: memo,
+                     attachments: cards([{ title: args.title, detail: text2.split("\n").slice(1).join("\n"), open: memo }]),
                      undo: { kind: "merge", objects: [{ _id: args.id, text: args.oldText, title: String(args.oldText).substring(0, 50) }], what: say.undoWhat.memoBack() } };
         });
     }
@@ -1778,6 +1788,69 @@ function run(cmd, args, env) {
         }
         return Promise.resolve({ text: say.failed("unknown command") });
     }
+}
+
+// ---- Said only when done ------------------------------------------------------------------------
+// The owner's banana pudding (9 October 2026): "Saved to Memos", and no
+// memo in Memos. A command's answer says what happened, so every db8
+// write it made is read back first (com.palm.db get): what it put is
+// there with the fields it wrote, what it merged has them, what it deleted
+// is gone. Otherwise the answer says it did not happen, and why, with
+// what to do instead. (Calls to other services already fail the command
+// when they answer returnValue false: lunaCall.)
+function run(cmd, args, env) {
+    var writes = {}, order = [], luna = env.luna;
+    var note = function (op, id, obj) {
+        if (!id) return;
+        if (!writes[id]) order.push(id);
+        writes[id] = { op: op, obj: op === "merge" && writes[id] && writes[id].obj ? Object.assign({}, writes[id].obj, obj) : obj };
+    };
+    var spy = Object.assign({}, luna, { call: function (uri, p) {
+        return Promise.resolve(luna.call(uri, p)).then(function (r) {
+            if (r && r.returnValue !== false) {
+                if (uri === DB + "put") (r.results || []).forEach(function (x, i) { note("put", x.id, p.objects[i]); });
+                else if (uri === DB + "merge") (p.objects || []).forEach(function (o) { note("merge", o._id, o); });
+                else if (uri === DB + "del") (p.ids || []).forEach(function (id) { note("del", id, null); });
+            }
+            return r;
+        });
+    } });
+    return runInner(cmd, args, Object.assign({}, env, { luna: spy })).then(function (out) {
+        if (!order.length) return out;
+        return Promise.resolve(luna.call(DB + "get", { ids: order })).then(function (r) {
+            // A db8 that cannot say (no results at all): nothing to check against.
+            if (!r || !Array.isArray(r.results)) return out;
+            var got = {};
+            r.results.forEach(function (o) { if (o && o._id) got[o._id] = o; });
+            var bad = order.filter(function (id) {
+                var w = writes[id], o = got[id];
+                if (w.op === "del") return !!(o && !o._del);
+                if (!o || o._del) return true;
+                // The words, numbers and switches it wrote, as written (db8 may
+                // drop a null or order an object's keys its own way).
+                return Object.keys(w.obj || {}).some(function (k) {
+                    var v = w.obj[k];
+                    if (k.charAt(0) === "_" || v === null || v === undefined || typeof v === "object") return false;
+                    return o[k] !== v;
+                });
+            });
+            if (!bad.length) return out;
+            return notDone(cmd, args, env, bad.map(function (id) { return (writes[id].obj && writes[id].obj._kind) || (got[id] && got[id]._kind) || id; }));
+        }, function (e) { return notDone(cmd, args, env, [], e && e.message); });
+    });
+}
+// The answer when what a command wrote is not there.
+function notDone(cmd, args, env, kinds, why) {
+    var say = env.lang.say, app = { "com.palm.note:1": "Memos", "com.palm.calendarevent:1": "Calendar", "com.palm.task:1": "Tasks",
+        "com.palm.tasklist:1": "Tasks", "com.palm.clock.alarm:1": "Clock", "com.palm.person:1": "Contacts", "com.palm.contact.palmprofile:1": "Contacts" }[kinds[0]] || "";
+    var reason = why || say.notThere();
+    var out = { text: say.notSaved(app, reason), failed: true, actions: [] };
+    // What to do instead: the words kept (a memo's, a task's) on the clipboard.
+    var words = cmd.id === "note" ? args.text : cmd.id === "noteAppend" || cmd.id === "task" || cmd.id === "reminder" ? args.text : "";
+    if (words) out.actions.push({ label: say.copyInstead(), run: { command: "copyText", args: { text: String(words) } } });
+    var appIds = { Memos: MEMOS_APP, Calendar: CALENDAR_APP, Tasks: TASKS_APP, Clock: CLOCK_APP, Contacts: CONTACTS_APP };
+    if (appIds[app]) out.open = { appId: appIds[app], params: {}, title: app };
+    return out;
 }
 
 function runningTimers(env) {

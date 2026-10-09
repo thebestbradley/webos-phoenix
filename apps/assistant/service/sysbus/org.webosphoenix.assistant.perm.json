@@ -27,7 +27,8 @@
         "phoenix.system.media",
         "filemanager.operation",
         "phoenix.tethering",
-        "vpn.management"
+        "vpn.management",
+        "phoenix.clipboard"
     ],
     "org.webosphoenix.tts": []
 }

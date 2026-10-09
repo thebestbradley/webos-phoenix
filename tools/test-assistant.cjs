@@ -327,6 +327,44 @@ async function main() {
         for (const id of made) await svc(app, A + "deleteThread", { id });
         await svc(app, A + "setCurrent", { id: currentBefore });
         check(notOff.length === 0, "each command turned off in Settings is refused" + (notOff.length ? ": " + notOff.join(" | ") : ""));
+        // Said only when done: every command that writes, then its effect read
+        // back independently from the store the app reads (db8, the
+        // services), so "says it did, didn't" cannot come back.
+        {
+            const find = async (kind) => ((await svc(app, "luna://com.palm.db/find", { query: { from: kind } })).results || []);
+            const say = async (text) => {
+                let r = await svc(app, A + "ask", { text, newThread: true });
+                let m = r.messages[r.messages.length - 1];
+                if (m.status === "pending") { r = await svc(app, A + "confirm", { threadId: r.thread.id, messageId: m.id, accept: true }); m = r.messages[r.messages.length - 1]; }
+                await svc(app, A + "deleteThread", { id: r.thread.id });
+                return m;
+            };
+            const effects = [
+                ["new note: harness memo", async () => (await find("com.palm.note:1")).some((n) => n.text === "Harness memo")],
+                ["add the second line to my harness memo", async () => (await find("com.palm.note:1")).some((n) => n.text === "Harness memo\nthe second line")],
+                ["add a meeting called harness sync tomorrow at 3", async () => (await find("com.palm.calendarevent:1")).some((e) => e.subject === "Harness sync" && new Date(e.dtstart).getHours() === 15)],
+                ["move my harness sync to 4pm", async () => (await find("com.palm.calendarevent:1")).some((e) => e.subject === "Harness sync" && new Date(e.dtstart).getHours() === 16)],
+                ["cancel my harness sync meeting", async () => !(await find("com.palm.calendarevent:1")).some((e) => e.subject === "Harness sync" && !e._del)],
+                ["set an alarm for 6:15am", async () => (await find("com.palm.clock.alarm:1")).some((a) => a.hour === 6 && a.minute === 15 && a.enabled)],
+                ["turn off my 6:15 am alarm", async () => (await find("com.palm.clock.alarm:1")).some((a) => a.hour === 6 && a.minute === 15 && !a.enabled)],
+                ["add harness bolts to my hardware list", async () => {
+                    const l = (await find("com.palm.tasklist:1")).find((x) => x.name === "Hardware");
+                    return !!l && (await find("com.palm.task:1")).some((t) => t.summary === "Harness bolts" && t.listId === l._id);
+                }],
+                ["check off harness bolts", async () => (await find("com.palm.task:1")).some((t) => t.summary === "Harness bolts" && t.completed)],
+                ["remind me to water the harness plant tomorrow at 9am", async () => (await find("com.palm.task:1")).some((t) => /^water the harness plant$/i.test(t.summary) && t.due)],
+                ["add Harness Tester to my contacts with number 555 0199", async () => (await find("com.palm.person:1")).some((x) => x.name && x.name.familyName === "Tester")],
+                ["text 555 0142 hello from the harness", async () => (await find("com.palm.smsmessage:1")).some((x) => x.messageText === "hello from the harness")],
+            ];
+            const lies = [];
+            for (const [text, effect] of effects) {
+                const m = await say(text);
+                const happened = await effect();
+                if (m.status !== "failed" && !happened) lies.push(`${text}: said "${m.text}", not done`);
+                if (!happened && m.status === "failed") lies.push(`${text}: failed: ${m.text}`);
+            }
+            check(lies.length === 0, "every write command did what it said, read back from the apps' store" + (lies.length ? ": " + lies.join(" | ") : ""));
+        }
         // What's playing: what the player told the system (setNowPlaying, as
         // @phoenix/luna postNowPlaying does for Music and Podcasts).
         check(/^Nothing is playing right now\.$/.test(await ask("What's playing?")) || true, "what's playing, before");

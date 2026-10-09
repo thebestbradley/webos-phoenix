@@ -561,6 +561,9 @@ function textMessage(t, ctx) {
     if (sep && !/^(?:me|us)$/.test(sep[1])) return { who: sep[1], message: cased(sep[2], ctx) };
     var best = nameAtStart(rest, ctx);
     if (best) return { who: best, message: cased(rest.slice(best.length).trim(), ctx) };
+    // A number said in groups ("555 0142 hello"): all of it, then the words.
+    var num = /^(\+?\(?\d[\d().-]*(?: \(?\d[\d().-]*)*)\s+(\D.*)$/.exec(rest);
+    if (num && num[1].replace(/\D/g, "").length >= 3) return { who: num[1], message: cased(num[2], ctx) };
     var sp = rest.indexOf(" ");
     if (/^tell /.test(t) || /^(?:me|us)\b/.test(rest)) return null;
     return sp < 0 ? { who: rest, message: "" } : { who: rest.slice(0, sp), message: cased(rest.slice(sp + 1), ctx) };
@@ -1705,6 +1708,11 @@ var say = {
         return cap(where.replace(/^your /, "Your ")) + ": " + list(shown) + (items.length > 8 ? ", and " + (items.length - 8) + " more" : "") + ".";
     },
     // ---- Maps, the web, the device, Marketplace
+    // ---- When it did not happen
+    notSaved: function (app, why) { return "I couldn't save it" + (app ? " to " + app : "") + ": " + why + "."; },
+    notThere: function () { return "it isn't there when I check"; },
+    copyInstead: function () { return "Copy It Instead"; },
+    copied: function () { return "Copied. You can paste it anywhere."; },
     // ---- Email, files, travel, hotspot and VPN
     readEmail: function (from, subject, text, at, now) {
         return "From " + from + ", " + whenText(at, null, false, now) + ": " + quote(subject || "(no subject)") + (text ? ". " + excerpt(text, 240) : ".");
