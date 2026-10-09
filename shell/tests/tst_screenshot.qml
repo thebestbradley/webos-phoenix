@@ -135,6 +135,11 @@ Item {
             verify(thumb.visible && thumb.shown);
             verify(String(findChild(thumb, "screenCaptureThumbnailImage").source) !== "", "the capture in it");
             verify(thumb.x + thumb.width < root.width / 2 && thumb.y + thumb.height > root.height / 2, "bottom left");
+            // Clear of the controls down there: above the gesture area, the
+            // notification area and an app's bottom toolbar (the preview's
+            // Crop button), not over them.
+            verify(thumb.y + thumb.height <= root.height - Theme.gestureAreaHeight - shell.notifications.negativeSpaceTarget - Theme.px(56),
+                   "above the app's toolbar: " + (thumb.y + thumb.height));
             // The page saving it was handed the capture's id.
             verify(thumb.capture !== "");
             verify(windows._pendingCaptures[windows._pendingCaptures.length - 1].indexOf('"capture":"' + thumb.capture + '"') >= 0);

@@ -3622,8 +3622,11 @@ FocusScope {
     ScreenCaptureThumbnail {
         id: captureThumbnail
         anchors.bottom: parent.bottom
-        // Above the phone's notification area (its banner says "Screen captured").
-        anchors.bottomMargin: Theme.px(24) + notes.negativeSpaceTarget
+        // Bottom left as on iOS, but clear of what is down there: above the
+        // phone's notification area (its banner says "Screen captured")
+        // and the gesture area, and above an app's bottom toolbar (Enyo's
+        // command menus, the preview's Crop, Markup and Share), not over it.
+        anchors.bottomMargin: Theme.gestureAreaHeight + notes.negativeSpaceTarget + captureThumbnail.toolbarClearance + Theme.px(12)
         z: 99999
         onActivated: (path, capture) => shell.openCapture(path, capture)
     }

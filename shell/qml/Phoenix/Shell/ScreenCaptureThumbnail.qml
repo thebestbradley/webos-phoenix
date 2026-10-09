@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // The capture's thumbnail after a screen capture (Phoenix, as iOS and
-// Android show it; docs/SCREENSHOTS.md SC3): framed, in the bottom left
-// corner for a few seconds. A tap opens it in the preview (the Screenshot
+// Android show it; docs/SCREENSHOTS.md SC3): framed, at the bottom left
+// for a few seconds, raised above an app's bottom toolbar
+// (toolbarClearance) so it covers none of its buttons. A tap opens it in the preview (the Screenshot
 // app: crop, markup, share, save, delete); a swipe to the left puts it
 // away, as does doing nothing. The capture is saved either way.
 
@@ -21,6 +22,10 @@ Item {
     // Its file, once the runtime has saved it ("" until then).
     property string path: ""
     readonly property bool shown: state === "shown"
+    // How far up from the bottom of the app's space it stays: an app's
+    // bottom toolbar (Enyo 1's CommandMenu, the toolbars of Phoenix's apps,
+    // the preview's Crop / Markup / Share row: 56 px at most).
+    readonly property real toolbarClearance: Theme.px(56)
 
     // Tapped: the capture's file, or "" while it is still being saved
     // (with the capture's id, for the shell to open it once it is).
