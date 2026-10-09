@@ -17,7 +17,13 @@ works, and how to host every piece yourself.
 - **My location**: from webOS OSE's `com.webos.service.location`
   (`getLocationUpdates`, subscribed). The simulator simulates it
   (`runtime/phoenix-runtime.js`, "First use, emergency information, location and help"), starting in
-  downtown San Jose; `mock/setLocation` moves the device.
+  downtown San Jose; `mock/setLocation` moves the device, and so does
+  phoenix-sim's **Simulate > Location** (`shell/qml/Phoenix/Sim/SimLocation.qml`):
+  a few cities, Custom... (latitude and longitude, or a place's name),
+  This Computer's Location (Qt Positioning: CoreLocation on a Mac, GeoClue
+  on Linux when it runs), and Moving Along the Route, which walks, cycles
+  or drives the device along the route Maps shows, a fix a second, for
+  testing navigation.
 - **Search**: when the user submits (never as-you-type), with Photon or
   Nominatim, cached; coordinates typed in are understood. When the server
   fails or search is set to offline, the offline index answers.

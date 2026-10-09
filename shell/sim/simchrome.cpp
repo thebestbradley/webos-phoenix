@@ -23,6 +23,8 @@
 #include <QLayout>
 #include <QMenu>
 #include <QMenuBar>
+#include <QInputDialog>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QPixmap>
 #include <QPushButton>
@@ -630,6 +632,13 @@ void SimChrome::alert(const QString &text, const QString &details, const QString
         connect(log, &QPushButton::clicked, this, [logFile]() { QDesktopServices::openUrl(QUrl::fromLocalFile(logFile)); });
     }
     box->open();
+}
+
+QString SimChrome::askText(const QString &title, const QString &label, const QString &text)
+{
+    bool ok = false;
+    const QString answer = QInputDialog::getText(this, title, label, QLineEdit::Normal, text, &ok);
+    return ok ? answer : QString();
 }
 
 void SimChrome::showAbout()

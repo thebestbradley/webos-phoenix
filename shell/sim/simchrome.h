@@ -54,6 +54,9 @@ public:
     // the Services menu): a warning with the details, and a Show Log button
     // when there is a log to open.
     Q_INVOKABLE void alert(const QString &text, const QString &details, const QString &logFile);
+    // A line of text asked for (sim.qml: Simulate > Location > Custom...);
+    // "" when cancelled.
+    Q_INVOKABLE QString askText(const QString &title, const QString &label, const QString &text);
 
     // --check-chrome: whether the menu bar has its menus with the keyboard
     // focus on the device's screen, as people use it (on a Mac: the menu

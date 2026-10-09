@@ -573,6 +573,12 @@ function MapsApp() {
     ) : null;
 
     const routeLine = nav?.route.geometry ?? dir?.route?.geometry ?? null;
+    // The route on screen, for phoenix-sim's Simulate > Location > Moving
+    // Along the Route (shell/qml/Phoenix/Sim/SimLocation.qml).
+    const shownRoute = nav?.route ?? dir?.route ?? null;
+    useEffect(() => {
+        (window as { __phoenixMapsRoute?: unknown }).__phoenixMapsRoute = shownRoute ? { geometry: shownRoute.geometry, mode: shownRoute.mode } : null;
+    }, [shownRoute]);
 
     const appMenu = [
         { label: "Saved Places", onSelect: () => setPage("saved") },

@@ -757,6 +757,14 @@ Item {
         }
     }
 
+    // Simulate > Location: where the device is, a city, a place, this
+    // computer's, or moving along Maps' route (SimLocation.qml).
+    SimLocation {
+        id: simLocation
+        windows: windows
+        askText: typeof simChrome !== "undefined" && simChrome ? function (title, label, text) { return simChrome.askText(title, label, text); } : null
+    }
+
     // ---- The simulator's functions ------------------------------------------------------
     // Every key and command the simulator adds, once: the keyboard shortcuts
     // below are made from this list, and phoenix-sim builds its menus,
@@ -1004,7 +1012,7 @@ Item {
               if (!root.adaptive)
                   root.restartSim(["tablet", "phone", "adaptive"], ["--adaptive"]);
           } }
-    ].concat(devicePresets.map(function (p) {
+    ].concat(simLocation.actions).concat(devicePresets.map(function (p) {
         return { id: "size-" + p.id, menu: "view", submenu: qsTr("Device Size"), text: p.text, radio: "deviceSize",
                  tip: qsTr("The window at %1x%2, upright (%3 layout when adaptive)").arg(p.width).arg(p.height)
                       .arg(Theme.tabletLayoutFor(p.width, p.height, 1) ? qsTr("tablet") : qsTr("phone")),
