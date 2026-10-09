@@ -1569,12 +1569,6 @@ Item {
                 simSettings.setValue("keyboard/emoji", shell.keyboard.emojiPrefs);
         }
         function onTextAssistDataChanged() { textAssistSave.restart(); }
-    }
-    Timer {
-        id: textAssistSave
-        interval: 2000
-        onTriggered: {
-            if (typeof simSettings !== "undefined")
         // Settings > Text Assist > Personal Dictionary lists them
         // (getSystemStatus learnedWords).
         function onLearnedWordsChanged() { windows.pushSystemStatus({ learnedWords: shell.keyboard.learnedWords }); }
@@ -1583,6 +1577,12 @@ Item {
     Connections {
         target: status
         function onDictionaryWordAdded(word) { windows.pushSystemStatus({ dictionaryWordAdded: word }); }
+    }
+    Timer {
+        id: textAssistSave
+        interval: 2000
+        onTriggered: {
+            if (typeof simSettings !== "undefined")
                 simSettings.setValue("keyboard/words", shell.keyboard.textAssistData);
         }
     }

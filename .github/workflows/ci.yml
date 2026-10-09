@@ -123,6 +123,9 @@ jobs:
           cmake --build build -j
 
       - name: Behaviour tests
+        # A test that waits forever (a QML file that fails to load) fails
+        # here in minutes, with its log, instead of holding the job for hours.
+        timeout-minutes: 40
         # Failures also become annotations, readable without the log.
         run: |
           set -o pipefail
@@ -390,6 +393,7 @@ jobs:
         run: defaults write NSGlobalDomain NSAppSleepDisabled -bool YES
 
       - name: Behaviour tests
+        timeout-minutes: 60
         env:
           QT_QUICK_BACKEND: software
         # Failures also become annotations, readable without the log.
