@@ -14215,14 +14215,25 @@
         // time one is due, again until one is shown as a notification (past
         // the quiet hours, Do Not Disturb and calls) or none waits. Resolves
         // the last wake's {queued, delivered, dropped, postponed, at}.
-        function fastForward(limit) {
-            var m = service(), n = limit || 8;
+        // {all: true}: on until every question waiting has been shown once
+        // (those queued a moment apart are due a moment apart), the counts
+        // summed; what the tests need, whatever the hour (an hour on from
+        // 01:00 is in the quiet hours and sends them together at 08:00; one
+        // on from 11:00 sends one at a time).
+        function fastForward(opts) {
+            var o = typeof opts === "number" ? { limit: opts } : (opts || {});
+            var m = service(), n = o.limit || 8, sum = null;
+            function add(r) {
+                if (!sum) { sum = r; return; }
+                ["queued", "delivered", "dropped", "postponed"].forEach(function (k) { sum[k] = (sum[k] || 0) + (r[k] || 0); });
+                sum.at = r.at;
+            }
             function step(last) {
                 return m.followUps({}).then(function (q) {
-                    var waiting = q.followUps || [];
-                    if (!waiting.length || n-- <= 0 || (last && last.delivered)) return last || { delivered: 0 };
+                    var waiting = (q.followUps || []).filter(function (f) { return !o.all || f.state !== "delivered"; });
+                    if (!waiting.length || n-- <= 0 || (!o.all && last && last.delivered)) return (o.all ? sum : last) || { delivered: 0 };
                     var at = Math.max(Date.now(), Math.min.apply(null, waiting.map(function (f) { return f.nextAt; })));
-                    return m.followUpWake({ at: at }).then(function (r) { r.at = at; return step(r); });
+                    return m.followUpWake({ at: at }).then(function (r) { r.at = at; add(Object.assign({}, r)); return step(r); });
                 });
             }
             return step(null);

@@ -17,7 +17,12 @@
 //   - the app opened from the notification ({followUp}) is on that
 //     conversation; an answer typed there applies, and nothing is unread.
 //
-//   node tools/test-assistant-followups.cjs [--tablet] [--out DIR]
+//   node tools/test-assistant-followups.cjs [--tablet] [--night] [--out DIR]
+//
+// The page's clock is set to a time zone where it is 12:00-ish (--night:
+// 23:00-ish, the tablet's default), so what the quiet hours (22:00-08:00)
+// do to the questions is the same whenever the test runs: by day they go
+// one at a time, by night together at 08:00.
 //
 // Build the app first (cd apps && npm run build -w assistant).
 
@@ -37,6 +42,15 @@ const tablet = args.includes("--tablet");
 const outIdx = args.indexOf("--out");
 const outDir = outIdx >= 0 ? args[outIdx + 1] : path.join(REPO, "build", "assistant-followups-tests", tablet ? "tablet" : "phone");
 const viewport = tablet ? { width: 1024, height: 740 } : { width: 320, height: 452 };
+const night = args.includes("--night") || (tablet && !args.includes("--day"));
+// Etc/GMT-N is UTC+N: the zone whose hour now is the one wanted.
+function zoneAt(hour) {
+    let off = hour - new Date().getUTCHours();
+    if (off > 14) off -= 24;
+    if (off < -12) off += 24;
+    return off === 0 ? "Etc/GMT" : "Etc/GMT" + (off > 0 ? "-" : "+") + Math.abs(off);
+}
+const timezoneId = zoneAt(night ? 23 : 12);
 const port = 8790 + Math.floor(Math.random() * 80);
 const appUrl = `http://127.0.0.1:${port}/usr/palm/applications/org.webosphoenix.assistant/index.html`;
 const A = "luna://org.webosphoenix.assistant/";
@@ -66,7 +80,8 @@ async function main() {
     try {
         await waitForServer(`http://127.0.0.1:${port}/apps.json`, 10000);
         const browser = await chromium.launch();
-        const context = await browser.newContext({ viewport });
+        const context = await browser.newContext({ viewport, timezoneId });
+        console.log(`clock: ${night ? "night" : "day"} (${timezoneId})`);
         const errors = [], notes = [];
         const app = await context.newPage();
         app.on("pageerror", (e) => errors.push(e.message));
@@ -126,9 +141,10 @@ async function main() {
         // (Out of the conversation: one in sight reads what arrives at once.
         // A phone shows the list instead; a tablet, beside it, another one.)
         await app.click(tablet ? "[data-testid='as-new']" : "[data-testid='as-conversations']");
-        const ff = await app.evaluate(() => __phoenixRuntime.assistant.fastForward());
-        // The lunch's second question (left as the dinner was asked) and the dinner's.
-        check(ff.delivered === 2, "moved on to when they are due, they are sent: " + JSON.stringify(ff));
+        const ff = await app.evaluate(() => __phoenixRuntime.assistant.fastForward({ all: true }));
+        // The lunch's second question (left as the dinner was asked) and the
+        // dinner's: due a moment apart by day, both at 08:00 by night.
+        check(ff.delivered === 2 && (night ? ff.postponed >= 1 : ff.postponed === 0), "moved on to when they are due, they are sent: " + JSON.stringify(ff));
         const n = notes.find((x) => /dinner/.test(x.title || ""));
         check(!!n && n.appId === "org.webosphoenix.assistant" && /\?$/.test(n.title) && n.actions && n.actions.uri === A + "answerFollowUp"
               && n.actions.items.some((i) => i.id === "fu:skip") && n.params && n.params.followUp,
