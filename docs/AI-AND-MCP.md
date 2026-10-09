@@ -232,6 +232,34 @@ the prompt cached for a phone's single user. Checked in phoenix-sim:
 does not know, set the alarm through Qwen3 0.6B and was spoken by Kitten
 TTS.
 
+**What the grammar could not read** (`fillArgs`). When the grammar knows
+the command but not all it needs (a required argument empty: "add an
+event called dentist friday-ish" has no time it can read), or a language
+file marks its parse `partial: true`, the on-device model fills in what
+the words say, before any choosing: its answer held to the command's own
+parameters (their JSON schema, nothing required), at temperature 0. What
+the grammar read stays; a value from the model is kept only when a word
+of it was said (a small model left free invents times); what is still
+missing is asked for as before ("When is it?"), and what the model filled
+is read back unless the words name it.
+
+**Measured on the evaluation set** (`test/model-eval.json`: 163 requests
+the grammar does not take, 25 of them questions or chat; the commands
+with their examples, `lib/examples.js`): the right command chosen for 78 of the 138
+requests to the phone with the built-in Qwen3 0.6B (57%), 114 with Qwen3
+4B (83%); the 25 questions and chat stayed words with 0.6B (25), 4B put
+one in Arithmetic ("how many legs does a spider have": a command that
+reads, so it was taken). End to end, the right command was carried out
+for 49 with 0.6B (before questions reached the choice; on a computer busy
+with other work, where some requests ran out of time). Questions now
+reach the choice too (37 of the 138 are worded as questions, "is my
+thursday afternoon open"): 17 of them right with 0.6B, 30 with 4B; for a
+question only a command that reads is taken, so "how do I make banana
+pudding" (0.6B: append to a memo) stays words. Checked with the real
+0.6B: "add an event called dentist friday-ish" was made for Friday;
+"... in a fortnight" (the model gave nothing the dates understand) and
+"add an event called dentist" (nothing said) were asked "When is it?".
+
 **Never a dead end** (9 October 2026, from the owner's "how do you make
 banana pudding": the commands said "I can't do that on the phone", and the
 model connected later copied it). What nothing here can do gets what can,
