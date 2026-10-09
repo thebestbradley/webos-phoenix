@@ -10826,6 +10826,242 @@
     })();
 
     // ================================================================================
+    // Hardware and drivers (org.webosphoenix.hardware; services/hardware)
+    // ================================================================================
+    //
+    // The device's own service (hardwareservice.js, loaded from
+    // /usr/palm/services/org.webosphoenix.hardware/), given a simulated
+    // device: the hardware below, opkg (packages read with the Marketplace's
+    // .ipk reader, what they hold recorded in the store), and a kernel that
+    // loads firmware and modules when the driver is reloaded. The driver
+    // catalog is the sample one (server/drivers/sample), signed with a key
+    // only the simulator trusts (/usr/share/phoenix/hardware/sample/
+    // catalog-sim.json, in place of /etc/palm/hardware/catalog.json;
+    // "hardware:config" in the store stands for an edited one).
+    // tools/test-hardware.cjs sets "hardware:sim" {fail: {opkg: text}} to
+    // make opkg fail.
+    (function hardwareService() {
+        var SERVICE = "org.webosphoenix.hardware";
+        var SAMPLE = "/usr/share/phoenix/hardware/sample/";
+        var PACKAGES = "/var/lib/phoenix/hardware/packages/";
+        var loadModule = nodeServiceLoader("/usr/palm/services/" + SERVICE + "/", "Hardware service");
+        var subtle = global.crypto && global.crypto.subtle;
+        function digest(alg) {
+            return function (bytes) { return subtle.digest(alg, bytes).then(function (h) { return new Uint8Array(h); }); };
+        }
+        function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+        function b64(bytes) {
+            var s = "";
+            for (var i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            return btoa(s);
+        }
+        function unb64(text) {
+            var s = atob(text), out = new Uint8Array(s.length);
+            for (var i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+            return out;
+        }
+
+        // The simulated device: a PC-like tablet with a Wi-Fi card that works,
+        // a USB Wi-Fi dongle whose firmware is not in the image, another whose
+        // driver is not in the kernel, an NVIDIA card nouveau drives (an
+        // optional firmware makes it faster), and a USB gadget nothing knows.
+        // firmware / module: what the driver needs before it binds.
+        var DEVICES = [
+            { id: "pci:0000:02:00.0", bus: "pci", name: "AR9462 Wireless Network Adapter", vendor: "Qualcomm Atheros", category: "wifi",
+              modaliases: ["pci:v0000168Cd00000034sv0000105Bsd0000E052bc02sc80i00"], driver: "ath9k" },
+            { id: "usb:1-2", bus: "usb", name: "802.11ac WLAN Adapter (RTL8821CU)", vendor: "Realtek", category: "wifi",
+              modaliases: ["usb:v0BDApC811d0200dc00dsc00dp00icFFiscFFipFFin00"], driver: "rtw88_8821cu", firmware: ["rtw88/rtw8821c_fw.bin"] },
+            { id: "usb:1-3", bus: "usb", name: "802.11ac WLAN Adapter (RTL8812AU)", vendor: "Realtek", category: "wifi",
+              modaliases: ["usb:v0BDAp8812d0000dc00dsc00dp00icFFiscFFipFFin00"], driver: "88XXau", module: "88XXau" },
+            { id: "pci:0000:01:00.0", bus: "pci", name: "TU117 [GeForce GTX 1650]", vendor: "NVIDIA", category: "graphics",
+              modaliases: ["pci:v000010DEd00001F82sv00001043sd000087B4bc03sc00i00"], driver: "nouveau" },
+            { id: "pci:0000:00:1f.3", bus: "pci", name: "Cannon Lake PCH cAVS", vendor: "Intel", category: "audio",
+              modaliases: ["pci:v00008086d0000A348sv000017AAsd00003FF6bc04sc03i80"], driver: "snd_hda_intel" },
+            { id: "pci:0000:03:00.0", bus: "pci", name: "NVMe SSD Controller 980", vendor: "Samsung", category: "storage",
+              modaliases: ["pci:v0000144Dd0000A809sv0000144Dsd0000A801bc01sc08i02"], driver: "nvme" },
+            { id: "usb:1-5", bus: "usb", name: "HD Pro Webcam C920", vendor: "Logitech", category: "camera",
+              modaliases: ["usb:v046Dp082Dd0011dcEFdsc02dp01ic0Eisc01ip00in00"], driver: "uvcvideo" },
+            { id: "i2c:i2c-GDIX1001:00", bus: "acpi", name: "Touchscreen (GDIX1001)", vendor: "Goodix", category: "input",
+              modaliases: ["acpi:GDIX1001:"], driver: "Goodix-TS" },
+            { id: "i2c:i2c-BOSC0200:00", bus: "acpi", name: "Accelerometer (BMC150)", vendor: "Bosch", category: "sensors",
+              modaliases: ["acpi:BOSC0200:"], driver: "bmc150_accel_i2c" },
+            { id: "usb:1-4", bus: "usb", name: "USB device (1209:0001)", vendor: "", category: "other",
+              modaliases: ["usb:v1209p0001d0100dcFFdsc00dp00icFFisc00ip00in00"], driver: null }
+        ];
+        var BASE_PACKAGES = { "kernel-6.6.23-phoenix": "6.6.23-r0", "kernel-module-rtw88-8821cu-6.6.23-phoenix": "6.6.23-r0", "busybox": "1.36.1-r0" };
+
+        function sim() {
+            var s = store.get("hardware:sim", null) || {};
+            s.packages = s.packages || {};
+            s.loaded = s.loaded || { firmware: [], modules: [] };
+            return s;
+        }
+        function files() { return store.get("hardware:files", null) || {}; }
+
+        var opkg = {
+            list: function () {
+                var s = sim(), out = [];
+                Object.keys(BASE_PACKAGES).forEach(function (n) { out.push({ name: n, version: BASE_PACKAGES[n] }); });
+                Object.keys(s.packages).forEach(function (n) { out.push({ name: n, version: s.packages[n].version }); });
+                return Promise.resolve(out);
+            },
+            install: function (paths) {
+                return wait(500).then(function () {
+                    var s = sim();
+                    if (s.fail && s.fail.opkg) return { ok: false, error: s.fail.opkg };
+                    var all = files();
+                    return paths.reduce(function (chain, path) {
+                        return chain.then(function () {
+                            var name = path.slice(PACKAGES.length);
+                            if (!all[name]) throw new Error("No such file: " + path);
+                            return runtime.ipk().read(unb64(all[name])).then(function (pkg) {
+                                var s2 = sim();
+                                s2.packages[pkg.control.Package] = { version: pkg.control.Version, files: pkg.files.map(function (f) { return f.path; }) };
+                                store.set("hardware:sim", s2);
+                            });
+                        });
+                    }, Promise.resolve()).then(function () { return { ok: true }; }, function (e) { return { ok: false, error: e.message }; });
+                });
+            },
+            remove: function (names) {
+                return wait(300).then(function () {
+                    var s = sim();
+                    names.forEach(function (n) { delete s.packages[n]; });
+                    store.set("hardware:sim", s);
+                    return { ok: true };
+                });
+            }
+        };
+
+        // The kernel: a driver probing again (a reload) loads what is in
+        // /lib/firmware and /lib/modules then.
+        function activate(step) {
+            if (step.after === "reboot" || step.after === "none") return Promise.resolve();
+            return wait(600).then(function () {
+                var s = sim(), fw = [], mods = [];
+                Object.keys(s.packages).forEach(function (n) {
+                    s.packages[n].files.forEach(function (f) {
+                        var m = /^lib\/firmware\/(.+?)(\.xz|\.zst)?$/.exec(f);
+                        if (m) fw.push(m[1]);
+                        var k = /^lib\/modules\/[^/]+\/.*\/([^/]+)\.ko(\.xz|\.zst)?$/.exec(f);
+                        if (k) mods.push(k[1]);
+                    });
+                });
+                s.loaded = { firmware: fw, modules: mods };
+                store.set("hardware:sim", s);
+            });
+        }
+
+        function scan() {
+            var s = sim();
+            return Promise.resolve(DEVICES.map(function (d) {
+                var missing = (d.firmware || []).filter(function (f) { return s.loaded.firmware.indexOf(f) < 0; });
+                var bound = missing.length ? null : d.module && s.loaded.modules.indexOf(d.module) < 0 ? null : d.driver;
+                return { id: d.id, bus: d.bus, name: d.name, vendor: d.vendor, category: d.category, modaliases: d.modaliases.slice(),
+                         driver: bound, firmwareMissing: missing };
+            }));
+        }
+
+        // file:// (the sample catalog in the rootfs) or the web.
+        function rootfsBytes(path) {
+            return new Promise(function (resolve) {
+                var x = new global.XMLHttpRequest();
+                x.open("GET", path, true);
+                x.responseType = "arraybuffer";
+                x.onload = function () {
+                    var ok = (x.status === 200 || x.status === 0) && x.response && x.response.byteLength > 0;
+                    resolve({ status: ok ? 200 : 404, bytes: ok ? new Uint8Array(x.response) : new Uint8Array(0) });
+                };
+                x.onerror = function () { resolve({ status: 404, bytes: new Uint8Array(0) }); };
+                x.send();
+            });
+        }
+        function fileUrl(u) { var m = /^file:\/\/(\/.*)$/.exec(u); return m ? m[1] : null; }
+
+        var methods = null, watchers = [];
+        function service() {
+            if (methods) return methods;
+            methods = loadModule("hardwareservice.js").createHardwareService({
+                system: {
+                    scan: scan,
+                    info: function () { return Promise.resolve({ arch: "x86_64", kernel: "6.6.23-phoenix" }); },
+                    activate: activate,
+                    // Restarts counted by com.palm.power/shutdown/machineReboot.
+                    bootId: function () { return "boot-" + store.get("boot:count", 0); }
+                },
+                opkg: opkg,
+                request: function (req) {
+                    var path = fileUrl(req.url);
+                    if (!path) return proxiedRequest(req);
+                    var text = PalmSystem.getResource(path);
+                    return Promise.resolve(text ? { status: 200, body: text } : { status: 404, body: "" });
+                },
+                requestBytes: function (req) {
+                    var path = fileUrl(req.url);
+                    return (path ? rootfsBytes(path) : proxiedRequestBytes(req)).then(function (r) { return wait(300).then(function () { return r; }); });
+                },
+                crypto: { sha256: digest("SHA-256"), sha512: digest("SHA-512") },
+                files: {
+                    write: function (name, bytes) {
+                        var all = files();
+                        all[name] = b64(bytes);
+                        store.set("hardware:files", all);
+                        return PACKAGES + name;
+                    },
+                    find: function (name) { return files()[name] ? PACKAGES + name : null; },
+                    remove: function (path) {
+                        var all = files();
+                        delete all[path.slice(PACKAGES.length)];
+                        store.set("hardware:files", all);
+                    }
+                },
+                state: {
+                    load: function () { return store.get("hardware:state", null); },
+                    save: function (o) { store.set("hardware:state", o); }
+                },
+                config: function () {
+                    var c;
+                    try { c = JSON.parse(PalmSystem.getResource(SAMPLE + "catalog-sim.json") || "{}"); }
+                    catch (e) { c = {}; }
+                    return Object.assign(c, store.get("hardware:config", {}));
+                },
+                luna: nodeServiceLuna(),
+                log: function (m) { console.info("[hardware] " + m); }
+            });
+            methods.watch(function (r) { watchers.slice().forEach(function (w) { w(r); }); });
+            return methods;
+        }
+
+        var names;
+        try { names = loadModule("hardwareservice.js").METHODS; }
+        catch (e) { return; }   // no rootfs behind the page (the runtime's unit tests)
+        var serviceMethods = {};
+        names.forEach(function (name) {
+            serviceMethods["/" + name] = function (p, reply, ctx) {
+                var m;
+                try { m = service(); } catch (e) { return reply(fail("UNKNOWN_ERROR", String(e.message || e))); }
+                if (name === "install" && p.subscribe) {
+                    reply(ok({ subscribed: true, driverId: p.driverId, state: "queued" }));
+                    m.install(p, function (st) { if (!ctx.cancelled()) reply(st); });
+                    return;
+                }
+                m[name](p).then(function (r) {
+                    if (name === "list" && p.subscribe && r.returnValue) {
+                        r.subscribed = true;
+                        var w = function (x) {
+                            if (ctx.cancelled()) { watchers.splice(watchers.indexOf(w), 1); return; }
+                            reply(x);
+                        };
+                        watchers.push(w);
+                    }
+                    reply(r);
+                }, function (e) { reply(fail("UNKNOWN_ERROR", String(e && e.message || e))); });
+            };
+        });
+        register([SERVICE], serviceMethods);
+    })();
+
+    // ================================================================================
     // Ongoing activities (org.webosphoenix.ongoing; the shell's)
     // ================================================================================
     //
@@ -11593,6 +11829,7 @@
         var power = runtime.services["com.palm.power"];
         if (power) power["/shutdown/machineReboot"] = function (p, reply) {
             reply(ok());
+            store.set("boot:count", (store.get("boot:count", 0) || 0) + 1);
             runtime.updateSlots.boot();
             setTimeout(function () {
                 if (/^https?:$/.test(global.location.protocol)) global.location.reload();

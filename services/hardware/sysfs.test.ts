@@ -15,8 +15,8 @@ import { afterAll, describe, expect, it } from "vitest";
 const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Any = any;
-const sysfs = require("./sysfs.js") as Any;
-const node = require("./node.js") as Any;
+const sysfs = require("./lib/sysfs.js") as Any;
+const node = require("./lib/node.js") as Any;
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-sysfs-"));
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }));

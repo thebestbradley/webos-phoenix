@@ -5,9 +5,12 @@
 // Wi-Fi, the Palm Profile, backup restore; then the "how to use cards and
 // gestures" tutorial) with the Palm Profile replaced by accounts, the backup
 // restore from the USB drive or a WebDAV server, and the passcode and
-// privacy choices added.
+// privacy choices added. Hardware (after Wi-Fi, so downloads work) offers
+// the firmware and drivers the device's hardware needs and the system image
+// does not carry (docs/HARDWARE.md, "First boot"); it is left out when
+// nothing needs any.
 
-export type StepId = "welcome" | "wifi" | "restore" | "datetime" | "accounts" | "passcode" | "privacy" | "tutorial" | "done";
+export type StepId = "welcome" | "wifi" | "hardware" | "restore" | "datetime" | "accounts" | "passcode" | "privacy" | "tutorial" | "done";
 
 export interface StepInfo {
     id: StepId;
@@ -19,6 +22,7 @@ export interface StepInfo {
 export const STEPS: StepInfo[] = [
     { id: "welcome", title: "Welcome", skippable: false },
     { id: "wifi", title: "Wi-Fi", skippable: true },
+    { id: "hardware", title: "Hardware", skippable: true },
     { id: "restore", title: "Restore", skippable: true },
     { id: "datetime", title: "Date & Time", skippable: true },
     { id: "accounts", title: "Accounts", skippable: true },
@@ -32,14 +36,21 @@ export function stepIndex(id: StepId): number {
     return STEPS.findIndex((s) => s.id === id);
 }
 
-export function nextStep(id: StepId): StepId {
-    const i = stepIndex(id);
-    return STEPS[Math.min(STEPS.length - 1, i + 1)].id;
+/** The steps shown: hidden ones (nothing to do in them) left out. */
+export function shownSteps(hidden: StepId[] = []): StepInfo[] {
+    return STEPS.filter((s) => !hidden.includes(s.id));
 }
 
-export function previousStep(id: StepId): StepId | null {
-    const i = stepIndex(id);
-    return i > 0 ? STEPS[i - 1].id : null;
+export function nextStep(id: StepId, hidden: StepId[] = []): StepId {
+    const steps = shownSteps(hidden.filter((h) => h !== id));
+    const i = steps.findIndex((s) => s.id === id);
+    return steps[Math.min(steps.length - 1, i + 1)].id;
+}
+
+export function previousStep(id: StepId, hidden: StepId[] = []): StepId | null {
+    const steps = shownSteps(hidden.filter((h) => h !== id));
+    const i = steps.findIndex((s) => s.id === id);
+    return i > 0 ? steps[i - 1].id : null;
 }
 
 // ---- The tutorial ------------------------------------------------------------------

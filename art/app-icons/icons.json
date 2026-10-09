@@ -476,5 +476,14 @@
         "out": [
             "apps/settings/public/icons/gamepads"
         ]
+    },
+    "settings-hardware": {
+        "platter": "diamond",
+        "object": "hardwarepane",
+        "base": 176,
+        "foot": 36,
+        "out": [
+            "apps/settings/public/icons/hardware"
+        ]
     }
 }

@@ -9,7 +9,7 @@
 // Ed25519, as server/drivers signs it with libsodium (tested in
 // server/drivers/tests/run.php, and against this code in
 // tools/test-hardware.cjs). lib/sysfs.js and lib/node.js are tested in
-// lib/*.test.ts.
+// sysfs.test.ts.
 
 import { createRequire } from "node:module";
 import crypto from "node:crypto";
@@ -79,7 +79,7 @@ function makeWorld() {
         signer, entries, files: new Map<string, Uint8Array>(), served: new Map<string, Uint8Array>(), requests: [] as Any[], toasts: [] as Any[],
         ongoing: [] as Any[], activities: [] as Any[], posts: [] as Any[], opkgCalls: [] as Any[], activations: [] as Any[],
         installed: new Map<string, string>([["kernel", "6.6.21"]]), firmware: new Set<string>(), state: null as Any,
-        failOpkg: null as string | null, brokenFirmware: false, catalogBuild: 3,
+        failOpkg: null as string | null, brokenFirmware: false, catalogBuild: 3, boot: "boot-1",
         devices: [
             { id: "pci:0000:02:00.0", bus: "pci", name: "AR9462 Wireless Network Adapter", vendor: "Qualcomm Atheros", category: "wifi",
               modaliases: ["pci:v0000168Cd00000034sv0000105Bsd0000E052bc02sc80i00"], driver: "ath9k", firmwareMissing: [] },
@@ -117,6 +117,7 @@ function makeService(world: Any, config: Any = null) {
                 return { ...d, firmwareMissing: missing, driver: fixed ? "rtw88_8821cu" : moduleIn ? "8812au" : d.driver };
             }),
             info: async () => ({ arch: "x86_64", kernel: "6.6.21-phoenix" }),
+            bootId: () => world.boot,
             activate: async (step: Any) => {
                 world.activations.push(step);
                 // Firmware is only read when the driver probes again.
@@ -369,6 +370,13 @@ describe("the hardware service", () => {
         const l = await svc.list();
         expect(l.pendingRestart).toEqual(["driver-nvidia-open"]);
         expect(byId(l, "pci:0000:01:00.0").status).toBe("restart");
+        // After the restart it has started.
+        world.boot = "boot-2";
+        expect(byId(await svc.list(), "pci:0000:01:00.0").status).toBe("working");
+        expect((await svc.list()).pendingRestart).toEqual([]);
+        // Removed: a restart stops it.
+        expect(await svc.remove({ driverId: "driver-nvidia-open" })).toEqual({ returnValue: true, restart: true });
+        await svc.install({ driverId: "driver-nvidia-open", deviceId: "pci:0000:01:00.0", acceptLicense: "LicenseRef-NVIDIA" });
         // Removed before the restart: nothing to restart for.
         expect(await svc.remove({ driverId: "driver-nvidia-open" })).toEqual({ returnValue: true, restart: false });
         expect(world.opkgCalls.at(-1)).toEqual({ op: "remove", names: ["nvidia-open", "linux-firmware-nvidia-gsp"] });

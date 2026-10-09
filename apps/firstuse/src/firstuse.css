@@ -264,3 +264,11 @@ html:has(> body.pui-app), body.pui-app { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
     .tut-screen * { animation-duration: 0s; animation-iteration-count: 1; animation-fill-mode: forwards; }
 }
+
+/* Hardware: firmware and drivers to install */
+.fu-hw-row .pui-row-subtitle { white-space: normal; }
+.fu-hw-install.pui-button { width: auto; min-width: 96px; margin: 0; padding: 0 14px; }
+.fu-license-text {
+    max-height: 220px; overflow: auto; margin: 4px 0 10px; padding: 8px 10px; border-radius: 6px;
+    background: rgba(255, 255, 255, 0.85); color: #222; font-size: 13px; line-height: 1.35; white-space: pre-wrap; word-break: break-word;
+}

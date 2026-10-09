@@ -161,6 +161,10 @@ def main():
         src = os.path.realpath(os.path.join(REPO, target)) + os.sep
         if any(src.startswith(d) for d in service_dirs):
             continue
+        # The simulator's stand-ins for what servers hold (the sample driver
+        # catalog, server/drivers/sample) are not part of a device.
+        if target.startswith("server/"):
+            continue
         copy_tree(os.path.join(REPO, target), prefix.rstrip("/"), plan)
     for app_id, app_dir in find_apps(cfg):
         # An app's service/ is installed on its own, below (apps/dav keeps

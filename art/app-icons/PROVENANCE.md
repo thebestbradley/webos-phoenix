@@ -54,7 +54,7 @@ Touchstone, the Time exhibition's glass clock on its screen), `clipboard`
 `assistant` (a frosted speech balloon with a glowing orb in it, its light in
 bands like a voice's sound waves; `assistantpane` is the same drawing,
 smaller, for Settings > Assistant) and `advancedpane` (Settings > Advanced:
-a brushed metal panel with three sliders).
+a brushed metal panel with three sliders) and `hardwarepane` (Settings > Hardware: a circuit board with a chip, standing on its gold edge connector).
 
 ## The originals' 512 px icons
 

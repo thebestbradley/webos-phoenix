@@ -6,7 +6,7 @@
 // opkg for the packages, modprobe and the driver core's bind/unbind files
 // to start a new driver or firmware, HTTP. Tested in
 // ../hardwareservice.test.ts (opkg and modprobe as stand-in programs) and
-// lib/sysfs.test.ts (a made-up /sys).
+// sysfs.test.ts (a made-up /sys).
 
 "use strict";
 

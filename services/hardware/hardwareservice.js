@@ -90,6 +90,8 @@ function hex(bytes) {
 //   system.info() -> Promise<{arch, kernel}>
 //   system.activate({after, modules, deviceId}) -> Promise: load the new
 //                    driver or firmware (reload the modules, rebind the device)
+//   system.bootId() -> this start's id (optional): a restart has happened
+//                    when it changes
 //   opkg.list() -> Promise<[{name, version}]>
 //   opkg.install(paths, {downgrade}) / opkg.remove(names) -> Promise<{ok, error}>
 //   request({method, url, headers, body}) -> Promise<{status, body}>
@@ -108,11 +110,17 @@ function createHardwareService(deps) {
     var busy = null;
     var installing = {};   // driverId -> the progress of its install
 
+    function bootId() { return deps.system.bootId ? String(deps.system.bootId() || "") : ""; }
     function load() {
         var s = deps.state.load() || {};
         s.catalogs = s.catalogs || {};
         s.installed = s.installed || {};
         s.pendingRestart = s.pendingRestart || [];
+        // Drivers waiting for a restart have started once the device has.
+        if (s.pendingRestart.length && s.restartBoot && s.restartBoot !== bootId()) {
+            s.pendingRestart = [];
+            delete s.restartBoot;
+        }
         s.report = s.report || { enabled: false, lastSent: null, lastIds: null };
         s.notified = s.notified || [];
         return s;
@@ -367,7 +375,10 @@ function createHardwareService(deps) {
                     packages: pkgs.map(function (q, i) { return { name: q.name, version: q.version, file: fileName(q), path: paths[i] }; }),
                     installedAt: now().toISOString(), deviceId: p.deviceId || null
                 };
-                if (entry.after === "reboot" && s2.pendingRestart.indexOf(entry.id) < 0) s2.pendingRestart.push(entry.id);
+                if (entry.after === "reboot" && s2.pendingRestart.indexOf(entry.id) < 0) {
+                    s2.pendingRestart.push(entry.id);
+                    s2.restartBoot = bootId();
+                }
                 save(s2);
                 if (entry.after === "reboot") return "restart";
                 progress({ state: "activating", progress: 85 });
