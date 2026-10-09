@@ -2369,6 +2369,8 @@ var say = {
     cloudNoControl: function (name) { return name + " asked to control the phone, but cloud models may only chat. You can allow it in Settings > Assistant."; },
     cloudFailed: function (name, why) { return name + " didn't answer: " + why; },
     localFailed: function (why) { return "The on-device model didn't answer (" + why + ")."; },
+    // The on-device model out of time (assistant.js bounded); app: the one the words name, or "".
+    localTimeout: function (app) { return "I couldn't think that through in time. Want me to search the web" + (app ? " or open " + app : "") + "?"; },
     unknownTool: function (name) { return "The model asked for \"" + name + "\", which isn't a command I know."; },
     done: function () { return "Done."; },
     failed: function (why) { return "That didn't work: " + why; },

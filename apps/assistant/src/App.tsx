@@ -81,6 +81,22 @@ const VIA: Record<string, string> = { commands: "On the phone", "on-device": "On
 
 // ---- One message ---------------------------------------------------------------------------
 
+// The on-device model at work (the service's thread.working): what it is
+// doing, for how long, and when it will give up, so a slow answer is not
+// a spinner without end (assistant.js bounded).
+export function Working({ w }: { w: NonNullable<AssistantThread["working"]> }) {
+    const [, tick] = useState(0);
+    useEffect(() => { const t = window.setInterval(() => tick((n) => n + 1), 1000); return () => window.clearInterval(t); }, []);
+    const now = Date.now();
+    const secs = (ms: number) => Math.max(0, Math.round(ms / 1000));
+    const what = w.stage === "starting" ? "Starting the on-device model" : "Thinking it over on this device";
+    return (
+        <div className="as-working" data-testid="as-working" data-stage={w.stage}>
+            {what} · {secs(now - w.since)} s{now < w.until ? ` (I'll stop in ${secs(w.until - now)} s)` : ""}
+        </div>
+    );
+}
+
 function Bubble({ m, busy, onChoose, onConfirm, onSuggest, avatar, onMenu }: {
     m: AssistantMessage; busy: boolean;
     onChoose: (m: AssistantMessage, id: string) => void; onConfirm: (m: AssistantMessage, yes: boolean) => void;
@@ -347,7 +363,12 @@ function Conversation({ threadId, onThread, retry, onPose, grab, shown = true }:
                     <div className="as-work" data-testid="as-work">
                         <Bird pose={birdPose({ loading: false, busy, beat, greeting: false })} size={72} testId="as-bird-work"
                               speed={motion.speed} still={motion.still} start={busy ? "cheer" : undefined} />
-                        {busy && <div className="as-bubble in as-thinking" data-testid="as-thinking"><span /><span /><span /></div>}
+                        {busy && (
+                            <div className="as-work-say">
+                                <div className="as-bubble in as-thinking" data-testid="as-thinking"><span /><span /><span /></div>
+                                {thread?.working && <Working w={thread.working} />}
+                            </div>
+                        )}
                     </div>
                 )}
                 {error && <div className="as-error" data-testid="as-error">{error}</div>}

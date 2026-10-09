@@ -90,6 +90,8 @@ export interface AssistantThread {
     last: string;
     /** Follow-up questions sent here later and not yet seen. */
     unread?: number;
+    /** The on-device model at work on it: starting, then thinking, until the deadline (ms). */
+    working?: { stage: "starting" | "thinking"; since: number; until: number };
 }
 
 export interface AssistantSettings {

@@ -315,11 +315,17 @@ void LocalModels::ensure(const QString &id, const QString &requestId)
     // size"); one slot, so the tools stay cached between requests; the
     // cache in 8 bits with flash attention, which keeps it as small as
     // 4,096 was (Qwen3 0.6B: 1.3 GB in all, measured; lib/node-device.js
-    // the same on a device).
+    // the same on a device). Prompts read 512 tokens at a time (-b; the
+    // physical batch is 512 anyway): llama-server sees that a request was
+    // given up on (the assistant's deadline) only between batches, and with
+    // its default 2,048 it went on 46 s for one nobody waited for, the next
+    // question queued behind it (measured on a busy 4-core computer; 9 s
+    // with 512).
     args << QStringLiteral("-m") << file << QStringLiteral("--host") << QStringLiteral("127.0.0.1")
          << QStringLiteral("--port") << QString::number(m_port) << QStringLiteral("--jinja") << QStringLiteral("-c") << QStringLiteral("8192")
          << QStringLiteral("-np") << QStringLiteral("1") << QStringLiteral("-fa") << QStringLiteral("on")
-         << QStringLiteral("-ctk") << QStringLiteral("q8_0") << QStringLiteral("-ctv") << QStringLiteral("q8_0");
+         << QStringLiteral("-ctk") << QStringLiteral("q8_0") << QStringLiteral("-ctv") << QStringLiteral("q8_0")
+         << QStringLiteral("-b") << QStringLiteral("512");
     m_server->setProgram(program);
     m_server->setArguments(args);
     m_server->setProcessChannelMode(QProcess::SeparateChannels);

@@ -79,7 +79,7 @@ describe("storage and the device key", () => {
 describe("the on-device model", () => {
     it("downloads a model through redirects, checks it, runs llama-server and answers", async () => {
         const bin = join(dir, "llama-server");
-        writeFileSync(bin, `#!/bin/sh\nexec "${process.execPath}" "${resolve(__dirname, "test/mock-providers.cjs")}" "$@"\n`);
+        writeFileSync(bin, `#!/bin/sh\necho "$@" > "${join(dir, "llama-args")}"\nexec "${process.execPath}" "${resolve(__dirname, "test/mock-providers.cjs")}" "$@"\n`);
         chmodSync(bin, 0o755);
         const llm = device.llamaServer({ modelsDir: join(dir, "models"), server: bin, idleMs: 60000, startTimeoutMs: 20000 });
         expect((await llm.status()).available).toBe(true);
@@ -88,6 +88,8 @@ describe("the on-device model", () => {
         expect(existsSync(join(dir, "models", "test-model.gguf.part"))).toBe(false);
         const { baseUrl } = await llm.ensure(model());
         expect(baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/v1$/);
+        // Prompts read 512 tokens at a time: a request given up on ends soon (lib/node-device.js).
+        expect(readFileSync(join(dir, "llama-args"), "utf8")).toMatch(/ -np 1 .* -b 512\b/);
         const rq = providers.chatRequest({ type: "local", baseUrl, model: "test-model" },
             { system: "s", messages: [{ role: "user", text: "turn on the torch" }], tools: [{ name: "toggle", description: "t", parameters: { type: "object" } }] }, "");
         const r = await createRequest()(rq);

@@ -50,7 +50,7 @@ vi.mock("@phoenix/luna", async (orig) => {
     };
 });
 
-import { App } from "./App";
+import { App, Working } from "./App";
 
 function resize(width: number) {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
@@ -131,5 +131,23 @@ describe("the Assistant as a TouchPad app", () => {
         expect(screen.getByTestId("as-thread-t2").getAttribute("aria-current")).toBe("true");
         expect(screen.queryByText("The flashlight is on.")).toBeNull();
         expect(luna.setCurrent).toHaveBeenCalledWith("t2");
+    });
+});
+
+describe("the on-device model at work", () => {
+    // thread.working (assistant.js bounded): what it is doing, how long,
+    // and when it gives up, ticking each second.
+    it("says what it is doing and when it will stop", () => {
+        vi.useFakeTimers();
+        try {
+            const now = Date.now();
+            vi.setSystemTime(now);
+            render(<Working w={{ stage: "starting", since: now - 3000, until: now + 72000 }} />);
+            expect(screen.getByTestId("as-working").textContent).toBe("Starting the on-device model · 3 s (I'll stop in 72 s)");
+            act(() => { vi.advanceTimersByTime(2000); });
+            expect(screen.getByTestId("as-working").textContent).toBe("Starting the on-device model · 5 s (I'll stop in 70 s)");
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

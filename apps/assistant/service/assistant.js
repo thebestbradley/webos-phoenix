@@ -114,6 +114,9 @@ var DEFAULTS = {
     followUpTopicsOff: []       // follow-up topics turned off (Settings, or "Stop asking"): lib/followups.js KINDS
 };
 var HISTORY = 20;               // turns a model sees
+// The on-device model's whole answer (starting it, choosing a command,
+// calling it) within this; askLocal says why.
+var LOCAL_DEADLINE_MS = 75000;
 // What a request asked by voice over the lock screen (ask {locked}) may do:
 // nothing that shows what is private, sends, or opens an app.
 var LOCKED_COMMANDS = ["timer", "timerStatus", "timerCancel", "stopwatch", "alarm", "alarmList", "toggle", "media", "volume",
@@ -216,8 +219,11 @@ function createAssistantService(deps) {
     }
     function summary(t) {
         var msgs = messagesOf(t.id), last = msgs[msgs.length - 1];
-        return { id: t.id, title: t.title || (msgs[0] ? msgs[0].text : ""), created: t.created, updated: t.updated,
-                 provider: t.provider || "", count: msgs.length, last: last ? last.text : "", unread: t.unread || 0 };
+        var out = { id: t.id, title: t.title || (msgs[0] ? msgs[0].text : ""), created: t.created, updated: t.updated,
+                    provider: t.provider || "", count: msgs.length, last: last ? last.text : "", unread: t.unread || 0 };
+        // The on-device model at work on it: {stage: "starting" | "thinking", since, until} (ms).
+        if (t.working) out.working = t.working;
+        return out;
     }
 
     function say(thread, text, extra) {
@@ -523,9 +529,11 @@ function createAssistantService(deps) {
             return { name: commands.toolName(c.id), description: c.description, parameters: c.parameters };
         });
     }
-    function callModel(provider, key, thread, tools, toolChoice) {
+    // timeoutMs: the time left for it (the on-device model's deadline).
+    function callModel(provider, key, thread, tools, toolChoice, timeoutMs) {
         var req = providers.chatRequest(provider, { system: systemPrompt(tools.length > 0), messages: history(thread), tools: tools,
                                                     toolChoice: toolChoice }, key);
+        if (timeoutMs) req.timeoutMs = timeoutMs;
         return deps.request(req).then(function (r) { return providers.parseChat(provider.type, r.status, r.body); });
     }
     // An answer: words, or a tool call to run (cloud ones only when allowed).
@@ -616,34 +624,37 @@ function createAssistantService(deps) {
         if (parsed.partial) return true;
         return (cmd.parameters.required || []).some(function (k) { return empty(args[k]); });
     }
-    function fillArgs(cmd, args, text) {
+    function fillArgs(thread, cmd, args, text) {
         var said = " " + String(text).toLowerCase().replace(/[^a-z0-9']+/g, " ") + " ";
         function inWords(v) {
             return String(v).toLowerCase().split(/[^a-z0-9']+/).some(function (w) { return w.length > 1 && said.indexOf(" " + w + " ") >= 0; });
         }
         return localReady().then(function (m) {
             if (!m) return null;
-            return deps.llm.ensure(m).then(function (srv) {
-                var p = { type: "local", baseUrl: srv.baseUrl, model: m.id };
-                var req = providers.chatRequest(p, {
-                    system: "Fill in the arguments of the phone command " + commands.toolName(cmd.id) + ": " + cmd.description +
-                        " Use only what the user said, in their words (times and dates as they said them, \"friday at 4 pm\"); " +
-                        "leave out what they did not say.",
-                    messages: [{ role: "user", text: text }],
-                    schema: Object.assign({}, cmd.parameters, { required: [] }),
-                    maxTokens: 200, temperature: 0
-                }, "");
-                return deps.request(req).then(function (r) {
-                    var got = {};
-                    try { got = JSON.parse(providers.parseChat(p.type, r.status, r.body).text) || {}; } catch (e) { return null; }
-                    var kept = {};
-                    Object.keys(got).forEach(function (k) { if (empty(args[k]) && !empty(got[k]) && inWords(got[k])) kept[k] = got[k]; });
-                    if (!Object.keys(kept).length) return null;
-                    var filled = commands.fromModel(cmd, kept, env());
-                    // The grammar's own values stay; what neither has keeps the grammar's default.
-                    Object.keys(args).forEach(function (k) { if ((!empty(args[k]) && !(k in kept)) || filled[k] === undefined) filled[k] = args[k]; });
-                    return { args: filled, model: m };
+            return bounded(thread, function (left, stage) {
+                return deps.llm.ensure(m).then(function (srv) {
+                    stage("thinking");
+                    var req = providers.chatRequest({ type: "local", baseUrl: srv.baseUrl, model: m.id }, {
+                        system: "Fill in the arguments of the phone command " + commands.toolName(cmd.id) + ": " + cmd.description +
+                            " Use only what the user said, in their words (times and dates as they said them, \"friday at 4 pm\"); " +
+                            "leave out what they did not say.",
+                        messages: [{ role: "user", text: text }],
+                        schema: Object.assign({}, cmd.parameters, { required: [] }),
+                        maxTokens: 200, temperature: 0
+                    }, "");
+                    req.timeoutMs = left();
+                    return deps.request(req);
                 });
+            }).then(function (r) {
+                var got = {};
+                try { got = JSON.parse(providers.parseChat("local", r.status, r.body).text) || {}; } catch (e) { return null; }
+                var kept = {};
+                Object.keys(got).forEach(function (k) { if (empty(args[k]) && !empty(got[k]) && inWords(got[k])) kept[k] = got[k]; });
+                if (!Object.keys(kept).length) return null;
+                var filled = commands.fromModel(cmd, kept, env());
+                // The grammar's own values stay; what neither has keeps the grammar's default.
+                Object.keys(args).forEach(function (k) { if ((!empty(args[k]) && !(k in kept)) || filled[k] === undefined) filled[k] = args[k]; });
+                return { args: filled, model: m };
             });
         }).catch(function (e) { log("filling in arguments failed: " + (e && e.message)); return null; });
     }
@@ -669,7 +680,7 @@ function createAssistantService(deps) {
         ["launch the calculator", "open"], ["will it be sunny tomorrow", "weather"], ["write down: the wifi password is on the fridge", "note"],
         ["why is the sky blue", "none"], ["tell me a joke", "none"]
     ];
-    function pickCommand(p, thread, cat) {
+    function pickCommand(p, thread, cat, timeoutMs) {
         var usable = cat.all.filter(function (c) { return allowed(c) && !c.internal; });
         var names = usable.map(function (c) { return commands.toolName(c.id); });
         // Each command by its description's first sentence and, where it
@@ -691,6 +702,7 @@ function createAssistantService(deps) {
             schema: { type: "object", properties: { command: { type: "string", "enum": names.concat(["none"]) } }, required: ["command"] },
             maxTokens: 40, temperature: 0
         }, "");
+        if (timeoutMs) req.timeoutMs = timeoutMs;
         return deps.request(req).then(function (r) {
             var out = providers.parseChat(p.type, r.status, r.body), choice = "";
             try { choice = JSON.parse(out.text).command; } catch (e) { /* not JSON: none */ }
@@ -698,20 +710,68 @@ function createAssistantService(deps) {
             return i >= 0 ? usable[i] : null;
         });
     }
+    // The on-device model's work, bounded as a whole. llama-server answers
+    // a request only when it is done and serves one at a time (-np 1), so
+    // on a busy computer or a slow phone starting it, the choice and the
+    // call could each take their whole HTTP timeout (2 minutes on a
+    // device, 3 in the simulator's proxy) one after the other: the spinner
+    // for 7 minutes, then "Operation canceled". One deadline for all of it;
+    // each request is given only the time left, so it is closed then and
+    // llama-server drops it instead of keeping the next question waiting
+    // behind it. Until then the thread says what is happening (summary
+    // working, which the app shows under its dots); past it, the error has
+    // {deadline: true} and the router offers what else can (localFailed).
+    // run(left() -> ms, stage(name)) -> Promise; a late result is dropped.
+    // left() is a moment more than the time left, so that the deadline,
+    // not a request's own timeout ("Operation canceled"), ends it.
+    function bounded(thread, run) {
+        var ms = deps.localDeadlineMs || LOCAL_DEADLINE_MS, since = Date.now(), until = since + ms, timer = null, over = false;
+        function stage(name) {
+            if (over || !thread) return;
+            thread.working = { stage: name, since: since, until: until };
+            putThread(thread);
+            changed("threads");
+        }
+        function end() {
+            over = true;
+            clearTimeout(timer);
+            if (thread && thread.working) { delete thread.working; putThread(thread); changed("threads"); }
+        }
+        function outOfTime() {
+            var e = new Error("no answer within " + Math.round(ms / 1000) + " seconds");
+            e.deadline = true;
+            return e;
+        }
+        var late = new Promise(function (resolve, reject) { timer = setTimeout(function () { reject(outOfTime()); }, ms); });
+        stage("starting");
+        var work = Promise.resolve().then(function () { return run(function () { return Math.max(1, until - Date.now()) + 500; }, stage); })
+            .catch(function (e) { throw Date.now() >= until ? outOfTime() : e; });
+        return Promise.race([work, late]).then(function (r) { end(); return r; }, function (e) { end(); throw e; });
+    }
+    // The on-device model failed or ran out of time: what else can.
+    function localFailed(thread, e, asked) {
+        log("on-device model failed: " + (e && e.message));
+        var s = lang().say;
+        if (e && e.deadline && s.localTimeout) return offer(thread, function (app) { return s.localTimeout(app); }, true, asked);
+        return offer(thread, s.localFailed(e && e.message || "no answer"), false, asked);
+    }
     function askLocal(thread, model, cat) {
-        return deps.llm.ensure(model).then(function (srv) {
-            var p = { type: "local", baseUrl: srv.baseUrl, model: model.id };
-            // Small talk is answered in words. A question goes to the choice
-            // too ("is my thursday afternoon open", "how can I reach Priya"
-            // are the calendar's and Contacts'), but only a command that
-            // reads may answer it: "how do I make banana pudding" is never
-            // made a memo (measured: docs/AI-AND-MCP.md).
-            var ctx = lang().say.context ? lang().say.context(lastAsked(thread)) : { question: false, smallTalk: false };
-            if (ctx.smallTalk) return callModel(p, "", thread, []);
-            return pickCommand(p, thread, cat).then(function (c) {
-                if (c && ctx.question && c.risk !== "read") c = null;
-                if (!c) return callModel(p, "", thread, []);
-                return callModel(p, "", thread, [{ name: commands.toolName(c.id), description: c.description, parameters: c.parameters }], "required");
+        return bounded(thread, function (left, stage) {
+            return deps.llm.ensure(model).then(function (srv) {
+                stage("thinking");
+                var p = { type: "local", baseUrl: srv.baseUrl, model: model.id };
+                // Small talk is answered in words. A question goes to the choice
+                // too ("is my thursday afternoon open", "how can I reach Priya"
+                // are the calendar's and Contacts'), but only a command that
+                // reads may answer it: "how do I make banana pudding" is never
+                // made a memo (measured: docs/AI-AND-MCP.md).
+                var ctx = lang().say.context ? lang().say.context(lastAsked(thread)) : { question: false, smallTalk: false };
+                if (ctx.smallTalk) return callModel(p, "", thread, [], undefined, left());
+                return pickCommand(p, thread, cat, left()).then(function (c) {
+                    if (c && ctx.question && c.risk !== "read") c = null;
+                    if (!c) return callModel(p, "", thread, [], undefined, left());
+                    return callModel(p, "", thread, [{ name: commands.toolName(c.id), description: c.description, parameters: c.parameters }], "required", left());
+                });
             });
         }).then(function (r) { return answer(thread, r, cat, "on-device", model.name, false, lastAsked(thread)); });
     }
@@ -726,11 +786,13 @@ function createAssistantService(deps) {
     // end: the app that does it ("I can open Phone for you"), a web search
     // for a question, a model; and the commands the words come close to.
     // instead: the note replaces the words (it says why and what instead).
-    // asked: the words nothing understood (not after a model tried).
+    // asked: the words nothing understood (not after a model tried). note
+    // may be a function (the app's title or "") -> the note.
     function offer(thread, note, instead, asked) {
         var s = lang().say, p = defaultProvider(), ctx = asked && s.context ? s.context(asked) : { app: "" };
         return apps().then(function (list) {
             var app = appByTitle(list, ctx.app), choices = [], data = {};
+            if (typeof note === "function") note = note(app ? app.title : "");
             if (app) {
                 data.actions = [{ label: s.openApp(app.title), open: { appId: app.id, params: app.params || {}, title: app.title } }];
                 choices.push({ id: "open:0", label: s.openApp(app.title) });
@@ -773,7 +835,7 @@ function createAssistantService(deps) {
                 var args = parsed.command === "app" ? { text: parsed.args.text } : parsed.args;
                 if (parsed.command === "open") args = { appId: parsed.args.appId, title: parsed.args.title, name: parsed.args.title, params: parsed.args.params };
                 if (cmd && missingArgs(cmd, args, parsed)) {
-                    return fillArgs(cmd, args, text).then(function (f) {
+                    return fillArgs(thread, cmd, args, text).then(function (f) {
                         return f ? act(thread, cmd, f.args, "on-device", f.model.name, text) : act(thread, cmd, args, "commands", "");
                     });
                 }
@@ -783,10 +845,7 @@ function createAssistantService(deps) {
             if (cloud) return askCloud(thread, cloud, cat);
             return localReady().then(function (m) {
                 if (!m) return offer(thread, note, !!note, text);
-                return askLocal(thread, m, cat).catch(function (e) {
-                    log("on-device model failed: " + (e && e.message));
-                    return offer(thread, lang().say.localFailed(e && e.message || "no answer"), false, text);
-                });
+                return askLocal(thread, m, cat).catch(function (e) { return localFailed(thread, e, text); });
             });
         });
     }
@@ -947,10 +1006,7 @@ function createAssistantService(deps) {
                 else putThread(thread);
                 var answering;
                 if (local && (r.mode !== "cloud" || !cloud)) {
-                    answering = askLocal(thread, local, cat).catch(function (e) {
-                        log("on-device model failed: " + (e && e.message));
-                        return offer(thread, lang().say.localFailed(e && e.message || "no answer"));
-                    });
+                    answering = askLocal(thread, local, cat).catch(function (e) { return localFailed(thread, e, e && e.deadline ? r.text : undefined); });
                 } else {
                     thread.provider = cloud.id;
                     putThread(thread);

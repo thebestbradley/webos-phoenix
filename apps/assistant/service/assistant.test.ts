@@ -10,6 +10,7 @@
 // rest, threads.
 
 import { createRequire } from "node:module";
+import http from "node:http";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 type Reply = { returnValue: boolean; errorCode?: number; errorText?: string; [k: string]: any };
@@ -33,7 +34,7 @@ const PEOPLE = [
 ];
 const APPS = [{ id: "org.webosphoenix.maps", title: "Maps" }, { id: "org.webosphoenix.music", title: "Music" }];
 
-function setup(opts: { llm?: object; voice?: () => unknown } = {}) {
+function setup(opts: { llm?: object; voice?: () => unknown; deadlineMs?: number } = {}) {
     const data = new Map<string, unknown>();
     const calls: { uri: string; params: any }[] = [];
     const spoken: string[] = [];
@@ -67,7 +68,7 @@ function setup(opts: { llm?: object; voice?: () => unknown } = {}) {
     const svc = createAssistantService({
         luna, storage, secrets, request: createRequest({ timeoutMs: 5000 }), now: () => NOW,
         caller: () => who, tts: { speak: (t: string, _l: string, v: string) => { spoken.push(t); voices.push(v); return Promise.resolve(); }, stop() {} },
-        llm: opts.llm, voice: opts.voice, locale: () => "en-GB",
+        llm: opts.llm, voice: opts.voice, locale: () => "en-GB", localDeadlineMs: opts.deadlineMs,
     });
     return {
         svc, calls, data, spoken, voices,
@@ -599,6 +600,39 @@ describe("the on-device model", () => {
         const r = await ask(t, "why is the sky blue");
         expect(last(r).text).toMatch(/^The on-device model didn't answer \(llama-server is not installed\)/);
         expect(last(r).choices[0].id).toBe("web");
+    });
+
+    // One deadline for the whole answer (assistant.js bounded): a model
+    // that never answers (llama-server busy behind another request) is
+    // given up on then, not after each step's own HTTP timeout; its request
+    // is closed; the thread says what it is doing meanwhile.
+    it("gives up at one deadline, says so, and closes the request", async () => {
+        const held: { closed: boolean }[] = [];
+        const stall = http.createServer((rq) => { const h = { closed: false }; held.push(h); rq.socket.on("close", () => { h.closed = true; }); });
+        await new Promise<void>((r) => stall.listen(0, "127.0.0.1", () => r()));
+        const url = `http://127.0.0.1:${(stall.address() as { port: number }).port}/v1`;
+        try {
+            const t = setup({ llm: { ...llm(), ensure: () => Promise.resolve({ baseUrl: url }) }, deadlineMs: 600 });
+            t.as("org.webosphoenix.settings");
+            await t.svc.selectModel({ id: MODEL });
+            t.as("com.palm.systemui");
+            const started = Date.now();
+            const asking = ask(t, "why is the sky blue");
+            await new Promise((r) => setTimeout(r, 200));
+            const th = await t.svc.thread({});
+            expect(th.thread.working).toMatchObject({ stage: "thinking" });
+            expect(th.thread.working.until - started).toBeLessThanOrEqual(700);
+            const r = await asking;
+            expect(Date.now() - started).toBeLessThan(2000);
+            expect(last(r).text).toBe("I couldn't think that through in time. Want me to search the web?");
+            expect(last(r).choices.map((c: Reply) => c.id)).toContain("web");
+            expect((await t.svc.thread({})).thread.working).toBeUndefined();
+            for (let i = 0; i < 50 && !(held[0] && held[0].closed); ++i) await new Promise((r) => setTimeout(r, 20));
+            expect(held.length).toBe(1);
+            expect(held[0].closed).toBe(true);
+        } finally {
+            stall.close();
+        }
     });
 });
 

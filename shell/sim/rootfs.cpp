@@ -598,8 +598,13 @@ void RootfsSchemeHandler::proxy(QWebEngineUrlRequestJob *job)
     // model on the loopback (llama-server answers only when done: loading
     // the model and reading the commands as tools can take over a minute on
     // a busy computer, as the device's service allows, lib/node-device.js).
+    // A request may ask for less ({timeoutMs}: the on-device model's
+    // deadline, apps/assistant/service/assistant.js bounded): closed then,
+    // so llama-server drops it rather than keep the next question waiting.
     const bool loopback = url.host() == QLatin1String("127.0.0.1") || url.host() == QLatin1String("localhost");
-    nr.setTransferTimeout(loopback ? 180000 : 60000);
+    const int asked = req.value(QStringLiteral("timeoutMs")).toInt();
+    const int limit = loopback ? 180000 : 60000;
+    nr.setTransferTimeout(asked > 0 ? qMin(asked, limit) : limit);
     nr.setAttribute(QNetworkRequest::RedirectPolicyAttribute, req.value(QStringLiteral("follow")).toBool()
                     ? QNetworkRequest::NoLessSafeRedirectPolicy : QNetworkRequest::ManualRedirectPolicy);
     const QJsonObject headers = req.value(QStringLiteral("headers")).toObject();

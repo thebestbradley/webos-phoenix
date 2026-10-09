@@ -610,7 +610,9 @@ def proxy_request(req):
             target = url.path or "/"
             if url.query:
                 target += "?" + url.query
-            conn = cls(url.hostname, url.port, timeout=60)
+            # {timeoutMs}: the on-device model's deadline (assistant.js bounded).
+            asked = req.get("timeoutMs")
+            conn = cls(url.hostname, url.port, timeout=min(60, asked / 1000) if isinstance(asked, (int, float)) and asked > 0 else 60)
             conn.request(method, target, body=body.encode("utf-8") if body is not None else None,
                          headers=req.get("headers") or {})
             res = conn.getresponse()

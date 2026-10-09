@@ -56,6 +56,8 @@
 /* The bird at work, below the conversation, with the dots while it waits. */
 .as-work { display: flex; align-items: flex-end; gap: 6px; margin: 4px 0 8px; }
 .as-work .ab-bird { flex: none; margin-top: 18px; }
+.as-work-say { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.as-working { margin: 4px 2px 0; font-size: 13px; color: #777; }
 .as-empty p { font-size: 17px; line-height: 1.4; margin: 12px auto; max-width: 420px; }
 .as-off { text-align: center; padding: 40px 24px; font-size: 17px; }
 

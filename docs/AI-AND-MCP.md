@@ -232,6 +232,29 @@ the prompt cached for a phone's single user. Checked in phoenix-sim:
 does not know, set the alarm through Qwen3 0.6B and was spoken by Kitten
 TTS.
 
+**One deadline for the whole answer** (`assistant.js` `bounded`, 9
+October). llama-server answers a request only when it is done and serves
+one at a time, so on a busy computer the steps (starting the server, the
+choice, the call) each ran into their own HTTP timeout, one after the
+other: "show my photos of flowers" showed the dots for seven minutes and
+then "The on-device model didn't answer (Operation canceled)", the
+simulator's proxy giving up after its 3 minutes without a byte. Now the
+on-device model has 75 s in all; each request is given the time left
+(`timeoutMs`, which phoenix-sim's proxy, `tools/serve-rootfs.py` and
+`lib/node-http.js` honour), so it is closed then. Meanwhile the thread
+says what is happening (`working: {stage, since, until}`) and the app shows
+it under the dots ("Thinking it over on this device · 19 s (I'll stop in
+56 s)"); past it: "I couldn't think that through in time. Want me to
+search the web or open Photos?" with those buttons. llama-server notices a
+closed request only between prompt batches: with its default 2,048
+tokens it went on 46 s for a question nobody waited for (the choice's
+prompt is some 3,100 tokens; 76 tokens a second on this 4-core machine
+under load), keeping the next one waiting; it now reads 512 at a time
+(`-b 512`, 9 s). On that loaded machine Qwen3 0.6B did not get through
+the choice's prompt in 75 s at all, so the deadline is what the user
+sees there: the prompt is worth shortening (or keeping cached across the
+two steps) next.
+
 **What the grammar could not read** (`fillArgs`). When the grammar knows
 the command but not all it needs (a required argument empty: "add an
 event called dentist friday-ish" has no time it can read), or a language
@@ -388,7 +411,7 @@ Siri or Google Assistant of each built-in app, and where Phoenix stands.
 | Weather | now, at an hour, today, tomorrow, will it rain or snow, this week or weekend, anywhere | |
 | Maps | directions, distances, places nearby, travel time by car, on foot or by bike | live traffic (no keyless source: it says so, gives the time without traffic and offers Maps) |
 | Music | play an artist, album or song, pause, next, previous, what's playing (Music and Podcasts tell the system) | Videos does not tell the system what plays yet |
-| Photos | photos by day, screenshots, how many, shown in the conversation | by place or person (no index of either) |
+| Photos | photos by day, screenshots, how many, shown in the conversation; "photos of flowers" by album or file name, saying so | by what is in them, place or person (no labels or index of any) |
 | Files | find files and folders by name (the file manager's new `search`) | find by what a file says (no content index) |
 | Settings | Wi-Fi, Bluetooth, airplane mode, flashlight, ringer, Do Not Disturb, Location Services, rotation lock, hotspot, VPN, volume, brightness, any pane | USB tethering; choosing a VPN profile by name |
 | Device | battery, storage, lock, screenshot | |
