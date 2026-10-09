@@ -147,9 +147,61 @@ FocusScope {
         when: shell.source !== null && shell.source !== undefined && shell.source.appRelaunch !== undefined
         value: shell.appRelaunch
     }
+    // ---- Developer apps (docs/APP-RUNTIME.md "Developer apps") -------------------------
+    // Apps whose appinfo.json says "phoenix": {"developer": true} (the
+    // window source's apps entry developer "devmode": Notification Lab, the
+    // framework demos, Terminal) are left out of the launcher, the dock and
+    // Just Type, and do not open, while Developer Mode is off; "unlock"
+    // (Settings' Developer Mode) until it was revealed: Just Type's Konami
+    // code (luna-applauncher app/LaunchPointSearch.js:30-36), which sets the
+    // devModeUnlocked system preference for good. On a device, OSE's
+    // setDevMode restarts it; the simulator follows at once.
+    readonly property bool developerMode: !!(shell.system && shell.system.devMode)
+    readonly property bool developerUnlocked: developerMode || !!(shell.system && shell.system.devModeUnlocked)
+    // The original's switcher app, which Just Type's Konami result launches.
+    readonly property string devModeSwitcherId: "com.palm.app.devmodeswitcher"
+    function developerShown(entry) {
+        var d = entry && entry.developer ? String(entry.developer) : "";
+        return d === "" || developerMode || (d === "unlock" && developerUnlocked);
+    }
+    onDeveloperModeChanged: Qt.callLater(rebuildLauncherLayout)
+    onDeveloperUnlockedChanged: Qt.callLater(rebuildLauncherLayout)
+    Binding {
+        target: shell.source
+        property: "developerMode"
+        when: shell.source !== null && shell.source !== undefined && shell.source.developerMode !== undefined
+        value: shell.developerMode
+    }
+    // The Konami code's result chosen (Just Type): Settings' Developer Mode
+    // shows from now on, and opens. (The original Just Type's own result
+    // launches com.palm.app.devmodeswitcher, which the runtime turns into
+    // the same: runtime/phoenix-runtime.js revealDeveloperMode.)
+    function revealDeveloperMode() {
+        if (shell.system)
+            shell.system.devModeUnlocked = true;
+        if (source && typeof source.lunaCall === "function")
+            source.lunaCall("luna://com.webos.service.systemservice/setPreferences", { devModeUnlocked: true }, function() {});
+        return launch("org.webosphoenix.settings", { page: "devmode" });
+    }
+    // A developer app asked to open while Developer Mode is off (the window
+    // source refused it): once Developer Mode was revealed, the user is
+    // told and offered it; before, the app is as good as not there (no
+    // precedent in the original, which had no developer-only apps).
+    function developerAppRefused(appId, title) {
+        if (developerUnlocked)
+            deleteDialog.askDeveloper(appId, title);
+    }
+    Connections {
+        target: shell.source
+        ignoreUnknownSignals: true
+        function onDeveloperAppRefused(appId, title) { shell.developerAppRefused(appId, title); }
+    }
+
     // The user opening an app (its icon in the launcher, the dock or the
     // wave; Just Type's app results): as appRelaunch says.
     function openApp(appId) {
+        if (appId === devModeSwitcherId)
+            return revealDeveloperMode();
         return launch(appId, null, appRelaunch);
     }
 
@@ -1888,7 +1940,9 @@ FocusScope {
             // dynamic: a launch point an app added (addLaunchPoint), for
             // Favorites; category, keywords and installed place the rest
             // (LauncherLayout.pageFor).
-            entries.push({ id: a.appId, appId: a.webAppId || a.appId, title: a.title, tab: a.tab, quickLaunch: a.quickLaunch,
+            // A developer app while Developer Mode is off: hidden (tab -1).
+            entries.push({ id: a.appId, appId: a.webAppId || a.appId, title: a.title,
+                           tab: developerShown(a) ? a.tab : -1, quickLaunch: a.quickLaunch,
                            page: a.page || "", dynamic: !!a.dynamic, category: a.category || "",
                            keywords: a.keywords ? String(a.keywords).split("\n").filter(function(k) { return k !== ""; }) : [],
                            installed: !!a.installed });
@@ -2834,6 +2888,17 @@ FocusScope {
                         canUninstall = !!e.removable && !e.installState;
                         appId = id;
                     }
+                    // A developer app while Developer Mode is off
+                    // (shell.developerAppRefused): Open Developer Mode.
+                    function askDeveloper(id, appTitle) {
+                        mode = "developer";
+                        shownId = id;
+                        titleText = qsTr("Developer Mode Is Off");
+                        messageText = qsTr("Turn on Developer Mode to use %1.").arg(appTitle || id);
+                        canRetry = false;
+                        canUninstall = false;
+                        appId = id;
+                    }
                     property bool canUninstall: false
                     function info() {
                         return shell.source && typeof shell.source.installInfo === "function" ? shell.source.installInfo(shownId) : null;
@@ -2947,9 +3012,21 @@ FocusScope {
                                     objectName: "deleteDialogRemove"
                                     width: parent.width
                                     height: Theme.px(52)
-                                    visible: deleteDialog.mode !== "info"
+                                    visible: deleteDialog.mode !== "info" && deleteDialog.mode !== "developer"
                                     caption: qsTr("Remove")
                                     onAction: deleteDialog.remove()
+                                }
+                                ActionButton {
+                                    objectName: "deleteDialogDevMode"
+                                    width: parent.width
+                                    height: Theme.px(52)
+                                    visible: deleteDialog.mode === "developer"
+                                    affirmative: true
+                                    caption: qsTr("Open Developer Mode")
+                                    onAction: {
+                                        deleteDialog.appId = "";
+                                        shell.launch("org.webosphoenix.settings", { page: "devmode" });
+                                    }
                                 }
                             }
                         }
@@ -2993,6 +3070,7 @@ FocusScope {
                     bottomInset: notes.negativeSpace
                     apps: shell.source ? shell.source.apps : null
                     source: shell.source
+                    appShown: (entry) => shell.developerShown(entry)
                     onLaunchRequested: (appId) => shell.openApp(appId)
                     onCloseRequested: { justType.open = false; shell.forceActiveFocus(); }
                     onCopied: (text) => clipboardClient.record(text, "com.palm.systemui")

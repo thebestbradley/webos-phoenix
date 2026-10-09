@@ -48,6 +48,13 @@ QtObject {
     property string exhibitionNightStart: "22:00"
     property string exhibitionNightEnd: "07:00"
     property url dockWallpaper: ""
+
+    // ---- Developer Mode (com.webos.service.devmode; the runtime's devMode) -----
+    // On: the developer apps show (docs/APP-RUNTIME.md "Developer apps").
+    // devModeUnlocked: Developer Mode was revealed (Just Type's Konami code;
+    // the system preference), so Settings' Developer Mode shows.
+    property bool devMode: false
+    property bool devModeUnlocked: false
     property int wifiBars: 3          // 0..3 connected, 0 = on but not connected, -1 = off
     property int signalBars: 5        // 0..5, -1 = no modem
     property bool airplaneMode: false
@@ -350,7 +357,7 @@ QtObject {
     // volume, streams, systemSounds, tapSounds, textAssist, keyboards,
     // keyboard, ringtone, alerttone,
     // notificationtone, callForwarding, reduceMotion, keyboardAccess, tweaks, browser, proxy,
-    // vpnProfiles, exhibitionApps, dockModeSound, exhibition {enabled,
+    // vpnProfiles, exhibitionApps, devMode, devModeUnlocked, dockModeSound, exhibition {enabled,
     // startAfter, nightMode, nightStart, nightEnd}, dockWallpaperUrl,
     // automaticBrightness, displayOnWhenConnected.
     // Missing keys are left alone.
@@ -432,6 +439,10 @@ QtObject {
         }
         if (s.exhibitionApps !== undefined && s.exhibitionApps !== null)
             exhibitionApps = s.exhibitionApps;
+        if (s.devMode !== undefined)
+            devMode = !!s.devMode;
+        if (s.devModeUnlocked !== undefined)
+            devModeUnlocked = !!s.devModeUnlocked;
         if (s.dockModeSound !== undefined)
             dockModeSound = s.dockModeSound === "mute" ? "mute" : "systemsettings";
         if (s.exhibition !== undefined && s.exhibition !== null) {

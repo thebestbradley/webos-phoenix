@@ -1504,7 +1504,55 @@
     runtime.appsChanged = appsChanged;
 
     function visibleLaunchPoints() {
-        return launchPoints().filter(function (lp) { return !lp.hidden; });
+        return launchPoints().filter(function (lp) { return !lp.hidden && developerShown(lp); });
+    }
+
+    // ---- Developer apps (docs/APP-RUNTIME.md "Developer apps") --------------------------
+    //
+    // appinfo.json "phoenix": {"developer": true} (the record's developer
+    // "devmode"): the app or launch point is left out of listLaunchPoints
+    // and searchApps (the launcher, Just Type, the Assistant) unless
+    // Developer Mode is on. "unlock": unless Developer Mode was revealed
+    // (the devModeUnlocked system preference: Just Type's Konami code) or
+    // is on; Settings' Developer Mode launch point. Each change of either
+    // tells launchPointChanges the launch points that came and went, in
+    // every page (the storage event), as an install would.
+    function developerShown(lp) {
+        if (!lp.developer || store.get("devMode", false)) return true;
+        return lp.developer === "unlock" && !!prefs().devModeUnlocked;
+    }
+    var developerSeen = null;   // launchPointId -> shown, for the developer ones
+    function developerGateChanged() {
+        var before = developerSeen, now = {}, changes = [];
+        launchPoints().forEach(function (lp) {
+            if (!lp.developer || lp.hidden) return;
+            now[lp.launchPointId] = developerShown(lp);
+            if (before && now[lp.launchPointId] !== !!before[lp.launchPointId])
+                changes.push(Object.assign({ change: now[lp.launchPointId] ? "added" : "removed" }, lp));
+        });
+        developerSeen = now;
+        changes.forEach(function (c) {
+            launchPointWatchers = launchPointWatchers.filter(function (w) { return w(c) !== false; });
+        });
+    }
+    runtime.developerGateChanged = developerGateChanged;
+    try {
+        global.addEventListener("storage", function (e) {
+            if (e.key === "phoenix:devMode" || e.key === "phoenix:prefs") developerGateChanged();
+        });
+    } catch (e) { /* no window */ }
+    // Just Type's Konami code: luna-applauncher shows "Developer Mode
+    // Enabler" (com.palm.app.devmodeswitcher) when the search field holds
+    // exactly "upupdowndownleftrightleftrightbastart" or "webos20090606"
+    // (app/LaunchPointSearch.js:30-36, 137-139), and launches it when tapped
+    // or on Enter (:194-214, 226-231). Phoenix has no switcher app: its
+    // launch reveals Settings' Developer Mode (devModeUnlocked, for good)
+    // and opens it there (APP_ALIASES).
+    var DEVMODE_SWITCHER = "com.palm.app.devmodeswitcher";
+    function revealDeveloperMode(id) {
+        if (id !== DEVMODE_SWITCHER || prefs().devModeUnlocked === true) return;
+        dispatch("palm://com.palm.systemservice/setPreferences", { devModeUnlocked: true }, function () {},
+                 { cancelled: function () { return false; } });
     }
 
     var resourceHandlers = null;
@@ -1579,7 +1627,9 @@
         // the Agenda exhibition, and Exhibition preferences, a Settings page now.
         "com.palm.app.photos": "org.webosphoenix.photos",
         "com.palm.app.agendaview": "org.webosphoenix.agenda",
-        "com.palm.app.exhibitionpreferences": { id: "org.webosphoenix.settings", params: { page: "exhibition" } }
+        "com.palm.app.exhibitionpreferences": { id: "org.webosphoenix.settings", params: { page: "exhibition" } },
+        // The Developer Mode Enabler (Just Type's Konami code; revealDeveloperMode).
+        "com.palm.app.devmodeswitcher": { id: "org.webosphoenix.settings", params: { page: "devmode" } }
     };
     var HELP_TOPICS = { universalsearch: "justtype", accountsmgr: "accounts", phone: "phone", messaging: "messaging",
                         camera: "camera", photos: "photos", music: "music", launcher: "launcher", notifications: "notifications" };
@@ -1647,6 +1697,7 @@
         // view returns to the app that opened it (runtime.back below): the
         // caller rides in the params as $caller.
         "/launch": function (p, reply) {
+            revealDeveloperMode(p.id);
             var params = aliasParams(p.id, p.params);
             var caller = appIdFromLocation();
             if (p.returnToCaller === true && caller && ["com.palm.systemui", "com.palm.launcher", "com.webos.phoenix.unknown"].indexOf(caller) < 0 && caller !== appId(p.id))
@@ -1664,6 +1715,7 @@
         // $from (the shell's, for a link in a card that has no runtime of
         // its own): the card the app is opened from.
         "/open": function (p, reply) {
+            revealDeveloperMode(p.id);
             var handler = appId(p.id) || (p.target && resourceHandler(p.target));
             var from = typeof p.$from === "string" ? { from: p.$from } : {};
             if (handler) {
@@ -1691,6 +1743,7 @@
         // installed or removed), {change: "added" | "removed", ...launch point}.
         "/launchPointChanges": function (p, reply, ctx) {
             launchPoints();   // what there is now, to tell changes from
+            if (!developerSeen) developerGateChanged();
             reply(ok({ subscribed: !!p.subscribe }));
             if (p.subscribe) launchPointWatchers.push(function (change) {
                 if (ctx.cancelled()) return false;
@@ -4309,6 +4362,11 @@
                 // sounds and when it starts; night mode.
                 dockWallpaperFile: (p.dockwallpaper && p.dockwallpaper.wallpaperFile) || "",
                 exhibitionApps: runtime.exhibitionApps ? runtime.exhibitionApps() : [],
+                // Developer Mode (com.webos.service.devmode) and whether its
+                // pane was revealed (Just Type's Konami code): the shell
+                // shows the developer apps and Settings' launch point by them.
+                devMode: !!store.get("devMode", false),
+                devModeUnlocked: p.devModeUnlocked === true,
                 dockModeSound: p.dockModeSoundPref === "mute" ? "mute" : "systemsettings",
                 exhibition: exhibitionPrefs(p),
                 // The system menu's VPN drawer: each profile's name, its state
@@ -4964,7 +5022,8 @@
             if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "lockScreenPreviews", "notificationRepeat", "screenTimeout", "lockTimeout", "enableALS", "sysUiEnableNextPrevGestures", "appRelaunch", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
                  "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "x_palm_textinput", "accessibility",
                  "dockwallpaper", "dockModeSoundPref", "exhibition", "browserContentBlocker", "browserUserAgent",
-                 "networkProxy"].concat(TWEAK_KEYS).some(function (k) { return k in p; })) {
+                 "networkProxy", "devModeUnlocked"].concat(TWEAK_KEYS).some(function (k) { return k in p; })) {
+                if ("devModeUnlocked" in p && runtime.developerGateChanged) runtime.developerGateChanged();
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
                 changed();
             }
@@ -5329,6 +5388,10 @@
                 reply(ok({ status: devMode() }));
                 devModeWatchers = devModeWatchers.filter(function (w) { return !w.ctx.cancelled(); });
                 devModeWatchers.forEach(function (w) { w.reply(ok({ status: devMode() })); });
+                // The developer apps come and go (launchPointChanges, and
+                // the shell's launcher: systemStatus devMode).
+                if (runtime.developerGateChanged) runtime.developerGateChanged();
+                if (runtime.hostStatus) host.postToHost("systemStatus", runtime.hostStatus());
             }
         });
 

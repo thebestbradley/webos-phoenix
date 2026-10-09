@@ -12,6 +12,9 @@
 //             appinfo.json), and tapping it opens the event
 //   actions   New Memo carries the typed text to Memos
 //   web       Search Google opens the browser with the query
+//   konami    "upupdowndownleftrightleftrightbastart" offers the Developer
+//             Mode Enabler, which reveals and opens Settings' Developer Mode;
+//             developer apps (Terminal) are found only with Developer Mode on
 //
 //   node tools/test-justtype.cjs [--tablet] [--out DIR]
 
@@ -131,6 +134,29 @@ async function main() {
         const web = launches().find((l) => l.id === "com.palm.app.browser");
         check(web && /google\.com\/search\?q=webos(%20|\+)phoenix/.test(web.params && web.params.target || ""),
               "web: Search Google opens the browser on the query");
+
+        // The Konami code (LaunchPointSearch.js:30-36, 137-139): the
+        // Developer Mode Enabler, as typed; Enter launches it (:226-231).
+        await search("term");
+        check(!/Terminal/.test(await text()), "developer apps: Terminal is not found while Developer Mode is off");
+        await search("upupdowndownleftrightleftrightbastart");
+        t = await text();
+        check(/Developer Mode Enabler/.test(t), "konami: the code offers the Developer Mode Enabler");
+        check(await page.locator("img[name=appIcon][src*='devmodeswitcher']").evaluate((i) => i.naturalWidth > 0).catch(() => false),
+              "konami: with its icon");
+        await shot("konami");
+        host.length = 0;
+        await page.keyboard.press("Enter");
+        await page.waitForTimeout(500);
+        const dev = launches().find((l) => l.id === "org.webosphoenix.settings");
+        check(dev && dev.params && dev.params.page === "devmode", "konami: Enter opens Settings' Developer Mode");
+        check(host.some((m) => m.type === "systemStatus" && m.payload.devModeUnlocked === true), "konami: and reveals it for good (the shell hears it)");
+        await page.evaluate(() => new Promise((res) => __phoenixRuntime.dispatch("luna://com.webos.service.devmode/setDevMode",
+            { status: "enabled" }, res, { cancelled: () => false, onCancel: null })));
+        await search("term");
+        check(/Terminal/.test(await text()), "developer apps: Terminal is found with Developer Mode on");
+        await page.evaluate(() => new Promise((res) => __phoenixRuntime.dispatch("luna://com.webos.service.devmode/setDevMode",
+            { status: "disabled" }, res, { cancelled: () => false, onCancel: null })));
 
         // Its preferences (Settings > Just Type, com.palm.universalsearch):
         // the default engine, the engines turned on and their order, and

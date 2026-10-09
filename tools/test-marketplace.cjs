@@ -266,9 +266,16 @@ async function main() {
         await page.goto(appUrl("org.webosphoenix.marketplace", hooked));
         await page.click("[data-testid=install-app]", { timeout: 15000 });
         await page.waitForSelector("[data-testid=install-error]", { timeout: 20000 });
-        check(/Developer Mode/.test(await page.textContent("[data-testid=install-error]")) && await page.locator("[data-testid=open-devmode]").count() === 1,
-              "a package with install scripts needs Developer Mode, and links to it");
+        check(/Developer Mode/.test(await page.textContent("[data-testid=install-error]")) && await page.locator("[data-testid=open-devmode]").count() === 0
+              && /Konami code/.test(await page.textContent("[data-testid=devmode-hint]")),
+              "a package with install scripts needs Developer Mode, and says how to find it while it is hidden");
         check(!(await apps()).some((a) => a.id === "org.example.hooked"), "... and is not installed");
+        // Revealed (Just Type's Konami code): a link to it.
+        await luna("luna://com.palm.applicationManager/launch", { id: "com.palm.app.devmodeswitcher", params: {} });
+        await page.goto(appUrl("org.webosphoenix.marketplace", hooked));
+        await page.click("[data-testid=install-app]", { timeout: 15000 });
+        await page.waitForSelector("[data-testid=open-devmode]", { timeout: 20000 });
+        check(await page.locator("[data-testid=devmode-hint]").count() === 0, "once revealed, it links to Developer Mode");
         await shot("9b-needs-devmode");
         await luna("luna://com.webos.service.devmode/setDevMode", { status: "enabled" });
         await page.goto(appUrl("org.webosphoenix.marketplace", hooked));

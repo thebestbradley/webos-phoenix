@@ -561,6 +561,12 @@ Item {
             // LunaSysMgr read them at boot (user-exhibition-apps.json).
             if (s.exhibitionApps && typeof simSettings !== "undefined")
                 simSettings.setValue("dockmode/exhibitionApps", JSON.stringify(s.exhibitionApps));
+            // Developer Mode and its pane, so the launcher shows the
+            // developer apps from the start next time (before a page reports).
+            if (s.devMode !== undefined && typeof simSettings !== "undefined")
+                simSettings.setValue("developer/devMode", s.devMode ? "1" : "0");
+            if (s.devModeUnlocked !== undefined && typeof simSettings !== "undefined")
+                simSettings.setValue("developer/unlocked", s.devModeUnlocked ? "1" : "0");
         }
     }
     Connections {
@@ -1587,6 +1593,8 @@ Item {
                 if (Array.isArray(exhibitions))
                     status.exhibitionApps = exhibitions;
             } catch (e) { /* the default */ }
+            status.devMode = simSettings.value("developer/devMode") === "1";
+            status.devModeUnlocked = simSettings.value("developer/unlocked") === "1";
         }
         // The "Dismissing Cards" tutorial, until it has been shown once
         // (not in a demo scene).

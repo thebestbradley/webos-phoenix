@@ -15,6 +15,9 @@ Item {
     id: jt
 
     property var apps
+    // Whether an app of apps is shown (the shell's developerShown: developer
+    // apps only while Developer Mode is on); null: all are.
+    property var appShown: null
     // The window source; its optional justTypeWindow() supplies the surface.
     property var source
     property bool open: false
@@ -198,13 +201,24 @@ Item {
         }
     }
 
+    // The Konami code, and webOS 1.x's: exactly this in the search field
+    // (as typed: case and all) shows "Developer Mode Enabler", the original
+    // com.palm.app.devmodeswitcher (luna-applauncher app/LaunchPointSearch.js:
+    // 30-36, 137-139); choosing it reveals Settings' Developer Mode
+    // (Shell.revealDeveloperMode).
+    readonly property var easterStrings: ["upupdowndownleftrightleftrightbastart", "webos20090606"]
     function refresh() {
         results.clear();
+        if (easterStrings.indexOf(input.text) >= 0)
+            results.append({ appId: "com.palm.app.devmodeswitcher", title: qsTr("Developer Mode Enabler"), color: "#2a2f36",
+                             glyph: "{}", icon: "", largeIcon: "" });
         var q = input.text.toLowerCase();
         if (!apps || q === "")
             return;
         for (var i = 0; i < apps.count; ++i) {
             var a = apps.get(i);
+            if (appShown && !appShown(a))
+                continue;
             if (a.title.toLowerCase().indexOf(q) >= 0)
                 results.append({ appId: a.appId, title: a.title, color: a.color, glyph: a.glyph,
                                  icon: String(a.icon || ""), largeIcon: String(a.largeIcon || "") });
@@ -224,6 +238,7 @@ Item {
         spacing: Theme.px(2)
 
         Repeater {
+            objectName: "justTypeResults"
             model: results
             delegate: Rectangle {
                 id: result

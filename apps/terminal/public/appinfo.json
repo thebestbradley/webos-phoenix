@@ -13,8 +13,9 @@
     "uiRevision": 2,
     "keywords": ["Shell", "Console", "Command Line", "bash", "zsh", "SSH"],
     "phoenix": {
-        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
-        "launcherTab": 0
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings; developer: shown only while Developer Mode is on.",
+        "launcherTab": 0,
+        "developer": true
     },
     "//requiredPermissions": "OSE access control groups for the services the app calls. pty.operation is services/pty's; the service also checks that the caller is this app.",
     "requiredPermissions": [

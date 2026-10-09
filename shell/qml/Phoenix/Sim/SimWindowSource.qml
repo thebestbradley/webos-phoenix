@@ -75,6 +75,13 @@
 //   (installing: "installApp" / "removeApp" host messages, phoenix-sim's
 //   simInstaller; deleting an installed app in the launcher removes it)
 //   apps also has removable: whether the launcher offers to delete the app
+//   apps also has developer: "" for everyone's apps, "devmode" for a developer
+//                            app (appinfo.json "phoenix": {"developer": true}),
+//                            "unlock" for one shown once Developer Mode was
+//                            revealed (Settings' Developer Mode)
+//   developerMode            (set by the shell) Developer Mode is on; while
+//                            off, launching a developer app is refused:
+//   developerAppRefused(appId, title)  signal: so the shell can say so
 //
 // Optional, for the launcher's icon menu (Shell.iconMenuItems):
 //   launchNewInstance(appId) -> uid  another window of an app whose entry
@@ -235,7 +242,9 @@ Item {
                  size: a.size || 0,
                  // A site's part of the web (an installed web app's manifest
                  // scope): its links out of it go elsewhere (Links.js).
-                 scope: a.scope || "" });
+                 scope: a.scope || "",
+                 // A developer app (Rootfs::apps: "devmode" or "unlock").
+                 developer: a.developer || "" });
     }
 
     // The launcher's fields every entry has (Shell._launcherEntries,
@@ -247,7 +256,7 @@ Item {
         return { page: "", dynamic: false, category: "", keywords: "", installed: false,
                  installState: "", progress: -1, pending: false, installReason: "",
                  exhibition: false, exhibitionTitle: "", tapToShare: false,
-                 multipleInstances: false, size: 0, scope: "" };
+                 multipleInstances: false, size: 0, scope: "", developer: "" };
     }
 
     // Apps that run in several windows at once whose appinfo.json cannot
@@ -2253,6 +2262,11 @@ Item {
         // taps on its icon).
         if (!info || info.pending)
             return "";
+        // A developer app while Developer Mode is off.
+        if (info.developer === "devmode" && !developerMode) {
+            developerAppRefused(appId, info.title);
+            return "";
+        }
         if (info.web && info.noWindow && _headless[appId]) {
             // Running without a card: the app opens one when told; a
             // window of it kept alive comes back when the page activates
@@ -2296,6 +2310,19 @@ Item {
     // set by the shell): how launches the user makes treat an app that
     // already has a card (launch's how).
     property string appRelaunch: "front"
+    // Developer Mode is on (SimSystemStatus.devMode, set by the shell):
+    // developer apps open only then (docs/APP-RUNTIME.md "Developer apps").
+    // Turned off, those running close, as OSE's setDevMode restarts the
+    // device.
+    property bool developerMode: false
+    signal developerAppRefused(string appId, string title)
+    onDeveloperModeChanged: {
+        if (developerMode)
+            return;
+        for (var i = 0; i < apps.count; ++i)
+            if (apps.get(i).developer === "devmode")
+                closeApp(apps.get(i).webAppId || apps.get(i).appId);
+    }
     // Apps that keep one card whatever the setting: the phone (its card is
     // the call), and those without a card of their own.
     property var singleCardApps: [phoneAppId]

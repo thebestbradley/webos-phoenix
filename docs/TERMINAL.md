@@ -19,7 +19,9 @@ Phases T1, T2 and the code of T3 below. **Decisions:** the web route
 be chosen in Preferences (the image ships both), fish is offered wherever it
 is installed but is not in the image (it needs a Rust toolchain since fish
 4); shells run as the unprivileged device user; Developer Mode (sudo, SSH,
-MCP's `exec`) is a follow-up.
+MCP's `exec`) is a follow-up. Terminal is a developer app: it is in the
+launcher, and opens, only while Developer Mode is on
+([APP-RUNTIME.md](APP-RUNTIME.md#developer-apps)).
 
 | Part | Where | What it does |
 | --- | --- | --- |

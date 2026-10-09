@@ -3,19 +3,21 @@
 
 import { AppMenu, Group, Page, PageHeader, Row, iconSrcSet } from "@phoenix/ui";
 import { tethering as tetheringService, type TetheringStatus } from "@phoenix/luna";
-import { useLuna } from "@phoenix/luna/react";
+import { useDevModeShown, useLuna } from "@phoenix/luna/react";
 import { PAGES, type PageId } from "./index";
 
 /** Every pane in one list (the app launched without a page). */
 export function Hub({ onOpen }: { onOpen: (id: PageId) => void }) {
     // Hotspot & Tethering where there is mobile data to share (phones).
     const tethering = useLuna<TetheringStatus>((cb, err) => tetheringService.watch(cb, err), []).value?.available !== false;
+    // Developer Mode once Just Type's Konami code revealed it (or while on).
+    const devModeShown = useDevModeShown() === true;
     const groups: { label: string; ids: PageId[] }[] = [
         { label: "Connections", ids: ["wifi", "bluetooth", "vpn", "airplane", "phone", ...(tethering ? ["hotspot" as const] : []), "dropshare"] },
         { label: "Device", ids: ["screen", "battery", "usb", "gamepads", "hardware", "exhibition", "sounds", "datetime", "language", "textassist", "justtype", "clipboard", "assistant", "accessibility"] },
         { label: "Privacy & Safety", ids: ["location", "emergency", "certificates"] },
         { label: "About", ids: ["deviceinfo", "backup", "updates"] },
-        { label: "Advanced", ids: ["advanced", "devmode"] },
+        { label: "Advanced", ids: ["advanced", ...(devModeShown ? ["devmode" as const] : [])] },
     ];
     return (
         <Page>

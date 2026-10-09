@@ -274,7 +274,10 @@ dark and light themes go to 2.0.
 - [ ] Developer Mode with `sudo` and an SSH server ([TERMINAL.md](TERMINAL.md) T4-T5).
       Done in the simulator: Settings > Developer Mode behind the device PIN
       or password, and the Marketplace installs packages with install
-      scripts and services only in it ([APP-RUNTIME.md](APP-RUNTIME.md#developer-mode))
+      scripts and services only in it ([APP-RUNTIME.md](APP-RUNTIME.md#developer-mode));
+      hidden until Just Type's Konami code reveals it, as on webOS, and the
+      developer apps (Notification Lab, the framework demos, Terminal) show
+      only while it is on
 - [ ] Screenshots as the original took them, with a notification that
       opens a preview to crop, mark up, share or delete
       ([SCREENSHOTS.md](SCREENSHOTS.md) SC1-SC2). Done in the simulator;

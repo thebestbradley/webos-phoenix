@@ -206,6 +206,20 @@ void Rootfs::rescan()
             const int t = o.value(QStringLiteral("launcherTab")).toInt(-1);
             return o.contains(QStringLiteral("launcherTab")) && t >= 0 && t < pageNames.size() ? pageNames.at(t) : fallback;
         };
+        // Developer apps (docs/APP-RUNTIME.md "Developer apps"): "phoenix":
+        // {"developer": true} keeps an app (or a launch point) out of the
+        // launcher, the dock, Just Type and the Assistant until Developer
+        // Mode is on ("devmode"); "unlock": until Developer Mode was revealed
+        // (Just Type's Konami code) or is on. "" for everyone's apps.
+        auto developerOf = [](const QJsonObject &o, const QString &fallback) {
+            const QJsonValue d = o.value(QStringLiteral("developer"));
+            if (d.isBool())
+                return d.toBool() ? QStringLiteral("devmode") : QString();
+            if (d.toString() == QLatin1String("unlock"))
+                return QStringLiteral("unlock");
+            return fallback;
+        };
+        const QString developer = developerOf(phoenix, QString());
         QStringList keywords;
         for (const auto &k : app.value(QStringLiteral("keywords")).toArray())
             keywords.append(k.toString());
@@ -250,6 +264,7 @@ void Rootfs::rescan()
         entry[QStringLiteral("keywords")] = keywords.join(QLatin1Char('\n'));
         entry[QStringLiteral("dynamic")] = false;
         entry[QStringLiteral("quickLaunch")] = phoenix.value(QStringLiteral("quickLaunch")).toInt(0);
+        entry[QStringLiteral("developer")] = developer;
         // The app's files on disk, for device paths the shell resolves itself (wallpapers).
         entry[QStringLiteral("dir")] = QUrl::fromLocalFile(appDir + QLatin1Char('/')).toString();
         // The shell loads icons itself, from the file on disk.
@@ -317,6 +332,7 @@ void Rootfs::rescan()
         record[QStringLiteral("params")] = QVariantMap();
         record[QStringLiteral("hidden")] = entry.value(QStringLiteral("tab")).toInt() < 0;
         record[QStringLiteral("universalSearch")] = app.value(QStringLiteral("universalSearch")).toVariant();
+        record[QStringLiteral("developer")] = developer;
         // The Assistant's commands the app adds (docs/M6-PLAN.md F3).
         if (app.contains(QStringLiteral("assistant")))
             record[QStringLiteral("assistant")] = app.value(QStringLiteral("assistant")).toVariant();
@@ -374,6 +390,8 @@ void Rootfs::rescan()
             // The app's own entry is its exhibition, not its launch points.
             point[QStringLiteral("exhibition")] = false;
             point[QStringLiteral("quickLaunch")] = lp.value(QStringLiteral("quickLaunch")).toInt(0);
+            // A launch point says for itself, else it is as its app.
+            point[QStringLiteral("developer")] = developerOf(lp, developer);
             m_apps.append(point);
             QVariantMap pointRecord;
             pointRecord[QStringLiteral("id")] = id;
@@ -385,6 +403,7 @@ void Rootfs::rescan()
             pointRecord[QStringLiteral("icon")] = root + lp.value(QStringLiteral("icon")).toString(icon);
             pointRecord[QStringLiteral("params")] = lp.value(QStringLiteral("params")).toObject().toVariantMap();
             pointRecord[QStringLiteral("hidden")] = false;
+            pointRecord[QStringLiteral("developer")] = point.value(QStringLiteral("developer"));
             m_launchPoints.append(pointRecord);
         }
     };
@@ -448,6 +467,7 @@ void Rootfs::rescan()
             record[QStringLiteral("appId")] = appId;
             record[QStringLiteral("hidden")] = false;
             record[QStringLiteral("dynamic")] = true;
+            record[QStringLiteral("developer")] = app.value(QStringLiteral("developer"));
             m_launchPoints.append(record);
             m_dynamic.insert(name, record);
         }

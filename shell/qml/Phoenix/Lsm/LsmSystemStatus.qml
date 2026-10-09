@@ -127,6 +127,33 @@ QtObject {
     property string exhibitionNightEnd: "07:00"
     property url dockWallpaper: ""
 
+    // Developer Mode (OSE's com.webos.service.devmode getDevMode: its
+    // setDevMode restarts the device, so reading it at start is enough) and
+    // the devModeUnlocked system preference (Just Type's Konami code).
+    // STATUS: written against the services' APIs, not yet run on a device;
+    // LsmWindowSource's apps do not carry appinfo.json's phoenix.developer
+    // yet (SAM's launch points have no such field), so every app shows.
+    property bool devMode: false
+    property bool devModeUnlocked: false
+    property var _developer: Service {
+        appId: LS.appId
+        onResponse: (method, payload, token) => {
+            var r = null;
+            try { r = JSON.parse(payload); } catch (e) { return; }
+            if (!r)
+                return;
+            if (r.status === "enabled" || r.status === "disabled")
+                status.devMode = r.status === "enabled";
+            if (r.devModeUnlocked !== undefined)
+                status.devModeUnlocked = r.devModeUnlocked === true;
+        }
+        Component.onCompleted: {
+            call("luna://com.webos.service.devmode", "/getDevMode", JSON.stringify({}));
+            call("luna://com.webos.service.systemservice", "/getPreferences",
+                 JSON.stringify({ keys: ["devModeUnlocked"], subscribe: true }));
+        }
+    }
+
     property var wifiNetworks: []
     property bool wifiScanning: false
     property var bluetoothDevices: []

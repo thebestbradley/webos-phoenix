@@ -9,14 +9,18 @@
 import { useState } from "react";
 import { flushSync } from "react-dom";
 import { sceneTransition } from "@phoenix/luna";
-import { useLaunchParams } from "@phoenix/luna/react";
+import { useDevModeShown, useLaunchParams } from "@phoenix/luna/react";
 import { BackProvider, useBack } from "./nav";
 import { Hub } from "./pages/Hub";
 import { PAGES, type PageId } from "./pages";
 
 function Router() {
     const params = useLaunchParams<{ page?: string }>();
-    const launched = params.page && params.page in PAGES ? (params.page as PageId) : null;
+    // Developer Mode stays out of sight until Just Type's Konami code
+    // revealed it (pages/DevMode.tsx); asked for before, the list shows.
+    const devModeShown = useDevModeShown();
+    const asked = params.page && params.page in PAGES ? (params.page as PageId) : null;
+    const launched = asked === "devmode" && devModeShown === false ? null : asked;
     // Pane opened from the list (only when not launched straight into one).
     const [opened, setOpened] = useState<PageId | null>(null);
     const [lastLaunched, setLastLaunched] = useState(launched);
@@ -25,7 +29,7 @@ function Router() {
         setLastLaunched(launched);
         setOpened(null);
     }
-    const current = launched ?? opened;
+    const current = launched ?? (opened === "devmode" && devModeShown === false ? null : opened);
     // Opening a pane pushes a scene and the back gesture pops it, with the
     // card's zoom-fade (Mojo's pushScene / popScene; CardTransition.cpp).
     const open = (id: PageId | null, pop: boolean) =>

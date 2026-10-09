@@ -431,7 +431,11 @@ sets a device security policy, as an Exchange account did (any of the
 parts; `none` removes it): the lock screen asks for a PIN or password that
 meets it, counts the tries left, warns before the last one and erases the
 device after it. Settings > Developer Mode (when on) has switches for the
-frame rate counter and the touch plot.
+frame rate counter and the touch plot. It is hidden until the Konami code
+(`upupdowndownleftrightleftrightbastart`, or `webos20090606`) is typed in
+Just Type, as on webOS; the developer apps (Notification Lab, the
+framework demos, Terminal) show only while it is on
+([docs/APP-RUNTIME.md](docs/APP-RUNTIME.md#developer-mode)).
 
 `--launch com.palm.app.notes` opens an app at start-up (repeatable);
 `--launch org.webosphoenix.settings.wifi` opens a Settings pane.

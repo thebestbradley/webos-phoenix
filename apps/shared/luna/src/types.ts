@@ -190,6 +190,8 @@ export interface SystemPreferences {
      *  as it is ("front", the default), relaunched to reload its data
      *  ("refresh"), or another card of it ("new"). */
     appRelaunch?: "front" | "refresh" | "new";
+    /** Settings' Developer Mode was revealed (Just Type's Konami code; Phoenix). */
+    devModeUnlocked?: boolean;
     /** Phoenix: the shell's hardware keyboard shortcuts, iPad-style or desktop-style. */
     keyboardShortcuts?: "ipad" | "desktop";
     /** Text Assist's checks and the user's shortcuts (see TextInputPrefs). */

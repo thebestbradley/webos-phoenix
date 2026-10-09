@@ -737,6 +737,10 @@ apps) or grey diamond (system apps), rendered by `tools/render-app-icons.cjs`
   Settings, as on the TouchPad; a layout saved before Favorites keeps its
   three pages.
 - `hidden`: leave the app itself out of the launcher (its launch points stay)
+- `developer`: `true` makes it a [developer app](#developer-apps), shown
+  and opened only while Developer Mode is on; `"unlock"` (a launch point:
+  Settings' Developer Mode) shows once Developer Mode was revealed. A
+  launch point may say its own, else it is as its app.
 - `quickLaunch`: put the app in this quick launch slot (1-4); Phone is 1 and
   Messaging 3 (Email 2 and Calendar 4 are set by title in `SimWindowSource`)
 - `launchPoints`: extra launcher icons for the same app. Each is its own
@@ -2401,7 +2405,8 @@ which runs unchanged in the simulator:
   (`sources.json` without `depends.js`: Palm's Mojo was never released).
   One that runs install scripts, has services or puts files outside its
   app needs [Developer Mode](#developer-mode) (`NEEDS_DEVMODE`; the app
-  page then links to Settings > Developer Mode), and is installed with
+  page then links to Settings > Developer Mode once it was revealed, and
+  until then says to type the Konami code in Just Type), and is installed with
   `developerMode: true`.
 - **Screenshots**: the app page's strip leaves out the ones that do not
   load (the webOS Archive lists some it no longer has); a tap opens them
@@ -2484,6 +2489,24 @@ part through `runtime.hostOp`, phoenix-sim's `SimWindowSource` or
 
 ### Developer Mode
 
+As on legacy webOS, Developer Mode is out of sight until it is found:
+typing `upupdowndownleftrightleftrightbastart` (the Konami code) or webOS
+1.x's `webos20090606` in Just Type offers "Developer Mode Enabler".
+That is the original's own result: luna-applauncher shows it when the
+search field holds exactly one of those strings, as typed, case and all
+(`app/LaunchPointSearch.js:30-36, 137-139`), and launches
+`com.palm.app.devmodeswitcher`, Palm's Developer Mode Switcher, on a tap or
+Enter (`:194-214, 226-231`). Phoenix has no switcher app: the runtime's
+application manager turns that launch into the `devModeUnlocked` system
+preference, set for good, and opens Settings > Developer Mode
+(`revealDeveloperMode`; the shell's built-in Just Type does the same,
+`Shell.revealDeveloperMode`). The result's icon is Settings' Developer
+Mode icon, at the path the original names (`runtime/rootfs.json`). From
+then on the pane is in Settings' list and has its launch point (the
+launcher's Settings page); while Developer Mode is off it offers Hide
+Developer Mode, which sets the preference back. Settings launched straight
+into the pane before it was revealed shows the list instead.
+
 Settings > Developer Mode (the last pane, under Advanced) turns on what
 ordinary apps may not do: packages that run install scripts, have
 background services or put files outside their app, and later the
@@ -2495,6 +2518,26 @@ and offers Screen & Lock. Turning it off asks nothing. The state is OSE's
 device turns it off. While it is on, its Debugging switches show the
 shell's frame rate counter and touch plot (`enableFpsCounter`,
 `enableTouchPlot`; see [Device security](#device-security-erase-usb-drive-mode-and-debugging)).
+
+#### Developer apps
+
+An app whose `appinfo.json` says `"phoenix": {"developer": true}` is for
+developers: Notification Lab, the framework demos (Enyo 2 Demo, the Enact
+Notes, Ionic Notes, Flutter Notes) and Terminal. Third-party apps can say
+so too. While Developer Mode is off such an app is left out of the
+launcher and the dock (the shell's `developerShown`), Just Type and the
+Assistant (`listLaunchPoints` and `searchApps` leave it out), and it does
+not open: the window source refuses the launch (`developerAppRefused`).
+Once Developer Mode was revealed the shell then says "Turn on Developer
+Mode to use <app>." with Open Developer Mode; before, the app is as good as
+not there. (The original had no developer-only apps, so there is no
+precedent to follow.) Turning Developer Mode on or off changes all of this
+at once in the simulator: `launchPointChanges` reports the launch points
+added and removed in every page, the shell hears `devMode` and
+`devModeUnlocked` in its host status and rebuilds the launcher, and the
+developer apps' cards close as it turns off. On a device OSE's
+`setDevMode` restarts it, so the same follows from the restart.
+`tools/test-apps.cjs` runs the developer apps with Developer Mode on.
 
 The installer takes such a package only when Developer Mode is on and the
 request says `developerMode: true` (`com.webos.appInstallService install`;

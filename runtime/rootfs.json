@@ -8,7 +8,8 @@
         "overlays: directories laid out like the device filesystem whose files win over everything else (patched or missing files for the original apps).",
         "systemApps: single app directories for system UI apps (Just Type, the system alerts), never shown in the launcher.",
         "applicationDirs: each child with an appinfo.json is an app; a child whose built output is in dist/ (e.g. React apps) is used from there.",
-        "exclude: device paths that are never served or installed (files of the original apps we do not redistribute; see docs/LEGAL.md)."
+        "exclude: device paths that are never served or installed (files of the original apps we do not redistribute; see docs/LEGAL.md).",
+        "com.palm.app.devmodeswitcher/icon.png: the icon of Just Type's \"Developer Mode Enabler\" result for the Konami code (luna-applauncher app/LaunchPointSearch.js:30-36); Phoenix has no switcher app, so it is Settings' Developer Mode icon."
     ],
     "overlays": [
         "compat/rootfs"
@@ -17,6 +18,8 @@
         "/usr/palm/frameworks/enyo/0.10/framework/": "third_party/enyo-1.0/framework/",
         "/usr/palm/frameworks/enyo/1.0/framework/": "third_party/enyo-1.0/framework/",
         "/usr/palm/frameworks/mojoloader.js": "third_party/mojoloader/mojoloader.js",
+        "/usr/palm/applications/com.palm.app.devmodeswitcher/icon.png": "apps/settings/public/icons/devmode.png",
+        "/usr/palm/applications/com.palm.app.devmodeswitcher/icon@2x.png": "apps/settings/public/icons/devmode-128x128.png",
         "/usr/palm/frameworks/enyo2/enyo/": "third_party/enyo-2/enyo/",
         "/usr/palm/frameworks/enyo2/lib/onyx/": "third_party/enyo-2/onyx/",
         "/usr/palm/frameworks/enyo2/lib/layout/": "third_party/enyo-2/layout/",

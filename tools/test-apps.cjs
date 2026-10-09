@@ -101,11 +101,14 @@ async function main() {
             // A state the app needs to show something ("storage": runtime
             // store keys, written once the runtime has set up the profile,
             // then the app starts again).
-            if (expect.storage) {
+            // A developer app (appinfo.json "phoenix": {"developer": true})
+            // runs with Developer Mode on, as only then can it open.
+            const storage = Object.assign({}, expect.storage || {}, app.developer === "devmode" ? { devMode: true } : {});
+            if (Object.keys(storage).length) {
                 await page.waitForTimeout(500);
                 await page.evaluate((st) => {
                     for (const k of Object.keys(st)) localStorage.setItem("phoenix:" + k, JSON.stringify(st[k]));
-                }, expect.storage);
+                }, storage);
                 await page.goto(base + app.main);
             }
             // Headless apps: the window they open is what the user sees. They

@@ -23,7 +23,7 @@ import {
     apps, localCatalog, LunaError, marketplace,
     type CatalogSource, type InstalledApp, type InstallProgress, type LocalCatalogStatus, type MarketApp, type PendingKey, type Section,
 } from "@phoenix/luna";
-import { useLaunchParams } from "@phoenix/luna/react";
+import { useDevModeShown, useLaunchParams } from "@phoenix/luna/react";
 import { Screenshots } from "./Gallery";
 import { Icon } from "./Icon";
 import { AppMenu, BackProvider, Button, Dialog, ErrorText, Group, Note, Row, Spinner, TextField, ToggleButton, useBack } from "@phoenix/ui";
@@ -256,6 +256,9 @@ function AppPage({ sourceId, id, seed, onRemoved }: { sourceId: string; id: stri
     const [error, setError] = useState<string | null>(null);
     const [confirmRemove, setConfirmRemove] = useState(false);
     const sub = useRef<{ cancel(): void } | null>(null);
+    // The way to Developer Mode once Just Type's Konami code revealed it
+    // (as webOS users enabled it); before, how to find it.
+    const devModeShown = useDevModeShown() === true;
 
     const load = useCallback(() => {
         marketplace.app(sourceId, id).then((a) => setApp((old) => ({
@@ -321,9 +324,15 @@ function AppPage({ sourceId, id, seed, onRemoved }: { sourceId: string; id: stri
             </div>
             {app.verdict && !app.verdict.ok && <Note>{app.verdict.text}</Note>}
             {error && <ErrorText testId="install-error">{error}</ErrorText>}
-            {progress?.errorCode === "NEEDS_DEVMODE" && (
+            {progress?.errorCode === "NEEDS_DEVMODE" && devModeShown && (
                 <Button variant="dark" data-testid="open-devmode"
                         onClick={() => void apps.launch("org.webosphoenix.settings", { page: "devmode" })}>Developer Mode Settings</Button>
+            )}
+            {progress?.errorCode === "NEEDS_DEVMODE" && !devModeShown && (
+                <Note testId="devmode-hint">
+                    Developer Mode is hidden until it is found: type the Konami code
+                    (upupdowndownleftrightleftrightbastart) in Just Type, as on webOS.
+                </Note>
             )}
             {progress?.state === "installed" && progress.skipped && progress.skipped.length > 0 && (
                 <Note testId="install-skipped">Installed without its {progress.skipped.join(" and ")}: this device cannot run them yet.</Note>
