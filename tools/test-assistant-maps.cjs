@@ -23,7 +23,9 @@
 //     Back through what the user opened in Maps, then Back on the view the
 //     Assistant opened goes back to the Assistant (the runtime closes the card);
 //   - "directions to the nearest coffee shop": a card with the time there
-//     and Start Navigation, which opens Maps navigating.
+//     and Start Navigation, which opens Maps navigating;
+//   - Settings > Language & Region > Units: metric chosen on a US device,
+//     the Assistant and Maps both answer in metres.
 //
 // The map data services are answered from tools/fixtures/maps (replies
 // recorded from Photon, Valhalla's FOSSGIS server and Overpass on 9 October
@@ -305,6 +307,27 @@ async function main() {
         await nav.waitForSelector(tid("nav-banner"), { timeout: 20000 });
         check(true, "Maps starts the turn-by-turn guidance at once");
         await nav.screenshot({ path: path.join(outDir, "8-maps-start-navigation.png") });
+
+        // ---- One setting for the units: Settings > Language & Region > Units ----------------------
+        // The device is in the US (miles); metric chosen there, Maps and the Assistant both follow.
+        const set = await context.newPage();
+        watch(set, "settings");
+        await set.goto(`${root}/org.webosphoenix.settings/index.html?launchParams=` + encodeURIComponent(JSON.stringify({ page: "language" })));
+        await set.waitForSelector(tid("units"));
+        check(/Automatic \(miles, °F\)/.test(await set.textContent(tid("units"))), `Units: Automatic, by the region (${await set.textContent(tid("units"))})`);
+        await set.click(tid("units"));
+        await set.click(`.pui-popup .pui-menu-item:has(.pui-menu-label:text-is("Metric (km, °C)"))`);
+        await set.waitForSelector(".pui-popup", { state: "detached" });
+        await set.screenshot({ path: path.join(outDir, "9-settings-units.png") });
+        await app.evaluate(([lat, lon]) => window.__phoenixRuntime.location.set(lat, lon), [HOME.lat, HOME.lon]);
+        reply = await ask("coffee near me");
+        const metric = await reply.locator(".as-bubble").textContent();
+        check(/Café Too, [56]0 m away\.$/.test(metric), `the Assistant answers in metres now: "${metric}"`);
+        const km = await context.newPage();
+        watch(km, "maps (metric)");
+        await km.goto(mapsUrl({ place: { id: "photon:N3555373048", name: "City Bagels", lat: 37.3356689, lon: -121.8911368 } }));
+        await km.waitForSelector(tid("place-distance"), { timeout: 20000 });
+        check(/^2\d0 m away$/.test(await km.textContent(tid("place-distance"))), `and Maps in metres: ${await km.textContent(tid("place-distance"))}`);
 
         check(external.length === 0, `no requests to other servers${external.length ? ": " + [...new Set(external)].join(", ") : ""}`);
         check(errors.length === 0, `no page errors${errors.length ? ": " + errors.join(" | ") : ""}`);

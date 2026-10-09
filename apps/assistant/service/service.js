@@ -24,6 +24,7 @@ var device = require("./lib/node-device");
 
 var DATA = "/var/lib/phoenix/assistant";
 var service = new Service(assistant.SERVICE);
+var region = require("./lib/region");
 var tts = device.speech({ log: function (m) { console.log("[tts] " + m); } });
 var watchers = [];
 
@@ -55,8 +56,15 @@ var methods = assistant.createAssistantService({
                      { sourceId: assistant.SERVICE, message: n.title, onclick: { appId: n.appId, params: n.params || {} } }, function () {});
     },
     changed: function () { notify(); },
+    // The device's units (Settings > Language & Region > Units; the region when "auto").
+    units: function () { return region.deviceUnits(systemSettings); },
     log: function (m) { console.log("[assistant] " + m); }
 });
+
+// The settings the units follow, kept as they change.
+var systemSettings = {};
+service.subscribe("luna://com.webos.settingsservice/getSystemSettings", { keys: ["localeInfo", "measurementUnits"], subscribe: true })
+    .on("response", function (message) { if (message.payload && message.payload.settings) systemSettings = message.payload.settings; });
 
 // The caller of the request being answered (luna-service2 tells the app id).
 var current = null;

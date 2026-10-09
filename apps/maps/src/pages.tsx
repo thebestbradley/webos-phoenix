@@ -28,8 +28,8 @@ function PageShell({ title, onBack, children, testId }: { title: string; onBack:
 
 // ---- Preferences ---------------------------------------------------------------------------------
 
-export function SettingsPage({ prefs, providers, onPrefs, onProviders, onBack }: {
-    prefs: Prefs; providers: Providers; onPrefs: (p: Partial<Prefs>) => void; onProviders: (p: Providers | null) => void; onBack: () => void;
+export function SettingsPage({ prefs, deviceUnits, providers, onPrefs, onProviders, onBack }: {
+    prefs: Prefs; deviceUnits: Units; providers: Providers; onPrefs: (p: Partial<Prefs>) => void; onProviders: (p: Providers | null) => void; onBack: () => void;
 }) {
     const [draft, setDraft] = useState<Providers>(providers);
     const [error, setError] = useState("");
@@ -49,8 +49,10 @@ export function SettingsPage({ prefs, providers, onPrefs, onProviders, onBack }:
     return (
         <PageShell title="Preferences" onBack={onBack} testId="settings">
             <Group label="Directions">
-                <ListSelector<Units> title="Distances" value={prefs.units} testId="pref-units" onChange={(units) => onPrefs({ units })}
-                                     options={[{ label: "Miles and feet", value: "imperial" }, { label: "Kilometres and metres", value: "metric" }]} />
+                <ListSelector<Prefs["distanceUnits"]> title="Distances" value={prefs.distanceUnits} testId="pref-units"
+                                     onChange={(distanceUnits) => onPrefs({ distanceUnits })}
+                                     options={[{ label: `Automatic (${deviceUnits === "imperial" ? "miles" : "kilometres"})`, value: "auto" },
+                                               { label: "Miles and feet", value: "imperial" }, { label: "Kilometres and metres", value: "metric" }]} />
                 <Row title="Spoken directions" testId="pref-voice"><ToggleButton value={prefs.voice} onChange={(voice) => onPrefs({ voice })} /></Row>
             </Group>
 

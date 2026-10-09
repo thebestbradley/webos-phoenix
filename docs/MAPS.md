@@ -94,7 +94,9 @@ works, and how to host every piece yourself.
 - **Two renderers**: MapLibre GL JS 6 (WebGL 2) normally; where the web
   runtime has no WebGL 2, Leaflet with the same vector tiles drawn on a 2D
   canvas (`src/canvasmap.ts`), or raster tiles if Preferences give a URL.
-- **Preferences**: units, voice, and every server (tiles, search,
+- **Preferences**: distances (Automatic: the device's units, Settings >
+  Language & Region > Units, which Weather and the Assistant follow too;
+  `@phoenix/luna` `units`), voice, and every server (tiles, search,
   routing, renderer), with "Reset to Defaults". An image or organisation
   sets the defaults for all devices by replacing `providers.json` in the app.
 

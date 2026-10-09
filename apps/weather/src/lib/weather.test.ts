@@ -12,7 +12,7 @@ import {
     fetchForecast, forecastUrl, parseForecast, placeLine, roundCoord, searchPlaces, searchUrl, WeatherError, type Fetcher, type Place,
 } from "./openmeteo";
 import { addPlace, CURRENT_ID, DEFAULT_PREFS, freshness, load, movePlace, removePlace, save, STALE_MS } from "./store";
-import { compass, dayLabel, hourLabel, IMPERIAL, METRIC, precip, regionOf, safeLocale, temp, unitsFor, wind } from "./units";
+import { compass, dayLabel, effectiveUnits, hourLabel, IMPERIAL, METRIC, precip, regionOf, safeLocale, temp, unitsFor, wind } from "./units";
 
 const fixture = (name: string) => JSON.parse(readFileSync(resolve(__dirname, "../../fixtures", name), "utf8"));
 const reply = (body: unknown, status = 200): ReturnType<Fetcher> =>
@@ -24,6 +24,13 @@ function memory() {
 }
 
 describe("units", () => {
+    it("Automatic is the device's units (Settings > Language & Region > Units), whose own Automatic is the region's", () => {
+        expect(effectiveUnits("auto", "metric", "en-US")).toEqual(METRIC);
+        expect(effectiveUnits("auto", "imperial", "de-DE")).toEqual(IMPERIAL);
+        expect(effectiveUnits("auto", "auto", "en-US")).toEqual(IMPERIAL);
+        expect(effectiveUnits("auto", "auto", "de-DE")).toEqual(METRIC);
+        expect(effectiveUnits("metric", "imperial", "en-US")).toEqual(METRIC);
+    });
     it("follow the region", () => {
         expect(regionOf("en-US")).toBe("US");
         expect(regionOf("zh-Hans-CN")).toBe("CN");

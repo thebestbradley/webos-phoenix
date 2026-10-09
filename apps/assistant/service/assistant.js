@@ -74,11 +74,13 @@
 //   llm (the on-device model runner: status(), download(model), cancel(id),
 //   remove(id), ensure(model) -> Promise<{baseUrl}>), tts: {speak(text,
 //   lang, voice), stop()}, voice() -> parts as voice answers them (optional), caller() -> app id, now() -> ms, changed(what), log,
-//   notify(n) (a notification: lib/followups.js)}
+//   notify(n) (a notification: lib/followups.js), units() -> "metric" |
+//   "imperial", the device's (lib/region.js; optional, else locale())}
 
 "use strict";
 
 var grammar = require("./lib/grammar");
+var region = require("./lib/region");
 var commands = require("./lib/commands");
 var providers = require("./lib/providers");
 var models = require("./lib/models");
@@ -162,8 +164,10 @@ function createAssistantService(deps) {
     function units() {
         var u = settings().units;
         if (u !== "auto") return u;
-        var loc = String(deps.locale ? deps.locale() : "en-US");
-        return /-(US|LR|MM)$/i.test(loc) ? "imperial" : "metric";
+        // The device's one setting, as every app reads it (lib/region.js:
+        // Settings > Language & Region > Units, "auto" by the region).
+        if (deps.units) return deps.units();
+        return region.systemFor("auto", String(deps.locale ? deps.locale() : "en-US"));
     }
 
     // ---- Threads and messages (one key each) ---------------------------------------------------

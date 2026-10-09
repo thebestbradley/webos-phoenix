@@ -21,7 +21,7 @@ const { createAssistantService } = req("./assistant.js") as { createAssistantSer
 const NOW = new Date(2026, 9, 7, 10, 0, 0).getTime();
 const at = (d: number, h: number, m = 0) => new Date(2026, 9, d, h, m, 0).getTime();
 
-function device(opts: { offline?: boolean; locationAllowed?: boolean | null } = {}) {
+function device(opts: { offline?: boolean; locationAllowed?: boolean | null; units?: "metric" | "imperial" } = {}) {
     let n = 0;
     const db = new Map<string, any>();
     const put = (o: any) => { const id = o._id || "db" + ++n; db.set(id, { ...o, _id: id }); return id; };
@@ -166,7 +166,8 @@ function device(opts: { offline?: boolean; locationAllowed?: boolean | null } = 
     // The commands alone: the questions after them have their own tests (followups.test.ts).
     data.set("assistant:settings", { followUps: false });
     const svc = createAssistantService({ luna, storage, request, now: () => clock, caller: () => "com.palm.systemui",
-                                         secrets: { seal: () => Promise.resolve({}), unseal: () => Promise.resolve("") }, locale: () => "en-US" });
+                                         secrets: { seal: () => Promise.resolve({}), unseal: () => Promise.resolve("") }, locale: () => "en-US",
+                                         ...(opts.units ? { units: () => opts.units! } : {}) });
     let thread = "";
     async function ask(text: string): Promise<Msg> {
         const r = await svc.ask({ text, ...(thread ? { threadId: thread } : { newThread: true }) });
@@ -657,6 +658,12 @@ describe("places and the way there (the owner's coffee shops)", () => {
         const route = d.requests.find((u) => u.includes("valhalla"))!;
         expect(JSON.parse(decodeURIComponent(route.split("json=")[1])).costing).toBe("pedestrian");
         expect(launched(d).params).toMatchObject({ travelMode: "walk" });
+    });
+    it("in the device's units (Settings > Language & Region > Units), as Maps and the Weather", async () => {
+        const d = device({ units: "metric" });
+        expect((await d.ask("coffee near me")).text).toMatch(/The closest is Philz Coffee, 4\d0 m away\.$/);
+        expect((await d.ask("what's the weather")).text).toMatch(/°C/);
+        expect((await device().ask("coffee near me")).text).toMatch(/0\.3 mi away/);
     });
     it("asks for the location once; offline, Maps finds them itself", async () => {
         const d = device({ locationAllowed: null });

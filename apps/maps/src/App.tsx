@@ -37,14 +37,14 @@
 // the card; apps/photos does the same).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { apps } from "@phoenix/luna";
+import { apps, systemFor, units as unitsService } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import { AppMenu, BackProvider, Dialog, Button, IconToolButton, PopupMenu, Toolbar, ToolSpacer, cx, useBack, type Option } from "@phoenix/ui";
 import { MapView, prepareMapWorker, type Camera, type MapHandle, type MapMarker, type MapPoi } from "./MapView";
 import { AboutPage, RegionsPage, SavedPage, SettingsPage } from "./pages";
 import { Directions, NavBanner, NavSteps, PlaceCard, Results } from "./panels";
 import { MapGlyph } from "./icons";
-import { bounds as boundsOf, distance, type LngLat } from "./lib/geo";
+import { bounds as boundsOf, distance, type LngLat, type Units } from "./lib/geo";
 import { cleanNearby, isNearbyQuery, searchNearby } from "./lib/nearby";
 import { placeDetails, type PlaceDetails } from "./lib/details";
 import { directions as getDirections, findPlaces, whatIsHere } from "./lib/engine";
@@ -149,6 +149,10 @@ function MapsApp() {
     }, []);
     const setPrefs = (p: Partial<Prefs>) => setPrefsState((o) => { const n = { ...o, ...p }; savePrefs(n); return n; });
     const me: LngLat | null = fix ? [fix.lon, fix.lat] : null;
+    // The device's units unless Preferences say otherwise.
+    const [deviceUnits, setDeviceUnits] = useState<Units>(() => systemFor("auto", navigator.language));
+    useEffect(() => { const sub = unitsService.watch((u) => setDeviceUnits(u), () => {}); return () => sub.cancel(); }, []);
+    const unitsNow: Units = prefs.distanceUnits === "auto" ? deviceUnits : prefs.distanceUnits;
 
     // Start: the image's provider defaults, the offline regions, then the map.
     useEffect(() => {
@@ -349,7 +353,7 @@ function MapsApp() {
         setNav((n) => (n ? { ...n, progress: p } : n));
         map.current?.follow(fix, true);
         if (prefs.voice) {
-            const text = dueAnnouncement(nav.route, p, prefs.units, said.current);
+            const text = dueAnnouncement(nav.route, p, unitsNow, said.current);
             if (text) void speak(text);
         }
         if (p.offRoute && dir && Date.now() - lastReroute.current > 10000) {
@@ -540,12 +544,12 @@ function MapsApp() {
 
     const fromLabel = dir ? (dir.from === "me" ? "My Location" : dir.from.name) : "";
     const navSteps = nav && (wide || stepsShown) ? (
-        <NavSteps route={nav.route} progress={nav.progress} units={prefs.units}
+        <NavSteps route={nav.route} progress={nav.progress} units={unitsNow}
                   onStep={(i) => { const s = nav.route.steps[i]; if (s) map.current?.flyTo(s.location, 17); }} />
     ) : null;
     const panel = nav ? null : dir ? (
         <Directions fromLabel={fromLabel} toLabel={dir.to.name} mode={prefs.mode} route={dir.route} busy={dir.busy} error={dir.error}
-                    note={dir.note} units={prefs.units} times={dir.times}
+                    note={dir.note} units={unitsNow} times={dir.times}
                     onMode={(m) => { setPrefs({ mode: m }); void routeFor(dir, m); }}
                     onSwap={() => {
                         const from = dir.from === "me" ? (me ? coordsPlace(me, "My Location") : null) : dir.from;
@@ -561,11 +565,11 @@ function MapsApp() {
                     onStep={(i) => { const s = dir.route?.steps[i]; if (s) map.current?.flyTo(s.location, 17); }}
                     onClose={() => setDir(null)} />
     ) : selected ? (
-        <PlaceCard place={selected} details={details?.id === selected.id ? details.d : undefined} saved={!!findSaved(saved, selected)} near={me} units={prefs.units}
+        <PlaceCard place={selected} details={details?.id === selected.id ? details.d : undefined} saved={!!findSaved(saved, selected)} near={me} units={unitsNow}
                    onDirections={() => startDirections(selected)} onStart={() => startDirections(selected, "me", true)} onSave={() => void toggleSave(selected)}
                    onShare={(anchor) => setMenu({ kind: "share", anchor, place: selected })} onClose={() => setSelected(null)} />
     ) : results ? (
-        <Results places={results.places} busy={results.busy} note={results.note} near={me ?? null} units={prefs.units} onPick={choose} />
+        <Results places={results.places} busy={results.busy} note={results.note} near={me ?? null} units={unitsNow} onPick={choose} />
     ) : null;
 
     const routeLine = nav?.route.geometry ?? dir?.route?.geometry ?? null;
@@ -582,14 +586,14 @@ function MapsApp() {
         : `© OpenStreetMap contributors · © OpenMapTiles${providers.tiles.kind === "openmaptiles" && /openfreemap/.test(providers.tiles.url) ? " · OpenFreeMap" : ""}`;
 
     const pageView = page === "settings" ? (
-        <SettingsPage prefs={prefs} providers={providers} onPrefs={setPrefs} onBack={() => setPage(null)}
+        <SettingsPage prefs={prefs} deviceUnits={deviceUnits} providers={providers} onPrefs={setPrefs} onBack={() => setPage(null)}
                       onProviders={(p) => {
                           if (p) saveProviders(p);
                           setProvidersState(p ?? resetProviders());
                           say("Map servers updated");
                       }} />
     ) : page === "regions" ? (
-        <RegionsPage regions={regions} visibleTiles={visibleTiles} progress={download.progress} error={download.error} units={prefs.units}
+        <RegionsPage regions={regions} visibleTiles={visibleTiles} progress={download.progress} error={download.error} units={unitsNow}
                      onSave={(n) => void saveArea(n)} onCancel={() => download.abort?.abort()}
                      onDelete={(r) => setConfirm({ title: "Delete Offline Map", message: `Delete "${r.name}"?`, action: () => {
                          void deleteRegion(r.id).then(loadRegions).then(setRegions);
@@ -598,7 +602,7 @@ function MapsApp() {
                      onShow={(r) => { setPage(null); map.current?.fitBounds(r.bounds, 20); }}
                      onBack={() => setPage(null)} />
     ) : page === "saved" ? (
-        <SavedPage list={saved} near={me} units={prefs.units} onBack={() => setPage(null)}
+        <SavedPage list={saved} near={me} units={unitsNow} onBack={() => setPage(null)}
                    onPick={(s) => { setPage(null); setResults(null); setDir(null); choose(fromSaved(s)); }}
                    onDelete={(s) => void placesDb.remove(s._id!)} />
     ) : page === "about" ? <AboutPage providers={providers} onBack={() => setPage(null)} /> : null;
@@ -629,7 +633,7 @@ function MapsApp() {
             {panel && <div className={cx("mp-panel", wide ? "side" : "sheet")} data-testid="panel">{panel}</div>}
 
             {nav && (
-                <NavBanner route={nav.route} progress={nav.progress} units={prefs.units} voice={prefs.voice}
+                <NavBanner route={nav.route} progress={nav.progress} units={unitsNow} voice={prefs.voice}
                            onVoice={() => { if (prefs.voice) stopSpeaking(); setPrefs({ voice: !prefs.voice }); }}
                            onEnd={endNav} onOverview={() => map.current?.fitBounds(boundsOf(nav.route.geometry), 60)}
                            onSteps={wide ? undefined : () => setStepsShown((v) => !v)} stepsShown={stepsShown} />

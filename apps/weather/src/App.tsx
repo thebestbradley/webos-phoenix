@@ -16,8 +16,9 @@
 // - Offline: the last forecast of each place is kept (localStorage) and
 //   shown with the time it is from when the service can't be reached.
 //   Forecasts are fetched again when older than 30 minutes, or on Refresh.
-// - Units follow the system region (Settings > Language & Region) unless
-//   set in Preferences; hours follow the system clock (12/24 hour).
+// - Units follow the device's (Settings > Language & Region > Units, the
+//   region when Automatic; @phoenix/luna units.ts) unless set in
+//   Preferences; hours follow the system clock (12/24 hour).
 // - Tablet cards show the places at the left and the forecast at the
 //   right; phone cards one at a time (the back gesture goes back).
 //
@@ -25,7 +26,7 @@
 // the same to the user.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { location as locationService, settings, system, type LocaleInfo } from "@phoenix/luna";
+import { location as locationService, settings, system, UNITS_KEY, type SystemSettings } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
 import {
     AppMenu, BackProvider, Button, cx, Dialog, Divider, ErrorText, Glyph, Group, IconToolButton, ListSelector, Note, PageHeader, Row, Spinner,
@@ -36,7 +37,7 @@ import {
     ATTRIBUTION_URL, DEFAULT_SERVER, fetchForecast, placeLine, searchPlaces, WeatherError, type Forecast, type Place,
 } from "./lib/openmeteo";
 import { addPlace, CURRENT_ID, freshness, load, movePlace, removePlace, save, type Prefs, type State } from "./lib/store";
-import { compass, dayLabel, hourLabel, safeLocale, temp, unitsFor, wind, type Units, type UnitsPref } from "./lib/units";
+import { compass, dayLabel, hourLabel, effectiveUnits, safeLocale, temp, unitsFor, wind, type Units, type UnitsPref } from "./lib/units";
 import { WeatherIcon } from "./WeatherIcon";
 
 type Clock = "HH12" | "HH24";
@@ -304,13 +305,16 @@ function WeatherApp() {
     const stateRef = useRef(state);
     stateRef.current = state;
 
-    const localeInfo = useLuna<LocaleInfo | undefined>((cb, err) => settings.watch("", ["localeInfo"], (s) => cb(s.localeInfo), err), []).value;
+    const sys = useLuna<SystemSettings | undefined>((cb, err) => settings.watch("", ["localeInfo", UNITS_KEY], (s) => cb(s), err), []).value;
+    const localeInfo = sys?.localeInfo;
+    const deviceSetting = (sys?.[UNITS_KEY] as UnitsPref | undefined) ?? "auto";
     const clock = useLuna<Clock>((cb, err) => system.watchPreferences(["timeFormat"], (p) => cb(p.timeFormat === "HH24" ? "HH24" : "HH12"), err), [])
         .value ?? "HH12";
     const fmt = safeLocale(localeInfo?.locales?.FMT ?? localeInfo?.locales?.UI ?? navigator.language);
     const ui = localeInfo?.locales?.UI ?? "en-US";
-    const units = useMemo(() => unitsFor(state.prefs.units, fmt), [state.prefs.units, fmt]);
-    const autoUnits = useMemo(() => unitsFor("auto", fmt), [fmt]);
+    // "Automatic" here is the device's units; the device's "auto" is the region's.
+    const units = useMemo(() => effectiveUnits(state.prefs.units, deviceSetting, fmt), [state.prefs.units, deviceSetting, fmt]);
+    const autoUnits = useMemo(() => unitsFor(deviceSetting, fmt), [deviceSetting, fmt]);
 
     const update = useCallback((f: (s: State) => State) => {
         setState((old) => { const n = f(old); save(n); return n; });

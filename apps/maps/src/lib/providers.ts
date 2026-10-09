@@ -143,7 +143,8 @@ export function isValidUrl(u: string): boolean {
 // ---- App preferences ----------------------------------------------------------------------
 
 export interface Prefs {
-    units: "metric" | "imperial";
+    /** "auto": the device's units (Settings > Language & Region > Units, @phoenix/luna units.ts). */
+    distanceUnits: "auto" | "metric" | "imperial";
     voice: boolean;
     mode: "drive" | "walk" | "cycle";
     /** Last camera, to open where the user left off. */
@@ -153,10 +154,15 @@ export interface Prefs {
 const PREFS = "maps:prefs";
 
 export function loadPrefs(): Prefs {
-    const def: Prefs = { units: "imperial", voice: true, mode: "drive" };
+    // (An older "units" key was the default saved with the rest, not a
+    // choice: it is left behind, and the device's units are used.)
+    const def: Prefs = { distanceUnits: "auto", voice: true, mode: "drive" };
     try {
         const raw = localStorage.getItem(PREFS);
-        return raw ? { ...def, ...(JSON.parse(raw) as Partial<Prefs>) } : def;
+        if (!raw) return def;
+        const { units: _old, ...saved } = JSON.parse(raw) as Partial<Prefs> & { units?: unknown };
+        void _old;
+        return { ...def, ...saved };
     } catch {
         return def;
     }

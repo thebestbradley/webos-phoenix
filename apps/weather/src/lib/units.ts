@@ -5,10 +5,13 @@
 // (Open-Meteo's defaults: °C, km/h, mm) and cached that way; the app
 // converts for display, so changing units needs no new request.
 //
-// "Automatic" follows the system region (com.webos.settingsservice
-// localeInfo.locales.FMT, Settings > Language & Region): the US and a few
-// others use °F and mph, the UK °C with mph, everyone else °C and km/h.
+// "Automatic" follows the device's units (Settings > Language & Region >
+// Units), which when automatic follow the region (com.webos.settingsservice
+// localeInfo.locales.FMT): the US and a few others use °F and mph, the UK
+// °C with mph, everyone else °C and km/h.
 // Hours follow the system clock (systemservice timeFormat HH12 / HH24).
+
+import { IMPERIAL_REGIONS } from "@phoenix/luna";
 
 export type UnitsPref = "auto" | "metric" | "imperial";
 
@@ -21,8 +24,8 @@ export interface Units {
 export const METRIC: Units = { temp: "C", wind: "kmh", precip: "mm" };
 export const IMPERIAL: Units = { temp: "F", wind: "mph", precip: "in" };
 
-/** Regions that use Fahrenheit (and miles): the US and its territories, Liberia, Myanmar, a few Pacific states. */
-const FAHRENHEIT = new Set(["US", "PR", "GU", "VI", "AS", "MP", "UM", "LR", "MM", "BS", "BZ", "KY", "PW", "FM", "MH"]);
+/** Regions that use Fahrenheit (and miles): the device's list (@phoenix/luna units.ts). */
+const FAHRENHEIT = new Set(IMPERIAL_REGIONS);
 /** °C but road speeds in mph. */
 const MPH = new Set(["GB", "IM", "JE", "GG"]);
 
@@ -49,6 +52,11 @@ export function unitsFor(pref: UnitsPref, locale: string | undefined): Units {
     if (FAHRENHEIT.has(r)) return IMPERIAL;
     if (MPH.has(r)) return { temp: "C", wind: "mph", precip: "mm" };
     return METRIC;
+}
+
+/** The app's choice, "Automatic" being the device's units (its own "auto" the region's). */
+export function effectiveUnits(pref: UnitsPref, device: UnitsPref, locale: string | undefined): Units {
+    return unitsFor(pref === "auto" ? device : pref, locale);
 }
 
 export const toF = (c: number) => c * 9 / 5 + 32;

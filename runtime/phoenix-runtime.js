@@ -14021,6 +14021,12 @@
         ["ask", "choose", "confirm", "threads", "thread", "newThread", "setCurrent", "deleteThread", "clearHistory",
          "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
          "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary",
+                    // The device's units (Settings > Language & Region >
+                    // Units, the region when "auto"), as every app reads them.
+                    units: function () {
+                        var st = store.get("settings:state", null);
+                        return loadModule("lib/region.js").deviceUnits(st && st.settings && st.settings[""], global.navigator && global.navigator.language);
+                    },
          "followUps", "answerFollowUp", "followUpOpen", "followUpLeave", "followUpWake", "resetFollowUps", "markRead",
          "connect", "retry", "voice"].forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
