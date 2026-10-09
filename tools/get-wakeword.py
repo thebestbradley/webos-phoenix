@@ -14,13 +14,11 @@ phoenix-sim looks in build/wakeword beside itself (or --wake-model and
 """
 
 import argparse
-import hashlib
 import io
 import os
 import platform
 import shutil
 import sys
-import urllib.request
 import zipfile
 
 MODEL = ("vosk-model-small-en-us-0.15",
@@ -38,14 +36,9 @@ WHEELS = {
 
 
 def fetch(url, sha256):
-    with urllib.request.urlopen(url) as r:
-        size = int(r.headers.get("Content-Length") or 0)
-        print("downloading", url, f"({size / 1e6:.0f} MB)" if size else "")
-        data = r.read()
-    got = hashlib.sha256(data).hexdigest()
-    if got != sha256:
-        sys.exit(f"{url}: SHA-256 {got}, expected {sha256}")
-    return data
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from fetch import fetch_bytes
+    return fetch_bytes(url, sha256)
 
 
 def main():

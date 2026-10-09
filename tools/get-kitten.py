@@ -22,13 +22,11 @@ PHOENIX_ONNXRUNTIME). On a device meta-phoenix installs all three
 """
 
 import argparse
-import hashlib
 import io
 import os
 import platform
 import sys
 import tarfile
-import urllib.request
 
 HF = "https://huggingface.co/KittenML/kitten-tts-nano-0.2/resolve/9c81564aa56c6fb79f83780e87099357b88d6617/"
 MODEL = [
@@ -51,14 +49,9 @@ ORT = {
 
 
 def fetch(url, sha256):
-    with urllib.request.urlopen(url) as r:
-        size = int(r.headers.get("Content-Length") or 0)
-        print("downloading", url, f"({size / 1e6:.1f} MB)" if size else "")
-        data = r.read()
-    got = hashlib.sha256(data).hexdigest()
-    if got != sha256:
-        sys.exit(f"{url}: SHA-256 {got}, expected {sha256}")
-    return data
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from fetch import fetch_bytes
+    return fetch_bytes(url, sha256)
 
 
 def write(path, data):

@@ -637,28 +637,52 @@ Item {
         pageGlide.start();
     }
     // A finger's drag across the pages, let go (LauncherObject's pan and
-    // flick, dimensionslauncher.cpp:1990-2010, 3610-3645): a flick (the
-    // whole drag's speed, as FlickGestureRecognizer's, :44-45, 95-104) goes
-    // to the page beside the one it began on, in the time the distance takes
-    // at the flick's speed (px/ms x 100 / 1000), 200 to 1200 ms, OutCubic
-    // (:3330-3339); otherwise the page nearest the middle, as a tab's tap.
+    // flick, dimensionslauncher.cpp:1990-2010, 3610-3645): a flick goes to
+    // the page beside the one it began on, in the time the distance takes at
+    // the flick's speed (px/ms x 100 / 1000), OutCubic (:3330-3339);
+    // otherwise the page nearest the middle, as a tab's tap. Phoenix's flick
+    // is snappier (Theme.launcherFlickMinVelocity): the finger's speed over
+    // the last launcherFlickWindow ms, where the original took the whole
+    // drag's (FlickGestureRecognizer.cpp:44-45, 95-104), so a slow start
+    // ending in a flick still flicks, and 150 to 400 ms, not 200 to 1200.
     property real _dragStartX: 0
     property real _dragStartTime: 0
     property int _dragStartPage: 0
+    // [time, contentX] while dragged: the last launcherFlickWindow ms of
+    // it, and the one sample before.
+    property var _dragSamples: []
     function _pagesDragStarted() {
         pageGlide.stop();
         pageSettle.stop();
         _dragStartX = pages.contentX;
         _dragStartTime = Date.now();
         _dragStartPage = pages.currentIndex;
+        _dragSamples = [[_dragStartTime, _dragStartX]];
+    }
+    function _pagesDragMoved() {
+        var now = Date.now();
+        var s = _dragSamples;
+        s.push([now, pages.contentX]);
+        while (s.length > 1 && now - s[1][0] > Theme.launcherFlickWindow)
+            s.shift();
     }
     function _pagesDragEnded() {
         var w = Math.max(1, pages.width);
-        var dt = Math.max(1, Date.now() - _dragStartTime);
-        var vx = -(pages.contentX - _dragStartX) / dt;      // the finger's, px/ms
+        var now = Date.now();
+        var s = _dragSamples.length ? _dragSamples : [[_dragStartTime, _dragStartX]];
+        // From the oldest sample inside the window to the release; only when
+        // none is (the finger held still), from the last one before it, which
+        // reads slow. Not from a sample before the window when there is one
+        // inside: a slow step before a quick flick would count against it.
+        var from = s[s.length - 1];
+        for (var i = 0; i < s.length; ++i) {
+            if (now - s[i][0] <= Theme.launcherFlickWindow) { from = s[i]; break; }
+        }
+        var dt = Math.max(1, now - from[0]);
+        var vx = -(pages.contentX - from[1]) / dt;      // the finger's, px/ms
         var speed = Math.abs(vx);
         var to;
-        if (speed >= Theme.flickMinVelocity && speed <= Theme.flickMaxVelocity) {
+        if (speed >= Theme.launcherFlickMinVelocity) {
             to = Math.max(0, Math.min(tabs.length - 1, _dragStartPage + (vx > 0 ? -1 : 1)));
             if (to !== _dragStartPage) {
                 pages.currentIndex = to;
@@ -816,6 +840,7 @@ Item {
         maximumFlickVelocity: 0
         onDragStarted: launcher._pagesDragStarted()
         onDragEnded: launcher._pagesDragEnded()
+        onContentXChanged: if (dragging) launcher._pagesDragMoved()
         onWidthChanged: if (!pageGlide.running && !dragging) contentX = launcher._pageX(currentIndex)
         boundsBehavior: Flickable.StopAtBounds
         interactive: !launcher.dragging

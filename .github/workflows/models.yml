@@ -1,0 +1,156 @@
+name: models
+
+# The Assistant's on-device models that the Qwen team publishes no GGUF of
+# (apps/assistant/service/lib/models.js: the official GGUF first, Phoenix's
+# conversion of their weights when there is none).
+#
+#   Every Monday, and by hand: "official" looks for a Qwen GGUF repository
+#   beside each converted model's and fails when one appears, so its
+#   official file can be added to models.js ahead of ours.
+#
+#   By hand (Actions > models > Run workflow, convert: yes): each model
+#   models.js wants converted and models-converted.js lacks, whose weights
+#   fit a runner's disk (under max_weights_gb), is converted
+#   (tools/convert-model.sh) and published as a release of this repository,
+#   models-<id>, its parts the assets; then a branch, models/converted-<run>,
+#   records them in models-converted.js for a pull request. Larger models:
+#   tools/convert-model.sh on a computer with three times their weights in
+#   free disk, the parts uploaded to a release models-<id> by hand, and
+#   tools/models-converted.py add <id>.json.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      convert:
+        description: "Convert and publish the models still wanted"
+        type: boolean
+        default: false
+      only:
+        description: "Only these ids (space-separated); empty: every one wanted"
+        required: false
+      max_weights_gb:
+        description: "Skip models whose weights are larger (GB)"
+        default: '25'
+
+permissions:
+  contents: read
+
+jobs:
+  official:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Official GGUFs for the models Phoenix converts
+        run: python3 tools/models-converted.py official | tee -a "$GITHUB_STEP_SUMMARY"
+
+  plan:
+    if: github.event_name == 'workflow_dispatch' && inputs.convert
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      models: ${{ steps.plan.outputs.models }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: plan
+        env:
+          ONLY: ${{ inputs.only }}
+          MAX_GB: ${{ inputs.max_weights_gb }}
+        run: |
+          set -eu
+          python3 tools/models-converted.py wanted > wanted.txt
+          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
+          import json, os, urllib.request
+          only = os.environ.get("ONLY", "").split()
+          limit = float(os.environ.get("MAX_GB") or 25) * 1e9
+          out = []
+          for line in open("wanted.txt"):
+              mid, repo, rev, quant = line.split()
+              if only and mid not in only:
+                  continue
+              with urllib.request.urlopen("https://huggingface.co/api/models/%s/revision/%s?blobs=true" % (repo, rev), timeout=60) as r:
+                  size = sum(s.get("size") or 0 for s in json.load(r)["siblings"] if s["rfilename"].endswith(".safetensors"))
+              print("%s: %.1f GB of weights%s" % (mid, size / 1e9, "" if size <= limit else ", too large for a runner: skipped"), flush=True)
+              if size <= limit:
+                  out.append({"id": mid, "repo": repo, "revision": rev, "quant": quant})
+          print("models=" + json.dumps(out))
+          EOF
+
+  convert:
+    needs: plan
+    if: needs.plan.outputs.models != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        model: ${{ fromJSON(needs.plan.outputs.models) }}
+    steps:
+      - uses: actions/checkout@v4
+      # The runner's second disk (/mnt) holds the weights, the bf16 file
+      # and the quant.
+      - name: Work on /mnt
+        run: |
+          sudo mkdir -p /mnt/convert && sudo chown "$USER" /mnt/convert
+          df -h / /mnt
+      - name: Convert ${{ matrix.model.id }}
+        env:
+          PHOENIX_CONVERT_CACHE: /mnt/convert/cache
+        run: |
+          tools/convert-model.sh --id "${{ matrix.model.id }}" --repo "${{ matrix.model.repo }}" \
+              --revision "${{ matrix.model.revision }}" --quant "${{ matrix.model.quant }}" --out /mnt/convert/out
+      - name: Publish models-${{ matrix.model.id }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ID: ${{ matrix.model.id }}
+          REPO: ${{ matrix.model.repo }}
+          REV: ${{ matrix.model.revision }}
+        run: |
+          set -eu
+          tag="models-$ID"
+          notes="Phoenix's GGUF of $REPO at $REV (Apache-2.0), converted with llama.cpp $(sed -n 's/^LLAMA_COMMIT=\([0-9a-f]*\).*/\1/p' phoenix) by tools/convert-model.sh. The on-device Assistant downloads it when the Qwen team publishes no GGUF of this model."
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$ID" --notes "$notes" --latest=false
+          gh release upload "$tag" /mnt/convert/out/*.gguf --clobber
+          cat "/mnt/convert/out/$ID.json" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: entry-${{ matrix.model.id }}
+          path: /mnt/convert/out/${{ matrix.model.id }}.json
+
+  record:
+    needs: convert
+    if: always() && needs.convert.result != 'skipped'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: entry-*
+          path: entries
+          merge-multiple: true
+      - name: Record the conversions on a branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          ls entries/*.json >/dev/null 2>&1 || { echo "Nothing converted." >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          python3 tools/models-converted.py add entries/*.json
+          branch="models/converted-${{ github.run_id }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add apps/assistant/service/lib/models-converted.js
+          git commit -m "Assistant models: record Phoenix's conversions ($(ls entries | sed 's/\.json$//' | tr '\n' ' '))"
+          git push origin "$branch"
+          gh pr create --draft --base main --head "$branch" --title "Assistant models: record Phoenix's conversions" \
+              --body "Converted and published by run ${{ github.run_id }} (releases models-<id>). lib/models.js offers each once this is merged." \
+            || echo "Open a pull request for $branch (Actions may not create one here)." >> "$GITHUB_STEP_SUMMARY"

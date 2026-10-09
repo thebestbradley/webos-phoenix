@@ -13,9 +13,22 @@
 // the Qwen team publishes, with their SHA-256 (Hugging Face's LFS
 // metadata) checked.
 //
-// The newest official GGUFs are Qwen3's (May 2025). Qwen3.5, 3.6 and 3.8
-// (2026) and the Qwen3 2507 instruct updates have no GGUF from the Qwen
-// team (checked 9 October 2026), so they are not offered (docs/AI-AND-MCP.md).
+// Where a model comes from, in order (the owner's rule): the Qwen team's
+// own GGUF when they publish one; otherwise Phoenix's conversion of the
+// Qwen team's own weights at a pinned revision (tools/convert-model.sh,
+// llama.cpp at ./phoenix's LLAMA_COMMIT; .github/workflows/models.yml
+// publishes it as a release of this repository, in parts under 2 GiB,
+// and records it in models-converted.js). A download tries each source
+// in turn until one comes whole (lib/node-device.js, the simulator's
+// shell/native/localmodels.cpp). A model with no source yet is not
+// offered, and one that replaces an older model of its size hides it once
+// it can be downloaded (unless the older one is installed: assistant.js).
+//
+// The newest official GGUFs are Qwen3's (May 2025). Qwen3.5 (2B, 4B, 9B),
+// Qwen3.6 35B-A3B and Qwen3.8 27B (2026) have only safetensors from the
+// Qwen team (checked 9 October 2026), so theirs are Phoenix's conversions
+// until Qwen publishes GGUFs (the models workflow checks every week). All
+// Apache-2.0 (each repository's model card, checked 9 October 2026).
 //
 // ram: the device memory to run it well (the file, a 4,096-token cache,
 // as big as 8,192 in 8 bits was, and the rest of the system): the list
@@ -27,6 +40,10 @@
 
 var HF = "https://huggingface.co/";
 var GiB = 1024 * 1024 * 1024;
+// Phoenix's conversions: a release of this repository a model
+// (models-<id>), its parts as assets.
+var RELEASES = "https://github.com/thebestbradley/webos-phoenix/releases/download/";
+var CONVERTED = require("./models-converted");
 
 // Qwen3 0.6B: built in.
 var BUILT_IN = "qwen3-0.6b-q8_0";
@@ -61,25 +78,83 @@ var MODELS = [
       licence: "Apache-2.0", source: "Qwen/Qwen3-30B-A3B-GGUF", revision: "e4d4bafdfb96a411a163846265362aceb0b9c63a",
       file: "Qwen3-30B-A3B-Q4_K_M.gguf", size: 18556685824,
       sha256: "0d003f6662faee786ed5da3e31b29c978de5ae5d275c8794c606a7f3c01aa8f5",
+      ram: 32 * GiB, note: "The best, and quick for its size; for computers with 32 GB or more" },
+    // Newer models, as Phoenix converts them (no official GGUF yet): from
+    // Qwen's repositories at these revisions.
+    { id: "qwen3.5-2b-q8_0", name: "Qwen3.5 2B", family: "Qwen3.5", params: "2B", replaces: "qwen3-1.7b-q8_0",
+      licence: "Apache-2.0", weights: { repo: "Qwen/Qwen3.5-2B", revision: "15852e8c16360a2fea060d615a32b45270f8a8fc" }, quant: "Q8_0",
+      ram: 6 * GiB, note: "Better commands and answers; for 6 GB phones" },
+    { id: "qwen3.5-4b-q4_k_m", name: "Qwen3.5 4B", family: "Qwen3.5", params: "4B", replaces: "qwen3-4b-q4_k_m",
+      licence: "Apache-2.0", weights: { repo: "Qwen/Qwen3.5-4B", revision: "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a" }, quant: "Q4_K_M",
+      ram: 8 * GiB, note: "Good answers; for 8 GB phones and tablets" },
+    { id: "qwen3.5-9b-q4_k_m", name: "Qwen3.5 9B", family: "Qwen3.5", params: "9B", replaces: "qwen3-8b-q4_k_m",
+      licence: "Apache-2.0", weights: { repo: "Qwen/Qwen3.5-9B", revision: "c202236235762e1c871ad0ccb60c8ee5ba337b9a" }, quant: "Q4_K_M",
+      ram: 12 * GiB, note: "Very good answers; for 12-16 GB devices" },
+    { id: "qwen3.8-27b-q4_k_m", name: "Qwen3.8 27B", family: "Qwen3.8", params: "27B",
+      licence: "Apache-2.0", weights: { repo: "Qwen/Qwen3.8-27B", revision: "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0" }, quant: "Q4_K_M",
+      ram: 32 * GiB, slow: true, note: "The most capable, but slow (all 27B work on every word); for computers with 32 GB or more" },
+    { id: "qwen3.6-35b-a3b-q4_k_m", name: "Qwen3.6 35B-A3B", family: "Qwen3.6", params: "35B (3B active)", replaces: "qwen3-30b-a3b-q4_k_m",
+      licence: "Apache-2.0", weights: { repo: "Qwen/Qwen3.6-35B-A3B", revision: "995ad96eacd98c81ed38be0c5b274b04031597b0" }, quant: "Q4_K_M",
       ram: 32 * GiB, note: "The best, and quick for its size; for computers with 32 GB or more" }
 ];
-MODELS.forEach(function (m) { m.url = HF + m.source + "/resolve/" + (m.revision || "main") + "/" + m.file; });
 
-function find(id) {
-    for (var i = 0; i < MODELS.length; ++i) if (MODELS[i].id === id) return MODELS[i];
-    return null;
+// The catalogue with these conversions (converted: models-converted.js's
+// form; tests give their own): each model's sources, in order, the Qwen
+// team's GGUF (source, revision, file), then Phoenix's conversion when one
+// was made from the same weights. url, sha256 and size: the first
+// source's (its first file's address; its sha256 when it is one file; the
+// size of all its files).
+function catalog(converted) {
+    var list = MODELS.map(function (base) {
+        var m = Object.assign({}, base), sources = [];
+        if (m.source && m.file && m.sha256)
+            sources.push({ kind: "official", files: [{ url: HF + m.source + "/resolve/" + (m.revision || "main") + "/" + m.file,
+                                                       sha256: m.sha256, size: m.size }] });
+        var c = converted[m.id];
+        if (c && m.weights && c.from && c.from.repo === m.weights.repo && c.from.revision === m.weights.revision && c.files && c.files.length)
+            sources.push({ kind: "phoenix", files: c.files.map(function (f) {
+                return { url: RELEASES + "models-" + m.id + "/" + f.name, sha256: f.sha256, size: f.size };
+            }) });
+        m.sources = sources;
+        if (sources.length) {
+            m.url = sources[0].files[0].url;
+            m.sha256 = sources[0].files.length === 1 ? sources[0].files[0].sha256 : "";
+            m.size = sources[0].files.reduce(function (n, f) { return n + f.size; }, 0);
+            if (!m.source) m.source = m.weights.repo;
+        }
+        return m;
+    });
+
+    function find(id) {
+        for (var i = 0; i < list.length; ++i) if (list[i].id === id) return list[i];
+        return null;
+    }
+
+    // The models offered: those with a source, less those a newer one of
+    // their size replaces (keep: the ids installed, which stay listed).
+    function offered(keep) {
+        keep = keep || [];
+        var have = list.filter(function (m) { return m.sources.length; });
+        var replaced = {};
+        have.forEach(function (m) { if (m.replaces) replaced[m.replaces] = true; });
+        return have.filter(function (m) { return !replaced[m.id] || keep.indexOf(m.id) >= 0; });
+    }
+
+    // The list with what fits this device (ramBytes: 0 if unknown: all fit)
+    // and the one to recommend: the largest that fits and is not slow for
+    // its size (the built-in one when nothing larger does).
+    function forDevice(ramBytes, keep) {
+        // A device sold as 8 GB reports 7.3 to 7.7 GiB: 15% of room.
+        var all = offered(keep).sort(function (a, b) { return a.ram - b.ram || (a.size || 0) - (b.size || 0); })
+            .map(function (m) { return Object.assign({}, m, { fits: !ramBytes || m.ram <= ramBytes * 1.15 }); });
+        // Not a dense 27B: the MoE beside it answers as well, far sooner.
+        var quick = all.filter(function (m) { return m.fits && !m.slow; });
+        var best = quick.length ? quick[quick.length - 1] : all[0];
+        all.forEach(function (m) { m.recommended = m === best; });
+        return all;
+    }
+
+    return { MODELS: list, BUILT_IN: BUILT_IN, find: find, offered: offered, forDevice: forDevice, catalog: catalog };
 }
 
-// The list with what fits this device (ramBytes: 0 if unknown: all fit)
-// and the one to recommend: the largest that fits (the built-in one when
-// nothing larger does).
-function forDevice(ramBytes) {
-    // A device sold as 8 GB reports 7.3 to 7.7 GiB: 15% of room.
-    var list = MODELS.map(function (m) { return Object.assign({}, m, { fits: !ramBytes || m.ram <= ramBytes * 1.15 }); });
-    var fitting = list.filter(function (m) { return m.fits; });
-    var best = fitting.length ? fitting[fitting.length - 1] : list[0];
-    list.forEach(function (m) { m.recommended = m === best; });
-    return list;
-}
-
-module.exports = { MODELS: MODELS, BUILT_IN: BUILT_IN, find: find, forDevice: forDevice };
+module.exports = catalog(CONVERTED);

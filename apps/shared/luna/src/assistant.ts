@@ -178,6 +178,8 @@ export interface LocalModel {
     installed: boolean;
     /** Comes with the system (Qwen3 0.6B): in use until another is chosen, never removed. */
     builtIn?: boolean;
+    /** Phoenix's conversion of the Qwen team's weights (no GGUF from them yet). */
+    converted?: boolean;
     downloading: { received: number; total: number } | null;
 }
 

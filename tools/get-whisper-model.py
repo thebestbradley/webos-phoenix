@@ -16,10 +16,8 @@ both (whisper-cpp, whisper-cpp-model-base-en; docs/AI-AND-MCP.md).
 """
 
 import argparse
-import hashlib
 import os
 import sys
-import urllib.request
 
 BASE = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"
 # name -> (file, bytes, SHA-256), as the meta-phoenix recipe pins them.
@@ -42,19 +40,9 @@ def main():
     if os.path.exists(out) and os.path.getsize(out) == size:
         print("model:", out, "(already there)")
         return
-    print(f"downloading {BASE + name} ({size / 1e6:.0f} MB)")
-    h = hashlib.sha256()
-    with urllib.request.urlopen(BASE + name) as r, open(out + ".part", "wb") as f:
-        while True:
-            chunk = r.read(1 << 20)
-            if not chunk:
-                break
-            h.update(chunk)
-            f.write(chunk)
-    if h.hexdigest() != sha:
-        os.remove(out + ".part")
-        sys.exit(f"{name}: SHA-256 {h.hexdigest()}, expected {sha}")
-    os.replace(out + ".part", out)
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from fetch import download
+    download(BASE + name, out, sha, size, "whisper " + name)
     print("model:", out)
 
 

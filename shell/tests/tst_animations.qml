@@ -88,10 +88,11 @@ Item {
                 compare(Theme[k], 1, k + " reduced");
             compare(shell.rotator.animationDuration, 1);
             Theme.reduceMotion = false;
-            // The flick's bounds are the original's clamp on a time it works
-            // out; the time itself goes through motion() as it is used.
-            compare(Theme.launcherPageFlickMinDuration, 200);
-            compare(Theme.launcherPageFlickMaxDuration, 1200);
+            // The flick's bounds (Phoenix's, snappier than the original's 200
+            // to 1200 ms) clamp a time it works out; the time itself goes
+            // through motion() as it is used.
+            compare(Theme.launcherPageFlickMinDuration, 150);
+            compare(Theme.launcherPageFlickMaxDuration, 400);
         }
 
         // A tab's tap (or the keyboard) makes the page current at once and
@@ -125,7 +126,7 @@ Item {
 
         // A drag let go slowly goes back to the page nearest the middle,
         // 250 ms InQuad; a flick goes on to the page beside, OutCubic, in a
-        // time worked out from its speed, 200 to 1200 ms.
+        // time worked out from its speed, 150 to 400 ms.
         function test_dragAndFlickBetweenPages() {
             shell.gestureUp();
             tryCompare(launcher, "hidden", 0, 2000);
@@ -149,15 +150,39 @@ Item {
             view.contentX = view.originX + view.width / 3;
             launcher._dragStartX = view.originX;
             launcher._dragStartTime = Date.now() - (view.width / 3) / 5;
+            launcher._dragSamples = [[launcher._dragStartTime, view.originX]];
             launcher._dragStartPage = 0;
             launcher._pagesDragEnded();
             compare(launcher.currentPage, 1);
             verify(glide.running);
             compare(glide.easing.type, Easing.OutCubic);
-            // distance / (5 x 100 / 1000) px/ms, within 200 to 1200 ms.
-            var expected = Math.max(200, Math.min(1200, Math.round((view.width * 2 / 3) / 0.5)));
+            // distance / (5 x 100 / 1000) px/ms, within 150 to 400 ms.
+            var expected = Math.max(150, Math.min(400, Math.round((view.width * 2 / 3) / 0.5)));
             verify(Math.abs(glide.duration - expected) <= expected * 0.2, "flick time " + glide.duration + " ~ " + expected);
             tryCompare(view, "contentX", view.originX + view.width, 2000);
+        }
+
+        // Phoenix's snappier flick: the finger's speed as it lets go counts,
+        // so a slow drag that ends in a quick flick goes on to the next page
+        // (the original's whole-drag average would have snapped it back).
+        function test_launcherFlickAtTheEnd() {
+            shell.gestureUp();
+            tryCompare(launcher, "hidden", 0, 2000);
+            var view = pages();
+            launcher.showPage(0, true);
+            var y = view.mapToItem(root, 0, view.height / 2).y;
+            mousePress(root, 300, y);
+            for (var i = 1; i <= 8; ++i) {          // slowly, 4 px a step
+                mouseMove(root, 300 - i * 4, y);
+                wait(60);
+            }
+            for (i = 1; i <= 4; ++i) {              // then quickly, 20 px a step
+                mouseMove(root, 268 - i * 20, y);
+                wait(5);
+            }
+            mouseRelease(root, 188, y);
+            compare(launcher.currentPage, 1);
+            launcher.showPage(0, true);
         }
 
         // A notification its app takes back slides out of the open dashboard

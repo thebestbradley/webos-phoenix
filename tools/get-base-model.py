@@ -13,10 +13,11 @@ meta-phoenix's qwen3-0.6b-gguf puts it in /usr/share/phoenix/models.
 """
 
 import argparse
-import hashlib
 import os
 import sys
-import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from fetch import download  # noqa: E402
 
 ID = "qwen3-0.6b-q8_0"
 URL = "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/23749fefcc72300e3a2ad315e1317431b06b590a/Qwen3-0.6B-Q8_0.gguf"
@@ -35,21 +36,7 @@ def main():
     if os.path.exists(path) and os.path.getsize(path) == SIZE:
         print("model:", path)
         return
-    print("downloading", URL, f"({SIZE / 1e6:.0f} MB)")
-    part = path + ".part"
-    h = hashlib.sha256()
-    # In pieces: 640 MB need not be in memory at once.
-    with urllib.request.urlopen(URL) as r, open(part, "wb") as out:
-        while True:
-            chunk = r.read(1 << 20)
-            if not chunk:
-                break
-            h.update(chunk)
-            out.write(chunk)
-    if h.hexdigest() != SHA256:
-        os.remove(part)
-        sys.exit(f"{URL}: SHA-256 {h.hexdigest()}, expected {SHA256}")
-    os.replace(part, path)
+    download(URL, path, SHA256, SIZE, "Qwen3 0.6B")
     print("model:", path)
 
 

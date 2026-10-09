@@ -506,13 +506,19 @@ QtObject {
     // on to the page beside the one it began on (:3624-3645) in
     // distance / speed, at least 200 and at most 1200 ms, OutCubic (:3330-3339;
     // the flick's speed is px/ms x 100, FlickGestureRecognizer.cpp:46, 98-101).
+    // Phoenix's flick is snappier than the original's (the owner's choice):
+    // the finger's speed as it lets go (the last 100 ms), not the whole
+    // drag's, counts from 0.4 px/ms with no upper bound, and the glide takes
+    // 150 to 400 ms.
     readonly property int launcherPageSnapDuration: motion(250)
+    readonly property real launcherFlickMinVelocity: 0.4 * u * gestureScale
+    readonly property int launcherFlickWindow: 100
     // The app info dialog (Remove Application?) fades in over 400 ms and out
     // over 600, linear (dynamicssettings.cpp:106-107; AppInfoDialog.qml:55-68).
     readonly property int appInfoDialogFadeInDuration: motion(400)
     readonly property int appInfoDialogFadeOutDuration: motion(600)
-    readonly property int launcherPageFlickMinDuration: 200
-    readonly property int launcherPageFlickMaxDuration: 1200
+    readonly property int launcherPageFlickMinDuration: 150
+    readonly property int launcherPageFlickMaxDuration: 400
     readonly property real launcherInstallingOpacity: 0.5            // dynamicssettings.cpp:105 iconInstallModeOpacity
     readonly property int launcherProgressFrames: 19                 // iconheap.cpp:47 loading-strip.png's frames
     // App groups (LunaCE): a dragged icon this near another's centre (a

@@ -2498,7 +2498,11 @@ Item {
             break;
         case "download":
             if (!lm) { answer({ error: qsTr("Models cannot be downloaded here.") }); break; }
-            lm.download(String(p.id), String(p.url), String(p.sha256 || ""), Number(p.size) || 0);
+            // Its sources in order (the Qwen team's GGUF, Phoenix's conversion: lib/models.js).
+            if (p.sources && p.sources.length)
+                lm.downloadFrom(String(p.id), p.sources);
+            else
+                lm.download(String(p.id), String(p.url), String(p.sha256 || ""), Number(p.size) || 0);
             answer(lm.error && lm.status().downloading === null ? { error: lm.error } : {});
             break;
         case "cancel":

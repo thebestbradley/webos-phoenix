@@ -21,12 +21,13 @@ import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const req = createRequire(import.meta.url);
-type Model = { id: string; name: string; url: string; sha256: string; size: number; file: string };
+type Source = { kind: string; files: { url: string; sha256: string; size: number }[] };
+type Model = { id: string; name: string; url: string; sha256: string; size: number; file: string; sources?: Source[] };
 const device = req("./lib/node-device.js") as {
     fileStorage(dir: string): { get(k: string): unknown; set(k: string, v: unknown): void; remove(k: string): void; keys(p: string): string[] };
     fileSecrets(f: string): { seal(t: string): Promise<{ iv: string; data: string }>; unseal(e: object): Promise<string> };
     llamaServer(o: object): {
-        status(): Promise<{ available: boolean; installed: { id: string }[]; downloading: object | null; error: string; running: boolean }>;
+        status(): Promise<{ available: boolean; installed: { id: string; file?: string; size?: number }[]; downloading: object | null; error: string; running: boolean }>;
         download(m: Model): Promise<void>; cancel(id: string): Promise<void>; remove(m: Model): Promise<void>;
         ensure(m: Model): Promise<{ baseUrl: string }>; stop(): void;
     };
@@ -38,6 +39,8 @@ const { createRequest } = req("./lib/node-http.js") as { createRequest(): (r: ob
 
 let dir: string, files: Server, base = "";
 const FAKE_GGUF = Buffer.from("GGUF fake model for the tests\n".repeat(2000));
+const PART1 = Buffer.from("GGUF part one\n".repeat(3000)), PART2 = Buffer.from("GGUF part two\n".repeat(2000));
+const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
 const model = (): Model => ({ id: "test-model", name: "Test Model", url: base + "/redirect/test.gguf",
     sha256: createHash("sha256").update(FAKE_GGUF).digest("hex"), size: FAKE_GGUF.length, file: "test.gguf" });
 
@@ -46,6 +49,8 @@ beforeAll(async () => {
     files = createServer((rq, rs) => {
         if (rq.url === "/redirect/test.gguf") { rs.writeHead(302, { Location: "/files/test.gguf" }); return rs.end(); }
         if (rq.url === "/files/test.gguf") { rs.writeHead(200, { "Content-Length": FAKE_GGUF.length }); return rs.end(FAKE_GGUF); }
+        if (rq.url === "/files/p1.gguf") { rs.writeHead(200, { "Content-Length": PART1.length }); return rs.end(PART1); }
+        if (rq.url === "/files/p2.gguf") { rs.writeHead(200, { "Content-Length": PART2.length }); return rs.end(PART2); }
         rs.writeHead(404); rs.end();
     });
     await new Promise<void>((r) => files.listen(0, "127.0.0.1", () => r()));
@@ -185,6 +190,31 @@ setInterval(() => {}, 1000);
         await llm.remove(m);
         expect(existsSync(join(shipped, "built-in.gguf"))).toBe(true);
         llm.stop();
+    });
+
+    // lib/models.js's sources in order: the Qwen team's GGUF, then
+    // Phoenix's conversion; a model in parts is kept by the names llama.cpp
+    // loads the rest by, listed once, and removed whole.
+    it("falls back to the next source, and keeps a model in parts", async () => {
+        const models = join(dir, "models4");
+        const llm = device.llamaServer({ modelsDir: models, server: join(dir, "nowhere", "llama-server") });
+        const official = { kind: "official", files: [{ url: base + "/files/gone.gguf", sha256: sha(FAKE_GGUF), size: 10 }] };
+        const phoenix = { kind: "phoenix", files: [{ url: base + "/files/p1.gguf", sha256: sha(PART1), size: PART1.length },
+                                                   { url: base + "/files/p2.gguf", sha256: sha(PART2), size: PART2.length }] };
+        const m = { ...model(), id: "split", sources: [official, phoenix] };
+        await llm.download(m);
+        await vi.waitFor(async () => expect((await llm.status()).downloading).toBeNull(), { timeout: 5000 });
+        const st = await llm.status();
+        expect(st.error).toBe("");
+        expect(st.installed).toEqual([{ id: "split", file: join(models, "split-00001-of-00002.gguf"), size: PART1.length + PART2.length }]);
+        await llm.remove(m);
+        expect((await llm.status()).installed).toEqual([]);
+        // Every source failing: nothing kept, and each one's error said.
+        await llm.download({ ...m, id: "none", sources: [official, { ...phoenix, files: [phoenix.files[0], { ...phoenix.files[1], sha256: "0".repeat(64) }] }] });
+        await vi.waitFor(async () => expect((await llm.status()).downloading).toBeNull(), { timeout: 5000 });
+        const after = await llm.status();
+        expect(after.error).toMatch(/official: HTTP 404; phoenix: the download is damaged/);
+        expect(after.installed).toEqual([]);
     });
 
     it("refuses a download whose SHA-256 is wrong, and says llama-server is missing", async () => {
