@@ -11,7 +11,7 @@
 //   shell, later) see the same state: the app subscribes to getStatus.
 // - Screen: the whole card turns white, for devices without a flash LED
 //   (the TouchPad, most tablets) or when the LED is too bright. Tap
-//   anywhere to turn it off.
+//   anywhere, or Back, to turn it off.
 // - While lit the screen does not time out (setWindowProperties
 //   {blockScreenTimeout}, as Mojo/Enyo apps asked for it).
 // - Closing the card turns the LED off, unless "Leave LED On When Closed"
@@ -22,7 +22,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { torch, type TorchStatus } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
-import { AppMenu, cx, GroupedToolButtons, Slider, Toolbar, ToolSpacer } from "@phoenix/ui";
+import { AppMenu, cx, GroupedToolButtons, Slider, Toolbar, ToolSpacer, useBack } from "@phoenix/ui";
 import { effectiveMode, isLit, loadPrefs, savePrefs, snapBrightness, statusText, type Mode, type Prefs } from "./lib/light";
 
 type PalmWindow = { PalmSystem?: { setWindowProperties?: (p: object) => void } };
@@ -55,6 +55,9 @@ export function App() {
     prefsRef.current = prefs;
     const litRef = useRef(false);
     litRef.current = mode === "led" && lit;
+
+    // The white screen fills the card: Back turns it off too, as a tap does.
+    useBack(() => { setScreenOn(false); return true; }, mode === "screen" && screenOn);
 
     const setPrefs = (p: Partial<Prefs>) => setPrefsState((old) => { const n = { ...old, ...p }; savePrefs(n); return n; });
 
