@@ -97,7 +97,15 @@ service bus). `runtime/phoenix-runtime.js` runs before the app's own scripts:
   shell also says when a card gains or leaves the front, as a
   `phoenixcardactivation` event with `{active}`, because a card minimized to
   card view stays visible), cross-app window params, and aliases for the
-  Prelude font.
+  Prelude font. `PalmSystem.runTextIndexer(html, options)` (Enyo's
+  `enyo.string.runTextIndexer`: Memos, Calendar's subjects and notes,
+  Email's subject) turns web addresses (`http://...`, `www....`), e-mail
+  addresses and phone numbers in the text into `<a href>` links (http,
+  `mailto:`, `tel:`), leaving tags and existing links alone; `{webLink,
+  schemalessWebLink, emailAddress, phoneNumber}: false` leaves a kind out,
+  as WebAppMgr's `Palm::WebGlobal::runTextIndexerOnHtml` did. Emoticons
+  stay text (their pictures were not released). Tests:
+  `tools/test-links.cjs`.
 
 Pages talk to the shell (launch another app, show a banner) through
 `phoenixHost.postToHost(type, payload)`. In phoenix-sim that arrives as a

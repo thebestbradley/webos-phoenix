@@ -65,6 +65,67 @@
         });
     })();
 
+    // ---- The text indexer (PalmSystem.runTextIndexer) ------------------------------
+    (function () {
+        // One pass over a stretch of text (no tags): the first kind that
+        // matches at a place wins, e-mail addresses before web addresses
+        // (ada@example.com is not a site) and both before phone numbers.
+        var EMAIL = "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}";
+        // (The text is HTML: an escaped "<", ">" or quote ends an address.)
+        var URLCHAR = "(?:(?!&(?:lt|gt|quot|#39|apos);)[^\\s<>\"'])";
+        var WEB = "(?:https?|ftp|rtsp):\\/\\/" + URLCHAR + "+";
+        var BARE = "www\\.[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+(?:[/?#]" + URLCHAR + "*)?";
+        // North American and international forms: 555-0100, (408) 555-1212,
+        // 408.555.1212, +1 408 555 1212, +44 20 7946 0958, 4085551212; not
+        // dates (2010-11-12) or plain counts.
+        var PHONE = "(?:\\+\\d{1,3}[\\s.-]?)?(?:\\(\\d{2,4}\\)\\s?|\\d{2,4}[\\s.-])?\\d{3,4}[\\s.-]\\d{4}|\\+?\\d{10,13}";
+        var RE = new RegExp("(" + EMAIL + ")|(" + WEB + ")|(" + BARE + ")|((?:^|(?<=[^\\w+]))(?:" + PHONE + ")(?![\\w]))", "g");
+        // Punctuation that ends a sentence, not the address.
+        function trimEnd(s) {
+            var m = /[.,;:!?)\]}'"]+$/.exec(s);
+            if (!m) return [s, ""];
+            // A ")" the address opened stays (wikipedia.org/wiki/Foo_(bar)).
+            var cut = m[0];
+            if (cut.charAt(0) === ")" && s.slice(0, -cut.length).indexOf("(") >= 0) cut = cut.slice(1);
+            return [s.slice(0, s.length - cut.length), cut];
+        }
+        function linkText(text, o) {
+            return text.replace(RE, function (all, email, web, bare, phone) {
+                if (email !== undefined) {
+                    if (o.emailAddress === false) return all;
+                    return '<a href="mailto:' + email + '">' + email + "</a>";
+                }
+                if (web !== undefined || bare !== undefined) {
+                    if (web !== undefined ? o.webLink === false : o.schemalessWebLink === false) return all;
+                    var t = trimEnd(all);
+                    var href = web !== undefined ? t[0] : "http://" + t[0];
+                    return '<a href="' + href.replace(/"/g, "&quot;") + '">' + t[0] + "</a>" + t[1];
+                }
+                if (o.phoneNumber === false) return all;
+                if (all.replace(/\D/g, "").length < 7) return all;
+                var digits = all.replace(/[^\d+]/g, "");
+                return '<a href="tel:' + digits + '">' + all + "</a>";
+            });
+        }
+        runtime.textIndexer = function (html, options) {
+            if (typeof html !== "string" || html === "") return html === undefined || html === null ? "" : String(html);
+            var o = options && typeof options === "object" ? options : {};
+            // Tags pass; text inside an <a> (a link already) too.
+            var parts = html.split(/(<[^>]*>)/), inLink = 0, out = "";
+            for (var i = 0; i < parts.length; i++) {
+                var part = parts[i];
+                if (i % 2 === 1) {
+                    if (/^<a[\s>]/i.test(part)) inLink++;
+                    else if (/^<\/a\s*>/i.test(part) && inLink > 0) inLink--;
+                    out += part;
+                } else {
+                    out += inLink ? part : linkText(part, o);
+                }
+            }
+            return out;
+        };
+    })();
+
     // ---- Host messaging --------------------------------------------------------
 
     var host = global.phoenixHost = global.phoenixHost || {
@@ -408,7 +469,16 @@
         applyLaunchFeedback: function () {},
         simulateMouseClick: function () {},
         useSimulatedMouseClicks: function () {},
-        runTextIndexer: function (text) { return text; },
+        // Links in text an app shows (enyo.string.runTextIndexer: Memos'
+        // notes, Calendar's subjects and notes, Email's subject): web
+        // addresses (http://..., www....), e-mail addresses and phone
+        // numbers become <a href> links (http, mailto:, tel:), which open in
+        // their apps. The text is HTML: tags and existing links stay as
+        // they are. options {webLink, schemalessWebLink, emailAddress,
+        // phoneNumber}: false leaves that kind alone (WebAppMgr's
+        // PalmSystem::runTextIndexer, Palm::WebGlobal::runTextIndexerOnHtml;
+        // enyo-1.0 dom/util.js:310-334). Emoticons stay text.
+        runTextIndexer: function (text, options) { return runtime.textIndexer(text, options); },
         // A sound for the app, without a banner (Email's new-mail sound):
         // LunaSysMgr's BannerMessageHandler played it by the same rules as a
         // banner's (PlaySound event). The shell picks the file and plays it.
