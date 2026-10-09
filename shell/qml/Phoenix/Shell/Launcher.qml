@@ -651,16 +651,21 @@ Item {
     // [time, contentX] while dragged: the last launcherFlickWindow ms of
     // it, and the one sample before.
     property var _dragSamples: []
+    // The drag's clock, ms: the wall clock, or the tests' own (a test timed
+    // by the wall clock read a quick flick as a held finger on a busy
+    // runner, where a 5 ms wait took far longer).
+    property var clock: null
+    function _now() { return clock ? clock() : Date.now(); }
     function _pagesDragStarted() {
         pageGlide.stop();
         pageSettle.stop();
         _dragStartX = pages.contentX;
-        _dragStartTime = Date.now();
+        _dragStartTime = _now();
         _dragStartPage = pages.currentIndex;
         _dragSamples = [[_dragStartTime, _dragStartX]];
     }
     function _pagesDragMoved() {
-        var now = Date.now();
+        var now = _now();
         var s = _dragSamples;
         s.push([now, pages.contentX]);
         while (s.length > 1 && now - s[1][0] > Theme.launcherFlickWindow)
@@ -668,7 +673,7 @@ Item {
     }
     function _pagesDragEnded() {
         var w = Math.max(1, pages.width);
-        var now = Date.now();
+        var now = _now();
         var s = _dragSamples.length ? _dragSamples : [[_dragStartTime, _dragStartX]];
         // From the oldest sample inside the window to the release; only when
         // none is (the finger held still), from the last one before it, which

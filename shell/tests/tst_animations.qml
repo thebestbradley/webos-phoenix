@@ -46,6 +46,7 @@ Item {
                 windows.notifications.remove(0);
         }
         function cleanup() {
+            launcher.clock = null;
             Theme.reduceMotion = false;
             sys.tweaks = {};
             if (shell.launcherOpen)
@@ -171,17 +172,38 @@ Item {
             var view = pages();
             launcher.showPage(0, true);
             var y = view.mapToItem(root, 0, view.height / 2).y;
+            // The drag's own clock: the steps' times exactly, whatever the
+            // machine's timers do.
+            var t = 1000;
+            launcher.clock = function () { return t; };
             mousePress(root, 300, y);
-            for (var i = 1; i <= 8; ++i) {          // slowly, 4 px a step
+            for (var i = 1; i <= 8; ++i) {          // slowly, 4 px each 60 ms
+                t += 60;
                 mouseMove(root, 300 - i * 4, y);
-                wait(60);
             }
-            for (i = 1; i <= 4; ++i) {              // then quickly, 20 px a step
+            for (i = 1; i <= 4; ++i) {              // then quickly, 20 px each 5 ms
+                t += 5;
                 mouseMove(root, 268 - i * 20, y);
-                wait(5);
             }
+            t += 5;
             mouseRelease(root, 188, y);
             compare(launcher.currentPage, 1);
+            launcher.showPage(0, true);
+            // The same drag held still 200 ms before letting go: no flick.
+            t = 5000;
+            mousePress(root, 300, y);
+            for (i = 1; i <= 8; ++i) {
+                t += 60;
+                mouseMove(root, 300 - i * 4, y);
+            }
+            for (i = 1; i <= 4; ++i) {
+                t += 5;
+                mouseMove(root, 268 - i * 20, y);
+            }
+            t += 200;
+            mouseRelease(root, 188, y);
+            compare(launcher.currentPage, 0);
+            launcher.clock = null;
             launcher.showPage(0, true);
         }
 
