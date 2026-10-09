@@ -344,6 +344,26 @@ the dentist, take it off my calendar" for the event Dentist), once the
 contact has no email to write to. 55 of the 80 answers ran in all; the
 call took 3.0 s and 22 tokens on average.
 
+**A sentence for a name** (`lib/commands.js` `namedIn`, 9 October). The
+user means a task, event or memo that exists, so when the name given
+matches none, the ones whose every word of their name is in what was
+said are found ("milk's bought": Milk; "I'm not going to the dentist,
+take it off my calendar": Dentist), the most specific first, and when
+several fit equally it asks which ("Which one: “Bank” or “Rent”?"). The
+call's message now lists what each argument is (the schema's
+descriptions, which the grammar alone does not show the model: "the
+task's name as it is in Tasks, in a few words, not the whole sentence"),
+with a length limit in the schema. An example name in a description
+was taken as the answer ("milk" for "I've done the laundry"), so the
+descriptions have none, and a name the model gives with no word of what
+was said is replaced by the words (`assistant.js` `NAMED_ARG`). On the
+same 80: the right command 47 times, 43 of them ran (41 before). The 4
+that did not name things the stand-in does not have (a laundry task, a
+packing memo, lunch with Sam, Priya's email), so they should not; every
+right command whose thing exists ran. One wrong choice still runs: "Sam
+and I are doing lunch friday at 1" is taken as a text to Sam (read back
+first; the harness confirms it).
+
 **What the grammar could not read** (`fillArgs`). When the grammar knows
 the command but not all it needs (a required argument empty: "add an
 event called dentist friday-ish" has no time it can read), or a language

@@ -58,7 +58,7 @@ function decide(shape, body) {
     const schema = body.response_format && body.response_format.json_schema && body.response_format.json_schema.schema;
     if (schema && schema.properties && schema.properties.command) {
         const pick = /force a tool|flashlight|torch/i.test(said) ? "toggle" : /^text \w+ /i.test(said) ? "text" : /wake me/i.test(said) ? "alarm"
-            : /how busy/i.test(said) ? "agenda" : "none";
+            : /how busy/i.test(said) ? "agenda" : /bought|check it off/i.test(said) ? "taskDone" : "none";
         return { text: JSON.stringify({ command: pick }) };
     }
     // The on-device model's call (assistant.js callCommand): the chosen
@@ -81,6 +81,8 @@ function decide(shape, body) {
     if (tools && t) return { tool: { name: "text", args: { who: t[1], message: t[2] } } };
     if (tools && /wake me/i.test(said)) return { tool: { name: "alarm", args: { time: "tomorrow at 6:30 am" } } };
     if (tools && /how busy/i.test(said)) return { tool: { name: "agenda", args: { when: "friday" } } };
+    // A small model's name for a task: an example of its own, not the words.
+    if (tools && /bought|check it off/i.test(said)) return { tool: { name: "taskDone", args: { text: "eggs" } } };
     return { text: `${shape} says: ${said}` };
 }
 

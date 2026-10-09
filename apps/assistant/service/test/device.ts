@@ -176,5 +176,5 @@ export function device(opts: { offline?: boolean; locationAllowed?: boolean | nu
     }
     const of = (kind: string) => [...db.values()].filter((o) => o._kind === kind);
     const called = (part: string) => calls.filter((c) => c.uri.includes(part));
-    return { svc, db, of, calls, called, state, ask, confirm, choose, requests, setNow: (t: number) => { clock = t; } };
+    return { svc, db, luna, of, calls, called, state, ask, confirm, choose, requests, setNow: (t: number) => { clock = t; } };
 }

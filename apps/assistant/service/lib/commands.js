@@ -216,17 +216,17 @@ var BUILT_IN = [
     { id: "replyMessage", title: "Replying to messages", risk: "send", description: "Reply by text message to whoever sent the last message.",
       parameters: { type: "object", properties: { message: { type: "string", description: "The words to send; empty to write them in Messaging" } } } },
     { id: "eventMove", title: "Moving events", risk: "change", description: "Move a calendar event to another time or day; a repeating one's next day, or all of them (all: true).",
-      parameters: { type: "object", properties: { query: { type: "string", description: "The event's name, as said (\"dentist appointment\")" }, start: WHEN, all: B }, required: ["query", "start"] } },
+      parameters: { type: "object", properties: { query: { type: "string", maxLength: 60, description: "The event's name as it is on the calendar, in a few words, not the whole sentence" }, start: WHEN, all: B }, required: ["query", "start"] } },
     { id: "eventCancel", title: "Cancelling events", risk: "delete", description: "Delete an event from the calendar (read back first); a repeating one's day, or all of them (all: true).",
-      parameters: { type: "object", properties: { query: { type: "string", description: "The event's name, and its day or time if said" }, all: B }, required: ["query"] } },
+      parameters: { type: "object", properties: { query: { type: "string", maxLength: 60, description: "The event's name as it is on the calendar, in a few words, and its day or time if said; not the whole sentence" }, all: B }, required: ["query"] } },
     { id: "freeTime", title: "Free time", risk: "read", description: "Tell whether the user is free at a time, or when they are free on a day.",
       parameters: { type: "object", properties: { day: { type: "string", description: "The day, as said or ISO 8601" }, at: { type: "string", description: "A time that day, if asked" } } } },
     { id: "noteAppend", title: "Adding to memos", risk: "change", description: "Add words to the end of an existing memo.",
-      parameters: { type: "object", properties: { query: { type: "string", description: "Words of the memo" }, text: S }, required: ["query", "text"] } },
+      parameters: { type: "object", properties: { query: { type: "string", maxLength: 40, description: "The memo's name: a few words of its title, not the whole sentence" }, text: S }, required: ["query", "text"] } },
     { id: "taskList", title: "Reading lists and tasks", risk: "read", description: "Tell what is on a list in Tasks (empty: the default list), or what is due on a day.",
       parameters: { type: "object", properties: { list: S, day: { type: "string", enum: ["", "today", "tomorrow", "this week"] } } } },
     { id: "taskDone", title: "Completing tasks", risk: "change", description: "Mark a task as done.",
-      parameters: { type: "object", properties: { text: { type: "string", description: "The task's words" } }, required: ["text"] } },
+      parameters: { type: "object", properties: { text: { type: "string", maxLength: 40, description: "The task's name as it is in Tasks, in a few words, not the whole sentence" } }, required: ["text"] } },
     { id: "nearby", title: "Places nearby", risk: "open", description: "Find places of a kind near the user, closest first (\"coffee\", \"pharmacy\"; just the kind, not the whole sentence).",
       parameters: { type: "object", properties: { query: S }, required: ["query"] } },
     { id: "website", title: "Opening websites", risk: "open", description: "Open a website in the browser.",
@@ -336,6 +336,29 @@ function matches(text, query) {
     return words(query).split(" ").filter(Boolean).every(function (w) {
         return t.indexOf(" " + w) >= 0 || (w.length >= 4 && squashed.indexOf(w.replace(/[^a-z0-9À-￿]+/g, "")) >= 0);
     });
+}
+// What was said may be a whole sentence where a name was wanted (the
+// on-device model's "milk's bought" for the task Milk, "I'm not going to
+// the dentist, take it off my calendar" for the event Dentist): the user
+// means something that exists, so the items whose every word of their name
+// is in what was said, the most specific (most such words) first.
+// -> {hit} | {ambiguous: [names]} | {} (none). nameOf(item) -> its name.
+var NAME_STOP = /^(?:a|an|the|my|our|your|to|of|for|with|and|on|in|at|it|is|i|me)$/;
+function nameWords(s) {
+    return words(s).split(" ").filter(function (w) { return w && !NAME_STOP.test(w); })
+        .map(function (w) { return w.replace(/'s$/, "").replace(/(?:es|s)$/, "").slice(0, 6); }).filter(Boolean);
+}
+function namedIn(items, nameOf, said) {
+    var heard = nameWords(said);
+    var scored = items.map(function (x) {
+        var n = nameWords(nameOf(x));
+        return { x: x, n: n.length, all: n.length > 0 && n.every(function (w) { return heard.indexOf(w) >= 0; }) };
+    }).filter(function (s) { return s.all; });
+    if (!scored.length) return {};
+    var best = Math.max.apply(null, scored.map(function (s) { return s.n; }));
+    var top = scored.filter(function (s) { return s.n === best; });
+    var names = top.map(function (s) { return nameOf(s.x); }).filter(function (n, i, a) { return a.indexOf(n) === i; });
+    return names.length > 1 ? { ambiguous: names } : { hit: top[0].x };
 }
 function digitsOnly(s) { return String(s || "").replace(/\D/g, ""); }
 function samePhone(a, b) {
@@ -627,6 +650,7 @@ function prepareInner(cmd, args, env) {
     if (cmd.id === "eventMove" || cmd.id === "eventCancel") {
         return findEvent(env, args.query).then(function (hit) {
             if (!hit) return { args: args, reply: say.noSuchEvent(env.lang.eventWords ? env.lang.eventWords(String(args.query)) || args.query : args.query) };
+            if (hit.ambiguous) return { args: args, reply: say.whichOne(hit.ambiguous) };
             var ev = hit.event, repeats = !!(ev.rrule && ev.rrule.freq);
             args.id = ev._id; args.title = hit.title; args.old = { dtstart: Number(ev.dtstart), dtend: Number(ev.dtend), allDay: !!ev.allDay };
             // A repeating event: the day found (as the Calendar app's "this
@@ -660,7 +684,13 @@ function prepareInner(cmd, args, env) {
     if (cmd.id === "noteAppend") {
         return dbFind(env, "com.palm.note:1").then(function (memos) {
             var q = String(args.query || "").trim();
+            var titleOf = function (n) { return (n.title || n.text || "").split("\n")[0]; };
             var hit = memos.filter(function (n) { return q && matches(n.title || n.text, q); })[0] || memos.filter(function (n) { return q && matches(n.text, q); })[0];
+            if (!hit && q) {
+                var named = namedIn(memos.filter(function (n) { return !n._del; }), titleOf, q);
+                if (named.ambiguous) return { args: args, reply: say.whichOne(named.ambiguous) };
+                hit = named.hit;
+            }
             if (!hit) return { args: args, reply: say.noMemo(q) };
             if (!String(args.text || "").trim()) return { args: args, reply: say.failed("add what?") };
             args.id = hit._id; args.oldText = hit.text || ""; args.title = (hit.text || "").split("\n")[0];
@@ -672,6 +702,11 @@ function prepareInner(cmd, args, env) {
             var q = String(args.text || "").trim();
             var open = tasks.filter(function (x) { return !x.completed && !x._del; });
             var hit = open.filter(function (x) { return words(x.summary) === words(q); })[0] || open.filter(function (x) { return matches(x.summary, q); })[0];
+            if (!hit && q) {
+                var named = namedIn(open, function (x) { return x.summary; }, q);
+                if (named.ambiguous) return { args: args, reply: say.whichOne(named.ambiguous) };
+                hit = named.hit;
+            }
             if (!hit) return { args: args, reply: say.noTask(q) };
             args.id = hit._id; args.summary = hit.summary;
             return { args: args };
@@ -1270,6 +1305,12 @@ function findEvent(env, said) {
             return q || r.hasTime;
         }).sort(function (a, b) { return a.start - b.start; });
         var e = evs[0];
+        if (!e && q) {
+            // A sentence for a name: an event of the coming year it names.
+            var named = namedIn(got[0].filter(function (x) { return !info.day || x.start >= from; }), function (x) { return x.title; }, said);
+            if (named.ambiguous) return { ambiguous: named.ambiguous };
+            e = named.hit;
+        }
         if (!e) return null;
         var rec = got[1].filter(function (x) { return x._id === e.id; })[0];
         return rec ? { event: rec, title: e.title, start: e.start } : null;

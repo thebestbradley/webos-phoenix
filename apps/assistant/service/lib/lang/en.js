@@ -1982,6 +1982,11 @@ var say = {
     noMemo: function (q) { return "I couldn't find a memo about " + quote(q) + ". Say \u201cnew note\u201d and what it says to start one."; },
     noteAppended: function (title) { return "Added it to your " + quote(excerpt(title, 40)) + " memo."; },
     noTask: function (q) { return "I couldn't find " + quote(q) + " in your tasks."; },
+    // Several things a sentence could name (commands.js namedIn).
+    whichOne: function (names) {
+        var q = names.slice(0, 4).map(quote);
+        return "Which one: " + (q.length > 1 ? q.slice(0, -1).join(", ") + " or " + q[q.length - 1] : q[0]) + "?";
+    },
     taskDone: function (t) { return "Marked " + quote(t) + " as done."; },
     noList: function (name) { return "You don't have a list called " + quote(name) + "."; },
     tasks: function (name, items) {

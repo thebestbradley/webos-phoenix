@@ -570,9 +570,23 @@ function createAssistantService(deps) {
     // tool_choice "required", Qwen3 0.6B often wrote the JSON, a full stop
     // and then went on until its 160 tokens (up to 30 s under load):
     // measured in docs/AI-AND-MCP.md ("A call held to its schema").
+    // The commands whose argument names a thing that exists (a task, an
+    // event, a memo), and whether a value has a word of what was said.
+    var NAMED_ARG = { taskDone: "text", eventCancel: "query", eventMove: "query", noteAppend: "query" };
+    function grounded(v, said) {
+        var heard = " " + String(said).toLowerCase().replace(/[^a-z0-9']+/g, " ") + " ";
+        return String(v || "").toLowerCase().split(/[^a-z0-9']+/).some(function (w) { return w.length > 2 && heard.indexOf(" " + w) >= 0; });
+    }
     function callCommand(p, thread, cmd, timeoutMs, prefix) {
         var name = commands.toolName(cmd.id);
+        // The schema holds the JSON's form; what each argument is, the
+        // model reads here ("the task's name as it is in Tasks, not the
+        // whole sentence").
+        var props = (cmd.parameters && cmd.parameters.properties) || {};
+        var said = Object.keys(props).filter(function (k) { return props[k].description; })
+            .map(function (k) { return k + ": " + props[k].description; }).join("; ");
         var tail = nowText() + " The user asked the phone to do this: " + name + ": " + cmd.description +
+            (said ? " Its arguments: " + said + "." : "") +
             " Write its arguments as JSON, from what the user said, in their words (times and dates as they said them, \"friday at 4 pm\").";
         var req = providers.chatRequest(p, { system: prefix.text, messages: [{ role: "system", text: tail }].concat(fitted(history(thread), LOCAL_HISTORY_CHARS)),
                                              schema: cmd.parameters || { type: "object", properties: {} }, maxTokens: CALL_TOKENS, temperature: 0 }, "");
@@ -580,7 +594,14 @@ function createAssistantService(deps) {
         return deps.request(req).then(function (r) {
             var out = providers.parseChat(p.type, r.status, r.body), args;
             try { args = JSON.parse(out.text); } catch (e) { throw new Error("its call of " + name + " could not be read"); }
-            return { text: "", toolCalls: [{ name: name, args: args && typeof args === "object" ? args : {} }] };
+            args = args && typeof args === "object" ? args : {};
+            // The name of a thing that exists, which the model must take from
+            // the words: one with none of them (an example it made up) is
+            // the words themselves, which the command matches against what
+            // there is (lib/commands.js namedIn).
+            var asked = lastAsked(thread), k = NAMED_ARG[cmd.id];
+            if (k && !grounded(args[k], asked)) args[k] = asked;
+            return { text: "", toolCalls: [{ name: name, args: args }] };
         });
     }
     // An answer: words, or a tool call to run (cloud ones only when allowed).

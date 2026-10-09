@@ -6,6 +6,7 @@
 // lib/lang/en.js), through the service: the field asked for, concisely,
 // with the item's card; and "it", the item the conversation is about.
 
+import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 import { at, device } from "./test/device";
 
@@ -129,5 +130,49 @@ describe("changing what was found", () => {
         const d = seeded();
         expect((await d.ask("rename it to Lunch")).text).toBe("Which one? Say its name, like “rename my meeting with Sam to Coffee with Sam”.");
         expect((await d.ask("change my alarm to 6")).text).toBe("You have alarms at 7:00 AM and 6:30 PM: which one? Say “set my 7:00 AM alarm to…”.");
+    });
+});
+
+// A sentence where a name was wanted (the on-device model's "milk's
+// bought" for the task Milk): the thing it names that exists, the most
+// specific; asked which when several fit (lib/commands.js namedIn).
+describe("a sentence for a name", () => {
+    const req = createRequire(import.meta.url);
+    const commands = req("./lib/commands.js");
+    const en = req("./lib/lang/en.js");
+    const prep = (d: ReturnType<typeof device>, id: string, args: object) =>
+        commands.prepare(commands.find(commands.catalogue([]), id), args, { luna: d.luna, now: () => at(7, 10), lang: en });
+    it("finds the task, event or memo it names", async () => {
+        const d = device({ seed: (put) => { put({ _kind: "com.palm.task:1", summary: "Oat milk", listId: "list-shop", completed: false }); } });
+        expect((await prep(d, "taskDone", { text: "milk's bought" })).args.summary).toBe("Milk");
+        const cancel = await prep(d, "eventCancel", { query: "I'm not going to the dentist, take it off my calendar" });
+        expect(cancel.args.title).toBe("Dentist");
+        expect(cancel.confirm).toMatch(/Dentist/);
+        expect((await prep(d, "noteAppend", { query: "put this in my books to read note please", text: "Dune" })).args.title).toBe("Books to read");
+        // Nothing it names: as before.
+        expect((await prep(d, "taskDone", { text: "the laundry is done" })).reply).toBe("I couldn't find “the laundry is done” in your tasks.");
+    });
+    // The on-device model's name for the thing must be in the words (the
+    // stand-in model answers "eggs", its own example, for any task): else
+    // the words themselves are matched against the tasks there are.
+    it("takes the model's name only when it is in the words", async () => {
+        const mock = await req("./test/mock-providers.cjs").start();
+        try {
+            const http = req("./lib/node-http.js").createRequest({ timeoutMs: 5000 });
+            const llm = { status: () => Promise.resolve({ available: true, installed: [{ id: "qwen3-0.6b-q8_0" }] }), ensure: () => Promise.resolve({ baseUrl: mock.url + "/v1" }) };
+            const d = device({ llm, llmRequest: http });
+            expect((await d.ask("milk's bought")).text).toBe("Marked \u201cMilk\u201d as done.");
+            expect((await d.ask("I've done the laundry, check it off")).text).toMatch(/^I couldn't find .* in your tasks\.$/);
+            expect(d.db.get("task-eggs").completed).toBe(false);
+        } finally {
+            await mock.close();
+        }
+    });
+    it("asks which when the words name several", async () => {
+        const d = device({ seed: (put) => {
+            put({ _kind: "com.palm.task:1", summary: "Bank", listId: "list-inbox", completed: false });
+            put({ _kind: "com.palm.task:1", summary: "Rent", listId: "list-inbox", completed: false });
+        } });
+        expect((await prep(d, "taskDone", { text: "bank and rent are sorted" })).reply).toBe("Which one: “Bank” or “Rent”?");
     });
 });
