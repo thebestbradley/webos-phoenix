@@ -38,6 +38,12 @@ Item {
     }
 
     SignalSpy { id: typed; target: shell.keyboard; signalName: "keyTyped" }
+    // A keyboard of its own, never re-made (the shell's is, as the test
+    // window settles, which hid a keymap bound to numberRow).
+    Component {
+        id: freshKeyboard
+        VirtualKeyboard { availableWidth: 320; availableHeight: 480 }
+    }
 
     TestCase {
         name: "PhoneKeyboard"
@@ -208,6 +214,40 @@ Item {
             showKeyboard();
             fuzzyCompare(kb.keysHeight, height, 0.01);
             verify(kb.keyRect("1") === null);
+        }
+
+        // Changed while the keyboard is up, or after it has been (Settings >
+        // Text Assist in a card beside the field): it follows, both ways.
+        function test_numberRowWhileOpen() {
+            showKeyboard();
+            verify(kb.keyRect("1") === null);
+            // The same keymap, changed in place: not a new, unsized one (it
+            // was a binding on numberRow, and the keyboard kept its rows).
+            sys.tweaks = { numberRow: true };
+            tryVerify(function () { return kb.keyRect("1") !== null; }, 2000, "on while open");
+            type(["1", "q"]);
+            compare(field.text, "1q");
+            sys.tweaks = {};
+            tryVerify(function () { return kb.keyRect("1") === null; }, 2000, "off while open");
+            type(["q"]);
+            compare(field.text, "1qq");
+        }
+
+        // The number row changes the keymap in place: it is not made again
+        // (a binding on numberRow made a new, unsized keymap, and the
+        // keyboard kept its old rows, its repaint failing on it).
+        function test_numberRowKeepsTheKeymap() {
+            var k = createTemporaryObject(freshKeyboard, root);
+            verify(k);
+            var km = k._km;
+            verify(km.rect.width > 0, "laid out");
+            k.numberRow = true;
+            verify(k._km === km, "the same keymap");
+            compare(km.rows, 5);
+            verify(km.rect.width > 0, "still laid out");
+            k.numberRow = false;
+            verify(k._km === km);
+            compare(km.rows, 4);
         }
 
         function test_symbols() {
