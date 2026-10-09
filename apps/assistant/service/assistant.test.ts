@@ -496,7 +496,7 @@ describe("the on-device model", () => {
 
     // One prompt, read once (assistant.js localPrefix): the choice and the
     // call (or the answer in words) start with the same system prompt, the
-    // same for every request; llama-server keeps it (cache_prompt, slot 0).
+    // same for every request; llama-server keeps it (cache_prompt, its one slot).
     // The choice shows examples only for the few commands the words come near.
     it("shares one prompt between the choice and the call, and across requests", async () => {
         const t = setup({ llm: llm() });
@@ -526,11 +526,29 @@ describe("the on-device model", () => {
         expect((hint.match(/\n[a-zA-Z]+: "/g) || []).length).toBeLessThanOrEqual(4);
         expect(hint).toMatch(/\ntoggle: "/);
         expect(pick.messages.at(-1)).toEqual({ role: "user", content: "it's dark, put the flashlight on for me" });
-        for (const b of sent) expect([b.cache_prompt, b.id_slot]).toEqual([true, 0]);
+        for (const b of sent) expect([b.cache_prompt, b.id_slot]).toEqual([true, undefined]);
         // The time and the tools' rule come after the shared prompt.
         expect(call.messages[1].role).toBe("system");
         expect(call.messages[1].content).toMatch(/^Today is /);
         expect(call.max_tokens).toBe(160);
+    });
+
+    // Its context is 4,096 tokens: the conversation it sees is the latest
+    // turns that fit (LOCAL_HISTORY_CHARS), the shared prompt whole.
+    it("sees the latest turns that fit in its context", async () => {
+        const t = setup({ llm: llm() });
+        t.as("org.webosphoenix.settings");
+        await t.svc.selectModel({ id: MODEL });
+        t.as("com.palm.systemui");
+        const long = (n: number) => "tell me about " + String(n).repeat(1500);
+        let r: Reply = {};
+        for (let i = 1; i <= 4; ++i) r = await ask(t, long(i), r.thread ? { threadId: r.thread.id } : {});
+        const sent = mock.requests.at(-1)!.body;
+        const turns = sent.messages.slice(2);
+        const chars = turns.reduce((n: number, m: Reply) => n + m.content.length, 0);
+        expect(chars).toBeLessThanOrEqual(5000);
+        expect(turns.at(-1)).toEqual({ role: "user", content: long(4) });
+        expect(turns.some((m: Reply) => m.content === long(1))).toBe(false);
     });
 
     it("reads back a choice the words did not ask for", async () => {

@@ -242,15 +242,14 @@ function llamaServer(options) {
         stop();
         var p = freePort().then(function (port) {
             return new Promise(function (resolve, reject) {
-                // 8,192 tokens (the commands as tools and the system prompt are
-                // some 4,900), one slot (the tools stay cached between
-                // requests), an 8-bit cache with flash attention (as small as
-                // 4,096 was: 1.3 GB in all for Qwen3 0.6B), prompts read 512
-                // tokens at a time so that a request given up on (the
-                // assistant's deadline) ends soon; as the simulator's
-                // shell/native/localmodels.cpp, which says why.
-                var args = ["-m", file, "--host", "127.0.0.1", "--port", String(port), "--jinja", "-c", "8192", "-np", "1",
-                            "-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0", "-b", "512"].concat(options.args || []);
+                // 4,096 tokens with the default 16-bit cache (twice as fast
+                // reading a prompt as 8,192 in 8 bits, in the same memory),
+                // one slot (its prompt kept between requests), flash
+                // attention, prompts read 512 tokens at a time so that a
+                // request given up on (the assistant's deadline) ends soon;
+                // as the simulator's shell/native/localmodels.cpp, which says why.
+                var args = ["-m", file, "--host", "127.0.0.1", "--port", String(port), "--jinja", "-c", "4096", "-np", "1",
+                            "-fa", "on", "-b", "512"].concat(options.args || []);
                 log("starting " + bin + " " + args.join(" "));
                 var child = childProcess.spawn.apply(childProcess, throughPdeath(bin, args).concat([{ stdio: ["ignore", "ignore", "pipe"] }]));
                 running.push(child);

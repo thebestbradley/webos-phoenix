@@ -89,8 +89,12 @@ describe("the on-device model", () => {
         expect(existsSync(join(dir, "models", "test-model.gguf.part"))).toBe(false);
         const { baseUrl } = await llm.ensure(model());
         expect(baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/v1$/);
-        // Prompts read 512 tokens at a time: a request given up on ends soon (lib/node-device.js).
-        expect(readFileSync(join(dir, "llama-args"), "utf8")).toMatch(/ -np 1 .* -b 512\b/);
+        // 4,096 tokens in the default 16-bit cache (twice as fast to read a
+        // prompt as 8,192 in 8 bits); prompts read 512 tokens at a time: a
+        // request given up on ends soon (lib/node-device.js).
+        const used = readFileSync(join(dir, "llama-args"), "utf8");
+        expect(used).toMatch(/ -c 4096 -np 1 .* -b 512\b/);
+        expect(used).not.toMatch(/-ctk|-ctv/);
         const rq = providers.chatRequest({ type: "local", baseUrl, model: "test-model" },
             { system: "s", messages: [{ role: "user", text: "turn on the torch" }], tools: [{ name: "toggle", description: "t", parameters: { type: "object" } }] }, "");
         const r = await createRequest()(rq);

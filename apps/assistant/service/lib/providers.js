@@ -116,9 +116,12 @@ function chatRequest(p, req, key) {
                  messages: [{ role: "system", content: system }].concat(msgs.map(function (m) { return { role: m.role, content: m.text }; })) };
         if (tools.length) body.tools = tools.map(function (t) { return { type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }; });
         // Qwen3's template thinks aloud unless told not to (llama-server passes this to it).
-        // Its one slot, the prompt kept there: what a request shares with the
-        // one before is not read again (assistant.js localPrefix).
-        if (p.type === "local") { body.chat_template_kwargs = { enable_thinking: false }; body.max_tokens = req.maxTokens || 512; body.cache_prompt = true; body.id_slot = 0; }
+        // The prompt kept in its one slot (-np 1): what a request shares with
+        // the one before is not read again (assistant.js localPrefix). No
+        // id_slot: with it, requests from two clients at once came back
+        // with each other's words in them (seen with this llama.cpp while
+        // measuring; the one slot is fixed anyway).
+        if (p.type === "local") { body.chat_template_kwargs = { enable_thinking: false }; body.max_tokens = req.maxTokens || 512; body.cache_prompt = true; }
         // The on-device model's two steps (assistant.js askLocal): a tool
         // call it must make ("required": llama-server constrains the output
         // to a call), and an answer in a JSON schema (its grammar).

@@ -314,21 +314,22 @@ void LocalModels::ensure(const QString &id, const QString &requestId)
     m_waiting = { requestId };
     m_server = new QProcess(this);
     QStringList args = m_command.mid(1);
-    // 8,192 tokens: the commands as tools are some 4,900 with the system
-    // prompt (4,096 no longer held them: "exceeds the available context
-    // size"); one slot, so the tools stay cached between requests; the
-    // cache in 8 bits with flash attention, which keeps it as small as
-    // 4,096 was (Qwen3 0.6B: 1.3 GB in all, measured; lib/node-device.js
-    // the same on a device). Prompts read 512 tokens at a time (-b; the
-    // physical batch is 512 anyway): llama-server sees that a request was
-    // given up on (the assistant's deadline) only between batches, and with
-    // its default 2,048 it went on 46 s for one nobody waited for, the next
-    // question queued behind it (measured on a busy 4-core computer; 9 s
-    // with 512).
+    // 4,096 tokens with the default 16-bit cache: the on-device model gets
+    // one tool at a time and a shared prompt of some 1,400 tokens
+    // (apps/assistant/service/assistant.js localPrefix, which holds the
+    // conversation it sees to the rest), and this reads a prompt twice as
+    // fast as the 8,192 tokens in 8 bits it had (200 against 100 tokens a
+    // second for Qwen3 0.6B on a 4-core computer) in the same memory (1.83
+    // against 1.86 GB; docs/AI-AND-MCP.md). One slot, so its prompt is kept
+    // between requests; flash attention. Prompts read 512 tokens at a time
+    // (-b; the physical batch is 512 anyway): llama-server sees that a
+    // request was given up on (the assistant's deadline) only between
+    // batches, and with its default 2,048 it went on 46 s for one nobody
+    // waited for, the next question queued behind it (measured on a busy
+    // 4-core computer; 9 s with 512). lib/node-device.js the same on a device.
     args << QStringLiteral("-m") << file << QStringLiteral("--host") << QStringLiteral("127.0.0.1")
-         << QStringLiteral("--port") << QString::number(m_port) << QStringLiteral("--jinja") << QStringLiteral("-c") << QStringLiteral("8192")
+         << QStringLiteral("--port") << QString::number(m_port) << QStringLiteral("--jinja") << QStringLiteral("-c") << QStringLiteral("4096")
          << QStringLiteral("-np") << QStringLiteral("1") << QStringLiteral("-fa") << QStringLiteral("on")
-         << QStringLiteral("-ctk") << QStringLiteral("q8_0") << QStringLiteral("-ctv") << QStringLiteral("q8_0")
          << QStringLiteral("-b") << QStringLiteral("512");
     m_server->setProgram(program);
     m_server->setArguments(args);

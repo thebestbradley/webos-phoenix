@@ -220,11 +220,12 @@ dentist visit next tuesday at 3", "drop Sam a line saying I'm on my way"):
 the right command 7 times before (the closest ten tools offered), 17
 after; the choice alone 20, 9 without the examples; with the official
 Q8_0 the choice alone 17 (as close as 28 phrasings can tell; a request 2.4 s on this machine while it was loaded with other work). A request takes about
-0.8 s here once the server is up (the choice 0.45 s). llama-server runs
+0.8 s here once the server is up (the choice 0.45 s). llama-server ran
 with 8,192 tokens of context (the commands as tools passed 4,096: it
 refused the request), one slot and an 8-bit cache with flash attention:
 1.3 GB in all for Qwen3 0.6B Q4_K_M, as much as 4,096 tokens took before
-(1.8 GB for the official Q8_0). One
+(1.8 GB for the official Q8_0); since the shared prompt, 4,096 tokens in
+16 bits again (below). One
 slot against four made no difference here (0.44 s against 0.46 s a
 choice: this llama.cpp shares one cache between its slots), but keeps
 the prompt cached for a phone's single user. Checked in phoenix-sim:
@@ -267,7 +268,9 @@ commands the words come nearest (a lexical score over each command's
 name, description and examples; two each) and the words; for the call or
 the answer, the time and the history (the Qwen3 template puts a call's
 one tool after the system prompt, so it is shared too). Requests say
-`cache_prompt` and slot 0. Measured with Qwen3 0.6B Q8_0 and llama-server
+`cache_prompt`; llama-server has one slot (`-np 1`). Naming it (`id_slot`)
+was tried and dropped: with it, requests from two clients at once came
+back with each other's words in them. Measured with Qwen3 0.6B Q8_0 and llama-server
 on this 4-core machine (busy with other work, load 6 to 9, so the times
 are long and vary; the token counts do not):
 
@@ -287,6 +290,31 @@ took 18 s in all, pick and answer; later ones read some 150 for the
 choice and 300 for the call, so their time is the model's writing (2 to
 6 tokens a second under that load: 15 to 40 s for a call's arguments;
 idle, several times faster).
+
+**The cache: 4,096 tokens in 16 bits** (9 October). With one tool at a
+time and the shared prompt some 1,400 tokens, 8,192 tokens of context are
+no longer needed; the cache in 8 bits had kept that as small as 4,096 in
+16 bits, but llama-server reads a prompt in 8 bits half as fast. Measured
+on the same machine, the same prompt (1,464 tokens, not kept), two runs
+of three, each configuration in turn:
+
+| | 8,192 tokens, 8-bit cache | 4,096 tokens, 16-bit cache |
+|---|---|---|
+| reading the prompt | 97-106 tokens/s | 183-208 tokens/s |
+| llama-server's memory after start | 1.86 GB | 1.83 GB |
+| the choice right on `model-eval.json` | 105 of 163 | 110 of 163 |
+| the choice's mean time on it | 4.0 s | 1.7 s |
+
+So llama-server now runs with `-c 4096` and its default cache
+(`shell/native/localmodels.cpp`, `lib/node-device.js`). The conversation
+the model sees is held to the latest turns that fit (`LOCAL_HISTORY_CHARS`,
+5,000 characters, some 1,500 tokens), so the shared prompt, a tool and a
+512-token answer always fit. A first question with the server cold
+(`why is the sky blue`) took 12.5 s in all, pick and answer. A call of a
+command sometimes goes on writing after its arguments (Qwen3 0.6B's JSON,
+a full stop, then more) until its 160 tokens: up to 30 s at 5 tokens a
+second under load. A stop at the first blank line ended it but lost the
+call at temperature 0, so it is left at that for now.
 
 **What the grammar could not read** (`fillArgs`). When the grammar knows
 the command but not all it needs (a required argument empty: "add an

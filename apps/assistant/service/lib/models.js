@@ -17,10 +17,11 @@
 // (2026) and the Qwen3 2507 instruct updates have no GGUF from the Qwen
 // team (checked 9 October 2026), so they are not offered (docs/AI-AND-MCP.md).
 //
-// ram: the device memory to run it well (the file, an 8,192-token cache and
-// the rest of the system): the list offers what fits and recommends the
-// largest that does. By device: 4 GB or less, the built-in model only;
-// 6-8 GB, 1.7B or 4B; 12-16 GB, 8B or 14B; 32 GB and more, 30B-A3B.
+// ram: the device memory to run it well (the file, a 4,096-token cache,
+// as big as 8,192 in 8 bits was, and the rest of the system): the list
+// offers what fits and recommends the largest that does. By device: 4 GB
+// or less, the built-in model only; 6-8 GB, 1.7B or 4B; 12-16 GB, 8B or
+// 14B; 32 GB and more, 30B-A3B.
 
 "use strict";
 

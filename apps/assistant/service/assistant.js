@@ -115,6 +115,11 @@ var DEFAULTS = {
 };
 var HISTORY = 20;               // turns a model sees
 var CALL_TOKENS = 160;          // the most a call of a command may say (its arguments)
+// The on-device model's context is 4,096 tokens (lib/node-device.js): the
+// shared prompt takes some 1,400, a tool 250 and the answer up to 512, so
+// the conversation it sees is held to about 1,500 tokens (some 3.5
+// characters each), the latest turns.
+var LOCAL_HISTORY_CHARS = 5000;
 // The on-device model's whole answer (starting it, choosing a command,
 // calling it) within this; askLocal says why.
 var LOCAL_DEADLINE_MS = 75000;
@@ -502,6 +507,17 @@ function createAssistantService(deps) {
         return messagesOf(thread.id).filter(function (m) { return m.kind !== "fallback" && !(m.followUp && !m.chosen); }).slice(-HISTORY)
             .map(function (m) { return { role: m.role, text: m.text }; });
     }
+    // The latest turns that fit in chars (the last one always, cut to fit).
+    function fitted(list, chars) {
+        var out = [], used = 0;
+        for (var i = list.length - 1; i >= 0; --i) {
+            var n = String(list[i].text || "").length;
+            if (out.length && used + n > chars) break;
+            out.unshift(n > chars ? { role: list[i].role, text: String(list[i].text).slice(0, chars) } : list[i]);
+            used += n;
+        }
+        return out;
+    }
     function lastAsked(thread) {
         var m = messagesOf(thread.id).filter(function (x) { return x.role === "user"; });
         return m.length ? m[m.length - 1].text : "";
@@ -542,7 +558,7 @@ function createAssistantService(deps) {
         // After the choice's examples in the shared prompt, the model must
         // be told this is not a choice ("None." was its whole answer).
         var tail = promptTail(tools.length > 0) + (tools.length ? "" : " Now answer the user in words, as yourself: never with a command's name or \"none\".");
-        var msgs = prefix ? [{ role: "system", text: tail }].concat(history(thread)) : history(thread);
+        var msgs = prefix ? [{ role: "system", text: tail }].concat(fitted(history(thread), LOCAL_HISTORY_CHARS)) : history(thread);
         var req = providers.chatRequest(provider, { system: system, messages: msgs, tools: tools, toolChoice: toolChoice,
                                                     maxTokens: toolChoice ? CALL_TOKENS : undefined }, key);
         if (timeoutMs) req.timeoutMs = timeoutMs;
