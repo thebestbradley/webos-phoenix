@@ -1314,7 +1314,69 @@ var SUGGESTIONS = [
     [/\b(?:open|launch|start|app)\b/, ["open Maps"]]
 ];
 
+// What nothing here can do yet: the app that does it, by its launch
+// point's title (say.context; the router offers "Open <title>" when that
+// app is installed). First match wins: the camera before the photos, the
+// podcasts before the music.
+var APP_WORDS = [
+    [/\b(?:voicemail|call log|missed calls?|calls?|dial|redial)\b/, "Phone"],
+    [/\b(?:texts?|sms|messages?|chats?)\b/, "Messaging"],
+    [/\b(?:e-?mails?|inbox|mail)\b/, "Email"],
+    [/\b(?:calendar|meetings?|appointments?|events?|schedule|agenda)\b/, "Calendar"],
+    [/\b(?:contacts?|address book|phone ?book)\b/, "Contacts"],
+    [/\b(?:memos?|notes?)\b/, "Memos"],
+    [/\b(?:tasks?|to-?dos?|to do|groceries|shopping list)\b/, "Tasks"],
+    [/\b(?:alarms?|timers?|stop ?watch|clock)\b/, "Clock"],
+    [/\b(?:weather|forecast|temperature)\b/, "Weather"],
+    [/\b(?:maps?|directions|navigate|nearby|near me|route|traffic)\b/, "Maps"],
+    [/\b(?:podcasts?|episodes?)\b/, "Podcasts"],
+    [/\b(?:music|songs?|albums?|playlists?|artists?|tracks?)\b/, "Music"],
+    [/\b(?:videos?|movies?|films?)\b/, "Videos"],
+    [/\b(?:camera|selfie|take a (?:photo|picture))\b/, "Camera"],
+    [/\b(?:photos?|pictures?|pics|screenshots?|gallery)\b/, "Photos"],
+    [/\b(?:files?|documents?|downloads?|folders?|pdfs?)\b/, "Files"],
+    [/\b(?:app store|marketplace|install|uninstall)\b/, "Marketplace"],
+    [/\b(?:passwords?|logins?)\b/, "Passwords"],
+    [/\b(?:clipboard|copied)\b/, "Clipboard"],
+    [/\b(?:wi-?fi|bluetooth|settings?|wallpaper|ringtone|vpn|hotspot)\b/, "Settings"],
+    [/\b(?:websites?|browser|web ?page|bookmarks?)\b/, "Web"]
+];
+// A question about the world (a web search may answer it), and small talk
+// (it may not).
+var QUESTION = /^(?:what|what's|whats|who|who's|whom|whose|when|when's|where|where's|why|how|how's|which|is|are|was|were|do|does|did|can|could|should|would|will|tell me|explain|define|describe|meaning of|recipe|give me)\b|\?$/;
+var SMALL_TALK = /^(?:hi|hello|hey|yo|good (?:morning|afternoon|evening|night)|how are you(?: doing| today)?|how's it going|what's up|sup|thanks|thank you|cheers|tell me a joke|say something funny|make me laugh|who are you|what(?:'s| is) your name|are you (?:there|real|a robot|human)|i love you|you're (?:great|awesome|funny|smart)|bye|goodbye|see you|good job|well done|nice)\b/;
+// After a model's answer: what to do with it ("Save as Memo" for a recipe,
+// Maps for where something is).
+var RECIPE = /\b(?:recipes?|how (?:do|can|should) (?:you|i|we|one) (?:make|cook|bake|prepare|brew)|how to (?:make|cook|bake|prepare|brew))\b/;
+var PLACE = /^(?:where(?:'s| is| are)|how far is|directions to|what(?:'s| is) the address of)\s+(?:the\s+)?(.+?)\??$/;
+
 var say = {
+    // What a request is: {question, smallTalk, app: an app's title or ""}.
+    context: function (text) {
+        var t = clean(text), app = "";
+        for (var i = 0; i < APP_WORDS.length && !app; ++i) if (APP_WORDS[i][0].test(t)) app = APP_WORDS[i][1];
+        var small = SMALL_TALK.test(t);
+        return { question: !small && QUESTION.test(t), smallTalk: small, app: app };
+    },
+    // Layer 4's words: nothing here can, and what can instead ("app":
+    // the app that does it; "question": a web search; "other").
+    // close: requests near it follow ("Did you mean ...?").
+    fallback: function (kind, title, close) {
+        if (kind === "app") return "I don't have the tools for that yet, but I can open " + title + " for you.";
+        if (kind === "question") return "I can't answer that on my own yet, but I can search the web for it.";
+        return "I'm not sure how to help with that yet." + (close ? "" : " I can search the web for it, or say “help” to see what I can do.");
+    },
+    // Things to do with a model's answer to text: [{label, run: {command,
+    // args}} | {label, open: {query}}] (the router fills in the app).
+    related: function (text, answer) {
+        var t = clean(text), out = [], m;
+        if (RECIPE.test(t) && answer) {
+            var dish = t.replace(/^.*?\b(?:make|cook|bake|prepare|brew|recipes? for|recipe)\s+/, "").replace(/\?$/, "");
+            out.push({ label: "Save as Memo", run: { command: "note", args: { text: capital(dish) + "\n\n" + answer } } });
+        }
+        if ((m = PLACE.exec(t))) out.push({ label: "Show in Maps", map: m[1] });
+        return out;
+    },
     off: function () { return "The assistant is turned off. You can turn it on in Settings > Assistant."; },
     notAllowed: function (title) { return "\"" + title + "\" is turned off in Settings > Assistant."; },
     openApp: function (title) { return "Open " + title; },
@@ -1470,7 +1532,7 @@ var say = {
         contact: function (name) { return "remove " + name + " from your contacts"; },
         timer: function () { return "cancel that timer"; }
     },
-    beyond: function (what) { return what === "translate" ? "I can't translate on the phone." : ""; },
+    beyond: function (what) { return what === "translate" ? "I can't translate without a language model yet, but I can search the web for it." : ""; },
     // As before
     toggled: function (setting, on) { return SETTING_NAMES[setting] + " is " + (on ? "on" : "off") + "."; },
     noSuchContact: function (who) { return "I couldn't find " + who + " in your contacts."; },
@@ -1497,7 +1559,6 @@ var say = {
     noPlace: function (place) { return "I couldn't find a place called " + place + "."; },
     noLocation: function () { return "I don't know where you are. Say a city, like \"weather in Paris\", or turn on Location Services."; },
     noWeather: function () { return "I couldn't get the weather right now. I've opened Weather."; },
-    cantDo: function () { return "I can't do that on the phone."; },
     askCloud: function (name) { return "Ask " + name; },
     searchWeb: function () { return "Search the web"; },
     setUpCloud: function () { return "Set up a cloud model"; },

@@ -364,7 +364,7 @@ describe("conversions and the world", () => {
     it("translation goes on to a model or the web", async () => {
         const d = device();
         const m = await d.ask("translate hello into French");
-        expect(m.text).toBe("I can't translate on the phone.");
+        expect(m.text).toBe("I can't translate without a language model yet, but I can search the web for it.");
         expect(m.choices!.map((c) => c.id)).toContain("web");
     });
 });

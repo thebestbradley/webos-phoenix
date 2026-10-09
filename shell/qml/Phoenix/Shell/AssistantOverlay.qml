@@ -339,8 +339,9 @@ Item {
         busy = true;
         _call("choose", { threadId: threadId, messageId: message.id, choice: choice.id }, function (r) {
             _settled(r);
-            // Settings, the browser or the app offered came up: out of their way.
-            if (r && r.returnValue !== false && (choice.id === "settings" || choice.id === "web" || choice.id === "open"))
+            // Settings, the browser or the app offered came up ("open", or
+            // "open:<n>", one of the things to do next): out of their way.
+            if (r && r.returnValue !== false && (choice.id === "settings" || choice.id === "web" || choice.id === "open" || choice.id.indexOf("open:") === 0))
                 ov.closeRequested();
         });
     }

@@ -116,7 +116,9 @@ var HISTORY = 20;               // turns a model sees
 var LOCKED_COMMANDS = ["timer", "timerStatus", "timerCancel", "stopwatch", "alarm", "alarmList", "toggle", "media", "volume",
                        "brightness", "lock", "battery", "weather", "convert", "worldTime", "calculate", "time"];
 
-var MESSAGE_FIELDS = ["id", "threadId", "role", "text", "time", "via", "source", "command", "status", "confirm", "choices", "chosen", "data", "followUp"];
+// kind "fallback": layer 4's "nothing here can" (offer), never shown to a
+// model as something the assistant said (history), so it is not copied.
+var MESSAGE_FIELDS = ["id", "threadId", "role", "text", "time", "via", "source", "command", "status", "confirm", "choices", "chosen", "data", "followUp", "kind"];
 var HHMM = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 // Settings > Assistant > First and Second follow-up (minutes): the reminder
 // brackets offered (the owner's choice, 9 October 2026).
@@ -372,16 +374,23 @@ function createAssistantService(deps) {
     }
 
     // A command's answer as a message: done, with the app it offers ("Open
-    // Calendar", choice "open") and what takes it back (undo).
+    // Calendar", choice "open"), what takes it back (undo), and other things
+    // to do next (r.actions: [{label, open: {appId, params, title}} | {label,
+    // run: {command, args, then?}}], choices "open:<n>" and "do:<n>"; e.g.
+    // "Turn On Location Services", then the weather asked again).
     function outcome(r, layer, source, cmd) {
         var data = r.data ? Object.assign({}, r.data) : {}, extra = {};
         if (r.open) data.open = r.open;
         if (r.undo) data.undo = r.undo;
         var choices = [];
+        (r.actions || []).forEach(function (a, i) {
+            choices.push({ id: (a.open ? "open:" : "do:") + i, label: a.label });
+        });
+        if (r.actions && r.actions.length) data.actions = r.actions;
         if (r.open) choices.push({ id: "open", label: lang().say.openApp(r.open.title) });
         if (r.offerWeb) choices.push({ id: "web", label: lang().say.searchWeb() });
         if (choices.length) extra.choices = choices;
-        return Object.assign({ via: layer, source: source, command: cmd.id, status: r.offerWeb ? "failed" : "done",
+        return Object.assign({ via: layer, source: source, command: cmd.id, status: r.offerWeb || r.failed ? "failed" : "done",
                                data: Object.keys(data).length ? data : undefined }, extra);
     }
     // The last thing the assistant did that can be taken back.
@@ -413,6 +422,18 @@ function createAssistantService(deps) {
         var m = lastUndoable(thread);
         return act(thread, commands.find(cat.all, "undo"), m ? { undo: m.data.undo, messageId: m.id } : {}, "commands", "");
     }
+    // An action's command ({command, args, then?}), as if asked: its
+    // permission and read-back as any; then the request it unblocked
+    // ("then": the weather once location is allowed) when it went through.
+    function runAction(thread, cat, run) {
+        var cmd = run && commands.find(cat.all, run.command);
+        if (!cmd) return Promise.resolve([say(thread, lang().say.failed("unknown command"), { via: "commands", status: "failed" })]);
+        return act(thread, cmd, run.args || {}, "commands", "").then(function (out) {
+            var last = out[out.length - 1];
+            if (!run.then || !last || last.status !== "done") return out;
+            return runAction(thread, cat, run.then).then(function (more) { return out.concat(more); });
+        });
+    }
     // The words after "When is it?": a time for the event asked about.
     function fillAwaiting(thread, text, cat) {
         var msgs = messagesOf(thread.id), last = null;
@@ -428,16 +449,27 @@ function createAssistantService(deps) {
     }
 
     // ---- Language models (layers 3 and 4) -------------------------------------------------------
+    // What a model is told. It answers what it can in words: facts, how-tos,
+    // recipes, advice, small talk; the phone's commands are tools for
+    // what the user asks the phone to do. (The owner's report, 9 October
+    // 2026: "You can't do that on the phone" was a model copying the
+    // grammar's old refusal and this prompt's "one to three sentences".)
     function systemPrompt(withTools) {
         var d = new Date(now());
-        return "You are Assistant, the voice assistant on a webOS phone. Answer briefly, in one to three sentences, in plain text without markdown; " +
-            "your answers are read aloud. Today is " + d.toDateString() + ", the time is " + lang().timeText(now()) + "." +
-            (withTools ? " Most questions need no tool: answer them in words. Call a tool only when the user clearly asks the phone to do " +
-             "the very thing the tool does (\"turn on the flashlight\" calls toggle with flashlight on); call at most one. " +
-             "Never call a tool for a question about the world." : " You cannot control the phone; if asked to, say the user can do it themselves.");
+        return "You are Assistant, the friendly, helpful assistant on a webOS Phoenix phone. " +
+            "Answer questions directly and accurately: facts, explanations, how-tos, recipes, advice, small talk and jokes. " +
+            "Be concise, since answers may be read aloud, but give every step when steps are needed (a short numbered list is fine). " +
+            "Write plain text without markdown headings or bold. If you are not sure of something, say so briefly. " +
+            "Today is " + d.toDateString() + ", the time is " + lang().timeText(now()) + "." +
+            (withTools ? " You can also control the device with the tools you are given. Call a tool only when the user asks the phone " +
+             "to do the very thing the tool does (\"turn on the flashlight\" calls toggle with flashlight on); call at most one. " +
+             "Never call a tool for a question you can answer in words."
+                       : " In this conversation you cannot operate the phone; if asked to, say which app or setting does it.");
     }
+    // The conversation as a model sees it: not the "nothing here can"
+    // fallbacks (kind "fallback") nor follow-up questions left unanswered.
     function history(thread) {
-        return messagesOf(thread.id).filter(function (m) { return !m.choices || m.chosen || m.status === "done"; }).slice(-HISTORY)
+        return messagesOf(thread.id).filter(function (m) { return m.kind !== "fallback" && !(m.followUp && !m.chosen); }).slice(-HISTORY)
             .map(function (m) { return { role: m.role, text: m.text }; });
     }
     function lastAsked(thread) {
@@ -466,7 +498,37 @@ function createAssistantService(deps) {
             if (cmd.id === "open" && call.args && call.args.name) args.name = call.args.name;
             return act(thread, cmd, args, layer, source, asked);
         }
-        return Promise.resolve([say(thread, result.text || s.done(), { via: layer, source: source })]);
+        return withNext(asked, result.text || s.done()).then(function (next) {
+            return [say(thread, result.text || s.done(), Object.assign({ via: layer, source: source }, next))];
+        });
+    }
+    // What to offer after a model's answer to words: a web search for a
+    // question about the world (not small talk), and what to do with the
+    // answer (lang say.related: "Save as Memo" for a recipe, Maps for a place).
+    function withNext(asked, text) {
+        var s = lang().say;
+        if (!asked || !s.context) return Promise.resolve({});
+        var ctx = s.context(asked), rel = s.related(asked, text);
+        return apps().then(function (list) {
+            var choices = [], actions = [];
+            rel.forEach(function (a) {
+                if (a.run) actions.push({ label: a.label, run: a.run });
+                else if (a.map) {
+                    var maps = appByTitle(list, "Maps");
+                    if (maps) actions.push({ label: a.label, open: { appId: maps.id, params: { query: a.map }, title: maps.title } });
+                }
+            });
+            actions.forEach(function (a, i) { choices.push({ id: (a.open ? "open:" : "do:") + i, label: a.label }); });
+            if (ctx.question) choices.push({ id: "web", label: s.searchWeb() });
+            if (!choices.length) return {};
+            var data = { webQuery: asked };
+            if (actions.length) data.actions = actions;
+            return { choices: choices, data: data };
+        });
+    }
+    function appByTitle(list, title) {
+        var t = String(title || "").toLowerCase();
+        return t ? list.filter(function (a) { return String(a.title).toLowerCase() === t; })[0] || null : null;
     }
 
     function localReady() {
@@ -492,18 +554,29 @@ function createAssistantService(deps) {
             .then(function (r) { return answer(thread, r, cat, "cloud", source, true, lastAsked(thread)); },
                   function (e) { return [say(thread, lang().say.cloudFailed(source, e.message), { via: "cloud", source: source, status: "failed" })]; });
     }
-    // Layer 4: nothing here could answer; the user chooses.
-    // instead: the note replaces "I can't do that on the phone" (it says why).
-    // asked: the words nothing understood, for the commands they come
-    // close to (not after a model tried).
+    // Layer 4: nothing here could answer; the user chooses. Never a dead
+    // end: the app that does it ("I can open Phone for you"), a web search
+    // for a question, a model; and the commands the words come close to.
+    // instead: the note replaces the words (it says why and what instead).
+    // asked: the words nothing understood (not after a model tried).
     function offer(thread, note, instead, asked) {
-        var s = lang().say, choices = [], p = defaultProvider();
-        if (p) choices.push({ id: "cloud:" + p.id, label: s.askCloud(providers.displayName(p)) });
-        choices.push({ id: "web", label: s.searchWeb() });
-        if (!p) choices.push({ id: "connect", label: s.connectModel() });
-        var close = asked && !note && s.suggest ? s.suggest(asked) : [];
-        var text = instead ? note : (note ? note + " " : "") + s.cantDo() + (close.length ? " " + s.didYouMeanAny(close) : "");
-        return [say(thread, text, { via: "commands", choices: choices, data: close.length ? { suggest: close } : undefined })];
+        var s = lang().say, p = defaultProvider(), ctx = asked && s.context ? s.context(asked) : { app: "" };
+        return apps().then(function (list) {
+            var app = appByTitle(list, ctx.app), choices = [], data = {};
+            if (app) {
+                data.actions = [{ label: s.openApp(app.title), open: { appId: app.id, params: app.params || {}, title: app.title } }];
+                choices.push({ id: "open:0", label: s.openApp(app.title) });
+            }
+            if (p) choices.push({ id: "cloud:" + p.id, label: s.askCloud(providers.displayName(p)) });
+            choices.push({ id: "web", label: s.searchWeb() });
+            if (!p) choices.push({ id: "connect", label: s.connectModel() });
+            var close = asked && !note && s.suggest ? s.suggest(asked) : [];
+            if (close.length) data.suggest = close;
+            var why = s.fallback(app ? "app" : ctx.question ? "question" : "other", app && app.title, close.length > 0);
+            var text = instead ? note : (note ? note + " " : "") + why + (close.length ? " " + s.didYouMeanAny(close) : "");
+            return [say(thread, text, { via: "commands", kind: "fallback", choices: choices,
+                                        data: Object.keys(data).length ? data : undefined })];
+        });
     }
 
     function route(thread, text, fq) {
@@ -629,10 +702,21 @@ function createAssistantService(deps) {
                 if (!o || !o.appId) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to open there"));
                 work = deps.luna.call("luna://com.palm.applicationManager/launch", { id: o.appId, params: o.params || {} })
                     .then(function () { return []; });
+            } else if (/^(?:open|do):\d+$/.test(c)) {
+                // One of the things to do next (outcome, offer, withNext).
+                var a = ((m.data && m.data.actions) || [])[Number(c.split(":")[1])];
+                if (!a) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to do there"));
+                if (a.open) {
+                    work = deps.luna.call("luna://com.palm.applicationManager/launch", { id: a.open.appId, params: a.open.params || {} })
+                        .then(function () { return []; });
+                } else {
+                    work = catalogue().then(function (cat) { return runAction(thread, cat, a.run); });
+                }
             } else if (c.indexOf("fu:") === 0 && m.followUp) {
                 work = answerFollowUp(thread, m, { choice: c });
             } else if (c === "web") {
-                work = catalogue().then(function (cat) { return act(thread, commands.find(cat.all, "search"), { query: asked }, "commands", ""); });
+                var query = (m.data && m.data.webQuery) || asked;
+                work = catalogue().then(function (cat) { return act(thread, commands.find(cat.all, "search"), { query: query }, "commands", ""); });
             } else {
                 work = deps.luna.call("luna://com.palm.applicationManager/launch", { id: SETTINGS_APP, params: { page: "assistant" } })
                     .then(function () { return []; });

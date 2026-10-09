@@ -277,11 +277,11 @@ describe("Connect model", () => {
     it("suggests the commands close to words it did not understand", async () => {
         const t = setup();
         const r = await ask(t, "I have a meeting thing with the dentist sometime");
-        expect(last(r).text).toBe("I can't do that on the phone. Did you mean something like “add a meeting with Sam tomorrow at 3” or “what's on my calendar tomorrow”?");
+        expect(last(r).text).toBe("I'm not sure how to help with that yet. Did you mean something like “add a meeting with Sam tomorrow at 3” or “what's on my calendar tomorrow”?");
         expect(last(r).data.suggest).toEqual(["add a meeting with Sam tomorrow at 3", "what's on my calendar tomorrow"]);
         // Nothing close: no suggestion.
         const q = await ask(t, "who wrote the odyssey");
-        expect(last(q).text).toBe("I can't do that on the phone.");
+        expect(last(q).text).toBe("I can't answer that on my own yet, but I can search the web for it.");
         expect(last(q).data).toBeUndefined();
     });
 
@@ -290,6 +290,77 @@ describe("Connect model", () => {
         t.as("org.webosphoenix.somebody");
         expect((await t.svc.connect({ mode: "local" })).errorCode).toBe(ERRORS.NOT_ALLOWED);
         expect((await t.svc.retry({ threadId: "x" })).errorCode).toBe(ERRORS.NOT_ALLOWED);
+    });
+});
+
+describe("never a dead end (the owner's banana pudding, 9 October 2026)", () => {
+    const MODEL = "qwen2.5-0.5b-instruct-q4_k_m";
+    const local = () => ({
+        status: () => Promise.resolve({ available: true, installed: [{ id: MODEL }], ramBytes: 4 * 2 ** 30 }),
+        ensure: () => Promise.resolve({ baseUrl: mock.url + "/v1" }),
+        download: () => Promise.resolve(), cancel: () => Promise.resolve(), remove: () => Promise.resolve(),
+    });
+
+    it("a question with no model: one reply, a web search, no \"on the phone\"", async () => {
+        const t = setup();
+        const r = await ask(t, "how do you make bananna pudding");
+        expect(r.messages.map((m: Reply) => m.role)).toEqual(["user", "assistant"]);
+        expect(last(r)).toMatchObject({ kind: "fallback", text: "I can't answer that on my own yet, but I can search the web for it." });
+        expect(last(r).choices.map((c: Reply) => c.id)).toEqual(["web", "connect"]);
+        expect(JSON.stringify(r)).not.toMatch(/on the phone/);
+    });
+
+    it("the model answering later never sees the fallback, so it cannot copy it", async () => {
+        const t = setup({ llm: local() });
+        const r = await ask(t, "how do you make bananna pudding");
+        await t.svc.connect({ threadId: r.thread.id, messageId: last(r).id, mode: "local" });
+        t.as("org.webosphoenix.settings");
+        await t.svc.selectModel({ id: MODEL });
+        t.as("org.webosphoenix.assistant");
+        const again = await t.svc.retry({ threadId: r.thread.id });
+        // One answer, from the model.
+        expect(again.messages.map((m: Reply) => [m.role, m.via])).toEqual([["assistant", "on-device"]]);
+        const sent = mock.requests.at(-1)!.body;
+        expect(sent.messages.filter((m: Reply) => m.role !== "system").map((m: Reply) => [m.role, m.content]))
+            .toEqual([["user", "how do you make bananna pudding"]]);
+        // Told to answer how-tos and recipes, not to refuse them.
+        const system = sent.messages.find((m: Reply) => m.role === "system").content;
+        expect(system).toMatch(/how-tos, recipes, advice, small talk/);
+        expect(system).not.toMatch(/one to three sentences|on the phone/);
+        // Then: save the recipe as a memo, or search the web.
+        expect(last(again).choices.map((c: Reply) => c.label)).toEqual(["Save as Memo", "Search the web"]);
+        const saved = await t.svc.choose({ threadId: r.thread.id, messageId: last(again).id, choice: "do:0" });
+        expect(last(saved).text).toBe("Saved to Memos.");
+        const memo = t.called("com.palm.db/put").at(-1)!.params.objects[0];
+        expect(memo).toMatchObject({ _kind: "com.palm.note:1" });
+        expect(memo.text).toMatch(/^Bananna pudding\n\nchat says: how do you make bananna pudding/);
+    });
+
+    it("the on-device model answers small talk with nothing to search", async () => {
+        const t = setup({ llm: local() });
+        t.as("org.webosphoenix.settings");
+        await t.svc.selectModel({ id: MODEL });
+        t.as("org.webosphoenix.assistant");
+        const r = await ask(t, "tell me a joke");
+        expect(r.messages).toHaveLength(2);
+        expect(last(r)).toMatchObject({ via: "on-device", text: "chat says: tell me a joke" });
+        expect(last(r).choices).toBeUndefined();
+        const q = await ask(t, "who wrote the odyssey");
+        expect(last(q).choices).toEqual([{ id: "web", label: "Search the web" }]);
+        const w = await t.svc.choose({ threadId: q.thread.id, messageId: last(q).id, choice: "web" });
+        expect(last(w).text).toBe("Searching the web for \"who wrote the odyssey\".");
+        // Device requests still go to the tools.
+        const f = await ask(t, "can you put the torch on for me");
+        expect(last(f)).toMatchObject({ command: "toggle", status: "done", via: "on-device" });
+    });
+
+    it("offers the app that does what it cannot", async () => {
+        const t = setup();
+        const r = await ask(t, "make a playlist of my favourite songs");
+        expect(last(r).text).toMatch(/^I don't have the tools for that yet, but I can open Music for you\. Did you mean/);
+        expect(last(r).choices.map((c: Reply) => c.id)).toEqual(["open:0", "web", "connect"]);
+        await t.svc.choose({ threadId: r.thread.id, messageId: last(r).id, choice: "open:0" });
+        expect(t.called("applicationManager/launch").at(-1)!.params).toEqual({ id: "org.webosphoenix.music", params: {} });
     });
 });
 

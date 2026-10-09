@@ -269,12 +269,14 @@ async function main() {
         await shot(app, "thread-everyday");
         // Words it does not understand: the commands they come close to.
         const close = await ask("I need the dentist appointment thing");
-        check(/^I can't do that on the phone\. Did you mean something like \u201cadd a meeting with Sam tomorrow at 3\u201d/.test(close), "close commands suggested: " + close);
+        check(/^I don't have the tools for that yet, but I can open Calendar for you\. Did you mean something like \u201cadd a meeting with Sam tomorrow at 3\u201d/.test(close),
+              "the app that does it offered, and close commands suggested: " + close);
+        check(await app.locator(".as-row").last().locator("[data-testid='as-choice-open:0']").textContent() === "Open Calendar", "an Open Calendar button");
         await app.locator(".as-row").last().locator("[data-testid='as-suggest-0']").click();
         check(await app.inputValue("[data-testid='as-input']") === "add a meeting with Sam tomorrow at 3", "a suggestion goes to the field");
         await app.fill("[data-testid='as-input']", "");
         // Nothing here can answer.
-        check(await ask("Who wrote the Odyssey?") === "I can't do that on the phone.", "a question the phone cannot answer");
+        check(await ask("Who wrote the Odyssey?") === "I can't answer that on my own yet, but I can search the web for it.", "a question nothing here can answer: a web search offered");
         const offerRow = app.locator(".as-row").last();
         check(await offerRow.locator("[data-testid='as-choice-web']").count() === 1 && /^Connect model$/.test((await offerRow.locator("[data-testid='as-choice-connect']").textContent()).trim()),
               "it offers Search the web and Connect model");
