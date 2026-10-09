@@ -1789,12 +1789,17 @@
     // host started it from the "launch" message before it reads this
     // request): the one /running lists and /close takes
     // (ApplicationManagerService.cpp's launch replies {processId} from
-    // WebAppMgr). "" when the host keeps no processes (no shell).
+    // WebAppMgr). "" when the host keeps no processes (no shell, or one
+    // that cannot answer: the launch is answered all the same, and soon).
     function launchedProcessId(id, params) {
         if (!runtime.hostOp) return Promise.resolve("");
-        return runtime.hostOp("processId", { appId: id, params: params || {} }).then(function (r) {
+        var asked = Promise.resolve().then(function () {
+            return runtime.hostOp("processId", { appId: id, params: params || {} });
+        }).then(function (r) {
             return r && r.ok && typeof r.processId === "string" ? r.processId : "";
-        });
+        }, function () { return ""; });
+        var late = new Promise(function (resolve) { setTimeout(function () { resolve(""); }, 2000); });
+        return Promise.race([asked, late]);
     }
     runtime.launchedProcessId = launchedProcessId;
     function launchedReply(reply, id, params, extra) {
