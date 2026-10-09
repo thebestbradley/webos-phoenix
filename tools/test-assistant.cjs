@@ -378,6 +378,9 @@ async function main() {
         check(await ask("Put the flashlight on for me") === "The flashlight is on.", "allowed, the cloud model acts");
         check(/Anthropic/.test(await app.locator(".as-via").last().textContent()), "and the answer says it was Anthropic");
         await shot(app, "thread-cloud");
+        // A short answer is one line (a balloon's width is the row's 80%).
+        const tall = await app.locator(".as-bubble:has-text('The flashlight is on.')").last().evaluate((b) => b.getBoundingClientRect().height);
+        check(tall < 48, "a short answer on one line: " + tall + " px");
 
         // ---- Conversations ----------------------------------------------------------------------
         // A TouchPad app: on a tablet the list is beside the conversation;

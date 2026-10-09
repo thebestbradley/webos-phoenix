@@ -121,7 +121,8 @@
  * beside its words (as Messaging shows a contact's picture), quick replies
  * under a follow-up question, the unread count in Conversations, the bird
  * in the header. */
-.as-line { display: flex; align-items: flex-end; gap: 6px; max-width: 100%; }
+/* As wide as the row, so a balloon's 80% is of the row, not of itself (it wrapped short words). */
+.as-line { display: flex; align-items: flex-end; gap: 6px; width: 100%; }
 .as-row.out .as-line { justify-content: flex-end; }
 .as-row.with-avatar .as-bubble { max-width: calc(80% - 36px); }
 .as-avatar { flex: none; width: 30px; height: 33px; margin-bottom: 1px; }
