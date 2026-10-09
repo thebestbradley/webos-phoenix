@@ -676,7 +676,12 @@ Item {
             // that runs: as the user chose (appRelaunch); a background
             // launch, or an app launching itself (its dashboard or banner
             // tapped), only tells its page.
-            var how = background || appId === target ? "front" : appRelaunch;
+            // {newCard: true} (Phoenix, the application manager's launch):
+            // another card of it whatever the setting, in a stack of its
+            // own, e.g. the Assistant opening a conversation in a new card
+            // (apps/assistant: its "Open in New Card").
+            var newCard = payload.newCard === true && !background;
+            var how = newCard ? "new" : background || appId === target ? "front" : appRelaunch;
             if (running !== "" && !_opensNewCard(target, how)) {
                 var refresh = how === "refresh";
                 if ((refresh || (target === payload.id && Object.keys(params).length > 0)) && _windows[running] && _windows[running].relaunch)
@@ -688,7 +693,7 @@ Item {
             // Launched by the app in front: the new card joins its stack,
             // e.g. the browser opened from a link in Email
             // (CardWindowManager::prepareAddWindow, :561-567).
-            var joins = uid !== "" && uid === focusedUid && !background;
+            var joins = uid !== "" && uid === focusedUid && !background && !newCard;
             var launched = launch(target, uid, target === payload.id ? params : null, joins, how);
             if (launched !== "" && !background)
                 cardFocusRequested(launched);

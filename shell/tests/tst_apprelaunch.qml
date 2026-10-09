@@ -142,6 +142,28 @@ Item {
             compare(windows.windowFor(e).refreshCount, 1);
         }
 
+        // An app asking for a new card of itself ({newCard: true}, the
+        // Assistant's "Open in New Card"): another card whatever the
+        // setting, in a stack of its own beside the asking card's, with its
+        // params; a background launch or a one-card app does not.
+        function test_newCardAsked() {
+            var a = shell.openApp(email);
+            windows._hostMessage(email, a, "launch", { id: email, params: { conversationId: "t1" }, newCard: true });
+            var list = cardsOf(email);
+            compare(list.length, 2);
+            var b = list[0] === a ? list[1] : list[0];
+            verify(windows.cards.get(windows.cardIndex(a)).groupId !== windows.cards.get(windows.cardIndex(b)).groupId,
+                   "its own stack");
+            compare(windows.cardIndex(b), windows.cardIndex(a) + 1, "right of the asking card");
+            compare(windows.windowFor(a).relaunchParams, null, "the asking card keeps its own");
+            tryCompare(shell.cardView, "currentUid", b, 2000);
+            windows._hostMessage(email, a, "launch", { id: email, params: { $activity: { activityId: 2 } }, newCard: true });
+            compare(cardsOf(email).length, 2);
+            var p = shell.openApp(windows.phoneAppId);
+            windows._hostMessage(windows.phoneAppId, p, "launch", { id: windows.phoneAppId, params: {}, newCard: true });
+            compare(cardsOf(windows.phoneAppId).length, 1);
+        }
+
         // The setting reaches the shell through the runtime's systemStatus
         // (anything else is "front").
         function test_unknownIsFront() {

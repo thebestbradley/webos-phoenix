@@ -1637,8 +1637,12 @@
     runtime.exhibitionApps = exhibitionApps;
 
     register(["com.palm.applicationManager", "com.webos.applicationManager"], {
+        // {newCard: true} (Phoenix): another card of the app in a stack of
+        // its own, even while one runs (the shell's appRelaunch "new" for
+        // this launch; one-card apps such as the phone keep theirs).
         "/launch": function (p, reply) {
-            host.postToHost("launch", { id: appId(p.id), params: aliasParams(p.id, p.params) });
+            host.postToHost("launch", Object.assign({ id: appId(p.id), params: aliasParams(p.id, p.params) },
+                                                    p.newCard === true ? { newCard: true } : {}));
             reply(ok({ processId: String(Date.now()) }));
         },
         // As on webOS: {id, params} launches the app; {target} goes to the
