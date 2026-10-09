@@ -85,22 +85,20 @@ Item {
         }
     }
 
-    // The moves as they start and end (with when), and the effects played.
+    // The moves as they start and end, and the effects played.
     QtObject {
         id: moved
         property var started: []
         property var ended: []
         property var fx: []
-        property real startedAt: 0
-        property real endedAt: 0
         property real minFade: 1
         property real maxFade: 0
         function reset() { started = []; ended = []; fx = []; minFade = maxFade = bird.fade; }
     }
     Connections {
         target: bird
-        function onMoveStarted(name) { moved.started = moved.started.concat([name]); moved.startedAt = Date.now(); }
-        function onMoveEnded(name) { moved.ended = moved.ended.concat([name]); moved.endedAt = Date.now(); }
+        function onMoveStarted(name) { moved.started = moved.started.concat([name]); }
+        function onMoveEnded(name) { moved.ended = moved.ended.concat([name]); }
         function onFxPlayed(name) { moved.fx = moved.fx.concat([name]); }
         function onFadeChanged() { moved.minFade = Math.min(moved.minFade, bird.fade); moved.maxFade = Math.max(moved.maxFade, bird.fade); }
     }
@@ -501,14 +499,27 @@ Item {
             compare(bird._gx, 0);
         }
 
-        // Animation speed scales the moves (Fast: 60% of the time).
+        // Animation speed scales the moves (Fast: 60% of the time): the
+        // lengths its animations are given. (Not the wall clock: Qt Quick's
+        // animation driver advances animations a vsync interval per frame
+        // drawn, qtdeclarative src/quick/scenegraph/qsgcontext.cpp
+        // QSGAnimationDriver::advance, so with frames drawn faster than that
+        // they end before their time by the wall clock.)
         function test_animationSpeedScalesTheMoves() {
-            Theme.animationSpeed = "fast";
             var m = bird.art.motion.moves.enter;
+            function given() {
+                var l = bird.acts.whole._ml, sum = 0;
+                for (var i = 0; i < l.length; ++i)
+                    sum += l[i];
+                return sum;
+            }
+            compare(bird.enter(0), m.period);
+            fuzzyCompare(given(), m.period, 11);
+            Theme.animationSpeed = "fast";
             compare(bird.enter(0), Math.round(m.period * 0.6));
-            tryVerify(function () { return moved.ended.indexOf("enter") >= 0; }, 6000);
-            // An animation never ends before its time, however late a slow machine draws it.
-            verify(moved.endedAt - moved.startedAt >= Math.round(m.period * 0.6) - 20, "fast: " + (moved.endedAt - moved.startedAt));
+            // Each step rounded to the millisecond.
+            fuzzyCompare(given(), m.period * 0.6, 11);
+            tryVerify(function () { return moved.ended.indexOf("enter") >= 0 && bird.movesAtRest(); }, 6000, "played to its end");
         }
 
         // Reduce motion: it enters and leaves with a plain fade; no moves,
