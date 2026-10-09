@@ -11,7 +11,10 @@
 // entrance is born of embers, falls, lands with a squash and a dust cloud
 // and settles at rest; the exit bursts into embers and is gone; each idle
 // and reaction plays and comes back to rest; Reduce motion fades it in
-// and out instead; Animation speed scales them.
+// and out instead; Animation speed scales them. Its magic (magic): the
+// aura glows by the pose and radiates rings, sparks come and go in the
+// pose's share of the lanes, a mist now and then; held still under Reduce
+// motion; none pile up as poses and moves come and go.
 
 import QtQuick
 import QtTest
@@ -355,7 +358,7 @@ Item {
             verify(acted.range.body.sy[0] < 0.8, "the landing squash: " + acted.range.body.sy[0]);
             verify(acted.span("wingL", "rot") > 90 && acted.span("wingR", "rot") > 90, "flapping");
             verify(acted.range.crest.sy[1] > 1.5, "the crest flaring: " + acted.range.crest.sy[1]);
-            compare(moved.fx.join(" "), "swirl fireball dust");
+            compare(moved.fx.join(" "), "swirl fireball dust surge");
             tryVerify(function () { return bird.movesAtRest() && bird.atRest(); }, 3000, "at rest");
             compare(bird.faceEyes, "");
             compare(bird.faceBeak, "");
@@ -556,6 +559,123 @@ Item {
             Theme.reduceMotion = true;
             for (var ch in bird.acts)
                 verify(!bird.acts[ch].isRunning() && bird.acts[ch].rot === 0 && bird.acts[ch].ty === 0 && bird.acts[ch].sy === 1, ch);
+        }
+    
+        // ---- Magic ----
+        function lane(i) {
+            var l = findChild(bird, "assistantBirdSparkLane-" + i);
+            verify(l, "spark lane " + i);
+            return l;
+        }
+        // Its sparks showing now (a lane's come one after another: one at most).
+        function lit(l) {
+            var n = 0;
+            for (var i = 0; i < l.children.length; ++i)
+                if (l.children[i].opacity > 0)
+                    ++n;
+            return n;
+        }
+
+        // The aura glows by the pose, flickering with the crest and
+        // radiating rings; the pose's share of the spark lanes show and
+        // sparks come and go in them; idle mists now and then.
+        function test_itsMagicIsThere() {
+            var magic = bird.art.magic;
+            var aura = findChild(bird, "assistantBirdAura");
+            verify(aura && aura.visible);
+            tryVerify(function () { return Math.abs(bird.auraLevel - magic.poses.idle[0]) < 0.001; }, 4000);
+            var seen = {};
+            tryVerify(function () { seen[aura.opacity.toFixed(3)] = true; return Object.keys(seen).length >= 4; }, 10000, "the aura breathing");
+            var ring = findChild(bird, "assistantBirdAuraRing-0");
+            verify(ring);
+            // (Waits are generous: the animation clock runs behind the wall clock on a busy machine.)
+            tryVerify(function () { return ring.opacity > 0.3 && ring.scale > magic.aura.rings.scale[0]; },
+                      4 * (magic.aura.rings.period + magic.aura.rings.gap), "a ring radiating");
+            compare(magic.sparkLanes.length, magic.sparks.lanes);
+            var poses = Object.keys(bird.art.poses);
+            for (var p = 0; p < poses.length; ++p) {
+                bird.pose = poses[p];
+                compare(bird.sparkLanes, magic.poses[poses[p]][1], poses[p]);
+                for (var i = 0; i < magic.sparks.lanes; ++i)
+                    compare(lane(i).shown, i < magic.poses[poses[p]][1], poses[p] + " lane " + i);
+            }
+            bird.pose = "done";
+            tryVerify(function () { return Math.abs(bird.auraLevel - 1) < 0.001; }, 4000, "brighter as it celebrates");
+            // Every lane plays (the pose shows its share); a spark lights in each.
+            var lighted = {};
+            tryVerify(function () {
+                for (var i = 0; i < magic.sparks.lanes; ++i) {
+                    verify(lane(i).playing, "lane " + i + " playing");
+                    if (lit(lane(i)) > 0)
+                        lighted[i] = true;
+                }
+                return Object.keys(lighted).length === magic.sparks.lanes;
+            }, 6 * (2600 + 2600 + 1700), "sparks in every lane: " + JSON.stringify(lighted));
+            bird.pose = "idle";
+            var mist = findChild(bird, "assistantBirdMist");
+            verify(mist.visible);
+            tryCompare(mist, "opacity", 1, 4000);
+            bird.pose = "confused";
+            tryCompare(mist, "opacity", 0, 4000, "no mist when unsure");
+            // Nor rings.
+            tryCompare(ring, "opacity", 0, 4000, "no rings when unsure");
+        }
+
+        // Reduce motion: a faint still glow; no sparks, rings or mist, and nothing changes.
+        function test_reducedMotionHoldsTheMagicStill() {
+            bird.pose = "done";
+            Theme.reduceMotion = true;
+            var magic = bird.art.magic;
+            var aura = findChild(bird, "assistantBirdAura");
+            compare(bird.auraLevel, magic.poses.done[0] * magic.aura.still);
+            fuzzyCompare(aura.opacity, bird.auraLevel, 0.0001);
+            verify(aura.opacity > 0.3, "still a glow: " + aura.opacity);
+            verify(!findChild(bird, "assistantBirdAuraRing-0"), "no rings");
+            verify(!findChild(bird, "assistantBirdSparks").visible && !findChild(bird, "assistantBirdMist").visible);
+            for (var i = 0; i < magic.sparks.lanes; ++i) {
+                verify(!lane(i).playing, "lane " + i);
+                compare(lit(lane(i)), 0, "lane " + i);
+            }
+            var o = aura.opacity, b = bird.auraBreath;
+            wait(400);
+            compare(aura.opacity, o);
+            compare(bird.auraBreath, b);
+            compare(bird.auraBreath, 0);
+        }
+
+        // As poses change and moves come and go (the entrance, cheers),
+        // each lane still lights one spark at most; the surge plays once a
+        // move, not more; while it enters or leaves, none.
+        function test_theMagicDoesNotPileUp() {
+            var magic = bird.art.magic;
+            var poses = Object.keys(bird.art.poses);
+            var most = 0, surges = 0;
+            var c = function (name) { if (name === "surge") ++surges; };
+            bird.fxPlayed.connect(c);
+            try {
+                for (var r = 0; r < 3; ++r) {
+                    for (var p = 0; p < poses.length; ++p) {
+                        bird.pose = poses[p];
+                        bird.react("cheer");
+                        wait(60);
+                        for (var i = 0; i < magic.sparks.lanes; ++i)
+                            most = Math.max(most, lit(lane(i)));
+                    }
+                }
+                verify(most <= 1, "one spark a lane at most: " + most);
+                bird.pose = "idle";
+                tryVerify(function () { return bird.move === ""; }, 8000);
+                surges = 0;
+                bird.enter(0);
+                verify(!bird._sparkling, "none while it is born");
+                tryVerify(function () { return moved.ended.indexOf("enter") >= 0; }, 15000);
+                compare(surges, 1, "one surge as it lands");
+                verify(bird._sparkling, "sparkling again");
+                for (var j = 0; j < magic.sparks.lanes; ++j)
+                    verify(lane(j).playing, "lane " + j);
+            } finally {
+                bird.fxPlayed.disconnect(c);
+            }
         }
     }
 }

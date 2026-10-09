@@ -23,6 +23,9 @@ with the project's owner on 7–8 October 2026 ([art/assistant-bird/PROVENANCE.m
 - It enters born out of fire and drops in with a bump of dust, leaves in a
   burst of embers, moves its whole body now and then while idle, and
   reacts to what the user does (see *Moves* below).
+- A little magic about it: a warm gold aura that breathes, flickers with
+  its crest and radiates soft rings, tiny sparks and glittering motes
+  around it, now and then a faint mist (see *Magic* below).
 
 ## One source, two renderers
 
@@ -162,7 +165,9 @@ as before.
 in, each its angle, radius, size, delay and colour), `glow` (a ball of
 fire: keys of scale and opacity; `fireball`, `flash`), `puff` (soft dust
 clouds billowing out from its feet: `dust`, the smaller `puff`; in the app, on its light ground, in the darker `dustOnLight`) and
-`burst` (embers flying out and up). The shell draws them with shapes and
+`burst` (embers flying out and up) and `surge` (the aura flaring for a
+moment, in its gold: as it lands from its entrance and at the top of a
+cheer). The shell draws them with shapes and
 plays them as property animations (no script per frame, no particle
 system, so they look the same on the software renderer); the app as SVG
 shapes in nested groups with generated keyframes (`ab-fx-*`), each with
@@ -170,6 +175,68 @@ its own curve, as the shell's.
 
 `phoenix-sim --scene assistantbirdmoves` plays them all one after
 another, large, logging the frame rate.
+
+## Magic
+
+`magic` in `bird.json`: always there while it shows, under everything
+else it does, and never in the way.
+
+- **The aura** (`magic.aura`): a warm gold light behind it (a radial
+  gradient, gold at `alpha` in its centre to nothing at `radius`). It
+  breathes (its opacity and size between `breath`'s lows and highs, over
+  4.2 s, there and back), flickers with the crest (its opacity follows the
+  crest flame's height, by `flicker.depth`: in the shell bound to the flame
+  itself, in the app keyframes of the same length in step with it) and
+  radiates rings: soft bands growing out from it and fading, one at a time
+  (`rings`: 2.7 s each, 2.7 s apart). It flares for a moment as it lands
+  from its entrance and at the top of a cheer (the `surge` effect).
+- **Sparks** (`magic.sparks`): tiny four-pointed glints (turning a little)
+  and glittering motes in gold, flame, ember and white, appearing at random
+  around it (between two ellipses about its middle, none below its feet),
+  drifting up and aside and fading, about a second and a half each. They
+  play in lanes, each of five sparks one after another with a random gap
+  before each; the generator picks every spark (place, size, colour, gap,
+  life, drift, rise, glint or mote) once from `seed`, so each lane has its
+  own length (12 to 17 s) and together they never look periodic, and each
+  bird starts each lane at a random point (birds side by side do not
+  sparkle in step).
+- **Mist** (`magic.mist`): now and then (every 4 to 9 s) a faint haze
+  rising behind it, shimmering (brighter, dimmer, brighter, gone) as it
+  spreads, about 3 s; three, picked from their own seed.
+
+How much of it shows goes with the pose (`magic.poses`: [aura, sparks
+lanes, mist, rings]):
+
+| Pose | Aura | Sparks (lanes of 6) | Mist | Rings |
+| --- | --- | --- | --- | --- |
+| `asleep` | 0.35 | 0 | no | no |
+| `hello`, `speaking` | 0.7 | 2 | yes | yes |
+| `idle` | 0.6 | 2 | yes | yes |
+| `asking` | 0.65 | 2 | yes | yes |
+| `listening` | 0.85 | 4 | yes | yes |
+| `thinking` | 0.8 | 4 | yes | yes |
+| `working` | 0.85 | 3 | yes | yes |
+| `done` | 1 | 6 | yes | yes |
+| `proud` | 0.95 | 5 | yes | yes |
+| `confused` | 0.5 | 1 | no | no |
+| `shy` | 0.45 | 1 | no | no |
+
+Every lane plays while it shows (only the pose's share is seen), so a
+celebration shows more sparks at once, mid-flight. None play while it is
+born or bursts (its entrance and exit have their own embers). Animation
+speed scales all of it; under Reduce motion (and prefers-reduced-motion in
+the app) there are no sparks, mist or rings and the aura holds still, a
+faint glow (`still`: 0.8 of the pose's brightness).
+
+The shell draws it as the rest: shapes and rectangles, plain property
+animations, no particle system and no script per frame, so it looks the
+same on the software renderer. What it costs is what it fills: on the
+simulator's software GL a dozen birds' glows are most of a frame, so the
+aura is not drawn behind the body (an elliptical hole there, `hole`), the
+rings are bands (only the band is filled), one at a time, and none in the
+subdued poses. The app draws it as SVG with generated keyframes
+(`ab-aura-*`, `ab-spark-<lane>-<n>`, `ab-mist-<n>`), each lane's start set
+by `--ab-phase`. `magic: false` on `AssistantBird` turns it off.
 
 ## The poses
 
@@ -204,6 +271,7 @@ cycles through the poses; `--scene assistantbirds` shows them all.
    `wingL`, `wingR`, `crestScale`, `crestRotation`, `beakTilt` (degrees,
    clockwise) and `extras` (keys of `extras`). New eyes, lids, beaks or
    extras go in their tables, with any new parts in `parts`. Give it its
+   magic in `magic.poses` (the generator refuses a pose without) and its
    acting in `motion.acting.poses` (a `period` and its channels' keys;
    `every: [min, max]` for one now and then).
 2. Run `python3 tools/gen-assistant-bird.py`; it refuses a pose that names

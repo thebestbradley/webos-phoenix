@@ -51,6 +51,17 @@
 // puffs, all plain property animations over shapes). gazeX, gazeY: where
 // it looks (the text it watches, a scroll it follows).
 //
+// Its magic (magic, always there while it shows): a warm gold aura behind
+// it that breathes, flickers with its crest and radiates soft rings (and
+// flares for a moment as it lands from its entrance and cheers: the surge
+// effect); tiny sparks and glittering motes appearing around it at random,
+// drifting up and fading, a few at a time (more as it listens, thinks and
+// celebrates: magic.poses); now and then a faint shimmering mist. The
+// randomness is picked once by the generator (lanes of sparks, each its own
+// length, so together they never repeat in step), each bird starting each
+// lane at a random point; all plain property animations over shapes and
+// rectangles (no particle system), as everything else.
+//
 // All of it through Theme.motion (Settings > Advanced > Animation speed).
 // With `animated` false (Reduce motion) every pose is held still: no
 // flicker, breath, blink, hop, acting, moves, effects or beak flapping;
@@ -80,6 +91,8 @@ Item {
     // Plays the idle pool now and then (and idle's look around): off while
     // the user is busy with it (typing).
     property bool fidgety: true
+    // Its magic (magic): the aura, the sparks, the mist.
+    property bool magic: true
     // Its own motion only while drawn.
     readonly property bool _live: animated && visible && opacity > 0
     // Shown (1) or gone (0): entering and leaving under Reduce motion fade it.
@@ -562,6 +575,28 @@ Item {
     // How high above the ground it is (the hop, a move's leap), for its shadow.
     readonly property real _air: Math.max(0, lift - actBody.ty - actWhole.ty)
 
+    // ---- Magic: the aura, the sparks, the mist (magic) --------------------------------------------
+    readonly property var _magic: art.magic
+    readonly property var _magicPose: _magic.poses[pose] || _magic.poses.idle
+    // The aura's brightness for the pose, eased to (still: at once, held at a share of it).
+    property real _auraEased: _magicPose[0]
+    Behavior on _auraEased { enabled: bird.animated; NumberAnimation { duration: Theme.motion(bird._magic.aura.ease); easing.type: Easing.InOutQuad } }
+    readonly property real auraLevel: animated ? _auraEased : _magicPose[0] * _magic.aura.still
+    // How many spark lanes show, the mist's: 0 or 1.
+    readonly property int sparkLanes: _magicPose[1]
+    readonly property bool misty: _magicPose[2] === 1
+    readonly property bool ringing: _magicPose[3] === 1
+    // Sparks and mist play while it is there (not while it is born or bursts).
+    readonly property bool _sparkling: _live && magic && moveKind !== "enter" && moveKind !== "leave" && !gone
+    property real auraBreath: 0
+    SequentialAnimation {
+        running: bird._live && bird.magic
+        loops: Animation.Infinite
+        NumberAnimation { target: bird; property: "auraBreath"; to: 1; duration: Theme.motion(bird._magic.aura.breath.period / 2); easing.type: Easing.InOutSine }
+        NumberAnimation { target: bird; property: "auraBreath"; to: 0; duration: Theme.motion(bird._magic.aura.breath.period / 2); easing.type: Easing.InOutSine }
+        onRunningChanged: if (!running) bird.auraBreath = 0
+    }
+
     // ---- Breathing and blinking -----------------------------------------------------------------
     readonly property var _breath: art.motion.breath
     property real breathX: 1
@@ -979,6 +1014,16 @@ Item {
             }
         }
 
+        // Now and then a faint shimmering mist behind it.
+        Item {
+            id: mistLayer
+            objectName: "assistantBirdMist"
+            visible: bird.magic && bird.animated
+            opacity: bird.misty && bird._sparkling ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.motion(bird._magic.aura.ease) } }
+            MistLane { running: bird._sparkling && bird.misty }
+        }
+
         // The bird, apart from the extras around it.
         Item {
             id: body
@@ -1010,6 +1055,79 @@ Item {
                         GradientStop { position: 1; color: "#00F2B705" }
                     }
                     PathSvg { path: "M-2 236 A210 210 0 1 0 418 236 A210 210 0 1 0 -2 236 Z" }
+                }
+            }
+            // The aura (magic.aura): a warm gold light breathing behind it,
+            // flickering with its crest's flame, radiating soft rings.
+            Item {
+                id: aura
+                objectName: "assistantBirdAura"
+                readonly property var spec: bird._magic.aura
+                visible: bird.magic
+                // The crest's flame's height, as a share of its tallest (magic.aura.flicker).
+                readonly property real _flickMax: Math.max.apply(null, bird.art.motion.flicker[spec.flicker.with].keys.map(function (k) {
+                    return 1 + aura.spec.flicker.depth * (k[2] - 1); }))
+                readonly property real flick: (1 + spec.flicker.depth * (crestFlame.sy - 1)) / _flickMax
+                opacity: bird.auraLevel * (bird.animated ? (spec.breath.opacity[0] + (spec.breath.opacity[1] - spec.breath.opacity[0]) * bird.auraBreath) * flick : 1)
+                transform: Scale {
+                    origin.x: aura.spec.origin[0]; origin.y: aura.spec.origin[1]
+                    xScale: aura.spec.breath.scale[0] + (aura.spec.breath.scale[1] - aura.spec.breath.scale[0]) * bird.auraBreath
+                    yScale: xScale
+                }
+                Glow {
+                    x: aura.spec.origin[0] - r
+                    y: aura.spec.origin[1] - r
+                    r: aura.spec.radius
+                    hole: aura.spec.hole
+                    stops: [[0, bird._auraColor(aura.spec.alpha)], [0.45, bird._auraColor(aura.spec.alpha * 0.45)],
+                            [0.7, bird._auraColor(aura.spec.alpha * 0.16)], [1, bird._auraColor(0)]]
+                }
+                // Soft bands growing out from it and fading, one after another.
+                Repeater {
+                    model: bird.animated ? aura.spec.rings.count : 0
+                    // A band (only it is filled: the frame rate of a dozen birds on a software GL).
+                    delegate: Shape {
+                        id: ring
+                        required property int index
+                        readonly property var rs: aura.spec.rings
+                        readonly property real ri: rs.radius * rs.inner
+                        objectName: "assistantBirdAuraRing-" + index
+                        preferredRendererType: Shape.GeometryRenderer
+                        x: aura.spec.origin[0]
+                        y: aura.spec.origin[1]
+                        opacity: 0
+                        visible: opacity > 0
+                        scale: rs.scale[0]
+                        transformOrigin: Item.TopLeft
+                        ShapePath {
+                            strokeColor: "transparent"
+                            fillRule: ShapePath.OddEvenFill
+                            fillGradient: RadialGradient {
+                                centerX: 0; centerY: 0; centerRadius: ring.rs.radius
+                                focalX: 0; focalY: 0
+                                GradientStop { position: ring.rs.inner; color: bird._auraColor(0) }
+                                GradientStop { position: (1 + 2 * ring.rs.inner) / 3; color: bird._auraColor(ring.rs.alpha) }
+                                GradientStop { position: 1; color: bird._auraColor(0) }
+                            }
+                            PathSvg { path: bird._circle(0, 0, ring.rs.radius) + " " + bird._circle(0, 0, ring.ri) }
+                        }
+                        SequentialAnimation {
+                            running: bird._live && bird.magic && bird.ringing
+                            PauseAnimation { duration: Theme.motion((ring.rs.period + ring.rs.gap) * ring.index / ring.rs.count) }
+                            SequentialAnimation {
+                                loops: Animation.Infinite
+                                ParallelAnimation {
+                                    NumberAnimation { target: ring; property: "scale"; from: ring.rs.scale[0]; to: ring.rs.scale[1]; duration: Theme.motion(ring.rs.period) }
+                                    SequentialAnimation {
+                                        NumberAnimation { target: ring; property: "opacity"; from: 0; to: 1; duration: Theme.motion(ring.rs.period * 0.25); easing.type: Easing.OutQuad }
+                                        NumberAnimation { target: ring; property: "opacity"; to: 0; duration: Theme.motion(ring.rs.period * 0.75) }
+                                    }
+                                }
+                                PauseAnimation { duration: Theme.motion(ring.rs.gap) }
+                            }
+                            onRunningChanged: if (!running) { ring.opacity = 0; ring.scale = ring.rs.scale[0]; }
+                        }
+                    }
                 }
             }
             Item {
@@ -1046,7 +1164,7 @@ Item {
                 Flicker {
                     name: "crestGust"
                     running: bird._live
-                    Flicker { objectName: "assistantBirdFlame"; name: "crest"; running: bird._live; Part { name: "crest" } }
+                    Flicker { id: crestFlame; objectName: "assistantBirdFlame"; name: "crest"; running: bird._live; Part { name: "crest" } }
                     Flicker { name: "crestInner"; running: bird._live; Part { name: "crestInner" } }
                     Flicker { name: "crestCore"; running: bird._live; Part { name: "crestCore" } }
                 }
@@ -1238,6 +1356,28 @@ Item {
             }
         }
 
+        // Sparks and motes around it, drifting up: the pose's share of the lanes.
+        Item {
+            id: sparkLayer
+            objectName: "assistantBirdSparks"
+            visible: bird.magic && bird.animated
+            opacity: bird._sparkling ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.motion(bird._magic.aura.ease) } }
+            Repeater {
+                model: bird._magic.sparkLanes
+                delegate: SparkLane {
+                    required property var modelData
+                    required property int index
+                    objectName: "assistantBirdSparkLane-" + index
+                    lane: modelData
+                    shown: index < bird.sparkLanes
+                    // All play while it sparkles (the pose shows its share): more
+                    // show at once as it celebrates, mid-flight.
+                    running: bird._sparkling
+                }
+            }
+        }
+
         // The effects (embers, the fireball, dust): each shown while it plays.
         Repeater {
             model: Object.keys(bird.art.effects)
@@ -1260,7 +1400,7 @@ Item {
         readonly property var colors: BirdData.bird.colors
         property int plays: 0
         // A fireball behind the bird (born out of it); embers and dust over it.
-        z: spec.kind === "glow" ? -1 : 1
+        z: spec.kind === "glow" || spec.kind === "surge" ? -1 : 1
         visible: showing.running
         function play() {
             if (!bird.animated)
@@ -1276,7 +1416,8 @@ Item {
         // glow: a ball of fire, scaled and faded through its keys.
         Shape {
             id: ball
-            visible: fx.spec.kind === "glow"
+            visible: fx.spec.kind === "glow" || fx.spec.kind === "surge"
+            readonly property bool aura: fx.spec.kind === "surge"
             x: fx.spec.origin[0]
             y: fx.spec.origin[1]
             opacity: 0
@@ -1289,17 +1430,18 @@ Item {
                 fillGradient: RadialGradient {
                     centerX: 0; centerY: 0; centerRadius: ball.r
                     focalX: 0; focalY: 0
-                    GradientStop { position: 0; color: fx.colors.flameCore }
-                    GradientStop { position: 0.3; color: fx.colors.flame }
-                    GradientStop { position: 0.6; color: "#C0" + fx.colors.ember.substring(1) }
-                    GradientStop { position: 1; color: "#00" + fx.colors.ember.substring(1) }
+                    // A fireball; or the aura's gold (a surge).
+                    GradientStop { position: 0; color: ball.aura ? bird._auraColor(0.6) : fx.colors.flameCore }
+                    GradientStop { position: 0.3; color: ball.aura ? bird._auraColor(0.4) : fx.colors.flame }
+                    GradientStop { position: 0.6; color: ball.aura ? bird._auraColor(0.15) : "#C0" + fx.colors.ember.substring(1) }
+                    GradientStop { position: 1; color: ball.aura ? bird._auraColor(0) : "#00" + fx.colors.ember.substring(1) }
                 }
                 PathSvg { path: "M" + (-ball.r) + " 0 A" + ball.r + " " + ball.r + " 0 1 0 " + ball.r + " 0 A" + ball.r + " " + ball.r + " 0 1 0 " + (-ball.r) + " 0 Z" }
             }
             readonly property var k: fx.spec.keys4 || [[0, 0, 0, [0, 0, 1, 1]], [1, 0, 0, [0, 0, 1, 1]], [1, 0, 0, [0, 0, 1, 1]], [1, 0, 0, [0, 0, 1, 1]]]
             function step(i) { return Theme.motion((k[i + 1][0] - k[i][0]) * fx.spec.period); }
             function curve(i) { var c = k[i + 1][3]; return [c[0], c[1], c[2], c[3], 1, 1]; }
-            Connections { target: fx; function onPlaysChanged() { if (fx.spec.kind === "glow") ballAnim.restart(); } }
+            Connections { target: fx; function onPlaysChanged() { if (ball.visible) ballAnim.restart(); } }
             SequentialAnimation {
                 id: ballAnim
                 PropertyAction { target: ball; property: "scale"; value: ball.k[0][1] }
@@ -1322,7 +1464,7 @@ Item {
 
         // swirl, puff, burst: their particles.
         Repeater {
-            model: fx.spec.kind === "glow" ? [] : fx.spec.particles
+            model: fx.spec.particles || []
             delegate: Item {
                 id: pt
                 required property var modelData
@@ -1417,6 +1559,227 @@ Item {
                     PropertyAction { target: pt; property: "opacity"; value: 0 }
                 }
             }
+        }
+    }
+
+    // ---- Magic's parts (magic): sparks, motes and mist, each a few property animations ---------------
+    // The aura's gold at an alpha (0 to 1).
+    function _auraColor(a) {
+        var c = art.colors[art.magic.aura.color];
+        var h = Math.round(Math.max(0, Math.min(1, a)) * 255).toString(16);
+        return "#" + (h.length < 2 ? "0" + h : h) + c.substring(1);
+    }
+    // A circle's path about (x, y) (an ellipse's, with ry).
+    function _circle(x, y, r, ry) {
+        var a = " A" + r + " " + (ry === undefined ? r : ry) + " 0 1 0 ";
+        return "M" + (x - r) + " " + y + a + (x + r) + " " + y + a + (x - r) + " " + y + " Z";
+    }
+
+    // A spark (s: [gap, life, x, y, size, colour, drift, rise, glint, spin]):
+    // a four-pointed glint (turning) or a glittering mote, with its halo.
+    component Spark: Item {
+        id: sp
+        property var s: [0, 0, 0, 0, 0, "gold", 0, 0, 0, 0]
+        readonly property color tint: BirdData.bird.colors[s[5]]
+        readonly property real size: s[4]
+        x: s[2]
+        y: s[3]
+        opacity: 0
+        visible: opacity > 0
+        property real dx: 0
+        property real dy: 0
+        property real grow: 0.3
+        property real turn: 0
+        transform: [
+            Scale { xScale: sp.grow; yScale: sp.grow },
+            Rotation { angle: sp.turn },
+            Translate { x: sp.dx; y: sp.dy }
+        ]
+        Rectangle {
+            readonly property real d: sp.size * (sp.s[8] ? 3 : 2.6)
+            width: d; height: d; radius: d / 2
+            x: -d / 2; y: -d / 2
+            color: sp.tint
+            opacity: 0.26
+        }
+        // A glint: two crossed streaks.
+        Rectangle {
+            visible: sp.s[8] === 1
+            width: sp.size * 3.4; height: sp.size * 0.55; radius: height / 2
+            x: -width / 2; y: -height / 2
+            color: sp.tint
+        }
+        Rectangle {
+            visible: sp.s[8] === 1
+            width: sp.size * 0.55; height: sp.size * 3.4; radius: width / 2
+            x: -width / 2; y: -height / 2
+            color: sp.tint
+        }
+        // A mote: a dot (a glint's centre).
+        Rectangle {
+            readonly property real d: sp.s[8] ? sp.size * 0.9 : sp.size
+            width: d; height: d; radius: d / 2
+            x: -d / 2; y: -d / 2
+            color: sp.s[8] ? BirdData.bird.colors.flameCore : sp.tint
+            Rectangle { anchors.centerIn: parent; width: parent.width * 0.45; height: width; radius: width / 2; color: BirdData.bird.colors.flameCore }
+        }
+    }
+    // A spark's moment: after its gap, up and bright, a while, out, drifting up.
+    component SparkPlay: SequentialAnimation {
+        id: play
+        property Item spark
+        readonly property var s: spark ? spark.s : [0, 0, 0, 0, 0, "gold", 0, 0, 0, 0]
+        readonly property int life: Theme.motion(s[1])
+        PauseAnimation { duration: Theme.motion(play.s[0]) }
+        ParallelAnimation {
+            NumberAnimation { target: play.spark; property: "dx"; from: 0; to: play.s[6]; duration: play.life; easing.type: Easing.OutQuad }
+            NumberAnimation { target: play.spark; property: "dy"; from: 0; to: -play.s[7]; duration: play.life; easing.type: Easing.OutQuad }
+            NumberAnimation { target: play.spark; property: "turn"; from: 0; to: play.s[9]; duration: play.life; easing.type: Easing.OutQuad }
+            SequentialAnimation {
+                ParallelAnimation {
+                    NumberAnimation { target: play.spark; property: "opacity"; from: 0; to: 1; duration: play.life * 0.3; easing.type: Easing.OutQuad }
+                    NumberAnimation { target: play.spark; property: "grow"; from: 0.3; to: 1; duration: play.life * 0.3; easing.type: Easing.OutQuad }
+                }
+                ParallelAnimation {
+                    NumberAnimation { target: play.spark; property: "opacity"; to: 0.75; duration: play.life * 0.3; easing.type: Easing.InOutSine }
+                    NumberAnimation { target: play.spark; property: "grow"; to: 0.8; duration: play.life * 0.3; easing.type: Easing.InOutSine }
+                }
+                ParallelAnimation {
+                    NumberAnimation { target: play.spark; property: "opacity"; to: 0; duration: play.life * 0.4; easing.type: Easing.InQuad }
+                    NumberAnimation { target: play.spark; property: "grow"; to: 0.3; duration: play.life * 0.4; easing.type: Easing.InQuad }
+                }
+            }
+        }
+    }
+    // A lane of sparks (magic.sparkLanes): its five one after another, over
+    // and over, after a random wait (birds side by side not in step).
+    component SparkLane: Item {
+        id: ln
+        property var lane: ({ period: 0, sparks: [] })
+        property bool shown: false
+        property bool running: false
+        // Played (its loop running), for tests.
+        readonly property bool playing: laneAnim.running
+        opacity: shown ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity { NumberAnimation { duration: Theme.motion(BirdData.bird.magic.aura.ease) } }
+        readonly property int _phase: Math.floor(Math.random() * lane.period)
+        Spark { id: s0; s: ln.lane.sparks[0] }
+        Spark { id: s1; s: ln.lane.sparks[1] }
+        Spark { id: s2; s: ln.lane.sparks[2] }
+        Spark { id: s3; s: ln.lane.sparks[3] }
+        Spark { id: s4; s: ln.lane.sparks[4] }
+        SequentialAnimation {
+            id: laneAnim
+            running: ln.running
+            // Into the lane at its random point: the rest of a gap, as long.
+            PauseAnimation { duration: Theme.motion(ln._phase % 2600) }
+            SequentialAnimation {
+                loops: Animation.Infinite
+                SparkPlay { spark: s0 }
+                SparkPlay { spark: s1 }
+                SparkPlay { spark: s2 }
+                SparkPlay { spark: s3 }
+                SparkPlay { spark: s4 }
+            }
+            onRunningChanged: if (!running) { for (var i = 0; i < 5; ++i) [s0, s1, s2, s3, s4][i].opacity = 0; }
+        }
+    }
+
+    // A soft round light: a radial gradient of four stops [position,
+    // colour] to its edge, r about its centre.
+    component Glow: Item {
+        id: gl
+        property real r
+        // Not drawn within this ellipse ([rx, ry]; hidden behind the body anyway).
+        property var hole: [0, 0]
+        property var stops: [[0, "transparent"], [0.3, "transparent"], [0.6, "transparent"], [1, "transparent"]]
+        width: 2 * r
+        height: 2 * r
+        Shape {
+            // Soft to its edge (nothing there to smooth): plain geometry, the
+            // cheaper to fill. (What it fills is what costs: on a software GL a
+            // dozen birds' glows are most of a frame, so they are kept close.)
+            preferredRendererType: Shape.GeometryRenderer
+            ShapePath {
+                strokeColor: "transparent"
+                fillRule: ShapePath.OddEvenFill
+                fillGradient: RadialGradient {
+                    centerX: gl.r; centerY: gl.r; centerRadius: gl.r
+                    focalX: gl.r; focalY: gl.r
+                    GradientStop { position: gl.stops[0][0]; color: gl.stops[0][1] }
+                    GradientStop { position: gl.stops[1][0]; color: gl.stops[1][1] }
+                    GradientStop { position: gl.stops[2][0]; color: gl.stops[2][1] }
+                    GradientStop { position: gl.stops[3][0]; color: gl.stops[3][1] }
+                }
+                PathSvg { path: bird._circle(gl.r, gl.r, gl.r) + (gl.hole[0] > 0 ? " " + bird._circle(gl.r, gl.r, gl.hole[0], gl.hole[1]) : "") }
+            }
+        }
+    }
+
+    // A mist (m: [gap, life, x, y, radius, rise]): a soft haze, squashed.
+    component Mist: Item {
+        id: mi
+        property var m: [0, 0, 0, 0, 0, 0]
+        readonly property string tint: {
+            var mist = BirdData.bird.magic.mist, h = Math.round(mist.alpha * 255).toString(16);
+            return "#" + (h.length < 2 ? "0" + h : h) + BirdData.bird.colors[mist.color].substring(1);
+        }
+        x: m[2]
+        y: m[3]
+        opacity: 0
+        visible: opacity > 0
+        property real dy: 0
+        property real grow: 0.85
+        transform: [
+            Scale { xScale: mi.grow; yScale: mi.grow * BirdData.bird.magic.mist.squash },
+            Translate { y: mi.dy }
+        ]
+        Glow {
+            r: mi.m[4]
+            x: -r
+            y: -r
+            stops: [[0, mi.tint], [0.5, mi.tint], [0.75, "#60" + mi.tint.substring(3)], [1, "#00" + mi.tint.substring(3)]]
+        }
+    }
+    component MistPlay: SequentialAnimation {
+        id: mp
+        property Item mist
+        readonly property var m: mist ? mist.m : [0, 0, 0, 0, 0, 0]
+        readonly property int life: Theme.motion(m[1])
+        PauseAnimation { duration: Theme.motion(mp.m[0]) }
+        ParallelAnimation {
+            NumberAnimation { target: mp.mist; property: "dy"; from: 0; to: -mp.m[5]; duration: mp.life }
+            NumberAnimation { target: mp.mist; property: "grow"; from: 0.85; to: 1.15; duration: mp.life }
+            // Shimmering: up, down a little, up again, away.
+            SequentialAnimation {
+                NumberAnimation { target: mp.mist; property: "opacity"; from: 0; to: 0.7; duration: mp.life * 0.25; easing.type: Easing.InOutSine }
+                NumberAnimation { target: mp.mist; property: "opacity"; to: 0.45; duration: mp.life * 0.2; easing.type: Easing.InOutSine }
+                NumberAnimation { target: mp.mist; property: "opacity"; to: 1; duration: mp.life * 0.25; easing.type: Easing.InOutSine }
+                NumberAnimation { target: mp.mist; property: "opacity"; to: 0; duration: mp.life * 0.3; easing.type: Easing.InOutSine }
+            }
+        }
+    }
+    component MistLane: Item {
+        id: ml
+        property bool running: false
+        readonly property var lane: BirdData.bird.magic.mistLane
+        readonly property bool playing: mistAnim.running
+        readonly property int _phase: Math.floor(Math.random() * lane.mists[0][0])
+        Mist { id: m0; m: ml.lane.mists[0] }
+        Mist { id: m1; m: ml.lane.mists[1] }
+        Mist { id: m2; m: ml.lane.mists[2] }
+        SequentialAnimation {
+            id: mistAnim
+            running: ml.running
+            PauseAnimation { duration: Theme.motion(ml._phase) }
+            SequentialAnimation {
+                loops: Animation.Infinite
+                MistPlay { mist: m0 }
+                MistPlay { mist: m1 }
+                MistPlay { mist: m2 }
+            }
+            onRunningChanged: if (!running) { m0.opacity = 0; m1.opacity = 0; m2.opacity = 0; }
         }
     }
 }

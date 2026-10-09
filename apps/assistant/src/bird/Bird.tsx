@@ -11,6 +11,10 @@
 // ab-mv-* keyframes on a group of their own over each part's acting, their
 // cues (a face for a moment, an effect) timed here; the effects (embers,
 // the fireball, dust) the generated ab-fx-* keyframes over SVG shapes.
+// Its magic (magic): the aura breathing behind it, flickering with its
+// crest and radiating rings (ab-aura-*), the sparks and motes around it
+// (ab-spark-<lane>-<n>) and now and then a mist (ab-mist-<n>), each lane
+// started at a random point (--ab-phase).
 //
 // Follows the system's Animation speed (Fast: 60% of the time) and Reduce
 // motion, and the browser's prefers-reduced-motion: with either it holds
@@ -69,8 +73,31 @@ interface Cue { at: number; eyes?: string; beak?: string; fx?: string }
 interface Move { kind: "enter" | "leave" | "idle" | "react"; period: number; tracks: Partial<Record<Channel, unknown>>; cues: readonly Cue[] }
 const MOVES = BIRD.motion.moves as unknown as Record<MoveName, Move>;
 type FxName = keyof typeof BIRD.effects;
-interface Effect { kind: "swirl" | "glow" | "puff" | "burst"; origin: readonly number[]; period: number; radius?: number; particles?: readonly (readonly (number | string)[])[] }
+interface Effect { kind: "swirl" | "glow" | "puff" | "burst" | "surge"; origin: readonly number[]; period: number; radius?: number; particles?: readonly (readonly (number | string)[])[] }
 const EFFECTS = BIRD.effects as unknown as Record<FxName, Effect>;
+
+const MAGIC = BIRD.magic as unknown as {
+    aura: { origin: readonly number[]; radius: number; color: keyof typeof BIRD.colors; alpha: number; still: number; ease: number;
+            rings: { count: number; radius: number; inner: number; alpha: number } };
+    poses: Record<string, readonly number[]>;
+    sparkLanes: readonly { period: number; sparks: readonly (readonly (number | string)[])[] }[];
+    mistLane: { period: number; mists: readonly (readonly number[])[] };
+    mist: { color: keyof typeof BIRD.colors; alpha: number };
+};
+const behind = (k: Effect["kind"]) => k === "glow" || k === "surge";
+
+/** A spark (magic.sparkLanes: [gap, life, x, y, size, colour, drift, rise, glint, spin]),
+ *  drawn about its centre: a four-pointed glint or a mote, with its halo. */
+function SparkView({ s }: { s: readonly (number | string)[] }) {
+    const size = Number(s[4]), tint = BIRD.colors[s[5] as keyof typeof BIRD.colors], glint = s[8] === 1;
+    return (<>
+        <circle r={size * (glint ? 1.5 : 1.3)} fill={tint} opacity={0.26} />
+        {glint && <rect x={-size * 1.7} y={-size * 0.275} width={size * 3.4} height={size * 0.55} rx={size * 0.275} fill={tint} />}
+        {glint && <rect x={-size * 0.275} y={-size * 1.7} width={size * 0.55} height={size * 3.4} rx={size * 0.275} fill={tint} />}
+        <circle r={size * (glint ? 0.45 : 0.5)} fill={glint ? BIRD.colors.flameCore : tint} />
+        <circle r={size * (glint ? 0.2 : 0.22)} fill={BIRD.colors.flameCore} />
+    </>);
+}
 
 /** A move playing: its name and a key (a new one for each time it plays). */
 interface Playing { name: MoveName; key: number }
@@ -331,6 +358,14 @@ export function Bird({ pose, size = 120, className, testId = "as-bird", speed, s
     const [shown, setShown] = useState(!(start === "enter" && calm));
     useEffect(() => { if (!shown) { const r = requestAnimationFrame(() => setShown(true)); return () => cancelAnimationFrame(r); } return undefined; }, [shown]);
 
+    // Magic: the pose's aura, how many spark lanes show, the mist; each lane from a random point.
+    const mp = MAGIC.poses[pose] ?? MAGIC.poses.idle;
+    const [phases] = useState(() => [...MAGIC.sparkLanes.map((l) => -Math.round(Math.random() * l.period)),
+                                     -Math.round(Math.random() * MAGIC.mistLane.period)]);
+    const sparkling = !calm && !(move && (MOVES[move.name].kind === "enter" || MOVES[move.name].kind === "leave"));
+    const au = MAGIC.aura;
+    const magicEase = `opacity ${ms(au.ease)}ms ease`;
+
     const shadowMove = move && !calm && ("whole" in MOVES[move.name].tracks || "body" in MOVES[move.name].tracks) ? `ab-mv-${move.name}-shadow` : undefined;
     return (
         <svg className={["ab-bird", calm && "ab-still", className].filter(Boolean).join(" ")} data-testid={testId} data-pose={pose}
@@ -347,18 +382,54 @@ export function Bird({ pose, size = 120, className, testId = "as-bird", speed, s
                     <stop offset="1" stopColor={BIRD.colors.ember} stopOpacity={0} />
                 </radialGradient>
                 {/* Dust on the app's light ground: a darker warm grey-brown than the shell's (dark ground). */}
+                {/* The aura's gold: its light, its rings' bands, a surge's; the mist. */}
+                <radialGradient id="ab-aura">
+                    <stop offset="0" stopColor={BIRD.colors[au.color]} stopOpacity={au.alpha} />
+                    <stop offset="0.45" stopColor={BIRD.colors[au.color]} stopOpacity={au.alpha * 0.45} />
+                    <stop offset="1" stopColor={BIRD.colors[au.color]} stopOpacity={0} />
+                </radialGradient>
+                <radialGradient id="ab-aura-ring">
+                    <stop offset={au.rings.inner} stopColor={BIRD.colors[au.color]} stopOpacity={0} />
+                    <stop offset={(1 + 2 * au.rings.inner) / 3} stopColor={BIRD.colors[au.color]} stopOpacity={au.rings.alpha} />
+                    <stop offset="1" stopColor={BIRD.colors[au.color]} stopOpacity={0} />
+                </radialGradient>
+                <radialGradient id="ab-aura-surge">
+                    <stop offset="0" stopColor={BIRD.colors[au.color]} stopOpacity={0.6} />
+                    <stop offset="0.3" stopColor={BIRD.colors[au.color]} stopOpacity={0.4} />
+                    <stop offset="0.6" stopColor={BIRD.colors[au.color]} stopOpacity={0.15} />
+                    <stop offset="1" stopColor={BIRD.colors[au.color]} stopOpacity={0} />
+                </radialGradient>
+                <radialGradient id="ab-mist">
+                    <stop offset="0" stopColor={BIRD.colors[MAGIC.mist.color]} stopOpacity={MAGIC.mist.alpha} />
+                    <stop offset="0.5" stopColor={BIRD.colors[MAGIC.mist.color]} stopOpacity={MAGIC.mist.alpha} />
+                    <stop offset="1" stopColor={BIRD.colors[MAGIC.mist.color]} stopOpacity={0} />
+                </radialGradient>
                 <radialGradient id="ab-dust">
                     <stop offset="0" stopColor={BIRD.colors.dustOnLight} stopOpacity={0.8} />
                     <stop offset="0.55" stopColor={BIRD.colors.dustOnLight} stopOpacity={0.5} />
                     <stop offset="1" stopColor={BIRD.colors.dustOnLight} stopOpacity={0} />
                 </radialGradient>
             </defs>
-            {fx.filter((e) => EFFECTS[e.name].kind === "glow").map((e) => <FxView key={e.key} name={e.name} />)}
+            {fx.filter((e) => behind(EFFECTS[e.name].kind)).map((e) => <FxView key={e.key} name={e.name} />)}
+            {!calm && (
+                <g data-magic="mist" style={{ opacity: sparkling && mp[2] === 1 ? 1 : 0, transition: magicEase, ["--ab-phase" as string]: `${phases[phases.length - 1]}ms` } as CSSProperties}>
+                    {MAGIC.mistLane.mists.map((_m, i) => <circle key={i} className={`ab-mist ab-mist-${i + 1}`} r={100} fill="url(#ab-mist)" />)}
+                </g>
+            )}
             <g className={shadowMove} key={shadowMove ? move?.key : 0}>
                 <Part name="shadow" style={{ transform: about(pv.shadow, `scale(${p.lift > 0 ? 0.7 : 1}, 1)`), transition: ease(t.body) }} />
             </g>
             {act("whole",
             <g style={{ transform: `translate(0px, ${-p.lift}px)`, transition: liftTransition }}>
+                {/* The aura: breathing, flickering with the crest, radiating rings; still, a faint glow. */}
+                <g data-magic="aura" style={{ opacity: mp[0] * (calm ? au.still : 1), transition: magicEase }}>
+                    <g className={anim("ab-aura-breath")}><g className={anim("ab-aura-flicker")}>
+                        <circle cx={au.origin[0]} cy={au.origin[1]} r={au.radius} fill="url(#ab-aura)" />
+                    </g></g>
+                    {!calm && mp[3] === 1 && Array.from({ length: au.rings.count }, (_v, i) => (
+                        <circle key={i} className={`ab-aura-ring ab-aura-ring-${i + 1}`} r={au.rings.radius} fill="url(#ab-aura-ring)" />
+                    ))}
+                </g>
                 <g style={{ transform: about(pv.body, `rotate(${p.tilt}deg)`), transition: ease(t.body) }}>
                     {/* Not remounted for the hop (its class alternates, take-off and
                         landing, which restarts it): the parts within ease and blend on. */}
@@ -437,7 +508,16 @@ export function Bird({ pose, size = 120, className, testId = "as-bird", speed, s
                     </g>
                 );
             })}
-            {fx.filter((e) => EFFECTS[e.name].kind !== "glow").map((e) => <FxView key={e.key} name={e.name} />)}
+            {!calm && (
+                <g data-magic="sparks" style={{ opacity: sparkling ? 1 : 0, transition: magicEase }}>
+                    {MAGIC.sparkLanes.map((lane, l) => (
+                        <g key={l} data-lane={l} style={{ opacity: l < mp[1] ? 1 : 0, transition: magicEase, ["--ab-phase" as string]: `${phases[l]}ms` } as CSSProperties}>
+                            {lane.sparks.map((s, i) => <g key={i} className={`ab-spark ab-spark-${l + 1}-${i + 1}`}><SparkView s={s} /></g>)}
+                        </g>
+                    ))}
+                </g>
+            )}
+            {fx.filter((e) => !behind(EFFECTS[e.name].kind)).map((e) => <FxView key={e.key} name={e.name} />)}
         </svg>
     );
 }
@@ -447,8 +527,8 @@ export function Bird({ pose, size = 120, className, testId = "as-bird", speed, s
 function FxView({ name }: { name: FxName }) {
     const e = EFFECTS[name];
     const c = (v: number | string | undefined) => BIRD.colors[(v ?? "dust") as keyof typeof BIRD.colors];
-    if (e.kind === "glow")
-        return <g data-fx={name}><g className={`ab-fx-${name}`}><circle r={e.radius} fill="url(#ab-fire)" /></g></g>;
+    if (behind(e.kind))
+        return <g data-fx={name}><g className={`ab-fx-${name}`}><circle r={e.radius} fill={e.kind === "surge" ? "url(#ab-aura-surge)" : "url(#ab-fire)"} /></g></g>;
     return (
         <g data-fx={name}>
             {(e.particles ?? []).map((pt, i) => {

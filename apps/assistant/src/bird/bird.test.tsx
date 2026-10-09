@@ -250,8 +250,76 @@ describe("the drawing", () => {
                 expect(css).toMatch(new RegExp(`\\.ab-mv-${name}-${ch} \\{ animation: ab-mv-${name}-${ch} calc\\(${m.period}ms \\* var\\(--ab-speed, 1\\)\\) linear [^;]* both;`));
             }
         for (const [name, e] of Object.entries(BIRD.effects)) {
-            if (e.kind === "glow") expect(css).toContain(`.ab-fx-${name} {`);
+            if (e.kind === "glow" || e.kind === "surge") expect(css).toContain(`.ab-fx-${name} {`);
             else expect(css).toContain(`.ab-fx-${name}-${e.particles.length}-o {`);
         }
+    });
+});
+
+describe("the bird's magic", () => {
+    afterEach(() => { vi.useRealTimers(); });
+    const magic = BIRD.magic;
+    const lanes = (c: HTMLElement) => Array.from(c.querySelectorAll<SVGGElement>("[data-magic='sparks'] > [data-lane]"));
+
+    it("glows, sparkles and mists by its pose, each lane from a point of its own", () => {
+        const { container, rerender } = render(<Bird pose="idle" still={false} speed={1} />);
+        const aura = container.querySelector("[data-magic='aura']") as SVGGElement;
+        expect(aura.style.opacity).toBe(String(magic.poses.idle[0]));
+        expect(aura.querySelector(".ab-aura-breath .ab-aura-flicker circle")).not.toBeNull();
+        expect(aura.querySelectorAll(".ab-aura-ring")).toHaveLength(magic.aura.rings.count);
+        const ls = lanes(container);
+        expect(ls).toHaveLength(magic.sparks.lanes);
+        expect(ls.filter((l) => l.style.opacity === "1")).toHaveLength(magic.poses.idle[1]);
+        for (const l of ls) {
+            expect(l.querySelectorAll(".ab-spark")).toHaveLength(magic.sparks.each);
+            expect(parseFloat(l.style.getPropertyValue("--ab-phase"))).toBeLessThanOrEqual(0);
+        }
+        expect((container.querySelector("[data-magic='mist']") as SVGGElement).style.opacity).toBe("1");
+        // More as it celebrates; none of the mist when it is unsure.
+        rerender(<Bird pose="done" still={false} speed={1} />);
+        expect(lanes(container).filter((l) => l.style.opacity === "1")).toHaveLength(magic.poses.done[1]);
+        expect(aura.style.opacity).toBe("1");
+        rerender(<Bird pose="confused" still={false} speed={1} />);
+        expect((container.querySelector("[data-magic='mist']") as SVGGElement).style.opacity).toBe("0");
+        expect(aura.querySelectorAll(".ab-aura-ring")).toHaveLength(0);
+    });
+
+    it("holds a faint still glow, with no sparks, mist or rings, when held still", () => {
+        const { container } = render(<Bird pose="idle" still speed={1} />);
+        const aura = container.querySelector("[data-magic='aura']") as SVGGElement;
+        expect(parseFloat(aura.style.opacity)).toBeCloseTo(magic.poses.idle[0] * magic.aura.still, 5);
+        expect(aura.querySelector("[class*='ab-aura']")).toBeNull();
+        expect(container.querySelector("[data-magic='sparks'], [data-magic='mist']")).toBeNull();
+    });
+
+    it("sparkles only once it is there, and flares as it lands and cheers", () => {
+        vi.useFakeTimers();
+        const { container, rerender } = render(<Bird pose="idle" start="enter" still={false} speed={1} />);
+        const sparks = container.querySelector("[data-magic='sparks']") as SVGGElement;
+        expect(sparks.style.opacity).toBe("0");
+        const enter = BIRD.motion.moves.enter;
+        act(() => { vi.advanceTimersByTime(0.69 * enter.period); });
+        expect(container.querySelector("[data-fx='surge'] .ab-fx-surge")).not.toBeNull();
+        act(() => { vi.advanceTimersByTime(enter.period); });
+        expect(sparks.style.opacity).toBe("1");
+        rerender(<Bird pose="idle" start="enter" still={false} speed={1} react={{ name: "cheer", n: 1 }} />);
+        act(() => { vi.advanceTimersByTime(0.41 * BIRD.motion.moves.cheer.period); });
+        expect(container.querySelector("[data-fx='surge']")).not.toBeNull();
+    });
+
+    it("has the keyframes of every spark, mist and ring, each over its lane's length", () => {
+        const css = readFileSync(resolve(__dirname, "bird.generated.css"), "utf8");
+        magic.sparkLanes.forEach((lane, l) => lane.sparks.forEach((_s, i) => {
+            expect(css).toContain(`@keyframes ab-spark-${l + 1}-${i + 1} {`);
+            expect(css).toContain(`.ab-spark-${l + 1}-${i + 1} { animation: ab-spark-${l + 1}-${i + 1} calc(${lane.period}ms * var(--ab-speed, 1)) linear calc(var(--ab-phase, 0ms)`);
+        }));
+        magic.mistLane.mists.forEach((_m, i) => expect(css).toContain(`.ab-mist-${i + 1} { animation: ab-mist-${i + 1} calc(${magic.mistLane.period}ms`));
+        for (let i = 1; i <= magic.aura.rings.count; ++i) expect(css).toContain(`.ab-aura-ring-${i} {`);
+        // The aura's flicker in step with its flame's: the same length.
+        expect(css).toContain(`.ab-aura-flicker { animation: ab-aura-flicker calc(${BIRD.motion.flicker.crest.period}ms`);
+        // Hidden unless animated (prefers-reduced-motion stops the animations).
+        expect(css).toContain(".ab-spark, .ab-mist, .ab-aura-ring { opacity: 0; }");
+        // Never twice the same: each lane its own length.
+        expect(new Set(magic.sparkLanes.map((l) => l.period)).size).toBe(magic.sparkLanes.length);
     });
 });
