@@ -15,6 +15,20 @@ never deprecated: it is for the fans. **2.0** is a modern revamp in style
 and features, including docking to monitors and TVs, to bring webOS back.
 See [docs/ROADMAP.md](docs/ROADMAP.md#two-lines-1x-and-20).
 
+**Try it** on a Mac or Ubuntu, in a clone of this repository:
+
+```sh
+./phoenix run
+```
+
+One command installs what is missing (Homebrew's Qt and tools on a Mac; Qt
+6.8.1, Node.js 22 and the packages on Ubuntu; the assistant's models),
+builds, and starts the simulator, adaptive: resize its window and it is a
+phone or a tablet by the size, live. `./phoenix run phone` or `tablet` fixes
+the layout, `./phoenix check` only says what it would install, and
+`--no-assistant` / `--offline` skip downloads. Run again, it checks
+everything in about two seconds. See [Run the simulator](#run-the-simulator).
+
 | Lock screen | Card view | Card stack | Reordering | App | Launcher | Dashboard | Just Type | System menu |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | ![](docs/screenshots/locked.png) | ![](docs/screenshots/cards.png) | ![](docs/screenshots/stacks.png) | ![](docs/screenshots/reorder.png) | ![](docs/screenshots/maximized.png) | ![](docs/screenshots/launcher.png) | ![](docs/screenshots/dashboard.png) | ![](docs/screenshots/justtype.png) | ![](docs/screenshots/systemmenu.png) |
@@ -203,6 +217,23 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Run the simulator
 
+```sh
+./phoenix run                       # adaptive: a phone or a tablet by the window's size
+./phoenix run phone                 # the Pre, 320x480
+./phoenix run tablet --scene cards  # the TouchPad; what follows goes to phoenix-sim
+./phoenix                           # install what is missing and build, no run
+./phoenix check                     # what is there, what would be installed (a dry run)
+```
+
+`./phoenix` is the one command: it checks each prerequisite, installs only
+what is missing (printing its size), and builds; options `--no-assistant`,
+`--offline`, `--tests`, `--dry-run`. In the adaptive simulator **View >
+Device Size** snaps the window to the Pre, the Pre 3, a modern phone, a
+foldable folded or open, the TouchPad or a modern tablet, and the shell
+switches between its phone and tablet layouts with the apps running on
+([GETTING-STARTED.md](docs/GETTING-STARTED.md#phone-tablet-or-both-the-adaptive-simulator)).
+What it does, by hand:
+
 Requires Qt 6.8 or newer (6.8 is what a device's webOS OSE image ships)
 with Qt Quick and Qt5Compat. Qt WebEngine is
 needed to run the web apps (the original webOS apps and new Phoenix apps);
@@ -222,8 +253,9 @@ git submodule update --init
 ```
 
 Step by step, with troubleshooting and the test tools:
-[docs/GETTING-STARTED.md](docs/GETTING-STARTED.md). `scripts/mac-setup.sh`
-and `scripts/linux-setup.sh` install everything and build it.
+[docs/GETTING-STARTED.md](docs/GETTING-STARTED.md). `./phoenix` (or
+`scripts/mac-setup.sh` and `scripts/linux-setup.sh`, which call it) installs
+everything and builds it.
 
 **macOS**
 
@@ -236,7 +268,8 @@ cmake --build build
 
 | Command | What it does |
 | --- | --- |
-| `./build/phoenix-sim` | Pre (320x480) |
+| `./build/phoenix-sim` | Adaptive, starting as the Pre (320x480) |
+| `./build/phoenix-sim --phone` | Pre (320x480), fixed |
 | `./build/phoenix-sim --size 480x800 --scale 1.5 --scene cards` | Pre 3 |
 | `./build/phoenix-sim --tablet` | TouchPad (1024x768) |
 | `./build/phoenix-sim --tablet --size 2560x1600 --scale 2` | A large tablet |
@@ -244,11 +277,10 @@ cmake --build build
 **Ubuntu 24.04**
 
 ```sh
-scripts/linux-setup.sh
-./build/phoenix-sim
+./phoenix run
 ```
 
-Ubuntu's own Qt packages stop at 6.4, so the script installs Qt 6.8.1 into
+Ubuntu's own Qt packages stop at 6.4, so `./phoenix` installs Qt 6.8.1 into
 `/opt/Qt` with aqtinstall (and Node.js 22, as Ubuntu's nodejs is too old),
 then builds with `-DCMAKE_PREFIX_PATH=/opt/Qt/6.8.1/gcc_64`.
 
@@ -259,9 +291,10 @@ the ringer switch, turning it left or right, a screen capture, the Full Erase
 and USB drive chords, a hardware keyboard), **Simulate** what happens to it
 (an incoming call, text, picture message or IM, a notification, the battery
 and chargers, a USB cable, the Touchstones, Touch to Share, a headset and its
-button, the play/pause key, the light), **View** the device it starts as
-(phone or tablet, the scale, a demo scene: these restart it) and the
-developer overlays, and **Help > Keyboard Shortcuts…** lists every key below
+button, the play/pause key, the light), **View** the device (phone, tablet
+or adaptive; in the adaptive simulator Phone, Tablet and Device Size resize
+the window and the layout follows live, otherwise they, the scale and a demo
+scene restart it) and the developer overlays, and **Help > Keyboard Shortcuts…** lists every key below
 in a window. Each menu item shows its key, so the menus teach them; they are
 made from one list in `shell/qml/sim.qml` (`simActions`), as the keys are.
 The toolbar has icons for the most used: Power, Home, Back, rotate, screen

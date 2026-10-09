@@ -27,6 +27,17 @@ Humans: see [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md).
 ## Build
 
 ```sh
+./phoenix            # install what is missing, then build (a no-op run: ~2 s)
+./phoenix check      # a dry run: what is there, what it would install
+```
+
+`./phoenix` (POSIX sh) checks and installs the prerequisites (Homebrew's
+formulae on a Mac; apt, Qt 6.8.1 into /opt/Qt, Node 22 on Ubuntu), the
+submodules, the apps' npm packages and the assistant's models, configures
+CMake with the Qt it finds, and builds. `--no-assistant`, `--offline`,
+`--tests`, `--dry-run`; `tools/test-phoenix-script.sh` tests it. By hand:
+
+```sh
 git submodule update --init
 cmake -S shell -B build
 cmake --build build
@@ -34,32 +45,38 @@ cmake --build build
 
 Add Qt's location to the first `cmake`: on a Mac
 `-DCMAKE_PREFIX_PATH="$(brew --prefix qt)"`, on Ubuntu
-`-DCMAKE_PREFIX_PATH=/opt/Qt/6.8.1/gcc_64` (installed by `scripts/linux-setup.sh`;
-Ubuntu's own Qt is too old). The build also builds `apps/` with npm.
+`-DCMAKE_PREFIX_PATH=/opt/Qt/6.8.1/gcc_64` (installed by `./phoenix`;
+Ubuntu's own Qt is too old). The build also builds `apps/` with npm, when a
+file in `apps/` changed (`shell/cmake/run-if-changed.sh`).
 
 Only the apps: `cd apps && npm run build` (or `npm run build -w settings`).
-Setup from scratch: `scripts/mac-setup.sh` or `scripts/linux-setup.sh`.
+`scripts/mac-setup.sh` and `scripts/linux-setup.sh` call `./phoenix`.
 
 ## Run and look
 
 Check changes in the real simulator, not only in tests, and look at the result:
 
 ```sh
+./phoenix run tablet --launch org.webosphoenix.settings --screenshot out.png --delay 8000
 ./build/phoenix-sim --tablet --launch org.webosphoenix.settings --screenshot out.png --delay 8000
 ```
 
+`./phoenix run [adaptive|phone|tablet] [args]` builds first and passes the
+rest to `phoenix-sim` (under `xvfb-run` when there is no display).
 `--scene cards|launcher|dashboard|systemmenu|...` opens a state, `--launch
-<appId>` an app, `--screenshot` saves a PNG and exits. Without a display (Linux
+<appId>` an app, `--screenshot` saves a PNG and exits. `--adaptive` (the
+default without `--phone`/`--tablet`) switches the layout live as the window
+is resized; View > Device Size snaps to presets. Without a display (Linux
 containers): prefix `QTWEBENGINE_DISABLE_SANDBOX=1 xvfb-run -a -s "-screen 0
 1920x1200x24"`; use a fresh `HOME` per run for a clean device. To drive it
-(taps, keys), `xdotool` on Linux.
+(taps, keys, `windowsize`), `xdotool` on Linux.
 
 ## Test
 
 Run what covers the change before committing; CI runs all of it.
 
 - QML: `QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -input shell/tests`
-  (`/opt/Qt/6.8.1/gcc_64/bin/qmltestrunner` on Ubuntu, from `scripts/linux-setup.sh`;
+  (`/opt/Qt/6.8.1/gcc_64/bin/qmltestrunner` on Ubuntu, from `./phoenix`;
   `$(brew --prefix qt)/bin/` on a Mac). Qt 6.8 is the minimum: the device's version.
 - Apps: `cd apps && npm run typecheck && npx vitest run` (`--maxWorkers=2` on a busy machine).
 - Web apps in Chromium: `NODE_PATH="$(npm root -g)" node tools/test-<area>.cjs` (the
