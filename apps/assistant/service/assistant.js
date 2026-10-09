@@ -479,8 +479,31 @@ function createAssistantService(deps) {
         var m = messagesOf(thread.id).filter(function (x) { return x.role === "user"; });
         return m.length ? m[m.length - 1].text : "";
     }
-    function toolsFor(list) {
-        return list.filter(function (c) { return allowed(c) && !c.internal; }).map(function (c) {
+    // The commands a model is offered as tools: with the words asked, only
+    // the ones they come near (MAX_TOOLS, by the words they share with a
+    // command's title and description, and the words a command needs:
+    // lang grounded()). All of them are some 5,000 tokens, more than the
+    // on-device model's context (llama-server -c 4096) and a long wait on
+    // a phone before the first word.
+    var MAX_TOOLS = 10;
+    var STOP = /^(?:the|and|for|with|from|that|this|what|when|where|which|your|have|does|will|can|could|would|should|please|tell|turn|make|about|into|onto|them|they|there|some|just|then|than|also|been|being|very|really|want|need|like)$/;
+    function stems(text) {
+        return String(text || "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/)
+            .filter(function (w) { return w.length > 2 && !STOP.test(w); }).map(function (w) { return w.slice(0, 5); });
+    }
+    function toolsFor(list, asked) {
+        var usable = list.filter(function (c) { return allowed(c) && !c.internal; });
+        if (asked !== undefined) {
+            var said = stems(asked), l = lang();
+            usable = usable.map(function (c) {
+                var known = stems(c.id.replace(/([A-Z])/g, " $1") + " " + c.title + " " + c.description), score = 0;
+                said.forEach(function (w) { if (known.indexOf(w) >= 0) score++; });
+                if (c.builtIn && l.mentions && l.mentions(c.id, asked)) score += 2;
+                return { c: c, score: score };
+            }).filter(function (x) { return x.score > 0; }).sort(function (a, b) { return b.score - a.score; })
+              .slice(0, MAX_TOOLS).map(function (x) { return x.c; });
+        }
+        return usable.map(function (c) {
             return { name: commands.toolName(c.id), description: c.description, parameters: c.parameters };
         });
     }
@@ -544,15 +567,26 @@ function createAssistantService(deps) {
             return installed && st.available ? m : null;
         }, function () { return null; });
     }
+    // The commands as tools only for words that may ask the device to do
+    // something: a question about the world or small talk goes without
+    // them, which keeps a small model from calling one ("why is the sky
+    // blue" playing music) and its prompt short (some 3,600 tokens of
+    // tools: a minute on a slow phone before the first word).
+    function mayAct(thread) {
+        var s = lang().say, asked = lastAsked(thread);
+        if (!s.context || !asked) return true;
+        var c = s.context(asked);
+        return !c.question && !c.smallTalk;
+    }
     function askLocal(thread, model, cat) {
         return deps.llm.ensure(model).then(function (srv) {
             var p = { type: "local", baseUrl: srv.baseUrl, model: model.id };
-            return callModel(p, "", thread, toolsFor(cat.all));
+            return callModel(p, "", thread, mayAct(thread) ? toolsFor(cat.all, lastAsked(thread)) : []);
         }).then(function (r) { return answer(thread, r, cat, "on-device", model.name, false, lastAsked(thread)); });
     }
     function askCloud(thread, p, cat) {
         var source = providers.displayName(p);
-        var tools = settings().allowCloudControl ? toolsFor(cat.all) : [];
+        var tools = settings().allowCloudControl && mayAct(thread) ? toolsFor(cat.all, lastAsked(thread)) : [];
         return keyOf(p).then(function (key) { return callModel(p, key, thread, tools); })
             .then(function (r) { return answer(thread, r, cat, "cloud", source, true, lastAsked(thread)); },
                   function (e) { return [say(thread, lang().say.cloudFailed(source, e.message), { via: "cloud", source: source, status: "failed" })]; });
@@ -615,7 +649,7 @@ function createAssistantService(deps) {
                 if (!m) return offer(thread, note, !!note, text);
                 return askLocal(thread, m, cat).catch(function (e) {
                     log("on-device model failed: " + (e && e.message));
-                    return offer(thread, lang().say.localFailed(e && e.message || "no answer"));
+                    return offer(thread, lang().say.localFailed(e && e.message || "no answer"), false, text);
                 });
             });
         });
@@ -693,6 +727,8 @@ function createAssistantService(deps) {
                 // An item shown in the conversation, tapped: its app on it
                 // (the buttons stay: nothing was chosen).
                 var item = [].concat.apply([], ((m.data && m.data.attachments) || []).map(function (x) { return x.items || []; }))[Number(p.choice.slice(5))];
+                // An example (help's "Right now", "Calendar" ...): asked, as if said.
+                if (item && item.text && !item.open) return methods.ask({ text: item.text, threadId: thread.id, speak: p.speak });
                 if (!item || !item.open) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to show there"));
                 return deps.luna.call("luna://com.palm.applicationManager/launch", { id: item.open.appId, params: item.open.params || {} })
                     .then(function () { return ok({ thread: summary(thread), messages: [] }); });

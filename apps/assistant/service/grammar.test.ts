@@ -180,6 +180,44 @@ describe("what the assistant suggests", () => {
             expect(p!.command, e).not.toBe("beyond");
         }
     });
+    it("help: every example it offers is understood, as the command it shows", () => {
+        const { HELP_GROUPS } = req("./lib/commands.js") as { HELP_GROUPS: { title: string; examples: string[] }[] };
+        expect(HELP_GROUPS.length).toBeGreaterThan(8);
+        for (const g of HELP_GROUPS) for (const e of g.examples) {
+            const p = parse(e);
+            expect(p, e).not.toBeNull();
+            expect(p!.command, e).not.toBe("beyond");
+            if (g.title === "Using Phoenix") expect(p!.command, e).toBe("help");
+            else expect(p!.command, e).not.toBe("help");
+        }
+        // And what fits now (commands.js helpNow).
+        for (const e of ["What's my next meeting?", "Read my new messages", "Who called me?", "Do I have any new emails?", "What's the weather today?",
+                         "What's on my calendar today?", "What's on my calendar tomorrow?", "Set an alarm for 7am", "Am I free at 4?", "Remind me to call Mom at 6"])
+            expect(parse(e)?.command, e).toMatch(/^(?:agenda|readMessages|callLog|searchEmail|weather|alarm|freeTime|reminder)$/);
+    });
+    it("how-tos: each from its Help topic, which has what it says", () => {
+        const { HOWTO } = req("./lib/lang/en-help.js") as { HOWTO: { id: string; topic: string; source: string[] }[] };
+        for (const h of HOWTO) {
+            if (!h.topic) continue;
+            const md = readFileSync(resolve(__dirname, `../../help/topics/${h.topic}.md`), "utf8").toLowerCase().replace(/\*\*/g, "").replace(/\s+/g, " ");
+            for (const w of h.source) expect(md, `${h.id}: "${w}" in ${h.topic}.md`).toContain(w);
+        }
+        const asks: [string, string][] = [["help", ""], ["what can you do", ""], ["give me some suggestions", ""], ["tips", ""], ["how do I use you", ""],
+            ["how do I close an app", "close"], ["how do i go back", "back"], ["how do I switch apps", "switch"], ["what is just type", "justtype"],
+            ["how do I delete an app", "rearrange"], ["how do I take a screenshot", "screenshot"], ["how do I set a passcode", "passcode"],
+            ["how do i open the launcher", "launcher"], ["how do I see my notifications", "notifications"], ["how do I unlock my phone", "unlock"]];
+        for (const [t, topic] of asks) expect(parse(t), t).toEqual({ command: "help", args: { topic } });
+        // Not every "how do I": the world's questions go on to a model or the web.
+        expect(parse("how do I make banana pudding")).toBeNull();
+    });
+    it("tells a question about the world, small talk and a request apart (what a model gets tools for)", () => {
+        expect(en.say.context("how do you make banana pudding")).toEqual({ question: true, smallTalk: false, app: "" });
+        expect(en.say.context("tell me a joke")).toMatchObject({ question: false, smallTalk: true });
+        expect(en.say.context("can you put the torch on for me")).toMatchObject({ question: false, smallTalk: false });
+        expect(en.say.context("make a playlist of my songs")).toEqual({ question: false, smallTalk: false, app: "Music" });
+        expect(en.say.related("how do you make banana pudding", "Slice bananas.")[0]).toMatchObject({ label: "Save as Memo", run: { command: "note", args: { text: "Banana pudding\n\nSlice bananas." } } });
+        expect(en.say.related("where is the eiffel tower", "In Paris.")).toEqual([{ label: "Show in Maps", map: "eiffel tower" }]);
+    });
     it("finds the commands close to words it did not understand", () => {
         expect(en.say.suggest("something about my dentist appointment")).toEqual(["add a meeting with Sam tomorrow at 3", "what's on my calendar tomorrow"]);
         expect(en.say.suggest("the song that goes la la")).toEqual(["play some music by Miles Davis", "next song"]);

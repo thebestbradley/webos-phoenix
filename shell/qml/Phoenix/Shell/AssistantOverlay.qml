@@ -355,6 +355,13 @@ Item {
                 ov.closeRequested();
         });
     }
+    function askExample(message, index) {
+        var all = [], list = (message.data && message.data.attachments) || [];
+        for (var i = 0; i < list.length; ++i)
+            all = all.concat(list[i].items || []);
+        if (all[index] && all[index].text)
+            ask(all[index].text);
+    }
     function confirm(message, accept) {
         if (busy)
             return;
@@ -1059,6 +1066,8 @@ Item {
                     source: ov.source
                     opacity: row.appear
                     onShown: function (index) { ov.show(row.modelData, index); }
+                    // An example (help) asked here, as if typed.
+                    onAsked: function (index) { ov.askExample(row.modelData, index); }
                 }
                 Flow {
                     id: actions

@@ -295,6 +295,38 @@ async function main() {
         for (let i = 0; i < 50 && !launches.length; ++i) await app.waitForTimeout(100);
         check(launches[0] && launches[0].params.imageList.results.length === 1, "a picture tapped: Photos on it");
         check(/^Open Photos$/.test((await photoRow.locator("[data-testid='as-choice-open']").textContent()).trim()), "and Open Photos to bring it forward");
+        // Every command through the simulator's own services (test/phrases.cjs):
+        // none fails for want of a method; then each turned off in Settings >
+        // Assistant is refused, and on again.
+        const PHRASES = require(path.join(REPO, "apps/assistant/service/test/phrases.cjs"));
+        const currentBefore = (await svc(app, A + "threads", {})).current, made = new Set();
+        const broken = [];
+        for (const [id, text] of Object.entries(PHRASES)) {
+            if (!text || id === "lock") continue;   // locking the page's screen: test-device-services.cjs
+            let r = await svc(app, A + "ask", { text, newThread: true });
+            if (r.thread) made.add(r.thread.id);
+            let m = r.messages && r.messages[r.messages.length - 1];
+            if (m && m.status === "pending") {
+                r = await svc(app, A + "confirm", { threadId: r.thread.id, messageId: m.id, accept: true });
+                m = r.messages && r.messages[r.messages.length - 1];
+            }
+            if (!m || m.command !== id || /not available in the Phoenix simulator|Unknown method|didn't work/i.test(m.text))
+                broken.push(`${id}: ${m ? m.command + ": " + m.text : JSON.stringify(r)}`);
+        }
+        check(broken.length === 0, "every command runs on the simulated device" + (broken.length ? ": " + broken.join(" | ") : ""));
+        const notOff = [];
+        for (const [id, text] of Object.entries(PHRASES)) {
+            if (!text) continue;
+            await svc(app, A + "setSettings", { disabledCommands: [id] });
+            const r = await svc(app, A + "ask", { text, newThread: true });
+            made.add(r.thread.id);
+            const m = r.messages[r.messages.length - 1];
+            if (!/is turned off in Settings > Assistant\.$/.test(m.text)) notOff.push(`${id}: ${m.text}`);
+        }
+        await svc(app, A + "setSettings", { disabledCommands: [] });
+        for (const id of made) await svc(app, A + "deleteThread", { id });
+        await svc(app, A + "setCurrent", { id: currentBefore });
+        check(notOff.length === 0, "each command turned off in Settings is refused" + (notOff.length ? ": " + notOff.join(" | ") : ""));
         // Photos shows just the pictures it was given.
         const ph = await context.newPage();
         watch(ph, "photos");
@@ -336,7 +368,10 @@ async function main() {
         check(/llama-server/.test(await st.textContent("[data-testid='as-local-status']")), "without llama.cpp, it says how to get it");
         // (The models come with their own answer, after the page.)
         await st.waitForFunction(() => document.querySelectorAll("[data-testid^='as-model-']").length > 0);
-        check(await st.locator("[data-testid^='as-model-']").count() === 3, "three on-device models offered, with size and memory");
+        check(await st.locator("[data-testid^='as-model-']").count() === 4, "four on-device models offered, with size and memory");
+        const builtIn = st.locator("[data-testid='as-model-qwen3-0.6b-q4_k_m']");
+        check(/Qwen3 0\.6BBuilt in/.test(await builtIn.textContent()) && await builtIn.locator("button").count() === 0,
+              "Qwen3 0.6B is built in: nothing to download or remove");
         const settings = async () => (await svc(st, A + "getSettings", {})).settings;
         const until = async (fn, what) => {
             for (let i = 0; i < 150; ++i) {

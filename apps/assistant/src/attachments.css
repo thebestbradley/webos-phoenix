@@ -15,3 +15,5 @@
 .as-card-sub { color: #555; font-size: 14px; }
 .as-card-detail { color: #666; font-size: 14px; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 @media (min-width: 700px) { .as-thumb { width: 96px; height: 96px; } }
+.as-examples-group { display: flex; flex-direction: column; gap: 4px; }
+.as-examples-title { color: #555; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 4px; }

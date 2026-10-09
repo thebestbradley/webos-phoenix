@@ -17,6 +17,7 @@
         "org.webosphoenix.assistant/followUpLeave",
         "org.webosphoenix.assistant/followUpWake",
         "org.webosphoenix.assistant/markRead",
+        "org.webosphoenix.assistant/vocabulary",
         "org.webosphoenix.assistant/speak",
         "org.webosphoenix.assistant/stopSpeaking"
     ],

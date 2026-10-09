@@ -471,8 +471,13 @@ describe("the on-device model", () => {
         t.as("com.palm.systemui");
         const r = await ask(t, "why is the sky blue");
         expect(last(r)).toMatchObject({ text: "chat says: why is the sky blue", via: "on-device", source: "Qwen2.5 0.5B Instruct" });
-        expect(mock.requests.at(-1)!.body.tools.length).toBeGreaterThan(10);
+        // A question about the world: no tools (a short prompt, no misfires).
+        expect(mock.requests.at(-1)!.body.tools).toBeUndefined();
         const act = await ask(t, "it's dark, put the flashlight on for me");
+        // A request of the device: the tools near its words only (a short prompt).
+        const offered = mock.requests.at(-1)!.body.tools.map((x: Reply) => x.function?.name ?? x.name);
+        expect(offered).toContain("toggle");
+        expect(offered.length).toBeLessThanOrEqual(10);
         expect(last(act)).toMatchObject({ via: "on-device", status: "done", text: "The flashlight is on." });
         // Its times as said: "tomorrow at 6:30 am".
         const wake = await ask(t, "please could you wake me early tomorrow");

@@ -6,15 +6,16 @@
 // same in AssistantAttachments.qml):
 //   {type: "images", total, items: [{path, open}]}  thumbnails, "+N more"
 //   {type: "cards", items: [{title, subtitle?, detail?, open?}]}  a card each
-// A tap shows it in its app: choose "show:<index>", index across every
-// attachment's items. The conversation stays where it is.
+//   {type: "examples", title, items: [{text}]}  things to ask (help), by app
+// A tap shows it in its app, or asks the example: choose "show:<index>",
+// index across every attachment's items. The conversation stays where it is.
 
 import type { AssistantMessage } from "@phoenix/luna";
 import { useMediaUrl } from "@phoenix/luna/react";
 import "./attachments.css";
 
-export interface ShownItem { path?: string; title?: string; subtitle?: string; detail?: string; open?: { appId: string } }
-export interface Attachment { type: "images" | "cards"; total?: number; items: ShownItem[] }
+export interface ShownItem { path?: string; title?: string; subtitle?: string; detail?: string; text?: string; open?: { appId: string } }
+export interface Attachment { type: "images" | "cards" | "examples"; title?: string; total?: number; items: ShownItem[] }
 
 export function attachmentsOf(m: AssistantMessage): Attachment[] {
     const a = m.data?.attachments;
@@ -45,6 +46,19 @@ export function Attachments({ m, onShow }: { m: AssistantMessage; onShow: (index
                         <div key={k} className="as-thumbs">
                             {a.items.map((it, i) => it.path && <Thumb key={it.path} path={it.path} index={first + i} onClick={() => onShow(first + i)} />)}
                             {more > 0 && <span className="as-more">+{more} more</span>}
+                        </div>
+                    );
+                }
+                if (a.type === "examples") {
+                    if (!a.items.length) return null;
+                    return (
+                        <div key={k} className="as-examples-group" data-testid={`as-help-${k}`}>
+                            {a.title && <div className="as-examples-title">{a.title}</div>}
+                            <div className="as-thumbs">
+                                {a.items.map((it, i) => (
+                                    <button type="button" key={i} className="as-chip" data-testid={`as-ex-${first + i}`} onClick={() => onShow(first + i)}>{it.text}</button>
+                                ))}
+                            </div>
                         </div>
                     );
                 }

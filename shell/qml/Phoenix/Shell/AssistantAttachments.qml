@@ -7,7 +7,9 @@
 //   {type: "images", total, items: [{path, open}]}  a strip of thumbnails,
 //       "+N more" past those shown;
 //   {type: "cards", items: [{title, subtitle?, detail?, open?}]}  a card
-//       each (an event, a contact, a memo, an email).
+//       each (an event, a contact, a memo, an email);
+//   {type: "examples", title, items: [{text}]}  things to ask (help), as
+//       chips under their app's name: a tap asks it (asked(index)).
 // A tap on one is shown(index), index across every attachment's items (the
 // service's choice "show:<index>" opens its app on it). The conversation
 // stays in front: the app is only brought forward by that tap or "Open ...".
@@ -26,6 +28,7 @@ Column {
     property var source: null
     property real maxWidth: Theme.px(300)
     signal shown(int index)
+    signal asked(int index)
 
     spacing: Theme.px(6)
     visible: attachments && attachments.length > 0
@@ -44,7 +47,8 @@ Column {
             id: part
             required property var modelData
             required property int index
-            sourceComponent: modelData.type === "images" ? strip : modelData.type === "cards" ? cards : null
+            sourceComponent: modelData.type === "images" ? strip : modelData.type === "cards" ? cards
+                           : modelData.type === "examples" && (modelData.items || []).length ? examples : null
             readonly property int base: att.firstIndex(index)
             readonly property var shown: modelData
 
@@ -102,6 +106,38 @@ Column {
                         color: "#D0FFFFFF"
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.px(14)
+                    }
+                }
+            }
+            Component {
+                id: examples
+                Column {
+                    objectName: "assistantExamples"
+                    width: att.maxWidth
+                    spacing: Theme.px(4)
+                    Text {
+                        visible: text !== ""
+                        text: part.shown.title || ""
+                        color: "#B0FFFFFF"
+                        font.family: Theme.fontFamily
+                        font.bold: true
+                        font.capitalization: Font.AllUppercase
+                        font.pixelSize: Theme.px(12)
+                    }
+                    Flow {
+                        width: parent.width
+                        spacing: Theme.px(6)
+                        Repeater {
+                            model: part.shown.items || []
+                            delegate: AssistantChip {
+                                required property var modelData
+                                required property int index
+                                objectName: "assistantHelp-" + (part.base + index)
+                                text: modelData.text
+                                maxWidth: att.maxWidth
+                                onClicked: att.asked(part.base + index)
+                            }
+                        }
                     }
                 }
             }

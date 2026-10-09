@@ -81,6 +81,10 @@ Item {
                 else if (/^add a meeting/.test(params.text))
                     added.push(msg({ role: "assistant", text: "Added \u201cMeeting with Sam\u201d to your calendar, tomorrow at 3:00 PM.", via: "commands",
                                      command: "event", status: "done", choices: [{ id: "open", label: "Open Calendar" }] }));
+                else if (/^what can you do/.test(params.text))
+                    added.push(msg({ role: "assistant", text: "Here's what I can do.", via: "commands", command: "help", status: "done",
+                                     data: { attachments: [{ type: "examples", title: "Right now", items: [{ text: "hello there" }] },
+                                                           { type: "examples", title: "Calendar", items: [{ text: "What's on my calendar tomorrow?" }, { text: "hello again" }] }] } }));
                 else if (/^show my photos/.test(params.text))
                     added.push(msg({ role: "assistant", text: "Here are 5 photos from yesterday. I've opened them in Photos too.", via: "commands",
                                      command: "photos", status: "done", choices: [{ id: "open", label: "Open Photos" }],
@@ -492,6 +496,19 @@ Item {
             card = findChild(row, "assistantCard-0");
             mouseClick(card, card.width / 2, card.height / 2);
             tryVerify(function () { return fake.calls.indexOf("choose show:2") >= 0; }, 2000, "the card's index counts the pictures before it");
+        }
+
+        // Help: things to ask, by app; a tap asks one.
+        function test_helpExamplesAreAsked() {
+            openByHold();
+            type("what can you do");
+            var row = arrived("Here's what I can do.");
+            verify(findChild(row, "assistantExamples"), "the examples under the words");
+            var chip = findChild(row, "assistantHelp-2");
+            verify(chip && chip.visible && chip.text === "hello again");
+            mouseClick(chip, chip.width / 2, chip.height / 2);
+            tryVerify(function () { return fake.asks.length === 2 && fake.asks[1].text === "hello again"; }, 2000, "asked");
+            verify(overlay.open);
         }
 
         // Each opening is a conversation of its own: the first request makes

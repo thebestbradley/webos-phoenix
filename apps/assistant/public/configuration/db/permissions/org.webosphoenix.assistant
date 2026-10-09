@@ -1,0 +1,133 @@
+[
+    {
+        "type": "db.kind",
+        "object": "com.palm.person:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "create": "allow",
+            "read": "allow",
+            "delete": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.contact.palmprofile:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "create": "allow",
+            "read": "allow",
+            "delete": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.account:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "read": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.smsmessage:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "read": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.phonecall:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "read": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.mail.account:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "read": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.email:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "read": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.calendar:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "read": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.calendarevent:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "create": "allow",
+            "read": "allow",
+            "update": "allow",
+            "delete": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.clock.alarm:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "create": "allow",
+            "read": "allow",
+            "update": "allow",
+            "delete": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.task:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "create": "allow",
+            "read": "allow",
+            "update": "allow",
+            "delete": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.tasklist:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "create": "allow",
+            "read": "allow",
+            "update": "allow",
+            "delete": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.note:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "create": "allow",
+            "read": "allow",
+            "update": "allow",
+            "delete": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.media.image.file:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "read": "allow"
+        }
+    }
+]
