@@ -1,0 +1,58 @@
+{
+    "id": "firmware-rtw88",
+    "kind": "firmware",
+    "title": "Realtek Wi-Fi firmware (rtw88)",
+    "summary": "Lets Realtek 802.11ac Wi-Fi adapters (RTL8821C, RTL8822B, RTL8822C, USB and PCIe) connect.",
+    "description": "The rtw88 driver is built into Phoenix; the adapter's own program (firmware) is Realtek's and is not open source, so it is not in the system image.",
+    "category": "wifi",
+    "match": [
+        "usb:v0BDApC811d*",
+        "usb:v0BDApC820d*",
+        "usb:v0BDApB82Cd*",
+        "usb:v0BDApC82Cd*",
+        "pci:v000010ECd0000C821sv*",
+        "pci:v000010ECd0000C822sv*",
+        "pci:v000010ECd0000B822sv*"
+    ],
+    "firmware": [
+        "rtw88/rtw8821c_fw.bin",
+        "rtw88/rtw8822b_fw.bin",
+        "rtw88/rtw8822c_fw.bin"
+    ],
+    "modules": [
+        "rtw88_8821cu",
+        "rtw88_8822bu",
+        "rtw88_8822cu",
+        "rtw88_8821ce",
+        "rtw88_8822be",
+        "rtw88_8822ce"
+    ],
+    "optional": false,
+    "after": "reload",
+    "license": {
+        "id": "LicenseRef-rtlwifi-firmware",
+        "name": "Realtek firmware licence",
+        "text": "Sample catalog: this stands for the licence text the real entry carries,\nlinux-firmware's LICENCE.rtlwifi_firmware.txt (Copyright (c) 2010, Realtek\nSemiconductor Corporation), shown in full before installing. In short, it\nallows passing the firmware on in binary form, unmodified, with Realtek's\ncopyright notice and disclaimer; it does not allow reverse engineering,\ndecompiling or disassembling it, or using Realtek's name to promote\nproducts; and it gives no warranty.\n\nRead the full text at:\nhttps://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/LICENCE.rtlwifi_firmware.txt\n",
+        "url": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/LICENCE.rtlwifi_firmware.txt",
+        "free": false,
+        "redistributable": true
+    },
+    "source": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git",
+    "homepage": "",
+    "maintainer": {
+        "name": "webOS Phoenix",
+        "email": "drivers@webosphoenix.org"
+    },
+    "packages": [
+        {
+            "name": "linux-firmware-rtw88",
+            "version": "20240909-r0",
+            "arch": "all",
+            "kernel": null,
+            "size": 598,
+            "installedSize": 141,
+            "sha256": "f87c5ed6b42efcee3ea241e1f08f70e26d85a3dbc4895b143de683a163a155ca",
+            "url": "packages/linux-firmware-rtw88_20240909-r0_all.ipk"
+        }
+    ]
+}

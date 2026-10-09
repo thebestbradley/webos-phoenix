@@ -1,0 +1,27 @@
+{
+    "id": "firmware-nvidia-gsp",
+    "kind": "firmware",
+    "title": "NVIDIA GPU firmware (GSP)",
+    "summary": "Full speed and better power use for GeForce 16 and RTX 20 graphics with the built-in nouveau driver.",
+    "description": "Without it, nouveau runs these graphics cards at their lowest clock speed. The firmware is NVIDIA's and is not open source.",
+    "category": "graphics",
+    "match": ["pci:v000010DEd00001F8[0-9A-F]sv*bc03sc*", "pci:v000010DEd00002182sv*bc03sc*", "pci:v000010DEd00001E8[0-9A-F]sv*bc03sc*"],
+    "firmware": ["nvidia/tu117/gsp/gsp-535.113.01.bin"],
+    "modules": ["nouveau"],
+    "optional": true,
+    "after": "reboot",
+    "license": {
+        "id": "LicenseRef-nvidia-firmware",
+        "name": "NVIDIA firmware licence",
+        "text": "Sample catalog: this stands for linux-firmware's LICENCE.nvidia, shown in full before installing. In short, it allows passing the firmware on, unmodified, with NVIDIA's notice, for use with NVIDIA's graphics; it does not allow reverse engineering it; it gives no warranty.\n\nFull text: https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/LICENCE.nvidia",
+        "url": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/LICENCE.nvidia",
+        "free": false,
+        "redistributable": true
+    },
+    "source": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git",
+    "maintainer": { "name": "webOS Phoenix", "email": "drivers@webosphoenix.org" },
+    "samplePackages": [
+        { "name": "linux-firmware-nvidia-gsp", "version": "20240909-r0", "arch": "all",
+          "files": { "lib/firmware/nvidia/tu117/gsp/gsp-535.113.01.bin": "SAMPLE: stands for NVIDIA's GSP firmware\n" } }
+    ]
+}

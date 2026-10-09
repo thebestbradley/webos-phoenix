@@ -1,0 +1,58 @@
+{
+    "id": "module-rtl8812au",
+    "kind": "module",
+    "title": "Realtek RTL8812AU Wi-Fi driver",
+    "summary": "A driver for USB Wi-Fi adapters with the RTL8812AU chip, which the Linux kernel does not include.",
+    "description": "Open source (GPL-2.0), maintained outside the Linux kernel by the aircrack-ng project, and built for each Phoenix kernel.",
+    "category": "wifi",
+    "match": [
+        "usb:v0BDAp8812d*",
+        "usb:v0BDAp881Ad*",
+        "usb:v0BDAp881Bd*",
+        "usb:v0BDAp881Cd*",
+        "usb:v2357p0101d*",
+        "usb:v0846p9052d*"
+    ],
+    "firmware": [],
+    "modules": [
+        "88XXau"
+    ],
+    "optional": false,
+    "after": "reload",
+    "license": {
+        "id": "GPL-2.0-only",
+        "name": "GNU General Public License 2.0",
+        "text": "",
+        "url": "https://github.com/aircrack-ng/rtl8812au/blob/v5.6.4.2/LICENSE",
+        "free": true,
+        "redistributable": true
+    },
+    "source": "https://github.com/aircrack-ng/rtl8812au",
+    "homepage": "",
+    "maintainer": {
+        "name": "webOS Phoenix",
+        "email": "drivers@webosphoenix.org"
+    },
+    "packages": [
+        {
+            "name": "kernel-module-88xxau-6.6.23-phoenix",
+            "version": "5.6.4.2-r0",
+            "arch": "x86_64",
+            "kernel": "6.6.23-phoenix",
+            "size": 656,
+            "installedSize": 46,
+            "sha256": "ae3dde11c1ea5b33a09db79871d2071468e04d7b1b9791b4199330bea9fa40bc",
+            "url": "packages/kernel-module-88xxau-6.6.23-phoenix_5.6.4.2-r0_x86_64.ipk"
+        },
+        {
+            "name": "kernel-module-88xxau-6.6.23-phoenix",
+            "version": "5.6.4.2-r0",
+            "arch": "aarch64",
+            "kernel": "6.6.23-phoenix",
+            "size": 656,
+            "installedSize": 45,
+            "sha256": "00bc223427402051af8fb47df9f7a0a5cb95479a1cf7903acd848745a038ed1f",
+            "url": "packages/kernel-module-88xxau-6.6.23-phoenix_5.6.4.2-r0_aarch64.ipk"
+        }
+    ]
+}

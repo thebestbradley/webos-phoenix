@@ -1,0 +1,7 @@
+{
+    "//": "The simulator's driver catalog (runtime/phoenix-runtime.js reads it in place of /etc/palm/hardware/catalog.json): the sample catalog next to this file, signed with sample/signing.key, which signs nothing else. Made by `php server/drivers/bin/drivers.php sample`. reportUrl: the catalog service on this computer (server/drivers/bin/serve.sh).",
+    "sources": [
+        { "id": "phoenix", "name": "Phoenix Drivers (sample)", "url": "file:///usr/share/phoenix/hardware/sample/v1/", "key": "KEAXsw9Dql00scrFTxAblCi4HsZnk7ApHyAA5jZ6WUo=" }
+    ],
+    "reportUrl": "http://127.0.0.1:8090/v1/report"
+}

@@ -1,0 +1,10 @@
+Sample catalog: this stands for the licence text the real entry carries,
+linux-firmware's LICENCE.rtlwifi_firmware.txt (Copyright (c) 2010, Realtek
+Semiconductor Corporation), shown in full before installing. In short, it
+allows passing the firmware on in binary form, unmodified, with Realtek's
+copyright notice and disclaimer; it does not allow reverse engineering,
+decompiling or disassembling it, or using Realtek's name to promote
+products; and it gives no warranty.
+
+Read the full text at:
+https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/LICENCE.rtlwifi_firmware.txt
