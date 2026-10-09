@@ -179,6 +179,10 @@ jobs:
         timeout-minutes: 10
         run: build/localmodels-test
 
+      - name: The Assistant's voice (phoenix-tts, with Kitten TTS's model and ONNX Runtime)
+        timeout-minutes: 10
+        run: python3 tools/get-kitten.py && build/tts-test
+
       - name: Trademark overlays up to date
         run: python3 tools/debrand-overlays.py --check
 
@@ -345,7 +349,8 @@ jobs:
           submodules: recursive
 
       - name: Qt 6, CMake and Ninja (Homebrew)
-        run: brew install qt cmake ninja
+        # onnxruntime: the Assistant's voice (tts-test, with Kitten TTS's model).
+        run: brew install qt cmake ninja onnxruntime
 
       - uses: actions/setup-node@v4
         with:
@@ -407,6 +412,7 @@ jobs:
           build/dictation-test
           python3 tools/get-wakeword.py && build/wakeword-test
           build/localmodels-test
+          python3 tools/get-kitten.py && build/tts-test
           build/simnet-test
           build/simmarketplace-test
 

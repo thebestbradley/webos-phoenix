@@ -22,7 +22,8 @@ See [docs/ROADMAP.md](docs/ROADMAP.md#two-lines-1x-and-20).
 ```
 
 One command installs what is missing (Homebrew's Qt and tools on a Mac; Qt
-6.8.1, Node.js 22 and the packages on Ubuntu; the assistant's models),
+6.8.1, Node.js 22 and the packages on Ubuntu; the assistant's models, its
+voice, Kitten TTS, and its built-in language model, Qwen3 0.6B),
 builds, and starts the simulator, adaptive: resize its window and it is a
 phone or a tablet by the size, live. `./phoenix run phone` or `tablet` fixes
 the layout, `./phoenix check` only says what it would install, and
@@ -477,6 +478,8 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-assistant-followups.cjs` | The Assistant's follow-up questions: asked after an event, answered by a quick reply, sent later as a notification with buttons, unread in Conversations, the app opened from it |
 | `node tools/test-terminal.cjs` | Terminal (simulated shell, then /bin/sh for real) |
 | `build/pty/pty-test` | The Terminal's PTY service |
+| `build/tts-test` | The Assistant's voice, phoenix-tts: numbers and words, the dictionary's phonemes, Kitten's symbols and voices; with the model (`tools/get-kitten.py`) speech, checked for length and loudness |
+| `build/localmodels-test` | The shell's on-device model runner (a stand-in llama-server; built-in models) and Speech (Kitten TTS first, Flite when it cannot, the voice) |
 | `build/devices/devices-test` | phoenix-devices: the display, keys, vibrator and light sensor services; the hardware found by looking, devices appearing and going, `--probe` |
 | `node tools/test-videos.cjs` | Videos |
 | `node tools/test-podcasts.cjs` | Podcasts |

@@ -127,6 +127,41 @@ needed; the 1.5B and 4B models are recommended where they fit. In
 phoenix-sim the model loaded and answered in about 18 s the first time
 and 2 s after, on four CPU cores.
 
+**Built in: Qwen3 0.6B** (9 October 2026, the owner's decision). The device
+image ships Qwen3 0.6B (Q4_K_M, 397 MB) and `./phoenix` puts it in
+`build/models`; it is the on-device model in use until another is chosen
+(`localModel` "": the built-in one; "off": none), listed in Settings as
+**Built in**, never downloaded or removed. The commands still answer
+first (a test checks that what the grammar knows never reaches the
+model). Qwen3's template thinks aloud unless told not to: every request
+says `enable_thinking: false`. A model this small, offered tools, often
+said what it would do instead of calling one ("I'll turn off the Wi-Fi"),
+or was not offered the right one for words it did not share with it
+("throw on some tunes"). So where the words may ask the phone to act it
+works in two steps (`assistant.js` `pickCommand`): it first chooses among
+every command, by name and the first sentence of its description, or
+"none", its answer held to those names by a JSON schema (llama-server
+turns it into a grammar), at temperature 0, with sixteen examples as
+earlier turns (other words than the grammar's); then it gets that one
+tool with `tool_choice: "required"`, which makes it call it and fill in
+the arguments. "None" is answered in words, without tools; what it
+chooses wrongly is still read back unless the words name it
+(`grounded()`). Measured with the real model and llama-server on 28 action
+phrasings the grammar misses ("kill the wifi for now", "pencil in a
+dentist visit next tuesday at 3", "drop Sam a line saying I'm on my way"):
+the right command 7 times before (the closest ten tools offered), 17
+after; the choice alone 20, 9 without the examples. A request takes about
+0.8 s here once the server is up (the choice 0.45 s). llama-server runs
+with 8,192 tokens of context (the commands as tools passed 4,096: it
+refused the request), one slot and an 8-bit cache with flash attention:
+1.3 GB in all for Qwen3 0.6B, as much as 4,096 tokens took before. One
+slot against four made no difference here (0.44 s against 0.46 s a
+choice: this llama.cpp shares one cache between its slots), but keeps
+the prompt cached for a phone's single user. Checked in phoenix-sim:
+"please set up a wake up call at 6 tomorrow morning", which the grammar
+does not know, set the alarm through Qwen3 0.6B and was spoken by Kitten
+TTS.
+
 **Never a dead end** (9 October 2026, from the owner's "how do you make
 banana pudding": the commands said "I can't do that on the phone", and the
 model connected later copied it). What nothing here can do gets what can,
@@ -380,9 +415,11 @@ same origin could use the sealing key; the service only answers
 Settings, and provider changes only for Settings. On a device the
 Phoenix key store (SYNERGY.md) replaces the key file.
 
-**On-device models** (`lib/models.js`; Apache-2.0, the Qwen team's own
-GGUF builds, SHA-256 from Hugging Face, checked after download; nothing
-shipped in the image): Qwen2.5 0.5B Instruct Q4_K_M (491 MB, for 2 GB),
+**On-device models** (`lib/models.js`; Apache-2.0, SHA-256 from Hugging
+Face, checked after download). Built in: Qwen3 0.6B Q4_K_M (397 MB; the
+Qwen team publishes only a Q8_0 GGUF of it, 639 MB, so this is Unsloth's
+quantization of their weights, `unsloth/Qwen3-0.6B-GGUF` at a pinned
+revision). To download, the Qwen team's own GGUF builds: Qwen2.5 0.5B Instruct Q4_K_M (491 MB, for 2 GB),
 Qwen2.5 1.5B Instruct Q4_K_M (1.1 GB, for 4 GB), Qwen3 4B Q4_K_M (2.5 GB,
 for 8 GB). Settings offers what fits the device's memory and recommends
 the largest. Llama 3.2 was left out (its licence is not permissive);
@@ -393,16 +430,68 @@ setup scripts install it (below), and on a device meta-phoenix's
 `llama-cpp` recipe does. It stops after five idle minutes to give the
 memory back.
 
-**Speech** (`org.webosphoenix.tts`: `speak {text, lang?}`, `stop`,
-`getStatus`). Qt's TextToSpeech module is not part of the Qt installs
-Phoenix builds with, and QtWebEngine's `speechSynthesis` has no voices
-(it needs speech-dispatcher, which Qt's builds do not use), so the shell
-runs a speech program with the text on its input: `espeak-ng` (GPL-3.0,
-run as a separate program, never linked) where it is installed, `say` on
-a Mac, else Flite (BSD-3-Clause, English only), or `--speech-command`
-(Piper, for instance). The device service does the same. A browser page
-with voices uses `speechSynthesis`. Answers are spoken when **Speak
-answers** is on (on by default).
+**Speech** (`org.webosphoenix.tts`: `speak {text, lang?, voice?}`,
+`stop`, `getStatus` -> `{available, engine, voices}`). Qt's TextToSpeech
+module is not part of the Qt installs Phoenix builds with, and
+QtWebEngine's `speechSynthesis` has no voices (it needs speech-dispatcher,
+which Qt's builds do not use), so the shell runs a speech program with the
+text on its input. Since 9 October 2026 (the owner's decision) that is
+**Kitten TTS**: `phoenix-tts` (`services/tts`, C++), KittenML's nano 0.2
+model (15 million parameters, 24 MB, eight voices, 24 kHz) on ONNX
+Runtime, which it loads at run time (its C API, version 16 or later), as
+the wake word loads libvosk. It speaks sentence by sentence (the first is
+heard while the next is made) through PulseAudio, else ALSA (both loaded
+when needed), or Audio Queue Services on a Mac; it writes one line on
+its standard error, which phoenix-sim's log shows ("phoenix-tts: Kitten
+TTS ..., voice expr-voice-3-f, 2 sentences, 9.8 s of speech; first sound
+after 1.97 s ..., real-time factor 0.32; dictionary phonemes; ALSA").
+Where it cannot speak (no model or ONNX Runtime: exit status 3; no sound
+output: 4), and for languages other than English, the programs before it
+take the same words: `espeak-ng` (GPL-3.0, run as a separate program,
+never linked) where it is installed, `say` on a Mac, else Flite
+(BSD-3-Clause, English only); or `--speech-command` (Piper, for
+instance; `%l` the language, `%v` the voice). The device service does the
+same (`lib/node-device.js` `speech`). A browser page with voices uses
+`speechSynthesis`. Answers are spoken when **Speak answers** is on (on by
+default).
+
+*Phonemes.* Kitten reads phonemes, not letters: it was trained on
+espeak-ng's IPA (en-us, stress marks, punctuation kept, as the Python
+`phonemizer` writes it), and KittenML's own code runs espeak-ng's library.
+espeak-ng is GPL-3.0, which the image avoids (below), so `phoenix-tts`
+makes those phonemes itself by default: the CMU Pronouncing Dictionary
+(BSD-2-Clause, 135,000 words) turned into espeak's en-us IPA by rules
+(`services/tts/src/phonemes.cpp`: stress before the vowel, the flapped t,
+reduced vowels, small words as espeak says them in a sentence, "the" and
+"to" before a vowel), letter-to-sound rules for words it lacks, and
+numbers, times, money, units and abbreviations as words. Against
+espeak-ng on 515 sentences of these docs it differs in 8% of phoneme
+characters (5% without the stress marks); spoken by Kitten and
+transcribed by whisper base.en, 30 assistant answers came out with 3.1%
+of words wrong either way (the same eight, all "ten" written "10" and the
+like). `--phonemizer espeak` uses the espeak-ng program instead, as a
+program of its own run for each stretch between punctuation marks: that
+is an aggregate, not a derived work, and it is opt-in.
+
+*The voice.* Kitten has eight voices (KittenML's names for them in its
+0.8 model: Bella, Jasper, Luna, Bruno, Rosie, Hugo, Kiki, Leo). Chosen
+without listening, by measure: Luna (`expr-voice-3-f`) has the darkest
+tone of the women's voices (spectral centroid about 1,400 Hz against
+1,400-1,900), a mid pitch (about 230 Hz) and an unhurried pace, and
+whisper understood all eight equally. It is the default; **Settings >
+Assistant > Voice** offers the others (`speechVoice`) with **Play
+Sample**, where the engine has voices (not with Flite or espeak-ng).
+
+*Speed.* On this simulator's computer (4 cores of a 2.3 GHz Xeon, one
+thread for Kitten: more did not help a model this small, and ONNX
+Runtime's graph optimizations cost more to load, 0.7 s, than they saved,
+so they are off): a real-time factor of 0.3 (a 3 s sentence in 0.9 s),
+0.3-0.5 s to load the model, the first sound 1-2 s after the words
+arrive for a typical answer; `phoenix-tts --check` (what Speech asks
+first) takes 40 ms. A phone's Cortex-A76 class core should be about half
+as fast (0.6, still faster than real time); a slower A55 class core about
+real time, where the sentence-by-sentence playing keeps the first words
+prompt. Not measured on a device yet.
 
 **What's installed where** (8 October 2026). The command grammar needs
 nothing extra. Everything else is a program or a model beside Phoenix,
@@ -418,23 +507,33 @@ installed by the setup scripts on a computer and by meta-phoenix's
 | Wake word: `phoenix-wakeword` | Built with phoenix-sim | Built with phoenix-sim | `phoenix-shell` | Apache-2.0 (Phoenix) |
 | Wake word: libvosk | `build/wakeword` (`tools/get-wakeword.py`, 13 MB) | `build/wakeword` (26 MB) | `libvosk`, prebuilt from Alpha Cephei's PyPI wheels (x86-64, aarch64, armv7) | Apache-2.0; Kaldi, OpenFST Apache-2.0; OpenBLAS, CLAPACK BSD-3-Clause |
 | Wake word: `vosk-model-small-en-us-0.15` (40 MB download, 71 MB) | `build/wakeword` | `build/wakeword` | `vosk-model-small-en-us`, in the image, `/usr/share/phoenix/wakeword` | Apache-2.0 |
-| Spoken answers | `say` (part of macOS) | `espeak-ng` (apt) | `flite` (meta-multimedia; `PHOENIX_TTS` to change) | Flite BSD-3-Clause; espeak-ng GPL-3.0 |
+| The built-in language model: Qwen3 0.6B Q4_K_M (397 MB) | `build/models` (`tools/get-base-model.py`) | `build/models` | `qwen3-0.6b-gguf`, in the image, `/usr/share/phoenix/models` (`PHOENIX_BASE_MODEL`) | Apache-2.0 (Qwen; Unsloth's quantization) |
+| The voice: `phoenix-tts` | Built with phoenix-sim | Built with phoenix-sim | `phoenix-shell` | Apache-2.0 (Phoenix); its `onnxruntime_c_api.h` MIT |
+| Kitten TTS nano 0.2 (24 MB) | `build/kitten` (`tools/get-kitten.py`) | `build/kitten` | `kitten-tts-nano`, in the image, `/usr/share/phoenix/kitten` | Apache-2.0 (KittenML: code, weights and voices) |
+| The CMU Pronouncing Dictionary (3.6 MB) | `build/kitten` | `build/kitten` | `cmudict`, `/usr/share/phoenix/kitten` | BSD-2-Clause |
+| ONNX Runtime 1.30 (29 MB) | Homebrew `onnxruntime` | `build/kitten` (Microsoft's build, 11 MB download) | `onnxruntime`, Microsoft's build (x86-64, aarch64; `PHOENIX_KITTEN`) | MIT |
+| Spoken answers when Kitten cannot | `say` (part of macOS) | `espeak-ng` (apt) | `flite` (meta-multimedia; `PHOENIX_TTS` to change) | Flite BSD-3-Clause; espeak-ng GPL-3.0 |
 
 Each setup script installs all of it by default, skips what is already
 there, checks downloads against their SHA-256 (or a pinned git commit),
-and leaves it out with `--no-assistant`. On a Mac it is about 230 MB of
-models plus the two Homebrew packages; on Linux about 280 MB, and a few
-minutes to build the two programs.
+and leaves it out with `--no-assistant`. On a Mac it is about 650 MB of
+models plus the three Homebrew packages; on Linux about 740 MB, and a few
+minutes to build the two programs (the voice is about 40 MB of it, the
+built-in model 397 MB).
 
 In the image, by device class (HARDWARE.md: 4 GB is the practical
 minimum): whisper's base.en and the Vosk model ship in the image, since
 dictation and "Hey Phoenix" must work offline from the first boot and
 together they take about 220 MB of storage, which every supported device
 has; tiny.en (78 MB, about twice as fast, less exact) is the choice to
-make for a 2-3 GB community device. The language models are never in the
-image: they are 0.5 to 2.5 GB, the right one depends on the memory
-(Settings offers what fits), and many users will not want one. Flite is
-the image's voice because it is permissive; espeak-ng (more languages)
+make for a 2-3 GB community device. Qwen3 0.6B (397 MB, 1.3 GB of memory
+while it runs, stopped after five idle minutes) ships too, so the
+Assistant answers what its commands miss offline from the first boot;
+the larger models are 1.1 to 2.5 GB, the right one depends on the memory
+(Settings offers what fits), and are downloads. Kitten TTS is the image's
+voice (with its dictionary and ONNX Runtime, about 57 MB, all
+permissive), and Flite its fallback, because both are permissive; armv7
+devices have no prebuilt ONNX Runtime and speak with Flite. espeak-ng (more languages)
 is GPL-3.0, which docs/LEGAL.md allows only as a separate program with its
 own licence and source offer, and GPL-3.0 also asks a device maker who
 locks the bootloader to give the user a way to install a changed version.
@@ -448,9 +547,9 @@ When a part is missing the assistant says so instead of failing
 silently: phoenix-sim logs one line per missing part with how to get it,
 and Settings > Assistant lists them under Voice (service method `voice`:
 the simulator's from what phoenix-sim found at start, the device's from
-the transcriber, the wake word's files and the speech program; on a
-device the hint names the meta-phoenix package). The on-device model's
-note says how to get `llama-server`.
+the transcriber, the wake word's files and the speech program, Kitten
+TTS first; on a device the hint names the meta-phoenix package). The
+on-device model's note says how to get `llama-server`.
 
 **Where it shows.** Holding the launcher button opens the system view
 (its heading says "Assistant": Phoenix is the UI's version name):
