@@ -122,8 +122,8 @@ Item {
         property var poses: []
         property real maxLift: 0
         property real minFlap: 1
-        property real shutAt: 0
-        function reset() { poses = []; maxLift = 0; minFlap = 1; shutAt = 0; }
+        property int between: 0     // steps of the panel's opening or closing between shut and open
+        function reset() { poses = []; maxLift = 0; minFlap = 1; between = 0; }
         function had(list) {
             // list in this order (others between allowed).
             var i = 0;
@@ -135,8 +135,7 @@ Item {
     Connections {
         target: root.overlay
         function onBirdPoseChanged() { birdSeen.poses = birdSeen.poses.concat([root.overlay.birdPose]); }
-        // When the panel ended up shut.
-        function onShownChanged() { if (root.overlay.shown === 0) birdSeen.shutAt = Date.now(); }
+        function onShownChanged() { if (root.overlay.shown > 0 && root.overlay.shown < 1) ++birdSeen.between; }
     }
     Connections {
         target: root.overlay ? findBird() : null
@@ -539,16 +538,21 @@ Item {
             var panel = findChild(overlay, "assistantPanel");
             compare(panel.opacity, 1);
             compare(findChild(overlay, "assistantBackdrop").opacity, 1);
+            // The launcher's length (lunaAnimations.conf:83-84). Checked as
+            // given, not by the wall clock: Qt Quick's animation driver
+            // advances animations a vsync interval per frame drawn
+            // (qtdeclarative src/quick/scenegraph/qsgcontext.cpp,
+            // QSGAnimationDriver::advance), so offscreen, with frames drawn
+            // faster or slower than that, an animation ends early or late
+            // by the clock.
+            compare(findChild(overlay, "assistantShownAnimation").duration, Theme.launcherDuration);
             birdSeen.reset();
-            var t0 = Date.now();
             keyClick(Qt.Key_Escape);
             compare(overlay.open, false);
+            verify(overlay.visible, "still drawn as it starts closing");
             tryCompare(overlay, "visible", false, 3000);
             compare(overlay.shown, 0);
-            // It took its time closing (when it shut, recorded as it came: an
-            // animation never ends before its duration, however a slow
-            // machine draws it in between).
-            verify(birdSeen.shutAt - t0 >= Theme.launcherDuration - 20, "closing: " + (birdSeen.shutAt - t0) + " ms");
+            verify(birdSeen.between > 0, "it closed in steps, not at once");
         }
 
         // ---- The bird ----------------------------------------------------------------

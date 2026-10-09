@@ -161,6 +161,7 @@ Item {
     property real shown: open ? 1 : 0
     Behavior on shown {
         NumberAnimation {
+            objectName: "assistantShownAnimation"
             duration: Theme.launcherDuration
             easing.type: ov.open ? Easing.OutCubic : Easing.InCubic
         }
