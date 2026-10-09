@@ -127,16 +127,18 @@ function getOnce(url) {
 // ships (default /usr/share/phoenix/models: Qwen3 0.6B, meta-phoenix's
 // qwen3-0.6b-gguf; lib/models.js BUILT_IN), server: path or names to look
 // for, args: extra arguments, idleMs, ramBytes, log, pidFile: where the
-// running server's pid is kept (default beside the models), pdeathsig:
-// false not to use setpriv (the tests)}
+// running server's pid is kept (default beside the models), pdeath: the
+// program to start it through (default phoenix-pdeath, else setpriv), or
+// false for none (the tests)}
 //
 // It ends with the service, however the service ends: on exit and on
-// SIGTERM, SIGINT or SIGHUP it is stopped; started through util-linux's
-// setpriv --pdeathsig where the image has it, the kernel ends it when the
-// service dies outright (SIGKILL, a crash); and its pid and start time are
-// kept in pidFile, so a server left by a service that died anyway is
-// stopped when the next one starts (as phoenix-sim's shell/native/
-// localmodels.cpp ends its own with PR_SET_PDEATHSIG).
+// SIGTERM, SIGINT or SIGHUP it is stopped; started through phoenix-pdeath
+// (services/pdeath, Phoenix's own, in the image) or else util-linux's
+// setpriv --pdeathsig, the kernel ends it when the service dies outright
+// (SIGKILL, a crash); and its pid and start time are kept in pidFile, so
+// a server left by a service that died anyway is stopped when the next one
+// starts (as phoenix-sim's shell/native/localmodels.cpp ends its own with
+// PR_SET_PDEATHSIG).
 var reaping = null;
 function procStart(pid) {
     try {
@@ -177,6 +179,14 @@ function llamaServer(options) {
         running.forEach(function (c) { try { c.kill("SIGTERM"); } catch (e) { /* gone */ } });
         if (running.length) try { fs.unlinkSync(pidFile); } catch (e) { /* none */ }
     });
+    // [program, args] that end with the service: phoenix-pdeath, else setpriv, else as is.
+    function throughPdeath(bin, args) {
+        if (process.platform !== "linux" || options.pdeath === false) return [bin, args];
+        var own = findProgram([].concat(options.pdeath || "phoenix-pdeath"));
+        if (own) return [own, ["TERM", "--", bin].concat(args)];
+        var setpriv = options.pdeath ? "" : findProgram(["setpriv"]);
+        return setpriv ? [setpriv, ["--pdeathsig", "TERM", "--", bin].concat(args)] : [bin, args];
+    }
     function keepPid(child) {
         try { fs.mkdirSync(path.dirname(pidFile), { recursive: true }); fs.writeFileSync(pidFile, child.pid + " " + procStart(child.pid) + "\n"); }
         catch (e) { log("llama-server pid: " + e.message); }
@@ -242,9 +252,7 @@ function llamaServer(options) {
                 var args = ["-m", file, "--host", "127.0.0.1", "--port", String(port), "--jinja", "-c", "8192", "-np", "1",
                             "-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0", "-b", "512"].concat(options.args || []);
                 log("starting " + bin + " " + args.join(" "));
-                var setpriv = process.platform === "linux" && options.pdeathsig !== false ? findProgram(["setpriv"]) : "";
-                var child = setpriv ? childProcess.spawn(setpriv, ["--pdeathsig", "TERM", "--", bin].concat(args), { stdio: ["ignore", "ignore", "pipe"] })
-                                    : childProcess.spawn(bin, args, { stdio: ["ignore", "ignore", "pipe"] });
+                var child = childProcess.spawn.apply(childProcess, throughPdeath(bin, args).concat([{ stdio: ["ignore", "ignore", "pipe"] }]));
                 running.push(child);
                 keepPid(child);
                 var errText = "";

@@ -3,7 +3,8 @@
 
 SUMMARY = "What the Phoenix Assistant and dictation run on the device"
 DESCRIPTION = "Speech recognition (whisper.cpp and its English model), \
-the on-device model runner (llama.cpp's llama-server) and the built-in \
+the on-device model runner (llama.cpp's llama-server, which phoenix-pdeath \
+ends with the Assistant service) and the built-in \
 model (Qwen3 0.6B), the wake word (libvosk and its small English model; \
 phoenix-wakeword comes with phoenix-shell) and the voice for spoken \
 answers: Kitten TTS (its model, the CMU dictionary and ONNX Runtime; \
@@ -44,6 +45,7 @@ RDEPENDS:${PN} = " \
     whisper-cpp \
     whisper-cpp-model-base-en \
     llama-cpp-server \
+    phoenix-pdeath \
     ${PHOENIX_BASE_MODEL} \
     ${PHOENIX_WAKEWORD} \
     ${PHOENIX_KITTEN} \
