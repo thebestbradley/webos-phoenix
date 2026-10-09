@@ -3930,6 +3930,28 @@
             reportInput(true, editorState(el));
         else
             reportInput(false);
+        watchRemoval(editable(el) ? el : null);
+    }
+
+    // Chromium moves the focus to the body without a focusout when the
+    // focused element leaves the page (a view that goes away under Back
+    // while its field is focused); WebKit told the IMEController the focus
+    // had gone and the keyboard hid. Watch the page while a field has the
+    // focus and follow the focus when that field is gone.
+    var removalWatch = null;
+    function watchRemoval(el) {
+        if (removalWatch) {
+            removalWatch.observer.disconnect();
+            removalWatch = null;
+        }
+        if (!el || typeof global.MutationObserver !== "function" || !global.document.documentElement)
+            return;
+        var observer = new global.MutationObserver(function () {
+            if (!el.isConnected || global.document.activeElement !== el)
+                followFocus();
+        });
+        observer.observe(global.document.documentElement, { childList: true, subtree: true });
+        removalWatch = { observer: observer, el: el };
     }
 
     if (global.document) {
