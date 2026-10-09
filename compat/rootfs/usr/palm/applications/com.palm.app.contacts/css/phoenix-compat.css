@@ -70,12 +70,3 @@
     color: #8a8a8a;
     font-size: 16px;
 }
-
-/* The type label beside a phone number or address (MOBILE, HOME...) is a
-   framed list selector (contacts.css .editable-label). Enyo styles its
-   content width:0 with a flex of 1, which in Chromium leaves the frame
-   24 px wide with the label hanging out of it; sized to its label, the
-   frame goes round it. */
-.edit .editable-label > .enyo-hflexbox {
-	width: auto !important;
-}

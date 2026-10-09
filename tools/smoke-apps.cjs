@@ -119,6 +119,13 @@ const SCENARIOS = {
         await h.tap(".enyo-radiobutton:nth-child(2)");
         await h.button("New Alarm").click(); await h.wait(1200);
         await h.screenshot("new-alarm");
+        await h.expect("Occurs' list selector holds its label (Daily), not hanging out under the arrow", async () => h.page.evaluate(() => {
+            const sel = [...document.querySelectorAll(".enyo-listselector")].find((e) => e.offsetWidth && /Daily/.test(e.textContent));
+            const label = sel && [...sel.querySelectorAll("*")].find((e) => !e.children.length && /Daily/.test(e.textContent));
+            if (!label) return false;
+            const s = sel.getBoundingClientRect(), l = label.getBoundingClientRect();
+            return l.left >= s.left && l.right <= s.right && s.right <= innerWidth;
+        }));
         await h.button("Done").click(); await h.wait(1200);
         await h.screenshot("alarms");
         await h.expect("an alarm in db8", async () => (await h.db("com\\.palm\\.clock\\.alarm:1")).length === 1);
@@ -172,6 +179,10 @@ const SCENARIOS = {
         await h.screenshot("month");
         await views.nth(0).click(); await h.wait(1000);
         await h.button("New event").click(); await h.wait(1500);
+        await h.expect("the new event's calendar picker shows the calendar's name", async () => h.page.evaluate(() => {
+            const c = document.querySelector("[id$=calendarPicker] [id$=_caption]");
+            return !!c && c.getBoundingClientRect().width > 40 && /\S/.test(c.textContent);
+        }));
         await h.tap(".event-name", 300);
         await h.type("Pick up bike");
         await h.screenshot("new-event");

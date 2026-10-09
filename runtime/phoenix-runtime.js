@@ -3635,6 +3635,30 @@
         else add();
     })();
 
+    // Enyo 1.0's list selectors (Clock's "Occurs  Daily", Contacts' MOBILE /
+    // HOME type labels): FlexLayout gives a flexed child width 0, "exactly
+    // the left over space" (base/layout/FlexLayout.js:75-79), and in a list
+    // selector sized to its content that left Chromium nothing for the
+    // label: the selector was its arrow alone, the label hanging out of it
+    // under the arrow and off the row. Sized to its label, the content
+    // still takes any space the selector is given, and so does the item in
+    // it: an item flexed inside in turn (Calendar's calendar picker: its
+    // colour and name, width 0 with a flex) otherwise showed nothing.
+    (function () {
+        var doc = global.document;
+        if (!doc || !doc.createElement) return;
+        function add() {
+            if (doc.getElementById("phoenix-enyo-listselector") || !doc.head) return;
+            var st = doc.createElement("style");
+            st.id = "phoenix-enyo-listselector";
+            st.textContent = ".enyo-listselector > .enyo-hflexbox { width: auto !important; }" +
+                " .enyo-listselector > .enyo-hflexbox > :first-child { -webkit-box-flex: 1; }";
+            doc.head.appendChild(st);
+        }
+        if (doc.readyState === "loading") doc.addEventListener("DOMContentLoaded", add);
+        else add();
+    })();
+
     // ---- HiDPI art named from script (the original apps) --------------------------
     //
     // The shell zooms a web view by its density, which the page sees as its
