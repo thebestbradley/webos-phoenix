@@ -371,6 +371,23 @@ function createPackagesService(deps) {
         });
     }
 
+    // An app's icon from its package (appinfo's icon, beside it), as a data:
+    // address the launcher can draw before the app is installed: a PNG, JPEG
+    // or GIF by its own bytes, at most 256 KB; else "".
+    var ICON_TYPES = [["image/png", [0x89, 0x50, 0x4e, 0x47]], ["image/jpeg", [0xff, 0xd8, 0xff]], ["image/gif", [0x47, 0x49, 0x46, 0x38]]];
+    function packageIcon(c) {
+        var name = String((c.app.appinfo && c.app.appinfo.icon) || "icon.png").replace(/^\.?\//, "");
+        var f = c.pkg.files.filter(function (x) { return x.path === c.app.dir + name; })[0];
+        var data = f && (typeof f.data === "string" ? new TextEncoder().encode(f.data) : f.data);
+        if (!data || !data.length || data.length > 256 * 1024) return "";
+        for (var i = 0; i < ICON_TYPES.length; ++i) {
+            var sig = ICON_TYPES[i][1];
+            if (sig.every(function (b, k) { return data[k] === b; }))
+                return "data:" + ICON_TYPES[i][0] + ";base64," + b64.toBase64(data);
+        }
+        return "";
+    }
+
     function sha256Hex(bytes) {
         return Promise.resolve(deps.crypto.sha256(bytes)).then(function (h) { return b64.hex(new Uint8Array(h)); });
     }
@@ -468,6 +485,10 @@ function createPackagesService(deps) {
                 body: words[st.state] || "", progress: st.progress, params: { sourceId: p.sourceId, id: p.id }
             }).then(null, function () {});
         };
+        // The launcher's pending icon: the package's own once it has been
+        // read (packageIcon), else the catalog's (none for an App Museum app;
+        // the launcher then draws the app's initial, as for one it cannot load).
+        var ownIcon = "";
         // Only an install that got going has an icon to mark failed.
         var pendingShown = false;
         var pending = function (st) {
@@ -476,7 +497,7 @@ function createPackagesService(deps) {
             try {
                 deps.pending(Object.assign({
                     appId: appId || (entry && (entry.appId || entry.id)) || p.id, catalogId: p.id, sourceId: p.sourceId,
-                    title: (entry && entry.title) || "", icon: (entry && entry.icon) || ""
+                    title: (entry && entry.title) || "", icon: ownIcon || (entry && entry.icon) || ""
                 }, st));
             } catch (e) { log("pending: " + e.message); }
         };
@@ -495,6 +516,7 @@ function createPackagesService(deps) {
             var bytes = got[0];
             return check(bytes, entry, got[1]).then(function (c) {
                 appId = c.app.id;
+                ownIcon = packageIcon(c);
                 if (entry.kind !== "classic" && entry.kind !== "preware" && appId !== entry.id) throw err("BAD_PACKAGE", "The package holds another app");
                 var owner = load().installed[appId];
                 if (owner && owner.sourceId !== entry.sourceId)

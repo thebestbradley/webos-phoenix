@@ -104,9 +104,10 @@ Item {
         }
 
         Image {
+            id: iconImage
             objectName: "iconImage"
             anchors.fill: parent
-            visible: icon.source != "" && !icon.isGroup
+            visible: icon.source != "" && !icon.isGroup && status !== Image.Error
             // The icon, or a bigger one the app ships once the icon would
             // be magnified (Theme.appIcon). A file bigger than the drawn
             // size (that bigger one, or the 64 px icon in a 22 px
@@ -124,8 +125,11 @@ Item {
             smooth: true
         }
 
+        // No icon, or one that does not load (an icon address out of reach,
+        // a package not installed yet): the app's initial on its colour.
         Rectangle {
-            visible: icon.source == "" && !icon.isGroup
+            objectName: "iconGlyph"
+            visible: (icon.source == "" || iconImage.status === Image.Error) && !icon.isGroup
             anchors.fill: parent
             anchors.margins: parent.width * 0.08
             radius: width * 0.2
