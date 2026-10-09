@@ -3565,7 +3565,17 @@
                 if (!s) continue;
                 var prop = s.getPropertyValue("-webkit-border-image") ? "-webkit-border-image" : "border-image-source";
                 var img = s.getPropertyValue(prop);
-                if (!img || s.getPropertyValue("border-top-style"))
+                var style = s.getPropertyValue("border-top-style");
+                // No image of the rule's own ("border: none" leaves it
+                // "initial").
+                if (!img || img === "initial" || img === "inherit" || img === "unset")
+                    continue;
+                // A rule's own line style stays, but not "none" beside an
+                // image: the old WebKit drew a border image whatever the
+                // style (BorderData::borderLeftWidth gave the width whenever
+                // an image was set), and "border: 12px" (Contacts' edit
+                // buttons) reads as style "none" in the CSSOM.
+                if (img === "none" ? style : style && style !== "none" && style !== "initial")
                     continue;
                 s.setProperty("border-style", img === "none" ? "none" : "solid", s.getPropertyPriority(prop));
             }

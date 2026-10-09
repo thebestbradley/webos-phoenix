@@ -39,9 +39,7 @@
 	.edit .enyo-scroller [style*="700px"] {
 		width: auto !important;
 		-webkit-box-flex: 1;
-		/* Room on the right for the type labels (MOBILE, HOME, ...), which
-		   hang outside the fields. */
-		padding: 10px 52px 10px 6px !important;
+		padding: 10px 6px !important;
 	}
 
 	/* Cancel and Done are styled width:15rem inline: they share the
@@ -58,20 +56,12 @@
 		margin-right: 8px;
 	}
 
-	/* The name field's star and info buttons, framed (below): side by side
-	   with the name hint beside them in the narrow column. */
+	/* The name field's star and info buttons, framed (the runtime's legacy
+	   border images): side by side with the name hint beside them in the
+	   narrow column. */
 	.edit .field-button[style*="margin-right"] {
 		margin-right: 2px !important;
 	}
-}
-
-/* The star and info buttons in the edit form's name field are framed by a
-   12 px border image (contacts.css .field-button: "border: 12px", which
-   sets no border style). Old WebKit drew -webkit-border-image at those
-   widths anyway; Chromium takes the widths as 0 without a style, so the
-   frames went and the two 32 px buttons overlapped. */
-.edit .field-button {
-	border-style: solid;
 }
 
 /* Edit's Tones group (app/phoenix-tones.js): the tone's name at the row's
@@ -79,4 +69,13 @@
 .phoenix-tone-name {
     color: #8a8a8a;
     font-size: 16px;
+}
+
+/* The type label beside a phone number or address (MOBILE, HOME...) is a
+   framed list selector (contacts.css .editable-label). Enyo styles its
+   content width:0 with a flex of 1, which in Chromium leaves the frame
+   24 px wide with the label hanging out of it; sized to its label, the
+   frame goes round it. */
+.edit .editable-label > .enyo-hflexbox {
+	width: auto !important;
 }

@@ -142,6 +142,15 @@ const SCENARIOS = {
             const r = [...document.querySelectorAll(".edit .field-button")].filter((b) => b.offsetWidth).slice(0, 2).map((b) => b.getBoundingClientRect());
             return r.length === 2 && r[0].width >= 32 && r[0].right <= r[1].left;
         }));
+        await h.expect("the type label (MOBILE) framed round its text", async () => h.page.evaluate(() => {
+            const l = [...document.querySelectorAll(".edit .editable-label")].find((e) => e.offsetWidth);
+            const t = l && [...l.querySelectorAll("*")].find((e) => /MOBILE/i.test(e.textContent) && !e.children.length);
+            if (!l || !t) return false;
+            const a = l.getBoundingClientRect(), b = t.getBoundingClientRect();
+            return parseFloat(getComputedStyle(l).borderTopWidth) === 12 && b.left >= a.left && b.right <= a.right;
+        }));
+        await h.expect("text fields keep no border (border: none is not a border image)", async () => h.page.evaluate(() =>
+            [...document.querySelectorAll(".edit input")].filter((i) => i.offsetWidth).every((i) => getComputedStyle(i).borderTopWidth === "0px")));
         await h.button("Done").click(); await h.wait(2500);
         await h.screenshot("saved");
         await h.expectText("Taylor Morgan");
