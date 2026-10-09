@@ -46,6 +46,9 @@ class SimBrowser : public QObject
     Q_PROPERTY(QString userAgent READ userAgent WRITE setUserAgent NOTIFY userAgentChanged)
     Q_PROPERTY(int blockedCount READ blockedCount NOTIFY blockedCountChanged)
     Q_PROPERTY(int blockListSize READ blockListSize CONSTANT)
+    // A phone's browser (the mobile sites) or a tablet's; the adaptive
+    // simulator switches it with the layout (sim.qml).
+    Q_PROPERTY(bool phone READ phone WRITE setPhone NOTIFY phoneChanged)
 public:
     SimBrowser(Rootfs *rootfs, PictureMaker *snapshots, bool phone, QObject *parent = nullptr);
 
@@ -58,6 +61,8 @@ public:
     Q_INVOKABLE bool hasPrivateProfile() const { return m_private; }
 
     bool contentBlocker() const { return m_blocking; }
+    bool phone() const { return m_phone; }
+    void setPhone(bool phone);
     void setContentBlocker(bool on);
     QString userAgent() const { return m_uaMode; }
     void setUserAgent(const QString &mode);
@@ -82,6 +87,7 @@ public:
 signals:
     void contentBlockerChanged();
     void userAgentChanged();
+    void phoneChanged();
     void blockedCountChanged();
 
 private:

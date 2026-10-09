@@ -1,0 +1,8 @@
+{
+    "//": "The simulator's stand-in for /usr/share/phoenix/firmware/licences.json, which meta-phoenix's phoenix-firmware-policy writes into every image: each firmware package the image has, its licence, and its licence files (here served from licences/).",
+    "packages": [
+        { "name": "linux-firmware-rtl8821", "version": "20240909-r0", "license": "Firmware-rtlwifi_firmware", "licenseFiles": ["/lib/firmware/LICENCE.rtlwifi_firmware.txt"] },
+        { "name": "linux-firmware-rtl8822", "version": "20240909-r0", "license": "Firmware-rtlwifi_firmware", "licenseFiles": ["/lib/firmware/LICENCE.rtlwifi_firmware.txt"] },
+        { "name": "linux-firmware-nvidia-gpu", "version": "20240909-r0", "license": "Firmware-nvidia", "licenseFiles": ["/lib/firmware/LICENCE.nvidia"] }
+    ]
+}

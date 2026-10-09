@@ -30,6 +30,7 @@ import { GameControllersPage } from "./GameControllers";
 import { UsbPage } from "./Usb";
 import { HotspotPage } from "./Hotspot";
 import { BatteryPage } from "./Battery";
+import { HardwarePage } from "./Hardware";
 
 export interface PageInfo {
     title: string;
@@ -59,6 +60,7 @@ export const PAGES = {
     assistant: { title: "Assistant", icon: "icons/assistant.png", component: AssistantPage },
     usb: { title: "USB", icon: "icons/usb.png", component: UsbPage },
     gamepads: { title: "Game Controllers", icon: "icons/gamepads.png", component: GameControllersPage },
+    hardware: { title: "Hardware", icon: "icons/hardware.png", component: HardwarePage },
     location: { title: "Location Services", icon: "icons/location.png", component: LocationPage },
     emergency: { title: "Emergency Info", icon: "icons/emergency.png", component: EmergencyPage },
     accessibility: { title: "Accessibility", icon: "icons/accessibility.png", component: AccessibilityPage },

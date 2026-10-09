@@ -1,0 +1,34 @@
+{
+    "id": "firmware-bcm43455",
+    "kind": "firmware",
+    "title": "Broadcom/Cypress Wi-Fi firmware (BCM43455)",
+    "category": "wifi",
+    "summary": "Lets the Wi-Fi of boards with a BCM43455 (the PinePhone Pro and others) connect.",
+    "match": [
+        "sdio:c*v02D0d4345*"
+    ],
+    "firmware": [
+        "brcm/brcmfmac43455-sdio.*"
+    ],
+    "modules": [
+        "brcmfmac"
+    ],
+    "after": "reload",
+    "license": {
+        "id": "LicenseRef-broadcom-bcm43xx",
+        "name": "Broadcom firmware licence (bcm43xx)",
+        "textInPackage": "lib/firmware/LICENCE.broadcom_bcm43xx",
+        "url": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/LICENCE.broadcom_bcm43xx",
+        "free": false,
+        "redistributable": true
+    },
+    "packages": [
+        "linux-firmware-bcm43455",
+        "linux-firmware-broadcom-license"
+    ],
+    "source": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git",
+    "maintainer": {
+        "name": "webOS Phoenix",
+        "email": "drivers@webosphoenix.org"
+    }
+}

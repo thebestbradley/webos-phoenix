@@ -12,7 +12,7 @@
 // the real llama.cpp on a real model.
 
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -29,7 +29,8 @@ const device = req("./lib/node-device.js") as {
         download(m: Model): Promise<void>; cancel(id: string): Promise<void>; remove(m: Model): Promise<void>;
         ensure(m: Model): Promise<{ baseUrl: string }>; stop(): void;
     };
-    speech(o: object): { speak(t: string, l?: string): Promise<void>; status(): Promise<{ available: boolean; engine: string }> };
+    speech(o: object): { speak(t: string, l?: string, v?: string): Promise<void>; status(): Promise<{ available: boolean; engine: string; voices: string[] }> };
+    voiceStatus(o: object): () => Promise<{ id: string; available: boolean; engine?: string; howToInstall: string }[]>;
 };
 const providers = req("./lib/providers.js") as { chatRequest(p: object, r: object, k: string): { url: string; body: string; headers: Record<string, string>; method: string }; parseChat(t: string, s: number, b: string): { text: string; toolCalls: { name: string }[] } };
 const { createRequest } = req("./lib/node-http.js") as { createRequest(): (r: object) => Promise<{ status: number; body: string }> };
@@ -97,6 +98,34 @@ describe("the on-device model", () => {
         expect((await llm.status()).running).toBe(false);
     });
 
+    it("ships the same built-in model everywhere: lib/models.js, ./phoenix's fetcher, meta-phoenix's recipe", () => {
+        const models = req("./lib/models.js") as { BUILT_IN: string; find(id: string): { url: string; sha256: string; size: number; builtIn: boolean } };
+        const m = models.find(models.BUILT_IN);
+        expect(m.builtIn).toBe(true);
+        const repo = resolve(__dirname, "../../..");
+        const fetcher = readFileSync(join(repo, "tools/get-base-model.py"), "utf8");
+        const value = (name: string) => (fetcher.match(new RegExp(`^${name} = "?([^"\\n]+)"?$`, "m")) || [])[1];
+        expect([value("ID"), value("URL"), value("SHA256"), Number(value("SIZE"))]).toEqual([models.BUILT_IN, m.url, m.sha256, m.size]);
+        const recipe = readFileSync(join(repo, "meta-phoenix/recipes-support/qwen3-gguf/qwen3-0.6b-gguf.bb"), "utf8");
+        expect(recipe).toContain(m.sha256);
+        expect(recipe).toContain(m.url.replace(/\/[^/]+$/, ""));
+        expect(recipe).toContain(models.BUILT_IN + ".gguf");
+    });
+
+    it("runs a built-in model where the image keeps it, and never removes it", async () => {
+        const bin = join(dir, "llama-server");
+        const shipped = join(dir, "usr-share-phoenix-models");
+        mkdirSync(shipped, { recursive: true });
+        writeFileSync(join(shipped, "built-in.gguf"), FAKE_GGUF);
+        const llm = device.llamaServer({ modelsDir: join(dir, "models3"), builtInDirs: [shipped], server: bin, startTimeoutMs: 20000 });
+        expect((await llm.status()).installed).toEqual([{ id: "built-in", file: join(shipped, "built-in.gguf"), size: FAKE_GGUF.length, builtIn: true }]);
+        const m = { ...model(), id: "built-in" };
+        expect((await llm.ensure(m)).baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/v1$/);
+        await llm.remove(m);
+        expect(existsSync(join(shipped, "built-in.gguf"))).toBe(true);
+        llm.stop();
+    });
+
     it("refuses a download whose SHA-256 is wrong, and says llama-server is missing", async () => {
         const llm = device.llamaServer({ modelsDir: join(dir, "models2"), server: join(dir, "nowhere", "llama-server") });
         await llm.download({ ...model(), sha256: "0".repeat(64) });
@@ -134,5 +163,87 @@ describe("speech", () => {
         await sp.speak("The flashlight is on.", "en");
         expect(readFileSync(out, "utf8")).toBe("en:The flashlight is on.");
         expect((await sp.status()).available).toBe(true);
+    });
+
+    // phoenix-tts and Flite stood in for by scripts (the real ones: tts-test).
+    function standIns(noSound: boolean) {
+        const bin = join(dir, noSound ? "tts-bin-nosound" : "tts-bin");
+        mkdirSync(bin, { recursive: true });
+        const kitten = join(bin, "phoenix-tts"), flite = join(bin, "flite");
+        writeFileSync(kitten, `#!/bin/sh
+if [ "$1" = --check ]; then echo '{"ok":true,"voices":["expr-voice-3-f","expr-voice-5-m"]}'; exit 0; fi
+echo "$*:$(cat)" > "${bin}/kitten.txt"
+${noSound ? "exit 4" : "exit 0"}
+`);
+        writeFileSync(flite, `#!/bin/sh
+echo "$(cat)" > "${bin}/flite.txt"
+`);
+        chmodSync(kitten, 0o755);
+        chmodSync(flite, 0o755);
+        return { bin, kitten, flite };
+    }
+
+    it("speaks with Kitten TTS by default, with the voice asked for", async () => {
+        const { bin, kitten, flite } = standIns(false);
+        const sp = device.speech({ kitten, fallback: [flite] });
+        expect(await sp.status()).toEqual({ available: true, engine: "Kitten TTS", voices: ["expr-voice-3-f", "expr-voice-5-m"] });
+        await sp.speak("The flashlight is on.", "en", "expr-voice-5-m");
+        expect(readFileSync(join(bin, "kitten.txt"), "utf8").trim()).toBe("--voice expr-voice-5-m:The flashlight is on.");
+        // Another language: Kitten speaks English only.
+        await sp.speak("Bonjour.", "fr");
+        expect(readFileSync(join(bin, "flite.txt"), "utf8").trim()).toBe("Bonjour.");
+    });
+
+    it("goes on to Flite when Kitten cannot speak", async () => {
+        const { bin, kitten, flite } = standIns(true);
+        const said: string[] = [];
+        const sp = device.speech({ kitten, fallback: [flite], log: (m: string) => said.push(m) });
+        await sp.speak("Bluetooth is off.", "en");
+        expect(readFileSync(join(bin, "flite.txt"), "utf8").trim()).toBe("Bluetooth is off.");
+        expect(said.join("\n")).toMatch(/Kitten TTS could not speak; flite instead/);
+        const none = device.speech({ kitten: join(dir, "nowhere", "phoenix-tts"), fallback: [flite] });
+        expect(await none.status()).toEqual({ available: true, engine: "flite", voices: [] });
+    });
+});
+
+describe("what the voice needs (voiceStatus)", () => {
+    const luna = (reply: object | null) => ({ call: () => (reply ? Promise.resolve(reply) : Promise.reject(new Error("no service"))) });
+    const tts = (available: boolean) => ({ status: () => Promise.resolve({ available, engine: available ? "flite" : "" }) });
+
+    it("says what is missing from the image and which package has it", async () => {
+        const parts = await device.voiceStatus({
+            luna: luna({ returnValue: true, engine: "whisper.cpp", installed: false, binary: "/usr/bin/whisper-cli",
+                         model: "/usr/share/whisper/ggml-base.en.bin", modelInstalled: false }),
+            tts: tts(false), libDirs: [dir], wakeModel: join(dir, "no-model"),
+        })();
+        const by = Object.fromEntries(parts.map((p) => [p.id, p]));
+        expect(by.recognition.available).toBe(false);
+        expect(by.recognition.howToInstall).toMatch(/ggml-base\.en\.bin is not installed.*whisper-cpp-model-base-en/);
+        expect(by.wakeWord.available).toBe(false);
+        expect(by.wakeWord.howToInstall).toMatch(/packagegroup-phoenix-assistant/);
+        expect(by.speech).toMatchObject({ available: false });
+        expect(by.speech.howToInstall).toMatch(/Flite or espeak-ng/);
+        // No transcriber at all.
+        const none = await device.voiceStatus({ luna: luna(null), tts: tts(true), libDirs: [dir] })();
+        expect(none[0]).toMatchObject({ id: "recognition", available: false });
+        expect(none[2]).toMatchObject({ id: "speech", available: true, engine: "flite", howToInstall: "" });
+    });
+
+    it("finds the wake word's program, library and model", async () => {
+        const bin = join(dir, "bin"), lib = join(dir, "lib"), wakeModel = join(dir, "vosk-model");
+        for (const d of [bin, lib, wakeModel]) mkdirSync(d, { recursive: true });
+        writeFileSync(join(bin, "phoenix-wakeword"), "#!/bin/sh\n");
+        chmodSync(join(bin, "phoenix-wakeword"), 0o755);
+        writeFileSync(join(lib, "libvosk.so"), "");
+        const path = process.env.PATH;
+        process.env.PATH = bin + ":" + path;
+        try {
+            const parts = await device.voiceStatus({ luna: luna({ returnValue: true, installed: true, binary: "/x", modelInstalled: true }),
+                                                     tts: tts(true), libDirs: [lib], wakeModel })();
+            expect(parts.map((p) => [p.id, p.available, p.howToInstall])).toEqual([
+                ["recognition", true, ""], ["wakeWord", true, ""], ["speech", true, ""]]);
+        } finally {
+            process.env.PATH = path;
+        }
     });
 });

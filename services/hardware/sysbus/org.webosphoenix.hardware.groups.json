@@ -1,0 +1,5 @@
+{
+    "allowedNames": ["org.webosphoenix.hardware"],
+    "hardware.query": ["oem"],
+    "hardware.management": ["oem"]
+}

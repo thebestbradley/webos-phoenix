@@ -45,8 +45,12 @@ FILES:${PN} += " \
     ${sysconfdir}/surface-manager.d/product.env \
 "
 
+# qtsvg-plugins: the launcher shows SVG app icons (the Marketplace's
+# generated icons for web apps whose own icons are broken; launch points'
+# .svg icons).
 RDEPENDS:${PN} += " \
     luna-surfacemanager-base \
     qtdeclarative-qmlplugins \
     qt5compat-qmlplugins \
+    qtsvg-plugins \
 "

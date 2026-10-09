@@ -78,7 +78,11 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         site = await servers.startSite();
         catalog = await servers.startCatalog({
             curated: [{ id: "org.webosphoenix.pwa.tides", title: "Tides", developer: "Tide Co", summary: "Tide tables", categories: ["Travel"],
-                        featured: true, manifest: site.manifestUrl, origin: site.url, icon: site.url + "/app/icon-192.png" }]
+                        featured: true, manifest: site.manifestUrl, origin: site.url, icon: site.url + "/app/icon-192.png" },
+                      // Its icons all broken: the probe found the manifest good and the catalog makes its icon.
+                      { id: "org.webosphoenix.pwa.harbour", title: "Harbour Times", developer: "Harbour Co", summary: "Harbour clocks",
+                        categories: ["Travel"], featured: false, manifest: site.manifestUrl, origin: site.url, icon: "",
+                        iconGenerated: { text: "HT", color: "#1d4f7a", why: "manifest's icons are missing" } }]
         });
         museum = await servers.startMuseum();
         feed = await servers.startFeed();
@@ -151,6 +155,25 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         expect((await service.getApp({ sourceId: "phoenix", id: "org.webosphoenix.pwa.tides" })).app.installed).toMatchObject({ sourceId: "phoenix" });
         expect((await service.remove({ id: "org.webosphoenix.pwa.tides" })).returnValue).toBe(true);
         expect((await service.listInstalled()).apps).toEqual([]);
+    });
+
+    it("installs a web app whose icons are all broken with the icon the catalog made", async () => {
+        const { service, world } = makeService(defaults());
+        await service.trustSource({ url: catalog.catalogUrl, key: catalog.key });
+        const app = (await service.getApp({ sourceId: "phoenix", id: "org.webosphoenix.pwa.harbour" })).app;
+        expect(app.icon).toBe(catalog.catalogUrl.replace(/index\.json$/, "") + "icons/org.webosphoenix.pwa.harbour.svg");
+        site.setManifest({ name: "Harbour Times", start_url: "/app/", icons: [{ src: "gone-192.png", sizes: "192x192", type: "image/png" }] });
+        try {
+            const r = await service.install({ sourceId: "phoenix", id: "org.webosphoenix.pwa.harbour" });
+            expect(r).toMatchObject({ returnValue: true, appId: "org.webosphoenix.pwa.harbour" });
+        } finally {
+            site.setManifest({ name: "Tide Tables for Sailors", short_name: "Tides", start_url: "/app/", icons: [{ src: "icon-192.png", sizes: "192x192", type: "image/png" }] });
+        }
+        const pkg = world.installs[0].pkg;
+        expect(pkg.apps[0].appinfo.icon).toBe("icon.svg");
+        const svg = Buffer.from(pkg.files.find((f: Any) => f.path.endsWith("/icon.svg")).data).toString();
+        expect(svg).toMatch(/^<svg [^>]*>.*>HT<\/text><\/svg>/s);
+        expect(svg).toContain('fill="#1d4f7a"');
     });
 
     it("keeps a web app on its own site when its manifest points elsewhere", async () => {

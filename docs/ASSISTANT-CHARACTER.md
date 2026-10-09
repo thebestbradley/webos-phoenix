@@ -1,6 +1,6 @@
 # The Assistant's character
 
-The Phoenix Assistant has a face: a small bird that shows what the
+The Assistant has a face: a small bird that shows what the
 assistant is doing. It is original art for Phoenix (Apache-2.0), designed
 with the project's owner on 7–8 October 2026 ([art/assistant-bird/PROVENANCE.md](../art/assistant-bird/PROVENANCE.md)).
 
@@ -20,6 +20,12 @@ with the project's owner on 7–8 October 2026 ([art/assistant-bird/PROVENANCE.m
 - Every pose acts: a loop of movement over its parts (body, head, eyes,
   lids, each flipper, beak, crest), so it is never a still picture with
   only its fire moving (see *Acting* below).
+- It enters born out of fire and drops in with a bump of dust, leaves in a
+  burst of embers, moves its whole body now and then while idle, and
+  reacts to what the user does (see *Moves* below).
+- A little magic about it: a warm gold aura that breathes, flickers with
+  its crest and radiates soft rings, tiny sparks and glittering motes
+  around it, now and then a faint mist (see *Magic* below).
 
 ## One source, two renderers
 
@@ -81,12 +87,163 @@ the app) stops them with everything else. The wake shake and the nod stay
 as they were. `phoenix-sim --scene assistantbird` and `--scene
 assistantbirds` show them playing.
 
+## Moves
+
+One-off movements of the whole bird (`motion.moves`), on a layer of their
+own over the pose and its acting: each part they move goes through their
+keys and back to rest, so they can play over any pose. Keys are as
+acting's, `[at, rotation, x, y, scale x, scale y, curve]`, over the acting
+channels and four more (`whole`: the whole bird about its centre, over its
+hop and tilt; `tail` about its base; `footL`, `footR` about their heels).
+The curve (`motion.curves`) is the way into the key, chosen to feel
+physical rather than tweened: `in` for a fall (a quadratic ease-in, like
+gravity), `out` for a throw or a rise, `out3` for a quick start that
+settles, `back` for a spring that overshoots, `io` (the default) and
+`lin`. Cues at moments of a move give it a face for a while (eyes, beak)
+or play an effect. In the shell `AssistantBird.qml`'s `play()`,
+`enter()`, `leave()`, `react()` and `idle()`; in the app `Bird.tsx`'s
+`start` and `react` props, the generated `ab-mv-<move>-<part>` keyframes.
+
+### The entrance and the exit
+
+| Move | What it does | Time |
+| --- | --- | --- |
+| `enter` | Embers swirl in from all round, faster as they near, to a point above its place (`swirl`); a fireball blooms there (`fireball`) and the bird is born out of it, small then a little too big then itself, flapping its flippers, its tail streaming, swaying as it hovers. It looks down, folds its flippers up and drops, stretched (gravity: easing in); hits the ground squashed flat, its crest flaring, its eyes squeezed shut, a cloud of dust billowing out both ways from its feet (`dust`); bounces once (a sixth of the height, in the time gravity gives it), lands again with a smaller squash and settles with a spring, grinning. Its shadow grows in as it comes down. | 1.3 s |
+| `leave` | A happy crouch, a leap up stretched with its flippers high and its crest flaring, a flash, and it bursts into embers flying out and rising (`flash`, `burst`) as it shrinks away. It stays gone until it enters again. | 0.42 s |
+
+The system view plays the entrance once the panel has grown out of the
+launcher button (the swirl would be lost in the panel's growth), then the
+wave (hello) as before. Closed, the panel stays up (no longer taking
+input) while the bird plays its exit, about half a second, then goes
+back into the button. A request asked while it enters plays
+over it (thinking takes the pose). The app plays the entrance on a new
+conversation, then waves. Under Reduce motion both fade instead (250 ms,
+by Animation speed).
+
+### The idle pool
+
+Idle, now and then (`acting.poses.idle.every`: 3 to 7.5 s apart at random)
+it plays its look around and a full-body move in turn, the move one of
+`motion.idles.pool` at random, never the same twice running. None while
+the user types; a pose change ends one where it is and blends it away.
+
+| Move | What it does | Time |
+| --- | --- | --- |
+| `stretch` | Rises on its toes, flippers stretched high, head back, eyes shut and beak wide in a yawn; drops back with a little shake-out | 2.2 s |
+| `hop` | Crouches, hops a step aside and lands (a puff of dust), and hops back | 1.15 s |
+| `preen` | Turns its head to its tail, which lifts towards it, and nibbles at the flame, content | 2 s |
+| `tap` | Taps its foot three times, rocking with it, a flipper out, looking up and away, its head on the beat | 1.6 s |
+| `peek` | Leans down and looks at the text field below, tilting its head | 1.8 s |
+| `shiver` | Its crest and tail flames shiver, its body with them, eyes squeezed | 0.9 s |
+| `lookUp` | Stretches up and looks up (at the status bar), its crest rising, eyes going one way then the other | 1.8 s |
+
+### Reactions
+
+`motion.reactions` says what plays when. A reaction plays once at a time
+(typing fast pecks steadily rather than starting over), not while it
+enters or leaves.
+
+| When | Move | What it does | Time |
+| --- | --- | --- | --- |
+| a character typed | `peck` | a quick nod towards the words, the crest bobbing | 0.22 s |
+| a character deleted | `wince` | squeezes its eyes shut and cringes: hunched, flippers up by its head, its crest shrinking; peeks | 0.9 s |
+| a pause in the typing (2.5 s) | `ponder` | a curious tilt of the head, one eye wide (asking's eyes) | 1.6 s |
+| a request sent | `cheer` | crouches and hops up grinning, flippers high, lands with a puff, as it starts thinking | 0.75 s |
+| a tap on it | (the wave) then `giggle` or `spin` at random, never the same twice running | giggle: bounces three times grinning, wiggling; spin: hops and turns round in the air, lands with a puff | 0.9 s |
+| the keyboard moving it (the view) | `scoot` | a hop to its new place as it slides there | 0.45 s |
+| the microphone on | (the listening pose's lean, as before) | | |
+
+While words are typed it watches them: its eyes, head and a lean of its
+body go towards the caret (`gazeX`, `gazeY`; `motion.gaze`); a scroll of
+the conversation makes it glance the way the words go. The outcome poses
+(thinking, working, done, speaking, asking, confused, oops, proud) play
+as before.
+
+### Effects
+
+`effects` in `bird.json`, particles at a cue: `swirl` (embers spiralling
+in, each its angle, radius, size, delay and colour), `glow` (a ball of
+fire: keys of scale and opacity; `fireball`, `flash`), `puff` (soft dust
+clouds billowing out from its feet: `dust`, the smaller `puff`; in the app, on its light ground, in the darker `dustOnLight`) and
+`burst` (embers flying out and up) and `surge` (the aura flaring for a
+moment, in its gold: as it lands from its entrance and at the top of a
+cheer). The shell draws them with shapes and
+plays them as property animations (no script per frame, no particle
+system, so they look the same on the software renderer); the app as SVG
+shapes in nested groups with generated keyframes (`ab-fx-*`), each with
+its own curve, as the shell's.
+
+`phoenix-sim --scene assistantbirdmoves` plays them all one after
+another, large, logging the frame rate.
+
+## Magic
+
+`magic` in `bird.json`: always there while it shows, under everything
+else it does, and never in the way.
+
+- **The aura** (`magic.aura`): a warm gold light behind it (a radial
+  gradient, gold at `alpha` in its centre to nothing at `radius`). It
+  breathes (its opacity and size between `breath`'s lows and highs, over
+  4.2 s, there and back), flickers with the crest (its opacity follows the
+  crest flame's height, by `flicker.depth`: in the shell bound to the flame
+  itself, in the app keyframes of the same length in step with it) and
+  radiates rings: soft bands growing out from it and fading, one at a time
+  (`rings`: 2.7 s each, 2.7 s apart). It flares for a moment as it lands
+  from its entrance and at the top of a cheer (the `surge` effect).
+- **Sparks** (`magic.sparks`): tiny four-pointed glints (turning a little)
+  and glittering motes in gold, flame, ember and white, appearing at random
+  around it (between two ellipses about its middle, none below its feet),
+  drifting up and aside and fading, about a second and a half each. They
+  play in lanes, each of five sparks one after another with a random gap
+  before each; the generator picks every spark (place, size, colour, gap,
+  life, drift, rise, glint or mote) once from `seed`, so each lane has its
+  own length (12 to 17 s) and together they never look periodic, and each
+  bird starts each lane at a random point (birds side by side do not
+  sparkle in step).
+- **Mist** (`magic.mist`): now and then (every 4 to 9 s) a faint haze
+  rising behind it, shimmering (brighter, dimmer, brighter, gone) as it
+  spreads, about 3 s; three, picked from their own seed.
+
+How much of it shows goes with the pose (`magic.poses`: [aura, sparks
+lanes, mist, rings]):
+
+| Pose | Aura | Sparks (lanes of 6) | Mist | Rings |
+| --- | --- | --- | --- | --- |
+| `asleep` | 0.35 | 0 | no | no |
+| `hello`, `speaking` | 0.7 | 2 | yes | yes |
+| `idle` | 0.6 | 2 | yes | yes |
+| `asking` | 0.65 | 2 | yes | yes |
+| `listening` | 0.85 | 4 | yes | yes |
+| `thinking` | 0.8 | 4 | yes | yes |
+| `working` | 0.85 | 3 | yes | yes |
+| `done` | 1 | 6 | yes | yes |
+| `proud` | 0.95 | 5 | yes | yes |
+| `confused` | 0.5 | 1 | no | no |
+| `shy` | 0.45 | 1 | no | no |
+
+Every lane plays while it shows (only the pose's share is seen), so a
+celebration shows more sparks at once, mid-flight. None play while it is
+born or bursts (its entrance and exit have their own embers). Animation
+speed scales all of it; under Reduce motion (and prefers-reduced-motion in
+the app) there are no sparks, mist or rings and the aura holds still, a
+faint glow (`still`: 0.8 of the pose's brightness).
+
+The shell draws it as the rest: shapes and rectangles, plain property
+animations, no particle system and no script per frame, so it looks the
+same on the software renderer. What it costs is what it fills: on the
+simulator's software GL a dozen birds' glows are most of a frame, so the
+aura is not drawn behind the body (an elliptical hole there, `hole`), the
+rings are bands (only the band is filled), one at a time, and none in the
+subdued poses. The app draws it as SVG with generated keyframes
+(`ab-aura-*`, `ab-spark-<lane>-<n>`, `ab-mist-<n>`), each lane's start set
+by `--ab-phase`. `magic: false` on `AssistantBird` turns it off.
+
 ## The poses
 
 | Pose | Label | Eyes | Beak | What it does | When |
 | --- | --- | --- | --- | --- | --- |
-| `asleep` | Asleep | sleepy | closed | slumped, flippers tucked, the crest a tiny ember, z's | the view opening (and closing) |
-| `hello` | Hello | happy | grin | a big flipper wave | just after it opens; a tap on it; the app's empty conversation |
+| `asleep` | Asleep | sleepy | closed | slumped, flippers tucked, the crest a tiny ember, z's | the view closed (and closing) |
+| `hello` | Hello | happy | grin | a big flipper wave | just after its entrance; a tap on it; the app's empty conversation |
 | `idle` | Idle | open | closed | upright, breathing, blinking | nothing going on |
 | `listening` | Listening | wide | open | leans in, a flipper up; the crest and rings swell with the voice | the microphone is on |
 | `thinking` | Thinking | lower lids up | closed, pursed | a flipper to the chin, embers drifting up | a request (or a transcription) waits |
@@ -99,12 +256,13 @@ assistantbirds` show them playing.
 | `shy` | Oops | sleepy | closed | a flipper over its face | something failed |
 
 The system view (`AssistantOverlay.qml`, `birdPose`) chooses: not open →
-asleep; opening → asleep, then hello; listening; busy → thinking; the
-reply's beats (working 450 ms then done 700 ms; confused or shy 1500 ms);
-speaking while the shell's speech speaks; asking while a read-back waits;
-else idle. The app (`apps/assistant/src/bird/pose.ts`) plays the same beats
-for its requests. `phoenix-sim --scene assistantbird` cycles through the
-poses; `--scene assistantbirds` shows them all.
+asleep (it leaves); listening; busy → thinking; the reply's beats
+(working 450 ms then done 700 ms; confused or shy 1500 ms); the opening's
+wave after its entrance; speaking while the shell's speech speaks; asking
+while a read-back waits; else idle. The app
+(`apps/assistant/src/bird/pose.ts`) plays the same beats for its requests,
+and listens while its microphone does. `phoenix-sim --scene assistantbird`
+cycles through the poses; `--scene assistantbirds` shows them all.
 
 ## Adding a pose
 
@@ -113,6 +271,7 @@ poses; `--scene assistantbirds` shows them all.
    `wingL`, `wingR`, `crestScale`, `crestRotation`, `beakTilt` (degrees,
    clockwise) and `extras` (keys of `extras`). New eyes, lids, beaks or
    extras go in their tables, with any new parts in `parts`. Give it its
+   magic in `magic.poses` (the generator refuses a pose without) and its
    acting in `motion.acting.poses` (a `period` and its channels' keys;
    `every: [min, max]` for one now and then).
 2. Run `python3 tools/gen-assistant-bird.py`; it refuses a pose that names

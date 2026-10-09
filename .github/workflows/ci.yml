@@ -1,7 +1,10 @@
 name: shell
 
+# Pull requests, and pushes to main. A branch with a PR is tested once, by
+# the PR's run; a push run on top would test the same commit again.
 on:
   push:
+    branches: [main]
   pull_request:
 
 # A newer push to a branch or PR cancels its older runs, which would only
@@ -140,24 +143,40 @@ jobs:
         run: QT_SCALE_FACTOR=2 QT_QPA_PLATFORM=offscreen "$QT_ROOT_DIR/bin/qmltestrunner" -import shell/qml -import build/qml -input shell/tests/tst_hidpi.qml
 
       - name: Terminal PTY service (core and Luna methods, services/pty)
+        # A native test that hangs fails here, with its log, not after the job's limit.
+        timeout-minutes: 10
         run: build/pty/pty-test
 
       - name: Device services (display, keys, vibrator, light sensor; services/devices)
+        timeout-minutes: 10
         run: build/devices/devices-test
 
       - name: The simulator's installed apps (SimInstaller)
+        timeout-minutes: 10
         run: build/siminstaller-test
 
+      - name: The colour emoji font's fontconfig setup (SimFonts)
+        timeout-minutes: 10
+        run: build/simfonts-test
+
       - name: The keyboard's dictation (recording format, transcriber replies)
+        timeout-minutes: 10
         run: build/dictation-test
 
       - name: The wake word ("Hey Phoenix" in the test recordings, with Vosk's model)
+        timeout-minutes: 10
         run: python3 tools/get-wakeword.py && build/wakeword-test
 
       - name: The simulator's network (content blocker, user agents, DropShare's server)
+        timeout-minutes: 10
         run: build/simnet-test
 
+      - name: The simulator's Marketplace catalog service (started, stopped, failing)
+        timeout-minutes: 10
+        run: build/simmarketplace-test
+
       - name: The Assistant's on-device model runner and speech
+        timeout-minutes: 10
         run: build/localmodels-test
 
       - name: Trademark overlays up to date
@@ -278,6 +297,10 @@ jobs:
           t node tools/test-ionic-notes.cjs --out app-tests/ionic-notes
           t node tools/test-flutter-notes.cjs --out app-tests/flutter-notes
 
+      # The menus over the screen, with the keyboard focus on the screen.
+      - name: The simulator's menu bar
+        run: xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --check-chrome --no-boot-animation --quiet
+
       - name: Screenshots
         run: |
           mkdir -p screenshots/phone screenshots/tablet
@@ -301,10 +324,19 @@ jobs:
             screenshots
             app-tests
 
+      # ./phoenix, the one command, in its dry run on a pretend Linux and
+      # Mac (what it finds, would install and would run). Independent of the
+      # build: it runs even when a step before it failed, and last,
+      # so it hides no other test's result and none hides its own.
+      - name: The one command (./phoenix)
+        if: ${{ !cancelled() }}
+        run: sh tools/test-phoenix-script.sh
+
   # The simulator on a Mac (Apple silicon), built the way
   # docs/GETTING-STARTED.md and scripts/mac-setup.sh build it: Homebrew's Qt,
   # Apple's compiler and macOS's headers, with the apps built by CMake's npm
   # step. The Linux job above can't catch code that only builds on Linux.
+
   macos:
     runs-on: macos-15
     steps:
@@ -367,6 +399,8 @@ jobs:
           done || true
 
       - name: Terminal PTY service, installed apps, dictation
+        # A native test that hangs fails here, with its log, not after the job's limit.
+        timeout-minutes: 10
         run: |
           build/pty/pty-test
           build/siminstaller-test
@@ -374,6 +408,7 @@ jobs:
           python3 tools/get-wakeword.py && build/wakeword-test
           build/localmodels-test
           build/simnet-test
+          build/simmarketplace-test
 
       - name: The simulator starts (phone and tablet)
         run: |
@@ -382,8 +417,21 @@ jobs:
           build/phoenix-sim --tablet --scene cards --screenshot screenshots-macos/tablet.png
           test -s screenshots-macos/phone.png && test -s screenshots-macos/tablet.png
 
+      # The menu bar at the top of the screen has the simulator's menus
+      # while the keyboard focus is on the device's screen (a window inside
+      # the simulator's: SimChrome's constructor), and the program is a
+      # foreground app (AppKit's NSApp.mainMenu and activationPolicy).
+      - name: The simulator's menu bar (macOS's, at the top of the screen)
+        run: build/phoenix-sim --check-chrome --no-boot-animation --quiet
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: screenshots-macos
           path: screenshots-macos
+
+      # ./phoenix's dry runs with macOS's own sh, sed and grep; last, as
+      # in the Linux job.
+      - name: The one command (./phoenix) with macOS's own tools
+        if: ${{ !cancelled() }}
+        run: sh tools/test-phoenix-script.sh

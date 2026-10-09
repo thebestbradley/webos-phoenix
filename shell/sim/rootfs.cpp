@@ -64,6 +64,24 @@ Rootfs::Rootfs(const QString &repoDir)
         m_applicationDirs.append(QDir(repoDir).filePath(dirValue.toString()));
     for (const auto &dirValue : cfg.value(QStringLiteral("systemApps")).toArray())
         m_systemApps.append(QDir(repoDir).filePath(dirValue.toString()));
+
+    QStringList sources = m_applicationDirs + m_systemApps;
+    for (const auto &mount : std::as_const(m_mounts))
+        sources.append(mount.second);
+    for (const QString &source : std::as_const(sources)) {
+        // A submodule not fetched is an empty folder, or one holding only
+        // its own submodules' empty folders (third_party/isis).
+        const QFileInfo info(source);
+        if (info.isFile() || (info.isDir() && QDirIterator(source, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories).hasNext()))
+            continue;
+        QString path = QDir(repoDir).relativeFilePath(source);
+        if (path.startsWith(QLatin1String("third_party/")))
+            path = path.section(QLatin1Char('/'), 0, 1);
+        if (!m_missing.contains(path))
+            m_missing.append(path);
+    }
+    std::sort(m_missing.begin(), m_missing.end());
+
     rescan();
     m_valid = true;
 }
@@ -556,7 +574,12 @@ void RootfsSchemeHandler::proxy(QWebEngineUrlRequestJob *job)
     if (!m_network)
         m_network = new QNetworkAccessManager(this);
     QNetworkRequest nr(url);
-    nr.setTransferTimeout(60000);
+    // A minute without a byte ends a request; three for the on-device
+    // model on the loopback (llama-server answers only when done: loading
+    // the model and reading the commands as tools can take over a minute on
+    // a busy computer, as the device's service allows, lib/node-device.js).
+    const bool loopback = url.host() == QLatin1String("127.0.0.1") || url.host() == QLatin1String("localhost");
+    nr.setTransferTimeout(loopback ? 180000 : 60000);
     nr.setAttribute(QNetworkRequest::RedirectPolicyAttribute, req.value(QStringLiteral("follow")).toBool()
                     ? QNetworkRequest::NoLessSafeRedirectPolicy : QNetworkRequest::ManualRedirectPolicy);
     const QJsonObject headers = req.value(QStringLiteral("headers")).toObject();

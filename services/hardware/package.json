@@ -1,0 +1,8 @@
+{
+  "name": "org.webosphoenix.hardware",
+  "version": "0.1.0",
+  "private": true,
+  "description": "webOS Phoenix hardware and drivers (Luna): lists the device's hardware, matches it against the signed driver catalog, installs kernel modules, firmware and services with opkg, and rolls back what does not work",
+  "license": "Apache-2.0",
+  "main": "service.js"
+}

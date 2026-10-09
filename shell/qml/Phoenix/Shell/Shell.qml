@@ -95,7 +95,7 @@ FocusScope {
     // Settings > Advanced (docs/M6-PLAN.md F4; the system's tweaks, see
     // SimSystemStatus.tweaks): tweak(name) is the setting, or its default.
     readonly property var tweaks: shell.system && shell.system.tweaks ? shell.system.tweaks : ({})
-    readonly property var tweakDefaults: ({ infiniteCardCycling: false, maximizeEdges: false, waveLauncher: false, tapRipple: true,
+    readonly property var tweakDefaults: ({ infiniteCardCycling: false, maximizeEdges: false, waveLauncher: true, tapRipple: true,
                                             animationSpeed: "normal", gestureSensitivity: "normal", haptics: false,
                                             gridDensity: "normal", batteryPercent: false, numberRow: false,
                                             keyboardStyle: "auto" })
@@ -115,8 +115,10 @@ FocusScope {
     // ---- Navigation -----------------------------------------------------------
 
     // params (optional): launch params, e.g. from a tapped notification.
+    // how (optional): what it does if the app runs (the window source's
+    // launch): "front" (default), "refresh" or "new".
     // Returns the card's uid ("" for apps without a card).
-    function launch(appId, params) {
+    function launch(appId, params, how) {
         if (!source)
             return "";
         // An app coming up ends dock mode (cardWindowAdded).
@@ -124,10 +126,31 @@ FocusScope {
             exitDockMode(true);
         launcher.open = false;
         justType.open = false;
-        var uid = source.launch(appId, cards.currentUid, params || null);
+        var uid = source.launch(appId, cards.currentUid, params || null, false, how || "front");
         if (uid !== "")
             Qt.callLater(cards.focusLaunched, uid);
         return uid;
+    }
+
+    // Settings > Apps > Opening a running app (system preference
+    // appRelaunch, Phoenix): what opening an app that already has a card
+    // does. "front": its card comes to the front as it is (the original's
+    // behaviour, CardWindowManager focusWindow); "refresh": also relaunched,
+    // so it reloads its data; "new": another card of it.
+    readonly property string appRelaunch: shell.system && (shell.system.appRelaunch === "refresh" || shell.system.appRelaunch === "new")
+                                          ? shell.system.appRelaunch : "front"
+    // The window source follows it for launches apps make (a link, the
+    // assistant's "Open Memos").
+    Binding {
+        target: shell.source
+        property: "appRelaunch"
+        when: shell.source !== null && shell.source !== undefined && shell.source.appRelaunch !== undefined
+        value: shell.appRelaunch
+    }
+    // The user opening an app (its icon in the launcher, the dock or the
+    // wave; Just Type's app results): as appRelaunch says.
+    function openApp(appId) {
+        return launch(appId, null, appRelaunch);
     }
 
     // A tap on an app the launcher shows as being installed: the original
@@ -337,7 +360,7 @@ FocusScope {
         justType.start(text);
     }
 
-    // The Phoenix Assistant's view over the screen (AssistantOverlay; docs/
+    // The Assistant's view over the screen (AssistantOverlay; docs/
     // M6-PLAN.md F3): held launcher button. Not over the lock screen nor in
     // First Use; nothing when the assistant is off (Settings > Assistant).
     function openAssistant(listen) {
@@ -1051,9 +1074,12 @@ FocusScope {
                 lockScreen.unlockPanel.entryCanceled();
             return;
         }
-        // The assistant's view closes.
+        // The assistant's view closes (its "Connect model" sheet first).
         if (assistantView.open) {
-            closeAssistant();
+            if (assistantView.connecting !== null)
+                assistantView.connecting = null;
+            else
+                closeAssistant();
             return;
         }
         // The share sheet over the launcher gets it (it goes back inside
@@ -1140,13 +1166,25 @@ FocusScope {
         cards.switchApp(toRight);
     }
 
+    // A tap on the gesture area: what is open over the cards closes first,
+    // as for the Home key (Key_CoreNavi_Home, SystemUiController.cpp:528-571:
+    // the dashboard, the menu, the launcher, then Universal Search, Just
+    // Type, hides), and as the swipe up does; only then does it toggle
+    // between the app and card view (so a tap in Just Type closes it, rather
+    // than maximizing the card behind it).
     function gestureTap() {
         if (locked || emergencyShown || (firstUse && cards.count < 2))
             return;
-        if (cards.maximizeProgress > 0)
-            cards.minimize();
+        if (notes.dashboardOpen)
+            notes.dashboardOpen = false;
+        else if (systemMenu.open)
+            systemMenu.open = false;
         else if (launcher.open)
             launcher.open = false;
+        else if (justType.open)
+            justType.open = false;
+        else if (cards.maximizeProgress > 0)
+            cards.minimize();
         else if (cards.count > 0)
             cards.maximize();
     }
@@ -2422,7 +2460,7 @@ FocusScope {
                         apps: shell.source ? shell.source.apps : null
                         layout: shell.launcherLayout
                         draggedId: iconDrag.appId
-                        onLaunchRequested: (appId) => shell.launch(appId)
+                        onLaunchRequested: (appId) => shell.openApp(appId)
                         onCloseRequested: launcher.open = false
                         onDeleteRequested: (appId) => deleteDialog.ask(appId)
                         onPendingTapped: (appId) => shell.pendingAppTapped(appId)
@@ -2482,7 +2520,7 @@ FocusScope {
                     backdrop: sceneBackdrop
                     dock: shell.launcherLayout ? shell.launcherLayout.dock : []
                     draggedId: iconDrag.appId
-                    onLaunchRequested: (appId) => shell.launch(appId)
+                    onLaunchRequested: (appId) => shell.openApp(appId)
                     onLauncherToggled: launcher.open = !launcher.open
                     onAssistantRequested: {
                         // The view grows out of the held button.
@@ -2513,7 +2551,7 @@ FocusScope {
                     anchors.fill: parent
                     anchors.bottomMargin: notes.negativeSpace
                     z: 997
-                    onLaunchRequested: (appId) => shell.launch(appId)
+                    onLaunchRequested: (appId) => shell.openApp(appId)
                     onLauncherRequested: {
                         justType.open = false;
                         launcher.open = true;
@@ -2955,12 +2993,12 @@ FocusScope {
                     bottomInset: notes.negativeSpace
                     apps: shell.source ? shell.source.apps : null
                     source: shell.source
-                    onLaunchRequested: (appId) => shell.launch(appId)
+                    onLaunchRequested: (appId) => shell.openApp(appId)
                     onCloseRequested: { justType.open = false; shell.forceActiveFocus(); }
                     onCopied: (text) => clipboardClient.record(text, "com.palm.systemui")
                 }
 
-                // The Phoenix Assistant over everything here (held launcher button).
+                // The Assistant over everything here (held launcher button).
                 AssistantOverlay {
                     id: assistantView
                     anchors.fill: parent
@@ -3413,7 +3451,7 @@ FocusScope {
             onForward: shell.gestureForward()
             onPrevious: shell.gestureSwitchApp(true)
             onNext: shell.gestureSwitchApp(false)
-            advancedGestures: !!(shell.system && shell.system.advancedGestures)
+            advancedGestures: !!shell.system && shell.system.advancedGestures !== false
             // The wave launcher (Settings > Advanced): not over the lock
             // screen, First Use, dock mode or the launcher.
             waveLauncher: shell.tweak("waveLauncher") && !shell.locked && !shell.firstUse && !shell.dockMode && !launcher.open
@@ -3596,8 +3634,11 @@ FocusScope {
     ScreenCaptureThumbnail {
         id: captureThumbnail
         anchors.bottom: parent.bottom
-        // Above the phone's notification area (its banner says "Screen captured").
-        anchors.bottomMargin: Theme.px(24) + notes.negativeSpaceTarget
+        // Bottom left as on iOS, but clear of what is down there: above the
+        // phone's notification area (its banner says "Screen captured")
+        // and the gesture area, and above an app's bottom toolbar (Enyo's
+        // command menus, the preview's Crop, Markup and Share), not over it.
+        anchors.bottomMargin: Theme.gestureAreaHeight + notes.negativeSpaceTarget + captureThumbnail.toolbarClearance + Theme.px(12)
         z: 99999
         onActivated: (path, capture) => shell.openCapture(path, capture)
     }

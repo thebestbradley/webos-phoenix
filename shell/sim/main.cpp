@@ -5,11 +5,11 @@
 // desktop window with mock apps, under menus (Device, Simulate, View, Help)
 // and beside a toolbar with every key below (SimChrome; sim.qml simActions).
 //
-//   phoenix-sim [--size WxH] [--scale N] [--tablet|--phone] [--scene NAME]
+//   phoenix-sim [--size WxH] [--scale N] [--adaptive|--tablet|--phone] [--scene NAME]
 //               [--orientation up|left|down|right] [--turn ORIENTATION]
 //               [--home-button] [--first-use] [--screenshot FILE [--delay MS]] [--stay-awake] [--low-memory] [--hardware-keyboard] [--touchstone] [--no-host-shell]
 //               [--host-shell PATH] [--security-policy SPEC] [--usb] [--usb-busy] [--touch-to-share]
-//               [--boot-animation | --no-boot-animation] [--no-toolbar] [--marketplace]
+//               [--boot-animation | --no-boot-animation] [--no-toolbar] [--marketplace] [--check-chrome]
 //
 // Keys: Esc = back gesture, Home/F1 = up gesture, F2 = demo notification,
 //       F3 = Power (screen off and locked / on), F4 = incoming call, F5 = incoming text message
@@ -44,6 +44,8 @@
 #include <QStandardPaths>
 #include <QScopeGuard>
 #include <QTimer>
+#include <QVersionNumber>
+#include <cstdio>
 
 #include <memory>
 
@@ -53,6 +55,7 @@
 
 #include "rootfs.h"
 #include "simchrome.h"
+#include "simfonts.h"
 #include "siminstaller.h"
 #include "simsnapshots.h"
 #include "simpty.h"
@@ -104,22 +107,12 @@ static void useBundledEmojiFont(int argc, char *argv[])
         qmlDir = QString::fromUtf8(PHOENIX_QML_DIR);
     if (qmlDir.isEmpty())
         qmlDir = QFileInfo(QString::fromLocal8Bit(argv[0])).absoluteDir().filePath(QStringLiteral("../qml"));
-    const QDir emojiDir(QDir(qmlDir).absoluteFilePath(QStringLiteral("../assets/fonts/noto-color-emoji")));
-    if (!emojiDir.exists(QStringLiteral("NotoColorEmoji.ttf")))
+    const QString conf = SimFonts::writeEmojiFontConfig(
+        QDir(qmlDir).absoluteFilePath(QStringLiteral("../assets/fonts/noto-color-emoji")),
+        QDir::temp().filePath(QStringLiteral("phoenix-sim-fonts-") + QString::number(getuid())));
+    if (conf.isEmpty())
         return;
-    const QString confDir = QDir::temp().filePath(QStringLiteral("phoenix-sim-fonts-") + QString::number(getuid()));
-    QDir().mkpath(confDir);
-    QFile conf(QDir(confDir).filePath(QStringLiteral("fonts.conf")));
-    if (!conf.open(QIODevice::WriteOnly | QIODevice::Truncate))
-        return;
-    conf.write("<?xml version=\"1.0\"?>\n<!DOCTYPE fontconfig SYSTEM \"urn:fontconfig:fonts.dtd\">\n<fontconfig>\n"
-               "  <include ignore_missing=\"yes\">/etc/fonts/fonts.conf</include>\n"
-               "  <dir>" + emojiDir.absolutePath().toHtmlEscaped().toUtf8() + "</dir>\n"
-               "  <include ignore_missing=\"yes\">"
-               + emojiDir.absoluteFilePath(QStringLiteral("50-phoenix-emoji.conf")).toHtmlEscaped().toUtf8()
-               + "</include>\n</fontconfig>\n");
-    conf.close();
-    qputenv("FONTCONFIG_FILE", conf.fileName().toLocal8Bit());
+    qputenv("FONTCONFIG_FILE", QFile::encodeName(conf));
 #else
     Q_UNUSED(argc);
     Q_UNUSED(argv);
@@ -128,6 +121,13 @@ static void useBundledEmojiFont(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
+    // Built against Qt 6.8 or newer (CMakeLists.txt), and run with it: an
+    // older Qt found first at run time is refused here, before it draws
+    // (Qt 6.4 aborts drawing styled text with the colour emoji font).
+    if (QVersionNumber::fromString(QLatin1String(qVersion())) < QVersionNumber(6, 8)) {
+        std::fprintf(stderr, "phoenix-sim: Qt %s is too old; it needs Qt 6.8 or newer (built with %s).\n", qVersion(), QT_VERSION_STR);
+        return 1;
+    }
     useBundledEmojiFont(argc, argv);
 #ifdef PHOENIX_HAVE_WEBENGINE
     // Both must happen before the application object exists.
@@ -153,6 +153,7 @@ int main(int argc, char *argv[])
     QCommandLineOption scaleOpt(QStringLiteral("scale"), QStringLiteral("Device pixels per legacy pixel, like a denser screen (default 1; the Pre 3 was 1.5 at 480x800)."), QStringLiteral("N"), QStringLiteral("1"));
     QCommandLineOption tabletOpt(QStringLiteral("tablet"), QStringLiteral("Use the tablet (TouchPad) layout."));
     QCommandLineOption phoneOpt(QStringLiteral("phone"), QStringLiteral("Force the phone layout."));
+    QCommandLineOption adaptiveOpt(QStringLiteral("adaptive"), QStringLiteral("A phone or a tablet by the window's size (the default without --phone or --tablet): resize the window, or pick View > Device Size, and the shell switches between the layouts live, the apps running on."));
     QCommandLineOption sceneOpt(QStringLiteral("scene"), QStringLiteral("Demo scene: locked, cards, stacks, reorder, maximized, heldcard, launcher, launcheredit, launchermenu, launchergroup, launchergroupopen, launchertabs, launcherinstall, wave, powermenu, pin, emergency, firstuse, lowbattery, banner, notified, dashboard, justtype, keyboard, clipstrip, assistant, systemmenu, empty."), QStringLiteral("name"));
     QCommandLineOption firstUseOpt(QStringLiteral("first-use"), QStringLiteral("Start with First Use, as on a new device (without it, First Use runs until it has been done once, unless --scene or --launch is given)."));
     QCommandLineOption shotOpt(QStringLiteral("screenshot"), QStringLiteral("Save a screenshot to FILE and exit."), QStringLiteral("file"));
@@ -172,8 +173,8 @@ int main(int argc, char *argv[])
     QCommandLineOption quietOpt(QStringLiteral("quiet"), QStringLiteral("No boot and shutdown sounds (they are off anyway with --screenshot and the offscreen platform)."));
     QCommandLineOption noHostShellOpt(QStringLiteral("no-host-shell"), QStringLiteral("Do not give the Terminal app a real shell on this computer (it gets the runtime's simulated shell)."));
     QCommandLineOption llamaServerOpt(QStringLiteral("llama-server"), QStringLiteral("llama.cpp's llama-server program for the Assistant's on-device model (default: llama-server on the PATH)."), QStringLiteral("path"));
-    QCommandLineOption marketplaceOpt(QStringLiteral("marketplace"), QStringLiteral("Start the Marketplace's catalog service on this computer (server/marketplace/bin/serve.sh: PHP 8; set up the first time) where the simulator's Marketplace reads it, http://127.0.0.1:8088/, and open the Marketplace. It stops with the simulator; one already running is used."));
-    QCommandLineOption speechCommandOpt(QStringLiteral("speech-command"), QStringLiteral("The program (and arguments, %l for the language) that speaks the Assistant's answers, given the text on its input (default: espeak-ng, or say on a Mac)."), QStringLiteral("command"));
+    QCommandLineOption marketplaceOpt(QStringLiteral("marketplace"), QStringLiteral("Start the Marketplace's catalog service on this computer (server/marketplace/bin/serve.sh: PHP 8; set up the first time) where the simulator's Marketplace reads it, http://127.0.0.1:8088/, and open the Marketplace. It stops with the simulator; one already running is used. The Services menu starts and stops it too."));
+    QCommandLineOption speechCommandOpt(QStringLiteral("speech-command"), QStringLiteral("The program (and arguments, %l for the language, %v for the voice) that speaks the Assistant's answers, given the text on its input (default: Kitten TTS, phoenix-tts; else espeak-ng, say or Flite)."), QStringLiteral("command"));
     QCommandLineOption wakeModelOpt(QStringLiteral("wake-model"), QStringLiteral("The wake word's Vosk model folder (default: wakeword/vosk-model-small-en-us-0.15 beside phoenix-sim, which tools/get-wakeword.py fetches)."), QStringLiteral("dir"));
     QCommandLineOption voskLibraryOpt(QStringLiteral("vosk-library"), QStringLiteral("libvosk for the wake word (default: wakeword/libvosk.so, or .dylib, beside phoenix-sim)."), QStringLiteral("file"));
     QCommandLineOption wakeFileOpt(QStringLiteral("wake-file"), QStringLiteral("The WAV file Simulate > Say \"Hey Phoenix\" plays into the microphone (default: the tests' hey-phoenix.wav)."), QStringLiteral("file"));
@@ -185,14 +186,15 @@ int main(int argc, char *argv[])
     QCommandLineOption usbBusyOpt(QStringLiteral("usb-busy"), QStringLiteral("An app keeps a file open on the USB drive: entering USB drive mode fails (\"USB Drive connection failed\")."));
     QCommandLineOption bootAnimOpt(QStringLiteral("boot-animation"), QStringLiteral("Show the boot animation at start-up (it shows anyway unless --screenshot or an offscreen platform)."));
     QCommandLineOption noBootAnimOpt(QStringLiteral("no-boot-animation"), QStringLiteral("Start without the boot animation."));
+    QCommandLineOption checkChromeOpt(QStringLiteral("check-chrome"), QStringLiteral("Check that the menu bar shows its menus with the keyboard focus on the screen (on a Mac: the menu bar at the top of the screen) and that the focus goes back to the screen from the window around it, print what it found, and exit: 0 if so (CI)."));
     QCommandLineOption noToolbarOpt(QStringLiteral("no-toolbar"), QStringLiteral("Start without the toolbar beside the screen (View > Show Toolbar shows it again)."));
     // Set by phoenix-sim itself when it restarts (SimProcess).
     QCommandLineOption updatingOpt(QStringLiteral("updating"), QStringLiteral("Boot as after a system update: \"Updating the system\" first."));
     QCommandLineOption eraseOpt(QStringLiteral("erase-data"), QStringLiteral("Internal: once process PID is gone, erase the simulator's data and start into First Use."), QStringLiteral("pid"));
     updatingOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     eraseOpt.setFlags(QCommandLineOption::HiddenFromHelp);
-    parser.addOptions({ hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
-                        noHostShellOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, updatingOpt, eraseOpt, microphoneFileOpt,
+    parser.addOptions({ hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, adaptiveOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
+                        noHostShellOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, checkChromeOpt, updatingOpt, eraseOpt, microphoneFileOpt,
                         llamaServerOpt, speechCommandOpt, marketplaceOpt, wakeModelOpt, voskLibraryOpt, wakeFileOpt });
     parser.process(app);
 
@@ -246,6 +248,10 @@ int main(int argc, char *argv[])
         return 2;
     }
 
+    if (int(parser.isSet(tabletOpt)) + int(parser.isSet(phoneOpt)) + int(parser.isSet(adaptiveOpt)) > 1) {
+        qCritical("--adaptive, --phone and --tablet: one of them");
+        return 2;
+    }
     const bool tablet = parser.isSet(tabletOpt);
     QSize size = tablet ? QSize(1024, 768) : QSize(320, 480);
     if (parser.isSet(sizeOpt)) {
@@ -289,6 +295,10 @@ int main(int argc, char *argv[])
         QStringLiteral("%f"), QStringLiteral("%l"), QStringLiteral("%p") };
     if (!rootfs.isValid())
         qWarning("phoenix-sim: web apps disabled: %s", qPrintable(rootfs.error()));
+    else if (!rootfs.missing().isEmpty())
+        qWarning("phoenix-sim: missing from the checkout (%s): %s. The original webOS apps and frameworks there are left out; "
+                 "fetch the git submodules with `git submodule update --init` (./phoenix does), then start phoenix-sim again.",
+                 qPrintable(QDir::toNativeSeparators(QDir(repoDir).absolutePath())), qPrintable(rootfs.missing().join(QStringLiteral(", "))));
     // Apps the user installs (the Marketplace, Files' .ipk sheet) live with
     // the simulator's other data, as on a device in /media/cryptofs/apps.
     // /var/luna/ (launch points apps add, the browser's page pictures) in
@@ -302,13 +312,19 @@ int main(int argc, char *argv[])
     // The browser's page pictures (saveViewToFile, generateIconFromFile).
     SimSnapshots snapshots(&rootfs);
 
-    // --marketplace: the catalog service, answering before the Marketplace
-    // first reads it.
+    // The Marketplace's catalog service (Services > Marketplace Catalog,
+    // the Marketplace's Start Local Catalog). --marketplace: started,
+    // answering before the Marketplace first reads it; with Services >
+    // Start Catalog with the Simulator ("marketplace/autostart"), started
+    // without waiting.
     QStringList launch = parser.values(launchOpt);
 #ifdef PHOENIX_HAVE_WEBENGINE
-    std::unique_ptr<SimMarketplace> marketplace;
+    auto marketplace = std::make_unique<SimMarketplace>(repoDir);
+    if (!parser.isSet(marketplaceOpt) && SimSettings().value(QStringLiteral("marketplace/autostart")) == QLatin1String("1")) {
+        qInfo("phoenix-sim: starting the Marketplace's catalog (Services > Start Catalog with the Simulator)");
+        marketplace->startAsync();
+    }
     if (parser.isSet(marketplaceOpt)) {
-        marketplace = std::make_unique<SimMarketplace>(repoDir);
         if (marketplace->start())
             qInfo("phoenix-sim: the Marketplace's catalog at %s%s", qPrintable(marketplace->url()),
                   marketplace->ownsServer() ? qPrintable(QStringLiteral(" (log: ") + marketplace->logFile() + QLatin1Char(')')) : " (already running)");
@@ -327,12 +343,16 @@ int main(int argc, char *argv[])
     // The shell's dictation (the microphone and the transcriber) serves the
     // apps too: org.webosphoenix.dictation (Voice Dial).
     SimPty *simPty = nullptr;
+    QJsonObject hostInfo{ { QStringLiteral("dictation"), true }, { QStringLiteral("assistant"), true } };
+#ifdef PHOENIX_HAVE_WEBENGINE
+    // The simulator starts the catalog service when the Marketplace asks
+    // (the runtime's org.webosphoenix.simulator).
+    hostInfo.insert(QStringLiteral("marketplaceCatalog"), true);
+#endif
     if (!parser.isSet(noHostShellOpt)) {
         simPty = new SimPty(&app);
         simPty->setShellOverride(parser.value(hostShellOpt));
-        rootfs.setHostInfo(QByteArrayLiteral("{\"pty\":\"host\",\"dictation\":true,\"assistant\":true}"));
-    } else {
-        rootfs.setHostInfo(QByteArrayLiteral("{\"dictation\":true,\"assistant\":true}"));
+        hostInfo.insert(QStringLiteral("pty"), QStringLiteral("host"));
     }
 
     QQuickView view;
@@ -412,16 +432,103 @@ int main(int argc, char *argv[])
         if (QFileInfo::exists(spotter) && QFileInfo(model).isDir() && QFileInfo::exists(vosk))
             wakeCommand = { spotter, QStringLiteral("--model"), QFileInfo(model).absoluteFilePath(),
                             QStringLiteral("--vosk"), QFileInfo(vosk).absoluteFilePath() };
-        else
-            qInfo("phoenix-sim: no wake word (run tools/get-wakeword.py, or pass --wake-model and --vosk-library)");
         view.rootContext()->setContextProperty(QStringLiteral("simWakeWordCommand"), wakeCommand);
         view.rootContext()->setContextProperty(QStringLiteral("simWakeFile"),
             parser.isSet(wakeFileOpt) ? QFileInfo(parser.value(wakeFileOpt)).absoluteFilePath()
                                       : QDir(repoDir).filePath(QStringLiteral("services/wakeword/tests/data/hey-phoenix.wav")));
+
+        // What the assistant's voice and model have on this computer, for
+        // Settings > Assistant (the runtime's voice reads host.json's
+        // "voice") and for this log, each missing one with a line on how to
+        // get it (./phoenix installs them all; docs/AI-AND-MCP.md, "What's
+        // installed where").
+        QJsonObject voice;
+        // hint: what is missing and how to get it, after the part's name
+        // ("speech recognition: its model is missing; run ...").
+        const auto part = [&voice](const char *id, const char *what, bool available, const QString &engine, const QString &hint) {
+            voice.insert(QLatin1String(id), QJsonObject{ { QStringLiteral("available"), available },
+                { QStringLiteral("engine"), engine }, { QStringLiteral("howToInstall"), available ? QString() : hint } });
+            if (!available)
+                qInfo("phoenix-sim: %s: %s", what, qPrintable(hint));
+        };
+        // The one command installs what is missing (./phoenix at the top
+        // of the checkout).
+        const QString setup = QStringLiteral("./phoenix");
+        // Dictation runs the transcriber (apps/voicememos/service/
+        // transcribe-cli.js) with Node.js, which finds whisper-cli and its
+        // model as on a device: PHOENIX_WHISPER_CLI or the PATH, and
+        // PHOENIX_WHISPER_MODEL, here build/whisper's model when that is
+        // not set (tools/get-whisper-model.py).
+        QString whisper = qEnvironmentVariable("PHOENIX_WHISPER_CLI");
+        for (const char *name : { "whisper-cli", "whisper-cpp" })
+            if (whisper.isEmpty())
+                whisper = QStandardPaths::findExecutable(QLatin1String(name));
+        QString whisperModel = qEnvironmentVariable("PHOENIX_WHISPER_MODEL");
+        if (whisperModel.isEmpty()) {
+            whisperModel = here.filePath(QStringLiteral("whisper/ggml-base.en.bin"));
+            if (QFileInfo::exists(whisperModel))
+                qputenv("PHOENIX_WHISPER_MODEL", QFile::encodeName(whisperModel));
+            else if (QFileInfo::exists(QStringLiteral("/usr/share/whisper/ggml-base.en.bin")))
+                whisperModel = QStringLiteral("/usr/share/whisper/ggml-base.en.bin");
+        }
+        const bool node = !QStandardPaths::findExecutable(QStringLiteral("node")).isEmpty();
+#ifdef Q_OS_MACOS
+        const QString getWhisper = QStringLiteral("brew install whisper-cpp (%1 does it)").arg(setup);
+#else
+        const QString getWhisper = QStringLiteral("%1 builds it (or set PHOENIX_WHISPER_CLI)").arg(setup);
+#endif
+        part("recognition", "speech recognition", node && !whisper.isEmpty() && QFileInfo::exists(whisperModel), QStringLiteral("whisper.cpp"),
+             !node ? QStringLiteral("Node.js is not on the PATH (%1 installs it).").arg(setup)
+             : whisper.isEmpty() ? QStringLiteral("whisper.cpp's whisper-cli is missing; %1.").arg(getWhisper)
+             : QStringLiteral("its model is missing; run tools/get-whisper-model.py (or set PHOENIX_WHISPER_MODEL)."));
+        part("wakeWord", "the wake word", !wakeCommand.isEmpty(), QStringLiteral("Vosk"),
+             !QFileInfo::exists(spotter) ? QStringLiteral("phoenix-wakeword is missing; it is built with phoenix-sim.")
+             : QStringLiteral("Vosk and its model are missing; run tools/get-wakeword.py, then start phoenix-sim again "
+                              "(or pass --wake-model and --vosk-library)."));
+        // The program shell/native/speech.cpp would run (the runtime asks it
+        // whether there is one; this is for the hint).
+        QString speaker;
+        if (parser.isSet(speechCommandOpt)) {
+            const QString p = QProcess::splitCommand(parser.value(speechCommandOpt)).value(0);
+            if (QFileInfo(p).isAbsolute() ? QFileInfo(p).isExecutable() : !QStandardPaths::findExecutable(p).isEmpty())
+                speaker = QFileInfo(p).fileName();
+        } else {
+            // Kitten TTS first (phoenix-tts beside this program, with its
+            // model in build/kitten: tools/get-kitten.py), as Speech does.
+            QString kittenWhy;
+            const QString tts = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("phoenix-tts"));
+            if (QFileInfo(tts).isExecutable()) {
+                QProcess check;
+                check.start(tts, { QStringLiteral("--check") });
+                check.waitForFinished(5000);
+                const QJsonObject r = QJsonDocument::fromJson(check.readAllStandardOutput()).object();
+                if (r.value(QStringLiteral("ok")).toBool())
+                    speaker = QStringLiteral("Kitten TTS");
+                else
+                    kittenWhy = r.value(QStringLiteral("error")).toString();
+            }
+            for (const char *name : { "espeak-ng", "say", "flite" })
+                if (speaker.isEmpty() && !QStandardPaths::findExecutable(QLatin1String(name)).isEmpty())
+                    speaker = QLatin1String(name);
+            if (!kittenWhy.isEmpty())
+                qInfo("phoenix-sim: the voice: Kitten TTS cannot speak (%s); run tools/get-kitten.py (%s does it)%s",
+                      qPrintable(kittenWhy), qPrintable(setup), speaker.isEmpty() ? "" : qPrintable(QStringLiteral(", %1 speaks meanwhile").arg(speaker)));
+        }
+        part("speech", "spoken answers", !speaker.isEmpty(), speaker,
+             parser.isSet(speechCommandOpt) ? QStringLiteral("the --speech-command program was not found.")
+             : QStringLiteral("no speech program; run tools/get-kitten.py for Kitten TTS (%1 does it), or sudo apt install espeak-ng, or start phoenix-sim with --speech-command.").arg(setup));
+        hostInfo.insert(QStringLiteral("voice"), voice);
+        if (!parser.isSet(llamaServerOpt) && QStandardPaths::findExecutable(QStringLiteral("llama-server")).isEmpty())
+#ifdef Q_OS_MACOS
+            qInfo("phoenix-sim: on-device models: llama.cpp's llama-server is missing; brew install llama.cpp (./phoenix does it), or --llama-server");
+#else
+            qInfo("phoenix-sim: on-device models: llama.cpp's llama-server is missing; ./phoenix builds it, or --llama-server");
+#endif
     }
+    rootfs.setHostInfo(QJsonDocument(hostInfo).toJson(QJsonDocument::Compact));
     // The Assistant's on-device models (downloaded into the simulator's data)
     // and its speech: the shell runs them, as "assistant" host messages ask
-    // (the runtime's block "The Phoenix Assistant").
+    // (the runtime's block "The Assistant").
     view.rootContext()->setContextProperty(QStringLiteral("simModelsDir"),
         QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath(QStringLiteral("models")));
     view.rootContext()->setContextProperty(QStringLiteral("simLlamaServer"),
@@ -429,6 +536,11 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simSpeechCommand"),
         parser.isSet(speechCommandOpt) ? QProcess::splitCommand(parser.value(speechCommandOpt)) : QStringList());
     view.rootContext()->setContextProperty(QStringLiteral("simSettings"), &settings);
+#ifdef PHOENIX_HAVE_WEBENGINE
+    view.rootContext()->setContextProperty(QStringLiteral("simMarketplace"), marketplace.get());
+#else
+    view.rootContext()->setContextProperty(QStringLiteral("simMarketplace"), nullptr);
+#endif
     view.rootContext()->setContextProperty(QStringLiteral("simPty"), simPty);
     view.rootContext()->setContextProperty(QStringLiteral("simInstaller"), rootfs.isValid() ? &installer : nullptr);
     view.rootContext()->setContextProperty(QStringLiteral("simSnapshots"), rootfs.isValid() ? &snapshots : nullptr);
@@ -484,6 +596,15 @@ int main(int argc, char *argv[])
         chrome->showWithScreen(size);
     } else {
         view.show();
+    }
+
+    if (parser.isSet(checkChromeOpt)) {
+        if (!chrome) {
+            std::fprintf(stderr, "phoenix-sim: --check-chrome: no menu bar on the %s platform\n", qPrintable(platform));
+            return 1;
+        }
+        // Once the window is up and the app activated.
+        QTimer::singleShot(3000, chrome, [chrome]() { QCoreApplication::exit(chrome->checkChrome() ? 0 : 1); });
     }
 
     if (parser.isSet(shotOpt)) {

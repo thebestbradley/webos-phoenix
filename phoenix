@@ -1,0 +1,587 @@
+#!/bin/sh
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The one command for the webOS Phoenix simulator: installs what is missing,
+# builds, and runs it. Safe to run again: what is there is only checked
+# (a few seconds), then the build is incremental.
+#
+#   ./phoenix                     the same as ./phoenix build
+#   ./phoenix build               install what is missing, then build
+#   ./phoenix run [MODE] [ARGS]   build if needed, then start the simulator
+#                                 MODE: adaptive (default; a resizable window,
+#                                 phone or tablet by its size), phone, tablet.
+#                                 ARGS go to phoenix-sim (./phoenix run phone
+#                                 --scene cards; phoenix-sim --help lists them)
+#   ./phoenix run --marketplace   the same, with the Marketplace's catalog
+#                                 service on this computer (PHP 8), and the
+#                                 Marketplace open; or start it in the
+#                                 simulator: Services > Marketplace Catalog
+#   ./phoenix setup               install what is missing, without building
+#   ./phoenix check               only say what is there and what would be
+#                                 installed (the same as --dry-run)
+#
+# Options (anywhere before the simulator's own arguments):
+#   --no-assistant   without the assistant's parts (whisper.cpp, llama.cpp,
+#                    their models, the wake word, the voice)
+#   --offline        download nothing; fails only if something the build
+#                    needs is missing
+#   --tests          also the test tools (Playwright, Radicale, WsgiDAV,
+#                    PHP's MySQL driver)
+#   --dry-run        print what would be installed and run; change nothing
+#   -h, --help       this text
+#
+# What it checks and installs, only what is missing:
+#   macOS   Xcode's command line tools, Homebrew, then from Homebrew: qt,
+#           cmake, ninja, node@22, git, python@3.12, php (+ whisper-cpp,
+#           llama.cpp, onnxruntime)
+#   Ubuntu  apt packages (build tools, the libraries Qt loads, PHP 8 with
+#           SQLite for the Marketplace's catalog), Qt 6.8.1
+#           into /opt/Qt (aqtinstall; Ubuntu's own Qt is too old), Node.js 22
+#           (NodeSource), whisper-cli and llama-server built from pinned
+#           commits into /usr/local/bin, espeak-ng
+#   Both    git submodules, the apps' npm packages, whisper's base.en model,
+#           the wake word's Vosk model, the voice (Kitten TTS's model, the
+#           CMU dictionary; ONNX Runtime on Linux) and the built-in language
+#           model (Qwen3 0.6B) into build/ (checked by SHA-256), then CMake
+#           (configured with the Qt it found) and the build.
+#
+# Environment: PHOENIX_BUILD_DIR (default build), PHOENIX_QT_DIR (a Qt 6.8+
+# to use), QT_PREFIX (where Qt is installed on Linux, default /opt/Qt),
+# CMAKE_BUILD_PARALLEL_LEVEL (build jobs). scripts/mac-setup.sh and
+# scripts/linux-setup.sh call this script.
+
+set -eu
+
+REPO_DIR=$(cd "$(dirname "$0")" && pwd)
+BUILD_DIR=${PHOENIX_BUILD_DIR:-$REPO_DIR/build}
+case "$BUILD_DIR" in /*) ;; *) BUILD_DIR=$REPO_DIR/$BUILD_DIR ;; esac
+QT_VERSION=6.8.1          # the release a device's webOS OSE image ships (meta-qt6, scarthgap)
+QT_MIN=6.8
+QT_PREFIX=${QT_PREFIX:-/opt/Qt}
+# whisper.cpp and llama.cpp at the commits meta-phoenix's recipes pin
+# (meta-phoenix/recipes-support), built on Linux; Homebrew has both.
+WHISPER_COMMIT=d09f61a708f3487afa956ff578e60eae5e7a233c   # whisper.cpp master, 2026-09-24 (1.9.4)
+LLAMA_COMMIT=66e665c4276ee46f3ec9872dd7e5a496842bc44f     # llama.cpp b11239, 2026-09-28
+
+# ---- Arguments ----------------------------------------------------------------------
+COMMAND=""
+MODE=""
+ASSISTANT=1
+OFFLINE=0
+TESTS=0
+DRY=0
+# The comment at the top, from its fifth line.
+usage() { awk 'NR < 5 { next } /^#/ { print; next } { exit }' "$REPO_DIR/phoenix" | sed 's/^# \{0,1\}//'; }
+# Our words first; from the first word that is not ours (or after --), the
+# rest is the simulator's.
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --no-assistant) ASSISTANT=0 ;;
+        --offline) OFFLINE=1 ;;
+        --tests) TESTS=1 ;;
+        --dry-run) DRY=1 ;;
+        -h|--help|help) usage; exit 0 ;;
+        build|run|setup|check)
+            [ -z "$COMMAND" ] || break
+            COMMAND=$1 ;;
+        adaptive|phone|tablet)
+            [ "$COMMAND" = run ] && [ -z "$MODE" ] || break
+            MODE=$1 ;;
+        --) shift; break ;;
+        *)
+            [ "$COMMAND" = run ] && break
+            echo "phoenix: unknown command or option: $1 (./phoenix --help)" >&2
+            exit 2 ;;
+    esac
+    shift
+done
+COMMAND=${COMMAND:-build}
+if [ $# -gt 0 ] && [ "$COMMAND" != run ]; then
+    echo "phoenix: $1: only ./phoenix run takes the simulator's arguments (./phoenix --help)" >&2
+    exit 2
+fi
+[ "$COMMAND" = check ] && DRY=1
+MODE=${MODE:-adaptive}
+
+# ---- Output -------------------------------------------------------------------------
+START=$(date +%s)
+INSTALLED=""     # what this run installed (the summary)
+PRESENT=0        # how many checks found their part already there
+step() { printf '==> %s\n' "$*"; }
+ok() { printf '  ok       %s\n' "$*"; PRESENT=$((PRESENT + 1)); }
+skip() { printf '  skipped  %s\n' "$*"; }
+# installing NAME SIZE: says so (would, in a dry run) and records it.
+installing() {
+    if [ $DRY = 1 ]; then
+        printf '  install  %s (%s)\n' "$1" "$2"
+    else
+        printf '  install  %s (%s)...\n' "$1" "$2"
+    fi
+    INSTALLED="$INSTALLED
+    $1 ($2)"
+}
+die() { printf 'phoenix: %s\n' "$*" >&2; exit 1; }
+have() { command -v "$1" >/dev/null 2>&1; }
+# run CMD...: runs it, or in a dry run prints it.
+run() {
+    if [ $DRY = 1 ]; then
+        printf '           would run: %s\n' "$*"
+    else
+        "$@"
+    fi
+}
+need_network() {  # need_network WHAT
+    [ $OFFLINE = 0 ] || die "$1 is missing and --offline downloads nothing; run ./phoenix without --offline once."
+}
+
+OS=${PHOENIX_OS:-$(uname -s)}
+SUDO=""
+if [ "$OS" = Linux ] && [ "$(id -u)" -ne 0 ]; then
+    SUDO=sudo
+fi
+JOBS=${CMAKE_BUILD_PARALLEL_LEVEL:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}
+
+# Qt's version from its CMake package (6.8.1), or nothing.
+qt_version() {
+    sed -n 's/^set(PACKAGE_VERSION "\([0-9.]*\)").*/\1/p' "$1/lib/cmake/Qt6/Qt6ConfigVersionImpl.cmake" "$1/lib/cmake/Qt6/Qt6ConfigVersion.cmake" 2>/dev/null | head -n 1
+}
+# A Qt at least QT_MIN, with Qt WebEngine (the web apps)?
+qt_usable() {
+    v=$(qt_version "$1")
+    [ -n "$v" ] || return 1
+    major=${v%%.*}; rest=${v#*.}; minor=${rest%%.*}
+    [ "$major" -gt 6 ] || { [ "$major" -eq 6 ] && [ "$minor" -ge "${QT_MIN#6.}" ]; } || return 1
+    [ -d "$1/lib/cmake/Qt6WebEngineQuick" ] || [ -d "$1/lib/QtWebEngineCore.framework" ]
+}
+node_ok() {  # Node.js 22 or later on the PATH (Enact's CLI refuses odd releases)
+    have node || return 1
+    nv=$(node --version 2>/dev/null | sed 's/^v\([0-9]*\).*/\1/')
+    [ -n "$nv" ] && [ "$nv" -ge 22 ] && [ $((nv % 2)) -eq 0 ]
+}
+
+# ---- macOS --------------------------------------------------------------------------
+QT_DIR=""
+mac_prerequisites() {
+    step "macOS: the command line tools and Homebrew"
+    if xcode-select -p >/dev/null 2>&1; then
+        ok "Xcode command line tools"
+    else
+        installing "Xcode command line tools" "about 1 GB, Apple's installer"
+        need_network "Xcode's command line tools"
+        run xcode-select --install || true
+        [ $DRY = 1 ] || die "finish the Command Line Tools installer that opened, then run ./phoenix again."
+    fi
+
+    BREW=$(command -v brew 2>/dev/null || true)
+    for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+        [ -n "$BREW" ] || { [ -x "$b" ] && BREW=$b; } || true
+    done
+    if [ -n "$BREW" ]; then
+        ok "Homebrew ($BREW)"
+    else
+        installing "Homebrew" "about 100 MB, from brew.sh; asks for your password"
+        need_network "Homebrew"
+        if [ $DRY = 0 ]; then
+            sudo -v
+            NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+                [ -n "$BREW" ] || { [ -x "$b" ] && BREW=$b; } || true
+            done
+            [ -n "$BREW" ] || die "Homebrew did not install; see https://brew.sh"
+            echo "  Homebrew for new terminals: echo 'eval \"\$($BREW shellenv)\"' >> ~/.zprofile"
+        else
+            BREW=/opt/homebrew/bin/brew
+        fi
+    fi
+    # The prefix from where brew is (no need to run it: fast).
+    BREW_PREFIX=$(cd "$(dirname "$BREW")/.." 2>/dev/null && pwd || echo /opt/homebrew)
+    export PATH="$BREW_PREFIX/bin:$PATH"
+
+    # formula:size: the core, the assistant's, the tests'.
+    # php: the Marketplace's catalog service (server/marketplace), which
+    # the simulator starts (Services > Marketplace Catalog).
+    formulae="qt:1.3_GB cmake:60_MB ninja:1_MB node@22:80_MB git:60_MB python@3.12:70_MB php:120_MB"
+    [ $ASSISTANT = 1 ] && formulae="$formulae whisper-cpp:10_MB llama.cpp:30_MB onnxruntime:40_MB"
+    step "Homebrew packages"
+    missing=""
+    for fs in $formulae; do
+        f=${fs%%:*}; size=$(echo "${fs#*:}" | tr _ ' ')
+        # A formula is installed when its opt link is there (what brew list
+        # checks, without starting brew).
+        if [ -d "$BREW_PREFIX/opt/$f" ]; then
+            ok "$f"
+        else
+            installing "$f" "about $size with its dependencies"
+            missing="$missing $f"
+        fi
+    done
+    if [ -n "$missing" ]; then
+        need_network "Homebrew packages ($missing )"
+        # shellcheck disable=SC2086
+        run "$BREW" install $missing
+    fi
+    # Node 22 LTS is keg-only: on the PATH for the build. Odd-numbered
+    # releases (Homebrew's plain node may be one) are refused by Enact's CLI.
+    export PATH="$BREW_PREFIX/opt/node@22/bin:$PATH"
+    if [ $DRY = 0 ] && ! grep -qs 'node@22' "$HOME/.zprofile" "$HOME/.zshrc"; then
+        echo "  note: for npm in new terminals: echo 'export PATH=\"$BREW_PREFIX/opt/node@22/bin:\$PATH\"' >> ~/.zprofile"
+    fi
+    PYTHON="$BREW_PREFIX/opt/python@3.12/bin/python3.12"
+    [ -x "$PYTHON" ] || PYTHON=python3
+    # Homebrew's Qt (opt/qt; or its parts linked into the prefix), unless
+    # one was asked for or the build has one.
+    cached=$(sed -n 's/^CMAKE_PREFIX_PATH:[A-Z]*=//p' "$BUILD_DIR/CMakeCache.txt" 2>/dev/null || true)
+    for d in ${PHOENIX_QT_DIR:-} $cached "$BREW_PREFIX/opt/qt" "$BREW_PREFIX"; do
+        if [ -z "$QT_DIR" ] && qt_usable "$d"; then QT_DIR=$d; fi
+    done
+    QT_DIR=${QT_DIR:-${PHOENIX_QT_DIR:-$BREW_PREFIX/opt/qt}}
+}
+
+# ---- Linux --------------------------------------------------------------------------
+# The libraries Qt's own (display, fonts, input, sound, Qt WebEngine's
+# Chromium) load from the system, the OpenGL headers its CMake files ask
+# for, and the build tools. The same as CI (.github/workflows/ci.yml).
+APT_CORE="build-essential cmake ninja-build git curl ca-certificates pkg-config
+    libgl-dev libegl-dev libxkbcommon-dev libglib2.0-dev fonts-dejavu-core
+    libgl1 libegl1 libgbm1 libfontconfig1 libfreetype6 libdbus-1-3
+    libxkbcommon0 libxkbcommon-x11-0 libx11-xcb1 libxcb-cursor0 libxcb-icccm4
+    libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0
+    libxcb-xinerama0 libxcb-xkb1 libnss3 libnspr4 libxcomposite1 libxdamage1
+    libxrandr2 libxtst6 libxkbfile1 libxshmfence1 libasound2t64 libpulse0 libcups2t64
+    python3 python3-pip python3-venv
+    php-cli php-sqlite3"
+# php-cli and php-sqlite3: the Marketplace's catalog service, which the
+# simulator starts (sodium is in Debian's and Ubuntu's php-common).
+APT_ASSISTANT="espeak-ng"
+APT_TESTS="xvfb xauth xdotool libgl1-mesa-dri php-mysql"
+
+linux_packages() {
+    want="$APT_CORE"
+    [ $ASSISTANT = 1 ] && want="$want $APT_ASSISTANT"
+    [ $TESTS = 1 ] && want="$want $APT_TESTS"
+    step "System packages (apt)"
+    if ! have dpkg-query; then
+        # Not Debian or Ubuntu: what to look for, and on we go.
+        skip "not an apt system: install a C++ compiler, CMake, Ninja, git, curl, Python 3 and the X11/OpenGL libraries Qt needs with your package manager"
+        return
+    fi
+    # One query for all: installed ones print "name ii ".
+    # shellcheck disable=SC2086
+    installed=$(dpkg-query -W -f='${Package} ${db:Status-Abbrev}\n' $want 2>/dev/null | awk '$2 == "ii" { print $1 }')
+    missing=""
+    count=0
+    for p in $want; do
+        # Before Ubuntu 24.04 (and on Debian 12) the t64 libraries had their old names.
+        alt=${p%t64}
+        if echo "$installed" | grep -qx -e "$p" -e "$alt" || dpkg-query -W -f='${db:Status-Abbrev}' "$alt" 2>/dev/null | grep -q '^ii'; then
+            count=$((count + 1))
+        else
+            missing="$missing $p"
+        fi
+    done
+    ok "$count apt packages"
+    PRESENT=$((PRESENT + count - 1))
+    if [ -n "$missing" ]; then
+        installing "apt:$missing" "about 300 MB for all of them; needs sudo"
+        need_network "apt packages"
+        run $SUDO apt-get update
+        # shellcheck disable=SC2086
+        run $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $missing
+    fi
+}
+
+linux_qt() {
+    step "Qt $QT_MIN or later"
+    # The one asked for, the build's, the one this script installs, ~/Qt.
+    cached=$(sed -n 's/^CMAKE_PREFIX_PATH:[A-Z]*=//p' "$BUILD_DIR/CMakeCache.txt" 2>/dev/null || true)
+    for d in ${PHOENIX_QT_DIR:-} $cached "$QT_PREFIX/$QT_VERSION/gcc_64" "$QT_PREFIX"/6.*/gcc_64 "$HOME"/Qt/6.*/gcc_64; do
+        if [ -z "$QT_DIR" ] && qt_usable "$d"; then QT_DIR=$d; fi
+    done
+    if [ -n "$QT_DIR" ]; then
+        ok "Qt $(qt_version "$QT_DIR") ($QT_DIR)"
+        return
+    fi
+    [ -z "${PHOENIX_QT_DIR:-}" ] || die "PHOENIX_QT_DIR=$PHOENIX_QT_DIR is not a Qt $QT_MIN or later with Qt WebEngine."
+    QT_DIR="$QT_PREFIX/$QT_VERSION/gcc_64"
+    installing "Qt $QT_VERSION into $QT_PREFIX (aqtinstall)" "about 700 MB download, 2.2 GB on disk"
+    need_network "Qt $QT_VERSION"
+    # --break-system-packages: Ubuntu 24.04 marks its Python as externally
+    # managed; aqtinstall is a build tool, not system software.
+    run python3 -m pip install --quiet --break-system-packages aqtinstall
+    run $SUDO mkdir -p "$QT_PREFIX"
+    run $SUDO python3 -m aqt install-qt linux desktop "$QT_VERSION" linux_gcc_64 -O "$QT_PREFIX" \
+        -m qtwebengine qtwebchannel qtpositioning qt5compat qtmultimedia qtshadertools
+    run $SUDO rm -f aqtinstall.log
+}
+
+linux_node() {
+    step "Node.js 22"
+    if node_ok; then
+        ok "Node.js $(node --version)"
+        return
+    fi
+    installing "Node.js 22 (NodeSource)" "about 100 MB; needs sudo"
+    need_network "Node.js 22"
+    if [ $DRY = 1 ]; then
+        run "curl -fsSL https://deb.nodesource.com/setup_22.x | $SUDO bash -"
+    else
+        curl -fsSL https://deb.nodesource.com/setup_22.x | $SUDO bash -
+    fi
+    run $SUDO apt-get install -y nodejs
+}
+
+# A static whisper.cpp / llama.cpp program (their ggml inside) into
+# /usr/local/bin; Ubuntu 24.04 packages neither.
+build_ggml_program() {  # NAME REPO COMMIT TARGET CMAKE_FLAGS...
+    name=$1; repo=$2; commit=$3; target=$4; shift 4
+    if have "$target"; then
+        ok "$target ($(command -v "$target"))"
+        return
+    fi
+    if [ $OFFLINE = 1 ]; then
+        skip "$target (--offline)"
+        return
+    fi
+    installing "$target ($name, built from source into /usr/local/bin)" "a few minutes; about 150 MB of source, removed after"
+    if [ $DRY = 1 ]; then
+        run git fetch --depth 1 "$repo" "$commit"
+        run cmake --build "<source>/build" --target "$target"
+        return
+    fi
+    src=$(mktemp -d)
+    git -C "$src" init -q
+    git -C "$src" fetch -q --depth 1 "$repo" "$commit"
+    git -C "$src" checkout -q FETCH_HEAD
+    cmake -S "$src" -B "$src/build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=ON "$@" >/dev/null
+    cmake --build "$src/build" --target "$target"
+    $SUDO install -m 0755 "$src/build/bin/$target" "/usr/local/bin/$target"
+    rm -rf "$src"
+}
+
+linux_prerequisites() {
+    linux_packages
+    linux_qt
+    linux_node
+    PYTHON=python3
+    if [ $ASSISTANT = 1 ]; then
+        step "The assistant's programs"
+        build_ggml_program whisper.cpp https://github.com/ggml-org/whisper.cpp.git "$WHISPER_COMMIT" whisper-cli \
+            -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF -DWHISPER_SDL2=OFF -DWHISPER_CURL=OFF
+        build_ggml_program llama.cpp https://github.com/ggml-org/llama.cpp.git "$LLAMA_COMMIT" llama-server \
+            -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_APP=OFF -DLLAMA_BUILD_UI=OFF \
+            -DLLAMA_USE_PREBUILT_UI=OFF -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_NUMBER=11239
+    fi
+}
+
+# ---- Both ---------------------------------------------------------------------------
+# PHP 8 with sodium and pdo_sqlite: the Marketplace's catalog service
+# (server/marketplace/bin/serve.sh), which the simulator starts. Installed
+# with the packages above; only checked here, as the simulator runs
+# without it (the catalog then says what is missing).
+marketplace_php() {
+    step "PHP for the Marketplace's catalog"
+    if have php && php -r 'exit(PHP_MAJOR_VERSION >= 8 && extension_loaded("sodium") && extension_loaded("pdo_sqlite") ? 0 : 1);' >/dev/null 2>&1; then
+        ok "PHP $(php -r 'echo PHP_VERSION;' 2>/dev/null) with sodium and pdo_sqlite"
+    elif [ $DRY = 1 ] && ! have php; then
+        skip "PHP: not there yet (installed with the packages above)"
+    elif [ "$OS" = Darwin ]; then
+        skip "PHP 8 with sodium and pdo_sqlite is missing ($(command -v php || echo 'no php')): brew reinstall php; the simulator runs without the Marketplace's catalog"
+    else
+        skip "PHP 8 with sodium and pdo_sqlite is missing ($(command -v php || echo 'no php')): sudo apt install php-cli php-sqlite3 (PHP 8); the simulator runs without the Marketplace's catalog"
+    fi
+}
+
+source_and_packages() {
+    step "Source"
+    if ! have git; then
+        [ $DRY = 1 ] || die "git is missing."
+    elif [ -e "$REPO_DIR/.git" ]; then
+        # "-" in front: not checked out yet. Ones checked out are left as
+        # they are (a "+" is someone's own commit there).
+        absent=$(git -C "$REPO_DIR" submodule status 2>/dev/null | grep -c '^-' || true)
+        if [ "$absent" = 0 ]; then
+            ok "git submodules (the original Open webOS apps and frameworks)"
+        elif [ $OFFLINE = 1 ]; then
+            skip "$absent git submodules missing (--offline); the original apps will not be there"
+        else
+            installing "$absent git submodules" "about 400 MB"
+            run git -C "$REPO_DIR" submodule update --init
+        fi
+    fi
+
+    if [ -f "$REPO_DIR/apps/package-lock.json" ]; then
+        stamp="$REPO_DIR/apps/node_modules/.package-lock.json"
+        # npm's own record of the install, newer than the lock: up to date
+        # (the build checks the same, shell/CMakeLists.txt).
+        if [ -f "$stamp" ] && [ ! "$REPO_DIR/apps/package-lock.json" -nt "$stamp" ]; then
+            ok "npm packages for apps/"
+        elif [ $OFFLINE = 1 ]; then
+            if [ $DRY = 0 ] && have npm; then
+                printf '  install  npm packages for apps/ (from npm'"'"'s cache, --offline)\n'
+                (cd "$REPO_DIR/apps" && npm ci --offline --no-audit --no-fund) || die "npm ci --offline failed: npm's cache lacks packages; run ./phoenix without --offline once."
+            fi
+        else
+            installing "npm packages for apps/" "about 400 MB in apps/node_modules"
+            if [ $DRY = 1 ] || have npm; then
+                run sh -c "cd '$REPO_DIR/apps' && npm ci --no-audit --no-fund"
+            else
+                die "npm is missing (Node.js 22)."
+            fi
+        fi
+    fi
+}
+
+assistant_models() {
+    [ $ASSISTANT = 1 ] || return 0
+    step "The assistant's models (into $(basename "$BUILD_DIR")/)"
+    if [ -s "$BUILD_DIR/whisper/ggml-base.en.bin" ]; then
+        ok "whisper base.en model (speech recognition)"
+    elif [ $OFFLINE = 1 ]; then
+        skip "whisper base.en model (--offline): no dictation or spoken questions"
+    else
+        installing "whisper base.en model" "148 MB, checked by its SHA-256"
+        run "$PYTHON" "$REPO_DIR/tools/get-whisper-model.py" --dest "$BUILD_DIR/whisper"
+    fi
+    lib=libvosk.so
+    [ "$OS" = Darwin ] && lib=libvosk.dylib
+    if [ -d "$BUILD_DIR/wakeword/vosk-model-small-en-us-0.15" ] && [ -s "$BUILD_DIR/wakeword/$lib" ]; then
+        ok "wake word: Vosk and its model (\"Hey Phoenix\")"
+    elif [ $OFFLINE = 1 ]; then
+        skip "wake word (--offline): no \"Hey Phoenix\""
+    else
+        installing "wake word: Vosk and its small English model" "about 90 MB, checked by their SHA-256"
+        run "$PYTHON" "$REPO_DIR/tools/get-wakeword.py" --dest "$BUILD_DIR/wakeword"
+    fi
+    # The voice: Kitten TTS's model and the CMU dictionary (and, on Linux,
+    # ONNX Runtime; a Mac has Homebrew's onnxruntime, above).
+    kitten="$BUILD_DIR/kitten"
+    if [ -s "$kitten/kitten_tts_nano_v0_2.onnx" ] && [ -s "$kitten/cmudict.dict" ] &&
+        { [ "$OS" = Darwin ] || [ -s "$kitten/libonnxruntime.so.1" ]; }; then
+        ok "voice: Kitten TTS, its dictionary and ONNX Runtime"
+    elif [ $OFFLINE = 1 ]; then
+        skip "voice (--offline): answers are spoken with espeak-ng, say or Flite"
+    else
+        if [ "$OS" = Darwin ]; then size="about 28 MB"; else size="about 39 MB, 57 MB on disk"; fi
+        installing "voice: Kitten TTS (model and dictionary$([ "$OS" = Darwin ] || echo ', ONNX Runtime'))" "$size, checked by their SHA-256"
+        run "$PYTHON" "$REPO_DIR/tools/get-kitten.py" --dest "$kitten"
+    fi
+    if [ -s "$BUILD_DIR/models/qwen3-0.6b-q4_k_m.gguf" ]; then
+        ok "built-in language model: Qwen3 0.6B"
+    elif [ $OFFLINE = 1 ]; then
+        skip "built-in language model (--offline): only the commands answer, until one is downloaded in Settings"
+    else
+        installing "built-in language model: Qwen3 0.6B" "397 MB, checked by its SHA-256"
+        run "$PYTHON" "$REPO_DIR/tools/get-base-model.py" --dest "$BUILD_DIR/models"
+    fi
+}
+
+test_tools() {
+    [ $TESTS = 1 ] || return 0
+    step "Test tools"
+    if have npx && [ -d "$(npm root -g 2>/dev/null)/playwright" ]; then
+        ok "Playwright"
+    else
+        installing "Playwright and its Chromium" "about 400 MB"
+        need_network "Playwright"
+        if [ "$OS" = Darwin ]; then
+            run npm install -g playwright@1
+            run npx --yes playwright@1 install chromium
+        else
+            run $SUDO npm install -g playwright@1
+            run $SUDO npx --yes playwright@1 install --with-deps chromium
+        fi
+    fi
+    # Radicale and WsgiDAV: the CardDAV/CalDAV and WebDAV servers the sync
+    # and backup tests talk to. Pillow and NumPy: the HiDPI art checks.
+    if [ "$OS" = Darwin ]; then
+        if [ -x "$REPO_DIR/.venv/bin/radicale" ]; then
+            ok "Python test packages (.venv)"
+        else
+            installing "Radicale, WsgiDAV, Pillow, NumPy into .venv" "about 80 MB"
+            need_network "Python test packages"
+            run "$PYTHON" -m venv "$REPO_DIR/.venv"
+            run "$REPO_DIR/.venv/bin/pip" install --quiet radicale wsgidav cheroot pillow numpy
+        fi
+    elif python3 -c 'import radicale, wsgidav, PIL, numpy' 2>/dev/null; then
+        ok "Python test packages"
+    else
+        installing "Radicale, WsgiDAV, Pillow, NumPy (pip)" "about 80 MB"
+        need_network "Python test packages"
+        run python3 -m pip install --quiet --break-system-packages radicale wsgidav cheroot pillow numpy
+    fi
+}
+
+build() {
+    step "Building ($(basename "$BUILD_DIR")/)"
+    [ -n "$QT_DIR" ] || die "no Qt found."
+    if [ $DRY = 0 ]; then
+        have cmake || die "CMake is missing."
+        qt_usable "$QT_DIR" || die "Qt at $QT_DIR is missing or older than $QT_MIN (or has no Qt WebEngine)."
+    fi
+    cache="$BUILD_DIR/CMakeCache.txt"
+    cached=$(sed -n 's/^CMAKE_PREFIX_PATH:[A-Z]*=//p' "$cache" 2>/dev/null || true)
+    if [ ! -f "$cache" ]; then
+        # Ninja for a new build directory; an existing one keeps its generator.
+        gen=""
+        have ninja && gen="-G Ninja"
+        # shellcheck disable=SC2086
+        run cmake -S "$REPO_DIR/shell" -B "$BUILD_DIR" $gen -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_PREFIX_PATH="$QT_DIR"
+    elif [ "$cached" != "$QT_DIR" ] && ! qt_usable "$cached"; then
+        # The Qt it was configured with is gone (or none was given).
+        run cmake -S "$REPO_DIR/shell" -B "$BUILD_DIR" -DCMAKE_PREFIX_PATH="$QT_DIR"
+    else
+        QT_DIR=${cached:-$QT_DIR}
+        ok "configured with Qt $(qt_version "$QT_DIR") ($QT_DIR)"
+    fi
+    run cmake --build "$BUILD_DIR" --parallel "$JOBS"
+}
+
+summary() {
+    elapsed=$(( $(date +%s) - START ))
+    if [ -n "$INSTALLED" ]; then
+        if [ $DRY = 1 ]; then echo "Would install:$INSTALLED"; else echo "Installed:$INSTALLED"; fi
+    else
+        echo "Nothing to install ($PRESENT parts already there)."
+    fi
+    printf 'Done in %ss.\n' "$elapsed"
+    [ "$COMMAND" != build ] || [ $DRY = 1 ] || echo "Start the simulator: ./phoenix run (adaptive), ./phoenix run phone, ./phoenix run tablet"
+}
+
+# ---- The command --------------------------------------------------------------------
+[ $DRY = 1 ] && echo "(dry run: nothing is installed or built)"
+case "$OS" in
+    Darwin) mac_prerequisites ;;
+    Linux) linux_prerequisites ;;
+    *) die "$OS is not supported; the simulator builds on macOS and Linux (docs/GETTING-STARTED.md)." ;;
+esac
+marketplace_php
+source_and_packages
+assistant_models
+test_tools
+[ "$COMMAND" = setup ] || build
+summary
+
+[ "$COMMAND" = run ] || exit 0
+SIM="$BUILD_DIR/phoenix-sim"
+step "Starting the simulator ($MODE)"
+set -- "--$MODE" "$@"
+if [ "$OS" = Linux ]; then
+    # Chromium refuses to run as root with its sandbox (cloud containers).
+    [ "$(id -u)" -ne 0 ] || export QTWEBENGINE_DISABLE_SANDBOX=1
+    # No display (a container, ssh): a virtual one, when xvfb-run is there.
+    if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "${QT_QPA_PLATFORM:-}" ]; then
+        if have xvfb-run; then
+            set -- xvfb-run -a -s "-screen 0 1920x1200x24" "$SIM" "$@"
+            SIM=""
+        else
+            echo "  no display: set DISPLAY, or install xvfb (./phoenix --tests) for --screenshot runs" >&2
+        fi
+    fi
+fi
+if [ $DRY = 1 ]; then
+    printf '           would run: %s\n' "${SIM:+$SIM }$*"
+    exit 0
+fi
+[ -z "$SIM" ] || [ -x "$SIM" ] || die "$SIM was not built."
+if [ -n "$SIM" ]; then exec "$SIM" "$@"; else exec "$@"; fi

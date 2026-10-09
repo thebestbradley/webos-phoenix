@@ -751,6 +751,22 @@
   "svg": "fa3dd4480702beaebf75ee9b96fff6040a5baf7cffde6aa37df4993766bff595",
   "png": "6eec5173222e56d95888313388b008782760777c7ce15ce991ec6fa9d6297df2"
  },
+ "apps/settings/public/icons/hardware-128x128.png": {
+  "svg": "1524c18fd63409c8ab6c959b9b93c11373fed98583b56ee9c445753889406f5b",
+  "png": "bba366f45a138251751adfd3442567f036769a1d5b4ea74dafb0338e22868ef4"
+ },
+ "apps/settings/public/icons/hardware-256x256.png": {
+  "svg": "88a3b093e2857e6659441e8705393ba3a03bc1f3a5b7a22b96d01b7940d48f11",
+  "png": "aa10623f6575eb68a2c08b2e387db49085708c0ba99a8e04723f7484ac9a4cac"
+ },
+ "apps/settings/public/icons/hardware-512x512.png": {
+  "svg": "c87191b6bd95e9e870b3da66855bfdca376448a3566e0b3e8b988ebd133cbeef",
+  "png": "84c8167959df3f48fa6fb1eee8e61a10b55297aed34a276863f6431bc5564b10"
+ },
+ "apps/settings/public/icons/hardware.png": {
+  "svg": "60f0309b3d198f11437dbb054d0637872f037490c8c9ca145578b6da8030ecaa",
+  "png": "38710038e6728867838b0631dbdad7e19fbc800f6a037e446303ef2537e5cf10"
+ },
  "apps/settings/public/icons/hotspot-128x128.png": {
   "svg": "cacbcdf84fee1dc29a87626bbc4c663461eed3cbca331f2ee9b84a6e78760265",
   "png": "6ef2ad691e5a695d30b51297fa3ae45bacf3345974be92a00ecd001d9d8e210f"

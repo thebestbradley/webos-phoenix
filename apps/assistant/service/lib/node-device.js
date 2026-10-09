@@ -12,9 +12,14 @@
 //                           llama.cpp's llama-server on 127.0.0.1 for the one
 //                           in use; stopped after idleMs without requests
 //                           to give the memory back
-//   speech(options)         text to speech with a program reading stdin
-//                           (espeak-ng by default; piper and others with
-//                           their own command)
+//   speech(options)         text to speech with a program reading stdin:
+//                           Kitten TTS (phoenix-tts) where the image has it,
+//                           else espeak-ng, else Flite; piper and others
+//                           with their own command
+//   voiceStatus(options)    what the voice needs and what is missing, for
+//                           assistant.js's voice: whisper.cpp (the
+//                           transcriber's getStatus), the wake word's
+//                           program, library and model, and speech
 //
 // The simulator does the same in the shell (shell/native/localmodels.cpp,
 // shell/native/speech.cpp); the runtime passes the service's calls there.
@@ -118,23 +123,46 @@ function getOnce(url) {
     });
 }
 
-// options: {modelsDir, server: path or names to look for, args: extra
-// arguments, idleMs, ramBytes, log}
+// options: {modelsDir, builtInDirs: where the image keeps the models it
+// ships (default /usr/share/phoenix/models: Qwen3 0.6B, meta-phoenix's
+// qwen3-0.6b-gguf; lib/models.js BUILT_IN), server: path or names to look
+// for, args: extra arguments, idleMs, ramBytes, log}
 function llamaServer(options) {
     var dir = options.modelsDir;
+    var builtInDirs = options.builtInDirs || ["/usr/share/phoenix/models"];
     var idleMs = options.idleMs || 5 * 60 * 1000;
     var log = options.log || function () {};
     var proc = null, current = "", baseUrl = "", starting = null, idleTimer = null, lastError = "";
     var download = null;   // {id, received, total, req, file}
 
     function server() { return options.server ? findProgram([].concat(options.server)) : findProgram(["llama-server"]); }
-    function installed() {
+    function ggufs(d, builtIn) {
         try {
-            return fs.readdirSync(dir).filter(function (n) { return /\.gguf$/.test(n); })
-                .map(function (n) { return { id: n.replace(/\.gguf$/, ""), file: path.join(dir, n), size: fs.statSync(path.join(dir, n)).size }; });
+            return fs.readdirSync(d).filter(function (n) { return /\.gguf$/.test(n); }).map(function (n) {
+                var e = { id: n.replace(/\.gguf$/, ""), file: path.join(d, n), size: fs.statSync(path.join(d, n)).size };
+                if (builtIn) e.builtIn = true;
+                return e;
+            });
         } catch (e) { return []; }
     }
+    function installed() {
+        var list = ggufs(dir, false);
+        builtInDirs.forEach(function (d) {
+            ggufs(d, true).forEach(function (e) { if (!list.some(function (x) { return x.id === e.id; })) list.push(e); });
+        });
+        return list;
+    }
+    // Downloads go to modelsDir; a built-in model is read where it is.
     function fileFor(m) { return path.join(dir, m.id + ".gguf"); }
+    function found(m) {
+        var own = fileFor(m);
+        if (fs.existsSync(own)) return own;
+        for (var i = 0; i < builtInDirs.length; ++i) {
+            var f = path.join(builtInDirs[i], m.id + ".gguf");
+            if (fs.existsSync(f)) return f;
+        }
+        return own;
+    }
 
     function stop() {
         if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
@@ -148,7 +176,7 @@ function llamaServer(options) {
     }
 
     function ensure(m) {
-        var file = fileFor(m);
+        var file = found(m);
         if (proc && current === m.id && baseUrl) { touch(); return Promise.resolve({ baseUrl: baseUrl }); }
         if (starting && starting.id === m.id) return starting.promise;
         if (!fs.existsSync(file)) return Promise.reject(new Error(m.name + " is not downloaded"));
@@ -157,7 +185,13 @@ function llamaServer(options) {
         stop();
         var p = freePort().then(function (port) {
             return new Promise(function (resolve, reject) {
-                var args = ["-m", file, "--host", "127.0.0.1", "--port", String(port), "--jinja", "-c", "4096"].concat(options.args || []);
+                // 8,192 tokens (the commands as tools and the system prompt are
+                // some 4,900), one slot (the tools stay cached between
+                // requests), an 8-bit cache with flash attention (as small as
+                // 4,096 was: 1.3 GB in all for Qwen3 0.6B); as the simulator's
+                // shell/native/localmodels.cpp.
+                var args = ["-m", file, "--host", "127.0.0.1", "--port", String(port), "--jinja", "-c", "8192", "-np", "1",
+                            "-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"].concat(options.args || []);
                 log("starting " + bin + " " + args.join(" "));
                 var child = childProcess.spawn(bin, args, { stdio: ["ignore", "ignore", "pipe"] });
                 var errText = "";
@@ -268,26 +302,123 @@ function llamaServer(options) {
 
 // ---- Speech -----------------------------------------------------------------------------------
 
-// options: {command: [program, args...] with %l for the language; text on stdin}
+// options: {command: [program, args...] with %l for the language and %v
+// for the voice, text on stdin (instead of the default), kitten: phoenix-tts
+// (default: on the PATH), fallback: the command when Kitten cannot speak
+// (default: espeak-ng, else Flite), log}
+//
+// The default is Kitten TTS (phoenix-tts, which phoenix-shell installs;
+// services/tts) with its model, the dictionary and ONNX Runtime from the
+// image (meta-phoenix: kitten-tts-nano, cmudict, onnxruntime) for English,
+// checked once with its --check; else, and for other languages, and when
+// it cannot speak after all (it exits with 3 or 4), the programs before it.
+function defaultSpeechCommand() {
+    var espeak = findProgram(["espeak-ng"]);
+    if (espeak) return [espeak, "-v", "%l", "--stdin"];
+    // Flite (BSD-3-Clause; meta-multimedia's flite, packagegroup-phoenix-
+    // assistant) reads the text on stdin and plays it; English only.
+    var flite = findProgram(["flite"]);
+    return flite ? [flite] : null;
+}
+
 function speech(options) {
-    var cmd = options && options.command ? options.command
-        : findProgram(["espeak-ng"]) ? [findProgram(["espeak-ng"]), "-v", "%l", "--stdin"] : null;
-    var child = null;
+    var o = options || {};
+    var log = o.log || function () {};
+    var child = null, kitten;  // undefined: not checked yet; null: cannot speak
+    function kittenNow() {
+        if (o.command) return null;
+        if (kitten !== undefined) return kitten;
+        kitten = null;
+        var program = o.kitten || findProgram(["phoenix-tts"]);
+        if (!program) return null;
+        var r = childProcess.spawnSync(program, ["--check"], { encoding: "utf8", timeout: 5000 });
+        var st = null;
+        try { st = JSON.parse(String(r.stdout || "").trim()); } catch (e) { /* not JSON */ }
+        if (st && st.ok) kitten = { program: program, voices: Array.isArray(st.voices) ? st.voices : [] };
+        else log("Kitten TTS cannot speak here: " + (st && st.error || "phoenix-tts --check failed"));
+        return kitten;
+    }
+    function fallback() { return o.fallback !== undefined ? o.fallback : (o.command || defaultSpeechCommand()); }
+    // Resolves with the exit code.
+    function run(cmd, text, lang, voice) {
+        if (child) { try { child.kill(); } catch (e) { /* done */ } }
+        return new Promise(function (resolve, reject) {
+            var args = cmd.slice(1).map(function (a) { return a.replace("%l", lang).replace("%v", voice || ""); });
+            var me = childProcess.spawn(cmd[0], args, { stdio: ["pipe", "ignore", "pipe"] });
+            var err = "";
+            child = me;
+            me.stderr.on("data", function (d) { err = (err + d).slice(-1000); });
+            me.on("error", reject);
+            me.on("exit", function (code) {
+                if (child === me) child = null;
+                if (err.trim()) log(err.trim());
+                resolve(code);
+            });
+            me.stdin.on("error", function () { /* it ended first */ });
+            me.stdin.end(String(text));
+        });
+    }
     return {
-        speak: function (text, lang) {
-            if (!cmd) return Promise.reject(new Error("No text-to-speech program (espeak-ng)"));
-            if (child) { try { child.kill(); } catch (e) { /* done */ } }
-            return new Promise(function (resolve, reject) {
-                var args = cmd.slice(1).map(function (a) { return a.replace("%l", String(lang || "en").slice(0, 5)); });
-                child = childProcess.spawn(cmd[0], args, { stdio: ["pipe", "ignore", "ignore"] });
-                child.on("error", reject);
-                child.on("exit", function () { child = null; resolve(); });
-                child.stdin.end(String(text));
+        speak: function (text, lang, voice) {
+            var l = String(lang || "en").slice(0, 5);
+            var k = /^en/.test(l) ? kittenNow() : null;
+            var cmd = k ? [k.program, "--voice", "%v"] : fallback();
+            if (!cmd) return Promise.reject(new Error("No text-to-speech program (Kitten TTS, Flite or espeak-ng)"));
+            return run(cmd, text, l, voice).then(function (code) {
+                var other = fallback();
+                if (!k || (code !== 3 && code !== 4) || !other) return;
+                if (code === 3) kitten = undefined;  // look again next time
+                log("Kitten TTS could not speak; " + path.basename(other[0]) + " instead");
+                return run(other, text, l, voice).then(function () {});
             });
         },
         stop: function () { if (child) { try { child.kill(); } catch (e) { /* done */ } } },
-        status: function () { return Promise.resolve({ available: !!cmd, engine: cmd ? path.basename(cmd[0]) : "" }); }
+        status: function () {
+            var k = kittenNow(), cmd = k ? [k.program] : fallback();
+            return Promise.resolve({ available: !!cmd, engine: k ? "Kitten TTS" : cmd ? path.basename(cmd[0]) : "",
+                                     voices: k ? k.voices : [] });
+        }
     };
 }
 
-module.exports = { fileStorage: fileStorage, fileSecrets: fileSecrets, llamaServer: llamaServer, speech: speech, findProgram: findProgram };
+// ---- What the voice needs ---------------------------------------------------------------------
+
+// Where meta-phoenix's packagegroup-phoenix-assistant puts the wake word
+// (recipes-support/vosk) and what the shell runs (PhoenixViewsRoot.qml).
+var WAKE_MODEL = "/usr/share/phoenix/wakeword/vosk-model-small-en-us-0.15";
+var IMAGE_HINT = "meta-phoenix's packagegroup-phoenix-assistant adds it to the image";
+
+// options: {luna: {call(uri, params) -> Promise<payload>}, tts: speech(),
+// wakeModel?, libDirs?}
+function voiceStatus(options) {
+    var o = options || {};
+    var libDirs = o.libDirs || ["/usr/lib", "/usr/lib64", "/lib", "/usr/local/lib"];
+    function hasVosk() {
+        return libDirs.some(function (d) { return fs.existsSync(path.join(d, "libvosk.so")); });
+    }
+    return function () {
+        var recognition = o.luna.call("luna://org.webosphoenix.transcriber/getStatus", {}).then(function (r) {
+            r = r || {};
+            var missing = r.returnValue === false ? "the transcriber service is not installed"
+                : !r.binary ? "whisper.cpp's whisper-cli is not installed"
+                : r.modelInstalled === false ? "its model " + (r.model || "") + " is not installed" : "";
+            return { id: "recognition", available: !missing && r.installed !== false, engine: r.engine || "whisper.cpp",
+                     howToInstall: missing ? "not in this image: " + missing + " (whisper-cpp, whisper-cpp-model-base-en; " + IMAGE_HINT + ")." : "" };
+        }, function () {
+            return { id: "recognition", available: false, howToInstall: "not in this image: the transcriber service (" + IMAGE_HINT + ")." };
+        });
+        var model = o.wakeModel || WAKE_MODEL;
+        var wakeMissing = !findProgram(["phoenix-wakeword"]) ? "phoenix-wakeword (phoenix-shell)"
+            : !hasVosk() ? "libvosk (libvosk)"
+            : !fs.existsSync(model) ? "the Vosk model " + model + " (vosk-model-small-en-us)" : "";
+        var wake = { id: "wakeWord", available: !wakeMissing, engine: "Vosk",
+                     howToInstall: wakeMissing ? "not in this image: " + wakeMissing + "; " + IMAGE_HINT + "." : "" };
+        var speaking = Promise.resolve(o.tts ? o.tts.status() : { available: false, engine: "" }).then(function (st) {
+            return { id: "speech", available: !!st.available, engine: st.engine || "",
+                     howToInstall: st.available ? "" : "not in this image: a speech program (Kitten TTS, Flite or espeak-ng; " + IMAGE_HINT + ")." };
+        });
+        return Promise.all([recognition, wake, speaking]);
+    };
+}
+
+module.exports = { fileStorage: fileStorage, fileSecrets: fileSecrets, llamaServer: llamaServer, speech: speech, voiceStatus: voiceStatus, findProgram: findProgram };

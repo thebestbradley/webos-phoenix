@@ -8,7 +8,7 @@
 #   scripts/parse-check.sh [MACHINE...]     default: qemux86-64 raspberrypi4-64
 #
 # For each MACHINE it runs `bitbake -p` (parse every recipe) and
-# `bitbake -n webos-phoenix-image torchd whisper-cpp` (a dry run: resolve the
+# `bitbake -n webos-phoenix-image torchd whisper-cpp phoenix-driver-feed` (a dry run: resolve the
 # whole task graph, every DEPENDS and RDEPENDS, and run nothing). Nothing
 # is fetched or built: the network is only used to clone build-webos and its
 # layers (about 200 MB). Each machine adds about 300 MB (bitbake's parse
@@ -22,8 +22,13 @@
 # Environment:
 #   PHOENIX_PARSE_DIR     build directory (default: ${TMPDIR:-/tmp}/webos-phoenix-parse);
 #                         keep it to rerun quickly, delete it to free the space
+#   PHOENIX_PARSE_COMPRESS  firmware compression switches to resolve too, on the
+#                         first MACHINE (default: "xz zstd"; "" for none): the
+#                         image and linux-firmware again with
+#                         PHOENIX_FIRMWARE_COMPRESS set to each
 #   PHOENIX_PARSE_TARGET  what to resolve (default: webos-phoenix-image, plus
-#                         the torchd and whisper-cpp stubs, which are not in it)
+#                         the torchd stub, which is not in it, whisper-cpp and
+#                         phoenix-driver-feed, the Hardware app's firmware packages)
 #
 # bitbake refuses to run as root (OE's sanity check, with no setting to
 # allow it). As root, run it as an ordinary user, or in a user namespace
@@ -34,7 +39,7 @@ set -eu
 
 REPO_DIR=$(cd "$(dirname "$0")/.." && pwd)
 BUILD_DIR=${PHOENIX_PARSE_DIR:-"${TMPDIR:-/tmp}/webos-phoenix-parse"}
-TARGET=${PHOENIX_PARSE_TARGET:-webos-phoenix-image torchd whisper-cpp}
+TARGET=${PHOENIX_PARSE_TARGET:-webos-phoenix-image torchd whisper-cpp phoenix-driver-feed}
 [ $# -gt 0 ] || set -- qemux86-64 raspberrypi4-64
 
 if [ "$(id -u)" = 0 ]; then
@@ -110,6 +115,11 @@ BB_NO_NETWORK = "1"
 # uninative is a download (a host-independent glibc for native tools);
 # nothing is built here, so leave it out instead of warning about it.
 INHERIT:remove = "uninative"
+# The disk space monitor's limits (stop below 1-2 GB free) are for builds; a
+# dry run writes only bitbake's caches, and the monitor would stop it on a
+# full-ish disk with "No new tasks can be executed". (forcevariable: the
+# webos distro sets it after this file.)
+BB_DISKMON_DIRS:forcevariable = ""
 CONF
 
 # 4. Parse and resolve for each machine.
@@ -120,6 +130,8 @@ bb() (
     . ./oe-init-build-env >/dev/null
     MACHINE=$m bitbake "$@"
 )
+COMPRESS=${PHOENIX_PARSE_COMPRESS-xz zstd}
+first=$1
 set -- "$@" --
 failed=
 summary=
@@ -143,6 +155,23 @@ while [ "$1" != -- ]; do
     grep -E '^(ERROR|WARNING):' "$log" | sort -u || true
     [ "$parse$dry" = okok ] || tail -n 30 "$log"
     summary="$summary$(printf '%-18s parse %-7s dry run %s' "$m" "$parse" "$dry")
+"
+done
+
+# The firmware compression switch (meta-phoenix linux-firmware bbappend):
+# resolve the image with it on, as a case of its own.
+for c in $COMPRESS; do
+    echo
+    echo "=== $first, PHOENIX_FIRMWARE_COMPRESS = \"$c\": bitbake -n webos-phoenix-image linux-firmware"
+    printf 'PHOENIX_FIRMWARE_COMPRESS = "%s"\n' "$c" > "$BUILD_DIR/parse-compress-$c.conf"
+    log="$BUILD_DIR/parse-check-$first-compress-$c.log"
+    if bb "$first" -R "$BUILD_DIR/parse-compress-$c.conf" -n webos-phoenix-image linux-firmware >"$log" 2>&1; then
+        dry=ok
+    else
+        dry=FAILED; failed=1
+        tail -n 30 "$log"
+    fi
+    summary="$summary$(printf '%-18s compress %-4s dry run %s' "$first" "$c" "$dry")
 "
 done
 

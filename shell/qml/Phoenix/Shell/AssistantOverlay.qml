@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// The Phoenix Assistant's system view (docs/M6-PLAN.md F3): the
+// The Assistant's system view (docs/M6-PLAN.md F3): the
 // conversation in use floats over whatever is on screen, on a translucent,
 // blurred backdrop (BackdropBlur over Shell.backdrop), like the recent Siri.
 // A Phoenix addition: webOS had no assistant. Opened by holding the
@@ -14,8 +14,14 @@
 // the app on the conversation, to go on there. A text field (the keyboard
 // comes up for it as for any shell field) and a microphone (the shell's
 // dictation, whisper.cpp, ending by itself when the speaker stops). The
-// answers' choices ("Ask <cloud model>", "Search the web") and read-backs
-// ("Send ... to Sam?") are buttons. A tap outside the conversation, Back or
+// answers' choices ("Ask <cloud model>", "Search the web", "Connect
+// model") and read-backs ("Send ... to Sam?") are buttons. Connect model
+// asks which kind (on-device, cloud or both) in a small sheet, then the
+// service opens Settings > Assistant for it and the question waits there
+// (connect; the Assistant app asks it again once the model is in). Empty,
+// it shows a few things to ask, a different few every few seconds; a tap
+// puts one in the field to change or send, as do the requests an answer
+// suggests ("Did you mean ...?"). A tap outside the conversation, Back or
 // Escape closes it.
 //
 // Motion (all through Theme.motion, so Settings > Advanced > Animation
@@ -102,10 +108,67 @@ Item {
     property bool listening: false
     property string status: ""          // a line under the conversation: "Listening…", an error
 
-    // 0 closed, 1 open: the backdrop's fade and the panel's growth.
-    property real shown: open ? 1 : 0
+    // What to ask, for the empty conversation: one of each kind of command
+    // (docs/AI-AND-MCP.md, the commands), shown a few at a time. Each one
+    // the grammar takes as it stands (apps/assistant/service/grammar.test.ts
+    // reads this list).
+    readonly property var examples: [
+        qsTr("Add a meeting with Sam tomorrow at 3"), qsTr("What's on my calendar this week?"),
+        qsTr("Remind me to call Mom at 6"), qsTr("Set an alarm for 7am weekdays"),
+        qsTr("Set a timer for 10 minutes"), qsTr("New note: buy flowers"),
+        qsTr("Add milk to my shopping list"), qsTr("Email Priya saying see you soon"),
+        qsTr("Play some music by Miles Davis"), qsTr("Turn on the flashlight"),
+        qsTr("Convert 10 miles to km"), qsTr("What's the weather tomorrow?"),
+        qsTr("Text Sam I'm running late"), qsTr("Set brightness to 50%"),
+        qsTr("What time is it in Tokyo?"), qsTr("Navigate to the nearest coffee shop"),
+        qsTr("Show my photos from yesterday"), qsTr("What's 15% of 80?")
+    ]
+    // How many show at once, and the first of them.
+    readonly property int examplesShown: Theme.tablet ? 3 : 2
+    property int exampleIndex: 0
+    function examplesNow() {
+        var out = [];
+        for (var i = 0; i < examplesShown; ++i)
+            out.push(examples[(exampleIndex + i) % examples.length]);
+        return out;
+    }
+    // Put words in the field, to change or send (an example, a suggestion).
+    function suggest(text) {
+        input.text = text;
+        input.forceActiveFocus();
+        input.cursorPosition = input.text.length;
+    }
+
+    // "Connect model": the message whose choice it was, while the sheet
+    // asking which kind shows; then connect takes it to Settings.
+    property var connecting: null
+    function connectModel(mode) {
+        var m = connecting;
+        connecting = null;
+        if (!m || busy)
+            return;
+        busy = true;
+        _call("connect", { threadId: threadId, messageId: m.id, mode: mode }, function (r) {
+            ov.busy = false;
+            if (r && r.returnValue !== false)
+                ov.closeRequested();
+            else
+                ov.status = String((r && r.errorText) || qsTr("Something went wrong."));
+        });
+    }
+
+    // 0 closed, 1 open: the backdrop's fade and the panel's growth. Closed,
+    // it stays up while the bird leaves (its exit: a crouch, a leap, a
+    // burst of embers), then goes back into the button.
+    property bool _leaving: false
+    property real shown: open || _leaving ? 1 : 0
+    Connections {
+        target: bird
+        function onMoveEnded(name) { if (name === "leave") ov._leaving = false; }
+    }
     Behavior on shown {
         NumberAnimation {
+            objectName: "assistantShownAnimation"
             duration: Theme.launcherDuration
             easing.type: ov.open ? Easing.OutCubic : Easing.InCubic
         }
@@ -124,11 +187,19 @@ Item {
         _beats = [];
         beat = "";
         beatTimer.stop();
+        connecting = null;
         if (open) {
-            // The bird rises asleep with the panel, then wakes and waves.
-            _wake = "asleep";
-            wakeTimer.interval = Theme.launcherDuration + _beatMs(80);
-            wakeTimer.restart();
+            exampleIndex = Math.floor(Math.random() * examples.length);
+            // The bird enters once the panel has grown (born of a swirl
+            // of embers, it drops in and lands), then waves: hidden till
+            // then (onShownChanged starts it, so a first opening that
+            // takes a while to build loses none of it).
+            _wake = "enter";
+            _taps = 0;
+            _leaving = false;
+            bird.enter(60000);
+            wakeTimer.stop();
+            _entering = true;
             ++_session;
             _fetchVocabulary();
             if (!listening)
@@ -146,8 +217,16 @@ Item {
             else
                 ov.forceActiveFocus();
         } else {
+            // A follow-up question left unanswered waits for later (a
+            // notification, lib/followups.js).
+            if (threadId !== "")
+                _call("followUpLeave", { threadId: threadId });
             _wake = "";
+            _entering = false;
             wakeTimer.stop();
+            // It leaves: a leap, and it bursts into embers (the panel
+            // waits for it, but for under Reduce motion).
+            _leaving = bird.leave() > 0 && bird.move === "leave";
             followTimer.stop();
             ++_session;
             busy = false;
@@ -249,13 +328,39 @@ Item {
     function choose(message, choice) {
         if (busy)
             return;
+        // Which kind first, here; then on to Settings.
+        if (choice.id === "connect") {
+            connecting = message;
+            // The keyboard down: the sheet has the panel's height.
+            input.focus = false;
+            ov.forceActiveFocus();
+            return;
+        }
         busy = true;
         _call("choose", { threadId: threadId, messageId: message.id, choice: choice.id }, function (r) {
             _settled(r);
-            // Settings, the browser or the app offered came up: out of their way.
-            if (r && r.returnValue !== false && (choice.id === "settings" || choice.id === "web" || choice.id === "open"))
+            // Settings, the browser or the app offered came up ("open", or
+            // "open:<n>", one of the things to do next): out of their way.
+            if (r && r.returnValue !== false && (choice.id === "settings" || choice.id === "web" || choice.id === "open" || choice.id.indexOf("open:") === 0))
                 ov.closeRequested();
         });
+    }
+    // An item an answer shows (a photo, an event), tapped: its app comes
+    // forward on it, on purpose, so the view makes way.
+    function show(message, index) {
+        if (busy)
+            return;
+        _call("choose", { threadId: threadId, messageId: message.id, choice: "show:" + index }, function (r) {
+            if (r && r.returnValue !== false)
+                ov.closeRequested();
+        });
+    }
+    function askExample(message, index) {
+        var all = [], list = (message.data && message.data.attachments) || [];
+        for (var i = 0; i < list.length; ++i)
+            all = all.concat(list[i].items || []);
+        if (all[index] && all[index].text)
+            suggest(all[index].text);
     }
     function confirm(message, accept) {
         if (busy)
@@ -277,6 +382,7 @@ Item {
         threadId = "";
         messages = [];
         status = "";
+        connecting = null;
         input.forceActiveFocus();
     }
     // The app button: on to the Assistant app with this conversation.
@@ -291,8 +397,10 @@ Item {
     // ("I can't do that" with Ask/Search), "cancelled", or "answer".
     function outcomeOf(list) {
         var last = null;
+        // A follow-up question after a command is not the outcome: done
+        // plays, then the bird asks.
         for (var i = (list || []).length - 1; i >= 0 && !last; --i)
-            if (list[i] && list[i].role === "assistant")
+            if (list[i] && list[i].role === "assistant" && !(list[i].followUp && list[i].status !== "failed"))
                 last = list[i];
         if (!last)
             return "answer";
@@ -345,12 +453,23 @@ Item {
         beatTimer.restart();
     }
     Timer { id: beatTimer; onTriggered: ov._nextBeat() }
-    // Opening: asleep while the panel grows, then a wave.
+    // Opening: its entrance once the panel has grown, then a wave.
     property string _wake: ""
+    property bool _entering: false
+    onShownChanged: {
+        if (shown === 1 && _entering) {
+            _entering = false;
+            if (_wake === "enter") {
+                wakeTimer.interval = Math.max(1, bird.enter(0));
+                wakeTimer.restart();
+            }
+        }
+    }
     Timer {
         id: wakeTimer
         onTriggered: {
-            if (ov._wake === "asleep") {
+            // The wave, unless something has gone on meanwhile.
+            if (ov._wake === "enter" && ov.messages.length === 0 && !ov.busy && !ov.listening) {
                 ov._wake = "hello";
                 interval = ov._beatMs(650);
                 restart();
@@ -360,21 +479,80 @@ Item {
         }
     }
     readonly property bool speaking: !!speech && !!speech.speaking
-    // A read-back waiting for its answer.
+    // A read-back waiting for its answer, or a follow-up question (the
+    // service's lib/followups.js: "Where is it?" with its answers): the bird
+    // asks, and a spoken turn listens for the answer.
     readonly property bool asking: {
         for (var i = messages.length - 1; i >= 0; --i)
             if (messages[i].role === "assistant")
-                return messages[i].status === "pending" && !!messages[i].confirm;
+                return (messages[i].status === "pending" && !!messages[i].confirm) || (!!messages[i].followUp && !messages[i].chosen);
         return false;
     }
+    // (What goes on comes before the opening's wave: a request asked
+    // while it enters plays over the entrance.)
     readonly property string birdPose: !open ? "asleep"
-        : _wake !== "" ? _wake
         : listening ? (dictation && dictation.busy ? "thinking" : "listening")
         : busy ? "thinking"
         : beat !== "" ? beat
+        : _wake === "hello" ? "hello"
         : speaking ? "speaking"
         : asking ? "asking"
         : "idle"
+
+    // ---- The bird's reactions (docs/ASSISTANT-CHARACTER.md, Reactions) ----------------
+    // While words are typed it watches them (its eyes on the caret) and
+    // pecks as each comes; a deletion makes it wince; a pause, ponder; a
+    // request sent, cheer; a tap waves (the first) or giggles or spins; the
+    // keyboard moving it, a scoot; a scroll, a glance along.
+    readonly property var _reactions: bird.art.motion.reactions
+    readonly property bool _typing: input.activeFocus && input.text !== ""
+    property int _typedLength: 0
+    // Clearing the field as a request is sent is no deletion.
+    property bool _sending: false
+    function _typed() {
+        var n = input.text.length, was = _typedLength;
+        _typedLength = n;
+        if (!open || _sending || !input.activeFocus || birdPose !== "idle" || n === was)
+            return;
+        bird.react(n > was ? _reactions.type : _reactions.erase);
+        pauseTimer.restart();
+    }
+    // A pause after typing: a curious tilt.
+    Timer {
+        id: pauseTimer
+        interval: ov._reactions.pauseAfter
+        onTriggered: if (ov._typing && ov.birdPose === "idle") bird.react(ov._reactions.pause)
+    }
+    // Its gaze: at the caret while words are typed, along a scroll; else ahead.
+    property real _glance: 0
+    readonly property point _gaze: {
+        if (_glance !== 0)
+            return Qt.point(0, _glance);
+        if (!_typing)
+            return Qt.point(0, 0);
+        var c = input.cursorRectangle;
+        var p = input.mapToItem(bird, c.x + c.width / 2, c.y + c.height / 2);
+        return Qt.point(Math.max(-1, Math.min(1, (p.x - bird.width / 2) / (bird.width * 1.5))),
+                        Math.max(-1, Math.min(1, (p.y - bird.height * 0.4) / (bird.height * 1.2))));
+    }
+    // A tap: the wave first, then the wave or a reaction at random (never
+    // the same twice running).
+    property int _taps: 0
+    property string _lastTap: ""
+    function tapBird() {
+        if (birdPose !== "idle" || bird.move !== "")
+            return;
+        var all = ["wave"].concat(_reactions.tap);
+        var pick = _taps === 0 ? "wave" : all.filter(function (n) { return n !== ov._lastTap; })[Math.floor(Math.random() * (all.length - 1))];
+        ++_taps;
+        _lastTap = pick;
+        if (pick === "wave")
+            _play([{ pose: "hello", ms: 900 }]);
+        else
+            bird.react(pick);
+    }
+    // The keyboard moving it beside the field and back: a scoot.
+    onBirdBesideChanged: if (_birdMoves) bird.react(_reactions.move)
 
     // ---- Voice --------------------------------------------------------------------------
     // The wake word was heard: listening at once (the words after "Hey
@@ -526,7 +704,17 @@ Item {
         }
     }
 
-    Keys.onEscapePressed: closeRequested()
+    Keys.onEscapePressed: { if (connecting !== null) connecting = null; else closeRequested(); }
+    // Typed with the field not in focus (voice first, a hardware keyboard):
+    // the words go to the field, not to Just Type behind the view.
+    Keys.onPressed: (event) => {
+        if (event.text.length !== 1 || event.text < " " || event.text === "\u007f"
+                || (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) || busy || connecting !== null)
+            return;
+        input.forceActiveFocus();
+        input.insert(input.cursorPosition, event.text);
+        event.accepted = true;
+    }
     // Over everything: Enter does not reach the card behind (it would
     // maximize it).
     Keys.onReturnPressed: (event) => { event.accepted = true; }
@@ -585,15 +773,22 @@ Item {
     readonly property real panelWidth: Math.min(width - Theme.px(24), Theme.px(Theme.tablet ? 560 : 420))
     // The panel's growth: from a fifth of its size at the origin.
     readonly property real _panelScale: 0.2 + 0.8 * shown
-    // The bird: 72 to 104 px at the top in the middle, over the
-    // conversation, which scrolls on behind it; where the panel is too
+    // The bird: 72 to 104 px at the top in the middle, above the
+    // conversation; where the panel is too
     // short for that and a conversation (a phone's keyboard up, a phone on
     // its side), small beside the field.
-    readonly property bool birdBeside: panel.height < Theme.px(360)
+    readonly property bool birdBeside: _beside
+    // (Where it was while it leaves: the keyboard going does not move it.)
+    property bool _beside: false
+    Binding on _beside {
+        when: ov.open
+        value: panel.height < Theme.px(360)
+        restoreMode: Binding.RestoreNone
+    }
     readonly property real birdSize: birdBeside ? Theme.px(44)
                                                 : Math.max(Theme.px(72), Math.min(Theme.px(104), Math.round(panel.height * 0.15)))
     // Moves between the two only once the panel is up.
-    readonly property bool _birdMoves: shown === 1
+    readonly property bool _birdMoves: shown === 1 && open
 
     Item {
         id: panel
@@ -670,7 +865,7 @@ Item {
             anchors.top: parent.top
             height: Theme.px(28)
             verticalAlignment: Text.AlignVCenter
-            text: qsTr("Phoenix Assistant")
+            text: qsTr("Assistant")
             color: "#B0FFFFFF"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.px(14)
@@ -693,7 +888,7 @@ Item {
         // The assistant's bird. A tap waves hello.
         AssistantBird {
             id: bird
-            // Over the conversation, which passes behind it.
+            // Over the conversation (its entrance and its effects reach over it).
             z: 1
             pose: ov.birdPose
             glow: true
@@ -708,8 +903,11 @@ Item {
             Behavior on y { enabled: ov._birdMoves; NumberAnimation { duration: Theme.motion(250); easing.type: Easing.InOutQuad } }
             MouseArea {
                 anchors.fill: parent
-                onClicked: if (ov.birdPose === "idle") ov._play([{ pose: "hello", ms: 900 }])
+                onClicked: ov.tapBird()
             }
+            gazeX: ov._gaze.x
+            gazeY: ov._gaze.y
+            fidgety: !ov._typing
         }
 
         // The conversation's top edge: clear to opaque over 28 px.
@@ -731,13 +929,14 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: heading.bottom
-            anchors.topMargin: Theme.px(4)
+            // Below the bird at the top (the conversation passing behind it
+            // hid its words: a phone's panel, the software renderer, which
+            // draws no fade); below the heading with the bird beside the field.
+            anchors.topMargin: ov.birdBeside ? Theme.px(4) : bird.height
+            Behavior on anchors.topMargin { enabled: ov._birdMoves; NumberAnimation { duration: Theme.motion(250); easing.type: Easing.InOutQuad } }
             anchors.bottom: statusLine.top
             anchors.bottomMargin: Theme.px(6)
-            // The conversation runs on up behind the bird; scrolled back to
-            // its start, the first message comes clear below it.
-            topMargin: ov.birdBeside ? Theme.px(4) : bird.height
-            Behavior on topMargin { enabled: ov._birdMoves; NumberAnimation { duration: Theme.motion(250); easing.type: Easing.InOutQuad } }
+            topMargin: Theme.px(4)
             clip: true
             // It fades out under the heading rather than being cut off
             // (not with the software renderer, which cannot run the effect).
@@ -751,6 +950,15 @@ Item {
             model: ov.messages.concat(ov.busy ? [{ id: "thinking", role: "assistant", text: "", thinking: true }] : []).reverse()
             boundsBehavior: Flickable.StopAtBounds
             interactive: contentHeight + topMargin > height
+            // The bird glances along a scroll, the way the words go.
+            property real _from: 0
+            onMovementStarted: { _from = contentY; glanceTimer.restart(); }
+            onMovementEnded: { glanceTimer.stop(); ov._glance = 0; }
+            Timer {
+                id: glanceTimer
+                interval: 120
+                onTriggered: if (list.contentY !== list._from) ov._glance = list.contentY > list._from ? -1 : 1
+            }
             delegate: Item {
                 id: row
                 required property var modelData
@@ -760,7 +968,7 @@ Item {
                 property real appear: 1
                 property real choicesAppear: 1
                 width: list.width
-                height: bubble.height + (actions.visible ? actions.height + Theme.px(6) : 0)
+                height: bubble.height + (found.visible ? found.height + Theme.px(6) : 0) + (actions.visible ? actions.height + Theme.px(6) : 0)
 
                 Component.onCompleted: {
                     if (ov._arrives(modelData)) {
@@ -847,15 +1055,34 @@ Item {
                         }
                     }
                 }
+                // What it found (photos, events, contacts): a tap opens its app on it.
+                AssistantAttachments {
+                    id: found
+                    anchors.top: bubble.bottom
+                    anchors.topMargin: Theme.px(6)
+                    anchors.left: parent.left
+                    maxWidth: list.width * 0.86
+                    attachments: !row.mine && row.modelData.data && row.modelData.data.attachments ? row.modelData.data.attachments : []
+                    source: ov.source
+                    opacity: row.appear
+                    onShown: function (index) { ov.show(row.modelData, index); }
+                    // An example (help) to the field, to change or send, as
+                    // the empty conversation's (it could make a meeting
+                    // nobody meant if it were asked at once).
+                    onAsked: function (index) { ov.askExample(row.modelData, index); }
+                }
                 Flow {
                     id: actions
-                    anchors.top: bubble.bottom
+                    anchors.top: found.visible ? found.bottom : bubble.bottom
                     anchors.topMargin: Theme.px(6)
                     width: list.width
                     spacing: Theme.px(8)
                     readonly property bool asking: row.modelData.status === "pending" && !!row.modelData.confirm
                     readonly property var choices: row.modelData.choices && !row.modelData.chosen ? row.modelData.choices : []
-                    readonly property int count: choices.length + (asking ? 2 : 0)
+                    // Requests close to words it did not understand: to the field.
+                    readonly property var suggestions: row.modelData.data && row.modelData.data.suggest && choices.length > 0 ? row.modelData.data.suggest : []
+                    readonly property int count: choices.length + suggestions.length + (asking ? 2 : 0)
+
                     visible: asking || choices.length > 0
                     // Button k of n appears after the ones before it (an
                     // even share of choicesAppear each, overlapping).
@@ -882,6 +1109,20 @@ Item {
                             Text { id: label; visible: false; text: parent.caption; font.pixelSize: Theme.px(16); font.bold: true; font.family: Theme.fontFamily }
                         }
                     }
+                    Repeater {
+                        model: actions.suggestions
+                        delegate: AssistantChip {
+                            required property var modelData
+                            required property int index
+                            objectName: "assistantSuggest-" + index
+                            text: modelData
+                            maxWidth: list.width
+                            onClicked: ov.suggest(modelData)
+                            readonly property real appear: actions.shareOf(actions.choices.length + index)
+                            opacity: appear
+                            scale: 0.85 + 0.15 * appear
+                        }
+                    }
                     ActionButton {
                         objectName: "assistantConfirmYes"
                         visible: actions.asking
@@ -890,7 +1131,7 @@ Item {
                         affirmative: true
                         caption: row.modelData.command === "text" ? qsTr("Send") : row.modelData.command === "call" ? qsTr("Call") : qsTr("Yes")
                         onAction: ov.confirm(row.modelData, true)
-                        readonly property real appear: actions.shareOf(actions.choices.length)
+                        readonly property real appear: actions.shareOf(actions.choices.length + actions.suggestions.length)
                         opacity: appear
                         scale: 0.85 + 0.15 * appear
                     }
@@ -901,26 +1142,72 @@ Item {
                         height: Theme.px(40)
                         caption: qsTr("Cancel")
                         onAction: ov.confirm(row.modelData, false)
-                        readonly property real appear: actions.shareOf(actions.choices.length + 1)
+                        readonly property real appear: actions.shareOf(actions.choices.length + actions.suggestions.length + 1)
                         opacity: appear
                         scale: 0.85 + 0.15 * appear
                     }
                 }
             }
 
-            // Nothing asked yet.
-            Text {
+            // Nothing asked yet: a few things to ask, a different few
+            // every few seconds (faded over; held still while one is
+            // being typed or said).
+            Column {
+                id: hint
                 objectName: "assistantHint"
                 anchors.bottom: parent.bottom
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                visible: ov.messages.length === 0
-                wrapMode: Text.Wrap
-                text: qsTr("Ask me to set a timer, text someone, turn on the flashlight, open an app, or anything else.")
-                color: "#C0FFFFFF"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.px(Theme.tablet ? 20 : 17)
+                spacing: Theme.px(8)
+                visible: ov.messages.length === 0 && !ov.busy
+                property real fade: 1
+                Text {
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    text: qsTr("Try asking")
+                    color: "#A0FFFFFF"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.px(Theme.tablet ? 15 : 13)
+                }
+                // In a line where they fit, else one under another; centred.
+                Grid {
+                    id: exampleFlow
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: Theme.px(8)
+                    opacity: hint.fade
+                    horizontalItemAlignment: Grid.AlignHCenter
+                    columns: oneLine ? ov.examplesShown : 1
+                    readonly property bool oneLine: {
+                        var w = -spacing;
+                        for (var i = 0; i < children.length; ++i)
+                            if (children[i].text !== undefined)
+                                w += children[i].width + spacing;
+                        return w <= hint.width;
+                    }
+                    Repeater {
+                        model: ov.examplesNow()
+                        delegate: AssistantChip {
+                            required property var modelData
+                            required property int index
+                            objectName: "assistantExample-" + index
+                            text: modelData
+                            maxWidth: hint.width
+                            onClicked: ov.suggest(modelData)
+                        }
+                    }
+                }
+                SequentialAnimation {
+                    id: nextExamples
+                    NumberAnimation { target: hint; property: "fade"; to: 0; duration: Theme.motion(250); easing.type: Easing.InQuad }
+                    ScriptAction { script: ov.exampleIndex = (ov.exampleIndex + ov.examplesShown) % ov.examples.length }
+                    NumberAnimation { target: hint; property: "fade"; to: 1; duration: Theme.motion(250); easing.type: Easing.OutQuad }
+                }
+                Timer {
+                    interval: 5000
+                    repeat: true
+                    running: hint.visible && ov.open && input.text === "" && !ov.listening && ov.connecting === null
+                    onTriggered: nextExamples.restart()
+                }
             }
         }
 
@@ -985,7 +1272,7 @@ Item {
                     followTimer.stop();
                     ov.stopListening(true);
                 }
-                Keys.onEscapePressed: ov.closeRequested()
+                Keys.onEscapePressed: { if (ov.connecting !== null) ov.connecting = null; else ov.closeRequested(); }
                 // Enter is the field's alone: TextInput lets it go on after
                 // accepted(), and the shell behind would take it (the card
                 // in focus maximized).
@@ -999,9 +1286,14 @@ Item {
                     ov.voice = false;
                     ov.handsFree = false;
                     var t = text;
+                    ov._sending = true;
                     text = "";
+                    ov._sending = false;
                     ov.ask(t);
+                    if (ov.busy)
+                        bird.react(ov._reactions.send);
                 }
+                onTextChanged: ov._typed()
                 Text {
                     anchors.fill: parent
                     verticalAlignment: Text.AlignVCenter
@@ -1070,6 +1362,121 @@ Item {
             MouseArea {
                 anchors.fill: parent
                 onClicked: ov.listening ? ov.dictation.stop() : ov.listen()
+            }
+        }
+
+        // "Connect model": which kind, over the bottom of the panel (a
+        // tap on its backdrop, Back or Escape lets it go).
+        MouseArea {
+            objectName: "assistantConnectScrim"
+            z: 2                                    // over the bird
+            anchors.fill: parent
+            visible: ov.connecting !== null
+            onClicked: ov.connecting = null
+        }
+        Rectangle {
+            id: connectSheet
+            objectName: "assistantConnect"
+            z: 2
+            visible: ov.connecting !== null
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            // Scrolls where the panel is short (a phone on its side).
+            height: Math.min(parent.height, connectColumn.implicitHeight + Theme.px(24))
+            radius: Theme.px(16)
+            clip: true
+            color: "#FA1C2024"
+            border.color: "#50FFFFFF"
+            border.width: 1
+            opacity: visible ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.motion(150) } }
+            MouseArea { anchors.fill: parent }       // taps stay on it
+            Flickable {
+                anchors.fill: parent
+                contentHeight: connectColumn.implicitHeight + Theme.px(24)
+                interactive: contentHeight > height
+                boundsBehavior: Flickable.StopAtBounds
+                Column {
+                    id: connectColumn
+                    x: Theme.px(16)
+                    y: Theme.px(12)
+                    width: connectSheet.width - Theme.px(32)
+                    spacing: Theme.px(4)
+                    Text {
+                        width: parent.width
+                        text: qsTr("Connect a model")
+                        color: "#FFFFFF"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.px(Theme.tablet ? 19 : 17)
+                        font.bold: true
+                    }
+                    Text {
+                        width: parent.width
+                        bottomPadding: Theme.px(4)
+                        wrapMode: Text.Wrap
+                        text: qsTr("For questions and requests the phone's own commands don't know.")
+                        color: "#B0FFFFFF"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.px(13)
+                    }
+                    Repeater {
+                        model: [
+                            { mode: "local", title: qsTr("On-device model"),
+                              detail: qsTr("Private and offline: nothing leaves the phone. A 0.5 to 2.5 GB download.") },
+                            { mode: "cloud", title: qsTr("Cloud model"),
+                              detail: qsTr("Anthropic, OpenAI, Gemini or a compatible server, with your API key.") },
+                            { mode: "both", title: qsTr("Both"),
+                              detail: qsTr("On-device first; the cloud model for what it can't do.") }
+                        ]
+                        delegate: Rectangle {
+                            required property var modelData
+                            objectName: "assistantConnect-" + modelData.mode
+                            width: connectColumn.width
+                            height: kindText.implicitHeight + Theme.px(16)
+                            radius: Theme.px(10)
+                            color: kindArea.pressed ? "#40FFFFFF" : "#1AFFFFFF"
+                            Column {
+                                id: kindText
+                                x: Theme.px(12)
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width - Theme.px(24)
+                                Text {
+                                    width: parent.width
+                                    text: modelData.title
+                                    color: "#FFFFFF"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.px(Theme.tablet ? 17 : 15)
+                                    font.bold: true
+                                }
+                                Text {
+                                    width: parent.width
+                                    wrapMode: Text.Wrap
+                                    text: modelData.detail
+                                    color: "#C0FFFFFF"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.px(Theme.tablet ? 14 : 12)
+                                }
+                            }
+                            MouseArea {
+                                id: kindArea
+                                anchors.fill: parent
+                                onClicked: ov.connectModel(modelData.mode)
+                            }
+                        }
+                    }
+                    Text {
+                        objectName: "assistantConnectCancel"
+                        width: parent.width
+                        topPadding: Theme.px(6)
+                        horizontalAlignment: Text.AlignHCenter
+                        text: qsTr("Cancel")
+                        color: "#D0FFFFFF"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.px(15)
+                        MouseArea { anchors.fill: parent; anchors.margins: -Theme.px(6); onClicked: ov.connecting = null }
+                    }
+                }
             }
         }
     }

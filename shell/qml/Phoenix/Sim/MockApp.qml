@@ -28,8 +28,13 @@ Rectangle {
 
     // Relaunched with these params (webOSRelaunch in a web app), last.
     property var relaunchParams: null
-    function relaunch(params) {
+    // Relaunches that asked for fresh data (Settings > Apps > Opening a
+    // running app: Refresh).
+    property int refreshCount: 0
+    function relaunch(params, refresh) {
         relaunchParams = params;
+        if (refresh)
+            refreshCount++;
     }
 
     function appMenuRequested() {

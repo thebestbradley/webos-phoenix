@@ -2,20 +2,27 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Drives the Phoenix Assistant (docs/M6-PLAN.md F3) in headless Chromium
+// Drives the Assistant (docs/M6-PLAN.md F3) in headless Chromium
 // against the simulated org.webosphoenix.assistant (the device's service
 // code, apps/assistant/service, run in the page by runtime/phoenix-runtime.js):
 //
 //   - the Assistant app (apps/assistant): the phone's commands answer at
 //     once (a sum, the flashlight), a text is read back and sent only on
-//     Send, a question nothing on the phone answers offers "Search the web"
-//     and "Set up a cloud model";
-//   - Settings > Assistant (apps/settings): a cloud provider added (a local
-//     stand-in for Anthropic's Messages API, test/mock-providers.cjs,
+//     Send; a new conversation shows things to ask, which go to the field;
+//     words it does not understand get close commands ("Did you mean
+//     ...?"); a question nothing on the phone answers offers "Search the
+//     web" and "Connect model", which asks which kind;
+//   - an event made asks a follow-up question after it (as conversation,
+//     with quick replies): Skip leaves it and the next comes, a tap answers
+//     it (the whole flow: test-assistant-followups.cjs);
+//   - Settings > Assistant (apps/settings): speech, units and a command
+//     switched; opened by Connect model, a cloud provider added there (a
+//     local stand-in for Anthropic's Messages API, test/mock-providers.cjs,
 //     reached through serve-rootfs.py's proxy as a real one would be), its
-//     connection tested; speech, units and a command switched;
-//   - back in the app, "Ask Anthropic" answers in the thread; a cloud model
-//     asking to act is refused until Settings allows it, then acts;
+//     connection tested, then "Back to Your Question";
+//   - back in the app, the question is asked again and Anthropic answers in
+//     the thread; a cloud model asking to act is refused until Settings
+//     allows it, then acts;
 //   - Conversations: new, open, delete; a conversation from the shell's
 //     view (ask {newThread}) opened by a relaunch with {threadId}; Clear
 //     History; no key in the stored data.
@@ -105,10 +112,45 @@ async function main() {
         await app.evaluate(() => localStorage.clear());
         await app.goto(appUrl);
         await app.waitForSelector("[data-testid='as-empty']");
-        check(/set a timer/.test(await app.textContent("[data-testid='as-empty']")), "a new conversation says what it can do");
+        check(/events, reminders, alarms, notes/.test(await app.textContent("[data-testid='as-empty']")), "a new conversation says what it can do");
+        // Things to ask: a tap puts them in the field, to change or send.
+        await app.waitForSelector("[data-testid='as-example-1']");
+        const example = (await app.textContent("[data-testid='as-example-0']")).trim();
+        await app.click("[data-testid='as-example-0']");
+        check(await app.inputValue("[data-testid='as-input']") === example && await app.locator(".as-row").count() === 0,
+              "a new conversation shows things to ask; a tap puts one in the field: " + example);
+        await shot(app, "examples");
+        const firstExamples = await app.textContent("[data-testid='as-examples']");
+        await app.waitForFunction((t) => document.querySelector("[data-testid='as-examples']")?.textContent !== t, firstExamples, { timeout: 8000 });
+        check(true, "a different few after a while");
+        await app.fill("[data-testid='as-input']", "");
         // The bird greets, then idles (docs/ASSISTANT-CHARACTER.md).
         await app.waitForSelector("[data-testid='as-empty'] [data-testid='as-bird'][data-pose='idle']");
         check(true, "the bird shows on the new conversation, idle after its hello");
+        // It entered (born of embers, it drops in: its whole drawn by the
+        // entrance's keyframes until it ends) and reacts to typing: a peck
+        // as a character comes, a wince as one goes (docs/ASSISTANT-CHARACTER.md).
+        await app.waitForFunction(() => {
+            const b = document.querySelector("[data-testid='as-empty'] [data-testid='as-bird']");
+            return b && b.dataset.move === "" && !b.querySelector("[class*='ab-mv-']");
+        });
+        const moves = await app.evaluate(async () => {
+            const b = document.querySelector("[data-testid='as-empty'] [data-testid='as-bird']");
+            const seen = [];
+            new MutationObserver(() => { if (b.dataset.move && seen[seen.length - 1] !== b.dataset.move) seen.push(b.dataset.move); })
+                .observe(b, { attributes: true, attributeFilter: ["data-move"] });
+            window.__birdMoves = seen;
+            return true;
+        });
+        await app.focus("[data-testid='as-input']");
+        const typedBefore = await app.inputValue("[data-testid='as-input']");
+        await app.keyboard.type("x");
+        await app.waitForFunction(() => window.__birdMoves.includes("peck"));
+        await app.waitForFunction(() => document.querySelector("[data-testid='as-empty'] [data-testid='as-bird']").dataset.move === "");
+        await app.keyboard.press("Backspace");
+        await app.waitForFunction(() => window.__birdMoves.includes("wince"));
+        check(moves && (await app.inputValue("[data-testid='as-input']")) === typedBefore, "the bird pecks at a character typed and winces at one deleted: " +
+              (await app.evaluate(() => window.__birdMoves.join(", "))));
         // Every pose the working bird takes from here on.
         await app.evaluate(() => {
             window.__birdPoses = [];
@@ -121,7 +163,7 @@ async function main() {
             // transform it is drawn with, frame by frame.
             window.__birdFlipper = new Set();
             const frame = () => {
-                const w = document.querySelector("[data-testid='as-bird-work'] [data-act='wingR'] > g");
+                const w = document.querySelector("[data-testid='as-bird-work'] [data-act='wingR'] > [data-mover] > g");
                 if (w) window.__birdFlipper.add(getComputedStyle(w).transform);
                 requestAnimationFrame(frame);
             };
@@ -133,7 +175,12 @@ async function main() {
             await app.fill("[data-testid='as-input']", text);
             await app.click("[data-testid='as-send']");
             await app.waitForFunction((n) => document.querySelectorAll(".as-row").length >= n + 2 && !document.querySelector("[data-testid='as-thinking']"), before, { timeout: 15000 });
-            return (await app.locator(".as-row.in .as-bubble").last().textContent()).trim();
+            // A follow-up question after what was made (docs/AI-AND-MCP.md):
+            // the answer is the message before it; the question waits (the
+            // next request leaves it for later).
+            const bubbles = app.locator(".as-row.in .as-bubble");
+            const asking = await app.locator(".as-row").last().locator("[data-testid^='as-replies-']").count();
+            return (await bubbles.nth((await bubbles.count()) - (asking ? 2 : 1)).textContent()).trim();
         };
 
         // ---- The phone's own commands -----------------------------------------------------
@@ -166,7 +213,20 @@ async function main() {
         const ev = events.find((e) => e.subject === "Meeting with Sam");
         check(!!ev && ev.dtstart === at3 && ev.dtend === at3 + 3600000 && ev.location === "Bistro Verde" && ev.calendarId,
               "it is in db8 as the Calendar saves one, in a calendar, an hour long");
-        const openCal = app.locator(".as-row").last().locator("[data-testid='as-choice-open']");
+        // Then a follow-up question about it, as conversation, with answers to tap.
+        const question = (await app.locator(".as-row.in .as-bubble").last().textContent()).trim();
+        const replies = app.locator(".as-row").last().locator("[data-testid^='as-replies-'] .as-reply");
+        check(/meeting with Sam.*\?$/.test(question) && (await replies.allTextContents()).includes("Skip"),
+              "a follow-up question after the event: " + question + " (" + (await replies.allTextContents()).join(" · ") + ")");
+        await app.locator(".as-row").last().locator("[data-testid='as-choice-fu:skip']").click();
+        await app.waitForFunction(() => [...document.querySelectorAll(".as-row.in .as-bubble")].some((b) => b.textContent === "No problem, I'll leave it."));
+        await app.waitForFunction(() => /^How long .*meeting with Sam.*\?$/.test([...document.querySelectorAll(".as-row.in .as-bubble")].pop().textContent));
+        check(true, "Skip leaves it, and the next question is how long");
+        await app.locator(".as-row").last().locator(".as-reply", { hasText: "1 hour" }).click();
+        await app.waitForFunction(() => [...document.querySelectorAll(".as-row.in .as-bubble")].pop().textContent === "OK, I've blocked out 1 hour.");
+        check(true, "a tap answers it, said back");
+        await shot(app, "follow-up");
+        const openCal = app.locator(".as-row", { hasText: "Added \u201cMeeting with Sam\u201d" }).locator("[data-testid='as-choice-open']");
         check(await openCal.count() === 1 && /Open Calendar/.test(await openCal.textContent()), "the answer offers Open Calendar");
         await openCal.click();
         const calOpened = () => launches.some((l) => l.id === "com.palm.app.calendar" && l.params && l.params.showEventDetail === ev._id);
@@ -207,14 +267,97 @@ async function main() {
         check(/^Volume \d+%\.$/.test(await ask("Turn up the volume")), "the volume up");
         check(await ask("Set brightness to 50%") === "Brightness 50%.", "the brightness set");
         await shot(app, "thread-everyday");
+        // Photos found: shown in the conversation and opened in Photos (just
+        // those), behind; a picture tapped opens Photos on it.
+        for (const name of ["harbor-dusk", "alpine-lake"]) {
+            const data = fs.readFileSync(path.join(REPO, `apps/media-samples/media/photos/${name}.jpg`)).toString("base64");
+            const w = await svc(app, "luna://org.webosphoenix.service.mediafiles/write", { path: `/media/internal/DCIM/100PHNX/${name}.jpg`, data, mimeType: "image/jpeg" });
+            check(w.returnValue !== false, "a photo taken today: " + name);
+        }
+        await svc(app, "luna://com.webos.service.mediaindexer/requestMediaScan", { path: "/media/internal" });
+        // Indexed (the legacy kind the assistant reads is mirrored from the index).
+        const dcim = async () => ((await svc(app, "luna://com.palm.db/find", { query: { from: "com.palm.media.image.file:1" } })).results || [])
+            .filter((o) => /\/DCIM\/100PHNX\//.test(o.path));
+        for (let i = 0; i < 50 && (await dcim()).length < 2; ++i) await app.waitForTimeout(100);
+        check((await dcim()).length === 2, "indexed: " + JSON.stringify((await dcim()).map((o) => [o.path, o.createdTime])));
+        launches.length = 0;
+        const photosSaid = await ask("Show my photos from today");
+        check(photosSaid === "Here are 2 photos from today. I've opened them in Photos too.", "photos from today: " + photosSaid);
+        const photoRow = app.locator(".as-row").last();
+        await photoRow.locator("[data-testid='as-thumb-1'] img").waitFor();
+        check(await photoRow.locator(".as-thumb").count() === 2, "the two pictures in the conversation");
+        const photosLaunch = launches.find((l) => l.id === "org.webosphoenix.photos");
+        check(!!photosLaunch && photosLaunch.params.imageList.results.length === 2 && photosLaunch.params.imageList.title === "Photos from Today",
+              "and Photos opened on just those");
+        await shot(app, "photos-found");
+        launches.length = 0;
+        await photoRow.locator("[data-testid='as-thumb-0']").click();
+        for (let i = 0; i < 50 && !launches.length; ++i) await app.waitForTimeout(100);
+        check(launches[0] && launches[0].params.imageList.results.length === 1, "a picture tapped: Photos on it");
+        check(/^Open Photos$/.test((await photoRow.locator("[data-testid='as-choice-open']").textContent()).trim()), "and Open Photos to bring it forward");
+        // Every command through the simulator's own services (test/phrases.cjs):
+        // none fails for want of a method; then each turned off in Settings >
+        // Assistant is refused, and on again.
+        const PHRASES = require(path.join(REPO, "apps/assistant/service/test/phrases.cjs"));
+        const currentBefore = (await svc(app, A + "threads", {})).current, made = new Set();
+        const broken = [];
+        for (const [id, text] of Object.entries(PHRASES)) {
+            if (!text || id === "lock") continue;   // locking the page's screen: test-device-services.cjs
+            let r = await svc(app, A + "ask", { text, newThread: true });
+            if (r.thread) made.add(r.thread.id);
+            let m = r.messages && r.messages[r.messages.length - 1];
+            if (m && m.status === "pending") {
+                r = await svc(app, A + "confirm", { threadId: r.thread.id, messageId: m.id, accept: true });
+                m = r.messages && r.messages[r.messages.length - 1];
+            }
+            if (!m || m.command !== id || /not available in the Phoenix simulator|Unknown method|didn't work/i.test(m.text))
+                broken.push(`${id}: ${m ? m.command + ": " + m.text : JSON.stringify(r)}`);
+        }
+        check(broken.length === 0, "every command runs on the simulated device" + (broken.length ? ": " + broken.join(" | ") : ""));
+        const notOff = [];
+        for (const [id, text] of Object.entries(PHRASES)) {
+            if (!text) continue;
+            await svc(app, A + "setSettings", { disabledCommands: [id] });
+            const r = await svc(app, A + "ask", { text, newThread: true });
+            made.add(r.thread.id);
+            const m = r.messages[r.messages.length - 1];
+            if (!/is turned off in Settings > Assistant\.$/.test(m.text)) notOff.push(`${id}: ${m.text}`);
+        }
+        await svc(app, A + "setSettings", { disabledCommands: [] });
+        for (const id of made) await svc(app, A + "deleteThread", { id });
+        await svc(app, A + "setCurrent", { id: currentBefore });
+        check(notOff.length === 0, "each command turned off in Settings is refused" + (notOff.length ? ": " + notOff.join(" | ") : ""));
+        // Photos shows just the pictures it was given.
+        const ph = await context.newPage();
+        watch(ph, "photos");
+        await ph.goto(`${root}/org.webosphoenix.photos/index.html?launchParams=` + encodeURIComponent(JSON.stringify(photosLaunch.params)));
+        await ph.waitForSelector("[data-testid='thumb-1']");
+        check(await ph.locator(".ph-cell").count() === 2 && /Photos from Today/.test(await ph.textContent(".ph-header")), "Photos: a grid of just those two");
+        await shot(ph, "photos-picked");
+        await ph.close();
+        // Words it does not understand: the commands they come close to.
+        const close = await ask("I need the dentist appointment thing");
+        check(/^I don't have the tools for that yet, but I can open Calendar for you\. Did you mean something like \u201cadd a meeting with Sam tomorrow at 3\u201d/.test(close),
+              "the app that does it offered, and close commands suggested: " + close);
+        check(await app.locator(".as-row").last().locator("[data-testid='as-choice-open:0']").textContent() === "Open Calendar", "an Open Calendar button");
+        await app.locator(".as-row").last().locator("[data-testid='as-suggest-0']").click();
+        check(await app.inputValue("[data-testid='as-input']") === "add a meeting with Sam tomorrow at 3", "a suggestion goes to the field");
+        await app.fill("[data-testid='as-input']", "");
         // Nothing here can answer.
-        check(await ask("Who wrote the Odyssey?") === "I can't do that on the phone.", "a question the phone cannot answer");
-        check(await app.locator("[data-testid='as-choice-web']").count() === 1 && await app.locator("[data-testid='as-choice-settings']").count() === 1,
-              "it offers Search the web and Set up a cloud model");
-        await app.click("[data-testid='as-choice-settings']");
-        const opened = () => launches.some((l) => l.id === "org.webosphoenix.settings" && l.params && l.params.page === "assistant");
-        for (let i = 0; i < 100 && !opened(); ++i) await app.waitForTimeout(100);
-        check(opened(), "Set up a cloud model opens Settings > Assistant");
+        check(await ask("Who wrote the Odyssey?") === "I can't answer that on my own yet, but I can search the web for it.", "a question nothing here can answer: a web search offered");
+        const offerRow = app.locator(".as-row").last();
+        check(await offerRow.locator("[data-testid='as-choice-web']").count() === 1 && /^Connect model$/.test((await offerRow.locator("[data-testid='as-choice-connect']").textContent()).trim()),
+              "it offers Search the web and Connect model");
+        await offerRow.locator("[data-testid='as-choice-connect']").click();
+        await app.waitForSelector("[data-testid='as-connect-both']");
+        check(/Private and offline/.test(await app.textContent("[data-testid='as-connect']")), "Connect model asks which kind: on-device, cloud or both");
+        await app.waitForTimeout(600);
+        await shot(app, "connect-model");
+        await app.click("[data-testid='as-connect-cloud']");
+        const connectLaunch = () => launches.find((l) => l.id === "org.webosphoenix.settings" && l.params && l.params.page === "assistant" && l.params.connect === "cloud");
+        for (let i = 0; i < 100 && !connectLaunch(); ++i) await app.waitForTimeout(100);
+        const odysseyThread = (await svc(app, A + "threads", {})).current;
+        check(!!connectLaunch() && connectLaunch().params.threadId === odysseyThread, "a cloud model: Settings > Assistant opens for it, with the conversation");
 
         // ---- Settings > Assistant --------------------------------------------------------------
         const st = await context.newPage();
@@ -225,7 +368,10 @@ async function main() {
         check(/llama-server/.test(await st.textContent("[data-testid='as-local-status']")), "without llama.cpp, it says how to get it");
         // (The models come with their own answer, after the page.)
         await st.waitForFunction(() => document.querySelectorAll("[data-testid^='as-model-']").length > 0);
-        check(await st.locator("[data-testid^='as-model-']").count() === 3, "three on-device models offered, with size and memory");
+        check(await st.locator("[data-testid^='as-model-']").count() === 4, "four on-device models offered, with size and memory");
+        const builtIn = st.locator("[data-testid='as-model-qwen3-0.6b-q4_k_m']");
+        check(/Qwen3 0\.6BBuilt in/.test(await builtIn.textContent()) && await builtIn.locator("button").count() === 0,
+              "Qwen3 0.6B is built in: nothing to download or remove");
         const settings = async () => (await svc(st, A + "getSettings", {})).settings;
         const until = async (fn, what) => {
             for (let i = 0; i < 150; ++i) {
@@ -244,37 +390,55 @@ async function main() {
         await st.click("[data-testid='as-cmd-toggle-weather']");
         await until((s) => !s.disabledCommands.includes("weather"), "and on again");
 
-        // A provider: Anthropic's API, here the local stand-in.
-        await st.click("[data-testid='as-add-provider']");
-        await st.click("role=option[name='Anthropic']");
-        await st.waitForSelector("[data-testid='as-provider-key']");
-        check(await st.inputValue("[data-testid='as-provider-model']") === "claude-sonnet-5-5", "Anthropic's model suggested: claude-sonnet-5-5");
-        await st.fill("[data-testid='as-provider-url']", mockUrl);
-        await st.fill("[data-testid='as-provider-key']", "wrong-key");
-        await st.click("[data-testid='as-provider-test']");
-        await st.waitForSelector("[data-testid='as-provider-result']");
-        check(/401.*check the key/.test(await st.textContent("[data-testid='as-provider-result']")), "a wrong key: the test says so");
-        await st.fill("[data-testid='as-provider-key']", KEY);
-        await st.click("[data-testid='as-provider-test']");
-        await st.waitForSelector("[data-testid='as-provider-result']:has-text('Connected')");
-        check(true, "the right key: connected");
-        await shot(st, "settings-provider");
-        await st.click("[data-testid='as-provider-save']");
-        // Back on the page once it is saved (the editor's own result note
-        // says "anthropic" too: wait for the page, not for the word).
-        await st.waitForSelector("[data-testid='as-add-provider']");
-        const provs = (await svc(st, A + "providers", {})).providers;
-        check(provs.length === 1 && provs[0].keyHint === "opic" && provs[0].hasKey && provs[0].model === "claude-sonnet-5-5", "the provider saved, its key hidden");
-        const stored = await st.evaluate(() => JSON.stringify({ ...localStorage }));
-        check(!stored.includes(KEY), "the key is not in the stored data");
         check(await st.locator("[data-testid='as-cloud-control'][aria-checked='true']").count() === 0, "cloud models may not control the device by default");
 
+        // A provider: Anthropic's API, here the local stand-in, added where
+        // Connect model opened Settings.
+        const cn = await context.newPage();
+        watch(cn, "settings-connect");
+        await cn.goto(`${root}/org.webosphoenix.settings/index.html?launchParams=` + encodeURIComponent(JSON.stringify(connectLaunch().params)));
+        await cn.waitForSelector("[data-testid='as-connect-waiting']");
+        check(/API key/.test(await cn.textContent("[data-testid='as-connect-waiting']")) && await cn.locator("[data-testid='as-connect-back']").count() === 0,
+              "Connect a Model: the cloud model's providers, nothing ready yet");
+        await shot(cn, "settings-connect");
+        await cn.click("[data-testid='as-connect-add-anthropic']");
+        await cn.waitForSelector("[data-testid='as-provider-key']");
+        check(await cn.inputValue("[data-testid='as-provider-model']") === "claude-sonnet-5-5", "Anthropic's model suggested: claude-sonnet-5-5");
+        await cn.fill("[data-testid='as-provider-url']", mockUrl);
+        await cn.fill("[data-testid='as-provider-key']", "wrong-key");
+        await cn.click("[data-testid='as-provider-test']");
+        await cn.waitForSelector("[data-testid='as-provider-result']");
+        check(/401.*check the key/.test(await cn.textContent("[data-testid='as-provider-result']")), "a wrong key: the test says so");
+        await cn.fill("[data-testid='as-provider-key']", KEY);
+        await cn.click("[data-testid='as-provider-test']");
+        await cn.waitForSelector("[data-testid='as-provider-result']:has-text('Connected')");
+        check(true, "the right key: connected");
+        await shot(cn, "settings-provider");
+        await cn.click("[data-testid='as-provider-save']");
+        // Back on Connect a Model once it is saved: ready, and back to the question.
+        await cn.waitForSelector("[data-testid='as-connect-ready']");
+        check(/Anthropic \(claude-sonnet-5-5\) is ready/.test(await cn.textContent("[data-testid='as-connect-ready']")), "the provider saved: ready");
+        await shot(cn, "settings-connect-ready");
+        await cn.click("[data-testid='as-connect-back']");
+        const backLaunch = () => launches.find((l) => l.id === "org.webosphoenix.assistant" && l.params && l.params.retry === true);
+        for (let i = 0; i < 100 && !backLaunch(); ++i) await app.waitForTimeout(100);
+        check(!!backLaunch() && backLaunch().params.threadId === odysseyThread, "Back to Your Question opens the Assistant on the conversation");
+        const provs = (await svc(cn, A + "providers", {})).providers;
+        check(provs.length === 1 && provs[0].keyHint === "opic" && provs[0].hasKey && provs[0].model === "claude-sonnet-5-5", "the provider saved, its key hidden");
+        const stored = await cn.evaluate(() => JSON.stringify({ ...localStorage }));
+        check(!stored.includes(KEY), "the key is not in the stored data");
+        await cn.close();
+
         // ---- Asking the cloud model --------------------------------------------------------------
+        // The question that waited, asked again as the app is relaunched with it.
         await app.bringToFront();
-        await ask("Tell me about the Palm Pre");
-        await app.click("[data-testid^='as-choice-cloud:']");
-        await app.waitForFunction(() => /anthropic says: Tell me about the Palm Pre/.test(document.body.textContent));
-        check(/Anthropic \(claude-sonnet-5-5\)/.test(await app.locator(".as-via").last().textContent()), "Ask Anthropic answers, labelled");
+        await app.evaluate((p) => document.dispatchEvent(new CustomEvent("webOSRelaunch", { detail: p })), backLaunch().params);
+        await app.waitForFunction(() => /anthropic says: [^]*Who wrote the Odyssey\?/.test(document.body.textContent), null, { timeout: 15000 });
+        check(/Anthropic \(claude-sonnet-5-5\)/.test(await app.locator(".as-via").last().textContent()), "the question asked again, Anthropic answers, labelled");
+        check(await app.locator("[data-testid='as-choice-connect']").count() === 1, "Connect model taken on the question asked again (the earlier answer keeps its own)");
+        await shot(app, "thread-retried");
+        // The conversation goes on with it.
+        check(await ask("Tell me about the Palm Pre") === "anthropic says: Tell me about the Palm Pre", "the conversation goes on with Anthropic");
         const refused = await ask("force a tool");
         check(/cloud models may only chat/.test(refused), "a cloud model asking to act is refused");
         check(await ask("Turn off the flashlight") === "The flashlight is off.", "the phone's own commands answer first, in a cloud thread too");
@@ -285,47 +449,119 @@ async function main() {
         check(await ask("Put the flashlight on for me") === "The flashlight is on.", "allowed, the cloud model acts");
         check(/Anthropic/.test(await app.locator(".as-via").last().textContent()), "and the answer says it was Anthropic");
         await shot(app, "thread-cloud");
+        // A short answer is one line (a balloon's width is the row's 80%).
+        const tall = await app.locator(".as-bubble:has-text('The flashlight is on.')").last().evaluate((b) => b.getBoundingClientRect().height);
+        check(tall < 48, "a short answer on one line: " + tall + " px");
 
         // ---- Conversations ----------------------------------------------------------------------
-        await app.click("[data-testid='as-conversations']");
-        await app.waitForSelector("[data-testid='as-new']");
+        // A TouchPad app: on a tablet the list is beside the conversation;
+        // on a phone the conversation is over it, and Back (or the header's
+        // Conversations) slides it away.
+        const panes = await app.getAttribute("[data-testid='as-panes']", "class");
+        check(tablet ? /\bmulti\b/.test(panes) : /\bsingle\b/.test(panes), tablet ? "a tablet: the panes side by side" : "a phone: one pane at a time");
+        if (tablet) check(await app.isVisible("[data-testid='as-list']") && await app.isVisible("[data-testid='as-input']"), "the list beside the conversation");
+        else check(await app.isHidden("[data-testid='as-list']"), "the conversation over the list");
+        const showList = async () => {
+            if (!tablet && await app.isVisible("[data-testid='as-conversations']")) await app.click("[data-testid='as-conversations']");
+            // (Slid away, the conversation is out of sight.)
+            if (!tablet) await app.waitForSelector("[data-testid='as-panes-detail']", { state: "hidden" });
+            await app.waitForSelector("[data-testid='as-new']");
+        };
+        const openThread = async (id) => {
+            await app.click(`[data-testid='as-thread-${id}']`);
+            if (!tablet) await app.waitForSelector("[data-testid='as-list']", { state: "hidden" });
+        };
+        await showList();
         const threads = (await svc(app, A + "threads", {})).threads;
         check(threads.length === 1, "one conversation so far");
         await app.click("[data-testid='as-new']");
         await app.waitForSelector("[data-testid='as-empty']");
         await ask("What time is it?");
-        await app.click("[data-testid='as-conversations']");
+        await showList();
         await app.waitForFunction(() => document.querySelectorAll("[data-testid^='as-thread-']").length === 2);
         check(true, "a new conversation listed beside the first");
+        check(/What time is it/.test(await app.textContent("[data-testid='as-list']")), "titled by its first request");
         await shot(app, "conversations");
         const first = threads[0].id;
         await app.click(`[data-testid='as-thread-${first}']`);
         await app.waitForSelector(".as-bubble:has-text('Palm Pre')");
         check((await svc(app, A + "threads", {})).current === first, "an old conversation opened goes on in use");
-        await app.click("[data-testid='as-conversations']");
+        check(await app.getAttribute(`[data-testid='as-thread-${first}']`, "aria-current") === "true", "and is the one selected in the list");
+        await showList();
         const second = (await svc(app, A + "threads", {})).threads.find((t) => t.id !== first).id;
-        await app.click(`[data-testid='as-delete-${second}']`);
+        // Held (here right-clicked): its menu, Delete, asked.
+        await app.click(`[data-testid='as-thread-${second}']`, { button: "right" });
+        await app.click("[data-testid='as-menu-delete']");
         await app.click("[data-testid='as-delete-ok']");
         await app.waitForFunction(() => document.querySelectorAll("[data-testid^='as-thread-']").length === 1);
-        check(true, "a conversation deleted");
+        check(true, "a conversation deleted from its menu");
+        // Swiped across: Cancel or Delete over it.
+        const third = (await svc(app, A + "newThread", {})).thread.id;
+        await svc(app, A + "ask", { text: "What's 3 plus 4?", threadId: third });
+        await app.waitForSelector(`[data-testid='as-thread-${third}']`);
+        const box = await app.locator(`[data-testid='as-thread-${third}']`).boundingBox();
+        await app.mouse.move(box.x + 20, box.y + box.height / 2);
+        await app.mouse.down();
+        for (let i = 1; i <= 8; ++i) await app.mouse.move(box.x + 20 + i * box.width * 0.08, box.y + box.height / 2);
+        await app.mouse.up();
+        await app.waitForSelector(`[data-testid='as-swipe-${third}-confirm']`);
+        await shot(app, "swipe-delete");
+        await app.click(`[data-testid='as-swipe-${third}-delete']`);
+        await app.waitForFunction((id) => !document.querySelector(`[data-testid='as-thread-${id}']`), third);
+        check((await svc(app, A + "threads", {})).threads.length === 1, "a conversation swiped across and deleted");
+        if (!tablet) await openThread(first);
+
+        // ---- Open in New Card ---------------------------------------------------------------------
+        // A conversation (or a message) held: Open in New Card launches
+        // another card of the app ({newCard: true}) with that conversation;
+        // each card keeps to its own, and both follow the one store.
+        await showList();
+        launches.length = 0;
+        await app.click(`[data-testid='as-thread-${first}']`, { button: "right" });
+        await app.click("[data-testid='as-menu-newcard']");
+        await until(() => launches.length > 0, "Open in New Card launches");
+        check(launches[0].id === "org.webosphoenix.assistant" && launches[0].newCard === true && launches[0].params.conversationId === first,
+              "a new card of the app with the conversation: " + JSON.stringify(launches[0]));
+        if (!tablet) await openThread(first);
+        launches.length = 0;
+        await app.click(".as-row.out .as-bubble >> nth=0", { button: "right" });
+        await app.click("[data-testid='as-menu-newcard']");
+        await until(() => launches.length > 0 && launches[0].newCard === true && launches[0].params.conversationId === first, "a message's Open in New Card");
+        const other = (await svc(app, A + "newThread", {})).thread.id;
+        await svc(app, A + "ask", { text: "What's 5 plus 5?", threadId: other });
+        const card = await context.newPage();
+        watch(card, "second card");
+        await card.goto(appUrl + "?launchParams=" + encodeURIComponent(JSON.stringify({ conversationId: other })));
+        await card.waitForSelector(".as-bubble:has-text('5 plus 5')");
+        check(await app.locator(".as-bubble:has-text('5 plus 5')").count() === 0, "the second card shows its conversation, the first keeps its own");
+        await card.fill("[data-testid='as-input']", "What's 6 plus 6?");
+        await card.click("[data-testid='as-send']");
+        await card.waitForSelector(".as-bubble:has-text('12')");
+        await showList();
+        await app.waitForFunction((id) => /6 plus 6|12/.test(document.querySelector(`[data-testid='as-thread-${id}']`)?.textContent || ""), other);
+        check(await app.locator(".as-bubble:has-text('6 plus 6')").count() === 0, "a message sent in one card shows in the other's list, not its conversation");
+        await shot(card, "second-card");
+        await card.close();
+        await svc(app, A + "deleteThread", { id: other });
+        await svc(app, A + "setCurrent", { id: first });
 
         // ---- The system's view hands its conversation on ------------------------------------------
         // Each opening of the shell's view is a new conversation, made by
         // its first request (ask {newThread}); its app button relaunches the
         // app with {threadId}, which shows it even from Conversations
         // (where the app still is).
-        await app.waitForSelector("[data-testid='as-new']");
+        await showList();
         const before = (await svc(app, A + "threads", {})).threads.length;
         const viewAsk = await svc(app, A + "ask", { text: "What's 7 times 6?", newThread: true });
         const viewThread = viewAsk.thread && viewAsk.thread.id;
         check(!!viewThread && (await svc(app, A + "threads", {})).threads.length === before + 1, "a request from the view makes a new conversation");
         await app.evaluate((id) => document.dispatchEvent(new CustomEvent("webOSRelaunch", { detail: { threadId: id } })), viewThread);
         await app.waitForSelector(".as-bubble:has-text('7 times 6')");
-        check(await app.locator("[data-testid='as-new']").count() === 0, "the app, relaunched with it, shows that conversation");
+        if (!tablet) await app.waitForSelector("[data-testid='as-list']", { state: "hidden" });
+        check(await app.getAttribute(`[data-testid='as-thread-${viewThread}']`, "aria-current") === "true", "the app, relaunched with it, shows that conversation");
         check((await svc(app, A + "threads", {})).current === viewThread, "and goes on in it");
         await shot(app, "from-view");
-        await app.click("[data-testid='as-conversations']");
-        await app.waitForSelector("[data-testid='as-new']");
+        await showList();
 
         // ---- Clear History -----------------------------------------------------------------------
         await st.bringToFront();
@@ -337,7 +573,7 @@ async function main() {
         check(true, "the app follows at once");
         await st.click("[data-testid='as-enabled']");
         await until((s) => s.enabled === false, "Assistant: off");
-        await app.click(".pui-button:has-text('New Conversation')");
+        await app.click("[data-testid='as-new']");
         await app.waitForSelector("[data-testid='as-off']");
         check(true, "the app says the assistant is off");
         await st.click("[data-testid='as-enabled']");

@@ -1,0 +1,34 @@
+{
+    "id": "firmware-amdgpu",
+    "kind": "firmware",
+    "title": "AMD graphics firmware (amdgpu)",
+    "category": "graphics",
+    "summary": "AMD Radeon graphics need it to show anything with the built-in amdgpu driver.",
+    "match": [
+        "pci:v00001002d*sv*sd*bc03sc*i*"
+    ],
+    "firmware": [
+        "amdgpu/*"
+    ],
+    "modules": [
+        "amdgpu"
+    ],
+    "after": "reboot",
+    "license": {
+        "id": "LicenseRef-amdgpu-firmware",
+        "name": "AMD graphics firmware licence",
+        "textInPackage": "lib/firmware/LICENSE.amdgpu",
+        "url": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/LICENSE.amdgpu",
+        "free": false,
+        "redistributable": true
+    },
+    "packages": [
+        "linux-firmware-amdgpu",
+        "linux-firmware-amdgpu-license"
+    ],
+    "source": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git",
+    "maintainer": {
+        "name": "webOS Phoenix",
+        "email": "drivers@webosphoenix.org"
+    }
+}

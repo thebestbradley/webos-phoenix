@@ -13,6 +13,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished,
 import { call, subscribe } from "./bridge";
 import { findFiles, isWebAddress, openTarget, readTarget, targetName } from "./documents";
 import { openWith } from "./files";
+import { apps } from "./services";
 import { audioFocus } from "./playback";
 import { downloadManager, httpRequest, httpText } from "./web";
 
@@ -72,6 +73,15 @@ describe("apps registered for file types", () => {
         expect(lastHost("launch")?.payload.id).toBe("org.webosphoenix.pdfview");
         await call("luna://com.webos.applicationManager/open", { target: "https://example.org/index.html" });
         expect(lastHost("launch")?.payload.id).toBe("com.palm.app.browser");
+    });
+});
+
+describe("launching an app", () => {
+    it("asks for another card only when told ({newCard}: the Assistant's Open in New Card)", async () => {
+        await apps.launch("org.webosphoenix.assistant", { conversationId: "t1" });
+        expect(lastHost("launch")?.payload).toEqual({ id: "org.webosphoenix.assistant", params: { conversationId: "t1" } });
+        await apps.launch("org.webosphoenix.assistant", { conversationId: "t2" }, { newCard: true });
+        expect(lastHost("launch")?.payload).toEqual({ id: "org.webosphoenix.assistant", params: { conversationId: "t2" }, newCard: true });
     });
 });
 

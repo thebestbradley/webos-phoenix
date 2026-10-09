@@ -113,8 +113,8 @@ Item {
             compare(cv.currentUid, uids[2]);
         }
 
-        // The wave launcher: off, a slide up from the gesture area's side is
-        // the swipe up; on, it raises the wave of the dock's apps and the
+        // The wave launcher (on by default): off, a slide up from the
+        // gesture area's side is the swipe up; on, it raises the wave of the dock's apps and the
         // launcher button, the one under the finger lifted and named;
         // letting go there opens it.
         function test_waveLauncher() {
@@ -123,7 +123,8 @@ Item {
             verify(m && wave);
             var dock = shell.launcherLayout.dock;
             verify(dock.length >= 2, "the dock has apps");
-            sys.tweaks = { waveLauncher: true };
+            // On by default: no saved choice.
+            compare(shell.tweak("waveLauncher"), true);
             var x0 = m.width * 0.1;
             mousePress(m, x0, m.height / 2);
             mouseMove(m, x0, -20);
@@ -160,7 +161,7 @@ Item {
             tryVerify(function() { return !shell.maximized; }, 2000);
             compare(windows.cards.count, before);
             // Off: the same slide is the swipe up, no wave.
-            sys.tweaks = {};
+            sys.tweaks = { waveLauncher: false };
             shell.cardView.maximize();
             tryVerify(function() { return shell.maximized; }, 2000);
             mousePress(m, x0, m.height / 2);

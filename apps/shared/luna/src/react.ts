@@ -5,7 +5,7 @@
 //
 //   const status = useLuna((cb, err) => wifi.watchStatus(cb, err), []);
 
-import { useEffect, useState } from "react";
+import { createElement, Fragment, useEffect, useState, type ReactNode } from "react";
 import type { LunaError, Subscription } from "./bridge";
 import { fileUrl } from "./files";
 import { mediaUrl } from "./media";
@@ -13,6 +13,23 @@ import { mediaUrl } from "./media";
 export interface LunaState<T> {
     value: T | undefined;
     error: LunaError | undefined;
+}
+
+/**
+ * How many times the app was asked for fresh data: the shell relaunched it
+ * with Settings > Apps > Opening a running app set to Refresh (the
+ * runtime's "phoenixRefresh" document event). A count to put in an
+ * effect's deps so it runs again.
+ */
+export function useRefresh(): number {
+    const [count, setCount] = useState(0);
+    useEffect(() => {
+        if (typeof document === "undefined") return;
+        const onRefresh = () => setCount((n) => n + 1);
+        document.addEventListener("phoenixRefresh", onRefresh);
+        return () => document.removeEventListener("phoenixRefresh", onRefresh);
+    }, []);
+    return count;
 }
 
 /**
@@ -34,6 +51,16 @@ export function useLuna<T>(
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, deps);
     return state;
+}
+
+/**
+ * An app's root (each Phoenix app's main.tsx): started again when the app
+ * is refreshed (useRefresh), so everything it shows is loaded anew from
+ * the services, for the launch params it was relaunched with, as a webOS
+ * app reloaded on its relaunch.
+ */
+export function Refreshed({ children }: { children: ReactNode }) {
+    return createElement(Fragment, { key: useRefresh() }, children);
 }
 
 /** The launch params and every relaunch (OSE's "webOSRelaunch" document event). */

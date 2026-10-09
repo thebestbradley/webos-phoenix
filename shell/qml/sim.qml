@@ -6,7 +6,7 @@
 // Context properties set by phoenix-sim:
 //   simScene       "locked" | "cards" | "stacks" | "longstack" | "reorder" | "maximized" | "heldcard" | "launcher" |
 //                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" | "drawer" | "capture" | "capturepreview" |
-//                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "assistantbird" | "assistantbirds" |
+//                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "assistantbird" | "assistantbirds" | "assistantbirdmoves" |
 //                  "wakeword" | "wakewordlocked" |
 //                  "systemmenu" | "empty"
 //   simFirstUse    start with First Use (--first-use); without it First Use
@@ -41,6 +41,8 @@
 //                  from the start (Shift+F7 / Ctrl+F7)
 //   simChrome      phoenix-sim's window around the screen, with its menus and
 //                  toolbar (SimChrome), or null: resizeScreen(w, h)
+//   simMarketplace the Marketplace's catalog service (SimMarketplace), or
+//                  null: the Services menu
 
 import QtQuick
 import Phoenix.Native
@@ -65,6 +67,86 @@ Item {
     // the screen takes the new size (a bigger tablet, a narrower phone), and
     // the shell lays itself out again.
     readonly property bool sideways: deviceAngle % 180 !== 0
+
+    // ---- Adaptive: a phone or a tablet by the window's size ---------------------------
+    // Without --phone or --tablet (--adaptive, ./phoenix run) the shell's
+    // formFactor is "auto": it is a tablet while the screen's shorter side
+    // is at least Theme.tabletMinSide legacy pixels, a phone below, and
+    // switches live as the window is resized (Shell.tablet is a binding;
+    // every surface follows Theme.tablet), the apps running on. The pages
+    // hear of it as of a turn: their window resizes, and the system status
+    // carries the screen and the form factor (PalmSystem.deviceInfo).
+    readonly property bool adaptive: shell.formFactor === "auto"
+    // The screen, upright, in legacy pixels.
+    readonly property int screenWidth: Math.round(device.width / shell.effectiveDensity)
+    readonly property int screenHeight: Math.round(device.height / shell.effectiveDensity)
+    // View > Device Size: legacy pixels, upright (the TouchPad is upright
+    // on its side, as --tablet starts it). The Pre 3 is 480x800 at 1.5.
+    readonly property var devicePresets: [
+        { id: "pre", text: qsTr("Pre, Pixi, Veer (320x480)"), width: 320, height: 480 },
+        { id: "pre3", text: qsTr("Pre 3 (320x533; 480x800 at 1.5x)"), width: 320, height: 533 },
+        { id: "phone", text: qsTr("Modern Phone (393x852)"), width: 393, height: 852 },
+        { id: "folded", text: qsTr("Foldable, Folded (344x882)"), width: 344, height: 882 },
+        { id: "unfolded", text: qsTr("Foldable, Open (690x829)"), width: 690, height: 829 },
+        { id: "touchpad", text: qsTr("TouchPad (1024x768)"), width: 1024, height: 768 },
+        { id: "tablet", text: qsTr("Modern Tablet (1180x820)"), width: 1180, height: 820 }
+    ]
+    // The window at a preset's size, as the device is held now.
+    function snapToPreset(id) {
+        var p = devicePresets.filter(function (d) { return d.id === id; })[0];
+        if (p)
+            resizeScreen(p.width, p.height);
+    }
+    // The screen (upright, legacy pixels) at this size; the window turns it
+    // as the device is held.
+    function resizeScreen(width, height) {
+        var w = Math.round(width * shell.effectiveDensity), h = Math.round(height * shell.effectiveDensity);
+        if (sideways) {
+            var t = w;
+            w = h;
+            h = t;
+        }
+        var win = root.Window.window;
+        if (typeof simChrome !== "undefined" && simChrome) {
+            simChrome.resizeScreen(w, h);
+        } else if (win) {
+            win.width = w;
+            win.height = h;
+        }
+    }
+    // The pages: the form factor and the screen as they change (resizing
+    // the window is a stream of sizes: the last one, a moment after).
+    function pushScreen() {
+        windows.pushSystemStatus({ formFactor: shell.tablet ? "tablet" : "phone",
+                                   screen: { width: screenWidth, height: screenHeight } });
+    }
+    Timer {
+        id: screenPush
+        interval: 150
+        onTriggered: root.pushScreen()
+    }
+    onScreenWidthChanged: screenPush.restart()
+    onScreenHeightChanged: screenPush.restart()
+    Connections {
+        target: shell
+        // After the size it switched at has reached everything.
+        function onTabletChanged() { Qt.callLater(root.layoutSwitched); }
+    }
+    function layoutSwitched() {
+        pushScreen();
+        console.info("phoenix-sim: " + (shell.tablet ? "tablet" : "phone") + " layout at " + screenWidth + "x" + screenHeight);
+    }
+    // The browser's pages ask for the phone's or the desktop's site by it.
+    Binding {
+        when: typeof simBrowser !== "undefined" && simBrowser !== null
+        target: typeof simBrowser !== "undefined" ? simBrowser : null
+        property: "phone"
+        value: !shell.tablet
+    }
+    // The window's title says what the screen is.
+    readonly property string screenInfo: "%1x%2, %3%4".arg(screenWidth).arg(screenHeight)
+        .arg(shell.tablet ? qsTr("tablet") : qsTr("phone")).arg(adaptive ? qsTr(" (adaptive)") : "")
+    onScreenInfoChanged: if (typeof simChrome !== "undefined" && simChrome) simChrome.setScreenInfo(screenInfo)
 
     Item {
         id: device
@@ -108,12 +190,14 @@ Item {
 
         // "assistantbird": the Assistant's bird (docs/ASSISTANT-CHARACTER.md)
         // going through its twelve poses, a few seconds each, large, for
-        // review; "assistantbirds": all twelve at once, a contact sheet.
+        // review; "assistantbirds": all twelve at once, a contact sheet;
+        // "assistantbirdmoves": its moves one after another (the entrance,
+        // each idle of the pool, each reaction, the exit), large.
         // Over the shell, on the storyboard's dark ground; the frame rate
         // counter at the bottom left.
         Loader {
             anchors.fill: shell
-            active: root.scene === "assistantbird" || root.scene === "assistantbirds"
+            active: root.scene === "assistantbird" || root.scene === "assistantbirds" || root.scene === "assistantbirdmoves"
             sourceComponent: Rectangle {
                 id: review
                 color: "#1E1C22"
@@ -166,6 +250,53 @@ Item {
                         interval: 2600
                         repeat: true
                         onTriggered: review.index = (review.index + 1) % review.poses.length
+                    }
+                }
+                // Its moves, one after another, with a pause between.
+                Item {
+                    anchors.fill: parent
+                    visible: root.scene === "assistantbirdmoves"
+                    readonly property var moves: {
+                        var m = reviewProbe.art.motion.moves, order = ["enter"];
+                        Object.keys(m).forEach(function (n) { if (m[n].kind === "idle") order.push(n); });
+                        Object.keys(m).forEach(function (n) { if (m[n].kind === "react") order.push(n); });
+                        return order.concat(["leave"]);
+                    }
+                    property int at: -1
+                    AssistantBird {
+                        id: mover
+                        objectName: "reviewMoves"
+                        width: Math.round(Math.min(parent.width * 0.45, parent.height * 0.4))
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        y: Math.round(parent.height * 0.3)
+                        glow: true
+                        fidgety: false
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.top: mover.bottom
+                        anchors.topMargin: Theme.px(8)
+                        text: parent.at >= 0 ? (parent.at + 1) + " / " + parent.moves.length + "   " + parent.moves[parent.at] : ""
+                        color: "#F4EEE6"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.px(Theme.tablet ? 28 : 20)
+                    }
+                    Timer {
+                        running: root.scene === "assistantbirdmoves"
+                        interval: 2800
+                        repeat: true
+                        triggeredOnStart: true
+                        onTriggered: {
+                            var p = parent;
+                            p.at = (p.at + 1) % p.moves.length;
+                            var name = p.moves[p.at];
+                            if (name === "enter")
+                                mover.enter(0);
+                            else if (name === "leave")
+                                mover.leave();
+                            else
+                                mover.play(name);
+                        }
                     }
                 }
                 // All at once.
@@ -261,6 +392,104 @@ Item {
         running: typeof simTurn !== "undefined" && simTurn !== ""
         interval: 1000
         onTriggered: root.turnDevice(simTurn)
+    }
+
+    // ---- The assistant's follow-up questions (docs/AI-AND-MCP.md) ------------------------
+    // Assistant Follow-ups Now: the service's clock moved on to when the next
+    // question waiting for later is due (followUpWake {at}), again until one
+    // is shown as a notification (past the quiet hours, Do Not Disturb and
+    // calls) or none waits. done() after.
+    function followUpsNow(done, left) {
+        var svc = "luna://org.webosphoenix.assistant/";
+        if (left === undefined)
+            left = 8;
+        windows.lunaCall(svc + "followUps", {}, function (q) {
+            var list = q && q.followUps ? q.followUps.filter(function (f) { return f.state !== "delivered"; }) : [];
+            if (!list.length || left <= 0) {
+                if (done) done();
+                return;
+            }
+            var at = Math.max(Date.now(), Math.min.apply(null, list.map(function (f) { return f.nextAt; })));
+            windows.lunaCall(svc + "followUpWake", { at: at }, function (r) {
+                console.log("phoenix-sim: assistant follow-ups at " + new Date(at).toString() + ": " + JSON.stringify(r));
+                if (r && r.delivered) {
+                    if (done) done();
+                    return;
+                }
+                root.followUpsNow(done, left - 1);
+            });
+        });
+    }
+    // --scene followup: the assistant's view, an event made and the
+    // question after it; followuplater: an event made and left unanswered,
+    // the clock moved on, its notification in the dashboard; followupchat:
+    // then the Assistant app opened from it (its conversation).
+    Timer {
+        id: sceneFollowUpTimer
+        interval: 9000
+        onTriggered: {
+            var svc = "luna://org.webosphoenix.assistant/";
+            if (root.scene === "followup" || root.scene === "followupanswer") {
+                shell.openAssistant();
+                sceneFollowUpAsk.start();
+                return;
+            }
+            windows.lunaCall(svc + "ask", { text: "schedule lunch with Sam on friday at noon", newThread: true }, function () {
+                windows.lunaCall(svc + "followUpLeave", {}, function () {
+                    root.followUpsNow(function () {
+                        if (root.scene === "followupchat") {
+                            windows.lunaCall(svc + "followUps", {}, function (q) {
+                                var f = q && q.followUps && q.followUps[0];
+                                if (f)
+                                    shell.launch("org.webosphoenix.assistant", { followUp: f.id });
+                            });
+                        } else {
+                            shell.notifications.bannerActive = false;
+                            shell.notifications.dashboardOpen = root.scene !== "followupaction";
+                            // followupaction: its first answer tapped, the confirmation in the banner.
+                            if (root.scene === "followupaction")
+                                sceneFollowUpAction.start();
+                        }
+                    });
+                });
+            });
+        }
+    }
+
+    Timer {
+        id: sceneFollowUpAsk
+        interval: 1500
+        onTriggered: {
+            shell.assistantOverlay.ask("add a meeting with Sam tomorrow at 3");
+            if (root.scene === "followupanswer")
+                sceneFollowUpChoose.start();
+        }
+    }
+    Timer {
+        id: sceneFollowUpAction
+        interval: 2000
+        onTriggered: {
+            for (var i = 0; i < windows.notifications.count; ++i)
+                if (windows.notifications.get(i).actions) {
+                    console.log("phoenix-sim: follow-up answered from its notification, " + (Date.now() - root.startedAt) + " ms in");
+                    shell.notifications.runAction(i, "fu:0");
+                    break;
+                }
+        }
+    }
+    readonly property double startedAt: Date.now()
+    // --scene followupanswer: its first answer tapped.
+    Timer {
+        id: sceneFollowUpChoose
+        interval: 2500
+        onTriggered: {
+            var ov = shell.assistantOverlay, list = ov.messages;
+            for (var i = list.length - 1; i >= 0; --i)
+                if (list[i].followUp && !list[i].chosen) {
+                    ov.choose(list[i], list[i].choices[0]);
+                    return;
+                }
+        }
     }
 
     // --scene launchermenu: once the launcher is up.
@@ -541,7 +770,11 @@ Item {
     //             item is unchecked (a chord to keep holding)
     //   checked   a function: the item is a check box showing it; radio: a
     //             group of which one is checked
-    //   icon      its toolbar icon (shell/sim/icons/NAME.svg)
+    //   label     a function: what it is called now, for an item that says
+    //             what it will do ("Attach ..." / "Detach ..."); tipNow its
+    //             tip now; enabled whether it can be chosen
+    //   icon      its toolbar icon (shell/sim/icons/NAME.svg); iconNow: a
+    //             function, the icon now
     // { separator: true, menu } separates; Help > Keyboard Shortcuts lists
     // them in this order.
     readonly property var simActions: [
@@ -581,25 +814,35 @@ Item {
         { id: "usbDrive", menu: "device", text: qsTr("USB Drive Chord"), keyText: "F3+F10", press: [Qt.Key_F3, Qt.Key_F10],
           tip: qsTr("Power and Volume Down on a USB cable: USB drive mode") },
         { separator: true, menu: "device" },
-        { id: "keyboard", menu: "device", text: qsTr("Hardware Keyboard Attached"), keys: ["Ctrl+Shift+K"],
-          run: function () { status.hardwareKeyboard = !status.hardwareKeyboard; },
-          checked: function () { return status.hardwareKeyboard; } },
+        // A Bluetooth keyboard attached or detached (Shell.hardwareKeyboard).
+        // The menu item and the toolbar button say what they will do.
+        { id: "keyboard", menu: "device", text: qsTr("Attach or Detach Hardware Keyboard"), keys: ["Ctrl+Shift+K"], icon: "keyboard",
+          tip: qsTr("Attached, the on-screen keyboard stays down when a text field takes the focus"),
+          label: function () { return status.hardwareKeyboard ? qsTr("Detach Hardware Keyboard") : qsTr("Attach Hardware Keyboard"); },
+          run: function () { status.hardwareKeyboard = !status.hardwareKeyboard; } },
         // The on-screen keyboard up or down. It types into the field with
         // the focus (as on the device, it has nothing to type into
         // otherwise), so with none Just Type opens, its field focused (not
         // over the lock screen, where only its PIN or password field takes
         // the keyboard, nor in First Use).
-        { id: "virtualKeyboard", menu: "device", text: qsTr("On-Screen Keyboard"), keys: ["Ctrl+Shift+O"], icon: "keyboard",
-          tip: qsTr("Up or down; with no text field in use, Just Type opens with it"),
+        { id: "virtualKeyboard", menu: "device", text: qsTr("Show or Hide Virtual Keyboard"), keys: ["Ctrl+Shift+O"], icon: "keyboard-show",
+          tip: qsTr("The on-screen keyboard; with no text field in use, Just Type opens with it"),
+          label: function () { return shell.keyboardOpen ? qsTr("Hide Virtual Keyboard") : qsTr("Show Virtual Keyboard"); },
+          iconNow: function () { return shell.keyboardOpen ? "keyboard-hide" : "keyboard-show"; },
           run: function () {
               if (shell.keyboardOpen)
                   shell.hideKeyboard();
               else if (shell.imeClient)
                   shell.showVirtualKeyboard();
-              else if (!shell.locked && !shell.firstUse)
+              else if (!shell.locked && !shell.firstUse) {
+                  // With a hardware keyboard a field taking the focus leaves
+                  // the keyboard down; this asked for it, so it comes up
+                  // once Just Type's field has the focus (its page's, a
+                  // moment later).
+                  root._keyboardForJustType = status.hardwareKeyboard;
                   shell.startJustType("");
-          },
-          checked: function () { return shell.keyboardOpen; } },
+              }
+          } },
 
         // Simulate: what happens to the device. Incoming calls and messages
         // (SimWindowSource.simulateIncomingCall / Sms / Mms / Im).
@@ -620,6 +863,11 @@ Item {
                   console.log("phoenix-sim: the microphone is not listening for \"Hey Phoenix\" (Settings > Assistant)");
           } },
         { id: "notification", menu: "simulate", text: qsTr("Demo Notification"), keys: ["F2"], press: [Qt.Key_F2], icon: "notification" },
+        // The assistant's follow-up questions waiting for later: the clock
+        // moved on to when the next is due (docs/AI-AND-MCP.md).
+        { id: "followUpsNow", menu: "simulate", text: qsTr("Assistant Follow-ups Now"), keys: ["Shift+F2"],
+          tip: qsTr("Moves the assistant's clock on until a follow-up question waiting for later is shown as a notification"),
+          run: function () { root.followUpsNow(); } },
         { separator: true, menu: "simulate" },
         // The battery and chargers: 5% and under is luna-systemui's Low
         // Battery alert (battery_low.mp3); a wall charger "Charging Battery"
@@ -719,23 +967,53 @@ Item {
               console.info("phoenix-sim: light " + status.lightLevel + " lux");
           } },
 
-        // View: the device phoenix-sim starts as (it restarts with it).
+        // View: the device. Adaptive (--adaptive, and without --phone or
+        // --tablet): the shell is a phone or a tablet by the window's size,
+        // live, and Phone and Tablet snap the window to the Pre's and the
+        // TouchPad's sizes; with --phone or --tablet the layout is fixed and
+        // they restart phoenix-sim as the other.
         { id: "phone", menu: "view", text: qsTr("Phone"), radio: "formFactor", icon: "phone",
-          tip: qsTr("Restart as a phone (the Pre, 320x480)"),
-          checked: function () { return !shell.tablet; },
-          run: function () { if (shell.tablet) root.restartSim(["tablet", "phone", "size", "scale"], []); } },
+          tip: qsTr("A phone: the Pre, 320x480 (adaptive: the window takes its size; else a restart)"),
+          checked: function () { return !root.adaptive && !shell.tablet; },
+          run: function () {
+              if (root.adaptive)
+                  root.snapToPreset("pre");
+              else if (shell.tablet)
+                  root.restartSim(["tablet", "phone", "adaptive", "size", "scale"], ["--phone"]);
+          } },
         { id: "tablet", menu: "view", text: qsTr("Tablet"), radio: "formFactor", icon: "tablet",
-          tip: qsTr("Restart as a tablet (the TouchPad, 1024x768)"),
-          checked: function () { return shell.tablet; },
-          run: function () { if (!shell.tablet) root.restartSim(["tablet", "phone", "size", "scale"], ["--tablet"]); } },
+          tip: qsTr("A tablet: the TouchPad, 1024x768 (adaptive: the window takes its size; else a restart)"),
+          checked: function () { return !root.adaptive && shell.tablet; },
+          run: function () {
+              if (root.adaptive)
+                  root.snapToPreset("touchpad");
+              else if (!shell.tablet)
+                  root.restartSim(["tablet", "phone", "adaptive", "size", "scale"], ["--tablet"]);
+          } },
+        { id: "adaptive", menu: "view", text: qsTr("Adaptive (Phone or Tablet by Size)"), radio: "formFactor",
+          tip: qsTr("Resize the window freely: the shell becomes a tablet once its shorter side reaches %1 pixels, "
+                    + "and a phone again below, without restarting the apps").arg(Theme.tabletMinSide),
+          checked: function () { return root.adaptive; },
+          run: function () {
+              if (!root.adaptive)
+                  root.restartSim(["tablet", "phone", "adaptive"], ["--adaptive"]);
+          } }
+    ].concat(devicePresets.map(function (p) {
+        return { id: "size-" + p.id, menu: "view", submenu: qsTr("Device Size"), text: p.text, radio: "deviceSize",
+                 tip: qsTr("The window at %1x%2, upright (%3 layout when adaptive)").arg(p.width).arg(p.height)
+                      .arg(Theme.tabletLayoutFor(p.width, p.height, 1) ? qsTr("tablet") : qsTr("phone")),
+                 checked: function () { return root.screenWidth === p.width && root.screenHeight === p.height; },
+                 run: function () { root.snapToPreset(p.id); } };
+    })).concat([
         { separator: true, menu: "view" }
-    ].concat([1, 1.5, 2].map(function (n) {
+    ]).concat([1, 1.5, 2].map(function (n) {
         return { id: "scale-" + n, menu: "view", submenu: qsTr("Scale"), text: qsTr("%1x").arg(n), radio: "scale",
                  tip: qsTr("Restart with --scale %1").arg(n),
                  checked: function () { return shell.density === n; },
                  run: function () {
-                     var w = shell.tablet ? 1024 : 320, h = shell.tablet ? 768 : 480;
-                     root.restartSim(["size", "scale"], ["--scale", String(n), "--size", Math.round(w * n) + "x" + Math.round(h * n)]);
+                     // The screen it has now, at the new density.
+                     root.restartSim(["size", "scale"], ["--scale", String(n), "--size",
+                                     Math.round(root.screenWidth * n) + "x" + Math.round(root.screenHeight * n)]);
                  } };
     })).concat([""].concat(scenes).map(function (name) {
         return { id: "scene-" + (name || "none"), menu: "view", submenu: qsTr("Scene"), text: name || qsTr("None (a normal start)"),
@@ -758,12 +1036,44 @@ Item {
               root.debugOverlay({ touchPlot: { collection: on, trails: on, crosshairs: on } });
           } },
 
+        // Services: what the simulator runs on this computer for the
+        // device. The Marketplace's catalog (SimMarketplace): checked while
+        // it runs or starts; its state in the item's text.
+        { id: "marketplaceCatalog", menu: "services", text: qsTr("Marketplace Catalog"),
+          tip: qsTr("The Phoenix Marketplace's catalog service on this computer (server/marketplace, PHP 8), "
+                    + "where the simulator's Marketplace reads it; it stops with the simulator"),
+          checked: function () { return root.catalogState === "running" || root.catalogState === "starting"; },
+          label: function () { return root.catalogMenuText(); },
+          tipNow: function () { return root.catalogState === "failed" ? root.catalog.error : ""; },
+          enabled: function () { return root.catalog !== null; },
+          run: function () { root.toggleCatalog(); } },
+        { id: "marketplaceCatalogBrowser", menu: "services", text: qsTr("Open Catalog in Browser"),
+          tip: qsTr("The catalog's review page (/admin; its token is server/marketplace/data/admin.token) in this computer's browser"),
+          enabled: function () { return root.catalogState === "running"; },
+          run: function () { Qt.openUrlExternally(root.catalog.url + "admin"); } },
+        { id: "marketplaceCatalogLog", menu: "services", text: qsTr("Show Catalog Log"),
+          tip: qsTr("server/marketplace/data/simulator.log"),
+          enabled: function () {
+              return root.catalogState === "starting" || root.catalogState === "failed"
+                  || (root.catalogState === "running" && root.catalog.ownsServer);
+          },
+          run: function () { Qt.openUrlExternally("file://" + root.catalog.logFile); } },
+        { separator: true, menu: "services" },
+        { id: "marketplaceCatalogAuto", menu: "services", text: qsTr("Start Catalog with the Simulator"),
+          tip: qsTr("Start the Marketplace's catalog every time the simulator starts"),
+          checked: function () { return typeof simSettings !== "undefined" && simSettings.value("marketplace/autostart") === "1"; },
+          enabled: function () { return root.catalog !== null; },
+          run: function () {
+              if (typeof simSettings !== "undefined")
+                  simSettings.setValue("marketplace/autostart", simSettings.value("marketplace/autostart") === "1" ? "0" : "1");
+          } },
+
         // Keys of the shell's own, for Help > Keyboard Shortcuts.
         { id: "justType", menu: "", text: qsTr("Just Type"), keyText: qsTr("Type in card view, or the Search key") },
         { id: "cardView", menu: "", text: qsTr("Card View"), keyText: Qt.platform.os === "osx" ? "" : qsTr("Super, on its own") }
     ])
     // The toolbar's, in order ("|" separates).
-    readonly property var simToolbar: ["power", "volumeUp", "volumeDown", "ringer", "|", "home", "back", "virtualKeyboard", "|",
+    readonly property var simToolbar: ["power", "volumeUp", "volumeDown", "ringer", "|", "home", "back", "|", "keyboard", "virtualKeyboard", "|",
                                        "rotateLeft", "rotateRight", "capture", "|",
                                        "call", "sms", "notification", "|", "lowBattery", "charger", "touchstone", "|",
                                        "phone", "tablet"]
@@ -771,9 +1081,30 @@ Item {
     readonly property var scenes: ["locked", "cards", "stacks", "longstack", "reorder", "maximized", "heldcard",
                                    "launcher", "launcheredit", "launchermenu", "launchergroup", "launchergroupopen", "launchertabs", "launcherinstall", "wave", "powermenu", "hot", "pin", "emergency", "firstuse",
                                    "lowbattery", "banner", "notified", "dashboard", "drawer", "capture",
-                                   "capturepreview", "justtype", "keyboard", "clipstrip", "assistant", "assistantbird", "assistantbirds",
+                                   "capturepreview", "justtype", "keyboard", "clipstrip", "assistant", "assistantbird", "assistantbirds", "assistantbirdmoves",
                                    "wakeword", "wakewordlocked", "systemmenu", "empty"]
     readonly property string scene: typeof simScene !== "undefined" ? simScene : ""
+
+    // Show Virtual Keyboard opened Just Type with a hardware keyboard
+    // attached: the keyboard comes up for its field (simActions).
+    property bool _keyboardForJustType: false
+    Connections {
+        target: shell
+        function onImeClientChanged() {
+            if (root._keyboardForJustType && shell.imeClient)
+                // After the shell has dealt with the new field (the
+                // hardware keyboard's: the keyboard stays down).
+                Qt.callLater(function () {
+                    root._keyboardForJustType = false;
+                    if (shell.justTypeOpen && shell.imeClient)
+                        shell.showVirtualKeyboard();
+                });
+        }
+        function onJustTypeOpenChanged() {
+            if (!shell.justTypeOpen)
+                root._keyboardForJustType = false;
+        }
+    }
 
     // The keys of the entries that run something, wherever the keyboard
     // focus is (a web app's too).
@@ -802,12 +1133,101 @@ Item {
             return { id: a.id || "", separator: !!a.separator, menu: a.menu || "", submenu: a.submenu || "",
                      text: a.text || "", tip: a.tip || "", keys: a.keys || [], keyText: a.keyText || "",
                      press: a.press || [], hold: !!a.hold, run: !!a.run, checkable: !!a.checked,
-                     radio: a.radio || "", icon: a.icon || "" };
+                     radio: a.radio || "", icon: a.icon || "", dynamic: !!(a.label || a.enabled || a.iconNow) };
         });
     }
     function simActionChecked(id) {
         var a = _simAction(id);
         return !!(a && a.checked && a.checked());
+    }
+    // An entry whose text (label), availability (enabled), tip (tipNow) or
+    // toolbar icon (iconNow) changes: {text, enabled, tip, icon} now.
+    function simActionState(id) {
+        var a = _simAction(id);
+        if (!a)
+            return {};
+        var text = a.label ? a.label() : a.text;
+        return { text: text, enabled: a.enabled ? !!a.enabled() : true, tip: a.tipNow ? a.tipNow() : "",
+                 icon: a.iconNow ? a.iconNow() : (a.icon || "") };
+    }
+
+    // ---- The Marketplace's catalog (Services) --------------------------------------
+    // phoenix-sim's SimMarketplace (null without web apps, and in the
+    // tests). Its state goes to the pages (the runtime's
+    // org.webosphoenix.simulator), for the Marketplace's Start Local Catalog.
+    // (A stand-in in the tests.)
+    property var catalog: typeof simMarketplace !== "undefined" && simMarketplace ? simMarketplace : null
+    readonly property string catalogState: catalog ? catalog.state : "stopped"
+    // Started from the menu: the Marketplace opens once it runs, and a
+    // failure is told in a box.
+    property bool _catalogFromMenu: false
+    function catalogMenuText() {
+        if (!catalog)
+            return qsTr("Marketplace Catalog (needs web apps)");
+        var where = catalog.url.replace(/^http:\/\//, "").replace(/\/$/, "");
+        switch (catalogState) {
+        case "starting":
+            return catalog.settingUp ? qsTr("Marketplace Catalog: setting up (the first time)…")
+                                     : qsTr("Marketplace Catalog: starting…");
+        case "running":
+            return catalog.ownsServer ? qsTr("Marketplace Catalog: running at %1").arg(where)
+                                      : qsTr("Marketplace Catalog: running at %1 (started elsewhere)").arg(where);
+        case "failed":
+            var why = catalog.error.split("\n")[0].replace(/:$/, "");
+            return qsTr("Marketplace Catalog: failed (%1)").arg(why.length > 70 ? why.slice(0, 69) + "…" : why);
+        }
+        return qsTr("Marketplace Catalog");
+    }
+    function toggleCatalog() {
+        if (!catalog)
+            return;
+        if (catalogState === "running" || catalogState === "starting") {
+            _catalogFromMenu = false;
+            catalog.stop();
+            return;
+        }
+        _catalogFromMenu = true;
+        catalog.startAsync();
+        // One already running: open the Marketplace now.
+        if (catalogState === "running")
+            _catalogStarted();
+    }
+    function _catalogStarted() {
+        if (!_catalogFromMenu)
+            return;
+        _catalogFromMenu = false;
+        shell.unlock();
+        shell.launch("org.webosphoenix.marketplace");
+    }
+    function pushCatalogState() {
+        windows.pushSystemStatus({ marketplaceCatalog: catalog
+            ? { state: catalog.state, url: catalog.url, error: catalog.error, settingUp: catalog.settingUp }
+            : { state: "unavailable" } });
+    }
+    Connections {
+        target: root.catalog
+        function onStateChanged() {
+            root.pushCatalogState();
+            if (root.catalogState === "running") {
+                root._catalogStarted();
+            } else if (root.catalogState === "failed" && root._catalogFromMenu) {
+                root._catalogFromMenu = false;
+                if (typeof simChrome !== "undefined" && simChrome)
+                    simChrome.alert(qsTr("The Marketplace's catalog service did not start."),
+                                    root.catalog.error.charAt(0).toUpperCase() + root.catalog.error.slice(1), root.catalog.logFile);
+            }
+        }
+    }
+    // The Marketplace's Start Local Catalog (a "simulator" host message).
+    function simulatorRequest(appId, payload) {
+        if (payload.op === "startMarketplaceCatalog" && appId === "org.webosphoenix.marketplace" && catalog)
+            catalog.startAsync();
+        // Whatever it is now, the asking page hears it.
+        pushCatalogState();
+    }
+    Connections {
+        target: windows
+        function onSimulatorRequest(appId, payload) { root.simulatorRequest(appId, payload); }
     }
     function simTrigger(id) {
         var a = _simAction(id);
@@ -992,7 +1412,15 @@ Item {
     readonly property bool _systemUiUp: !simWebEngineOn || windows.systemUiLoaded
     readonly property bool simWebEngineOn: typeof simWebEngine !== "undefined" && simWebEngine
     readonly property bool _bootDone: bootMinimum.done && _systemUiUp
-    on_BootDoneChanged: if (_bootDone) shell.systemScreens.finishBoot()
+    // Said on the output too, for scripts that drive the simulator (xdotool):
+    // until then the boot animation takes every touch (BootAnimation.qml).
+    on_BootDoneChanged: {
+        if (!_bootDone)
+            return;
+        shell.systemScreens.finishBoot();
+        if (shell.bootAnimation)
+            console.info("phoenix-sim: booted (touches reach the UI once the logo has gone, " + Theme.motion(700) + " ms)");
+    }
     Connections {
         target: windows
         function onSystemUiProgressChanged() { shell.systemScreens.bootProgress(windows.systemUiProgress, 100); }
@@ -1118,6 +1546,8 @@ Item {
 
     // Build a demo scene, as if the user had been using the phone for a bit.
     Component.onCompleted: {
+        // The catalog's state, for every page as it loads.
+        pushCatalogState();
         // Icons the system UI names by device path find their HiDPI variants
         // in the compat overlay as on a device, where it is installed beside
         // the submodule's files (luna-systemui's notification icons).
@@ -1137,7 +1567,10 @@ Item {
         windows.pushSystemStatus({ gestureArea: Theme.gestureAreaHeight > 0 });
         // The accessories (none at boot) and what the device is: Settings
         // offers tethering on phones.
-        windows.pushSystemStatus({ gamepads: [], usbDrives: [], formFactor: shell.tablet ? "tablet" : "phone" });
+        windows.pushSystemStatus({ gamepads: [], usbDrives: [] });
+        pushScreen();
+        if (typeof simChrome !== "undefined" && simChrome)
+            simChrome.setScreenInfo(screenInfo);
         if (typeof simSettings !== "undefined") {
             windows.launcherLayoutJson = simSettings.value("launcher/layout");
             windows.dockModePositionsJson = simSettings.value("dockmode/positions");
@@ -1284,6 +1717,8 @@ Item {
         } else if (scene === "launchergroup" || scene === "launchergroupopen" || scene === "launchertabs") {
             shell.gestureUp();
             sceneGroupTimer.start();
+        } else if (/^followup(?:answer|later|action|chat)?$/.test(scene)) {
+            sceneFollowUpTimer.start();
         } else if (scene === "launchermenu") {
             // The icon menu of the launcher's second icon (press and hold).
             shell.gestureUp();
@@ -1376,7 +1811,7 @@ Item {
         }
     }
 
-    // "assistant": a short conversation with the Phoenix Assistant
+    // "assistant": a short conversation with the Assistant
     // (org.webosphoenix.assistant: a sum, a timer, and a question nothing on
     // the phone can answer) in its view over the screen (the app with
     // --launch, else the card view), each opening being a conversation of
@@ -1395,9 +1830,16 @@ Item {
         property bool inApp: false
         property bool up: false         // the service answers (the system UI page is up)
         property int serial: 0
+        property bool asking: false     // a request is out: no other until it is answered
+        property double askedAt: 0      // (or until it is clearly lost: 4 minutes)
         interval: 3000
         onTriggered: next()
         function next() {
+            // An answer can take longer than a tick (the on-device model):
+            // asking again then would ask twice and drop the first answer.
+            if (asking && Date.now() - askedAt < 240000)
+                return;
+            asking = false;
             var mine = ++serial;
             restart();
             if (!up) {
@@ -1418,16 +1860,23 @@ Item {
                 return;
             }
             var answered = function (r) {
-                if (mine !== assistantSceneSteps.serial || !r || r.returnValue === false)
+                if (mine !== assistantSceneSteps.serial)
                     return;
+                assistantSceneSteps.asking = false;
+                if (!r || r.returnValue === false)
+                    return;     // asked again at the next tick
                 assistantSceneSteps.stop();
                 assistantSceneSteps.asks = assistantSceneSteps.asks.slice(1);
                 assistantSceneSteps.next();
             };
             var view = shell.assistantOverlay;
             if (inApp || !view.open) {
+                asking = true;
+                askedAt = Date.now();
                 windows.lunaCall("luna://org.webosphoenix.assistant/ask", { text: asks[0], speak: false }, answered);
             } else if (!view.busy) {
+                asking = true;
+                askedAt = Date.now();
                 // A request that failed (no page up yet) is taken back.
                 view.ask(asks[0], function (r) {
                     if (!r || r.returnValue === false) {

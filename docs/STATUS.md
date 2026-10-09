@@ -45,7 +45,9 @@ user's shortcuts, swipe typing and dictation (V2, V3) ([GAPS.md](spec/GAPS.md));
 ([APP-RUNTIME.md](APP-RUNTIME.md#backup)); the Marketplace with web apps,
 App Museum II and Preware as sources and its PHP catalog service
 ([APP-RUNTIME.md](APP-RUNTIME.md#marketplace)); System Updates on RAUC
-([APP-RUNTIME.md](APP-RUNTIME.md#system-updates)); downloads and installs as
+([APP-RUNTIME.md](APP-RUNTIME.md#system-updates)); Settings > Hardware, which
+fills the gaps the image leaves (newer firmware, out-of-tree drivers) from a
+signed driver catalog ([HARDWARE.md](HARDWARE.md#hardware-support-and-the-hardware-app)); downloads and installs as
 ongoing activities in the notification area. The MCP layer and the AI
 agent are 2.0 ([ROADMAP.md](ROADMAP.md#10-release)).
 

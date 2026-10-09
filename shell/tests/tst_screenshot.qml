@@ -119,6 +119,33 @@ Item {
             shell.forceActiveFocus();
         }
 
+        // A capture deleted (the preview, Photos, Files): the runtime takes
+        // its "Screen captured" notification back by its tag; a folder
+        // deleted, every capture's in it (tagPrefix).
+        function test_deletedCaptureLeavesTheDashboard() {
+            windows.notifications.clear();
+            var dir = "/media/internal/screencaptures/";
+            ["A.png", "B.png", "C.png"].forEach(function (f) {
+                windows._hostMessage("com.palm.systemui", "", "notification",
+                                     { appId: "org.webosphoenix.screenshot", title: "Screen captured", body: f,
+                                       params: { path: dir + f }, tag: "capture:" + dir + f });
+            });
+            windows.notify("org.webosphoenix.screenshot", "Untagged", "");
+            compare(windows.notifications.count, 4);
+            windows._hostMessage("com.palm.systemui", "", "notification",
+                                 { appId: "org.webosphoenix.screenshot", remove: true, tag: "capture:" + dir + "B.png",
+                                   tagPrefix: "capture:" + dir + "B.png/" });
+            compare(windows.notifications.count, 3);
+            for (var i = 0; i < windows.notifications.count; ++i)
+                verify(windows.notifications.get(i).body !== "B.png");
+            windows._hostMessage("com.palm.systemui", "", "notification",
+                                 { appId: "org.webosphoenix.screenshot", remove: true, tag: "capture:" + dir.slice(0, -1),
+                                   tagPrefix: "capture:" + dir });
+            compare(windows.notifications.count, 1);
+            compare(windows.notifications.get(0).title, "Untagged");
+            windows.notifications.clear();
+        }
+
         // As iOS: the capture's thumbnail in the bottom left corner; a tap
         // opens the file the runtime saved in the preview, a swipe to the
         // left puts it away, and it goes by itself after a few seconds.
@@ -135,6 +162,11 @@ Item {
             verify(thumb.visible && thumb.shown);
             verify(String(findChild(thumb, "screenCaptureThumbnailImage").source) !== "", "the capture in it");
             verify(thumb.x + thumb.width < root.width / 2 && thumb.y + thumb.height > root.height / 2, "bottom left");
+            // Clear of the controls down there: above the gesture area, the
+            // notification area and an app's bottom toolbar (the preview's
+            // Crop button), not over them.
+            verify(thumb.y + thumb.height <= root.height - Theme.gestureAreaHeight - shell.notifications.negativeSpaceTarget - Theme.px(56),
+                   "above the app's toolbar: " + (thumb.y + thumb.height));
             // The page saving it was handed the capture's id.
             verify(thumb.capture !== "");
             verify(windows._pendingCaptures[windows._pendingCaptures.length - 1].indexOf('"capture":"' + thumb.capture + '"') >= 0);

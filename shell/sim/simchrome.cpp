@@ -9,8 +9,11 @@
 #include <QBuffer>
 #include <QCloseEvent>
 #include <QDialog>
+#include <QDesktopServices>
 #include <QDialogButtonBox>
+#include <QElapsedTimer>
 #include <QFile>
+#include <QGuiApplication>
 #include <QHeaderView>
 #include <QImageReader>
 #include <QJSValue>
@@ -22,16 +25,23 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPixmap>
+#include <QPushButton>
 #include <QQuickItem>
 #include <QQuickView>
 #include <QSettings>
 #include <QTimer>
 #include <QToolBar>
 #include <QTreeWidget>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <QWindow>
 
+#include <cstdio>
 #include <memory>
+
+#ifdef Q_OS_MACOS
+#include "simmac.h"
+#endif
 
 namespace {
 
@@ -61,10 +71,31 @@ QString SimChrome::displayName()
 SimChrome::SimChrome(QQuickView *view, bool toolbar)
     : m_view(view)
     , m_container(QWidget::createWindowContainer(view, this))
+    , m_menuBar(nullptr)
     , m_toolbar(new QToolBar(tr("Simulator"), this))
     , m_refresh(new QTimer(this))
 {
     setWindowTitle(displayName());
+#ifdef Q_OS_MACOS
+    // The menu bar at the top of the screen shows a window's own menu bar
+    // only while that window is Qt's focus window, else the one made
+    // without a window, if any (QCocoaMenuBar::updateMenuBarImmediately,
+    // on every focus window change: qcocoanativeinterface.mm
+    // onAppFocusWindowChanged). The focus window is nearly always the
+    // device's screen, the QQuickView inside this window (a child window
+    // with no menu bar: QNSView's topLevelWindow climbs to the top only
+    // from a widget's window), so QMainWindow's own menu bar showed only
+    // in the moments this window itself had the focus, and otherwise the
+    // menu bar kept just the application menu. Made without a window, the
+    // menu bar is the application's: there whichever window has the focus
+    // (Qt's QMenuBar documentation, "QMenuBar as a Global Menu Bar").
+    m_menuBar = new QMenuBar(nullptr);
+    m_ownsMenuBar = m_menuBar->isNativeMenuBar();
+    if (!m_ownsMenuBar)
+        setMenuBar(m_menuBar);   // Qt::AA_DontUseNativeMenuBar: in the window
+#else
+    m_menuBar = menuBar();
+#endif
     // The screen takes the keyboard: clicked, and from the start.
     m_container->setFocusPolicy(Qt::StrongFocus);
     m_container->setMinimumSize(64, 64);
@@ -80,10 +111,11 @@ SimChrome::SimChrome(QQuickView *view, bool toolbar)
     m_toolbar->setContextMenuPolicy(Qt::NoContextMenu);
     addToolBar(Qt::RightToolBarArea, m_toolbar);
     m_toolbar->setVisible(toolbar && QSettings().value(QLatin1String(kToolbarSetting), true).toBool());
-    m_toolbarAction = new QAction(tr("Show Toolbar"), this);
-    m_toolbarAction->setCheckable(true);
-    m_toolbarAction->setChecked(m_toolbar->isVisibleTo(this));
-    connect(m_toolbarAction, &QAction::triggered, this, [this](bool on) {
+    // Says what it will do, as a Mac's View > Hide Toolbar.
+    m_toolbarAction = new QAction(this);
+    m_toolbarAction->setText(m_toolbar->isVisibleTo(this) ? tr("Hide Toolbar") : tr("Show Toolbar"));
+    connect(m_toolbarAction, &QAction::triggered, this, [this]() {
+        const bool on = !m_toolbar->isVisibleTo(this);
         setToolbarShown(on);
         QSettings().setValue(QLatin1String(kToolbarSetting), on);
     });
@@ -91,6 +123,12 @@ SimChrome::SimChrome(QQuickView *view, bool toolbar)
     // What the check boxes show changes with the keys too.
     m_refresh->setInterval(500);
     connect(m_refresh, &QTimer::timeout, this, &SimChrome::refreshChecks);
+}
+
+SimChrome::~SimChrome()
+{
+    if (m_ownsMenuBar)
+        delete m_menuBar;
 }
 
 void SimChrome::build()
@@ -118,6 +156,7 @@ void SimChrome::build()
         e.hold = m.value(QStringLiteral("hold")).toBool();
         e.run = m.value(QStringLiteral("run")).toBool();
         e.checkable = m.value(QStringLiteral("checkable")).toBool();
+        e.dynamic = m.value(QStringLiteral("dynamic")).toBool();
         m_entries << e;
     }
 
@@ -126,6 +165,7 @@ void SimChrome::build()
     menuFor(QStringLiteral("device"), QString());
     menuFor(QStringLiteral("simulate"), QString());
     menuFor(QStringLiteral("view"), QString());
+    menuFor(QStringLiteral("services"), QString());
     QHash<QString, QActionGroup *> groups;
     for (const Entry &e : std::as_const(m_entries)) {
         if (e.menu.isEmpty())
@@ -164,7 +204,7 @@ void SimChrome::build()
     view->addSeparator();
     view->addAction(m_toolbarAction);
 
-    QMenu *help = menuBar()->addMenu(tr("Help"));
+    QMenu *help = m_menuBar->addMenu(tr("Help"));
     QAction *sheet = help->addAction(tr("Keyboard Shortcuts…"));
     connect(sheet, &QAction::triggered, this, &SimChrome::showShortcuts);
     QAction *about = help->addAction(tr("About %1").arg(displayName()));
@@ -198,14 +238,76 @@ QMenu *SimChrome::menuFor(const QString &menu, const QString &submenu)
     if (submenu.isEmpty()) {
         const QString title = menu == QLatin1String("device") ? tr("Device")
                             : menu == QLatin1String("simulate") ? tr("Simulate")
-                            : menu == QLatin1String("view") ? tr("View") : menu;
-        m = menuBar()->addMenu(title);
+                            : menu == QLatin1String("view") ? tr("View")
+                            : menu == QLatin1String("services") ? tr("Services") : menu;
+        m = m_menuBar->addMenu(title);
     } else {
         m = menuFor(menu, QString())->addMenu(submenu);
     }
     connect(m, &QMenu::aboutToShow, this, &SimChrome::refreshChecks);
     m_menus.insert(key, m);
     return m;
+}
+
+bool SimChrome::checkChrome()
+{
+    // The keyboard focus on the screen, as after a start or a click on it.
+    m_view->requestActivate();
+    m_container->setFocus();
+    QCoreApplication::processEvents();
+    const QStringList expected = { tr("Device"), tr("Simulate"), tr("View"), tr("Services"), tr("Help") };
+    QWindow *focus = QGuiApplication::focusWindow();
+    const QString focusName = !focus ? QStringLiteral("none")
+                            : focus == m_view ? QStringLiteral("the device's screen")
+                            : focus == windowHandle() ? QStringLiteral("the simulator's window")
+                            : QString::fromLatin1(focus->metaObject()->className());
+    std::printf("phoenix-sim: focus window: %s\n", qPrintable(focusName));
+    std::printf("phoenix-sim: native menu bar: %s\n", m_menuBar->isNativeMenuBar() ? "yes" : "no");
+    std::printf("phoenix-sim: menu bar without a window (the application's): %s\n", m_ownsMenuBar ? "yes" : "no");
+    bool ok = true;
+    QStringList shown;
+#ifdef Q_OS_MACOS
+    shown = SimMac::mainMenuTitles();
+    const bool foreground = SimMac::isForegroundApp();
+    std::printf("phoenix-sim: foreground app (Dock icon, own menu bar): %s\n", foreground ? "yes" : "no");
+    std::printf("phoenix-sim: active app: %s\n", SimMac::isActive() ? "yes" : "no (another app has the menu bar until the simulator's window is clicked)");
+    ok = foreground && m_menuBar->isNativeMenuBar() && m_ownsMenuBar;
+#else
+    for (QAction *a : m_menuBar->actions())
+        if (a->isVisible())
+            shown << a->text();
+    ok = m_menuBar->isNativeMenuBar() || m_menuBar->isVisible();
+#endif
+    std::printf("phoenix-sim: menu bar: %s\n", qPrintable(shown.join(QStringLiteral(", "))));
+    for (const QString &title : expected) {
+        if (!shown.contains(title)) {
+            std::printf("phoenix-sim: the menu bar has no %s menu\n", qPrintable(title));
+            ok = false;
+        }
+    }
+
+    // The keyboard focus taken by this window (a click on the toolbar)
+    // goes back to the screen (showWithScreen).
+    bool outer = false, back = false;
+    const QMetaObject::Connection watch = connect(qApp, &QGuiApplication::focusWindowChanged, this, [this, &outer](QWindow *w) {
+        outer = outer || w == windowHandle();
+    });
+    windowHandle()->requestActivate();
+    QElapsedTimer clock;
+    clock.start();
+    while (clock.elapsed() < 3000 && !back) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        back = outer && QGuiApplication::focusWindow() == m_view;
+    }
+    disconnect(watch);
+    std::printf("phoenix-sim: the simulator's window took the focus: %s; back on the screen: %s\n",
+                outer ? "yes" : "no", back ? "yes" : "no");
+    // Without the window system's say (an inactive app) there is nothing to check.
+    if (outer && !back)
+        ok = false;
+    std::printf("phoenix-sim: chrome check %s\n", ok ? "passed" : "FAILED");
+    std::fflush(stdout);
+    return ok;
 }
 
 QString SimChrome::keyLabel(const QString &portable)
@@ -280,21 +382,43 @@ void SimChrome::refreshChecks()
     if (!root)
         return;
     for (const Entry &e : std::as_const(m_entries)) {
-        if (!e.checkable)
+        if (!e.checkable && !e.dynamic)
             continue;
         QAction *a = m_actions.value(e.id);
         if (!a)
             continue;
-        QVariant on;
-        QMetaObject::invokeMethod(root, "simActionChecked", Q_RETURN_ARG(QVariant, on), Q_ARG(QVariant, e.id));
-        a->setChecked(on.toBool());
+        if (e.checkable) {
+            QVariant on;
+            QMetaObject::invokeMethod(root, "simActionChecked", Q_RETURN_ARG(QVariant, on), Q_ARG(QVariant, e.id));
+            a->setChecked(on.toBool());
+        }
+        if (e.dynamic) {
+            // {text, enabled, tip, icon}: what the item says now.
+            QVariant v;
+            QMetaObject::invokeMethod(root, "simActionState", Q_RETURN_ARG(QVariant, v), Q_ARG(QVariant, e.id));
+            const QVariantMap st = plain(v).toMap();
+            const QString text = st.value(QStringLiteral("text"), e.text).toString();
+            const QString keys = menuKeys(e);
+            a->setText(keys.isEmpty() ? text : kMac ? QStringLiteral("%1  (%2)").arg(text, keys) : text + QLatin1Char('\t') + keys);
+            a->setIconText(text);
+            a->setEnabled(st.value(QStringLiteral("enabled"), true).toBool());
+            const QString tip = st.value(QStringLiteral("tip")).toString();
+            a->setStatusTip(tip.isEmpty() ? e.tip : tip);
+            // The toolbar button's tip: what it does now, and its keys.
+            a->setToolTip(!tip.isEmpty() ? tip : keys.isEmpty() ? text : QStringLiteral("%1 (%2)").arg(text, keys));
+            const QString iconName = st.value(QStringLiteral("icon"), e.icon).toString();
+            if (!iconName.isEmpty() && a->property("simIcon").toString() != iconName) {
+                a->setProperty("simIcon", iconName);
+                a->setIcon(icon(iconName));
+            }
+        }
     }
 }
 
 void SimChrome::showWithScreen(const QSize &screen)
 {
     // A first guess from the bars' sizes, then exact once laid out.
-    const int bar = menuBar()->isNativeMenuBar() ? 0 : menuBar()->sizeHint().height();
+    const int bar = m_menuBar->isNativeMenuBar() ? 0 : m_menuBar->sizeHint().height();
     const QSize tools = m_toolbar->isVisibleTo(this) ? m_toolbar->sizeHint() : QSize(0, 0);
     if (screen.height() >= screen.width())
         resize(screen.width() + tools.width(), screen.height() + bar);
@@ -304,6 +428,17 @@ void SimChrome::showWithScreen(const QSize &screen)
     // Keys this window gets go on to the screen (eventFilter).
     if (QWindow *window = windowHandle())
         window->installEventFilter(this);
+    // A click on the toolbar or the menu bar makes this window, around the
+    // screen's, the focus window (the window system's focus moves to it;
+    // the toolbar's buttons take no focus themselves). The screen's window
+    // then has none: its items cannot take the active focus (Qt Quick gives
+    // it only in the focus window), so a field an item focuses, Just Type's
+    // after the Show Virtual Keyboard button, got no keyboard. The focus
+    // goes straight back to the screen, once the window system is done.
+    connect(qApp, &QGuiApplication::focusWindowChanged, this, [this](QWindow *focus) {
+        if (focus && focus == windowHandle())
+            m_view->requestActivate();
+    }, Qt::QueuedConnection);
     resizeScreen(screen.width(), screen.height());
     m_container->setFocus();
 }
@@ -325,11 +460,16 @@ void SimChrome::resizeScreen(int width, int height)
         resize(size() + delta);
 }
 
+void SimChrome::setScreenInfo(const QString &info)
+{
+    setWindowTitle(info.isEmpty() ? displayName() : displayName() + QStringLiteral(" \u2014 ") + info);
+}
+
 void SimChrome::setToolbarShown(bool shown)
 {
     const QSize screen = m_container->size();
     m_toolbar->setVisible(shown);
-    m_toolbarAction->setChecked(shown);
+    m_toolbarAction->setText(shown ? tr("Hide Toolbar") : tr("Show Toolbar"));
     resizeScreen(screen.width(), screen.height());
 }
 
@@ -365,7 +505,8 @@ void SimChrome::updateIcons()
         QAction *a = m_actions.value(e.id);
         if (!a || e.icon.isEmpty())
             continue;
-        const QIcon i = icon(e.icon);
+        const QString name = a->property("simIcon").toString();
+        const QIcon i = icon(name.isEmpty() ? e.icon : name);
         all = all && !i.isNull();
         a->setIcon(i);
     }
@@ -475,6 +616,20 @@ void SimChrome::showShortcuts()
     dialog->resize(900, 700);
     m_shortcuts = dialog;
     dialog->show();
+}
+
+void SimChrome::alert(const QString &text, const QString &details, const QString &logFile)
+{
+    auto *box = new QMessageBox(QMessageBox::Warning, displayName(), text, QMessageBox::Close, this);
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    box->setInformativeText(details);
+    if (!logFile.isEmpty() && QFile::exists(logFile)) {
+        QPushButton *log = box->addButton(tr("Show Log"), QMessageBox::ActionRole);
+        // Opens it, and the box stays.
+        log->disconnect();
+        connect(log, &QPushButton::clicked, this, [logFile]() { QDesktopServices::openUrl(QUrl::fromLocalFile(logFile)); });
+    }
+    box->open();
 }
 
 void SimChrome::showAbout()

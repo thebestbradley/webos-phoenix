@@ -10,7 +10,8 @@
 // (apps/marketplace/service/test/servers.cjs). Covers trusting a catalog by
 // its key, browsing, a web app and a developer's package installed (and
 // served, and listed), an update, removing, the Classics with a Mojo app
-// refused, search, and the update notification's launch.
+// refused, search, the update notification's launch, and in the simulator
+// (its host.json) the offline card's Start Local Catalog.
 //
 //   node tools/test-marketplace.cjs [--tablet] [--out DIR]
 //
@@ -97,6 +98,7 @@ async function main() {
         // ---- Nothing at the default address yet ------------------------------------------------
         await page.waitForSelector("[data-testid=catalog-offline]", { timeout: 15000 });
         check(/bin\/serve\.sh/.test(await page.textContent("[data-testid=catalog-offline]")), "the default catalog is not running: it says how to start it");
+        check(await page.locator("[data-testid=catalog-start]").count() === 0, "... and, not in the simulator, offers no Start Local Catalog");
         await shot("1-offline");
 
         // ---- Add the catalog: its key is checked first ----------------------------------------------
@@ -112,6 +114,14 @@ async function main() {
         await page.click("[data-testid=back]");
         await page.waitForSelector("[data-testid='app-org.webosphoenix.pwa.tides']", { timeout: 15000 });
         check(await page.locator("[data-testid^='app-org.webosphoenix.pwa.']").count() >= 20, "Featured: the curated web apps");
+        // Their icons come from the catalog (its copy of the site's), and are drawn.
+        const tidesIcon = page.locator("[data-testid='app-org.webosphoenix.pwa.tides'] img");
+        await tidesIcon.waitFor({ timeout: 10000 });
+        await page.waitForFunction((sel) => { const i = document.querySelector(sel); return i && i.complete; },
+                                   "[data-testid='app-org.webosphoenix.pwa.tides'] img", { timeout: 10000 });
+        const drawn = await tidesIcon.evaluate((i) => ({ src: i.src, w: i.naturalWidth }));
+        check(drawn.src.startsWith(catalog.catalogUrl + "icons/copy/org.webosphoenix.pwa.tides-") && drawn.w > 0,
+              `a curated web app's icon is the catalog's copy, and shows (${drawn.src}, ${drawn.w} px)`);
         await shot("3-featured");
 
         // ---- A web app ----------------------------------------------------------------------------------
@@ -264,6 +274,73 @@ async function main() {
         check(removed.returnValue && !(await apps()).some((a) => a.id === "com.example.classicnotes"), "com.webos.appInstallService remove");
         const nope = await luna("luna://com.webos.appInstallService/remove", { id: "org.webosphoenix.settings" });
         check(nope.returnValue === false && nope.errorText === "No such id", "built-in apps are not removable");
+
+        // ---- In the simulator: Start Local Catalog --------------------------------------------------------
+        // phoenix-sim's host.json says it can start the catalog
+        // (org.webosphoenix.simulator); this test is the shell: it hears
+        // the "simulator" message, passes the states on (applyHostStatus
+        // {marketplaceCatalog}), and starts a catalog where the built-in
+        // source looks (a free port in place of 8088).
+        {
+            const simPort = await servers.freePort();
+            const sim = await browser.newContext({ viewport });
+            await sim.route("**/usr/share/phoenix/host.json", (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify({ marketplaceCatalog: true }) }));
+            await sim.route("**/etc/palm/marketplace/sources.json", async (r) => {
+                const res = await r.fetch();
+                const json = await res.json();
+                json.sources.find((x) => x.id === "phoenix").url = `http://127.0.0.1:${simPort}/v1/`;
+                await r.fulfill({ response: res, body: JSON.stringify(json) });
+            });
+            const sp = await sim.newPage();
+            const asks = [];
+            sp.on("pageerror", (e) => errors.push(e.message));
+            sp.on("console", (m) => {
+                const t = m.text();
+                if (t.startsWith("__phoenix__")) {
+                    const msg = JSON.parse(t.slice(11));
+                    if (msg.type === "simulator") asks.push(msg.payload);
+                }
+            });
+            const shellSays = (c) => sp.evaluate((st) => window.__phoenixRuntime.applyHostStatus({ marketplaceCatalog: st }, { writer: false }),
+                Object.assign({ url: `http://127.0.0.1:${simPort}/`, error: "", settingUp: false }, c));
+            const simShot = async (name) => { await sp.waitForTimeout(350); await sp.screenshot({ path: path.join(outDir, name + ".png") }); };
+            await sp.goto(appUrl("org.webosphoenix.marketplace"));
+            await sp.waitForSelector("[data-testid=catalog-start]", { timeout: 15000 });
+            check(!/bin\/serve\.sh/.test(await sp.textContent("[data-testid=catalog-offline]")) && /Start Local Catalog/.test(await sp.textContent("[data-testid=catalog-start]")),
+                  "in the simulator the offline card offers Start Local Catalog");
+            await simShot("10-sim-start-local");
+
+            // It fails: the reason, and the button again.
+            await sp.click("[data-testid=catalog-start]");
+            await sp.waitForFunction(() => document.querySelector("[data-testid=catalog-start]").disabled);
+            check(asks.length === 1 && asks[0].op === "startMarketplaceCatalog", "the button asks the simulator to start it");
+            await shellSays({ state: "starting" });
+            await shellSays({ state: "failed", error: "PHP 8 with sodium and pdo_sqlite is needed: sudo apt install php-cli php-sqlite3 (./phoenix installs it)" });
+            await sp.waitForSelector("[data-testid=local-catalog-error]");
+            check(/PHP 8/.test(await sp.textContent("[data-testid=local-catalog-error]"))
+                  && !(await sp.locator("[data-testid=catalog-start]").isDisabled()), "it failed: the reason, and Start Local Catalog again");
+            await simShot("11-sim-start-failed");
+
+            // It starts (setting itself up), then the catalog is read: its key to trust.
+            await sp.click("[data-testid=catalog-start]");
+            await sp.waitForFunction(() => document.querySelector("[data-testid=catalog-start]").disabled);
+            check(asks.length === 2, "asked again");
+            await shellSays({ state: "starting", settingUp: true });
+            await sp.waitForSelector("[data-testid=catalog-setting-up]");
+            check(/Setting Up/.test(await sp.textContent("[data-testid=catalog-start]")), "starting the first time: it says it is setting up");
+            await simShot("12-sim-setting-up");
+            const local = await servers.startCatalog({ port: simPort });
+            try {
+                await shellSays({ state: "running" });
+                await sp.waitForSelector("[data-testid=trust-card]", { timeout: 15000 });
+                check((await sp.textContent("[data-testid=trust-fingerprint]")).trim() === local.fingerprint && await sp.locator("[data-testid=catalog-offline]").count() === 0,
+                      "once it runs the Marketplace reads it: its key to trust, the offline card gone");
+                await simShot("13-sim-running");
+            } finally {
+                await local.stop();
+                await sim.close();
+            }
+        }
 
         check(errors.length === 0, "no page errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
     } finally {

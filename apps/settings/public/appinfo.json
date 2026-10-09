@@ -26,6 +26,7 @@
             { "id": "org.webosphoenix.settings.battery", "title": "Battery", "icon": "icons/battery.png", "params": { "page": "battery" } },
             { "id": "org.webosphoenix.settings.usb", "title": "USB", "icon": "icons/usb.png", "params": { "page": "usb" } },
             { "id": "org.webosphoenix.settings.gamepads", "title": "Game Controllers", "icon": "icons/gamepads.png", "params": { "page": "gamepads" } },
+            { "id": "org.webosphoenix.settings.hardware", "title": "Hardware", "icon": "icons/hardware.png", "params": { "page": "hardware" } },
             { "id": "org.webosphoenix.settings.exhibition", "title": "Exhibition", "icon": "icons/exhibition.png", "params": { "page": "exhibition" } },
             { "id": "org.webosphoenix.settings.sounds", "title": "Sounds & Ringtones", "icon": "icons/sounds.png", "params": { "page": "sounds" } },
             { "id": "org.webosphoenix.settings.datetime", "title": "Date & Time", "icon": "icons/datetime.png", "params": { "page": "datetime" } },

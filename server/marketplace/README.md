@@ -13,12 +13,17 @@ sets itself up the first time (`bin/marketplace.php init`: the database, the
 signing key, the curated web apps, an admin account, a first publish) and
 serves at <http://127.0.0.1:8088/>, which is where the simulator's
 Marketplace looks (`apps/marketplace/service/etc/palm/marketplace/sources.json`).
-Or let the simulator do it: `./build/phoenix-sim --marketplace` starts
-`serve.sh` (setting it up the first time), waits until it answers, opens
-the Marketplace, and stops it on quitting (one already running is used as
-it is; its log is `data/simulator.log`). It needs PHP 8 with sodium and
-pdo_sqlite, which `scripts/mac-setup.sh` and `scripts/linux-setup.sh`
-install.
+Or let the simulator do it: **Services > Marketplace Catalog** in its menu
+bar (or **Start Local Catalog** on the Marketplace's "Can't reach" card, or
+`./phoenix run --marketplace`, or `./build/phoenix-sim --marketplace`)
+starts `serve.sh` without blocking the simulator (`shell/sim/simmarketplace.h`),
+setting it up the first time; the menu item shows it starting, running or
+failed with the reason, and the Marketplace opens once it answers. It stops
+on quitting (one already running, another simulator's, is used as it is);
+its log is `data/simulator.log` (Services > Show Catalog Log). **Services >
+Start Catalog with the Simulator** starts it with every run. It needs PHP 8
+with sodium and pdo_sqlite, which `./phoenix` installs (Homebrew's `php`;
+apt's `php-cli` and `php-sqlite3`, whose `php-common` has sodium).
 
 The first time the Marketplace reads it, it shows the key's fingerprint
 (`php server/marketplace/bin/marketplace.php key` prints it) and asks to
@@ -67,16 +72,52 @@ Outlook's); the probe still checks it. A site is listed only with a manifest
 that has a name and a picture icon that is there on the web (the probe
 loads it, and prefers one another site's page may show); the others stay in
 the file's `notFound` with the reason, naming the bot check (Cloudflare,
-DataDome, Akamai) when one refused the probe. Its start page is the
+DataDome, Akamai) when one refused the probe. A site whose manifest is good
+but whose icons are all missing is listed anyway, with an icon the catalog
+makes: the probe records `iconGenerated` (the letters, from the title: "GN",
+"NYT", "F1", and the manifest's `theme_color`, else its `background_color`,
+else a colour of its own), `seed` draws it as a plain SVG (its letters on a
+rounded square of that colour; `Catalog::generatedIcon`) into the published
+files, `/v1/icons/<id>.svg`, and the index marks the app `"iconGenerated":
+true`; a device installing the web app uses it when none of the site's own
+icons comes (`apps/marketplace/service/packagesservice.js`). It is our own
+lettering, not the brand's logo. Its start page is the
 manifest's `start_url` when that is on the site, else the site (as
 browsers do, so a manifest kept on a CDN still starts on the site).
 
-Today 132 of the 160 sites are listed. Of the rest, some show a visitor
-who is not signed in no manifest at all (Bluesky, Discord, Notion, Trello,
-Word, OneDrive, Tuta, Zoho Mail, Yahoo Mail, Evernote, McDonald's,
-trivago), three name
-icons that are all missing (Ground News, NYT Games, Formula 1), and the
-others turned the probe away with a bot check from the cloud network it ran
+Devices get every picture from the catalog itself: the index names an icon
+or screenshot on another site as the catalog's copy,
+`/v1/icons/copy/<id>-<hash of its address>` (`/v1/screenshots/copy/...`).
+The first request for it fetches it from the site and keeps it in the
+published files (a PNG, JPEG, GIF, WebP or ICO, by its own bytes, never an
+SVG; icons at most 2 MB, screenshots 8 MB); an admin listing an app or
+approving a release fetches its pictures then. Until a picture can be had
+(tried again after an hour) an icon is the app's initials, so a list never
+shows an empty square, and a screenshot is left out (`Catalog::mediaCopy`).
+So pictures show wherever the catalog is reachable (phoenix-sim's local
+catalog included), a device browsing the catalog tells the sites nothing,
+and a site renaming a hashed file breaks no listing.
+
+The addresses come from developers, so the fetch (`src/SafeFetch.php`)
+cannot be pointed at the server's own network: https only; every address
+the host resolves to must be public (no loopback, RFC 1918, link-local and
+the cloud metadata address, 100.64/10, multicast, reserved, documentation,
+nor IPv6's ::1, fc00::/7, fe80::/10, ff00::/8 or an IPv4 address inside
+IPv6); the connection is pinned to the address checked (no DNS rebinding);
+each of at most three redirects is checked again; size and time are
+capped. `MARKETPLACE_FETCH_LOCAL=1` lets it reach http://127.0.0.1 as well,
+for the tests' local sites only; `MARKETPLACE_FETCH_PROXY` names an egress
+proxy the operator trusts (it then resolves the names).
+
+`bin/serve.sh` publishes the index again at each start, and runs PHP's
+server with several workers, since a first copy waits on its site.
+
+Today 135 of the 160 sites are listed, three of them (Ground News, NYT
+Games, Formula 1) with generated icons, as all the icons their manifests
+name are missing (probed again 9 October 2026). Of the rest, some show a
+visitor who is not signed in no manifest at all (Bluesky, Discord, Notion,
+Trello, Word, OneDrive, Tuta, Zoho Mail, Yahoo Mail, Evernote, McDonald's,
+trivago), and the others turned the probe away with a bot check from the cloud network it ran
 on (Canva, The New York Times, Reuters, The Economist, Skyscanner,
 Tripadvisor, DoorDash, Revolut, Stack Overflow, CodePen, Yelp, VSCO,
 Reddit). ChatGPT's Cloudflare check lets the probe through only at times.
@@ -91,7 +132,9 @@ servers and cloud networks):
     git diff --stat server/marketplace/catalog/curated-pwas.json
 
 It prints `ok` or `skip` (with the reason) for each site and rewrites
-`curated-pwas.json`; look at what came and went before committing it. (If
+`curated-pwas.json`; look at what came and went before committing it.
+`probe-pwas.py ID ...` (ids or titles) probes only those sites and keeps
+the others as they were. (If
 Python cannot check certificates, run `/Applications/Python 3.x/Install
 Certificates.command` once.) Then load it into the catalog and publish:
 

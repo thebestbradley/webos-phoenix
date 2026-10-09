@@ -44,6 +44,30 @@ int main(int argc, char **argv)
     QCoreApplication app(argc, argv);
     Rootfs rootfs(QStringLiteral(PHOENIX_REPO_DIR));
     check(rootfs.isValid(), "the checkout's rootfs loads");
+    check(rootfs.missing().isEmpty(), qPrintable(QStringLiteral("nothing it names is missing (%1)").arg(rootfs.missing().join(QStringLiteral(", ")))));
+    {
+        // A checkout without its submodules: their folders are there, empty.
+        QTemporaryDir repo;
+        QDir(repo.path()).mkpath(QStringLiteral("runtime"));
+        QDir(repo.path()).mkpath(QStringLiteral("third_party/core-apps"));
+        QDir(repo.path()).mkpath(QStringLiteral("third_party/enyo-2/enyo"));
+        QDir(repo.path()).mkpath(QStringLiteral("third_party/isis/isis-browser"));
+        QDir(repo.path()).mkpath(QStringLiteral("apps/a"));
+        QFile app(repo.filePath(QStringLiteral("apps/a/appinfo.json")));
+        app.open(QIODevice::WriteOnly);
+        app.close();
+        QFile cfg(repo.filePath(QStringLiteral("runtime/rootfs.json")));
+        cfg.open(QIODevice::WriteOnly);
+        cfg.write(R"({"mounts": {"/usr/palm/frameworks/enyo2/enyo/": "third_party/enyo-2/enyo/",
+                                 "/usr/palm/frameworks/mojoloader.js": "third_party/mojoloader/mojoloader.js",
+                                 "/usr/share/phoenix/runtime/": "runtime/"},
+                      "applicationDirs": ["third_party/core-apps", "third_party/isis", "apps"]})");
+        cfg.close();
+        const Rootfs bare(repo.path());
+        check(bare.isValid() && bare.missing() == QStringList({ QStringLiteral("third_party/core-apps"), QStringLiteral("third_party/enyo-2"),
+                                                                 QStringLiteral("third_party/isis"), QStringLiteral("third_party/mojoloader") }),
+              qPrintable(QStringLiteral("without the submodules, they are missing (%1)").arg(bare.missing().join(QStringLiteral(", ")))));
+    }
     QTemporaryDir dir;
     rootfs.setInstalledDir(dir.path());
     SimInstaller installer(&rootfs);

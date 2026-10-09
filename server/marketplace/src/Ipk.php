@@ -83,7 +83,8 @@ final class Ipk
                 'files' => array_keys(array_filter($data, fn ($f) => $f['type'] === 'file'))];
     }
 
-    private static function readAr(string $b): array
+    // readAr, readTar and parseControl are also server/drivers' .ipk reader.
+    public static function readAr(string $b): array
     {
         if (substr($b, 0, 8) !== "!<arch>\n") {
             throw new CheckFailed('Not an .ipk package (no ar header)');
@@ -112,7 +113,7 @@ final class Ipk
     }
 
     /** @return array<string, array{type: string, data?: string}> */
-    private static function readTar(string $b): array
+    public static function readTar(string $b): array
     {
         $out = [];
         $pos = 0;

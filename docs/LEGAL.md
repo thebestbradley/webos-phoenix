@@ -13,8 +13,11 @@ as webOS OSE and Open webOS.
 `tools/get-wakeword.py` downloads, SHA-256 checked: Vosk's library (libvosk
 from the `vosk` wheel on PyPI, Apache-2.0; Kaldi, OpenFST and OpenBLAS
 inside are Apache-2.0 / BSD) and `vosk-model-small-en-us-0.15` (Apache-2.0,
-Alpha Cephei, <https://alphacephei.com/vosk/models>). An image may ship
-both. openWakeWord's pre-trained models (CC BY-NC-SA 4.0) are not used.
+Alpha Cephei, <https://alphacephei.com/vosk/models>; checked again 8
+October 2026). `webos-phoenix-image` ships both (meta-phoenix's `libvosk`,
+the same prebuilt library, and `vosk-model-small-en-us`), with OE's
+Apache-2.0 and BSD-3-Clause texts, as neither download carries a licence
+file. openWakeWord's pre-trained models (CC BY-NC-SA 4.0) are not used.
 The test recordings in `services/wakeword/tests/data` are made by
 espeak-ng (`tools/gen-voice-fixtures.sh`; espeak-ng runs as a program, its
 GPL does not cover the speech it outputs). The voices and LibriSpeech used
@@ -352,6 +355,71 @@ data use "Phoenix Account".
 - RAUC (LGPL-2.1) is a separate program on the device; the service calls its
   command line and does not link it.
 
+## Firmware and drivers
+
+The owner's decision of October 2026: as much hardware as possible works
+out of the box, as on Ubuntu and Debian. The rules that follow from it:
+
+1. **Open source drivers are in the system image.** The Linux kernel's
+   drivers (GPL-2.0) are built as modules and shipped with the kernel,
+   whose source has to be offered with the image as the GPL requires (OE's
+   archiver class can collect it).
+2. **Firmware whose licence allows redistribution is in the image too**,
+   open source or not (most of `linux-firmware`: Realtek, Intel, Qualcomm,
+   MediaTek, Broadcom/Cypress, AMD, NVIDIA, Marvell), as OE packages it from
+   the upstream `linux-firmware` repository: **unmodified, with its licence
+   files** (each firmware package depends on its `linux-firmware-*-license`
+   package, installed with it in `/lib/firmware`). Machine firmware from
+   `meta-raspberrypi` likewise. A build may compress the files losslessly
+   (`PHOENIX_FIRMWARE_COMPRESS`, off by default), as Fedora and Arch ship
+   them; the kernel gets the same bytes back, and the licence files stay as
+   they are. The image build checks every firmware
+   package's licence against an allow-list of licences that permit
+   redistribution and fails otherwise (`phoenix-firmware-policy.bbclass`,
+   `PHOENIX_FIRMWARE_LICENSES`); adding a licence to it needs a note here.
+3. **The licences can be read on the device**: Settings > Device Info > Open
+   source licenses lists each firmware package with its licence and shows
+   the licence files (`/usr/share/phoenix/firmware/licences.json`, written
+   when the image is built).
+4. **The Hardware app fills the gaps** (firmware not in the image, newer
+   firmware, out-of-tree drivers, optional extras), only with what may be
+   redistributed: the catalog tool refuses an entry whose licence does not
+   say so (`redistributable: true`) or whose non-free licence text is
+   missing, and the device ignores such entries too. What is not open
+   source is installed only **after the user accepts its licence**, shown in
+   full with its name and source first.
+5. **Newer firmware is passed on unmodified as well**, installed beside the
+   image's (`/lib/firmware/updates`).
+6. **What may not be redistributed is not shipped, hosted or fetched by
+   Phoenix.** For such hardware, firmware is taken from the user's own
+   device (an Android vendor partition, at install time), never shipped
+   (HARDWARE.md, "Reverse engineering").
+7. **Out-of-tree drivers** (`meta-phoenix` `rtl8812au`, `rtl8814au`) are
+   GPL-2.0, built from their upstream sources, and offered separately, not
+   in the image. A service in the catalog is reviewed by a person first
+   (DRIVERS.md).
+8. **Other driver catalogs** (Developer Mode only) are their makers'
+   responsibility; Phoenix shows them as not its own.
+
+`meta-raspberrypi`'s BCM43456 firmware (`Synaptics-rpidistro`) allows
+redistribution under a licence Synaptics can withdraw (the
+`synaptics-killswitch` licence flag, which OSE's `webos.conf` accepts); it is
+on the allow-list until the owner decides otherwise.
+
+The driver catalog is signed with its own Ed25519 key, held offline by the
+owner and pinned in the image (the Marketplace's code; see Marketplace
+above). The opt-in hardware report sends only device IDs (HARDWARE.md, "The
+anonymous hardware report") and the catalog service keeps them with the day
+only.
+
+The service, the Hardware pane, the catalog tool and the packaging are
+original code. The sample catalog's packages (`server/drivers/sample`) hold
+placeholder text, not firmware, and its licence texts are summaries that
+point to the real ones. The Hardware icon (a circuit board) is a new
+drawing (`art/app-icons/objects/hardwarepane.svg`). Device names and IDs in
+the simulator's hardware are the vendors' public PCI and USB IDs; `1209:0001`
+is pid.codes' test ID.
+
 ## VPN
 
 - **luneos-vpn-adapter** (<https://github.com/webOS-ports/luneos-vpn-adapter>,
@@ -425,16 +493,19 @@ contributors, available under the **Open Database License (ODbL) 1.0**
 Voice Memos' transcription service (`apps/voicememos/service`) runs
 **whisper.cpp** (<https://github.com/ggml-org/whisper.cpp>) as a separate
 program, `whisper-cli`; no whisper.cpp code is in this repository.
-whisper.cpp and ggml are MIT-licensed. The `meta-phoenix` recipe stub
-(`recipes-support/whisper-cpp`) would build it from source and ship its
-`LICENSE` with the package, as the MIT license asks.
+whisper.cpp and ggml are MIT-licensed. The `meta-phoenix` recipe
+(`recipes-support/whisper-cpp`) builds it from source and ships its
+`LICENSE` with the package, as the MIT license asks; on Linux
+`scripts/linux-setup.sh` builds the same commit for the simulator.
 
 The models are OpenAI's **Whisper** weights, released under the MIT license
 (<https://github.com/openai/whisper>, including the model card), converted to
 ggml's format by the whisper.cpp authors and published at
 <https://huggingface.co/ggerganov/whisper.cpp>. The default,
-`ggml-base.en.bin`, is not in this repository; an image that includes it
-should carry OpenAI's MIT notice with it. Other models (for instance
+`ggml-base.en.bin`, is not in this repository (`tools/get-whisper-model.py`
+fetches it for the simulator). `webos-phoenix-image` includes it
+(`whisper-cpp-model-base-en`) with OpenAI's MIT notice beside it
+(`/usr/share/whisper/LICENSE.openai-whisper`, from openai/whisper). Other models (for instance
 fine-tuned ones found elsewhere) may have other licenses: check before
 shipping one.
 
@@ -444,11 +515,13 @@ records WAV, so it is optional.
 
 ## The Assistant's language models and speech
 
-The Phoenix Assistant (`apps/assistant`) runs **llama.cpp**
+The Assistant (`apps/assistant`) runs **llama.cpp**
 (<https://github.com/ggml-org/llama.cpp>, MIT) as a separate program,
-`llama-server`; no llama.cpp code is in this repository. A `meta-phoenix`
-recipe beside `whisper-cpp`'s is still to write, and should ship llama.cpp's
-`LICENSE`.
+`llama-server`; no llama.cpp code is in this repository. The `meta-phoenix`
+recipe (`recipes-support/llama-cpp`, release b11239) builds it from source
+without OpenSSL or the downloaded web UI, and ships llama.cpp's `LICENSE`;
+`scripts/linux-setup.sh` builds the same release for the simulator,
+Homebrew's `llama.cpp` on a Mac.
 
 The on-device models are downloaded by the user, never shipped: Qwen2.5
 0.5B Instruct, Qwen2.5 1.5B Instruct and Qwen3 4B, each **Apache-2.0** per
@@ -458,11 +531,19 @@ Qwen/Qwen2.5-1.5B-Instruct-GGUF, Qwen/Qwen3-4B-GGUF; checked 7 October
 permissive) and Qwen2.5 3B (Qwen Research License). An image that ships a
 model must carry its licence.
 
-Answers are spoken by **espeak-ng** (GPL-3.0) or, on a Mac, `say`, run as
-separate programs and only called, never linked; Phoenix's code stays
-Apache-2.0. An image that includes espeak-ng ships it as its own package
-with its licence and source offer. Piper or another engine can be configured
-instead (`--speech-command`).
+Answers are spoken by a speech program, run as a separate program and
+only called, never linked; Phoenix's code stays Apache-2.0. On the device
+image it is **Flite** (CMU, BSD-3-Clause, meta-multimedia's `flite`), so the
+image stays permissive. In the simulator it is **espeak-ng** (GPL-3.0) on
+Linux, which `scripts/linux-setup.sh` installs from Ubuntu, or `say` on a
+Mac. espeak-ng may go into an image only as its own package with its
+licence and source offer (`PHOENIX_TTS` in local.conf; meta-oe has the
+older eSpeak 1.48, also GPL-3.0); note that GPL-3.0 also asks whoever
+ships it on a device with a locked bootloader to give users a way to
+install a changed version (its "Installation Information"), so it is the
+image maker's decision. Piper does not avoid this: its phonemizer is
+espeak-ng's library, also in the original MIT `rhasspy/piper`. Other
+engines can be configured (`--speech-command`).
 
 Cloud providers (Anthropic, OpenAI, Google, OpenAI-compatible servers) are
 used only with the user's own key, under the provider's terms; nothing of

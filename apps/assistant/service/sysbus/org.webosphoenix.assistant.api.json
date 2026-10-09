@@ -9,6 +9,15 @@
         "org.webosphoenix.assistant/setCurrent",
         "org.webosphoenix.assistant/deleteThread",
         "org.webosphoenix.assistant/clearHistory",
+        "org.webosphoenix.assistant/connect",
+        "org.webosphoenix.assistant/retry",
+        "org.webosphoenix.assistant/followUps",
+        "org.webosphoenix.assistant/answerFollowUp",
+        "org.webosphoenix.assistant/followUpOpen",
+        "org.webosphoenix.assistant/followUpLeave",
+        "org.webosphoenix.assistant/followUpWake",
+        "org.webosphoenix.assistant/markRead",
+        "org.webosphoenix.assistant/vocabulary",
         "org.webosphoenix.assistant/speak",
         "org.webosphoenix.assistant/stopSpeaking"
     ],
@@ -21,11 +30,13 @@
         "org.webosphoenix.assistant/removeProvider",
         "org.webosphoenix.assistant/testProvider",
         "org.webosphoenix.assistant/listModels",
+        "org.webosphoenix.assistant/voice",
         "org.webosphoenix.assistant/models",
         "org.webosphoenix.assistant/downloadModel",
         "org.webosphoenix.assistant/cancelDownload",
         "org.webosphoenix.assistant/removeModel",
-        "org.webosphoenix.assistant/selectModel"
+        "org.webosphoenix.assistant/selectModel",
+        "org.webosphoenix.assistant/resetFollowUps"
     ],
     "tts.speak": [
         "org.webosphoenix.tts/speak",

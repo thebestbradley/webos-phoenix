@@ -269,9 +269,11 @@ export const devMode = {
 // ---- Applications: com.webos.applicationManager (SAM) ---------------------------------
 
 export const apps = {
-    /** launch {id, params}: start or relaunch an app. */
-    launch(id: string, params: object = {}) {
-        return call("luna://com.webos.applicationManager/launch", { id, params });
+    /** launch {id, params}: start or relaunch an app. {newCard: true}
+     *  (Phoenix): another card of it, in a stack of its own, even while
+     *  one runs (one-card apps such as the phone keep theirs). */
+    launch(id: string, params: object = {}, opts: { newCard?: boolean } = {}) {
+        return call("luna://com.webos.applicationManager/launch", opts.newCard ? { id, params, newCard: true } : { id, params });
     },
     /**
      * open {target}: the app that handles a URL (web pages to the browser,

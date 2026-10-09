@@ -1,0 +1,19 @@
+/* Copyright (c) 2026 webOS Phoenix contributors
+   SPDX-License-Identifier: Apache-2.0
+   What an answer found (Attachments.tsx): thumbnails and cards under its words. */
+.as-found { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; max-width: 86%; }
+.as-row.with-avatar .as-found { margin-left: 36px; }
+.as-thumbs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.as-thumb { width: 72px; height: 72px; padding: 0; border: 1px solid #b4b4b2; border-radius: 6px; overflow: hidden; background: #d8d8d6; cursor: pointer; }
+.as-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.as-more { color: #666; font-size: 14px; padding: 0 6px; }
+.as-cards { display: flex; flex-direction: column; gap: 4px; }
+.as-card { display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: 2px; padding: 8px 12px; border: 1px solid #b4b4b2;
+           border-radius: 10px; background: linear-gradient(#fff, #f3f3f1); font: inherit; color: #222; cursor: pointer; }
+.as-card:disabled { cursor: default; }
+.as-card-title { font-weight: bold; }
+.as-card-sub { color: #555; font-size: 14px; }
+.as-card-detail { color: #666; font-size: 14px; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+@media (min-width: 700px) { .as-thumb { width: 96px; height: 96px; } }
+.as-examples-group { display: flex; flex-direction: column; gap: 4px; }
+.as-examples-title { color: #555; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 4px; }

@@ -7,7 +7,8 @@
 // never open-sourced the app). The steps, each but the first and last
 // skippable:
 //
-//   Welcome (language)  ->  Wi-Fi  ->  Restore (a backup)  ->  Date & Time  ->  Accounts (Synergy)
+//   Welcome (language)  ->  Wi-Fi  ->  Hardware (firmware and drivers it needs, when
+//   any)  ->  Restore (a backup)  ->  Date & Time  ->  Accounts (Synergy)
 //   ->  Passcode  ->  Privacy (location, the assistant)  ->  Cards & gestures
 //   (the tutorial)  ->  All set (Help and tips)
 //
@@ -19,19 +20,21 @@
 // Services: com.webos.settingsservice localeInfo; com.webos.service.wifi;
 // com.webos.service.systemservice (timeZone, useNetworkTime, timeFormat,
 // firstUseComplete); org.webosphoenix.service.backup; com.palm.service.accounts listAccounts;
-// com.palm.systemmanager setDevicePasscode; com.webos.service.location.
+// com.palm.systemmanager setDevicePasscode; com.webos.service.location;
+// org.webosphoenix.hardware.
 
 import { useEffect, useState, type ReactNode } from "react";
 import {
-    apps, backup, backupErrorCode, BACKUP_PARTS, call, deviceLock, firstUse, LunaError, location, settings, system, wifi, WIFI_ERROR_INVALID_KEY,
-    type BackupDestination, type BackupFile,
+    apps, backup, backupErrorCode, BACKUP_PARTS, call, deviceLock, deviceTitle, firstUse, hardware, installable, LunaError, location, needsAttention, reflowLicense, settings,
+    system, wifi, WIFI_ERROR_INVALID_KEY,
+    type BackupDestination, type BackupFile, type DriverOffer, type HardwareDevice, type HardwareList,
     type LocaleInfo, type LocationHandler, type LockMode, type SystemPreferences, type TimeZone, type WifiNetworkInfo, type WifiStatus,
 } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
 import {
     BackProvider, Button, Checkmark, Dialog, ErrorText, Group, icons, ListSelector, Note, Row, Spinner, srcSet, TextField, ToggleButton, useBack,
 } from "@phoenix/ui";
-import { LANGUAGES, nextStep, passcodeProblem, previousStep, STEPS, stepIndex, type StepId } from "./lib/flow";
+import { LANGUAGES, nextStep, passcodeProblem, previousStep, shownSteps, STEPS, type StepId } from "./lib/flow";
 import { Tutorial } from "./Tutorial";
 
 function useWide(): boolean {
@@ -68,11 +71,12 @@ function StepPage({ title, intro, children, onBack, onNext, nextLabel = "Next", 
     );
 }
 
-function Progress({ step }: { step: StepId }) {
-    const i = stepIndex(step);
+function Progress({ step, hidden }: { step: StepId; hidden: StepId[] }) {
+    const steps = shownSteps(hidden.filter((h) => h !== step));
+    const i = steps.findIndex((s) => s.id === step);
     return (
-        <div className="fu-progress" aria-label={`Step ${i + 1} of ${STEPS.length}`}>
-            {STEPS.map((s, j) => <span key={s.id} className={`fu-pip${j < i ? " done" : j === i ? " on" : ""}`} />)}
+        <div className="fu-progress" aria-label={`Step ${i + 1} of ${steps.length}`}>
+            {steps.map((s, j) => <span key={s.id} className={`fu-pip${j < i ? " done" : j === i ? " on" : ""}`} />)}
         </div>
     );
 }
@@ -174,6 +178,74 @@ function WifiStep(nav: NavProps) {
                 <Button variant="affirmative" busy={busy !== null} disabled={!pass} data-testid="wifi-connect"
                         onClick={() => join && void connect(join, pass)}>Connect</Button>
                 <Button variant="dark" onClick={() => setJoin(null)}>Cancel</Button>
+            </Dialog>
+        </StepPage>
+    );
+}
+
+// ---- Hardware ------------------------------------------------------------------------
+//
+// Firmware and drivers the hardware needs that are not in the system image
+// (not open source; their makers allow passing them on): each with its
+// licence, which the user accepts before it is downloaded (docs/LEGAL.md,
+// "Firmware and drivers"). Optional extras wait in Settings > Hardware.
+
+/** The firmware or driver a device needs that can be installed now. */
+export function neededOffer(d: HardwareDevice): DriverOffer | null {
+    return needsAttention(d) ? installable(d).find((o) => !o.optional) ?? null : null;
+}
+
+function HardwareStep(nav: NavProps & { list: HardwareList | null }) {
+    const devices = (nav.list?.devices ?? []).filter((d) => neededOffer(d));
+    const [done, setDone] = useState<Record<string, string>>({});
+    const [busy, setBusy] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [asking, setAsking] = useState<{ device: HardwareDevice; offer: DriverOffer } | null>(null);
+    // Looked, and nothing is missing: on to the next step.
+    const nothing = !!nav.list && devices.length === 0 && Object.keys(done).length === 0;
+    useEffect(() => { if (nothing) nav.onNext(); }, [nothing]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+    const install = async (device: HardwareDevice, offer: DriverOffer) => {
+        setAsking(null);
+        setBusy(device.id);
+        setError(null);
+        try {
+            const r = await hardware.install(offer.driverId, { deviceId: device.id, acceptLicense: offer.license.free ? undefined : offer.license.id });
+            setDone((d) => ({ ...d, [device.id]: r.state === "restart" ? "Installed; starts after a restart" : "Installed" }));
+        } catch (e) {
+            setError(e instanceof LunaError ? e.errorText : String(e));
+        } finally {
+            setBusy(null);
+        }
+    };
+    return (
+        <StepPage testId="hardware" title="Hardware" {...nav}
+                  intro="Some of your hardware needs firmware or a driver that does not come with Phoenix. Install it now, or later.">
+            {!nav.list && <Row title="Looking at your hardware…"><Spinner /></Row>}
+            <Group>
+                {devices.map((d) => {
+                    const o = neededOffer(d)!;
+                    return (
+                        <Row key={d.id} title={deviceTitle(d)} testId={`fu-hw-${d.id}`} className="fu-hw-row"
+                             subtitle={done[d.id] ?? `${o.title}${o.license.free ? "" : " (not open source)"}`}
+                             icon={done[d.id] ? <Checkmark /> : undefined}>
+                            {busy === d.id ? <Spinner /> : !done[d.id] && (
+                                <Button variant="affirmative" className="fu-hw-install" disabled={busy !== null} data-testid={`fu-hw-install-${d.id}`}
+                                        onClick={() => (o.license.free ? void install(d, o) : setAsking({ device: d, offer: o }))}>Install</Button>
+                            )}
+                        </Row>
+                    );
+                })}
+            </Group>
+            {error && <ErrorText testId="fu-hw-error">{error}</ErrorText>}
+            <Note>Skip this to install them later from Settings &gt; Hardware, which also has optional drivers.</Note>
+            <Dialog open={!!asking} title={asking?.offer.license.name ?? ""} onClose={() => setAsking(null)} testId="fu-hw-license"
+                    message={asking ? `${asking.offer.title} is not open source. Read its licence before installing it.` : undefined}>
+                <pre className="fu-license-text">{reflowLicense(asking?.offer.license.text ?? "")}</pre>
+                <Button variant="affirmative" data-testid="fu-hw-accept" onClick={() => asking && void install(asking.device, asking.offer)}>
+                    Accept and Install
+                </Button>
+                <Button variant="dark" onClick={() => setAsking(null)}>Cancel</Button>
             </Dialog>
         </StepPage>
     );
@@ -477,6 +549,16 @@ function FirstUse() {
     const wide = useWide();
     const [step, setStep] = useState<StepId>("welcome");
     const [confirmSkip, setConfirmSkip] = useState(false);
+    // Hardware is a step only when something needs installing.
+    const [hw, setHw] = useState<HardwareList | null>(null);
+    useEffect(() => {
+        let live = true;
+        // No hardware service (or it failed): nothing to offer.
+        hardware.list().then((l) => { if (live) setHw(l); }, () => { if (live) setHw({ devices: [] } as unknown as HardwareList); });
+        return () => { live = false; };
+    }, []);
+    // Until the hardware has been looked at, the step stays in (it waits for it).
+    const hidden: StepId[] = !hw || hw.devices.some((d) => neededOffer(d)) ? [] : ["hardware"];
 
     const finish = async () => {
         try { await firstUse.complete(); } catch { /* the shell hears the window close anyway */ }
@@ -484,16 +566,17 @@ function FirstUse() {
     };
     const go = (s: StepId | null) => { if (s) setStep(s); };
     const nav: NavProps = {
-        onBack: previousStep(step) ? () => go(previousStep(step)) : undefined,
-        onNext: () => go(nextStep(step)),
-        onSkip: STEPS[stepIndex(step)].skippable ? () => go(nextStep(step)) : undefined,
+        onBack: previousStep(step, hidden) ? () => go(previousStep(step, hidden)) : undefined,
+        onNext: () => go(nextStep(step, hidden)),
+        onSkip: STEPS.find((s) => s.id === step)!.skippable ? () => go(nextStep(step, hidden)) : undefined,
     };
-    useBack(() => { if (previousStep(step)) go(previousStep(step)); return true; }, step !== "welcome" && !confirmSkip);
+    useBack(() => { if (previousStep(step, hidden)) go(previousStep(step, hidden)); return true; }, step !== "welcome" && !confirmSkip);
 
     let page: ReactNode;
     switch (step) {
     case "welcome": page = <Welcome onNext={nav.onNext} onSkipAll={() => setConfirmSkip(true)} />; break;
     case "wifi": page = <WifiStep {...nav} />; break;
+    case "hardware": page = <HardwareStep {...nav} list={hw} />; break;
     case "restore": page = <RestoreStep {...nav} />; break;
     case "datetime": page = <DateTimeStep {...nav} />; break;
     case "accounts": page = <AccountsStep {...nav} />; break;
@@ -510,7 +593,7 @@ function FirstUse() {
     }
     return (
         <div className={`fu-root${wide ? " wide" : ""}`}>
-            <Progress step={step} />
+            <Progress step={step} hidden={hidden} />
             {page}
             <Dialog open={confirmSkip} title="Skip setup?" onClose={() => setConfirmSkip(false)} testId="skip-dialog"
                     message="You can set up Wi-Fi, accounts and a passcode later in Settings, and run setup again from Settings > Device Info.">

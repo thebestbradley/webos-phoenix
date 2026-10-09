@@ -76,7 +76,9 @@ describe("calendar events", () => {
         expect(args("what's on my schedule this week")).toEqual({ range: "week", from: day(7), to: day(12), label: "this week" });
         expect(args("show my calendar for next week")).toEqual({ range: "week", from: day(12), to: day(19), label: "next week" });
         expect(args("do I have anything on Friday")).toEqual({ range: "day", from: day(9), to: day(10) });
-        expect(args("am I busy on Monday")).toEqual({ range: "day", from: day(12), to: day(13) });
+        // Free or busy: when, around the events (freeTime).
+        expect(cmd("am I busy on Monday")).toBe("freeTime");
+        expect(args("am I busy on Monday")).toEqual({ day: day(12), at: null, label: "" });
         expect(args("what's my next meeting")).toEqual({ range: "next" });
         expect(args("when is my dentist appointment")).toEqual({ range: "find", query: "dentist" });
         expect(args("my agenda")).toEqual({ range: "day", from: day(7), to: day(8) });
@@ -229,9 +231,10 @@ describe("people, messages and email", () => {
         expect(args("search my email for invoice")).toEqual({ query: "invoice", from: false, unread: false });
         expect(args("find emails from Alex")).toEqual({ query: "alex", from: true, unread: false });
         expect(args("do I have any new emails")).toEqual({ query: "", from: false, unread: true });
-        expect(args("read my last message")).toEqual({ who: "" });
-        expect(args("what did Sam say")).toEqual({ who: "sam" });
-        expect(args("read my messages from Priya")).toEqual({ who: "priya" });
+        expect(args("read my last message")).toEqual({ who: "", unread: false });
+        expect(args("what did Sam say")).toEqual({ who: "sam", unread: false });
+        expect(args("any new texts")).toEqual({ who: "", unread: true });
+        expect(args("read my messages from Priya")).toEqual({ who: "priya", unread: false });
     });
     it("contacts: added, and asked about", () => {
         expect(args("add Sam to contacts with number 555 0100")).toEqual({ name: "Sam", number: "555 0100", email: "", label: "" });
@@ -322,10 +325,13 @@ describe("conversions, the world, photos, undo", () => {
         expect(cmd("what time is it")).toBe("time");
     });
     it("photos by day", () => {
-        expect(args("show my photos from yesterday")).toEqual({ from: day(6), to: day(7), label: "yesterday" });
-        expect(args("show me pictures from last week")).toEqual({ from: day(28, 8), to: day(5), label: "last week" });
-        expect(args("photos from friday")).toEqual({ from: day(2), to: day(3), label: "" });
-        expect(args("show my photos")).toEqual({ from: null, to: null, label: "" });
+        const no = { screenshots: false, count: false };
+        expect(args("show my photos from yesterday")).toEqual({ from: day(6), to: day(7), label: "yesterday", ...no });
+        expect(args("show me pictures from last week")).toEqual({ from: day(28, 8), to: day(5), label: "last week", ...no });
+        expect(args("photos from friday")).toEqual({ from: day(2), to: day(3), label: "", ...no });
+        expect(args("show my photos")).toEqual({ from: null, to: null, label: "", ...no });
+        expect(args("show my recent screenshots")).toEqual({ from: null, to: null, label: "", screenshots: true, count: false });
+        expect(args("how many photos did i take yesterday")).toEqual({ from: day(6), to: day(7), label: "yesterday", screenshots: false, count: true });
     });
     it("undo and cancel; what only a model can do", () => {
         expect(args("undo")).toEqual({ pending: false });

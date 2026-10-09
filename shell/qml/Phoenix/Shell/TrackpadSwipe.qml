@@ -65,6 +65,16 @@ MouseArea {
     property int momentumGap: 50
     // When the fingers of a list's scroll lifted (0: not yet).
     property real liftedAt: 0
+    // The swipe's events carry scroll phases (a Mac trackpad): it ends
+    // when they say so; the pause that ends a swipe without phases
+    // (wheelGestureEndDelay) only guards against an end that never comes.
+    property bool phased: false
+    property int phasedEndDelay: 2000
+    // The time in ms, for the swipe's speed and the momentum's gaps
+    // (a test sets its own clock, so how busy the machine is does not
+    // change what a swipe was).
+    property var clock: null
+    function now() { return clock ? clock() : Date.now(); }
 
     signal started(real x, real y)
     signal moved(real dx, real dy)
@@ -73,7 +83,7 @@ MouseArea {
 
     Timer {
         id: gestureEnd
-        interval: Theme.wheelGestureEndDelay
+        interval: area.phased ? area.phasedEndDelay : Theme.wheelGestureEndDelay
         onTriggered: area.finish()
     }
     Timer {
@@ -93,12 +103,12 @@ MouseArea {
         // later than momentumGap after the fingers' ScrollEnd).
         if (axis === "v" && verticalMomentum) {
             var notch = e.phase === Qt.NoScrollPhase && e.pixelDelta.x === 0 && e.pixelDelta.y === 0;
-            var again = e.phase === Qt.ScrollBegin && liftedAt > 0 && Date.now() - liftedAt > momentumGap;
+            var again = e.phase === Qt.ScrollBegin && liftedAt > 0 && now() - liftedAt > momentumGap;
             if (notch || again) {
                 finish();
             } else {
                 if (end)
-                    liftedAt = Date.now();
+                    liftedAt = now();
                 else
                     swipe(e.x, e.y, e.pixelDelta.x, e.pixelDelta.y);
                 return;
@@ -107,7 +117,10 @@ MouseArea {
         // Fingers down again: a new swipe, whatever is still settling. Not
         // the momentum begun as a ScrollBegin right after the fingers'
         // ScrollEnd: fingers cannot lift and land again that quickly.
-        if (e.phase === Qt.ScrollBegin && !(settling && Date.now() - endedAt < momentumGap))
+        if (e.phase === Qt.ScrollBegin && !(settling && now() - endedAt < momentumGap))
+            settling = false;
+        // A mouse wheel's notch is no momentum: it is not ignored.
+        if (e.phase === Qt.NoScrollPhase && e.pixelDelta.x === 0 && e.pixelDelta.y === 0)
             settling = false;
         if (settling) {
             settleEnd.restart();
@@ -132,6 +145,7 @@ MouseArea {
                 notched(e.angleDelta.x, e.angleDelta.y, e);
             return;
         }
+        phased = e.phase !== Qt.NoScrollPhase;
         swipe(e.x, e.y, e.pixelDelta.x, e.pixelDelta.y);
         if (axis === "pass")
             e.accepted = false;
@@ -142,13 +156,13 @@ MouseArea {
     // clock; the default is now).
     function swipe(x, y, dx, dy, time) {
         gestureEnd.restart();
-        var now = time === undefined ? Date.now() : time;
-        if (lastTime > 0 && now > lastTime) {
+        var t = time === undefined ? now() : time;
+        if (lastTime > 0 && t > lastTime) {
             // Smoothed: trackpad events come unevenly.
-            vx = 0.6 * dx / (now - lastTime) + 0.4 * vx;
-            vy = dy / (now - lastTime);
+            vx = 0.6 * dx / (t - lastTime) + 0.4 * vx;
+            vy = dy / (t - lastTime);
         }
-        lastTime = now;
+        lastTime = t;
         sumX += dx;
         sumY += dy;
         if (axis === "") {
@@ -170,7 +184,7 @@ MouseArea {
     // The fingers lifted: the surface settles.
     function finish() {
         gestureEnd.stop();
-        endedAt = Date.now();
+        endedAt = now();
         var was = axis;
         if (was === "h" || was === "v")
             ended();
@@ -180,6 +194,7 @@ MouseArea {
         }
         axis = "";
         liftedAt = 0;
+        phased = false;
         sumX = 0;
         sumY = 0;
         lastTime = 0;

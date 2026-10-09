@@ -136,3 +136,30 @@ export const marketplace = {
         return call(SERVICE + "updateAll", {}) as unknown as Promise<{ updated: string[]; failed: { id: string; errorText: string }[] }>;
     },
 };
+
+/**
+ * The catalog service on this computer, in the simulator only
+ * (org.webosphoenix.simulator, phoenix-sim's Services > Marketplace
+ * Catalog): the Marketplace offers to start it when it cannot reach it.
+ * On a device the methods fail (NOT_AVAILABLE), and nothing is offered.
+ */
+export interface LocalCatalogStatus {
+    state: "stopped" | "starting" | "running" | "failed";
+    url: string;
+    error: string;
+    /** Starting for the first time: it sets itself up first. */
+    settingUp: boolean;
+}
+
+const SIMULATOR = "luna://org.webosphoenix.simulator/";
+
+export const localCatalog = {
+    /** Its state now and as it changes; onError when there is none to start (not the simulator). */
+    watch(cb: (s: LocalCatalogStatus) => void, onError?: (e: LunaError) => void): Subscription {
+        return subscribe(SIMULATOR + "marketplaceCatalog", {}, (r) => cb(r as unknown as LocalCatalogStatus), onError);
+    },
+    /** Starts it; resolves once it runs, rejects with the reason when it does not start. */
+    async start(): Promise<LocalCatalogStatus> {
+        return (await call(SIMULATOR + "startMarketplaceCatalog", {})) as unknown as LocalCatalogStatus;
+    },
+};

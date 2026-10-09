@@ -14,6 +14,12 @@ PORT="${1:-8088}"
 export MARKETPLACE_BASE_URL="${MARKETPLACE_BASE_URL:-http://127.0.0.1:$PORT/v1/}"
 if [ ! -f "${MARKETPLACE_DATA:-data}/signing.key" ]; then
     php bin/marketplace.php init
+else
+    # The index as this version of the catalog writes it (a new build).
+    php bin/marketplace.php publish >/dev/null
 fi
 echo "Phoenix Marketplace at http://127.0.0.1:$PORT/ (catalog: /v1/, admin: /admin)"
+# Several requests at once: copying an app's icon from its site the first
+# time (Catalog::iconCopy) waits on that site.
+export PHP_CLI_SERVER_WORKERS="${PHP_CLI_SERVER_WORKERS:-4}"
 exec php -S "127.0.0.1:$PORT" public/router.php

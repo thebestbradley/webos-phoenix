@@ -140,6 +140,9 @@ final class Catalog
         if (!in_array($status, ['listed', 'pulled', 'pending'], true) || !$this->db->run('UPDATE apps SET status = ?, updated = ? WHERE id = ?', [$status, Db::now(), $id])) {
             throw new CheckFailed("No app $id");
         }
+        if ($status === 'listed') {
+            $this->copyMedia($id);
+        }
     }
 
     public function decideRelease(int $rid, bool $approve, array $reviewer, string $notes = ''): array
@@ -157,6 +160,7 @@ final class Catalog
             $this->db->run("UPDATE apps SET status = 'listed', version = ?, updated = ? WHERE id = ? AND status = 'pending'",
                 [$r['version'], Db::now(), $r['app_id']]);
             $this->db->run('UPDATE apps SET version = ?, updated = ? WHERE id = ?', [$r['version'], Db::now(), $r['app_id']]);
+            $this->copyMedia($r['app_id']);
         }
         return $this->db->one('SELECT * FROM releases WHERE id = ?', [$rid]);
     }
@@ -240,8 +244,15 @@ final class Catalog
             if (in_array(strtolower($e['origin']), $optedOut, true)) {
                 continue;
             }
+            $icon = $e['icon'] ?? '';
+            // A good manifest whose icons are all broken (the probe's
+            // iconGenerated): an icon made here, served with the catalog.
+            if (!empty($e['iconGenerated']) && is_array($e['iconGenerated'])) {
+                $icon = $this->writeGeneratedIcon($e['id'], (string) ($e['iconGenerated']['text'] ?? ''),
+                                                  (string) ($e['iconGenerated']['color'] ?? ''), $e['title']);
+            }
             $row = ['title' => $e['title'], 'developer' => $e['developer'] ?? '', 'summary' => $e['summary'] ?? '',
-                    'categories' => $e['categories'] ?? [], 'icon' => $e['icon'] ?? '', 'featured' => !empty($e['featured']),
+                    'categories' => $e['categories'] ?? [], 'icon' => $icon, 'featured' => !empty($e['featured']),
                     'homepage' => $e['origin'] . '/'];
             if ($this->db->one('SELECT id FROM apps WHERE id = ?', [$e['id']])) {
                 $this->db->run("UPDATE apps SET title = ?, developer_name = ?, summary = ?, categories = ?, icon = ?, featured = ?,
@@ -265,6 +276,174 @@ final class Catalog
         return $n;
     }
 
+    // ---- Generated icons ----------------------------------------------------------------------
+
+    /** Where a generated icon is published (under the catalog's own URL). */
+    public function generatedIconUrl(string $id): string
+    {
+        return $this->config['base_url'] . 'icons/' . preg_replace('/[^A-Za-z0-9._-]/', '_', $id) . '.svg';
+    }
+
+    /**
+     * An icon for a site whose manifest's icons are all broken: its initials
+     * (the probe's, e.g. "GN", "NYT", "F1"; else the title's first letter) in
+     * white, or near black on a light colour, on a rounded square of $color
+     * (the manifest's theme_color, as the probe found it). A plain SVG with no
+     * scripts or outside references.
+     */
+    public static function generatedIcon(string $text, string $color, string $title = ''): string
+    {
+        $text = mb_strtoupper(trim($text) !== '' ? mb_substr(trim($text), 0, 3) : mb_substr(trim($title), 0, 1)) ?: '?';
+        if (!preg_match('/^#[0-9a-fA-F]{6}$/', $color)) {
+            $color = '#37474f';
+        }
+        [$r, $g, $b] = array_map('hexdec', str_split(substr($color, 1), 2));
+        // Relative luminance (WCAG): light colours get dark letters.
+        $lin = fn ($c) => ($c /= 255) <= 0.03928 ? $c / 12.92 : (($c + 0.055) / 1.055) ** 2.4;
+        $light = 0.2126 * $lin($r) + 0.7152 * $lin($g) + 0.0722 * $lin($b) > 0.4;
+        $ink = $light ? '#1a1a1a' : '#ffffff';
+        $size = [1 => 120, 2 => 104, 3 => 80][mb_strlen($text)];
+        $t = htmlspecialchars($text, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+        return '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">'
+            . '<rect x="8" y="8" width="240" height="240" rx="52" fill="' . strtolower($color) . '"/>'
+            . '<text x="128" y="128" dy="0.35em" text-anchor="middle" font-family="Open Sans, Helvetica, Arial, sans-serif"'
+            . ' font-weight="700" font-size="' . $size . '" fill="' . $ink . '">' . $t . '</text></svg>' . "\n";
+    }
+
+    /** Write $id's generated icon into the published files; its URL. */
+    private function writeGeneratedIcon(string $id, string $text, string $color, string $title): string
+    {
+        $dir = $this->publicDir() . '/icons';
+        @mkdir($dir, 0755, true);
+        file_put_contents("$dir/" . preg_replace('/[^A-Za-z0-9._-]/', '_', $id) . '.svg', self::generatedIcon($text, $color, $title));
+        return $this->generatedIconUrl($id);
+    }
+
+    // ---- Pictures copied from the sites -------------------------------------------------------
+
+    /** The images a copy may be, by their first bytes: extension => content type. */
+    private const IMAGE_TYPES = ['png' => 'image/png', 'jpg' => 'image/jpeg', 'gif' => 'image/gif',
+                                 'webp' => 'image/webp', 'ico' => 'image/x-icon'];
+    /** What each kind of copy is called in the published files, and how big one may be. */
+    private const COPIES = ['icon' => ['icons/copy', 2 * 1024 * 1024], 'screenshot' => ['screenshots/copy', 8 * 1024 * 1024]];
+
+    /**
+     * Where the catalog serves its copy of a picture of app $id's ('icon' or 'screenshot') that
+     * lives on another site (a curated web app's icon as bin/probe-pwas.py found it, a developer's
+     * screenshots). Devices then ask the catalog, not the site: the pictures show wherever the
+     * catalog is reachable (phoenix-sim's local catalog included), a device's browsing tells the
+     * sites nothing, and a site renaming a hashed file breaks no listing. The name changes with
+     * the address, so a new picture is a new copy.
+     */
+    public function copyUrl(string $kind, string $id, string $src): string
+    {
+        return $this->config['base_url'] . self::COPIES[$kind][0] . '/' . self::copyName($id, $src);
+    }
+
+    private static function copyName(string $id, string $src): string
+    {
+        return preg_replace('/[^A-Za-z0-9._-]/', '_', $id) . '-' . substr(sha1($src), 0, 12);
+    }
+
+    /** Whether $src is a picture on another site, which the index names as the catalog's copy. */
+    private function isOutside(string $src): bool
+    {
+        return (bool) preg_match('#^https?://#i', $src) && !str_starts_with($src, $this->config['base_url']);
+    }
+
+    /** An app's icon as the index gives it. */
+    private function publishedIcon(array $a): string
+    {
+        $src = (string) $a['icon'];
+        return $this->isOutside($src) ? $this->copyUrl('icon', $a['id'], $src) : $src;
+    }
+
+    /** An app's screenshots as the index gives them. */
+    private function publishedScreenshots(array $a): array
+    {
+        return array_map(fn ($src) => is_string($src) && $this->isOutside($src) ? $this->copyUrl('screenshot', $a['id'], $src) : $src,
+                         (array) $a['screenshots']);
+    }
+
+    /**
+     * The picture at <kind's folder>/$name: [content type, bytes, kept], or null for none. The
+     * first request fetches it from its site (SafeFetch: https to public addresses only) and keeps
+     * it (a PNG, JPEG, GIF, WebP or ICO by its own bytes, never an SVG from a site). One that cannot
+     * be had is tried again after an hour; meanwhile an icon is the app's initials, not kept, so a
+     * list never shows an empty square, and a screenshot is not there (the gallery leaves it out).
+     */
+    public function mediaCopy(string $kind, string $name): ?array
+    {
+        if (!isset(self::COPIES[$kind]) || !preg_match('/^([A-Za-z0-9._-]+)-([0-9a-f]{12})$/', $name, $m)) {
+            return null;
+        }
+        $a = $this->db->one('SELECT id, title, icon, screenshots FROM apps WHERE id = ?', [$m[1]]);
+        if (!$a) {
+            return null;
+        }
+        $sources = $kind === 'icon' ? [(string) $a['icon']] : (array) json_decode($a['screenshots'] ?: '[]', true);
+        $src = null;
+        foreach ($sources as $s) {
+            if (is_string($s) && $this->isOutside($s) && self::copyName($a['id'], $s) === $name) {
+                $src = $s;
+            }
+        }
+        if ($src === null) {
+            return null;
+        }
+        [$folder, $max] = self::COPIES[$kind];
+        $dir = $this->publicDir() . '/' . $folder;
+        foreach (self::IMAGE_TYPES as $ext => $type) {
+            if (is_file("$dir/$name.$ext")) {
+                return [$type, (string) file_get_contents("$dir/$name.$ext"), true];
+            }
+        }
+        $failed = "$dir/$name.failed";
+        if (!is_file($failed) || filemtime($failed) < time() - 3600) {
+            $bytes = isset($this->config['media_fetch']) ? ($this->config['media_fetch'])($src, $max)
+                                                        : SafeFetch::fromConfig($this->config)->get($src, $max);
+            $ext = is_string($bytes) && strlen($bytes) <= $max ? self::imageType($bytes) : null;
+            @mkdir($dir, 0755, true);
+            if ($ext !== null) {
+                file_put_contents("$dir/$name.$ext", $bytes);
+                @unlink($failed);
+                return [self::IMAGE_TYPES[$ext], $bytes, true];
+            }
+            touch($failed);
+        }
+        return $kind === 'icon' ? ['image/svg+xml', self::generatedIcon('', '', (string) $a['title']), false] : null;
+    }
+
+    /** Copies an app's pictures now (an admin listing it), so a device's first look waits on nothing. */
+    private function copyMedia(string $id): void
+    {
+        $a = $this->app($id);
+        if (!$a) {
+            return;
+        }
+        if ($this->isOutside((string) $a['icon'])) {
+            $this->mediaCopy('icon', self::copyName($id, (string) $a['icon']));
+        }
+        foreach ($a['screenshots'] as $s) {
+            if (is_string($s) && $this->isOutside($s)) {
+                $this->mediaCopy('screenshot', self::copyName($id, $s));
+            }
+        }
+    }
+
+    /** The image type of $bytes (an IMAGE_TYPES extension), or null for anything else. */
+    public static function imageType(string $bytes): ?string
+    {
+        return match (true) {
+            str_starts_with($bytes, "\x89PNG\r\n\x1a\n") => 'png',
+            str_starts_with($bytes, "\xff\xd8\xff") => 'jpg',
+            str_starts_with($bytes, 'GIF87a'), str_starts_with($bytes, 'GIF89a') => 'gif',
+            str_starts_with($bytes, 'RIFF') && substr($bytes, 8, 4) === 'WEBP' => 'webp',
+            str_starts_with($bytes, "\x00\x00\x01\x00") => 'ico',
+            default => null,
+        };
+    }
+
     // ---- Publishing ---------------------------------------------------------------------------
 
     public function publish(): array
@@ -277,11 +456,15 @@ final class Catalog
                 'id' => $a['id'], 'kind' => $a['kind'], 'title' => $a['title'],
                 'developer' => array_filter(['name' => $a['developer_name'], 'url' => $a['developer_url']]),
                 'summary' => $a['summary'], 'description' => (string) $a['description'], 'categories' => $a['categories'],
-                'icon' => $a['icon'], 'screenshots' => $a['screenshots'], 'license' => $a['license'], 'homepage' => $a['homepage'],
+                'icon' => $this->publishedIcon($a), 'screenshots' => $this->publishedScreenshots($a), 'license' => $a['license'], 'homepage' => $a['homepage'],
                 'donation' => $a['donation'], 'featured' => $a['featured'], 'rating' => $a['rating'], 'version' => $a['version'],
             ];
             if ($a['kind'] === 'pwa') {
                 $e['pwa'] = ['manifest' => $a['manifest'], 'origin' => $a['origin']];
+                // Its icon made here (the site's are broken): devices install it.
+                if ($a['icon'] === $this->generatedIconUrl($a['id'])) {
+                    $e['iconGenerated'] = true;
+                }
             } else {
                 $r = $this->db->one("SELECT * FROM releases WHERE app_id = ? AND state = 'approved' ORDER BY id DESC", [$a['id']]);
                 if (!$r) {

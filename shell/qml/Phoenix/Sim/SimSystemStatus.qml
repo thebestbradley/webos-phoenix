@@ -96,8 +96,12 @@ QtObject {
     property int screenTimeout: 60
     property int lockTimeout: 0
     // Screen & Lock > Advanced gestures (sysUiEnableNextPrevGestures): a
-    // long swipe across the gesture area switches apps.
-    property bool advancedGestures: false
+    // long swipe across the gesture area switches apps. On by default
+    // (Phoenix; the runtime's defaultPrefs).
+    property bool advancedGestures: true
+    // Settings > Apps > Opening a running app (appRelaunch): "front",
+    // "refresh" or "new" (the window source's appRelaunch).
+    property string appRelaunch: "front"
     // Settings > Text Assist > Hardware keyboard: "ipad" or "desktop".
     property string keyboardShortcuts: "ipad"
     // Settings > Screen & Lock "Show notifications when locked"
@@ -323,7 +327,7 @@ QtObject {
     // Apply a "systemStatus" report from the web runtime: wifiEnabled,
     // wifiConnected, wifiBars, bluetoothOn, airplaneMode, brightness
     // (0-100), rotationLocked, muted, timeFormat, showAlertsWhenLocked,
-    // screenTimeout, lockTimeout, advancedGestures, keyboardShortcuts,
+    // screenTimeout, lockTimeout, advancedGestures, appRelaunch, keyboardShortcuts,
     // volume, streams, systemSounds, tapSounds, textAssist, keyboards,
     // keyboard, ringtone, alerttone,
     // notificationtone, callForwarding, reduceMotion, keyboardAccess, tweaks, browser, proxy,
@@ -367,6 +371,8 @@ QtObject {
             lockTimeout = s.lockTimeout;
         if (s.advancedGestures !== undefined)
             advancedGestures = !!s.advancedGestures;
+        if (s.appRelaunch !== undefined)
+            appRelaunch = s.appRelaunch === "refresh" || s.appRelaunch === "new" ? s.appRelaunch : "front";
         if (s.keyboardShortcuts !== undefined)
             keyboardShortcuts = s.keyboardShortcuts === "desktop" ? "desktop" : "ipad";
         if (s.volume !== undefined)

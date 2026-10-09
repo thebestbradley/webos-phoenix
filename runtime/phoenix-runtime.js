@@ -315,30 +315,37 @@
         windowOrientation: "up",
         specifiedWindowOrientation: "free",
         videoOrientation: "up",
-        deviceInfo: toJson({
-            modelName: "Phoenix Simulator",
-            modelNameAscii: "Phoenix Simulator",
-            platformVersion: "3.0.5",
-            platformVersionMajor: 3,
-            platformVersionMinor: 0,
-            platformVersionDot: 5,
-            carrierName: "Phoenix",
-            serialNumber: "PHOENIX0001",
-            screenWidth: global.screen ? global.screen.width : 320,
-            screenHeight: global.screen ? global.screen.height : 480,
-            minimumCardWidth: 320,
-            minimumCardHeight: 188,
-            maximumCardWidth: 320,
-            maximumCardHeight: 452,
-            keyboardAvailable: true,
-            keyboardSlider: false,
-            keyboardType: "QWERTY",
-            wifiAvailable: true,
-            bluetoothAvailable: true,
-            coreNaviButton: false,
-            // Exhibitions on the Touchstone (DeviceInfo.cpp:315).
-            dockModeEnabled: true
-        }),
+        // Read again on each use: the screen is the shell's (applyHostStatus
+        // {screen}), which the adaptive simulator changes as its window is
+        // resized, as a turn changes the window (the page's own screen is
+        // the computer's monitor).
+        get deviceInfo() {
+            var shellScreen = store.get("screen", null);
+            return toJson({
+                modelName: "Phoenix Simulator",
+                modelNameAscii: "Phoenix Simulator",
+                platformVersion: "3.0.5",
+                platformVersionMajor: 3,
+                platformVersionMinor: 0,
+                platformVersionDot: 5,
+                carrierName: "Phoenix",
+                serialNumber: "PHOENIX0001",
+                screenWidth: shellScreen ? shellScreen.width : global.screen ? global.screen.width : 320,
+                screenHeight: shellScreen ? shellScreen.height : global.screen ? global.screen.height : 480,
+                minimumCardWidth: 320,
+                minimumCardHeight: 188,
+                maximumCardWidth: 320,
+                maximumCardHeight: 452,
+                keyboardAvailable: true,
+                keyboardSlider: false,
+                keyboardType: "QWERTY",
+                wifiAvailable: true,
+                bluetoothAvailable: true,
+                coreNaviButton: false,
+                // Exhibitions on the Touchstone (DeviceInfo.cpp:315).
+                dockModeEnabled: true
+            });
+        },
         isActivated: function () { return activated; },
         get isMinimal() { return false; },
 
@@ -1220,8 +1227,17 @@
         // getDisplayBrightness, :2065-2082).
         enableALS: true,
         // Screen & Lock > Advanced gestures: LunaSysMgr's key. A long swipe
-        // across the gesture area switches apps (phones).
-        sysUiEnableNextPrevGestures: false,
+        // across the gesture area switches apps (phones). On by default in
+        // Phoenix (the owner's choice; LunaSysMgr shipped it off): a choice
+        // the user saved is kept, only the default changed.
+        sysUiEnableNextPrevGestures: true,
+        // Settings > Apps > Opening a running app (Phoenix): what opening an
+        // app that already has a card does. "front" brings its card to the
+        // front as it is (the original's card, keeping its state); "refresh"
+        // also relaunches it, as LunaSysMgr relaunched a running app on
+        // every launch (Mojo's handleLaunch, Enyo's windowParamsChange), so
+        // it reloads its data; "new" opens another card of it.
+        appRelaunch: "front",
         // Settings > Text Assist > Hardware keyboard: the shell's shortcut
         // scheme, "ipad" or "desktop" (Phoenix).
         keyboardShortcuts: "ipad",
@@ -1235,11 +1251,12 @@
         // webOS CE 3.1.0, AddToImage/LunaCE-Tweaks/*.json), off as there:
         // card view wraps from the last card to the first
         // (abh_features.json), a tap on a side card maximizes it
-        // (maximize-edges.json), the wave launcher (wave-launcher.json), the
-        // tap ripple (tap-ripple.json, on).
+        // (maximize-edges.json), the tap ripple (tap-ripple.json, on); the
+        // wave launcher (wave-launcher.json) is on by default in Phoenix
+        // (the owner's choice; LunaCE shipped it off).
         infiniteCardCyclingEnabled: false,
         sysUiEnableMaximizeEdges: false,
-        sysUiEnableWaveLauncher: false,
+        sysUiEnableWaveLauncher: true,
         showReticleAnimation: true,
         // Phoenix's: the shell's animations "normal" or "fast" (the Faster
         // Card Animations patches); how far a swipe goes before it counts,
@@ -1283,13 +1300,18 @@
         return { enabled: !!r.enabled, minutes: typeof r.minutes === "number" && r.minutes > 0 ? r.minutes : 2, apps: apps };
     }
 
+    // Settings > Apps > Opening a running app, as the shell takes it.
+    function appRelaunch(v) {
+        return v === "refresh" || v === "new" ? v : "front";
+    }
+
     // Settings > Advanced, as the shell takes them (hostStatus tweaks).
     function tweaks(p) {
         var pick = function (v, allowed, d) { return allowed.indexOf(v) >= 0 ? v : d; };
         return {
             infiniteCardCycling: !!p.infiniteCardCyclingEnabled,
             maximizeEdges: !!p.sysUiEnableMaximizeEdges,
-            waveLauncher: !!p.sysUiEnableWaveLauncher,
+            waveLauncher: p.sysUiEnableWaveLauncher !== false,
             tapRipple: p.showReticleAnimation !== false,
             animationSpeed: pick(p.animationSpeed, ["normal", "fast"], "normal"),
             gestureSensitivity: pick(p.gestureSensitivity, ["low", "normal", "high"], "normal"),
@@ -1615,8 +1637,12 @@
     runtime.exhibitionApps = exhibitionApps;
 
     register(["com.palm.applicationManager", "com.webos.applicationManager"], {
+        // {newCard: true} (Phoenix): another card of the app in a stack of
+        // its own, even while one runs (the shell's appRelaunch "new" for
+        // this launch; one-card apps such as the phone keep theirs).
         "/launch": function (p, reply) {
-            host.postToHost("launch", { id: appId(p.id), params: aliasParams(p.id, p.params) });
+            host.postToHost("launch", Object.assign({ id: appId(p.id), params: aliasParams(p.id, p.params) },
+                                                    p.newCard === true ? { newCard: true } : {}));
             reply(ok({ processId: String(Date.now()) }));
         },
         // As on webOS: {id, params} launches the app; {target} goes to the
@@ -4227,7 +4253,8 @@
                 // setProperty onWhenConnected).
                 automaticBrightness: p.enableALS !== false,
                 displayOnWhenConnected: runtime.devices ? runtime.devices.onWhenConnected() : false,
-                advancedGestures: !!p.sysUiEnableNextPrevGestures,
+                advancedGestures: p.sysUiEnableNextPrevGestures !== false,
+                appRelaunch: appRelaunch(p.appRelaunch),
                 keyboardShortcuts: p.keyboardShortcuts === "desktop" ? "desktop" : "ipad",
                 // Settings > Accessibility: the shell's animations.
                 reduceMotion: !!(p.accessibility && p.accessibility.reduceMotion),
@@ -4881,7 +4908,7 @@
                     save(st);
                 }
             }
-            if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "lockScreenPreviews", "notificationRepeat", "screenTimeout", "lockTimeout", "enableALS", "sysUiEnableNextPrevGestures", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
+            if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "lockScreenPreviews", "notificationRepeat", "screenTimeout", "lockTimeout", "enableALS", "sysUiEnableNextPrevGestures", "appRelaunch", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
                  "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "x_palm_textinput", "accessibility",
                  "dockwallpaper", "dockModeSoundPref", "exhibition", "browserContentBlocker", "browserUserAgent",
                  "networkProxy"].concat(TWEAK_KEYS).some(function (k) { return k in p; })) {
@@ -5864,6 +5891,12 @@
                 store.set("orientation", { ui: st.orientation.ui, device: st.orientation.device });
                 changed();
             }
+            // The screen, upright, in legacy pixels (PalmSystem.deviceInfo):
+            // the adaptive simulator's window resized.
+            if (st.screen && toJson(st.screen) !== toJson(store.get("screen", null))) {
+                store.set("screen", { width: st.screen.width, height: st.screen.height });
+                changed();
+            }
             // The device has a gesture area (getSystemStatus gestureArea).
             if ("gestureArea" in st && !!st.gestureArea !== !!store.get("gestureArea", false)) {
                 store.set("gestureArea", !!st.gestureArea);
@@ -5924,16 +5957,24 @@
         // (enyo-1.0 palm/system/windows/events.js: windowParamsChange,
         // applicationRelaunch); OSE apps through the "webOSRelaunch" document
         // event (detail = params), as WebAppMgr does.
-        runtime.relaunch = function (params) {
+        // refresh (Settings > Apps > Opening a running app: Refresh): the
+        // user opened the app again and wants its data fresh; Phoenix's
+        // apps also hear "phoenixRefresh" (@phoenix/luna's Refreshed starts
+        // the app's root again on it).
+        runtime.relaunch = function (params, refresh) {
             PalmSystem.launchParams = toJson(params || {});
-            if (global.Mojo && typeof global.Mojo.relaunch === "function") {
+            var event = function (name, detail) {
+                var e;
+                try { e = new CustomEvent(name, { detail: detail }); }
+                catch (x) { e = global.document.createEvent("CustomEvent"); e.initCustomEvent(name, false, false, detail); }
+                global.document.dispatchEvent(e);
+            };
+            if (global.Mojo && typeof global.Mojo.relaunch === "function")
                 global.Mojo.relaunch();
-                return true;
-            }
-            var e;
-            try { e = new CustomEvent("webOSRelaunch", { detail: params || {} }); }
-            catch (x) { e = global.document.createEvent("CustomEvent"); e.initCustomEvent("webOSRelaunch", false, false, params || {}); }
-            global.document.dispatchEvent(e);
+            else
+                event("webOSRelaunch", params || {});
+            if (refresh)
+                event("phoenixRefresh", params || {});
             return true;
         };
 
@@ -7238,7 +7279,33 @@
             };
         }
 
+        // A picture made small, as a data: URL (the simulator's only: the
+        // shell cannot read IndexedDB, as wallpaperUrl above; on a device it
+        // loads "file://" + path). The Assistant's view shows the photos it
+        // found with it.
+        //   phoenix/thumbnail {path, size?: px (default 160)} -> {url}
+        function thumbnail(p, reply) {
+            if (!isMediaPath(p.path)) return reply(fail(-1, "path: a file under " + MEDIA_ROOT));
+            var size = Math.max(16, Math.min(512, Number(p.size) || 160));
+            files.read(p.path).then(function (blob) { return blob || readUrl(p.path); }).then(function (blob) {
+                if (!blob) return reply(fail(-1, "No such file: " + p.path));
+                var u = URL.createObjectURL(blob), img = new Image();
+                img.onload = function () {
+                    var k = Math.min(1, size / Math.max(img.naturalWidth, img.naturalHeight));
+                    var c = document.createElement("canvas");
+                    c.width = Math.max(1, Math.round(img.naturalWidth * k));
+                    c.height = Math.max(1, Math.round(img.naturalHeight * k));
+                    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+                    URL.revokeObjectURL(u);
+                    reply(ok({ url: c.toDataURL("image/jpeg", 0.85) }));
+                };
+                img.onerror = function () { URL.revokeObjectURL(u); reply(fail(-1, "Not a picture: " + p.path)); };
+                img.src = u;
+            }, function (e) { reply(fail(-1, String(e && e.message || e))); });
+        }
+
         register(["com.webos.service.mediaindexer"], {
+            "/phoenix/thumbnail": thumbnail,
             "/getImageList": listMethod("image"),
             "/getAudioList": listMethod("audio"),
             "/getVideoList": listMethod("video"),
@@ -7322,12 +7389,13 @@
                 return scan(CAPTURE_DIR);
             }).then(function () {
                 // capture: the shell's id for it, so its thumbnail opens
-                // this file and no other.
+                // this file and no other. Tagged with its file, so deleting
+                // it takes the notification back (captureRemoved below).
                 var params = { path: path };
                 if (p.capture) params.capture = String(p.capture);
                 host.postToHost("notification", { appId: SCREENSHOT_APP, title: "Screen captured",
                                                   body: path.slice(CAPTURE_DIR.length + 1).replace(/\.png$/, ""),
-                                                  params: params });
+                                                  params: params, tag: "capture:" + path });
                 return path;
             });
         };
@@ -9511,6 +9579,32 @@
         runtime.voiceMemos = { placeholder: PLACEHOLDER, errors: E };
     })();
 
+    // A screen capture deleted (the preview's Delete, Photos: mediafiles/
+    // remove; Files: filemanager/remove, a capture or a folder holding
+    // some): its "Screen captured" notification goes too (tag "capture:"
+    // + its file, runtime.saveScreenshot), as it would open nothing.
+    (function () {
+        var CAPTURES = "/media/internal/screencaptures";
+        function captureRemoved(path) {
+            path = String(path || "").replace(/\/+$/, "");
+            if (!path || (path.indexOf(CAPTURES + "/") !== 0 && CAPTURES.indexOf(path) !== 0)) return;
+            host.postToHost("notification", { appId: "org.webosphoenix.screenshot", remove: true,
+                                              tag: "capture:" + path, tagPrefix: "capture:" + path + "/" });
+        }
+        runtime.captureRemoved = captureRemoved;
+        ["org.webosphoenix.service.mediafiles", "org.webosphoenix.filemanager"].forEach(function (name) {
+            var svc = runtime.services[name];
+            if (!svc || !svc["/remove"]) return;
+            var base = svc["/remove"];
+            svc["/remove"] = function (p, reply, ctx) {
+                base(p, function (r) {
+                    if (r && r.returnValue) captureRemoved(p.path);
+                    reply(r);
+                }, ctx);
+            };
+        });
+    })();
+
     // ================================================================================
     // Dictation for the apps (org.webosphoenix.dictation; Voice Dial)
     // ================================================================================
@@ -9601,6 +9695,84 @@
     })();
 
     // ================================================================================
+    // The simulator's own (org.webosphoenix.simulator)
+    // ================================================================================
+    //
+    // What phoenix-sim does on this computer for the apps; only there
+    // (/usr/share/phoenix/host.json {"marketplaceCatalog": true}): on a
+    // device, or in a browser, the methods answer NOT_AVAILABLE and the
+    // apps leave out what they would offer.
+    //
+    //   marketplaceCatalog {subscribe} -> {state: "stopped" | "starting" |
+    //       "running" | "failed", url, error, settingUp}: the Marketplace's
+    //       catalog service (server/marketplace) on this computer, which
+    //       the simulator's Marketplace reads (phoenix-sim's SimMarketplace;
+    //       its Services menu starts and stops it too).
+    //   startMarketplaceCatalog -> the same, once it runs; fails with its
+    //       reason (FAILED) when it does not start. Only the Marketplace
+    //       may ask (the shell checks which app's window asks).
+    //
+    // The shell passes the state to every page (applyHostStatus
+    // {marketplaceCatalog}); "simulator" host messages ({op}) ask it.
+    (function simulatorServices() {
+        var E = { NOT_AVAILABLE: 1, FAILED: 2 };
+        var hostInfo = null;
+        function available() {
+            if (hostInfo === null) {
+                try { hostInfo = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/host.json") || "{}") || {}; }
+                catch (e) { hostInfo = {}; }
+            }
+            return hostInfo.marketplaceCatalog === true;
+        }
+        var catalog = { state: "stopped", url: "http://127.0.0.1:8088/", error: "", settingUp: false };
+        var watching = [];   // {reply, ctx} of marketplaceCatalog subscribers
+        var starting = [];   // {reply, ctx} of startMarketplaceCatalog calls waiting
+        function status() {
+            return ok({ state: catalog.state, url: catalog.url, error: catalog.error, settingUp: catalog.settingUp });
+        }
+        function settle() {
+            if (catalog.state !== "running" && catalog.state !== "failed" && catalog.state !== "stopped") return;
+            var waiting = starting;
+            starting = [];
+            waiting.forEach(function (w) {
+                if (w.ctx.cancelled()) return;
+                w.reply(catalog.state === "running" ? status()
+                    : fail(E.FAILED, catalog.error || "The catalog service did not start."));
+            });
+        }
+        function changed() {
+            watching = watching.filter(function (w) { return !w.ctx.cancelled(); });
+            watching.forEach(function (w) { w.reply(status()); });
+        }
+        runtime.hostStatusHooks = runtime.hostStatusHooks || [];
+        runtime.hostStatusHooks.push(function (st) {
+            var c = st && st.marketplaceCatalog;
+            if (!c || typeof c !== "object" || typeof c.state !== "string") return;
+            catalog = { state: c.state, url: String(c.url || catalog.url), error: String(c.error || ""), settingUp: !!c.settingUp };
+            changed();
+            settle();
+        });
+        register(["org.webosphoenix.simulator"], {
+            "/marketplaceCatalog": function (p, reply, ctx) {
+                if (!available()) return reply(fail(E.NOT_AVAILABLE, "Only in the simulator."));
+                reply(status());
+                if (p.subscribe) watching.push({ reply: reply, ctx: ctx });
+            },
+            "/startMarketplaceCatalog": function (p, reply, ctx) {
+                if (!available()) return reply(fail(E.NOT_AVAILABLE, "Only in the simulator."));
+                if (catalog.state === "running") return reply(status());
+                starting.push({ reply: reply, ctx: ctx });
+                // The shell answers with the state (applyHostStatus), the
+                // final one once it runs or fails.
+                catalog.state = "starting";
+                catalog.error = "";
+                changed();
+                host.postToHost("simulator", { op: "startMarketplaceCatalog" });
+            }
+        });
+    })();
+
+    // ================================================================================
     // Voice Dial (com.palm.sysapp.voicedial)
     // ================================================================================
     //
@@ -9627,7 +9799,10 @@
     // runs the same code in the page: nodeServiceLoader(dir, label) is a
     // require() for its CommonJS modules (relative requires only), read
     // from the virtual rootfs; nodeServiceLuna() is its luna.call(uri,
-    // params) -> Promise<reply> on the simulated bus; proxiedRequest is its
+    // params) -> Promise<reply> on the simulated bus (nodeServiceLuna(id):
+    // the calls are the service's, ctx.caller id, as luna-service2 tells a
+    // service who calls on a device; the location permission is asked of
+    // the caller, not of the page the service happens to run in); proxiedRequest is its
     // HTTP, {method, url, headers, body} -> Promise<{status, headers, body}>.
     // Servers do not allow cross-origin requests, so each goes through a
     // proxy of the host: a page served over HTTP (tools/serve-rootfs.py, the
@@ -9663,14 +9838,14 @@
         return loadModule;
     }
 
-    function nodeServiceLuna() {
+    function nodeServiceLuna(caller) {
         return {
             // A subscription: onReply for each reply until cancel().
             subscribe: function (uri, params, onReply) {
                 var stopped = false;
                 dispatch(uri, clone(params || {}), function (r) {
                     if (!stopped) setTimeout(function () { if (!stopped) onReply(r); }, 0);
-                }, { cancelled: function () { return stopped; }, onCancel: null });
+                }, { cancelled: function () { return stopped; }, onCancel: null, caller: caller });
                 return function () { stopped = true; };
             },
             call: function (uri, params) {
@@ -9680,7 +9855,7 @@
                         if (done) return;
                         done = true;
                         setTimeout(function () { resolve(r); }, 0);
-                    }, { cancelled: function () { return done; }, onCancel: null });
+                    }, { cancelled: function () { return done; }, onCancel: null, caller: caller });
                 });
             }
         };
@@ -10810,6 +10985,257 @@
     })();
 
     // ================================================================================
+    // Hardware and drivers (org.webosphoenix.hardware; services/hardware)
+    // ================================================================================
+    //
+    // The device's own service (hardwareservice.js, loaded from
+    // /usr/palm/services/org.webosphoenix.hardware/), given a simulated
+    // device: the hardware below, opkg (packages read with the Marketplace's
+    // .ipk reader, what they hold recorded in the store), and a kernel that
+    // loads firmware and modules when the driver is reloaded. The driver
+    // catalog is the sample one (server/drivers/sample), signed with a key
+    // only the simulator trusts (/usr/share/phoenix/hardware/sample/
+    // catalog-sim.json, in place of /etc/palm/hardware/catalog.json;
+    // "hardware:config" in the store stands for an edited one).
+    // tools/test-hardware.cjs sets "hardware:sim" {fail: {opkg: text}} to
+    // make opkg fail.
+    (function hardwareService() {
+        var SERVICE = "org.webosphoenix.hardware";
+        var SAMPLE = "/usr/share/phoenix/hardware/sample/";
+        var PACKAGES = "/var/lib/phoenix/hardware/packages/";
+        var loadModule = nodeServiceLoader("/usr/palm/services/" + SERVICE + "/", "Hardware service");
+        var subtle = global.crypto && global.crypto.subtle;
+        function digest(alg) {
+            return function (bytes) { return subtle.digest(alg, bytes).then(function (h) { return new Uint8Array(h); }); };
+        }
+        function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+        function b64(bytes) {
+            var s = "";
+            for (var i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            return btoa(s);
+        }
+        function unb64(text) {
+            var s = atob(text), out = new Uint8Array(s.length);
+            for (var i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+            return out;
+        }
+
+        // The simulated device: a PC-like tablet whose image has its drivers
+        // and redistributable firmware, as Phoenix's images do: a Wi-Fi card,
+        // a Realtek dongle (the catalog has newer firmware for it), an NVIDIA
+        // card; the gaps the Hardware app fills: a dongle whose driver is not
+        // in the 6.6 kernel (RTL8812AU, an out-of-tree driver), and a USB
+        // gadget nothing knows. firmware / module: what the driver needs
+        // before it binds.
+        var DEVICES = [
+            { id: "pci:0000:02:00.0", bus: "pci", name: "AR9462 Wireless Network Adapter", vendor: "Qualcomm Atheros", category: "wifi",
+              modaliases: ["pci:v0000168Cd00000034sv0000105Bsd0000E052bc02sc80i00"], driver: "ath9k" },
+            { id: "usb:1-2", bus: "usb", name: "RTL8821CU USB Wi-Fi Adapter", vendor: "Realtek", category: "wifi",
+              modaliases: ["usb:v0BDApC811d0200dc00dsc00dp00icFFiscFFipFFin00"], driver: "rtw88_8821cu", firmware: ["rtw88/rtw8821c_fw.bin"] },
+            { id: "usb:1-3", bus: "usb", name: "RTL8812AU USB Wi-Fi Adapter", vendor: "Realtek", category: "wifi",
+              modaliases: ["usb:v0BDAp8812d0000dc00dsc00dp00icFFiscFFipFFin00"], driver: "88XXau", module: "88XXau" },
+            { id: "pci:0000:01:00.0", bus: "pci", name: "TU117 [GeForce GTX 1650]", vendor: "NVIDIA", category: "graphics",
+              modaliases: ["pci:v000010DEd00001F82sv00001043sd000087B4bc03sc00i00"], driver: "nouveau" },
+            { id: "pci:0000:00:1f.3", bus: "pci", name: "Cannon Lake PCH cAVS", vendor: "Intel", category: "audio",
+              modaliases: ["pci:v00008086d0000A348sv000017AAsd00003FF6bc04sc03i80"], driver: "snd_hda_intel" },
+            { id: "pci:0000:03:00.0", bus: "pci", name: "NVMe SSD Controller 980", vendor: "Samsung", category: "storage",
+              modaliases: ["pci:v0000144Dd0000A809sv0000144Dsd0000A801bc01sc08i02"], driver: "nvme" },
+            { id: "usb:1-5", bus: "usb", name: "HD Pro Webcam C920", vendor: "Logitech", category: "camera",
+              modaliases: ["usb:v046Dp082Dd0011dcEFdsc02dp01ic0Eisc01ip00in00"], driver: "uvcvideo" },
+            { id: "i2c:i2c-GDIX1001:00", bus: "acpi", name: "Touchscreen (GDIX1001)", vendor: "Goodix", category: "input",
+              modaliases: ["acpi:GDIX1001:"], driver: "Goodix-TS" },
+            { id: "i2c:i2c-BOSC0200:00", bus: "acpi", name: "Accelerometer (BMC150)", vendor: "Bosch", category: "sensors",
+              modaliases: ["acpi:BOSC0200:"], driver: "bmc150_accel_i2c" },
+            { id: "usb:1-4", bus: "usb", name: "USB device (1209:0001)", vendor: "", category: "other",
+              modaliases: ["usb:v1209p0001d0100dcFFdsc00dp00icFFisc00ip00in00"], driver: null }
+        ];
+        // What the image has (the firmware as meta-phoenix's
+        // packagegroup-phoenix-firmware installs it).
+        var BASE_PACKAGES = { "kernel-6.6.23-phoenix": "6.6.23-r0", "kernel-module-rtw88-8821cu-6.6.23-phoenix": "6.6.23-r0", "busybox": "1.36.1-r0",
+                              "linux-firmware-rtl8821": "20240909-r0", "linux-firmware-rtl8822": "20240909-r0", "linux-firmware-rtl-license": "20240909-r0",
+                              "linux-firmware-nvidia-gpu": "20240909-r0", "linux-firmware-nvidia-license": "20240909-r0" };
+        var IMAGE_FIRMWARE = ["rtw88/rtw8821c_fw.bin", "rtw88/rtw8822b_fw.bin", "rtw88/rtw8822c_fw.bin"];
+
+        function sim() {
+            var s = store.get("hardware:sim", null) || {};
+            s.packages = s.packages || {};
+            s.loaded = s.loaded || { firmware: IMAGE_FIRMWARE.slice(), modules: [] };
+            return s;
+        }
+        function files() { return store.get("hardware:files", null) || {}; }
+
+        var opkg = {
+            list: function () {
+                var s = sim(), out = [];
+                Object.keys(BASE_PACKAGES).forEach(function (n) { out.push({ name: n, version: BASE_PACKAGES[n] }); });
+                Object.keys(s.packages).forEach(function (n) { out.push({ name: n, version: s.packages[n].version }); });
+                return Promise.resolve(out);
+            },
+            install: function (paths) {
+                return wait(500).then(function () {
+                    var s = sim();
+                    if (s.fail && s.fail.opkg) return { ok: false, error: s.fail.opkg };
+                    var all = files();
+                    return paths.reduce(function (chain, path) {
+                        return chain.then(function () {
+                            var name = path.slice(PACKAGES.length);
+                            if (!all[name]) throw new Error("No such file: " + path);
+                            return runtime.ipk().read(unb64(all[name])).then(function (pkg) {
+                                var s2 = sim();
+                                s2.packages[pkg.control.Package] = { version: pkg.control.Version, files: pkg.files.map(function (f) { return f.path; }) };
+                                store.set("hardware:sim", s2);
+                            });
+                        });
+                    }, Promise.resolve()).then(function () { return { ok: true }; }, function (e) { return { ok: false, error: e.message }; });
+                });
+            },
+            remove: function (names) {
+                return wait(300).then(function () {
+                    var s = sim();
+                    names.forEach(function (n) { delete s.packages[n]; });
+                    store.set("hardware:sim", s);
+                    return { ok: true };
+                });
+            }
+        };
+
+        // The kernel: a driver probing again (a reload) loads what is in
+        // /lib/firmware and /lib/modules then.
+        function activate(step) {
+            if (step.after === "reboot" || step.after === "none") return Promise.resolve();
+            return wait(600).then(function () {
+                var s = sim(), fw = IMAGE_FIRMWARE.slice(), mods = [];
+                Object.keys(s.packages).forEach(function (n) {
+                    s.packages[n].files.forEach(function (f) {
+                        var m = /^lib\/firmware\/(?:updates\/)?(.+?)(\.xz|\.zst)?$/.exec(f);
+                        if (m) fw.push(m[1]);
+                        var k = /^lib\/modules\/[^/]+\/.*\/([^/]+)\.ko(\.xz|\.zst)?$/.exec(f);
+                        if (k) mods.push(k[1]);
+                    });
+                });
+                s.loaded = { firmware: fw, modules: mods };
+                store.set("hardware:sim", s);
+            });
+        }
+
+        function scan() {
+            var s = sim();
+            return Promise.resolve(DEVICES.map(function (d) {
+                var missing = (d.firmware || []).filter(function (f) { return s.loaded.firmware.indexOf(f) < 0; });
+                var bound = missing.length ? null : d.module && s.loaded.modules.indexOf(d.module) < 0 ? null : d.driver;
+                return { id: d.id, bus: d.bus, name: d.name, vendor: d.vendor, category: d.category, modaliases: d.modaliases.slice(),
+                         driver: bound, firmwareMissing: missing };
+            }));
+        }
+
+        // file:// (the sample catalog in the rootfs) or the web.
+        function rootfsBytes(path) {
+            return new Promise(function (resolve) {
+                var x = new global.XMLHttpRequest();
+                x.open("GET", path, true);
+                x.responseType = "arraybuffer";
+                x.onload = function () {
+                    var ok = (x.status === 200 || x.status === 0) && x.response && x.response.byteLength > 0;
+                    resolve({ status: ok ? 200 : 404, bytes: ok ? new Uint8Array(x.response) : new Uint8Array(0) });
+                };
+                x.onerror = function () { resolve({ status: 404, bytes: new Uint8Array(0) }); };
+                x.send();
+            });
+        }
+        function fileUrl(u) { var m = /^file:\/\/(\/.*)$/.exec(u); return m ? m[1] : null; }
+
+        var methods = null, watchers = [];
+        function service() {
+            if (methods) return methods;
+            methods = loadModule("hardwareservice.js").createHardwareService({
+                system: {
+                    scan: scan,
+                    info: function () { return Promise.resolve({ arch: "x86_64", kernel: "6.6.23-phoenix" }); },
+                    activate: activate,
+                    // Restarts counted by com.palm.power/shutdown/machineReboot.
+                    bootId: function () { return "boot-" + store.get("boot:count", 0); }
+                },
+                opkg: opkg,
+                request: function (req) {
+                    var path = fileUrl(req.url);
+                    if (!path) return proxiedRequest(req);
+                    var text = PalmSystem.getResource(path);
+                    return Promise.resolve(text ? { status: 200, body: text } : { status: 404, body: "" });
+                },
+                requestBytes: function (req) {
+                    var path = fileUrl(req.url);
+                    return (path ? rootfsBytes(path) : proxiedRequestBytes(req)).then(function (r) { return wait(300).then(function () { return r; }); });
+                },
+                crypto: { sha256: digest("SHA-256"), sha512: digest("SHA-512") },
+                files: {
+                    write: function (name, bytes) {
+                        var all = files();
+                        all[name] = b64(bytes);
+                        store.set("hardware:files", all);
+                        return PACKAGES + name;
+                    },
+                    find: function (name) { return files()[name] ? PACKAGES + name : null; },
+                    remove: function (path) {
+                        var all = files();
+                        delete all[path.slice(PACKAGES.length)];
+                        store.set("hardware:files", all);
+                    }
+                },
+                state: {
+                    load: function () { return store.get("hardware:state", null); },
+                    save: function (o) { store.set("hardware:state", o); }
+                },
+                config: function () {
+                    var c;
+                    try { c = JSON.parse(PalmSystem.getResource(SAMPLE + "catalog-sim.json") || "{}"); }
+                    catch (e) { c = {}; }
+                    return Object.assign(c, store.get("hardware:config", {}));
+                },
+                // /usr/share/phoenix/firmware/licences.json and the licence files.
+                imageFirmware: {
+                    list: function () {
+                        try { return JSON.parse(PalmSystem.getResource(SAMPLE + "firmware-in-image.json") || "{}").packages || []; }
+                        catch (e) { return []; }
+                    },
+                    text: function (path) { return PalmSystem.getResource(SAMPLE + "licences/" + path.split("/").pop()) || null; }
+                },
+                luna: nodeServiceLuna(),
+                log: function (m) { console.info("[hardware] " + m); }
+            });
+            methods.watch(function (r) { watchers.slice().forEach(function (w) { w(r); }); });
+            return methods;
+        }
+
+        var names;
+        try { names = loadModule("hardwareservice.js").METHODS; }
+        catch (e) { return; }   // no rootfs behind the page (the runtime's unit tests)
+        var serviceMethods = {};
+        names.forEach(function (name) {
+            serviceMethods["/" + name] = function (p, reply, ctx) {
+                var m;
+                try { m = service(); } catch (e) { return reply(fail("UNKNOWN_ERROR", String(e.message || e))); }
+                if (name === "install" && p.subscribe) {
+                    reply(ok({ subscribed: true, driverId: p.driverId, state: "queued" }));
+                    m.install(p, function (st) { if (!ctx.cancelled()) reply(st); });
+                    return;
+                }
+                m[name](p).then(function (r) {
+                    if (name === "list" && p.subscribe && r.returnValue) {
+                        r.subscribed = true;
+                        var w = function (x) {
+                            if (ctx.cancelled()) { watchers.splice(watchers.indexOf(w), 1); return; }
+                            reply(x);
+                        };
+                        watchers.push(w);
+                    }
+                    reply(r);
+                }, function (e) { reply(fail("UNKNOWN_ERROR", String(e && e.message || e))); });
+            };
+        });
+        register([SERVICE], serviceMethods);
+    })();
+
+    // ================================================================================
     // Ongoing activities (org.webosphoenix.ongoing; the shell's)
     // ================================================================================
     //
@@ -11577,6 +12003,7 @@
         var power = runtime.services["com.palm.power"];
         if (power) power["/shutdown/machineReboot"] = function (p, reply) {
             reply(ok());
+            store.set("boot:count", (store.get("boot:count", 0) || 0) + 1);
             runtime.updateSlots.boot();
             setTimeout(function () {
                 if (/^https?:$/.test(global.location.protocol)) global.location.reload();
@@ -13223,7 +13650,7 @@
     })();
 
     // ================================================================================
-    // The Phoenix Assistant (org.webosphoenix.assistant, org.webosphoenix.tts;
+    // The Assistant (org.webosphoenix.assistant, org.webosphoenix.tts;
     // the shell's assistant view, apps/assistant, Settings > Assistant)
     // ================================================================================
     //
@@ -13263,8 +13690,9 @@
     // commands with {subscribe: true} answer again after every change in any
     // page (the store's storage events, "assistant:" keys).
     //
-    // org.webosphoenix.tts: speak {text, lang?}, stop {}, getStatus {} ->
-    // {available, engine}: the same speech for any app.
+    // org.webosphoenix.tts: speak {text, lang?, voice?}, stop {}, getStatus {}
+    // -> {available, engine, voices}: the same speech for any app (voices:
+    // Kitten TTS's, Settings > Assistant > Voice).
     //
     // __phoenixRuntime.assistant: service() (the methods), hostEvent, for tests.
     (function assistantService() {
@@ -13306,8 +13734,8 @@
             if (ev.changed) changed("models");
         };
 
-        var NO_LLM = "Install llama.cpp's llama-server (Homebrew: brew install llama.cpp; Linux: build llama.cpp) " +
-                     "and start phoenix-sim with it on the PATH, or with --llama-server <path>.";
+        var NO_LLM = "Install llama.cpp's llama-server (scripts/mac-setup.sh or brew install llama.cpp on a Mac, " +
+                     "scripts/linux-setup.sh on Linux) and start phoenix-sim with it on the PATH, or with --llama-server <path>.";
         var llm = {
             status: function () {
                 if (!hostHas()) return Promise.resolve({ available: false, installed: [], ramBytes: 0, howToInstall: NO_LLM });
@@ -13335,9 +13763,9 @@
             try { return ss && ss.getVoices ? ss.getVoices() : []; } catch (e) { return []; }
         }
         var tts = {
-            speak: function (text, lang) {
+            speak: function (text, lang, voice) {
                 if (!text) return Promise.resolve();
-                if (hostHas()) return hostAsk("speak", { text: String(text).slice(0, 2000), lang: lang || "en" });
+                if (hostHas()) return hostAsk("speak", { text: String(text).slice(0, 2000), lang: lang || "en", voice: voice || "" });
                 var ss = global.speechSynthesis;
                 if (ss && pageVoices().length && global.SpeechSynthesisUtterance) {
                     var u = new global.SpeechSynthesisUtterance(String(text));
@@ -13354,10 +13782,29 @@
                 return Promise.resolve();
             },
             status: function () {
-                if (hostHas()) return hostAsk("speechStatus", {}).catch(function () { return { available: false, engine: "" }; });
+                if (hostHas()) return hostAsk("speechStatus", {}).catch(function () { return { available: false, engine: "", voices: [] }; });
                 return Promise.resolve({ available: pageVoices().length > 0, engine: pageVoices().length ? "speechSynthesis" : "" });
             }
         };
+
+        // ---- What the voice needs (voice) --------------------------------------------------
+        // phoenix-sim says in host.json what it found when it started
+        // ({"voice": {"recognition" | "wakeWord" | "speech": {available,
+        // engine, howToInstall}}}, shell/sim/main.cpp); speech is asked of
+        // the shell now. Without the shell: nothing to say.
+        function voiceParts() {
+            if (!hostHas() || !hostInfo.voice) return [];
+            var part = function (id) {
+                var x = hostInfo.voice[id] || {};
+                return { id: id, available: !!x.available, engine: x.engine || "", howToInstall: x.howToInstall || "" };
+            };
+            return tts.status().then(function (st) {
+                var sp = part("speech");
+                sp.available = !!st.available;
+                sp.engine = st.engine || "";
+                return [part("recognition"), part("wakeWord"), sp];
+            });
+        }
 
         // ---- Subscriptions -------------------------------------------------------------------
         var watchers = [], notifyTimer = null;
@@ -13380,7 +13827,9 @@
             if (!methods) {
                 var lib = loadModule("assistant.js");
                 methods = lib.createAssistantService({
-                    luna: nodeServiceLuna(),
+                    // Its calls are the Assistant's (the location permission
+                    // Settings > Location Services lists for it), wherever it runs.
+                    luna: nodeServiceLuna(SERVICE),
                     request: proxiedRequest,
                     storage: {
                         get: function (k) { return store.get(k, null); },
@@ -13391,8 +13840,13 @@
                     secrets: sealer,
                     llm: llm,
                     tts: tts,
+                    voice: voiceParts,
                     caller: function () { return PalmSystem.appIdentifier; },
                     locale: function () { return (global.navigator && global.navigator.language) || "en-US"; },
+                    // A follow-up question later (lib/followups.js): the
+                    // Assistant's notification, with its answers as buttons
+                    // ({actions}), or {tag, remove} to take it back.
+                    notify: function (n) { host.postToHost("notification", n); },
                     changed: changed,
                     log: function (m) { console.info("[assistant] " + m); }
                 });
@@ -13401,11 +13855,13 @@
             return methods;
         }
 
-        var WATCHABLE = { threads: 1, thread: 1, getSettings: 1, providers: 1, models: 1, commands: 1 };
+        var WATCHABLE = { threads: 1, thread: 1, getSettings: 1, providers: 1, models: 1, commands: 1, followUps: 1 };
         var serviceMethods = {};
         ["ask", "choose", "confirm", "threads", "thread", "newThread", "setCurrent", "deleteThread", "clearHistory",
          "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
-         "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary"].forEach(function (name) {
+         "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary",
+         "followUps", "answerFollowUp", "followUpOpen", "followUpLeave", "followUpWake", "resetFollowUps", "markRead",
+         "connect", "retry", "voice"].forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
                 var m;
                 try { m = service(); } catch (e) { return reply(fail(-1, String(e.message || e))); }
@@ -13429,13 +13885,34 @@
         register(["org.webosphoenix.tts"], {
             "/speak": function (p, reply) {
                 if (typeof p.text !== "string" || !p.text.trim()) return reply(fail(-1, "need \"text\""));
-                tts.speak(p.text, p.lang).then(function () { reply(ok({})); }, function (e) { reply(fail(1, e.message)); });
+                var voice = typeof p.voice === "string" && /^[A-Za-z0-9._-]{1,40}$/.test(p.voice) ? p.voice : "";
+                tts.speak(p.text, p.lang, voice).then(function () { reply(ok({})); }, function (e) { reply(fail(1, e.message)); });
             },
             "/stop": function (p, reply) { tts.stop().then(function () { reply(ok({})); }); },
-            "/getStatus": function (p, reply) { tts.status().then(function (s) { reply(ok({ available: !!s.available, engine: s.engine || "" })); }); }
+            "/getStatus": function (p, reply) {
+                tts.status().then(function (s) { reply(ok({ available: !!s.available, engine: s.engine || "", voices: s.voices || [] })); });
+            }
         });
 
-        runtime.assistant = { service: service, llm: llm, tts: tts, hostHas: hostHas };
+        // The simulator's and the tests' fast-forward for follow-up questions
+        // (sim.qml "Assistant Follow-ups Now"): the clock moved on to the next
+        // time one is due, again until one is shown as a notification (past
+        // the quiet hours, Do Not Disturb and calls) or none waits. Resolves
+        // the last wake's {queued, delivered, dropped, postponed, at}.
+        function fastForward(limit) {
+            var m = service(), n = limit || 8;
+            function step(last) {
+                return m.followUps({}).then(function (q) {
+                    var waiting = q.followUps || [];
+                    if (!waiting.length || n-- <= 0 || (last && last.delivered)) return last || { delivered: 0 };
+                    var at = Math.max(Date.now(), Math.min.apply(null, waiting.map(function (f) { return f.nextAt; })));
+                    return m.followUpWake({ at: at }).then(function (r) { r.at = at; return step(r); });
+                });
+            }
+            return step(null);
+        }
+
+        runtime.assistant = { service: service, llm: llm, tts: tts, hostHas: hostHas, fastForward: fastForward };
     })();
 
     // ================================================================================
@@ -14676,8 +15153,10 @@
             });
         }
 
+        // Who asks: a service's own id (nodeServiceLuna), else the page's app.
+        function callerOf(ctx) { return (ctx && ctx.caller) || appIdFromLocation(); }
         function tracking(p, reply, ctx) {
-            var appId = appIdFromLocation();
+            var appId = callerOf(ctx);
             if (!p.subscribe) return positionReply(p, reply, ctx, appId);
             checkPermission(appId, ctx, function (allowed) {
                 if (!allowed) return reply(fail(LOC_ERR.denied, "Permission denied"));
@@ -14798,6 +15277,12 @@
             },
             "*": function (p, reply) { reply(ok()); }
         };
+        // Not OSE's (the legacy com.palm.location's, below): luna-service2's
+        // answer to a method a service does not have, not "*"'s silent
+        // success without a position (the Assistant asked this, 9 October 2026).
+        location["/getCurrentPosition"] = function (p, reply) {
+            reply(fail(-1, "Unknown method \"getCurrentPosition\" for category \"/\""));
+        };
         register(["com.webos.service.location"], location);
         // The legacy name (luna-systemui's alert, Mojo and Enyo apps): the
         // same, plus getCurrentPosition and startTracking, with timestamps in
@@ -14812,7 +15297,7 @@
         }
         var legacy = {};
         Object.keys(location).forEach(function (k) { legacy[k] = location[k]; });
-        legacy["/getCurrentPosition"] = inSeconds(function (p, reply, ctx) { positionReply(p, reply, ctx, appIdFromLocation()); });
+        legacy["/getCurrentPosition"] = inSeconds(function (p, reply, ctx) { positionReply(p, reply, ctx, callerOf(ctx)); });
         legacy["/getLocationUpdates"] = legacy["/startTracking"] = inSeconds(tracking);
         register(["com.palm.location"], legacy);
 

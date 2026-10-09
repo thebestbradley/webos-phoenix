@@ -9,3 +9,36 @@ import { cleanup } from "@testing-library/react";
 import { afterEach } from "vitest";
 
 afterEach(cleanup);
+
+// Synchronous XMLHttpRequest to the page's own origin: the runtime reads
+// the device's files that way (PalmSystem.getResource: sample-data.js, the
+// services' scripts, apps.json, the media samples), and in the tests
+// nothing serves them. jsdom does each such request in a child Node
+// process (living-standard/xhr-sync-worker.js, spawned for every send):
+// ~0.45 s apiece here, seven of them as a test file loads the runtime and
+// makes its first call, and many times that on a busy machine. That spent
+// the hooks' 10 s and the 1 s that waitFor and findBy wait before the page
+// had drawn anything ("flaky under load"); it also asked whatever happens
+// to listen on localhost:3000. Such a request now fails at once, as
+// jsdom's did with nothing listening: a NetworkError, which the runtime
+// takes for a missing file. Tests that serve files stub XMLHttpRequest
+// themselves, which this leaves alone.
+if (typeof window !== "undefined" && window.XMLHttpRequest) {
+    const proto = window.XMLHttpRequest.prototype;
+    const open = proto.open as (...a: unknown[]) => void;
+    const send = proto.send as (...a: unknown[]) => void;
+    const unserved = new WeakSet<XMLHttpRequest>();
+    proto.open = function (this: XMLHttpRequest, ...args: unknown[]) {
+        const [, url, async] = args;
+        let local = false;
+        try { local = new URL(String(url), document.baseURI).origin === window.location.origin; } catch { local = false; }
+        if (async === false && local) unserved.add(this);
+        else unserved.delete(this);
+        open.apply(this, args);
+    } as typeof proto.open;
+    proto.send = function (this: XMLHttpRequest, ...args: unknown[]) {
+        if (unserved.has(this))
+            throw new DOMException("Nothing serves the page's origin in the tests", "NetworkError");
+        send.apply(this, args);
+    } as typeof proto.send;
+}

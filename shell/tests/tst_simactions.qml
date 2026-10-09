@@ -70,6 +70,64 @@ Item {
             }
         }
 
+        // Services > Marketplace Catalog: the catalog service's state in
+        // the menu, started and stopped from it, and the Marketplace's
+        // Start Local Catalog (a "simulator" host message) only from the
+        // Marketplace. SimMarketplace itself: build/simmarketplace-test.
+        QtObject {
+            id: fakeCatalog
+            property string state: "stopped"
+            property string error: ""
+            property bool settingUp: false
+            property bool ownsServer: state === "running"
+            readonly property string url: "http://127.0.0.1:8088/"
+            readonly property string logFile: "/tmp/simulator.log"
+            property int starts: 0
+            property int stops: 0
+            function startAsync() { starts++; }
+            function stop() { stops++; }
+        }
+        function test_servicesMenu() {
+            var e = entry("marketplaceCatalog");
+            compare(e.menu, "services");
+            verify(e.dynamic && e.checkable && e.run);
+            var none = sim.item.simActionState("marketplaceCatalog");
+            verify(!none.enabled && /needs web apps/.test(none.text), "without web apps: there is none to start");
+
+            sim.item.catalog = fakeCatalog;
+            compare(sim.item.simActionState("marketplaceCatalog").text, "Marketplace Catalog");
+            verify(sim.item.simActionState("marketplaceCatalog").enabled);
+            verify(!sim.item.simActionChecked("marketplaceCatalog"));
+            verify(!sim.item.simActionState("marketplaceCatalogBrowser").enabled, "nothing to open while stopped");
+
+            sim.item.simTrigger("marketplaceCatalog");
+            compare(fakeCatalog.starts, 1, "the menu item starts it");
+            fakeCatalog.settingUp = true;
+            fakeCatalog.state = "starting";
+            verify(sim.item.simActionChecked("marketplaceCatalog"));
+            verify(/setting up/.test(sim.item.simActionState("marketplaceCatalog").text));
+            fakeCatalog.settingUp = false;
+            fakeCatalog.state = "running";
+            compare(sim.item.simActionState("marketplaceCatalog").text, "Marketplace Catalog: running at 127.0.0.1:8088");
+            verify(sim.item.simActionState("marketplaceCatalogBrowser").enabled && sim.item.simActionState("marketplaceCatalogLog").enabled);
+            sim.item.simTrigger("marketplaceCatalog");
+            compare(fakeCatalog.stops, 1, "and stops it");
+
+            fakeCatalog.error = "the catalog service stopped with exit code 255:\nPHP Fatal error";
+            fakeCatalog.state = "failed";
+            var failed = sim.item.simActionState("marketplaceCatalog");
+            compare(failed.text, "Marketplace Catalog: failed (the catalog service stopped with exit code 255)");
+            compare(failed.tip, fakeCatalog.error, "the whole reason in its tip");
+            verify(!sim.item.simActionChecked("marketplaceCatalog") && sim.item.simActionState("marketplaceCatalogLog").enabled);
+
+            sim.item.simulatorRequest("org.webosphoenix.notes", { op: "startMarketplaceCatalog" });
+            compare(fakeCatalog.starts, 1, "another app cannot start it");
+            sim.item.simulatorRequest("org.webosphoenix.marketplace", { op: "startMarketplaceCatalog" });
+            compare(fakeCatalog.starts, 2, "the Marketplace can");
+            fakeCatalog.state = "stopped";
+            sim.item.catalog = null;
+        }
+
         // The key and the menu item (simTrigger) are the same entry.
         function test_keyAndMenuItem() {
             verify(!sim.item.simActionChecked("ringer"));
@@ -78,11 +136,44 @@ Item {
             keyClick(Qt.Key_R, Qt.ControlModifier | Qt.ShiftModifier);
             verify(!sim.item.simActionChecked("ringer"), "and so does its key");
 
-            var keyboard = sim.item.simActionChecked("keyboard");
+            // The hardware keyboard's item and button say what they will
+            // do: attach one, or detach the one attached.
+            var status = sim.item.simStatus;
+            var keyboard = status.hardwareKeyboard;
             keyClick(Qt.Key_K, Qt.ControlModifier | Qt.ShiftModifier);
-            compare(sim.item.simActionChecked("keyboard"), !keyboard);
+            compare(status.hardwareKeyboard, !keyboard);
             sim.item.simTrigger("keyboard");
-            compare(sim.item.simActionChecked("keyboard"), keyboard);
+            compare(status.hardwareKeyboard, keyboard);
+        }
+
+        // The hardware keyboard and the on-screen one are two buttons, each
+        // in the toolbar and the Device menu, saying what they will do now
+        // (owner: the keyboard button read as the on-screen keyboard's).
+        function test_keyboardLabels() {
+            var hw = entry("keyboard"), vk = entry("virtualKeyboard");
+            verify(hw.dynamic && vk.dynamic);
+            verify(!hw.checkable && !vk.checkable, "their names say their state");
+            compare(hw.menu, "device");
+            compare(vk.menu, "device");
+            compare(hw.keys, ["Ctrl+Shift+K"]);
+            compare(vk.keys, ["Ctrl+Shift+O"]);
+            var bar = sim.item.simToolbar;
+            verify(bar.indexOf("keyboard") >= 0 && bar.indexOf("virtualKeyboard") >= 0, "both in the toolbar");
+            compare(hw.icon, "keyboard");
+
+            var status = sim.item.simStatus;
+            status.hardwareKeyboard = false;
+            compare(sim.item.simActionState("keyboard").text, "Attach Hardware Keyboard");
+            sim.item.simTrigger("keyboard");
+            verify(status.hardwareKeyboard);
+            compare(sim.item.simActionState("keyboard").text, "Detach Hardware Keyboard");
+            sim.item.simTrigger("keyboard");
+            verify(!status.hardwareKeyboard);
+            compare(sim.item.simActionState("keyboard").icon, "keyboard");
+
+            var st = sim.item.simActionState("virtualKeyboard");
+            compare(st.text, "Show Virtual Keyboard");
+            compare(st.icon, "keyboard-show");
         }
 
         // The toolbar's keyboard button: with no field in use it opens Just
@@ -98,18 +189,37 @@ Item {
                         walk(o.children[i]);
                 }
             })(sim.item);
+            function label() { return sim.item.simActionState("virtualKeyboard").text; }
             verify(shell.locked);
-            verify(!sim.item.simActionChecked("virtualKeyboard"));
+            verify(!shell.keyboardOpen);
+            compare(label(), "Show Virtual Keyboard");
             sim.item.simTrigger("virtualKeyboard");
             wait(100);
-            verify(!shell.justTypeOpen && !sim.item.simActionChecked("virtualKeyboard"), "nothing over the lock screen");
+            verify(!shell.justTypeOpen && !shell.keyboardOpen, "nothing over the lock screen");
 
             shell.unlock();
             sim.item.simTrigger("virtualKeyboard");
             verify(shell.justTypeOpen);
-            tryVerify(function() { return sim.item.simActionChecked("virtualKeyboard"); }, 3000, "the keyboard comes up");
+            tryVerify(function() { return shell.keyboardOpen; }, 3000, "the keyboard comes up");
+            compare(label(), "Hide Virtual Keyboard");
+            compare(sim.item.simActionState("virtualKeyboard").icon, "keyboard-hide");
             keyClick(Qt.Key_O, Qt.ControlModifier | Qt.ShiftModifier);
-            tryVerify(function() { return !sim.item.simActionChecked("virtualKeyboard"); }, 3000, "its key puts it down");
+            tryVerify(function() { return !shell.keyboardOpen; }, 3000, "its key puts it down");
+            compare(label(), "Show Virtual Keyboard");
+            shell.gestureBack();
+            tryVerify(function() { return !shell.justTypeOpen; }, 3000);
+
+            // With a hardware keyboard attached a field leaves the keyboard
+            // down, but Show Virtual Keyboard brings it up all the same.
+            sim.item.simStatus.hardwareKeyboard = true;
+            compare(label(), "Show Virtual Keyboard");
+            sim.item.simTrigger("virtualKeyboard");
+            verify(shell.justTypeOpen);
+            tryVerify(function() { return shell.keyboardOpen; }, 3000, "it comes up with a hardware keyboard too");
+            compare(label(), "Hide Virtual Keyboard");
+            sim.item.simTrigger("virtualKeyboard");
+            tryVerify(function() { return !shell.keyboardOpen; }, 3000);
+            sim.item.simStatus.hardwareKeyboard = false;
             shell.gestureBack();
             tryVerify(function() { return !shell.justTypeOpen; }, 3000);
             shell.lock();

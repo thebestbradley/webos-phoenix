@@ -15,6 +15,20 @@ never deprecated: it is for the fans. **2.0** is a modern revamp in style
 and features, including docking to monitors and TVs, to bring webOS back.
 See [docs/ROADMAP.md](docs/ROADMAP.md#two-lines-1x-and-20).
 
+**Try it** on a Mac or Ubuntu, in a clone of this repository:
+
+```sh
+./phoenix run
+```
+
+One command installs what is missing (Homebrew's Qt and tools on a Mac; Qt
+6.8.1, Node.js 22 and the packages on Ubuntu; the assistant's models),
+builds, and starts the simulator, adaptive: resize its window and it is a
+phone or a tablet by the size, live. `./phoenix run phone` or `tablet` fixes
+the layout, `./phoenix check` only says what it would install, and
+`--no-assistant` / `--offline` skip downloads. Run again, it checks
+everything in about two seconds. See [Run the simulator](#run-the-simulator).
+
 | Lock screen | Card view | Card stack | Reordering | App | Launcher | Dashboard | Just Type | System menu |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | ![](docs/screenshots/locked.png) | ![](docs/screenshots/cards.png) | ![](docs/screenshots/stacks.png) | ![](docs/screenshots/reorder.png) | ![](docs/screenshots/maximized.png) | ![](docs/screenshots/launcher.png) | ![](docs/screenshots/dashboard.png) | ![](docs/screenshots/justtype.png) | ![](docs/screenshots/systemmenu.png) |
@@ -194,6 +208,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Tasks, Voice Memos, Flashlight, QR Scanner, Weather, Maps, Passwords, Authenticator, Terminal, Videos, Podcasts, PDF View, Doc View, First Use, Help, Print Manager, Voice Dial), with the shared `@phoenix/ui` components, `@phoenix/luna` service client and `@phoenix/secrets` (TOTP, sealing, auto-lock), generated demo media (`apps/media-samples`), the Node.js Luna services of Files (`apps/files/service`) and Voice Memos (`apps/voicememos/service`, speech to text with whisper.cpp), and the CardDAV & CalDAV Synergy account with its sync service (`apps/dav`, see [docs/SYNERGY.md](docs/SYNERGY.md)) |
 | `services/pty` | `org.webosphoenix.pty`, the Terminal's PTY Luna service (C++), whose core phoenix-sim also uses |
 | `services/devices` | `phoenix-devices`: LunaSysMgr's `com.palm.display`, `com.palm.keys`, `com.palm.vibrate` and `com.palm.ambientLightSensor` on a device, which OSE lacks (C++; docs/HARDWARE.md); finds the hardware by looking and follows it as it comes and goes; `phoenix-devices --probe` prints what it finds |
+| `services/hardware` | `org.webosphoenix.hardware`: the device's hardware matched against the signed driver catalog, the gaps the image leaves (newer firmware, out-of-tree drivers) installed with opkg and rolled back when they do not work (Settings > Hardware; docs/HARDWARE.md, docs/DRIVERS.md); its catalog tool is `server/drivers` |
 | `runtime/` | The webOS web app runtime for the simulator and browsers (`PalmSystem`, simulated Luna services) |
 | `shell/tests` | Behaviour tests (`qmltestrunner`) |
 | `shell/assets/openwebos` | Original Open webOS system UI artwork (Apache-2.0) |
@@ -202,6 +217,24 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `docs/` | Architecture, roadmap, licensing, and the legacy UI spec |
 
 ## Run the simulator
+
+```sh
+./phoenix run                       # adaptive: a phone or a tablet by the window's size
+./phoenix run phone                 # the Pre, 320x480
+./phoenix run tablet --scene cards  # the TouchPad; what follows goes to phoenix-sim
+./phoenix run --marketplace         # with the Marketplace's catalog on this computer
+./phoenix                           # install what is missing and build, no run
+./phoenix check                     # what is there, what would be installed (a dry run)
+```
+
+`./phoenix` is the one command: it checks each prerequisite, installs only
+what is missing (printing its size), and builds; options `--no-assistant`,
+`--offline`, `--tests`, `--dry-run`. In the adaptive simulator **View >
+Device Size** snaps the window to the Pre, the Pre 3, a modern phone, a
+foldable folded or open, the TouchPad or a modern tablet, and the shell
+switches between its phone and tablet layouts with the apps running on
+([GETTING-STARTED.md](docs/GETTING-STARTED.md#phone-tablet-or-both-the-adaptive-simulator)).
+What it does, by hand:
 
 Requires Qt 6.8 or newer (6.8 is what a device's webOS OSE image ships)
 with Qt Quick and Qt5Compat. Qt WebEngine is
@@ -222,8 +255,9 @@ git submodule update --init
 ```
 
 Step by step, with troubleshooting and the test tools:
-[docs/GETTING-STARTED.md](docs/GETTING-STARTED.md). `scripts/mac-setup.sh`
-and `scripts/linux-setup.sh` install everything and build it.
+[docs/GETTING-STARTED.md](docs/GETTING-STARTED.md). `./phoenix` (or
+`scripts/mac-setup.sh` and `scripts/linux-setup.sh`, which call it) installs
+everything and builds it.
 
 **macOS**
 
@@ -236,7 +270,8 @@ cmake --build build
 
 | Command | What it does |
 | --- | --- |
-| `./build/phoenix-sim` | Pre (320x480) |
+| `./build/phoenix-sim` | Adaptive, starting as the Pre (320x480) |
+| `./build/phoenix-sim --phone` | Pre (320x480), fixed |
 | `./build/phoenix-sim --size 480x800 --scale 1.5 --scene cards` | Pre 3 |
 | `./build/phoenix-sim --tablet` | TouchPad (1024x768) |
 | `./build/phoenix-sim --tablet --size 2560x1600 --scale 2` | A large tablet |
@@ -244,11 +279,10 @@ cmake --build build
 **Ubuntu 24.04**
 
 ```sh
-scripts/linux-setup.sh
-./build/phoenix-sim
+./phoenix run
 ```
 
-Ubuntu's own Qt packages stop at 6.4, so the script installs Qt 6.8.1 into
+Ubuntu's own Qt packages stop at 6.4, so `./phoenix` installs Qt 6.8.1 into
 `/opt/Qt` with aqtinstall (and Node.js 22, as Ubuntu's nodejs is too old),
 then builds with `-DCMAKE_PREFIX_PATH=/opt/Qt/6.8.1/gcc_64`.
 
@@ -259,19 +293,43 @@ the ringer switch, turning it left or right, a screen capture, the Full Erase
 and USB drive chords, a hardware keyboard), **Simulate** what happens to it
 (an incoming call, text, picture message or IM, a notification, the battery
 and chargers, a USB cable, the Touchstones, Touch to Share, a headset and its
-button, the play/pause key, the light), **View** the device it starts as
-(phone or tablet, the scale, a demo scene: these restart it) and the
-developer overlays, and **Help > Keyboard Shortcuts…** lists every key below
+button, the play/pause key, the light), **View** the device (phone, tablet
+or adaptive; in the adaptive simulator Phone, Tablet and Device Size resize
+the window and the layout follows live, otherwise they, the scale and a demo
+scene restart it) and the developer overlays, **Services** what it runs on
+this computer for the device (the Marketplace's catalog, below), and **Help > Keyboard Shortcuts…** lists every key below
 in a window. Each menu item shows its key, so the menus teach them; they are
 made from one list in `shell/qml/sim.qml` (`simActions`), as the keys are.
-The toolbar has icons for the most used: Power, Home, Back, rotate, screen
-capture, incoming call, text, notification, low battery, charger, Touchstone,
-phone and tablet; their tooltips name the keys. It sits beside the screen
-(down the right of an upright screen, along the top of one on its side), so
-the screen keeps its size and `--screenshot` saves the screen alone; **View >
-Show Toolbar** or `--no-toolbar` hides it. Its icons need Qt's SVG plugin
+The toolbar has icons for the most used: Power, Home, Back, the hardware
+keyboard and the virtual one, rotate, screen capture, incoming call, text,
+notification, low battery, charger, Touchstone, phone and tablet; their
+tooltips name the keys. Items that switch something say what they will do
+now: **Attach Hardware Keyboard** / **Detach Hardware Keyboard**
+(Ctrl+Shift+K), **Show Virtual Keyboard** / **Hide Virtual Keyboard**
+(Ctrl+Shift+O, its icon's arrow the way the keyboard will go), **Show
+Toolbar** / **Hide Toolbar**. The toolbar sits beside the screen (down the
+right of an upright screen, along the top of one on its side), so the screen
+keeps its size and `--screenshot` saves the screen alone; **View > Hide
+Toolbar** or `--no-toolbar` hides it. A click on it leaves the keyboard focus
+on the screen. On a Mac the menus are in the menu bar at the top of the
+screen whatever has the focus in the simulator (click its window first if
+another app is in front); `phoenix-sim --check-chrome` prints what the menu
+bar has (CI runs it on Linux and macOS). Its icons need Qt's SVG plugin
 (`libqt6svg6` on Ubuntu; Homebrew's `qt` has it); without it its buttons
 show their names.
+
+**The Marketplace's catalog.** The Marketplace reads the Phoenix catalog
+from `http://127.0.0.1:8088/`, a PHP service in `server/marketplace` that
+runs on this computer for now. Start it with **Services > Marketplace
+Catalog**: the item says how it goes (setting up, the first time; running
+at 127.0.0.1:8088; or failed, with the reason and **Show Catalog Log**),
+and the Marketplace opens once it answers. Or tap **Start Local Catalog**
+on the Marketplace's "Can't reach" card, or start the simulator with
+`--marketplace` (`./phoenix run --marketplace`). **Services > Start Catalog
+with the Simulator** starts it every time (off by default), and **Open
+Catalog in Browser** opens its review page. It stops with the simulator;
+one another simulator started is used as it is. It needs PHP 8 with sodium
+and pdo_sqlite, which `./phoenix` installs.
 
 Controls: drag with the mouse as you would with a finger. In card view a
 two-finger trackpad swipe sideways moves between cards and a swipe up throws
@@ -283,10 +341,11 @@ the notification list, and swiped sideways on a notification dismisses it
 bottom is the gesture bar, on phones and tablets alike; it moves to the
 bottom of the screen as you hold it. Press on it and drag (up: card view,
 or out of Just Type; left: back), or swipe two fingers on a trackpad with
-the pointer on it. With Settings > Advanced > Wave launcher on, drag up from
-the bar's left or right quarter, slide along the wave and let go on an app;
-with Switch apps on (also Screen & Lock > Advanced gestures), drag across the
-bar's centre about half a phone's width (160 px) for the app beside. `--home-button` simulates a device
+the pointer on it. Drag up from the bar's left or right quarter for the wave
+launcher, slide along the wave and let go on an app; drag across the bar's
+centre about half a phone's width (160 px) for the app beside (Switch apps).
+Both are on by default; Settings > Advanced turns them off (Switch apps also
+in Screen & Lock > Advanced gestures). `--home-button` simulates a device
 whose maker uses a hardware Home button instead (no gesture bar; tablets
 then take the bottom-edge flick). A big `--size` needs a matching
 `--scale` to look like a real device (2 for most tablets of 2560 px). The
@@ -294,7 +353,7 @@ keyboard's microphone and Voice Dial transcribe with whisper.cpp on your
 computer (`PHOENIX_WHISPER_CLI`, `PHOENIX_WHISPER_MODEL`); without a
 microphone, `--microphone-file call.wav --microphone-file yes.wav` plays
 WAV files as one, one per recording. Keys: **Esc** back, **F1** swipe up, **Home** the Home button,
-**F2** demo notification, **F3** the Power button (the screen off and locked, or on again), **F4** incoming call (rings
+**F2** demo notification (**Shift+F2** the assistant's follow-up questions now: its clock moved on until one waiting for later is sent), **F3** the Power button (the screen off and locked, or on again), **F4** incoming call (rings
 the Phone app), **F5** incoming text message (for Messaging; **Shift+F5** a picture message, **Ctrl+F5** an instant message from a buddy once an IM account is set up), **F6** low
 battery, **Shift+F6** the battery stops reporting (or reports again), **F7** plug a charger in or out, **F8** battery charged to full,
 **Shift+F7** brings a Touch to Share phone in range (the glow) or takes it away, **Ctrl+F7** touches it to the device: the app in front sends what it shares (the browser its page) and its card is thrown (`--touch-to-share` starts with one in range),
@@ -327,7 +386,7 @@ connection failed"). Left alone the screen dims and turns off as on a device
 (Settings > Screen & Lock > Turn off after; 5 s on the lock screen); a
 click, **F3** or **Home** turns it on (on a Mac, F3 to F11 need **fn**:
 macOS keeps them for itself). `--stay-awake` keeps it on (as `--screenshot`
-does). `--hardware-keyboard` starts with a hardware keyboard attached, and **Ctrl+Shift+K** attaches or detaches one: the virtual keyboard then stays down when a field takes the focus, a keyboard button above the gesture bar brings it up, and typing on the keyboard puts it away. **Ctrl+Shift+O** (the toolbar's keyboard button) brings the on-screen keyboard up or puts it down; with no text field in use it opens Just Type, whose field it types into. `--low-memory` acts as if memory were low: launching an app shows
+does). `--hardware-keyboard` starts with a hardware keyboard attached, and **Ctrl+Shift+K** attaches or detaches one: the virtual keyboard then stays down when a field takes the focus, a keyboard button above the gesture bar brings it up, and typing on the keyboard puts it away. **Ctrl+Shift+O** (Device > Show Virtual Keyboard, also in the toolbar) brings the on-screen keyboard up or puts it down, with a hardware keyboard attached too; with no text field in use it opens Just Type, whose field it types into. `--low-memory` acts as if memory were low: launching an app shows
 "Sorry, Too Many Cards" instead. On a Touchstone the device goes into dock
 mode, "Exhibition", as on webOS: at once with the screen off (or Power), or
 when the screen would have turned off; an exhibition shows full screen (the
@@ -361,7 +420,10 @@ shutdown sounds (so do `--screenshot` and the offscreen platform).
 The boot animation shows at start-up, as on a device, until the system UI
 has loaded (not with `--screenshot` or `--no-boot-animation`;
 `--boot-animation` shows it anyway, e.g. for a screenshot). After a system
-update's Install Now it says "Updating the system" first.
+update's Install Now it says "Updating the system" first. It takes every
+touch while it shows, as on a device, so a script that drives the
+simulator (`xdotool`) waits for `phoenix-sim: booted` in its output, plus
+the logo's 700 ms fade, or passes `--no-boot-animation`.
 
 `--security-policy minLength=6,maxRetries=4,alphaNumeric,noSimple,inactivity=300`
 sets a device security policy, as an Exchange account did (any of the
@@ -411,7 +473,8 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-clipboard.cjs` | Clipboard history: the Clipboard app and Settings > Clipboard |
 | `node tools/test-sharing.cjs` | Sharing, sync and health (M6 F4): DropShare (Settings, receiving into Downloads, sending, the share sheet, Touch to Share), a subscribed .ics calendar, the temperature warnings |
 | `node tools/test-community.cjs` | The community's features (M6 F4): Settings > Advanced, repeat alerts and lock screen previews reaching the shell, Contacts' tones and a text's tone, Email's cycling dashboard |
-| `node tools/test-assistant.cjs` | The Phoenix Assistant: the app's commands, read-backs and choices, Settings > Assistant with a stand-in cloud provider, the permission gate, conversations |
+| `node tools/test-assistant.cjs` | The Assistant: the app's commands, read-backs and choices, Settings > Assistant with a stand-in cloud provider, the permission gate, conversations (the panes on a phone and a tablet, swipe to delete, Open in New Card with two cards) |
+| `node tools/test-assistant-followups.cjs` | The Assistant's follow-up questions: asked after an event, answered by a quick reply, sent later as a notification with buttons, unread in Conversations, the app opened from it |
 | `node tools/test-terminal.cjs` | Terminal (simulated shell, then /bin/sh for real) |
 | `build/pty/pty-test` | The Terminal's PTY service |
 | `build/devices/devices-test` | phoenix-devices: the display, keys, vibrator and light sensor services; the hardware found by looking, devices appearing and going, `--probe` |
@@ -420,6 +483,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-docs.cjs` | PDF View and Doc View |
 | `node tools/test-orientation.cjs` | Apps asking for and following an orientation |
 | `node tools/test-firstuse.cjs` | First Use, every step |
+| `node tools/test-hardware.cjs` | Settings > Hardware and First Use's Hardware step: newer firmware after its licence, a driver the kernel lacks (a failed install rolled back), another catalog with Developer Mode, a catalog with the wrong key refused, the hardware report, the firmware licences in Device Info (needs PHP) |
 | `node tools/test-help.cjs` | Help, and Just Type finding it |
 | `node tools/test-emergency.cjs` | Emergency Info, restricted Phone, Accessibility |
 | `node tools/test-location.cjs` | Location Services and permissions |

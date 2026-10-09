@@ -1,16 +1,25 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Assistant: the Phoenix Assistant (docs/M6-PLAN.md F3; launch params
-// {page: "assistant"}, which the Assistant app's Preferences and its "Set
-// up a cloud model" open). All through org.webosphoenix.assistant
-// (@phoenix/luna assistant); the shell's view and the app follow at once.
+// Assistant: settings for the Assistant (docs/M6-PLAN.md F3; launch params
+// {page: "assistant"}, which the Assistant app's Preferences open). All
+// through org.webosphoenix.assistant (@phoenix/luna assistant); the shell's
+// view and the app follow at once.
+//
+// "Connect model" (an answer's choice, in the shell's view and the app:
+// service connect) opens it with {connect: "choose" | "local" | "cloud" |
+// "both", threadId}: a page of its own for just that, asking which kind
+// first when it was not chosen, then the download or the provider, and
+// once a model is there "Back to Your Question", which opens the Assistant
+// app on the conversation with {retry: true} to ask it again.
 //
 //   Assistant        on or off (on by default), speak answers
 //   Voice            listen for "Hey Phoenix" (off by default), also with
 //                    the screen off or locked (off by default), voice
 //                    replies (on by default), and what listening means for
-//                    privacy (docs/AI-AND-MCP.md, Voice)
+//                    privacy (docs/AI-AND-MCP.md, Voice); the speaking
+//                    voice and Play Sample (AssistantSpeech.tsx); what the
+//                    voice is missing here and how to get it (AssistantVoice.tsx)
 //   On device        llama.cpp models to download, use or remove, with their
 //                    size and the memory they want (what fits is offered);
 //                    how to get llama-server when it is missing
@@ -18,20 +27,29 @@
 //                    OpenAI-compatible server) with their model and key; add,
 //                    edit, test, remove; the one "Ask ..." offers
 //   Control          whether cloud models may run commands (off by default)
+//   Follow-up        questions after something is made (on by default),
+//   questions        their quiet hours, the ones waiting, and a switch per
+//                    topic (AssistantFollowUps.tsx)
+//   Permissions      Location: the Assistant's grant in Location Services
+//                    (AssistantPermissions.tsx)
 //   Commands         which commands the assistant may run
 //   History          clear every conversation
 //
 // Keys go to the service, which seals them; this page only ever sees their
 // last four characters (docs/APP-RUNTIME.md "Assistant").
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-    assistant, formatBytes, type AssistantCommand, type AssistantProvider, type AssistantSettings, type LocalModel,
+    apps, assistant, formatBytes, ASSISTANT_APP_ID, type ConnectMode, type AssistantCommand, type AssistantProvider, type AssistantSettings, type LocalModel,
     type LocalModelStatus, type LunaError, type ProviderType, type ProviderTypeInfo,
 } from "@phoenix/luna";
-import { useLuna } from "@phoenix/luna/react";
+import { useLaunchParams, useLuna } from "@phoenix/luna/react";
 import { Button, Dialog, Group, ListSelector, Note, Page, PageHeader, PopupMenu, Row, Spinner, TextField, ToggleButton } from "@phoenix/ui";
 import { useBack } from "../nav";
+import { FollowUpQuestions } from "./AssistantFollowUps";
+import { VoiceMissing } from "./AssistantVoice";
+import { SpeakingVoice } from "./AssistantSpeech";
+import { AssistantPermissions } from "./AssistantPermissions";
 
 const errorText = (e: unknown) => (e as LunaError).errorText ?? (e instanceof Error ? e.message : String(e));
 const gb = (n: number) => `${Math.round(n / 2 ** 30)} GB`;
@@ -123,23 +141,25 @@ function ProviderEditor({ editing, types, onDone }: {
 
 // ---- On-device models ------------------------------------------------------------------------
 
-function LocalModels({ m }: { m: Models }) {
+function LocalModels({ m, onDownload }: { m: Models; onDownload?: (id: string) => void }) {
     const [error, setError] = useState("");
     const act = (p: Promise<void>) => { setError(""); p.catch((e) => setError(errorText(e))); };
     const st = m.status;
     return (
         <>
             <Group label="On-device model">
-                <ListSelector title="Use" value={m.selected} testId="as-local-use"
-                              options={[{ label: "None", value: "" }, ...m.models.filter((x) => x.installed).map((x) => ({ label: x.name, value: x.id }))]}
+                {/* "off": none, not even the built-in one ("" is the built-in one). */}
+                <ListSelector title="Use" value={m.selected || "off"} testId="as-local-use"
+                              options={[{ label: "None", value: "off" }, ...m.models.filter((x) => x.installed).map((x) => ({ label: x.name, value: x.id }))]}
                               onChange={(id) => act(assistant.selectModel(id))} />
                 {m.models.map((x) => (
-                    <Row key={x.id} testId={`as-model-${x.id}`} title={<>{x.name}{x.recommended && <span className="as-badge">Recommended</span>}</>}
-                         subtitle={`${formatBytes(x.size)} · needs ${gb(x.ram)} of memory · ${x.licence}${x.fits ? "" : " · too big for this device"}${x.downloading ? ` · ${Math.round(100 * x.downloading.received / Math.max(1, x.downloading.total))}%` : ""}`}>
-                        {x.downloading ? <button type="button" className="as-small" data-testid={`as-cancel-${x.id}`} onClick={() => act(assistant.cancelDownload(x.id))}>Cancel</button>
+                    <Row key={x.id} testId={`as-model-${x.id}`}
+                         title={<>{x.name}{x.builtIn ? <span className="as-badge">Built in</span> : x.recommended && <span className="as-badge">Recommended</span>}</>}
+                         subtitle={`${formatBytes(x.size)} · needs ${gb(x.ram)} of memory · ${x.licence}${x.fits ? "" : " · too big for this device"}${x.builtIn && !x.installed ? " · not installed here" : ""}${x.downloading ? ` · ${Math.round(100 * x.downloading.received / Math.max(1, x.downloading.total))}%` : ""}`}>
+                        {x.builtIn ? null : x.downloading ? <button type="button" className="as-small" data-testid={`as-cancel-${x.id}`} onClick={() => act(assistant.cancelDownload(x.id))}>Cancel</button>
                          : x.installed ? <button type="button" className="as-small negative" data-testid={`as-remove-${x.id}`} onClick={() => act(assistant.removeModel(x.id))}>Remove</button>
                          : <button type="button" className="as-small" disabled={!x.fits || !!m.models.some((y) => y.downloading)} data-testid={`as-download-${x.id}`}
-                                   onClick={() => act(assistant.downloadModel(x.id))}>Download</button>}
+                                   onClick={() => { onDownload?.(x.id); act(assistant.downloadModel(x.id)); }}>Download</button>}
                     </Row>
                 ))}
             </Group>
@@ -154,6 +174,114 @@ function LocalModels({ m }: { m: Models }) {
     );
 }
 
+// ---- Connect a model ------------------------------------------------------------------------
+// The kinds "Connect model" offers, as Settings' rows say them.
+
+const KINDS: { mode: ConnectMode; title: string; subtitle: string }[] = [
+    { mode: "local", title: "On-Device Model",
+      subtitle: "Private and offline: it runs on this device and nothing you ask leaves it. A one-time download of 0.5 to 2.5 GB, for the memory here." },
+    { mode: "cloud", title: "Cloud Model",
+      subtitle: "Anthropic, OpenAI, Google Gemini or any OpenAI-compatible server, with your API key. Best at open questions; what you ask goes to the provider." },
+    { mode: "both", title: "Both",
+      subtitle: "The on-device model answers first; what it can't, you can ask the cloud model." },
+];
+
+function localReady(m: Models | undefined): string {
+    const x = m?.selected ? m.models.find((y) => y.id === m.selected) : undefined;
+    return x && x.installed && m!.status.available ? x.name : "";
+}
+
+interface Connecting {
+    /** Launched with: "choose" asks which kind first. */
+    asked: ConnectMode | "choose";
+    mode: ConnectMode | "choose";
+    threadId: string;
+    /** The launch params it came with (a new launch starts it again). */
+    from: object;
+    closed?: boolean;
+    /** A model downloaded from here: used once it is in. */
+    downloading?: string;
+}
+
+function ConnectModel({ c, set, prov, local, settings, onEdit }: {
+    c: Connecting; set: (c: Connecting) => void; prov: Providers | undefined; local: Models | undefined; settings: AssistantSettings;
+    onEdit: (p: AssistantProvider | { type: ProviderType }) => void;
+}) {
+    const mode = c.mode;
+    const setMode = (m: Connecting["mode"]) => set({ ...c, mode: m });
+    const onClose = () => set({ ...c, closed: true });
+    useBack(() => { if (mode !== "choose" && c.asked === "choose") setMode("choose"); else onClose(); return true; });
+    useEffect(() => {
+        const id = c.downloading;
+        if (!id || !local || local.selected) return;
+        if (local.models.some((x) => x.id === id && x.installed)) {
+            set({ ...c, downloading: "" });
+            void assistant.selectModel(id).catch(() => undefined);
+        }
+    }, [local, c, set]);
+
+    const onDevice = localReady(local);
+    const cloud = prov?.providers.find((p) => p.id === prov.defaultProvider) ?? prov?.providers[0];
+    const wantsLocal = mode === "local" || mode === "both", wantsCloud = mode === "cloud" || mode === "both";
+    const ready = (wantsLocal && onDevice) || (wantsCloud && cloud?.label) || "";
+    const back = () => {
+        if (c.threadId) void apps.launch(ASSISTANT_APP_ID, { threadId: c.threadId, retry: true });
+        onClose();
+    };
+
+    return (
+        <Page>
+            <PageHeader title="Connect a Model" icon="icons/assistant.png" />
+            {mode === "choose" ? (
+                <>
+                    <Note>The phone's own commands answer first, offline. A model answers the rest: questions, and requests the commands don't know.</Note>
+                    <Group label="Which kind?">
+                        {KINDS.map((k) => (
+                            <Row key={k.mode} testId={`as-connect-${k.mode}`} title={k.title} subtitle={k.subtitle} chevron onClick={() => setMode(k.mode)} />
+                        ))}
+                    </Group>
+                </>
+            ) : (
+                <>
+                    {ready ? (
+                        <Note testId="as-connect-ready">{`✓ ${mode === "both" && onDevice && cloud ? `${onDevice} and ${cloud.label} are` : `${ready} is`} ready.`}</Note>
+                    ) : (
+                        <Note testId="as-connect-waiting">{KINDS.find((k) => k.mode === mode)?.subtitle}</Note>
+                    )}
+                    {ready && (
+                        <Button variant="affirmative" data-testid="as-connect-back" onClick={back}>
+                            {c.threadId ? "Back to Your Question" : "Done"}
+                        </Button>
+                    )}
+                    {wantsLocal && (local ? <LocalModels m={local} onDownload={(id) => set({ ...c, downloading: id })} />
+                                          : <Group label="On-device model"><Row title={<Spinner />} /></Group>)}
+                    {wantsCloud && prov && (
+                        <>
+                            <Group label="Cloud models">
+                                {prov.providers.map((p) => (
+                                    <Row key={p.id} testId={`as-provider-${p.id}`} title={p.name} chevron onClick={() => onEdit(p)}
+                                         subtitle={`${prov.types[p.type]?.label ?? p.type} · ${p.model}`} />
+                                ))}
+                                {(Object.keys(prov.types) as ProviderType[]).map((t) => (
+                                    <Row key={t} testId={`as-connect-add-${t}`} title={`Add ${prov.types[t].label}`} chevron onClick={() => onEdit({ type: t })}
+                                         subtitle={prov.types[t].needsKey ? "With your API key" : "A server on your network or elsewhere"} />
+                                ))}
+                            </Group>
+                            <Group label="Control">
+                                <Row title="Allow cloud models to control the device" subtitle="Off: they only chat. On: they can run the phone's commands">
+                                    <ToggleButton value={settings.allowCloudControl} label="Allow cloud models to control the device" testId="as-connect-cloud-control"
+                                                  onChange={(v) => void assistant.setSettings({ allowCloudControl: v })} />
+                                </Row>
+                            </Group>
+                        </>
+                    )}
+                    {mode === "both" && <Note>Whichever answers, anything that sends a message, calls or deletes is read back to you first.</Note>}
+                </>
+            )}
+        </Page>
+    );
+}
+
 // ---- The page ------------------------------------------------------------------------------------
 
 export function AssistantPage() {
@@ -165,9 +293,18 @@ export function AssistantPage() {
     const [adding, setAdding] = useState<HTMLElement | null>(null);
     const [clearing, setClearing] = useState(false);
     const [done, setDone] = useState("");
+    // "Connect model" (launch params {connect, threadId}): until closed, and again at each such launch.
+    const params = useLaunchParams<{ connect?: string; threadId?: string }>();
+    const [connect, setConnect] = useState<Connecting | null>(null);
+    if (params.connect && connect?.from !== params) {
+        const mode = (["local", "cloud", "both"] as string[]).includes(params.connect) ? params.connect as ConnectMode : "choose";
+        setConnect({ asked: mode, mode, threadId: params.threadId ?? "", from: params });
+    }
 
     if (editing && prov) return <ProviderEditor editing={editing} types={prov.types} onDone={() => setEditing(null)} />;
     if (!s) return <Page><PageHeader title="Assistant" icon="icons/assistant.png" /></Page>;
+    if (connect && !connect.closed)
+        return <ConnectModel c={connect} set={setConnect} prov={prov} local={local} settings={s} onEdit={setEditing} />;
 
     const set = (changes: Partial<AssistantSettings>) => void assistant.setSettings(changes);
     const off = !s.enabled;
@@ -199,8 +336,12 @@ export function AssistantPage() {
                 <Row title="Voice replies" subtitle="Answer spoken requests aloud" disabled={off}>
                     <ToggleButton value={s.voiceReplies} label="Voice replies" testId="as-voice-replies" disabled={off} onChange={(v) => set({ voiceReplies: v })} />
                 </Row>
+                <SpeakingVoice settings={s} set={set} off={off} />
             </Group>
+            <VoiceMissing />
             <Note testId="as-voice-privacy">{"Listening for \u201cHey Phoenix\u201d happens on this phone. The microphone goes only to the wake word spotter, which keeps the last few seconds in memory and nothing more; nothing is recorded, sent or saved until it hears the phrase, and what you say after it is turned into text on the phone too. A microphone in the status bar shows whenever it is open: faint while it waits for the phrase, orange while it listens to you."}</Note>
+
+            <FollowUpQuestions settings={s} set={set} off={off} />
 
             {local ? <LocalModels m={local} /> : <Group label="On-device model"><Row title={<Spinner />} /></Group>}
 
@@ -225,6 +366,7 @@ export function AssistantPage() {
             </Group>
             <Note>Whoever chose it, anything that sends a message, calls or deletes is read back to you first.</Note>
 
+            <AssistantPermissions disabled={off} />
             <Group label="Commands">
                 {(cmds ?? []).map((c) => (
                     <Row key={c.id} testId={`as-cmd-${c.id}`} title={c.title} subtitle={c.confirms ? "Asks you first" : c.builtIn ? undefined : "From an app"}>

@@ -2,7 +2,9 @@
 
 A plan, not built yet. Phoenix's gesture area (`shell/qml/Phoenix/Shell/GestureArea.qml`)
 does what the Pre's did: swipe up for card view, down to go back into the
-card, left for back, right for forward, a tap to toggle, and (Phoenix) a
+card, left for back, right for forward, a tap to toggle between the app and card
+view (closing Just Type, the launcher, the system menu or the dashboard
+first, as the Home key does), and (Phoenix) a
 hold and slide to move the cursor while the keyboard is up. Today it shows a
 thin bar that brightens for 600 ms after any gesture. This plan:
 

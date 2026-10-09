@@ -1,0 +1,35 @@
+{
+    "id": "firmware-nvidia-gpu",
+    "kind": "firmware",
+    "title": "NVIDIA graphics firmware",
+    "category": "graphics",
+    "optional": true,
+    "summary": "3D acceleration and full speed for recent NVIDIA graphics with the built-in nouveau driver.",
+    "match": [
+        "pci:v000010DEd*sv*sd*bc03sc*i*"
+    ],
+    "firmware": [
+        "nvidia/*"
+    ],
+    "modules": [
+        "nouveau"
+    ],
+    "after": "reboot",
+    "license": {
+        "id": "LicenseRef-nvidia-firmware",
+        "name": "NVIDIA firmware licence",
+        "textInPackage": "lib/firmware/LICENCE.nvidia",
+        "url": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/LICENCE.nvidia",
+        "free": false,
+        "redistributable": true
+    },
+    "packages": [
+        "linux-firmware-nvidia-gpu",
+        "linux-firmware-nvidia-license"
+    ],
+    "source": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git",
+    "maintainer": {
+        "name": "webOS Phoenix",
+        "email": "drivers@webosphoenix.org"
+    }
+}

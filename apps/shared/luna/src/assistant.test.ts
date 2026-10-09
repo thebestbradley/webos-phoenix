@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // The assistant client against the simulator's org.webosphoenix.assistant
-// (runtime/phoenix-runtime.js "The Phoenix Assistant", which runs
+// (runtime/phoenix-runtime.js "The Assistant", which runs
 // apps/assistant/service in the page): commands on the simulated bus,
 // threads and their subscriptions, keys sealed at rest, who may call.
 // The router itself is tested in apps/assistant/service.
@@ -88,14 +88,15 @@ describe("simulated org.webosphoenix.assistant", () => {
 
     it("lists the on-device models without the shell, and says how to get llama-server", async () => {
         const m = await assistant.models();
-        expect(m.models.map((x) => x.id)).toEqual(["qwen2.5-0.5b-instruct-q4_k_m", "qwen2.5-1.5b-instruct-q4_k_m", "qwen3-4b-q4_k_m"]);
+        expect(m.models.map((x) => x.id)).toEqual(["qwen3-0.6b-q4_k_m", "qwen2.5-0.5b-instruct-q4_k_m", "qwen2.5-1.5b-instruct-q4_k_m", "qwen3-4b-q4_k_m"]);
+        expect(m.models[0]).toMatchObject({ builtIn: true, installed: false });
         expect(m.status.available).toBe(false);
         expect(m.status.howToInstall).toMatch(/llama-server/);
-        expect(formatBytes(m.models[0].size)).toBe("491 MB");
+        expect(formatBytes(m.models[1].size)).toBe("491 MB");
     });
 
     it("has no speech without the shell or page voices", async () => {
-        expect(await tts.status()).toEqual({ available: false, engine: "" });
+        expect(await tts.status()).toEqual({ available: false, engine: "", voices: [] });
         await expect(tts.speak("hello")).rejects.toBeInstanceOf(LunaError);
     });
 });

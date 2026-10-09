@@ -2,16 +2,26 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, expect, it } from "vitest";
-import { lessons, nextStep, passcodeProblem, previousStep, STEPS } from "./flow";
+import { lessons, nextStep, passcodeProblem, previousStep, shownSteps, STEPS } from "./flow";
 
 describe("First Use steps", () => {
     it("run from Welcome to All Set, and only the ends cannot be skipped", () => {
-        expect(STEPS.map((s) => s.id)).toEqual(["welcome", "wifi", "restore", "datetime", "accounts", "passcode", "privacy", "tutorial", "done"]);
+        expect(STEPS.map((s) => s.id)).toEqual(["welcome", "wifi", "hardware", "restore", "datetime", "accounts", "passcode", "privacy", "tutorial", "done"]);
         expect(STEPS.filter((s) => !s.skippable).map((s) => s.id)).toEqual(["welcome", "done"]);
         expect(nextStep("welcome")).toBe("wifi");
         expect(nextStep("done")).toBe("done");
         expect(previousStep("welcome")).toBeNull();
         expect(previousStep("wifi")).toBe("welcome");
+    });
+
+    it("leave out Hardware when nothing needs firmware or a driver", () => {
+        expect(nextStep("wifi")).toBe("hardware");
+        expect(nextStep("wifi", ["hardware"])).toBe("restore");
+        expect(previousStep("restore", ["hardware"])).toBe("wifi");
+        expect(previousStep("restore")).toBe("hardware");
+        expect(shownSteps(["hardware"]).map((s) => s.id)).not.toContain("hardware");
+        // A step that is showing still knows its neighbours.
+        expect(nextStep("hardware", ["hardware"])).toBe("restore");
     });
 
     it("teach the back gesture on phones only", () => {

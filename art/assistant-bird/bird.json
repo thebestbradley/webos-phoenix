@@ -15,7 +15,10 @@
     "mouth": "#7A2E00",
     "tongue": "#E86A5A",
     "snore": "#9A9A9A",
-    "sweat": "#7FC6E8"
+    "sweat": "#7FC6E8",
+    "dust": "#BDB3A6",
+    "dustOnLight": "#8A7462",
+    "ember": "#FF9A2E"
   },
   "parts": {
     "shadow":      { "d": "M105 412 A100 11 0 1 0 305 412 A100 11 0 1 0 105 412 Z", "fill": "ink", "opacity": 0.14 },
@@ -68,7 +71,9 @@
     "sweat":       { "d": "M300 112 Q312 132 300 142 Q288 132 300 112 Z", "fill": "sweat" },
     "dot1":        { "d": "M292 96 A8 8 0 1 0 308 96 A8 8 0 1 0 292 96 Z", "fill": "gold" },
     "dot2":        { "d": "M318 96 A8 8 0 1 0 334 96 A8 8 0 1 0 318 96 Z", "fill": "gold", "opacity": 0.7 },
-    "dot3":        { "d": "M344 96 A8 8 0 1 0 360 96 A8 8 0 1 0 344 96 Z", "fill": "gold", "opacity": 0.4 }
+    "dot3":        { "d": "M344 96 A8 8 0 1 0 360 96 A8 8 0 1 0 344 96 Z", "fill": "gold", "opacity": 0.4 },
+    "shutL":       { "d": "M162 168 L186 180 L162 192", "stroke": "eye", "width": 8 },
+    "shutR":       { "d": "M250 168 L226 180 L250 192", "stroke": "eye", "width": 8 }
   },
   "pivots": {
     "body": [205, 300],
@@ -83,7 +88,11 @@
     "upperBeak": [211, 202],
     "rings": [318, 208],
     "neck": [206, 250],
-    "eyes": [206, 178]
+    "eyes": [206, 178],
+    "centre": [205, 240],
+    "tailBase": [128, 322],
+    "heelL": [172, 394],
+    "heelR": [238, 394]
   },
   "eyes": {
     "open":     { "L": [174, 178, 13, 22], "R": [238, 178, 13, 22], "show": 1, "overlays": [] },
@@ -93,7 +102,8 @@
     "focus":    { "L": [174, 180, 13, 22], "R": [238, 180, 13, 22], "show": 1, "overlays": ["lidFocusL", "lidFocusR"] },
     "think":    { "L": [174, 176, 13, 22], "R": [238, 176, 13, 22], "show": 1, "overlays": ["lidThinkL", "lidThinkR"] },
     "ask":      { "L": [174, 176, 15, 26], "R": [238, 182, 12, 20], "show": 1, "overlays": ["lidAskR"] },
-    "confused": { "L": [174, 178, 15, 25], "R": [238, 184, 10, 16], "show": 1, "overlays": ["lidConfusedL"] }
+    "confused": { "L": [174, 178, 15, 25], "R": [238, 184, 10, 16], "show": 1, "overlays": ["lidConfusedL"] },
+    "shut":     { "L": [174, 180, 13, 3],  "R": [238, 180, 13, 3],  "show": 0, "overlays": ["shutL", "shutR"] }
   },
   "overlays": {
     "happyL": { "dy": 6 }, "happyR": { "dy": 6 },
@@ -101,7 +111,8 @@
     "lidFocusL": { "dy": -18 }, "lidFocusR": { "dy": -18 },
     "lidThinkL": { "dy": 18 }, "lidThinkR": { "dy": 18 },
     "lidAskR": { "dy": -14 },
-    "lidConfusedL": { "dy": -10 }
+    "lidConfusedL": { "dy": -10 },
+    "shutL": { "dy": 0 }, "shutR": { "dy": 0 }
   },
   "beaks": {
     "closed": { "jaw": [-6, 0.84, 0.6667], "mouth": [0.85, 0, 0], "tongue": 0, "grin": 0, "upper": [0, 1] },
@@ -152,7 +163,8 @@
     "acting": {
       "about": "Each pose's acting: a loop of keyframes per moving part (channel), played on top of the pose's values, over and over (or, with every: [min, max] ms, once now and then, after a random gap like the blink). Each key: [at (0..1 of the period), rotation, x, y, scale x, scale y], about the channel's pivot (pivots[channels[name]]; the crest's own base), trailing values left out stay at rest (0, 0, 0, 1, 1); ease-in-out between keys; 2 to 6 keys, from 0 to 1, the first and the last at rest so the loop joins up. A pose change blends from wherever the loop is over lead ms.",
       "lead": 280,
-      "channels": { "body": "feet", "head": "neck", "eyes": "eyes", "lids": "eyes", "wingL": "wingL", "wingR": "wingR", "beak": "beak", "crest": null },
+      "channels": { "body": "feet", "head": "neck", "eyes": "eyes", "lids": "eyes", "wingL": "wingL", "wingR": "wingR", "beak": "beak", "crest": null,
+                    "whole": "centre", "tail": "tailBase", "footL": "heelL", "footR": "heelR" },
       "poses": {
         "asleep": { "period": 3600, "tracks": {
           "body": [[0], [0.5, 0, 0, 0, 1.012, 1.03], [1]],
@@ -213,6 +225,158 @@
           "eyes": [[0], [0.6], [0.7, 0, 4], [0.9, 0, 4], [1]]
         } }
       }
-    }
+    },
+    "curves": {
+      "about": "The easings a move's key may name (its last item) for the way into it: cubic Bezier control points, as CSS cubic-bezier() takes them. io: in and out (the default); in: falling (gravity, a quadratic ease-in); out: rising or thrown (a quadratic ease-out); out3: a quick start that settles (cubic); back: overshoots and springs back; lin: steady.",
+      "io": [0.42, 0, 0.58, 1],
+      "in": [0.11, 0, 0.5, 0],
+      "out": [0.5, 1, 0.89, 1],
+      "out3": [0.33, 1, 0.68, 1],
+      "back": [0.34, 1.56, 0.64, 1],
+      "lin": [0, 0, 1, 1]
+    },
+    "moves": {
+      "about": "One-off movements over the whole bird, played on top of the pose and its acting (a layer of their own on each channel): the entrance and the exit, the idle pool and the reactions. kind: enter (starts hidden), leave (holds its last keys: gone), idle (one of the idle pool; a pose change ends it, blending away), react (a reaction to the user). Tracks as acting's, over channels (whole: the whole bird about its centre, over its hop and tilt; tail; footL, footR about their heels); 2 to 12 keys, each [at, rotation, x, y, scale x, scale y, curve], the curve (a key of curves, io if left out) the way into that key; the first key at rest (but an enter's) and the last at rest (but a leave's). cues: at a time (0..1 of the period), eyes or beak (a key of eyes or beaks; empty: the pose's own again) or fx (a key of effects, played there). All cleared as it ends.",
+      "enter": { "kind": "enter", "period": 1300, "tracks": {
+        "whole": [[0, 0, 0, -180, 0.01, 0.01], [0.174, 0, 0, -180, 0.01, 0.01, "lin"], [0.311, -8, -14, -196, 1.1, 1.1, "out3"], [0.384, 5, 8, -206, 1, 1], [0.43, 0, 0, -204], [0.634, 0, 0, 0, 1, 1, "in"], [0.704, 0, 0, -16, 1, 1, "out"], [0.774, 0, 0, 0, 1, 1, "in"], [1, 0, 0, 0, 1, 1, "lin"]],
+        "body": [[0], [0.174, 0, 0, 0, 1, 1, "lin"], [0.43], [0.57, 0, 0, 0, 0.9, 1.14, "in"], [0.634, 0, 0, 0, 0.92, 1.12, "lin"], [0.667, 0, 0, 0, 1.24, 0.74, "out"], [0.704, 0, 0, 0, 0.95, 1.07, "out"], [0.774, 0, 0, 0, 0.98, 1.03], [0.806, 0, 0, 0, 1.1, 0.9, "out"], [0.892, 0, 0, 0, 0.98, 1.02], [1]],
+        "wingL": [[0], [0.174, 0, "lin"], [0.22, 95, "out"], [0.256, 25], [0.293, 105, "out"], [0.329, 30], [0.366, 100, "out"], [0.403, 45], [0.516, 125], [0.634, 120], [0.699, 20, "out"], [1]],
+        "wingR": [[0], [0.174, 0, "lin"], [0.22, -95, "out"], [0.256, -25], [0.293, -105, "out"], [0.329, -30], [0.366, -100, "out"], [0.403, -45], [0.516, -125], [0.634, -120], [0.699, -20, "out"], [1]],
+        "tail": [[0], [0.174, 0, 0, 0, 1, 1, "lin"], [0.311, 10, 0, 0, 1.3, 0.85], [0.43, -6, 0, 0, 1.15, 0.9], [0.591, 16, 0, 0, 1.35, 0.8, "in"], [0.667, -4, 0, 0, 0.9, 1.1, "out"], [0.785, 2], [1]],
+        "crest": [[0], [0.174, 0, 0, 0, 0.5, 0.5, "lin"], [0.311, 0, 0, 0, 1.15, 1.3, "out3"], [0.43, -4, 0, 0, 1, 1.05], [0.613, -10, 0, 0, 0.85, 1.35, "in"], [0.677, 0, 0, 0, 1.35, 1.6, "out"], [0.828, 0, 0, 0, 0.95, 0.92], [1]],
+        "head": [[0], [0.43, 0, 0, 0, 1, 1, "lin"], [0.57, 0, 0, -3], [0.667, 0, 0, 7, 1, 1, "out"], [0.742, 0, 0, -2], [0.849], [1]],
+        "eyes": [[0], [0.516, 0, 0, 6], [0.667, 0, 0, 2], [0.785], [1]]
+      }, "cues": [{ "at": 0.0, "fx": "swirl" }, { "at": 0.11, "fx": "fireball" }, { "at": 0.174, "eyes": "wide" }, { "at": 0.64, "fx": "dust", "eyes": "shut" }, { "at": 0.68, "fx": "surge" }, { "at": 0.72, "eyes": "happy", "beak": "grin" }] },
+      "leave": { "kind": "leave", "period": 420, "tracks": {
+        "body": [[0], [0.3, 0, 0, 0, 1.16, 0.82, "out"], [0.5, 0, 0, 0, 0.86, 1.2, "out"], [1, 0, 0, 0, 0.86, 1.2, "lin"]],
+        "whole": [[0], [0.3, 0, 0, 3, 1, 1, "out"], [0.62, 0, 0, -70, 1, 1, "out"], [0.75, 0, 0, -84, 1.1, 1.1, "out"], [1, 0, 0, -90, 0.01, 0.01, "in"]],
+        "wingL": [[0], [0.3, -10], [0.6, 120, "out3"], [1, 120, "lin"]],
+        "wingR": [[0], [0.3, 10], [0.6, -120, "out3"], [1, -120, "lin"]],
+        "crest": [[0], [0.3, 0, 0, 0, 0.9, 0.8], [0.6, 0, 0, 0, 1.2, 1.6, "out"], [1, 0, 0, 0, 1.2, 1.6, "lin"]]
+      }, "cues": [{ "at": 0, "eyes": "happy", "beak": "grin" }, { "at": 0.6, "fx": "flash" }, { "at": 0.68, "fx": "burst" }] },
+      "stretch": { "kind": "idle", "period": 2200, "tracks": {
+        "body": [[0], [0.2, 0, 0, -6, 0.96, 1.08], [0.55, 0, 0, -8, 0.95, 1.1], [0.66, 0, 0, 0, 1.06, 0.94, "out"], [0.74, -2.5], [0.82, 2.5], [0.9, -1.5], [1]],
+        "wingL": [[0], [0.22, 140, "out3"], [0.55, 146], [0.68, 0], [0.75, 14], [0.84, -6], [1]],
+        "wingR": [[0], [0.22, -140, "out3"], [0.55, -146], [0.68, 0], [0.75, -14], [0.84, 6], [1]],
+        "head": [[0], [0.22, 0, 0, -5], [0.55, -3, 0, -6], [0.68], [1]],
+        "crest": [[0], [0.22, 0, 0, 0, 1.05, 1.2], [0.55, 0, 0, 0, 1.05, 1.25], [0.7, 0, 0, 0, 0.95, 0.9], [1]]
+      }, "cues": [{ "at": 0.18, "eyes": "sleepy", "beak": "wide" }, { "at": 0.6, "eyes": "happy", "beak": "" }, { "at": 0.8, "eyes": "" }] },
+      "hop": { "kind": "idle", "period": 1150, "tracks": {
+        "body": [[0], [0.1, 0, 0, 0, 1.08, 0.92, "out"], [0.25, -3, -8, -22, 0.95, 1.06, "out"], [0.4, 0, -12, 0, 1.1, 0.9, "in"], [0.5, 0, -12, 0, 1, 1, "back"], [0.6, 0, -12, 0, 1.06, 0.94, "out"], [0.75, 3, -2, -18, 0.96, 1.05, "out"], [0.9, 0, 0, 0, 1.08, 0.92, "in"], [1, 0, 0, 0, 1, 1, "back"]],
+        "wingL": [[0], [0.25, 30], [0.4], [0.75, 30], [0.9], [1]],
+        "wingR": [[0], [0.25, -30], [0.4], [0.75, -30], [0.9], [1]]
+      }, "cues": [{ "at": 0.4, "fx": "puff" }, { "at": 0.9, "fx": "puff" }] },
+      "preen": { "kind": "idle", "period": 2000, "tracks": {
+        "head": [[0], [0.2, -16, -14, 8], [0.75, -16, -14, 8], [1]],
+        "beak": [[0], [0.25], [0.33, 10], [0.41, -2], [0.5, 10], [0.58, -2], [0.66, 8], [0.75], [1]],
+        "tail": [[0], [0.2, 16, 0, 0, 1.05, 0.95], [0.33, 10], [0.5, 18], [0.66, 12], [0.8], [1]],
+        "body": [[0], [0.2, -4], [0.75, -4], [1]],
+        "eyes": [[0], [0.18, 0, -6, 4], [0.78, 0, -6, 4], [1]]
+      }, "cues": [{ "at": 0.3, "eyes": "happy" }, { "at": 0.72, "eyes": "" }] },
+      "tap": { "kind": "idle", "period": 1600, "tracks": {
+        "footR": [[0], [0.1, -30, 0, -4, "out"], [0.2, 0, 0, 0, 1, 1, "in"], [0.32, -30, 0, -4, "out"], [0.42, 0, 0, 0, 1, 1, "in"], [0.54, -30, 0, -4, "out"], [0.64, 0, 0, 0, 1, 1, "in"], [1]],
+        "body": [[0], [0.1, -2, 0, -2], [0.2, -1, 0, 0, 1.02, 0.98, "in"], [0.32, -2, 0, -2], [0.42, -1, 0, 0, 1.02, 0.98, "in"], [0.54, -2, 0, -2], [0.64, -1, 0, 0, 1.02, 0.98, "in"], [0.8, -1], [1]],
+        "head": [[0], [0.2, 2, 0, 4], [0.32, 0], [0.42, 2, 0, 4], [0.54, 0], [0.64, 2, 0, 4], [0.8], [1]],
+        "eyes": [[0], [0.08, 0, 8, -6], [0.8, 0, 8, -6], [1]],
+        "wingR": [[0], [0.1, -34], [0.8, -34], [1]]
+      } },
+      "peek": { "kind": "idle", "period": 1800, "tracks": {
+        "body": [[0], [0.25, 0, 0, 2, 1.03, 0.96], [0.8, 0, 0, 2, 1.03, 0.96], [1]],
+        "head": [[0], [0.25, 0, 0, 8], [0.5, 6, 0, 8], [0.8, 6, 0, 8], [1]],
+        "eyes": [[0], [0.2, 0, 2, 8], [0.8, 0, 2, 8], [1]]
+      } },
+      "shiver": { "kind": "idle", "period": 900, "tracks": {
+        "crest": [[0], [0.1, -8, 0, 0, 0.92, 1.12], [0.2, 8, 0, 0, 1.08, 0.9], [0.3, -7, 0, 0, 0.94, 1.1], [0.4, 7, 0, 0, 1.06, 0.92], [0.5, -5, 0, 0, 0.96, 1.06], [0.6, 4], [0.72, -2], [0.85, 1], [1]],
+        "tail": [[0], [0.1, 6], [0.2, -6], [0.3, 5], [0.4, -5], [0.5, 4], [0.6, -3], [0.75, 1], [1]],
+        "body": [[0], [0.1, -1.5], [0.2, 1.5], [0.3, -1.2], [0.4, 1.2], [0.5, -0.8], [0.6, 0.6], [0.75], [1]]
+      }, "cues": [{ "at": 0.05, "eyes": "shut" }, { "at": 0.65, "eyes": "" }] },
+      "lookUp": { "kind": "idle", "period": 1800, "tracks": {
+        "head": [[0], [0.2, 0, 0, -10], [0.75, -4, 0, -10], [1]],
+        "eyes": [[0], [0.18, 0, 0, -13], [0.45, 0, -7, -13], [0.75, 0, 7, -13], [1]],
+        "body": [[0], [0.2, 0, 0, -4, 0.98, 1.04], [0.75, 0, 0, -4, 0.98, 1.04], [1]],
+        "wingL": [[0], [0.2, -12], [0.75, -12], [1]],
+        "wingR": [[0], [0.2, 12], [0.75, 12], [1]],
+        "crest": [[0], [0.2, -14, 0, 0, 1, 1.12], [0.75, -14, 0, 0, 1, 1.12], [1]]
+      } },
+      "peck": { "kind": "react", "period": 220, "tracks": {
+        "head": [[0], [0.4, 1.5, 0, 4, 1, 1, "out"], [1]],
+        "crest": [[0], [0.4, 0, 0, 0, 1.03, 1.08, "out"], [1]]
+      } },
+      "wince": { "kind": "react", "period": 900, "tracks": {
+        "wingL": [[0], [0.16, 150, "out3"], [0.56, 146], [0.64, 118], [0.74, 146], [1]],
+        "wingR": [[0], [0.16, -150, "out3"], [0.56, -146], [1]],
+        "body": [[0], [0.1, 0, 0, 0, 1.08, 0.9, "out"], [0.3, 0, 0, 0, 1.04, 0.94], [0.7, 0, 0, 0, 1.04, 0.94], [1]],
+        "head": [[0], [0.15, -4, 0, 6], [0.7, -4, 0, 6], [1]],
+        "crest": [[0], [0.12, 0, 0, 0, 0.9, 0.75, "out"], [0.7, 0, 0, 0, 0.92, 0.8], [1]]
+      }, "cues": [{ "at": 0.08, "eyes": "shut" }, { "at": 0.72, "eyes": "" }] },
+      "ponder": { "kind": "react", "period": 1600, "tracks": {
+        "head": [[0], [0.2, 12, 4, 0, 1, 1, "back"], [0.75, 12, 4], [1]],
+        "eyes": [[0], [0.2, 0, 4, -3], [0.75, 0, 4, -3], [1]],
+        "crest": [[0], [0.22, 12], [0.75, 12], [1]]
+      }, "cues": [{ "at": 0.15, "eyes": "ask" }, { "at": 0.8, "eyes": "" }] },
+      "cheer": { "kind": "react", "period": 750, "tracks": {
+        "body": [[0], [0.15, 0, 0, 0, 1.1, 0.9, "out"], [0.4, 0, 0, -26, 0.94, 1.08, "out"], [0.62, 0, 0, 0, 1, 1, "in"], [0.72, 0, 0, 0, 1.08, 0.92, "out"], [1, 0, 0, 0, 1, 1, "back"]],
+        "wingL": [[0], [0.15, -10], [0.4, 120, "out3"], [0.62, 90], [0.8, 10], [1]],
+        "wingR": [[0], [0.15, 10], [0.4, -120, "out3"], [0.62, -90], [0.8, -10], [1]],
+        "crest": [[0], [0.4, 0, 0, 0, 1.1, 1.3], [0.72, 0, 0, 0, 0.95, 0.9], [1]]
+      }, "cues": [{ "at": 0.1, "eyes": "happy", "beak": "grin" }, { "at": 0.4, "fx": "surge" }, { "at": 0.62, "fx": "puff" }, { "at": 0.9, "eyes": "", "beak": "" }] },
+      "giggle": { "kind": "react", "period": 900, "tracks": {
+        "body": [[0], [0.12, 0, 0, -12, 0.96, 1.05, "out"], [0.25, 3, 0, 0, 1.08, 0.93, "in"], [0.37, 0, 0, -10, 0.97, 1.04, "out"], [0.5, -3, 0, 0, 1.07, 0.94, "in"], [0.62, 0, 0, -6, 0.98, 1.03, "out"], [0.74, 2, 0, 0, 1.04, 0.96, "in"], [1, 0, 0, 0, 1, 1, "back"]],
+        "head": [[0], [0.25, -4], [0.5, 4], [0.74, -2], [1]],
+        "wingL": [[0], [0.12, 30], [0.25, 10], [0.37, 30], [0.5, 10], [0.62, 24], [1]],
+        "wingR": [[0], [0.12, -30], [0.25, -10], [0.37, -30], [0.5, -10], [0.62, -24], [1]]
+      }, "cues": [{ "at": 0.02, "eyes": "happy", "beak": "grin" }, { "at": 0.92, "eyes": "", "beak": "" }] },
+      "spin": { "kind": "react", "period": 900, "tracks": {
+        "whole": [[0], [0.12], [0.22, 0, 0, -22, 1, 1, "out"], [0.3, 0, 0, -32, 0.35, 1, "in"], [0.34, 0, 0, -35, -0.35, 1, "lin"], [0.5, 0, 0, -38, -1, 1, "out"], [0.62, 0, 0, -35, -0.35, 1, "in"], [0.66, 0, 0, -32, 0.35, 1, "lin"], [0.78, 0, 0, -16, 1, 1, "out"], [0.88, 0, 0, 0, 1, 1, "in"], [1]],
+        "body": [[0], [0.12, 0, 0, 0, 1.1, 0.9, "out"], [0.3, 0, 0, 0, 0.95, 1.06], [0.88, 0, 0, 0, 0.95, 1.06], [0.94, 0, 0, 0, 1.1, 0.9, "out"], [1, 0, 0, 0, 1, 1, "back"]],
+        "wingL": [[0], [0.3, 60], [0.7, 60], [0.9], [1]],
+        "wingR": [[0], [0.3, -60], [0.7, -60], [0.9], [1]]
+      }, "cues": [{ "at": 0.05, "eyes": "happy" }, { "at": 0.88, "fx": "puff" }, { "at": 0.92, "eyes": "" }] },
+      "scoot": { "kind": "react", "period": 450, "tracks": {
+        "body": [[0], [0.12, 0, 0, 0, 1.08, 0.92, "out"], [0.45, 0, 0, -20, 0.95, 1.06, "out"], [0.8, 0, 0, 0, 1.08, 0.93, "in"], [1, 0, 0, 0, 1, 1, "back"]],
+        "wingL": [[0], [0.45, 40], [1]],
+        "wingR": [[0], [0.45, -40], [1]]
+      } }
+    },
+    "idles": {
+      "about": "Idle, now and then (acting.poses.idle's every, a random gap): the look around (idle's acting) and a full-body move from the pool in turn, the pool's at random (never the same twice running).",
+      "pool": ["stretch", "hop", "preen", "tap", "peek", "shiver", "lookUp"]
+    },
+    "reactions": {
+      "about": "What the views play, and when (docs/ASSISTANT-CHARACTER.md): typing, a peck as each character comes; deleting, a wince; a pause after typing, ponder; sending, cheer; a tap, the wave (hello) or one of tap at random; the keyboard moving it, scoot.",
+      "type": "peck", "erase": "wince", "pause": "ponder", "send": "cheer", "tap": ["giggle", "spin"], "move": "scoot",
+      "pauseAfter": 2500
+    },
+    "gaze": { "about": "Where it looks (gaze x, y, -1 to 1: at the text it watches, along a scroll): the eyes move by eyes, the head turns by head degrees and moves by headY, the body leans by body degrees.", "eyes": [8, 7], "head": 5, "headY": 3, "body": 2, "ms": 200 }
+  },
+  "effects": {
+    "about": "Particles around it, played by moves' cues: swirl (embers spiralling in to the origin: each [angle, radius, size, delay, colour], turning by spin degrees), glow (a fiery ball: keys [at, scale, opacity, curve]), puff (dust clouds billowing out from its feet: each [dx, dy, radius, delay]), burst (embers flying out: each [dx, dy, size, delay, colour]), surge (the aura (magic.aura) flaring for a moment: keys as glow's, drawn in the aura's gold). Origins in the drawing's units; times in ms.",
+    "swirl": { "kind": "swirl", "origin": [205, 60], "period": 260, "spin": 280,
+      "particles": [[-4, 128, 10.3, 4, "gold"], [31, 140, 7.3, 30, "flame"], [51, 144, 7.3, 5, "ember"], [88, 165, 7.6, 13, "gold"], [123, 172, 9.9, 24, "flame"], [160, 123, 11.3, 17, "ember"], [173, 126, 8.5, 49, "gold"], [204, 152, 10.2, 22, "flame"], [241, 123, 7.3, 12, "ember"], [274, 144, 8.6, 35, "gold"], [299, 136, 11.0, 42, "flame"], [325, 152, 9.6, 53, "ember"]] },
+    "surge": { "kind": "surge", "origin": [206, 236], "radius": 230, "period": 1100, "keys": [[0, 0.7, 0], [0.22, 1, 1, "out"], [1, 1.3, 0, "io"]] },
+    "fireball": { "kind": "glow", "origin": [205, 60], "radius": 95, "period": 440, "keys": [[0, 0, 0], [0.3, 1.1, 1, "back"], [0.5, 0.95, 1], [1, 0.2, 0, "in"]] },
+    "flash": { "kind": "glow", "origin": [205, 150], "radius": 90, "period": 380, "keys": [[0, 0.2, 0], [0.25, 1.1, 1, "out"], [1, 1.5, 0, "out"]] },
+    "dust": { "kind": "puff", "origin": [205, 408], "period": 760,
+      "particles": [[-138, -13, 46, 8], [99, -27, 29, 34], [-51, -24, 42, 40], [156, -13, 41, 42], [-120, -18, 44, 66], [106, -24, 28, 49], [-128, -34, 44, 20], [94, -24, 26, 32], [-67, -8, 28, 54], [62, -11, 33, 61]] },
+    "puff": { "kind": "puff", "origin": [205, 408], "period": 520,
+      "particles": [[-32, -7, 15, 44], [71, -12, 13, 21], [-47, -13, 19, 8], [37, -5, 13, 24], [-59, -5, 11, 21], [47, -9, 19, 35]] },
+    "burst": { "kind": "burst", "origin": [205, 150], "period": 600,
+      "particles": [[142, -39, 10.1, 4, "gold"], [137, 24, 11.2, 64, "flame"], [90, 32, 6.6, 51, "ember"], [47, 31, 7.3, 13, "gold"], [4, 40, 6.0, 12, "flame"], [-34, 59, 6.2, 70, "ember"], [-75, 20, 7.5, 28, "gold"], [-91, -4, 11.1, 79, "flame"], [-131, -39, 6.5, 8, "ember"], [-106, -73, 11.0, 13, "gold"], [-136, -128, 9.2, 12, "flame"], [-34, -113, 9.2, 78, "ember"], [15, -166, 7.6, 29, "gold"], [46, -166, 9.2, 62, "flame"], [73, -109, 10.9, 79, "ember"], [152, -79, 10.9, 59, "gold"]] }
+  },
+  "magic": {
+    "about": "The magic about it, always there while it shows (docs/ASSISTANT-CHARACTER.md): its aura, sparks and mist. aura: a warm gold light behind it (a radial gradient of colour, alpha at its centre, radius about origin) that breathes (breath: opacity and scale between their [low, high] over period, there and back), flickers with a flame (flicker.with: its opacity follows that flame's height, by depth) and radiates rings (rings: count soft bands from inner to the edge of radius, each growing from scale[0] to scale[1] of radius and fading over period, then waiting gap, one after another); under Reduce motion it holds still at still times its brightness. poses: each pose's [aura (its brightness, 0 to 1), sparks (how many of the spark lanes play, 0 to sparks.lanes), mist (1 now and then, 0 none), rings (1 radiating, 0 none)]. The aura is not drawn within the ellipse hole ([rx, ry]) about its centre, always behind the body (what a software GL fills is what costs). sparks: tiny sparks (glints: a four-pointed twinkle, turning by spin degrees) and glittering motes (dots) appearing at random between the inner and outer ellipses about centre (none in the skip wedge of angles below it), drifting up by rise and aside by drift, fading; lanes of each, one after another with a gap before each, all of it picked once by tools/gen-assistant-bird.py from seed (magic.sparkLanes), each lane its own length, so together they never look periodic; each bird starts each lane at a random point. mist: now and then a faint shimmering haze (an ellipse of colour, radius, squashed by squash) rising behind it, each of a lane picked from seed too (magic.mistLane). Sizes in the drawing's units, times in ms.",
+    "aura": { "origin": [206, 246], "radius": 168, "hole": [98, 134], "color": "gold", "alpha": 0.5, "still": 0.8, "ease": 600,
+              "breath": { "period": 4200, "opacity": [0.72, 1], "scale": [0.96, 1.05] },
+              "flicker": { "with": "crest", "depth": 1.5 },
+              "rings": { "count": 2, "period": 2700, "gap": 2700, "radius": 200, "inner": 0.78, "alpha": 0.4, "scale": [0.62, 1.04] } },
+    "poses": {
+      "asleep": [0.35, 0, 0, 0], "hello": [0.7, 2, 1, 1], "idle": [0.6, 2, 1, 1], "listening": [0.85, 4, 1, 1], "thinking": [0.8, 4, 1, 1], "working": [0.85, 3, 1, 1],
+      "speaking": [0.7, 2, 1, 1], "done": [1, 6, 1, 1], "asking": [0.65, 2, 1, 1], "confused": [0.5, 1, 0, 0], "proud": [0.95, 5, 1, 1], "shy": [0.45, 1, 0, 0]
+    },
+    "sparks": { "seed": 2026, "lanes": 6, "each": 5, "centre": [205, 236], "inner": [138, 172], "outer": [198, 216], "skip": [50, 130],
+                "size": [3.5, 7.5], "life": [900, 1700], "gap": [400, 2600], "rise": [18, 48], "drift": [-14, 14], "spin": [25, 70],
+                "glints": 0.45, "colors": ["gold", "flame", "ember", "flameCore", "gold"] },
+    "mist": { "seed": 7, "each": 3, "centre": [205, 250], "spread": [120, 100], "radius": [64, 92], "squash": 0.6,
+              "life": [2600, 3600], "gap": [3500, 9000], "rise": [16, 34], "alpha": 0.24, "color": "flame" }
   }
 }

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// What the Phoenix Assistant can do: the commands the grammar recognises,
+// What the Assistant can do: the commands the grammar recognises,
 // which the on-device model (and a cloud model, when the user allows it)
 // choose among as tools. Each does what the apps themselves do, with the
 // same Luna calls and the same db8 records, so what the assistant makes
@@ -108,9 +108,12 @@ var PHOTOS_APP = "org.webosphoenix.photos";
 var SETTINGS_APP = "org.webosphoenix.settings";
 var MAPS_APP = "org.webosphoenix.maps";
 var ASSISTANT_APP = "org.webosphoenix.assistant";
+var MARKETPLACE_APP = "org.webosphoenix.marketplace";
+var HELP_APP = "org.webosphoenix.help";
 var AM = "luna://com.palm.activitymanager/";
 var DB = "luna://com.palm.db/";
 var AUDIO = "luna://com.webos.service.audio/";
+var SYSTEM_SERVICE = "luna://com.webos.service.systemservice/";
 
 var S = { type: "string" }, I = { type: "integer" }, B = { type: "boolean" };
 var WHEN = { type: "string", description: "When, as said (\"tomorrow at 3pm\", \"next Tuesday at noon\", \"in 2 hours\") or ISO 8601 local time" };
@@ -119,8 +122,8 @@ var BUILT_IN = [
       parameters: { type: "object", properties: { who: { type: "string", description: "Contact name" }, number: { type: "string", description: "Phone number, if no contact" }, label: { type: "string", enum: ["", "mobile", "home", "work"] } } } },
     { id: "text", title: "Text messages", risk: "send", description: "Send a text message (SMS) to a contact.",
       parameters: { type: "object", properties: { who: { type: "string", description: "Contact name or number" }, message: { type: "string", description: "The words to send" } }, required: ["who"] } },
-    { id: "readMessages", title: "Reading messages", risk: "read", description: "Read the last text message received, from anyone or from a contact.",
-      parameters: { type: "object", properties: { who: { type: "string", description: "Contact name; empty for anyone" } } } },
+    { id: "readMessages", title: "Reading messages", risk: "read", description: "Read the last text message received, from anyone or from a contact, or the unread ones.",
+      parameters: { type: "object", properties: { who: { type: "string", description: "Contact name; empty for anyone" }, unread: B } } },
     { id: "email", title: "Email", risk: "send", description: "Send an email to a contact (read back first); without a body, open a new email to them.",
       parameters: { type: "object", properties: { who: { type: "string", description: "Contact name or email address" }, subject: S, body: S }, required: ["who"] } },
     { id: "searchEmail", title: "Searching email", risk: "read", description: "Find emails by words, or from someone, or the unread ones.",
@@ -156,10 +159,11 @@ var BUILT_IN = [
       parameters: { type: "object", properties: { name: S, number: S, email: S, label: { type: "string", enum: ["", "mobile", "home", "work"] } }, required: ["name"] } },
     { id: "contactInfo", title: "Contact details", risk: "read", description: "Tell a contact's phone number, email, address or birthday.",
       parameters: { type: "object", properties: { who: S, what: { type: "string", enum: ["phone", "email", "address", "birthday"] }, label: S }, required: ["who"] } },
-    { id: "toggle", title: "Wi-Fi, Bluetooth, airplane mode, flashlight, ringer, Do Not Disturb", risk: "change", description: "Turn a device setting on or off.",
-      parameters: { type: "object", properties: { setting: { type: "string", enum: ["wifi", "bluetooth", "airplane", "flashlight", "ringer", "dnd"] }, state: { type: "string", enum: ["on", "off", "toggle"] } }, required: ["setting", "state"] } },
+    { id: "toggle", title: "Wi-Fi, Bluetooth, airplane mode, flashlight, ringer, Do Not Disturb, Location Services, rotation lock", risk: "change",
+      description: "Turn a device setting on or off (rotation: the screen turning; rotationLock: the lock).",
+      parameters: { type: "object", properties: { setting: { type: "string", enum: ["wifi", "bluetooth", "airplane", "flashlight", "ringer", "dnd", "location", "rotation", "rotationLock"] }, state: { type: "string", enum: ["on", "off", "toggle"] } }, required: ["setting", "state"] } },
     { id: "media", title: "Music controls", risk: "change", description: "Pause, resume, or skip to the next or previous song in the player.",
-      parameters: { type: "object", properties: { action: { type: "string", enum: ["pause", "play", "next", "prev"] } }, required: ["action"] } },
+      parameters: { type: "object", properties: { action: { type: "string", enum: ["pause", "play", "next", "prev", "status"] } }, required: ["action"] } },
     { id: "volume", title: "Volume", risk: "change", description: "Turn the volume up or down, set it (0-100), mute or unmute.",
       parameters: { type: "object", properties: { action: { type: "string", enum: ["up", "down", "set", "mute", "unmute", "status"] }, level: I }, required: ["action"] } },
     { id: "brightness", title: "Screen brightness", risk: "change", description: "Turn the screen brightness up or down, or set it (1-100).",
@@ -180,8 +184,9 @@ var BUILT_IN = [
       parameters: { type: "object", properties: { day: { type: "string", description: "\"yesterday\", \"last Friday\", \"last week\" or an ISO 8601 date" } } } },
     { id: "play", title: "Music", risk: "open", description: "Play music: an artist, album or song (empty for everything).",
       parameters: { type: "object", properties: { query: S } } },
-    { id: "weather", title: "Weather", risk: "read", description: "Tell the weather now or tomorrow, here or in a named place.",
-      parameters: { type: "object", properties: { place: { type: "string", description: "City; empty for here" }, day: { type: "string", enum: ["", "today", "tomorrow"] } } } },
+    { id: "weather", title: "Weather", risk: "read", description: "Tell the weather now, tomorrow or this week, here or in a named place, or whether it will rain.",
+      parameters: { type: "object", properties: { place: { type: "string", description: "City; empty for here" }, day: { type: "string", enum: ["", "today", "tonight", "tomorrow", "this week", "this weekend"] },
+        about: { type: "string", enum: ["", "rain", "snow", "sunny", "hot", "cold", "warm", "windy"] } } } },
     { id: "convert", title: "Unit and currency conversions", risk: "read", description: "Convert units (length, weight, volume, temperature, speed, area, data, time) or currencies (ISO codes).",
       parameters: { type: "object", properties: { value: { type: "number" }, from: { type: "string", description: "Unit id (km, mi, kg, lb, l, cup, c, f, ...) or currency code (USD)" }, to: S }, required: ["value", "from", "to"] } },
     { id: "worldTime", title: "Time around the world", risk: "read", description: "Tell the time in a city.", parameters: { type: "object", properties: { place: S }, required: ["place"] } },
@@ -191,6 +196,38 @@ var BUILT_IN = [
       parameters: { type: "object", properties: { what: { type: "string", enum: ["time", "date"] } } } },
     { id: "search", title: "Web search", risk: "open", description: "Search the web in the browser.",
       parameters: { type: "object", properties: { query: S }, required: ["query"] } },
+    { id: "callBack", title: "Calling back and redialling", risk: "call", description: "Call back the last person who called, or redial the last number called.",
+      parameters: { type: "object", properties: { which: { type: "string", enum: ["back", "redial"] } }, required: ["which"] } },
+    { id: "callLog", title: "Recent and missed calls", risk: "read", description: "Tell who called last, or the missed calls.",
+      parameters: { type: "object", properties: { missed: B } } },
+    { id: "voicemail", title: "Voicemail", risk: "call", description: "Tell whether there is new voicemail, or call voicemail.",
+      parameters: { type: "object", properties: { action: { type: "string", enum: ["status", "call"] } }, required: ["action"] } },
+    { id: "replyMessage", title: "Replying to messages", risk: "send", description: "Reply by text message to whoever sent the last message.",
+      parameters: { type: "object", properties: { message: { type: "string", description: "The words to send; empty to write them in Messaging" } } } },
+    { id: "eventMove", title: "Moving events", risk: "change", description: "Move a calendar event to another time or day.",
+      parameters: { type: "object", properties: { query: { type: "string", description: "The event's name, as said (\"dentist appointment\")" }, start: WHEN }, required: ["query", "start"] } },
+    { id: "eventCancel", title: "Cancelling events", risk: "delete", description: "Delete an event from the calendar (read back first).",
+      parameters: { type: "object", properties: { query: { type: "string", description: "The event's name, and its day or time if said" } }, required: ["query"] } },
+    { id: "freeTime", title: "Free time", risk: "read", description: "Tell whether the user is free at a time, or when they are free on a day.",
+      parameters: { type: "object", properties: { day: { type: "string", description: "The day, as said or ISO 8601" }, at: { type: "string", description: "A time that day, if asked" } } } },
+    { id: "noteAppend", title: "Adding to memos", risk: "change", description: "Add words to the end of an existing memo.",
+      parameters: { type: "object", properties: { query: { type: "string", description: "Words of the memo" }, text: S }, required: ["query", "text"] } },
+    { id: "taskList", title: "Reading lists and tasks", risk: "read", description: "Tell what is on a list in Tasks (empty: the default list).",
+      parameters: { type: "object", properties: { list: S } } },
+    { id: "taskDone", title: "Completing tasks", risk: "change", description: "Mark a task as done.",
+      parameters: { type: "object", properties: { text: { type: "string", description: "The task's words" } }, required: ["text"] } },
+    { id: "nearby", title: "Places nearby", risk: "open", description: "Find places of a kind near the user in Maps (\"coffee\", \"pharmacy\").",
+      parameters: { type: "object", properties: { query: S }, required: ["query"] } },
+    { id: "website", title: "Opening websites", risk: "open", description: "Open a website in the browser.",
+      parameters: { type: "object", properties: { url: S }, required: ["url"] } },
+    { id: "storage", title: "Storage", risk: "read", description: "Tell how much storage is free.", parameters: { type: "object", properties: {} } },
+    { id: "appStore", title: "Marketplace", risk: "open", description: "Find an app in the Marketplace, or show it there to install.",
+      parameters: { type: "object", properties: { query: S, install: B }, required: ["query"] } },
+    { id: "help", title: "Help and how-tos", risk: "read", description: "Say what the assistant can do, or how to do something in Phoenix (gestures, cards, Just Type).",
+      parameters: { type: "object", properties: { topic: { type: "string", enum: ["", "back", "gestures", "switch", "close", "stacks", "launcher", "rearrange", "justtype",
+        "notifications", "systemmenu", "unlock", "passcode", "location", "screenshot", "assistant"] } } } },
+    { id: "locationAccess", title: "Location", risk: "change", internal: true, description: "Let the Assistant use the device's location, or not.",
+      parameters: { type: "object", properties: { allow: B }, required: ["allow"] } },
     { id: "undo", title: "Undo", risk: "delete", internal: true, description: "Take back what the assistant just did.",
       parameters: { type: "object", properties: {} } }
 ];
@@ -322,6 +359,11 @@ function emailOf(p) {
     return pick ? pick.value : null;
 }
 // Who a number or address belongs to, for messages and email.
+// A person's phoneNumbers[].normalizedValue, as the contacts linker writes it.
+function normalizedPhone(number) {
+    var d = digitsOnly(number), rev = function (s) { return s.split("").reverse().join(""); };
+    return d.length === 10 ? "-" + rev(d.slice(6)) + rev(d.slice(3, 6)) + "-" + rev(d.slice(0, 3)) + "--" : "-" + rev(d) + "---";
+}
 function nameForPhone(all, addr) {
     var p = all.filter(function (x) { return (x.phoneNumbers || []).some(function (n) { return samePhone(n.value, addr); }); })[0];
     return p ? personName(p) : "";
@@ -395,6 +437,17 @@ function fromModel(cmd, args, env) {
             if (info2.week) { a.from = info2.week === "last" ? D.addDays(ww.from, -7) : ww.from; a.to = D.addDays(a.from, 7); }
             else if (info2.day !== undefined) { a.from = info2.day > now ? D.addDays(info2.day, -7) : info2.day; a.to = D.addDays(a.from, 1); }
         }
+    }
+    if (cmd.id === "eventMove" && typeof a.start === "string") {
+        var said2 = a.start.trim(), inf = /^\d{4}-/.test(said2) ? null : env.lang.extract(said2, now);
+        if (inf) { var rr = env.lang.resolve(inf, now, "day"); a.start = rr.start; a.hasTime = !!rr.hasTime; a.hasDate = !!rr.hasDate; }
+        else { a.start = moment(said2, "day"); a.hasTime = /T\d/.test(said2); a.hasDate = true; }
+    }
+    if (cmd.id === "freeTime") {
+        var dd2 = a.day ? moment(a.day, "day") : now;
+        a.day = D.startOfDay(dd2 === null ? now : dd2);
+        a.at = a.at ? moment(D.startOfDay(a.day) === D.startOfDay(now) ? a.at : String(a.at), "day") : null;
+        a.label = "";
     }
     if (cmd.id === "convert") { a.from = String(a.from || ""); a.to = String(a.to || ""); a.currency = /^[A-Z]{3}$/.test(a.from) && /^[A-Z]{3}$/.test(a.to); }
     return a;
@@ -485,6 +538,78 @@ function prepare(cmd, args, env) {
             return { args: args };
         });
     }
+    if (cmd.id === "callBack") {
+        return phoneCalls(env).then(function (calls) {
+            var c = calls.filter(function (x) { return args.which === "redial" ? x.type === "outgoing" : x.type !== "outgoing"; })[0];
+            var party = c && (args.which === "redial" ? (c.to || [])[0] : c.from);
+            if (!party || !party.addr) return { args: args, reply: say.noCalls(args.which === "redial" ? "outgoing" : "incoming") };
+            return people(env).then(function (all) {
+                args.number = String(party.addr).replace(/[^\d+]/g, "");
+                args.name = party.name || nameForPhone(all, party.addr);
+                return { args: args, confirm: say.confirmCall(args.name, args.number) };
+            });
+        });
+    }
+    if (cmd.id === "voicemail") {
+        return lunaCall(env, TELEPHONY + "voicemailQuery", {}).then(function (r) {
+            args.number = r.number || "";
+            args.count = Number(r.count) || 0;
+            args.waiting = !!r.waiting;
+            if (args.action !== "call") return { args: args };
+            if (!args.number) return { args: args, reply: say.noVoicemailNumber() };
+            return { args: args, confirm: say.confirmCall("voicemail", args.number) };
+        }, function () { return { args: args, reply: say.noVoicemailNumber() }; });
+    }
+    if (cmd.id === "replyMessage") {
+        return lastReceived(env).then(function (last) {
+            if (!last || !last.from || !last.from.addr) return { args: args, reply: say.nothingToReply() };
+            return people(env).then(function (all) {
+                args.number = String(last.from.addr);
+                args.name = last.from.name || nameForPhone(all, last.from.addr);
+                if (!String(args.message || "").trim()) return { args: args };
+                return { args: args, confirm: say.confirmText(args.name || args.number, args.message) };
+            });
+        });
+    }
+    if (cmd.id === "eventMove" || cmd.id === "eventCancel") {
+        return findEvent(env, args.query).then(function (hit) {
+            if (!hit) return { args: args, reply: say.noSuchEvent(env.lang.eventWords ? env.lang.eventWords(String(args.query)) || args.query : args.query) };
+            var ev = hit.event;
+            if (ev.rrule) return { args: args, reply: say.eventRepeats(hit.title) };
+            args.id = ev._id; args.title = hit.title; args.old = { dtstart: Number(ev.dtstart), dtend: Number(ev.dtend), allDay: !!ev.allDay };
+            if (cmd.id === "eventCancel") {
+                args.record = ev;
+                return { args: args, confirm: say.confirmEventCancel(hit.title, Number(ev.dtstart), !!ev.allDay, env.now()) };
+            }
+            if (!(args.start > 0)) return { args: args, reply: say.eventWhen() };
+            var len = Number(ev.dtend) - Number(ev.dtstart), start = args.start;
+            // Only a time said: the same day; only a day: the same time.
+            if (args.hasTime && !args.hasDate) { var t = new Date(args.start); start = D.at(D.startOfDay(Number(ev.dtstart)), t.getHours(), t.getMinutes()); }
+            else if (!args.hasTime && !ev.allDay) { var o = new Date(Number(ev.dtstart)); start = D.at(D.startOfDay(args.start), o.getHours(), o.getMinutes()); }
+            args.newStart = start; args.newEnd = start + len;
+            return { args: args };
+        });
+    }
+    if (cmd.id === "noteAppend") {
+        return dbFind(env, "com.palm.note:1").then(function (memos) {
+            var q = String(args.query || "").trim();
+            var hit = memos.filter(function (n) { return q && matches(n.title || n.text, q); })[0] || memos.filter(function (n) { return q && matches(n.text, q); })[0];
+            if (!hit) return { args: args, reply: say.noMemo(q) };
+            if (!String(args.text || "").trim()) return { args: args, reply: say.failed("add what?") };
+            args.id = hit._id; args.oldText = hit.text || ""; args.title = (hit.text || "").split("\n")[0];
+            return { args: args };
+        });
+    }
+    if (cmd.id === "taskDone") {
+        return dbFind(env, "com.palm.task:1").then(function (tasks) {
+            var q = String(args.text || "").trim();
+            var open = tasks.filter(function (x) { return !x.completed && !x._del; });
+            var hit = open.filter(function (x) { return words(x.summary) === words(q); })[0] || open.filter(function (x) { return matches(x.summary, q); })[0];
+            if (!hit) return { args: args, reply: say.noTask(q) };
+            args.id = hit._id; args.summary = hit.summary;
+            return { args: args };
+        });
+    }
     if (cmd.id === "undo") {
         if (!args.undo) return reply(say.nothingToUndo());
         return Promise.resolve({ args: args, confirm: say.confirmUndo(args.undo.what) });
@@ -523,6 +648,15 @@ var TOGGLE_RUN = {
     bluetooth: function (env, on) { return lunaCall(env, "luna://com.webos.service.bluetooth2/adapter/setState", { powered: on }); },
     airplane: function (env, on) { return lunaCall(env, "luna://com.webos.service.connectionmanager/setstate", { offlineMode: on ? "enabled" : "disabled" }); },
     flashlight: function (env, on) { return lunaCall(env, "luna://org.webosports.service.torch/set", { on: on }); },
+    // Location Services: both handlers, as Settings > Location Services' switch.
+    location: function (env, on) {
+        return lunaCall(env, LOCATION + "setState", { Handler: "gps", state: on })
+            .then(function () { return lunaCall(env, LOCATION + "setState", { Handler: "network", state: on }); });
+    },
+    // The rotation lock (Settings > Screen & Lock, the system menu's):
+    // "rotation" on is the screen turning, the lock off.
+    rotationLock: function (env, on) { return lunaCall(env, SYSTEM_SERVICE + "setPreferences", { rotationLock: on }); },
+    rotation: function (env, on) { return lunaCall(env, SYSTEM_SERVICE + "setPreferences", { rotationLock: !on }); },
     ringer: ringer,
     dnd: function (env, on) { return ringer(env, !on); }
 };
@@ -532,6 +666,13 @@ var TOGGLE_STATE = {
     airplane: function (env) { return lunaCall(env, "luna://com.webos.service.connectionmanager/getstatus", {}).then(function (r) { return r.offlineMode === "enabled"; }); },
     flashlight: function (env) { return lunaCall(env, "luna://org.webosports.service.torch/getStatus", {}).then(function (r) { return !!r.on; }); },
     ringer: function (env) { return lunaCall(env, AUDIO + "getInputVolume", { streamType: "pringtones" }).then(function (r) { return r.volume > 0; }); },
+    location: function (env) {
+        return lunaCall(env, LOCATION + "getAllLocationHandlers", {}).then(function (r) { return (r.handlers || []).some(function (h) { return h.state; }); });
+    },
+    rotationLock: function (env) {
+        return lunaCall(env, SYSTEM_SERVICE + "getPreferences", { keys: ["rotationLock"] }).then(function (r) { return !!r.rotationLock; });
+    },
+    rotation: function (env) { return TOGGLE_STATE.rotationLock(env).then(function (l) { return !l; }); },
     dnd: function (env) { return TOGGLE_STATE.ringer(env).then(function (on) { return !on; }); }
 };
 
@@ -555,31 +696,98 @@ function geocode(env, place) {
             return { lat: p.latitude, lon: p.longitude, name: p.name, timezone: p.timezone };
         });
 }
-function here(env) {
-    return lunaCall(env, "luna://com.webos.service.location/getCurrentPosition", { responseTime: 2, maximumAge: 600 })
-        .then(function (r) {
-            if (typeof r.latitude !== "number" || (r.errorCode && r.errorCode !== 0)) throw Object.assign(new Error("no fix"), { said: env.lang.say.noLocation() });
-            return { lat: r.latitude, lon: r.longitude, name: "" };
-        }, function () { throw Object.assign(new Error("no location"), { said: env.lang.say.noLocation() }); });
+// Where the device is. OSE's com.webos.service.location has no
+// getCurrentPosition (that was the legacy com.palm.location's): one fix
+// is getLocationUpdates without subscribe (@phoenix/luna location.ts,
+// https://www.webosose.org/docs/reference/ls2-api/com-webos-service-location/).
+// Asking the OSE name for getCurrentPosition was the owner's "it doesn't
+// have my location" (9 October 2026): the simulator answered returnValue
+// true without a position, a device "Unknown method".
+//
+// Phoenix's per-app permission (org.webosphoenix.service.location, the one
+// Settings > Location Services lists and Settings > Assistant's Location
+// row sets) is asked first: not answered yet, the Assistant asks in the
+// conversation (Allow, Don't Allow) rather than leaving the request
+// waiting on the system UI's alert; denied or Location Services off, it
+// says so, with the switch and the setting as buttons. A device without
+// that service: the location service's own errorCodes (5 off, 6 denied).
+// purpose: "weather" or "distance" (how it says why). Rejects with
+// {said, actions}: the actions' "then" is filled in by the caller.
+var LOCATION = "luna://com.webos.service.location/";
+var LOCATION_PERMISSIONS = "luna://org.webosphoenix.service.location/";
+function locationBlocked(env, why, purpose) {
+    var say = env.lang.say, actions = [];
+    var settings = { label: say.locationSettings(), open: { appId: SETTINGS_APP, params: { page: "location" }, title: "Location Services" } };
+    if (why === "ask") actions = [{ label: say.allow(), run: { command: "locationAccess", args: { allow: true } } },
+                                  { label: say.dontAllow(), run: { command: "locationAccess", args: { allow: false } } }];
+    else if (why === "denied") actions = [{ label: say.allowLocation(), run: { command: "locationAccess", args: { allow: true } } }, settings];
+    else if (why === "off") actions = [{ label: say.turnOnLocation(), run: { command: "toggle", args: { setting: "location", state: "on" } } }, settings];
+    return Object.assign(new Error("location " + why), { said: say.location(why, purpose), actions: actions, location: why });
+}
+function here(env, purpose) {
+    var call = function (uri, p) { return Promise.resolve(env.luna.call(uri, p)).catch(function () { return null; }); };
+    return call(LOCATION_PERMISSIONS + "getPermissions", {}).then(function (r) {
+        if (r && r.returnValue !== false && Array.isArray(r.permissions)) {
+            var mine = r.permissions.filter(function (p) { return p.appId === ASSISTANT_APP; })[0];
+            if (!mine) throw locationBlocked(env, "ask", purpose);
+            if (!mine.allowed) throw locationBlocked(env, "denied", purpose);
+        }
+        return call(LOCATION + "getAllLocationHandlers", {});
+    }).then(function (h) {
+        var list = h && h.returnValue !== false && h.handlers;
+        if (Array.isArray(list) && list.length && !list.some(function (x) { return x.state; })) throw locationBlocked(env, "off", purpose);
+        return call(LOCATION + "getLocationUpdates", {});
+    }).then(function (r) {
+        if (r && r.errorCode === 5) throw locationBlocked(env, "off", purpose);
+        if (r && r.errorCode === 6) throw locationBlocked(env, "denied", purpose);
+        if (!r || r.returnValue === false || typeof r.latitude !== "number") throw locationBlocked(env, "unavailable", purpose);
+        return { lat: r.latitude, lon: r.longitude, name: "" };
+    });
+}
+// A reply for a request that needed the location and could not have it:
+// what to do, and the request again once it is done (then).
+function blockedReply(e, then) {
+    return { text: e.said, failed: e.location !== "ask", actions: (e.actions || []).map(function (a) {
+        return a.run && !(a.run.command === "locationAccess" && !a.run.args.allow) ? { label: a.label, run: Object.assign({}, a.run, { then: then }) } : a;
+    }) };
 }
 
+// The weather: now, today, tonight, tomorrow, or the days ahead ("this
+// week", "this weekend"); and "will it rain?" by the chance of rain (or
+// snow) Open-Meteo gives for the day.
 function weather(args, env) {
     var say = env.lang.say;
     var imperial = env.units === "imperial";
-    var where = args.place ? geocode(env, args.place) : here(env);
+    var week = args.day === "this week" || args.day === "this weekend";
+    var where = args.place ? geocode(env, args.place) : here(env, "weather");
     return where.then(function (pl) {
         var url = "https://api.open-meteo.com/v1/forecast?latitude=" + pl.lat + "&longitude=" + pl.lon +
-            "&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=2&timezone=auto" +
-            (imperial ? "&temperature_unit=fahrenheit" : "");
+            "&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max" +
+            "&forecast_days=" + (week ? 7 : 2) + "&timezone=auto" + (imperial ? "&temperature_unit=fahrenheit" : "");
         return getJson(env, url).then(function (f) {
             var unit = imperial ? "F" : "C";
             var i = args.day === "tomorrow" ? 1 : 0, daily = f.daily || {};
+            var open = { appId: "org.webosphoenix.weather", params: {}, title: "Weather" };
+            if (week) {
+                var now = env.now(), days = (daily.time || (daily.temperature_2m_max || []).map(function (x, k) { return D.addDays(D.startOfDay(now), k); }))
+                    .map(function (d, k) {
+                        var at = typeof d === "string" ? new Date(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10))).getTime() : d;
+                        return { at: at, hi: (daily.temperature_2m_max || [])[k], lo: (daily.temperature_2m_min || [])[k],
+                                 rain: (daily.precipitation_probability_max || [])[k], desc: WMO[(daily.weather_code || [])[k]] || "" };
+                    });
+                if (args.day === "this weekend") days = days.filter(function (d) { var w = new Date(d.at).getDay(); return w === 0 || w === 6; });
+                return { text: say.weatherDays(pl.name, days, unit, args.day, now), open: open };
+            }
             var hi = daily.temperature_2m_max ? daily.temperature_2m_max[i] : null, lo = daily.temperature_2m_min ? daily.temperature_2m_min[i] : null;
             var code = i === 1 ? (daily.weather_code || [])[1] : f.current && f.current.weather_code;
-            return { text: say.weather(pl.name, f.current ? f.current.temperature_2m : hi, unit, WMO[code] || "", args.day, hi, lo),
-                     open: { appId: "org.webosphoenix.weather", params: {}, title: "Weather" } };
+            if (args.about) {
+                var chance = (daily.precipitation_probability_max || [])[i];
+                return { text: say.weatherWill(args.about, pl.name, args.day || "today", chance, WMO[(daily.weather_code || [])[i]] || "", hi, lo, unit), open: open };
+            }
+            return { text: say.weather(pl.name, f.current ? f.current.temperature_2m : hi, unit, WMO[code] || "", args.day, hi, lo), open: open };
         });
     }).catch(function (e) {
+        if (e && e.location) return blockedReply(e, { command: "weather", args: args });
         if (e && e.said) return { text: e.said };
         return launch(env, "org.webosphoenix.weather", {}).then(function () { return { text: say.noWeather() }; },
                                                                   function () { return { text: say.noWeather() }; });
@@ -594,6 +802,19 @@ function defaultSearchUrl(env, query) {
     }, function () { return "https://www.google.com/search?q=#{searchTerms}"; }).then(function (u) {
         return u.replace("#{searchTerms}", encodeURIComponent(query));
     });
+}
+
+// ---- What an answer shows (attachments) --------------------------------------------------------
+// Cards under the words ({type: "cards", items: [{title, subtitle,
+// detail, open}]}), each opening its app on itself.
+function whenShown(env, start, end, allDay) {
+    var w = env.lang.whenText(start, end, allDay, env.now());
+    return w.charAt(0).toUpperCase() + w.slice(1);
+}
+function cards(items) { return items.length ? [{ type: "cards", items: items.slice(0, 6) }] : undefined; }
+function eventCard(env, e) {
+    return { title: e.title, subtitle: whenShown(env, e.start, e.allDay ? null : e.end, e.allDay), detail: e.location || "",
+             open: { appId: CALENDAR_APP, params: { showEventDetail: e.id }, title: "Calendar" } };
 }
 
 // ---- Calendar ----------------------------------------------------------------------------------
@@ -656,18 +877,21 @@ function agenda(args, env) {
             if (args.range === "next") {
                 var next = evs.filter(function (e) { return !e.allDay && e.start >= now; }).sort(function (a, b) { return a.start - b.start; })[0]
                     || evs.filter(function (e) { return e.start >= today; })[0];
-                return { text: say.agendaNext(next || null, now), open: next ? { appId: CALENDAR_APP, params: { showEventDetail: next.id }, title: "Calendar" } : open };
+                return { text: say.agendaNext(next || null, now), open: next ? { appId: CALENDAR_APP, params: { showEventDetail: next.id }, title: "Calendar" } : open,
+                         attachments: next ? cards([eventCard(env, next)]) : undefined };
             }
             var q = String(args.query || "").replace(/\b(?:my|the|appointment|meeting|event)\b/g, " ");
             var hit = evs.filter(function (e) { return matches(e.title + " " + e.location, q); }).sort(function (a, b) { return a.start - b.start; })[0];
-            return { text: say.agendaFound(args.query, hit || null, now), open: hit ? { appId: CALENDAR_APP, params: { showEventDetail: hit.id }, title: "Calendar" } : open };
+            return { text: say.agendaFound(args.query, hit || null, now), open: hit ? { appId: CALENDAR_APP, params: { showEventDetail: hit.id }, title: "Calendar" } : open,
+                     attachments: hit ? cards([eventCard(env, hit)]) : undefined };
         });
     }
     var from = args.from !== undefined ? args.from : today, to = args.to !== undefined ? args.to : D.addDays(today, 1);
     var label = args.label || say.dayLabel(from, now);
     return eventsIn(env, from, to).then(function (evs) {
         if (args.range === "week") evs.sort(function (a, b) { return a.start - b.start; });
-        return { text: say.agenda(evs, label, now), data: { count: evs.length }, open: open };
+        return { text: say.agenda(evs, label, now), data: { count: evs.length }, open: open,
+                 attachments: cards(evs.map(function (e) { return eventCard(env, e); })) };
     });
 }
 
@@ -760,12 +984,100 @@ function addTask(env, text, list, due, remind) {
             var taskId = ids[0];
             var done = { task: task, taskId: taskId, list: l };
             if (!remind || !due) return done;
-            return lunaCall(env, AM + "create", { start: true, replace: true, activity: {
-                name: "org.webosphoenix.tasks.remind." + taskId, description: "Tasks reminder",
-                type: { foreground: true, persist: true }, schedule: { start: activityDate(due) },
-                callback: { method: "palm://com.palm.applicationManager/launch",
-                            params: { id: TASKS_APP, params: { reminder: taskId } } } } }).then(function () { return done; });
+            return remindTask(env, taskId, due).then(function () { return done; });
         });
+    });
+}
+// A task's reminder: the activity Tasks schedules (@phoenix/luna tasks.scheduleReminder).
+function remindTask(env, taskId, due) {
+    return lunaCall(env, AM + "create", { start: true, replace: true, activity: {
+        name: "org.webosphoenix.tasks.remind." + taskId, description: "Tasks reminder",
+        type: { foreground: true, persist: true }, schedule: { start: activityDate(due) },
+        callback: { method: "palm://com.palm.applicationManager/launch",
+                    params: { id: TASKS_APP, params: { reminder: taskId } } } } });
+}
+
+// ---- Calls, messages, events, lists: finding things -----------------------------------------------
+
+var TELEPHONY = "luna://com.palm.telephony/";
+// The call log (com.palm.phonecall:1, apps/phone lib/calllog.ts), newest first.
+function phoneCalls(env) {
+    return dbFind(env, "com.palm.phonecall:1").then(function (all) {
+        return all.filter(function (c) { return !c._del; }).sort(function (a, b) { return (b.timestamp || 0) - (a.timestamp || 0); });
+    });
+}
+// The last text message received.
+function lastReceived(env) {
+    return dbFind(env, "com.palm.smsmessage:1").then(function (all) {
+        return all.filter(function (m) { return m.folder === "inbox" && (!m.flags || m.flags.visible !== false); })
+            .sort(function (a, b) { return (b.localTimestamp || b.timestamp || 0) - (a.localTimestamp || a.timestamp || 0); })[0] || null;
+    });
+}
+// The event words name ("dentist appointment", "my 3pm meeting tomorrow"):
+// the next one from today whose title has the words, on the day and at
+// the time said if said. -> {event, title, start} | null
+function findEvent(env, said) {
+    var now = env.now(), info = env.lang.extract(String(said || ""), now);
+    var q = env.lang.eventWords ? env.lang.eventWords(info.rest) : info.rest;
+    var r = env.lang.resolve(info, now, "day");
+    var from = info.day !== undefined ? info.day : D.startOfDay(now), to = info.day !== undefined ? D.addDays(info.day, 1) : D.addDays(D.startOfDay(now), 366);
+    return Promise.all([eventsIn(env, from, to), dbFind(env, "com.palm.calendarevent:1")]).then(function (got) {
+        var evs = got[0].filter(function (e) {
+            if (q && !matches(e.title + " " + e.location, q)) return false;
+            if (r.hasTime && info.clock) {
+                var d = new Date(e.start), want = new Date(r.start);
+                if (d.getHours() !== want.getHours() || d.getMinutes() !== want.getMinutes()) return false;
+            }
+            return q || r.hasTime;
+        }).sort(function (a, b) { return a.start - b.start; });
+        var e = evs[0];
+        if (!e) return null;
+        var rec = got[1].filter(function (x) { return x._id === e.id; })[0];
+        return rec ? { event: rec, title: e.title, start: e.start } : null;
+    });
+}
+// Free stretches of [from, to) around the events (not all-day ones).
+function freeSlots(evs, from, to) {
+    var busy = evs.filter(function (e) { return !e.allDay && e.end > from && e.start < to; }).sort(function (a, b) { return a.start - b.start; });
+    var out = [], at = from;
+    busy.forEach(function (e) {
+        if (e.start - at >= 15 * 60000) out.push({ start: at, end: Math.min(e.start, to) });
+        at = Math.max(at, e.end);
+    });
+    if (to - at >= 15 * 60000) out.push({ start: at, end: to });
+    return out;
+}
+
+// ---- What the assistant can do, said (help) -----------------------------------------------------
+// The overview's examples, by app (docs/AI-AND-MCP.md; grammar.test.ts
+// checks that every one is understood as it stands).
+var HELP_GROUPS = [
+    { title: "Phone & Messages", examples: ["Call Mom", "Who called me?", "Call back", "Text Sam I'm running late", "Read my new messages", "Reply on my way"] },
+    { title: "Email", examples: ["Do I have any new emails?", "Email Priya saying see you soon"] },
+    { title: "Calendar", examples: ["What's on my calendar tomorrow?", "Add lunch with Sam Friday at noon", "Am I free tomorrow at 3?", "Move my dentist appointment to 4pm"] },
+    { title: "Reminders, Tasks & Memos", examples: ["Remind me to call Mom at 6", "Add milk to my shopping list", "What's on my shopping list?", "New note: buy flowers"] },
+    { title: "Clock", examples: ["Set an alarm for 7am weekdays", "Set a timer for 10 minutes", "What time is it in Tokyo?"] },
+    { title: "Weather & Maps", examples: ["What's the weather tomorrow?", "Will it rain tomorrow?", "Coffee near me", "Navigate to the nearest gas station"] },
+    { title: "Music & Photos", examples: ["Play some music by Miles Davis", "Next song", "Show my photos from yesterday"] },
+    { title: "Settings & Device", examples: ["Turn on Wi-Fi", "Turn on the flashlight", "Set brightness to 50%", "What's my battery?", "How much storage do I have?"] },
+    { title: "Answers", examples: ["What's 15% of 80?", "Convert 10 miles to km", "Search the web for webOS"] },
+    { title: "Using Phoenix", examples: ["How do I close an app?", "How do I use Just Type?", "How do I go back?"] }
+];
+// What fits now: the time of day, the next event, what waits unread.
+function helpNow(env) {
+    var now = env.now(), h = new Date(now).getHours(), out = [];
+    return Promise.all([eventsIn(env, now, now + 3 * 3600000).catch(function () { return []; }),
+                        dbFind(env, "com.palm.smsmessage:1").catch(function () { return []; }),
+                        dbFind(env, "com.palm.email:1").catch(function () { return []; }),
+                        phoneCalls(env).catch(function () { return []; })]).then(function (got) {
+        if (got[0].some(function (e) { return !e.allDay && e.start >= now; })) out.push("What's my next meeting?");
+        if (got[1].some(function (m) { return m.folder === "inbox" && m.flags && m.flags.read === false; })) out.push("Read my new messages");
+        if (got[3].some(function (c) { return c.type === "missed" && now - (c.timestamp || 0) < 86400000; })) out.push("Who called me?");
+        if (got[2].some(function (e) { return e.flags && e.flags.read === false && e.flags.visible !== false; })) out.push("Do I have any new emails?");
+        if (h >= 5 && h < 12) out.push("What's the weather today?", "What's on my calendar today?");
+        else if (h >= 17) out.push("What's on my calendar tomorrow?", "Set an alarm for 7am");
+        else out.push("Am I free at 4?", "Remind me to call Mom at 6");
+        return out.filter(function (x, i) { return out.indexOf(x) === i; }).slice(0, 4);
     });
 }
 
@@ -776,11 +1088,11 @@ function run(cmd, args, env) {
     switch (cmd.id) {
     case "call":
         return launch(env, "org.webosphoenix.phone", { number: args.number, dial: true })
-            .then(function () { return { text: say.calling(args.name || args.number) }; });
+            .then(function () { return { text: say.calling(args.name || args.number), open: { appId: "org.webosphoenix.phone", params: {}, title: "Phone" } }; });
     case "text":
         if (!String(args.message || "").trim())
             return launch(env, MESSAGING_APP, { to: args.number, name: args.name || "" })
-                .then(function () { return { text: say.composing(args.name || args.number) }; });
+                .then(function () { return { text: say.composing(args.name || args.number), open: { appId: MESSAGING_APP, params: { to: args.number, name: args.name || "" }, title: "Messaging" } }; });
         return lunaCall(env, "luna://org.webosports.service.messaging/putMessage", { message: {
             _kind: "com.palm.smsmessage:1", folder: "outbox", status: "pending", serviceName: "sms",
             messageText: String(args.message), to: [{ addr: args.number, name: args.name || "" }],
@@ -795,18 +1107,27 @@ function run(cmd, args, env) {
                 if (who && !p) return { text: say.noSuchContact(who) };
                 if (p) msgs = msgs.filter(function (m) { return (p.phoneNumbers || []).some(function (n) { return m.from && samePhone(n.value, m.from.addr); }); });
                 msgs.sort(function (a, b) { return (b.localTimestamp || b.timestamp || 0) - (a.localTimestamp || a.timestamp || 0); });
-                var last = msgs[0];
+                // The unread ones ("any new texts"): how many, and the newest read out.
+                var unread = args.unread ? msgs.filter(function (m) { return m.flags && m.flags.read === false; }) : null;
+                if (unread && !unread.length) return { text: say.noUnreadMessages(), open: { appId: MESSAGING_APP, params: {}, title: "Messaging" } };
+                var last = (unread || msgs)[0];
                 if (!last) return { text: p ? say.noMessagesFrom(personName(p)) : say.lastMessage("") };
-                var from = (last.from && (last.from.name || nameForPhone(all, last.from.addr) || last.from.addr)) || "Someone";
-                return { text: say.lastMessage(from, last.messageText || "", last.localTimestamp || last.timestamp, now),
-                         open: { appId: MESSAGING_APP, params: last.threadId ? { threadId: last.threadId } : {}, title: "Messaging" } };
+                var nameOf = function (m) { return (m.from && (m.from.name || nameForPhone(all, m.from.addr) || m.from.addr)) || "Someone"; };
+                var from = nameOf(last);
+                var threadOf = function (m) { return { appId: MESSAGING_APP, params: m.threadId ? { threadId: m.threadId } : {}, title: "Messaging" }; };
+                var said = say.lastMessage(from, last.messageText || "", last.localTimestamp || last.timestamp, now);
+                return { text: unread ? say.unreadMessages(unread.length) + " " + said : said, open: threadOf(last),
+                         actions: [{ label: say.replyTo(from), run: { command: "replyMessage", args: { message: "" } } }],
+                         attachments: cards((unread || [last]).map(function (m) {
+                             return { title: nameOf(m), subtitle: whenShown(env, m.localTimestamp || m.timestamp, null, false), detail: m.messageText || "", open: threadOf(m) };
+                         })) };
             });
         });
     case "email":
         if (!String(args.body || "").trim())
             return launch(env, EMAIL_APP, { recipients: [{ type: "email", role: 1, value: args.addr, contactDisplay: args.name || args.addr }],
                                             summary: String(args.subject || "") })
-                .then(function () { return { text: say.emailComposing(args.name || args.addr) }; });
+                .then(function () { return { text: say.emailComposing(args.name || args.addr), open: { appId: EMAIL_APP, params: {}, title: "Email" } }; });
         return dbFind(env, "com.palm.mail.account:1").then(function (accounts) {
             var acct = accounts[0];
             if (!acct) return { text: say.noMailAccount() };
@@ -828,7 +1149,11 @@ function run(cmd, args, env) {
                 return args.from ? matches(from, q) : matches([e.subject, from, e.summary].join(" "), q);
             }).sort(function (a, b) { return (b.timestamp || 0) - (a.timestamp || 0); });
             return { text: say.emailsFound(args.unread ? (q || "") : q, hits.map(function (e) { return { subject: e.subject, from: e.from && (e.from.name || e.from.addr) }; }), args.unread),
-                     open: { appId: EMAIL_APP, params: hits.length === 1 ? { emailId: hits[0]._id } : {}, title: "Email" } };
+                     open: { appId: EMAIL_APP, params: hits.length === 1 ? { emailId: hits[0]._id } : {}, title: "Email" },
+                     attachments: cards(hits.map(function (e) {
+                         return { title: e.subject || "(no subject)", subtitle: e.from ? e.from.name || e.from.addr : "", detail: e.summary || "",
+                                  open: { appId: EMAIL_APP, params: { emailId: e._id }, title: "Email" } };
+                     })) };
         });
     case "event":
         return addEvent(args, env);
@@ -883,7 +1208,7 @@ function run(cmd, args, env) {
             return scheduleAlarm(env, record, at).then(function () {
                 var text = say.alarmSet(args.time, now, args.label, occurs);
                 if (args.unrepeated) text += " " + say.alarmRepeatNot(args.unrepeated);
-                return { text: text, open: { appId: CLOCK_APP, params: {}, title: "Clock" },
+                return { text: text, open: { appId: CLOCK_APP, params: {}, title: "Clock" }, data: { alarmId: ids[0] },
                          undo: { kind: "alarm", ids: ids, keys: [key], what: say.undoWhat.alarm(record.niceTime) } };
             });
         });
@@ -909,12 +1234,13 @@ function run(cmd, args, env) {
     case "reminder":
         return addTask(env, args.text, "", args.due > now ? args.due : null, true).then(function (r) {
             return { text: say.reminderSet(r.task.summary, r.task.due, now), open: { appId: TASKS_APP, params: { taskId: r.taskId }, title: "Tasks" },
+                     data: { taskId: r.taskId },
                      undo: { kind: "db", ids: [r.taskId], activities: r.task.due ? ["org.webosphoenix.tasks.remind." + r.taskId] : [], what: say.undoWhat.task(r.task.summary) } };
         });
     case "task":
         return addTask(env, args.text, args.list || "", args.due || null, false).then(function (r) {
             return { text: say.taskAdded(r.task.summary, r.list.name, r.task.due, now, r.list.made),
-                     open: { appId: TASKS_APP, params: { taskId: r.taskId }, title: "Tasks" },
+                     open: { appId: TASKS_APP, params: { taskId: r.taskId }, title: "Tasks" }, data: { taskId: r.taskId },
                      undo: { kind: "db", ids: r.list.made ? [r.taskId, r.list.id] : [r.taskId], what: say.undoWhat.task(r.task.summary) } };
         });
     case "note":
@@ -935,7 +1261,11 @@ function run(cmd, args, env) {
             var q = String(args.query || "").trim();
             var hits = memos.filter(function (n) { return !q || matches(n.text || n.title, q); })
                 .sort(function (a, b) { return (b.modifiedTimestamp || 0) - (a.modifiedTimestamp || 0); });
-            return { text: say.notesFound(q, hits), open: { appId: MEMOS_APP, params: {}, title: "Memos" } };
+            return { text: say.notesFound(q, hits), open: { appId: MEMOS_APP, params: {}, title: "Memos" },
+                     attachments: cards(hits.map(function (n) {
+                         var text = String(n.text || n.title || "");
+                         return { title: text.split("\n")[0].slice(0, 60), detail: text.split("\n").slice(1).join("\n").trim(), open: { appId: MEMOS_APP, params: {}, title: "Memos" } };
+                     })) };
         });
     case "contactAdd": {
         // As runtime/sample-data.js and the contacts linker store a local
@@ -953,8 +1283,7 @@ function run(cmd, args, env) {
                 var contact = { _id: cid, _kind: "com.palm.contact.palmprofile:1", accountId: profile ? profile._id : "", name: name, nickname: "",
                     emails: emails, phoneNumbers: phones, addresses: [], organizations: [], urls: [], ims: [], photos: [], relations: [], tags: [],
                     birthday: "", anniversary: "", gender: "", note: "" };
-                var d = digitsOnly(args.number), rev = function (s) { return s.split("").reverse().join(""); };
-                var norm = d.length === 10 ? "-" + rev(d.slice(6)) + rev(d.slice(3, 6)) + "-" + rev(d.slice(0, 3)) + "--" : "-" + rev(d) + "---";
+                var norm = normalizedPhone(args.number);
                 var person = { _id: pid, _kind: "com.palm.person:1", contactIds: [cid], name: name, names: [name], nickname: "",
                     emails: emails.map(function (e) { return Object.assign({ normalizedValue: e.value.toLowerCase(), favoriteData: {} }, e); }),
                     phoneNumbers: phones.map(function (p) { return Object.assign({ normalizedValue: norm, speedDial: "", favoriteData: {} }, p); }),
@@ -966,6 +1295,7 @@ function run(cmd, args, env) {
                     searchTerms: [(given.charAt(0) + family).toLowerCase(), (family + given).toLowerCase()] };
                 return dbPut(env, [contact, person]).then(function () {
                     return { text: say.contactAdded(String(args.name)), open: { appId: CONTACTS_APP, params: { launchType: "showPerson", id: pid }, title: "Contacts" },
+                             data: { personId: pid, contactId: cid },
                              undo: { kind: "db", ids: [cid, pid], what: say.undoWhat.contact(String(args.name)) } };
                 });
             });
@@ -981,8 +1311,9 @@ function run(cmd, args, env) {
                 var a = (p.addresses || [])[0];
                 value = a ? [a.streetAddress, a.locality, a.region, a.postalCode].filter(Boolean).join(", ") : "";
             } else value = numberOf(p, args.label) || "";
-            return { text: say.contactInfo(personName(p), args.what || "phone", value),
-                     open: { appId: CONTACTS_APP, params: { launchType: "showPerson", id: p._id }, title: "Contacts" } };
+            var person = { appId: CONTACTS_APP, params: { launchType: "showPerson", id: p._id }, title: "Contacts" };
+            return { text: say.contactInfo(personName(p), args.what || "phone", value), open: person,
+                     attachments: cards([{ title: personName(p), subtitle: [numberOf(p), emailOf(p)].filter(Boolean).join(" · "), open: person }]) };
         });
     case "toggle": {
         var setting = args.setting, fn = TOGGLE_RUN[setting];
@@ -994,6 +1325,8 @@ function run(cmd, args, env) {
         });
     }
     case "media":
+        // What is playing: no service tells it yet (docs/AI-AND-MCP.md, gaps).
+        if (args.action === "status") return Promise.resolve({ text: say.nowPlaying(), open: { appId: "org.webosphoenix.music", params: {}, title: "Music" } });
         return lunaCall(env, "luna://org.webosphoenix.system/mediaKey", { key: args.action })
             .then(function () { return { text: say.media(args.action) }; });
     case "volume":
@@ -1029,38 +1362,62 @@ function run(cmd, args, env) {
                          open: { appId: SETTINGS_APP, params: { page: "battery" }, title: "Battery" } };
             });
     case "settings":
-        return launch(env, SETTINGS_APP, args.page ? { page: args.page } : {}).then(function () { return { text: say.openingSettings(args.page) }; });
+        return launch(env, SETTINGS_APP, args.page ? { page: args.page } : {}).then(function () {
+            return { text: say.openingSettings(args.page), open: { appId: SETTINGS_APP, params: args.page ? { page: args.page } : {}, title: "Settings" } };
+        });
     case "open":
         // A launch point's own params (Settings' panes: {page}).
-        return launch(env, args.appId, args.params || {}).then(function () { return { text: say.opening(args.title || args.appId) }; });
+        return launch(env, args.appId, args.params || {}).then(function () {
+            return { text: say.opening(args.title || args.appId), open: { appId: args.appId, params: args.params || {}, title: args.title || args.appId } };
+        });
     case "navigate":
         return launch(env, MAPS_APP, { target: "mapto:" + args.destination })
-            .then(function () { return { text: say.navigating(args.destination) }; });
+            .then(function () { return { text: say.navigating(args.destination), open: { appId: MAPS_APP, params: { target: "mapto:" + args.destination }, title: "Maps" } }; });
     case "distance":
         return Promise.all([geocode(env, args.place).catch(function (e) { throw e.said ? e : Object.assign(e, { said: say.noLookup(args.place) }); }),
-                            here(env)]).then(function (r) {
+                            here(env, "distance")]).then(function (r) {
             var a = r[0], b = r[1], rad = Math.PI / 180;
             var x = Math.sin((a.lat - b.lat) * rad / 2), y = Math.sin((a.lon - b.lon) * rad / 2);
             var km = 2 * 6371 * Math.asin(Math.sqrt(x * x + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * y * y));
             return { text: say.distance(a.name || args.place, km, env.units === "imperial"),
                      open: { appId: MAPS_APP, params: { target: "mapto:" + args.place }, title: "Maps" } };
         }).catch(function (e) {
+            if (e && e.location) return blockedReply(e, { command: "distance", args: args });
             if (e && e.said) return { text: e.said };
             throw e;
         });
+    case "locationAccess":
+        // The Assistant's own grant: the row Settings > Location Services
+        // lists (and Settings > Assistant's Location row) changes the same.
+        return lunaCall(env, LOCATION_PERMISSIONS + "setPermission", { appId: ASSISTANT_APP, allowed: !!args.allow })
+            .then(function () { return { text: say.locationAccess(!!args.allow) }; });
     case "photos":
+        // The pictures shown in the conversation (attachments: the first 12,
+        // each opening Photos on itself) and, unless only how many was
+        // asked, in Photos too: just those (its imageList of several), behind
+        // the conversation; "Open Photos" brings it forward.
         return dbFind(env, "com.palm.media.image.file:1").then(function (all) {
             var hits = all.filter(function (p) {
                 var t = Number(p.createdTime) || Number(p.modifiedTime) || 0;
+                if (args.screenshots && !/\/screencaptures\//.test(String(p.path))) return false;
                 return args.from === undefined || args.from === null || (t >= args.from && t < args.to);
             }).sort(function (a, b) { return (Number(b.createdTime) || 0) - (Number(a.createdTime) || 0); });
-            var params = hits.length ? { imageList: { results: hits.slice(0, 200).map(function (p) { return { file_path: p.path }; }) } } : {};
-            if (!hits.length) return { text: say.photos(0, args.label), open: { appId: PHOTOS_APP, params: {}, title: "Photos" } };
-            return launch(env, PHOTOS_APP, params).then(function () { return { text: say.photos(hits.length, args.label) }; });
+            var what = args.screenshots ? "screenshot" : "photo";
+            var photosApp = function (params) { return { appId: PHOTOS_APP, params: params, title: "Photos" }; };
+            if (!hits.length) return { text: say.photos(0, args.label, what), open: photosApp({}) };
+            var list = { results: hits.slice(0, 200).map(function (p) { return { file_path: p.path }; }),
+                         title: args.label ? say.photosTitle(args.label, what) : "" };
+            var shown = { type: "images", total: hits.length, items: hits.slice(0, 12).map(function (p) {
+                return { path: p.path, open: photosApp({ imageList: { results: [{ file_path: p.path }] } }) };
+            }) };
+            var out = { text: say.photos(hits.length, args.label, what, !args.count, args.count), open: photosApp({ imageList: list }),
+                        attachments: [shown], data: { count: hits.length } };
+            if (args.count) return out;
+            return launch(env, PHOTOS_APP, { imageList: list }).then(function () { return out; });
         });
     case "play":
         return launch(env, "org.webosphoenix.music", { play: String(args.query || "") })
-            .then(function () { return { text: say.playing(args.query) }; });
+            .then(function () { return { text: say.playing(args.query), open: { appId: "org.webosphoenix.music", params: {}, title: "Music" } }; });
     case "weather":
         return weather(args, env);
     case "convert": {
@@ -1108,6 +1465,125 @@ function run(cmd, args, env) {
         return defaultSearchUrl(env, args.query).then(function (url) {
             return lunaCall(env, "luna://com.palm.applicationManager/open", { target: url });
         }).then(function () { return { text: say.searching(args.query) }; });
+    case "callBack":
+    case "voicemail":
+        if (cmd.id === "voicemail" && args.action !== "call") {
+            var vm = args.number ? [{ label: say.callVoicemail(), run: { command: "voicemail", args: { action: "call" } } }] : [];
+            return Promise.resolve({ text: say.voicemail(args.count, args.waiting), actions: vm });
+        }
+        return launch(env, "org.webosphoenix.phone", { number: args.number, dial: true }).then(function () {
+            return { text: say.calling(cmd.id === "voicemail" ? "voicemail" : args.name || args.number), open: { appId: "org.webosphoenix.phone", params: {}, title: "Phone" } };
+        });
+    case "callLog":
+        return Promise.all([phoneCalls(env), people(env)]).then(function (got) {
+            var all = got[0], ppl = got[1];
+            var list = args.missed ? all.filter(function (c) { return c.type === "missed" && now - (c.timestamp || 0) < 7 * 86400000; }) : all.slice(0, 1);
+            var who = function (c) { var p = c.type === "outgoing" ? (c.to || [])[0] || {} : c.from || {}; return p.name || nameForPhone(ppl, p.addr) || p.addr || "Unknown"; };
+            var addr = function (c) { var p = c.type === "outgoing" ? (c.to || [])[0] || {} : c.from || {}; return p.addr || ""; };
+            var phone = { appId: "org.webosphoenix.phone", params: {}, title: "Phone" };
+            var shown = list.slice(0, 5).map(function (c) { return { name: who(c), type: c.type, at: c.timestamp || 0 }; });
+            var first = list[0];
+            var actions = first && addr(first) ? [{ label: say.callName(who(first)), run: { command: "call", args: { who: addr(first), number: addr(first) } } }] : [];
+            return { text: args.missed ? say.missedCalls(shown, now) : say.lastCall(shown[0] || null, now), open: phone, actions: actions,
+                     attachments: cards(shown.map(function (c) { return { title: c.name, subtitle: say.callKind(c.type) + " · " + whenShown(env, c.at, null, false), open: phone }; })) };
+        });
+    case "replyMessage":
+        return run(find(BUILT_IN, "text"), args, env);
+    case "eventMove":
+        return lunaCall(env, DB + "merge", { objects: [{ _id: args.id, dtstart: args.newStart, dtend: args.newEnd, lastModified: now }] }).then(function () {
+            var cal = { appId: CALENDAR_APP, params: { showEventDetail: args.id }, title: "Calendar" };
+            return { text: say.eventMoved(args.title, args.newStart, args.old.allDay, now), open: cal,
+                     attachments: cards([{ title: args.title, subtitle: whenShown(env, args.newStart, null, args.old.allDay), open: cal }]),
+                     undo: { kind: "merge", objects: [{ _id: args.id, dtstart: args.old.dtstart, dtend: args.old.dtend }], what: say.undoWhat.move(args.title) } };
+        });
+    case "eventCancel":
+        return lunaCall(env, DB + "del", { ids: [args.id] }).then(function () {
+            return { text: say.eventCancelled(args.title), open: { appId: CALENDAR_APP, params: {}, title: "Calendar" },
+                     undo: { kind: "put", objects: [args.record], what: say.undoWhat.restoreEvent(args.title) } };
+        });
+    case "freeTime": {
+        var day = args.day !== undefined && args.day !== null ? args.day : D.startOfDay(now);
+        return eventsIn(env, day, D.addDays(day, 1)).then(function (evs) {
+            var cal = { appId: CALENDAR_APP, params: {}, title: "Calendar" };
+            if (args.at) {
+                var clash = evs.filter(function (e) { return !e.allDay && e.start <= args.at && e.end > args.at; })[0];
+                return { text: say.freeAt(args.at, clash || null, now), open: cal, attachments: clash ? cards([eventCard(env, clash)]) : undefined };
+            }
+            // Free in the day's waking hours (8 to 20), from now on today.
+            var from = Math.max(D.at(day, 8, 0), now), to = D.at(day, 20, 0);
+            var slots = from < to ? freeSlots(evs, Math.ceil(from / 900000) * 900000, to) : [];
+            return { text: say.freeSlots(slots, args.label || say.dayLabel(day, now), now), open: cal };
+        });
+    }
+    case "noteAppend": {
+        var text2 = String(args.oldText).replace(/\s+$/, "") + "\n" + String(args.text).trim();
+        return lunaCall(env, DB + "merge", { objects: [{ _id: args.id, text: text2, title: text2.substring(0, 50), modifiedTimestamp: now }] }).then(function () {
+            return { text: say.noteAppended(args.title), open: { appId: MEMOS_APP, params: {}, title: "Memos" },
+                     attachments: cards([{ title: args.title, detail: text2.split("\n").slice(1).join("\n"), open: { appId: MEMOS_APP, params: {}, title: "Memos" } }]),
+                     undo: { kind: "merge", objects: [{ _id: args.id, text: args.oldText, title: String(args.oldText).substring(0, 50) }], what: say.undoWhat.memoBack() } };
+        });
+    }
+    case "taskList":
+        return dbFind(env, "com.palm.tasklist:1").then(function (lists) {
+            var name = String(args.list || ""), n = words(name).replace(/ list$/, "");
+            var l = name ? lists.filter(function (x) { return words(x.name).replace(/ list$/, "") === n; })[0] || lists.filter(function (x) { return words(x.name).indexOf(n) === 0; })[0]
+                         : lists.filter(function (x) { return x.isDefault; })[0];
+            if (name && !l) return { text: say.noList(name), open: { appId: TASKS_APP, params: {}, title: "Tasks" } };
+            return dbFind(env, "com.palm.task:1").then(function (tasks) {
+                var open = tasks.filter(function (x) { return !x.completed && !x._del && (!l || x.listId === l._id); })
+                    .sort(function (a, b) { return (a.due || Infinity) - (b.due || Infinity) || (a.createdTime || 0) - (b.createdTime || 0); });
+                return { text: say.tasks(l && !l.isDefault ? l.name : "", open.map(function (x) { return x.summary; })), data: { count: open.length },
+                         open: { appId: TASKS_APP, params: {}, title: "Tasks" },
+                         attachments: cards(open.map(function (x) {
+                             return { title: x.summary, subtitle: x.due ? whenShown(env, x.due, null, !!x.allDay) : "", open: { appId: TASKS_APP, params: { taskId: x._id }, title: "Tasks" } };
+                         })) };
+            });
+        });
+    case "taskDone":
+        return lunaCall(env, DB + "merge", { objects: [{ _id: args.id, completed: true, completedTime: now, modifiedTime: now }] }).then(function () {
+            return { text: say.taskDone(args.summary), open: { appId: TASKS_APP, params: { taskId: args.id }, title: "Tasks" },
+                     undo: { kind: "merge", objects: [{ _id: args.id, completed: false, completedTime: null }], what: say.undoWhat.taskBack(args.summary) } };
+        });
+    case "nearby":
+        return launch(env, MAPS_APP, { query: String(args.query) }).then(function () {
+            return { text: say.nearby(args.query), open: { appId: MAPS_APP, params: { query: String(args.query) }, title: "Maps" } };
+        });
+    case "website": {
+        var url = /^https?:\/\//i.test(args.url) ? String(args.url) : "https://" + String(args.url);
+        return lunaCall(env, "luna://com.palm.applicationManager/open", { target: url }).then(function () { return { text: say.openingSite(String(args.url).replace(/^https?:\/\//i, "")) }; });
+    }
+    case "storage":
+        return lunaCall(env, SYSTEM_SERVICE + "deviceInfo/query", {}).then(function (r) {
+            return { text: say.storage(r.storage_free || "", r.storage_size || ""), open: { appId: SETTINGS_APP, params: { page: "deviceinfo" }, title: "Device Info" } };
+        });
+    case "appStore":
+        return lunaCall(env, "luna://org.webosphoenix.service.packages/search", { query: String(args.query) }).then(function (r) {
+            var hits = (r.apps || []).filter(function (a) { return !a.adult; });
+            var store = function (a) { return { appId: MARKETPLACE_APP, params: a ? { sourceId: a.sourceId, id: a.id } : {}, title: "Marketplace" }; };
+            if (!hits.length) return { text: say.noApps(args.query), open: store(null) };
+            var top = hits[0];
+            var shown = cards(hits.map(function (a) {
+                return { title: a.title, subtitle: [a.developer && a.developer.name, a.installed ? say.installed() : ""].filter(Boolean).join(" · "), detail: a.summary || "", open: store(a) };
+            }));
+            if (!args.install) return { text: say.appsFound(args.query, hits.map(function (a) { return a.title; })), open: store(top), attachments: shown };
+            return launch(env, MARKETPLACE_APP, store(top).params).then(function () {
+                return { text: top.installed ? say.alreadyInstalled(top.title) : say.toInstall(top.title), open: store(top), attachments: shown };
+            });
+        }, function () { return { text: say.noMarketplace(), open: { appId: MARKETPLACE_APP, params: {}, title: "Marketplace" } }; });
+    case "help": {
+        if (args.topic) {
+            var h = env.lang.help ? env.lang.help(args.topic) : null;
+            if (!h) return Promise.resolve({ text: say.failed("no such topic") });
+            var where = h.topic ? { appId: HELP_APP, params: { topic: "help-" + h.topic }, title: "Help" }
+                      : h.id === "assistant" ? { appId: SETTINGS_APP, params: { page: "assistant" }, title: "Assistant Settings" } : null;
+            return Promise.resolve({ text: h.answer, open: where || undefined });
+        }
+        return helpNow(env).then(function (nowList) {
+            var groups = [{ type: "examples", title: say.rightNow(), items: nowList.map(function (x) { return { text: x }; }) }]
+                .concat(HELP_GROUPS.map(function (g) { return { type: "examples", title: g.title, items: g.examples.map(function (x) { return { text: x }; }) }; }));
+            return { text: say.helpOverview(), attachments: groups, open: { appId: HELP_APP, params: {}, title: "Help" } };
+        });
+    }
     case "undo":
         return undo(args.undo, env).then(function () { return { text: say.undone() }; });
     default:
@@ -1150,11 +1626,15 @@ function undo(u, env) {
             }));
         });
     }
+    // What a change replaced (merge), or what a deletion took (put back).
+    if (u.kind === "merge") return lunaCall(env, DB + "merge", { objects: u.objects || [] });
+    if (u.kind === "put") return lunaCall(env, DB + "put", { objects: (u.objects || []).map(function (o) { var c = Object.assign({}, o); delete c._rev; delete c._del; return c; }) });
     return cancel(u.activities).then(function () { return lunaCall(env, DB + "del", { ids: u.ids || [] }); });
 }
 
 module.exports = {
     BUILT_IN: BUILT_IN,
+    HELP_GROUPS: HELP_GROUPS,
     catalogue: catalogue,
     find: find,
     toolName: toolName,
@@ -1165,5 +1645,18 @@ module.exports = {
     run: run,
     contactNames: contactNames,
     activityDate: activityDate,
-    memoPosition: memoPosition
+    memoPosition: memoPosition,
+    // For the follow-up questions (lib/followups.js), which change what a
+    // command made the way the command made it.
+    lunaCall: lunaCall,
+    dbFind: dbFind,
+    people: people,
+    findPerson: findPerson,
+    personName: personName,
+    emailOf: emailOf,
+    taskList: taskList,
+    remindTask: remindTask,
+    scheduleAlarm: scheduleAlarm,
+    nextRing: nextRing,
+    normalizedPhone: normalizedPhone
 };

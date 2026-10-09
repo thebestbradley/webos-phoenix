@@ -33,9 +33,39 @@
 // working bobs and pumps its flippers...; idle looks around now and then),
 // and a pose change blends from wherever the loop is.
 //
+// Moves (motion.moves, played by play() on a layer of their own over the
+// pose and its acting): the entrance (enter(): embers swirl in and a
+// fireball bursts, the bird is born out of it flapping, its tail
+// streaming, drops with a stretch, lands with a squash, a dust cloud and
+// its crest flaring, bounces and settles), the exit (leave(): a crouch, a
+// leap and it bursts into embers; then it is gone until it enters again),
+// the idle pool (now and then, in turn with idle's look around: a
+// stretch and a yawn, a hop, preening its tail, tapping a foot, peeking
+// down, a shiver of its flames, looking up) and the reactions (react():
+// a peck as a character is typed, a wince at a deletion, a curious tilt
+// after a pause, a cheer as a request is sent, a giggle or a spin when
+// tapped, a scoot when the keyboard moves it). Each is keys over its
+// parts with curves that feel physical (falls ease in like gravity,
+// throws ease out, landings spring back), cues for a moment's face
+// (eyes, beak) and effects (particles: the embers, the fireball, dust
+// puffs, all plain property animations over shapes). gazeX, gazeY: where
+// it looks (the text it watches, a scroll it follows).
+//
+// Its magic (magic, always there while it shows): a warm gold aura behind
+// it that breathes, flickers with its crest and radiates soft rings (and
+// flares for a moment as it lands from its entrance and cheers: the surge
+// effect); tiny sparks and glittering motes appearing around it at random,
+// drifting up and fading, a few at a time (more as it listens, thinks and
+// celebrates: magic.poses); now and then a faint shimmering mist. The
+// randomness is picked once by the generator (lanes of sparks, each its own
+// length, so together they never repeat in step), each bird starting each
+// lane at a random point; all plain property animations over shapes and
+// rectangles (no particle system), as everything else.
+//
 // All of it through Theme.motion (Settings > Advanced > Animation speed).
 // With `animated` false (Reduce motion) every pose is held still: no
-// flicker, breath, blink, hop, acting or beak flapping; poses change at once. The
+// flicker, breath, blink, hop, acting, moves, effects or beak flapping;
+// poses change at once, it enters and leaves with a plain fade. The
 // animations are plain property animations (no script runs per frame);
 // Animators cannot scale unevenly about a point.
 
@@ -55,16 +85,30 @@ Item {
     // A soft warm light behind it (the flame's), so the black bird reads on
     // a dark ground (the assistant's view).
     property bool glow: false
+    // Where it looks, -1 to 1 (motion.gaze): at the text it watches, along a scroll.
+    property real gazeX: 0
+    property real gazeY: 0
+    // Plays the idle pool now and then (and idle's look around): off while
+    // the user is busy with it (typing).
+    property bool fidgety: true
+    // Its magic (magic): the aura, the sparks, the mist.
+    property bool magic: true
     // Its own motion only while drawn.
     readonly property bool _live: animated && visible && opacity > 0
+    // Shown (1) or gone (0): entering and leaving under Reduce motion fade it.
+    property real fade: 1
+    opacity: fade
 
     implicitWidth: 120
     implicitHeight: width * 1.1
 
     readonly property var art: BirdData.bird
     readonly property var poseSpec: art.poses[pose] || art.poses.idle
-    readonly property var _eyes: art.eyes[poseSpec.eyes]
-    readonly property var _beak: art.beaks[poseSpec.beak]
+    // A move's moment of a face of its own (its cues), else the pose's.
+    property string faceEyes: ""
+    property string faceBeak: ""
+    readonly property var _eyes: art.eyes[faceEyes || poseSpec.eyes]
+    readonly property var _beak: art.beaks[faceBeak || poseSpec.beak]
     readonly property var _t: art.motion.transition
     readonly property var _pv: art.pivots
 
@@ -238,9 +282,12 @@ Item {
 
     onPoseChanged: {
         _applyLift();
-        if (_was === "asleep" && pose !== "asleep" && animated)
+        if (_was === "asleep" && pose !== "asleep" && animated && move !== "enter")
             shakeAnim.restart();
         _was = pose;
+        // An idle move is idle's alone: it blends away.
+        if (moveKind === "idle")
+            _endMove(true);
     }
     onAnimatedChanged: {
         if (!animated) {
@@ -249,6 +296,11 @@ Item {
             shake = 0;
             nodAngle = 0;
             _applyLift();
+            // No moves: shown still, or gone.
+            _endMove(false);
+            fadeAnim.stop();
+            goneAnim.stop();
+            fade = gone ? 0 : 1;
         }
     }
     Component.onCompleted: {
@@ -270,8 +322,12 @@ Item {
     Act { id: actWingR; channel: "wingR" }
     Act { id: actBeak; channel: "beak" }
     Act { id: actCrest; channel: "crest" }
+    Act { id: actWhole; channel: "whole" }
+    Act { id: actTail; channel: "tail" }
+    Act { id: actFootL; channel: "footL" }
+    Act { id: actFootR; channel: "footR" }
     readonly property var acts: ({ body: actBody, head: actHead, eyes: actEyes, lids: actLids, wingL: actWingL, wingR: actWingR,
-                                   beak: actBeak, crest: actCrest })
+                                   beak: actBeak, crest: actCrest, whole: actWhole, tail: actTail, footL: actFootL, footR: actFootR })
     readonly property var _every: (art.motion.acting.poses[pose] || {}).every
     // The occasional acting (idle's look around), now.
     function fidget() {
@@ -287,20 +343,258 @@ Item {
         return false;
     }
     property int fidgets: 0
-    // Every random gap (like the blink's) plus the loop's own length, so a
-    // look around has ended before the next begins.
-    function _fidgetInterval() {
+    // Every random gap (like the blink's) plus the length of what plays
+    // (the look around's loop, or a move), so one has ended before the next.
+    function _fidgetInterval(ms) {
         var a = art.motion.acting.poses[pose];
-        return a && a.every ? a.every[0] + Math.random() * (a.every[1] - a.every[0]) + Theme.motion(a.period) : 1000;
+        return a && a.every ? a.every[0] + Math.random() * (a.every[1] - a.every[0]) + Theme.motion(ms === undefined ? a.period : ms) : 1000;
     }
+    // A full-body idle (motion.idles.pool) now: `name`, or one at random
+    // (never the one before).
+    property int idles: 0
+    property string lastIdle: ""
+    function idle(name) {
+        var pool = art.motion.idles.pool;
+        if (!name) {
+            var others = pool.filter(function (n) { return n !== bird.lastIdle; });
+            name = others[Math.floor(Math.random() * others.length)];
+        }
+        if (!play(name))
+            return "";
+        lastIdle = name;
+        ++idles;
+        return name;
+    }
+    // In turn: the look around, then one of the pool (none while a move plays).
+    property bool _poolNext: false
     Timer {
-        running: bird._live && bird._every !== undefined
+        running: bird._live && bird._every !== undefined && bird.fidgety
         repeat: true
         interval: bird._fidgetInterval()
         onTriggered: {
-            bird.fidget();
-            interval = bird._fidgetInterval();
+            var ms;
+            if (bird.move !== "") {
+                ms = 0;
+            } else if (bird._poolNext) {
+                var name = bird.idle();
+                ms = name ? bird.art.motion.moves[name].period : 0;
+                bird._poolNext = false;
+            } else {
+                bird.fidget();
+                bird._poolNext = true;
+            }
+            interval = bird._fidgetInterval(ms);
         }
+    }
+
+    // ---- Moves: the entrance, the exit, the idle pool, the reactions ------------------------------
+    // The move playing ("" none), its kind; how many have started.
+    property string move: ""
+    property string moveKind: ""
+    property int moveCount: 0
+    signal moveStarted(string name)
+    signal moveEnded(string name)
+    // Left (leave()): gone until it enters again.
+    property bool gone: false
+    readonly property var _moves: art.motion.moves
+    // Plays a move (motion.moves[name]) now, or after delay ms: over the
+    // parts it names (each from wherever a move before left it, blending),
+    // its cues at their moments. The time it takes, or 0 (none, or no motion).
+    function play(name, delay) {
+        var m = _moves[name];
+        if (!m || !animated)
+            return 0;
+        delay = Math.max(0, delay || 0);
+        var was = move;
+        moveClock.stop();
+        if (was !== "")
+            moveEnded(was);
+        faceEyes = "";
+        faceBeak = "";
+        for (var k in acts) {
+            if (m.kind === "enter")
+                acts[k].clearMove();
+            else
+                acts[k].cancelMove();
+            acts[k].startMove(m, delay);
+        }
+        // The cues, each waited for from the one before; the end.
+        var waits = [], cues = [], t = delay;
+        for (var i = 0; i < 6; ++i) {
+            var c = i < m.cues.length ? m.cues[i] : null;
+            var at = c ? delay + Theme.motion(c.at * m.period) : t;
+            waits.push(Math.max(0, at - t));
+            cues.push(c);
+            t = Math.max(t, at);
+        }
+        waits.push(Math.max(0, delay + Theme.motion(m.period) - t));
+        _cues = cues;
+        _cueWaits = waits;
+        move = name;
+        moveKind = m.kind;
+        ++moveCount;
+        moveStarted(name);
+        moveClock.start();
+        return delay + Theme.motion(m.period);
+    }
+    // A reaction (motion.reactions): not while it enters or leaves, nor
+    // again while it plays (typing fast: a steady pecking).
+    function react(name) {
+        if (!animated || gone || moveKind === "enter" || moveKind === "leave" || move === name)
+            return false;
+        return play(name) > 0;
+    }
+    // Enters (after delay ms): the entrance, or under Reduce motion a fade.
+    // The time it takes.
+    readonly property int _fadeMs: Math.round(250 * Theme.animationScale)
+    function enter(delay) {
+        delay = Math.max(0, delay || 0);
+        gone = false;
+        shakeAnim.stop();
+        shake = 0;
+        fadeAnim.stop();
+        goneAnim.stop();
+        if (!animated) {
+            _endMove(false);
+            fade = 0;
+            fadeAnim.wait = delay;
+            fadeAnim.to = 1;
+            fadeAnim.start();
+            return delay + _fadeMs;
+        }
+        fade = 1;
+        return play("enter", delay);
+    }
+    // Leaves: the exit (gone at its end), or under Reduce motion a fade.
+    function leave() {
+        fadeAnim.stop();
+        gone = true;
+        if (!animated) {
+            _endMove(false);
+            fadeAnim.wait = 0;
+            fadeAnim.to = 0;
+            fadeAnim.start();
+            return _fadeMs;
+        }
+        return play("leave");
+    }
+    SequentialAnimation {
+        id: fadeAnim
+        property int wait: 0
+        property real to: 1
+        PauseAnimation { duration: fadeAnim.wait }
+        NumberAnimation { target: bird; property: "fade"; to: fadeAnim.to; duration: bird._fadeMs; easing.type: Easing.InOutQuad }
+    }
+    // Ends the move playing: blending away from where it is, or at once.
+    function _endMove(blend) {
+        var was = move;
+        moveClock.stop();
+        for (var k in acts) {
+            if (blend)
+                acts[k].cancelMove();
+            else
+                acts[k].clearMove();
+        }
+        faceEyes = "";
+        faceBeak = "";
+        move = "";
+        moveKind = "";
+        if (was !== "")
+            moveEnded(was);
+    }
+    function _cue(i) {
+        var c = _cues[i];
+        if (!c)
+            return;
+        if (c.eyes !== undefined)
+            faceEyes = c.eyes;
+        if (c.beak !== undefined)
+            faceBeak = c.beak;
+        if (c.fx && _fx[c.fx])
+            _fx[c.fx].play();
+    }
+    function _moveDone() {
+        var was = move, kind = moveKind;
+        faceEyes = "";
+        faceBeak = "";
+        move = "";
+        moveKind = "";
+        // Left: gone (and its motion stops with it) once its embers have flown.
+        if (kind === "leave")
+            goneAnim.restart();
+        moveEnded(was);
+    }
+    SequentialAnimation {
+        id: goneAnim
+        PauseAnimation { duration: Theme.motion(bird.art.effects.burst.period) }
+        PropertyAction { target: bird; property: "fade"; value: 0 }
+    }
+    // Is any part moving (a move)?
+    function isMoving() {
+        for (var k in acts)
+            if (acts[k].isMoving())
+                return true;
+        return false;
+    }
+    // Every move layer at rest (tests).
+    function movesAtRest() {
+        for (var k in acts) {
+            var a = acts[k];
+            if (a.isMoving() || a.mrot !== 0 || a.mtx !== 0 || a.mty !== 0 || a.msx !== 1 || a.msy !== 1)
+                return false;
+        }
+        return true;
+    }
+    property var _cues: [null, null, null, null, null, null]
+    property var _cueWaits: [0, 0, 0, 0, 0, 0, 0]
+    // The cues' clock (set only while stopped: see Act's _steps).
+    SequentialAnimation {
+        id: moveClock
+        PauseAnimation { duration: bird._cueWaits[0] }
+        ScriptAction { script: bird._cue(0) }
+        PauseAnimation { duration: bird._cueWaits[1] }
+        ScriptAction { script: bird._cue(1) }
+        PauseAnimation { duration: bird._cueWaits[2] }
+        ScriptAction { script: bird._cue(2) }
+        PauseAnimation { duration: bird._cueWaits[3] }
+        ScriptAction { script: bird._cue(3) }
+        PauseAnimation { duration: bird._cueWaits[4] }
+        ScriptAction { script: bird._cue(4) }
+        PauseAnimation { duration: bird._cueWaits[5] }
+        ScriptAction { script: bird._cue(5) }
+        PauseAnimation { duration: bird._cueWaits[6] }
+        ScriptAction { script: bird._moveDone() }
+    }
+
+    // ---- Gaze: where it looks ------------------------------------------------------------------------
+    readonly property var _gz: art.motion.gaze
+    property real _gx: animated ? Math.max(-1, Math.min(1, gazeX)) : 0
+    property real _gy: animated ? Math.max(-1, Math.min(1, gazeY)) : 0
+    Behavior on _gx { enabled: bird.animated; NumberAnimation { duration: Theme.motion(bird._gz.ms); easing.type: Easing.OutCubic } }
+    Behavior on _gy { enabled: bird.animated; NumberAnimation { duration: Theme.motion(bird._gz.ms); easing.type: Easing.OutCubic } }
+    // How high above the ground it is (the hop, a move's leap), for its shadow.
+    readonly property real _air: Math.max(0, lift - actBody.ty - actWhole.ty)
+
+    // ---- Magic: the aura, the sparks, the mist (magic) --------------------------------------------
+    readonly property var _magic: art.magic
+    readonly property var _magicPose: _magic.poses[pose] || _magic.poses.idle
+    // The aura's brightness for the pose, eased to (still: at once, held at a share of it).
+    property real _auraEased: _magicPose[0]
+    Behavior on _auraEased { enabled: bird.animated; NumberAnimation { duration: Theme.motion(bird._magic.aura.ease); easing.type: Easing.InOutQuad } }
+    readonly property real auraLevel: animated ? _auraEased : _magicPose[0] * _magic.aura.still
+    // How many spark lanes show, the mist's: 0 or 1.
+    readonly property int sparkLanes: _magicPose[1]
+    readonly property bool misty: _magicPose[2] === 1
+    readonly property bool ringing: _magicPose[3] === 1
+    // Sparks and mist play while it is there (not while it is born or bursts).
+    readonly property bool _sparkling: _live && magic && moveKind !== "enter" && moveKind !== "leave" && !gone
+    property real auraBreath: 0
+    SequentialAnimation {
+        running: bird._live && bird.magic
+        loops: Animation.Infinite
+        NumberAnimation { target: bird; property: "auraBreath"; to: 1; duration: Theme.motion(bird._magic.aura.breath.period / 2); easing.type: Easing.InOutSine }
+        NumberAnimation { target: bird; property: "auraBreath"; to: 0; duration: Theme.motion(bird._magic.aura.breath.period / 2); easing.type: Easing.InOutSine }
+        onRunningChanged: if (!running) bird.auraBreath = 0
     }
 
     // ---- Breathing and blinking -----------------------------------------------------------------
@@ -522,6 +816,19 @@ Item {
         NumberAnimation { target: astep.act; property: "lsx"; to: astep.to[4]; duration: astep.length; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.42, 0, 0.58, 1, 1, 1] }
         NumberAnimation { target: astep.act; property: "lsy"; to: astep.to[5]; duration: astep.length; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.42, 0, 0.58, 1, 1, 1] }
     }
+    // One step of a move: to key `to` along `curve` (the Bezier into it).
+    component MoveStep: ParallelAnimation {
+        id: mstep
+        property QtObject act
+        property var to
+        property var curve
+        property int length
+        NumberAnimation { target: mstep.act; property: "mrot"; to: mstep.to[1]; duration: mstep.length; easing.type: Easing.BezierSpline; easing.bezierCurve: mstep.curve }
+        NumberAnimation { target: mstep.act; property: "mtx"; to: mstep.to[2]; duration: mstep.length; easing.type: Easing.BezierSpline; easing.bezierCurve: mstep.curve }
+        NumberAnimation { target: mstep.act; property: "mty"; to: mstep.to[3]; duration: mstep.length; easing.type: Easing.BezierSpline; easing.bezierCurve: mstep.curve }
+        NumberAnimation { target: mstep.act; property: "msx"; to: mstep.to[4]; duration: mstep.length; easing.type: Easing.BezierSpline; easing.bezierCurve: mstep.curve }
+        NumberAnimation { target: mstep.act; property: "msy"; to: mstep.to[5]; duration: mstep.length; easing.type: Easing.BezierSpline; easing.bezierCurve: mstep.curve }
+    }
     // A part's acting (motion.acting): the pose's loop for `channel`, on top
     // of the pose's values. rot, tx, ty, sx, sy are what the part's
     // transforms read: the loop's values (l...) with a blend (b...) that
@@ -549,11 +856,17 @@ Item {
         property real bty: 0
         property real bsx: 1
         property real bsy: 1
-        readonly property real rot: lrot + brot
-        readonly property real tx: ltx + btx
-        readonly property real ty: lty + bty
-        readonly property real sx: lsx * bsx
-        readonly property real sy: lsy * bsy
+        // A move's layer (bird.play()).
+        property real mrot: 0
+        property real mtx: 0
+        property real mty: 0
+        property real msx: 1
+        property real msy: 1
+        readonly property real rot: lrot + brot + mrot
+        readonly property real tx: ltx + btx + mtx
+        readonly property real ty: lty + bty + mty
+        readonly property real sx: lsx * bsx * msx
+        readonly property real sy: lsy * bsy * msy
 
         // What the loop plays, set only while it is stopped: a running
         // animation group whose children change is rebuilt by Qt at its next
@@ -570,7 +883,8 @@ Item {
             _lengths = l;
         }
         function play() {
-            var r = rot, x = tx, y = ty, w = sx, h = sy;
+            // The loop's and the blend's (a move goes on over them).
+            var r = lrot + brot, x = ltx + btx, y = lty + bty, w = lsx * bsx, h = lsy * bsy;
             loop.stop();
             blend.stop();
             lrot = 0; ltx = 0; lty = 0; lsx = 1; lsy = 1;
@@ -603,6 +917,51 @@ Item {
         onLiveChanged: play()
         Component.onCompleted: play()
 
+        // Moves: the move's keys for this part ([at, rotation, x, y, scale
+        // x, scale y], 12), the curve into each and the steps' lengths.
+        function isMoving() { return mover.running; }
+        property var _mk: [_rest, _rest, _rest, _rest, _rest, _rest, _rest, _rest, _rest, _rest, _rest, _rest]
+        property var _mc: [_io, _io, _io, _io, _io, _io, _io, _io, _io, _io, _io]
+        property var _ml: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        property int _mdelay: 0
+        readonly property var _io: [0.42, 0, 0.58, 1, 1, 1]
+        function startMove(m, delay) {
+            var k = m.steps[channel];
+            if (!k)
+                return;
+            mover.stop();
+            var l = [], c = [];
+            for (var i = 0; i < 11; ++i) {
+                l.push(Theme.motion((k[i + 1][0] - k[i][0]) * m.period));
+                var b = m.curves[channel][i];
+                c.push([b[0], b[1], b[2], b[3], 1, 1]);
+            }
+            _mk = k;
+            _mc = c;
+            _ml = l;
+            _mdelay = delay;
+            // From its first key (an entrance's: hidden, through its delay).
+            mrot = k[0][1]; mtx = k[0][2]; mty = k[0][3]; msx = k[0][4]; msy = k[0][5];
+            mover.start();
+        }
+        // Ends a move here: the blend takes it from where it is back to rest.
+        function cancelMove() {
+            mover.stop();
+            if (mrot === 0 && mtx === 0 && mty === 0 && msx === 1 && msy === 1)
+                return;
+            brot += mrot; btx += mtx; bty += mty; bsx *= msx; bsy *= msy;
+            mrot = 0; mtx = 0; mty = 0; msx = 1; msy = 1;
+            if (live)
+                blend.restart();
+            else
+                play();
+        }
+        // Ends a move here at once.
+        function clearMove() {
+            mover.stop();
+            mrot = 0; mtx = 0; mty = 0; msx = 1; msy = 1;
+        }
+
         property list<QtObject> _anims: [
             ParallelAnimation {
                 id: blend
@@ -611,6 +970,21 @@ Item {
                 NumberAnimation { target: act; property: "bty"; to: 0; duration: Theme.motion(act.acting.lead); easing.type: Easing.OutCubic }
                 NumberAnimation { target: act; property: "bsx"; to: 1; duration: Theme.motion(act.acting.lead); easing.type: Easing.OutCubic }
                 NumberAnimation { target: act; property: "bsy"; to: 1; duration: Theme.motion(act.acting.lead); easing.type: Easing.OutCubic }
+            },
+            SequentialAnimation {
+                id: mover
+                PauseAnimation { duration: act._mdelay }
+                MoveStep { act: act; to: act._mk[1]; curve: act._mc[0]; length: act._ml[0] }
+                MoveStep { act: act; to: act._mk[2]; curve: act._mc[1]; length: act._ml[1] }
+                MoveStep { act: act; to: act._mk[3]; curve: act._mc[2]; length: act._ml[2] }
+                MoveStep { act: act; to: act._mk[4]; curve: act._mc[3]; length: act._ml[3] }
+                MoveStep { act: act; to: act._mk[5]; curve: act._mc[4]; length: act._ml[4] }
+                MoveStep { act: act; to: act._mk[6]; curve: act._mc[5]; length: act._ml[5] }
+                MoveStep { act: act; to: act._mk[7]; curve: act._mc[6]; length: act._ml[6] }
+                MoveStep { act: act; to: act._mk[8]; curve: act._mc[7]; length: act._ml[7] }
+                MoveStep { act: act; to: act._mk[9]; curve: act._mc[8]; length: act._ml[8] }
+                MoveStep { act: act; to: act._mk[10]; curve: act._mc[9]; length: act._ml[9] }
+                MoveStep { act: act; to: act._mk[11]; curve: act._mc[10]; length: act._ml[10] }
             },
             SequentialAnimation {
                 id: loop
@@ -630,9 +1004,24 @@ Item {
         height: bird.art.viewBox[1]
         transform: Scale { xScale: bird.width / drawing.width; yScale: bird.width / drawing.width }
 
+        // Smaller and fainter the higher it is; none before it is born.
         Part {
             name: "shadow"
-            transform: Scale { origin.x: bird._pv.shadow[0]; origin.y: bird._pv.shadow[1]; xScale: bird.shadowScale * (1 - 0.25 * Math.min(1, bird.lift / 60)) }
+            opacity: spec.opacity * (1 - 0.6 * Math.min(1, bird._air / 220))
+            transform: Scale {
+                origin.x: bird._pv.shadow[0]; origin.y: bird._pv.shadow[1]
+                xScale: bird.shadowScale * (1 - 0.25 * Math.min(1, bird._air / 60)) * Math.min(1, Math.abs(actWhole.sy))
+            }
+        }
+
+        // Now and then a faint shimmering mist behind it.
+        Item {
+            id: mistLayer
+            objectName: "assistantBirdMist"
+            visible: bird.magic && bird.animated
+            opacity: bird.misty && bird._sparkling ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.motion(bird._magic.aura.ease) } }
+            MistLane { running: bird._sparkling && bird.misty }
         }
 
         // The bird, apart from the extras around it.
@@ -646,8 +1035,11 @@ Item {
                 Scale { origin.x: bird._pv.breath[0]; origin.y: bird._pv.breath[1]; xScale: bird.breathX; yScale: bird.breathY },
                 Scale { origin.x: bird._pv.feet[0]; origin.y: bird._pv.feet[1]; xScale: bird.squashX; yScale: bird.squashY },
                 Rotation { origin.x: bird._pv.body[0]; origin.y: bird._pv.body[1]; angle: bird.tilt + bird.shake },
-                Rotation { origin.x: bird._pv.feet[0]; origin.y: bird._pv.feet[1]; angle: bird.nodAngle },
-                Translate { y: -bird.lift }
+                Rotation { origin.x: bird._pv.feet[0]; origin.y: bird._pv.feet[1]; angle: bird.nodAngle + bird._gx * bird._gz.body },
+                Translate { y: -bird.lift },
+                Scale { origin.x: actWhole.pivot[0]; origin.y: actWhole.pivot[1]; xScale: actWhole.sx; yScale: actWhole.sy },
+                Rotation { origin.x: actWhole.pivot[0]; origin.y: actWhole.pivot[1]; angle: actWhole.rot },
+                Translate { x: actWhole.tx; y: actWhole.ty }
             ]
 
             Shape {
@@ -665,8 +1057,88 @@ Item {
                     PathSvg { path: "M-2 236 A210 210 0 1 0 418 236 A210 210 0 1 0 -2 236 Z" }
                 }
             }
-            Flicker { name: "tail"; running: bird._live; Part { name: "tail" } }
-            Flicker { name: "tailInner"; running: bird._live; Part { name: "tailInner" } }
+            // The aura (magic.aura): a warm gold light breathing behind it,
+            // flickering with its crest's flame, radiating soft rings.
+            Item {
+                id: aura
+                objectName: "assistantBirdAura"
+                readonly property var spec: bird._magic.aura
+                visible: bird.magic
+                // The crest's flame's height, as a share of its tallest (magic.aura.flicker).
+                readonly property real _flickMax: Math.max.apply(null, bird.art.motion.flicker[spec.flicker.with].keys.map(function (k) {
+                    return 1 + aura.spec.flicker.depth * (k[2] - 1); }))
+                readonly property real flick: (1 + spec.flicker.depth * (crestFlame.sy - 1)) / _flickMax
+                opacity: bird.auraLevel * (bird.animated ? (spec.breath.opacity[0] + (spec.breath.opacity[1] - spec.breath.opacity[0]) * bird.auraBreath) * flick : 1)
+                transform: Scale {
+                    origin.x: aura.spec.origin[0]; origin.y: aura.spec.origin[1]
+                    xScale: aura.spec.breath.scale[0] + (aura.spec.breath.scale[1] - aura.spec.breath.scale[0]) * bird.auraBreath
+                    yScale: xScale
+                }
+                Glow {
+                    x: aura.spec.origin[0] - r
+                    y: aura.spec.origin[1] - r
+                    r: aura.spec.radius
+                    hole: aura.spec.hole
+                    stops: [[0, bird._auraColor(aura.spec.alpha)], [0.45, bird._auraColor(aura.spec.alpha * 0.45)],
+                            [0.7, bird._auraColor(aura.spec.alpha * 0.16)], [1, bird._auraColor(0)]]
+                }
+                // Soft bands growing out from it and fading, one after another.
+                Repeater {
+                    model: bird.animated ? aura.spec.rings.count : 0
+                    // A band (only it is filled: the frame rate of a dozen birds on a software GL).
+                    delegate: Shape {
+                        id: ring
+                        required property int index
+                        readonly property var rs: aura.spec.rings
+                        readonly property real ri: rs.radius * rs.inner
+                        objectName: "assistantBirdAuraRing-" + index
+                        preferredRendererType: Shape.GeometryRenderer
+                        x: aura.spec.origin[0]
+                        y: aura.spec.origin[1]
+                        opacity: 0
+                        visible: opacity > 0
+                        scale: rs.scale[0]
+                        transformOrigin: Item.TopLeft
+                        ShapePath {
+                            strokeColor: "transparent"
+                            fillRule: ShapePath.OddEvenFill
+                            fillGradient: RadialGradient {
+                                centerX: 0; centerY: 0; centerRadius: ring.rs.radius
+                                focalX: 0; focalY: 0
+                                GradientStop { position: ring.rs.inner; color: bird._auraColor(0) }
+                                GradientStop { position: (1 + 2 * ring.rs.inner) / 3; color: bird._auraColor(ring.rs.alpha) }
+                                GradientStop { position: 1; color: bird._auraColor(0) }
+                            }
+                            PathSvg { path: bird._circle(0, 0, ring.rs.radius) + " " + bird._circle(0, 0, ring.ri) }
+                        }
+                        SequentialAnimation {
+                            running: bird._live && bird.magic && bird.ringing
+                            PauseAnimation { duration: Theme.motion((ring.rs.period + ring.rs.gap) * ring.index / ring.rs.count) }
+                            SequentialAnimation {
+                                loops: Animation.Infinite
+                                ParallelAnimation {
+                                    NumberAnimation { target: ring; property: "scale"; from: ring.rs.scale[0]; to: ring.rs.scale[1]; duration: Theme.motion(ring.rs.period) }
+                                    SequentialAnimation {
+                                        NumberAnimation { target: ring; property: "opacity"; from: 0; to: 1; duration: Theme.motion(ring.rs.period * 0.25); easing.type: Easing.OutQuad }
+                                        NumberAnimation { target: ring; property: "opacity"; to: 0; duration: Theme.motion(ring.rs.period * 0.75) }
+                                    }
+                                }
+                                PauseAnimation { duration: Theme.motion(ring.rs.gap) }
+                            }
+                            onRunningChanged: if (!running) { ring.opacity = 0; ring.scale = ring.rs.scale[0]; }
+                        }
+                    }
+                }
+            }
+            Item {
+                transform: [
+                    Scale { origin.x: actTail.pivot[0]; origin.y: actTail.pivot[1]; xScale: actTail.sx; yScale: actTail.sy },
+                    Rotation { origin.x: actTail.pivot[0]; origin.y: actTail.pivot[1]; angle: actTail.rot },
+                    Translate { x: actTail.tx; y: actTail.ty }
+                ]
+                Flicker { name: "tail"; running: bird._live; Part { name: "tail" } }
+                Flicker { name: "tailInner"; running: bird._live; Part { name: "tailInner" } }
+            }
 
             // The crest: its three flames, under a slower gust, scaled and
             // turned by the pose, swelling with the voice as it listens.
@@ -686,20 +1158,32 @@ Item {
                     Rotation { angle: bird.crestRotation },
                     Translate { x: bird._pv.crest[0]; y: bird._pv.crest[1] },
                     Scale { origin.x: actHead.pivot[0]; origin.y: actHead.pivot[1]; xScale: actHead.sx; yScale: actHead.sy },
-                    Rotation { origin.x: actHead.pivot[0]; origin.y: actHead.pivot[1]; angle: actHead.rot },
-                    Translate { x: actHead.tx; y: actHead.ty }
+                    Rotation { origin.x: actHead.pivot[0]; origin.y: actHead.pivot[1]; angle: actHead.rot + bird._gx * bird._gz.head },
+                    Translate { x: actHead.tx; y: actHead.ty + bird._gy * bird._gz.headY }
                 ]
                 Flicker {
                     name: "crestGust"
                     running: bird._live
-                    Flicker { objectName: "assistantBirdFlame"; name: "crest"; running: bird._live; Part { name: "crest" } }
+                    Flicker { id: crestFlame; objectName: "assistantBirdFlame"; name: "crest"; running: bird._live; Part { name: "crest" } }
                     Flicker { name: "crestInner"; running: bird._live; Part { name: "crestInner" } }
                     Flicker { name: "crestCore"; running: bird._live; Part { name: "crestCore" } }
                 }
             }
 
-            Part { name: "footL" }
-            Part { name: "footR" }
+            Part {
+                name: "footL"
+                transform: [
+                    Rotation { origin.x: actFootL.pivot[0]; origin.y: actFootL.pivot[1]; angle: actFootL.rot },
+                    Translate { x: actFootL.tx; y: actFootL.ty }
+                ]
+            }
+            Part {
+                name: "footR"
+                transform: [
+                    Rotation { origin.x: actFootR.pivot[0]; origin.y: actFootR.pivot[1]; angle: actFootR.rot },
+                    Translate { x: actFootR.tx; y: actFootR.ty }
+                ]
+            }
             Part { name: "body" }
             Part { name: "belly" }
             Item {
@@ -729,15 +1213,16 @@ Item {
                 id: face
                 transform: [
                     Scale { origin.x: actHead.pivot[0]; origin.y: actHead.pivot[1]; xScale: actHead.sx; yScale: actHead.sy },
-                    Rotation { origin.x: actHead.pivot[0]; origin.y: actHead.pivot[1]; angle: actHead.rot },
-                    Translate { x: actHead.tx; y: actHead.ty }
+                    Rotation { origin.x: actHead.pivot[0]; origin.y: actHead.pivot[1]; angle: actHead.rot + bird._gx * bird._gz.head },
+                    Translate { x: actHead.tx; y: actHead.ty + bird._gy * bird._gz.headY }
                 ]
                 Item {
                     id: eyeGroup
+                    objectName: "assistantBirdEyes"
                     transform: [
                         Scale { origin.x: actEyes.pivot[0]; origin.y: actEyes.pivot[1]; xScale: actEyes.sx; yScale: actEyes.sy },
                         Rotation { origin.x: actEyes.pivot[0]; origin.y: actEyes.pivot[1]; angle: actEyes.rot },
-                        Translate { x: actEyes.tx; y: actEyes.ty }
+                        Translate { x: actEyes.tx + bird._gx * bird._gz.eyes[0]; y: actEyes.ty + bird._gy * bird._gz.eyes[1] }
                     ]
                     // The eyes: ovals of radius 10 scaled to their radii, shut a
                     // little by a blink.
@@ -869,6 +1354,432 @@ Item {
                     }
                 }
             }
+        }
+
+        // Sparks and motes around it, drifting up: the pose's share of the lanes.
+        Item {
+            id: sparkLayer
+            objectName: "assistantBirdSparks"
+            visible: bird.magic && bird.animated
+            opacity: bird._sparkling ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.motion(bird._magic.aura.ease) } }
+            Repeater {
+                model: bird._magic.sparkLanes
+                delegate: SparkLane {
+                    required property var modelData
+                    required property int index
+                    objectName: "assistantBirdSparkLane-" + index
+                    lane: modelData
+                    shown: index < bird.sparkLanes
+                    // All play while it sparkles (the pose shows its share): more
+                    // show at once as it celebrates, mid-flight.
+                    running: bird._sparkling
+                }
+            }
+        }
+
+        // The effects (embers, the fireball, dust): each shown while it plays.
+        Repeater {
+            model: Object.keys(bird.art.effects)
+            delegate: Fx {
+                required property string modelData
+                name: modelData
+            }
+        }
+    }
+
+    // ---- Effects (art.effects): particles, each a few property animations ---------------------------
+    property var _fx: ({})
+    property int fxCount: 0
+    signal fxPlayed(string name)
+    component Fx: Item {
+        id: fx
+        property string name
+        objectName: "assistantBirdFx-" + name
+        readonly property var spec: BirdData.bird.effects[name]
+        readonly property var colors: BirdData.bird.colors
+        property int plays: 0
+        // A fireball behind the bird (born out of it); embers and dust over it.
+        z: spec.kind === "glow" || spec.kind === "surge" ? -1 : 1
+        visible: showing.running
+        function play() {
+            if (!bird.animated)
+                return;
+            ++plays;
+            showing.restart();
+            ++bird.fxCount;
+            bird.fxPlayed(name);
+        }
+        Component.onCompleted: bird._fx[name] = fx
+        PauseAnimation { id: showing; duration: Theme.motion(fx.spec.period) + 1 }
+
+        // glow: a ball of fire, scaled and faded through its keys.
+        Shape {
+            id: ball
+            visible: fx.spec.kind === "glow" || fx.spec.kind === "surge"
+            readonly property bool aura: fx.spec.kind === "surge"
+            x: fx.spec.origin[0]
+            y: fx.spec.origin[1]
+            opacity: 0
+            scale: 0
+            transformOrigin: Item.TopLeft
+            preferredRendererType: Shape.CurveRenderer
+            readonly property real r: fx.spec.radius || 0
+            ShapePath {
+                strokeColor: "transparent"
+                fillGradient: RadialGradient {
+                    centerX: 0; centerY: 0; centerRadius: ball.r
+                    focalX: 0; focalY: 0
+                    // A fireball; or the aura's gold (a surge).
+                    GradientStop { position: 0; color: ball.aura ? bird._auraColor(0.6) : fx.colors.flameCore }
+                    GradientStop { position: 0.3; color: ball.aura ? bird._auraColor(0.4) : fx.colors.flame }
+                    GradientStop { position: 0.6; color: ball.aura ? bird._auraColor(0.15) : "#C0" + fx.colors.ember.substring(1) }
+                    GradientStop { position: 1; color: ball.aura ? bird._auraColor(0) : "#00" + fx.colors.ember.substring(1) }
+                }
+                PathSvg { path: "M" + (-ball.r) + " 0 A" + ball.r + " " + ball.r + " 0 1 0 " + ball.r + " 0 A" + ball.r + " " + ball.r + " 0 1 0 " + (-ball.r) + " 0 Z" }
+            }
+            readonly property var k: fx.spec.keys4 || [[0, 0, 0, [0, 0, 1, 1]], [1, 0, 0, [0, 0, 1, 1]], [1, 0, 0, [0, 0, 1, 1]], [1, 0, 0, [0, 0, 1, 1]]]
+            function step(i) { return Theme.motion((k[i + 1][0] - k[i][0]) * fx.spec.period); }
+            function curve(i) { var c = k[i + 1][3]; return [c[0], c[1], c[2], c[3], 1, 1]; }
+            Connections { target: fx; function onPlaysChanged() { if (ball.visible) ballAnim.restart(); } }
+            SequentialAnimation {
+                id: ballAnim
+                PropertyAction { target: ball; property: "scale"; value: ball.k[0][1] }
+                PropertyAction { target: ball; property: "opacity"; value: ball.k[0][2] }
+                ParallelAnimation {
+                    NumberAnimation { target: ball; property: "scale"; to: ball.k[1][1]; duration: ball.step(0); easing.type: Easing.BezierSpline; easing.bezierCurve: ball.curve(0) }
+                    NumberAnimation { target: ball; property: "opacity"; to: ball.k[1][2]; duration: ball.step(0); easing.type: Easing.BezierSpline; easing.bezierCurve: ball.curve(0) }
+                }
+                ParallelAnimation {
+                    NumberAnimation { target: ball; property: "scale"; to: ball.k[2][1]; duration: ball.step(1); easing.type: Easing.BezierSpline; easing.bezierCurve: ball.curve(1) }
+                    NumberAnimation { target: ball; property: "opacity"; to: ball.k[2][2]; duration: ball.step(1); easing.type: Easing.BezierSpline; easing.bezierCurve: ball.curve(1) }
+                }
+                ParallelAnimation {
+                    NumberAnimation { target: ball; property: "scale"; to: ball.k[3][1]; duration: ball.step(2); easing.type: Easing.BezierSpline; easing.bezierCurve: ball.curve(2) }
+                    NumberAnimation { target: ball; property: "opacity"; to: ball.k[3][2]; duration: ball.step(2); easing.type: Easing.BezierSpline; easing.bezierCurve: ball.curve(2) }
+                }
+                PropertyAction { target: ball; property: "opacity"; value: 0 }
+            }
+        }
+
+        // swirl, puff, burst: their particles.
+        Repeater {
+            model: fx.spec.particles || []
+            delegate: Item {
+                id: pt
+                required property var modelData
+                readonly property string kind: fx.spec.kind
+                readonly property int delay: Theme.motion(modelData[3])
+                readonly property int length: Theme.motion(fx.spec.period - modelData[3])
+                readonly property color tint: fx.colors[modelData[4] || "dust"]
+                x: fx.spec.origin[0]
+                y: fx.spec.origin[1]
+                opacity: 0
+                // swirl: turning (a) at a radius (r) about the origin; puff,
+                // burst: out by (tx, ty); all sized by s.
+                property real a: kind === "swirl" ? modelData[0] : 0
+                property real r: kind === "swirl" ? modelData[1] : 0
+                property real tx: 0
+                property real ty: 0
+                property real s: 1
+                transform: [
+                    Translate { x: pt.r + pt.tx; y: pt.ty },
+                    Rotation { angle: pt.a }
+                ]
+                // An ember: a streak along its way round (swirl) or a spark,
+                // in a faint halo.
+                Rectangle {
+                    visible: pt.kind !== "puff"
+                    readonly property real size: pt.modelData[2] * 2.6
+                    width: size; height: size; radius: size / 2
+                    x: -size / 2; y: -size / 2
+                    color: pt.tint
+                    opacity: 0.3
+                    scale: pt.s
+                }
+                Rectangle {
+                    visible: pt.kind !== "puff"
+                    readonly property real size: pt.modelData[2]
+                    width: size; height: pt.kind === "swirl" ? size * 2.4 : size; radius: size / 2
+                    x: -width / 2; y: -height / 2
+                    color: pt.tint
+                    scale: pt.s
+                    Rectangle { anchors.centerIn: parent; width: parent.width * 0.45; height: parent.height * 0.45; radius: width / 2; color: fx.colors.flameCore }
+                }
+                // A dust cloud: soft at its edge.
+                Shape {
+                    id: cloud
+                    visible: pt.kind === "puff"
+                    readonly property real rr: pt.kind === "puff" ? pt.modelData[2] : 0
+                    scale: pt.s
+                    transformOrigin: Item.TopLeft
+                    preferredRendererType: Shape.CurveRenderer
+                    ShapePath {
+                        strokeColor: "transparent"
+                        fillGradient: RadialGradient {
+                            centerX: 0; centerY: 0; centerRadius: cloud.rr
+                            focalX: 0; focalY: 0
+                            GradientStop { position: 0; color: "#E0" + fx.colors.dust.substring(1) }
+                            GradientStop { position: 0.55; color: "#90" + fx.colors.dust.substring(1) }
+                            GradientStop { position: 1; color: "#00" + fx.colors.dust.substring(1) }
+                        }
+                        PathSvg { path: "M" + (-cloud.rr) + " 0 A" + cloud.rr + " " + cloud.rr + " 0 1 0 " + cloud.rr + " 0 A" + cloud.rr + " " + cloud.rr + " 0 1 0 " + (-cloud.rr) + " 0 Z" }
+                    }
+                }
+                Connections { target: fx; function onPlaysChanged() { ptAnim.restart(); } }
+                SequentialAnimation {
+                    id: ptAnim
+                    PropertyAction { target: pt; property: "opacity"; value: 0 }
+                    PropertyAction { target: pt; property: "a"; value: pt.kind === "swirl" ? pt.modelData[0] : 0 }
+                    PropertyAction { target: pt; property: "r"; value: pt.kind === "swirl" ? pt.modelData[1] : 0 }
+                    PropertyAction { target: pt; property: "tx"; value: 0 }
+                    PropertyAction { target: pt; property: "ty"; value: 0 }
+                    PropertyAction { target: pt; property: "s"; value: pt.kind === "puff" ? 0.35 : 1 }
+                    PauseAnimation { duration: pt.delay }
+                    ParallelAnimation {
+                        // swirl: in to the origin, faster and faster, turning.
+                        NumberAnimation { target: pt; property: "r"; to: 0; duration: pt.kind === "swirl" ? pt.length : 0; easing.type: Easing.InQuad }
+                        NumberAnimation { target: pt; property: "a"; to: pt.kind === "swirl" ? pt.modelData[0] + fx.spec.spin : 0; duration: pt.kind === "swirl" ? pt.length : 0; easing.type: Easing.InQuad }
+                        // puff, burst: out, slowing.
+                        NumberAnimation { target: pt; property: "tx"; to: pt.kind === "swirl" ? 0 : pt.modelData[0]; duration: pt.kind === "swirl" ? 0 : pt.length; easing.type: Easing.OutCubic }
+                        NumberAnimation { target: pt; property: "ty"; to: pt.kind === "swirl" ? 0 : pt.modelData[1]; duration: pt.kind === "swirl" ? 0 : pt.length; easing.type: Easing.OutCubic }
+                        NumberAnimation {
+                            target: pt; property: "s"
+                            to: pt.kind === "puff" ? 1 : pt.kind === "swirl" ? 0.4 : 0.3
+                            duration: pt.length
+                            easing.type: pt.kind === "puff" ? Easing.OutQuad : pt.kind === "swirl" ? Easing.InQuad : Easing.Linear
+                        }
+                        // Bright at once (burst), coming up (swirl), billowing (puff); then out.
+                        SequentialAnimation {
+                            NumberAnimation { target: pt; property: "opacity"; to: pt.kind === "puff" ? 0.85 : 1; duration: pt.kind === "burst" ? 0 : pt.length * (pt.kind === "puff" ? 0.15 : 0.25); easing.type: pt.kind === "puff" ? Easing.OutQuad : Easing.Linear }
+                            PauseAnimation { duration: pt.kind === "puff" ? pt.length * 0.25 : pt.kind === "swirl" ? pt.length * 0.75 : 0 }
+                            NumberAnimation { target: pt; property: "opacity"; to: pt.kind === "swirl" ? 1 : 0; duration: pt.kind === "puff" ? pt.length * 0.6 : pt.kind === "burst" ? pt.length : 0; easing.type: Easing.InQuad }
+                        }
+                    }
+                    PropertyAction { target: pt; property: "opacity"; value: 0 }
+                }
+            }
+        }
+    }
+
+    // ---- Magic's parts (magic): sparks, motes and mist, each a few property animations ---------------
+    // The aura's gold at an alpha (0 to 1).
+    function _auraColor(a) {
+        var c = art.colors[art.magic.aura.color];
+        var h = Math.round(Math.max(0, Math.min(1, a)) * 255).toString(16);
+        return "#" + (h.length < 2 ? "0" + h : h) + c.substring(1);
+    }
+    // A circle's path about (x, y) (an ellipse's, with ry).
+    function _circle(x, y, r, ry) {
+        var a = " A" + r + " " + (ry === undefined ? r : ry) + " 0 1 0 ";
+        return "M" + (x - r) + " " + y + a + (x + r) + " " + y + a + (x - r) + " " + y + " Z";
+    }
+
+    // A spark (s: [gap, life, x, y, size, colour, drift, rise, glint, spin]):
+    // a four-pointed glint (turning) or a glittering mote, with its halo.
+    component Spark: Item {
+        id: sp
+        property var s: [0, 0, 0, 0, 0, "gold", 0, 0, 0, 0]
+        readonly property color tint: BirdData.bird.colors[s[5]]
+        readonly property real size: s[4]
+        x: s[2]
+        y: s[3]
+        opacity: 0
+        visible: opacity > 0
+        property real dx: 0
+        property real dy: 0
+        property real grow: 0.3
+        property real turn: 0
+        transform: [
+            Scale { xScale: sp.grow; yScale: sp.grow },
+            Rotation { angle: sp.turn },
+            Translate { x: sp.dx; y: sp.dy }
+        ]
+        Rectangle {
+            readonly property real d: sp.size * (sp.s[8] ? 3 : 2.6)
+            width: d; height: d; radius: d / 2
+            x: -d / 2; y: -d / 2
+            color: sp.tint
+            opacity: 0.26
+        }
+        // A glint: two crossed streaks.
+        Rectangle {
+            visible: sp.s[8] === 1
+            width: sp.size * 3.4; height: sp.size * 0.55; radius: height / 2
+            x: -width / 2; y: -height / 2
+            color: sp.tint
+        }
+        Rectangle {
+            visible: sp.s[8] === 1
+            width: sp.size * 0.55; height: sp.size * 3.4; radius: width / 2
+            x: -width / 2; y: -height / 2
+            color: sp.tint
+        }
+        // A mote: a dot (a glint's centre).
+        Rectangle {
+            readonly property real d: sp.s[8] ? sp.size * 0.9 : sp.size
+            width: d; height: d; radius: d / 2
+            x: -d / 2; y: -d / 2
+            color: sp.s[8] ? BirdData.bird.colors.flameCore : sp.tint
+            Rectangle { anchors.centerIn: parent; width: parent.width * 0.45; height: width; radius: width / 2; color: BirdData.bird.colors.flameCore }
+        }
+    }
+    // A spark's moment: after its gap, up and bright, a while, out, drifting up.
+    component SparkPlay: SequentialAnimation {
+        id: play
+        property Item spark
+        readonly property var s: spark ? spark.s : [0, 0, 0, 0, 0, "gold", 0, 0, 0, 0]
+        readonly property int life: Theme.motion(s[1])
+        PauseAnimation { duration: Theme.motion(play.s[0]) }
+        ParallelAnimation {
+            NumberAnimation { target: play.spark; property: "dx"; from: 0; to: play.s[6]; duration: play.life; easing.type: Easing.OutQuad }
+            NumberAnimation { target: play.spark; property: "dy"; from: 0; to: -play.s[7]; duration: play.life; easing.type: Easing.OutQuad }
+            NumberAnimation { target: play.spark; property: "turn"; from: 0; to: play.s[9]; duration: play.life; easing.type: Easing.OutQuad }
+            SequentialAnimation {
+                ParallelAnimation {
+                    NumberAnimation { target: play.spark; property: "opacity"; from: 0; to: 1; duration: play.life * 0.3; easing.type: Easing.OutQuad }
+                    NumberAnimation { target: play.spark; property: "grow"; from: 0.3; to: 1; duration: play.life * 0.3; easing.type: Easing.OutQuad }
+                }
+                ParallelAnimation {
+                    NumberAnimation { target: play.spark; property: "opacity"; to: 0.75; duration: play.life * 0.3; easing.type: Easing.InOutSine }
+                    NumberAnimation { target: play.spark; property: "grow"; to: 0.8; duration: play.life * 0.3; easing.type: Easing.InOutSine }
+                }
+                ParallelAnimation {
+                    NumberAnimation { target: play.spark; property: "opacity"; to: 0; duration: play.life * 0.4; easing.type: Easing.InQuad }
+                    NumberAnimation { target: play.spark; property: "grow"; to: 0.3; duration: play.life * 0.4; easing.type: Easing.InQuad }
+                }
+            }
+        }
+    }
+    // A lane of sparks (magic.sparkLanes): its five one after another, over
+    // and over, after a random wait (birds side by side not in step).
+    component SparkLane: Item {
+        id: ln
+        property var lane: ({ period: 0, sparks: [] })
+        property bool shown: false
+        property bool running: false
+        // Played (its loop running), for tests.
+        readonly property bool playing: laneAnim.running
+        opacity: shown ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity { NumberAnimation { duration: Theme.motion(BirdData.bird.magic.aura.ease) } }
+        readonly property int _phase: Math.floor(Math.random() * lane.period)
+        Spark { id: s0; s: ln.lane.sparks[0] }
+        Spark { id: s1; s: ln.lane.sparks[1] }
+        Spark { id: s2; s: ln.lane.sparks[2] }
+        Spark { id: s3; s: ln.lane.sparks[3] }
+        Spark { id: s4; s: ln.lane.sparks[4] }
+        SequentialAnimation {
+            id: laneAnim
+            running: ln.running
+            // Into the lane at its random point: the rest of a gap, as long.
+            PauseAnimation { duration: Theme.motion(ln._phase % 2600) }
+            SequentialAnimation {
+                loops: Animation.Infinite
+                SparkPlay { spark: s0 }
+                SparkPlay { spark: s1 }
+                SparkPlay { spark: s2 }
+                SparkPlay { spark: s3 }
+                SparkPlay { spark: s4 }
+            }
+            onRunningChanged: if (!running) { for (var i = 0; i < 5; ++i) [s0, s1, s2, s3, s4][i].opacity = 0; }
+        }
+    }
+
+    // A soft round light: a radial gradient of four stops [position,
+    // colour] to its edge, r about its centre.
+    component Glow: Item {
+        id: gl
+        property real r
+        // Not drawn within this ellipse ([rx, ry]; hidden behind the body anyway).
+        property var hole: [0, 0]
+        property var stops: [[0, "transparent"], [0.3, "transparent"], [0.6, "transparent"], [1, "transparent"]]
+        width: 2 * r
+        height: 2 * r
+        Shape {
+            // Soft to its edge (nothing there to smooth): plain geometry, the
+            // cheaper to fill. (What it fills is what costs: on a software GL a
+            // dozen birds' glows are most of a frame, so they are kept close.)
+            preferredRendererType: Shape.GeometryRenderer
+            ShapePath {
+                strokeColor: "transparent"
+                fillRule: ShapePath.OddEvenFill
+                fillGradient: RadialGradient {
+                    centerX: gl.r; centerY: gl.r; centerRadius: gl.r
+                    focalX: gl.r; focalY: gl.r
+                    GradientStop { position: gl.stops[0][0]; color: gl.stops[0][1] }
+                    GradientStop { position: gl.stops[1][0]; color: gl.stops[1][1] }
+                    GradientStop { position: gl.stops[2][0]; color: gl.stops[2][1] }
+                    GradientStop { position: gl.stops[3][0]; color: gl.stops[3][1] }
+                }
+                PathSvg { path: bird._circle(gl.r, gl.r, gl.r) + (gl.hole[0] > 0 ? " " + bird._circle(gl.r, gl.r, gl.hole[0], gl.hole[1]) : "") }
+            }
+        }
+    }
+
+    // A mist (m: [gap, life, x, y, radius, rise]): a soft haze, squashed.
+    component Mist: Item {
+        id: mi
+        property var m: [0, 0, 0, 0, 0, 0]
+        readonly property string tint: {
+            var mist = BirdData.bird.magic.mist, h = Math.round(mist.alpha * 255).toString(16);
+            return "#" + (h.length < 2 ? "0" + h : h) + BirdData.bird.colors[mist.color].substring(1);
+        }
+        x: m[2]
+        y: m[3]
+        opacity: 0
+        visible: opacity > 0
+        property real dy: 0
+        property real grow: 0.85
+        transform: [
+            Scale { xScale: mi.grow; yScale: mi.grow * BirdData.bird.magic.mist.squash },
+            Translate { y: mi.dy }
+        ]
+        Glow {
+            r: mi.m[4]
+            x: -r
+            y: -r
+            stops: [[0, mi.tint], [0.5, mi.tint], [0.75, "#60" + mi.tint.substring(3)], [1, "#00" + mi.tint.substring(3)]]
+        }
+    }
+    component MistPlay: SequentialAnimation {
+        id: mp
+        property Item mist
+        readonly property var m: mist ? mist.m : [0, 0, 0, 0, 0, 0]
+        readonly property int life: Theme.motion(m[1])
+        PauseAnimation { duration: Theme.motion(mp.m[0]) }
+        ParallelAnimation {
+            NumberAnimation { target: mp.mist; property: "dy"; from: 0; to: -mp.m[5]; duration: mp.life }
+            NumberAnimation { target: mp.mist; property: "grow"; from: 0.85; to: 1.15; duration: mp.life }
+            // Shimmering: up, down a little, up again, away.
+            SequentialAnimation {
+                NumberAnimation { target: mp.mist; property: "opacity"; from: 0; to: 0.7; duration: mp.life * 0.25; easing.type: Easing.InOutSine }
+                NumberAnimation { target: mp.mist; property: "opacity"; to: 0.45; duration: mp.life * 0.2; easing.type: Easing.InOutSine }
+                NumberAnimation { target: mp.mist; property: "opacity"; to: 1; duration: mp.life * 0.25; easing.type: Easing.InOutSine }
+                NumberAnimation { target: mp.mist; property: "opacity"; to: 0; duration: mp.life * 0.3; easing.type: Easing.InOutSine }
+            }
+        }
+    }
+    component MistLane: Item {
+        id: ml
+        property bool running: false
+        readonly property var lane: BirdData.bird.magic.mistLane
+        readonly property bool playing: mistAnim.running
+        readonly property int _phase: Math.floor(Math.random() * lane.mists[0][0])
+        Mist { id: m0; m: ml.lane.mists[0] }
+        Mist { id: m1; m: ml.lane.mists[1] }
+        Mist { id: m2; m: ml.lane.mists[2] }
+        SequentialAnimation {
+            id: mistAnim
+            running: ml.running
+            PauseAnimation { duration: Theme.motion(ml._phase) }
+            SequentialAnimation {
+                loops: Animation.Infinite
+                MistPlay { mist: m0 }
+                MistPlay { mist: m1 }
+                MistPlay { mist: m2 }
+            }
+            onRunningChanged: if (!running) { m0.opacity = 0; m1.opacity = 0; m2.opacity = 0; }
         }
     }
 }

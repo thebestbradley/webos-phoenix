@@ -96,16 +96,20 @@ Item {
     }
 
     // Relaunch with new launch params (webOSRelaunch event in the page).
-    function relaunch(params) {
+    // refresh (Settings > Apps > Opening a running app: Refresh): the page
+    // also reloads its data ("phoenixRefresh"); a site reloads.
+    function relaunch(params, refresh) {
         // A site launched with a page of its own ({target}, a link to it
         // from another app) goes there.
         if (site) {
             if (params && typeof params.target === "string" && Links.inScope(params.target, _scope))
                 view.url = params.target;
+            else if (refresh)
+                view.reload();
             return;
         }
         runScript("window.__phoenixRuntime && __phoenixRuntime.relaunch && __phoenixRuntime.relaunch("
-                  + JSON.stringify(params || {}) + ")");
+                  + JSON.stringify(params || {}) + ", " + (refresh ? "true" : "false") + ")");
     }
 
     // ---- Links: where the page's navigations go (Links.js) ---------------------------

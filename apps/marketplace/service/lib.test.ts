@@ -14,7 +14,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -66,13 +66,32 @@ describe("Ed25519", () => {
     });
 });
 
-// These run tar and ar: on a busy CI runner, with every test file at once,
-// starting them has taken longer than the default 5 s.
+// These run tar and ar. One CI run took past 30 s in the first test, which
+// alone creates archives (the second, as many tools run, took 19 ms). Of
+// the tools run here only tar's -c looks anything up outside the files
+// (strace): the owner's and group's names, through NSS (on the CI image
+// files, then systemd-userdb). The fixture now stores them as numbers, as a
+// package built for a device has them (root, 0:0), so nothing is looked up;
+// and every step's time is printed when the test is slow, so a slow step
+// can be named should it happen again.
 describe(".ipk packages", { timeout: 30000 }, () => {
     const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-ipk-"));
+    const steps: string[] = [];
+    const step = <T,>(what: string, f: () => T): T => {
+        const t0 = performance.now();
+        try { return f(); } finally { steps.push(`${what} ${Math.round(performance.now() - t0)} ms`); }
+    };
+    const run = (cmd: string, args: string[], cwd: string) => step(`${cmd} ${args.join(" ")}`, () => execFileSync(cmd, args, { cwd }));
+    const ROOT = ["--owner=0", "--group=0", "--numeric-owner"];
+    let started = 0;
+    beforeEach(() => { steps.length = 0; started = performance.now(); });
+    afterEach(() => {
+        const total = performance.now() - started;
+        if (total > 2000) console.warn(`[lib.test] slow .ipk test (${Math.round(total)} ms): ${steps.join("; ")}`);
+    });
 
     it("reads what opkg-build's tools (ar, tar) make", async () => {
-        const d = tmp();
+        const d = step("mkdtemp", tmp);
         fs.mkdirSync(path.join(d, "data/usr/palm/applications/com.example.hello/images"), { recursive: true });
         fs.writeFileSync(path.join(d, "data/usr/palm/applications/com.example.hello/appinfo.json"),
             "﻿" + JSON.stringify({ id: "com.example.hello", title: "Hello", version: "1.0.2", type: "web", main: "index.html" }));
@@ -83,10 +102,10 @@ describe(".ipk packages", { timeout: 30000 }, () => {
         fs.writeFileSync(path.join(d, "control/control"), "Package: com.example.hello\nVersion: 1.0.2\nArchitecture: all\nDescription: Hello\n second line\n");
         fs.writeFileSync(path.join(d, "control/postinst"), "#!/bin/sh\n");
         fs.writeFileSync(path.join(d, "debian-binary"), "2.0\n");
-        execFileSync("tar", ["-czf", "../control.tar.gz", "."], { cwd: path.join(d, "control") });
-        execFileSync("tar", ["--format=gnu", "-czf", "../data.tar.gz", "."], { cwd: path.join(d, "data") });
-        execFileSync("ar", ["rc", "pkg.ipk", "debian-binary", "control.tar.gz", "data.tar.gz"], { cwd: d });
-        const pkg = await ipk.read(new Uint8Array(fs.readFileSync(path.join(d, "pkg.ipk"))));
+        run("tar", [...ROOT, "-czf", "../control.tar.gz", "."], path.join(d, "control"));
+        run("tar", [...ROOT, "--format=gnu", "-czf", "../data.tar.gz", "."], path.join(d, "data"));
+        run("ar", ["rc", "pkg.ipk", "debian-binary", "control.tar.gz", "data.tar.gz"], d);
+        const pkg = await step("ipk.read", () => ipk.read(new Uint8Array(fs.readFileSync(path.join(d, "pkg.ipk")))));
         expect(pkg.control).toMatchObject({ Package: "com.example.hello", Version: "1.0.2", Architecture: "all", Description: "Hello\nsecond line" });
         expect(pkg.scripts).toEqual(["postinst"]);
         expect(pkg.apps).toEqual([{ id: "com.example.hello", dir: "usr/palm/applications/com.example.hello/",

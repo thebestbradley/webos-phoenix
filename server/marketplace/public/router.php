@@ -16,6 +16,25 @@ use Phoenix\Marketplace\App;
 $config = marketplace_config();
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 
+if (preg_match('#^/v1/(icons|screenshots)/copy/([^/]+)$#', $path, $m)) {
+    // An app's icon or screenshot from its site, copied here (Catalog::mediaCopy).
+    $copy = (new App($config))->catalog->mediaCopy($m[1] === 'icons' ? 'icon' : 'screenshot', $m[2]);
+    if ($copy === null) {
+        http_response_code(404);
+        header('Content-Type: text/plain');
+        echo "not found\n";
+        return;
+    }
+    [$type, $bytes, $kept] = $copy;
+    header('Content-Type: ' . $type);
+    header('Content-Length: ' . strlen($bytes));
+    header('Cache-Control: ' . ($kept ? 'max-age=86400' : 'no-cache'));
+    header('X-Content-Type-Options: nosniff');
+    header('Access-Control-Allow-Origin: *');
+    echo $bytes;
+    return;
+}
+
 if (str_starts_with($path, '/v1/')) {
     $rel = substr($path, 4);
     $file = realpath($config['data'] . '/public/v1/' . $rel);
@@ -26,7 +45,8 @@ if (str_starts_with($path, '/v1/')) {
         echo "not found\n";
         return;
     }
-    $types = ['json' => 'application/json', 'sig' => 'text/plain', 'ipk' => 'application/vnd.debian.binary-package'];
+    $types = ['json' => 'application/json', 'sig' => 'text/plain', 'ipk' => 'application/vnd.debian.binary-package',
+              'svg' => 'image/svg+xml'];
     header('Content-Type: ' . ($types[pathinfo($file, PATHINFO_EXTENSION)] ?? 'application/octet-stream'));
     header('Content-Length: ' . filesize($file));
     header('Cache-Control: no-cache');

@@ -14,13 +14,21 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
 const updates = require("./updatesservice.js") as Any;
 const node = require("./lib/node.js") as Any;
+
+// Every RAUC command is a Node process (fake-rauc.cjs, as rauc is one on
+// a device), several a test: 0.7-2 s a test on an idle desktop, and past
+// the 5 s default beside other work. A test cut off there kept going and
+// wrote the shared state after the next test had reset it (the daily
+// check then found "ready", not "idle"), so the tests get the time the
+// processes take.
+vi.setConfig({ testTimeout: 30_000 });
 
 const FAKE_RAUC = path.join(__dirname, "test/fake-rauc.cjs");
 const COMPATIBLE = "phoenix-pinephone";

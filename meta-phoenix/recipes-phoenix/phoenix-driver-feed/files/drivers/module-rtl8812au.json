@@ -1,0 +1,39 @@
+{
+    "id": "module-rtl8812au",
+    "kind": "module",
+    "title": "Realtek RTL8812AU/RTL8821AU Wi-Fi driver",
+    "category": "wifi",
+    "summary": "A driver for USB Wi-Fi adapters with the RTL8812AU or RTL8821AU chip, which the system's Linux 6.6 kernel does not include.",
+    "match": [
+        "usb:v0BDAp8812d*",
+        "usb:v0BDAp881Ad*",
+        "usb:v0BDAp881Bd*",
+        "usb:v0BDAp881Cd*",
+        "usb:v0BDAp0811d*",
+        "usb:v0BDAp0821d*",
+        "usb:v0BDApA811d*",
+        "usb:v2357p0101d*",
+        "usb:v2357p0103d*",
+        "usb:v0846p9052d*",
+        "usb:v7392pA822d*"
+    ],
+    "modules": [
+        "88XXau"
+    ],
+    "after": "reload",
+    "license": {
+        "id": "GPL-2.0-only",
+        "name": "GNU General Public License 2.0",
+        "url": "https://github.com/aircrack-ng/rtl8812au",
+        "free": true,
+        "redistributable": true
+    },
+    "source": "https://github.com/aircrack-ng/rtl8812au",
+    "maintainer": {
+        "name": "webOS Phoenix",
+        "email": "drivers@webosphoenix.org"
+    },
+    "packages": [
+        "kernel-module-88xxau-*"
+    ]
+}

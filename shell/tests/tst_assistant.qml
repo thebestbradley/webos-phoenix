@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// The Phoenix Assistant's view (AssistantOverlay.qml, M6 F3): holding the
+// The Assistant's view (AssistantOverlay.qml, M6 F3): holding the
 // launcher button in the quick launch bar opens it while a tap still opens
 // the launcher; Back, Escape and a tap outside close it; typed requests go
 // to org.webosphoenix.assistant and the thread comes back with its answers,
@@ -52,7 +52,8 @@ Item {
         function msg(o) { n++; o.id = "m" + n; o.threadId = tid; o.time = n; return o; }
         function lunaCall(uri, params, cb) {
             var method = uri.replace(/^.*\//, "");
-            calls.push(method + (params.text ? " " + params.text : params.choice ? " " + params.choice : params.accept !== undefined ? " " + params.accept : ""));
+            calls.push(method + (params.text ? " " + params.text : params.choice ? " " + params.choice : params.accept !== undefined ? " " + params.accept
+                                 : params.mode ? " " + params.mode + " " + params.messageId : ""));
             var reply = { returnValue: true };
             if (method === "getSettings") {
                 reply.settings = { enabled: enabled };
@@ -80,8 +81,22 @@ Item {
                 else if (/^add a meeting/.test(params.text))
                     added.push(msg({ role: "assistant", text: "Added \u201cMeeting with Sam\u201d to your calendar, tomorrow at 3:00 PM.", via: "commands",
                                      command: "event", status: "done", choices: [{ id: "open", label: "Open Calendar" }] }));
+                else if (/^what can you do/.test(params.text))
+                    added.push(msg({ role: "assistant", text: "Here's what I can do.", via: "commands", command: "help", status: "done",
+                                     data: { attachments: [{ type: "examples", title: "Right now", items: [{ text: "hello there" }] },
+                                                           { type: "examples", title: "Calendar", items: [{ text: "What's on my calendar tomorrow?" }, { text: "hello again" }] }] } }));
+                else if (/^show my photos/.test(params.text))
+                    added.push(msg({ role: "assistant", text: "Here are 5 photos from yesterday. I've opened them in Photos too.", via: "commands",
+                                     command: "photos", status: "done", choices: [{ id: "open", label: "Open Photos" }],
+                                     data: { attachments: [{ type: "images", total: 5, items: [{ path: "/media/internal/DCIM/a.jpg" }, { path: "/media/internal/DCIM/b.jpg" }] },
+                                                           { type: "cards", items: [{ title: "Dentist", subtitle: "On Friday at 2:00 PM", open: { appId: "com.palm.app.calendar" } }] }] } }));
                 else if (/odyssey/.test(params.text))
-                    added.push(msg({ role: "assistant", text: "I can't do that on the phone.", choices: [{ id: "web", label: "Search the web" }] }));
+                    added.push(msg({ role: "assistant", text: "I can't do that on the phone.",
+                                     choices: [{ id: "web", label: "Search the web" }, { id: "connect", label: "Connect model" }] }));
+                else if (/dentist/.test(params.text))
+                    added.push(msg({ role: "assistant", text: "I can't do that on the phone. Did you mean \u201cadd a meeting with Sam tomorrow at 3\u201d?",
+                                     choices: [{ id: "web", label: "Search the web" }, { id: "connect", label: "Connect model" }],
+                                     data: { suggest: ["add a meeting with Sam tomorrow at 3"] } }));
                 else
                     added.push(msg({ role: "assistant", text: "The flashlight is on.", via: "commands", command: "flashlight", status: "done" }));
                 messages = messages.concat(added);
@@ -91,6 +106,10 @@ Item {
                     held.push(function () { cb(reply); });
                     return;
                 }
+            } else if (method === "thumbnail") {
+                reply = { returnValue: false };     // as on a device: the file itself
+            } else if (method === "choose" && /^show:/.test(params.choice)) {
+                reply.messages = [];
             } else if (method === "confirm" || method === "choose") {
                 var copy = messages.slice();
                 for (var i = 0; i < copy.length; ++i)
@@ -116,8 +135,8 @@ Item {
         property var poses: []
         property real maxLift: 0
         property real minFlap: 1
-        property real shutAt: 0
-        function reset() { poses = []; maxLift = 0; minFlap = 1; shutAt = 0; }
+        property int between: 0     // steps of the panel's opening or closing between shut and open
+        function reset() { poses = []; maxLift = 0; minFlap = 1; between = 0; }
         function had(list) {
             // list in this order (others between allowed).
             var i = 0;
@@ -129,8 +148,7 @@ Item {
     Connections {
         target: root.overlay
         function onBirdPoseChanged() { birdSeen.poses = birdSeen.poses.concat([root.overlay.birdPose]); }
-        // When the panel ended up shut.
-        function onShownChanged() { if (root.overlay.shown === 0) birdSeen.shutAt = Date.now(); }
+        function onShownChanged() { if (root.overlay.shown > 0 && root.overlay.shown < 1) ++birdSeen.between; }
     }
     Connections {
         target: root.overlay ? findBird() : null
@@ -329,6 +347,25 @@ Item {
             }
         }
 
+        // Voice first (the field not in focus), keys typed on a hardware
+        // keyboard go to the field, not to Just Type behind the view.
+        function test_typingGoesToTheField() {
+            shell.dictationInputFiles = ["/nonexistent/quiet.wav"];
+            try {
+                openByHold();
+                var input = findChild(overlay, "assistantInput");
+                tryVerify(function () { return overlay.activeFocus; }, 2000);
+                verify(!input.activeFocus);
+                keyClick(Qt.Key_H);
+                keyClick(Qt.Key_I);
+                compare(input.text, "hi");
+                verify(input.activeFocus);
+                compare(shell.justTypeOpen, false);
+            } finally {
+                shell.dictationInputFiles = [];
+            }
+        }
+
         function test_readBackWaitsForSend() {
             openByHold();
             type("text sam hi");
@@ -354,6 +391,69 @@ Item {
             tryCompare(overlay, "open", false, 2000);
         }
 
+        // "Connect model" asks which kind in a sheet over the panel (Escape
+        // and Back let the sheet go, not the view); the kind chosen goes to
+        // the service with the message, which opens Settings: the view
+        // gets out of its way.
+        function test_connectModelAsksWhichKind() {
+            openByHold();
+            type("who wrote the odyssey");
+            var row = arrived("I can't do that on the phone.");
+            var connect = findChild(row, "assistantChoice-connect");
+            verify(connect && connect.visible);
+            compare(connect.caption, "Connect model");
+            var sheet = findChild(overlay, "assistantConnect");
+            verify(!sheet.visible);
+            mouseClick(connect, connect.width / 2, connect.height / 2);
+            tryVerify(function () { return sheet.visible; }, 2000);
+            compare(fake.calls.filter(function (c) { return /^choose|^connect/.test(c); }).length, 0, "nothing asked of the service yet");
+            keyClick(Qt.Key_Escape);
+            tryVerify(function () { return !sheet.visible; }, 2000);
+            compare(overlay.open, true);
+            mouseClick(connect, connect.width / 2, connect.height / 2);
+            tryVerify(function () { return sheet.visible; }, 2000);
+            shell.gestureBack();
+            tryVerify(function () { return !sheet.visible; }, 2000);
+            compare(overlay.open, true);
+            mouseClick(connect, connect.width / 2, connect.height / 2);
+            tryVerify(function () { return sheet.visible; }, 2000);
+            for (var k = 0; k < 3; ++k)
+                verify(findChild(sheet, "assistantConnect-" + ["local", "cloud", "both"][k]).visible);
+            var cloud = findChild(sheet, "assistantConnect-cloud");
+            mouseClick(cloud, cloud.width / 2, cloud.height / 2);
+            tryVerify(function () { return fake.calls.indexOf("connect cloud " + row.modelData.id) >= 0; }, 2000, fake.calls.join(", "));
+            tryCompare(overlay, "open", false, 2000);
+        }
+
+        // Empty, it shows things to ask, a few at a time, a different few
+        // after a while; a tap puts one in the field. So do the requests an
+        // answer suggests.
+        function test_examplesAndSuggestionsGoToTheField() {
+            openByHold();
+            var hint = findChild(overlay, "assistantHint");
+            verify(hint.visible);
+            var first = findChild(hint, "assistantExample-0");
+            verify(first && first.visible && first.text !== "");
+            verify(findChild(hint, "assistantExample-1").visible);
+            var before = overlay.examplesNow().join("|");
+            tryVerify(function () { return overlay.examplesNow().join("|") !== before; }, 9000, "a different few");
+            first = findChild(hint, "assistantExample-0");
+            tryVerify(function () { return first.opacity === 1 && hint.fade === 1; }, 2000);
+            var words = first.text;
+            mouseClick(first, first.width / 2, first.height / 2);
+            var input = findChild(overlay, "assistantInput");
+            compare(input.text, words);
+            verify(input.activeFocus);
+            compare(fake.asks.length, 0, "not asked: the words to change or send");
+            type("I have a dentist thing");
+            var row = arrived("I can't do that on the phone. Did you mean \u201cadd a meeting with Sam tomorrow at 3\u201d?");
+            verify(!hint.visible);
+            var s = findChild(row, "assistantSuggest-0");
+            verify(s && s.visible);
+            mouseClick(s, s.width / 2, s.height / 2);
+            compare(input.text, "add a meeting with Sam tomorrow at 3");
+        }
+
         // A command done that offers its app ("Open Calendar"): the bird
         // cheers (no shrug), and the button opens the app, the view out of
         // its way.
@@ -369,6 +469,47 @@ Item {
             mouseClick(open, open.width / 2, open.height / 2);
             tryVerify(function () { return fake.calls.indexOf("choose open") >= 0; }, 2000);
             tryCompare(overlay, "open", false, 2000);
+        }
+
+        // What an answer found shows under it (thumbnails, "+N more", cards);
+        // the view stays up while the app it opened waits behind; a tap on
+        // one shows it in its app, which comes forward ("show:<n>").
+        function test_foundShowsUnderTheAnswer() {
+            openByHold();
+            type("show my photos from yesterday");
+            var row = arrived("Here are 5 photos from yesterday. I've opened them in Photos too.");
+            var strip = findChild(row, "assistantImages");
+            verify(strip && strip.visible, "the pictures under the words");
+            var second = findChild(strip, "assistantImage-1");
+            verify(second && second.visible && second.width > 0);
+            tryCompare(second, "url", "file:///media/internal/DCIM/b.jpg", 2000);
+            var card = findChild(row, "assistantCard-0");
+            verify(card && card.visible, "and the event's card");
+            verify(overlay.open, "the conversation stays in front");
+            mouseClick(second, second.width / 2, second.height / 2);
+            tryVerify(function () { return fake.calls.indexOf("choose show:1") >= 0; }, 2000);
+            tryCompare(overlay, "open", false, 2000);
+            openByHold();
+            fake.calls = [];
+            type("show my photos again");
+            row = arrived("Here are 5 photos from yesterday. I've opened them in Photos too.");
+            card = findChild(row, "assistantCard-0");
+            mouseClick(card, card.width / 2, card.height / 2);
+            tryVerify(function () { return fake.calls.indexOf("choose show:2") >= 0; }, 2000, "the card's index counts the pictures before it");
+        }
+
+        // Help: things to ask, by app; a tap puts one in the field.
+        function test_helpExamplesAreAsked() {
+            openByHold();
+            type("what can you do");
+            var row = arrived("Here's what I can do.");
+            verify(findChild(row, "assistantExamples"), "the examples under the words");
+            var chip = findChild(row, "assistantHelp-2");
+            verify(chip && chip.visible && chip.text === "hello again");
+            mouseClick(chip, chip.width / 2, chip.height / 2);
+            tryCompare(findChild(overlay, "assistantInput"), "text", "hello again", 2000);
+            compare(fake.asks.length, 1, "in the field, not asked");
+            verify(overlay.open);
         }
 
         // Each opening is a conversation of its own: the first request makes
@@ -451,16 +592,21 @@ Item {
             var panel = findChild(overlay, "assistantPanel");
             compare(panel.opacity, 1);
             compare(findChild(overlay, "assistantBackdrop").opacity, 1);
+            // The launcher's length (lunaAnimations.conf:83-84). Checked as
+            // given, not by the wall clock: Qt Quick's animation driver
+            // advances animations a vsync interval per frame drawn
+            // (qtdeclarative src/quick/scenegraph/qsgcontext.cpp,
+            // QSGAnimationDriver::advance), so offscreen, with frames drawn
+            // faster or slower than that, an animation ends early or late
+            // by the clock.
+            compare(findChild(overlay, "assistantShownAnimation").duration, Theme.launcherDuration);
             birdSeen.reset();
-            var t0 = Date.now();
             keyClick(Qt.Key_Escape);
             compare(overlay.open, false);
+            verify(overlay.visible, "still drawn as it starts closing");
             tryCompare(overlay, "visible", false, 3000);
             compare(overlay.shown, 0);
-            // It took its time closing (when it shut, recorded as it came: an
-            // animation never ends before its duration, however a slow
-            // machine draws it in between).
-            verify(birdSeen.shutAt - t0 >= Theme.launcherDuration - 20, "closing: " + (birdSeen.shutAt - t0) + " ms");
+            verify(birdSeen.between > 0, "it closed in steps, not at once");
         }
 
         // ---- The bird ----------------------------------------------------------------
@@ -470,15 +616,26 @@ Item {
             tryVerify(function () { return overlay.birdPose === pose && bird().pose === pose && bird().atRest(); }, 4000, msg || pose);
         }
 
-        // Opening: it rises asleep with the panel, wakes and waves, then idles.
+        // Opening: it enters as the panel grows (born of embers, it drops
+        // in and lands, docs/ASSISTANT-CHARACTER.md), waves, then idles.
         function test_birdWakesAsItOpens() {
             var p = launcherButton();
             tryVerify(function () { return !shell.keyboardOpen && ql.visible && ql.opacity === 1 && ql.shownProgress === 1; }, 3000);
-            // Asleep before it opens; it rises so with the panel.
+            // Asleep (gone) before it opens.
             compare(overlay.birdPose, "asleep");
             birdSeen.reset();
-            hold(p, opened);
+            var entered = [];
+            var c = function (name) { entered.push(name); };
+            bird().moveEnded.connect(c);
+            try {
+                hold(p, opened);
+                compare(bird().move, "enter");
+                tryVerify(function () { return entered.indexOf("enter") >= 0 && overlay._wake === ""; }, 8000, "entered, waved");
+            } finally {
+                bird().moveEnded.disconnect(c);
+            }
             poseIs("idle");
+            verify(bird().movesAtRest());
             verify(birdSeen.had(["hello", "idle"]), "hello, then idle: " + birdSeen.poses);
             // At the top in the middle of the panel, 72 to 104 px, over the
             // conversation, which runs on up behind it and, scrolled back
@@ -487,9 +644,9 @@ Item {
             verify(!overlay.birdBeside);
             verify(bird().width >= Theme.px(72) && bird().width <= Theme.px(104));
             var messages = findChild(overlay, "assistantMessages");
-            verify(messages.y < bird().y + bird().height, "the conversation reaches up behind the bird");
+            // The conversation below it: its words never pass behind the bird.
+            verify(messages.y >= bird().y + bird().height - 0.5, "the conversation below the bird: " + messages.y + " " + (bird().y + bird().height));
             verify(bird().z > messages.z);
-            compare(messages.topMargin, bird().height);
             fuzzyCompare(bird().x + bird().width / 2, panel.width / 2, 1);
             // A tap on it waves, and does not close the view.
             birdSeen.reset();
@@ -497,9 +654,20 @@ Item {
             verify(overlay.open);
             poseIs("idle");
             verify(birdSeen.had(["hello", "idle"]), "a wave: " + birdSeen.poses);
-            // Closing: asleep again, back into the button.
+            // Closing: it leaves (bursting into embers), the panel up till it
+            // has (recorded as the exit ends), then back into the button.
+            var shownAtExit = -1;
+            var left = function (name) { if (name === "leave") shownAtExit = overlay.shown; };
+            bird().moveEnded.connect(left);
             keyClick(Qt.Key_Escape);
             compare(overlay.birdPose, "asleep");
+            compare(bird().move, "leave");
+            verify(bird().gone);
+            verify(!overlay.enabled, "no longer taking input");
+            compare(overlay.shown, 1);
+            tryVerify(function () { return shownAtExit >= 0; }, 4000, "the exit, over");
+            bird().moveEnded.disconnect(left);
+            compare(shownAtExit, 1, "the panel up through the exit");
             tryCompare(overlay, "visible", false, 3000);
         }
 
@@ -577,14 +745,87 @@ Item {
             }
         }
 
+        // The bird reacts to the user (docs/ASSISTANT-CHARACTER.md,
+        // Reactions): it watches the words typed and pecks as they come,
+        // winces at a deletion, ponders a pause, cheers a request sent;
+        // a tap waves, then giggles or spins; it glances along a scroll.
+        // Each recorded as it starts.
+        function test_birdReactsToTheUser() {
+            openByHold();
+            var b = bird();
+            tryVerify(function () { return overlay._wake === "" && b.move === ""; }, 8000, "entered");
+            var started = [];
+            // (The keyboard coming up for the field scoots it, whenever it comes: that is
+            // test_birdBesideTheFieldWhenShort's.)
+            var c = function (name) { if (name !== "scoot") started.push(name); };
+            b.moveStarted.connect(c);
+            try {
+                var input = findChild(overlay, "assistantInput");
+                input.forceActiveFocus();
+                tryVerify(function () { return b.move === ""; }, 3000, "settled (the keyboard may move it)");
+                started = [];
+                input.insert(input.cursorPosition, "h");
+                compare(started.join(" "), "peck");
+                // Watching the words: its eyes on the caret, no idles meanwhile.
+                verify(!b.fidgety);
+                tryVerify(function () { return Math.abs(b._gx) + Math.abs(b._gy) > 0.3; }, 2000, "looking at the caret: " + b._gx + " " + b._gy);
+                tryVerify(function () { return b.move === ""; }, 3000);
+                input.insert(input.cursorPosition, "e");
+                compare(started.join(" "), "peck peck");
+                tryVerify(function () { return b.move === ""; }, 3000);
+                input.remove(input.text.length - 1, input.text.length);
+                compare(started.join(" "), "peck peck wince");
+                // A pause after typing: ponder.
+                tryVerify(function () { return started.indexOf("ponder") >= 0; }, overlay._reactions.pauseAfter + 4000, "a curious tilt: " + started);
+                tryVerify(function () { return b.move === ""; }, 4000);
+                // Sent: a cheer as it starts thinking.
+                fake.hold = true;
+                input.text = "hello there";
+                started = [];
+                input.accepted();
+                compare(overlay.birdPose, "thinking");
+                compare(started.join(" "), "cheer", "no wince as the field is cleared");
+                fake.release();
+                tryVerify(function () { return bubbles().indexOf("Hello!") >= 0; }, 2000);
+                poseIs("idle");
+                tryVerify(function () { return b.move === ""; }, 4000);
+                // A tap: the wave first, then a giggle or a spin.
+                input.focus = false;
+                birdSeen.reset();
+                mouseClick(b, b.width / 2, b.height / 2);
+                tryCompare(overlay, "birdPose", "hello", 1000);
+                poseIs("idle");
+                started = [];
+                mouseClick(b, b.width / 2, b.height / 2);
+                verify(started.length === 1 && overlay._reactions.tap.indexOf(started[0]) >= 0, "a reaction: " + started);
+                tryVerify(function () { return b.move === ""; }, 4000);
+                // A scroll: a glance along it, then ahead again.
+                var list = findChild(overlay, "assistantMessages");
+                list.movementStarted();
+                list.contentY = list.contentY - Theme.px(20);
+                tryVerify(function () { return b.gazeY !== 0; }, 2000, "a glance");
+                list.movementEnded();
+                compare(b.gazeY, 0);
+            } finally {
+                fake.hold = false;
+                b.moveStarted.disconnect(c);
+            }
+        }
+
         // A short panel (the phone's keyboard up): the bird sits small
-        // beside the field.
+        // beside the field, scooting there.
         function test_birdBesideTheFieldWhenShort() {
             openByHold();
+            tryVerify(function () { return overlay._wake === "" && bird().move === ""; }, 8000, "entered");
+            var started = [];
+            var c = function (name) { started.push(name); };
+            bird().moveStarted.connect(c);
             var input = findChild(overlay, "assistantInput");
             mouseClick(input, input.width / 2, input.height / 2);
             tryCompare(shell, "keyboardOpen", true, 2000);
             tryVerify(function () { return overlay.birdBeside; }, 2000);
+            bird().moveStarted.disconnect(c);
+            verify(started.indexOf("scoot") >= 0, "a scoot: " + started);
             var field = findChild(overlay, "assistantField");
             tryVerify(function () { return bird().width === overlay.birdSize && bird().x === 0 && field.x >= bird().width; }, 2000, "beside the field");
             verify(bird().width < Theme.px(72));
@@ -605,6 +846,20 @@ Item {
             wait(300);
             compare(overlay.open, false);
             compare(shell.launcherOpen, false);
+        }
+
+        // Under Reduce motion the bird fades and the panel does not wait for it.
+        function test_reducedMotionClosesAtOnce() {
+            openByHold();
+            Theme.reduceMotion = true;
+            try {
+                keyClick(Qt.Key_Escape);
+                verify(!overlay._leaving);
+                compare(bird().move, "");
+                tryCompare(overlay, "visible", false, 2000);
+            } finally {
+                Theme.reduceMotion = false;
+            }
         }
 
         function test_notOverTheLockScreen() {

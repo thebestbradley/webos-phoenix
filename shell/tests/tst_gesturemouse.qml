@@ -165,19 +165,21 @@ Item {
             verify(shell.justTypeOpen);
         }
 
-        // The wave launcher (Settings > Advanced, off by default): from a
+        // The wave launcher (Settings > Advanced, on by default): from a
         // side of the area, quick, or after a rest with the keyboard up.
         function test_waveFromASide() {
             var wave = findChild(shell, "waveLauncher");
             var ups = spy("up");
-            maximizedApp();
             // Off: the slide is the swipe up.
+            sys.tweaks = { waveLauncher: false };
+            maximizedApp();
             drag(m.width * 0.1, m.height / 2, 0, -60);
             verify(!wave.open);
             compare(ups.count, 1);
             tryCompare(cv, "maximizeProgress", 0, 2000);
 
-            sys.tweaks = { waveLauncher: true };
+            // On by default (no saved choice).
+            sys.tweaks = {};
             maximizedApp();
             mousePress(m, m.width * 0.1, m.height / 2);
             for (var d = 10; d <= 60; d += 10)

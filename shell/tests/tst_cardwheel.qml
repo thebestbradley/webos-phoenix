@@ -50,20 +50,24 @@ Item {
         }
 
         // A swipe of (dx, dy) in steps, with the events coming as a
-        // trackpad's do, then the pause that ends it.
+        // trackpad's do, then the fingers lift.
         // slow: the fingers slow down to a stop before lifting (no flick).
         // The events carry their own times (8 ms apart, or 40 slow), so a
-        // busy test machine does not change how fast the swipe was.
+        // busy test machine does not change how fast the swipe was; and
+        // the swipe has scroll phases (TrackpadSwipe.phased), so a pause of
+        // the machine between two events does not end it: it ends when the
+        // fingers lift (finish), as a Mac trackpad's ScrollEnd ends it.
         property real clock: 1000
         function swipe(dx, dy, slow) {
             var n = slow ? 20 : 10, step = slow ? 40 : 8;
+            wheel.phased = true;
             for (var i = 0; i < n; ++i) {
                 clock += step;
                 wheel.swipe(root.width / 2, root.height / 2, dx / n, dy / n, clock);
                 wait(step);
             }
+            wheel.finish();
             clock += 1000;
-            wait(Theme.wheelGestureEndDelay + 50);
         }
 
         function test_swipeLeftShowsTheNextStack() {

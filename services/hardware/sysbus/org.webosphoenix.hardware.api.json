@@ -1,0 +1,14 @@
+{
+    "hardware.query": [
+        "org.webosphoenix.hardware/list",
+        "org.webosphoenix.hardware/getReport"
+    ],
+    "hardware.management": [
+        "org.webosphoenix.hardware/refresh",
+        "org.webosphoenix.hardware/install",
+        "org.webosphoenix.hardware/remove",
+        "org.webosphoenix.hardware/sendReport",
+        "org.webosphoenix.hardware/setPreferences",
+        "org.webosphoenix.hardware/scheduled"
+    ]
+}

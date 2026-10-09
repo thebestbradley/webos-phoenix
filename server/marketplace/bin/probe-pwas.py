@@ -4,9 +4,15 @@
 """Find the web app manifests of the sites in catalog/curated-sites.json and
 write catalog/curated-pwas.json: each site's manifest URL, name, best icon
 and origin, checked live. Run it again to refresh the list; sites whose
-manifest is gone are left out (and listed).
+manifest is gone are left out (and listed). A site whose manifest is good
+but whose icons are all broken is listed with an icon the catalog service
+makes ("iconGenerated": its initials on its theme colour; Catalog.php
+generatedIcon).
 
-    python3 server/marketplace/bin/probe-pwas.py
+    python3 server/marketplace/bin/probe-pwas.py           every site
+    python3 server/marketplace/bin/probe-pwas.py ID ...    only these (by id
+                                                           or title), the
+                                                           others kept
 """
 
 import concurrent.futures
@@ -201,8 +207,44 @@ def pick_icon(urls, ua):
     return own_site, (None if own_site else why)
 
 
+HEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+# For a site whose manifest names no colour: one of these, the same each time.
+PALETTE = ["#1f6fb2", "#2e7d32", "#c62828", "#6a1b9a", "#ef6c00", "#00838f", "#37474f", "#ad1457"]
+
+
+def initials(title):
+    """The letters of a generated icon: an acronym the title starts with
+    ("NYT Games": NYT), else the first letters of its first two words
+    ("Ground News": GN, "Formula 1": F1), else its first letter."""
+    words = [w for w in re.split(r"[^\w]+", title) if w]
+    if not words:
+        return "?"
+    if 2 <= len(words[0]) <= 3 and words[0].isupper():
+        return words[0]
+    return "".join(w[0] for w in words[:2]).upper()
+
+
+def generated_icon(m, title, site, why):
+    """What the catalog service draws an icon from, for a manifest whose icons
+    are all broken: {text, color, why}. The colour is the manifest's
+    theme_color (else its background_color), not white."""
+    color = ""
+    for key in ("theme_color", "background_color"):
+        c = m.get(key)
+        if isinstance(c, str) and HEX.match(c.strip()) and c.strip().lower() not in ("#fff", "#ffffff"):
+            color = c.strip().lower()
+            break
+    if len(color) == 4:
+        color = "#" + "".join(ch * 2 for ch in color[1:])
+    if not color:
+        color = PALETTE[zlib.crc32(site.encode()) % len(PALETTE)]
+    return {"text": initials(title), "color": color, "why": why[:160]}
+
+
 def manifest_of(murl, ua, page):
-    """The manifest at murl (linked from page), checked: a name and an icon a launcher can show."""
+    """The manifest at murl (linked from page), checked: a name and an icon a
+    launcher can show. (manifest, name, icon URL, why): with every icon
+    broken, icon is None and why says so (the caller generates one)."""
     _, raw, _ = get(murl, ua, "application/manifest+json,application/json,*/*", page=page, dest="manifest")
     m = json.loads(raw.decode("utf-8-sig"))
     if not isinstance(m, dict):
@@ -212,17 +254,16 @@ def manifest_of(murl, ua, page):
         raise ValueError("manifest has no name")
     icons = usable_icons(m.get("icons") or [], murl)
     if not icons:
-        raise ValueError("manifest has no usable icon")
+        return m, name, None, "manifest has no usable icon"
     icon, why = pick_icon(icons, ua)
-    if not icon:
-        raise ValueError(why)
-    return m, name, icon
+    return m, name, icon, why
 
 
 def probe(s):
     """(entry, None) for a site whose manifest is found, (None, why) otherwise."""
     why = "no web app manifest found"
     tried, unreachable = set(), set()   # unreachable: hosts that did not answer, even when asked again
+    fallback = None     # a good manifest whose icons are all broken: listed with a generated icon, if nothing better
     for ua in UAS:
         try:
             final, page, _ = get(s["url"], ua)
@@ -237,7 +278,7 @@ def probe(s):
                 continue
             tried.add(murl)
             try:
-                m, name, icon = manifest_of(murl, ua, doc)
+                m, name, icon, icon_why = manifest_of(murl, ua, doc)
             except urllib.error.HTTPError as e:
                 if bot_check(e) and why == "no web app manifest found":
                     why = "%s: %s%s" % (murl, e, bot_check(e))
@@ -261,23 +302,54 @@ def probe(s):
             entry = dict(s)
             entry.pop("url", None)
             entry.update({"manifest": murl, "origin": origin(start),
-                          "icon": icon, "manifestName": name})
+                          "icon": icon or "", "manifestName": name})
+            if not icon:
+                # Another place may still have a manifest with icons that are there.
+                if not fallback:
+                    entry["iconGenerated"] = generated_icon(m, s["title"], origin(start), icon_why)
+                    fallback = (entry, m.get("display") or "browser")
+                continue
             return entry, None, m.get("display") or "browser"
+    if fallback:
+        return fallback[0], None, fallback[1]
     return None, why, None
 
 
-def main():
+def main(only=()):
     with open(os.path.join(HERE, "catalog", "curated-sites.json")) as f:
         sites = json.load(f)["sites"]
+    # Only some sites: the others as the last run left them.
+    previous = {}
+    if only:
+        with open(os.path.join(HERE, "catalog", "curated-pwas.json")) as f:
+            old = json.load(f)
+        previous = {e["title"]: ("ok", e) for e in old.get("apps", [])}
+        previous.update({e["title"]: ("skip", e) for e in old.get("notFound", [])})
+        unknown = [o for o in only if not any(o in (s["id"], s["title"]) for s in sites)]
+        if unknown:
+            print("not in curated-sites.json: " + ", ".join(unknown))
+            return 1
+    wanted = [s for s in sites if not only or s["id"] in only or s["title"] in only]
     out, missing = [], []
     with concurrent.futures.ThreadPoolExecutor(8) as pool:
-        for s, (entry, why, display) in zip(sites, pool.map(probe, sites)):
-            if entry:
-                out.append(entry)
-                print("ok   %-22s %-10s %s" % (s["title"], display, entry["manifest"]))
-            else:
-                missing.append({"title": s["title"], "url": s["url"], "why": why[:160]})
-                print("skip %-22s %s" % (s["title"], why[:120]))
+        results = dict(zip((s["id"] for s in wanted), pool.map(probe, wanted)))
+    for s in sites:
+        if s["id"] not in results:
+            kind, e = previous.get(s["title"], (None, None))
+            if kind == "ok":
+                out.append(e)
+            elif kind == "skip":
+                missing.append(e)
+            continue
+        entry, why, display = results[s["id"]]
+        if entry:
+            out.append(entry)
+            gen = entry.get("iconGenerated")
+            print("ok   %-22s %-10s %s%s" % (s["title"], display, entry["manifest"],
+                                          " (icon generated: %s; %s)" % (gen["text"], gen["why"]) if gen else ""))
+        else:
+            missing.append({"title": s["title"], "url": s["url"], "why": why[:160]})
+            print("skip %-22s %s" % (s["title"], why[:120]))
     with open(os.path.join(HERE, "catalog", "curated-pwas.json"), "w") as f:
         json.dump({"//": "Written by bin/probe-pwas.py from curated-sites.json; checked live. Edit curated-sites.json, not this.",
                    "apps": out, "notFound": missing}, f, indent=2, ensure_ascii=False)
@@ -286,4 +358,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(tuple(sys.argv[1:])))

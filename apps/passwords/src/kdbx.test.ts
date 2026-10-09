@@ -20,6 +20,14 @@ import {
 const FAST = { memoryKiB: 1024, iterations: 1, parallelism: 1 };
 const edit = (o: Partial<EntryEdit>): EntryEdit => ({ title: "", username: "", password: "", url: "", notes: "", ...o });
 
+// Opening the fixture derives its key with the parameters pykeepass chose
+// (Argon2d, in WebAssembly): 1.6 s on an idle desktop, every time, and
+// over twice that beside other work. The tests that open it get the time
+// that takes instead of the 5 s default, which a full run on a busy
+// machine went past (a test cut off there also left its derivation
+// running into the next ones).
+const KDF_TIME = 30_000;
+
 function fixture(): ArrayBuffer {
     const b = readFileSync(join(__dirname, "fixtures", "pykeepass-kdbx4.kdbx"));
     return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
@@ -73,7 +81,7 @@ describe("KDBX databases", () => {
         expect(customFields(legacy)).toEqual([{ name: "PIN", protected: true }]);
 
         await expect(openDatabase(fixture(), "nope")).rejects.toMatchObject({ kind: "wrong-key" });
-    });
+    }, KDF_TIME);
 
     it("keeps legacy TOTP fields when an edit leaves the TOTP alone, and replaces them when it sets one", async () => {
         const db = await openDatabase(fixture(), "fixture-master-pw");
@@ -84,7 +92,7 @@ describe("KDBX databases", () => {
         expect(text(legacy, "TOTP Seed")).toBe("");
         expect(text(legacy, "otp")).toBe("otpauth://totp/x?secret=JBSWY3DP");
         expect(text(legacy, "PIN")).toBe("4321");
-    });
+    }, KDF_TIME);
 
     it("keeps the previous version in the history on edit", () => {
         const db = createDatabase("H", "pw", FAST);

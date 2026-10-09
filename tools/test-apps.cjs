@@ -71,7 +71,8 @@ async function main() {
     let failed = false;
     try {
         await waitForServer(base + "/apps.json", 10000);
-        const apps = (await (await fetch(base + "/apps.json")).json()).filter((a) => !only.length || only.includes(a.id) || only.includes(a.appId));
+        const all = await (await fetch(base + "/apps.json")).json();
+        const apps = all.filter((a) => !only.length || only.includes(a.id) || only.includes(a.appId));
         const infos = {};
         const browser = await chromium.launch();
         const results = [];
@@ -91,7 +92,12 @@ async function main() {
             context.on("page", (p) => { watch(p); shown = p; });
             // Launch points (e.g. Settings > Wi-Fi) share their app's expectation.
             const expect = expectations[app.id] || expectations[app.appId] || { status: "unknown" };
-            await page.goto(base + app.main);
+            // A system page an app opens over itself with something to show
+            // ("openedBy": the share sheet): open that app, make its call,
+            // and judge the page in the frame it lays over the app.
+            const opener = expect.openedBy && all.find((a) => a.id === expect.openedBy.app);
+            if (expect.openedBy && !opener) throw new Error(`${app.id}: openedBy names ${expect.openedBy.app}, which is not an app`);
+            await page.goto(base + (opener ? opener.main : app.main));
             // A state the app needs to show something ("storage": runtime
             // store keys, written once the runtime has set up the profile,
             // then the app starts again).
@@ -108,14 +114,30 @@ async function main() {
                 for (let t = 0; t < 15000 && shown === page; t += 250) await page.waitForTimeout(250);
                 if (shown !== page) await shown.waitForLoadState().catch(() => {});
             }
+            let judged = shown;
+            if (opener) {
+                await page.waitForTimeout(1500);
+                await page.evaluate(({ call, params }) => {
+                    new PalmServiceBridge().call(call, JSON.stringify(params));
+                }, expect.openedBy);
+                const frame = await page.waitForSelector(expect.openedBy.frame, { timeout: 10000 }).then((h) => h.contentFrame()).catch(() => null);
+                if (!frame) errors.push(`${expect.openedBy.call} showed no ${expect.openedBy.frame}`);
+                judged = frame || page;
+            }
             await page.waitForTimeout(3000);
             const shot = path.join(outDir, app.id + ".png");
             await shown.screenshot({ path: shot }).catch(() => {});
-            const rendered = await shown.evaluate(() => {
+            const rendered = await judged.evaluate(() => {
                 const els = document.body ? document.body.querySelectorAll("*").length : 0;
                 const text = document.body ? document.body.innerText.trim().length : 0;
                 return els > 10 && (text > 0 || document.querySelectorAll("img,canvas,svg").length > 0);
             }).catch(() => false);
+            // What it must show of what it was given (openedBy.shows).
+            if (opener && judged !== page) {
+                const text = await judged.evaluate(() => document.body.innerText).catch(() => "");
+                for (const want of expect.openedBy.shows || [])
+                    if (!text.includes(want)) errors.push(`shows no "${want}"`);
+            }
             const real = errors.filter((e) => !ignorable(e));
             const pass = rendered && real.length === 0;
             const mustPass = expect.status === "works" || (tablet ? expect.tablet === "works" : expect.phone === "works");

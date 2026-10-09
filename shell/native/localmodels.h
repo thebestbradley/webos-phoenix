@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// The Phoenix Assistant's on-device model (docs/M6-PLAN.md F3, layer 3) as
+// The Assistant's on-device model (docs/M6-PLAN.md F3, layer 3) as
 // the shell runs it: GGUF models downloaded into modelsDir (redirects
 // followed, as Hugging Face sends them from a CDN; the SHA-256 checked) and
 // llama.cpp's llama-server started for the one in use on 127.0.0.1, with
@@ -12,8 +12,14 @@
 // The server is serverCommand (a program and arguments before ours), or
 // llama-server on the PATH; available says whether there is one.
 //
+// builtInDirs: where models that come with the system are (Qwen3 0.6B,
+// apps/assistant/service/lib/models.js BUILT_IN): models/ beside the
+// program (./phoenix puts it in build/models) and /usr/share/phoenix/models
+// by default. They are listed as installed ({builtIn: true}) and run from
+// there; remove() never touches them.
+//
 //   status() -> {available, server, running, model, error, ramBytes,
-//                installed: [{id, file, size}], downloading: {id, received, total} | null}
+//                installed: [{id, file, size, builtIn?}], downloading: {id, received, total} | null}
 //   download(id, url, sha256, size)   one at a time; changed() as it goes
 //   cancel(id), remove(id)
 //   ensure(id, requestId)             ready(requestId, baseUrl) or failed(requestId, error)
@@ -43,6 +49,7 @@ class LocalModels : public QObject
     Q_OBJECT
     QML_ELEMENT
     Q_PROPERTY(QString modelsDir READ modelsDir WRITE setModelsDir NOTIFY changed)
+    Q_PROPERTY(QStringList builtInDirs READ builtInDirs WRITE setBuiltInDirs NOTIFY changed)
     Q_PROPERTY(QStringList serverCommand READ serverCommand WRITE setServerCommand NOTIFY changed)
     Q_PROPERTY(int idleMs READ idleMs WRITE setIdleMs NOTIFY changed)
     Q_PROPERTY(int startTimeoutMs READ startTimeoutMs WRITE setStartTimeoutMs NOTIFY changed)
@@ -55,6 +62,8 @@ public:
     ~LocalModels() override;
 
     QString modelsDir() const { return m_dir; }
+    QStringList builtInDirs() const { return m_builtInDirs; }
+    void setBuiltInDirs(const QStringList &d) { if (d != m_builtInDirs) { m_builtInDirs = d; emit changed(); } }
     void setModelsDir(const QString &d);
     QStringList serverCommand() const { return m_command; }
     void setServerCommand(const QStringList &c);
@@ -84,11 +93,13 @@ signals:
 private:
     QString serverProgram() const;
     QString fileFor(const QString &id) const;
+    QString builtInFile(const QString &id) const;
     void setError(const QString &e);
     void pollHealth();
     void finishStart(bool ok, const QString &why);
 
     QString m_dir;
+    QStringList m_builtInDirs;
     QStringList m_command;
     int m_idleMs = 5 * 60 * 1000;
     int m_startTimeoutMs = 120000;

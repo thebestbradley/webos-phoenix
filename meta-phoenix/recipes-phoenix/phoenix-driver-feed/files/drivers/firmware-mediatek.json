@@ -1,0 +1,39 @@
+{
+    "id": "firmware-mediatek",
+    "kind": "firmware",
+    "title": "MediaTek Wi-Fi and Bluetooth firmware",
+    "category": "wifi",
+    "summary": "Lets MediaTek Wi-Fi 6 and 6E adapters (MT7921, MT7922, USB and PCIe) connect.",
+    "match": [
+        "usb:v0E8Dp7961d*",
+        "pci:v000014C3d00007961sv*",
+        "pci:v000014C3d00000608sv*",
+        "pci:v000014C3d00000616sv*",
+        "pci:v000014C3d00007922sv*"
+    ],
+    "firmware": [
+        "mediatek/*"
+    ],
+    "modules": [
+        "mt7921e",
+        "mt7921u"
+    ],
+    "after": "reload",
+    "license": {
+        "id": "LicenseRef-mediatek-firmware",
+        "name": "MediaTek firmware licence",
+        "textInPackage": "lib/firmware/LICENCE.mediatek",
+        "url": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/LICENCE.mediatek",
+        "free": false,
+        "redistributable": true
+    },
+    "packages": [
+        "linux-firmware-mediatek",
+        "linux-firmware-mediatek-license"
+    ],
+    "source": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git",
+    "maintainer": {
+        "name": "webOS Phoenix",
+        "email": "drivers@webosphoenix.org"
+    }
+}

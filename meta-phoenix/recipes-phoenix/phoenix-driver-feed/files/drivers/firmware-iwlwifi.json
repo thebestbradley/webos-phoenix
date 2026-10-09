@@ -1,0 +1,35 @@
+{
+    "id": "firmware-iwlwifi",
+    "kind": "firmware",
+    "title": "Intel Wi-Fi firmware (iwlwifi)",
+    "category": "wifi",
+    "summary": "Lets Intel Wi-Fi 5, 6 and 7 cards (AX200, AX210, BE200, 9000 and 8000 series and later) connect.",
+    "match": [
+        "pci:v00008086d*sv*sd*bc02sc80i*"
+    ],
+    "firmware": [
+        "iwlwifi-*.ucode"
+    ],
+    "modules": [
+        "iwlmvm",
+        "iwlwifi"
+    ],
+    "after": "reload",
+    "license": {
+        "id": "LicenseRef-iwlwifi-firmware",
+        "name": "Intel firmware licence (iwlwifi)",
+        "textInPackage": "lib/firmware/LICENCE.iwlwifi_firmware",
+        "url": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/LICENCE.iwlwifi_firmware",
+        "free": false,
+        "redistributable": true
+    },
+    "packages": [
+        "linux-firmware-iwlwifi-misc",
+        "linux-firmware-iwlwifi-license"
+    ],
+    "source": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git",
+    "maintainer": {
+        "name": "webOS Phoenix",
+        "email": "drivers@webosphoenix.org"
+    }
+}

@@ -27,6 +27,7 @@ filled out to [at, rotation, x, y, scale x, scale y] and padded to six
 import json
 import math
 import os
+import random
 import re
 import sys
 
@@ -42,9 +43,21 @@ HEADER = ("Copyright (c) 2026 webOS Phoenix contributors\n"
           "edit that and run the tool; CI checks this file is up to date.")
 
 # Acting (motion.acting): the parts that act, the most keys a loop has, a key at rest.
-ACT_CHANNELS = ("body", "head", "eyes", "lids", "wingL", "wingR", "beak", "crest")
+ACT_CHANNELS = ("body", "head", "eyes", "lids", "wingL", "wingR", "beak", "crest", "whole", "tail", "footL", "footR")
 ACT_KEYS = 6
 ACT_REST = [0, 0, 0, 1, 1]
+# Moves (motion.moves): the most keys a track has, the most cues, their kinds; effects' kinds.
+MOVE_KEYS = 12
+MOVE_CUES = 6
+MOVE_KINDS = ("enter", "leave", "idle", "react")
+FX_KINDS = ("swirl", "glow", "puff", "burst", "surge")
+# Magic (magic): how many sparks a lane plays, mists the mist lane (the shell plays that many).
+SPARKS_EACH = 5
+MISTS_EACH = 3
+# The easings of the effects' particles (CSS's matches of Qt's curves).
+OUT_CUBIC = "cubic-bezier(0.33, 1, 0.68, 1)"
+OUT_QUAD = "cubic-bezier(0.5, 1, 0.89, 1)"
+IN_QUAD = "cubic-bezier(0.11, 0, 0.5, 0)"
 
 EASE_IN_OUT = "cubic-bezier(0.42, 0, 0.58, 1)"   # CSS ease-in-out; the shell uses the same curve
 
@@ -187,15 +200,182 @@ def build(src):
                 fail("acting %s %s: the first and last keys at rest, so the loop joins up" % (name, ch))
             # Padded to ACT_KEYS for the shell (its loop plays exactly that many steps).
             a["steps"][ch] = full + [full[-1]] * (ACT_KEYS - len(full))
+    build_moves(bird)
+    build_magic(bird)
     if len(motion["speech"]) != 8 or len(motion["listen"]) != 6:
         fail("motion.speech needs 8 steps and motion.listen 6 (AssistantBird.qml plays that many)")
     return bird
 
 
+def build_moves(bird):
+    """Checks the moves, effects, idles and reactions; fills each move's keys
+    out to MOVE_KEYS of [at, rotation, x, y, scale x, scale y] ("steps") with
+    the curve into each ("curves", the Bezier points), and its cues."""
+    motion = bird["motion"]
+    curves = motion["curves"]
+    curves.pop("about", None)
+    for name, c in curves.items():
+        if len(c) != 4:
+            fail("curve %s: four numbers" % name)
+    effects = bird["effects"]
+    effects.pop("about", None)
+    for name, e in effects.items():
+        if e["kind"] not in FX_KINDS:
+            fail("effect %s: unknown kind %s" % (name, e["kind"]))
+        if e["period"] <= 0:
+            fail("effect %s: a period above 0" % name)
+        if e["kind"] in ("glow", "surge"):
+            keys = e["keys"]
+            if not 2 <= len(keys) <= 4 or keys[0][0] != 0 or keys[-1][0] != 1:
+                fail("effect %s: 2 to 4 keys from 0 to 1" % name)
+            full = [list(k[:3]) + [k[3] if len(k) > 3 else "io"] for k in keys]
+            for k in full:
+                if k[3] not in curves:
+                    fail("effect %s: no curve %s" % (name, k[3]))
+            # Four for the shell (three steps), the last repeated.
+            e["keys4"] = [k[:3] + [curves[k[3]]] for k in full] + [full[-1][:3] + [curves["lin"]]] * (4 - len(full))
+        else:
+            for p in e["particles"]:
+                if p[3] >= e["period"]:
+                    fail("effect %s: a particle's delay within the period" % name)
+                if len(p) > 4 and p[4] not in bird["colors"]:
+                    fail("effect %s: colour %s not in colors" % (name, p[4]))
+    moves = motion["moves"]
+    moves.pop("about", None)
+    channels = motion["acting"]["channels"]
+    for name, m in moves.items():
+        if m["kind"] not in MOVE_KINDS:
+            fail("move %s: unknown kind %s" % (name, m["kind"]))
+        if m["period"] <= 0:
+            fail("move %s: a period above 0" % name)
+        m["steps"], m["curves"] = {}, {}
+        for ch, keys in m["tracks"].items():
+            if ch not in channels:
+                fail("move %s: no channel %s" % (name, ch))
+            if not 2 <= len(keys) <= MOVE_KEYS or keys[0][0] != 0 or keys[-1][0] != 1:
+                fail("move %s %s: 2 to %d keys from 0 to 1" % (name, ch, MOVE_KEYS))
+            full, into = [], []
+            for k in keys:
+                k = list(k)
+                curve = k.pop() if isinstance(k[-1], str) else "io"
+                if curve not in curves:
+                    fail("move %s %s: no curve %s" % (name, ch, curve))
+                if not 1 <= len(k) <= 6:
+                    fail("move %s %s: a key is [at, rotation, x, y, scale x, scale y, curve]" % (name, ch))
+                full.append(k + ACT_REST[len(k) - 1:])
+                into.append(curve)
+            if any(full[i + 1][0] < full[i][0] for i in range(len(full) - 1)):
+                fail("move %s %s: keys out of order" % (name, ch))
+            if m["kind"] != "enter" and full[0][1:] != ACT_REST:
+                fail("move %s %s: the first key at rest (only an enter starts away)" % (name, ch))
+            if m["kind"] != "leave" and full[-1][1:] != ACT_REST:
+                fail("move %s %s: the last key at rest (only a leave holds)" % (name, ch))
+            m["steps"][ch] = full + [full[-1]] * (MOVE_KEYS - len(full))
+            m["curves"][ch] = [curves[c] for c in into[1:]] + [curves["lin"]] * (MOVE_KEYS - len(full))
+        cues = m.setdefault("cues", [])
+        if len(cues) > MOVE_CUES:
+            fail("move %s: at most %d cues" % (name, MOVE_CUES))
+        if any(cues[i + 1]["at"] < cues[i]["at"] for i in range(len(cues) - 1)):
+            fail("move %s: cues out of order" % name)
+        for c in cues:
+            if not 0 <= c["at"] <= 1:
+                fail("move %s: a cue's at is 0 to 1" % name)
+            if c.get("eyes") and c["eyes"] not in bird["eyes"]:
+                fail("move %s: no eyes %s" % (name, c["eyes"]))
+            if c.get("beak") and c["beak"] not in bird["beaks"]:
+                fail("move %s: no beak %s" % (name, c["beak"]))
+            if "fx" in c and c["fx"] not in effects:
+                fail("move %s: no effect %s" % (name, c["fx"]))
+    for name in motion["idles"]["pool"]:
+        if moves.get(name, {}).get("kind") != "idle":
+            fail("idles: %s is no idle move" % name)
+    r = motion["reactions"]
+    for key in ("type", "erase", "pause", "send", "tap", "move"):
+        for name in (r[key] if isinstance(r[key], list) else [r[key]]):
+            if moves.get(name, {}).get("kind") != "react":
+                fail("reactions %s: %s is no react move" % (key, name))
+    for kind in ("enter", "leave"):
+        if moves.get(kind, {}).get("kind") != kind:
+            fail("moves: an %s of kind %s is needed" % (kind, kind))
+
+
+def build_magic(bird):
+    """Checks the magic (its aura, sparks and mist) and picks its sparks and
+    mists from their seeds once: each spark lane's sparks ("sparkLanes":
+    each {period, sparks: [gap, life, x, y, size, colour, drift, rise,
+    glint (1) or mote (0), spin]}), the mist's ("mistLane": {period, mists:
+    [gap, life, x, y, radius, rise]}), and the aura's flicker as opacity
+    keys from its flame's ("flickerKeys4": [at, opacity], the most 1, padded
+    to four as the flames' are)."""
+    colors = bird["colors"]
+    m = bird["magic"]
+    m.pop("about", None)
+    a = m["aura"]
+    if a["color"] not in colors:
+        fail("magic aura: colour %s not in colors" % a["color"])
+    f = bird["motion"]["flicker"].get(a["flicker"]["with"])
+    if not f:
+        fail("magic aura: no flicker %s" % a["flicker"]["with"])
+    fac = [1 + a["flicker"]["depth"] * (k[2] - 1) for k in f["keys4"]]
+    a["flickerKeys4"] = [[k[0], round(v / max(fac), 4)] for k, v in zip(f["keys4"], fac)]
+    a["flickerPeriod"] = f["period"]
+    s, mist = m["sparks"], m["mist"]
+    for name in bird["poses"]:
+        v = m["poses"].get(name)
+        if not v or len(v) != 4 or not 0 <= v[0] <= 1 or v[1] not in range(s["lanes"] + 1) or v[2] not in (0, 1) or v[3] not in (0, 1):
+            fail("magic poses: %s needs [aura 0..1, sparks 0..%d, mist 0 or 1, rings 0 or 1]" % (name, s["lanes"]))
+    for name in m["poses"]:
+        if name not in bird["poses"]:
+            fail("magic poses: no pose %s" % name)
+    if s["each"] != SPARKS_EACH or mist["each"] != MISTS_EACH:
+        fail("magic: sparks.each must be %d and mist.each %d (AssistantBird.qml plays that many)" % (SPARKS_EACH, MISTS_EACH))
+    for c in s["colors"] + [mist["color"]]:
+        if c not in colors:
+            fail("magic: colour %s not in colors" % c)
+    # random.Random(seed).random() gives the same numbers on every Python 3.
+    rnd = random.Random(s["seed"]).random
+
+    def between(r):
+        return r[0] + (r[1] - r[0]) * rnd()
+    lanes = []
+    for _lane in range(s["lanes"]):
+        sparks = []
+        for _i in range(s["each"]):
+            gap, life = round(between(s["gap"])), round(between(s["life"]))
+            while True:
+                deg = rnd() * 360
+                if not s["skip"][0] < deg < s["skip"][1]:
+                    break
+            out = rnd()
+            rx = s["inner"][0] + (s["outer"][0] - s["inner"][0]) * out
+            ry = s["inner"][1] + (s["outer"][1] - s["inner"][1]) * out
+            x = s["centre"][0] + rx * math.cos(math.radians(deg))
+            y = s["centre"][1] + ry * math.sin(math.radians(deg))
+            size = between(s["size"])
+            colour = s["colors"][int(rnd() * len(s["colors"]))]
+            drift, rise = between(s["drift"]), between(s["rise"])
+            glint = 1 if rnd() < s["glints"] else 0
+            spin = round(between(s["spin"]) * (1 if rnd() < 0.5 else -1)) if glint else 0
+            sparks.append([gap, life, round(x, 1), round(y, 1), round(size, 2), colour, round(drift, 1), round(rise, 1), glint, spin])
+        lanes.append({"period": sum(p[0] + p[1] for p in sparks), "sparks": sparks})
+    m["sparkLanes"] = lanes
+    rnd = random.Random(mist["seed"]).random
+    mists = []
+    for _i in range(mist["each"]):
+        gap, life = round(between(mist["gap"])), round(between(mist["life"]))
+        x = mist["centre"][0] + (rnd() * 2 - 1) * mist["spread"][0]
+        y = mist["centre"][1] + (rnd() * 2 - 1) * mist["spread"][1]
+        mists.append([gap, life, round(x, 1), round(y, 1), round(between(mist["radius"]), 1), round(between(mist["rise"]), 1)])
+    m["mistLane"] = {"period": sum(p[0] + p[1] for p in mists), "mists": mists}
+
+
 # ---- Writers -----------------------------------------------------------------------------------
 
 def dumps(o):
-    return json.dumps(o, indent=1, ensure_ascii=False)
+    """Indented, but each list of plain values on one line (keys, curves, points)."""
+    text = json.dumps(o, indent=1, ensure_ascii=False)
+    flat = re.compile(r"\[\s*((?:-?[\d.e+-]+|\"[^\"\n]*\"|true|false|null)(?:,\s*(?:-?[\d.e+-]+|\"[^\"\n]*\"|true|false|null))*)\s*\]")
+    return flat.sub(lambda m: "[" + re.sub(r",\s+", ", ", m.group(1)) + "]", text)
 
 
 def qml_js(bird):
@@ -333,11 +513,226 @@ def css(bird):
             out.append(".ab-act-%s-%s { animation: ab-act-%s-%s calc(%dms * var(--ab-speed, 1)) %s %s; }"
                        % (pose, ch, pose, ch, a["period"], EASE_IN_OUT, "1" if "every" in a else "infinite"))
         out.append("")
+    out += css_moves(bird)
+    out += css_effects(bird)
+    out += css_magic(bird)
     out.append("@media (prefers-reduced-motion: reduce) {")
     out.append("    .ab-bird * { animation: none !important; transition: none !important; }")
     out.append("}")
     out.append(".ab-bird.ab-still * { animation: none !important; transition: none !important; }")
     return "\n".join(out) + "\n"
+
+
+def bezier(c):
+    return "cubic-bezier(%s)" % ", ".join(num(v) for v in c)
+
+
+def css_moves(bird):
+    """Each move's keyframes per channel, about the channel's pivot, each
+    key's curve on the way into it (CSS takes a keyframe's timing function
+    for the way out of it). Filled both ways: an enter is hidden through its
+    delay (--ab-delay), a leave holds its end."""
+    out = []
+    acting = bird["motion"]["acting"]
+    for name, m in bird["motion"]["moves"].items():
+        for ch, keys in m["tracks"].items():
+            px, py = acting["pivot"][ch]
+            n = len(keys)
+            steps, curves = m["steps"][ch][:n], m["curves"][ch]
+            out.append("@keyframes ab-mv-%s-%s {" % (name, ch))
+            for i, (at, rot, tx, ty, sx, sy) in enumerate(steps):
+                timing = "; animation-timing-function: %s" % bezier(curves[i]) if i < n - 1 else ""
+                out.append("    %s%% { transform: translate(%spx, %spx) translate(%spx, %spx) rotate(%sdeg) scale(%s, %s) translate(%spx, %spx)%s; }"
+                           % (num(at * 100), num(tx), num(ty), num(px), num(py), num(rot), num(sx), num(sy), num(-px), num(-py), timing))
+            out.append("}")
+            out.append(".ab-mv-%s-%s { animation: ab-mv-%s-%s calc(%dms * var(--ab-speed, 1)) linear calc(var(--ab-delay, 0ms) * var(--ab-speed, 1)) both; }"
+                       % (name, ch, name, ch, m["period"]))
+        out += css_shadow(bird, name, m)
+        out.append("")
+    return out
+
+
+def css_shadow(bird, name, m):
+    """The shadow under a move that lifts the bird (its body or whole): as
+    the shell's (AssistantBird.qml), narrower and fainter the higher it is,
+    none while the bird is not there (an entrance's start), at the keys'
+    times (the heights between them taken as straight)."""
+    tracks = {ch: m["steps"][ch][:len(m["tracks"][ch])] for ch in ("body", "whole") if ch in m["tracks"]}
+    if not tracks:
+        return []
+
+    def at(ch, t, i):
+        keys = tracks.get(ch)
+        if not keys:
+            return ACT_REST[i - 1]
+        for a, b in zip(keys, keys[1:]):
+            if a[0] <= t <= b[0]:
+                f = 0 if b[0] == a[0] else (t - a[0]) / (b[0] - a[0])
+                return a[i] + (b[i] - a[i]) * f
+        return keys[-1][i]
+    times = sorted({k[0] for keys in tracks.values() for k in keys})
+    px, py = bird["pivots"]["shadow"]
+    out = ["@keyframes ab-mv-%s-shadow {" % name]
+    for t in times:
+        air = max(0, -(at("body", t, 3) + at("whole", t, 3)))
+        sx = (1 - 0.25 * min(1, air / 60)) * min(1, abs(at("whole", t, 5)))
+        out.append("    %s%% { transform: translate(%spx, %spx) scale(%s, 1) translate(%spx, %spx); opacity: %s; }"
+                   % (num(t * 100), num(px), num(py), num(sx), num(-px), num(-py), num(1 - 0.6 * min(1, air / 220))))
+    out.append("}")
+    out.append(".ab-mv-%s-shadow { animation: ab-mv-%s-shadow calc(%dms * var(--ab-speed, 1)) linear calc(var(--ab-delay, 0ms) * var(--ab-speed, 1)) both; }"
+               % (name, name, m["period"]))
+    return out
+
+
+def css_effects(bird):
+    """The effects' particles: each a few nested groups (where it goes, how
+    big, how bright), each with its own curve, as the shell plays them."""
+    out = []
+
+    def anim(cls, ms, timing, delay=0):
+        return ".%s { animation: %s calc(%dms * var(--ab-speed, 1)) %s calc(%dms * var(--ab-speed, 1)) both; }" % (
+            cls, cls, ms, timing, delay)
+    for name, e in bird["effects"].items():
+        ox, oy = e["origin"]
+        if e["kind"] in ("glow", "surge"):
+            cls = "ab-fx-%s" % name
+            out.append("@keyframes %s {" % cls)
+            keys = e["keys"]
+            for i, k in enumerate(keys):
+                at, sc, op = k[:3]
+                nxt = keys[i + 1] if i + 1 < len(keys) else None
+                timing = "; animation-timing-function: %s" % bezier(bird["motion"]["curves"][nxt[3] if len(nxt) > 3 else "io"]) if nxt else ""
+                out.append("    %s%% { transform: translate(%spx, %spx) scale(%s); opacity: %s%s; }" % (num(at * 100), num(ox), num(oy), num(sc), num(op), timing))
+            out.append("}")
+            out.append(anim(cls, e["period"], "linear"))
+            out.append("")
+            continue
+        for i, p in enumerate(e["particles"]):
+            cls = "ab-fx-%s-%d" % (name, i + 1)
+            delay = p[3]
+            ms = e["period"] - delay
+            if e["kind"] == "swirl":
+                a, r = p[0], p[1]
+                out.append("@keyframes %s-a { 0%% { transform: translate(%spx, %spx) rotate(%sdeg); } 100%% { transform: translate(%spx, %spx) rotate(%sdeg); } }"
+                           % (cls, num(ox), num(oy), num(a), num(ox), num(oy), num(a + e["spin"])))
+                out.append("@keyframes %s-r { 0%% { transform: translate(%spx, 0px) scale(1); } 100%% { transform: translate(0px, 0px) scale(0.4); } }" % (cls, num(r)))
+                out.append("@keyframes %s-o { 0%% { opacity: 0; } 25%% { opacity: 1; } 100%% { opacity: 1; } }" % cls)
+                out.append(anim(cls + "-a", ms, IN_QUAD, delay))
+                out.append(anim(cls + "-r", ms, IN_QUAD, delay))
+                out.append(anim(cls + "-o", ms, "linear", delay))
+            elif e["kind"] == "puff":
+                dx, dy = p[0], p[1]
+                out.append("@keyframes %s-t { 0%% { transform: translate(%spx, %spx); } 100%% { transform: translate(%spx, %spx); } }"
+                           % (cls, num(ox), num(oy), num(ox + dx), num(oy + dy)))
+                out.append("@keyframes %s-s { 0%% { transform: scale(0.35); } 100%% { transform: scale(1); } }" % cls)
+                out.append("@keyframes %s-o { 0%% { opacity: 0; animation-timing-function: %s; } 15%% { opacity: 0.85; } 40%% { opacity: 0.85; animation-timing-function: %s; } 100%% { opacity: 0; } }"
+                           % (cls, OUT_QUAD, IN_QUAD))
+                out.append(anim(cls + "-t", ms, OUT_CUBIC, delay))
+                out.append(anim(cls + "-s", ms, OUT_QUAD, delay))
+                out.append(anim(cls + "-o", ms, "linear", delay))
+            else:   # burst
+                dx, dy = p[0], p[1]
+                out.append("@keyframes %s-t { 0%% { transform: translate(%spx, %spx); } 100%% { transform: translate(%spx, %spx); } }"
+                           % (cls, num(ox), num(oy), num(ox + dx), num(oy + dy)))
+                out.append("@keyframes %s-s { 0%% { transform: scale(1); } 100%% { transform: scale(0.3); } }" % cls)
+                out.append("@keyframes %s-o { 0%% { opacity: 1; } 100%% { opacity: 0; } }" % cls)
+                out.append(anim(cls + "-t", ms, OUT_CUBIC, delay))
+                out.append(anim(cls + "-s", ms, "linear", delay))
+                out.append(anim(cls + "-o", ms, IN_QUAD, delay))
+        out.append("")
+    return out
+
+
+def ease_out(f):
+    return 1 - (1 - f) ** 2
+
+
+def css_magic(bird):
+    """The aura's breath, flicker and rings; each spark's and mist's
+    keyframes over its lane's whole length (hidden but for its moment), as
+    the shell plays them (AssistantBird.qml's Spark, Mist). A lane starts at
+    a random point of it (--ab-phase, a negative delay set by Bird.tsx)."""
+    m = bird["magic"]
+    a = m["aura"]
+    ox, oy = a["origin"]
+    b = a["breath"]
+    out = ["/* The magic (magic): the aura, the sparks, the mist. Hidden unless animated. */",
+           ".ab-spark, .ab-mist, .ab-aura-ring { opacity: 0; }",
+           "@keyframes ab-aura-breath {",
+           "    0%% { transform: translate(%spx, %spx) scale(%s) translate(%spx, %spx); opacity: %s; }"
+           % (num(ox), num(oy), num(b["scale"][0]), num(-ox), num(-oy), num(b["opacity"][0])),
+           "    100%% { transform: translate(%spx, %spx) scale(%s) translate(%spx, %spx); opacity: %s; }"
+           % (num(ox), num(oy), num(b["scale"][1]), num(-ox), num(-oy), num(b["opacity"][1])),
+           "}",
+           ".ab-aura-breath { animation: ab-aura-breath calc(%dms * var(--ab-speed, 1)) %s infinite alternate; }" % (b["period"] // 2, EASE_IN_OUT),
+           "@keyframes ab-aura-flicker {"]
+    for at, o in a["flickerKeys4"][:len(bird["motion"]["flicker"][a["flicker"]["with"]]["keys"])]:
+        out.append("    %s%% { opacity: %s; }" % (num(at * 100), num(o)))
+    out.append("}")
+    # In step with the flame's own (.ab-flicker-<name>): the same length, curve and direction.
+    out.append(".ab-aura-flicker { animation: ab-aura-flicker calc(%dms * var(--ab-speed, 1)) %s infinite alternate; }" % (a["flickerPeriod"], EASE_IN_OUT))
+    r = a["rings"]
+    # Growing and fading over its period, then waiting its gap.
+    cycle = r["period"] + r["gap"]
+    end = 100 * r["period"] / cycle
+    out.append("@keyframes ab-aura-ring {")
+    out.append("    0%% { transform: translate(%spx, %spx) scale(%s); opacity: 0; animation-timing-function: %s; }" % (num(ox), num(oy), num(r["scale"][0]), OUT_QUAD))
+    out.append("    %s%% { transform: translate(%spx, %spx) scale(%s); opacity: 1; animation-timing-function: %s; }"
+               % (num(end * 0.25), num(ox), num(oy), num(r["scale"][0] + 0.25 * (r["scale"][1] - r["scale"][0])), "linear"))
+    out.append("    %s%%, 100%% { transform: translate(%spx, %spx) scale(%s); opacity: 0; }" % (num(end), num(ox), num(oy), num(r["scale"][1])))
+    out.append("}")
+    for i in range(r["count"]):
+        out.append(".ab-aura-ring-%d { animation: ab-aura-ring calc(%dms * var(--ab-speed, 1)) linear calc(%dms * var(--ab-speed, 1)) infinite; }"
+                   % (i + 1, cycle, cycle * i // r["count"]))
+    out.append("")
+
+    def lane_keys(cls, period, start, life, frames):
+        """frames: (fraction of its life, transform, opacity, the curve on from there)."""
+        pct = lambda t: num(100 * t / period)
+        lines = ["@keyframes %s {" % cls]
+        first = frames[0]
+        if start > 0:
+            lines.append("    0%% { transform: %s; opacity: 0; }" % first[1])
+        for f, tr, o, curve in frames:
+            timing = "; animation-timing-function: %s" % curve if curve else ""
+            lines.append("    %s%% { transform: %s; opacity: %s%s; }" % (pct(start + f * life), tr, num(o), timing))
+        if start + life < period:
+            lines.append("    100%% { transform: %s; opacity: 0; }" % frames[-1][1])
+        lines.append("}")
+        return lines
+    for li, lane in enumerate(m["sparkLanes"]):
+        t = 0
+        for si, (gap, life, x, y, size, _c, drift, rise, glint, spin) in enumerate(lane["sparks"]):
+            start = t + gap
+            t = start + life
+            cls = "ab-spark-%d-%d" % (li + 1, si + 1)
+            frames = []
+            # As the shell's: drifting up (easing out) over its life; up and bright, a while, out.
+            for f, g, o, curve in ((0, 0.3, 0, OUT_QUAD), (0.3, 1, 1, EASE_IN_OUT), (0.6, 0.8, 0.75, IN_QUAD), (1, 0.3, 0, None)):
+                p = ease_out(f)
+                frames.append((f, "translate(%spx, %spx) rotate(%sdeg) scale(%s)" % (num(x + drift * p), num(y - rise * p), num(spin * p), num(g)), o, curve))
+            out += lane_keys(cls, lane["period"], start, life, frames)
+            out.append(".%s { animation: %s calc(%dms * var(--ab-speed, 1)) linear calc(var(--ab-phase, 0ms) * var(--ab-speed, 1)) infinite; }"
+                       % (cls, cls, lane["period"]))
+    out.append("")
+    mist = m["mist"]
+    lane = m["mistLane"]
+    t = 0
+    for i, (gap, life, x, y, radius, rise) in enumerate(lane["mists"]):
+        start = t + gap
+        t = start + life
+        cls = "ab-mist-%d" % (i + 1)
+        frames = []
+        # Shimmering: up, down a little, up again, away; rising and spreading.
+        for f, o in ((0, 0), (0.25, 0.7), (0.45, 0.45), (0.7, 1), (1, 0)):
+            frames.append((f, "translate(%spx, %spx) scale(%s, %s)" % (num(x), num(y - rise * f), num(radius * (0.85 + 0.3 * f) / 100),
+                                                                       num(radius * mist["squash"] * (0.85 + 0.3 * f) / 100)),
+                           o, EASE_IN_OUT if f < 1 else None))
+        out += lane_keys(cls, lane["period"], start, life, frames)
+        out.append(".%s { animation: %s calc(%dms * var(--ab-speed, 1)) linear calc(var(--ab-phase, 0ms) * var(--ab-speed, 1)) infinite; }"
+                   % (cls, cls, lane["period"]))
+    out.append("")
+    return out
 
 
 def main():

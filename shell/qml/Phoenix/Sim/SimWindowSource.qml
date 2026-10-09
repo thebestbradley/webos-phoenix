@@ -588,7 +588,7 @@ Item {
         // A page gone lets go of what it held.
         if (win.gone)
             win.gone.connect(function() { source._pageGone(pageKey); });
-        win.windowRequested.connect(function(request) { source._openWindow(appId, request); });
+        win.windowRequested.connect(function(request) { source._openWindow(appId, request, uid); });
         if (win.linkRequested)
             win.linkRequested.connect(function(url) { source.openLink(appId, uid, url); });
         if (system)
@@ -600,7 +600,9 @@ Item {
 
     // A page opened a window: it becomes a card in its app's stack, or the
     // app's first card if it has none yet (headless apps).
-    function _openWindow(appId, request) {
+    // fromUid: the card whose page opened it (a second card of the app
+    // keeps its windows in its own stack).
+    function _openWindow(appId, request, fromUid) {
         // Popup alerts and dashboards (enyo.windows.openPopup / openDashboard;
         // the runtime tags their URL with the window type).
         var url = String(request.requestedUrl);
@@ -610,7 +612,7 @@ Item {
             return;
         }
         var info = appInfo(appId);
-        var existing = runningUid(appId);
+        var existing = fromUid && cardIndex(fromUid) >= 0 ? fromUid : runningUid(appId);
         var uid;
         if (existing !== "")
             uid = _createWindow(appId, info.title, _afterGroupOf(existing), cards.get(cardIndex(existing)).groupId, request);
@@ -670,9 +672,20 @@ Item {
             var background = !!params.$activity;
             var target = _launchTarget(payload.id, params);
             var running = runningUid(target);
-            if (running !== "") {
-                if (target === payload.id && Object.keys(params).length > 0 && _windows[running] && _windows[running].relaunch)
-                    _windows[running].relaunch(params);
+            // An app (a link, the assistant's "Open Memos") opening one
+            // that runs: as the user chose (appRelaunch); a background
+            // launch, or an app launching itself (its dashboard or banner
+            // tapped), only tells its page.
+            // {newCard: true} (Phoenix, the application manager's launch):
+            // another card of it whatever the setting, in a stack of its
+            // own, e.g. the Assistant opening a conversation in a new card
+            // (apps/assistant: its "Open in New Card").
+            var newCard = payload.newCard === true && !background;
+            var how = newCard ? "new" : background || appId === target ? "front" : appRelaunch;
+            if (running !== "" && !_opensNewCard(target, how)) {
+                var refresh = how === "refresh";
+                if ((refresh || (target === payload.id && Object.keys(params).length > 0)) && _windows[running] && _windows[running].relaunch)
+                    _windows[running].relaunch(target === payload.id ? params : {}, refresh);
                 if (!background)
                     cardFocusRequested(running);
                 return;
@@ -680,8 +693,8 @@ Item {
             // Launched by the app in front: the new card joins its stack,
             // e.g. the browser opened from a link in Email
             // (CardWindowManager::prepareAddWindow, :561-567).
-            var joins = uid !== "" && uid === focusedUid && !background;
-            var launched = launch(target, uid, target === payload.id ? params : null, joins);
+            var joins = uid !== "" && uid === focusedUid && !background && !newCard;
+            var launched = launch(target, uid, target === payload.id ? params : null, joins, how);
             if (launched !== "" && !background)
                 cardFocusRequested(launched);
         } else if (type === "browserData") {
@@ -726,8 +739,21 @@ Item {
             // A notification for another app (e.g. a text the telephony
             // service received for Messaging, a Tasks reminder): {appId,
             // title, body, params?}; tapping it launches the app with params.
+            // Phoenix: {tag} replaces the app's notification of that tag,
+            // {tag, remove: true} takes it away (with tagPrefix, also every
+            // tag starting with it: a deleted folder's captures); {actions: {uri, params,
+            // items: [{id, label}]}} adds buttons (Notifications.qml
+            // runAction), e.g. the Assistant's follow-up answers.
             var target = payload.appId && appInfo(payload.appId) ? payload.appId : appId;
-            notify(target, payload.title || "", payload.body || "", payload.params);
+            if (payload.tag)
+                removeTagged(target, String(payload.tag));
+            if (payload.remove) {
+                if (payload.tagPrefix)
+                    removeTagged(target, String(payload.tagPrefix), true);
+                return;
+            }
+            notify(target, payload.title || "", payload.body || "", payload.params,
+                   { tag: payload.tag ? String(payload.tag) : "", actions: payload.actions || null });
             if (payload.soundClass || payload.soundFile) {
                 var ns = _soundArgs(payload);
                 soundRequested(target, ns[0], ns[1], ns[2]);
@@ -777,6 +803,11 @@ Item {
                 _dictationRequest(uid, payload || {});
         } else if (type === "assistant") {
             _assistantRequest(appId, uid, payload || {});
+        } else if (type === "simulator") {
+            // What the simulator does on this computer for a page (the
+            // runtime's org.webosphoenix.simulator): sim.qml's, by the
+            // app the shell knows the window is.
+            simulatorRequest(appId, payload || {});
         } else if (type === "lunaReply") {
             var cb = _lunaCallbacks[payload.id];
             if (!payload.keep)
@@ -875,6 +906,9 @@ Item {
     // and a screen capture asked for (com.palm.systemmanager/takeScreenShot).
     signal mediaKeyRequested(string key)
     signal screenshotRequested
+    // A page asked the simulator for something it does on this computer
+    // ("simulator" host messages: {op: "startMarketplaceCatalog"}).
+    signal simulatorRequest(string appId, var payload)
     // The device was erased; it restarts into First Use.
     signal eraseRequested
     // USB drive mode was asked for (com.palm.storage diskmode/enterMSM).
@@ -1220,7 +1254,7 @@ Item {
                 color: info.color, glyph: info.glyph, icon: _iconUrl(_param(url, "phoenixIcon"), appId),
                 params: "", windowKey: key,
                 clickableWhenLocked: _param(url, "phoenixClickableWhenLocked") === "1",
-                ongoing: false, progress: -1
+                ongoing: false, progress: -1, tag: "", actions: ""
             });
         }
     }
@@ -1725,7 +1759,8 @@ Item {
     // are turned), which every page gets as it loads; unlike the rest it is
     // not the pages' to overrule.
     readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse", "launcherLayout", "gestureArea", "dockMode",
-                                        "debugOverlays", "usbHost", "gamepads", "usbDrives", "formFactor"]
+                                        "debugOverlays", "usbHost", "gamepads", "usbDrives", "formFactor", "screen",
+                                        "marketplaceCatalog"]
     property var _shellStatus: ({})
 
     function pushSystemStatus(changes) {
@@ -2105,7 +2140,12 @@ Item {
     // of its own.
     // A launch point whose params match wins, as for apps launching apps
     // (the system menu's "Wi-Fi Preferences" opens the Wi-Fi card).
-    function launch(appId, afterUid, params, joinStack) {
+    // how: what opening it does while it runs (Settings > Apps > Opening a
+    // running app, appRelaunch): "front" (the default) its card as it is,
+    // new params going to the page; "refresh" its card, relaunched even
+    // without params so it reloads its data; "new" another card of it
+    // (_opensNewCard).
+    function launch(appId, afterUid, params, joinStack, how) {
         if (params && Object.keys(params).length > 0) {
             var target = _launchTarget(appId, params);
             if (target !== appId) {
@@ -2114,10 +2154,13 @@ Item {
             }
         }
         var existing = runningUid(appId);
-        if (existing !== "") {
-            // Running already: new params go to the page (webOSRelaunch).
-            if (params && Object.keys(params).length > 0 && _windows[existing] && _windows[existing].relaunch)
-                _windows[existing].relaunch(params);
+        if (existing !== "" && !_opensNewCard(appId, how)) {
+            // Running already: new params go to the page (webOSRelaunch);
+            // with "refresh", always (as LunaSysMgr relaunched a running
+            // app on every launch).
+            var refresh = how === "refresh";
+            if ((refresh || (params && Object.keys(params).length > 0)) && _windows[existing] && _windows[existing].relaunch)
+                _windows[existing].relaunch(params || {}, refresh);
             return existing;
         }
         var info = appInfo(appId);
@@ -2136,7 +2179,7 @@ Item {
         // Kept alive (or started at boot): its window comes back as a card,
         // and the page hears of the launch (relaunch, as webOS relaunched a
         // running app).
-        var kept = info.noWindow ? "" : _parkedUid(appId);
+        var kept = info.noWindow || existing !== "" ? "" : _parkedUid(appId);
         if (kept !== "") {
             _unpark(kept);
             if (_windows[kept] && _windows[kept].relaunch)
@@ -2162,6 +2205,21 @@ Item {
         var at = afterUid ? _afterGroupOf(afterUid) : cards.count;
         var join = joinStack && afterUid ? cardIndex(afterUid) : -1;
         return _createWindow(appId, info.title, at, join >= 0 ? cards.get(join).groupId : newGroupId(), null, url);
+    }
+
+    // Settings > Apps > Opening a running app (SimSystemStatus.appRelaunch,
+    // set by the shell): how launches the user makes treat an app that
+    // already has a card (launch's how).
+    property string appRelaunch: "front"
+    // Apps that keep one card whatever the setting: the phone (its card is
+    // the call), and those without a card of their own.
+    property var singleCardApps: [phoneAppId]
+    // Opening appId, running, makes another card of it (how "new").
+    function _opensNewCard(appId, how) {
+        if (how !== "new" || singleCardApps.indexOf(appId) >= 0)
+            return false;
+        var info = appInfo(appId);
+        return !!info && !info.pending && !info.noWindow;
     }
 
     // Another window of an app that runs several at once (apps
@@ -2320,7 +2378,7 @@ Item {
             break;
         case "speak":
             if (!sp || !sp.available) { answer({ error: qsTr("No text-to-speech here.") }); break; }
-            sp.speak(String(p.text || ""), String(p.lang || "en"));
+            sp.speak(String(p.text || ""), String(p.lang || "en"), String(p.voice || ""));
             answer({});
             break;
         case "stopSpeaking":
@@ -2328,7 +2386,7 @@ Item {
             answer({});
             break;
         case "speechStatus":
-            answer({ available: !!(sp && sp.available), engine: sp ? sp.engine : "" });
+            answer({ available: !!(sp && sp.available), engine: sp ? sp.engine : "", voices: sp ? sp.voices : [] });
             break;
         default:
             answer({ error: "unknown op " + p.op });
@@ -2417,16 +2475,29 @@ Item {
     }
 
     // params: launch params for the app when the notification is tapped.
-    function notify(appId, titleText, body, params) {
+    // extra: {tag, actions} (see the "notification" host message).
+    function notify(appId, titleText, body, params, extra) {
         var info = appInfo(appId) || { color: "#666666", glyph: "!", icon: "" };
+        var acts = extra && extra.actions && Array.isArray(extra.actions.items) && extra.actions.items.length ? extra.actions : null;
         notifications.append({
             id: "n" + Date.now() + "_" + notifications.count,
             appId: appId, title: titleText, body: body,
             color: info.color, glyph: info.glyph, icon: info.icon || "",
             params: params && typeof params === "object" ? JSON.stringify(params) : "",
             windowKey: "", clickableWhenLocked: false,
-            ongoing: false, progress: -1
+            ongoing: false, progress: -1,
+            tag: extra && extra.tag ? extra.tag : "",
+            actions: acts ? JSON.stringify(acts) : ""
         });
+    }
+    // The app's notification of that tag, gone (replaced or taken back);
+    // prefix: every one whose tag starts with it.
+    function removeTagged(appId, tag, prefix) {
+        for (var i = notifications.count - 1; i >= 0; --i) {
+            var n = notifications.get(i);
+            if (n.appId === appId && (prefix ? n.tag !== "" && n.tag.indexOf(tag) === 0 : n.tag === tag))
+                notifications.remove(i);
+        }
     }
 
     // An ongoing activity (a download, an install; org.webosphoenix.ongoing
@@ -2462,7 +2533,7 @@ Item {
             id: key, appId: target, title: p.title || "", body: p.body || "",
             color: info.color, glyph: info.glyph, icon: p.icon ? _iconUrl(p.icon, target) : (info.icon || ""),
             params: params, windowKey: "", clickableWhenLocked: false,
-            ongoing: true, progress: progress
+            ongoing: true, progress: progress, tag: "", actions: ""
         });
     }
 

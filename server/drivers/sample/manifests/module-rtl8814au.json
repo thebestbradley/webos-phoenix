@@ -1,0 +1,44 @@
+{
+    "id": "module-rtl8814au",
+    "kind": "module",
+    "title": "Realtek RTL8814AU Wi-Fi driver",
+    "summary": "A driver for USB Wi-Fi adapters with the RTL8814AU chip (four antennas), which the system's Linux 6.6 kernel does not include.",
+    "description": "Open source (GPL-2.0), maintained by Nick Morrow (morrownr/8814au), built for each Phoenix kernel (meta-phoenix, rtl8814au).",
+    "category": "wifi",
+    "match": [
+        "usb:v0BDAp8813d*",
+        "usb:v2357p0106d*",
+        "usb:v0B05p1817d*",
+        "usb:v0B05p1852d*",
+        "usb:v0846p9054d*"
+    ],
+    "modules": [
+        "8814au"
+    ],
+    "after": "reload",
+    "license": {
+        "id": "GPL-2.0-only",
+        "name": "GNU General Public License 2.0",
+        "url": "https://github.com/morrownr/8814au/blob/main/LICENSE",
+        "free": true,
+        "redistributable": true
+    },
+    "source": "https://github.com/morrownr/8814au",
+    "maintainer": {
+        "name": "webOS Phoenix",
+        "email": "drivers@webosphoenix.org"
+    },
+    "samplePackages": [
+        {
+            "name": "kernel-module-8814au-6.6.23-phoenix",
+            "version": "5.8.5.1-r0",
+            "arch": "x86_64",
+            "files": {
+                "lib/modules/6.6.23-phoenix/updates/8814au.ko": "SAMPLE: stands for the 8814au module (x86-64)\n"
+            },
+            "scripts": {
+                "postinst": "#!/bin/sh\nif [ -z \"$D\" ]; then\n\tdepmod -a 6.6.23-phoenix\nfi\n"
+            }
+        }
+    ]
+}

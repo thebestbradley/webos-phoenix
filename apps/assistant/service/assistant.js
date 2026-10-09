@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// The Phoenix Assistant service, org.webosphoenix.assistant (docs/M6-PLAN.md
+// The Assistant service, org.webosphoenix.assistant (docs/M6-PLAN.md
 // F3). Each request goes down the layers in order:
 //
 //   1. speech to text: done before it gets here (the shell's dictation,
@@ -10,7 +10,11 @@
 //   3. the on-device model (llama.cpp, lib/models.js), when one is
 //      installed and chosen: free-form answers, and it picks among the same
 //      commands as tools
-//   4. otherwise the assistant asks: "Ask <cloud model>" or "Search the web"
+//   4. otherwise the assistant asks: "Ask <cloud model>" or "Search the web",
+//      and "Connect model" while no cloud model is set up (the UI asks
+//      which: on-device, cloud or both; connect takes it to Settings, and
+//      retry asks the question again once one is there). Words nothing
+//      understood get the commands they come close to ("Did you mean ...?")
 //
 // A thread the user took to a cloud model goes on with it. Cloud models may
 // chat once a provider is set up; they get the commands as tools only when
@@ -28,8 +32,14 @@
 //   vocabulary {} -> {words, prompt}: the wake phrase and contacts' names, and the transcriber's prompt
 //     (voice: spoken, answered aloud with voiceReplies; locked: over the lock
 //     screen, LOCKED_COMMANDS only; "yes" / "no" answer a read-back waiting)
-//   choose {threadId, messageId, choice: "cloud:<id>" | "web" | "settings" | "open"}
-//     ("open": the app a command's answer offers, "Open Calendar")
+//   choose {threadId, messageId, choice: "cloud:<id>" | "web" | "settings" | "open" | "connect"}
+//     ("open": the app a command's answer offers, "Open Calendar"; "connect"
+//     as connect without a mode)
+//   connect {threadId?, messageId?, mode?: "local" | "cloud" | "both"}: Settings
+//     > Assistant opens to set a model up (mode "": it asks which); the
+//     question before messageId waits to be asked again
+//   retry {threadId} -> {thread, messages}: that question asked again, of
+//     the on-device model (first, unless mode was "cloud") or the cloud one
 //   confirm {threadId, messageId, accept}
 //   threads {} -> {threads, current}; thread {id?} -> {thread, messages}
 //   newThread {} / setCurrent {id} / deleteThread {id} / clearHistory {}
@@ -42,6 +52,20 @@
 //   models {} -> {models: [catalogue + installed, fits, recommended], status, selected}
 //   downloadModel {id} / cancelDownload {id} / removeModel {id} / selectModel {id}
 //   speak {text} / stopSpeaking {}
+//   voice {} -> {parts: [{id: "recognition" | "wakeWord" | "speech", name,
+//     available, engine, howToInstall}]}: what the voice needs and whether
+//     this device has it, with a one-line hint for what is missing
+//     (deps.voice; Settings > Assistant shows it)
+//   Follow-up questions (lib/followups.js; docs/AI-AND-MCP.md): after a command
+//   made something, a message {followUp: {id, kind}, choices: [{id: "fu:<n>" |
+//   "fu:skip", label}]} asks for a missing detail; choose answers it, and so
+//   do the next words (ask) when they read as an answer.
+//   followUps {} -> {followUps: [{id, kind, question, item, state, attempts, nextAt, choices}], muted: [kinds]}
+//   answerFollowUp {id, action: "fu:<n>" | "fu:skip"} -> {text}: a notification's button
+//   followUpOpen {id} -> {thread, messages}: a notification tapped, asked again in its conversation
+//   followUpLeave {threadId?}: the assistant closed, its open question waits for later
+//   followUpWake {at?}: the activity manager's call (at: the time to act as, system UI and tests only)
+//   resetFollowUps {}: ask every kind again
 //
 // deps: {luna: {call(uri, params) -> Promise<reply>}, request(req) ->
 //   Promise<{status, headers, body}>, storage: {get, set, remove, keys(prefix)}
@@ -49,7 +73,8 @@
 //   {seal(text) -> Promise<sealed>, unseal(sealed) -> Promise<text>},
 //   llm (the on-device model runner: status(), download(model), cancel(id),
 //   remove(id), ensure(model) -> Promise<{baseUrl}>), tts: {speak(text,
-//   lang), stop()}, caller() -> app id, now() -> ms, changed(what), log}
+//   lang, voice), stop()}, voice() -> parts as voice answers them (optional), caller() -> app id, now() -> ms, changed(what), log,
+//   notify(n) (a notification: lib/followups.js)}
 
 "use strict";
 
@@ -57,6 +82,7 @@ var grammar = require("./lib/grammar");
 var commands = require("./lib/commands");
 var providers = require("./lib/providers");
 var models = require("./lib/models");
+var followups = require("./lib/followups");
 
 var SERVICE = "org.webosphoenix.assistant";
 var SETTINGS_APP = "org.webosphoenix.settings";
@@ -70,13 +96,20 @@ var DEFAULTS = {
     speak: true,                // answers spoken (on-device text to speech)
     language: "en",
     units: "auto",              // weather: "metric", "imperial", or from the language
-    localModel: "",             // the chosen on-device model (lib/models.js id), "" for none
+    localModel: "",             // the chosen on-device model (lib/models.js id); "" the built-in one, "off" none
+    speechVoice: "",            // the voice answers are spoken with (Kitten's, expr-voice-3-f ...), "" its default
     defaultProvider: "",        // the cloud provider "Ask ..." offers
     allowCloudControl: false,   // cloud models may run commands
     voiceReplies: true,         // answers to spoken requests spoken (ask {voice})
     wakeWord: false,            // the shell listens for "Hey Phoenix" (docs/AI-AND-MCP.md, Voice)
     wakeWhenLocked: false,      // ... also while the screen is off or locked
-    disabledCommands: []        // command ids the assistant must not run
+    disabledCommands: [],       // command ids the assistant must not run
+    followUps: true,            // questions after something is made (lib/followups.js)
+    quietStart: "22:00",        // ... never asked later, in a notification, between these
+    quietEnd: "08:00",
+    followUpFirst: 60,          // ... a question left unanswered comes back this many minutes later
+    followUpAgain: 240,         // ... and once more this many after that (0: not again)
+    followUpTopicsOff: []       // follow-up topics turned off (Settings, or "Stop asking"): lib/followups.js KINDS
 };
 var HISTORY = 20;               // turns a model sees
 // What a request asked by voice over the lock screen (ask {locked}) may do:
@@ -84,7 +117,20 @@ var HISTORY = 20;               // turns a model sees
 var LOCKED_COMMANDS = ["timer", "timerStatus", "timerCancel", "stopwatch", "alarm", "alarmList", "toggle", "media", "volume",
                        "brightness", "lock", "battery", "weather", "convert", "worldTime", "calculate", "time"];
 
-var MESSAGE_FIELDS = ["id", "threadId", "role", "text", "time", "via", "source", "command", "status", "confirm", "choices", "chosen", "data"];
+// kind "fallback": layer 4's "nothing here can" (offer), never shown to a
+// model as something the assistant said (history), so it is not copied.
+var MESSAGE_FIELDS = ["id", "threadId", "role", "text", "time", "via", "source", "command", "status", "confirm", "choices", "chosen", "data", "followUp", "kind"];
+var HHMM = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+// Settings > Assistant > First and Second follow-up (minutes): the reminder
+// brackets offered (the owner's choice, 9 October 2026).
+var FIRST_CHOICES = [15, 60, 180];
+var AGAIN_CHOICES = [0, 60, 240, 1440];
+// Follow-up answers read even when the words could be a command too ("in
+// an hour", "every day"); the others (a place, a label, a list, names)
+// only when they are not one.
+var STRICT_ANSWERS = ["duration", "alert", "due", "repeat", "email", "phone", "doubt"];
+// Every follow-up topic (lib/followups.js KINDS), for followUpTopicsOff.
+var TOPICS = ["location", "invitees", "duration", "alert", "due", "list", "repeat", "label", "email", "phone"];
 
 function ok(o) { var r = { returnValue: true }; for (var k in o) r[k] = o[k]; return r; }
 function fail(code, text) { return { returnValue: false, errorCode: code, errorText: text }; }
@@ -102,7 +148,12 @@ function createAssistantService(deps) {
     function settings() {
         var s = storage.get("assistant:settings") || {}, out = {};
         for (var k in DEFAULTS) out[k] = k in s ? s[k] : DEFAULTS[k];
-        ["enabled", "speak", "allowCloudControl", "voiceReplies", "wakeWord", "wakeWhenLocked"].forEach(function (b) { out[b] = !!out[b]; });
+        ["enabled", "speak", "allowCloudControl", "voiceReplies", "wakeWord", "wakeWhenLocked", "followUps"].forEach(function (b) { out[b] = !!out[b]; });
+        if (!HHMM.test(out.quietStart)) out.quietStart = DEFAULTS.quietStart;
+        if (!HHMM.test(out.quietEnd)) out.quietEnd = DEFAULTS.quietEnd;
+        if (FIRST_CHOICES.indexOf(out.followUpFirst) < 0) out.followUpFirst = DEFAULTS.followUpFirst;
+        if (AGAIN_CHOICES.indexOf(out.followUpAgain) < 0) out.followUpAgain = DEFAULTS.followUpAgain;
+        out.followUpTopicsOff = Array.isArray(out.followUpTopicsOff) ? out.followUpTopicsOff.filter(function (k) { return TOPICS.indexOf(k) >= 0; }) : [];
         out.disabledCommands = Array.isArray(out.disabledCommands) ? out.disabledCommands.filter(function (x) { return typeof x === "string"; }) : [];
         if (["metric", "imperial", "auto"].indexOf(out.units) < 0) out.units = "auto";
         return out;
@@ -162,7 +213,7 @@ function createAssistantService(deps) {
     function summary(t) {
         var msgs = messagesOf(t.id), last = msgs[msgs.length - 1];
         return { id: t.id, title: t.title || (msgs[0] ? msgs[0].text : ""), created: t.created, updated: t.updated,
-                 provider: t.provider || "", count: msgs.length, last: last ? last.text : "" };
+                 provider: t.provider || "", count: msgs.length, last: last ? last.text : "", unread: t.unread || 0 };
     }
 
     function say(thread, text, extra) {
@@ -215,6 +266,40 @@ function createAssistantService(deps) {
         return { luna: deps.luna, request: deps.request, now: now, lang: lang(), units: units(), storage: storage,
                  apps: apps };
     }
+    var followUps = followups.create({ storage: storage, now: now, env: env, settings: settings, log: log, changed: changed,
+                                       notify: deps.notify || function () {},
+                                       // "Stop asking": the topic off, as Settings would turn it off.
+                                       stopTopic: function (kind) {
+                                           var cur = storage.get("assistant:settings") || {};
+                                           var off = Array.isArray(cur.followUpTopicsOff) ? cur.followUpTopicsOff : [];
+                                           if (off.indexOf(kind) < 0) cur.followUpTopicsOff = off.concat([kind]);
+                                           storage.set("assistant:settings", cur);
+                                           changed("settings");
+                                       },
+                                       // A question sent later: said in its conversation, unread there.
+                                       delivered: function (q, text, choices) {
+                                           var thread = getThread(q.threadId);
+                                           if (!thread) return "";
+                                           var old = q.messageId ? getMessage(thread.id, q.messageId) : null;
+                                           var msgs = messagesOf(thread.id), latest = msgs[msgs.length - 1];
+                                           var m;
+                                           // Still the last word there: it stands, and waits unread.
+                                           if (old && !old.chosen && latest && latest.id === old.id) {
+                                               m = old;
+                                               m.choices = choices;   // the notification's (times as they are now)
+                                               putMessage(m);
+                                           }
+                                           else {
+                                               if (old && !old.chosen) { old.chosen = "later"; putMessage(old); }
+                                               var command = { event: "event", reminder: "reminder", task: "task", alarm: "alarm", contact: "contactAdd" }[q.item.type];
+                                               m = say(thread, text, { via: "commands", command: command, followUp: { id: q.id, kind: q.meta ? "doubt" : q.kind }, choices: choices });
+                                           }
+                                           thread = getThread(thread.id);
+                                           thread.unread = (thread.unread || 0) + 1;
+                                           putThread(thread);
+                                           changed("threads");
+                                           return m.id;
+                                       } });
 
     // ---- Doing a command ---------------------------------------------------------------------
     // layer: "commands", "on-device" or "cloud"; source: who chose it.
@@ -236,24 +321,80 @@ function createAssistantService(deps) {
                 confirm = s.didYouMean(s.describe(cmd.id, p.args, cmd.title));
             if (confirm) return [say(thread, confirm, { via: layer, source: source, command: cmd.id, status: "pending",
                                                         confirm: { command: cmd.id, args: p.args } })];
-            return commands.run(cmd, p.args, e).then(function (r) { return [say(thread, r.text, outcome(r, layer, source, cmd))]; });
+            return commands.run(cmd, p.args, e).then(function (r) {
+                return withFollowUp(thread, cmd, p.args, r, [say(thread, r.text, outcome(r, layer, source, cmd))]);
+            });
         }).catch(function (err) {
             log("command " + cmd.id + " failed: " + (err && err.message));
             return [say(thread, s.failed(err && err.message || String(err)), { via: layer, source: source, command: cmd.id, status: "failed" })];
         });
     }
 
+    // ---- Follow-up questions (lib/followups.js) ----------------------------------------------
+    // Something was made: the first question about it after the answer
+    // (not over the lock screen).
+    function withFollowUp(thread, cmd, args, r, out) {
+        if (lockedAsk[thread.id]) return Promise.resolve(out);
+        return followUps.afterCreate(cmd.id, args, r.data, thread.id).then(function (q) {
+            if (q) out.push(askFollowUp(thread, q, cmd.id));
+            return out;
+        });
+    }
+    function askFollowUp(thread, q, command) {
+        var m = say(thread, q.text, { via: "commands", command: command, followUp: { id: q.id, kind: q.meta ? "doubt" : q.kind }, choices: q.choices });
+        followUps.attach(q.id, thread.id, m.id);
+        return m;
+    }
+    // The question waiting in this conversation, if its message is the last
+    // thing the assistant said.
+    function openFollowUp(thread) {
+        var msgs = messagesOf(thread.id);
+        for (var i = msgs.length - 1; i >= 0; --i) {
+            var m = msgs[i];
+            if (m.role !== "assistant") continue;
+            return m.followUp && !m.chosen && followUps.answerable(m.followUp.id) ? m : null;
+        }
+        return null;
+    }
+    // An answer to question message m (input: {choice} or {text, parsed}):
+    // what changed, said back, and the next question.
+    function answerFollowUp(thread, m, input) {
+        return followUps.answer(m.followUp.id, input, true).then(function (out) {
+            if (!out) return [];
+            if (!m.chosen) { m.chosen = input.choice || "said"; putMessage(m); }
+            // Not understood ("I couldn't find Gandalf"): still asked, with its answers.
+            if (out.retry) {
+                var again = say(thread, out.text, { via: "commands", command: m.command, status: "failed", followUp: m.followUp, choices: m.choices });
+                followUps.attach(m.followUp.id, thread.id, again.id);
+                return [again];
+            }
+            var list = [say(thread, out.text, { via: "commands", command: m.command, status: out.skipped || out.dropped ? "cancelled" : "done" })];
+            if (out.next) list.push(askFollowUp(thread, out.next, m.command));
+            return list;
+        });
+    }
+
     // A command's answer as a message: done, with the app it offers ("Open
-    // Calendar", choice "open") and what takes it back (undo).
+    // Calendar", choice "open"), what takes it back (undo), and other things
+    // to do next (r.actions: [{label, open: {appId, params, title}} | {label,
+    // run: {command, args, then?}}], choices "open:<n>" and "do:<n>"; e.g.
+    // "Turn On Location Services", then the weather asked again).
     function outcome(r, layer, source, cmd) {
         var data = r.data ? Object.assign({}, r.data) : {}, extra = {};
         if (r.open) data.open = r.open;
         if (r.undo) data.undo = r.undo;
         var choices = [];
+        (r.actions || []).forEach(function (a, i) {
+            choices.push({ id: (a.open ? "open:" : "do:") + i, label: a.label });
+        });
+        if (r.actions && r.actions.length) data.actions = r.actions;
+        // What it found, shown in the conversation (pictures, cards); each
+        // item's open is the app on it (choice "show:<n>", n across them all).
+        if (r.attachments && r.attachments.length) data.attachments = r.attachments;
         if (r.open) choices.push({ id: "open", label: lang().say.openApp(r.open.title) });
         if (r.offerWeb) choices.push({ id: "web", label: lang().say.searchWeb() });
         if (choices.length) extra.choices = choices;
-        return Object.assign({ via: layer, source: source, command: cmd.id, status: r.offerWeb ? "failed" : "done",
+        return Object.assign({ via: layer, source: source, command: cmd.id, status: r.offerWeb || r.failed ? "failed" : "done",
                                data: Object.keys(data).length ? data : undefined }, extra);
     }
     // The last thing the assistant did that can be taken back.
@@ -285,6 +426,18 @@ function createAssistantService(deps) {
         var m = lastUndoable(thread);
         return act(thread, commands.find(cat.all, "undo"), m ? { undo: m.data.undo, messageId: m.id } : {}, "commands", "");
     }
+    // An action's command ({command, args, then?}), as if asked: its
+    // permission and read-back as any; then the request it unblocked
+    // ("then": the weather once location is allowed) when it went through.
+    function runAction(thread, cat, run) {
+        var cmd = run && commands.find(cat.all, run.command);
+        if (!cmd) return Promise.resolve([say(thread, lang().say.failed("unknown command"), { via: "commands", status: "failed" })]);
+        return act(thread, cmd, run.args || {}, "commands", "").then(function (out) {
+            var last = out[out.length - 1];
+            if (!run.then || !last || last.status !== "done") return out;
+            return runAction(thread, cat, run.then).then(function (more) { return out.concat(more); });
+        });
+    }
     // The words after "When is it?": a time for the event asked about.
     function fillAwaiting(thread, text, cat) {
         var msgs = messagesOf(thread.id), last = null;
@@ -300,24 +453,58 @@ function createAssistantService(deps) {
     }
 
     // ---- Language models (layers 3 and 4) -------------------------------------------------------
+    // What a model is told. It answers what it can in words: facts, how-tos,
+    // recipes, advice, small talk; the phone's commands are tools for
+    // what the user asks the phone to do. (The owner's report, 9 October
+    // 2026: "You can't do that on the phone" was a model copying the
+    // grammar's old refusal and this prompt's "one to three sentences".)
     function systemPrompt(withTools) {
         var d = new Date(now());
-        return "You are the Phoenix Assistant on a webOS Phoenix phone. Answer briefly, in one to three sentences, in plain text without markdown; " +
-            "your answers are read aloud. Today is " + d.toDateString() + ", the time is " + lang().timeText(now()) + "." +
-            (withTools ? " Most questions need no tool: answer them in words. Call a tool only when the user clearly asks the phone to do " +
-             "the very thing the tool does (\"turn on the flashlight\" calls toggle with flashlight on); call at most one. " +
-             "Never call a tool for a question about the world." : " You cannot control the phone; if asked to, say the user can do it themselves.");
+        return "You are Assistant, the friendly, helpful assistant on a webOS Phoenix phone. " +
+            "Answer questions directly and accurately: facts, explanations, how-tos, recipes, advice, small talk and jokes. " +
+            "Be concise, since answers may be read aloud, but give every step when steps are needed (a short numbered list is fine). " +
+            "Write plain text without markdown headings or bold. If you are not sure of something, say so briefly. " +
+            "Today is " + d.toDateString() + ", the time is " + lang().timeText(now()) + "." +
+            (withTools ? " You can also control the device with the tools you are given. Call a tool only when the user asks the phone " +
+             "to do the very thing the tool does (\"turn on the flashlight\" calls toggle with flashlight on); call at most one. " +
+             "Never call a tool for a question you can answer in words."
+                       : " In this conversation you cannot operate the phone; if asked to, say which app or setting does it.");
     }
+    // The conversation as a model sees it: not the "nothing here can"
+    // fallbacks (kind "fallback") nor follow-up questions left unanswered.
     function history(thread) {
-        return messagesOf(thread.id).filter(function (m) { return !m.choices || m.chosen || m.status === "done"; }).slice(-HISTORY)
+        return messagesOf(thread.id).filter(function (m) { return m.kind !== "fallback" && !(m.followUp && !m.chosen); }).slice(-HISTORY)
             .map(function (m) { return { role: m.role, text: m.text }; });
     }
     function lastAsked(thread) {
         var m = messagesOf(thread.id).filter(function (x) { return x.role === "user"; });
         return m.length ? m[m.length - 1].text : "";
     }
-    function toolsFor(list) {
-        return list.filter(function (c) { return allowed(c) && !c.internal; }).map(function (c) {
+    // The commands a model is offered as tools: with the words asked, only
+    // the ones they come near (MAX_TOOLS, by the words they share with a
+    // command's title and description, and the words a command needs:
+    // lang grounded()). All of them are some 5,000 tokens, more than the
+    // on-device model's context (llama-server -c 4096) and a long wait on
+    // a phone before the first word.
+    var MAX_TOOLS = 10;
+    var STOP = /^(?:the|and|for|with|from|that|this|what|when|where|which|your|have|does|will|can|could|would|should|please|tell|turn|make|about|into|onto|them|they|there|some|just|then|than|also|been|being|very|really|want|need|like)$/;
+    function stems(text) {
+        return String(text || "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/)
+            .filter(function (w) { return w.length > 2 && !STOP.test(w); }).map(function (w) { return w.slice(0, 5); });
+    }
+    function toolsFor(list, asked) {
+        var usable = list.filter(function (c) { return allowed(c) && !c.internal; });
+        if (asked !== undefined) {
+            var said = stems(asked), l = lang();
+            usable = usable.map(function (c) {
+                var known = stems(c.id.replace(/([A-Z])/g, " $1") + " " + c.title + " " + c.description), score = 0;
+                said.forEach(function (w) { if (known.indexOf(w) >= 0) score++; });
+                if (c.builtIn && l.mentions && l.mentions(c.id, asked)) score += 2;
+                return { c: c, score: score };
+            }).filter(function (x) { return x.score > 0; }).sort(function (a, b) { return b.score - a.score; })
+              .slice(0, MAX_TOOLS).map(function (x) { return x.c; });
+        }
+        return usable.map(function (c) {
             return { name: commands.toolName(c.id), description: c.description, parameters: c.parameters };
         });
     }
@@ -338,46 +525,115 @@ function createAssistantService(deps) {
             if (cmd.id === "open" && call.args && call.args.name) args.name = call.args.name;
             return act(thread, cmd, args, layer, source, asked);
         }
-        return Promise.resolve([say(thread, result.text || s.done(), { via: layer, source: source })]);
+        return withNext(asked, result.text || s.done()).then(function (next) {
+            return [say(thread, result.text || s.done(), Object.assign({ via: layer, source: source }, next))];
+        });
+    }
+    // What to offer after a model's answer to words: a web search for a
+    // question about the world (not small talk), and what to do with the
+    // answer (lang say.related: "Save as Memo" for a recipe, Maps for a place).
+    function withNext(asked, text) {
+        var s = lang().say;
+        if (!asked || !s.context) return Promise.resolve({});
+        var ctx = s.context(asked), rel = s.related(asked, text);
+        return apps().then(function (list) {
+            var choices = [], actions = [];
+            rel.forEach(function (a) {
+                if (a.run) actions.push({ label: a.label, run: a.run });
+                else if (a.map) {
+                    var maps = appByTitle(list, "Maps");
+                    if (maps) actions.push({ label: a.label, open: { appId: maps.id, params: { query: a.map }, title: maps.title } });
+                }
+            });
+            actions.forEach(function (a, i) { choices.push({ id: (a.open ? "open:" : "do:") + i, label: a.label }); });
+            if (ctx.question) choices.push({ id: "web", label: s.searchWeb() });
+            if (!choices.length) return {};
+            var data = { webQuery: asked };
+            if (actions.length) data.actions = actions;
+            return { choices: choices, data: data };
+        });
+    }
+    function appByTitle(list, title) {
+        var t = String(title || "").toLowerCase();
+        return t ? list.filter(function (a) { return String(a.title).toLowerCase() === t; })[0] || null : null;
     }
 
-    function localReady() {
+    // The on-device model in use: the one chosen, else the built-in one
+    // (lib/models.js), unless "off".
+    function localChoice() {
         var s = settings();
-        if (!s.localModel || !deps.llm) return Promise.resolve(null);
-        var m = models.find(s.localModel);
+        return s.localModel === "off" ? "" : s.localModel || models.BUILT_IN;
+    }
+    function localReady() {
+        if (!localChoice() || !deps.llm) return Promise.resolve(null);
+        var m = models.find(localChoice());
         if (!m) return Promise.resolve(null);
         return Promise.resolve(deps.llm.status()).then(function (st) {
             var installed = st && (st.installed || []).some(function (i) { return i.id === m.id; });
             return installed && st.available ? m : null;
         }, function () { return null; });
     }
+    // The commands as tools only for words that may ask the device to do
+    // something: a question about the world or small talk goes without
+    // them, which keeps a small model from calling one ("why is the sky
+    // blue" playing music) and its prompt short (some 3,600 tokens of
+    // tools: a minute on a slow phone before the first word).
+    function mayAct(thread) {
+        var s = lang().say, asked = lastAsked(thread);
+        if (!s.context || !asked) return true;
+        var c = s.context(asked);
+        return !c.question && !c.smallTalk;
+    }
     function askLocal(thread, model, cat) {
         return deps.llm.ensure(model).then(function (srv) {
             var p = { type: "local", baseUrl: srv.baseUrl, model: model.id };
-            return callModel(p, "", thread, toolsFor(cat.all));
+            return callModel(p, "", thread, mayAct(thread) ? toolsFor(cat.all, lastAsked(thread)) : []);
         }).then(function (r) { return answer(thread, r, cat, "on-device", model.name, false, lastAsked(thread)); });
     }
     function askCloud(thread, p, cat) {
         var source = providers.displayName(p);
-        var tools = settings().allowCloudControl ? toolsFor(cat.all) : [];
+        var tools = settings().allowCloudControl && mayAct(thread) ? toolsFor(cat.all, lastAsked(thread)) : [];
         return keyOf(p).then(function (key) { return callModel(p, key, thread, tools); })
             .then(function (r) { return answer(thread, r, cat, "cloud", source, true, lastAsked(thread)); },
                   function (e) { return [say(thread, lang().say.cloudFailed(source, e.message), { via: "cloud", source: source, status: "failed" })]; });
     }
-    // Layer 4: nothing here could answer; the user chooses.
-    // instead: the note replaces "I can't do that on the phone" (it says why).
-    function offer(thread, note, instead) {
-        var s = lang().say, choices = [], p = defaultProvider();
-        if (p) choices.push({ id: "cloud:" + p.id, label: s.askCloud(providers.displayName(p)) });
-        choices.push({ id: "web", label: s.searchWeb() });
-        if (!p) choices.push({ id: "settings", label: s.setUpCloud() });
-        return [say(thread, instead ? note : (note ? note + " " : "") + s.cantDo(), { via: "commands", choices: choices })];
+    // Layer 4: nothing here could answer; the user chooses. Never a dead
+    // end: the app that does it ("I can open Phone for you"), a web search
+    // for a question, a model; and the commands the words come close to.
+    // instead: the note replaces the words (it says why and what instead).
+    // asked: the words nothing understood (not after a model tried).
+    function offer(thread, note, instead, asked) {
+        var s = lang().say, p = defaultProvider(), ctx = asked && s.context ? s.context(asked) : { app: "" };
+        return apps().then(function (list) {
+            var app = appByTitle(list, ctx.app), choices = [], data = {};
+            if (app) {
+                data.actions = [{ label: s.openApp(app.title), open: { appId: app.id, params: app.params || {}, title: app.title } }];
+                choices.push({ id: "open:0", label: s.openApp(app.title) });
+            }
+            if (p) choices.push({ id: "cloud:" + p.id, label: s.askCloud(providers.displayName(p)) });
+            choices.push({ id: "web", label: s.searchWeb() });
+            if (!p) choices.push({ id: "connect", label: s.connectModel() });
+            var close = asked && !note && s.suggest ? s.suggest(asked) : [];
+            if (close.length) data.suggest = close;
+            var why = s.fallback(app ? "app" : ctx.question ? "question" : "other", app && app.title, close.length > 0);
+            var text = instead ? note : (note ? note + " " : "") + why + (close.length ? " " + s.didYouMeanAny(close) : "");
+            return [say(thread, text, { via: "commands", kind: "fallback", choices: choices,
+                                        data: Object.keys(data).length ? data : undefined })];
+        });
     }
 
-    function route(thread, text) {
+    function route(thread, text, fq) {
         return Promise.all([catalogue(), commands.contactNames(env())]).then(function (got) {
             var cat = got[0];
             var parsed = grammar.parse(text, { lang: settings().language, now: now(), apps: cat.apps, names: got[1], appCommands: cat.compiled });
+            // A question waits: the words answer it, or it waits for later.
+            if (fq) {
+                var said = lang().followUp ? lang().followUp.answer(fq.followUp.kind, text, now()) : null;
+                var command = parsed && parsed.command !== "beyond";
+                if (said && (said.skip || !command || STRICT_ANSWERS.indexOf(fq.followUp.kind) >= 0))
+                    return answerFollowUp(thread, fq, { text: text, parsed: said });
+                followUps.leaveOne(fq.followUp.id);
+            }
             if (!parsed) {
                 var filled = fillAwaiting(thread, text, cat);
                 if (filled) return filled;
@@ -396,13 +652,20 @@ function createAssistantService(deps) {
             var cloud = thread.provider ? getProvider(thread.provider) : null;
             if (cloud) return askCloud(thread, cloud, cat);
             return localReady().then(function (m) {
-                if (!m) return offer(thread, note, !!note);
+                if (!m) return offer(thread, note, !!note, text);
                 return askLocal(thread, m, cat).catch(function (e) {
                     log("on-device model failed: " + (e && e.message));
-                    return offer(thread, lang().say.localFailed(e && e.message || "no answer"));
+                    return offer(thread, lang().say.localFailed(e && e.message || "no answer"), false, text);
                 });
             });
         });
+    }
+
+    // The user's words before a message (what it answers).
+    function askedBefore(thread, messageId) {
+        var msgs = messagesOf(thread.id), asked = "";
+        for (var i = 0; i < msgs.length && msgs[i].id !== messageId; ++i) if (msgs[i].role === "user") asked = msgs[i].text;
+        return asked;
     }
 
     function speakLast(list, p) {
@@ -410,7 +673,10 @@ function createAssistantService(deps) {
         if (p.speak === false || !(p.voice ? settings().voiceReplies : settings().speak) || !deps.tts) return;
         var last = list[list.length - 1];
         if (last && last.role === "assistant" && last.text) {
-            try { Promise.resolve(deps.tts.speak(last.text, settings().language)).catch(function () {}); } catch (e) { /* no speech */ }
+            // A follow-up question is said after what was done.
+            var before = list[list.length - 2], words = last.text;
+            if (last.followUp && before && before.role === "assistant" && before.text) words = before.text + " " + last.text;
+            try { Promise.resolve(deps.tts.speak(words, settings().language, settings().speechVoice)).catch(function () {}); } catch (e) { /* no speech */ }
         }
     }
     function privileged() {
@@ -454,16 +720,25 @@ function createAssistantService(deps) {
             }
             if (p.locked) lockedAsk[thread.id] = true;
             var unlocked = function () { delete lockedAsk[thread.id]; };
-            return route(thread, text).then(function (out) { unlocked(); return done(thread, [user].concat(out), p); },
+            return route(thread, text, p.locked ? null : openFollowUp(thread)).then(function (out) { unlocked(); return done(thread, [user].concat(out), p); },
                                             function (e) { unlocked(); throw e; });
         },
         choose: function (p) {
             if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
             var thread = getThread(p.threadId), m = thread && getMessage(thread.id, p.messageId);
-            if (!m || !m.choices) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to choose there"));
-            if (!m.choices.some(function (c) { return c.id === p.choice; })) return Promise.resolve(fail(ERRORS.BAD_PARAMS, "No such choice"));
-            var msgs = messagesOf(thread.id), asked = "";
-            for (var i = 0; i < msgs.length && msgs[i].id !== m.id; ++i) if (msgs[i].role === "user") asked = msgs[i].text;
+            var shows = /^show:\d+$/.test(String(p.choice));
+            if (!m || (!m.choices && !shows)) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to choose there"));
+            if (!shows && !m.choices.some(function (c) { return c.id === p.choice; })) return Promise.resolve(fail(ERRORS.BAD_PARAMS, "No such choice"));
+            if (shows) {
+                // An item shown in the conversation, tapped: its app on it
+                // (the buttons stay: nothing was chosen).
+                var item = [].concat.apply([], ((m.data && m.data.attachments) || []).map(function (x) { return x.items || []; }))[Number(p.choice.slice(5))];
+                if (!item || !item.open) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to show there"));
+                return deps.luna.call("luna://com.palm.applicationManager/launch", { id: item.open.appId, params: item.open.params || {} })
+                    .then(function () { return ok({ thread: summary(thread), messages: [] }); });
+            }
+            if (p.choice === "connect") return methods.connect({ threadId: thread.id, messageId: m.id });
+            var asked = askedBefore(thread, m.id);
             m.chosen = p.choice;
             putMessage(m);
             var c = String(p.choice);
@@ -479,13 +754,80 @@ function createAssistantService(deps) {
                 if (!o || !o.appId) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to open there"));
                 work = deps.luna.call("luna://com.palm.applicationManager/launch", { id: o.appId, params: o.params || {} })
                     .then(function () { return []; });
+            } else if (/^(?:open|do):\d+$/.test(c)) {
+                // One of the things to do next (outcome, offer, withNext).
+                var a = ((m.data && m.data.actions) || [])[Number(c.split(":")[1])];
+                if (!a) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to do there"));
+                if (a.open) {
+                    work = deps.luna.call("luna://com.palm.applicationManager/launch", { id: a.open.appId, params: a.open.params || {} })
+                        .then(function () { return []; });
+                } else {
+                    work = catalogue().then(function (cat) { return runAction(thread, cat, a.run); });
+                }
+            } else if (c.indexOf("fu:") === 0 && m.followUp) {
+                work = answerFollowUp(thread, m, { choice: c });
             } else if (c === "web") {
-                work = catalogue().then(function (cat) { return act(thread, commands.find(cat.all, "search"), { query: asked }, "commands", ""); });
+                var query = (m.data && m.data.webQuery) || asked;
+                work = catalogue().then(function (cat) { return act(thread, commands.find(cat.all, "search"), { query: query }, "commands", ""); });
             } else {
                 work = deps.luna.call("luna://com.palm.applicationManager/launch", { id: SETTINGS_APP, params: { page: "assistant" } })
                     .then(function () { return []; });
             }
             return work.then(function (out) { return done(thread, out, p); });
+        },
+        // "Connect model": Settings > Assistant, to set up an on-device model,
+        // a cloud one or both; the question waits on the thread (retry).
+        connect: function (p) {
+            if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
+            var mode = ["local", "cloud", "both"].indexOf(p.mode) >= 0 ? p.mode : "";
+            var thread = p.threadId ? getThread(p.threadId) : null;
+            if (p.threadId && !thread) return Promise.resolve(fail(ERRORS.NOT_FOUND, "No such conversation: " + p.threadId));
+            var m = thread && p.messageId ? getMessage(thread.id, p.messageId) : null;
+            if (m) {
+                var asked = askedBefore(thread, m.id);
+                if (asked) {
+                    thread.retry = { messageId: m.id, text: asked, mode: mode, time: now() };
+                    putThread(thread);
+                }
+            }
+            return deps.luna.call("luna://com.palm.applicationManager/launch",
+                                  { id: SETTINGS_APP, params: { page: "assistant", connect: mode || "choose", threadId: thread ? thread.id : "" } })
+                .then(function () { return ok({ mode: mode, waiting: !!(thread && thread.retry) }); },
+                      function (e) { return fail(ERRORS.FAILED, e && e.message || String(e)); });
+        },
+        // The question that waited for a model (connect), asked again now
+        // that one is there: the on-device model first (as the router
+        // does), the cloud one when it is all there is or was asked for.
+        retry: function (p) {
+            if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
+            var thread = getThread(p.threadId);
+            if (!thread) return Promise.resolve(fail(ERRORS.NOT_FOUND, "No such conversation: " + p.threadId));
+            var r = thread.retry;
+            if (!r) return Promise.resolve(ok({ thread: summary(thread), messages: [] }));
+            if (!settings().enabled) return Promise.resolve(fail(ERRORS.OFF, lang().say.off()));
+            return Promise.all([localReady(), catalogue()]).then(function (got) {
+                var local = got[0], cat = got[1], cloud = defaultProvider();
+                if (!local && !cloud) return [say(thread, lang().say.noModelYet(), { via: "commands" })];
+                delete thread.retry;
+                var m = getMessage(thread.id, r.messageId);
+                if (m && m.choices && !m.chosen) { m.chosen = "connect"; putMessage(m); }
+                // Something else was asked since: the question again, last.
+                var out = [];
+                if (lastAsked(thread) !== r.text) out.push(say(thread, r.text, { role: "user" }));
+                else putThread(thread);
+                var answering;
+                if (local && (r.mode !== "cloud" || !cloud)) {
+                    answering = askLocal(thread, local, cat).catch(function (e) {
+                        log("on-device model failed: " + (e && e.message));
+                        return offer(thread, lang().say.localFailed(e && e.message || "no answer"));
+                    });
+                } else {
+                    thread.provider = cloud.id;
+                    putThread(thread);
+                    answering = askCloud(thread, cloud, cat);
+                }
+                return answering.then(function (list) { return out.concat(list); });
+            }).then(function (out) { return done(thread, out, p); });
         },
         confirm: function (p) {
             if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
@@ -510,7 +852,7 @@ function createAssistantService(deps) {
                         var target = getMessage(thread.id, m.confirm.args.messageId);
                         if (target && target.data) { target.data.undone = true; putMessage(target); }
                     }
-                    return [say(thread, r.text, outcome(r, m.via, m.source, cmd))];
+                    return withFollowUp(thread, cmd, m.confirm.args, r, [say(thread, r.text, outcome(r, m.via, m.source, cmd))]);
                 }, function (e) {
                     m.status = "failed";
                     putMessage(m);
@@ -557,9 +899,14 @@ function createAssistantService(deps) {
             Object.keys(p).forEach(function (k) {
                 if (!(k in DEFAULTS)) return;
                 var v = p[k];
-                if (/^(enabled|speak|allowCloudControl|voiceReplies|wakeWord|wakeWhenLocked)$/.test(k) && typeof v !== "boolean") bad = k + ": true or false";
+                if (/^(enabled|speak|allowCloudControl|voiceReplies|wakeWord|wakeWhenLocked|followUps)$/.test(k) && typeof v !== "boolean") bad = k + ": true or false";
+                else if ((k === "quietStart" || k === "quietEnd") && !HHMM.test(String(v))) bad = k + ": a time, \"22:00\"";
+                else if (k === "followUpFirst" && FIRST_CHOICES.indexOf(v) < 0) bad = "followUpFirst: minutes, one of " + FIRST_CHOICES.join(", ");
+                else if (k === "followUpAgain" && AGAIN_CHOICES.indexOf(v) < 0) bad = "followUpAgain: minutes, one of " + AGAIN_CHOICES.join(", ");
+                else if (k === "followUpTopicsOff" && !(Array.isArray(v) && v.every(function (x) { return TOPICS.indexOf(x) >= 0; }))) bad = "followUpTopicsOff: a list of " + TOPICS.join(", ");
                 else if (k === "disabledCommands" && !Array.isArray(v)) bad = "disabledCommands: a list of command ids";
-                else if (k === "localModel" && v !== "" && !models.find(v)) bad = "localModel: unknown model";
+                else if (k === "localModel" && v !== "" && v !== "off" && !models.find(v)) bad = "localModel: unknown model";
+                else if (k === "speechVoice" && !/^[A-Za-z0-9._-]{0,40}$/.test(String(v))) bad = "speechVoice: a voice name";
                 else if (k === "defaultProvider" && v !== "" && !getProvider(v)) bad = "defaultProvider: unknown provider";
                 else if (k === "units" && ["metric", "imperial", "auto"].indexOf(v) < 0) bad = "units: metric, imperial or auto";
                 else if (k === "language" && grammar.LANGUAGES.indexOf(String(v)) < 0) bad = "language: one of " + grammar.LANGUAGES.join(", ");
@@ -570,6 +917,8 @@ function createAssistantService(deps) {
             if (p.allowCloudControl === true && caller() !== SETTINGS_APP && !(deps.trusted && deps.trusted(caller())))
                 return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Only Settings can allow cloud models to control the device"));
             storage.set("assistant:settings", cur);
+            // Follow-up questions turned off: none waits any more.
+            if (p.followUps === false) followUps.clear();
             changed("settings");
             return Promise.resolve(ok({ settings: settings() }));
         },
@@ -592,7 +941,8 @@ function createAssistantService(deps) {
         },
         commands: function () {
             return catalogue().then(function (cat) {
-                return ok({ commands: cat.all.map(function (c) {
+                // Not locationAccess: Settings > Assistant > Permissions' Location row is it.
+                return ok({ commands: cat.all.filter(function (c) { return c.id !== "locationAccess"; }).map(function (c) {
                     return { id: c.id, title: c.title, risk: c.risk, builtIn: !!c.builtIn, appId: c.appId || "",
                              enabled: allowed(c), confirms: commands.needsConfirm(c) };
                 }) });
@@ -682,10 +1032,10 @@ function createAssistantService(deps) {
                 var list = models.forDevice(st.ramBytes || 0).map(function (m) {
                     var d = st.downloading && st.downloading.id === m.id ? st.downloading : null;
                     return { id: m.id, name: m.name, params: m.params, licence: m.licence, source: m.source, size: m.size, ram: m.ram,
-                             note: m.note, fits: m.fits, recommended: m.recommended, installed: !!installed[m.id],
+                             note: m.note, fits: m.fits, recommended: m.recommended, installed: !!installed[m.id], builtIn: !!m.builtIn,
                              downloading: d ? { received: d.received || 0, total: d.total || m.size } : null };
                 });
-                return ok({ models: list, selected: settings().localModel,
+                return ok({ models: list, selected: localChoice(),
                             status: { available: !!st.available, running: !!st.running, server: st.server || "", error: st.error || "",
                                       ramBytes: st.ramBytes || 0, howToInstall: st.howToInstall || "" } });
             });
@@ -693,6 +1043,7 @@ function createAssistantService(deps) {
         downloadModel: function (p) {
             var m = models.find(p.id);
             if (!m) return Promise.resolve(fail(ERRORS.NOT_FOUND, "No such model: " + p.id));
+            if (m.builtIn) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, m.name + " comes with the system"));
             if (!deps.llm) return Promise.resolve(fail(ERRORS.FAILED, "On-device models are not available here"));
             return Promise.resolve(deps.llm.download(m)).then(function () { changed("models"); return ok({}); },
                 function (e) { return fail(ERRORS.FAILED, e.message); });
@@ -704,6 +1055,7 @@ function createAssistantService(deps) {
         removeModel: function (p) {
             var m = models.find(p.id);
             if (!m) return Promise.resolve(fail(ERRORS.NOT_FOUND, "No such model: " + p.id));
+            if (m.builtIn) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, m.name + " is built in and cannot be removed"));
             return Promise.resolve(deps.llm && deps.llm.remove(m)).then(function () {
                 if (settings().localModel === m.id) {
                     var s = storage.get("assistant:settings") || {};
@@ -715,14 +1067,86 @@ function createAssistantService(deps) {
             });
         },
         selectModel: function (p) { return methods.setSettings({ localModel: String(p.id || "") }); },
+        // ---- Follow-up questions ----
+        followUps: function () { return Promise.resolve(ok(followUps.list())); },
+        // A notification's button: answered there, and said in its conversation too.
+        answerFollowUp: function (p) {
+            if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
+            var choice = String(p.action || p.choice || "");
+            if (!/^fu:(?:skip|\d+)$/.test(choice)) return Promise.resolve(fail(ERRORS.BAD_PARAMS, "action: fu:<n> or fu:skip"));
+            var q = followUps.get(String(p.id || ""));
+            if (!q) return Promise.resolve(fail(ERRORS.NOT_FOUND, "No such question: " + p.id));
+            return followUps.answer(q.id, { choice: choice }, false).then(function (out) {
+                var thread = getThread(q.threadId), m = thread && q.messageId ? getMessage(thread.id, q.messageId) : null;
+                if (m && !m.chosen) {
+                    m.chosen = choice;
+                    putMessage(m);
+                    say(thread, out.text, { via: "commands", command: m.command, status: out.skipped || out.dropped ? "cancelled" : "done" });
+                    changed("threads");
+                }
+                return ok({ text: out.text, answered: !out.dropped && !out.skipped });
+            });
+        },
+        followUpOpen: function (p) {
+            if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
+            var q0 = followUps.get(String(p.id || ""));
+            if (!q0) return Promise.resolve(fail(ERRORS.NOT_FOUND, "No such question: " + p.id));
+            return followUps.reopen(q0.id).then(function (q) {
+                var thread = getThread(q0.threadId) || createThread();
+                if (!thread.title) { thread.title = q.text || ""; putThread(thread); }
+                storage.set("assistant:current", thread.id);
+                var command = { event: "event", reminder: "reminder", task: "task", alarm: "alarm", contact: "contactAdd" }[q0.item.type];
+                // Already waiting there (sent later): opened on it, not asked twice.
+                var waiting = !q.why && q.messageId && getThread(q0.threadId) ? getMessage(thread.id, q.messageId) : null;
+                var list = q.why ? [say(thread, q.why === "gone" ? lang().followUp.gone() : lang().followUp.alreadySet(), { via: "commands", command: command, status: "cancelled" })]
+                         : waiting && !waiting.chosen ? [] : [askFollowUp(thread, q, command)];
+                thread = getThread(thread.id);
+                if (thread.unread) { thread.unread = 0; putThread(thread); }
+                changed("threads");
+                return ok({ thread: summary(thread), messages: list });
+            });
+        },
+        // The conversation was read: nothing unread in it.
+        markRead: function (p) {
+            var t = getThread(String(p.id || ""));
+            if (!t) return Promise.resolve(fail(ERRORS.NOT_FOUND, "No such conversation: " + p.id));
+            if (t.unread) { t.unread = 0; putThread(t); changed("threads"); }
+            return Promise.resolve(ok({}));
+        },
+        followUpLeave: function (p) {
+            if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
+            return Promise.resolve(ok({ queued: followUps.leave(p.threadId ? String(p.threadId) : "") }));
+        },
+        // The activity manager's wake-up. "at" moves the clock on (the
+        // simulator's and the tests' fast-forward): the system UI only.
+        followUpWake: function (p) {
+            var at = typeof p.at === "number" && privileged() ? p.at : undefined;
+            return followUps.wake(at).then(function (r) { return ok(r); });
+        },
+        resetFollowUps: function () {
+            if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
+            followUps.reset();
+            return Promise.resolve(ok({}));
+        },
         speak: function (p) {
             if (!deps.tts) return Promise.resolve(fail(ERRORS.FAILED, "No speech here"));
-            return Promise.resolve(deps.tts.speak(String(p.text || ""), settings().language)).then(function () { return ok({}); },
+            // voice: this one (Settings' Play Sample), else the chosen one.
+            var voice = typeof p.voice === "string" && /^[A-Za-z0-9._-]{1,40}$/.test(p.voice) ? p.voice : settings().speechVoice;
+            return Promise.resolve(deps.tts.speak(String(p.text || ""), settings().language, voice)).then(function () { return ok({}); },
                 function (e) { return fail(ERRORS.FAILED, e.message); });
         },
         stopSpeaking: function () {
             if (deps.tts) try { deps.tts.stop(); } catch (e) { /* nothing speaking */ }
             return Promise.resolve(ok({}));
+        },
+        voice: function () {
+            return Promise.resolve(deps.voice ? deps.voice() : []).then(function (parts) {
+                return ok({ parts: VOICE_PARTS.map(function (v) {
+                    var p = (parts || []).filter(function (x) { return x && x.id === v.id; })[0];
+                    return p ? { id: v.id, name: v.name, available: !!p.available, engine: String(p.engine || ""),
+                                 howToInstall: p.available ? "" : String(p.howToInstall || "") } : null;
+                }).filter(Boolean) });
+            }, function () { return ok({ parts: [] }); });
         }
     };
 
@@ -756,8 +1180,17 @@ function createAssistantService(deps) {
     return safe;
 }
 
+// What the voice needs (voice), in the order Settings lists them.
+var VOICE_PARTS = [
+    { id: "recognition", name: "Speech recognition (whisper.cpp)" },
+    { id: "wakeWord", name: "\u201cHey Phoenix\u201d (Vosk)" },
+    { id: "speech", name: "Spoken answers" }
+];
+
 var METHODS = ["ask", "choose", "confirm", "threads", "thread", "newThread", "setCurrent", "deleteThread", "clearHistory",
                "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
-               "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary"];
+               "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary", "voice",
+               "connect", "retry",
+               "followUps", "answerFollowUp", "followUpOpen", "followUpLeave", "followUpWake", "resetFollowUps", "markRead"];
 
 module.exports = { createAssistantService: createAssistantService, METHODS: METHODS, ERRORS: ERRORS, SERVICE: SERVICE, DEFAULTS: DEFAULTS };

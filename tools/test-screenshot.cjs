@@ -137,6 +137,7 @@ async function main() {
         const note = host.find((m) => m.type === "notification" && m.payload.appId === APP);
         check(note && note.payload.title === "Screen captured" && note.payload.params.path === want,
               "the \"Screen captured\" notification opens it in the preview");
+        check(note && note.payload.tag === "capture:" + want, "the notification is tagged with its file");
         const list = await luna("luna://com.webos.service.mediaindexer/getImageList", { uri: "storage:///media/internal" });
         check(list.imageList.results.some((i) => i.file_path === want), "indexed: Photos shows it");
 
@@ -340,6 +341,15 @@ async function main() {
         check(await picture(want, 0, 0) === null, "Delete removes the file");
         const list2 = await luna("luna://com.webos.service.mediaindexer/getImageList", { uri: "storage:///media/internal" });
         check(!list2.imageList.results.some((i) => i.file_path === want), "... and its index entry");
+        const gone = (tag) => host.some((m) => m.type === "notification" && m.payload.remove && m.payload.tag === tag);
+        check(gone("capture:" + want), "... and its \"Screen captured\" notification");
+        // Deleted in Files (filemanager/remove): a capture, or the folder.
+        const other = "/media/internal/screencaptures/Email 2026-10-01 at 21.06.00.png";
+        await luna("luna://org.webosphoenix.filemanager/remove", { path: other });
+        check(gone("capture:" + other), "deleted in Files: its notification goes too");
+        await luna("luna://org.webosphoenix.filemanager/remove", { path: "/media/internal/screencaptures", recursive: true });
+        check(host.some((m) => m.type === "notification" && m.payload.remove && m.payload.tagPrefix === "capture:/media/internal/screencaptures/"),
+              "the folder deleted: all the captures' notifications");
 
         check(errors.length === 0, "no page errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
     } finally {

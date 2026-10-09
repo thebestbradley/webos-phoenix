@@ -653,8 +653,8 @@ New Phoenix apps live in `apps/`, an npm workspace:
 | --- | --- |
 | `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers), `tasks.ts` Tasks (`com.palm.task:1`, `com.palm.tasklist:1`, reminder activities, `postNotification`); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
 
-| `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers), `transcriber.ts` Voice Memos (`transcriber.transcribe()` with progress, `TRANSCRIBE_ERRORS`), `location.ts` the location service and per-app permissions (`location`, `locationPermissions`, `LOCATION_ERRORS`), `setup.ts` First Use, the medical ID, accessibility and the emergency numbers (`firstUse`, `emergencyInfo`, `accessibility`, `isEmergencyNumber`); `vpn.ts` the VPN service (`vpn`, file import helpers), `backup.ts` the backup service (`backup`, `BACKUP_PARTS`), `search.ts` Just Type's preferences (`universalSearch`), `certificates.ts` the certificate store (`certificates`, `CERTIFICATE_ERRORS`), and in `telephony.ts` the phone preferences (`phonePrefs`, `mobileData`); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
-| `apps/shared/phoenix-ui` (`@phoenix/ui`) | React components with the webOS 1.x/2.x look, drawn with the Enyo 1.0 "Heritage" artwork (copied into `assets/enyo`, see its `PROVENANCE.md`): `PageHeader`, `Group`, `Row`, `Divider`, `ToggleButton`, `Slider` (also as a progress/seek bar), `ListSelector`, `Picker`, `PopupMenu`, `Button`, `Drawer`, `DividerDrawer`, `Dialog`, `Spinner`, `TextField`; for Phone and Messaging the webOS dial pad (`Dialpad`, `DialButton`, `BackspaceButton`, from Enyo's `lib/telephony` art), the command menu (`ToolBar`, `RadioToolGroup`, `ToolButton`), `Avatar` and number / time formatting (`formatDuration` takes milliseconds); for the media apps `Toolbar`, `IconToolButton`, `GroupedToolButtons`, `Glyph` and `formatSeconds`; for Files `CheckBox` (Heritage `checkbox.png`) and file glyphs (copy, cut, paste, new folder, ...); `BackProvider`/`useBack` for the back gesture |
+| `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers), `transcriber.ts` Voice Memos (`transcriber.transcribe()` with progress, `TRANSCRIBE_ERRORS`), `location.ts` the location service and per-app permissions (`location`, `locationPermissions`, `LOCATION_ERRORS`), `setup.ts` First Use, the medical ID, accessibility and the emergency numbers (`firstUse`, `emergencyInfo`, `accessibility`, `isEmergencyNumber`); `vpn.ts` the VPN service (`vpn`, file import helpers), `backup.ts` the backup service (`backup`, `BACKUP_PARTS`), `hardware.ts` the hardware and its drivers (`hardware`, `needsAttention`, `installable`), `search.ts` Just Type's preferences (`universalSearch`), `certificates.ts` the certificate store (`certificates`, `CERTIFICATE_ERRORS`), and in `telephony.ts` the phone preferences (`phonePrefs`, `mobileData`); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
+| `apps/shared/phoenix-ui` (`@phoenix/ui`) | React components with the webOS 1.x/2.x look, drawn with the Enyo 1.0 "Heritage" artwork (copied into `assets/enyo`, see its `PROVENANCE.md`): `PageHeader`, `Group`, `Row`, `Divider`, `ToggleButton`, `Slider` (also as a progress/seek bar), `ListSelector`, `Picker`, `PopupMenu`, `Button`, `Drawer`, `DividerDrawer`, `Dialog`, `Spinner`, `TextField`; for Phone and Messaging the webOS dial pad (`Dialpad`, `DialButton`, `BackspaceButton`, from Enyo's `lib/telephony` art), the command menu (`ToolBar`, `RadioToolGroup`, `ToolButton`), `Avatar` and number / time formatting (`formatDuration` takes milliseconds); for the media apps `Toolbar`, `IconToolButton`, `GroupedToolButtons`, `Glyph` and `formatSeconds`; for Files `CheckBox` (Heritage `checkbox.png`) and file glyphs (copy, cut, paste, new folder, ...); `BackProvider`/`useBack` for the back gesture; TouchPad-style panes after Enyo 1.0's Onyx theme (`SlidingPanes`, `useMultiView`, `GrabButton`, `PaneHeader`, `PaneToolbar`, `Swipeable` swipe to delete) and a long press or right-click menu (`useLongPress`, `ContextMenu`) |
 | `apps/settings` | Settings (see below) |
 | `apps/phone`, `apps/messaging` | Phone and Messaging (see below) |
 | `apps/camera`, `apps/photos`, `apps/music` | Camera, Photos, Music (see [below](#camera-photos-and-music)); `@phoenix/luna`'s `media.ts` wraps their services |
@@ -767,6 +767,52 @@ params, the page gets OSE's `webOSRelaunch` document event
 (`__phoenixRuntime.relaunch()` in the simulator); `useLaunchParams()` handles
 both. A `launch` host message (`applicationManager/launch {id, params}`) whose
 params match a launch point opens that launch point's card.
+
+### Opening an app that is already running
+
+Settings > Advanced > Apps > "Opening a running app" (system preference
+`appRelaunch`, Phoenix; the runtime's systemStatus `appRelaunch`,
+`SimSystemStatus.appRelaunch`, `Shell.appRelaunch`) decides what opening an
+app that already has a card does:
+
+- **Bring to front** (`"front"`, the default): its card comes to the front as
+  it was left (CardWindowManager's focusWindow); new launch params still go to
+  the page as a relaunch.
+- **Refresh** (`"refresh"`): its card comes to the front and the app is
+  relaunched even without params, as LunaSysMgr relaunched a running app on
+  every launch (Mojo's `AppAssistant.handleLaunch`, Enyo 1's
+  `windowParamsChange` / `applicationRelaunch`; OSE's `webOSRelaunch`). The
+  runtime also fires `phoenixRefresh` in the page (`__phoenixRuntime.relaunch(params, true)`):
+  every Phoenix app's root is wrapped in `Refreshed` (`@phoenix/luna/react`),
+  which starts the app again on it, so it loads everything anew for the
+  params; `useRefresh()` gives the count for an effect's deps. An installed
+  site (a PWA) reloads.
+- **New card** (`"new"`): another card of the app, in a stack of its own,
+  with the launch params as its own; each card is its own page and closes on
+  its own, and windows a card's page opens join that card's stack. Apps
+  without a card of their own (`noWindow`: the original Email, Calendar,
+  Contacts open their cards from a hidden page) and the Phone (its card is
+  the call) keep one card.
+
+The setting applies where the user opens an app: the launcher, the dock, the
+wave launcher and Just Type's results (`Shell.openApp`), and an app opening
+another (a link, the assistant's "Open Memos", `applicationManager/launch`
+or `open`; `SimWindowSource._hostMessage`). A tapped notification, the
+system menu and the like go to the card there is; so do an app launching
+itself (its dashboard or banner) and background launches (`$activity`).
+Tests: `shell/tests/tst_apprelaunch.qml`, `apps/shared/luna/src/relaunch.test.tsx`.
+On a device, `LsmWindowSource.launch` still leaves it to SAM (front).
+
+An app can ask for another card itself, whatever the setting:
+`applicationManager/launch {id, params, newCard: true}` (Phoenix;
+`apps.launch(id, params, {newCard: true})` in `@phoenix/luna`) opens a new
+card of the app in a stack of its own, right of the asking card's, with the
+params as its launch params (`SimWindowSource._hostMessage`). Background
+launches and one-card apps (the Phone) do not. The Assistant's Open in New
+Card uses it (`{conversationId}`). Tests: `tst_apprelaunch.qml`
+`test_newCardAsked`, `apps/shared/luna/src/mediaapps.test.ts`. Not on a
+device yet (`LsmWindowSource` leaves launches to SAM, which brings the
+running card to the front).
 
 ## Settings
 
@@ -1838,25 +1884,27 @@ On a device the service must run on the bus (a small Node.js or C++
 service with the same API; today it exists only in the web runtime), and
 the keyboard must be the device's input method (GAPS V5).
 
-## Phoenix Assistant
+## Assistant
 
 Phoenix's own (webOS had none; [M6-PLAN.md](M6-PLAN.md) F3,
 [AI-AND-MCP.md](AI-AND-MCP.md#10-as-built-7-october-2026-in-the-simulator)).
 The service is the device's own code, `apps/assistant/service` (a Node.js
 Luna service: `service.js`, `assistant.js`, `lib/`); the runtime runs it in
-the page (block "The Phoenix Assistant", loaded from
+the page (block "The Assistant", loaded from
 `/usr/palm/services/org.webosphoenix.assistant/` with `nodeServiceLoader`)
 and gives it Luna calls on the simulated bus, HTTP through the host's proxy,
 the shared store and the sealing key. `@phoenix/luna` `assistant` and `tts`
 are the clients.
 
 **The service**, `luna://org.webosphoenix.assistant/` (`threads`, `thread`,
-`getSettings`, `providers`, `models` and `commands` take `subscribe`):
+`getSettings`, `providers`, `models`, `commands` and `followUps` take `subscribe`):
 
 | Method | Does |
 | --- | --- |
 | `ask {text, threadId?, newThread?, speak?}` | `{thread, messages}`: the user's words and the answers. In the thread in use unless told otherwise. System UI, Assistant and Settings only (error -3); error -4 while the assistant is off |
-| `choose {threadId, messageId, choice}` | a message's choice: `cloud:<provider id>` (the thread goes on with that provider), `web`, `settings`, `open` (the app a command's answer offers: "Open Calendar" launches `data.open {appId, params}`) |
+| `choose {threadId, messageId, choice}` | a message's choice: `cloud:<provider id>` (the thread goes on with that provider), `web`, `open` (the app a command's answer offers: "Open Calendar" launches `data.open {appId, params}`), `open:<n>` / `do:<n>` (the things to do next in `data.actions[n]`: `{label, open: {appId, params}}` launched, or `{label, run: {command, args, then?}}` run as if asked, then `then` when it went through: "Turn On Location Services", then the weather), `show:<n>` (an item of `data.attachments`, counted across them, opened in its app; nothing is chosen), `connect` (as `connect` without a mode), `settings` (older messages: Settings > Assistant) |
+| `connect {threadId?, messageId?, mode?}` | "Connect model": launches Settings `{page: "assistant", connect: "local" \| "cloud" \| "both" \| "choose", threadId}` and keeps the question before `messageId` on the thread (`thread.retry`); the choice stays until a model answers. System UI, Assistant and Settings only |
+| `retry {threadId}` | `{thread, messages}`: that question asked again, of the on-device model (unless `mode` was `cloud`) or the default cloud provider (the thread goes on with it); "No model is connected yet" while there is none; no messages when nothing waits |
 | `confirm {threadId, messageId, accept}` | a read-back (`status: "pending"`): run it, or not |
 | `threads` / `thread {id?}` | `{threads, current}` / `{thread, messages}` (the one in use without an id) |
 | `newThread`, `setCurrent {id}`, `deleteThread {id}`, `clearHistory` | conversations |
@@ -1867,14 +1915,40 @@ are the clients.
 | `models` | the on-device catalogue with `fits`, `recommended`, `installed`, `downloading`, and `status: {available, running, ramBytes, error, howToInstall}` |
 | `downloadModel {id}`, `cancelDownload {id}`, `removeModel {id}`, `selectModel {id}` | on-device models |
 | `speak {text}`, `stopSpeaking` | the device's voice |
+| `followUps` | follow-up questions waiting (`lib/followups.js`): `{followUps: [{id, kind, meta, question, item: {type, id, title, at}, state: "open" \| "queued" \| "delivered", attempts, nextAt, threadId, choices}], topicsOff}` |
+| `answerFollowUp {id, action: "fu:<n>" \| "fu:skip"}` | a follow-up's notification button: the answer applied, said in its conversation, `{text, answered}` (the banner's words). System UI, Assistant and Settings only |
+| `followUpOpen {id}` | a follow-up's notification tapped: `{thread, messages}`, the question in its conversation (not again if it is waiting there), unread cleared |
+| `followUpLeave {threadId?}` | the assistant closed: its open questions wait for later |
+| `followUpWake {at?}` | the activity manager's call (activity `org.webosphoenix.assistant.followups`, at the next time one is due): queues, sends, postpones and drops; `at` (system UI, the simulator's and tests' fast-forward) is the time to act as. `{queued, delivered, dropped, postponed}` |
+| `markRead {id}` | a conversation read: `thread.unread` to 0 |
+| `resetFollowUps` | forget the Skips counted |
 
 A message is `{id, threadId, role, text, time, via: "commands" | "on-device"
 | "cloud", source (who answered), command, status: "pending" | "done" |
 "cancelled" | "failed", confirm: {command, args}, choices: [{id, label}],
-chosen, data}`. A command done may carry choices too (`open`: its app);
-its `data` holds `open {appId, params, title}`, `undo` (what takes it back)
-and, for a question the assistant asked ("When is it?"), `awaiting
-{command, args}`: the next words fill it. Each thread (`assistant:thread:<id>`), message
+chosen, data, kind}` (`kind` `"fallback"`: "nothing here can", never sent
+to a model). A command done may carry choices too (`open`: its app);
+its `data` holds `open {appId, params, title}`, `undo` (what takes it back),
+`actions` (the choices `open:<n>`, `do:<n>`), `attachments` (what it found,
+shown under the words: `{type: "images", total, items: [{path, open}]}`,
+`{type: "cards", items: [{title, subtitle, detail, open}]}`, `{type:
+"examples", title, items: [{text}]}`), `webQuery` (what "Search the web"
+searches) and, for a question the assistant asked ("When is it?"), `awaiting
+{command, args}`: the next words fill it; for words nothing understood,
+`suggest`: up to two requests close to them ("Did you mean ...?"). A
+follow-up question is a message with `followUp {id, kind}` (`kind`
+`"doubt"`: whether that kind of question helps) and its answers as
+`choices` (`fu:<n>`, `fu:skip`), answered by `choose` or by the next words;
+a thread counts the ones sent to it later in `unread`. Settings add
+`followUps` (on), `quietStart` / `quietEnd` ("22:00" / "08:00"),
+`followUpFirst` (minutes: 15, 60 or 180; 60), `followUpAgain` (0, 60, 240
+or 1440; 240) and
+`followUpTopicsOff` (kinds). The runtime gives the service `notify`: the
+"notification" host message, with `tag` (replaces the app's notification
+of that tag; `remove: true` takes it back) and `actions {uri, params,
+items: [{id, label}]}`, the row's buttons (Notifications.qml `runAction`:
+the app's own service called with `{action}` as the system UI, the reply's
+`text` as its banner, without opening it). Each thread (`assistant:thread:<id>`), message
 (`assistant:msg:<thread>:<id>`) and provider (`assistant:provider:<id>`) is
 its own stored key, so the shell's view and the app never write over each
 other (PR 7).
@@ -1903,7 +1977,7 @@ show the result at once:
 | `volume`, `brightness` | `com.webos.service.audio` `master/getVolume`, `setVolume`, `muteVolume`; `com.palm.display` `control/getProperty`, `control/setProperty {maximumBrightness}` |
 | `screenshot`, `lock`, `battery`, `settings` | `com.palm.systemmanager/takeScreenShot` (phoenix-sim closes the assistant's view first); `com.palm.display/control/setState {state: "off"}`; `com.palm.power` battery and charger queries; Settings `{page}` (Settings' list without one) |
 | `open`, `navigate`, `play`, `photos`, `search` | `applicationManager/launch` (a launch point's own params: Settings' panes); Maps `{target: "mapto:<place>"}`; Music `{play}`; Photos `{imageList}` of the `com.palm.media.image.file:1` taken those days; the browser with Just Type's default engine |
-| `weather`, `distance`, `worldTime`, `convert` | Open-Meteo (forecast, geocoder with time zones) and `com.webos.service.location`; `lib/places.js` for big cities offline; `lib/units.js` offline; currencies with Frankfurter's ECB rates (online; offline it says so and offers the web) |
+| `weather`, `distance`, `worldTime`, `convert` | Open-Meteo (forecast, geocoder with time zones) and `com.webos.service.location` (`getLocationUpdates` without subscribe, after `org.webosphoenix.service.location getPermissions` for the Assistant's own grant); `lib/places.js` for big cities offline; `lib/units.js` offline; currencies with Frankfurter's ECB rates (online; offline it says so and offers the web) |
 | `undo` | takes back what the last answer made (`data.undo`): deletes the record, cancels the activity, turns an alarm back on; read back first |
 
 **Apps' commands**: `appinfo.json` `"assistant": {"commands": [{"id",
@@ -1926,7 +2000,14 @@ read-backs, a field (the keyboard comes with a tap; at once where there is
 no microphone) and the microphone (the shell's dictation with `autoStop`,
 owner `"assistant"`). The Assistant's icon at the top left closes it and
 launches the app with `{threadId}` (none before the first request), to go
-on there. Back, Escape or a tap outside closes it. It grows out of the
+on there. Back, Escape or a tap outside closes it. Empty, it shows a few
+things to ask (`examples`, two on a phone, three on a tablet, others every
+five seconds); a tap on one, or on a suggestion under an answer
+(`data.suggest`), puts the words in the field. "Connect model" opens a
+sheet over the panel (on-device, cloud or both; Back and Escape close the
+sheet first), and the kind chosen goes to `connect`, the view closing as
+Settings opens. Keys typed while the field is not in focus (voice first)
+go to the field. It grows out of the
 held button with the blur and dim fading in, and shrinks back into it
 (`Theme.launcherDuration`); messages slide in from their side
 (`cardTransitionDuration`), choices appear one after another, rings spread
@@ -1938,22 +2019,34 @@ over the screen.
 **The assistant's bird** ([ASSISTANT-CHARACTER.md](ASSISTANT-CHARACTER.md),
 `AssistantBird.qml`) sits at the top in the middle of the panel (72 to 104
 px by its height; small beside the field where the panel is short, as on a
-phone with the keyboard up), over the conversation, which scrolls on up
-behind it and fades out under the heading rather than being cut off and plays what is going on (`birdPose`):
-asleep as the panel grows, hello, then listening while the microphone is
+phone with the keyboard up), above the conversation, which fades out under
+it rather than being cut off (its words never pass behind the bird), and plays what is going on (`birdPose`):
+its entrance once the panel has grown (`bird.enter()`: born of a swirl of embers
+and a fireball, it drops in, lands with a dust cloud and bounces), hello,
+then listening while the microphone is
 on (following the dictation's `loudness`), thinking while a request or a
 transcription waits, then the reply's outcome (`outcomeOf` its new
 messages): a command that ran (`status: "done"` with a `command`) plays
 working then done, `failed` plays shy (Oops), choices play confused, each
 for a moment (`beatsFor`, at Animation speed); speaking while the shell's
 `Speech` speaks; asking while a read-back waits; idle (with a nod for an
-answer that is not spoken); asleep again as it closes. A tap on it waves.
+answer that is not spoken); as it closes it leaves (`bird.leave()`: a
+leap, and it bursts into embers), the panel staying up for that, then
+going back into the button. A tap on it waves, then giggles or spins.
+It reacts to the user (`bird.react()`, `motion.reactions`): it watches the
+words typed (`gazeX`/`gazeY` at the caret) and pecks as each comes, winces
+at a deletion, tilts its head after a pause in the typing, cheers a request
+sent, scoots when the keyboard moves it beside the field, and glances along
+a scroll of the conversation. Idle, a full-body move from `motion.idles`'
+pool comes in turn with the look around (not while the user types).
 Every pose acts, never a still: hello waves, thinking taps its chin,
 working bobs and pumps its flippers, speaking gestures with its words,
 idle shifts its weight and looks around now and then (each pose's loop in
 `bird.json`'s `motion.acting`; a pose change blends from wherever the loop
-is; Reduce motion holds it still). `phoenix-sim --scene assistantbird` cycles through its poses,
-`--scene assistantbirds` shows them all; both log the frame rate.
+is; Reduce motion holds it still, and it fades in and out instead of its
+entrance and exit). `phoenix-sim --scene assistantbird` cycles through its poses,
+`--scene assistantbirds` shows them all, `--scene assistantbirdmoves` plays
+its entrance, each idle and reaction and its exit; all log the frame rate.
 
 **The on-device model and speech in phoenix-sim**: `/usr/share/phoenix/host.json`
 has `"assistant": true`; the runtime sends `assistant` host messages (`{op:
@@ -1968,14 +2061,25 @@ work.
 choices and read-backs, the field, the microphone
 (`org.webosphoenix.dictation`), Conversations (new, open, delete), and
 Preferences. Launch params: `{text}` (Just Type's "Ask Assistant"),
-`{threadId}`, `{timerDone}`. Its CSP allows `unsafe-eval` only because the
+`{threadId}` (with `retry: true`: the question that waited for a model is
+asked again, `retry`), `{timerDone}`. An empty conversation shows things to
+ask (`src/examples.ts`, the same list as the shell's view), Connect model a
+dialog for the kind. Settings > Assistant opened with `{connect, threadId}`
+shows Connect a Model: the kinds (for `choose`), then the on-device models
+(one downloaded there is used once it is in) and/or the providers, and
+"Back to Your Question" once a model is there. Its CSP allows `unsafe-eval` only because the
 simulator runs the service in its page. The same bird (`src/bird/Bird.tsx`)
 greets on an empty conversation (thinking while it loads), and stands below
 the conversation while a request runs: thinking, then working and done, a
 shrug or Oops, as the shell's view decides (`src/bird/pose.ts`). It acts
 as the shell's does, with the generated CSS keyframes (the CSP allows no
 style made at run time); the blend between poses sets the part's drawn
-transform through the CSSOM, which the CSP allows.
+transform through the CSSOM, which the CSP allows. It enters as the
+conversation opens (`start="enter"`, its effects SVG shapes with generated
+keyframes), cheers as a request is sent, listens while the microphone does,
+and reacts as the shell's does (`src/bird/reactions.ts`): pecks at typing,
+winces at a deletion, ponders a pause, glances along a scroll, and a tap
+waves, giggles or spins.
 
 **Voice** ([AI-AND-MCP.md](AI-AND-MCP.md#voice)): `ask {voice: true}` is
 answered aloud with the setting `voiceReplies`; "yes" / "no" (send it,
@@ -2190,7 +2294,9 @@ launcher, lock screen or system menu), and `com.palm.systemmanager/getBootStatus
 answered `firstUse: true` meanwhile. Phoenix does the same:
 
 - **Steps**: Welcome (language: `com.webos.settingsservice` `localeInfo`),
-  Wi-Fi (join, with a password dialog), Restore (a backup from the USB
+  Wi-Fi (join, with a password dialog), Hardware (firmware or a driver the
+  image lacks for a device, each installed after its licence; only when a
+  device needs one, see [Hardware and drivers](#hardware-and-drivers)), Restore (a backup from the USB
   drive or a WebDAV server, see [Backup](#backup); afterwards the device
   backs up there every day with the same passphrase), Date & Time (time zone, network
   time, 24-hour clock), Accounts (Synergy explained, the accounts there are,
@@ -2238,9 +2344,17 @@ which runs unchanged in the simulator:
 
 - **Sources** (`/etc/palm/marketplace/sources.json`, then the user's):
   the Phoenix Marketplace (a signed catalog; for now at
-  `http://127.0.0.1:8088/v1/`, `server/marketplace/bin/serve.sh`, or
-  `phoenix-sim --marketplace`, which starts it with the simulator and opens
-  the Marketplace), the
+  `http://127.0.0.1:8088/v1/`, `server/marketplace/bin/serve.sh`, or the
+  simulator's Services > Marketplace Catalog or `phoenix-sim --marketplace`,
+  which start it and open the Marketplace). When it cannot be reached, the
+  Marketplace's card offers **Start Local Catalog** in the simulator only:
+  the runtime's `org.webosphoenix.simulator` (`marketplaceCatalog
+  {subscribe}` -> `{state, url, error, settingUp}`, `startMarketplaceCatalog`;
+  `NOT_AVAILABLE` unless phoenix-sim's `host.json` says
+  `"marketplaceCatalog": true`) asks phoenix-sim with a `simulator` host
+  message, and the shell passes the state to every page
+  (`applyHostStatus {marketplaceCatalog}`); the catalogs are read again
+  once it runs. Then the
   webOS Archive's App Museum II and the PreCentral homebrew feed (both off
   until switched on). Catalogs can be added by address.
 - **Signed catalogs** (`lib/catalog.js`, `lib/ed25519.js`): `index.json`,
@@ -2281,8 +2395,9 @@ app site, an App Museum stand-in and a Preware feed), `tools/test-marketplace.cj
 The catalog service is `server/marketplace` (PHP 8 + PDO; MySQL/MariaDB on a
 server, SQLite on one computer): accounts, submissions with the same
 automatic checks, a review queue (`/admin`), ratings and reviews, reports,
-opt-outs for the curated web apps (132 popular sites' PWAs, found and
-checked by `bin/probe-pwas.py`), and publishing the signed index (its
+opt-outs for the curated web apps (135 popular sites' PWAs, found and
+checked by `bin/probe-pwas.py`; a site whose icons are all broken gets one
+the catalog generates, `/v1/icons/<id>.svg`), and publishing the signed index (its
 README).
 
 ### Installing apps
@@ -2417,6 +2532,58 @@ the boot shows luna-sysmgr's "Updating the system / Do not remove battery"
 progress that page's loading. Tests:
 `services/updates/updatesservice.test.ts` (with a stand-in for RAUC's command
 line), `server/updates/tests/run.php`, `tools/test-updates.cjs`.
+
+## Hardware and drivers
+
+`org.webosphoenix.hardware` (`services/hardware`, Node.js; methods in
+`hardwareservice.js`) is what Ubuntu's "Additional Drivers" is. The image
+carries the open source drivers and the redistributable firmware; the service
+fills the gaps: it lists the device's hardware (`list`), matches it against
+the signed driver catalog (`refresh`), installs what the catalog has for it
+(firmware the image lacks, newer firmware beside the image's in
+`/lib/firmware/updates`, out-of-tree drivers, optional extras; `install`, an
+ongoing activity in the notification area while it runs), removes it
+(`remove`), manages other catalogs with Developer Mode on (`addSource`,
+`trustSource`, `removeSource`), lists the image's firmware and licences
+(`firmwareLicenses`, `firmwareLicense`) and sends the opt-in hardware report
+(`getReport`, `sendReport`, `setPreferences`). Settings > Hardware
+(`apps/settings/src/pages/Hardware.tsx`, launch params `{page: "hardware",
+driverId?}`), Settings > Device Info > Open source licenses and First Use's
+Hardware step use it through `@phoenix/luna` `hardware`. The plan, the
+catalog and the trust model (a pinned key, hand-over to a new key, other
+catalogs only with Developer Mode):
+[HARDWARE.md](HARDWARE.md#hardware-support-and-the-hardware-app); publishing a
+driver and releasing the catalog: [DRIVERS.md](DRIVERS.md).
+
+On a device (`service.js`) it reads sysfs and the kernel log (`lib/sysfs.js`),
+installs with opkg, reloads modules with modprobe or rebinds the device
+(`lib/node.js`), reads `/etc/palm/hardware/catalog.json` (the catalog's
+address, pinned key and revoked keys) and
+`/usr/share/phoenix/firmware/licences.json` (written when the image is
+built), and keeps its state in `/var/lib/phoenix/hardware`. An install that
+opkg refuses, or after which the device still does not work, is rolled back.
+
+In the simulator the service runs unchanged on a simulated device
+(`runtime/phoenix-runtime.js`, "Hardware and drivers") whose image has its
+firmware: an Atheros Wi-Fi card, a Realtek RTL8821CU dongle (the catalog has
+newer firmware for it), an NVIDIA card, a webcam, sound, an NVMe drive, a
+touchscreen, an accelerometer; and its gaps: an RTL8812AU dongle the 6.6
+kernel has no driver for, and a USB gadget nothing knows (`1209:0001`). opkg
+reads the packages with the Marketplace's `.ipk` reader and records what they
+hold in the store; the "kernel" loads the firmware and modules installed when
+a driver is reloaded, and a driver that needs a restart starts after
+`com.palm.power/shutdown/machineReboot` (a boot count in the store). The
+catalog is the signed sample in `server/drivers/sample`
+(`/usr/share/phoenix/hardware/sample/`, `file://` URLs), trusted through
+`catalog-sim.json`, which also lists the image's firmware
+(`firmware-in-image.json`, `licences/`); `"hardware:config"` in the store
+stands for an edited `/etc/palm/hardware/catalog.json`, and `"hardware:sim"`
+`{fail: {opkg: text}}` makes opkg fail. Reports go to
+`http://127.0.0.1:8090/v1/report` (`server/drivers/bin/serve.sh`). Tests:
+`services/hardware/hardwareservice.test.ts`, `services/hardware/sysfs.test.ts`
+(a made-up `/sys`, stand-ins for opkg and modprobe),
+`apps/settings/src/pages/Hardware.test.tsx`, `server/drivers/tests/run.php`,
+`tools/test-hardware.cjs`.
 
 ## Device security, erase, USB drive mode and debugging
 

@@ -21,7 +21,7 @@ const { createAssistantService } = req("./assistant.js") as { createAssistantSer
 const NOW = new Date(2026, 9, 7, 10, 0, 0).getTime();
 const at = (d: number, h: number, m = 0) => new Date(2026, 9, d, h, m, 0).getTime();
 
-function device(opts: { offline?: boolean } = {}) {
+function device(opts: { offline?: boolean; locationAllowed?: boolean | null } = {}) {
     let n = 0;
     const db = new Map<string, any>();
     const put = (o: any) => { const id = o._id || "db" + ++n; db.set(id, { ...o, _id: id }); return id; };
@@ -43,14 +43,23 @@ function device(opts: { offline?: boolean } = {}) {
     put({ _id: "mail-acct", _kind: "com.palm.mail.account:1", accountId: "acct-mail", email: "jordan@example.com", realName: "Jordan Avery" });
     put({ _id: "mail-1", _kind: "com.palm.email:1", subject: "Invoice 2231", from: { name: "Alex Rivera", addr: "alex@example.com" }, summary: "Your invoice", timestamp: NOW - 3600e3, flags: { read: false, visible: true } });
     put({ _id: "mail-2", _kind: "com.palm.email:1", subject: "Lunch today?", from: { name: "Priya Nair", addr: "priya@example.net" }, summary: "Noon?", timestamp: NOW - 7200e3, flags: { read: true, visible: true } });
-    put({ _id: "sms-1", _kind: "com.palm.smsmessage:1", folder: "inbox", messageText: "Running 5 min late", from: { addr: "3035550135" }, localTimestamp: NOW - 600e3, threadId: "t-sam" });
+    put({ _id: "sms-1", _kind: "com.palm.smsmessage:1", folder: "inbox", messageText: "Running 5 min late", from: { addr: "3035550135" }, localTimestamp: NOW - 600e3, threadId: "t-sam",
+          flags: { read: false, visible: true } });
     put({ _id: "sms-2", _kind: "com.palm.smsmessage:1", folder: "inbox", messageText: "Lunch at noon?", from: { addr: "4155550123" }, localTimestamp: NOW - 3600e3, threadId: "t-priya" });
+    put({ _id: "call-1", _kind: "com.palm.phonecall:1", type: "missed", timestamp: NOW - 1800e3, duration: 0, from: { addr: "(303) 555-0135" }, to: [] });
+    put({ _id: "call-2", _kind: "com.palm.phonecall:1", type: "outgoing", timestamp: NOW - 7200e3, duration: 60000, from: { addr: "" }, to: [{ addr: "(415) 555-0123", name: "Priya Nair" }] });
+    put({ _id: "list-shop", _kind: "com.palm.tasklist:1", name: "Groceries" });
+    put({ _id: "task-milk", _kind: "com.palm.task:1", summary: "Milk", listId: "list-shop", completed: false, createdTime: 1 });
+    put({ _id: "task-eggs", _kind: "com.palm.task:1", summary: "Eggs", listId: "list-shop", completed: false, createdTime: 2 });
+    put({ _id: "task-done", _kind: "com.palm.task:1", summary: "Bread", listId: "list-shop", completed: true, createdTime: 3 });
     put({ _id: "img-1", _kind: "com.palm.media.image.file:1", path: "/media/internal/DCIM/a.jpg", createdTime: at(6, 15) });
     put({ _id: "img-2", _kind: "com.palm.media.image.file:1", path: "/media/internal/DCIM/b.jpg", createdTime: at(6, 16) });
     put({ _id: "img-3", _kind: "com.palm.media.image.file:1", path: "/media/internal/DCIM/c.jpg", createdTime: at(1, 9) });
 
     const calls: { uri: string; params: any }[] = [];
-    const state = { volume: 50, muted: false, ringtones: 60, brightness: 70, activities: new Map<string, any>() };
+    const state = { volume: 50, muted: false, ringtones: 60, brightness: 70, activities: new Map<string, any>(),
+                    gps: true, network: true, locationAllowed: (opts.locationAllowed === undefined ? true : opts.locationAllowed) as boolean | null,
+                    prefs: { rotationLock: false } as Record<string, unknown> };
     const okr = (o: object = {}) => Promise.resolve({ returnValue: true, ...o });
     const luna = {
         call(uri: string, p: any): Promise<any> {
@@ -79,7 +88,25 @@ function device(opts: { offline?: boolean } = {}) {
             if (m === "com.palm.display/control/setProperty") { state.brightness = p.maximumBrightness; return okr(); }
             if (m === "com.palm.power/com/palm/power/batteryStatusQuery") return okr({ percent: 76, percent_ui: 76 });
             if (m === "com.palm.power/com/palm/power/chargerStatusQuery") return okr({ Charging: true, Connected: true });
-            if (m === "com.webos.service.location/getCurrentPosition") return okr({ latitude: 37.37, longitude: -122.04, errorCode: 0 });
+            // Location (OSE's methods, and Phoenix's per-app permissions in
+            // front of them, as runtime/phoenix-runtime.js answers them).
+            if (m === "org.webosphoenix.service.location/getPermissions")
+                return okr({ permissions: state.locationAllowed === null ? [] : [{ appId: "org.webosphoenix.assistant", title: "Assistant", allowed: state.locationAllowed }] });
+            if (m === "org.webosphoenix.service.location/setPermission") { state.locationAllowed = p.allowed; return okr(); }
+            if (m === "com.webos.service.location/getAllLocationHandlers") return okr({ handlers: [{ name: "gps", state: state.gps }, { name: "network", state: state.network }] });
+            if (m === "com.webos.service.location/setState") { state[p.Handler as "gps" | "network"] = p.state; return okr(); }
+            if (m === "com.webos.service.location/getLocationUpdates") {
+                if (!state.gps && !state.network) return Promise.resolve({ returnValue: false, errorCode: 5, errorText: "Location services are off" });
+                return okr({ errorCode: 0, latitude: 37.37, longitude: -122.04, horizAccuracy: 8 });
+            }
+            // What OSE's service does not have (getCurrentPosition was the legacy com.palm.location's).
+            if (m.startsWith("com.webos.service.location/")) return Promise.resolve({ returnValue: false, errorCode: -1, errorText: "Unknown method" });
+            if (m === "com.palm.telephony/voicemailQuery") return okr({ number: "(408) 555-0100", waiting: true, count: 2 });
+            if (m === "com.webos.service.systemservice/deviceInfo/query") return okr({ storage_free: "5.8 GB", storage_size: "8 GB" });
+            if (m === "org.webosphoenix.service.packages/search")
+                return okr({ apps: p.query === "doom" ? [{ id: "com.example.doom", sourceId: "museum", title: "Doom", summary: "The classic", developer: { name: "id" }, installed: null }] : [] });
+            if (m === "com.webos.service.systemservice/setPreferences") { Object.assign(state.prefs, p); return okr(); }
+            if (m === "com.webos.service.systemservice/getPreferences") return okr({ ...state.prefs });
             return okr();
         },
     };
@@ -95,10 +122,15 @@ function device(opts: { offline?: boolean } = {}) {
         requests.push(r.url);
         if (opts.offline) return Promise.reject(new Error("offline"));
         if (r.url.includes("frankfurter")) return Promise.resolve({ status: 200, body: JSON.stringify({ amount: 20, base: "USD", date: "2026-10-07", rates: { EUR: 17.3 } }) });
+        if (r.url.includes("api.open-meteo.com/v1/forecast"))
+            return Promise.resolve({ status: 200, body: JSON.stringify({ current: { temperature_2m: 64.4, weather_code: 2 },
+                daily: { weather_code: [2, 61], temperature_2m_max: [70.2, 61.1], temperature_2m_min: [52.3, 50], precipitation_probability_max: [10, 80] } }) });
         if (r.url.includes("geocoding")) return Promise.resolve({ status: 200, body: JSON.stringify({ results: [{ name: "Paris", latitude: 48.85, longitude: 2.35, timezone: "Europe/Paris" }] }) });
         return Promise.resolve({ status: 404, body: "" });
     };
     let clock = NOW;
+    // The commands alone: the questions after them have their own tests (followups.test.ts).
+    data.set("assistant:settings", { followUps: false });
     const svc = createAssistantService({ luna, storage, request, now: () => clock, caller: () => "com.palm.systemui",
                                          secrets: { seal: () => Promise.resolve({}), unseal: () => Promise.resolve("") }, locale: () => "en-US" });
     let thread = "";
@@ -165,7 +197,13 @@ describe("calendar", () => {
         const week = await d.ask("what's on my calendar this week");
         expect(week.text).toMatch(/^This week you have 5 events: .*“Dentist” Friday 2:00 PM/);
         expect((await d.ask("what's my next meeting")).text).toBe("Next: “Team stand-up” tomorrow at 9:30 AM.");
-        expect((await d.ask("when is my dentist appointment")).text).toBe("“Dentist” is on Friday at 2:00 PM, at Downtown Dental.");
+        const dentist = await d.ask("when is my dentist appointment");
+        expect(dentist.text).toBe("“Dentist” is on Friday at 2:00 PM, at Downtown Dental.");
+        // The event shown as a card, which opens it in Calendar.
+        expect(dentist.data.attachments).toEqual([{ type: "cards", items: [{ title: "Dentist", subtitle: "On Friday at 2:00 PM", detail: "Downtown Dental",
+            open: { appId: "com.palm.app.calendar", params: { showEventDetail: "ev-dentist" }, title: "Calendar" } }] }]);
+        await d.choose(dentist, "show:0");
+        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "com.palm.app.calendar", params: { showEventDetail: "ev-dentist" } });
         expect((await d.ask("what's on my calendar on Sunday")).text).toBe("Nothing on your calendar on Sunday.");
     });
     it("undo takes the event back, after Yes", async () => {
@@ -234,9 +272,9 @@ describe("tasks, memos, contacts", () => {
         const m = await d.ask("add milk to my shopping list");
         expect(m.text).toBe("Added “Milk” to your Shopping list (a new list).");
         const list = d.of("com.palm.tasklist:1").find((l) => l.name === "Shopping");
-        expect(d.of("com.palm.task:1").find((t) => t.summary === "Milk")).toMatchObject({ listId: list._id, completed: false });
+        expect(d.of("com.palm.task:1").find((t) => t.summary === "Milk" && t.listId === list._id)).toMatchObject({ completed: false });
         expect((await d.ask("put eggs on the shopping list")).text).toBe("Added “Eggs” to your Shopping list.");
-        expect(d.of("com.palm.tasklist:1")).toHaveLength(2);
+        expect(d.of("com.palm.tasklist:1")).toHaveLength(3);
         const t = await d.ask("create a task to call the bank tomorrow");
         expect(t.text).toBe("Added “Call the bank” to your tasks, due tomorrow at 9:00 AM.");
         expect(d.of("com.palm.task:1").find((x) => x.summary === "Call the bank")).toMatchObject({ listId: "list-inbox", due: at(8, 9) });
@@ -281,7 +319,9 @@ describe("email and messages", () => {
     });
     it("finds email; reads the last message", async () => {
         const d = device();
-        expect((await d.ask("search my email for invoice")).text).toBe("One email about “invoice”: “Invoice 2231” from Alex Rivera.");
+        const inv = await d.ask("search my email for invoice");
+        expect(inv.text).toBe("One email about “invoice”: “Invoice 2231” from Alex Rivera.");
+        expect(inv.data.attachments[0].items[0]).toMatchObject({ title: "Invoice 2231", subtitle: "Alex Rivera", open: { params: { emailId: "mail-1" } } });
         expect((await d.ask("do I have any new emails")).text).toBe("1 unread email: “Invoice 2231” from Alex Rivera.");
         expect((await d.ask("read my last message")).text).toBe("Sam Delgado said, today at 9:50 AM: “Running 5 min late”");
         const p = await d.ask("what did Priya say");
@@ -325,12 +365,135 @@ describe("the device", () => {
         expect((await d.ask("open sounds & ringtones")).text).toBe("Opening Sounds & Ringtones.");
         expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.settings", params: { page: "sounds" } });
     });
-    it("photos from a day open in Photos", async () => {
+    it("photos from a day: shown in the conversation, and in Photos (just those) behind it", async () => {
         const d = device();
-        expect((await d.ask("show my photos from yesterday")).text).toBe("Here are 2 photos from yesterday.");
-        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.photos", params: { imageList: { results: [
-            { file_path: "/media/internal/DCIM/b.jpg" }, { file_path: "/media/internal/DCIM/a.jpg" }] } } });
-        expect((await d.ask("show my photos from last week")).text).toBe("Here is 1 photo from last week.");
+        const m = await d.ask("show my photos from yesterday");
+        expect(m.text).toBe("Here are 2 photos from yesterday. I've opened them in Photos too.");
+        const list = { results: [{ file_path: "/media/internal/DCIM/b.jpg" }, { file_path: "/media/internal/DCIM/a.jpg" }], title: "Photos from Yesterday" };
+        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.photos", params: { imageList: list } });
+        // The pictures in the reply, and Open Photos to bring it forward.
+        expect(m.data.attachments).toEqual([{ type: "images", total: 2, items: [
+            { path: "/media/internal/DCIM/b.jpg", open: { appId: "org.webosphoenix.photos", title: "Photos", params: { imageList: { results: [{ file_path: "/media/internal/DCIM/b.jpg" }] } } } },
+            { path: "/media/internal/DCIM/a.jpg", open: { appId: "org.webosphoenix.photos", title: "Photos", params: { imageList: { results: [{ file_path: "/media/internal/DCIM/a.jpg" }] } } } }] }]);
+        expect(m.choices).toEqual([{ id: "open", label: "Open Photos" }]);
+        // A picture tapped: Photos on it; the buttons stay.
+        await d.choose(m, "show:1");
+        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.photos", params: { imageList: { results: [{ file_path: "/media/internal/DCIM/a.jpg" }] } } });
+        expect((await d.svc.thread({ id: m.threadId })).messages.find((x: Msg) => x.id === m.id).chosen).toBeUndefined();
+        await d.choose(m, "open");
+        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.photos", params: { imageList: list } });
+        expect((await d.ask("show my photos from last week")).text).toBe("Here is 1 photo from last week. I've opened it in Photos too.");
+    });
+    it("no photos: says so and offers Photos; how many: only said", async () => {
+        const d = device();
+        const launches = () => d.called("applicationManager/launch").length;
+        const m = await d.ask("show my photos from today");
+        expect(m.text).toBe("You don't have any photos from today.");
+        expect(m.choices).toEqual([{ id: "open", label: "Open Photos" }]);
+        const before = launches();
+        expect((await d.ask("how many photos did I take yesterday")).text).toBe("You have 2 photos from yesterday.");
+        expect((await d.ask("show my screenshots")).text).toBe("You don't have any screenshots.");
+        expect(launches()).toBe(before);
+    });
+});
+
+describe("more for each app (docs/AI-AND-MCP.md, what it can do for each app)", () => {
+    it("phone: who called, missed calls, call back and redial (read back), voicemail", async () => {
+        const d = device();
+        const who = await d.ask("who called me");
+        expect(who.text).toBe("You missed a call from Sam Delgado, today at 9:30 AM.");
+        expect(who.choices!.map((c) => c.label)).toEqual(["Call Sam Delgado", "Open Phone"]);
+        expect((await d.ask("did I miss any calls")).text).toBe("You missed a call from Sam Delgado, today at 9:30 AM.");
+        const back = await d.ask("call back");
+        expect(back).toMatchObject({ status: "pending", text: "Call Sam Delgado (3035550135)?" });
+        await d.confirm(back);
+        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.phone", params: { number: "3035550135", dial: true } });
+        expect((await d.ask("redial")).text).toBe("Call Priya Nair (4155550123)?");
+        const vm = await d.ask("check my voicemail");
+        expect(vm.text).toBe("You have 2 new voicemails.");
+        expect(vm.choices!.map((c) => c.label)).toEqual(["Call Voicemail"]);
+        expect((await d.ask("call voicemail")).text).toBe("Call voicemail ((408) 555-0100)?");
+    });
+    it("messages: the new ones, a reply read back and sent", async () => {
+        const d = device();
+        const m = await d.ask("any new texts");
+        expect(m.text).toBe("You have 1 new message. Sam Delgado said, today at 9:50 AM: “Running 5 min late”");
+        expect(m.choices!.map((c) => c.label)).toEqual(["Reply to Sam Delgado", "Open Messaging"]);
+        const r = await d.ask("reply on my way");
+        expect(r).toMatchObject({ status: "pending", text: "Send \"On my way\" to Sam Delgado?" });
+        await d.confirm(r);
+        expect(d.called("messaging/putMessage")[0].params.message).toMatchObject({ messageText: "On my way", to: [{ addr: "3035550135" }] });
+    });
+    it("calendar: free time, an event moved (and back), one cancelled after Yes (and back)", async () => {
+        const d = device();
+        expect((await d.ask("am I free on Friday at 2:30")).text).toBe("No, you have “Dentist” then, 2:00 PM to 3:00 PM.");
+        expect((await d.ask("am I free tomorrow at 3")).text).toBe("Yes, you're free tomorrow at 3:00 PM.");
+        expect((await d.ask("when am I free on Friday")).text).toBe("On Friday you're free 8:00 AM to 9:30 AM, 10:00 AM to 2:00 PM and 3:00 PM to 8:00 PM.");
+        const moved = await d.ask("move my dentist appointment to 4pm");
+        expect(moved.text).toBe("Moved “Dentist” to Friday at 4:00 PM.");
+        expect(d.db.get("ev-dentist")).toMatchObject({ dtstart: at(9, 16), dtend: at(9, 17) });
+        await d.confirm(await d.ask("undo"));
+        expect(d.db.get("ev-dentist")).toMatchObject({ dtstart: at(9, 14), dtend: at(9, 15) });
+        expect((await d.ask("move my stand-up to 10am")).text).toMatch(/^“Team stand-up” repeats\./);
+        const c = await d.ask("cancel my dentist appointment");
+        expect(c).toMatchObject({ status: "pending", text: "Cancel “Dentist” on Friday at 2:00 PM?" });
+        expect(d.db.has("ev-dentist")).toBe(true);
+        expect((await d.confirm(c)).text).toBe("Cancelled “Dentist”.");
+        expect(d.db.has("ev-dentist")).toBe(false);
+        await d.confirm(await d.ask("undo"));
+        expect(d.db.get("ev-dentist")).toMatchObject({ subject: "Dentist", dtstart: at(9, 14) });
+        expect((await d.ask("cancel my yoga class from my calendar")).text).toBe("I couldn't find “yoga class” on your calendar.");
+    });
+    it("memos and tasks: added to a memo, a list read, a task done (and back)", async () => {
+        const d = device();
+        expect((await d.ask("add the guest code to my wi-fi note")).text).toBe("Added it to your “Wi-Fi at the cabin: network Lakeview” memo.");
+        expect(d.db.get("memo-1").text).toBe("Wi-Fi at the cabin: network Lakeview\nthe guest code");
+        expect((await d.ask("add eggs to my recipes memo")).text).toMatch(/^I couldn't find a memo about “recipes”/);
+        const list = await d.ask("what's on my groceries list");
+        expect(list.text).toBe("Your Groceries list: “Milk” and “Eggs”.");
+        expect(list.data.attachments[0].items.map((x: any) => x.title)).toEqual(["Milk", "Eggs"]);
+        expect((await d.ask("check off milk")).text).toBe("Marked “Milk” as done.");
+        expect(d.db.get("task-milk").completed).toBe(true);
+        expect((await d.ask("what's on my groceries list")).text).toBe("Your Groceries list: “Eggs”.");
+        await d.confirm(await d.ask("undo"));
+        expect(d.db.get("task-milk").completed).toBe(false);
+        expect((await d.ask("what's on my packing list")).text).toBe("You don't have a list called “packing”.");
+    });
+    it("maps, the web, storage, the Marketplace, what's playing", async () => {
+        const d = device();
+        expect((await d.ask("coffee near me")).text).toBe("Here's coffee near you, in Maps.");
+        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.maps", params: { query: "coffee" } });
+        expect((await d.ask("open example.com")).text).toBe("Opening example.com.");
+        expect(d.called("applicationManager/open").pop()!.params).toEqual({ target: "https://example.com" });
+        expect((await d.ask("how much storage do I have")).text).toBe("You have 5.8 GB free of 8 GB.");
+        const doom = await d.ask("find doom in the marketplace");
+        expect(doom.text).toBe("I found Doom in the Marketplace.");
+        expect(doom.choices).toEqual([{ id: "open", label: "Open Marketplace" }]);
+        expect((await d.ask("install doom")).text).toBe("Here's Doom in the Marketplace: tap Install to get it.");
+        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.marketplace", params: { sourceId: "museum", id: "com.example.doom" } });
+        expect((await d.ask("install frobnicator")).text).toBe("I couldn't find “frobnicator” in the Marketplace.");
+        expect((await d.ask("what's playing")).text).toBe("I can't see what's playing yet, but I can open Music for you.");
+    });
+    it("weather: will it rain, the week", async () => {
+        const d = device();
+        expect((await d.ask("will it rain tomorrow")).text).toBe("Yes, rain is likely tomorrow: a 80% chance of rain. Light rain, 61° / 50°F.");
+        expect((await d.ask("will it rain today")).text).toBe("Probably not today: a 10% chance of rain. Partly cloudy, 70° / 52°F.");
+        expect((await d.ask("what's the weather this week")).text).toBe("This week: highs 61° to 70°F, lows 50° to 52°F. Rain likely tomorrow.");
+    });
+    it("help: what it can do by app, with what fits now; how to use Phoenix", async () => {
+        const d = device();
+        const h = await d.ask("what can you do");
+        expect(h.text).toMatch(/^Here's what I can do\. Tap an example/);
+        const groups = h.data.attachments as { type: string; title: string; items: { text: string }[] }[];
+        expect(groups[0]).toMatchObject({ type: "examples", title: "Right now" });
+        // 10:00 on a Wednesday, a message unread and a missed call.
+        expect(groups[0].items.map((x) => x.text)).toEqual(["Read my new messages", "Who called me?", "Do I have any new emails?", "What's the weather today?"]);
+        expect(groups.slice(1).map((g) => g.title)).toContain("Calendar");
+        const how = await d.ask("how do I close an app?");
+        expect(how.text).toBe("In card view, flick the app's card up and off the top of the screen. Swipe up in the gesture area first to see the cards.");
+        expect(how.choices).toEqual([{ id: "open", label: "Open Help" }]);
+        await d.choose(how, "open");
+        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.help", params: { topic: "help-cards" } });
     });
 });
 
@@ -359,10 +522,50 @@ describe("conversions and the world", () => {
         expect((await d.ask("how far is Paris")).text).toBe("Paris is about 5,580 miles away, as the crow flies.");
         expect((await device({ offline: true }).ask("how far is Paris")).text).toBe("I couldn't look up paris right now: are you online?");
     });
+    it("the weather here: the position from OSE's location service, with the Assistant's permission", async () => {
+        const d = device();
+        const m = await d.ask("what's the weather");
+        expect(m.text).toBe("It's 64°F and partly cloudy. Today: 70° / 52°.");
+        expect(d.called("getCurrentPosition")).toHaveLength(0);
+        expect(d.called("com.webos.service.location/getLocationUpdates")[0].params).toEqual({});
+        expect(d.requests.at(-1)).toMatch(/latitude=37.37&longitude=-122.04/);
+    });
+    it("the location not answered yet: it asks, and Allow answers the weather", async () => {
+        const d = device({ locationAllowed: null });
+        const m = await d.ask("what's the weather");
+        expect(m.text).toBe("To check the weather where you are, I need your location. Is it OK if I use it?");
+        expect(m.choices!.map((c) => c.label)).toEqual(["Allow", "Don't Allow"]);
+        expect(d.called("getLocationUpdates")).toHaveLength(0);
+        const r = await d.choose(m, "do:0");
+        expect(r.messages.map((x: Msg) => x.text)).toEqual(["OK, I can use your location now.", "It's 64°F and partly cloudy. Today: 70° / 52°."]);
+        expect(d.state.locationAllowed).toBe(true);
+    });
+    it("the location denied: it says so, with Allow Location and the setting", async () => {
+        const d = device({ locationAllowed: false });
+        const m = await d.ask("what's the weather");
+        expect(m.status).toBe("failed");
+        expect(m.text).toMatch(/^I'm not allowed to use your location\. Allow it, here or in Settings > Location Services/);
+        expect(m.choices!.map((c) => [c.id, c.label])).toEqual([["do:0", "Allow Location"], ["open:1", "Location Settings"]]);
+        await d.choose(m, "open:1");
+        expect(d.called("applicationManager/launch").at(-1)!.params).toEqual({ id: "org.webosphoenix.settings", params: { page: "location" } });
+        const r = await d.choose(m, "do:0");
+        expect(r.messages.at(-1).text).toBe("It's 64°F and partly cloudy. Today: 70° / 52°.");
+    });
+    it("Location Services off: it offers to turn them on, then answers", async () => {
+        const d = device();
+        d.state.gps = d.state.network = false;
+        const m = await d.ask("what's the weather");
+        expect(m.text).toBe("Location Services are off. Turn them on and I'll check the weather where you are. Or say a city, like “weather in Paris”.");
+        expect(m.choices!.map((c) => c.label)).toEqual(["Turn On Location Services", "Location Settings"]);
+        const r = await d.choose(m, "do:0");
+        expect(r.messages.map((x: Msg) => x.text)).toEqual(["Location Services are on.", "It's 64°F and partly cloudy. Today: 70° / 52°."]);
+        expect(d.state.gps && d.state.network).toBe(true);
+        expect((await d.ask("turn off location services")).text).toBe("Location Services are off.");
+    });
     it("translation goes on to a model or the web", async () => {
         const d = device();
         const m = await d.ask("translate hello into French");
-        expect(m.text).toBe("I can't translate on the phone.");
+        expect(m.text).toBe("I can't translate without a language model yet, but I can search the web for it.");
         expect(m.choices!.map((c) => c.id)).toContain("web");
     });
 });

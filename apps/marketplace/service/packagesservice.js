@@ -383,16 +383,19 @@ function createPackagesService(deps) {
                 if (new URL(m.startUrl).origin !== entry.pwa.origin)
                     throw err("BAD_MANIFEST", "The site's start page is not on " + entry.pwa.origin);
                 var icons = pwa.pickIcons(m);
-                var want = [icons.small, icons.large].filter(Boolean);
-                return Promise.all(want.map(function (i) { return getBytes(i.src, 4 * 1024 * 1024).then(null, function () { return null; }); })).then(function (got) {
+                var fetch = function (i) { return i ? getBytes(i.src, 4 * 1024 * 1024).then(null, function () { return null; }) : Promise.resolve(null); };
+                return Promise.all([fetch(icons.small), fetch(icons.large)]).then(function (got) {
+                    // None of the site's own icons is there (the catalog then
+                    // made one, iconGenerated): the catalog's icon.
+                    if (got[0] || !entry.icon) return got;
+                    return fetch({ src: entry.icon }).then(function (b) { return [b, null, entry.icon]; });
+                }).then(function (got) {
                     progress({ state: "checking", progress: 50 });
                     var dir = ipkLib.APP_ROOT + entry.id + "/";
                     var files = [], names = {};
                     if (got[0]) {
-                        names.icon = "icon." + pwa.extOf(icons.small.type, icons.small.src);
+                        names.icon = "icon." + (got[2] ? pwa.extOf("", got[2]) : pwa.extOf(icons.small.type, icons.small.src));
                         files.push({ path: dir + names.icon, data: got[0] });
-                    } else if (entry.icon) {
-                        names.icon = "icon.png";
                     }
                     if (got[1]) {
                         names.large = "icon-256x256." + pwa.extOf(icons.large.type, icons.large.src);

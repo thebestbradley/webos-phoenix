@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Unit conversions for the Phoenix Assistant's "convert" command, offline:
+// Unit conversions for the Assistant's "convert" command, offline:
 // each unit is a kind and its size in the kind's base unit (SI). The words
 // for units are in the language files (lib/lang/<code>.js UNIT_WORDS);
 // currencies are ISO 4217 codes and convert with the day's rates

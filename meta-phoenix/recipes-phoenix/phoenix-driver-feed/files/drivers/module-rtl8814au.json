@@ -1,0 +1,33 @@
+{
+    "id": "module-rtl8814au",
+    "kind": "module",
+    "title": "Realtek RTL8814AU Wi-Fi driver",
+    "category": "wifi",
+    "summary": "A driver for USB Wi-Fi adapters with the RTL8814AU chip, which the system's Linux 6.6 kernel does not include.",
+    "match": [
+        "usb:v0BDAp8813d*",
+        "usb:v2357p0106d*",
+        "usb:v0B05p1817d*",
+        "usb:v0B05p1852d*",
+        "usb:v0846p9054d*"
+    ],
+    "modules": [
+        "8814au"
+    ],
+    "after": "reload",
+    "license": {
+        "id": "GPL-2.0-only",
+        "name": "GNU General Public License 2.0",
+        "url": "https://github.com/morrownr/8814au",
+        "free": true,
+        "redistributable": true
+    },
+    "source": "https://github.com/morrownr/8814au",
+    "maintainer": {
+        "name": "webOS Phoenix",
+        "email": "drivers@webosphoenix.org"
+    },
+    "packages": [
+        "kernel-module-8814au-*"
+    ]
+}

@@ -85,6 +85,9 @@ int main(int argc, char **argv)
 
     LocalModels lm;
     lm.setModelsDir(dir.filePath(QStringLiteral("models")));
+    // Built-in models: none yet (the default looks beside the program).
+    const QString shipped = dir.filePath(QStringLiteral("shipped"));
+    lm.setBuiltInDirs({ shipped });
     check(LocalModels::totalMemory() >= 0, "the device's memory");
 
     // A wrong SHA-256: refused, nothing kept.
@@ -152,6 +155,25 @@ int main(int argc, char **argv)
     lm.remove(QStringLiteral("m"));
     check(lm.status().value(QStringLiteral("installed")).toList().isEmpty(), "removed");
 
+    // A built-in model: listed, run from where it is, never removed.
+    QDir().mkpath(shipped);
+    {
+        QFile f(shipped + QStringLiteral("/qwen3-0.6b-q4_k_m.gguf"));
+        f.open(QIODevice::WriteOnly);
+        f.write(files.body);
+    }
+    const QVariantMap builtIn = lm.status().value(QStringLiteral("installed")).toList().value(0).toMap();
+    check(builtIn.value(QStringLiteral("id")) == QStringLiteral("qwen3-0.6b-q4_k_m") && builtIn.value(QStringLiteral("builtIn")).toBool(),
+          "a built-in model is installed");
+    QString builtInUrl;
+    QObject::connect(&lm, &LocalModels::ready, [&](const QString &id, const QString &url) { if (id == QStringLiteral("r4")) builtInUrl = url; });
+    lm.ensure(QStringLiteral("qwen3-0.6b-q4_k_m"), QStringLiteral("r4"));
+    waitFor([&]() { return !builtInUrl.isEmpty(); }, 20000);
+    check(!builtInUrl.isEmpty(), "and runs from where it is");
+    lm.remove(QStringLiteral("qwen3-0.6b-q4_k_m"));
+    check(QFile::exists(shipped + QStringLiteral("/qwen3-0.6b-q4_k_m.gguf")), "and is never removed");
+    lm.stop();
+
     // Speech: a program reading the text.
     Speech sp;
     const QString out = dir.filePath(QStringLiteral("spoken.txt"));
@@ -169,6 +191,72 @@ int main(int argc, char **argv)
     Speech none;
     none.setCommand({ dir.filePath(QStringLiteral("nowhere/espeak-ng")) });
     check(!none.available() && !none.speak(QStringLiteral("hi")), "no program, no speech");
+
+    // A voice for "%v": the one asked for, else the voice property.
+    Speech voiced;
+    const QString vout = dir.filePath(QStringLiteral("voiced.txt"));
+    voiced.setCommand({ node, QStringLiteral("-e"),
+                        QStringLiteral("require('fs').writeFileSync(%1, process.argv[1])").arg(QStringLiteral("'") + vout + QStringLiteral("'")),
+                        QStringLiteral("%v") });
+    voiced.setVoice(QStringLiteral("expr-voice-3-f"));
+    bool vdone = false;
+    QObject::connect(&voiced, &Speech::finished, [&]() { vdone = true; });
+    voiced.speak(QStringLiteral("Hi."));
+    waitFor([&]() { return vdone; }, 5000);
+    QFile vf(vout);
+    check(vf.open(QIODevice::ReadOnly) && vf.readAll() == "expr-voice-3-f", "the voice property for %v");
+    vf.close();
+    vdone = false;
+    voiced.speak(QStringLiteral("Hi."), QStringLiteral("en"), QStringLiteral("expr-voice-5-m"));
+    waitFor([&]() { return vdone; }, 5000);
+    check(vf.open(QIODevice::ReadOnly) && vf.readAll() == "expr-voice-5-m", "a voice asked for");
+
+    // Kitten TTS by default, Flite when it cannot speak: phoenix-tts and
+    // flite stood in for by scripts (the real ones: tts-test, the simulator).
+    QDir(dir.path()).mkpath(QStringLiteral("bin"));
+    const QString kittenLog = dir.filePath(QStringLiteral("kitten.txt")), fliteLog = dir.filePath(QStringLiteral("flite.txt"));
+    auto script = [&](const QString &name, const QString &body) {
+        QFile f(dir.filePath(QStringLiteral("bin/") + name));
+        f.open(QIODevice::WriteOnly);
+        f.write((QStringLiteral("#!/bin/sh\n") + body).toUtf8());
+        f.close();
+        f.setPermissions(f.permissions() | QFileDevice::ExeOwner);
+        return f.fileName();
+    };
+    const QString kitten = script(QStringLiteral("phoenix-tts"),
+        QStringLiteral("if [ \"$1\" = --check ]; then echo '{\"ok\":true,\"voices\":[\"expr-voice-3-f\",\"expr-voice-5-m\"]}'; exit 0; fi\n"
+                       "echo \"$*:$(/bin/cat)\" > '%1'\n[ -e '%2' ] && exit 4\nexit 0\n").arg(kittenLog, dir.filePath(QStringLiteral("no-sound"))));
+    script(QStringLiteral("flite"), QStringLiteral("echo \"$(/bin/cat)\" > '%1'\n").arg(fliteLog));
+    const QByteArray path = qgetenv("PATH");
+    qputenv("PHOENIX_TTS_PROGRAM", kitten.toUtf8());
+    qputenv("PATH", dir.filePath(QStringLiteral("bin")).toUtf8());
+    Speech kit;
+    kit.setVoice(QStringLiteral("expr-voice-5-m"));
+    check(kit.available() && kit.engine() == QStringLiteral("Kitten TTS") && kit.voices().size() == 2, "Kitten TTS by default, with its voices");
+    bool kdone = false;
+    QObject::connect(&kit, &Speech::finished, [&]() { kdone = true; });
+    kit.speak(QStringLiteral("The flashlight is on."));
+    waitFor([&]() { return kdone; }, 5000);
+    QFile kf(kittenLog);
+    check(kf.open(QIODevice::ReadOnly) && kf.readAll().trimmed() == "--voice expr-voice-5-m:The flashlight is on.", "phoenix-tts with the voice");
+    kf.close();
+    QFile(dir.filePath(QStringLiteral("no-sound"))).open(QIODevice::WriteOnly);
+    kdone = false;
+    kit.speak(QStringLiteral("Bluetooth is off."));
+    waitFor([&]() { return kdone; }, 5000);
+    QFile ff(fliteLog);
+    check(ff.open(QIODevice::ReadOnly) && ff.readAll().trimmed() == "Bluetooth is off.", "Kitten cannot speak: the same words with Flite");
+    QFile(fliteLog).remove();
+    kdone = false;
+    kit.speak(QStringLiteral("Bonjour."), QStringLiteral("fr"));
+    waitFor([&]() { return kdone; }, 5000);
+    QFile ff2(fliteLog);
+    check(ff2.open(QIODevice::ReadOnly) && ff2.readAll().trimmed() == "Bonjour.", "another language: the fallback");
+    qputenv("PHOENIX_TTS_PROGRAM", dir.filePath(QStringLiteral("nowhere/phoenix-tts")).toUtf8());
+    Speech plain;
+    check(plain.engine() == QStringLiteral("flite") && plain.voices().isEmpty(), "no phoenix-tts: Flite, no voices");
+    qputenv("PATH", path);
+    qunsetenv("PHOENIX_TTS_PROGRAM");
 
     std::printf("%s\n", failures ? "FAILED" : "all passed");
     return failures ? 1 : 0;

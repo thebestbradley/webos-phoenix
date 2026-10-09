@@ -20,8 +20,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-    apps, LunaError, marketplace,
-    type CatalogSource, type InstalledApp, type InstallProgress, type MarketApp, type PendingKey, type Section,
+    apps, localCatalog, LunaError, marketplace,
+    type CatalogSource, type InstalledApp, type InstallProgress, type LocalCatalogStatus, type MarketApp, type PendingKey, type Section,
 } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import { Screenshots } from "./Gallery";
@@ -119,6 +119,57 @@ function TrustCard({ pending, onDone, bare }: { pending: PendingKey; onDone: () 
     );
 }
 
+// ---- The catalog on this computer (the simulator only) ----------------------------------------
+//
+// In phoenix-sim the Phoenix Marketplace's catalog runs on the same
+// computer (server/marketplace), and the simulator starts it when asked
+// (org.webosphoenix.simulator; its Services menu does the same). Anywhere
+// else the watch fails and nothing is offered. Once it runs, from here or
+// from the menu, the catalogs are read again.
+
+function useLocalCatalog(reload: () => void) {
+    const [status, setStatus] = useState<LocalCatalogStatus | null>(null);
+    const last = useRef<string | null>(null);
+    const startedHere = useRef(false);
+    const reloadRef = useRef(reload);
+    reloadRef.current = reload;
+    useEffect(() => {
+        const sub = localCatalog.watch((s) => {
+            setStatus(s);
+            if (s.state === "running" && last.current !== null && last.current !== "running" && !startedHere.current)
+                reloadRef.current();
+            last.current = s.state;
+        }, () => setStatus(null));
+        return () => sub.cancel();
+    }, []);
+    const start = useCallback(async () => {
+        startedHere.current = true;
+        try {
+            await localCatalog.start();
+            reloadRef.current();
+        } catch { /* the watch has the reason */ }
+        finally { startedHere.current = false; }
+    }, []);
+    return { status, start };
+}
+
+const capitalized = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+
+function LocalCatalog({ local }: { local: ReturnType<typeof useLocalCatalog> }) {
+    const s = local.status!;
+    const starting = s.state === "starting";
+    return (
+        <>
+            <p className="mk-muted">It runs on this computer for now, and the simulator can start it.</p>
+            {s.state === "failed" && <ErrorText testId="local-catalog-error">{capitalized(s.error.split("\n")[0].replace(/:$/, ""))}</ErrorText>}
+            <Button variant="affirmative" busy={starting} data-testid="catalog-start" onClick={() => void local.start()}>
+                {!starting ? "Start Local Catalog" : s.settingUp ? "Setting Up…" : "Starting…"}
+            </Button>
+            {starting && s.settingUp && <p className="mk-muted" data-testid="catalog-setting-up">The first time it sets itself up, which takes a minute.</p>}
+        </>
+    );
+}
+
 function Home({ section, setSection, open, ctx }: {
     section: Section; setSection: (s: Section) => void; open: (a: MarketApp) => void; ctx: ReturnType<typeof useSources>;
 }) {
@@ -154,6 +205,7 @@ function Home({ section, setSection, open, ctx }: {
     }
 
     const phoenix = ctx.sources?.find((s) => s.kind === "phoenix" && s.builtin);
+    const local = useLocalCatalog(ctx.reload);
     return (
         <>
             <div className="mk-tabs" role="tablist">
@@ -167,7 +219,9 @@ function Home({ section, setSection, open, ctx }: {
                 <div className="mk-card" data-testid="catalog-offline">
                     <div className="mk-card-title">Can't reach {phoenix.name}</div>
                     <p>{phoenix.error.errorText}</p>
-                    <p className="mk-muted">It runs on this computer for now: start it with <code>server/marketplace/bin/serve.sh</code>.</p>
+                    {local.status
+                        ? <LocalCatalog local={local} />
+                        : <p className="mk-muted">It runs on this computer for now: start it with <code>server/marketplace/bin/serve.sh</code>.</p>}
                     <Button onClick={() => void ctx.reload()} data-testid="catalog-retry">Try Again</Button>
                 </div>
             )}

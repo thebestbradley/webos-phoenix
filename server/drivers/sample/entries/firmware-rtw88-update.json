@@ -1,0 +1,62 @@
+{
+    "id": "firmware-rtw88-update",
+    "kind": "firmware",
+    "title": "Newer Realtek Wi-Fi firmware (rtw88)",
+    "summary": "A newer version of the RTL8821C, RTL8822B and RTL8822C firmware than the one in the system, with Realtek's fixes since.",
+    "description": "Phoenix comes with this firmware; this is a newer release from linux-firmware. It is installed beside the system's (in /lib/firmware/updates, which the kernel reads first), so removing it goes back to the system's.",
+    "category": "wifi",
+    "match": [
+        "usb:v0BDApC811d*",
+        "usb:v0BDApC820d*",
+        "usb:v0BDApB82Cd*",
+        "usb:v0BDApC82Cd*",
+        "pci:v000010ECd0000C821sv*",
+        "pci:v000010ECd0000C822sv*",
+        "pci:v000010ECd0000B822sv*"
+    ],
+    "firmware": [
+        "rtw88/rtw8821c_fw.bin",
+        "rtw88/rtw8822b_fw.bin",
+        "rtw88/rtw8822c_fw.bin"
+    ],
+    "modules": [
+        "rtw88_8821cu",
+        "rtw88_8822bu",
+        "rtw88_8822cu",
+        "rtw88_8821ce",
+        "rtw88_8822be",
+        "rtw88_8822ce"
+    ],
+    "optional": true,
+    "after": "reload",
+    "supersedes": [
+        "linux-firmware-rtl8821",
+        "linux-firmware-rtl8822"
+    ],
+    "license": {
+        "id": "LicenseRef-rtlwifi-firmware",
+        "name": "Realtek firmware licence",
+        "text": "Sample catalog: this stands for the licence text the real entry carries,\nlinux-firmware's LICENCE.rtlwifi_firmware.txt (Copyright (c) 2010, Realtek\nSemiconductor Corporation), shown in full before installing. In short, it\nallows passing the firmware on in binary form, unmodified, with Realtek's\ncopyright notice and disclaimer; it does not allow reverse engineering,\ndecompiling or disassembling it, or using Realtek's name to promote\nproducts; and it gives no warranty.\n\nRead the full text at:\nhttps://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/LICENCE.rtlwifi_firmware.txt\n",
+        "url": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/LICENCE.rtlwifi_firmware.txt",
+        "free": false,
+        "redistributable": true
+    },
+    "source": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git",
+    "homepage": "",
+    "maintainer": {
+        "name": "webOS Phoenix",
+        "email": "drivers@webosphoenix.org"
+    },
+    "packages": [
+        {
+            "name": "linux-firmware-rtw88-update",
+            "version": "20250311-r0",
+            "arch": "all",
+            "kernel": null,
+            "size": 622,
+            "installedSize": 177,
+            "sha256": "072d3d6ea42b0b0a07534075402ebd958693aa9974e3bea5b7cbe05a3c84313f",
+            "url": "packages/linux-firmware-rtw88-update_20250311-r0_all.ipk"
+        }
+    ]
+}

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// The Phoenix Assistant's English: the command grammar (layer 2 of
+// The Assistant's English: the command grammar (layer 2 of
 // docs/M6-PLAN.md F3: no language model, instant, offline) and what the
 // assistant says back. Another language is another file shaped like this
 // one (lib/lang/<code>.js) registered in lib/grammar.js:
@@ -492,6 +492,9 @@ var TOGGLES = [
     ["bluetooth", /^(?:the )?blue ?tooth$/],
     ["airplane", /^(?:the )?(?:airplane|aeroplane|flight|plane)(?: mode)?$/],
     ["flashlight", /^(?:the )?(?:flash ?light|torch|light)$/],
+    ["location", /^(?:the )?(?:location(?: services)?|gps|location tracking)$/],
+    ["rotationLock", /^(?:the )?(?:rotation lock|orientation lock|screen lock rotation|lock rotation)$/],
+    ["rotation", /^(?:the )?(?:rotation|screen rotation|auto[- ]?rotat(?:e|ion)|auto[- ]?rotate screen)$/],
     ["ringer", /^(?:the )?(?:ringer|ringtone|ring tone|ringing|sound)$/],
     // webOS had no Do Not Disturb; its ringer switch silenced calls and
     // alerts, and the assistant's Do Not Disturb is that.
@@ -660,7 +663,9 @@ function event(t, ctx) {
     var onCalendar = CALENDAR_PLACE.test(body);
     body = body.replace(CALENDAR_PLACE, " ");
     var noun = new RegExp("^\\s(?:an? |the |my |another )?(?:new )?(" + EVENT_NOUN + ")\\b").exec(body);
-    if (!noun && !onCalendar && !/^(?:schedule|book|plan|arrange)$/.test(verb)) return null;
+    // "add lunch with Sam on Friday at noon": a get-together with a time is an event too.
+    var social = /^\s(?:an? |my )?(?:lunch|dinner|breakfast|brunch|coffee|drinks|party|date|interview|class|game|practice|session|catch-up|catch up|gym|workout)\b/.test(body);
+    if (!noun && !onCalendar && !social && !/^(?:schedule|book|plan|arrange)$/.test(verb)) return null;
     if (noun) body = body.slice(noun[0].length);
     var info = extract(body, ctx.now);
     var rest = " " + info.rest + " ";
@@ -840,7 +845,8 @@ function readMessages(t) {
         || /^(?:do i have|have i got|any|check(?: my)?) (?:any )?(?:new |unread )?(?:text )?(?:messages?|texts?|sms)(?: from (.+))?$/.exec(t)
         || /^what did (.+?) (?:say|text|send|write)(?: me)?$/.exec(t);
     if (!m) return null;
-    return { who: m[1] || "" };
+    // "any new texts", "read my unread messages": the unread ones.
+    return { who: m[1] || "", unread: /\b(?:new|unread)\b/.test(t) };
 }
 
 // ---- Music, volume, the screen -----------------------------------------------------------------
@@ -992,9 +998,19 @@ function distance(t) {
 }
 // "show my photos from yesterday", "photos from last week", "pictures I
 // took on Friday"
+// "show my photos from yesterday", "show my screenshots", "how many photos
+// did I take last week" (count: only said, Photos not opened).
 function photos(t, ctx) {
-    var m = /^(?:show|open|find|view|display|see|get|look at)(?: me)? (?:all )?(?:my |the )?(?:photos|pictures|pics|images|photographs|snaps|screenshots)(?: (?:i took|taken|from|of|on|that i took|i made))?(?: (.+))?$/.exec(t)
-        || /^(?:my )?(?:photos|pictures|pics) (?:from|of|taken) (.+)$/.exec(t);
+    var r = photosSaid(t, ctx);
+    if (!r) return null;
+    r.screenshots = /\bscreen ?shots?\b/.test(t);
+    r.count = /^how many /.test(t);
+    return r;
+}
+function photosSaid(t, ctx) {
+    var m = /^(?:show|open|find|view|display|see|get|look at)(?: me)? (?:all )?(?:my |the )?(?:(?:recent|latest|last|new) )?(?:photos|pictures|pics|images|photographs|snaps|screen ?shots)(?: (?:i took|taken|from|of|on|that i took|i made))?(?: (.+))?$/.exec(t)
+        || /^(?:my )?(?:photos|pictures|pics) (?:from|of|taken) (.+)$/.exec(t)
+        || /^how many (?:photos|pictures|pics|screen ?shots)(?: (?:did i take|have i taken|do i have|i took))?(?: (.+?))?$/.exec(t);
     if (!m) return null;
     var said = (m[1] || "").replace(/^(?:from|on|of|taken) /, "");
     if (!said) return { from: null, to: null, label: "" };
@@ -1104,7 +1120,156 @@ function appCommand(quick) {
     };
 }
 
+// ---- Phone, messages: more (docs/AI-AND-MCP.md, "What it can do for each app") ----------------
+
+// "call back", "call her back", "return my last call"; "redial"
+function callBack(t) {
+    if (/^(?:call (?:(?:him|her|them|that number|it) )?back|return (?:my |the |that )?(?:last |missed )?call|call back (?:the )?(?:last|missed) (?:call(?:er)?|number))$/.test(t)) return { which: "back" };
+    if (/^(?:redial|call (?:the )?last number(?: (?:i|we) called)?(?: again)?|call (?:that|the last) number again|call again)$/.test(t)) return { which: "redial" };
+    return null;
+}
+// "who called me", "did I miss any calls", "my recent calls"
+function callLog(t) {
+    if (/^(?:did i (?:miss|have) any (?:missed )?calls(?: today)?|(?:do i have |have i got |any )?missed calls?|(?:show(?: me)?|check|read) (?:my )?missed calls|have i missed any calls|who did i miss)$/.test(t)) return { missed: true };
+    if (/^(?:who (?:just )?called(?: me)?(?: last| today)?|who was (?:that|the last) call(?: from)?|(?:what was|show(?: me)?|read) (?:my )?(?:last|latest|recent) calls?|(?:show(?: me)?|check) (?:my )?(?:recent calls|call log|call history)|(?:my )?(?:recent calls|call log|call history))$/.test(t)) return { missed: false };
+    return null;
+}
+// "check my voicemail", "call voicemail", "do I have voicemail"
+function voicemail(t) {
+    if (/^(?:call|dial|listen to|play|get) (?:my )?voice ?mails?$/.test(t)) return { action: "call" };
+    if (/^(?:check|show(?: me)?) (?:my )?voice ?mails?$|^(?:do i have|have i got|any) (?:any )?(?:new )?voice ?mails?$|^(?:how many )?(?:new )?voice ?mails?(?: do i have)?$/.test(t)) return { action: "status" };
+    return null;
+}
+// "reply on my way", "reply to that saying ok", "text her back sounds good"
+function replyMessage(t, ctx) {
+    var m = /^(?:reply|respond|write back|text back|text (?:him|her|them) back)(?: to (?:that|it|him|her|them|this|the (?:last )?(?:message|text)))?(?:,|:| saying| with| that| back)?\s*(.*)$/.exec(t);
+    if (!m) return null;
+    return { message: m[1] ? capital(cased(m[1], ctx)) : "" };
+}
+
+// ---- Calendar: more ----------------------------------------------------------------------------
+
+// The words naming an event, without the nouns and times: "dentist", "lunch with priya".
+function eventWords(said) {
+    return said.replace(new RegExp("\\b" + EVENT_NOUN + "s?\\b", "g"), " ").replace(/\b(?:my|the|our|that|this|a)\b/g, " ").replace(/\s+/g, " ").trim();
+}
+// "move my dentist appointment to 4pm", "reschedule lunch with Priya to Friday at noon"
+function eventMove(t, ctx) {
+    var m = /^(?:move|reschedule|push(?: back)?|shift|bring forward|change|switch) (?:my |the |our |that )?(.+?) (?:to|until|till|for|over to) (.+)$/.exec(t);
+    if (!m || /\b(?:alarms?|timers?|tasks?|reminders?|notes?|memos?|contacts?|lists?|volume|brightness)\b/.test(m[1])) return null;
+    var info = extract(m[2], ctx.now);
+    if (info.rest.replace(/\b(?:at|on|the)\b/g, "").trim()) return null;
+    var r = resolve(info, ctx.now, "day");
+    if (r.start === null) return null;
+    return { query: m[1], start: r.start, hasTime: !!r.hasTime, hasDate: !!r.hasDate };
+}
+// "cancel my dentist appointment", "delete lunch with Priya from my calendar",
+// "cancel my 3pm meeting tomorrow"
+function eventCancel(t) {
+    var m = /^(?:cancel|delete|remove|call off|clear|scrap|drop) (?:my |the |our |that )?(.+?)(?: (?:from|off|in|on) (?:my |the )?(?:calendar|schedule|agenda|diary))?$/.exec(t);
+    if (!m) return null;
+    var onCalendar = / (?:from|off|in|on) (?:my |the )?(?:calendar|schedule|agenda|diary)$/.test(t);
+    if (!onCalendar && !new RegExp("\\b" + EVENT_NOUN + "s?\\b").test(m[1])) return null;
+    if (/\b(?:alarms?|timers?|tasks?|reminders?|notes?|memos?|contacts?)\b/.test(m[1])) return null;
+    return { query: m[1] };
+}
+// "am I free tomorrow at 3", "when am I free on Friday", "am I busy tonight"
+function freeTime(t, ctx) {
+    var m = /^(?:am i|will i be|are we|is my (?:calendar|schedule)) (free|busy|available|clear|open)(?: (.+?))?$/.exec(t)
+        || /^when am i (free|available)(?: (.+?))?$/.exec(t)
+        || /^(?:do i have|have i got) (?:any )?(free) time(?: (.+?))?$/.exec(t);
+    if (!m) return null;
+    var said = (m[2] || "today").replace(/^(?:for|on)\s+/, "");
+    var info = extract(said, ctx.now);
+    if (info.rest.replace(/\b(?:at|on|in|the|for)\b/g, "").trim()) return null;
+    var r = resolve(info, ctx.now, "day");
+    var day = info.day !== undefined ? info.day : D.startOfDay(r.start !== null ? r.start : ctx.now);
+    return { day: D.startOfDay(day), at: r.hasTime ? r.start : null, label: info.dayWord || "" };
+}
+
+// ---- Notes, tasks: more ------------------------------------------------------------------------
+
+// "add eggs to my shopping note", "append call Sam to my work memo"
+function noteAppend(t, ctx) {
+    var m = /^(?:add|append|put|write) (.+?) (?:to|on|in|at the end of) (?:my |the )?(.+?) (?:note|memo)$/.exec(t), text, which;
+    if (m) { text = m[1]; which = m[2]; }
+    else if ((m = /^(?:add|append) to (?:my |the )?(.+?) (?:note|memo)\s*[:,-]?\s+(.+)$/.exec(t))) { which = m[1]; text = m[2]; }
+    else return null;
+    if (/^(?:a|an|new)$/.test(which)) return null;
+    return { query: cased(which, ctx), text: cased(text, ctx) };
+}
+// "what's on my shopping list", "what are my tasks", "read my to-do list"
+function taskList(t) {
+    var m = /^(?:what(?:'s| is| are)|whats|show(?: me)?|read(?: me)?|list|check|open|tell me)(?: (?:on|in))? (?:everything on )?(?:my |the |our )?(?:(.+?) )?(list|tasks|to-?dos?(?: list)?|todo list)$/.exec(t);
+    if (m) {
+        var name = (m[1] || "").trim();
+        if (/\b(?:alarm|calendar|contact|email|message|call|play|reading)s?\b/.test(name)) return null;
+        if (/^(?:to-?do|task|my)$/.test(name)) name = "";
+        return { list: name };
+    }
+    if (/^what do i (?:need|have) to do(?: today)?$/.test(t)) return { list: "" };
+    if (/^what do i (?:need|have) to (?:buy|get)$/.test(t)) return { list: "shopping" };
+    return null;
+}
+// "mark buy milk as done", "check off eggs", "cross bread off my list"
+function taskDone(t, ctx) {
+    var m = /^(?:mark|set) (.+?) (?:as )?(?:done|complete|completed|finished)$/.exec(t)
+        || /^(?:check|tick|cross) off (.+?)(?: (?:on|from) (?:my |the )?(?:.+? )?list)?$/.exec(t)
+        || /^(?:check|tick|cross) (.+?) off(?: (?:my |the )?(?:.+? )?list)?$/.exec(t)
+        || /^(?:complete|finish) (?:the )?task (.+)$/.exec(t);
+    if (!m || /\b(?:alarms?|timers?|events?|meetings?)\b/.test(m[1])) return null;
+    return { text: cased(m[1].replace(/^(?:the )?(?:task|item) /, ""), ctx) };
+}
+
+// ---- Maps, the web, the device, Marketplace ------------------------------------------------------
+
+// "coffee near me", "find a pharmacy nearby", "where's the nearest gas station"
+function nearby(t) {
+    var m = /^(?:find|show(?: me)?|search for|look for|are there any|is there an?|any)? ?(?:an? |the |some )?(?:nearest |closest |nearby |good )?(.+?) (?:near me|nearby|near here|around here|close by|close to me|in the area|around me)$/.exec(t)
+        || /^where(?:'s| is| are) the (?:nearest|closest) (.+)$/.exec(t)
+        || /^(?:find|show(?: me)?) (?:the |a )?(?:nearest|closest) (.+)$/.exec(t);
+    if (!m || /^(?:it|me|you)$/.test(m[1])) return null;
+    return { query: m[1] };
+}
+// "open example.com", "go to wikipedia.org"
+function website(t) {
+    var m = /^(?:open|go to|visit|browse to|load|show me|take me to|pull up)? ?((?:https?:\/\/)?(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|edu|gov|io|co|uk|de|fr|nl|info|dev|app|me|tv|ca|au|jp|us|eu)(?:\/\S*)?)$/.exec(t);
+    return m ? { url: m[1] } : null;
+}
+// "how much storage do I have"
+function storageLeft(t) {
+    return /^(?:how much (?:storage|space|room|disk space|memory)(?: is| do i have| have i got)?(?: left| free| available| remaining| used)?(?: on (?:my |the )?(?:phone|tablet|device))?|(?:check|show)(?: me)?(?: my)? (?:storage|disk space)|(?:my )?storage(?: left| space)?|am i (?:running )?out of (?:storage|space))$/.test(t) ? {} : null;
+}
+// "find Angry Birds in the Marketplace", "install Doom"
+function appStore(t) {
+    var m = /^(?:find|search for|look for|look up|show me|is there) (?:an? )?(.+?)(?: app)? (?:in|on|from) (?:the )?(?:marketplace|app store|app catalog|store)$/.exec(t)
+        || /^search (?:the )?(?:marketplace|app store) for (?:an? )?(.+?)(?: app)?$/.exec(t);
+    if (m) return { query: m[1], install: false };
+    m = /^(?:install|download) (?:the |an? )?(.+?)(?: app)?(?: from (?:the )?(?:marketplace|app store))?$/.exec(t);
+    if (m && !/\b(?:file|photo|picture|update|map|maps)s?\b/.test(m[1])) return { query: m[1], install: true };
+    return null;
+}
+// "what's playing", "what song is this"
+function nowPlaying(t) {
+    return /^(?:what(?:'s| is|s) (?:this |that )?(?:song|track|tune)(?: playing| called)?|what(?:'s| is|s) playing(?: now)?|what song is (?:this|that|playing)|who(?:'s| is) (?:this|playing|singing)(?: song)?|name (?:this|that) (?:song|tune))$/.test(t) ? { action: "status" } : null;
+}
+
+// ---- Help (lib/lang/en-help.js) ---------------------------------------------------------------------
+
+var HELP = require("./en-help").HOWTO;
+// "help", "what can you do", "give me suggestions"; "how do I close an app"
+function help(t) {
+    if (/^(?:help|help me|i need help|can you help(?: me)?|what can (?:you|i) (?:do|say|ask)(?: (?:here|with you|you))?|what (?:can|do|else can) you do|what are you able to do|how (?:do|can|should) i use (?:you|this|the assistant)|how does this work|how do you work|give me (?:some )?(?:suggestions|ideas|tips|examples)|(?:any )?suggestions|(?:some )?tips|examples|show me what you can do|what should i (?:say|ask)|(?:list )?(?:your |the )?commands|what are (?:the |your )?commands|what do you know)$/.test(t))
+        return { topic: "" };
+    var m = /^(?:how (?:do|can|should|would) (?:i|you|one)|how to|what(?:'s| is| are)|tell me about|explain|help (?:me )?with|show me how to|teach me (?:how )?to|i (?:want|need) to|i don't know how to) (.+)$/.exec(t);
+    if (!m) return null;
+    var w = m[1].replace(/\?$/, "").replace(/ (?:on|in) (?:phoenix|webos|my phone|this phone|this tablet|the phone|my tablet)$/, "").trim();
+    for (var i = 0; i < HELP.length; ++i) if (HELP[i].words.test(w)) return { topic: HELP[i].id };
+    return null;
+}
+
 var rules = [
+    ["help", help],
     ["undo", undo],
     ["worldTime", worldTime],
     ["time", time],
@@ -1112,6 +1277,7 @@ var rules = [
     ["calculate", function (t) { var e = arithmetic(t); return e ? { expression: e } : null; }],
     ["weather", weather],
     ["battery", battery],
+    ["storage", storageLeft],
     ["timerStatus", timerStatus],
     ["timerCancel", timerCancel],
     ["stopwatch", stopwatch],
@@ -1119,18 +1285,29 @@ var rules = [
     ["alarmList", alarmList],
     ["alarmManage", function (t, ctx) { return alarmManage(t, ctx.now); }],
     ["alarm", function (t, ctx) { return alarm(t, ctx.now, ctx); }],
+    ["freeTime", freeTime],
+    ["eventMove", eventMove],
     ["agenda", agenda],
     ["app", appCommand(false)],
+    ["noteAppend", noteAppend],
     ["note", note],
     ["findNotes", findNotes],
     ["contactAdd", contactAdd],
     ["contactInfo", contactInfo],
+    ["taskList", taskList],
+    ["taskDone", taskDone],
     ["task", task],
     ["event", event],
     ["reminder", function (t, ctx) { return reminder(t, ctx.now, ctx); }],
+    ["eventCancel", eventCancel],
     ["searchEmail", searchEmail],
     ["email", email],
     ["readMessages", readMessages],
+    ["replyMessage", replyMessage],
+    ["callLog", callLog],
+    ["voicemail", voicemail],
+    ["callBack", callBack],
+    ["media", nowPlaying],
     ["media", media],
     ["volume", volume],
     ["brightness", brightness],
@@ -1140,6 +1317,7 @@ var rules = [
     ["lock", lock],
     ["call", call],
     ["navigate", navigate],
+    ["nearby", nearby],
     ["distance", distance],
     ["photos", photos],
     ["text", textMessage],
@@ -1147,6 +1325,8 @@ var rules = [
     ["app", appCommand(true)],
     ["beyond", beyond],
     ["search", search],
+    ["website", website],
+    ["appStore", appStore],
     ["open", openApp]
 ];
 
@@ -1164,7 +1344,10 @@ var MENTIONS = {
         airplane: /\b(airplane|aeroplane|flight|plane)\b/,
         flashlight: /\b(flash ?light|torch|light|dark)\b/,
         ringer: /\b(ringer|ring|ringtone|silent|silence|mute|unmute|sound|quiet|vibrate)\b/,
-        dnd: /\b(disturb|dnd|quiet|silent|focus)\b/
+        dnd: /\b(disturb|dnd|quiet|silent|focus)\b/,
+        location: /\b(location|gps)\b/,
+        rotation: /\b(rotat\w*|orientation)\b/,
+        rotationLock: /\b(rotat\w*|orientation)\b/
     },
     timer: /\b(timer|countdown|count down|minutes?|seconds?|hours?)\b/,
     timerCancel: /\b(timer|countdown)\b/,
@@ -1251,7 +1434,8 @@ function repeatText(r) {
     if (!r.days || !r.days.length) return every + "week";
     return every + list(r.days.map(function (d) { return cap(WEEKDAYS[d]); }));
 }
-var SETTING_NAMES = { wifi: "Wi-Fi", bluetooth: "Bluetooth", airplane: "Airplane mode", flashlight: "The flashlight", ringer: "The ringer", dnd: "Do Not Disturb" };
+var SETTING_NAMES = { wifi: "Wi-Fi", bluetooth: "Bluetooth", airplane: "Airplane mode", flashlight: "The flashlight", ringer: "The ringer", dnd: "Do Not Disturb",
+                      location: "Location Services", rotation: "Screen rotation", rotationLock: "The rotation lock" };
 var PAGE_NAMES = { wifi: "Wi-Fi", bluetooth: "Bluetooth", airplane: "Airplane Mode", phone: "Phone Preferences", hotspot: "Hotspot & Tethering",
     vpn: "VPN", screen: "Screen & Lock", battery: "Battery", sounds: "Sounds & Ringtones", datetime: "Date & Time", language: "Language & Region",
     textassist: "Text Assist", justtype: "Just Type", clipboard: "Clipboard", assistant: "Assistant", usb: "USB", gamepads: "Game Controllers",
@@ -1282,7 +1466,172 @@ function excerpt(s, n) {
     return (sp > n / 2 ? cut.slice(0, sp) : cut).replace(/[\s,;:.-]+$/, "") + "…";
 }
 
+// Requests nothing here understood: the commands their words come close
+// to, as one way each to say them (say.suggest), so "I can't do that" is
+// not a dead end. First matches first; every example is a request the
+// grammar takes as it stands (grammar.test.ts checks).
+var SUGGESTIONS = [
+    [/\b(?:meeting|appointment|event|calendar|schedule|lunch|dinner)\b/, ["add a meeting with Sam tomorrow at 3", "what's on my calendar tomorrow"]],
+    [/\b(?:agenda|busy|free|plans?)\b/, ["what's on my calendar today"]],
+    [/\b(?:remind|reminder|forget)\b/, ["remind me to call mom at 6"]],
+    [/\b(?:alarm|wake|wakeup)\b/, ["set an alarm for 7am weekdays"]],
+    [/\b(?:timer|countdown|minutes?)\b/, ["set a 10 minute timer"]],
+    [/\b(?:stopwatch|stop watch)\b/, ["start a stopwatch"]],
+    [/\b(?:note|notes|memo|jot|write)\b/, ["new note: buy flowers"]],
+    [/\b(?:task|tasks|todo|to-do|to do|list|groceries|shopping)\b/, ["add milk to my shopping list"]],
+    [/\b(?:e-?mail|inbox|mail)\b/, ["send an email to Priya saying see you soon", "do I have any new emails"]],
+    [/\b(?:text|message|messages|sms|tell)\b/, ["text Sam I'm running late", "read my last message"]],
+    [/\b(?:call|phone|dial|ring)\b/, ["call mom"]],
+    [/\b(?:contact|contacts|number|address|birthday)\b/, ["what's Sam's number"]],
+    [/\b(?:music|song|songs|play|album|artist|track|playlist)\b/, ["play some music by Miles Davis", "next song"]],
+    [/\b(?:volume|louder|quieter|mute|sound)\b/, ["turn up the volume"]],
+    [/\b(?:bright|brightness|dim|dimmer|screen)\b/, ["set brightness to 50%"]],
+    [/\b(?:wi-?fi|bluetooth|airplane|flashlight|torch|silent|disturb)\b/, ["turn on Wi-Fi", "turn on the flashlight"]],
+    [/\b(?:settings?|preferences)\b/, ["open Wi-Fi settings"]],
+    [/\b(?:weather|rain|sunny|temperature|forecast|cold|hot)\b/, ["what's the weather tomorrow"]],
+    [/\b(?:convert|miles?|km|kilometers?|pounds?|kg|cups?|liters?|fahrenheit|celsius|dollars?|euros?|usd|eur)\b/, ["convert 10 miles to km"]],
+    [/\b(?:directions|navigate|drive|route|far|distance)\b/, ["navigate to the nearest coffee shop"]],
+    [/\b(?:photos?|pictures?|pics)\b/, ["show my photos from yesterday"]],
+    [/\b(?:time|date|day|clock)\b/, ["what time is it in Tokyo"]],
+    [/\b(?:battery|charge|charging)\b/, ["what's my battery"]],
+    [/\b(?:calculate|plus|minus|times|divided|percent|%)\b/, ["what's 15% of 80"]],
+    [/\b(?:open|launch|start|app)\b/, ["open Maps"]]
+];
+
+// What nothing here can do yet: the app that does it, by its launch
+// point's title (say.context; the router offers "Open <title>" when that
+// app is installed). First match wins: the camera before the photos, the
+// podcasts before the music.
+var APP_WORDS = [
+    [/\b(?:voicemail|call log|missed calls?|calls?|dial|redial)\b/, "Phone"],
+    [/\b(?:texts?|sms|messages?|chats?)\b/, "Messaging"],
+    [/\b(?:e-?mails?|inbox|mail)\b/, "Email"],
+    [/\b(?:calendar|meetings?|appointments?|events?|schedule|agenda)\b/, "Calendar"],
+    [/\b(?:contacts?|address book|phone ?book)\b/, "Contacts"],
+    [/\b(?:memos?|notes?)\b/, "Memos"],
+    [/\b(?:tasks?|to-?dos?|to do|groceries|shopping list)\b/, "Tasks"],
+    [/\b(?:alarms?|timers?|stop ?watch|clock)\b/, "Clock"],
+    [/\b(?:weather|forecast|temperature)\b/, "Weather"],
+    [/\b(?:maps?|directions|navigate|nearby|near me|route|traffic)\b/, "Maps"],
+    [/\b(?:podcasts?|episodes?)\b/, "Podcasts"],
+    [/\b(?:music|songs?|albums?|playlists?|artists?|tracks?)\b/, "Music"],
+    [/\b(?:videos?|movies?|films?)\b/, "Videos"],
+    [/\b(?:camera|selfie|take a (?:photo|picture))\b/, "Camera"],
+    [/\b(?:photos?|pictures?|pics|screenshots?|gallery)\b/, "Photos"],
+    [/\b(?:files?|documents?|downloads?|folders?|pdfs?)\b/, "Files"],
+    [/\b(?:app store|marketplace|install|uninstall)\b/, "Marketplace"],
+    [/\b(?:passwords?|logins?)\b/, "Passwords"],
+    [/\b(?:clipboard|copied)\b/, "Clipboard"],
+    [/\b(?:wi-?fi|bluetooth|settings?|wallpaper|ringtone|vpn|hotspot)\b/, "Settings"],
+    [/\b(?:websites?|browser|web ?page|bookmarks?)\b/, "Web"]
+];
+// A question about the world (a web search may answer it), and small talk
+// (it may not).
+var QUESTION = /^(?:what|what's|whats|who|who's|whom|whose|when|when's|where|where's|why|how|how's|which|is|are|was|were|do|does|did|can|could|should|would|will|tell me|explain|define|describe|meaning of|recipe|give me)\b|\?$/;
+var SMALL_TALK = /^(?:hi|hello|hey|yo|good (?:morning|afternoon|evening|night)|how are you(?: doing| today)?|how's it going|what's up|sup|thanks|thank you|cheers|tell me a joke|say something funny|make me laugh|who are you|what(?:'s| is) your name|are you (?:there|real|a robot|human)|i love you|you're (?:great|awesome|funny|smart)|bye|goodbye|see you|good job|well done|nice)\b/;
+// After a model's answer: what to do with it ("Save as Memo" for a recipe,
+// Maps for where something is).
+var RECIPE = /\b(?:recipes?|how (?:do|can|should) (?:you|i|we|one) (?:make|cook|bake|prepare|brew)|how to (?:make|cook|bake|prepare|brew))\b/;
+var PLACE = /^(?:where(?:'s| is| are)|how far is|directions to|what(?:'s| is) the address of)\s+(?:the\s+)?(.+?)\??$/;
+
 var say = {
+    // What a request is: {question, smallTalk, app: an app's title or ""}.
+    context: function (text) {
+        var t = clean(text), app = "";
+        for (var i = 0; i < APP_WORDS.length && !app; ++i) if (APP_WORDS[i][0].test(t)) app = APP_WORDS[i][1];
+        var small = SMALL_TALK.test(t);
+        // "Can you put the torch on?" asks the device to do something.
+        var request = /^(?:can|could|would|will) you (?:please )?(?:turn|set|put|switch|call|text|send|open|play|start|stop|pause|add|remind|make|take|show|find|navigate|get|create|delete|cancel|mark|move|lock|mute|dim|raise|lower)\b/.test(t);
+        return { question: !small && !request && QUESTION.test(t), smallTalk: small, app: app };
+    },
+    // Layer 4's words: nothing here can, and what can instead ("app":
+    // the app that does it; "question": a web search; "other").
+    // close: requests near it follow ("Did you mean ...?").
+    fallback: function (kind, title, close) {
+        if (kind === "app") return "I don't have the tools for that yet, but I can open " + title + " for you.";
+        if (kind === "question") return "I can't answer that on my own yet, but I can search the web for it.";
+        return "I'm not sure how to help with that yet." + (close ? "" : " I can search the web for it, or say “help” to see what I can do.");
+    },
+    // Things to do with a model's answer to text: [{label, run: {command,
+    // args}} | {label, open: {query}}] (the router fills in the app).
+    related: function (text, answer) {
+        var t = clean(text), out = [], m;
+        if (RECIPE.test(t) && answer) {
+            var dish = t.replace(/^.*?\b(?:make|cook|bake|prepare|brew|recipes? for|recipe)\s+/, "").replace(/\?$/, "");
+            if (/^(?:it|that|this|them|one)$/.test(dish)) dish = "recipe";
+            out.push({ label: "Save as Memo", run: { command: "note", args: { text: capital(dish) + "\n\n" + answer } } });
+        }
+        if ((m = PLACE.exec(t))) out.push({ label: "Show in Maps", map: m[1] });
+        return out;
+    },
+    // ---- Phone, messages
+    noCalls: function (kind) { return kind === "outgoing" ? "You haven't called anyone yet." : "Nobody has called yet."; },
+    callName: function (who) { return "Call " + who; },
+    callKind: function (type) { return { missed: "Missed", incoming: "Incoming", outgoing: "Outgoing", ignored: "Ignored" }[type] || "Call"; },
+    lastCall: function (c, now) {
+        if (!c) return "There are no calls in your call log.";
+        var when = whenText(c.at, null, false, now);
+        if (c.type === "outgoing") return "Your last call was to " + c.name + ", " + when + ".";
+        return (c.type === "missed" ? "You missed a call from " : "Your last call was from ") + c.name + ", " + when + ".";
+    },
+    missedCalls: function (list, now) {
+        if (!list.length) return "No missed calls this week.";
+        if (list.length === 1) return "You missed a call from " + list[0].name + ", " + whenText(list[0].at, null, false, now) + ".";
+        return "You missed " + list.length + " calls: " + list(list.map(function (c) { return c.name + " " + whenText(c.at, null, false, now); })) + ".";
+    },
+    voicemail: function (count, waiting) {
+        if (!waiting && !count) return "You have no new voicemail.";
+        return count ? "You have " + plural(count, "new voicemail", "new voicemails") + "." : "You have new voicemail.";
+    },
+    callVoicemail: function () { return "Call Voicemail"; },
+    noVoicemailNumber: function () { return "There's no voicemail number set. You can add it in Phone's preferences."; },
+    nothingToReply: function () { return "There's no message to reply to yet."; },
+    replyTo: function (who) { return "Reply to " + who; },
+    unreadMessages: function (n) { return n === 1 ? "You have 1 new message." : "You have " + n + " new messages."; },
+    noUnreadMessages: function () { return "You have no new messages."; },
+    // ---- Calendar
+    noSuchEvent: function (what) { return "I couldn't find " + (what ? quote(what) : "that") + " on your calendar."; },
+    eventRepeats: function (title) { return quote(title) + " repeats. I can't change a repeating event yet: open it in Calendar to change one day or all of them."; },
+    confirmEventCancel: function (title, start, allDay, now) { return "Cancel " + quote(title) + " " + whenText(start, null, allDay, now) + "?"; },
+    eventCancelled: function (title) { return "Cancelled " + quote(title) + "."; },
+    eventMoved: function (title, start, allDay, now) { return "Moved " + quote(title) + " to " + whenText(start, null, allDay, now).replace(/^on /, "") + "."; },
+    freeAt: function (at, clash, now) {
+        var when = whenText(at, null, false, now);
+        if (!clash) return "Yes, you're free " + when + ".";
+        return "No, you have " + quote(clash.title) + " then, " + timeText(clash.start) + " to " + timeText(clash.end) + ".";
+    },
+    freeSlots: function (slots, label, now) {
+        var day = cap(label);
+        if (!slots.length) return day + " you're busy all day, from 8 AM to 8 PM.";
+        if (slots.length === 1 && slots[0].end - slots[0].start >= 11 * 3600000) return day + " your calendar is clear.";
+        return day + " you're free " + list(slots.map(function (x) { return timeText(x.start) + " to " + timeText(x.end); })) + ".";
+    },
+    // ---- Memos, tasks
+    noMemo: function (q) { return "I couldn't find a memo about " + quote(q) + ". Say \u201cnew note\u201d and what it says to start one."; },
+    noteAppended: function (title) { return "Added it to your " + quote(excerpt(title, 40)) + " memo."; },
+    noTask: function (q) { return "I couldn't find " + quote(q) + " in your tasks."; },
+    taskDone: function (t) { return "Marked " + quote(t) + " as done."; },
+    noList: function (name) { return "You don't have a list called " + quote(name) + "."; },
+    tasks: function (name, items) {
+        var where = name ? "your " + name + " list" : "your tasks";
+        if (!items.length) return "There's nothing on " + where + ".";
+        var shown = items.slice(0, 8).map(quote);
+        return cap(where.replace(/^your /, "Your ")) + ": " + list(shown) + (items.length > 8 ? ", and " + (items.length - 8) + " more" : "") + ".";
+    },
+    // ---- Maps, the web, the device, Marketplace
+    nearby: function (q) { return "Here's " + q + " near you, in Maps."; },
+    openingSite: function (url) { return "Opening " + url + "."; },
+    storage: function (free, size) { return free ? "You have " + free + " free" + (size ? " of " + size : "") + "." : "I couldn't read how much storage is free."; },
+    installed: function () { return "Installed"; },
+    noApps: function (q) { return "I couldn't find " + quote(q) + " in the Marketplace."; },
+    appsFound: function (q, titles) { return titles.length === 1 ? "I found " + titles[0] + " in the Marketplace." : "I found " + titles.length + " apps for " + quote(q) + " in the Marketplace."; },
+    toInstall: function (title) { return "Here's " + title + " in the Marketplace: tap Install to get it."; },
+    alreadyInstalled: function (title) { return title + " is already installed."; },
+    noMarketplace: function () { return "I couldn't reach the Marketplace right now."; },
+    nowPlaying: function () { return "I can't see what's playing yet, but I can open Music for you."; },
+    // ---- Help
+    rightNow: function () { return "Right now"; },
+    helpOverview: function () { return "Here's what I can do. Tap an example to try it, or just say what you want. I can also tell you how to use Phoenix: ask \u201chow do I close an app?\u201d"; },
     off: function () { return "The assistant is turned off. You can turn it on in Settings > Assistant."; },
     notAllowed: function (title) { return "\"" + title + "\" is turned off in Settings > Assistant."; },
     openApp: function (title) { return "Open " + title; },
@@ -1422,9 +1771,16 @@ var say = {
         var n = d >= 100 ? Math.round(d / 10) * 10 : d >= 10 ? Math.round(d) : Math.round(d * 10) / 10;
         return cap(place) + " is about " + n.toLocaleString("en") + (imperial ? " miles" : " km") + " away, as the crow flies.";
     },
-    photos: function (n, label) {
-        if (!n) return "I found no photos" + (label ? " from " + label : "") + ".";
-        return "Here " + (n === 1 ? "is 1 photo" : "are " + n + " photos") + (label ? " from " + label : "") + ".";
+    // The title Photos gives the pictures: "Photos from Yesterday".
+    photosTitle: function (label, what) { return cap(what || "photo") + "s from " + label.replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); }); },
+    // n found from label ("yesterday"); what: "photo" or "screenshot";
+    // opened: Photos shows them too; count: only how many was asked.
+    photos: function (n, label, what, opened, count) {
+        var noun = what || "photo", from = label ? " from " + label : "";
+        if (!n) return "You don't have any " + noun + "s" + from + ".";
+        if (count) return "You have " + plural(n, noun) + from + ".";
+        return "Here " + (n === 1 ? "is 1 " + noun : "are " + n + " " + noun + "s") + from + "." +
+            (opened ? (n === 1 ? " I've opened it in Photos too." : " I've opened them in Photos too.") : "");
     },
     // Undo
     nothingToUndo: function () { return "There's nothing to undo."; },
@@ -1436,11 +1792,15 @@ var say = {
         note: function () { return "delete that memo"; },
         alarm: function (time) { return "delete the " + time + " alarm"; },
         contact: function (name) { return "remove " + name + " from your contacts"; },
-        timer: function () { return "cancel that timer"; }
+        timer: function () { return "cancel that timer"; },
+        move: function (title) { return "move " + quote(title) + " back"; },
+        restoreEvent: function (title) { return "put " + quote(title) + " back on your calendar"; },
+        memoBack: function () { return "take that out of the memo"; },
+        taskBack: function (t) { return "mark " + quote(t) + " as not done"; }
     },
-    beyond: function (what) { return what === "translate" ? "I can't translate on the phone." : ""; },
+    beyond: function (what) { return what === "translate" ? "I can't translate without a language model yet, but I can search the web for it." : ""; },
     // As before
-    toggled: function (setting, on) { return SETTING_NAMES[setting] + " is " + (on ? "on" : "off") + "."; },
+    toggled: function (setting, on) { return SETTING_NAMES[setting] + (setting === "location" ? " are " : " is ") + (on ? "on" : "off") + "."; },
     noSuchContact: function (who) { return "I couldn't find " + who + " in your contacts."; },
     noNumber: function (who) { return who + " has no phone number in your contacts."; },
     confirmCall: function (who, number) { return "Call " + (who ? who + " (" + number + ")" : number) + "?"; },
@@ -1462,13 +1822,66 @@ var say = {
         if (day === "tomorrow") return "Tomorrow" + where + ": " + desc + ", " + Math.round(hi) + "° / " + Math.round(lo) + "°" + unit + ".";
         return "It's " + Math.round(temp) + "°" + unit + " and " + desc + where + "." + (hi !== null ? " Today: " + Math.round(hi) + "° / " + Math.round(lo) + "°." : "");
     },
+    // "Will it rain tomorrow?": about (rain, snow, sunny, hot, cold, warm,
+    // windy) by the chance of rain and the day's sky and temperatures.
+    weatherWill: function (about, place, day, chance, desc, hi, lo, unit) {
+        var where = place ? " in " + place : "", when = day === "tonight" ? "tonight" : day;
+        var sky = desc ? cap(desc) + ", " + Math.round(hi) + "° / " + Math.round(lo) + "°" + unit + "." : "";
+        if (about === "rain" || about === "snow") {
+            if (typeof chance !== "number") return sky || "I couldn't get the chance of " + about + ".";
+            var word = about === "snow" ? "snow" : "rain";
+            var likely = about === "snow" ? /snow/.test(desc) : chance >= 50;
+            return (chance >= 50 ? "Yes, " + (likely ? word + " is likely" : "probably") : chance >= 20 ? "Maybe" : "Probably not") +
+                where + " " + when + ": a " + chance + "% chance of " + (about === "snow" ? "precipitation" : "rain") + ". " + sky;
+        }
+        return cap(when) + where + ": " + sky;
+    },
+    weatherDays: function (place, days, unit, label, now) {
+        if (!days.length) return "I couldn't get the forecast.";
+        var where = place ? " in " + place : "";
+        var his = days.map(function (d) { return Math.round(d.hi); }), los = days.map(function (d) { return Math.round(d.lo); });
+        var wet = days.filter(function (d) { return d.rain >= 50; }).map(function (d) { return dayText(d.at, now); });
+        return cap(label) + where + ": highs " + Math.min.apply(null, his) + "° to " + Math.max.apply(null, his) + "°" + unit +
+            ", lows " + Math.min.apply(null, los) + "° to " + Math.max.apply(null, los) + "°" + unit + "." +
+            (wet.length ? " Rain likely " + list(wet) + "." : " No rain expected.");
+    },
     noPlace: function (place) { return "I couldn't find a place called " + place + "."; },
-    noLocation: function () { return "I don't know where you are. Say a city, like \"weather in Paris\", or turn on Location Services."; },
+    // Why the location could not be had (commands.js here): "ask" (not
+    // answered yet), "denied", "off", "unavailable"; purpose "weather" or
+    // "distance".
+    location: function (why, purpose) {
+        var need = purpose === "distance" ? "work out how far that is" : "check the weather where you are";
+        var instead = purpose === "distance" ? "" : " Or say a city, like \u201cweather in Paris\u201d.";
+        if (why === "ask") return "To " + need + ", I need your location. Is it OK if I use it?";
+        if (why === "denied") return "I'm not allowed to use your location. Allow it, here or in Settings > Location Services, and I'll " + need + "." + instead;
+        if (why === "off") return "Location Services are off. Turn them on and I'll " + need + "." + instead;
+        return "I couldn't find where you are right now." + (instead || " Try again in a moment.");
+    },
+    locationAccess: function (allow) { return allow ? "OK, I can use your location now." : "OK, I won't use your location. You can always say a city instead."; },
+    allow: function () { return "Allow"; },
+    dontAllow: function () { return "Don't Allow"; },
+    allowLocation: function () { return "Allow Location"; },
+    turnOnLocation: function () { return "Turn On Location Services"; },
+    locationSettings: function () { return "Location Settings"; },
     noWeather: function () { return "I couldn't get the weather right now. I've opened Weather."; },
-    cantDo: function () { return "I can't do that on the phone."; },
     askCloud: function (name) { return "Ask " + name; },
     searchWeb: function () { return "Search the web"; },
     setUpCloud: function () { return "Set up a cloud model"; },
+    // Layer 4's other choice when no cloud model is set up: the UI asks
+    // which (on-device, cloud or both) and Settings sets it up.
+    connectModel: function () { return "Connect model"; },
+    // Up to two requests close to what was asked (SUGGESTIONS), and the words that offer them.
+    suggest: function (text) {
+        var t = clean(text), out = [];
+        SUGGESTIONS.forEach(function (s) {
+            if (out.length < 2 && s[0].test(t)) s[1].forEach(function (e) { if (out.length < 2 && out.indexOf(e) < 0) out.push(e); });
+        });
+        return out;
+    },
+    suggestions: function () { return [].concat.apply([], SUGGESTIONS.map(function (s) { return s[1]; })); },
+    didYouMeanAny: function (list) { return "Did you mean " + (list.length > 1 ? "something like " + quote(list[0]) + " or " + quote(list[1]) : quote(list[0])) + "?"; },
+    // A question asked again once a model was connected (retry), with none there.
+    noModelYet: function () { return "No model is connected yet. You can connect one in Settings > Assistant."; },
     cloudNoControl: function (name) { return name + " asked to control the phone, but cloud models may only chat. You can allow it in Settings > Assistant."; },
     cloudFailed: function (name, why) { return name + " didn't answer: " + why; },
     localFailed: function (why) { return "The on-device model didn't answer (" + why + ")."; },
@@ -1506,6 +1919,165 @@ function answer(t) {
     return null;
 }
 
+// ---- Follow-up questions (lib/followups.js) -------------------------------------------------
+var TOPICS = { location: "where your meetings are", invitees: "who's coming to things", duration: "how long things last",
+               alert: "reminders before events", due: "when things are due", list: "which list things go on",
+               repeat: "whether alarms repeat", label: "what alarms are for", email: "email addresses for new contacts",
+               phone: "phone numbers for new contacts" };
+var COMMON_NOUNS = /^(?:meeting|lunch|dinner|breakfast|brunch|coffee|call|phone call|video call|appointment|event|drinks|catch-up|catch up|interview|party|class|session|game|practice|date)\b/i;
+// "3 o'clock", "3:30" (people say the hour; 12-hour clock).
+function clockWords(ms) {
+    var d = new Date(ms), h = d.getHours() % 12 || 12, m = d.getMinutes();
+    return m ? h + ":" + (m < 10 ? "0" : "") + m : h + " o'clock";
+}
+// "today", "tomorrow", "Friday", "October 20".
+function dayWord(ms, now) {
+    var days = D.daysBetween(now, ms);
+    if (days === 0) return "today";
+    if (days === 1) return "tomorrow";
+    if (days > 1 && days < 7) return cap(WEEKDAYS[new Date(ms).getDay()]);
+    return new Date(ms).toLocaleDateString("en", { month: "long", day: "numeric" });
+}
+// An event as people name it: "tomorrow's lunch with Sam", "“Dentist” on
+// Friday", "your 3 o'clock tomorrow" (not an event: its title quoted).
+function eventThing(item, now) {
+    var t = String(item.title || "");
+    if (item.type !== "event") return quote(t);
+    if (!item.start) return COMMON_NOUNS.test(t) ? "your " + t.charAt(0).toLowerCase() + t.slice(1) : quote(t);
+    var day = dayWord(item.start, now), named = /^(?:today|tomorrow|[A-Z][a-z]+day)$/.test(day);
+    if (COMMON_NOUNS.test(t) && named) return day + "'s " + t.charAt(0).toLowerCase() + t.slice(1);
+    if (COMMON_NOUNS.test(t)) return "your " + t.charAt(0).toLowerCase() + t.slice(1) + " on " + day;
+    return quote(t) + (named ? (day === "today" || day === "tomorrow" ? " " : " on ") + day : " on " + day);
+}
+// After something is made, one short question about what it still lacks;
+// the answer as typed or said (a chip's label also matches).
+var EMAIL_ONLY = /^(?:(?:it's|it is|her|his|their|the)?\s*(?:e-?mail(?: address)?(?: is)?)?\s*)([^\s@,]+@[^\s@,]+\.[a-z]{2,})$/;
+var followUp = {
+    // The question, as conversation: the thing named as people would, one
+    // of a few phrasings (variant: how many of the kind were asked before).
+    question: function (kind, item, now, variant) {
+        var v = variant || 0, t = item.title || "";
+        function pick(list) { return list[v % list.length]; }
+        var thing = eventThing(item, now), q = quote(t);
+        switch (kind) {
+        case "location":
+            return pick([item.people && item.people.length && !item.allDay && item.start
+                             ? "Hey, where are you and " + list(item.people) + " meeting for your " + clockWords(item.start) + " " + dayWord(item.start, now) + "?"
+                             : "Hey, where's " + thing + " happening?",
+                         "Quick one: where is " + thing + "?",
+                         "Where should I say " + thing + " is?"]);
+        case "invitees": return pick(["Is anyone joining you for " + thing + "?", "Who's coming to " + thing + "?", "Want me to invite anyone to " + thing + "?"]);
+        case "duration": return pick(["How long do you think " + thing + " will run?", "How much time should I block out for " + thing + "?"]);
+        case "alert": return pick(["Quick one about " + thing + ": should I remind you beforehand?", "Want a heads-up before " + thing + "?"]);
+        case "due": return item.type === "reminder" ? pick(["When should I remind you to " + t + "?", "When's a good time to nudge you to " + t + "?"])
+                                                    : pick(["Is there a day you want " + q + " done by?", "When's " + q + " due?"]);
+        case "list": return pick(["Which list should " + q + " go on?", "Want me to file " + q + " on one of your lists?"]);
+        case "repeat": return pick(["Should your " + t + " alarm go off every day, or just this once?", "Is the " + t + " alarm a one-off, or should it repeat?"]);
+        case "label": return pick(["What's the " + t + " alarm for?", "Want to give your " + t + " alarm a name?"]);
+        case "email": return pick(["Do you have an email address for " + t + "?", "What's " + t + "'s email, if you have it?"]);
+        case "phone": return pick(["Do you have a phone number for " + t + "?", "What's " + t + "'s number, if you have it?"]);
+        }
+        return "";
+    },
+    // Skipped a few times: whether that kind of question helps.
+    doubt: function (kind, variant) {
+        var list = ["I've been asking about " + TOPICS[kind] + ". Is that helpful, or should I stop asking?",
+                    "You've skipped a few questions about " + TOPICS[kind] + ". Want me to keep asking those?"];
+        return list[(variant || 0) % list.length];
+    },
+    topic: function (kind) { return TOPICS[kind] || kind; },
+    chip: {
+        skip: "Skip", videoCall: "Video call", justOnce: "Just once", keepAsking: "Keep asking", stopAsking: "Stop asking",
+        minutes: function (n) { return n < 60 ? n + " min" : n === 60 ? "1 hour" : n % 60 ? (n / 60).toFixed(1) + " hours" : n / 60 + " hours"; },
+        before: function (n) { return (n < 60 ? n + " min" : n === 60 ? "1 hour" : n / 60 + " hours") + " before"; },
+        inAnHour: "In 1 hour", thisEvening: "This evening", tomorrowMorning: "Tomorrow morning",
+        today: "Today", tomorrow: "Tomorrow", nextWeek: "Next week",
+        daily: "Every day", weekdays: "Weekdays", weekends: "Weekends"
+    },
+    // What changed, said back.
+    done: function (kind, value, now) {
+        switch (kind) {
+        case "location": return "Got it, I've put " + value + " as the place.";
+        case "invitees": return "Done, I've invited " + list(value) + ".";
+        case "duration": return "OK, I've blocked out " + durationText(value * 60) + ".";
+        case "alert": return value ? "I'll give you a heads-up " + durationText(value * 60) + " before." : "I'll remind you when it starts.";
+        case "due": return "OK, that's set for " + whenText(value, null, false, now) + ".";
+        case "list": return "Filed it on your " + value + " list.";
+        case "repeat": return value === "once" ? "Just this once, then." : "It'll go off " + repeatText(value) + " now.";
+        case "label": return "Labelled it " + quote(value) + ".";
+        case "email": return "Saved " + value + ".";
+        case "phone": return "Saved " + value + ".";
+        }
+        return "Done.";
+    },
+    skipped: function () { return "No problem, I'll leave it."; },
+    keeping: function () { return "Good to know. I'll keep asking."; },
+    stopped: function (kind) { return "OK, I'll stop asking about " + TOPICS[kind] + ". You can turn it back on in Settings > Assistant."; },
+    alreadySet: function () { return "That's been set already, so I'll leave it."; },
+    gone: function () { return "That's gone now, so there's nothing to add."; },
+    noContacts: function (names) { return "I couldn't find " + list(names) + " with an email address in your contacts."; },
+    // A typed or spoken answer to kind: {skip: true}, {value} (words for
+    // the free-text kinds, a number of minutes, ms for a time), or null
+    // (not an answer: a new request).
+    answer: function (kind, text, now) {
+        var t = clean(text).replace(/[.!]$/, "").trim();
+        if (kind === "doubt") {
+            if (/^(?:keep(?: asking| going)?|yes|yeah|yep|sure|it's (?:helpful|fine|useful)|(?:it's )?helpful|it helps|go on|carry on|ok|okay)$/.test(t)) return { value: "keep" };
+            if (/^(?:stop(?: asking| it)?|no|nope|please stop|not (?:really )?helpful|no thanks|don't|don't ask)$/.test(t)) return { value: "stop" };
+            return null;
+        }
+        if (/^(?:skip|skip it|skip that|no|nope|no thanks|no thank you|not now|never ?mind|leave it|pass|i don't know|don't know|dunno|not sure)$/.test(t)) return { skip: true };
+        var m;
+        switch (kind) {
+        case "location":
+            if (/^(?:a )?(?:video(?: call| chat| meeting)?|online|zoom|on zoom|virtual|remote|remotely)$/.test(t)) return { value: "Video call" };
+            t = t.replace(/^(?:it's |it is |it'll be |it will be |we're meeting |we are meeting |the place is |the location is )?(?:at |in |@ )?/, "").trim();
+            return t ? { value: capital(cased(t, { original: text })) } : null;
+        case "duration": {
+            var s = duration(t.replace(/^(?:it's |it is |it lasts |it'll be |about |around |roughly |for |make it )+/, "").replace(/ long$/, ""));
+            return s && s >= 300 && s <= 86400 ? { value: Math.round(s / 60) } : null;
+        }
+        case "alert":
+            if (/^(?:when it starts|at the start|at the time|on time|at start)$/.test(t)) return { value: 0 };
+            if ((m = /^(?:remind me |tell me )?(.+?) (?:before|earlier|ahead|beforehand|in advance)$/.exec(t))) {
+                var b = duration(m[1].replace(/^(?:about |around )/, ""));
+                return b && b <= 7 * 86400 ? { value: Math.round(b / 60) } : null;
+            }
+            return null;
+        case "due": {
+            var due = when(t.replace(/^(?:it's due |it is due |due |remind me |by )/, ""), now, { prefer: "day" });
+            return due && due > now ? { value: due } : null;
+        }
+        case "list":
+            t = t.replace(/^(?:it's for |it's on |put it on |put it in |on |in |for |to )?(?:my |the )?/, "").replace(/ list$/, "").trim();
+            return t && t.split(" ").length <= 4 ? { value: capital(cased(t, { original: text })) } : null;
+        case "repeat":
+            if (/^(?:every ?day|daily|each day|all week|every day of the week)$/.test(t)) return { value: "daily" };
+            if (/^(?:(?:on |every )?weekdays|monday to friday|mon-fri|work ?days|on work ?days|every weekday)$/.test(t)) return { value: "weekdays" };
+            if (/^(?:(?:on |at |every )?weekends?|saturday and sunday)$/.test(t)) return { value: "weekends" };
+            if (/^(?:just once|once|only once|no repeat|don't repeat|do not repeat|not repeat)$/.test(t)) return { value: "once" };
+            return null;
+        case "label":
+            t = t.replace(/^(?:it's for |it is for |for |call it |label it |name it |it's |to )/, "").trim();
+            return t && t.split(" ").length <= 5 ? { value: capital(cased(t, { original: text })) } : null;
+        case "invitees": {
+            t = t.replace(/^(?:invite |with |it's with |just |only )/, "");
+            var names = t.split(/\s*(?:,|\band\b|&)\s*/).map(function (x) { return x.trim(); }).filter(Boolean);
+            return names.length && names.length <= 6 && names.every(function (n) { return n.split(" ").length <= 3; })
+                ? { names: names.map(function (n) { return cased(n, { original: text }); }) } : null;
+        }
+        case "email":
+            m = EMAIL_ONLY.exec(String(text).trim().toLowerCase());
+            return m ? { value: m[1] } : null;
+        case "phone": {
+            var d = digits(t).replace(/^(?:it's |it is |the number is |number |call )/, "");
+            return /^\+?[\d\s().-]{3,}$/.test(d) && d.replace(/\D/g, "").length >= 3 ? { value: d.trim() } : null;
+        }
+        }
+        return null;
+    }
+};
+
 module.exports = {
     id: "en",
     name: "English",
@@ -1525,6 +2097,18 @@ module.exports = {
     whenText: whenText,
     repeatText: repeatText,
     say: say,
+    // Whether the words name what command does (MENTIONS), for choosing the
+    // tools a model is offered.
+    mentions: function (command, text) {
+        var m = MENTIONS[command], t = String(text || "").toLowerCase();
+        if (!m) return false;
+        if (m instanceof RegExp) return m.test(t);
+        return Object.keys(m).some(function (k) { return m[k].test(t); });
+    },
+    // A how-to (lib/lang/en-help.js) by its id.
+    help: function (id) { return HELP.filter(function (h) { return h.id === id; })[0] || null; },
+    eventWords: eventWords,
     grounded: grounded,
-    answer: answer
+    answer: answer,
+    followUp: followUp
 };

@@ -35,7 +35,7 @@ describe("Settings > Advanced", () => {
     it("sends the tweaks to the shell, LunaCE's keys and defaults", async () => {
         await call("luna://com.webos.service.systemservice/setPreferences", { infiniteCardCyclingEnabled: true, launcherGridDensity: "dense" });
         expect(last("systemStatus")?.tweaks).toEqual({
-            infiniteCardCycling: true, maximizeEdges: false, waveLauncher: false, tapRipple: true, animationSpeed: "normal",
+            infiniteCardCycling: true, maximizeEdges: false, waveLauncher: true, tapRipple: true, animationSpeed: "normal",
             gestureSensitivity: "normal", haptics: false, gridDensity: "dense", batteryPercent: false, numberRow: false,
             keyboardStyle: "auto",
         });

@@ -67,6 +67,8 @@ Item {
     property real fullHeight: Theme.dashboardMenuMaxContentHeight
 
     signal activated(string appId, string params)
+    // A notification's button (DashboardItem actions): row index, its id.
+    signal actionRequested(int index, string actionId)
     signal dismissRequested(int index)
 
     readonly property int count: model ? model.count : 0
@@ -304,6 +306,8 @@ Item {
             glyph: row.glyph
             icon: row.icon
             progress: row.progress
+            actions: row.model.actions || ""
+            onActionTapped: (actionId) => menu.actionRequested(row.index, actionId)
 
             Connections {
                 target: menu

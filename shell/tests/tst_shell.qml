@@ -1126,9 +1126,11 @@ Item {
             windows.dismissNotification(0);
         }
 
-        // G5: advanced gestures. A long swipe across the gesture area's
-        // centre shows the app beside this one, maximized; off, it is Back.
+        // G5: advanced gestures (on by default). A long swipe across the
+        // gesture area's centre shows the app beside this one, maximized;
+        // off, it is Back.
         function test_advancedGestures() {
+            verify(status.advancedGestures, "on by default");
             var a = windows.launch("org.webosphoenix.email", "");
             var b = windows.launch("org.webosphoenix.messaging", "");
             var c = windows.launch("org.webosphoenix.phone", "");
@@ -1170,7 +1172,7 @@ Item {
             shell.gestureSwitchApp(true);
             tryCompare(view, "currentUid", b, 2000);
             compare(view.maximizeProgress, 0);
-            status.advancedGestures = false;
+            status.advancedGestures = true;
         }
 
         // C7: in a stack of more than four, a tap on a card buried at the
@@ -1530,6 +1532,49 @@ Item {
             tryVerify(function() { return shell.maximized; }, 2000);
             shell.gestureUp();
             tryCompare(shell.cardView, "maximizeProgress", 0, 2000);
+        }
+
+        // Phoenix: a notification with answers as buttons ({actions}; the
+        // Assistant's follow-up questions). A button calls the app's own
+        // service, the notification goes, and what the service says shows as
+        // a banner, without opening the app. {tag} replaces, {remove} takes back.
+        function test_notificationActionsAnswerWithoutOpening() {
+            var notes = shell.notifications;
+            var app = "org.webosphoenix.email";
+            var q = { appId: app, tag: "followup:q1", title: "Where is “Dentist”?", body: "", params: { followUp: "q1" },
+                      actions: { uri: "luna://" + app + "/answerFollowUp", params: { id: "q1" },
+                                 items: [{ id: "fu:0", label: "Office" }, { id: "fu:skip", label: "Skip" }] } };
+            windows._hostMessage(app, "", "notification", q);
+            windows._hostMessage(app, "", "notification", q);
+            compare(windows.notifications.count, 1, "the tag replaces");
+            var calls = [];
+            notes.source = { windowFor: function () { return null; },
+                             lunaCall: function (uri, params, done) { calls.push({ uri: uri, params: params }); done({ returnValue: true, text: "Added Office as the place." }); } };
+            notes.bannerActive = false;
+            notes.dashboardOpen = true;
+            tryCompare(notes, "negativeSpace", notes.dashboardHeight, 2000);
+            var pill = findChild(notes, "dashboardAction_fu:0");
+            verify(pill && pill.visible, "the answer shows on the row");
+            mouseClick(pill);
+            compare(calls.length, 1);
+            compare(calls[0].uri, "luna://" + app + "/answerFollowUp");
+            compare(JSON.stringify(calls[0].params), '{"id":"q1","action":"fu:0"}');
+            tryCompare(windows.notifications, "count", 0, 1000);
+            compare(windows.cards.count, 0, "nothing opened");
+            tryVerify(function () { return notes._bannerShowing && notes._bannerShowing.text === "Added Office as the place."; }, 2000);
+
+            // Only the app's own service.
+            windows.notify(app, "Q", "", null, { tag: "x", actions: { uri: "luna://com.palm.db/del", params: {}, items: [{ id: "a", label: "A" }] } });
+            notes.runAction(0, "a");
+            compare(calls.length, 1);
+            // Taken back by its tag.
+            windows._hostMessage(app, "", "notification", { appId: app, tag: "x", remove: true });
+            compare(windows.notifications.count, 0);
+            notes.source = Qt.binding(function () { return shell.source; });
+            notes.dashboardOpen = false;
+            // (Clearing bannerActive drops the banner, as the other tests do.)
+            notes.bannerActive = false;
+            tryCompare(notes, "negativeSpace", 0, 2000);
         }
 
         SignalSpy { id: focusSpy; target: windows; signalName: "cardFocusRequested" }

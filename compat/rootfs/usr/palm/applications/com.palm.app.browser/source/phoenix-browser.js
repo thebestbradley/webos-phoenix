@@ -23,7 +23,7 @@
 // Just Type: com.palm.universalsearch's OptionalSearchList in the
 // runtime). The browser and Just Type share the default, as on webOS.
 
-/*global enyo, $L, Preferences, BrowserApp, Browser, FindBar */
+/*global enyo, $L, Preferences, BrowserApp, Browser, FindBar, ActionBar */
 (function () {
 	"use strict";
 
@@ -244,6 +244,25 @@
 		inputChange.apply(this, arguments);
 		if (this.$.input.getValue().length < 2) this.$.count.setContent("");
 	};
+	// The share menu (Add Bookmark, Share Link, Add to Launcher) opens with
+	// its right edge at the share button's (ActionBar.js:102-107), on the
+	// TouchPad's wide bar. On a phone the button is mid-bar and the menu
+	// reached past the left edge: Popup.clampPosition keeps the popup's box
+	// on screen, but the menu's frame is drawn outside it (its negative
+	// margins), so its left side was cut off. It is moved right by as much.
+	var AB = ActionBar.prototype;
+	var showSharePopup = AB.showSharePopup;
+	AB.showSharePopup = function () {
+		showSharePopup.apply(this, arguments);
+		var n = this.$.sharePopup.hasNode();
+		if (!n) return;
+		var left = 0;
+		for (var e = n; e; e = e.firstElementChild)
+			left = Math.min(left, e.getBoundingClientRect().left);
+		if (left < 0)
+			n.style.left = (n.offsetLeft - left) + "px";
+	};
+
 	var findClose = F.close;
 	F.close = function () {
 		findClose.apply(this, arguments);

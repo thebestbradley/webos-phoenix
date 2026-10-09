@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Layer 2 of the Phoenix Assistant (docs/M6-PLAN.md F3): a fixed grammar per
+// Layer 2 of the Assistant (docs/M6-PLAN.md F3): a fixed grammar per
 // language, matched against what the user said or typed. No language model:
 // it answers at once and offline, or says it does not know (null), and the
 // router goes on to the on-device model or offers a cloud model.

@@ -106,7 +106,7 @@ async function main() {
         await st.waitForSelector("[data-testid='adv-infiniteCardCyclingEnabled']");
         const tweaks = () => lastStatus().tweaks || {};
         const toggles = [["adv-infiniteCardCyclingEnabled", "infiniteCardCycling", true], ["adv-sysUiEnableMaximizeEdges", "maximizeEdges", true],
-                         ["adv-sysUiEnableWaveLauncher", "waveLauncher", true], ["adv-showReticleAnimation", "tapRipple", false],
+                         ["adv-sysUiEnableWaveLauncher", "waveLauncher", false], ["adv-showReticleAnimation", "tapRipple", false],
                          ["adv-hapticFeedback", "haptics", true], ["adv-showBatteryPercent", "batteryPercent", true]];
         for (const [id, key, want] of toggles) {
             await st.click(`[data-testid='${id}']`);
@@ -124,8 +124,10 @@ async function main() {
         check(await st.locator("[data-testid='adv-sysUiEnableNextPrevGestures']").count() === 0, "Advanced: no Switch apps without a gesture area");
         await st.evaluate(() => window.__phoenixRuntime.applyHostStatus({ gestureArea: true }));
         await st.waitForSelector("[data-testid='adv-sysUiEnableNextPrevGestures']", { timeout: 3000 });
+        // On by default: the toggle is checked, and turning it off reaches the shell.
+        check(await st.getAttribute("[data-testid='adv-sysUiEnableNextPrevGestures']", "aria-checked") === "true", "Advanced: Switch apps on by default");
         await st.click("[data-testid='adv-sysUiEnableNextPrevGestures']");
-        await until(() => lastStatus().advancedGestures === true, "Advanced: Switch apps reaches the shell");
+        await until(() => lastStatus().advancedGestures === false, "Advanced: Switch apps reaches the shell");
         await st.click("[data-testid='adv-emailDashboardCycling']");
         await until(async () => (await svc(st, "luna://com.webos.service.systemservice/getPreferences", { keys: ["emailDashboardCycling"] })).emailDashboardCycling === true,
                     "Advanced: the cycling email dashboard is a preference");

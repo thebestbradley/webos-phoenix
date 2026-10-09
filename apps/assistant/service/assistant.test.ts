@@ -33,10 +33,11 @@ const PEOPLE = [
 ];
 const APPS = [{ id: "org.webosphoenix.maps", title: "Maps" }, { id: "org.webosphoenix.music", title: "Music" }];
 
-function setup(opts: { llm?: object } = {}) {
+function setup(opts: { llm?: object; voice?: () => unknown } = {}) {
     const data = new Map<string, unknown>();
     const calls: { uri: string; params: any }[] = [];
     const spoken: string[] = [];
+    const voices: string[] = [];
     let who = "com.palm.systemui";
     let n = 0;
     const luna = {
@@ -65,11 +66,11 @@ function setup(opts: { llm?: object } = {}) {
     };
     const svc = createAssistantService({
         luna, storage, secrets, request: createRequest({ timeoutMs: 5000 }), now: () => NOW,
-        caller: () => who, tts: { speak: (t: string) => { spoken.push(t); return Promise.resolve(); }, stop() {} },
-        llm: opts.llm, locale: () => "en-GB",
+        caller: () => who, tts: { speak: (t: string, _l: string, v: string) => { spoken.push(t); voices.push(v); return Promise.resolve(); }, stop() {} },
+        llm: opts.llm, voice: opts.voice, locale: () => "en-GB",
     });
     return {
-        svc, calls, data, spoken,
+        svc, calls, data, spoken, voices,
         as(id: string) { who = id; },
         called: (part: string) => calls.filter((c) => c.uri.includes(part)),
     };
@@ -197,10 +198,10 @@ describe("confirmation for what sends or calls", () => {
 });
 
 describe("when nothing on the phone can answer", () => {
-    it("offers to search the web, and to set up a cloud model", async () => {
+    it("offers to search the web, and to connect a model", async () => {
         const t = setup();
         const r = await ask(t, "who wrote the odyssey");
-        expect(last(r).choices.map((c: Reply) => c.id)).toEqual(["web", "settings"]);
+        expect(last(r).choices).toEqual([{ id: "web", label: "Search the web" }, { id: "connect", label: "Connect model" }]);
         const w = await t.svc.choose({ threadId: r.thread.id, messageId: last(r).id, choice: "web" });
         expect(last(w).text).toBe("Searching the web for \"who wrote the odyssey\".");
         expect(t.called("applicationManager/open")[0].params.target).toBe("https://www.google.com/search?q=who%20wrote%20the%20odyssey");
@@ -218,6 +219,149 @@ describe("when nothing on the phone can answer", () => {
         expect(last(next).text).toBe("anthropic says: and when");
         // The model saw the conversation, starting with the user.
         expect(mock.requests.at(-1)!.body.messages.map((m: Reply) => m.role)).toEqual(["user", "assistant", "user"]);
+    });
+});
+
+describe("Connect model", () => {
+    it("opens Settings > Assistant for the kind chosen, and the question waits for it", async () => {
+        const t = setup();
+        const r = await ask(t, "who wrote the odyssey");
+        const offer = last(r);
+        const c = await t.svc.connect({ threadId: r.thread.id, messageId: offer.id, mode: "cloud" });
+        expect(c).toMatchObject({ returnValue: true, mode: "cloud", waiting: true });
+        expect(t.called("applicationManager/launch").at(-1)!.params).toEqual(
+            { id: "org.webosphoenix.settings", params: { page: "assistant", connect: "cloud", threadId: r.thread.id } });
+        // Not taken: the buttons stay until a model answers.
+        expect((await t.svc.thread({ id: r.thread.id })).messages.find((m: Reply) => m.id === offer.id).chosen).toBeUndefined();
+        // The choice itself (an older client) asks which kind in Settings.
+        await t.svc.choose({ threadId: r.thread.id, messageId: offer.id, choice: "connect" });
+        expect(t.called("applicationManager/launch").at(-1)!.params.params).toMatchObject({ connect: "choose" });
+    });
+
+    it("asks the question again once a cloud model is there", async () => {
+        const t = setup();
+        const r = await ask(t, "who wrote the odyssey");
+        await t.svc.connect({ threadId: r.thread.id, messageId: last(r).id, mode: "cloud" });
+        // Nothing set up yet: it says so, and the question still waits.
+        const early = await t.svc.retry({ threadId: r.thread.id });
+        expect(last(early).text).toBe("No model is connected yet. You can connect one in Settings > Assistant.");
+        await addProvider(t, "anthropic");
+        const again = await t.svc.retry({ threadId: r.thread.id });
+        expect(last(again)).toMatchObject({ text: "anthropic says: who wrote the odyssey", via: "cloud" });
+        const th = await t.svc.thread({ id: r.thread.id });
+        expect(th.messages.find((m: Reply) => m.id === last(r).id).chosen).toBe("connect");
+        expect(th.thread.provider).not.toBe("");
+        // Asked once: a second retry has nothing to do.
+        expect((await t.svc.retry({ threadId: r.thread.id })).messages).toEqual([]);
+    });
+
+    it("asks the on-device model first when both are there", async () => {
+        const MODEL = "qwen2.5-0.5b-instruct-q4_k_m";
+        const t = setup({ llm: {
+            status: () => Promise.resolve({ available: true, installed: [{ id: MODEL }], ramBytes: 4 * 2 ** 30 }),
+            ensure: () => Promise.resolve({ baseUrl: mock.url + "/v1" }),
+            download: () => Promise.resolve(), cancel: () => Promise.resolve(), remove: () => Promise.resolve(),
+        } });
+        const r = await ask(t, "why is the sky blue");
+        await t.svc.connect({ threadId: r.thread.id, messageId: last(r).id, mode: "both" });
+        // Something else asked meanwhile: the question comes again, last.
+        await ask(t, "turn on the flashlight", { threadId: r.thread.id });
+        await addProvider(t, "anthropic");
+        t.as("org.webosphoenix.settings");
+        await t.svc.selectModel({ id: MODEL });
+        t.as("org.webosphoenix.assistant");
+        const again = await t.svc.retry({ threadId: r.thread.id });
+        expect(again.messages.map((m: Reply) => [m.role, m.text])).toEqual([["user", "why is the sky blue"], ["assistant", "chat says: why is the sky blue"]]);
+        expect(last(again).via).toBe("on-device");
+    });
+
+    it("suggests the commands close to words it did not understand", async () => {
+        const t = setup();
+        const r = await ask(t, "I have a meeting thing with the dentist sometime");
+        expect(last(r).text).toBe("I'm not sure how to help with that yet. Did you mean something like “add a meeting with Sam tomorrow at 3” or “what's on my calendar tomorrow”?");
+        expect(last(r).data.suggest).toEqual(["add a meeting with Sam tomorrow at 3", "what's on my calendar tomorrow"]);
+        // Nothing close: no suggestion.
+        const q = await ask(t, "who wrote the odyssey");
+        expect(last(q).text).toBe("I can't answer that on my own yet, but I can search the web for it.");
+        expect(last(q).data).toBeUndefined();
+    });
+
+    it("lets only the system and the Assistant connect and retry", async () => {
+        const t = setup();
+        t.as("org.webosphoenix.somebody");
+        expect((await t.svc.connect({ mode: "local" })).errorCode).toBe(ERRORS.NOT_ALLOWED);
+        expect((await t.svc.retry({ threadId: "x" })).errorCode).toBe(ERRORS.NOT_ALLOWED);
+    });
+});
+
+describe("never a dead end (the owner's banana pudding, 9 October 2026)", () => {
+    const MODEL = "qwen2.5-0.5b-instruct-q4_k_m";
+    const local = () => ({
+        status: () => Promise.resolve({ available: true, installed: [{ id: MODEL }], ramBytes: 4 * 2 ** 30 }),
+        ensure: () => Promise.resolve({ baseUrl: mock.url + "/v1" }),
+        download: () => Promise.resolve(), cancel: () => Promise.resolve(), remove: () => Promise.resolve(),
+    });
+
+    it("a question with no model: one reply, a web search, no \"on the phone\"", async () => {
+        const t = setup();
+        const r = await ask(t, "how do you make bananna pudding");
+        expect(r.messages.map((m: Reply) => m.role)).toEqual(["user", "assistant"]);
+        expect(last(r)).toMatchObject({ kind: "fallback", text: "I can't answer that on my own yet, but I can search the web for it." });
+        expect(last(r).choices.map((c: Reply) => c.id)).toEqual(["web", "connect"]);
+        expect(JSON.stringify(r)).not.toMatch(/on the phone/);
+    });
+
+    it("the model answering later never sees the fallback, so it cannot copy it", async () => {
+        const t = setup({ llm: local() });
+        const r = await ask(t, "how do you make bananna pudding");
+        await t.svc.connect({ threadId: r.thread.id, messageId: last(r).id, mode: "local" });
+        t.as("org.webosphoenix.settings");
+        await t.svc.selectModel({ id: MODEL });
+        t.as("org.webosphoenix.assistant");
+        const again = await t.svc.retry({ threadId: r.thread.id });
+        // One answer, from the model.
+        expect(again.messages.map((m: Reply) => [m.role, m.via])).toEqual([["assistant", "on-device"]]);
+        const sent = mock.requests.at(-1)!.body;
+        expect(sent.messages.filter((m: Reply) => m.role !== "system").map((m: Reply) => [m.role, m.content]))
+            .toEqual([["user", "how do you make bananna pudding"]]);
+        // Told to answer how-tos and recipes, not to refuse them.
+        const system = sent.messages.find((m: Reply) => m.role === "system").content;
+        expect(system).toMatch(/how-tos, recipes, advice, small talk/);
+        expect(system).not.toMatch(/one to three sentences|on the phone/);
+        // Then: save the recipe as a memo, or search the web.
+        expect(last(again).choices.map((c: Reply) => c.label)).toEqual(["Save as Memo", "Search the web"]);
+        const saved = await t.svc.choose({ threadId: r.thread.id, messageId: last(again).id, choice: "do:0" });
+        expect(last(saved).text).toBe("Saved to Memos.");
+        const memo = t.called("com.palm.db/put").at(-1)!.params.objects[0];
+        expect(memo).toMatchObject({ _kind: "com.palm.note:1" });
+        expect(memo.text).toMatch(/^Bananna pudding\n\nchat says: how do you make bananna pudding/);
+    });
+
+    it("the on-device model answers small talk with nothing to search", async () => {
+        const t = setup({ llm: local() });
+        t.as("org.webosphoenix.settings");
+        await t.svc.selectModel({ id: MODEL });
+        t.as("org.webosphoenix.assistant");
+        const r = await ask(t, "tell me a joke");
+        expect(r.messages).toHaveLength(2);
+        expect(last(r)).toMatchObject({ via: "on-device", text: "chat says: tell me a joke" });
+        expect(last(r).choices).toBeUndefined();
+        const q = await ask(t, "who wrote the odyssey");
+        expect(last(q).choices).toEqual([{ id: "web", label: "Search the web" }]);
+        const w = await t.svc.choose({ threadId: q.thread.id, messageId: last(q).id, choice: "web" });
+        expect(last(w).text).toBe("Searching the web for \"who wrote the odyssey\".");
+        // Device requests still go to the tools.
+        const f = await ask(t, "can you put the torch on for me");
+        expect(last(f)).toMatchObject({ command: "toggle", status: "done", via: "on-device" });
+    });
+
+    it("offers the app that does what it cannot", async () => {
+        const t = setup();
+        const r = await ask(t, "make a playlist of my favourite songs");
+        expect(last(r).text).toMatch(/^I don't have the tools for that yet, but I can open Music for you\. Did you mean/);
+        expect(last(r).choices.map((c: Reply) => c.id)).toEqual(["open:0", "web", "connect"]);
+        await t.svc.choose({ threadId: r.thread.id, messageId: last(r).id, choice: "open:0" });
+        expect(t.called("applicationManager/launch").at(-1)!.params).toEqual({ id: "org.webosphoenix.music", params: {} });
     });
 });
 
@@ -328,8 +472,13 @@ describe("the on-device model", () => {
         t.as("com.palm.systemui");
         const r = await ask(t, "why is the sky blue");
         expect(last(r)).toMatchObject({ text: "chat says: why is the sky blue", via: "on-device", source: "Qwen2.5 0.5B Instruct" });
-        expect(mock.requests.at(-1)!.body.tools.length).toBeGreaterThan(10);
+        // A question about the world: no tools (a short prompt, no misfires).
+        expect(mock.requests.at(-1)!.body.tools).toBeUndefined();
         const act = await ask(t, "it's dark, put the flashlight on for me");
+        // A request of the device: the tools near its words only (a short prompt).
+        const offered = mock.requests.at(-1)!.body.tools.map((x: Reply) => x.function?.name ?? x.name);
+        expect(offered).toContain("toggle");
+        expect(offered.length).toBeLessThanOrEqual(10);
         expect(last(act)).toMatchObject({ via: "on-device", status: "done", text: "The flashlight is on." });
         // Its times as said: "tomorrow at 6:30 am".
         const wake = await ask(t, "please could you wake me early tomorrow");
@@ -352,8 +501,59 @@ describe("the on-device model", () => {
     it("lists the models for the device's memory", async () => {
         const t = setup({ llm: llm() });
         const m = await t.svc.models();
-        expect(m.models.map((x: Reply) => [x.id, x.fits, x.recommended, x.installed])).toEqual([
-            [MODEL, true, false, true], ["qwen2.5-1.5b-instruct-q4_k_m", true, true, false], ["qwen3-4b-q4_k_m", false, false, false]]);
+        expect(m.models.map((x: Reply) => [x.id, x.fits, x.recommended, x.installed, x.builtIn])).toEqual([
+            ["qwen3-0.6b-q4_k_m", true, false, false, true], [MODEL, true, false, true, false],
+            ["qwen2.5-1.5b-instruct-q4_k_m", true, true, false, false], ["qwen3-4b-q4_k_m", false, false, false, false]]);
+    });
+
+    describe("built in: Qwen3 0.6B", () => {
+        const BUILT_IN = "qwen3-0.6b-q4_k_m";
+        const withBuiltIn = () => ({
+            ...llm(),
+            status: () => Promise.resolve({ available: true, installed: [{ id: BUILT_IN, builtIn: true }], ramBytes: 2 * 2 ** 30 }),
+        });
+
+        it("is the one in use until another is chosen, and answers what the commands do not", async () => {
+            const t = setup({ llm: withBuiltIn() });
+            const m = await t.svc.models();
+            expect(m.selected).toBe(BUILT_IN);
+            expect(m.models[0]).toMatchObject({ id: BUILT_IN, installed: true, builtIn: true, name: "Qwen3 0.6B" });
+            const r = await ask(t, "why is the sky blue");
+            expect(last(r)).toMatchObject({ via: "on-device", source: "Qwen3 0.6B" });
+        });
+
+        it("comes after the commands: what the grammar knows never reaches it", async () => {
+            const t = setup({ llm: withBuiltIn() });
+            const before = mock.requests.length;
+            const r = await ask(t, "turn on the flashlight");
+            expect(last(r)).toMatchObject({ via: "commands", text: "The flashlight is on." });
+            expect(mock.requests.length).toBe(before);
+            // What it does not know goes to the model, with the commands as tools.
+            const act = await ask(t, "it's dark, put the flashlight on for me");
+            expect(mock.requests.length).toBe(before + 1);
+            expect(mock.requests.at(-1)!.body.chat_template_kwargs).toEqual({ enable_thinking: false });
+            expect(last(act)).toMatchObject({ via: "on-device", status: "done", text: "The flashlight is on." });
+        });
+
+        it("cannot be removed or downloaded, and \"off\" turns it off", async () => {
+            const t = setup({ llm: withBuiltIn() });
+            t.as("org.webosphoenix.settings");
+            expect((await t.svc.removeModel({ id: BUILT_IN })).errorCode).toBe(ERRORS.NOT_ALLOWED);
+            expect((await t.svc.downloadModel({ id: BUILT_IN })).errorCode).toBe(ERRORS.NOT_ALLOWED);
+            expect((await t.svc.selectModel({ id: "off" })).returnValue).toBe(true);
+            expect((await t.svc.models()).selected).toBe("");
+            t.as("com.palm.systemui");
+            const before = mock.requests.length;
+            const r = await ask(t, "why is the sky blue");
+            expect(last(r).via).toBe("commands");
+            expect(mock.requests.length).toBe(before);
+        });
+
+        it("is not used where it is not installed", async () => {
+            const t = setup({ llm: llm() });
+            const r = await ask(t, "why is the sky blue");
+            expect(last(r).via).toBe("commands");
+        });
     });
 
     it("falls back to the offer when the model does not answer", async () => {
@@ -364,6 +564,21 @@ describe("the on-device model", () => {
         const r = await ask(t, "why is the sky blue");
         expect(last(r).text).toMatch(/^The on-device model didn't answer \(llama-server is not installed\)/);
         expect(last(r).choices[0].id).toBe("web");
+    });
+});
+
+describe("the voice", () => {
+    it("speaks with the chosen voice; Play Sample with the one asked for", async () => {
+        const t = setup();
+        t.as("org.webosphoenix.settings");
+        expect((await t.svc.setSettings({ speechVoice: "expr-voice-5-m" })).returnValue).toBe(true);
+        expect((await t.svc.setSettings({ speechVoice: "../../etc" })).errorCode).toBe(ERRORS.BAD_PARAMS);
+        await t.svc.speak({ text: "Hello." });
+        await t.svc.speak({ text: "Sample.", voice: "expr-voice-2-f" });
+        expect(t.voices).toEqual(["expr-voice-5-m", "expr-voice-2-f"]);
+        t.as("com.palm.systemui");
+        await ask(t, "turn on the flashlight");
+        expect(t.voices.at(-1)).toBe("expr-voice-5-m");
     });
 });
 
@@ -462,5 +677,25 @@ describe("asking by voice (docs/AI-AND-MCP.md, Voice)", () => {
         expect(v.prompt).toContain("Sam Jones.");
         t.as("com.example.app");
         expect((await t.svc.vocabulary({})).returnValue).toBe(false);
+    });
+});
+
+describe("what the voice needs (voice)", () => {
+    it("lists the parts in order, with a hint only for what is missing", async () => {
+        const t = setup({ voice: () => Promise.resolve([
+            { id: "speech", available: false, engine: "", howToInstall: "Install espeak-ng." },
+            { id: "recognition", available: true, engine: "whisper.cpp", howToInstall: "never shown" },
+            { id: "wakeWord", available: false, howToInstall: "Run tools/get-wakeword.py." },
+        ]) });
+        const r = await t.svc.voice({});
+        expect(r.returnValue).toBe(true);
+        expect(r.parts.map((p: Reply) => [p.id, p.available, p.howToInstall])).toEqual([
+            ["recognition", true, ""], ["wakeWord", false, "Run tools/get-wakeword.py."], ["speech", false, "Install espeak-ng."]]);
+        expect(r.parts[0].name).toMatch(/whisper/);
+    });
+
+    it("answers with nothing where nobody knows (a browser), and when asking fails", async () => {
+        expect((await setup().svc.voice({})).parts).toEqual([]);
+        expect((await setup({ voice: () => Promise.reject(new Error("no")) }).svc.voice({})).parts).toEqual([]);
     });
 });

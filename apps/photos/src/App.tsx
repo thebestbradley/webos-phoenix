@@ -9,7 +9,9 @@
 //
 // Launch params: {imageList: {results: [item]}} (the convention OSE's
 // camera app uses to open its image viewer) or {target: "/media/internal/..."}
-// open that picture in the viewer. {dockMode: true} (windowType
+// open that picture in the viewer; an imageList of several (the Assistant's
+// "show my photos from yesterday", with its {title}) opens a grid of just
+// those, Back to the albums. {dockMode: true} (windowType
 // "dockModeWindow"): the window is dock mode's exhibition, the slideshow
 // (Exhibition.tsx; appinfo.json "exhibitionMode").
 
@@ -23,17 +25,26 @@ import { Thumb } from "./Thumb";
 import { Viewer } from "./Viewer";
 
 interface LaunchParams {
-    imageList?: { results?: { file_path?: string; uri?: string }[] };
+    imageList?: { results?: { file_path?: string; uri?: string }[]; title?: string };
     target?: string;
     dockMode?: boolean;
     windowType?: string;
 }
 
+function itemPath(it: { file_path?: string; uri?: string } | undefined): string | undefined {
+    const path = it?.file_path ?? (it?.uri ? it.uri.replace(/^storage:\/\//, "") : undefined);
+    return path ? path.replace(/^file:\/\//, "") : undefined;
+}
 function launchTarget(p: LaunchParams): string | null {
-    const first = p.imageList?.results?.[0];
-    const path = first?.file_path ?? (first?.uri ? first.uri.replace(/^storage:\/\//, "") : undefined) ?? p.target;
+    const path = itemPath(p.imageList?.results?.[0]) ?? p.target;
     return path ? path.replace(/^file:\/\//, "") : null;
 }
+/** The pictures an imageList of several names, in its order: null for one or none. */
+function launchPicked(p: LaunchParams): string[] | null {
+    const list = (p.imageList?.results ?? []).map(itemPath).filter((x): x is string => !!x);
+    return list.length > 1 ? list : null;
+}
+const PICKED = "__picked";
 
 function Header({ title, subtitle }: { title: string; subtitle?: string }) {
     return (
@@ -102,14 +113,29 @@ function Photos() {
     const [viewing, setViewing] = useState<string | null>(null);
 
     const params = useLaunchParams<LaunchParams>();
+    const [picked, setPicked] = useState<{ paths: string[]; title: string } | null>(null);
     useEffect(() => {
+        const several = launchPicked(params);
+        if (several) {
+            setPicked({ paths: several, title: params.imageList?.title || "Selected Photos" });
+            setAlbumId(PICKED);
+            setViewing(null);
+            return;
+        }
         const path = launchTarget(params);
         if (!path) return;
         setAlbumId(folderOf(path));
         setViewing(path);
     }, [params]);
+    // The pictures a launch named, as an album of their own.
+    const pickedAlbum = useMemo<Album | null>(() => {
+        if (!picked) return null;
+        const all = albums.flatMap((a) => a.items);
+        const items = picked.paths.map((p) => all.find((it) => it.file_path === p)).filter((x): x is MediaItem => !!x);
+        return { id: PICKED, name: picked.title, items };
+    }, [picked, albums]);
 
-    const album = albums.find((a) => a.id === albumId) ?? null;
+    const album = albumId === PICKED ? pickedAlbum : albums.find((a) => a.id === albumId) ?? null;
     const index = album && viewing ? album.items.findIndex((it) => it.file_path === viewing) : -1;
 
     useBack(() => { setViewing(null); return true; }, viewing !== null);

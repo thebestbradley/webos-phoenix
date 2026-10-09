@@ -19,7 +19,20 @@
 > [APP-RUNTIME.md](APP-RUNTIME.md#marketplace). Still to do: the server
 > online, A1 and A4 on a device, the Android catalog.
 >
-> **Curated web apps (8 October 2026):** 132 of 160 sites in 23 categories
+> **Running the catalog (9 October 2026).** Until the server is online the
+> catalog runs on the developer's computer, and the simulator starts it:
+> **Services > Marketplace Catalog** in its menu bar (it shows the service
+> starting, running at 127.0.0.1:8088, or failed with the reason and its
+> log, and opens the Marketplace once it answers), **Start Local Catalog**
+> on the Marketplace's "Can't reach" card (simulator only, through the
+> runtime's `org.webosphoenix.simulator`; a device never shows it),
+> `./phoenix run --marketplace`, or **Services > Start Catalog with the
+> Simulator** for every run. `./phoenix` installs PHP 8 for it.
+> `server/marketplace/README.md` has the details.
+>
+> **Curated web apps (8 October 2026; 9 October: 135, as a site whose
+> manifest is good but whose icons are all broken is listed with an icon the
+> catalog generates, its initials on its theme colour):** 135 of 160 sites in 23 categories
 > (`server/marketplace/catalog/curated-sites.json`; `bin/probe-pwas.py`
 > checks each manifest live and leaves out the ones it cannot find, with the
 > reason, in `curated-pwas.json`): social networks and messaging, Google's and
