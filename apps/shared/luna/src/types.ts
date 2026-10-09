@@ -259,12 +259,12 @@ export interface TextInputPrefs {
     grammarChecking?: "autoCorrect" | "off";
     shortcutChecking?: "autoCorrect" | "off";
     shortcuts?: TextAssistShortcut[];
-}
-
     /** Phoenix: the personal dictionary, words the user added (never corrected, suggested). */
     userWords?: string[];
     /** Phoenix: learned words deleted from the personal dictionary, lower case -> when (ms). */
     removedWords?: Record<string, number>;
+}
+
 /** Settings > Exhibition (Phoenix): when dock mode starts and its night mode. */
 export interface ExhibitionPrefs {
     /** Exhibitions on the Touchstone at all. */
@@ -368,10 +368,10 @@ export interface SystemStatus {
     orientation?: { ui: string; device: string };
     /** The device has a gesture area (the strip below the screen). */
     gestureArea?: boolean;
-}
-
     /** Phoenix: the words the keyboard learned that its word list lacks. */
     learnedWords?: string[];
+}
+
 // ---- The map -----------------------------------------------------------------------
 
 const WIFI = "luna://com.webos.service.wifi";
