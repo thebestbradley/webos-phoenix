@@ -100,6 +100,30 @@ guest for an event (by their contact's email), a line for a memo, a task
 for a list. Like every write, each change is read back before the answer
 says it was done ("Said only when done").
 
+**How well it understands** (9 October 2026). Three sets, kept as tests:
+
+- `test/eval-phrasings.cjs`, 150 requests as people say them across all
+  the commands, details and edits included. The grammar alone took 135 of
+  the first 147; widened on its misses ("ring my mom", "can you get Sam on
+  the phone", "what does my day look like tomorrow", "get rid of my
+  dentist appointment", "give me a 20 minute timer", "how much battery do
+  I have left", ...), it takes all 150 (`eval.test.ts`, in CI).
+- Its held-out part, 40 written afterwards and never used to change the
+  grammar: 35 (88%) with the grammar alone. The five it misses ("did
+  anyone call while I was out", "get me up at half six", "is it cold out",
+  ...) are what the on-device model is there for.
+- `test/model-eval.json`, 163 requests the grammar does not take (25 of
+  them questions and chat, `"none"`), for the model's choice
+  (`pickCommand`); `eval.test.ts` checks that the grammar takes none of
+  them wrongly, and that none repeats an example. Each command now has up
+  to four examples in other words (`lib/examples.js`, `examples` on
+  `BUILT_IN`), which the model sees beside its description. The model's
+  hit rates on this set are measured with llama-server
+  (opt-in, not in CI).
+
+Writing the sets found a crash: "to-do: renew the car insurance" threw
+in the task rule (`m` stayed null); it is a task now.
+
 | Command | Say, for example | Does | Asks first |
 | --- | --- | --- | --- |
 | `event` | "add a meeting with Sam tomorrow at 3", "create an event called dentist on Friday at 10am", "schedule lunch with Priya next Tuesday at noon at Bistro Verde", "put yoga on my calendar every Monday at 7pm for 90 minutes", "team offsite on the 20th all day" | A calendar event: title, day and time, end or length (an hour by default), place, invitees (contacts with an email), repeats; without a time it asks "When is it?" and the next words say it | |

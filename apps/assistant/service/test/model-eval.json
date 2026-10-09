@@ -1,0 +1,654 @@
+[
+ {
+  "text": "I don't need bluetooth right now, shut it",
+  "command": "toggle"
+ },
+ {
+  "text": "go into airplane mode please, we're taking off",
+  "command": "toggle"
+ },
+ {
+  "text": "can I get some light on my keys",
+  "command": "toggle"
+ },
+ {
+  "text": "flashlight please",
+  "command": "toggle"
+ },
+ {
+  "text": "get rid of the torch light",
+  "command": "toggle"
+ },
+ {
+  "text": "no more phone calls for the next hour",
+  "command": "toggle"
+ },
+ {
+  "text": "stop my phone from ringing during the meeting",
+  "command": "toggle"
+ },
+ {
+  "text": "stop the screen from rotating",
+  "command": "toggle"
+ },
+ {
+  "text": "share my internet with my laptop",
+  "command": "toggle"
+ },
+ {
+  "text": "connect to my vpn",
+  "command": "toggle"
+ },
+ {
+  "text": "stop tracking my location",
+  "command": "toggle"
+ },
+ {
+  "text": "make the phone vibrate only",
+  "command": "toggle"
+ },
+ {
+  "text": "I'm in a movie, silence everything",
+  "command": "toggle"
+ },
+ {
+  "text": "this is deafening",
+  "command": "volume"
+ },
+ {
+  "text": "I can hardly hear the podcast",
+  "command": "volume"
+ },
+ {
+  "text": "bring the sound down a notch",
+  "command": "volume"
+ },
+ {
+  "text": "max out the volume",
+  "command": "volume"
+ },
+ {
+  "text": "my eyes hurt, the display is blinding",
+  "command": "brightness"
+ },
+ {
+  "text": "it's too dim to read",
+  "command": "brightness"
+ },
+ {
+  "text": "knock the brightness down a little",
+  "command": "brightness"
+ },
+ {
+  "text": "I'm in the mood for some Beatles",
+  "command": "play"
+ },
+ {
+  "text": "let's have some music",
+  "command": "play"
+ },
+ {
+  "text": "could you put the radio on some classical",
+  "command": "play"
+ },
+ {
+  "text": "that song again from the start",
+  "command": "media"
+ },
+ {
+  "text": "carry on playing",
+  "command": "media"
+ },
+ {
+  "text": "I have an early flight, wake me at 4:30",
+  "command": "alarm"
+ },
+ {
+  "text": "alarm me for half past six",
+  "command": "alarm"
+ },
+ {
+  "text": "set something to wake me at 8 on saturday",
+  "command": "alarm"
+ },
+ {
+  "text": "rouse me at 6 in the morning",
+  "command": "alarm"
+ },
+ {
+  "text": "I don't need my 7 o'clock alarm tomorrow",
+  "command": "alarmManage"
+ },
+ {
+  "text": "silence all my alarms",
+  "command": "alarmManage"
+ },
+ {
+  "text": "have I set an alarm",
+  "command": "alarmList"
+ },
+ {
+  "text": "when am I getting woken up",
+  "command": "alarmList"
+ },
+ {
+  "text": "let me know when 15 minutes are up",
+  "command": "timer"
+ },
+ {
+  "text": "the cookies need 12 minutes",
+  "command": "timer"
+ },
+ {
+  "text": "steep the tea for 4 minutes and tell me",
+  "command": "timer"
+ },
+ {
+  "text": "how's my countdown doing",
+  "command": "timerStatus"
+ },
+ {
+  "text": "forget the timer",
+  "command": "timerCancel"
+ },
+ {
+  "text": "time how long my run takes",
+  "command": "stopwatch"
+ },
+ {
+  "text": "tomorrow morning I need to call the bank, remind me",
+  "command": "reminder"
+ },
+ {
+  "text": "at 6 tell me to start dinner",
+  "command": "reminder"
+ },
+ {
+  "text": "when I get a chance tonight remind me about the bills",
+  "command": "reminder"
+ },
+ {
+  "text": "I keep forgetting to water the plants, remind me every evening",
+  "command": "reminder"
+ },
+ {
+  "text": "we're out of coffee, add it to groceries",
+  "command": "task"
+ },
+ {
+  "text": "anything left to buy",
+  "command": "taskList"
+ },
+ {
+  "text": "I've done the laundry, check it off",
+  "command": "taskDone"
+ },
+ {
+  "text": "milk's bought",
+  "command": "taskDone"
+ },
+ {
+  "text": "save this as a note: Sam's gate code is 2244",
+  "command": "note"
+ },
+ {
+  "text": "did I write anything down about passwords",
+  "command": "findNotes"
+ },
+ {
+  "text": "show the memo where I saved the recipe",
+  "command": "findNotes"
+ },
+ {
+  "text": "add a line to my packing note: chargers",
+  "command": "noteAppend"
+ },
+ {
+  "text": "I'm seeing the doctor next wednesday at 11, put it in my calendar",
+  "command": "event"
+ },
+ {
+  "text": "Sam and I are doing lunch friday at 1",
+  "command": "event"
+ },
+ {
+  "text": "there's a team offsite all day on the 21st",
+  "command": "event"
+ },
+ {
+  "text": "I have a call with Priya tomorrow afternoon at 2, schedule it",
+  "command": "event"
+ },
+ {
+  "text": "how does next week look",
+  "command": "agenda"
+ },
+ {
+  "text": "is my thursday afternoon open",
+  "command": "freeTime"
+ },
+ {
+  "text": "can I fit in a meeting at 4 today",
+  "command": "freeTime"
+ },
+ {
+  "text": "my dentist appointment needs to be at 5 instead",
+  "command": "eventMove"
+ },
+ {
+  "text": "can we make lunch with Sam an hour later",
+  "command": "eventMove"
+ },
+ {
+  "text": "lunch with Sam isn't happening anymore",
+  "command": "eventCancel"
+ },
+ {
+  "text": "I'm not going to the dentist, take it off my calendar",
+  "command": "eventCancel"
+ },
+ {
+  "text": "what room is the meeting with Sam in",
+  "command": "detail"
+ },
+ {
+  "text": "at what time do I see the dentist",
+  "command": "detail"
+ },
+ {
+  "text": "is anyone else coming to lunch with Sam",
+  "command": "detail"
+ },
+ {
+  "text": "how can I reach Priya",
+  "command": "contactInfo"
+ },
+ {
+  "text": "what's Alex's phone",
+  "command": "contactInfo"
+ },
+ {
+  "text": "Mom's birthday, when is it",
+  "command": "contactInfo"
+ },
+ {
+  "text": "new contact, Kim Lee, kim@example.com",
+  "command": "contactAdd"
+ },
+ {
+  "text": "I need to talk to Sam",
+  "command": "call"
+ },
+ {
+  "text": "get Priya for me",
+  "command": "call"
+ },
+ {
+  "text": "who tried to reach me",
+  "command": "callLog"
+ },
+ {
+  "text": "have I missed anything",
+  "command": "callLog"
+ },
+ {
+  "text": "did anyone leave a message",
+  "command": "voicemail"
+ },
+ {
+  "text": "compose a mail to Priya",
+  "command": "email"
+ },
+ {
+  "text": "did the bank email me",
+  "command": "searchEmail"
+ },
+ {
+  "text": "read the newest message in my inbox",
+  "command": "readEmail"
+ },
+ {
+  "text": "should I bring an umbrella tomorrow",
+  "command": "weather"
+ },
+ {
+  "text": "how warm will it get today",
+  "command": "weather"
+ },
+ {
+  "text": "what's it like outside",
+  "command": "weather"
+ },
+ {
+  "text": "will it snow this weekend",
+  "command": "weather"
+ },
+ {
+  "text": "start driving directions to work",
+  "command": "navigate"
+ },
+ {
+  "text": "what's my commute time to work",
+  "command": "travelTime"
+ },
+ {
+  "text": "show the photos from my trip last weekend",
+  "command": "photos"
+ },
+ {
+  "text": "let me see pictures from today",
+  "command": "photos"
+ },
+ {
+  "text": "launch the calculator",
+  "command": "open"
+ },
+ {
+  "text": "can I see the clock app",
+  "command": "open"
+ },
+ {
+  "text": "I want to change my wallpaper",
+  "command": "settings"
+ },
+ {
+  "text": "screenshot this",
+  "command": "screenshot"
+ },
+ {
+  "text": "do I have room for more photos",
+  "command": "storage"
+ },
+ {
+  "text": "is there an app for podcasts",
+  "command": "appStore"
+ },
+ {
+  "text": "add 17 and 25",
+  "command": "calculate"
+ },
+ {
+  "text": "find out how tall Mount Everest is",
+  "command": "search"
+ },
+ {
+  "text": "how do I add a widget",
+  "command": "help"
+ },
+ {
+  "text": "Sam has a new email, sam@new.example.com",
+  "command": "edit"
+ },
+ {
+  "text": "why is the sky blue",
+  "command": "none"
+ },
+ {
+  "text": "tell me a joke",
+  "command": "none"
+ },
+ {
+  "text": "who wrote Pride and Prejudice",
+  "command": "none"
+ },
+ {
+  "text": "how are you today",
+  "command": "none"
+ },
+ {
+  "text": "what's the capital of Australia",
+  "command": "none"
+ },
+ {
+  "text": "thanks, that's all",
+  "command": "none"
+ },
+ {
+  "text": "how do I make banana pudding",
+  "command": "none"
+ },
+ {
+  "text": "what is photosynthesis",
+  "command": "none"
+ },
+ {
+  "text": "you're funny",
+  "command": "none"
+ },
+ {
+  "text": "who was the first person on the moon",
+  "command": "none"
+ },
+ {
+  "text": "good morning",
+  "command": "none"
+ },
+ {
+  "text": "what does serendipity mean",
+  "command": "none"
+ },
+ {
+  "text": "how many legs does a spider have",
+  "command": "none"
+ },
+ {
+  "text": "recommend a good book",
+  "command": "none"
+ },
+ {
+  "text": "what's the meaning of life",
+  "command": "none"
+ },
+ {
+  "text": "explain how a rainbow forms",
+  "command": "none"
+ },
+ {
+  "text": "is a tomato a fruit",
+  "command": "none"
+ },
+ {
+  "text": "what should I cook tonight",
+  "command": "none"
+ },
+ {
+  "text": "hi there",
+  "command": "none"
+ },
+ {
+  "text": "how do airplanes fly",
+  "command": "none"
+ },
+ {
+  "text": "my battery's dying, turn off the bluetooth thing",
+  "command": "toggle"
+ },
+ {
+  "text": "can you make it so nobody can find where I am",
+  "command": "toggle"
+ },
+ {
+  "text": "disconnect me from the internet",
+  "command": "toggle"
+ },
+ {
+  "text": "I'm about to board, offline mode",
+  "command": "toggle"
+ },
+ {
+  "text": "my neighbours are complaining about the noise",
+  "command": "volume"
+ },
+ {
+  "text": "make it a little louder so I can hear",
+  "command": "volume"
+ },
+ {
+  "text": "the sun is out, I can't see anything on the screen",
+  "command": "brightness"
+ },
+ {
+  "text": "I need something upbeat for my run",
+  "command": "play"
+ },
+ {
+  "text": "any chance of some Miles Davis",
+  "command": "play"
+ },
+ {
+  "text": "go back to the previous song",
+  "command": "media"
+ },
+ {
+  "text": "hold on, pause that",
+  "command": "media"
+ },
+ {
+  "text": "my train is at 6:15 so I need waking at 5:30",
+  "command": "alarm"
+ },
+ {
+  "text": "need an alarm, 6 am sharp",
+  "command": "alarm"
+ },
+ {
+  "text": "tell me when the rice is done in 18 minutes",
+  "command": "timer"
+ },
+ {
+  "text": "on monday morning remind me to submit the report",
+  "command": "reminder"
+ },
+ {
+  "text": "later today I have to pick up the kids, remind me at 3",
+  "command": "reminder"
+ },
+ {
+  "text": "I need to buy lightbulbs",
+  "command": "task"
+ },
+ {
+  "text": "add bananas to what I need to buy",
+  "command": "task"
+ },
+ {
+  "text": "what do I still need to pick up from the store",
+  "command": "taskList"
+ },
+ {
+  "text": "I finished the report, you can tick that off",
+  "command": "taskDone"
+ },
+ {
+  "text": "keep a note that the car is parked on level 2",
+  "command": "note"
+ },
+ {
+  "text": "I'm having dinner at Mom's on sunday at 6",
+  "command": "event"
+ },
+ {
+  "text": "what's on for the rest of the day",
+  "command": "agenda"
+ },
+ {
+  "text": "put my dentist appointment back to friday",
+  "command": "eventMove"
+ },
+ {
+  "text": "cancel everything with Sam tomorrow",
+  "command": "eventCancel"
+ },
+ {
+  "text": "when exactly is the meeting with Sam",
+  "command": "detail"
+ },
+ {
+  "text": "which room is the dentist in",
+  "command": "detail"
+ },
+ {
+  "text": "I'd like to speak to Mom",
+  "command": "call"
+ },
+ {
+  "text": "could you connect me to Sam",
+  "command": "call"
+ },
+ {
+  "text": "has Sam replied",
+  "command": "readMessages"
+ },
+ {
+  "text": "draft an email to Alex about the invoice",
+  "command": "email"
+ },
+ {
+  "text": "anything in my inbox from Alex",
+  "command": "searchEmail"
+ },
+ {
+  "text": "what's the high today",
+  "command": "weather"
+ },
+ {
+  "text": "will I need sunscreen tomorrow",
+  "command": "weather"
+ },
+ {
+  "text": "how's it looking outside this afternoon",
+  "command": "weather"
+ },
+ {
+  "text": "I need to get to the airport, show me the way",
+  "command": "navigate"
+ },
+ {
+  "text": "I want to take a picture",
+  "command": "open"
+ },
+ {
+  "text": "open up the music app",
+  "command": "open"
+ },
+ {
+  "text": "change my ringtone",
+  "command": "settings"
+ },
+ {
+  "text": "how long will my battery last",
+  "command": "battery"
+ },
+ {
+  "text": "what's a 20 percent tip on 45 dollars",
+  "command": "calculate"
+ },
+ {
+  "text": "how many kilometres is a marathon",
+  "command": "convert"
+ },
+ {
+  "text": "who won the world cup in 2022",
+  "command": "search"
+ },
+ {
+  "text": "what's the difference between weather and climate",
+  "command": "none"
+ },
+ {
+  "text": "can you sing me a song",
+  "command": "none"
+ },
+ {
+  "text": "how old is the universe",
+  "command": "none"
+ },
+ {
+  "text": "do you like music",
+  "command": "none"
+ },
+ {
+  "text": "what's a good name for a cat",
+  "command": "none"
+ }
+]

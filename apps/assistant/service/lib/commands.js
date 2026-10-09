@@ -256,6 +256,10 @@ var details = require("./details")({ D: D, lunaCall: lunaCall, dbFind: dbFind, f
                                      whenShown: whenShown, cards: cards, findPerson: findPerson, personName: personName, emailOf: emailOf,
                                      addTask: addTask, scheduleAlarm: scheduleAlarm, nextRing: nextRing });
 Array.prototype.push.apply(BUILT_IN, details.COMMANDS);
+// How people ask for each, in other words (lib/examples.js): for a model choosing one.
+(function (examples) {
+    BUILT_IN.forEach(function (c) { if (examples[c.id] && !c.examples) c.examples = examples[c.id]; });
+})(require("./examples"));
 
 // Every command: the built-in ones, then the apps' (lib/grammar.js compileAppCommands).
 function catalogue(appCommands) {

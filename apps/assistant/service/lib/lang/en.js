@@ -520,8 +520,8 @@ var PHONE_LABEL = /\s+(?:on |at )?(?:(?:his|her|their|the) )?(mobile|cell|cellph
 
 function call(t) {
     var m = /^(?:call|phone|ring|dial|ring up|give) (.+?)(?: a (?:call|ring))?$/.exec(t);
-    if (!m || /^(?:me|back)$/.test(m[1])) return null;
-    var who = m[1], label = "";
+    if (!m || /^(?:me|back)$/.test(m[1]) || /^me /.test(m[1])) return null;
+    var who = m[1].replace(/^my (?=\S)/, ""), label = "";
     var l = PHONE_LABEL.exec(who);
     if (l) { label = { cell: "mobile", cellphone: "mobile", office: "work" }[l[1]] || l[1]; who = who.slice(0, l.index); }
     if (/^[+\d][\d\s().-]{2,}$/.test(who)) return { number: who.replace(/[^\d+]/g, ""), label: label };
@@ -544,6 +544,7 @@ function textMessage(t, ctx) {
     if (!m) return null;
     var rest = m[1];
     if (/^(?:an? )?e-?mail\b/.test(rest)) return null;
+    if (/^write (?:this|that|it|down)\b/.test(t)) return null;   // "write this down: ...": a note
     // "send Mom a message saying call me back": who, without the message's name.
     rest = rest.replace(/^(.+?) (?:a |an )?(?:quick )?(?:text|message|sms|note|line)(?: message)?(?=,|:| saying| that says| to say| and say| that)/, "$1");
     var sep = /^(.+?)(?:,|:| saying| that says| to say| and say| that)\s+(.+)$/.exec(rest);
@@ -749,8 +750,8 @@ function task(t, ctx) {
         list = m[2].replace(/^(?:to-?do|todo|task|tasks|reminders?)$/, "").trim();
     } else if ((m = /^(?:add|put) (.+?) (?:to|on) (?:my |the )?(?:to-?dos?|todos|tasks|task list)$/.exec(t))) {
         text = m[1];
-    } else if ((m = /^(?:create|add|make|new|set up|start)(?: me)?(?: a| an)?(?: new)? (?:task|to-?do|todo)(?: item)?(?: to| called| named| for| that says)?\s?[:,-]?\s+(.+)$/.exec(t))
-               || /^(?:task|to-?do)[:,-]?\s+(.+)$/.exec(t)) {
+    } else if ((m = /^(?:create|add|make|new|set up|start)(?: me)?(?: a| an)?(?: new)? (?:task|to-?do|todo)(?: item)?(?: to| called| named| for| that says)?\s?[:,-]?\s+(.+)$/.exec(t)
+               || /^(?:task|to-?do)[:,-]?\s+(.+)$/.exec(t))) {
         text = m[1];
     } else {
         return null;
@@ -1377,6 +1378,7 @@ var CASUAL = [
     // The flashlight.
     [/^(?:it's |it is )?(?:(?:pitch|really|so|too) )?dark(?: in here| out here)?(?:,? i (?:need|want) (?:some |a )?light)?$/, "turn on the flashlight"],
     [/^(?:i )?(?:need|want) (?:some |a little |a bit of )?light(?: in here)?$|^light me up\b.*$|^(?:give me|i need) some light\b.*$|^i can't see (?:a thing|anything)(?: in here)?$/, "turn on the flashlight"],
+    [/^(?:kill|cut|lose) (?:the )?(?:sound|audio|volume)$/, "mute"],
     // Switches: "get the bluetooth going", "kill the wifi", "fire up the hotspot".
     [/^(?:get|fire up|power up|kick on|bring up|start up|crank up) (?:the |my )?(.+?)(?: going| running| started| up| on| back on)?$/, function (m) { return toggleTarget(m[1]) ? "turn on " + m[1] : null; }],
     [/^(?:kill|cut|shut off|shut down|shut|nix|ditch|lose|drop|knock off|power down) (?:off )?(?:the |my )?(.+?)(?: off)?$/, function (m) {
@@ -1399,7 +1401,7 @@ var CASUAL = [
     [/^(?:pencil|slot|squeeze|fit|block|jot|write|pop) (?:me )?(?:in|out|off|down)? ?(?:some )?(?:time (?:for )?)?(.+)$/, function (m, t) {
         return /^(?:jot|write) /.test(t) ? null : "schedule " + m[1]; }],
     // Messages: "drop Sam a line saying I'm on my way", "let Mary know I'll be late".
-    [/^(?:drop|shoot|send|fire off|flick|ping) (.+?) (?:a |an )?(?:line|note|text|message|msg|sms)(?:,|:| saying| that says| to say| that|$)\s*(.*)$/, function (m) {
+    [/^(?:drop|shoot|send|fire off|flick|ping) (.+?) (?:a |an )?(?:quick |short )?(?:line|note|text|message|msg|sms)(?:,|:| saying| that says| to say| that|$)\s*(.*)$/, function (m) {
         return /^(?:me|us)$/.test(m[1]) || !m[2] ? null : "text " + m[1] + " saying " + m[2]; }],
     [new RegExp("^let (.+?) know(?: that)? (.+?)" + LET_KNOW + "$"), function (m) {
         return /^(?:me|us)$/.test(m[1]) ? null : "text " + m[1] + " saying " + m[2]; }],
@@ -1417,6 +1419,20 @@ var CASUAL = [
         return "what's the " + m[1] + " " + (/^week/.test(m[2]) ? "this " + m[2] : m[2]); }],
     [/^(?:what's|what is|how's|how is) (?:the )?(?:weather|forecast) (?:looking|gonna be|going to be)(?: like)?(?: (?:in|for|at) (.+))?$/, function (m) { return "what's the weather" + (m[1] ? " in " + m[1] : ""); }],
     [/^(?:what's it|what is it) (?:gonna|going to) be like(?: outside)?(?: (today|tonight|tomorrow))?$/, function (m) { return "what's the weather" + (m[1] ? " " + m[1] : ""); }],
+    [/^(?:write|jot|note|put|get) (?:this|that|it) down(?: for (?:later|me))?[:,]?\s*(.+)$/, "take a note $1"],
+    // Calls: "can you get Sam on the phone", "who was that who just called".
+    [/^get (.+?) on the (?:phone|line)$/, "call $1"],
+    [/^who (?:was (?:that|it) )?(?:who |that )?(?:just )?(?:called|rang)(?: me)?$/, "who called me"],
+    [/^tell ((?:my )?\S+) (?:that )?(.+?) (?:by|via|over|in a) (?:text|sms|message)$/, "text $1 saying $2"],
+    // The day: "what does my day look like tomorrow", "do I have time for coffee on friday".
+    [/^what does (?:my |the )?(day|week|weekend|schedule|calendar)(?: look like)?(?: (.+))?$/, function (m) {
+        return "what's on my calendar" + (m[1] === "week" ? " this week" : m[1] === "weekend" ? " this weekend" : m[2] ? " " + m[2] : " today"); }],
+    [/^(?:do i have|have i got) (?:any )?time(?: for .+?)? ((?:on |at |in |this |next |tomorrow|today|tonight).*)$/, "am i free $1"],
+    [/^get rid of (.+)$/, "cancel $1"],
+    // The device: "lock the screen orientation", "how much battery do I have left".
+    [/^lock (?:the )?(?:screen )?(?:orientation|rotation)$/, "turn on rotation lock"],
+    [/^unlock (?:the )?(?:screen )?(?:orientation|rotation)$/, "turn off rotation lock"],
+    [/^how much (?:battery|charge|juice|power)(?: do i have| have i got| is there| is)?(?: left)?$/, "what's my battery"],
     // Apps: "fire up the camera".
     [/^(?:fire up|pull up|boot up|load up|start up|crack open|pop open|jump into|take me to|get me into|get into|hop into|i want|i need|gimme) (?:the |my )?(.+?)(?: app| application)?$/, "open $1"]
 ];
@@ -1452,6 +1468,8 @@ function eventish(q) {
         || /\b(?:lunch|dinner|breakfast|brunch|coffee|drinks|party|date|interview|class|lesson|game|practice|session|stand-?up|catch-?up|gym|workout|visit|checkup|check-up|dentist|doctor|haircut|flight|trip|concert|show|wedding|birthday party)\b/.test(q);
 }
 function detailEvent(q, field) {
+    // "a good place for coffee around here": a place to find, not an event.
+    if (/^(?:an?|some|any) /.test(q) || /\b(?:near(?:by|est)?|around here|close by|closest)\b/.test(q)) return null;
     q = q.replace(/^(?:my|the|our) /, "").trim();
     // "Where's the nearest coffee shop" is a place nearby (nearby), not an event.
     if (/^(?:nearest|closest)\b/.test(q)) return null;
@@ -1561,7 +1579,7 @@ function edit(t, ctx) {
         && (target = editTarget(m[2])) && target.kind === "event" && /^(?:my|the|our|that) /.test(m[2]))
         return { kind: "event", query: target.query, it: false, change: "add", value: cased(m[1], ctx) };
     // Take out of it.
-    if ((m = /^(?:remove|take|delete|drop|uninvite|cross) (.+?) (?:from|off|out of) (.+)$/.exec(t)) && (target = editTarget(m[2])))
+    if ((m = /^(?:remove|take|delete|drop|uninvite) (.+?) (?:from|off|out of) (.+)$/.exec(t)) && (target = editTarget(m[2])))
         return { kind: target.kind, query: target.query, it: target.it, change: "remove", value: cased(m[1].replace(/^(?:the )/, ""), ctx) };
     if ((m = /^uninvite (.+)$/.exec(t))) return { kind: "event", query: "", it: true, change: "remove", value: cased(m[1], ctx) };
     // A contact's details: "change Sam's email to sam@new.com".
