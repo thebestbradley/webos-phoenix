@@ -201,9 +201,10 @@ Device tiers, the driver plan and the phased timeline are in
 - [ ] Power management: screen timeout, suspend, wake on notification
 - [ ] Porting guide, device table and hardware report (the opt-in report of
       unsupported hardware is done in the simulator, with the Hardware app)
-- [ ] Hardware support like a distro: open source drivers in the image,
-      firmware and extra drivers from Settings > Hardware and a signed driver
-      catalog ([HARDWARE.md](HARDWARE.md#hardware-support-and-the-hardware-app)).
+- [ ] Hardware support like a distro: open source drivers and redistributable
+      firmware in the image, the gaps (newer firmware, out-of-tree drivers,
+      optional extras) from Settings > Hardware and a signed driver catalog
+      ([HARDWARE.md](HARDWARE.md#hardware-support-and-the-hardware-app)).
       Done in the simulator; on a device with M1
 
 ## M4: core apps and services

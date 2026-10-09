@@ -30,9 +30,9 @@ where something is uncertain it says so.
 - **Install it like a Linux distro**: generic images, live boot, one
   installer, a hardware report feeding the device table, and a light
   profile for old hardware (next section).
-- **Drivers like a distro**: open source drivers in the image, firmware
-  offered by the Hardware app with its licence, from a signed driver
-  catalog ([Hardware support and the Hardware app](#hardware-support-and-the-hardware-app)).
+- **Drivers like a distro**: open source drivers and redistributable
+  firmware in the image, the gaps filled by the Hardware app from a signed
+  driver catalog ([Hardware support and the Hardware app](#hardware-support-and-the-hardware-app)).
 
 ## Install it like a Linux distro
 
@@ -147,24 +147,29 @@ the kernel, and reaches the rest through Halium.
 ## Hardware support and the Hardware app
 
 Owner's direction (9 October 2026): make Phoenix as easy as possible to
-adopt and to develop for, on as much hardware as possible. Common hardware
-works out of the box; for the rest, an application, as Ubuntu's
-"Additional Drivers" (`ubuntu-drivers`), Fedora's and Windows' driver
-installers are, finds the device and installs the driver, firmware or
-service it needs. Firmware licensing (the owner's "Mix" decision): **open
-source drivers are built into the image; firmware that is not open source
-but may be redistributed (the `linux-firmware` blobs for Wi-Fi, Bluetooth
-and GPUs) is not in the image, and the Hardware app offers it on first boot
-and later, downloaded only when the user says so.**
+adopt and to develop for, on as much hardware as possible. **As much as
+possible works out of the box**, as on Ubuntu or Debian: the image carries
+the open source drivers **and the firmware whose licence allows
+redistribution** (the `linux-firmware` files for Wi-Fi, Bluetooth, Ethernet
+and GPUs), unmodified, with their licence files. **The Hardware app fills
+the gaps and is the avenue for more**, as Ubuntu's "Additional Drivers"
+(`ubuntu-drivers`) and Windows' driver installer are: firmware the image
+does not have (new or rare hardware, firmware added after a release, or
+left out of a small image), newer firmware than the image's, drivers that
+are not in the kernel, optional extras, and, with Developer Mode on,
+drivers from other catalogs.
 
-**Status (October 2026):** the plan below is built in the simulator: the
-service (`services/hardware`), Settings > Hardware, First Use's Hardware
-step, the signed driver catalog and its tool (`server/drivers`), and the
-packaging in `meta-phoenix` (kernel config fragments, the firmware policy,
-`phoenix-driver-feed`). Not run on a device yet (M1). How to publish a
-driver: [DRIVERS.md](DRIVERS.md).
+**Status (October 2026):** built in the simulator: the service
+(`services/hardware`), Settings > Hardware, the firmware licences in
+Settings > Device Info, First Use's Hardware step, the signed driver catalog
+and its tool (`server/drivers`) with off-server signing in CI
+(`.github/workflows/drivers-catalog.yml`), and the packaging in
+`meta-phoenix` (kernel config fragments, `packagegroup-phoenix-firmware`, the
+firmware licence check, out-of-tree driver recipes, `phoenix-driver-feed`).
+Parsed and dry-run for both machines; not built or run on a device yet (M1).
+How to publish a driver and release the catalog: [DRIVERS.md](DRIVERS.md).
 
-### What is built in
+### What is built in: drivers
 
 Every open source driver the kernel has for the hardware Phoenix aims at,
 as modules, in every image (`kernel-modules` in `webos-phoenix-image`),
@@ -180,9 +185,9 @@ added:
 | USB classes | storage and UAS, CDC ACM/ECM/NCM/MBIM, RNDIS, QMI modems, USB serial (FTDI, PL2303, CH341, CP210x, option), printers, Ethernet adapters (ASIX, Realtek r8152, SMSC), iPhone tethering, USB-C (`typec`, UCSI on PCs) |
 | HID and input | generic HID, multitouch, Apple, Logitech, Microsoft, Sony/PlayStation, Nintendo, Steam, Wacom, I2C-HID (ACPI and device tree), HID sensor hubs, `uinput`, Xbox controllers (`xpad`), touchscreens (Goodix, FocalTech/EDT, Elan, Atmel mXT, Silead), GPIO vibrators |
 | Storage | NVMe, SDHCI (PCI, ACPI), Realtek card readers, FAT, exFAT, NTFS |
-| Wi-Fi | ath9k (no firmware needed), ath9k_htc, ath10k, ath11k, iwlwifi, rtw88 (PCIe, SDIO, USB), rtw89, rtl8xxxu, MediaTek mt7601u, mt76x2u, mt7921, brcmfmac (SDIO, USB, PCIe), Marvell mwifiex |
+| Wi-Fi | ath9k, ath9k_htc, ath10k, ath11k, iwlwifi, rtw88 (PCIe, SDIO, USB), rtw89, rtl8xxxu, MediaTek mt7601u, mt76x2u, mt7921, brcmfmac (SDIO, USB, PCIe), Marvell mwifiex |
 | Bluetooth | btusb (with Realtek and Broadcom), btsdio, hci_uart (H5, BCM, QCA), Marvell |
-| Graphics | x86: i915, amdgpu, radeon, nouveau, virtio-gpu; ARM: Panfrost, Lima, MSM (Adreno), etnaviv, VC4/V3D, simple panels; DisplayLink-like USB displays (`udl`) |
+| Graphics | x86: i915, amdgpu, radeon, nouveau, virtio-gpu; ARM: Panfrost, Lima, MSM (Adreno), etnaviv, VC4/V3D, simple panels; USB displays (`udl`) |
 | Camera, sound | UVC webcams, gspca; USB audio; HD Audio (x86) |
 | Sensors | IIO with HID sensors, BMC150, KXCJK1013, MXC4005, MPU6050, STK3310, LTR501 |
 
@@ -190,39 +195,54 @@ The kernel loads firmware compressed (`FW_LOADER_COMPRESS_XZ`/`_ZSTD`) and
 without a user-space helper. What the drivers expose is found by
 `phoenix-devices` as before ([Finding the hardware](#finding-the-hardware-and-following-it)).
 
-### Firmware: not in the image, offered on the device
+### Firmware in the image
 
-- `linux-firmware` and the other firmware recipes are **built** (their
-  packages are split per chip by OE: `linux-firmware-rtl8821`,
-  `linux-firmware-iwlwifi-misc`, ...), **not installed**:
-  `phoenix-firmware-policy.bbclass` fails an image that would install a
-  firmware package and names it; firmware a machine recommends (the
-  Raspberry Pi 4's Wi-Fi and Bluetooth) is dropped with
-  `BAD_RECOMMENDATIONS`. `PHOENIX_FIRMWARE_IN_IMAGE` lists exceptions: open
-  source firmware, or what the owner decides a device cannot do without.
-- `phoenix-driver-feed` collects the firmware packages with a driver manifest
-  each (`recipes-phoenix/phoenix-driver-feed/files/drivers/*.json`: Realtek
-  rtw88, Intel iwlwifi, Qualcomm ath10k, MediaTek, Broadcom BCM43455, AMD,
-  Intel and NVIDIA graphics), for `server/drivers` to check, sign and
-  publish.
-- Only firmware whose licence allows redistribution is ever offered; the
-  catalog refuses anything else, and the device drops it too. A licence that
-  is not open source is shown in full before installing, with its name and
-  source. The legal side is in [LEGAL.md](LEGAL.md#firmware-and-drivers).
-- Firmware a vendor does not allow passing on stays out entirely; for those
-  devices the reverse-engineering and "copy it from the device's own
-  Android" routes above apply.
+`packagegroup-phoenix-firmware` installs the redistributable firmware for
+common hardware, as OE splits `linux-firmware` per chip, each with the
+licence package it depends on (`linux-firmware-rtl-license`, ...):
 
-**The first-boot problem.** Firmware for the Wi-Fi itself cannot be
-downloaded over that Wi-Fi. In order of preference: a wired or USB
-connection (Ethernet, a phone's USB tethering, which the image's open
-drivers cover); the **installer**, which already identifies the device and
-can put the firmware it needs on the data partition, after showing the
-licence on the computer, for First Use to install offline; a USB drive with
-the packages (the catalog's `file://` sources: the signature check is the
-same). Phones get their own Wi-Fi firmware with their adaptation package
-(above), which the owner decides per device, so this is mostly a PC and
-board question.
+| Group | Packages | Size (uncompressed, linux-firmware 20240909) |
+| --- | --- | --- |
+| Graphics | `amdgpu`, `radeon`, `i915`, `nvidia-gpu` | 93 + 7 + 31 + 66 MB |
+| Intel Wi-Fi and Bluetooth | `iwlwifi-misc` and the 7260 to 9260 packages, `ibt-*` | up to 201 + 29 MB (`iwlwifi-*` files, all versions; the packages carry the ones the kernel asks for) |
+| Realtek | `rtl8188`, `rtl8192cu/ce/su`, `rtl8723`, `rtl8761`, `rtl8821`, `rtl8822`, `rtl-nic`, `rtl8168` | about 4 MB |
+| Qualcomm Atheros | `ath9k`, `ath10k`, `ath11k`, `ath12k`, `ath3k`, `ar3k`, `qca` | 21 + 52 + 8 + 3 MB |
+| MediaTek | `mediatek`, `mt7601u`, `mt76x2`, `mt7650` | about 37 MB |
+| Broadcom/Cypress, Marvell/NXP | `bcm43430`, `bcm43455`, `bcm4350`, `bcm4354`, `bcm4356-pcie`, `bcm43602`, `bcm4373`; `sd8887`, `sd8897`, `sd8997`, `pcie8997`, `usb8997`; `bnx2` | about 20 MB, plus the Marvell files used |
+| Machines | the Raspberry Pi 4's Wi-Fi and Bluetooth (`linux-firmware-rpidistro-bcm43455`/`43456`, `bluez-firmware-rpidistro-*`, recommended by `meta-raspberrypi`); a phone's adaptation package | a few MB |
+
+**Size cost:** about 550-600 MB uncompressed for the whole set (measured from
+the 20240909 release's file list; all of `linux-firmware` is 1.23 GB), of
+which Intel's Wi-Fi files and the GPUs are most. The image build logs the
+exact figure (`phoenix-firmware-policy`: "Phoenix firmware: N packages, X
+MB"). Ways to shrink it, none taken yet: compress the files (the kernel
+reads `.xz`/`.zst`; OE's scarthgap `linux-firmware` recipe has no switch for
+it, so it would be a bbappend), keep only the newest `iwlwifi` version per
+chip, and `PHOENIX_FIRMWARE_EXCLUDE` (below).
+
+- **`PHOENIX_FIRMWARE_EXCLUDE`** (in the image or `local.conf`): firmware
+  packages to leave out of a small image, e.g.
+  `"linux-firmware-amdgpu linux-firmware-nvidia-gpu"` for an ARM tablet. The
+  Hardware app offers them (`phoenix-driver-feed` publishes them).
+- **The licence check** (`phoenix-firmware-policy.bbclass`): the image fails
+  if it would install a firmware package whose licence is not on the
+  allow-list of licences that permit redistribution
+  (`PHOENIX_FIRMWARE_LICENSES`: OE's `Firmware-*` licences of linux-firmware,
+  whose WHENCE file records each file's redistribution terms; `WHENCE`;
+  meta-raspberrypi's `binary-redist-Cypress-rpidistro`,
+  `Firmware-cypress-rpidistro` (through `Firmware-*`) and
+  `Synaptics-rpidistro`; open source licences), naming the package and its
+  licence. It writes `/usr/share/phoenix/firmware/licences.json`: each
+  firmware package, its version, licence, licence files and size, which
+  Settings > Device Info > Open source licenses shows (the licence files'
+  text on a tap).
+
+**Wi-Fi firmware at first boot** is no longer a problem for the hardware in
+the image. For hardware whose firmware is not in it, the routes are: a wired
+or USB connection (Ethernet, a phone's USB tethering), the installer putting
+the firmware it found on the computer on the data partition, or a USB drive
+with the packages (`file://` catalog sources; the signature check is the
+same).
 
 ### Detection
 
@@ -244,11 +264,13 @@ udev reads, without libudev:
 - **Missing firmware**: the kernel's "Direct firmware load for X failed"
   lines (`dmesg`, else `journalctl -k`), tied to the device that asked, minus
   files that have appeared in `/lib/firmware` since.
+- **What is installed**: opkg's list, so an entry the image already has shows
+  as "Included with Phoenix" and newer firmware as an update.
 
-Each device's state: **working** (a driver is bound), **needs firmware**,
-**needs a driver** (the catalog has one), **no driver** (nothing knows it),
-**restart to finish**; and **optional driver available** for a working
-device the catalog has an extra for.
+Each device's state: **working**, **needs firmware**, **needs a driver** (the
+catalog has one), **no driver** (nothing knows it), **restart to finish**;
+and for a working device, **newer firmware available** or **optional driver
+available**.
 
 ### The driver catalog
 
@@ -259,35 +281,76 @@ JSON index any web host or mirror serves, signed with Ed25519
 and signer. Each entry maps hardware to packages:
 
 ```json
-{"id": "firmware-rtw88", "kind": "firmware", "title": "Realtek Wi-Fi firmware (rtw88)",
+{"id": "firmware-rtw88-update", "kind": "firmware", "title": "Newer Realtek Wi-Fi firmware (rtw88)",
  "match": ["usb:v0BDApC811d*", "pci:v000010ECd0000C821sv*"],
- "firmware": ["rtw88/rtw8821*.bin"], "modules": ["rtw88_8821cu"], "optional": false, "after": "reload",
+ "firmware": ["rtw88/rtw8821c_fw.bin"], "modules": ["rtw88_8821cu"], "optional": true, "after": "reload",
+ "supersedes": ["linux-firmware-rtl8821"],
  "license": {"id": "LicenseRef-rtlwifi-firmware", "name": "Realtek firmware licence", "text": "…",
              "url": "…", "free": false, "redistributable": true},
  "source": "https://git.kernel.org/…/linux-firmware.git",
- "packages": [{"name": "linux-firmware-rtl8821", "version": "20240909-r0", "arch": "all",
+ "packages": [{"name": "linux-firmware-rtw88-update", "version": "20250311-r0", "arch": "all",
                "kernel": null, "url": "packages/…ipk", "size": 1234, "installedSize": 5678, "sha256": "…"}]}
 ```
 
-`match` holds the kernel's own modalias globs (`modules.alias` syntax), so
-an entry names its devices as its driver does; `firmware` (names or globs)
-also matches a device whose driver asked for one of those files. `kind` is
-`firmware`, `module` (an out-of-tree kernel module, built per kernel:
-`kernel` must equal `uname -r`) or `service` (a user-space HAL or daemon,
-reviewed by a person). Packages are picked by architecture: one of those
-opkg installs on the device (`/etc/opkg/arch.conf`: `all`, the CPU's tune
-such as `core2-64` or `cortexa72`, the machine's such as `qemux86_64`), the
-most specific there is. The full format and the checks: [DRIVERS.md](DRIVERS.md).
+`match` holds the kernel's own modalias globs (`modules.alias` syntax);
+`firmware` (names or globs) also matches a device whose driver asked for one
+of those files. `kind` is `firmware`, `module` (an out-of-tree kernel module,
+built per kernel: `kernel` must equal `uname -r`) or `service` (a user-space
+HAL or daemon, reviewed by a person). **Newer firmware** names the image
+package it updates (`supersedes`) and installs its files in
+`/lib/firmware/updates`, which the kernel reads before `/lib/firmware`: the
+image's package stays, and removing the update goes back to it. Packages are
+picked by architecture: one of those opkg installs on the device
+(`/etc/opkg/arch.conf`: `all`, the CPU's tune such as `core2-64` or
+`cortexa72`, the machine's such as `qemux86_64`), the most specific there is.
+The full format and the checks: [DRIVERS.md](DRIVERS.md).
 
-**Trust: the same Ed25519 model as the Marketplace, with one change.**
-Drivers install as root, so the driver catalog's key is **pinned in the
-system image** (`/etc/palm/hardware/catalog.json`), not trusted on first use,
-and the user cannot add driver catalogs (Developer Mode could, later; an
-open question below). The device takes only an index signed with that key,
-not expired, and not older than the last one it took (no rollback to an
-index with a withdrawn driver), and installs only a package whose size and
-SHA-256 are the signed ones. A catalog that fails is reported and the last
-good one kept.
+**Trust.** The same Ed25519 model as the Marketplace, with these rules:
+
+- **Phoenix's catalog key is pinned in the system image**
+  (`/etc/palm/hardware/catalog.json`), not trusted on first use: drivers
+  install as root. The device takes only an index signed with it, not
+  expired, and not older than the last one it took, and installs only a
+  package whose size and SHA-256 are the signed ones. A catalog that fails
+  is reported and the last good one kept.
+- **The owner holds the key offline** (a USB drive or security key, a copy in
+  a password manager). CI builds the catalog; the owner signs it on their
+  own computer; a CI job that the owner must approve checks the signature
+  against the pinned key and publishes ([DRIVERS.md](DRIVERS.md#releasing-the-catalog)).
+  The simulator and tests use the sample key (`server/drivers/sample`),
+  which only the simulator trusts.
+- **Key rotation is built in**: the old key signs a hand-over to a new one
+  (`key-handover.json`); a device whose catalog no longer verifies with its
+  key follows a hand-over signed by that key and then trusts only the new
+  one. A key listed in `revoked` (`catalog.json`) is never trusted again; a
+  lost or leaked key is replaced by a system update that pins the new key
+  and revokes the old.
+- **Other catalogs, with Developer Mode only**: added by their address in
+  Settings > Hardware, trusted by their own key once the user has seen its
+  fingerprint (as the Marketplace does for app catalogs), shown under "Other
+  driver catalogs" by the name the user saw. Their drivers are marked "From
+  X, a catalog you added, not Phoenix's", never replace a Phoenix entry with
+  the same id, and are neither used nor installable while Developer Mode is
+  off.
+
+### Out-of-tree drivers
+
+Built per kernel in `meta-phoenix` (`recipes-kernel/rtl8812au`,
+`recipes-kernel/rtl8814au`, into `lib/modules/<kernel>/updates`), offered by
+the Hardware app through `phoenix-driver-feed`, **never in the image and
+never installed for a device a built-in driver already binds** (the service
+refuses it: "A built-in driver already drives this device"):
+
+| Driver | Hardware | Why |
+| --- | --- | --- |
+| `rtl8812au` (aircrack-ng's `88XXau`, GPL-2.0) | USB Wi-Fi with the RTL8812AU or RTL8821AU: most AC600/AC1200 dongles (TP-Link Archer T2U/T4U, Alfa AWUS036AC/ACH, Netgear A6100, ...) | Among the most sold USB Wi-Fi chips and the most asked-about Linux Wi-Fi drivers; mainline drives them only from Linux 6.14 (`rtw88_8812au`/`_8821au`), after OSE's 6.6 kernels |
+| `rtl8814au` (morrownr's, GPL-2.0) | USB Wi-Fi with the RTL8814AU (AC1900, four antennas: Asus USB-AC68, Alfa AWUS1900, TP-Link Archer T9UH) | The popular high-end dongle; mainline support came in 2025, after 6.6 |
+
+Not included: RTL88x2BU and RTL8821CU (in the 6.6 kernel's `rtw88`),
+RTL8188EU (`rtl8xxxu` in 6.6), and drivers whose firmware may not be
+redistributed (the Xbox Wireless adapter's `xone`) or whose licence is not
+compatible with the kernel's. The list follows the opt-in reports
+(`drivers.php reports`): what is most reported without a driver is next.
 
 ### Installing, and putting it back
 
@@ -309,11 +372,11 @@ ongoing activity in the notification area:
 5. **Check**: the device must now be working. If not, or if opkg failed:
    **roll back**: remove what was new, reinstall the previous version from
    the kept package, reload, and say "Your device was put back as it was."
+   The image's own packages are never replaced (updates go beside them).
 
 `remove {driverId}` removes the packages and reloads (or asks for a restart).
 A daily activity (and the first look after start-up) tells the user about
-new hardware that needs something ("Realtek … needs firmware", opening
-Settings > Hardware).
+new hardware that needs something.
 
 ### The anonymous hardware report (opt-in)
 
@@ -325,61 +388,51 @@ modaliases and missing firmware names; the architecture and kernel version
 board strings, account or device identifiers. "See What Is Sent" shows the
 exact IDs and can send them once. The catalog service keeps them with the
 day only (`POST /v1/report`, `data/reports.jsonl`); `drivers.php reports`
-lists the devices no driver is for yet, most reported first, which is what
-the people adding drivers work on next.
-
-### For developers: publishing a driver
-
-[DRIVERS.md](DRIVERS.md): write a manifest (`driver.json`), build the `.ipk`
-(OE recipe, or `opkg-build`), run `drivers.php add` for the automatic checks
-(files only where the kind allows, no install scripts but `depmod`, the
-licence and its text, the firmware it names is there), a person reviews
-(services always), and the catalog's maintainer publishes a signed build.
-`meta-phoenix`'s `phoenix-driver-feed` does the first two steps for the
-firmware OE builds.
+lists the devices no driver is for yet, most reported first.
 
 ### First boot
 
-First Use has a **Hardware** step after Wi-Fi (so downloads work), shown
-only when a device needs firmware or a driver the catalog has: each such
-device, what it needs, and Install (the licence first). Optional extras
-wait in Settings > Hardware. When the Wi-Fi itself needs firmware, the
-offline routes above apply.
+First Use has a **Hardware** step after Wi-Fi, which looks at the hardware
+first and is shown only when a device needs firmware or a driver the image
+lacks and the catalog has (for the simulated device: the RTL8812AU dongle);
+newer firmware and optional extras wait in Settings > Hardware.
 
 ### Where it lives
 
 | Piece | Where |
 | --- | --- |
-| The service (`org.webosphoenix.hardware`) | `services/hardware` (`hardwareservice.js`; device side `service.js`, `lib/sysfs.js`, `lib/node.js`; the Marketplace's Ed25519 code, kept identical by a test) |
-| The app | Settings > Hardware (`apps/settings/src/pages/Hardware.tsx`, its own launch point, as webOS's preference panes were), First Use's step (`apps/firstuse`), `@phoenix/luna` `hardware` |
-| The catalog | `server/drivers` (`drivers.php`, `public/router.php`); the simulator's signed sample catalog in `server/drivers/sample` |
-| In the simulator | `runtime/phoenix-runtime.js` "Hardware and drivers": a simulated device (a Realtek dongle without its firmware, an RTL8812AU without its driver, an NVIDIA card with an optional firmware, a USB gadget nothing knows), opkg and kernel |
-| Packaging | `meta-phoenix`: `recipes-kernel/linux` (fragments), `classes/phoenix-firmware-policy.bbclass`, `recipes-phoenix/phoenix-driver-feed` |
-| Tests | `services/hardware/*.test.ts`, `apps/settings/src/pages/Hardware.test.tsx`, `server/drivers/tests/run.php`, `tools/test-hardware.cjs` |
+| The service (`org.webosphoenix.hardware`) | `services/hardware` (`hardwareservice.js`; device side `service.js`, `lib/sysfs.js`, `lib/node.js`; trust config `etc/palm/hardware/catalog.json`; the Marketplace's Ed25519 code, kept identical by a test) |
+| The app | Settings > Hardware (`apps/settings/src/pages/Hardware.tsx`, its own launch point, as webOS's preference panes were), the firmware licences in Device Info, First Use's step (`apps/firstuse`), `@phoenix/luna` `hardware` |
+| The catalog | `server/drivers` (`drivers.php`, `public/router.php`, reviewed entries in `catalog/entries`); releases: `.github/workflows/drivers-catalog.yml`; the simulator's signed sample catalog in `server/drivers/sample` |
+| In the simulator | `runtime/phoenix-runtime.js` "Hardware and drivers": a simulated device whose image has its firmware (an Atheros card, a Realtek RTL8821CU dongle with newer firmware in the catalog, an NVIDIA card), its gaps (an RTL8812AU dongle without a driver, a USB gadget nothing knows), opkg and kernel |
+| Packaging | `meta-phoenix`: `recipes-kernel/linux` (fragments), `recipes-kernel/rtl8812au`, `rtl8814au`, `recipes-core/packagegroups/packagegroup-phoenix-firmware.bb`, `classes/phoenix-firmware-policy.bbclass`, `recipes-phoenix/phoenix-driver-feed` |
+| Tests | `services/hardware/*.test.ts`, `apps/settings/src/pages/Hardware.test.tsx`, `server/drivers/tests/run.php`, `tools/test-hardware.cjs`, `tools/test-firstuse.cjs`; `scripts/parse-check.sh` resolves the packagegroup, the feed and the driver recipes |
 
 **Why a Settings pane, not its own app:** webOS's preferences were one
 launcher icon per pane, and Phoenix's Settings keeps that (launch points);
-Hardware is one more pane with its own icon, so it is found where Wi-Fi,
-Bluetooth and USB are, opened by its notification and its ongoing activity,
-and shares Settings' look and code.
+Hardware is one more pane with its own icon, found where Wi-Fi, Bluetooth and
+USB are, opened by its notification and its ongoing activity.
 
-### Decisions for the owner
+### Decided, and still open
 
-1. **Exceptions to "no firmware in the image".** Candidates: the GPU
-   firmware a PC needs to show anything (AMD's `amdgpu`; without it the
-   shell runs on the firmware framebuffer, slowly), the Wi-Fi firmware of
-   reference devices (the Pi 4's), and phones' adaptation packages, which
-   carry their own firmware. Each would go in `PHOENIX_FIRMWARE_IN_IMAGE`
-   with a note here.
-2. **The driver catalog's key and host**: who holds the key (offline, like
-   the Marketplace's), and the address (`drivers.webosphoenix.org` is a
-   placeholder in `/etc/palm/hardware/catalog.json`).
-3. **Third-party driver catalogs**: never, or with Developer Mode on and the
-   key shown (as the Marketplace does for app catalogs)?
-4. **The report endpoint**: the same server as the Marketplace, and whether
-   the counts are published (as linux-hardware.org does).
-5. **Out-of-tree drivers** (RTL8812AU, xone, ...): build them in
-   `meta-phoenix` per kernel and offer them, or only upstream drivers?
+Decided (October 2026): redistributable firmware in the image; the Hardware
+app for the gaps; other catalogs with Developer Mode only; a short list of
+out-of-tree drivers built per kernel; the catalog key held offline by the
+owner, releases signed off-server and approved in CI, rotation by signed
+hand-over.
+
+Open, for the owner:
+
+1. **Image size**: accept about 550-600 MB of firmware, or compress it and
+   keep one `iwlwifi` version per chip (a bbappend), or leave the GPU
+   firmware out of ARM images by default (`PHOENIX_FIRMWARE_EXCLUDE`)?
+2. **Synaptics' Pi firmware**: `meta-raspberrypi` puts the BCM43456 firmware
+   (Pi 400, CM4) under `Synaptics-rpidistro` with a licence flag
+   (`synaptics-killswitch`, which OSE's `webos.conf` accepts). It allows
+   redistribution but Synaptics can withdraw it; it is on the allow-list
+   for now.
+3. **The catalog's host** (`drivers.webosphoenix.org` is a placeholder) and
+   whether the report counts are published (as linux-hardware.org does).
 
 ## Device tiers
 

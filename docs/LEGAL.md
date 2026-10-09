@@ -357,44 +357,57 @@ data use "Phoenix Account".
 
 ## Firmware and drivers
 
-The owner's decision of October 2026 ("Mix"), and the narrow rule that
-follows from it:
+The owner's decision of October 2026: as much hardware as possible works
+out of the box, as on Ubuntu and Debian. The rules that follow from it:
 
-1. **Open source drivers and firmware are in the system image.** The Linux
-   kernel's drivers (GPL-2.0) are built as modules and shipped with the
-   kernel, whose source has to be offered with the image as the GPL
-   requires (OE's archiver class can collect it). Open source firmware may
-   be in the image too.
-2. **Firmware that is not open source is never in the image**, even when its
-   licence allows redistribution (most of `linux-firmware`: Realtek, Intel,
-   Qualcomm, MediaTek, Broadcom/Cypress, AMD, NVIDIA). `meta-phoenix` builds
-   it but its image refuses to install it (`phoenix-firmware-policy.bbclass`);
-   exceptions are listed in `PHOENIX_FIRMWARE_IN_IMAGE`, each decided by the
-   owner and recorded in HARDWARE.md.
-3. **It is offered on the device, only if its licence allows
-   redistribution**, by Settings > Hardware and First Use
-   (`org.webosphoenix.hardware`), for the hardware it is for, and
-   **downloaded only after the user accepts its licence**, which is shown in
-   full with its name and source before anything is downloaded. The catalog
-   tool refuses an entry whose licence does not say it may be redistributed
-   (`redistributable: true`) or whose non-free licence text is missing, and
-   the device ignores such entries too.
-4. **The files are passed on unmodified**, as the licences require, in the
-   packages OE builds from the upstream `linux-firmware` repository, with the
-   licence file each one depends on (`linux-firmware-*-license`), which is
-   installed with it.
-5. **What may not be redistributed is not hosted or fetched by Phoenix.**
-   For such hardware, firmware is taken from the user's own device (an
-   Android vendor partition, at install time), never shipped
+1. **Open source drivers are in the system image.** The Linux kernel's
+   drivers (GPL-2.0) are built as modules and shipped with the kernel,
+   whose source has to be offered with the image as the GPL requires (OE's
+   archiver class can collect it).
+2. **Firmware whose licence allows redistribution is in the image too**,
+   open source or not (most of `linux-firmware`: Realtek, Intel, Qualcomm,
+   MediaTek, Broadcom/Cypress, AMD, NVIDIA, Marvell), as OE packages it from
+   the upstream `linux-firmware` repository: **unmodified, with its licence
+   files** (each firmware package depends on its `linux-firmware-*-license`
+   package, installed with it in `/lib/firmware`). Machine firmware from
+   `meta-raspberrypi` likewise. The image build checks every firmware
+   package's licence against an allow-list of licences that permit
+   redistribution and fails otherwise (`phoenix-firmware-policy.bbclass`,
+   `PHOENIX_FIRMWARE_LICENSES`); adding a licence to it needs a note here.
+3. **The licences can be read on the device**: Settings > Device Info > Open
+   source licenses lists each firmware package with its licence and shows
+   the licence files (`/usr/share/phoenix/firmware/licences.json`, written
+   when the image is built).
+4. **The Hardware app fills the gaps** (firmware not in the image, newer
+   firmware, out-of-tree drivers, optional extras), only with what may be
+   redistributed: the catalog tool refuses an entry whose licence does not
+   say so (`redistributable: true`) or whose non-free licence text is
+   missing, and the device ignores such entries too. What is not open
+   source is installed only **after the user accepts its licence**, shown in
+   full with its name and source first.
+5. **Newer firmware is passed on unmodified as well**, installed beside the
+   image's (`/lib/firmware/updates`).
+6. **What may not be redistributed is not shipped, hosted or fetched by
+   Phoenix.** For such hardware, firmware is taken from the user's own
+   device (an Android vendor partition, at install time), never shipped
    (HARDWARE.md, "Reverse engineering").
-6. **Out-of-tree drivers and services** in the catalog are open source
-   (their licence in the entry); a service is reviewed by a person before it
-   is listed (DRIVERS.md).
+7. **Out-of-tree drivers** (`meta-phoenix` `rtl8812au`, `rtl8814au`) are
+   GPL-2.0, built from their upstream sources, and offered separately, not
+   in the image. A service in the catalog is reviewed by a person first
+   (DRIVERS.md).
+8. **Other driver catalogs** (Developer Mode only) are their makers'
+   responsibility; Phoenix shows them as not its own.
 
-The driver catalog is signed with its own Ed25519 key, pinned in the image
-(the Marketplace's code; see Marketplace above). The opt-in hardware report
-sends only device IDs (HARDWARE.md, "The anonymous hardware report") and the
-catalog service keeps them with the day only.
+`meta-raspberrypi`'s BCM43456 firmware (`Synaptics-rpidistro`) allows
+redistribution under a licence Synaptics can withdraw (the
+`synaptics-killswitch` licence flag, which OSE's `webos.conf` accepts); it is
+on the allow-list until the owner decides otherwise.
+
+The driver catalog is signed with its own Ed25519 key, held offline by the
+owner and pinned in the image (the Marketplace's code; see Marketplace
+above). The opt-in hardware report sends only device IDs (HARDWARE.md, "The
+anonymous hardware report") and the catalog service keeps them with the day
+only.
 
 The service, the Hardware pane, the catalog tool and the packaging are
 original code. The sample catalog's packages (`server/drivers/sample`) hold

@@ -2278,9 +2278,9 @@ launcher, lock screen or system menu), and `com.palm.systemmanager/getBootStatus
 answered `firstUse: true` meanwhile. Phoenix does the same:
 
 - **Steps**: Welcome (language: `com.webos.settingsservice` `localeInfo`),
-  Wi-Fi (join, with a password dialog), Hardware (the firmware and drivers
-  the hardware needs, each installed after its licence; only when a device
-  needs one, see [Hardware and drivers](#hardware-and-drivers)), Restore (a backup from the USB
+  Wi-Fi (join, with a password dialog), Hardware (firmware or a driver the
+  image lacks for a device, each installed after its licence; only when a
+  device needs one, see [Hardware and drivers](#hardware-and-drivers)), Restore (a backup from the USB
   drive or a WebDAV server, see [Backup](#backup); afterwards the device
   backs up there every day with the same passphrase), Date & Time (time zone, network
   time, 24-hour clock), Accounts (Synergy explained, the accounts there are,
@@ -2512,41 +2512,50 @@ line), `server/updates/tests/run.php`, `tools/test-updates.cjs`.
 ## Hardware and drivers
 
 `org.webosphoenix.hardware` (`services/hardware`, Node.js; methods in
-`hardwareservice.js`) is what Ubuntu's "Additional Drivers" is: it lists the
-device's hardware (`list`), matches it against the signed driver catalog
-(`refresh`), installs the firmware, kernel modules and services the catalog
-has for it (`install`, an ongoing activity in the notification area while it
-runs), removes them (`remove`), and sends the opt-in hardware report
+`hardwareservice.js`) is what Ubuntu's "Additional Drivers" is. The image
+carries the open source drivers and the redistributable firmware; the service
+fills the gaps: it lists the device's hardware (`list`), matches it against
+the signed driver catalog (`refresh`), installs what the catalog has for it
+(firmware the image lacks, newer firmware beside the image's in
+`/lib/firmware/updates`, out-of-tree drivers, optional extras; `install`, an
+ongoing activity in the notification area while it runs), removes it
+(`remove`), manages other catalogs with Developer Mode on (`addSource`,
+`trustSource`, `removeSource`), lists the image's firmware and licences
+(`firmwareLicenses`, `firmwareLicense`) and sends the opt-in hardware report
 (`getReport`, `sendReport`, `setPreferences`). Settings > Hardware
 (`apps/settings/src/pages/Hardware.tsx`, launch params `{page: "hardware",
-driverId?}`) and First Use's Hardware step use it through `@phoenix/luna`
-`hardware`. The plan, the catalog and the trust model:
+driverId?}`), Settings > Device Info > Open source licenses and First Use's
+Hardware step use it through `@phoenix/luna` `hardware`. The plan, the
+catalog and the trust model (a pinned key, hand-over to a new key, other
+catalogs only with Developer Mode):
 [HARDWARE.md](HARDWARE.md#hardware-support-and-the-hardware-app); publishing a
-driver: [DRIVERS.md](DRIVERS.md).
+driver and releasing the catalog: [DRIVERS.md](DRIVERS.md).
 
 On a device (`service.js`) it reads sysfs and the kernel log (`lib/sysfs.js`),
 installs with opkg, reloads modules with modprobe or rebinds the device
 (`lib/node.js`), reads `/etc/palm/hardware/catalog.json` (the catalog's
-address and pinned key) and keeps its state in `/var/lib/phoenix/hardware`.
-An install that opkg refuses, or after which the device still does not work,
-is rolled back (the previous version from the kept package, or none).
+address, pinned key and revoked keys) and
+`/usr/share/phoenix/firmware/licences.json` (written when the image is
+built), and keeps its state in `/var/lib/phoenix/hardware`. An install that
+opkg refuses, or after which the device still does not work, is rolled back.
 
 In the simulator the service runs unchanged on a simulated device
-(`runtime/phoenix-runtime.js`, "Hardware and drivers"): an Atheros Wi-Fi card
-that works, a Realtek RTL8821CU dongle without its firmware, an RTL8812AU
-dongle without its driver, an NVIDIA card nouveau drives with an optional
-firmware, a webcam, sound, an NVMe drive, a touchscreen, an accelerometer and
-a USB gadget nothing knows (`1209:0001`). opkg reads the packages with the
-Marketplace's `.ipk` reader and records what they hold in the store; the
-"kernel" loads the firmware and modules installed when a driver is reloaded,
-and a driver that needs a restart starts after
+(`runtime/phoenix-runtime.js`, "Hardware and drivers") whose image has its
+firmware: an Atheros Wi-Fi card, a Realtek RTL8821CU dongle (the catalog has
+newer firmware for it), an NVIDIA card, a webcam, sound, an NVMe drive, a
+touchscreen, an accelerometer; and its gaps: an RTL8812AU dongle the 6.6
+kernel has no driver for, and a USB gadget nothing knows (`1209:0001`). opkg
+reads the packages with the Marketplace's `.ipk` reader and records what they
+hold in the store; the "kernel" loads the firmware and modules installed when
+a driver is reloaded, and a driver that needs a restart starts after
 `com.palm.power/shutdown/machineReboot` (a boot count in the store). The
 catalog is the signed sample in `server/drivers/sample`
 (`/usr/share/phoenix/hardware/sample/`, `file://` URLs), trusted through
-`catalog-sim.json`; `"hardware:config"` in the store stands for an edited
-`/etc/palm/hardware/catalog.json`, and `"hardware:sim"` `{fail: {opkg:
-text}}` makes opkg fail. Reports go to `http://127.0.0.1:8090/v1/report`
-(`server/drivers/bin/serve.sh`). Tests:
+`catalog-sim.json`, which also lists the image's firmware
+(`firmware-in-image.json`, `licences/`); `"hardware:config"` in the store
+stands for an edited `/etc/palm/hardware/catalog.json`, and `"hardware:sim"`
+`{fail: {opkg: text}}` makes opkg fail. Reports go to
+`http://127.0.0.1:8090/v1/report` (`server/drivers/bin/serve.sh`). Tests:
 `services/hardware/hardwareservice.test.ts`, `services/hardware/sysfs.test.ts`
 (a made-up `/sys`, stand-ins for opkg and modprobe),
 `apps/settings/src/pages/Hardware.test.tsx`, `server/drivers/tests/run.php`,

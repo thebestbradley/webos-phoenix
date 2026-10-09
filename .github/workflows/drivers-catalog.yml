@@ -1,0 +1,100 @@
+name: driver catalog
+
+# Releasing the driver catalog (docs/DRIVERS.md, "Releasing the catalog").
+# The signing key never comes here: the owner keeps it offline and signs on
+# their own computer. Two runs, both started by hand (Actions > driver
+# catalog > Run workflow):
+#
+#   1. step "build": builds drivers.json from the reviewed entries in
+#      server/drivers/catalog/entries, not signed, and prints its SHA-256.
+#   2. The owner downloads the "drivers-catalog" artifact, checks the SHA-256,
+#      and signs it on their computer:
+#        php server/drivers/bin/drivers.php sign drivers.json --key /Volumes/PHOENIXKEY/drivers
+#   3. step "publish", with the build's run id and the signature: waits for the
+#      owner's approval (the "drivers-release" environment requires it), checks
+#      the signature against the key pinned in the image
+#      (services/hardware/etc/palm/hardware/catalog.json) and uploads the signed
+#      catalog ("drivers-catalog-signed"); with DRIVERS_DEPLOY_* secrets set it
+#      also copies it to the catalog's host.
+
+on:
+  workflow_dispatch:
+    inputs:
+      step:
+        description: "build, or publish a signed build"
+        type: choice
+        options: [build, publish]
+        default: build
+      build_run:
+        description: "publish: the run id of the build (from its page's address)"
+        required: false
+      signature:
+        description: "publish: what drivers.php sign printed"
+        required: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    if: inputs.step == 'build'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y --no-install-recommends php-cli
+      - name: Build drivers.json (not signed)
+        run: |
+          set -eu
+          key=$(php -r 'echo json_decode(file_get_contents("services/hardware/etc/palm/hardware/catalog.json"), true)["sources"][0]["key"] ?? "";')
+          DRIVERS_DATA=server/drivers/catalog php server/drivers/bin/drivers.php build --out out \
+              --build "$(date -u +%Y%m%d%H%M)" ${key:+--public "$key"} | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Sign it on your computer: php server/drivers/bin/drivers.php sign drivers.json --key <your key folder>" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: drivers-catalog
+          path: out/
+          retention-days: 14
+
+  publish:
+    if: inputs.step == 'publish'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Settings > Environments > drivers-release: "Required reviewers" = the owner.
+    environment: drivers-release
+    env:
+      DEPLOY_HOST: ${{ secrets.DRIVERS_DEPLOY_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y --no-install-recommends php-cli
+      - uses: actions/download-artifact@v4
+        with:
+          name: drivers-catalog
+          path: out
+          run-id: ${{ inputs.build_run }}
+          github-token: ${{ github.token }}
+      - name: Check the signature against the key pinned in the image
+        env:
+          SIGNATURE: ${{ inputs.signature }}
+        run: |
+          set -eu
+          key=$(php -r 'echo json_decode(file_get_contents("services/hardware/etc/palm/hardware/catalog.json"), true)["sources"][0]["key"] ?? "";')
+          if [ -z "$key" ]; then echo "No key is pinned in services/hardware/etc/palm/hardware/catalog.json yet" >&2; exit 1; fi
+          php server/drivers/bin/drivers.php attach out "$SIGNATURE" --public "$key" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: drivers-catalog-signed
+          path: out/
+      - name: Copy to the catalog's host
+        if: env.DEPLOY_HOST != ''
+        env:
+          SSH_KEY: ${{ secrets.DRIVERS_DEPLOY_SSH_KEY }}
+          DEST: ${{ secrets.DRIVERS_DEPLOY_PATH }}
+        run: |
+          set -eu
+          install -m 600 /dev/null ~/deploy_key && printf '%s\n' "$SSH_KEY" > ~/deploy_key
+          # A device reading between the two copies keeps its last catalog
+          # (the new index does not verify with the old signature yet).
+          scp -i ~/deploy_key -o StrictHostKeyChecking=accept-new out/key.json out/drivers.json "$DEPLOY_HOST:$DEST/"
+          scp -i ~/deploy_key out/drivers.json.sig "$DEPLOY_HOST:$DEST/"

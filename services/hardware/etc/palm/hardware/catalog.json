@@ -1,7 +1,7 @@
 {
-    "//": "The driver catalog org.webosphoenix.hardware reads (docs/DRIVERS.md). Its key is pinned here, in the system image: a driver catalog is not trusted on first use, as drivers install as root. key is null until the project's driver catalog key is made (server/drivers, `drivers.php init`); until then the service lists the hardware and offers nothing. reportUrl: where the opt-in hardware report goes.",
+    "//": "The driver catalogs org.webosphoenix.hardware trusts (docs/DRIVERS.md). Phoenix's catalog key is pinned here, in the system image: a driver catalog is never trusted on first use, as drivers install as root. key is null until the owner makes the key (docs/DRIVERS.md, \"Releasing the catalog\": drivers.php keygen) and puts its public half here; until then the service lists the hardware and offers nothing. When the key moves, the old key signs a hand-over (key-handover.json) and devices follow it; a key in revoked is never trusted again, whatever signs it (a leaked key: a system update adds it here, with the new key). reportUrl: where the opt-in hardware report goes.",
     "sources": [
-        { "id": "phoenix", "name": "Phoenix Drivers", "url": "https://drivers.webosphoenix.org/v1/", "key": null }
+        { "id": "phoenix", "name": "Phoenix Drivers", "url": "https://drivers.webosphoenix.org/v1/", "key": null, "revoked": [] }
     ],
     "reportUrl": "https://drivers.webosphoenix.org/v1/report"
 }
