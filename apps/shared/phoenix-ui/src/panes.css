@@ -1,0 +1,162 @@
+/*
+ * Copyright (c) 2026 webOS Phoenix contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * TouchPad-style panes (panes.tsx), after Enyo 1.0's Onyx theme
+ * (enyo-1.0/framework/source/palm/themes/Onyx/css): SlidingPane.css,
+ * SlidingView.css, Header.css, Toolbar.css, GrabButton.css,
+ * SwipeableItem.css, ConfirmPrompt.css. The theme's art (the sliding
+ * shadow, the header's and toolbar's bevels, the grip) is drawn here.
+ */
+
+.pui-panes {
+    position: relative;
+    height: 100%;
+    overflow: hidden;          /* SlidingPane.css */
+    background: #4b4b4b;
+}
+.pui-pane {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--pui-bg, #e5e5e5);
+}
+.pui-pane[hidden] { display: flex; visibility: hidden; }
+.pui-pane-detail { z-index: 1; will-change: transform; }
+/* The Animator's 700 ms slide, easing out (SlidingPane.js:47). */
+.pui-panes.moving .pui-pane-detail { transition: transform 700ms cubic-bezier(0.215, 0.61, 0.355, 1); }
+@media (prefers-reduced-motion: reduce) {
+    .pui-panes.moving .pui-pane-detail { transition: none; }
+}
+
+/* The shadow the detail casts on the list (sliding-shadow.png, 20 px). */
+.pui-pane-shadow {
+    position: absolute;
+    z-index: 2;
+    top: 0;
+    bottom: 0;
+    left: -20px;
+    width: 20px;
+    pointer-events: none;
+    background: linear-gradient(to left, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0.12) 35%, rgba(0, 0, 0, 0));
+}
+.pui-panes.single .pui-pane-shadow { display: none; }
+/* Its left edge drags it (enyo-sliding-view-nub: 20 px either side). */
+.pui-pane-nub {
+    position: absolute;
+    z-index: 3;
+    top: 0;
+    bottom: 0;
+    left: -20px;
+    width: 40px;
+    touch-action: none;
+    cursor: ew-resize;
+}
+/* One at a time: only a thin strip inside the screen's edge. */
+.pui-panes.single .pui-pane-nub { left: 0; width: 12px; }
+.pui-panes.single[data-selected="list"] .pui-pane-nub { display: none; }
+
+/* ---- Header (Header.css: header.png's white bevel on #ccc) -------------------------------------- */
+
+.pui-pane-header {
+    flex: none;
+    box-sizing: border-box;
+    min-height: 54px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    background: linear-gradient(rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.3) 30%, rgba(255, 255, 255, 0.05) 85%), #ccc;
+    border-top: 2px solid #fff;
+    border-bottom: 1px solid #8f8f8f;
+    color: #444;
+    font-size: 20px;
+    font-weight: bold;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+/* ---- Toolbar (Toolbar.css: toolbar.png's bevel on #343434) -------------------------------------- */
+
+.pui-pane-toolbar {
+    flex: none;
+    position: relative;      /* hosts a GrabButton */
+    box-sizing: border-box;
+    min-height: 54px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    background: #343434;
+    border-top: 2px solid #585858;
+    border-bottom: 2px solid #1d1d1d;
+    color: #fff;
+}
+.pui-pane-toolbar .pui-spacer { flex: 1; }
+/* A toolbar's icon button (Onyx button-toolbar.png: a dark pill when held). */
+.pui-pane-tool {
+    min-width: 50px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #fff;
+    font: inherit;
+    font-size: 15px;
+    cursor: pointer;
+}
+.pui-pane-tool:active { background: linear-gradient(#1b1b1b, #2b2b2b); box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8); }
+.pui-pane-tool svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---- GrabButton (grabbutton.png, 46 x 54: three grips) ------------------------------------------ */
+
+.pui-grab {
+    flex: none;
+    width: 46px;
+    height: 54px;
+    margin: -2px 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    touch-action: none;
+    cursor: ew-resize;
+}
+.pui-grab span {
+    width: 4px;
+    height: 20px;
+    border-radius: 2px;
+    background: rgba(0, 0, 0, 0.38);
+    box-shadow: 1px 0 0 rgba(255, 255, 255, 0.1), inset 0 1px 1px rgba(0, 0, 0, 0.4);
+}
+.pui-pane-toolbar .pui-grab span { background: rgba(0, 0, 0, 0.6); box-shadow: 1px 0 0 rgba(255, 255, 255, 0.16); }
+
+/* ---- SwipeableItem and its confirm prompt ------------------------------------------------------- */
+
+.pui-swipeable { position: relative; overflow: hidden; }
+.pui-swipeable-item { touch-action: pan-y; }
+.pui-confirm-prompt {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    /* confirmprompt-background.png: a grey band, lighter at its edges */
+    background: linear-gradient(#bdbdbd, #e2e2e2 18%, #e2e2e2 82%, #bdbdbd);
+}
+.pui-confirm-prompt .pui-button { min-width: 96px; margin: 0; }

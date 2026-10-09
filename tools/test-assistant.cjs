@@ -380,45 +380,114 @@ async function main() {
         await shot(app, "thread-cloud");
 
         // ---- Conversations ----------------------------------------------------------------------
-        await app.click("[data-testid='as-conversations']");
-        await app.waitForSelector("[data-testid='as-new']");
+        // A TouchPad app: on a tablet the list is beside the conversation;
+        // on a phone the conversation is over it, and Back (or the header's
+        // Conversations) slides it away.
+        const panes = await app.getAttribute("[data-testid='as-panes']", "class");
+        check(tablet ? /\bmulti\b/.test(panes) : /\bsingle\b/.test(panes), tablet ? "a tablet: the panes side by side" : "a phone: one pane at a time");
+        if (tablet) check(await app.isVisible("[data-testid='as-list']") && await app.isVisible("[data-testid='as-input']"), "the list beside the conversation");
+        else check(await app.isHidden("[data-testid='as-list']"), "the conversation over the list");
+        const showList = async () => {
+            if (!tablet && await app.isVisible("[data-testid='as-conversations']")) await app.click("[data-testid='as-conversations']");
+            // (Slid away, the conversation is out of sight.)
+            if (!tablet) await app.waitForSelector("[data-testid='as-panes-detail']", { state: "hidden" });
+            await app.waitForSelector("[data-testid='as-new']");
+        };
+        const openThread = async (id) => {
+            await app.click(`[data-testid='as-thread-${id}']`);
+            if (!tablet) await app.waitForSelector("[data-testid='as-list']", { state: "hidden" });
+        };
+        await showList();
         const threads = (await svc(app, A + "threads", {})).threads;
         check(threads.length === 1, "one conversation so far");
         await app.click("[data-testid='as-new']");
         await app.waitForSelector("[data-testid='as-empty']");
         await ask("What time is it?");
-        await app.click("[data-testid='as-conversations']");
+        await showList();
         await app.waitForFunction(() => document.querySelectorAll("[data-testid^='as-thread-']").length === 2);
         check(true, "a new conversation listed beside the first");
+        check(/What time is it/.test(await app.textContent("[data-testid='as-list']")), "titled by its first request");
         await shot(app, "conversations");
         const first = threads[0].id;
         await app.click(`[data-testid='as-thread-${first}']`);
         await app.waitForSelector(".as-bubble:has-text('Palm Pre')");
         check((await svc(app, A + "threads", {})).current === first, "an old conversation opened goes on in use");
-        await app.click("[data-testid='as-conversations']");
+        check(await app.getAttribute(`[data-testid='as-thread-${first}']`, "aria-current") === "true", "and is the one selected in the list");
+        await showList();
         const second = (await svc(app, A + "threads", {})).threads.find((t) => t.id !== first).id;
-        await app.click(`[data-testid='as-delete-${second}']`);
+        // Held (here right-clicked): its menu, Delete, asked.
+        await app.click(`[data-testid='as-thread-${second}']`, { button: "right" });
+        await app.click("[data-testid='as-menu-delete']");
         await app.click("[data-testid='as-delete-ok']");
         await app.waitForFunction(() => document.querySelectorAll("[data-testid^='as-thread-']").length === 1);
-        check(true, "a conversation deleted");
+        check(true, "a conversation deleted from its menu");
+        // Swiped across: Cancel or Delete over it.
+        const third = (await svc(app, A + "newThread", {})).thread.id;
+        await svc(app, A + "ask", { text: "What's 3 plus 4?", threadId: third });
+        await app.waitForSelector(`[data-testid='as-thread-${third}']`);
+        const box = await app.locator(`[data-testid='as-thread-${third}']`).boundingBox();
+        await app.mouse.move(box.x + 20, box.y + box.height / 2);
+        await app.mouse.down();
+        for (let i = 1; i <= 8; ++i) await app.mouse.move(box.x + 20 + i * box.width * 0.08, box.y + box.height / 2);
+        await app.mouse.up();
+        await app.waitForSelector(`[data-testid='as-swipe-${third}-confirm']`);
+        await shot(app, "swipe-delete");
+        await app.click(`[data-testid='as-swipe-${third}-delete']`);
+        await app.waitForFunction((id) => !document.querySelector(`[data-testid='as-thread-${id}']`), third);
+        check((await svc(app, A + "threads", {})).threads.length === 1, "a conversation swiped across and deleted");
+        if (!tablet) await openThread(first);
+
+        // ---- Open in New Card ---------------------------------------------------------------------
+        // A conversation (or a message) held: Open in New Card launches
+        // another card of the app ({newCard: true}) with that conversation;
+        // each card keeps to its own, and both follow the one store.
+        await showList();
+        launches.length = 0;
+        await app.click(`[data-testid='as-thread-${first}']`, { button: "right" });
+        await app.click("[data-testid='as-menu-newcard']");
+        await until(() => launches.length > 0, "Open in New Card launches");
+        check(launches[0].id === "org.webosphoenix.assistant" && launches[0].newCard === true && launches[0].params.conversationId === first,
+              "a new card of the app with the conversation: " + JSON.stringify(launches[0]));
+        if (!tablet) await openThread(first);
+        launches.length = 0;
+        await app.click(".as-row.out .as-bubble >> nth=0", { button: "right" });
+        await app.click("[data-testid='as-menu-newcard']");
+        await until(() => launches.length > 0 && launches[0].newCard === true && launches[0].params.conversationId === first, "a message's Open in New Card");
+        const other = (await svc(app, A + "newThread", {})).thread.id;
+        await svc(app, A + "ask", { text: "What's 5 plus 5?", threadId: other });
+        const card = await context.newPage();
+        watch(card, "second card");
+        await card.goto(appUrl + "?launchParams=" + encodeURIComponent(JSON.stringify({ conversationId: other })));
+        await card.waitForSelector(".as-bubble:has-text('5 plus 5')");
+        check(await app.locator(".as-bubble:has-text('5 plus 5')").count() === 0, "the second card shows its conversation, the first keeps its own");
+        await card.fill("[data-testid='as-input']", "What's 6 plus 6?");
+        await card.click("[data-testid='as-send']");
+        await card.waitForSelector(".as-bubble:has-text('12')");
+        await showList();
+        await app.waitForFunction((id) => /6 plus 6|12/.test(document.querySelector(`[data-testid='as-thread-${id}']`)?.textContent || ""), other);
+        check(await app.locator(".as-bubble:has-text('6 plus 6')").count() === 0, "a message sent in one card shows in the other's list, not its conversation");
+        await shot(card, "second-card");
+        await card.close();
+        await svc(app, A + "deleteThread", { id: other });
+        await svc(app, A + "setCurrent", { id: first });
 
         // ---- The system's view hands its conversation on ------------------------------------------
         // Each opening of the shell's view is a new conversation, made by
         // its first request (ask {newThread}); its app button relaunches the
         // app with {threadId}, which shows it even from Conversations
         // (where the app still is).
-        await app.waitForSelector("[data-testid='as-new']");
+        await showList();
         const before = (await svc(app, A + "threads", {})).threads.length;
         const viewAsk = await svc(app, A + "ask", { text: "What's 7 times 6?", newThread: true });
         const viewThread = viewAsk.thread && viewAsk.thread.id;
         check(!!viewThread && (await svc(app, A + "threads", {})).threads.length === before + 1, "a request from the view makes a new conversation");
         await app.evaluate((id) => document.dispatchEvent(new CustomEvent("webOSRelaunch", { detail: { threadId: id } })), viewThread);
         await app.waitForSelector(".as-bubble:has-text('7 times 6')");
-        check(await app.locator("[data-testid='as-new']").count() === 0, "the app, relaunched with it, shows that conversation");
+        if (!tablet) await app.waitForSelector("[data-testid='as-list']", { state: "hidden" });
+        check(await app.getAttribute(`[data-testid='as-thread-${viewThread}']`, "aria-current") === "true", "the app, relaunched with it, shows that conversation");
         check((await svc(app, A + "threads", {})).current === viewThread, "and goes on in it");
         await shot(app, "from-view");
-        await app.click("[data-testid='as-conversations']");
-        await app.waitForSelector("[data-testid='as-new']");
+        await showList();
 
         // ---- Clear History -----------------------------------------------------------------------
         await st.bringToFront();
@@ -430,7 +499,7 @@ async function main() {
         check(true, "the app follows at once");
         await st.click("[data-testid='as-enabled']");
         await until((s) => s.enabled === false, "Assistant: off");
-        await app.click(".pui-button:has-text('New Conversation')");
+        await app.click("[data-testid='as-new']");
         await app.waitForSelector("[data-testid='as-off']");
         check(true, "the app says the assistant is off");
         await st.click("[data-testid='as-enabled']");

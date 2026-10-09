@@ -23,3 +23,6 @@ export { Glyph, Toolbar, ToolSpacer, IconToolButton, GroupedToolButtons, formatS
 export type { GlyphName, ToolbarProps, IconToolButtonProps, GroupedToolButtonsProps } from "./media";
 export { PrintDialog } from "./print";
 export type { PrintDialogProps, PrintDialogPrinter } from "./print";
+export { SlidingPanes, GrabButton, PaneHeader, PaneToolbar, Swipeable, ContextMenu, useMultiView, useLongPress,
+         MULTI_VIEW_MIN_WIDTH, LIST_PANE_WIDTH, LONG_PRESS_MS } from "./panes";
+export type { SlidingPanesProps, PaneView, ContextMenuItem } from "./panes";

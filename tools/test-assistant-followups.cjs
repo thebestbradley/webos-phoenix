@@ -123,8 +123,9 @@ async function main() {
         await app.waitForSelector("[data-testid^='as-replies-']");
         const threadId = (await svc(A + "threads", {})).current;
         check((await svc(A + "followUpLeave", {})).queued >= 1, "closed unanswered, the questions wait for later");
-        // (Out of the conversation: one open reads what arrives at once.)
-        await app.click("[data-testid='as-conversations']");
+        // (Out of the conversation: one in sight reads what arrives at once.
+        // A phone shows the list instead; a tablet, beside it, another one.)
+        await app.click(tablet ? "[data-testid='as-new']" : "[data-testid='as-conversations']");
         const ff = await app.evaluate(() => __phoenixRuntime.assistant.fastForward());
         // The lunch's second question (left as the dinner was asked) and the dinner's.
         check(ff.delivered === 2, "moved on to when they are due, they are sent: " + JSON.stringify(ff));

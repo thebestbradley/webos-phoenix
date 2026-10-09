@@ -14,6 +14,16 @@
 // shell's assistant view (hold the launcher button) shows the same thread
 // in use: both go through org.webosphoenix.assistant.
 //
+// Laid out as a TouchPad app (phoenix-ui's SlidingPanes, after Enyo 1.0's
+// SlidingPane): wider than 500 px, Conversations (conversations.tsx) at the
+// left, 320 px, and the conversation beside it, which can be dragged over
+// the list and back (its edge, or the grip in its compose bar); narrower,
+// the conversation slides in over the list and Back (or a drag to the
+// right) shows the list. It follows the card's width live (the simulator's
+// adaptive layout, a rotation). Hold a conversation or a message, or
+// right-click it, for Open in New Card: another card of the app with that
+// conversation; each card keeps to its own conversation.
+//
 // The empty conversation shows a few things to ask (examples.ts), a
 // different few every few seconds; a tap puts one in the field.
 //
@@ -28,7 +38,7 @@
 // how many follow-ups wait unread in each.
 //
 // Launch params: {text} asks it (Just Type's "Ask Assistant"); {threadId}
-// opens that conversation, and with {retry: true} asks again the question
+// (or {conversationId}, Open in New Card) opens that conversation, and with {retry: true} asks again the question
 // that waited for a model (Settings' "Back to Your Question"); {followUp:
 // id} is a follow-up's notification tapped: the conversation it waits in
 // (followUpOpen); {timerDone: {id, label, seconds}} is a timer
@@ -37,48 +47,49 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-    apps, assistant, audio, dictation, postNotification, tts, ASSISTANT_APP_ID,
+    apps, assistant, audio, dictation, postNotification, tts, ASSISTANT_APP_ID, ASSISTANT_ERRORS,
     type AssistantMessage, type AssistantSettings, type AssistantThread, type ConnectMode, type Listening, type LunaError,
 } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
-import { AppMenu, BackProvider, Button, cx, Dialog, Page, PageHeader, Row, Spinner, useBack } from "@phoenix/ui";
+import {
+    AppMenu, BackProvider, Button, ContextMenu, cx, Dialog, GrabButton, PaneHeader, SlidingPanes, useBack, useLongPress, useMultiView,
+    type ContextMenuItem, type PaneView,
+} from "@phoenix/ui";
 import { Bird, moveMs, useBirdMotion } from "./bird/Bird";
 import { useBirdReactions } from "./bird/reactions";
 import type { BirdPose } from "./bird/birdData";
 import { beatsFor, birdPose, outcomeOf, type Beat } from "./bird/pose";
 import { EXAMPLES, examplesFrom } from "./examples";
-import { Avatar, QuickReplies, restingPose, Unread, waitingFollowUp, withoutFollowUps } from "./chat";
+import { Avatar, QuickReplies, restingPose, waitingFollowUp, withoutFollowUps } from "./chat";
+import { ConversationList, copyText, openInNewCard } from "./conversations";
 
 const errorText = (e: unknown) => (e as LunaError).errorText ?? (e instanceof Error ? e.message : String(e));
 
 interface Launch {
     text?: string;
     threadId?: string;
+    /** Open in New Card: the conversation this card shows. */
+    conversationId?: string;
     retry?: boolean;
     /** A follow-up question's notification tapped: the conversation it waits in. */
     followUp?: string;
     timerDone?: { id?: string; label?: string; seconds?: number };
 }
 
-function when(time: number, now = Date.now()): string {
-    const d = new Date(time), n = new Date(now);
-    if (d.toDateString() === n.toDateString()) return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-    const y = new Date(n.getFullYear(), n.getMonth(), n.getDate() - 1);
-    if (d.toDateString() === y.toDateString()) return "Yesterday";
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
 const VIA: Record<string, string> = { commands: "On the phone", "on-device": "On device", cloud: "Cloud" };
 
 // ---- One message ---------------------------------------------------------------------------
 
-function Bubble({ m, busy, onChoose, onConfirm, onSuggest, avatar }: {
+function Bubble({ m, busy, onChoose, onConfirm, onSuggest, avatar, onMenu }: {
     m: AssistantMessage; busy: boolean;
     onChoose: (m: AssistantMessage, id: string) => void; onConfirm: (m: AssistantMessage, yes: boolean) => void;
     onSuggest: (words: string) => void;
     /** The bird beside the assistant's words (chat.tsx). */
     avatar?: ReactNode;
+    /** Held or right-clicked: its menu (Open in New Card, Copy). */
+    onMenu?: (m: AssistantMessage, el: HTMLElement) => void;
 }) {
+    const press = useLongPress((el) => onMenu?.(m, el));
     const mine = m.role === "user";
     const asking = m.status === "pending" && !!m.confirm;
     const choices = m.choices && !m.chosen ? m.choices : [];
@@ -89,7 +100,8 @@ function Bubble({ m, busy, onChoose, onConfirm, onSuggest, avatar }: {
         <div className={cx("as-row", mine ? "out" : "in", !!avatar && "with-avatar")} data-testid={`as-msg-${m.id}`}>
             <div className="as-line">
                 {avatar}
-                <div className={cx("as-bubble", mine ? "out" : "in", m.status === "failed" && "failed", m.status === "cancelled" && "cancelled")}>
+                <div className={cx("as-bubble", mine ? "out" : "in", m.status === "failed" && "failed", m.status === "cancelled" && "cancelled")}
+                     {...(onMenu ? press : {})}>
                     {m.text}
                 </div>
             </div>
@@ -181,12 +193,26 @@ function Examples({ onPick, speed }: { onPick: (words: string) => void; speed: n
     );
 }
 
+// ---- A message held or right-clicked ------------------------------------------------------------
+
+function messageMenu(m: AssistantMessage): ContextMenuItem[] {
+    return [
+        { label: "Open in New Card", testId: "as-menu-newcard", onSelect: () => { void openInNewCard(m.threadId).catch(() => undefined); } },
+        { label: "Copy", testId: "as-menu-copy", onSelect: () => { void copyText(m.text); } },
+    ];
+}
+
 // ---- The conversation in use -------------------------------------------------------------------
 
-function Conversation({ threadId, onThread, retry, onPose }: {
+function Conversation({ threadId, onThread, retry, onPose, grab, shown = true }: {
+    /** This card's conversation ("": the one in use, which it then keeps to). */
     threadId: string; onThread: (id: string) => void; retry: object | null;
     /** The bird's pose as the conversation goes, for the header's. */
     onPose?: (pose: BirdPose) => void;
+    /** The panes side by side: the grip that drags this one over the list. */
+    grab?: boolean;
+    /** In sight (not slid away behind the list): what arrives is read. */
+    shown?: boolean;
 }) {
     const [thread, setThread] = useState<AssistantThread | null>(null);
     const [messages, setMessages] = useState<AssistantMessage[]>([]);
@@ -205,12 +231,21 @@ function Conversation({ threadId, onThread, retry, onPose }: {
     const birdr = useBirdReactions({ speed: motion.speed });
     const [connecting, setConnecting] = useState<AssistantMessage | null>(null);
     const input = useRef<HTMLInputElement>(null);
+    const [menu, setMenu] = useState<{ m: AssistantMessage; el: HTMLElement } | null>(null);
 
+    // The one in use, once known, stays this card's: another card going
+    // on in another conversation does not change what this one shows.
+    // Its conversation deleted (here or in another card): the one in use.
     useEffect(() => {
-        const sub = assistant.watchThread(threadId || undefined, (t, list) => { setThread(t); setMessages(list); setLoaded(true); },
-                                          (e) => { setError(errorText(e)); setLoaded(true); });
+        const sub = assistant.watchThread(threadId || undefined, (t, list) => {
+            setThread(t); setMessages(list); setLoaded(true);
+            if (!threadId && t) onThread(t.id);
+        }, (e) => {
+            if (threadId && e.errorCode === ASSISTANT_ERRORS.NOT_FOUND) { onThread(""); return; }
+            setError(errorText(e)); setLoaded(true);
+        });
         return () => sub.cancel();
-    }, [threadId]);
+    }, [threadId]);    // eslint-disable-line react-hooks/exhaustive-deps
     // Loaded: once it has entered (born of embers, it drops in), a wave,
     // then it idles; a tap waves again, or giggles or spins.
     const wave = useCallback((after: number) => {
@@ -259,8 +294,8 @@ function Conversation({ threadId, onThread, retry, onPose }: {
         if (m) assistant.connect({ threadId: m.threadId, messageId: m.id, mode }).catch((e) => setError(errorText(e)));
     };
 
-    // Read: follow-ups that arrived here count unread no more.
-    useEffect(() => { if (thread?.unread) void assistant.markRead(thread.id).catch(() => undefined); }, [thread]);
+    // Read: follow-ups that arrived here, in sight, count unread no more.
+    useEffect(() => { if (shown && thread?.unread) void assistant.markRead(thread.id).catch(() => undefined); }, [thread, shown]);
     const waiting = waitingFollowUp(messages);
     const pose = restingPose(birdPose({ loading: !loaded, busy, beat, greeting: false }), !!waiting);
     useEffect(() => { onPose?.(pose); }, [pose, onPose]);
@@ -301,7 +336,7 @@ function Conversation({ threadId, onThread, retry, onPose }: {
                     </div>
                 )}
                 {messages.map((m) => (
-                    <Bubble key={m.id} m={m} busy={busy} onChoose={choose} onSuggest={suggest}
+                    <Bubble key={m.id} m={m} busy={busy} onChoose={choose} onSuggest={suggest} onMenu={(msg, el) => setMenu({ m: msg, el })}
                             onConfirm={(msg, yes) => run(assistant.confirm(msg.threadId, msg.id, yes))}
                             avatar={m.role === "assistant" ? <Avatar pose={pose} live={m === lastAssistant && !busy && !beat}
                                                                      speed={motion.speed} still={motion.still} /> : undefined} />
@@ -317,6 +352,7 @@ function Conversation({ threadId, onThread, retry, onPose }: {
                 <div ref={end} />
             </div>
             <form className="as-compose" onSubmit={(e) => { e.preventDefault(); ask(text); }}>
+                {grab && <GrabButton testId="as-grab" />}
                 <input ref={input} className="as-input" data-testid="as-input" value={text} disabled={busy}
                        placeholder={listening === "listening" ? "Listening…" : listening === "transcribing" ? "Transcribing…" : waiting ? "Reply" : "Ask anything"}
                        onChange={(e) => { birdr.typed(e.target.value, e.target.selectionStart); setText(e.target.value); }} enterKeyHint="send" />
@@ -330,46 +366,8 @@ function Conversation({ threadId, onThread, retry, onPose }: {
                 </button>
             </form>
             <ConnectChooser open={connecting !== null} onChoose={connect} onClose={() => setConnecting(null)} />
+            <ContextMenu anchor={menu?.el ?? null} onClose={() => setMenu(null)} items={menu ? messageMenu(menu.m) : []} />
         </div>
-    );
-}
-
-// ---- Conversations ----------------------------------------------------------------------------
-
-function Conversations({ onOpen, onNew }: { onOpen: (id: string) => void; onNew: () => void }) {
-    const [threads, setThreads] = useState<AssistantThread[] | null>(null);
-    const [current, setCurrent] = useState("");
-    const [deleting, setDeleting] = useState<AssistantThread | null>(null);
-    useEffect(() => {
-        const sub = assistant.watchThreads((list, cur) => { setThreads(list); setCurrent(cur); });
-        return () => sub.cancel();
-    }, []);
-    return (
-        <Page>
-            <PageHeader title="Conversations" icon="icon.png" />
-            <div className="as-list-actions">
-                <Button variant="affirmative" data-testid="as-new" onClick={onNew}>New Conversation</Button>
-            </div>
-            {!threads && <div className="as-loading"><Spinner /></div>}
-            {threads && threads.length === 0 && <div className="as-none" data-testid="as-none">No conversations yet.</div>}
-            {threads?.map((t) => (
-                <Row key={t.id} testId={`as-thread-${t.id}`} title={<span className={cx(t.id === current && "as-current")}>{t.title || "New conversation"}</span>}
-                     subtitle={`${when(t.updated)} · ${t.last}`} onClick={() => onOpen(t.id)}>
-                    <Unread n={t.unread} />
-                    <button type="button" className="as-delete" data-testid={`as-delete-${t.id}`} aria-label="Delete"
-                            onClick={(e) => { e.stopPropagation(); setDeleting(t); }}>Delete</button>
-                </Row>
-            ))}
-            <Dialog open={deleting !== null} onClose={() => setDeleting(null)} testId="as-delete-dialog"
-                    title="Delete this conversation?" message={deleting ? `"${deleting.title}" and its messages go.` : ""}>
-                <Button variant="negative" data-testid="as-delete-ok" onClick={() => {
-                    const t = deleting;
-                    setDeleting(null);
-                    if (t) void assistant.deleteThread(t.id);
-                }}>Delete</Button>
-                <Button onClick={() => setDeleting(null)}>Cancel</Button>
-            </Dialog>
-        </Page>
     );
 }
 
@@ -393,41 +391,78 @@ function useTimerDone(launch: Launch, settings: AssistantSettings | null) {
 function Main() {
     const launch = useLaunchParams<Launch>();
     const settings = useLuna<AssistantSettings>((cb, err) => assistant.watchSettings(cb, err), []).value;
-    const [view, setView] = useState<"thread" | "list">("thread");
+    const threads = useLuna<AssistantThread[]>((cb, err) => assistant.watchThreads((list) => cb(list), err), []).value ?? null;
+    const multiView = useMultiView();
+    // The pane at the left (SlidingPanes): side by side, the list (the
+    // conversation beside it); one at a time, the conversation.
+    const [view, setView] = useState<PaneView>(multiView ? "list" : "detail");
+    // This card's conversation; opened (open, New Conversation) it starts afresh.
     const [threadId, setThreadId] = useState("");
+    const [opened, setOpened] = useState(0);
     const [asked, setAsked] = useState<Launch | null>(null);
     const [retry, setRetry] = useState<Launch | null>(null);
     const [pose, setPose] = useState<BirdPose>("idle");
     const motion = useBirdMotion();
 
     useTimerDone(launch, settings ?? null);
-    useBack(() => { setView("thread"); return true; }, view === "list");
+    // Across the pivot (the card resized, rotated): side by side both
+    // show; one at a time, the conversation. In the same render, so the
+    // panes snap to the new layout rather than slide.
+    const [wasMulti, setWasMulti] = useState(multiView);
+    if (wasMulti !== multiView) {
+        setWasMulti(multiView);
+        setView(multiView ? "list" : "detail");
+    }
+    const lastMulti = useRef(multiView);
+    lastMulti.current = multiView;
+    useBack(() => { setView("list"); return true; }, view === "detail");
 
-    // {threadId} opens it (the system's view hands its conversation on
-    // this way); {text} asks it in the conversation in use.
+    const show = useCallback((id: string) => {
+        setThreadId(id);
+        setOpened((n) => n + 1);
+        if (!lastMulti.current) setView("detail");
+    }, []);
+    // {threadId} or {conversationId} opens it (the system's view hands its
+    // conversation on this way; Open in New Card); {text} asks it in the
+    // conversation in use.
     useEffect(() => {
         if (asked === launch) return;
         setAsked(launch);
-        if (launch.threadId) {
-            setThreadId(launch.threadId);
-            setView("thread");
-            void assistant.setCurrent(launch.threadId).catch(() => undefined);
+        const id = launch.conversationId || launch.threadId;
+        if (id) {
+            show(id);
+            void assistant.setCurrent(id).catch(() => undefined);
             if (launch.retry) setRetry(launch);
         }
-        if (launch.text) void assistant.ask(launch.text, launch.threadId ? { threadId: launch.threadId } : {}).catch(() => undefined);
+        if (launch.text) void assistant.ask(launch.text, id ? { threadId: id } : {}).catch(() => undefined);
         // A follow-up's notification: its conversation, where the question waits.
-        if (launch.followUp) {
-            void assistant.openFollowUp(launch.followUp).then((r) => { setThreadId(r.thread.id); setView("thread"); }, () => undefined);
-        }
-    }, [launch, asked]);
+        if (launch.followUp) void assistant.openFollowUp(launch.followUp).then((r) => show(r.thread.id), () => undefined);
+    }, [launch, asked, show]);
 
-    const open = (id: string) => {
-        void assistant.setCurrent(id).then(() => { setThreadId(id); setView("thread"); });
-    };
-    const fresh = () => {
-        void assistant.newThread().then((t) => { setThreadId(t.id); setView("thread"); });
-    };
+    const open = (id: string) => { void assistant.setCurrent(id).then(() => show(id), () => undefined); };
+    const fresh = () => { void assistant.newThread().then((t) => show(t.id), () => undefined); };
     const prefs = () => { void apps.launch("org.webosphoenix.settings", { page: "assistant" }); };
+    const title = threads?.find((t) => t.id === threadId)?.title || "Assistant";
+
+    const detail = (
+        <div className="as-chat">
+            <PaneHeader className="as-header">
+                {view === "detail" && (
+                    <button type="button" className="as-header-button" data-testid="as-conversations" aria-label="Conversations"
+                            onClick={() => setView("list")}>Conversations</button>
+                )}
+                <div className="as-header-bird"><Bird pose={pose} size={30} testId="as-header-bird" speed={motion.speed} still={motion.still} /></div>
+                <div className="as-header-title" data-testid="as-title">{title}</div>
+            </PaneHeader>
+            {settings && !settings.enabled ? (
+                <div className="as-off" data-testid="as-off">
+                    <p>The assistant is turned off.</p>
+                    <Button onClick={prefs}>Settings</Button>
+                </div>
+            ) : <Conversation key={opened} threadId={threadId} onThread={setThreadId} retry={retry} onPose={setPose} grab={multiView}
+                                  shown={multiView || view === "detail"} />}
+        </div>
+    );
 
     return (
         <div className="as-app">
@@ -436,21 +471,9 @@ function Main() {
                 { label: "Conversations", onSelect: () => setView("list") },
                 { label: "Preferences", onSelect: prefs },
             ]} />
-            {view === "list" ? <Conversations onOpen={open} onNew={fresh} /> : (
-                <>
-                    <div className="as-header">
-                        <PageHeader title="Assistant" />
-                        <div className="as-header-bird"><Bird pose={pose} size={30} testId="as-header-bird" speed={motion.speed} still={motion.still} /></div>
-                        <button type="button" className="as-header-button" data-testid="as-conversations" onClick={() => setView("list")}>Conversations</button>
-                    </div>
-                    {settings && !settings.enabled ? (
-                        <div className="as-off" data-testid="as-off">
-                            <p>The assistant is turned off.</p>
-                            <Button onClick={prefs}>Settings</Button>
-                        </div>
-                    ) : <Conversation key={threadId} threadId={threadId} onThread={setThreadId} retry={retry} onPose={setPose} />}
-                </>
-            )}
+            <SlidingPanes testId="as-panes" multiView={multiView} selected={view} onSelect={setView}
+                          list={<ConversationList threads={threads} selected={threadId} onOpen={open} onNew={fresh} />}
+                          detail={detail} />
         </div>
     );
 }
