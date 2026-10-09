@@ -148,6 +148,9 @@ jobs:
       - name: The simulator's installed apps (SimInstaller)
         run: build/siminstaller-test
 
+      - name: The colour emoji font's fontconfig setup (SimFonts)
+        run: build/simfonts-test
+
       - name: The keyboard's dictation (recording format, transcriber replies)
         run: build/dictation-test
 

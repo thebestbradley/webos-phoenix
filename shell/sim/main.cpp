@@ -44,6 +44,8 @@
 #include <QStandardPaths>
 #include <QScopeGuard>
 #include <QTimer>
+#include <QVersionNumber>
+#include <cstdio>
 
 #include <memory>
 
@@ -53,6 +55,7 @@
 
 #include "rootfs.h"
 #include "simchrome.h"
+#include "simfonts.h"
 #include "siminstaller.h"
 #include "simsnapshots.h"
 #include "simpty.h"
@@ -104,22 +107,12 @@ static void useBundledEmojiFont(int argc, char *argv[])
         qmlDir = QString::fromUtf8(PHOENIX_QML_DIR);
     if (qmlDir.isEmpty())
         qmlDir = QFileInfo(QString::fromLocal8Bit(argv[0])).absoluteDir().filePath(QStringLiteral("../qml"));
-    const QDir emojiDir(QDir(qmlDir).absoluteFilePath(QStringLiteral("../assets/fonts/noto-color-emoji")));
-    if (!emojiDir.exists(QStringLiteral("NotoColorEmoji.ttf")))
+    const QString conf = SimFonts::writeEmojiFontConfig(
+        QDir(qmlDir).absoluteFilePath(QStringLiteral("../assets/fonts/noto-color-emoji")),
+        QDir::temp().filePath(QStringLiteral("phoenix-sim-fonts-") + QString::number(getuid())));
+    if (conf.isEmpty())
         return;
-    const QString confDir = QDir::temp().filePath(QStringLiteral("phoenix-sim-fonts-") + QString::number(getuid()));
-    QDir().mkpath(confDir);
-    QFile conf(QDir(confDir).filePath(QStringLiteral("fonts.conf")));
-    if (!conf.open(QIODevice::WriteOnly | QIODevice::Truncate))
-        return;
-    conf.write("<?xml version=\"1.0\"?>\n<!DOCTYPE fontconfig SYSTEM \"urn:fontconfig:fonts.dtd\">\n<fontconfig>\n"
-               "  <include ignore_missing=\"yes\">/etc/fonts/fonts.conf</include>\n"
-               "  <dir>" + emojiDir.absolutePath().toHtmlEscaped().toUtf8() + "</dir>\n"
-               "  <include ignore_missing=\"yes\">"
-               + emojiDir.absoluteFilePath(QStringLiteral("50-phoenix-emoji.conf")).toHtmlEscaped().toUtf8()
-               + "</include>\n</fontconfig>\n");
-    conf.close();
-    qputenv("FONTCONFIG_FILE", conf.fileName().toLocal8Bit());
+    qputenv("FONTCONFIG_FILE", QFile::encodeName(conf));
 #else
     Q_UNUSED(argc);
     Q_UNUSED(argv);
@@ -128,6 +121,13 @@ static void useBundledEmojiFont(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
+    // Built against Qt 6.8 or newer (CMakeLists.txt), and run with it: an
+    // older Qt found first at run time is refused here, before it draws
+    // (Qt 6.4 aborts drawing styled text with the colour emoji font).
+    if (QVersionNumber::fromString(QLatin1String(qVersion())) < QVersionNumber(6, 8)) {
+        std::fprintf(stderr, "phoenix-sim: Qt %s is too old; it needs Qt 6.8 or newer (built with %s).\n", qVersion(), QT_VERSION_STR);
+        return 1;
+    }
     useBundledEmojiFont(argc, argv);
 #ifdef PHOENIX_HAVE_WEBENGINE
     // Both must happen before the application object exists.
@@ -294,6 +294,10 @@ int main(int argc, char *argv[])
         QStringLiteral("%f"), QStringLiteral("%l"), QStringLiteral("%p") };
     if (!rootfs.isValid())
         qWarning("phoenix-sim: web apps disabled: %s", qPrintable(rootfs.error()));
+    else if (!rootfs.missing().isEmpty())
+        qWarning("phoenix-sim: missing from the checkout (%s): %s. The original webOS apps and frameworks there are left out; "
+                 "fetch the git submodules with `git submodule update --init` (./phoenix does), then start phoenix-sim again.",
+                 qPrintable(QDir::toNativeSeparators(QDir(repoDir).absolutePath())), qPrintable(rootfs.missing().join(QStringLiteral(", "))));
     // Apps the user installs (the Marketplace, Files' .ipk sheet) live with
     // the simulator's other data, as on a device in /media/cryptofs/apps.
     // /var/luna/ (launch points apps add, the browser's page pictures) in

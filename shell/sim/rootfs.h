@@ -30,6 +30,11 @@ public:
 
     bool isValid() const { return m_valid; }
     QString error() const { return m_error; }
+    // What rootfs.json names that is missing or empty in the checkout, as
+    // paths in it (a submodule's folder for anything in third_party/): the
+    // original webOS apps and frameworks when the git submodules were not
+    // fetched. Their apps are left out of the launcher.
+    QStringList missing() const { return m_missing; }
 
     // Device path (e.g. /usr/palm/applications/<id>/index.html) -> file.
     QString resolve(const QString &devicePath) const;
@@ -92,6 +97,7 @@ private:
 
     bool m_valid = false;
     QString m_error;
+    QStringList m_missing;
     QString m_repoDir;
     QStringList m_overlays;                    // searched first
     QStringList m_excluded;                    // never served

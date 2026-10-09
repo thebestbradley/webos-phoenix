@@ -16,7 +16,20 @@ set(PHOENIX_DATA_DIR "${CMAKE_INSTALL_DATADIR}/phoenix" CACHE STRING "Install lo
 # Qt 6.8, the LTS release a device's webOS OSE image ships (meta-qt6,
 # scarthgap: docs/HARDWARE.md); the simulator and CI build with it or newer.
 set(PHOENIX_QT_MIN 6.8)
-find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Gui Qml Quick)
+find_package(Qt6 ${PHOENIX_QT_MIN} QUIET COMPONENTS Gui Qml Quick)
+if(NOT Qt6_FOUND)
+    # Older Qts are refused: Ubuntu 24.04's own Qt 6.4, for one, aborts as
+    # soon as it draws styled text with the colour emoji font (QFontEngineFT,
+    # fixed in Qt 6.5).
+    list(REMOVE_DUPLICATES Qt6_CONSIDERED_VERSIONS)
+    string(REPLACE ";" ", " _qt_found "${Qt6_CONSIDERED_VERSIONS}")
+    if(NOT _qt_found)
+        set(_qt_found "none")
+    endif()
+    message(FATAL_ERROR "Qt ${PHOENIX_QT_MIN} or newer is needed (found: ${_qt_found}). "
+                        "Pass its location, e.g. -DCMAKE_PREFIX_PATH=/opt/Qt/6.8.1/gcc_64 (scripts/linux-setup.sh "
+                        "installs it there) or -DCMAKE_PREFIX_PATH=\"$(brew --prefix qt)\" on a Mac.")
+endif()
 
 # Compiled QML modules (Phoenix.Native) are written here, beside the source
 # QML the simulator loads, and installed next to the QML on the device.
@@ -44,7 +57,7 @@ if(PHOENIX_BUILD_SIM)
     # Widgets: the window's menu bar (the global one on macOS) and toolbar
     # (SimChrome).
     find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Widgets)
-    add_executable(phoenix-sim sim/main.cpp sim/rootfs.cpp sim/rootfs.h sim/simsettings.h sim/simprocess.h sim/simpty.cpp sim/simpty.h sim/siminstaller.cpp sim/siminstaller.h sim/simsnapshots.cpp sim/simsnapshots.h
+    add_executable(phoenix-sim sim/main.cpp sim/rootfs.cpp sim/rootfs.h sim/simfonts.cpp sim/simfonts.h sim/simsettings.h sim/simprocess.h sim/simpty.cpp sim/simpty.h sim/siminstaller.cpp sim/siminstaller.h sim/simsnapshots.cpp sim/simsnapshots.h
                                sim/simchrome.cpp sim/simchrome.h)
     target_link_libraries(phoenix-sim PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets phoenix-pty-core)
     # The toolbar's icons (SVG: drawn with Qt's SVG icon engine where it is
@@ -87,6 +100,12 @@ if(PHOENIX_BUILD_SIM)
     add_executable(siminstaller-test sim/siminstaller_test.cpp sim/rootfs.cpp sim/rootfs.h sim/siminstaller.cpp sim/siminstaller.h)
     target_link_libraries(siminstaller-test PRIVATE Qt6::Core)
     target_compile_definitions(siminstaller-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
+    # The colour emoji font's fontconfig setup (CI: build/simfonts-test).
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(simfonts-test sim/simfonts_test.cpp sim/simfonts.cpp sim/simfonts.h)
+        target_link_libraries(simfonts-test PRIVATE Qt6::Gui)
+        target_compile_definitions(simfonts-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
+    endif()
     # The browser's content blocker and user agents, and DropShare's server
     # (CI: build/simnet-test).
     add_executable(simnet-test sim/simnet_test.cpp sim/contentfilter.h sim/simdropshare.cpp sim/simdropshare.h)
