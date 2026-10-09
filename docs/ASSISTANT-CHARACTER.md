@@ -110,8 +110,9 @@ or play an effect. In the shell `AssistantBird.qml`'s `play()`,
 
 The system view plays the entrance once the panel has grown out of the
 launcher button (the swirl would be lost in the panel's growth), then the
-wave (hello) as before; the exit as the
-panel goes back into the button. A request asked while it enters plays
+wave (hello) as before. Closed, the panel stays up (no longer taking
+input) while the bird plays its exit, about half a second, then goes
+back into the button. A request asked while it enters plays
 over it (thinking takes the pose). The app plays the entrance on a new
 conversation, then waves. Under Reduce motion both fade instead (250 ms,
 by Animation speed).
@@ -160,7 +161,7 @@ as before.
 `effects` in `bird.json`, particles at a cue: `swirl` (embers spiralling
 in, each its angle, radius, size, delay and colour), `glow` (a ball of
 fire: keys of scale and opacity; `fireball`, `flash`), `puff` (soft dust
-clouds billowing out from its feet: `dust`, the smaller `puff`) and
+clouds billowing out from its feet: `dust`, the smaller `puff`; in the app, on its light ground, in the darker `dustOnLight`) and
 `burst` (embers flying out and up). The shell draws them with shapes and
 plays them as property animations (no script per frame, no particle
 system, so they look the same on the software renderer); the app as SVG

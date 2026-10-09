@@ -590,9 +590,9 @@ Item {
             verify(!overlay.birdBeside);
             verify(bird().width >= Theme.px(72) && bird().width <= Theme.px(104));
             var messages = findChild(overlay, "assistantMessages");
-            verify(messages.y < bird().y + bird().height, "the conversation reaches up behind the bird");
+            // The conversation below it: its words never pass behind the bird.
+            verify(messages.y >= bird().y + bird().height - 0.5, "the conversation below the bird: " + messages.y + " " + (bird().y + bird().height));
             verify(bird().z > messages.z);
-            compare(messages.topMargin, bird().height);
             fuzzyCompare(bird().x + bird().width / 2, panel.width / 2, 1);
             // A tap on it waves, and does not close the view.
             birdSeen.reset();
@@ -600,11 +600,20 @@ Item {
             verify(overlay.open);
             poseIs("idle");
             verify(birdSeen.had(["hello", "idle"]), "a wave: " + birdSeen.poses);
-            // Closing: it leaves (bursting into embers), back into the button.
+            // Closing: it leaves (bursting into embers), the panel up till it
+            // has (recorded as the exit ends), then back into the button.
+            var shownAtExit = -1;
+            var left = function (name) { if (name === "leave") shownAtExit = overlay.shown; };
+            bird().moveEnded.connect(left);
             keyClick(Qt.Key_Escape);
             compare(overlay.birdPose, "asleep");
             compare(bird().move, "leave");
             verify(bird().gone);
+            verify(!overlay.enabled, "no longer taking input");
+            compare(overlay.shown, 1);
+            tryVerify(function () { return shownAtExit >= 0; }, 4000, "the exit, over");
+            bird().moveEnded.disconnect(left);
+            compare(shownAtExit, 1, "the panel up through the exit");
             tryCompare(overlay, "visible", false, 3000);
         }
 
@@ -783,6 +792,20 @@ Item {
             wait(300);
             compare(overlay.open, false);
             compare(shell.launcherOpen, false);
+        }
+
+        // Under Reduce motion the bird fades and the panel does not wait for it.
+        function test_reducedMotionClosesAtOnce() {
+            openByHold();
+            Theme.reduceMotion = true;
+            try {
+                keyClick(Qt.Key_Escape);
+                verify(!overlay._leaving);
+                compare(bird().move, "");
+                tryCompare(overlay, "visible", false, 2000);
+            } finally {
+                Theme.reduceMotion = false;
+            }
         }
 
         function test_notOverTheLockScreen() {

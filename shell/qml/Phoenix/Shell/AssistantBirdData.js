@@ -25,6 +25,7 @@ var bird = {
   "snore": "#9A9A9A",
   "sweat": "#7FC6E8",
   "dust": "#BDB3A6",
+  "dustOnLight": "#8A7462",
   "ember": "#FF9A2E"
  },
  "parts": {

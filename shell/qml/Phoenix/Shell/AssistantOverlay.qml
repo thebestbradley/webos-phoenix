@@ -157,8 +157,15 @@ Item {
         });
     }
 
-    // 0 closed, 1 open: the backdrop's fade and the panel's growth.
-    property real shown: open ? 1 : 0
+    // 0 closed, 1 open: the backdrop's fade and the panel's growth. Closed,
+    // it stays up while the bird leaves (its exit: a crouch, a leap, a
+    // burst of embers), then goes back into the button.
+    property bool _leaving: false
+    property real shown: open || _leaving ? 1 : 0
+    Connections {
+        target: bird
+        function onMoveEnded(name) { if (name === "leave") ov._leaving = false; }
+    }
     Behavior on shown {
         NumberAnimation {
             objectName: "assistantShownAnimation"
@@ -189,6 +196,7 @@ Item {
             // takes a while to build loses none of it).
             _wake = "enter";
             _taps = 0;
+            _leaving = false;
             bird.enter(60000);
             wakeTimer.stop();
             _entering = true;
@@ -216,8 +224,9 @@ Item {
             _wake = "";
             _entering = false;
             wakeTimer.stop();
-            // It leaves: a leap, and it bursts into embers.
-            bird.leave();
+            // It leaves: a leap, and it bursts into embers (the panel
+            // waits for it, but for under Reduce motion).
+            _leaving = bird.leave() > 0 && bird.move === "leave";
             followTimer.stop();
             ++_session;
             busy = false;
@@ -746,15 +755,22 @@ Item {
     readonly property real panelWidth: Math.min(width - Theme.px(24), Theme.px(Theme.tablet ? 560 : 420))
     // The panel's growth: from a fifth of its size at the origin.
     readonly property real _panelScale: 0.2 + 0.8 * shown
-    // The bird: 72 to 104 px at the top in the middle, over the
-    // conversation, which scrolls on behind it; where the panel is too
+    // The bird: 72 to 104 px at the top in the middle, above the
+    // conversation; where the panel is too
     // short for that and a conversation (a phone's keyboard up, a phone on
     // its side), small beside the field.
-    readonly property bool birdBeside: panel.height < Theme.px(360)
+    readonly property bool birdBeside: _beside
+    // (Where it was while it leaves: the keyboard going does not move it.)
+    property bool _beside: false
+    Binding on _beside {
+        when: ov.open
+        value: panel.height < Theme.px(360)
+        restoreMode: Binding.RestoreNone
+    }
     readonly property real birdSize: birdBeside ? Theme.px(44)
                                                 : Math.max(Theme.px(72), Math.min(Theme.px(104), Math.round(panel.height * 0.15)))
     // Moves between the two only once the panel is up.
-    readonly property bool _birdMoves: shown === 1
+    readonly property bool _birdMoves: shown === 1 && open
 
     Item {
         id: panel
@@ -854,7 +870,7 @@ Item {
         // The assistant's bird. A tap waves hello.
         AssistantBird {
             id: bird
-            // Over the conversation, which passes behind it.
+            // Over the conversation (its entrance and its effects reach over it).
             z: 1
             pose: ov.birdPose
             glow: true
@@ -895,13 +911,14 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: heading.bottom
-            anchors.topMargin: Theme.px(4)
+            // Below the bird at the top (the conversation passing behind it
+            // hid its words: a phone's panel, the software renderer, which
+            // draws no fade); below the heading with the bird beside the field.
+            anchors.topMargin: ov.birdBeside ? Theme.px(4) : bird.height
+            Behavior on anchors.topMargin { enabled: ov._birdMoves; NumberAnimation { duration: Theme.motion(250); easing.type: Easing.InOutQuad } }
             anchors.bottom: statusLine.top
             anchors.bottomMargin: Theme.px(6)
-            // The conversation runs on up behind the bird; scrolled back to
-            // its start, the first message comes clear below it.
-            topMargin: ov.birdBeside ? Theme.px(4) : bird.height
-            Behavior on topMargin { enabled: ov._birdMoves; NumberAnimation { duration: Theme.motion(250); easing.type: Easing.InOutQuad } }
+            topMargin: Theme.px(4)
             clip: true
             // It fades out under the heading rather than being cut off
             // (not with the software renderer, which cannot run the effect).

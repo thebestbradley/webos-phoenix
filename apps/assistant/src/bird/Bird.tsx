@@ -346,10 +346,11 @@ export function Bird({ pose, size = 120, className, testId = "as-bird", speed, s
                     <stop offset="0.6" stopColor={BIRD.colors.ember} stopOpacity={0.75} />
                     <stop offset="1" stopColor={BIRD.colors.ember} stopOpacity={0} />
                 </radialGradient>
+                {/* Dust on the app's light ground: a darker warm grey-brown than the shell's (dark ground). */}
                 <radialGradient id="ab-dust">
-                    <stop offset="0" stopColor={BIRD.colors.dust} stopOpacity={0.88} />
-                    <stop offset="0.55" stopColor={BIRD.colors.dust} stopOpacity={0.56} />
-                    <stop offset="1" stopColor={BIRD.colors.dust} stopOpacity={0} />
+                    <stop offset="0" stopColor={BIRD.colors.dustOnLight} stopOpacity={0.8} />
+                    <stop offset="0.55" stopColor={BIRD.colors.dustOnLight} stopOpacity={0.5} />
+                    <stop offset="1" stopColor={BIRD.colors.dustOnLight} stopOpacity={0} />
                 </radialGradient>
             </defs>
             {fx.filter((e) => EFFECTS[e.name].kind === "glow").map((e) => <FxView key={e.key} name={e.name} />)}

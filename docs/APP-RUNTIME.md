@@ -2003,8 +2003,8 @@ over the screen.
 **The assistant's bird** ([ASSISTANT-CHARACTER.md](ASSISTANT-CHARACTER.md),
 `AssistantBird.qml`) sits at the top in the middle of the panel (72 to 104
 px by its height; small beside the field where the panel is short, as on a
-phone with the keyboard up), over the conversation, which scrolls on up
-behind it and fades out under the heading rather than being cut off and plays what is going on (`birdPose`):
+phone with the keyboard up), above the conversation, which fades out under
+it rather than being cut off (its words never pass behind the bird), and plays what is going on (`birdPose`):
 its entrance once the panel has grown (`bird.enter()`: born of a swirl of embers
 and a fireball, it drops in, lands with a dust cloud and bounces), hello,
 then listening while the microphone is
@@ -2015,7 +2015,8 @@ working then done, `failed` plays shy (Oops), choices play confused, each
 for a moment (`beatsFor`, at Animation speed); speaking while the shell's
 `Speech` speaks; asking while a read-back waits; idle (with a nod for an
 answer that is not spoken); as it closes it leaves (`bird.leave()`: a
-leap, and it bursts into embers). A tap on it waves, then giggles or spins.
+leap, and it bursts into embers), the panel staying up for that, then
+going back into the button. A tap on it waves, then giggles or spins.
 It reacts to the user (`bird.react()`, `motion.reactions`): it watches the
 words typed (`gazeX`/`gazeY` at the caret) and pecks as each comes, winces
 at a deletion, tilts its head after a pause in the typing, cheers a request
