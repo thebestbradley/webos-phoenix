@@ -485,9 +485,11 @@ describe("the on-device model", () => {
         // A question about the world: no tools (a short prompt, no misfires).
         expect(mock.requests.at(-1)!.body.tools).toBeUndefined();
         const act = await ask(t, "it's dark, put the flashlight on for me");
-        // A request of the device: the one tool it chose (pickCommand), to call.
-        const offered = mock.requests.at(-1)!.body.tools.map((x: Reply) => x.function?.name ?? x.name);
-        expect(offered).toEqual(["toggle"]);
+        // A request of the device: the command it chose (pickCommand), its
+        // arguments held to that command's schema (callCommand).
+        const called = mock.requests.at(-1)!.body;
+        expect(called.response_format.json_schema.schema.properties.setting).toBeDefined();
+        expect(called.messages[1].content).toMatch(/asked the phone to do this: toggle: /);
         expect(last(act)).toMatchObject({ via: "on-device", status: "done", text: "The flashlight is on." });
         // Its times as said: "tomorrow at 6:30 am".
         const wake = await ask(t, "please could you wake me early tomorrow");
@@ -509,7 +511,8 @@ describe("the on-device model", () => {
         const sent = mock.requests.slice(from).map((r) => r.body);
         const [pick, call, pick2, chat] = sent;
         expect(pick.response_format).toBeDefined();
-        expect(call.tools.map((x: Reply) => x.function.name)).toEqual(["toggle"]);
+        expect(call.tools).toBeUndefined();
+        expect(Object.keys(call.response_format.json_schema.schema.properties)).toContain("setting");
         expect(pick2.response_format).toBeDefined();
         expect(chat.tools).toBeUndefined();
         const system = pick.messages[0];
@@ -527,7 +530,7 @@ describe("the on-device model", () => {
         expect(hint).toMatch(/\ntoggle: "/);
         expect(pick.messages.at(-1)).toEqual({ role: "user", content: "it's dark, put the flashlight on for me" });
         for (const b of sent) expect([b.cache_prompt, b.id_slot]).toEqual([true, undefined]);
-        // The time and the tools' rule come after the shared prompt.
+        // The time and the command to call come after the shared prompt.
         expect(call.messages[1].role).toBe("system");
         expect(call.messages[1].content).toMatch(/^Today is /);
         expect(call.max_tokens).toBe(160);
@@ -612,8 +615,10 @@ describe("the on-device model", () => {
             const [pick, call] = mock.requests.slice(-2).map((q) => q.body);
             expect(pick.response_format.json_schema.schema.properties.command.enum).toContain("toggle");
             expect(pick.temperature).toBe(0);
-            expect(call.tools.map((x: Reply) => x.function.name)).toEqual(["toggle"]);
-            expect(call.tool_choice).toBe("required");
+            // Its arguments as JSON held to toggle's schema: generation ends at its closing brace.
+            expect(call.response_format.json_schema.schema.properties.state).toBeDefined();
+            expect(call.temperature).toBe(0);
+            expect(call.tools).toBeUndefined();
             expect(call.chat_template_kwargs).toEqual({ enable_thinking: false });
             expect(last(act)).toMatchObject({ via: "on-device", status: "done", text: "The flashlight is on." });
         });

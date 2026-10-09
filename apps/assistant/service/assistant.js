@@ -492,9 +492,9 @@ function createAssistantService(deps) {
     // What changes from request to request (the time, whether it has
     // tools): after the persona for a cloud model, in its own message after
     // the shared prefix for the on-device one (localPrefix).
+    function nowText() { return "Today is " + new Date(now()).toDateString() + ", the time is " + lang().timeText(now()) + "."; }
     function promptTail(withTools) {
-        var d = new Date(now());
-        return "Today is " + d.toDateString() + ", the time is " + lang().timeText(now()) + "." +
+        return nowText() +
             (withTools ? " You can also control the device with the tools you are given. Call a tool only when the user asks the phone " +
              "to do the very thing the tool does (\"turn on the flashlight\" calls toggle with flashlight on); call at most one. " +
              "Never call a tool for a question you can answer in words."
@@ -559,10 +559,29 @@ function createAssistantService(deps) {
         // be told this is not a choice ("None." was its whole answer).
         var tail = promptTail(tools.length > 0) + (tools.length ? "" : " Now answer the user in words, as yourself: never with a command's name or \"none\".");
         var msgs = prefix ? [{ role: "system", text: tail }].concat(fitted(history(thread), LOCAL_HISTORY_CHARS)) : history(thread);
-        var req = providers.chatRequest(provider, { system: system, messages: msgs, tools: tools, toolChoice: toolChoice,
-                                                    maxTokens: toolChoice ? CALL_TOKENS : undefined }, key);
+        var req = providers.chatRequest(provider, { system: system, messages: msgs, tools: tools, toolChoice: toolChoice }, key);
         if (timeoutMs) req.timeoutMs = timeoutMs;
         return deps.request(req).then(function (r) { return providers.parseChat(provider.type, r.status, r.body); });
+    }
+    // The on-device model calls the command it chose: its arguments as JSON
+    // held to the command's parameters (response_format: llama-server
+    // turns the schema into a grammar, so generation ends with the JSON's
+    // closing brace), the call made of it here. Offered as a tool with
+    // tool_choice "required", Qwen3 0.6B often wrote the JSON, a full stop
+    // and then went on until its 160 tokens (up to 30 s under load):
+    // measured in docs/AI-AND-MCP.md ("A call held to its schema").
+    function callCommand(p, thread, cmd, timeoutMs, prefix) {
+        var name = commands.toolName(cmd.id);
+        var tail = nowText() + " The user asked the phone to do this: " + name + ": " + cmd.description +
+            " Write its arguments as JSON, from what the user said, in their words (times and dates as they said them, \"friday at 4 pm\").";
+        var req = providers.chatRequest(p, { system: prefix.text, messages: [{ role: "system", text: tail }].concat(fitted(history(thread), LOCAL_HISTORY_CHARS)),
+                                             schema: cmd.parameters || { type: "object", properties: {} }, maxTokens: CALL_TOKENS, temperature: 0 }, "");
+        if (timeoutMs) req.timeoutMs = timeoutMs;
+        return deps.request(req).then(function (r) {
+            var out = providers.parseChat(p.type, r.status, r.body), args;
+            try { args = JSON.parse(out.text); } catch (e) { throw new Error("its call of " + name + " could not be read"); }
+            return { text: "", toolCalls: [{ name: name, args: args && typeof args === "object" ? args : {} }] };
+        });
     }
     // An answer: words, or a tool call to run (cloud ones only when allowed).
     function answer(thread, result, cat, layer, source, cloud, asked) {
@@ -831,7 +850,7 @@ function createAssistantService(deps) {
                 return pickCommand(p, thread, cat, left()).then(function (c) {
                     if (c && ctx.question && c.risk !== "read") c = null;
                     if (!c) return callModel(p, "", thread, [], undefined, left(), pre);
-                    return callModel(p, "", thread, [{ name: commands.toolName(c.id), description: c.description, parameters: c.parameters }], "required", left(), pre);
+                    return callCommand(p, thread, c, left(), pre);
                 });
             });
         }).then(function (r) { return answer(thread, r, cat, "on-device", model.name, false, lastAsked(thread)); });

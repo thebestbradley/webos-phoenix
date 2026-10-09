@@ -61,6 +61,14 @@ function decide(shape, body) {
             : /how busy/i.test(said) ? "agenda" : "none";
         return { text: JSON.stringify({ command: pick }) };
     }
+    // The on-device model's call (assistant.js callCommand): the chosen
+    // command's arguments as JSON, held to its schema; the same as the calls.
+    const system = (body.messages || []).filter((m) => m.role === "system").map((m) => m.content).join("\n");
+    const calling = /asked the phone to do this: (\w+):/.exec(system);
+    if (schema && calling) {
+        const d = decide(shape, Object.assign({}, body, { response_format: undefined, tools: [{ name: calling[1] }] }));
+        return { text: JSON.stringify(d.tool && d.tool.name === calling[1] ? d.tool.args : {}) };
+    }
     // Filling in a command's arguments (assistant.js fillArgs): a time for
     // "friday-ish"; anything else gets one the words never said (to be dropped).
     if (schema && schema.properties) {

@@ -310,11 +310,27 @@ So llama-server now runs with `-c 4096` and its default cache
 the model sees is held to the latest turns that fit (`LOCAL_HISTORY_CHARS`,
 5,000 characters, some 1,500 tokens), so the shared prompt, a tool and a
 512-token answer always fit. A first question with the server cold
-(`why is the sky blue`) took 12.5 s in all, pick and answer. A call of a
-command sometimes goes on writing after its arguments (Qwen3 0.6B's JSON,
-a full stop, then more) until its 160 tokens: up to 30 s at 5 tokens a
-second under load. A stop at the first blank line ended it but lost the
-call at temperature 0, so it is left at that for now.
+(`why is the sky blue`) took 12.5 s in all, pick and answer.
+
+**A call held to its schema** (`assistant.js` `callCommand`, 9 October).
+Offered the chosen command as a tool with `tool_choice: "required"`,
+Qwen3 0.6B often wrote the call's JSON, a full stop and then more until
+its 160 tokens (llama-server's tool-call grammar only starts at a
+`<tool_call>` tag, which it left out). Now the call asks for the
+command's arguments as JSON held to its parameters' schema
+(`response_format`, which llama-server turns into a grammar), at
+temperature 0, and the call is made from that JSON: generation ends at
+the closing brace. The shared prompt stays first; after it, the time and
+which command to fill in. On the first 80 phrasings of `model-eval.json`
+(the whole answer through the router, commands run against stand-in
+services that keep nothing, so a read-back check fails either way):
+
+| | a tool, `required` | JSON held to the schema |
+|---|---|---|
+| ends in the right command | 34 of 80 | 47 of 80 |
+| calls done or read back (of 66 calls) | 34 | 46 |
+| the call's mean time | 13.3 s | 3.0 s |
+| the call's mean tokens written | 84 | 22 |
 
 **What the grammar could not read** (`fillArgs`). When the grammar knows
 the command but not all it needs (a required argument empty: "add an
