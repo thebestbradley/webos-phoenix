@@ -653,7 +653,7 @@ New Phoenix apps live in `apps/`, an npm workspace:
 | --- | --- |
 | `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers), `tasks.ts` Tasks (`com.palm.task:1`, `com.palm.tasklist:1`, reminder activities, `postNotification`); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
 
-| `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers), `transcriber.ts` Voice Memos (`transcriber.transcribe()` with progress, `TRANSCRIBE_ERRORS`), `location.ts` the location service and per-app permissions (`location`, `locationPermissions`, `LOCATION_ERRORS`), `setup.ts` First Use, the medical ID, accessibility and the emergency numbers (`firstUse`, `emergencyInfo`, `accessibility`, `isEmergencyNumber`); `vpn.ts` the VPN service (`vpn`, file import helpers), `backup.ts` the backup service (`backup`, `BACKUP_PARTS`), `search.ts` Just Type's preferences (`universalSearch`), `certificates.ts` the certificate store (`certificates`, `CERTIFICATE_ERRORS`), and in `telephony.ts` the phone preferences (`phonePrefs`, `mobileData`); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
+| `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers), `transcriber.ts` Voice Memos (`transcriber.transcribe()` with progress, `TRANSCRIBE_ERRORS`), `location.ts` the location service and per-app permissions (`location`, `locationPermissions`, `LOCATION_ERRORS`), `setup.ts` First Use, the medical ID, accessibility and the emergency numbers (`firstUse`, `emergencyInfo`, `accessibility`, `isEmergencyNumber`); `vpn.ts` the VPN service (`vpn`, file import helpers), `backup.ts` the backup service (`backup`, `BACKUP_PARTS`), `hardware.ts` the hardware and its drivers (`hardware`, `needsAttention`, `installable`), `search.ts` Just Type's preferences (`universalSearch`), `certificates.ts` the certificate store (`certificates`, `CERTIFICATE_ERRORS`), and in `telephony.ts` the phone preferences (`phonePrefs`, `mobileData`); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
 | `apps/shared/phoenix-ui` (`@phoenix/ui`) | React components with the webOS 1.x/2.x look, drawn with the Enyo 1.0 "Heritage" artwork (copied into `assets/enyo`, see its `PROVENANCE.md`): `PageHeader`, `Group`, `Row`, `Divider`, `ToggleButton`, `Slider` (also as a progress/seek bar), `ListSelector`, `Picker`, `PopupMenu`, `Button`, `Drawer`, `DividerDrawer`, `Dialog`, `Spinner`, `TextField`; for Phone and Messaging the webOS dial pad (`Dialpad`, `DialButton`, `BackspaceButton`, from Enyo's `lib/telephony` art), the command menu (`ToolBar`, `RadioToolGroup`, `ToolButton`), `Avatar` and number / time formatting (`formatDuration` takes milliseconds); for the media apps `Toolbar`, `IconToolButton`, `GroupedToolButtons`, `Glyph` and `formatSeconds`; for Files `CheckBox` (Heritage `checkbox.png`) and file glyphs (copy, cut, paste, new folder, ...); `BackProvider`/`useBack` for the back gesture |
 | `apps/settings` | Settings (see below) |
 | `apps/phone`, `apps/messaging` | Phone and Messaging (see below) |
@@ -2277,7 +2277,9 @@ launcher, lock screen or system menu), and `com.palm.systemmanager/getBootStatus
 answered `firstUse: true` meanwhile. Phoenix does the same:
 
 - **Steps**: Welcome (language: `com.webos.settingsservice` `localeInfo`),
-  Wi-Fi (join, with a password dialog), Restore (a backup from the USB
+  Wi-Fi (join, with a password dialog), Hardware (the firmware and drivers
+  the hardware needs, each installed after its licence; only when a device
+  needs one, see [Hardware and drivers](#hardware-and-drivers)), Restore (a backup from the USB
   drive or a WebDAV server, see [Backup](#backup); afterwards the device
   backs up there every day with the same passphrase), Date & Time (time zone, network
   time, 24-hour clock), Accounts (Synergy explained, the accounts there are,
@@ -2504,6 +2506,49 @@ the boot shows luna-sysmgr's "Updating the system / Do not remove battery"
 progress that page's loading. Tests:
 `services/updates/updatesservice.test.ts` (with a stand-in for RAUC's command
 line), `server/updates/tests/run.php`, `tools/test-updates.cjs`.
+
+## Hardware and drivers
+
+`org.webosphoenix.hardware` (`services/hardware`, Node.js; methods in
+`hardwareservice.js`) is what Ubuntu's "Additional Drivers" is: it lists the
+device's hardware (`list`), matches it against the signed driver catalog
+(`refresh`), installs the firmware, kernel modules and services the catalog
+has for it (`install`, an ongoing activity in the notification area while it
+runs), removes them (`remove`), and sends the opt-in hardware report
+(`getReport`, `sendReport`, `setPreferences`). Settings > Hardware
+(`apps/settings/src/pages/Hardware.tsx`, launch params `{page: "hardware",
+driverId?}`) and First Use's Hardware step use it through `@phoenix/luna`
+`hardware`. The plan, the catalog and the trust model:
+[HARDWARE.md](HARDWARE.md#hardware-support-and-the-hardware-app); publishing a
+driver: [DRIVERS.md](DRIVERS.md).
+
+On a device (`service.js`) it reads sysfs and the kernel log (`lib/sysfs.js`),
+installs with opkg, reloads modules with modprobe or rebinds the device
+(`lib/node.js`), reads `/etc/palm/hardware/catalog.json` (the catalog's
+address and pinned key) and keeps its state in `/var/lib/phoenix/hardware`.
+An install that opkg refuses, or after which the device still does not work,
+is rolled back (the previous version from the kept package, or none).
+
+In the simulator the service runs unchanged on a simulated device
+(`runtime/phoenix-runtime.js`, "Hardware and drivers"): an Atheros Wi-Fi card
+that works, a Realtek RTL8821CU dongle without its firmware, an RTL8812AU
+dongle without its driver, an NVIDIA card nouveau drives with an optional
+firmware, a webcam, sound, an NVMe drive, a touchscreen, an accelerometer and
+a USB gadget nothing knows (`1209:0001`). opkg reads the packages with the
+Marketplace's `.ipk` reader and records what they hold in the store; the
+"kernel" loads the firmware and modules installed when a driver is reloaded,
+and a driver that needs a restart starts after
+`com.palm.power/shutdown/machineReboot` (a boot count in the store). The
+catalog is the signed sample in `server/drivers/sample`
+(`/usr/share/phoenix/hardware/sample/`, `file://` URLs), trusted through
+`catalog-sim.json`; `"hardware:config"` in the store stands for an edited
+`/etc/palm/hardware/catalog.json`, and `"hardware:sim"` `{fail: {opkg:
+text}}` makes opkg fail. Reports go to `http://127.0.0.1:8090/v1/report`
+(`server/drivers/bin/serve.sh`). Tests:
+`services/hardware/hardwareservice.test.ts`, `services/hardware/sysfs.test.ts`
+(a made-up `/sys`, stand-ins for opkg and modprobe),
+`apps/settings/src/pages/Hardware.test.tsx`, `server/drivers/tests/run.php`,
+`tools/test-hardware.cjs`.
 
 ## Device security, erase, USB drive mode and debugging
 

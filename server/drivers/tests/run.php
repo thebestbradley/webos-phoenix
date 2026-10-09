@@ -75,6 +75,12 @@ $e = Catalog::check($mod, [$ko('6.6.23-phoenix', ['postinst' => $depmod])]);
 check($e['packages'][0]['kernel'] === '6.6.23-phoenix' && $e['packages'][0]['arch'] === 'x86_64', 'a module package: the kernel it is built for, a depmod script allowed');
 refused(fn () => Catalog::check($mod, [$ko('6.6.23-phoenix', ['postinst' => "#!/bin/sh\ndepmod -a\nrm -rf /data\n"])]), '/postinst script/', 'a module package script that does more than depmod');
 check(Catalog::check($mod, [$ko('6.6.23-phoenix', ['postinst' => "#!/bin/sh\nrm -rf /tmp/x\n"])], true)['id'] === 'module-88xxau', '... unless a person read it (--reviewed)');
+$oe = "#!/bin/sh\nif [ -z \"\$D\" ]; then\n\tdepmod -a 6.6.23-yocto-standard\nelse\n\t# image.bbclass will call depmodwrapper after everything is installed,\n\t# no need to do it here as well\n\t:\nfi\n";
+check(Catalog::check($mod, [$ko('6.6.23-yocto-standard', ['postinst' => $oe])])['packages'][0]['kernel'] === '6.6.23-yocto-standard', 'OpenEmbedded\'s kernel module postinst is allowed');
+$iwl = ['id' => 'firmware-iwlwifi', 'firmware' => ['iwlwifi-*.ucode'], 'match' => []] + $manifest;
+check(Catalog::check($iwl, [PackageWriter::ipk('linux-firmware-iwlwifi-misc', '1', 'all', ['lib/firmware/iwlwifi-cc-a0-77.ucode.xz' => 'x'])])['firmware'] === ['iwlwifi-*.ucode'],
+      'firmware named by a glob, found compressed');
+refused(fn () => Catalog::check($iwl, [PackageWriter::ipk('linux-firmware-iwlwifi-misc', '1', 'all', ['lib/firmware/iwlwifi-cc-a0.pnvm' => 'x'])]), '/no package has/', '... and not found');
 refused(fn () => Catalog::check(['kind' => 'service'] + $mod, [PackageWriter::ipk('fprintd-goodix', '1', 'x86_64', ['usr/libexec/x' => 'x'])]), '/review/', 'a service package needs a review');
 refused(fn () => Catalog::check(['kind' => 'service'] + $mod, [PackageWriter::ipk('evil', '1', 'all', ['etc/shadow' => 'x'])], true), '/cannot put a file/', 'a service package cannot replace system accounts');
 
@@ -110,6 +116,15 @@ unset($manifest['license']['text']);
 file_put_contents("$tmp/in/fw2.json", json_encode(['id' => 'firmware-two', 'license' => $manifest['license'] + ['textFile' => 'LICENCE.txt'], 'packages' => ['linux-firmware-rtw88.ipk']] + $manifest));
 check($cat->add("$tmp/in/fw2.json")['license']['text'] === "The full licence\n", 'add: a licence text from a file next to the manifest');
 refused(fn () => $cat->add("$tmp/in/missing.json"), '/not a JSON manifest/', 'add: no manifest');
+// As phoenix-driver-feed writes them: the licence text in a licence package.
+file_put_contents("$tmp/in/linux-firmware-rtl-license.ipk", PackageWriter::ipk('linux-firmware-rtl-license', '20240909-r0', 'all', ['lib/firmware/LICENCE.rtlwifi_firmware.txt' => "Copyright (c) 2010, Realtek\n"]));
+file_put_contents("$tmp/in/fw3.json", json_encode(['id' => 'firmware-three', 'license' => $manifest['license'] + ['textInPackage' => '/lib/firmware/LICENCE.rtlwifi_firmware.txt'],
+                                                  'packages' => ['linux-firmware-rtw88.ipk', 'linux-firmware-rtl-license.ipk']] + $manifest));
+check($cat->add("$tmp/in/fw3.json")['license']['text'] === "Copyright (c) 2010, Realtek\n", 'add: a licence text from inside a package');
+$cat->remove('firmware-three');
+file_put_contents("$tmp/in/fw4.json", json_encode(['id' => 'firmware-four', 'license' => $manifest['license'] + ['textInPackage' => 'lib/firmware/NOPE'],
+                                                  'packages' => ['linux-firmware-rtw88.ipk']] + $manifest));
+refused(fn () => $cat->add("$tmp/in/fw4.json"), '/textInPackage/', 'add: a licence text no package has');
 
 $signer = new Signer("$tmp/data");
 $now = new DateTimeImmutable('2026-10-09T12:00:00Z');

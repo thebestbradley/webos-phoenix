@@ -17,6 +17,7 @@
 //   {id, kind: "firmware" | "module" | "service", title, summary, category,
 //    match: ["usb:v0BDApC811d*", "pci:v000010DEd00001F82sv*", "of:N*T*Cvendor,chip*", ...],
 //    firmware: ["rtw88/rtw8821c_fw.bin"]   files a driver asks the kernel for
+//                                          (or globs of them: "iwlwifi-*.ucode")
 //    modules: ["rtw88_8821cu"]              kernel modules it provides or uses
 //    optional: false                         an extra for hardware that already works
 //    after: "reload" | "rebind" | "reboot" | "none"
@@ -142,8 +143,11 @@ function verifyIndex(indexBytes, signatureB64, keyB64, opts) {
 function matches(entry, device) {
     var aliases = device.modaliases || [];
     var missing = device.firmwareMissing || [];
-    if (entry.firmware.some(function (f) { return missing.indexOf(f) >= 0; })) return true;
-    if (!entry._re) Object.defineProperty(entry, "_re", { value: entry.match.map(globToRegExp), enumerable: false });
+    if (!entry._re) {
+        Object.defineProperty(entry, "_re", { value: entry.match.map(globToRegExp), enumerable: false });
+        Object.defineProperty(entry, "_fw", { value: entry.firmware.map(globToRegExp), enumerable: false });
+    }
+    if (entry._fw.some(function (re) { return missing.some(function (f) { return re.test(f); }); })) return true;
     return entry._re.some(function (re) { return aliases.some(function (a) { return re.test(a); }); });
 }
 

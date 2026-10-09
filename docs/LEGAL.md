@@ -355,6 +355,55 @@ data use "Phoenix Account".
 - RAUC (LGPL-2.1) is a separate program on the device; the service calls its
   command line and does not link it.
 
+## Firmware and drivers
+
+The owner's decision of October 2026 ("Mix"), and the narrow rule that
+follows from it:
+
+1. **Open source drivers and firmware are in the system image.** The Linux
+   kernel's drivers (GPL-2.0) are built as modules and shipped with the
+   kernel, whose source has to be offered with the image as the GPL
+   requires (OE's archiver class can collect it). Open source firmware may
+   be in the image too.
+2. **Firmware that is not open source is never in the image**, even when its
+   licence allows redistribution (most of `linux-firmware`: Realtek, Intel,
+   Qualcomm, MediaTek, Broadcom/Cypress, AMD, NVIDIA). `meta-phoenix` builds
+   it but its image refuses to install it (`phoenix-firmware-policy.bbclass`);
+   exceptions are listed in `PHOENIX_FIRMWARE_IN_IMAGE`, each decided by the
+   owner and recorded in HARDWARE.md.
+3. **It is offered on the device, only if its licence allows
+   redistribution**, by Settings > Hardware and First Use
+   (`org.webosphoenix.hardware`), for the hardware it is for, and
+   **downloaded only after the user accepts its licence**, which is shown in
+   full with its name and source before anything is downloaded. The catalog
+   tool refuses an entry whose licence does not say it may be redistributed
+   (`redistributable: true`) or whose non-free licence text is missing, and
+   the device ignores such entries too.
+4. **The files are passed on unmodified**, as the licences require, in the
+   packages OE builds from the upstream `linux-firmware` repository, with the
+   licence file each one depends on (`linux-firmware-*-license`), which is
+   installed with it.
+5. **What may not be redistributed is not hosted or fetched by Phoenix.**
+   For such hardware, firmware is taken from the user's own device (an
+   Android vendor partition, at install time), never shipped
+   (HARDWARE.md, "Reverse engineering").
+6. **Out-of-tree drivers and services** in the catalog are open source
+   (their licence in the entry); a service is reviewed by a person before it
+   is listed (DRIVERS.md).
+
+The driver catalog is signed with its own Ed25519 key, pinned in the image
+(the Marketplace's code; see Marketplace above). The opt-in hardware report
+sends only device IDs (HARDWARE.md, "The anonymous hardware report") and the
+catalog service keeps them with the day only.
+
+The service, the Hardware pane, the catalog tool and the packaging are
+original code. The sample catalog's packages (`server/drivers/sample`) hold
+placeholder text, not firmware, and its licence texts are summaries that
+point to the real ones. The Hardware icon (a circuit board) is a new
+drawing (`art/app-icons/objects/hardwarepane.svg`). Device names and IDs in
+the simulator's hardware are the vendors' public PCI and USB IDs; `1209:0001`
+is pid.codes' test ID.
+
 ## VPN
 
 - **luneos-vpn-adapter** (<https://github.com/webOS-ports/luneos-vpn-adapter>,

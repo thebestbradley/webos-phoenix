@@ -208,6 +208,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Tasks, Voice Memos, Flashlight, QR Scanner, Weather, Maps, Passwords, Authenticator, Terminal, Videos, Podcasts, PDF View, Doc View, First Use, Help, Print Manager, Voice Dial), with the shared `@phoenix/ui` components, `@phoenix/luna` service client and `@phoenix/secrets` (TOTP, sealing, auto-lock), generated demo media (`apps/media-samples`), the Node.js Luna services of Files (`apps/files/service`) and Voice Memos (`apps/voicememos/service`, speech to text with whisper.cpp), and the CardDAV & CalDAV Synergy account with its sync service (`apps/dav`, see [docs/SYNERGY.md](docs/SYNERGY.md)) |
 | `services/pty` | `org.webosphoenix.pty`, the Terminal's PTY Luna service (C++), whose core phoenix-sim also uses |
 | `services/devices` | `phoenix-devices`: LunaSysMgr's `com.palm.display`, `com.palm.keys`, `com.palm.vibrate` and `com.palm.ambientLightSensor` on a device, which OSE lacks (C++; docs/HARDWARE.md); finds the hardware by looking and follows it as it comes and goes; `phoenix-devices --probe` prints what it finds |
+| `services/hardware` | `org.webosphoenix.hardware`: the device's hardware matched against the signed driver catalog, firmware and drivers installed with opkg and rolled back when they do not work (Settings > Hardware; docs/HARDWARE.md, docs/DRIVERS.md); its catalog tool is `server/drivers` |
 | `runtime/` | The webOS web app runtime for the simulator and browsers (`PalmSystem`, simulated Luna services) |
 | `shell/tests` | Behaviour tests (`qmltestrunner`) |
 | `shell/assets/openwebos` | Original Open webOS system UI artwork (Apache-2.0) |
@@ -458,6 +459,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-docs.cjs` | PDF View and Doc View |
 | `node tools/test-orientation.cjs` | Apps asking for and following an orientation |
 | `node tools/test-firstuse.cjs` | First Use, every step |
+| `node tools/test-hardware.cjs` | Settings > Hardware and First Use's Hardware step: firmware after its licence, a failed install rolled back, an optional driver after a restart, a catalog with the wrong key refused, the hardware report (needs PHP) |
 | `node tools/test-help.cjs` | Help, and Just Type finding it |
 | `node tools/test-emergency.cjs` | Emergency Info, restricted Phone, Accessibility |
 | `node tools/test-location.cjs` | Location Services and permissions |

@@ -199,7 +199,12 @@ Device tiers, the driver plan and the phased timeline are in
 - [ ] Telephony and SMS (oFono, LuneOS's `webos-telephonyd`), cellular indicators
 - [ ] Sensors: accelerometer, proximity, ambient light
 - [ ] Power management: screen timeout, suspend, wake on notification
-- [ ] Porting guide, device table and hardware report
+- [ ] Porting guide, device table and hardware report (the opt-in report of
+      unsupported hardware is done in the simulator, with the Hardware app)
+- [ ] Hardware support like a distro: open source drivers in the image,
+      firmware and extra drivers from Settings > Hardware and a signed driver
+      catalog ([HARDWARE.md](HARDWARE.md#hardware-support-and-the-hardware-app)).
+      Done in the simulator; on a device with M1
 
 ## M4: core apps and services
 

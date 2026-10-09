@@ -147,7 +147,7 @@ final class Catalog
             // Kernel module packages run depmod (OE's kernel-module-split); nothing else runs without a person reading it.
             $lines = array_filter(array_map('trim', explode("\n", $text)), fn ($l) => $l !== '' && $l[0] !== '#');
             $onlyDepmod = $kind === 'module' && $lines && !array_filter($lines, fn ($l) =>
-                !preg_match('/^(set -e|if \[ -z "\$D" \]; then|if \[ x"\$D" = "x" \]; then|fi|else|then|depmod -a( \S+)?|exit 0|\S*depmod\S* -a .*)$/', $l));
+                !preg_match('/^(set -e|if \[ -z "\$D" \]; then|if \[ x"\$D" = "x" \]; then|fi|else|then|:|depmod -a( \S+)?|update-modules \|\| true|exit 0|\S*depmod\S* -a .*)$/', $l));
             if (!$onlyDepmod && !$reviewed) {
                 throw new CheckFailed("The package has a $name script; a person has to read it first (add --reviewed)");
             }
@@ -242,8 +242,9 @@ final class Catalog
             $records[] = $r;
         }
         if ($kind === 'firmware') {
+            // Each name (or glob, "iwlwifi-*.ucode") is in a package, compressed or not.
             foreach ($firmware as $fw) {
-                if (!array_filter(['', '.xz', '.zst'], fn ($ext) => in_array("lib/firmware/$fw$ext", $files, true))) {
+                if (!array_filter($files, fn ($f) => (bool) preg_match('#^lib/firmware/(.+?)(\.xz|\.zst)?$#', $f, $mm) && fnmatch($fw, $mm[1], FNM_NOESCAPE))) {
                     throw new CheckFailed("firmware: no package has lib/firmware/$fw");
                 }
             }
@@ -279,6 +280,20 @@ final class Catalog
                 throw new CheckFailed("packages: $f is not next to the manifest");
             }
             $bytes[] = (string) file_get_contents($path);
+        }
+        // The licence text from a file in one of the packages (linux-firmware's
+        // licence packages: lib/firmware/LICENCE.rtlwifi_firmware.txt).
+        if (isset($m['license']['textInPackage'])) {
+            $want = ltrim((string) $m['license']['textInPackage'], '/');
+            foreach ($bytes as $b) {
+                $files = self::readPackage($b)['files'];
+                if (isset($files[$want]['data'])) {
+                    $m['license']['text'] = $files[$want]['data'];
+                }
+            }
+            if (($m['license']['text'] ?? '') === '') {
+                throw new CheckFailed("license.textInPackage: no package has /$want");
+            }
         }
         $entry = self::check($m, $bytes, $reviewed);
         $out = $this->dir('public/v1/packages');

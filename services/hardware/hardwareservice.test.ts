@@ -188,6 +188,10 @@ describe("the driver catalog", () => {
         expect(re("acpi:BOSC020[!1]:*").test("acpi:BOSC0200:")).toBe(true);
         expect(re("acpi:BOSC020[!1]:*").test("acpi:BOSC0201:")).toBe(false);
         expect(re("usb:v1.3*").test("usb:v1x3")).toBe(false);
+        // Firmware file names can be globs too.
+        const e = driversLib.normalize({ ...makeWorld().world.entries.rtw88, match: [], firmware: ["iwlwifi-*.ucode"] }, BASE);
+        expect(driversLib.matches(e, { modaliases: [], firmwareMissing: ["iwlwifi-cc-a0-77.ucode"] })).toBe(true);
+        expect(driversLib.matches(e, { modaliases: [], firmwareMissing: ["iwlwifi-cc-a0.pnvm"] })).toBe(false);
     });
 
     it("keeps only usable entries that may be redistributed", () => {
