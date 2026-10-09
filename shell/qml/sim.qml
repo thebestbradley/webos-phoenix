@@ -618,6 +618,8 @@ Item {
     Connections {
         target: status
         function onVpnRequested(request) { windows.pushSystemStatus(request); }
+        // ... and a Wi-Fi network's row.
+        function onWifiRequested(request) { windows.pushSystemStatus(request); }
     }
 
     function statusChanged(name) {

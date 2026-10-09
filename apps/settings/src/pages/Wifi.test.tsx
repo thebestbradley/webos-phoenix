@@ -80,3 +80,30 @@ describe("Wi-Fi > Proxy", () => {
             .toEqual({ type: "none", host: "", port: 0 }));
     });
 });
+
+// The system menu's Wi-Fi drawer (phoenix-sim): the shell hears the networks
+// Settings lists (systemStatus wifiNetworks) and asks to join one
+// (applyHostStatus {wifiConnect}); it had a list of its own.
+describe("Wi-Fi in the system menu", () => {
+    type Net = { ssid: string; bars: number; security: string; known: boolean; state: string };
+    const lastNetworks = () => {
+        for (let i = hostMessages.length - 1; i >= 0; --i) {
+            const p = hostMessages[i].payload;
+            if (hostMessages[i].type === "systemStatus" && p.wifiNetworks) return p.wifiNetworks as Net[];
+        }
+        return null;
+    };
+    const rt = () => (window as unknown as { __phoenixRuntime: { applyHostStatus(s: object): void; hostStatus(): { wifiNetworks: Net[] } } }).__phoenixRuntime;
+
+    it("reports the networks Settings lists, and joins the one the menu picks", async () => {
+        const nets = rt().hostStatus().wifiNetworks;
+        expect(nets.map((n) => n.ssid)).toEqual(expect.arrayContaining(["Phoenix", "Sunnyvale Cafe", "Lab 5G"]));
+        expect(nets.find((n) => n.ssid === "Sunnyvale Cafe")).toMatchObject({ security: "" });
+        rt().applyHostStatus({ wifiConnect: "Sunnyvale Cafe" });
+        await waitFor(() => expect(lastNetworks()?.find((n) => n.ssid === "Sunnyvale Cafe")?.state).toBe("ipConfigured"), { timeout: 3000 });
+        expect(lastNetworks()?.find((n) => n.ssid === "Sunnyvale Cafe")?.known).toBe(true);
+        expect(lastNetworks()?.filter((n) => n.state === "ipConfigured").length).toBe(1);
+        const st = (await call("luna://com.webos.service.wifi/getstatus", {})) as { networkInfo?: { ssid: string } };
+        expect(st.networkInfo?.ssid).toBe("Sunnyvale Cafe");
+    });
+});

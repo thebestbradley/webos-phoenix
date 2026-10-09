@@ -4428,6 +4428,15 @@
                 wifiEnabled: !!s.wifi.enabled,
                 wifiConnected: !!ap,
                 wifiBars: !s.wifi.enabled ? -1 : ap ? bars(ap.signalLevel) : 0,
+                // The networks in range for the system menu's Wi-Fi drawer,
+                // the same as Settings > Wi-Fi lists (the shell had a list of
+                // its own): ssid, bars, security ("" open), known (a profile
+                // is kept), state "" | "connecting" | "ipConfigured".
+                wifiNetworks: !s.wifi.enabled ? [] : AIR.map(function (a) {
+                    return { ssid: a.ssid, bars: bars(a.signalLevel), security: a.security[0] || "",
+                             known: s.wifi.profiles.some(function (x) { return x.ssid === a.ssid; }),
+                             state: s.wifi.connected === a.ssid ? "ipConfigured" : connecting === a.ssid ? "connecting" : "" };
+                }),
                 bluetoothOn: !!s.bluetooth.powered,
                 airplaneMode: !!s.offlineMode,
                 brightness: s.settings.picture.backlight,
@@ -6120,6 +6129,13 @@
             if (writer) {
                 if ("airplaneMode" in st) setOffline(s, !!st.airplaneMode);
                 if ("wifiEnabled" in st && !!st.wifiEnabled !== !!s.wifi.enabled) setWifi(s, !!st.wifiEnabled);
+                // A network picked in the system menu's Wi-Fi drawer: a known
+                // or open one joins at once (a secured one it has no key for
+                // opens Settings > Wi-Fi instead), once this state is saved.
+                if (st.wifiConnect && s.wifi.enabled && airFor(st.wifiConnect)) {
+                    var join = st.wifiConnect;
+                    setTimeout(function () { wifi["/connect"]({ ssid: join }, function () {}); }, 0);
+                }
                 if ("bluetoothOn" in st) s.bluetooth.powered = !!st.bluetoothOn;
                 if ("brightness" in st) s.settings.picture.backlight = Math.round(st.brightness);
                 if ("muted" in st) s.audio.muted = !!st.muted;

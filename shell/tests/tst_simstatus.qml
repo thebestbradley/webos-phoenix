@@ -16,6 +16,9 @@ Item {
 
     SimWindowSource { id: windows }
     SimSystemStatus { id: status }
+    // One that hears the runtime's Wi-Fi networks (test_wifiFromTheRuntime).
+    SimSystemStatus { id: wifiStatus }
+    SignalSpy { id: wifiAsked; target: wifiStatus; signalName: "wifiRequested" }
 
     SignalSpy { id: reported; target: windows; signalName: "systemStatusReported" }
 
@@ -87,6 +90,27 @@ Item {
             compare(status.airplaneMode, true);
             compare(status.bluetoothOn, true);
             compare(status.applyingAppStatus, false);
+        }
+
+        // The system menu's Wi-Fi drawer lists the runtime's networks (those
+        // of Settings > Wi-Fi), not a list of its own, and joining one asks
+        // the runtime (the menu said "Phoenix" with Sunnyvale Cafe joined in
+        // Settings, and listed a "Palm Guest" Settings had never seen).
+        function test_wifiFromTheRuntime() {
+            var nets = [{ ssid: "Phoenix", bars: 3, security: "psk", known: true, state: "" },
+                        { ssid: "Sunnyvale Cafe", bars: 3, security: "", known: true, state: "ipConfigured" },
+                        { ssid: "Lab 5G", bars: 2, security: "psk", known: false, state: "" }];
+            wifiStatus.applyAppStatus({ wifiEnabled: true, wifiConnected: true, wifiBars: 3, wifiNetworks: nets });
+            compare(wifiStatus.wifiNetworks.map(function (n) { return n.ssid; }), ["Phoenix", "Sunnyvale Cafe", "Lab 5G"]);
+            compare(wifiStatus.wifiSsid, "Sunnyvale Cafe");
+            wifiStatus.connectWifi("Phoenix");
+            compare(wifiAsked.count, 1);
+            compare(wifiAsked.signalArguments[0][0], { wifiConnect: "Phoenix" });
+            compare(wifiStatus.wifiNetworks[0].state, "connecting", "shown joining at once");
+            // The radio off: no networks reported, the list kept for when it is back.
+            wifiStatus.applyAppStatus({ wifiEnabled: false, wifiNetworks: [] });
+            compare(wifiStatus.wifiNetworks.length, 3);
+            compare(wifiStatus.wifiBars, -1);
         }
 
         function test_appStatusFor() {

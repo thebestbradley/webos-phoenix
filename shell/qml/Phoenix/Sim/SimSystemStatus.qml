@@ -219,6 +219,11 @@ QtObject {
         { name: "Office", state: "disconnected" }
     ]
     property bool _runtimeVpn: false
+    // The web runtime has reported its Wi-Fi networks: joining one asks it
+    // (wifiRequested), the system menu and Settings > Wi-Fi then agree.
+    property bool _runtimeWifi: false
+    // {wifiConnect: ssid}, for the web pages.
+    signal wifiRequested(var request)
     // The system menu connects or disconnects a profile the runtime has:
     // {vpnConnect: name} or {vpnDisconnect: name}, for the web pages.
     signal vpnRequested(var request)
@@ -240,6 +245,9 @@ QtObject {
         }
         wifiBars = 0;
         scanWifi();
+        // The runtime joins a known network itself as the radio comes on.
+        if (_runtimeWifi)
+            return;
         _later(_scanTime, function() {
             for (var i = 0; i < wifiNetworks.length; ++i)
                 if (wifiNetworks[i].known)
@@ -263,6 +271,13 @@ QtObject {
     function connectWifi(ssid) {
         if (wifiBars < 0)
             return;
+        if (_runtimeWifi) {
+            wifiNetworks = wifiNetworks.map(function(n) {
+                return _with(n, { state: n.ssid === ssid ? "connecting" : n.state === "ipConfigured" ? "" : n.state });
+            });
+            wifiRequested({ wifiConnect: ssid });
+            return;
+        }
         wifiBars = 0;
         wifiNetworks = wifiNetworks.map(function(n) {
             return _with(n, { state: n.ssid === ssid ? "connecting" : "" });
@@ -332,7 +347,7 @@ QtObject {
                 });
             if (wifiBars < 0)
                 wifiScanning = false;
-        } else if (_named(wifiNetworks, "ssid", "ipConfigured") === "") {
+        } else if (!_runtimeWifi && _named(wifiNetworks, "ssid", "ipConfigured") === "") {
             var done = false;
             wifiNetworks = wifiNetworks.map(function(n) {
                 if (done || !n.known)
@@ -436,6 +451,13 @@ QtObject {
         if (s.vpnProfiles !== undefined) {
             _runtimeVpn = true;
             vpnProfiles = s.vpnProfiles;
+        }
+        // The runtime's networks (Settings > Wi-Fi's), in place of the demo
+        // list; with the radio off it has none, and the list stays.
+        if (s.wifiNetworks !== undefined) {
+            _runtimeWifi = true;
+            if (s.wifiNetworks.length > 0)
+                wifiNetworks = s.wifiNetworks;
         }
         if (s.exhibitionApps !== undefined && s.exhibitionApps !== null)
             exhibitionApps = s.exhibitionApps;
