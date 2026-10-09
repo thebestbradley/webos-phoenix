@@ -16,16 +16,16 @@ use Phoenix\Marketplace\App;
 $config = marketplace_config();
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 
-if (str_starts_with($path, '/v1/icons/copy/')) {
-    // An app's icon from its site, copied here (Catalog::iconCopy).
-    $icon = (new App($config))->catalog->iconCopy(substr($path, strlen('/v1/icons/copy/')));
-    if ($icon === null) {
+if (preg_match('#^/v1/(icons|screenshots)/copy/([^/]+)$#', $path, $m)) {
+    // An app's icon or screenshot from its site, copied here (Catalog::mediaCopy).
+    $copy = (new App($config))->catalog->mediaCopy($m[1] === 'icons' ? 'icon' : 'screenshot', $m[2]);
+    if ($copy === null) {
         http_response_code(404);
         header('Content-Type: text/plain');
         echo "not found\n";
         return;
     }
-    [$type, $bytes, $kept] = $icon;
+    [$type, $bytes, $kept] = $copy;
     header('Content-Type: ' . $type);
     header('Content-Length: ' . strlen($bytes));
     header('Cache-Control: ' . ($kept ? 'max-age=86400' : 'no-cache'));

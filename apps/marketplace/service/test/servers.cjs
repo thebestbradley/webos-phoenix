@@ -103,8 +103,9 @@ async function startCatalog(opts) {
         php(["init"]);
     }
     // Several requests at once, as bin/serve.sh: an icon copied from its site waits on it.
+    // The test sites are on this computer (http://127.0.0.1), which a real catalog refuses.
     const proc = spawn("php", ["-S", `127.0.0.1:${port}`, path.join(SERVER, "public/router.php")],
-                       { env: Object.assign({ PHP_CLI_SERVER_WORKERS: "4" }, env), stdio: ["ignore", "ignore", "pipe"] });
+                       { env: Object.assign({ PHP_CLI_SERVER_WORKERS: "4", MARKETPLACE_FETCH_LOCAL: "1" }, env), stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "";
     proc.stderr.on("data", (d) => { stderr += d; });
     const url = `http://127.0.0.1:${port}`;

@@ -140,6 +140,9 @@ final class Catalog
         if (!in_array($status, ['listed', 'pulled', 'pending'], true) || !$this->db->run('UPDATE apps SET status = ?, updated = ? WHERE id = ?', [$status, Db::now(), $id])) {
             throw new CheckFailed("No app $id");
         }
+        if ($status === 'listed') {
+            $this->copyMedia($id);
+        }
     }
 
     public function decideRelease(int $rid, bool $approve, array $reviewer, string $notes = ''): array
@@ -157,6 +160,7 @@ final class Catalog
             $this->db->run("UPDATE apps SET status = 'listed', version = ?, updated = ? WHERE id = ? AND status = 'pending'",
                 [$r['version'], Db::now(), $r['app_id']]);
             $this->db->run('UPDATE apps SET version = ?, updated = ? WHERE id = ?', [$r['version'], Db::now(), $r['app_id']]);
+            $this->copyMedia($r['app_id']);
         }
         return $this->db->one('SELECT * FROM releases WHERE id = ?', [$rid]);
     }
@@ -315,77 +319,120 @@ final class Catalog
         return $this->generatedIconUrl($id);
     }
 
-    // ---- Icons copied from the sites ----------------------------------------------------------
+    // ---- Pictures copied from the sites -------------------------------------------------------
 
-    /** The images a copied icon may be, by their first bytes: extension => content type. */
-    private const ICON_TYPES = ['png' => 'image/png', 'jpg' => 'image/jpeg', 'gif' => 'image/gif',
-                                'webp' => 'image/webp', 'ico' => 'image/x-icon'];
-    private const ICON_MAX_BYTES = 2 * 1024 * 1024;
+    /** The images a copy may be, by their first bytes: extension => content type. */
+    private const IMAGE_TYPES = ['png' => 'image/png', 'jpg' => 'image/jpeg', 'gif' => 'image/gif',
+                                 'webp' => 'image/webp', 'ico' => 'image/x-icon'];
+    /** What each kind of copy is called in the published files, and how big one may be. */
+    private const COPIES = ['icon' => ['icons/copy', 2 * 1024 * 1024], 'screenshot' => ['screenshots/copy', 8 * 1024 * 1024]];
 
     /**
-     * Where the catalog serves its copy of an app's icon that lives on another site (a curated web
-     * app's, as bin/probe-pwas.py found it). Devices then ask the catalog, not the site: an icon
-     * shows wherever the catalog is reachable (phoenix-sim's local catalog included), a device's
-     * browsing tells the sites nothing, and a site renaming its hashed icon file breaks no list.
-     * The name changes with the address, so a new icon is a new copy.
+     * Where the catalog serves its copy of a picture of app $id's ('icon' or 'screenshot') that
+     * lives on another site (a curated web app's icon as bin/probe-pwas.py found it, a developer's
+     * screenshots). Devices then ask the catalog, not the site: the pictures show wherever the
+     * catalog is reachable (phoenix-sim's local catalog included), a device's browsing tells the
+     * sites nothing, and a site renaming a hashed file breaks no listing. The name changes with
+     * the address, so a new picture is a new copy.
      */
-    public function iconCopyUrl(string $id, string $src): string
+    public function copyUrl(string $kind, string $id, string $src): string
     {
-        return $this->config['base_url'] . 'icons/copy/' . self::iconCopyName($id, $src);
+        return $this->config['base_url'] . self::COPIES[$kind][0] . '/' . self::copyName($id, $src);
     }
 
-    private static function iconCopyName(string $id, string $src): string
+    private static function copyName(string $id, string $src): string
     {
         return preg_replace('/[^A-Za-z0-9._-]/', '_', $id) . '-' . substr(sha1($src), 0, 12);
     }
 
-    /** An app's icon as the index gives it: a copy here for one on another site. */
+    /** Whether $src is a picture on another site, which the index names as the catalog's copy. */
+    private function isOutside(string $src): bool
+    {
+        return (bool) preg_match('#^https?://#i', $src) && !str_starts_with($src, $this->config['base_url']);
+    }
+
+    /** An app's icon as the index gives it. */
     private function publishedIcon(array $a): string
     {
         $src = (string) $a['icon'];
-        $own = str_starts_with($src, $this->config['base_url']);
-        return !$own && preg_match('#^https?://#i', $src) ? $this->iconCopyUrl($a['id'], $src) : $src;
+        return $this->isOutside($src) ? $this->copyUrl('icon', $a['id'], $src) : $src;
+    }
+
+    /** An app's screenshots as the index gives them. */
+    private function publishedScreenshots(array $a): array
+    {
+        return array_map(fn ($src) => is_string($src) && $this->isOutside($src) ? $this->copyUrl('screenshot', $a['id'], $src) : $src,
+                         (array) $a['screenshots']);
     }
 
     /**
-     * The icon at icons/copy/$name: [content type, bytes, kept], or null for no such icon. The
-     * first request fetches it from the app's site and keeps it (a PNG, JPEG, GIF, WebP or ICO by
-     * its own bytes, at most 2 MB). One that cannot be had is tried again after an hour; meanwhile
-     * the app's initials stand in, not kept, so a list never shows an empty square.
+     * The picture at <kind's folder>/$name: [content type, bytes, kept], or null for none. The
+     * first request fetches it from its site (SafeFetch: https to public addresses only) and keeps
+     * it (a PNG, JPEG, GIF, WebP or ICO by its own bytes, never an SVG from a site). One that cannot
+     * be had is tried again after an hour; meanwhile an icon is the app's initials, not kept, so a
+     * list never shows an empty square, and a screenshot is not there (the gallery leaves it out).
      */
-    public function iconCopy(string $name): ?array
+    public function mediaCopy(string $kind, string $name): ?array
     {
-        if (!preg_match('/^([A-Za-z0-9._-]+)-([0-9a-f]{12})$/', $name, $m)) {
+        if (!isset(self::COPIES[$kind]) || !preg_match('/^([A-Za-z0-9._-]+)-([0-9a-f]{12})$/', $name, $m)) {
             return null;
         }
-        $a = $this->db->one('SELECT id, title, icon FROM apps WHERE id = ?', [$m[1]]);
-        if (!$a || self::iconCopyName($a['id'], (string) $a['icon']) !== $name) {
+        $a = $this->db->one('SELECT id, title, icon, screenshots FROM apps WHERE id = ?', [$m[1]]);
+        if (!$a) {
             return null;
         }
-        $dir = $this->publicDir() . '/icons/copy';
-        foreach (self::ICON_TYPES as $ext => $type) {
+        $sources = $kind === 'icon' ? [(string) $a['icon']] : (array) json_decode($a['screenshots'] ?: '[]', true);
+        $src = null;
+        foreach ($sources as $s) {
+            if (is_string($s) && $this->isOutside($s) && self::copyName($a['id'], $s) === $name) {
+                $src = $s;
+            }
+        }
+        if ($src === null) {
+            return null;
+        }
+        [$folder, $max] = self::COPIES[$kind];
+        $dir = $this->publicDir() . '/' . $folder;
+        foreach (self::IMAGE_TYPES as $ext => $type) {
             if (is_file("$dir/$name.$ext")) {
                 return [$type, (string) file_get_contents("$dir/$name.$ext"), true];
             }
         }
         $failed = "$dir/$name.failed";
         if (!is_file($failed) || filemtime($failed) < time() - 3600) {
-            $fetch = $this->config['icon_fetch'] ?? [self::class, 'fetchIcon'];
-            $bytes = $fetch((string) $a['icon']);
-            $ext = is_string($bytes) && strlen($bytes) <= self::ICON_MAX_BYTES ? self::iconType($bytes) : null;
+            $bytes = isset($this->config['media_fetch']) ? ($this->config['media_fetch'])($src, $max)
+                                                        : SafeFetch::fromConfig($this->config)->get($src, $max);
+            $ext = is_string($bytes) && strlen($bytes) <= $max ? self::imageType($bytes) : null;
             @mkdir($dir, 0755, true);
             if ($ext !== null) {
                 file_put_contents("$dir/$name.$ext", $bytes);
                 @unlink($failed);
-                return [self::ICON_TYPES[$ext], $bytes, true];
+                return [self::IMAGE_TYPES[$ext], $bytes, true];
             }
             touch($failed);
         }
-        return ['image/svg+xml', self::generatedIcon('', '', (string) $a['title']), false];
+        return $kind === 'icon' ? ['image/svg+xml', self::generatedIcon('', '', (string) $a['title']), false] : null;
     }
 
-    /** The image type of $bytes (an ICON_TYPES extension), or null for anything else. */
-    public static function iconType(string $bytes): ?string
+    /** Copies an app's pictures now (an admin listing it), so a device's first look waits on nothing. */
+    private function copyMedia(string $id): void
+    {
+        $a = $this->app($id);
+        if (!$a) {
+            return;
+        }
+        if ($this->isOutside((string) $a['icon'])) {
+            $this->mediaCopy('icon', self::copyName($id, (string) $a['icon']));
+        }
+        foreach ($a['screenshots'] as $s) {
+            if (is_string($s) && $this->isOutside($s)) {
+                $this->mediaCopy('screenshot', self::copyName($id, $s));
+            }
+        }
+    }
+
+    /** The image type of $bytes (an IMAGE_TYPES extension), or null for anything else. */
+    public static function imageType(string $bytes): ?string
     {
         return match (true) {
             str_starts_with($bytes, "\x89PNG\r\n\x1a\n") => 'png',
@@ -395,30 +442,6 @@ final class Catalog
             str_starts_with($bytes, "\x00\x00\x01\x00") => 'ico',
             default => null,
         };
-    }
-
-    /** An icon's bytes from its site (http or https, a few redirects, 8 s), or null. */
-    public static function fetchIcon(string $url): ?string
-    {
-        if (!preg_match('#^https?://#i', $url)) {
-            return null;
-        }
-        if (function_exists('curl_init')) {
-            $c = curl_init($url);
-            curl_setopt_array($c, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 3,
-                CURLOPT_CONNECTTIMEOUT => 4, CURLOPT_TIMEOUT => 8, CURLOPT_USERAGENT => 'PhoenixMarketplace/1 (icon copy)',
-                CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS, CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-                CURLOPT_MAXFILESIZE => self::ICON_MAX_BYTES,
-                // Decoded as a browser would: some CDNs send an icon gzipped unasked (Duolingo's).
-                CURLOPT_ENCODING => '']);
-            $body = curl_exec($c);
-            $ok = is_string($body) && curl_getinfo($c, CURLINFO_RESPONSE_CODE) === 200;
-            return $ok ? $body : null;
-        }
-        $ctx = stream_context_create(['http' => ['timeout' => 8, 'max_redirects' => 3, 'ignore_errors' => false,
-                                                 'user_agent' => 'PhoenixMarketplace/1 (icon copy)']]);
-        $body = @file_get_contents($url, false, $ctx, 0, self::ICON_MAX_BYTES + 1);
-        return is_string($body) ? $body : null;
     }
 
     // ---- Publishing ---------------------------------------------------------------------------
@@ -433,7 +456,7 @@ final class Catalog
                 'id' => $a['id'], 'kind' => $a['kind'], 'title' => $a['title'],
                 'developer' => array_filter(['name' => $a['developer_name'], 'url' => $a['developer_url']]),
                 'summary' => $a['summary'], 'description' => (string) $a['description'], 'categories' => $a['categories'],
-                'icon' => $this->publishedIcon($a), 'screenshots' => $a['screenshots'], 'license' => $a['license'], 'homepage' => $a['homepage'],
+                'icon' => $this->publishedIcon($a), 'screenshots' => $this->publishedScreenshots($a), 'license' => $a['license'], 'homepage' => $a['homepage'],
                 'donation' => $a['donation'], 'featured' => $a['featured'], 'rating' => $a['rating'], 'version' => $a['version'],
             ];
             if ($a['kind'] === 'pwa') {

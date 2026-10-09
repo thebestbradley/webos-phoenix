@@ -85,17 +85,32 @@ lettering, not the brand's logo. Its start page is the
 manifest's `start_url` when that is on the site, else the site (as
 browsers do, so a manifest kept on a CDN still starts on the site).
 
-Devices get every icon from the catalog itself: the index names an icon on
-another site as the catalog's copy, `/v1/icons/copy/<id>-<hash of its
-address>`. The first request for it fetches it from the site and keeps it
-in the published files (a PNG, JPEG, GIF, WebP or ICO, by its own bytes,
-at most 2 MB); until it can be had (tried again after an hour) the app's
-initials stand in, so a list never shows an empty square
-(`Catalog::iconCopy`). So icons show wherever the catalog is reachable
-(phoenix-sim's local catalog included), a device browsing the catalog
-tells the sites nothing, and a site renaming its hashed icon file breaks
-no list. `bin/serve.sh` publishes the index again at each start, and runs
-PHP's server with several workers, since a first copy waits on its site.
+Devices get every picture from the catalog itself: the index names an icon
+or screenshot on another site as the catalog's copy,
+`/v1/icons/copy/<id>-<hash of its address>` (`/v1/screenshots/copy/...`).
+The first request for it fetches it from the site and keeps it in the
+published files (a PNG, JPEG, GIF, WebP or ICO, by its own bytes, never an
+SVG; icons at most 2 MB, screenshots 8 MB); an admin listing an app or
+approving a release fetches its pictures then. Until a picture can be had
+(tried again after an hour) an icon is the app's initials, so a list never
+shows an empty square, and a screenshot is left out (`Catalog::mediaCopy`).
+So pictures show wherever the catalog is reachable (phoenix-sim's local
+catalog included), a device browsing the catalog tells the sites nothing,
+and a site renaming a hashed file breaks no listing.
+
+The addresses come from developers, so the fetch (`src/SafeFetch.php`)
+cannot be pointed at the server's own network: https only; every address
+the host resolves to must be public (no loopback, RFC 1918, link-local and
+the cloud metadata address, 100.64/10, multicast, reserved, documentation,
+nor IPv6's ::1, fc00::/7, fe80::/10, ff00::/8 or an IPv4 address inside
+IPv6); the connection is pinned to the address checked (no DNS rebinding);
+each of at most three redirects is checked again; size and time are
+capped. `MARKETPLACE_FETCH_LOCAL=1` lets it reach http://127.0.0.1 as well,
+for the tests' local sites only; `MARKETPLACE_FETCH_PROXY` names an egress
+proxy the operator trusts (it then resolves the names).
+
+`bin/serve.sh` publishes the index again at each start, and runs PHP's
+server with several workers, since a first copy waits on its site.
 
 Today 135 of the 160 sites are listed, three of them (Ground News, NYT
 Games, Formula 1) with generated icons, as all the icons their manifests

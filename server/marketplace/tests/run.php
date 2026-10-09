@@ -32,13 +32,13 @@ mkdir($tmp);
 putenv("MARKETPLACE_DATA=$tmp/data");
 putenv('MARKETPLACE_DSN');
 putenv('MARKETPLACE_BASE_URL=http://127.0.0.1:9999/v1/');
-// Icons copied from the sites (Catalog::iconCopy) come from here, not the network.
+// Pictures copied from the sites (Catalog::mediaCopy) come from here, not the network.
 $iconReply = null;
 $iconFetched = [];
-$app = new App(marketplace_config() + ['icon_fetch' => function (string $url) use (&$iconReply, &$iconFetched) {
+$app = new App(['media_fetch' => function (string $url, int $max) use (&$iconReply, &$iconFetched) {
     $iconFetched[] = $url;
     return $iconReply;
-}]);
+}] + marketplace_config());
 $api = $app->api;
 $call = function (string $method, string $path, $body = null, ?string $token = null) use ($api): array {
     return $api->handle($method, $path, is_string($body) ? $body : json_encode($body ?? []), $token ? "Bearer $token" : null);
@@ -110,21 +110,21 @@ check(!isset($x['iconGenerated']) && str_starts_with($x['icon'], 'http://127.0.0
 // The copy: fetched from the site the first time, kept; served as the image it is.
 $png = "\x89PNG\r\n\x1a\n" . str_repeat("\0", 24);
 $iconReply = $png;
-$c1 = $app->catalog->iconCopy($xName);
-$c2 = $app->catalog->iconCopy($xName);
+$c1 = $app->catalog->mediaCopy('icon', $xName);
+$c2 = $app->catalog->mediaCopy('icon', $xName);
 check($c1 === ['image/png', $png, true] && $c2 === $c1 && count($iconFetched) === 1
       && $iconFetched[0] === $app->catalog->app('org.webosphoenix.pwa.x')['icon'] && is_file("$tmp/data/public/v1/icons/copy/$xName.png"),
       'an icon copy is fetched from the site once and kept');
 // A site that answers with something else: the initials stand in, not kept, and the site is not asked again at once.
 $mName = basename((string) (array_values(array_filter($idx['apps'], fn ($a) => $a['id'] === 'org.webosphoenix.pwa.mastodon'))[0]['icon'] ?? ''));
 $iconReply = '<html>not an image</html>';
-$m1 = $app->catalog->iconCopy($mName);
-$m2 = $app->catalog->iconCopy($mName);
+$m1 = $app->catalog->mediaCopy('icon', $mName);
+$m2 = $app->catalog->mediaCopy('icon', $mName);
 check($m1[0] === 'image/svg+xml' && str_contains($m1[1], '>M</text>') && $m1[2] === false && $m2 === $m1 && count($iconFetched) === 2,
       'an icon the site does not give: the initials meanwhile, tried again later');
-check($app->catalog->iconCopy('org.webosphoenix.pwa.x-000000000000') === null && $app->catalog->iconCopy('../index.json') === null
-      && $app->catalog->iconCopy('com.example.none-' . substr(sha1('x'), 0, 12)) === null, 'only the copies the index names');
-check(Phoenix\Marketplace\Catalog::iconType("GIF89a...") === 'gif' && Phoenix\Marketplace\Catalog::iconType('<svg onload="x">') === null,
+check($app->catalog->mediaCopy('icon', 'org.webosphoenix.pwa.x-000000000000') === null && $app->catalog->mediaCopy('icon', '../index.json') === null
+      && $app->catalog->mediaCopy('icon', 'com.example.none-' . substr(sha1('x'), 0, 12)) === null, 'only the copies the index names');
+check(Phoenix\Marketplace\Catalog::imageType("GIF89a...") === 'gif' && Phoenix\Marketplace\Catalog::imageType('<svg onload="x">') === null,
       'icons are images by their own bytes; no SVG from a site');
 // A good manifest whose icons are all broken (the probe's iconGenerated): listed, with an icon made here.
 foreach (['org.webosphoenix.pwa.groundnews' => 'GN', 'org.webosphoenix.pwa.nytgames' => 'NYT', 'org.webosphoenix.pwa.formula1' => 'F1'] as $gid => $letters) {
@@ -249,6 +249,94 @@ check($s === 200 && $s2 === 400, 'reports of a known kind are taken');
 $b1 = $app->catalog->publish()['build'];
 $b2 = $app->catalog->publish()['build'];
 check($b2 === $b1 + 1, 'every publish is a new build');
+
+// ---- Screenshots on other sites: copies too ------------------------------------------------------
+$shot = 'https://shots.example.com/one.png';
+$app->db->run('UPDATE apps SET screenshots = ? WHERE id = ?', [json_encode([$shot]), 'org.webosphoenix.pwa.devdocs']);
+$app->catalog->publish();
+$dd = array_values(array_filter(json_decode(file_get_contents("$tmp/data/public/v1/index.json"), true)['apps'],
+                                fn ($a) => $a['id'] === 'org.webosphoenix.pwa.devdocs'))[0];
+$shotName = basename($dd['screenshots'][0]);
+check(str_starts_with($dd['screenshots'][0], 'http://127.0.0.1:9999/v1/screenshots/copy/org.webosphoenix.pwa.devdocs-'),
+      'a screenshot on another site is named as the catalog\'s copy');
+$iconReply = null;
+check($app->catalog->mediaCopy('screenshot', $shotName) === null, '... one that cannot be had is not there (the gallery leaves it out)');
+$app->db->run('UPDATE apps SET screenshots = ? WHERE id = ?', [json_encode(['https://shots.example.com/two.png']), 'org.webosphoenix.pwa.devdocs']);
+$iconReply = $png;
+$two = $app->catalog->mediaCopy('screenshot', 'org.webosphoenix.pwa.devdocs-' . substr(sha1('https://shots.example.com/two.png'), 0, 12));
+check($two === ['image/png', $png, true] && end($iconFetched) === 'https://shots.example.com/two.png', '... one that comes is kept and served');
+
+// ---- Fetching the copies: only public sites (SafeFetch) ---------------------------------------------
+use Phoenix\Marketplace\SafeFetch;
+$refused = ['127.0.0.1', '127.255.0.9', '10.1.2.3', '172.16.5.4', '172.31.255.255', '192.168.1.1', '169.254.169.254', '100.64.0.1',
+            '100.127.255.255', '0.0.0.0', '224.0.0.1', '239.255.255.250', '240.0.0.1', '255.255.255.255', '192.0.2.7', '198.18.0.1',
+            '::', '::1', '::127.0.0.1', '::ffff:127.0.0.1', '::ffff:8.8.8.8', '64:ff9b::a00:1', '2002:a00:1::', 'fc00::1', 'fd12:3456::1',
+            'fe80::1', 'febf::1', 'ff02::1', '2001:db8::1', '2001::1', 'not-an-ip'];
+$public = ['8.8.8.8', '1.1.1.1', '100.63.255.255', '100.128.0.1', '172.32.0.1', '192.169.0.1', '93.184.216.34', '2606:4700::1111', '2a00:1450::1'];
+$bad = array_filter($refused, fn ($ip) => SafeFetch::isPublic($ip));
+$good = array_filter($public, fn ($ip) => !SafeFetch::isPublic($ip));
+check(!$bad && !$good, 'SafeFetch: loopback, private, link-local, shared, multicast, reserved and IPv4-in-IPv6 addresses are refused ('
+      . implode(' ', $bad) . ') and public ones taken (' . implode(' ', $good) . ')');
+$dns = ['meta.example' => ['169.254.169.254'], 'mixed.example' => ['93.184.216.34', '10.0.0.5'], 'ok.example' => ['93.184.216.34'],
+        'ok6.example' => ['2606:4700::1111'], 'v6local.example' => ['fd00::1']];
+$f = new SafeFetch(false, fn (string $h) => $dns[$h] ?? []);
+$planRefused = [];
+foreach (['http://ok.example/i.png', 'https://u:p@ok.example/i.png', 'ftp://ok.example/i.png', 'https://10.0.0.1/i.png', 'https://[::1]/i.png',
+          'https://[::ffff:127.0.0.1]/i.png', 'https://169.254.169.254/latest/meta-data/', 'https://meta.example/i.png',
+          'https://mixed.example/i.png', 'https://v6local.example/i.png', 'https://none.example/i.png', 'http://127.0.0.1/i.png'] as $u) {
+    if ($f->plan($u) !== null) {
+        $planRefused[] = $u;
+    }
+}
+check(!$planRefused, 'SafeFetch: http, credentials, other schemes, internal addresses and names that resolve to one (any of their addresses) are refused ('
+      . implode(' ', $planRefused) . ')');
+check(SafeFetch::pin((array) $f->plan('https://ok.example/i.png')) === 'ok.example:443:93.184.216.34'
+      && SafeFetch::pin((array) $f->plan('https://ok6.example:8443/i.png')) === 'ok6.example:8443:[2606:4700::1111]',
+      'SafeFetch: a public site\'s request is pinned to the address checked');
+
+// A site on this computer, which only the explicit local mode (the simulator's, the tests') reaches.
+$sock = stream_socket_server('tcp://127.0.0.1:0');
+$port = (int) substr(strrchr(stream_socket_get_name($sock, false), ':'), 1);
+fclose($sock);
+file_put_contents("$tmp/site.php", '<?php
+$p = parse_url($_SERVER["REQUEST_URI"], PHP_URL_PATH);
+$png = "\x89PNG\r\n\x1a\n" . str_repeat("\0", 24);
+if ($p === "/icon.png") { header("Content-Type: image/png"); echo $png; return; }
+if ($p === "/big.png") { header("Content-Type: image/png"); echo $png . str_repeat("\0", 3 * 1024 * 1024); return; }
+$to = ["/to-metadata" => "http://169.254.169.254/latest/meta-data/", "/to-private-name" => "http://inside.example:' . $port . '/icon.png",
+       "/to-relative" => "/icon.png", "/loop" => "/loop", "/to-https-local" => "https://127.0.0.1:' . $port . '/icon.png"];
+if (isset($to[$p])) { header("Location: " . $to[$p], true, 302); return; }
+http_response_code(404);');
+$site = proc_open(['php', '-S', "127.0.0.1:$port", "$tmp/site.php"], [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes);
+for ($i = 0; $i < 50 && !@fsockopen('127.0.0.1', $port); $i++) {
+    usleep(100000);
+}
+$lookups = [];
+$resolver = function (string $h) use (&$lookups) {
+    $lookups[] = $h;
+    // Rebinding: the first answer is the allowed one, any later one an internal address.
+    if ($h === 'rebind.example') {
+        return count(array_keys($lookups, 'rebind.example')) === 1 ? ['127.0.0.1'] : ['10.0.0.1'];
+    }
+    return $h === 'inside.example' ? ['10.0.0.9'] : [];
+};
+$local = new SafeFetch(true, $resolver);
+$base = "http://127.0.0.1:$port";
+check($local->get("$base/icon.png", 1 << 20) === $png, 'SafeFetch local mode: the local test site is reached');
+check((new SafeFetch(false, $resolver))->get("$base/icon.png", 1 << 20) === null, '... and only in local mode');
+$got = $local->get("http://rebind.example:$port/icon.png", 1 << 20);
+check($got === $png && count(array_keys($lookups, 'rebind.example')) === 1,
+      'SafeFetch: the connection goes to the address checked, looked up once (a name only the check resolves; rebinding answers later go unasked)');
+check($local->get("$base/to-metadata", 1 << 20) === null && str_contains($local->refused, '169.254.169.254'),
+      'SafeFetch: a redirect to the cloud metadata address is refused (' . $local->refused . ')');
+check($local->get("$base/to-private-name", 1 << 20) === null && str_contains($local->refused, '10.0.0.9'),
+      'SafeFetch: a redirect to a name that resolves to a private address is refused (' . $local->refused . ')');
+check($local->get("$base/to-relative", 1 << 20) === $png, 'SafeFetch: a redirect on the same site is followed, and checked again');
+check($local->get("$base/loop", 1 << 20) === null && $local->refused === 'too many redirects', 'SafeFetch: three redirects at most');
+check($local->get("$base/big.png", 1 << 20) === null && str_contains($local->refused, 'larger than'), 'SafeFetch: no more than the size allowed');
+check($local->get('http://10.0.0.1/i.png', 1 << 20) === null && $local->get('https://[fe80::1]/i.png', 1 << 20) === null,
+      'SafeFetch local mode: still nothing internal besides 127.0.0.1');
+proc_terminate($site);
 
 exec('rm -rf ' . escapeshellarg($tmp));
 echo $failures ? "\n$failures failed\n" : "\nall passed\n";
