@@ -17,9 +17,19 @@
 //      for a restart), checks the device works, and puts things back as they
 //      were if it does not.
 //
-// Firmware that may be redistributed but is not open source is not in the
-// system image; it is offered here, with its licence, and downloaded only
-// when the user says so (docs/LEGAL.md, "Firmware and drivers").
+// The system image carries the open source drivers and the firmware whose
+// licence allows redistribution, so most hardware works out of the box
+// (docs/LEGAL.md, "Firmware and drivers"). This fills the gaps: firmware the
+// image does not have (new, rare, or left out of a small image), newer
+// firmware than the image's (installed to /lib/firmware/updates, which the
+// kernel reads first), drivers outside the kernel, optional extras. What is
+// not open source is installed only after the user accepts its licence.
+//
+// Catalogs: Phoenix's, its key pinned in the image (with a signed hand-over
+// to a new key, key-handover.json); and, with Developer Mode on only,
+// catalogs the user adds, trusted by their own key once the user has seen
+// its fingerprint, always shown as not Phoenix's and never replacing a
+// Phoenix entry.
 //
 // Methods:
 //   list {subscribe?}          -> {devices: [device], catalog, pendingRestart,
@@ -30,8 +40,16 @@
 //                        "no-driver" | "restart", offers: [offer]}
 //       offer: {driverId, kind, title, summary, optional, after, license:
 //               {id, name, text, url, free}, size, installedSize, version,
-//               available, reason, installed}
-//   refresh {}                 reads the driver catalog again
+//               available, reason, installed, installedVersion, included
+//               (the image's version it would replace), update, thirdParty,
+//               sourceName}
+//   refresh {}                 reads the driver catalogs again
+//   addSource {url}            (Developer Mode) -> {pending: {url, name, key,
+//                              fingerprint}}: a catalog's key, for the user to check
+//   trustSource {url, key, name?}, removeSource {id}   (Developer Mode)
+//   firmwareLicenses {}        the firmware in the system image, each with its
+//                              licence and licence files; firmwareLicense
+//                              {path} -> {text} (Settings > Device Info)
 //   install {driverId, deviceId?, acceptLicense?, subscribe?}
 //       acceptLicense: the licence's id, when it is not a free licence (the
 //       user saw it and agreed). Progress {state: "downloading" | "checking"
@@ -58,9 +76,11 @@
 "use strict";
 
 var drivers = require("./lib/drivers");
+var b64 = require("./lib/b64");
 
 var SERVICE = "org.webosphoenix.hardware";
-var METHODS = ["list", "refresh", "install", "remove", "getReport", "sendReport", "setPreferences", "scheduled"];
+var METHODS = ["list", "refresh", "install", "remove", "getReport", "sendReport", "setPreferences", "scheduled",
+               "addSource", "trustSource", "removeSource", "firmwareLicenses", "firmwareLicense"];
 var ACTIVITY = "org.webosphoenix.hardware.check";
 var SETTINGS_APP = "org.webosphoenix.settings";
 var MAX_PACKAGE = 256 * 1024 * 1024;
@@ -100,7 +120,9 @@ function hex(bytes) {
 //   files.write(name, bytes) -> path; files.find(name) -> path | null;
 //   files.remove(path): the packages it installed, kept to roll back to
 //   state.load() / state.save(obj)
-//   config() -> {sources: [{id, name, url, key}], reportUrl}
+//   config() -> {sources: [{id, name, url, key, revoked?: [keys]}], reportUrl}
+//   imageFirmware.list() -> [{name, version, license, licenseFiles}] | null;
+//   imageFirmware.text(path) -> string | null (optional)
 //   luna.call(uri, params) -> Promise<reply>
 //   now(), log(msg) (optional)
 function createHardwareService(deps) {
@@ -123,13 +145,28 @@ function createHardwareService(deps) {
         }
         s.report = s.report || { enabled: false, lastSent: null, lastIds: null };
         s.notified = s.notified || [];
+        s.keys = s.keys || {};             // source id -> the key a hand-over moved to
+        s.userSources = s.userSources || [];
         return s;
     }
     function save(s) { deps.state.save(s); }
-    function sources() {
-        var c = deps.config() || {};
-        return (Array.isArray(c.sources) ? c.sources : []).filter(function (x) { return x && x.id && x.url; });
+    // Developer Mode, as last read (devMode()).
+    var devModeOn = false;
+    function devMode() {
+        return Promise.resolve(deps.luna.call("luna://com.webos.service.devmode/getDevMode", {})).then(function (r) {
+            devModeOn = !!(r && r.status === "enabled");
+            return devModeOn;
+        }, function () { devModeOn = false; return false; });
     }
+    // Phoenix's catalogs first (pinned in the image), then, with Developer
+    // Mode on, the ones the user added.
+    function sources(s) {
+        var c = deps.config() || {};
+        var own = (Array.isArray(c.sources) ? c.sources : []).filter(function (x) { return x && x.id && x.url; });
+        var user = devModeOn ? (s || load()).userSources.map(function (u) { return Object.assign({ thirdParty: true }, u); }) : [];
+        return own.concat(user);
+    }
+    function keyOf(s, src) { return s.keys[src.id] || src.key || null; }
 
     // ---- The catalog -------------------------------------------------------------------
 
@@ -142,11 +179,31 @@ function createHardwareService(deps) {
         });
     }
 
+    // The catalog's key moved: a hand-over signed by the key the device
+    // trusts names the next one (docs/DRIVERS.md, "If the key is lost or leaked").
+    function handOver(s, src, base) {
+        return Promise.all([
+            Promise.resolve(deps.requestBytes({ method: "GET", url: base + "key-handover.json" })),
+            getText(base + "key-handover.json.sig")
+        ]).then(function (r) {
+            if (r[0].status !== 200) return null;
+            return drivers.verifyHandover(r[0].bytes, r[1], keyOf(s, src), src.revoked, deps.crypto.sha512).then(function (to) {
+                log("catalog " + src.id + ": its key was handed over to " + to);
+                s.keys[src.id] = to;
+                return to;
+            }, function (e) {
+                log("catalog " + src.id + ": key hand-over refused: " + e.message);
+                return null;
+            });
+        }, function () { return null; });
+    }
+
     function refreshOne(s, src) {
         var base = String(src.url).replace(/\/*$/, "/");
         var prev = s.catalogs[src.id] || {};
-        if (!src.key) {
-            s.catalogs[src.id] = Object.assign(prev, { error: { errorCode: "UNTRUSTED", errorText: "No key is set for the driver catalog" } });
+        var key = keyOf(s, src);
+        if (!key || (src.revoked || []).indexOf(key) >= 0) {
+            s.catalogs[src.id] = Object.assign(prev, { error: { errorCode: "UNTRUSTED", errorText: key ? "The driver catalog's key was revoked" : "No key is set for the driver catalog" } });
             return Promise.resolve({ id: src.id, ok: false, errorCode: "UNTRUSTED" });
         }
         return Promise.all([
@@ -154,9 +211,13 @@ function createHardwareService(deps) {
             getText(base + "drivers.json.sig")
         ]).then(function (r) {
             if (r[0].status !== 200) throw err("CONNECTION_FAILED", "HTTP " + r[0].status + " from " + base + "drivers.json");
-            return drivers.verifyIndex(r[0].bytes, r[1], src.key, {
-                sha512: deps.crypto.sha512, now: now(), baseUrl: base,
-                lastBuild: typeof prev.build === "number" ? prev.build : undefined
+            var opts = { sha512: deps.crypto.sha512, now: now(), baseUrl: base, lastBuild: typeof prev.build === "number" ? prev.build : undefined };
+            return drivers.verifyIndex(r[0].bytes, r[1], key, opts).then(null, function (e) {
+                if (!e || e.code !== "BAD_SIGNATURE") throw e;
+                return handOver(s, src, base).then(function (to) {
+                    if (!to) throw e;
+                    return drivers.verifyIndex(r[0].bytes, r[1], to, opts);
+                });
             });
         }, function (e) {
             throw e && e.code ? e : err("CONNECTION_FAILED", "Could not reach " + base + ((e && e.message) ? " (" + e.message + ")" : ""));
@@ -174,31 +235,49 @@ function createHardwareService(deps) {
     }
 
     function refresh() {
-        var s = load();
-        return sources().reduce(function (chain, src) {
-            return chain.then(function (out) { return refreshOne(s, src).then(function (r) { out.push(r); return out; }); });
-        }, Promise.resolve([])).then(function (results) {
+        var s;
+        return devMode().then(function () {
+            s = load();
+            return sources(s).reduce(function (chain, src) {
+                return chain.then(function (out) { return refreshOne(s, src).then(function (r) { out.push(r); return out; }); });
+            }, Promise.resolve([]));
+        }).then(function (results) {
             save(s);
             changed();
             return { returnValue: true, sources: results };
         });
     }
 
-    // Every driver of every catalog (the first catalog's entry wins an id).
+    // Every driver of every catalog. Phoenix's come first and keep their ids:
+    // another catalog's entry with the same id is left out, never mixed in.
     function allDrivers(s) {
         var seen = {}, out = [];
-        sources().forEach(function (src) {
+        sources(s).forEach(function (src) {
             var c = s.catalogs[src.id];
             (c && c.drivers || []).forEach(function (d) {
                 if (seen[d.id]) return;
                 seen[d.id] = true;
-                out.push(Object.assign({ sourceId: src.id }, d));
+                out.push(Object.assign({ sourceId: src.id, thirdParty: !!src.thirdParty, sourceName: nameOf(src, c) }, d));
             });
         });
         return out;
     }
+    // Another catalog goes by the name the user saw when trusting its key, not
+    // what its index says (which could say "Phoenix").
+    function nameOf(src, c) { return src.thirdParty ? src.name || src.url : (c && c.name) || src.name || src.url; }
+    function publicSources(s) {
+        return sources(s).map(function (src) {
+            var c = s.catalogs[src.id] || {};
+            return { id: src.id, name: nameOf(src, c), url: src.url, thirdParty: !!src.thirdParty,
+                     fingerprint: src.fingerprint || null, refreshed: c.refreshed || null, error: c.error || null,
+                     count: (c.drivers || []).length };
+        }).concat(devModeOn ? [] : s.userSources.map(function (u) {
+            return { id: u.id, name: u.name, url: u.url, thirdParty: true, fingerprint: u.fingerprint, refreshed: null, count: 0,
+                     error: { errorCode: "UNTRUSTED", errorText: "Not used while Developer Mode is off" } };
+        }));
+    }
     function catalogInfo(s) {
-        var src = sources()[0];
+        var src = sources(s)[0];
         var c = src && s.catalogs[src.id];
         if (!src) return { name: null, build: null, refreshed: null, error: { errorCode: "UNTRUSTED", errorText: "No driver catalog is set up" } };
         return { name: (c && c.name) || src.name || null, build: c ? c.build : null, refreshed: c ? c.refreshed : null,
@@ -207,20 +286,35 @@ function createHardwareService(deps) {
 
     // ---- The devices --------------------------------------------------------------------
 
-    function offerOf(entry, system, s) {
+    // have: the packages opkg has (the image's and ours), name -> version.
+    function offerOf(entry, system, s, raw, have) {
         var pick = drivers.packagesFor(entry, system);
         var pk = pick.packages || entry.packages;
         var inst = s.installed[entry.id];
+        var reason = pick.reason;
+        var version = pk.map(function (p) { return p.version; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(", ");
+        // The image already has these very packages (installed with it).
+        var inImage = !inst && !!pick.packages && pick.packages.every(function (p) { return have[p.name]; });
+        // A newer version of firmware the image has.
+        var included = entry.supersedes.map(function (n) { return have[n]; }).filter(Boolean)[0] || null;
+        var update = !inst && !inImage && !!included && !!pick.packages && drivers.compareVersions(pk[0].version, included) > 0;
+        if (!inst && !inImage && included && !update && pick.packages) reason = "Phoenix already has this version or a newer one";
+        // An out-of-tree driver is never put over a driver the kernel already binds.
+        if (!inst && entry.kind === "module" && raw.driver && !entry.optional && entry.modules.indexOf(raw.driver) < 0)
+            reason = "A built-in driver (" + raw.driver + ") already drives this device";
         return {
             driverId: entry.id, kind: entry.kind, title: entry.title, summary: entry.summary, description: entry.description,
             category: entry.category, optional: entry.optional, after: entry.after, source: entry.source,
             license: { id: entry.license.id, name: entry.license.name, text: entry.license.text, url: entry.license.url, free: entry.license.free },
             size: pk.reduce(function (t, p) { return t + p.size; }, 0),
             installedSize: pk.every(function (p) { return p.installedSize; }) ? pk.reduce(function (t, p) { return t + p.installedSize; }, 0) : null,
-            version: pk.map(function (p) { return p.version; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(", "),
+            version: version,
             packages: pk.map(function (p) { return p.name; }),
-            available: !!pick.packages, reason: pick.reason,
-            installed: !!inst, installedVersion: inst ? inst.packages.map(function (p) { return p.version; }).join(", ") : null,
+            available: !!pick.packages && reason === pick.reason, reason: reason,
+            installed: !!inst || inImage, inImage: inImage,
+            installedVersion: inst ? inst.packages.map(function (p) { return p.version; }).join(", ") : inImage ? have[pk[0].name] : null,
+            included: included, update: update,
+            thirdParty: !!entry.thirdParty, sourceName: entry.sourceName || null,
             installing: installing[entry.id] || null
         };
     }
@@ -239,10 +333,11 @@ function createHardwareService(deps) {
 
     function devices() {
         var s = load();
-        return Promise.all([deps.system.scan(), deps.system.info()]).then(function (r) {
-            var system = r[1], all = allDrivers(s);
+        return Promise.all([deps.system.scan(), deps.system.info(), Promise.resolve(deps.opkg.list()).then(null, function () { return []; })]).then(function (r) {
+            var system = r[1], all = allDrivers(s), have = {};
+            (r[2] || []).forEach(function (p) { have[p.name] = p.version; });
             var list = (r[0] || []).map(function (raw) {
-                var offers = all.filter(function (e) { return drivers.matches(e, raw); }).map(function (e) { return offerOf(e, system, s); });
+                var offers = all.filter(function (e) { return drivers.matches(e, raw); }).map(function (e) { return offerOf(e, system, s, raw, have); });
                 // A device nobody needs to see, unless a catalog entry is for it.
                 if (raw.hidden && !offers.length) return null;
                 return {
@@ -257,8 +352,10 @@ function createHardwareService(deps) {
 
     // The first look reads the catalog; later ones use what was read.
     function withCatalog() {
-        var s = load();
-        return sources().some(function (src) { return !s.catalogs[src.id]; }) ? refresh() : Promise.resolve();
+        return devMode().then(function () {
+            var s = load();
+            return sources(s).some(function (src) { return !s.catalogs[src.id]; }) ? refresh() : null;
+        });
     }
 
     function list() {
@@ -267,7 +364,8 @@ function createHardwareService(deps) {
             return {
                 returnValue: true, devices: r.devices, catalog: catalogInfo(r.state), system: r.system,
                 pendingRestart: r.state.pendingRestart.slice(),
-                report: { enabled: !!r.state.report.enabled, lastSent: r.state.report.lastSent || null }
+                report: { enabled: !!r.state.report.enabled, lastSent: r.state.report.lastSent || null },
+                sources: publicSources(r.state), devMode: devModeOn
             };
         }, errorReply);
     }
@@ -340,6 +438,8 @@ function createHardwareService(deps) {
         if (busy) return Promise.resolve(fail("BUSY", "Another driver is being installed"));
         var s = load(), entry, pkgs, system, before = {}, installedNow = false, rolledBack = false;
         try { entry = findEntry(s, p.driverId); } catch (e) { return Promise.resolve(errorReply(e)); }
+        if (entry.thirdParty && !devModeOn)
+            return Promise.resolve(fail("UNTRUSTED", "Drivers from other catalogs need Developer Mode"));
         if (!entry.license.free && p.acceptLicense !== entry.license.id)
             return Promise.resolve(fail("LICENSE_REQUIRED", "Accept the licence of " + entry.title + " (" + entry.license.name + ") to install it"));
         busy = entry.id;
@@ -553,7 +653,88 @@ function createHardwareService(deps) {
         }).then(null, function () {});
     }
 
+    // ---- Other catalogs (Developer Mode) ------------------------------------------------------
+
+    function keyInfo(url) {
+        var base = String(url).replace(/\/*$/, "/");
+        return getText(base + "key.json").then(function (text) {
+            var k;
+            try { k = JSON.parse(text); } catch (e) { throw err("BAD_INDEX", "The catalog's key.json is not JSON"); }
+            if (typeof k.key !== "string" || b64len(k.key) !== 32) throw err("BAD_INDEX", "The catalog's key is not an Ed25519 key");
+            return drivers.fingerprint(k.key, deps.crypto.sha256).then(function (fp) {
+                return { url: base, name: String(k.name || "").slice(0, 80) || base, key: k.key, fingerprint: fp };
+            });
+        });
+    }
+    function b64len(k) { return b64.fromBase64(String(k)).length; }
+    function needDevMode() {
+        return devMode().then(function (on) {
+            if (!on) throw err("UNTRUSTED", "Other driver catalogs can only be used with Developer Mode on");
+        });
+    }
+    function addSource(p) {
+        var u = String((p && p.url) || "").trim();
+        if (!/^(https?|file):\/\//i.test(u)) return Promise.resolve(fail("BAD_PARAMS", "url: the catalog's address"));
+        return needDevMode().then(function () { return keyInfo(u); }).then(function (k) { return { returnValue: true, pending: k }; }, errorReply);
+    }
+    function trustSource(p) {
+        if (!p || !p.url || !p.key || b64len(p.key) !== 32) return Promise.resolve(fail("BAD_PARAMS", "url and key (base64 Ed25519) are required"));
+        var base = String(p.url).replace(/\/*$/, "/");
+        if (sources(load()).some(function (x) { return !x.thirdParty && String(x.url).replace(/\/*$/, "/") === base; }))
+            return Promise.resolve(fail("BAD_PARAMS", "That is Phoenix's own catalog"));
+        return needDevMode().then(function () { return drivers.fingerprint(p.key, deps.crypto.sha256); }).then(function (fp) {
+            var s = load();
+            var src = s.userSources.filter(function (x) { return x.url === base; })[0];
+            if (!src) {
+                src = { id: "user-" + now().getTime().toString(36), url: base };
+                s.userSources.push(src);
+            }
+            if (src.key !== p.key) delete s.catalogs[src.id];   // a new key starts again
+            src.key = p.key;
+            src.name = String(p.name || base).slice(0, 80);
+            src.fingerprint = fp;
+            save(s);
+            return refresh().then(list);
+        }).then(null, errorReply);
+    }
+    function removeSource(p) {
+        var s = load();
+        var before = s.userSources.length;
+        s.userSources = s.userSources.filter(function (x) { return x.id !== (p && p.id); });
+        if (s.userSources.length === before) return Promise.resolve(fail("NOT_FOUND", "No such catalog (Phoenix's cannot be removed)"));
+        delete s.catalogs[p.id];
+        save(s);
+        return list();
+    }
+
+    // ---- The firmware in the image ---------------------------------------------------------------
+
+    function firmwareLicenses() {
+        var l = deps.imageFirmware ? deps.imageFirmware.list() : null;
+        return Promise.resolve(l).then(function (pk) {
+            return { returnValue: true, packages: (pk || []).map(function (x) {
+                return { name: x.name, version: x.version || "", license: x.license || "", licenseFiles: x.licenseFiles || [] };
+            }) };
+        });
+    }
+    function firmwareLicense(p) {
+        var path = String((p && p.path) || "");
+        // Only the licence files the image lists.
+        return firmwareLicenses().then(function (r) {
+            var ok = r.packages.some(function (x) { return x.licenseFiles.indexOf(path) >= 0; });
+            if (!ok) return fail("NOT_FOUND", "Not a firmware licence file");
+            return Promise.resolve(deps.imageFirmware.text(path)).then(function (t) {
+                return t === null || t === undefined ? fail("NOT_FOUND", "Cannot read " + path) : { returnValue: true, path: path, text: t };
+            });
+        });
+    }
+
     return {
+        addSource: addSource,
+        trustSource: trustSource,
+        removeSource: removeSource,
+        firmwareLicenses: firmwareLicenses,
+        firmwareLicense: firmwareLicense,
         list: function () { return list(); },
         refresh: function () { return refresh().then(list); },
         install: install,

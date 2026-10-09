@@ -99,7 +99,7 @@ function makeWorld() {
     const publish = (build: number, list: Any[], extra: Any = {}) => {
         const index = bytesOf(JSON.stringify(catalogOf(build, list, extra)));
         world.served.set(BASE + "drivers.json", index);
-        world.served.set(BASE + "drivers.json.sig", bytesOf(signer.sign(index)));
+        world.served.set(BASE + "drivers.json.sig", bytesOf(world.signer.sign(index)));
     };
     publish(world.catalogBuild, Object.values(entries));
     return { world, publish, pkgs: { fw8821, fw8821new, rtl8812, nvidia, nvidiaFw } };
@@ -165,11 +165,17 @@ function makeService(world: Any, config: Any = null) {
         config: () => config ?? { sources: [{ id: "phoenix", name: "Phoenix Drivers", url: BASE, key: world.signer.key }], reportUrl: BASE + "report" },
         luna: {
             call: async (uri: string, params: Any) => {
+                if (uri.endsWith("/getDevMode")) return { returnValue: true, status: world.devMode ? "enabled" : "disabled" };
                 if (uri.endsWith("/createToast")) world.toasts.push(params);
                 if (uri.includes("org.webosphoenix.ongoing")) world.ongoing.push({ uri, params });
                 if (uri.includes("activitymanager")) world.activities.push({ uri, params });
                 return { returnValue: true };
             },
+        },
+        imageFirmware: {
+            list: () => [{ name: "linux-firmware-rtl8821", version: "20240909-r0", license: "Firmware-rtlwifi_firmware",
+                           licenseFiles: ["/lib/firmware/LICENCE.rtlwifi_firmware.txt"] }],
+            text: (path: string) => (path === "/lib/firmware/LICENCE.rtlwifi_firmware.txt" ? "Copyright (c) 2010, Realtek" : null),
         },
         now: () => new Date("2026-10-09T12:00:00Z"),
     });
@@ -468,5 +474,139 @@ describe("the hardware service", () => {
         await new Promise((r) => setTimeout(r, 10));
         expect(seen.at(-1)).toBe("working");
         stop();
+    });
+});
+
+describe("gaps in what the image has", () => {
+    const update = (world: Any, pk: Any) => ({ id: "firmware-rtw88-update", kind: "firmware", title: "Newer Realtek Wi-Fi firmware", optional: true,
+        match: ["usb:v0BDApC811d*"], firmware: [], supersedes: ["linux-firmware-rtl8821"], after: "reload", license: REALTEK_LICENSE, packages: [pk.file] });
+
+    it("offers newer firmware than the image's, and says when the image has it already", async () => {
+        const { world, publish } = makeWorld();
+        const newer = pkg("linux-firmware-rtw88-update", "20250311-r0");
+        const same = pkg("linux-firmware-rtl8821", "20240909-r0");
+        world.served.set(newer.url, newer.body);
+        world.served.set(same.url, same.body);
+        world.installed.set("linux-firmware-rtl8821", "20240909-r0");   // in the image
+        world.devices[1] = { ...world.devices[1], driver: "rtw88_8821cu", firmwareMissing: [] };
+        const inImage = { ...world.entries.rtw88, id: "firmware-rtl8821", packages: [same.file] };
+        publish(4, [update(world, newer), inImage]);
+        const svc = makeService(world);
+        const d = byId(await svc.list(), "usb:1-2");
+        expect(d.status).toBe("working");
+        const up = d.offers.find((o: Any) => o.driverId === "firmware-rtw88-update");
+        expect(up).toMatchObject({ update: true, included: "20240909-r0", installed: false, available: true, optional: true });
+        // Already in the image: shown as installed with it, nothing to do.
+        expect(d.offers.find((o: Any) => o.driverId === "firmware-rtl8821")).toMatchObject({ installed: true, inImage: true, installedVersion: "20240909-r0" });
+        const r = await svc.install({ driverId: "firmware-rtw88-update", deviceId: "usb:1-2", acceptLicense: REALTEK_LICENSE.id });
+        expect(r.state).toBe("installed");
+        expect(world.installed.get("linux-firmware-rtl8821")).toBe("20240909-r0");   // the image's stays; the update goes beside it
+        // An older one than the image's is not offered.
+        const older = pkg("linux-firmware-rtw88-update", "20230101-r0");
+        world.served.set(older.url, older.body);
+        publish(5, [update(world, older)]);
+        const svc2 = makeService({ ...world, state: null, installed: new Map([["linux-firmware-rtl8821", "20240909-r0"]]) });
+        const o = byId(await svc2.list(), "usb:1-2").offers[0];
+        expect(o).toMatchObject({ available: false, update: false, reason: "Phoenix already has this version or a newer one" });
+    });
+
+    it("never puts an out-of-tree driver over one the kernel binds", async () => {
+        const { world } = makeWorld();
+        world.devices[2] = { ...world.devices[2], driver: "rtw88_8812au" };   // a newer kernel's own driver
+        const o = byId(await makeService(world).list(), "usb:1-3").offers[0];
+        expect(o).toMatchObject({ available: false, reason: "A built-in driver (rtw88_8812au) already drives this device" });
+    });
+
+    it("lists the image's firmware with its licences", async () => {
+        const { world } = makeWorld();
+        const svc = makeService(world);
+        expect((await svc.firmwareLicenses()).packages[0]).toMatchObject({ name: "linux-firmware-rtl8821", license: "Firmware-rtlwifi_firmware" });
+        expect((await svc.firmwareLicense({ path: "/lib/firmware/LICENCE.rtlwifi_firmware.txt" })).text).toMatch(/Realtek/);
+        expect((await svc.firmwareLicense({ path: "/etc/shadow" })).errorCode).toBe("NOT_FOUND");
+    });
+});
+
+describe("catalog keys", () => {
+    function handover(world: Any, signer: Any, from: string, to: string) {
+        const bytes = bytesOf(JSON.stringify({ format: 1, from, to, issued: "2026-10-09T00:00:00Z" }));
+        world.served.set(BASE + "key-handover.json", bytes);
+        world.served.set(BASE + "key-handover.json.sig", bytesOf(signer.sign(bytes)));
+    }
+
+    it("follows a hand-over signed by the old key to a new one", async () => {
+        const { world, publish } = makeWorld();
+        const svc = makeService(world, { sources: [{ id: "phoenix", name: "Phoenix Drivers", url: BASE, key: world.signer.key }] });
+        await svc.list();
+        const old = world.signer, next = keyPair();
+        handover(world, old, old.key, next.key);
+        world.signer = next;
+        publish(4, Object.values(world.entries));
+        const r = await svc.refresh();
+        expect(r.catalog).toMatchObject({ build: 4, error: null });
+        expect(world.state.keys.phoenix).toBe(next.key);
+        // The old key cannot sign any more catalogs now.
+        world.signer = old;
+        publish(5, Object.values(world.entries));
+        expect((await svc.refresh()).catalog.error.errorCode).toBe("BAD_SIGNATURE");
+    });
+
+    it("refuses a hand-over not signed by the trusted key, or to a revoked key", async () => {
+        const { world, publish } = makeWorld();
+        const old = world.signer, thief = keyPair();
+        handover(world, thief, old.key, thief.key);
+        world.signer = thief;
+        publish(4, Object.values(world.entries));
+        expect((await makeService(world, { sources: [{ id: "phoenix", url: BASE, key: old.key }] }).refresh()).catalog.error.errorCode).toBe("BAD_SIGNATURE");
+        handover(world, old, old.key, thief.key);
+        const cfg = { sources: [{ id: "phoenix", url: BASE, key: old.key, revoked: [thief.key] }] };
+        world.state = null;
+        expect((await makeService(world, cfg).refresh()).catalog.error.errorCode).toBe("BAD_SIGNATURE");
+        expect((await makeService(world, { sources: [{ id: "phoenix", url: BASE, key: old.key, revoked: [old.key] }] }).refresh()).catalog.error.errorCode).toBe("UNTRUSTED");
+    });
+});
+
+describe("other driver catalogs", () => {
+    const OTHER = "https://other.example/drivers/";
+    function otherCatalog(world: Any) {
+        const k = keyPair();
+        const p = pkg("kernel-module-gadget", "1.0", "all");
+        const entries = [
+            { id: "module-gadget", kind: "module", title: "Gadget driver", match: ["usb:v1209p0001d*"], modules: ["gadget"], after: "none",
+              license: { id: "GPL-2.0-only", name: "GPL 2.0", free: true, redistributable: true }, packages: [{ ...p.file, url: "pkg.ipk" }] },
+            // Tries to take the place of Phoenix's entry.
+            { ...world.entries.rtw88, title: "Not Phoenix's" },
+        ];
+        const index = bytesOf(JSON.stringify(catalogOf(1, entries)));
+        world.served.set(OTHER + "drivers.json", index);
+        world.served.set(OTHER + "drivers.json.sig", bytesOf(k.sign(index)));
+        world.served.set(OTHER + "key.json", bytesOf(JSON.stringify({ key: k.key, name: "Gadget Fans" })));
+        world.served.set(OTHER + "pkg.ipk", p.body);
+        return k;
+    }
+
+    it("are only for Developer Mode, trusted by their fingerprint, marked, and never replace Phoenix's", async () => {
+        const { world } = makeWorld();
+        const k = otherCatalog(world);
+        const svc = makeService(world);
+        expect((await svc.addSource({ url: OTHER })).errorCode).toBe("UNTRUSTED");
+        world.devMode = true;
+        const pending = (await svc.addSource({ url: OTHER })).pending;
+        expect(pending).toMatchObject({ url: OTHER, name: "Gadget Fans", key: k.key });
+        expect(pending.fingerprint).toMatch(/^([0-9A-F]{4} ){7}[0-9A-F]{4}$/);
+        const r = await svc.trustSource({ url: OTHER, key: pending.key, name: pending.name });
+        expect(r.sources.map((x: Any) => [x.name, x.thirdParty])).toEqual([["Phoenix Drivers", false], ["Gadget Fans", true]]);
+        const gadget = byId(r, "usb:1-4");
+        expect(gadget.status).toBe("needs-driver");
+        expect(gadget.offers.find((o: Any) => o.driverId === "module-gadget")).toMatchObject({ thirdParty: true, sourceName: "Gadget Fans" });
+        expect(byId(r, "usb:1-2").offers.map((o: Any) => [o.title, o.thirdParty])).toEqual([["Realtek Wi-Fi firmware (rtw88)", false]]);
+        expect((await svc.install({ driverId: "module-gadget", deviceId: "usb:1-4" })).state).toBe("installed");
+        // Developer Mode off: the catalog is not used, nor can its drivers be installed.
+        world.devMode = false;
+        const off = await svc.list();
+        expect(byId(off, "usb:1-4").offers.map((o: Any) => o.driverId)).toEqual(["module-foo"]);
+        expect(off.sources[1]).toMatchObject({ thirdParty: true, error: { errorCode: "UNTRUSTED" } });
+        expect((await svc.trustSource({ url: OTHER, key: k.key })).errorCode).toBe("UNTRUSTED");
+        expect((await svc.removeSource({ id: off.sources[1].id })).returnValue).toBe(true);
+        expect((await svc.removeSource({ id: "phoenix" })).errorCode).toBe("NOT_FOUND");
     });
 });

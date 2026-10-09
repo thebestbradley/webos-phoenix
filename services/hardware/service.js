@@ -24,6 +24,7 @@ var sysfs = require("./lib/sysfs");
 var STATE = "/var/lib/phoenix/hardware/state.json";
 var PACKAGES = "/var/lib/phoenix/hardware/packages";
 var CONFIG = "/etc/palm/hardware/catalog.json";
+var IMAGE_FIRMWARE = "/usr/share/phoenix/firmware/licences.json";
 
 var service = new Service(hardware.SERVICE);
 var scanner = sysfs.createScanner(node.createFs("/"), {
@@ -71,6 +72,12 @@ var methods = hardware.createHardwareService({
         }
     },
     config: function () { return readJson(CONFIG) || {}; },
+    // Written when the image is built (meta-phoenix, phoenix-firmware-policy):
+    // each firmware package in it, its licence and its licence files.
+    imageFirmware: {
+        list: function () { return (readJson(IMAGE_FIRMWARE) || {}).packages || []; },
+        text: function (p) { try { return fs.readFileSync(p, "utf8"); } catch (e) { return null; } }
+    },
     luna: {
         call: function (uri, params) {
             return new Promise(function (resolve) {

@@ -20,6 +20,10 @@
 //                                          (or globs of them: "iwlwifi-*.ucode")
 //    modules: ["rtw88_8821cu"]              kernel modules it provides or uses
 //    optional: false                         an extra for hardware that already works
+//    supersedes: ["linux-firmware-rtl8821"]  the image's package a newer version
+//                                          replaces (its files go to
+//                                          /lib/firmware/updates, which the
+//                                          kernel reads first)
 //    after: "reload" | "rebind" | "reboot" | "none"
 //    license: {id (SPDX or LicenseRef-), name, text, url, free, redistributable},
 //    source (where the files come from), homepage,
@@ -103,6 +107,7 @@ function normalize(e, baseUrl) {
         category: CATEGORIES.indexOf(e.category) >= 0 ? e.category : "other",
         match: match, firmware: firmware, modules: strings(e.modules, 50, function (m) { return /^[A-Za-z0-9_-]+$/.test(m); }),
         optional: !!e.optional, after: AFTER.indexOf(e.after) >= 0 ? e.after : "reload",
+        supersedes: strings(e.supersedes, 20, function (n) { return /^[a-z0-9][a-z0-9.+-]*$/.test(n); }),
         license: { id: str(lic.id, 120), name: str(lic.name, 200), text: str(lic.text, 100000), url: url(lic.url),
                    free: lic.free === true, redistributable: true },
         source: url(e.source), homepage: url(e.homepage), packages: packages
@@ -179,7 +184,48 @@ function packagesFor(entry, system) {
     return { packages: order.map(function (n) { return byName[n]; }), reason: null };
 }
 
+// opkg's version order, near enough: digits compare as numbers, the rest
+// as text, chunk by chunk ("20240909-r0" < "20250311-r0", "5.6.10" > "5.6.9").
+function compareVersions(a, b) {
+    var x = String(a || "").match(/\d+|[^\d]+/g) || [], y = String(b || "").match(/\d+|[^\d]+/g) || [];
+    for (var i = 0; i < Math.max(x.length, y.length); i++) {
+        if (x[i] === undefined) return -1;
+        if (y[i] === undefined) return 1;
+        var nx = /^\d/.test(x[i]), ny = /^\d/.test(y[i]);
+        var c = nx && ny ? parseInt(x[i], 10) - parseInt(y[i], 10) : x[i] < y[i] ? -1 : x[i] > y[i] ? 1 : 0;
+        if (c) return c < 0 ? -1 : 1;
+    }
+    return 0;
+}
+
+// A key's fingerprint, as shown to the user (the Marketplace's, lib/catalog.js):
+// SHA-256 of the key, its first 16 bytes in hex, grouped by 2.
+function fingerprint(keyB64, sha256) {
+    return Promise.resolve(sha256(b64.fromBase64(keyB64))).then(function (h) {
+        var hex = Array.prototype.map.call(new Uint8Array(h).subarray(0, 16), function (v) { return (v < 16 ? "0" : "") + v.toString(16); }).join("");
+        return hex.match(/.{4}/g).join(" ").toUpperCase();
+    });
+}
+
+// A key hand-over (server/drivers, "drivers.php handover"): the catalog's
+// old key signs {format: 1, from, to, issued}, naming the key that signs
+// from now on. Returns the new key (base64) when the hand-over is signed by
+// currentKey, is from it, and is to a key that is not revoked.
+function verifyHandover(bytes, signatureB64, currentKey, revoked, sha512) {
+    var sig = b64.fromBase64(String(signatureB64 || "").trim());
+    return ed25519.verify(sig, bytes, b64.fromBase64(currentKey), sha512).then(function (ok) {
+        if (!ok) throw fail("BAD_SIGNATURE", "The key hand-over is not signed by the catalog's key");
+        var h;
+        try { h = JSON.parse(b64.fromUtf8(bytes)); } catch (e) { throw fail("BAD_INDEX", "The key hand-over is not valid JSON"); }
+        if (!h || h.format !== 1 || h.from !== currentKey || typeof h.to !== "string" || b64.fromBase64(h.to).length !== 32 || h.to === currentKey)
+            throw fail("BAD_INDEX", "Not a key hand-over from the catalog's key");
+        if ((revoked || []).indexOf(h.to) >= 0) throw fail("UNTRUSTED", "The key hand-over names a revoked key");
+        return h.to;
+    });
+}
+
 module.exports = {
+    compareVersions: compareVersions, fingerprint: fingerprint, verifyHandover: verifyHandover,
     verifyIndex: verifyIndex, normalize: normalize, matches: matches, packagesFor: packagesFor, globToRegExp: globToRegExp,
     KINDS: KINDS, CATEGORIES: CATEGORIES
 };
