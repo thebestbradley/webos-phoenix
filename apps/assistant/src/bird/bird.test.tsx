@@ -11,7 +11,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { act, render } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssistantMessage } from "@phoenix/luna";
 import { Bird } from "./Bird";
 import { BIRD, BIRD_POSES } from "./birdData";
@@ -62,6 +62,16 @@ describe("the bird's poses", () => {
 });
 
 describe("the drawing", () => {
+    // A move or loop that changes asks each of the part's three groups for
+    // its transform as drawn (Act.getSnapshotBeforeUpdate). jsdom runs no
+    // CSS animations and the tests load no stylesheet, so that is always
+    // none; but jsdom's getComputedStyle builds every property for it, ~5 ms
+    // a call here: a second of the reactions test, and past its 5 s on a
+    // busy machine. It answers the same "none" at once (the blend test
+    // gives its own).
+    beforeEach(() => {
+        vi.spyOn(window, "getComputedStyle").mockImplementation(() => ({ transform: "none" }) as CSSStyleDeclaration);
+    });
     afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
     it("shows each pose's lids and extras, and only those", () => {
