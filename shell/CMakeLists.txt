@@ -38,6 +38,10 @@ add_subdirectory(native)
 # The assistant's wake word spotter (phoenix-wakeword, wakeword-test), run by
 # the shell's Dictation; libvosk and its model are found at run time.
 add_subdirectory(../services/wakeword ${CMAKE_CURRENT_BINARY_DIR}/services-wakeword)
+# The Assistant's voice, Kitten TTS (phoenix-tts, tts-test), run by the
+# shell's Speech and the device's org.webosphoenix.tts; ONNX Runtime and the
+# model are found at run time.
+add_subdirectory(../services/tts ${CMAKE_CURRENT_BINARY_DIR}/services-tts)
 
 if(PHOENIX_BUILD_SIM)
     # Qt WebEngine runs the web apps (original webOS apps, Settings, ...).

@@ -41,6 +41,7 @@ public:
     double num(double fallback = 0) const { return m_type == Number ? m_num : fallback; }
     bool boolean(bool fallback = false) const { return m_type == Bool ? m_bool : fallback; }
     const std::vector<Json> &items() const { return m_items; }
+    const std::vector<std::pair<std::string, Json>> &members() const { return m_members; }
 
 private:
     friend class JsonParser;

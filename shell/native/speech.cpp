@@ -3,7 +3,12 @@
 
 #include "speech.h"
 
+#include <QCoreApplication>
+#include <QDir>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QProcess>
 #include <QStandardPaths>
 
@@ -25,18 +30,64 @@ void Speech::setCommand(const QStringList &c)
     emit commandChanged();
 }
 
-QStringList Speech::resolved() const
+void Speech::setVoice(const QString &v)
 {
-    if (!m_command.isEmpty()) {
-        const QString p = m_command.first();
-        const QString found = QFileInfo(p).isAbsolute() ? (QFileInfo(p).isExecutable() ? p : QString())
-                                                        : QStandardPaths::findExecutable(p);
-        if (found.isEmpty())
-            return {};
-        QStringList c = m_command;
-        c[0] = found;
-        return c;
+    if (v == m_voice)
+        return;
+    m_voice = v;
+    emit voiceChanged();
+}
+
+QString Speech::kittenProgram()
+{
+    // PHOENIX_TTS_PROGRAM (tests, another build); beside phoenix-sim in the
+    // build tree; on a device phoenix-shell installs it into /usr/bin.
+    const QString given = qEnvironmentVariable("PHOENIX_TTS_PROGRAM");
+    if (!given.isEmpty())
+        return QFileInfo(given).isExecutable() ? given : QString();
+    const QString beside = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("phoenix-tts"));
+    if (QFileInfo(beside).isExecutable())
+        return beside;
+    return QStandardPaths::findExecutable(QStringLiteral("phoenix-tts"));
+}
+
+bool Speech::kittenReady() const
+{
+    if (m_kitten >= 0)
+        return m_kitten == 1;
+    m_kitten = 0;
+    const QString program = kittenProgram();
+    if (program.isEmpty())
+        return false;
+    // Its --check finds the model, the dictionary and ONNX Runtime without
+    // loading the model (a few milliseconds), once.
+    QProcess p;
+    p.start(program, { QStringLiteral("--check") });
+    if (!p.waitForFinished(5000)) {
+        p.kill();
+        p.waitForFinished(1000);
+        return false;
     }
+    const QJsonObject r = QJsonDocument::fromJson(p.readAllStandardOutput()).object();
+    if (!r.value(QStringLiteral("ok")).toBool()) {
+        qInfo("Speech: Kitten TTS cannot speak here: %s", qPrintable(r.value(QStringLiteral("error")).toString()));
+        return false;
+    }
+    m_kittenVoices.clear();
+    for (const QJsonValue &v : r.value(QStringLiteral("voices")).toArray())
+        m_kittenVoices << v.toString();
+    m_kitten = 1;
+    return true;
+}
+
+QStringList Speech::voices() const
+{
+    return m_command.isEmpty() && kittenReady() ? m_kittenVoices : QStringList();
+}
+
+// The speech programs before Kitten, in the order they are looked for.
+QStringList Speech::fallback() const
+{
     const QString espeak = QStandardPaths::findExecutable(QStringLiteral("espeak-ng"));
     if (!espeak.isEmpty())
         return { espeak, QStringLiteral("-v"), QStringLiteral("%l"), QStringLiteral("--stdin") };
@@ -51,32 +102,73 @@ QStringList Speech::resolved() const
     return {};
 }
 
+QStringList Speech::resolved(const QString &lang) const
+{
+    if (!m_command.isEmpty()) {
+        const QString p = m_command.first();
+        const QString found = QFileInfo(p).isAbsolute() ? (QFileInfo(p).isExecutable() ? p : QString())
+                                                        : QStandardPaths::findExecutable(p);
+        if (found.isEmpty())
+            return {};
+        QStringList c = m_command;
+        c[0] = found;
+        return c;
+    }
+    // Kitten speaks English (its phonemes are English); other languages go
+    // to the fallback (espeak-ng speaks many).
+    if ((lang.isEmpty() || lang.startsWith(QLatin1String("en"))) && kittenReady())
+        return { kittenProgram(), QStringLiteral("--voice"), QStringLiteral("%v") };
+    return fallback();
+}
+
 QString Speech::engine() const
 {
     const QStringList c = resolved();
-    return c.isEmpty() ? QString() : QFileInfo(c.first()).fileName();
+    if (c.isEmpty())
+        return QString();
+    const QString name = QFileInfo(c.first()).fileName();
+    return name == QLatin1String("phoenix-tts") ? QStringLiteral("Kitten TTS") : name;
 }
 
-bool Speech::speak(const QString &text, const QString &lang)
+bool Speech::speak(const QString &text, const QString &lang, const QString &voice)
 {
-    const QStringList c = resolved();
+    const QString l = lang.isEmpty() ? QStringLiteral("en") : lang.left(5);
+    const QStringList c = resolved(l);
     if (c.isEmpty() || text.trimmed().isEmpty())
         return false;
     stop();
+    return run(c, text, l, voice.isEmpty() ? m_voice : voice);
+}
+
+bool Speech::run(const QStringList &c, const QString &text, const QString &lang, const QString &voice)
+{
     QStringList args = c.mid(1);
-    const QString l = lang.isEmpty() ? QStringLiteral("en") : lang.left(5);
-    for (QString &a : args)
-        a.replace(QStringLiteral("%l"), l);
+    for (QString &a : args) {
+        a.replace(QStringLiteral("%l"), lang);
+        a.replace(QStringLiteral("%v"), voice);
+    }
+    const bool kitten = m_command.isEmpty() && QFileInfo(c.first()).fileName() == QLatin1String("phoenix-tts");
     auto *p = new QProcess(this);
     p->setProgram(c.first());
     p->setArguments(args);
+    // Its one line about what it said and how fast goes to the log.
     p->setProcessChannelMode(QProcess::ForwardedErrorChannel);
     p->setStandardOutputFile(QProcess::nullDevice());
-    connect(p, &QProcess::finished, this, [this, p]() {
+    connect(p, &QProcess::finished, this, [this, p, kitten, text, lang, voice](int code, QProcess::ExitStatus status) {
         if (m_process != p)
             return;
         m_process = nullptr;
         p->deleteLater();
+        // phoenix-tts could not speak after all (3: no model or ONNX
+        // Runtime; 4: no sound output): the same words with the fallback.
+        const QStringList other = fallback();
+        if (kitten && status == QProcess::NormalExit && (code == 3 || code == 4) && !other.isEmpty()) {
+            qInfo("Speech: Kitten TTS could not speak; %s instead", qPrintable(QFileInfo(other.first()).fileName()));
+            if (code == 3)
+                m_kitten = -1;  // look again next time (the model may come)
+            if (run(other, text, lang, voice))
+                return;
+        }
         emit speakingChanged();
         emit finished();
     });
@@ -88,11 +180,13 @@ bool Speech::speak(const QString &text, const QString &lang)
         emit speakingChanged();
         emit finished();
     });
+    const bool wasSpeaking = m_process != nullptr;
     m_process = p;
     p->start();
     p->write(text.toUtf8());
     p->closeWriteChannel();
-    emit speakingChanged();
+    if (!wasSpeaking)
+        emit speakingChanged();
     return true;
 }
 
