@@ -105,6 +105,38 @@ Item {
     property string threadId: ""
     property var messages: []
     property bool busy: false
+    // The on-device model at work on the question ({stage, since, until}
+    // from the service's threads: apps/assistant/service/assistant.js
+    // bounded), read each second while busy; what it is doing, for how
+    // long and when it will give up, under the dots, as the Assistant app
+    // says it (apps/assistant/src/App.tsx Working).
+    property var working: null
+    property real workingNow: 0
+    readonly property string workingText: {
+        var w = working;
+        if (!w || !busy)
+            return "";
+        var secs = function (ms) { return Math.max(0, Math.round(ms / 1000)); };
+        var what = w.stage === "starting" ? qsTr("Starting the on-device model") : qsTr("Thinking it over on this device");
+        return what + " \u00b7 " + qsTr("%1 s").arg(secs(workingNow - w.since))
+            + (workingNow < w.until ? " " + qsTr("(I'll stop in %1 s)").arg(secs(w.until - workingNow)) : "");
+    }
+    onBusyChanged: if (!busy) working = null
+    Timer {
+        id: workingPoll
+        interval: 1000
+        repeat: true
+        triggeredOnStart: true
+        running: ov.busy && ov.open
+        onTriggered: ov._call("threads", {}, function (r) {
+            if (!ov.busy || !r || r.returnValue === false)
+                return;
+            var id = ov.threadId !== "" ? ov.threadId : r.current;
+            var t = (r.threads || []).filter(function (x) { return x.id === id; })[0];
+            ov.working = t && t.working ? t.working : null;
+            ov.workingNow = Date.now();
+        })
+    }
     property bool listening: false
     property string status: ""          // a line under the conversation: "Listening…", an error
 
@@ -996,7 +1028,8 @@ Item {
                 property real appear: 1
                 property real choicesAppear: 1
                 width: list.width
-                height: bubble.height + (found.visible ? found.height + Theme.px(6) : 0) + (actions.visible ? actions.height + Theme.px(6) : 0)
+                height: bubble.height + (workingLine.visible ? workingLine.height + Theme.px(4) : 0)
+                        + (found.visible ? found.height + Theme.px(6) : 0) + (actions.visible ? actions.height + Theme.px(6) : 0)
 
                 Component.onCompleted: {
                     if (ov._arrives(modelData)) {
@@ -1086,10 +1119,26 @@ Item {
                         }
                     }
                 }
+                // The on-device model at work: what, how long, when it gives up.
+                Text {
+                    id: workingLine
+                    objectName: "assistantWorking"
+                    visible: row.thinking && ov.workingText !== ""
+                    anchors.top: bubble.bottom
+                    anchors.topMargin: Theme.px(4)
+                    anchors.left: parent.left
+                    anchors.leftMargin: Theme.px(4)
+                    width: list.width * 0.86
+                    text: ov.workingText
+                    wrapMode: Text.Wrap
+                    color: "#B0FFFFFF"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.px(12)
+                }
                 // What it found (photos, events, contacts): a tap opens its app on it.
                 AssistantAttachments {
                     id: found
-                    anchors.top: bubble.bottom
+                    anchors.top: workingLine.visible ? workingLine.bottom : bubble.bottom
                     anchors.topMargin: Theme.px(6)
                     anchors.left: parent.left
                     maxWidth: list.width * 0.86
