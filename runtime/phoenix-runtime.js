@@ -4393,7 +4393,23 @@
             return { suggestions: kb.WordSuggestions !== false, autoCorrect: kb.AutoCorrect !== false,
                      swipe: kb.SwipeTyping !== false, spaces2period: kb.spaces2period !== false,
                      forgetWords: typeof kb.ForgetWords === "number" ? kb.ForgetWords : 0,
-                     shortcuts: shortcuts, shortcutsOn: ti.shortcutChecking !== "off" };
+                     shortcuts: shortcuts, shortcutsOn: ti.shortcutChecking !== "off",
+                     userWords: dictionaryWords(ti), removedWords: removedWords(ti) };
+        }
+        // Settings > Text Assist > Personal Dictionary (Phoenix): the words the
+        // user added (x_palm_textinput.userWords), never corrected and
+        // suggested, and the learned words deleted there, lower case -> when
+        // (removedWords; the keyboard drops each once).
+        var DICTIONARY_WORD = /^[A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F']*$/;
+        function dictionaryWords(ti) {
+            return (Array.isArray(ti.userWords) ? ti.userWords : []).filter(function (w) {
+                return typeof w === "string" && w.length <= 48 && DICTIONARY_WORD.test(w);
+            });
+        }
+        function removedWords(ti) {
+            var out = {}, r = ti.removedWords && typeof ti.removedWords === "object" ? ti.removedWords : {};
+            Object.keys(r).forEach(function (w) { if (typeof r[w] === "number" && r[w] > 0) out[w.toLowerCase()] = r[w]; });
+            return out;
         }
 
         function changed() {
@@ -5212,7 +5228,7 @@
                     var o = store.get("orientation", null) || {};
                     // gestureArea (Phoenix): the shell says whether there is one.
                     return ok({ ime: { visible: !!store.get("imeVisible", false) }, orientation: { ui: o.ui || "up", device: o.device || "up" },
-                                gestureArea: !!store.get("gestureArea", false) });
+                                gestureArea: !!store.get("gestureArea", false), learnedWords: store.get("learnedWords", []) });
                 });
             },
             "/getDeviceLockMode": function (p, reply, ctx) {
@@ -5270,6 +5286,8 @@
                         l.numRetries = l.policy.retriesLeft;
                         wipe = l.numRetries === 0;
                     }
+                    // learnedWords (Phoenix): what the keyboard learned that
+                    // its word list lacks, as the shell last said.
                     l.lastFailure = now;
                 } else if (st.a && !st.pending) {
                     if (counted) l.policy.retriesLeft = st.a.maxRetries;
@@ -6012,6 +6030,12 @@
                 event("webOSRelaunch", params || {});
             if (refresh)
                 event("phoenixRefresh", params || {});
+            // The words the keyboard learned that its list lacks (Settings >
+            // Text Assist > Personal Dictionary; getSystemStatus learnedWords).
+            if (Array.isArray(st.learnedWords) && toJson(st.learnedWords) !== toJson(store.get("learnedWords", []))) {
+                store.set("learnedWords", st.learnedWords.filter(function (w) { return typeof w === "string"; }));
+                changed();
+            }
             return true;
         };
 
@@ -6022,6 +6046,18 @@
 
     // ================================================================================
     // Phone and Messaging services (simulated legacy webOS APIs used by apps/phone
+                // The keyboard's "Add" (after backspace put back a corrected
+                // word): into the personal dictionary.
+                if (typeof st.dictionaryWordAdded === "string" && DICTIONARY_WORD.test(st.dictionaryWordAdded)) {
+                    var ti = prefs().x_palm_textinput && typeof prefs().x_palm_textinput === "object" ? prefs().x_palm_textinput : {};
+                    var w = st.dictionaryWordAdded, words = dictionaryWords(ti);
+                    if (!words.some(function (x) { return x.toLowerCase() === w.toLowerCase(); })) {
+                        var next = {};
+                        Object.keys(ti).forEach(function (k) { next[k] = ti[k]; });
+                        next.userWords = words.concat([w]);
+                        sys["/setPreferences"]({ x_palm_textinput: next }, function () {}, { cancelled: function () { return false; } });
+                    }
+                }
     // and apps/messaging)
     // ================================================================================
     //

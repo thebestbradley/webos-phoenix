@@ -1767,7 +1767,7 @@ Item {
     // not the pages' to overrule.
     readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse", "launcherLayout", "gestureArea", "dockMode",
                                         "debugOverlays", "usbHost", "gamepads", "usbDrives", "formFactor", "screen",
-                                        "marketplaceCatalog"]
+                                        "marketplaceCatalog", "learnedWords"]
     property var _shellStatus: ({})
 
     function pushSystemStatus(changes) {

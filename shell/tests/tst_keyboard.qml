@@ -825,6 +825,90 @@ Item {
             kb.forgetWordsAt = 0;
         }
 
+        // Settings > Text Assist > Personal Dictionary (x_palm_textinput
+        // userWords): its words are never corrected and are suggested; a
+        // learned word deleted there (removedWords) is forgotten.
+        function test_personalDictionary() {
+            var before = sys.textAssist;
+            kb.textAssistData = "";
+            function assist(userWords, removedWords) {
+                sys.textAssist = { suggestions: true, autoCorrect: true, swipe: true, spaces2period: true, forgetWords: 0,
+                                   shortcuts: {}, shortcutsOn: true, userWords: userWords, removedWords: removedWords };
+            }
+            assist(["teh", "Zorblax"], {});
+            showKeyboard();
+            type(["t", "e", "h"]);
+            verify(!kb.candidates.some(function (c) { return c.kind === "correction"; }), JSON.stringify(kb.candidates));
+            tapKey("Space");
+            compare(field.text, "teh ");
+            // Suggested as written.
+            type(["z", "o", "r", "b"]);
+            verify(candidateTexts().indexOf("Zorblax") > 0, JSON.stringify(candidateTexts()));
+            tapCandidate("Zorblax");
+            compare(field.text, "teh Zorblax ");
+
+            // Learned (typed twice), listed for Settings, suggested; then
+            // deleted from the dictionary: forgotten, no longer suggested.
+            field.text = "";
+            assist([], {});
+            for (var n = 0; n < 2; ++n)
+                type(["k", "w", "y", "j", "i", "b", "o", "Space"]);
+            compare(kb.learnedWords, ["kwyjibo"]);
+            verify(kb.learnedWords.indexOf("see") < 0, "words of the list are not listed");
+            type(["k", "w", "y", "j"]);
+            verify(candidateTexts().indexOf("kwyjibo") > 0, JSON.stringify(candidateTexts()));
+            type(["Backspace", "Backspace", "Backspace", "Backspace"]);
+            assist([], { kwyjibo: Date.now() });
+            compare(kb.learnedWords, []);
+            type(["k", "w", "y", "j"]);
+            verify(candidateTexts().indexOf("kwyjibo") < 0, JSON.stringify(candidateTexts()));
+            // Applied once: typed again, it is learned again.
+            type(["Backspace", "Backspace", "Backspace", "Backspace"]);
+            for (n = 0; n < 2; ++n)
+                type(["k", "w", "y", "j", "i", "b", "o", "Space"]);
+            compare(kb.learnedWords, ["kwyjibo"]);
+            sys.textAssist = before;
+            kb.textAssistData = "";
+        }
+
+        // Backspace putting back a word a correction replaced offers "Add" at
+        // the end of the bar; tapped, the word joins the personal dictionary
+        // (the system's x_palm_textinput.userWords) and is not corrected again.
+        function test_addToDictionaryAfterUndo() {
+            var before = sys.textAssist;
+            var added = [];
+            function onAdded(w) { added.push(w); }
+            sys.dictionaryWordAdded.connect(onAdded);
+            showKeyboard();
+            type(["t", "e", "h", "Space"]);
+            compare(field.text.toLowerCase(), "the ");
+            tapKey("Backspace");
+            compare(field.text.toLowerCase(), "teh");
+            var last = kb.candidates[kb.candidates.length - 1];
+            compare(last.kind, "add");
+            compare(last.text.toLowerCase(), "teh");
+            tapCandidate(last.text);
+            compare(field.text.toLowerCase(), "teh", "the text is left alone");
+            compare(added.length, 1);
+            verify(sys.textAssist.userWords.some(function (w) { return w.toLowerCase() === "teh"; }), JSON.stringify(sys.textAssist.userWords));
+            verify(!kb.candidates.some(function (c) { return c.kind === "add"; }), "offered once");
+            tapKey("Space");
+            type(["t", "e", "h", "Space"]);
+            compare(field.text.toLowerCase(), "teh teh ");
+            // A shortcut put back is not offered.
+            sys.textAssist = { suggestions: true, autoCorrect: true, swipe: true, spaces2period: true, forgetWords: 0,
+                               shortcuts: { omw: "On my way" }, shortcutsOn: true, userWords: [], removedWords: {} };
+            type(["o", "m", "w", "Space", "Backspace"]);
+            verify(/omw$/.test(field.text), field.text);
+            verify(!kb.candidates.some(function (c) { return c.kind === "add"; }), JSON.stringify(kb.candidates));
+            // Nor after a word typed on.
+            tapKey("Space");
+            type(["t", "e", "h", "Space", "Backspace", "s"]);
+            verify(!kb.candidates.some(function (c) { return c.kind === "add"; }), JSON.stringify(kb.candidates));
+            sys.dictionaryWordAdded.disconnect(onAdded);
+            sys.textAssist = before;
+        }
+
         // Settings > Text Assist > Keyboards: the language key (Shift on the
         // symbol page) goes to the next keyboard; its layout and words follow.
         function test_keyboardsAndLanguageKey() {

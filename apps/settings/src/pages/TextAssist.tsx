@@ -19,15 +19,19 @@
 // (Phoenix; the owner, 8 October 2026): the keys' look, system preference
 // keyboardStyle: "auto" (the phone's black keys on a phone, the TouchPad's on
 // a tablet), "black" or "touchpad" on every device; the keyboard changes at
-// once.
+// once. Personal Dictionary (PersonalDictionary.tsx): the words the user
+// added and the ones the keyboard learned, and Forget Learned Words.
 //
 // Launch params {page: "textassist"}; com.palm.app.textassist opens it.
 
 import { useState } from "react";
 import { keyboardPrefs, system, withKeyboardPrefs, type SystemPreferences, type VirtualKeyboardPrefs } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
-import { Button, Dialog, Group, ListSelector, Note, Page, PageHeader, Row, ToggleButton } from "@phoenix/ui";
+import { Group, ListSelector, Note, Page, PageHeader, Row, ToggleButton } from "@phoenix/ui";
+import { useBack } from "../nav";
+import { PersonalDictionaryPage } from "./PersonalDictionary";
 import { ShortcutsSection } from "./TextAssistShortcuts";
+import { textInputPrefs } from "./shortcuts";
 
 /** The keyboards there are: a layout and the language of its words ("none": no suggestions or corrections). */
 export const KEYBOARDS = [
@@ -52,17 +56,11 @@ export const keyboardStyle = (v: unknown): KeyboardStyle => (v === "black" || v 
 export function TextAssistPage() {
     const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(["x_palm_virtualkeyboard_prefs", "keyboardShortcuts", "x_palm_textinput", "keyboardNumberRow", "keyboardStyle"], cb, err), []).value ?? {};
     const kb = keyboardPrefs(prefs.x_palm_virtualkeyboard_prefs);
-    const [confirm, setConfirm] = useState(false);
-    const [forgotten, setForgotten] = useState(false);
+    const [dictionary, setDictionary] = useState(false);
+    useBack(() => { setDictionary(false); return true; }, dictionary);
     const save = (changes: Partial<VirtualKeyboardPrefs>) =>
         system.setPreferences({ x_palm_virtualkeyboard_prefs: withKeyboardPrefs(prefs.x_palm_virtualkeyboard_prefs, changes) });
     const set = (changes: Partial<VirtualKeyboardPrefs>) => void save(changes);
-    // Said once it is saved.
-    const forget = async () => {
-        setConfirm(false);
-        await save({ ForgetWords: Date.now() });
-        setForgotten(true);
-    };
 
     // In the order of KEYBOARDS, at least one.
     const enabled = kb.keyboards && kb.keyboards.length ? kb.keyboards : DEFAULT_KEYBOARDS;
@@ -79,6 +77,9 @@ export function TextAssistPage() {
         </Row>
     );
 
+    if (dictionary)
+        return <PersonalDictionaryPage prefs={prefs} />;
+    const added = textInputPrefs(prefs.x_palm_textinput).userWords?.length ?? 0;
     return (
         <Page>
             <PageHeader title="Text Assist" icon="icons/textassist.png" />
@@ -87,6 +88,8 @@ export function TextAssistPage() {
                 {toggle("Auto-correct", "AutoCorrect", "ta-autocorrect", "When you type a space")}
                 {toggle("Swipe typing", "SwipeTyping", "ta-swipe", "Slide across the letters")}
                 {toggle("Quick period", "spaces2period", "ta-period", "Two spaces type \". \"")}
+                <Row title="Personal Dictionary" subtitle={added === 1 ? "1 word added" : added ? `${added} words added` : "Your own words, and the ones it learned"}
+                     chevron testId="ta-dictionary" onClick={() => setDictionary(true)} />
             </Group>
             <ShortcutsSection prefs={prefs} />
             <Group label="Layout">
@@ -122,23 +125,6 @@ export function TextAssistPage() {
                     onChange={(v) => void system.setPreferences({ keyboardShortcuts: v })} />
                 <Note>Hold Ctrl (⌘ on a Mac) for iPad style, or Super for desktop style, for a moment to see them all.</Note>
             </Group>
-
-            <Group label="Learned words">
-                <Button onClick={() => setConfirm(true)} data-testid="ta-forget">Forget Learned Words</Button>
-            </Group>
-            <Note>
-                <span data-testid="ta-learned-note">
-                    {forgotten ? "Learned words forgotten." : "The keyboard learns the words you type, to suggest them. They stay on this device."}
-                </span>
-            </Note>
-            {confirm && (
-                <Dialog open title="Forget Learned Words?" onClose={() => setConfirm(false)} testId="ta-forget-dialog"
-                        message="The keyboard forgets the words and phrases it learned from your typing.">
-                    <Button variant="negative" onClick={() => void forget()}
-                            data-testid="ta-forget-confirm">Forget</Button>
-                    <Button variant="dark" onClick={() => setConfirm(false)}>Cancel</Button>
-                </Dialog>
-            )}
         </Page>
     );
 }

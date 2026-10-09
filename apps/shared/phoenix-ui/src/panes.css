@@ -148,6 +148,11 @@
 
 .pui-swipeable { position: relative; overflow: hidden; }
 .pui-swipeable-item { touch-action: pan-y; }
+/* A Row in one keeps the list's lines between rows (styles.css .pui-row),
+   which :first-child / :last-child inside the item would drop. */
+.pui-swipeable-item > .pui-row { border-top: 1px solid #fff; border-bottom: 1px solid silver; }
+.pui-swipeable:first-child > .pui-swipeable-item > .pui-row { border-top: 0; }
+.pui-swipeable:last-child > .pui-swipeable-item > .pui-row { border-bottom: 0; }
 .pui-confirm-prompt {
     position: absolute;
     inset: 0;

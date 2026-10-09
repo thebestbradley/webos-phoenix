@@ -81,12 +81,31 @@ QtObject {
     // Settings > Text Assist: {suggestions, autoCorrect, swipe, spaces2period,
     // forgetWords (when the learned words were forgotten, ms)}.
     property var textAssist: ({ suggestions: true, autoCorrect: true, swipe: true, spaces2period: true, forgetWords: 0,
-                                shortcuts: {}, shortcutsOn: true })
+                                shortcuts: {}, shortcutsOn: true, userWords: [], removedWords: {} })
+    // The keyboard's "Add" (after backspace put back a corrected word): the
+    // word joins the personal dictionary here at once, and goes to the
+    // runtime (dictionaryWordAdded: sim.qml sends it on), which keeps it in
+    // x_palm_textinput.userWords.
+    signal dictionaryWordAdded(string word)
+    function addDictionaryWord(word) {
+        var w = String(word || "").trim();
+        if (!w)
+            return;
+        var t = {};
+        for (var k in textAssist)
+            t[k] = textAssist[k];
+        var words = (t.userWords || []).filter(function (x) { return x.toLowerCase() !== w.toLowerCase(); });
+        t.userWords = words.concat([w]);
+        textAssist = t;
+        dictionaryWordAdded(w);
+    }
     // Settings > Text Assist > Keyboards: [{layout, language}] turned on,
     // and the one in use (the keyboard's language key picks another).
     property var keyboards: [{ layout: "qwerty", language: "en" }]
     property var keyboard: ({ layout: "qwerty", language: "en" })
     property string ringtone: "/usr/palm/sounds/ringtone.mp3"
+    // userWords (the personal dictionary), removedWords (learned words
+    // deleted there: lower case -> ms).
     property string alerttone: "/usr/palm/sounds/alert.wav"
     property string notificationtone: "/usr/palm/sounds/notification.wav"
     // The clock's format (system preference timeFormat "HH24").

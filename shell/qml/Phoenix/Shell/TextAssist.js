@@ -19,6 +19,13 @@
 //   setUserShortcuts(map), shortcut(word)
 //                         the user's own shortcuts (Settings > Text Assist >
 //                         Shortcuts): "omw" for "On my way"
+//   setDictionary(words), addToDictionary(word), inDictionary(word)
+//                         the personal dictionary (Settings > Text Assist >
+//                         Personal Dictionary): words the user added, never
+//                         corrected away, suggested as they are written
+//   learnedWords(), removeLearned(word, at)
+//                         the words it learned that its list lacks, and one
+//                         of them dropped (removed from the dictionary)
 //
 // Corrections are words one edit away (a letter added, missing, swapped
 // with its neighbour, or another letter, cheaper when the keys are
@@ -135,7 +142,7 @@ function _build(Words) {
 
 // words: lw -> {w, n}; next: prev -> {lw: n}; forgotten: when the user last
 // asked for them to be forgotten (ms).
-var _user = { words: {}, next: {}, forgotten: 0 };
+var _user = { words: {}, next: {}, forgotten: 0, removed: {} };
 var USER_WORDS_MAX = 2000;
 var NEXT_MAX = 400;
 
@@ -143,12 +150,75 @@ function userData() { return JSON.stringify(_user); }
 function setUserData(json) {
     var u = null;
     try { u = JSON.parse(json || "{}"); } catch (e) { u = null; }
-    _user = { words: (u && u.words) || {}, next: (u && u.next) || {}, forgotten: (u && u.forgotten) || 0 };
+    _user = { words: (u && u.words) || {}, next: (u && u.next) || {}, forgotten: (u && u.forgotten) || 0,
+              removed: (u && u.removed) || {} };
 }
-function forget(at) { _user = { words: {}, next: {}, forgotten: at || Date.now() }; }
+function forget(at) { _user = { words: {}, next: {}, forgotten: at || Date.now(), removed: _user.removed || {} }; }
 function forgottenAt() { return _user.forgotten || 0; }
 // How many words it has learned.
 function learnedCount() { return Object.keys(_user.words).length; }
+// The words it learned that are not in its list (typed twice, so words to
+// it: isWord), as written, sorted: what Settings > Text Assist > Personal
+// Dictionary lists as learned. "the" typed a hundred times is not one.
+function learnedWords() {
+    _load();
+    return Object.keys(_user.words).filter(function (k) {
+        return _user.words[k].n >= 2 && !_byLower[k] && !_known[k];
+    }).sort().map(function (k) { return _user.words[k].w; });
+}
+// Settings > Text Assist > Personal Dictionary: a learned word deleted at
+// `at` (ms): dropped, with what followed it, once (the time is kept, as
+// forget's). Typed again, it is learned again.
+function removeLearned(word, at) {
+    var lw = String(word || "").toLowerCase();
+    if (!lw || !(at > 0) || (_user.removed[lw] || 0) >= at)
+        return false;
+    _user.removed[lw] = at;
+    delete _user.words[lw];
+    delete _user.next[lw];
+    Object.keys(_user.next).forEach(function (p) { delete _user.next[p][lw]; });
+    // Only the latest removals are kept: older ones were applied already.
+    var keys = Object.keys(_user.removed);
+    if (keys.length > REMOVED_MAX) {
+        keys.sort(function (a, b) { return _user.removed[a] - _user.removed[b]; });
+        keys.slice(0, keys.length - REMOVED_MAX).forEach(function (k) { delete _user.removed[k]; });
+    }
+    return true;
+}
+var REMOVED_MAX = 500;
+
+// ---- The personal dictionary ------------------------------------------------------
+
+// The words the user added (system preference x_palm_textinput.userWords,
+// Settings > Text Assist > Personal Dictionary, or "Add" in the candidate
+// bar after putting back a word a correction replaced): lw -> as written.
+// In every language: they are the user's.
+var _dict = {};
+function setDictionary(words) {
+    _dict = {};
+    (words || []).forEach(function (w) {
+        w = String(w || "").trim();
+        if (w && _learnRe.test(w))
+            _dict[w.toLowerCase()] = w;
+    });
+}
+function addToDictionary(word) {
+    var w = String(word || "").trim();
+    if (!w || !_learnRe.test(w))
+        return false;
+    _dict[w.toLowerCase()] = w;
+    return true;
+}
+function inDictionary(word) { return !!_dict[String(word || "").toLowerCase()]; }
+// The dictionary's words beginning with `lp` that the list lacks.
+function _dictEntries(test) {
+    var out = [];
+    Object.keys(_dict).forEach(function (k) {
+        if (test(k) && !_byLower[k] && !(_user.words[k] && _user.words[k].n >= 2))
+            out.push({ w: _dict[k], lw: k, f: frequency(k) });
+    });
+    return out;
+}
 
 // A word the user typed (and kept: not corrected away), after `prev`.
 function learn(prev, word) {
@@ -191,14 +261,19 @@ function frequency(word) {
     var f = e ? e.f : -1;
     if (u && u.n >= 2)
         f = Math.max(f, 120 + Math.min(80, u.n * 10));
+    // A word of the user's dictionary counts as a common one.
+    if (_dict[lw])
+        f = Math.max(f, 160);
     return f;
 }
 function isWord(word) {
     _load();
     var lw = String(word).toLowerCase();
-    return !!(_byLower[lw] || _known[lw] || (_user.words[lw] && _user.words[lw].n >= 2));
+    return !!(_byLower[lw] || _known[lw] || _dict[lw] || (_user.words[lw] && _user.words[lw].n >= 2));
 }
 function _written(lw) {
+    if (_dict[lw])
+        return _dict[lw];
     var u = _user.words[lw];
     if (u && u.n >= 2 && !_byLower[lw])
         return u.w;
@@ -230,6 +305,7 @@ function _completions(lp, max) {
         if (k.indexOf(lp) === 0 && !_byLower[k] && _user.words[k].n >= 2)
             out.push({ w: _user.words[k].w, lw: k, f: frequency(k) });
     });
+    out = out.concat(_dictEntries(function (k) { return k.indexOf(lp) === 0; }));
     out.sort(function (a, b) { return frequency(b.lw) - frequency(a.lw); });
     return out.slice(0, max);
 }
@@ -488,6 +564,7 @@ function swipe(path, keys, keyWidth, max) {
             if (k.charAt(0) === c && !_byLower[k] && _user.words[k].n >= 2)
                 list.push({ w: _user.words[k].w, lw: k, f: frequency(k) });
         });
+        list = list.concat(_dictEntries(function (k) { return k.charAt(0) === c; }));
         for (var j = 0; j < list.length; ++j) {
             // Its keys: accented letters on their plain letter's key.
             var e = list[j], lw = e.lw.replace(/'/g, "").split("").map(_base).join("");

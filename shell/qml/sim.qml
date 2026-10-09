@@ -1540,6 +1540,14 @@ Item {
         interval: 2000
         onTriggered: {
             if (typeof simSettings !== "undefined")
+        // Settings > Text Assist > Personal Dictionary lists them
+        // (getSystemStatus learnedWords).
+        function onLearnedWordsChanged() { windows.pushSystemStatus({ learnedWords: shell.keyboard.learnedWords }); }
+    }
+    // The keyboard's "Add": the runtime keeps it in x_palm_textinput.userWords.
+    Connections {
+        target: status
+        function onDictionaryWordAdded(word) { windows.pushSystemStatus({ dictionaryWordAdded: word }); }
                 simSettings.setValue("keyboard/words", shell.keyboard.textAssistData);
         }
     }
