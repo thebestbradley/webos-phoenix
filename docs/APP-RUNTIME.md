@@ -97,7 +97,15 @@ service bus). `runtime/phoenix-runtime.js` runs before the app's own scripts:
   shell also says when a card gains or leaves the front, as a
   `phoenixcardactivation` event with `{active}`, because a card minimized to
   card view stays visible), cross-app window params, and aliases for the
-  Prelude font.
+  Prelude font. `PalmSystem.runTextIndexer(html, options)` (Enyo's
+  `enyo.string.runTextIndexer`: Memos, Calendar's subjects and notes,
+  Email's subject) turns web addresses (`http://...`, `www....`), e-mail
+  addresses and phone numbers in the text into `<a href>` links (http,
+  `mailto:`, `tel:`), leaving tags and existing links alone; `{webLink,
+  schemalessWebLink, emailAddress, phoneNumber}: false` leaves a kind out,
+  as WebAppMgr's `Palm::WebGlobal::runTextIndexerOnHtml` did. Emoticons
+  stay text (their pictures were not released). Tests:
+  `tools/test-links.cjs`.
 
 Pages talk to the shell (launch another app, show a banner) through
 `phoenixHost.postToHost(type, payload)`. In phoenix-sim that arrives as a
@@ -347,6 +355,10 @@ the same Apple Notes-style app in each theme, sharing their notes in db8
   So each demo is an npm project of its own with its own lock file, not a
   workspace of `apps/`, and takes shared code as a built package
   (`install-links`). CMake and CI build them after `apps/`.
+- **On a phone** (narrower than 720 px) one pane shows at a time: the notes,
+  the note over them while one is open (Agate's folder tabs go across the
+  top, as icons; Limestone's folders are a button away, over the notes),
+  and Back closes the note or the folders.
 - **Served like the other built apps**: `dist/` holds `appinfo.json` (from
   `webos-meta/`), the fonts and iLib's data.
 - **Luna calls** go through Enact's `@enact/webos/LS2Request`, on
@@ -843,6 +855,20 @@ buttons, thumbnails and cards with `returnToCaller`. Tests:
 knows neither `behind` nor `returnToCaller` (the card comes to the
 front, with no `$caller`), and Back at an app's root goes to card view,
 as on webOS.
+
+Back that no one takes minimizes the card, as on webOS: WebAppMgr handed a
+Back the page did not handle back to LunaSysMgr (`WindowedWebApp.cpp`
+`View_Host_ReturnedKeyEvent`), and `SystemUiController::slotKeyEventRejected`
+minimized the active card. `runtime.back` answers whether the app took it
+(the Escape keydown or keyup default-prevented, or the `$caller` close above);
+`WebAppWindow.back` hands a `false` to the shell (`backUnhandled`), which
+minimizes the card if it is still the one in front. A site (a PWA) with no
+history left answers `false` at once. Enyo 1.0 apps stop the key when they go
+back (`enyo.gesture` passes `preventDefault` to the `back` event, `Pane.back`
+calls it), Phoenix apps when a `useBack` handler returns true, Ionic Notes
+everywhere but at its notes list; Flutter's and Enact's first screens leave it.
+The Terminal keeps Back as Esc for the shell, as the Preware Terminal did.
+Tests: `tools/test-back.cjs`, `tst_shell.qml` `test_backAtTheTopLevelMinimizes`.
 
 ## Settings
 
@@ -2480,7 +2506,7 @@ part through `runtime.hostOp`, phoenix-sim's `SimWindowSource` or
 | `getUserInstalledAppSizes` | `{apps: [{appName, size (KB)}], totalSize}` |
 | `revoke {item: '{"payload": {signature, appId: [...]}}'}` | removes the apps (cause REVOKED) when a trusted Marketplace catalog's Ed25519 key signed their ids; else `verify failed` |
 | `com.palm.applicationManager/addLaunchPoint`, `removeLaunchPoint` | above |
-| `running`, `close {processId}` | the apps with cards, headless or kept alive, with process ids; close ends one for good |
+| `running`, `close {processId}` | the apps with cards, headless or kept alive, with process ids; close ends one for good. `launch` and `open` reply the process id of the app they started (the same id; none without a shell) |
 | `install {target}`, `rescan` | install a package file; read the apps again |
 | `getSizeOfApps {appIds}` | `{<appId>: bytes}` |
 | `listPendingLaunchPoints` | the apps being installed |

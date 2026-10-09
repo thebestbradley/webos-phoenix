@@ -13,6 +13,7 @@
 
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -88,8 +89,12 @@ describe("the on-device model", () => {
         expect(existsSync(join(dir, "models", "test-model.gguf.part"))).toBe(false);
         const { baseUrl } = await llm.ensure(model());
         expect(baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/v1$/);
-        // Prompts read 512 tokens at a time: a request given up on ends soon (lib/node-device.js).
-        expect(readFileSync(join(dir, "llama-args"), "utf8")).toMatch(/ -np 1 .* -b 512\b/);
+        // 4,096 tokens in the default 16-bit cache (twice as fast to read a
+        // prompt as 8,192 in 8 bits); prompts read 512 tokens at a time: a
+        // request given up on ends soon (lib/node-device.js).
+        const used = readFileSync(join(dir, "llama-args"), "utf8");
+        expect(used).toMatch(/ -c 4096 -np 1 .* -b 512\b/);
+        expect(used).not.toMatch(/-ctk|-ctv/);
         const rq = providers.chatRequest({ type: "local", baseUrl, model: "test-model" },
             { system: "s", messages: [{ role: "user", text: "turn on the torch" }], tools: [{ name: "toggle", description: "t", parameters: { type: "object" } }] }, "");
         const r = await createRequest()(rq);
@@ -99,6 +104,60 @@ describe("the on-device model", () => {
         expect((await llm.status()).installed).toEqual([]);
         expect((await llm.status()).running).toBe(false);
     });
+
+    // The service gone, its llama-server goes too (lib/node-device.js):
+    // on SIGTERM; killed outright, through phoenix-pdeath (services/pdeath,
+    // built here with cc) or setpriv, or else by the next service, from the
+    // pid it kept.
+    it("ends llama-server with the service, however the service ends", async () => {
+        const bin = join(dir, "llama-server");
+        writeFileSync(bin, `#!/bin/sh\nexec "${process.execPath}" "${resolve(__dirname, "test/mock-providers.cjs")}" "$@"\n`);
+        chmodSync(bin, 0o755);
+        const script = join(dir, "service-child.cjs");
+        writeFileSync(script, `const d = require(${JSON.stringify(resolve(__dirname, "lib/node-device.js"))});
+const [models, pidFile, pdeath] = process.argv.slice(2);
+const llm = d.llamaServer({ modelsDir: models, pidFile, server: ${JSON.stringify(bin)}, startTimeoutMs: 20000,
+                            pdeath: pdeath === "none" ? false : pdeath === "default" ? undefined : pdeath });
+llm.ensure({ id: "test-model", name: "Test Model" }).then(() => { console.log("ready " + require("fs").readFileSync(pidFile, "utf8").split(" ")[0]); }, (e) => { console.log("failed " + e.message); });
+setInterval(() => {}, 1000);
+`);
+        const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+        const service = async (pidFile: string, pdeath: string) => {
+            const child = spawn(process.execPath, [script, join(dir, "models"), pidFile, pdeath], { stdio: ["ignore", "pipe", "inherit"] });
+            const line: string = await new Promise((r) => child.stdout.on("data", (d) => r(String(d).trim())));
+            expect(line).toMatch(/^ready \d+$/);
+            return { child, server: Number(line.split(" ")[1]) };
+        };
+        const gone = (pid: number) => vi.waitFor(() => expect(alive(pid)).toBe(false), { timeout: 5000 });
+        mkdirSync(join(dir, "models"), { recursive: true });
+        writeFileSync(join(dir, "models", "test-model.gguf"), FAKE_GGUF);
+        // SIGTERM (run-js-service stopping it).
+        let s = await service(join(dir, "a.pid"), "none");
+        expect(alive(s.server)).toBe(true);
+        s.child.kill("SIGTERM");
+        await gone(s.server);
+        expect(existsSync(join(dir, "a.pid"))).toBe(false);
+        // Killed outright, without setpriv: left, until the next service starts.
+        s = await service(join(dir, "b.pid"), "none");
+        s.child.kill("SIGKILL");
+        await new Promise((r) => setTimeout(r, 300));
+        expect(alive(s.server)).toBe(true);
+        device.llamaServer({ modelsDir: join(dir, "models"), pidFile: join(dir, "b.pid"), server: bin });
+        await gone(s.server);
+        // Killed outright, through phoenix-pdeath: ended by the kernel.
+        const helper = join(dir, "phoenix-pdeath");
+        execFileSync("cc", ["-O2", "-o", helper, resolve(__dirname, "../../../services/pdeath/pdeath.c")]);
+        s = await service(join(dir, "c.pid"), helper);
+        expect(readFileSync(`/proc/${s.server}/cmdline`, "utf8")).toContain("mock-providers.cjs");
+        s.child.kill("SIGKILL");
+        await gone(s.server);
+        // ... or through setpriv, where there is one and no phoenix-pdeath.
+        if (existsSync("/usr/bin/setpriv") || existsSync("/bin/setpriv")) {
+            s = await service(join(dir, "d.pid"), "default");
+            s.child.kill("SIGKILL");
+            await gone(s.server);
+        }
+    }, 30000);
 
     it("ships the same built-in model everywhere: lib/models.js, ./phoenix's fetcher, meta-phoenix's recipe", () => {
         const models = req("./lib/models.js") as { BUILT_IN: string; find(id: string): { url: string; sha256: string; size: number; builtIn: boolean } };

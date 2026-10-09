@@ -48,6 +48,8 @@ Item {
         // true: replies to ask wait in held until release().
         property bool hold: false
         property var held: []
+        // The current thread's working (assistant.js bounded), as threads says it.
+        property var working: null
         function release() { var h = held; held = []; for (var i = 0; i < h.length; ++i) h[i](); }
         function msg(o) { n++; o.id = "m" + n; o.threadId = tid; o.time = n; return o; }
         function lunaCall(uri, params, cb) {
@@ -61,6 +63,9 @@ Item {
                 var t = params.id || tid;
                 reply.thread = t === tid && tid !== "" ? { id: tid } : null;
                 reply.messages = t === tid ? messages.slice() : [];
+            } else if (method === "threads") {
+                reply.threads = tid !== "" ? [{ id: tid, working: working }] : [];
+                reply.current = tid;
             } else if (method === "newThread") {
                 messages = [];
                 tid = "t" + (++threads);
@@ -607,6 +612,27 @@ Item {
             compare(bubble.opacity, 1);
             // The user's words, shown at once, did not come in again.
             compare(bubbles().filter(function (t) { return t === "turn on the flashlight"; }).length, 1);
+        }
+
+        // The on-device model at work: under the dots, what it is doing, for
+        // how long and when it will give up (the service's thread working),
+        // as in the Assistant app; gone with the answer.
+        function test_thinkingSaysWhatTheModelIsDoing() {
+            openByHold();
+            fake.hold = true;
+            var now = Date.now();
+            fake.working = { stage: "thinking", since: now - 12000, until: now + 63000 };
+            type("why is the sky blue");
+            var line = null;
+            tryVerify(function () { line = findChild(overlay, "assistantWorking"); return line && line.visible; }, 3000);
+            verify(/^Thinking it over on this device \u00b7 1[23] s \(I'll stop in 6[23] s\)$/.test(line.text), line.text);
+            fake.working = { stage: "starting", since: now - 1000, until: now + 74000 };
+            tryVerify(function () { return /^Starting the on-device model/.test(line.text); }, 3000);
+            fake.working = null;
+            fake.release();
+            arrived("The flashlight is on.");
+            tryVerify(function () { var t = findChild(overlay, "assistantWorking"); return !t || !t.visible; }, 2000);
+            compare(overlay.working, null);
         }
 
         // Closing goes back into the button: the view stays drawn until

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
 import fs from "node:fs";
 import path from "node:path";
-import { AppMenu, CheckBox, Dialog, Group, ListSelector, PageHeader, Row, Slider, ToggleButton } from "./index";
+import { AppMenu, BackProvider, CheckBox, Dialog, Group, ListSelector, PageHeader, Row, Slider, ToggleButton, useBack } from "./index";
 import { iconSrcSet } from "./layout";
 
 afterEach(cleanup);
@@ -114,6 +114,41 @@ describe("ListSelector", () => {
         fireEvent.click(screen.getByRole("option", { name: "3 minutes" }));
         expect(screen.queryByRole("listbox")).toBeNull();
         expect(screen.getByText("3 minutes")).toBeTruthy();
+    });
+
+    it("takes the back gesture (Escape) that closes its popup, so the card stays", () => {
+        function Picker() {
+            const [v, setV] = useState(1);
+            return <ListSelector title="Turn off after" value={v} onChange={setV}
+                                 options={[{ label: "1 minute", value: 1 }, { label: "3 minutes", value: 3 }]} />;
+        }
+        render(<BackProvider><Picker /></BackProvider>);
+        fireEvent.click(screen.getByRole("button", { name: /Turn off after/ }));
+        expect(screen.getByRole("listbox")).toBeTruthy();
+        const back = new KeyboardEvent("keydown", { key: "Escape", cancelable: true, bubbles: true });
+        act(() => { window.dispatchEvent(back); });
+        expect(screen.queryByRole("listbox")).toBeNull();
+        expect(back.defaultPrevented).toBe(true);
+    });
+});
+
+describe("BackProvider", () => {
+    // runtime.back: a Back no view takes is left to the system, which
+    // minimizes the card (the app's top level).
+    it("leaves Back alone when no view takes it, and takes it for the view that does", () => {
+        function View({ open }: { open: boolean }) {
+            useBack(() => true, open);
+            return null;
+        }
+        const press = () => {
+            const e = new KeyboardEvent("keydown", { key: "Escape", cancelable: true, bubbles: true });
+            act(() => { window.dispatchEvent(e); });
+            return e.defaultPrevented;
+        };
+        const { rerender } = render(<BackProvider><View open={false} /></BackProvider>);
+        expect(press()).toBe(false);
+        rerender(<BackProvider><View open /></BackProvider>);
+        expect(press()).toBe(true);
     });
 });
 

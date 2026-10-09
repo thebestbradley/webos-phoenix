@@ -65,6 +65,67 @@
         });
     })();
 
+    // ---- The text indexer (PalmSystem.runTextIndexer) ------------------------------
+    (function () {
+        // One pass over a stretch of text (no tags): the first kind that
+        // matches at a place wins, e-mail addresses before web addresses
+        // (ada@example.com is not a site) and both before phone numbers.
+        var EMAIL = "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}";
+        // (The text is HTML: an escaped "<", ">" or quote ends an address.)
+        var URLCHAR = "(?:(?!&(?:lt|gt|quot|#39|apos);)[^\\s<>\"'])";
+        var WEB = "(?:https?|ftp|rtsp):\\/\\/" + URLCHAR + "+";
+        var BARE = "www\\.[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+(?:[/?#]" + URLCHAR + "*)?";
+        // North American and international forms: 555-0100, (408) 555-1212,
+        // 408.555.1212, +1 408 555 1212, +44 20 7946 0958, 4085551212; not
+        // dates (2010-11-12) or plain counts.
+        var PHONE = "(?:\\+\\d{1,3}[\\s.-]?)?(?:\\(\\d{2,4}\\)\\s?|\\d{2,4}[\\s.-])?\\d{3,4}[\\s.-]\\d{4}|\\+?\\d{10,13}";
+        var RE = new RegExp("(" + EMAIL + ")|(" + WEB + ")|(" + BARE + ")|((?:^|(?<=[^\\w+]))(?:" + PHONE + ")(?![\\w]))", "g");
+        // Punctuation that ends a sentence, not the address.
+        function trimEnd(s) {
+            var m = /[.,;:!?)\]}'"]+$/.exec(s);
+            if (!m) return [s, ""];
+            // A ")" the address opened stays (wikipedia.org/wiki/Foo_(bar)).
+            var cut = m[0];
+            if (cut.charAt(0) === ")" && s.slice(0, -cut.length).indexOf("(") >= 0) cut = cut.slice(1);
+            return [s.slice(0, s.length - cut.length), cut];
+        }
+        function linkText(text, o) {
+            return text.replace(RE, function (all, email, web, bare, phone) {
+                if (email !== undefined) {
+                    if (o.emailAddress === false) return all;
+                    return '<a href="mailto:' + email + '">' + email + "</a>";
+                }
+                if (web !== undefined || bare !== undefined) {
+                    if (web !== undefined ? o.webLink === false : o.schemalessWebLink === false) return all;
+                    var t = trimEnd(all);
+                    var href = web !== undefined ? t[0] : "http://" + t[0];
+                    return '<a href="' + href.replace(/"/g, "&quot;") + '">' + t[0] + "</a>" + t[1];
+                }
+                if (o.phoneNumber === false) return all;
+                if (all.replace(/\D/g, "").length < 7) return all;
+                var digits = all.replace(/[^\d+]/g, "");
+                return '<a href="tel:' + digits + '">' + all + "</a>";
+            });
+        }
+        runtime.textIndexer = function (html, options) {
+            if (typeof html !== "string" || html === "") return html === undefined || html === null ? "" : String(html);
+            var o = options && typeof options === "object" ? options : {};
+            // Tags pass; text inside an <a> (a link already) too.
+            var parts = html.split(/(<[^>]*>)/), inLink = 0, out = "";
+            for (var i = 0; i < parts.length; i++) {
+                var part = parts[i];
+                if (i % 2 === 1) {
+                    if (/^<a[\s>]/i.test(part)) inLink++;
+                    else if (/^<\/a\s*>/i.test(part) && inLink > 0) inLink--;
+                    out += part;
+                } else {
+                    out += inLink ? part : linkText(part, o);
+                }
+            }
+            return out;
+        };
+    })();
+
     // ---- Host messaging --------------------------------------------------------
 
     var host = global.phoenixHost = global.phoenixHost || {
@@ -408,7 +469,16 @@
         applyLaunchFeedback: function () {},
         simulateMouseClick: function () {},
         useSimulatedMouseClicks: function () {},
-        runTextIndexer: function (text) { return text; },
+        // Links in text an app shows (enyo.string.runTextIndexer: Memos'
+        // notes, Calendar's subjects and notes, Email's subject): web
+        // addresses (http://..., www....), e-mail addresses and phone
+        // numbers become <a href> links (http, mailto:, tel:), which open in
+        // their apps. The text is HTML: tags and existing links stay as
+        // they are. options {webLink, schemalessWebLink, emailAddress,
+        // phoneNumber}: false leaves that kind alone (WebAppMgr's
+        // PalmSystem::runTextIndexer, Palm::WebGlobal::runTextIndexerOnHtml;
+        // enyo-1.0 dom/util.js:310-334). Emoticons stay text.
+        runTextIndexer: function (text, options) { return runtime.textIndexer(text, options); },
         // A sound for the app, without a banner (Email's new-mail sound):
         // LunaSysMgr's BannerMessageHandler played it by the same rules as a
         // banner's (PlaySound event). The shell picks the file and plays it.
@@ -1715,6 +1785,30 @@
     // exhibitions: an app removed since drops out there).
     runtime.exhibitionApps = exhibitionApps;
 
+    // The process id of the app a launch or open has just started (the
+    // host started it from the "launch" message before it reads this
+    // request): the one /running lists and /close takes
+    // (ApplicationManagerService.cpp's launch replies {processId} from
+    // WebAppMgr). "" when the host keeps no processes (no shell, or one
+    // that cannot answer: the launch is answered all the same, and soon).
+    function launchedProcessId(id, params) {
+        if (!runtime.hostOp) return Promise.resolve("");
+        var asked = Promise.resolve().then(function () {
+            return runtime.hostOp("processId", { appId: id, params: params || {} });
+        }).then(function (r) {
+            return r && r.ok && typeof r.processId === "string" ? r.processId : "";
+        }, function () { return ""; });
+        var late = new Promise(function (resolve) { setTimeout(function () { resolve(""); }, 2000); });
+        return Promise.race([asked, late]);
+    }
+    runtime.launchedProcessId = launchedProcessId;
+    function launchedReply(reply, id, params, extra) {
+        launchedProcessId(id, params).then(function (pid) {
+            reply(ok(Object.assign(pid ? { processId: pid } : {}, extra || {})));
+        });
+    }
+    runtime.launchedReply = launchedReply;
+
     register(["com.palm.applicationManager", "com.webos.applicationManager"], {
         // {newCard: true} (Phoenix): another card of the app in a stack of
         // its own, even while one runs (the shell's appRelaunch "new" for
@@ -1734,7 +1828,7 @@
             host.postToHost("launch", Object.assign({ id: appId(p.id), params: params },
                                                     p.newCard === true ? { newCard: true } : {},
                                                     p.behind === true ? { behind: true } : {}));
-            reply(ok({ processId: String(Date.now()) }));
+            launchedReply(reply, appId(p.id), params);
         },
         // As on webOS: {id, params} launches the app; {target} goes to the
         // app that handles it (command-resource-handlers.json: mailto: to
@@ -1748,8 +1842,9 @@
             var handler = appId(p.id) || (p.target && resourceHandler(p.target));
             var from = typeof p.$from === "string" ? { from: p.$from } : {};
             if (handler) {
-                host.postToHost("launch", Object.assign({ id: handler, params: p.id ? aliasParams(p.id, p.params) : { target: p.target } }, from));
-                return reply(ok({ processId: String(Date.now()) }));
+                var launchParams = p.id ? aliasParams(p.id, p.params) : { target: p.target };
+                host.postToHost("launch", Object.assign({ id: handler, params: launchParams }, from));
+                return launchedReply(reply, handler, launchParams);
             }
             host.postToHost("open", Object.assign({ target: p.target, params: p.params || {} }, from));
             reply({ returnValue: false, errorCode: -1, errorText: "No handler for " + (p.target || p.id || "") });
@@ -3866,6 +3961,12 @@
     // they took the gesture) closes its card, and the caller's card, the one
     // beside it in the stack it joined, comes back. As LunaSysMgr's back at
     // an app's root went to card view, this goes back to where the user was.
+    // Returns whether the app took it: false (nothing stopped the key, no
+    // caller to go back to) and the shell minimizes the card to card view,
+    // as WebAppMgr handed an unhandled Back back to LunaSysMgr
+    // (WindowedWebApp.cpp:823-832, View_Host_ReturnedKeyEvent) and
+    // SystemUiController::slotKeyEventRejected minimized the active card
+    // (SystemUiController.cpp:941-954).
     runtime.back = function () {
         var target = global.document.activeElement || global.document.body || global.document;
         var handled = false;
@@ -3892,9 +3993,10 @@
             }
             if (lp && typeof lp.$caller === "string" && lp.$caller) {
                 try { global.close(); } catch (x) { /* ignore */ }
+                return true;
             }
         }
-        return true;
+        return handled;
     };
 
     // ---- Orientation ------------------------------------------------------------------
@@ -8625,7 +8727,7 @@
                 if (app) {
                     host.postToHost("launch", Object.assign({ id: app, params: { target: p.target } },
                                                             typeof p.$from === "string" ? { from: p.$from } : {}));
-                    return reply(ok({ processId: String(Date.now()), appId: app }));
+                    return runtime.launchedReply(reply, app, { target: p.target }, { appId: app });
                 }
                 baseOpen(p, reply, ctx);
             };
@@ -12125,8 +12227,9 @@
         if (am) {
             var baseOpen = am["/open"];
             am["/open"] = function (p, reply, ctx) {
+                // (No process runs for it: no processId.)
                 if (p.id === "com.palm.app.printmanager" && p.params && p.params.runHeadless)
-                    return reply(ok({ processId: String(Date.now()), appId: PRINT_MANAGER }));
+                    return reply(ok({ appId: PRINT_MANAGER }));
                 baseOpen(p, reply, ctx);
             };
         }
@@ -15296,6 +15399,22 @@
             store.set("systemui:events", q);
             changed();
         }
+        // The shell, in the system UI's page: appId has closed (its last
+        // card, nothing of it left running). The location alert raised for it
+        // goes with it: an alert stands for its app, as one an app opens
+        // itself closes with it (WebAppMgr closes all of an app's windows).
+        // Unanswered, the app is asked again next time.
+        runtime.appClosed = function (appId) {
+            var w = null;
+            var ew = global.enyo && global.enyo.windows;
+            try { w = ew && ew.fetchWindow ? ew.fetchWindow("LocationAlert") : null; } catch (e) { w = null; }
+            if (!w || w.closed) return false;
+            var params = null;
+            try { params = w.enyo && w.enyo.windowParams; } catch (e) { params = null; }
+            if (!params || params.appId !== appId) return false;
+            w.close();
+            return true;
+        };
         sm["/subscribeToSystemUI"] = function (p, reply, ctx) {
             reply(ok({ subscribed: !!p.subscribe }));
             if (!p.subscribe) return;

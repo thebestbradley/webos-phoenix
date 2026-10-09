@@ -49,7 +49,8 @@ export function PopupMenu<T>({ options, value, anchor, onSelect, onClose, kind =
     }, [anchor, kind]);
 
     useEffect(() => {
-        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+        // Back (Escape) closes it; taken, so the card does not minimize too.
+        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); onClose(); } };
         window.addEventListener("keydown", onKey, true);
         return () => window.removeEventListener("keydown", onKey, true);
     }, [onClose]);

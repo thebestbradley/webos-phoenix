@@ -39,7 +39,7 @@ var methods = assistant.createAssistantService({
     request: nodeHttp.createRequest({ timeoutMs: 120000 }),
     storage: device.fileStorage(DATA + "/store"),
     secrets: device.fileSecrets(DATA + "/device.key"),
-    llm: device.llamaServer({ modelsDir: "/media/internal/.phoenix/models", log: function (m) { console.log("[assistant] " + m); },
+    llm: device.llamaServer({ modelsDir: "/media/internal/.phoenix/models", pidFile: DATA + "/llama-server.pid", log: function (m) { console.log("[assistant] " + m); },
                               onChange: function () { notify(); } }),
     tts: tts,
     // What the voice needs, and how to get what is missing (Settings > Assistant).

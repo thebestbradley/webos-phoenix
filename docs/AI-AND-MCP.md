@@ -220,11 +220,12 @@ dentist visit next tuesday at 3", "drop Sam a line saying I'm on my way"):
 the right command 7 times before (the closest ten tools offered), 17
 after; the choice alone 20, 9 without the examples; with the official
 Q8_0 the choice alone 17 (as close as 28 phrasings can tell; a request 2.4 s on this machine while it was loaded with other work). A request takes about
-0.8 s here once the server is up (the choice 0.45 s). llama-server runs
+0.8 s here once the server is up (the choice 0.45 s). llama-server ran
 with 8,192 tokens of context (the commands as tools passed 4,096: it
 refused the request), one slot and an 8-bit cache with flash attention:
 1.3 GB in all for Qwen3 0.6B Q4_K_M, as much as 4,096 tokens took before
-(1.8 GB for the official Q8_0). One
+(1.8 GB for the official Q8_0); since the shared prompt, 4,096 tokens in
+16 bits again (below). One
 slot against four made no difference here (0.44 s against 0.46 s a
 choice: this llama.cpp shares one cache between its slots), but keeps
 the prompt cached for a phone's single user. Checked in phoenix-sim:
@@ -252,8 +253,116 @@ prompt is some 3,100 tokens; 76 tokens a second on this 4-core machine
 under load), keeping the next one waiting; it now reads 512 at a time
 (`-b 512`, 9 s). On that loaded machine Qwen3 0.6B did not get through
 the choice's prompt in 75 s at all, so the deadline is what the user
-sees there: the prompt is worth shortening (or keeping cached across the
-two steps) next.
+saw there; the prompt is now shorter and read once (below).
+
+**One prompt, read once** (`assistant.js` `localPrefix`, 9 October).
+The choice's prompt was some 3,000 tokens, two thirds of them each
+command's own examples, and the call's began with another system prompt,
+so llama-server read most of every question afresh: 77 s for the first
+choice on this machine. Now the on-device model's requests all begin with
+one system prompt, the same for every request and both steps: the
+persona, every command by its name and the first sentence of its
+description, and the sixteen examples of a choice. What changes comes
+after it in messages of its own: for the choice, the examples of the four
+commands the words come nearest (a lexical score over each command's
+name, description and examples; two each) and the words; for the call or
+the answer, the time and the history (the Qwen3 template puts a call's
+one tool after the system prompt, so it is shared too). Requests say
+`cache_prompt`; llama-server has one slot (`-np 1`). Naming it (`id_slot`)
+was tried and dropped: with it, requests from two clients at once came
+back with each other's words in them. Measured with Qwen3 0.6B Q8_0 and llama-server
+on this 4-core machine (busy with other work, load 6 to 9, so the times
+are long and vary; the token counts do not):
+
+| | before | after |
+|---|---|---|
+| first choice after the server starts (tokens read) | 3,028 (77 s) | 1,365 (14 s) |
+| a choice after a call (read / kept) | 17-22 / 3,014 | 145-160 / 1,314 |
+| the call or the answer (read / kept) | 150-355 / 4-113 | 64-320 / 1,314-1,319 |
+| the choice right on the evaluation set (`model-eval.json`, 163) | 97 | 105 |
+
+Two things had to be said for the shared prompt: its choice examples made
+the answer in words come back "None." until the message after it says to
+answer in words, never with a command's name; and a call may say at most
+160 tokens (its arguments), where a call that rambled had gone on to
+512. A first question with the server cold read about 1,400 tokens and
+took 18 s in all, pick and answer; later ones read some 150 for the
+choice and 300 for the call, so their time is the model's writing (2 to
+6 tokens a second under that load: 15 to 40 s for a call's arguments;
+idle, several times faster).
+
+**The cache: 4,096 tokens in 16 bits** (9 October). With one tool at a
+time and the shared prompt some 1,400 tokens, 8,192 tokens of context are
+no longer needed; the cache in 8 bits had kept that as small as 4,096 in
+16 bits, but llama-server reads a prompt in 8 bits half as fast. Measured
+on the same machine, the same prompt (1,464 tokens, not kept), two runs
+of three, each configuration in turn:
+
+| | 8,192 tokens, 8-bit cache | 4,096 tokens, 16-bit cache |
+|---|---|---|
+| reading the prompt | 97-106 tokens/s | 183-208 tokens/s |
+| llama-server's memory after start | 1.86 GB | 1.83 GB |
+| the choice right on `model-eval.json` | 105 of 163 | 110 of 163 |
+| the choice's mean time on it | 4.0 s | 1.7 s |
+
+So llama-server now runs with `-c 4096` and its default cache
+(`shell/native/localmodels.cpp`, `lib/node-device.js`). The conversation
+the model sees is held to the latest turns that fit (`LOCAL_HISTORY_CHARS`,
+5,000 characters, some 1,500 tokens), so the shared prompt, a tool and a
+512-token answer always fit. A first question with the server cold
+(`why is the sky blue`) took 12.5 s in all, pick and answer.
+
+**A call held to its schema** (`assistant.js` `callCommand`, 9 October).
+Offered the chosen command as a tool with `tool_choice: "required"`,
+Qwen3 0.6B often wrote the call's JSON, a full stop and then more until
+its 160 tokens (llama-server's tool-call grammar only starts at a
+`<tool_call>` tag, which it left out). Now the call asks for the
+command's arguments as JSON held to its parameters' schema
+(`response_format`, which llama-server turns into a grammar), at
+temperature 0, and the call is made from that JSON: generation ends at
+the closing brace. The shared prompt stays first; after it, the time and
+which command to fill in. On the first 80 phrasings of `model-eval.json`
+(the whole answer through the router, commands run against stand-in
+services that keep nothing, so a read-back check fails either way):
+
+| | a tool, `required` | JSON held to the schema |
+|---|---|---|
+| ends in the right command | 34 of 80 | 47 of 80 |
+| calls done or read back (of 66 calls) | 34 | 46 |
+| the call's mean time | 13.3 s | 3.0 s |
+| the call's mean tokens written | 84 | 22 |
+
+With a stand-in device that keeps what is saved (`test/device.ts`: the
+alarms, reminders, tasks, events and memos made are there to read back;
+`model-calls.test.ts`, run with `PHOENIX_TEST_LLAMA_URL`, a read-back
+confirmed), the same 80 phrasings measure whether the arguments were right:
+the right command 47 times, and 41 of those ran (their arguments good
+enough to do it and find it again; no read-back fails from the stand-in
+any more). The 6 that did not: 5 times the model gave the whole sentence
+as the thing's name ("milk's bought" for the task Milk, "I'm not going to
+the dentist, take it off my calendar" for the event Dentist), once the
+contact has no email to write to. 55 of the 80 answers ran in all; the
+call took 3.0 s and 22 tokens on average.
+
+**A sentence for a name** (`lib/commands.js` `namedIn`, 9 October). The
+user means a task, event or memo that exists, so when the name given
+matches none, the ones whose every word of their name is in what was
+said are found ("milk's bought": Milk; "I'm not going to the dentist,
+take it off my calendar": Dentist), the most specific first, and when
+several fit equally it asks which ("Which one: “Bank” or “Rent”?"). The
+call's message now lists what each argument is (the schema's
+descriptions, which the grammar alone does not show the model: "the
+task's name as it is in Tasks, in a few words, not the whole sentence"),
+with a length limit in the schema. An example name in a description
+was taken as the answer ("milk" for "I've done the laundry"), so the
+descriptions have none, and a name the model gives with no word of what
+was said is replaced by the words (`assistant.js` `NAMED_ARG`). On the
+same 80: the right command 47 times, 43 of them ran (41 before). The 4
+that did not name things the stand-in does not have (a laundry task, a
+packing memo, lunch with Sam, Priya's email), so they should not; every
+right command whose thing exists ran. One wrong choice still runs: "Sam
+and I are doing lunch friday at 1" is taken as a text to Sam (read back
+first; the harness confirms it).
 
 **What the grammar could not read** (`fillArgs`). When the grammar knows
 the command but not all it needs (a required argument empty: "add an

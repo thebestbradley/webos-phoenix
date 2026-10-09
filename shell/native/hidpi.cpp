@@ -5,6 +5,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QImage>
 #include <QImageReader>
 #include <QRegularExpression>
 
@@ -114,6 +115,27 @@ QSize HiDpi::imageSize(const QUrl &url) const
         s = QSize(-1, -1);
     m_sizes.insert(path, s);
     return s;
+}
+
+bool HiDpi::fullBleed(const QUrl &url) const
+{
+    const QString path = pathOf(url);
+    if (path.isEmpty())
+        return false;
+    const auto hit = m_fullBleed.constFind(path);
+    if (hit != m_fullBleed.constEnd())
+        return *hit;
+    QImageReader reader(path);
+    const QImage image = reader.read();
+    bool full = false;
+    if (!image.isNull() && image.width() >= 8 && image.height() >= 8) {
+        // Its four corners (a pixel in, past an antialiased edge) opaque.
+        const int r = image.width() - 2, b = image.height() - 2;
+        full = qAlpha(image.pixel(1, 1)) > 200 && qAlpha(image.pixel(r, 1)) > 200
+            && qAlpha(image.pixel(1, b)) > 200 && qAlpha(image.pixel(r, b)) > 200;
+    }
+    m_fullBleed.insert(path, full);
+    return full;
 }
 
 QUrl HiDpi::icon(const QUrl &url, qreal pixels, const QUrl &large) const

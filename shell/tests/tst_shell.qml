@@ -899,6 +899,48 @@ Item {
             windows.windowFor(uid).detail = "Inbox";
             shell.gestureBack();
             compare(windows.windowFor(uid).detail, "");
+            compare(shell.cardView.maximizeProgress, 1, "the app took it: the card stays");
+        }
+
+        // Back at an app's top level, which the app does not take: the card
+        // minimizes to card view (SystemUiController::slotKeyEventRejected).
+        // A web page answers later (backUnhandled), for its own card only.
+        function test_backAtTheTopLevelMinimizes() {
+            var uid = windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximize(uid);
+            // maximized, exactly 1 (tryCompare takes 0.99999 for 1): Back
+            // goes to the app only once its card is maximized.
+            tryVerify(function () { return shell.cardView.maximized; }, 2000);
+            shell.gestureBack();
+            tryCompare(shell.cardView, "maximizeProgress", 0, 2000);
+
+            var other = windows.launch("org.webosphoenix.maps", "");
+            shell.cardView.maximize(uid);
+            tryVerify(function () { return shell.cardView.maximized; }, 2000);
+            windows.backUnhandled(other);
+            wait(100);
+            compare(shell.cardView.maximizeProgress, 1, "another card's answer does nothing");
+            // Not after a Back to that card: nothing.
+            windows.backUnhandled(uid);
+            wait(100);
+            compare(shell.cardView.maximizeProgress, 1, "an answer to no Back does nothing");
+            // A page's late answer to the last Back minimizes its card...
+            shell._backUid = uid;
+            shell._backMoves = shell._cardMoves;
+            windows.backUnhandled(uid);
+            tryCompare(shell.cardView, "maximizeProgress", 0, 2000);
+            // ...unless the user has gone on since: switched away and back.
+            shell.cardView.maximize(uid);
+            tryVerify(function () { return shell.cardView.maximized; }, 2000);
+            shell._backUid = uid;
+            shell._backMoves = shell._cardMoves;
+            shell.cardView.maximize(other);
+            tryVerify(function () { return shell.cardView.maximized; }, 2000);
+            shell.cardView.maximize(uid);
+            tryCompare(shell.cardView, "currentUid", uid, 2000);
+            windows.backUnhandled(uid);
+            wait(100);
+            compare(shell.cardView.maximizeProgress, 1, "a late answer after the user moved on does nothing");
         }
 
         function test_upGestureTogglesLauncherInCardView() {
@@ -1162,15 +1204,22 @@ Item {
             var c = windows.launch("org.webosphoenix.phone", "");
             var view = shell.cardView;
             view.maximize(b);
-            tryCompare(view, "maximizeProgress", 1, 2000);
+            // Exactly 1 (tryCompare takes 0.99999 for 1): Back goes to the
+            // app only once its card is maximized.
+            tryVerify(function () { return view.maximized; }, 2000);
             compare(view.currentUid, b);
             var area = findChild(shell, "gestureMouse");
             var gestures = findChild(shell, "gestureBar");
-            // Off: a long leftward swipe is only Back.
+            // Off: a long leftward swipe is only Back, which the app takes
+            // here (it goes back from a message it shows), so the card
+            // stays (test_backAtTheTopLevelMinimizes: one it does not take).
             status.advancedGestures = false;
             verify(!gestures.advancedGestures);
+            windows.windowFor(b).detail = "Inbox";
             mouseDrag(area, area.width * 0.9, area.height / 2, -area.width * 0.8, 0);
+            compare(windows.windowFor(b).detail, "", "the app had Back");
             compare(view.currentUid, b);
+            compare(view.maximizeProgress, 1);
             status.advancedGestures = true;
             verify(gestures.advancedGestures);
             // Leftward (Previous): the card to the right, still maximized.
@@ -1618,6 +1667,58 @@ Item {
             compare(windows.cards.count, 1);
             compare(focusSpy.count, 0);
             compare(shell.cardView.maximizeProgress, 0);
+        }
+
+        // An app launched by another app or a service while the launcher
+        // (or Just Type, or the dashboard) is open comes to the front: they
+        // give way as its card maximizes
+        // (SystemUiController::setCardWindowAboutToMaximize).
+        function test_cardLaunchedByAnAppHidesTheLauncher() {
+            shell.gestureUp();
+            tryCompare(shell, "launcherOpen", true, 2000);
+            windows._hostMessage("org.webosphoenix.calendar", "", "launch", { id: "org.webosphoenix.email" });
+            tryCompare(shell, "launcherOpen", false, 2000);
+            tryCompare(shell.cardView, "maximizeProgress", 1, 3000);
+
+            shell.cardView.minimize();
+            tryCompare(shell.cardView, "maximizeProgress", 0, 3000);
+            shell.startJustType("abc");
+            verify(shell.justTypeOpen);
+            shell.notifications.dashboardOpen = true;
+            windows._hostMessage("com.palm.systemui", "", "launch", { id: "org.webosphoenix.email" });
+            tryCompare(shell, "justTypeOpen", false, 2000);
+            compare(shell.notifications.dashboardOpen, false);
+            tryCompare(shell.cardView, "maximizeProgress", 1, 3000);
+            // An app opening in the background leaves the launcher open.
+            shell.cardView.minimize();
+            tryCompare(shell.cardView, "maximizeProgress", 0, 3000);
+            shell.gestureUp();
+            tryCompare(shell, "launcherOpen", true, 2000);
+            windows._hostMessage("org.webosphoenix.calendar", "", "launch",
+                                 { id: "org.webosphoenix.memos", params: { $activity: { activityId: 2 } } });
+            wait(300);
+            compare(shell.launcherOpen, true);
+            shell.gestureUp();
+            tryCompare(shell, "launcherOpen", false, 2000);
+        }
+
+        // The launcher opened over a card still on its way up (not ready
+        // yet): the card stays in card view, the launcher open
+        // (CardWindowManager::slotLauncherShown).
+        function test_launcherOverARisingCardKeepsItInCardView() {
+            var uid = windows.launch("org.webosphoenix.email", "");
+            windows.windowFor(uid).ready = false;
+            shell.cardView.focusLaunched(uid);
+            verify(shell.cardView.risingUid === uid);
+            shell.gestureUp();
+            tryCompare(shell, "launcherOpen", true, 2000);
+            compare(shell.cardView.risingUid, "");
+            windows.windowFor(uid).ready = true;
+            wait(1500);
+            compare(shell.launcherOpen, true);
+            compare(shell.cardView.maximizeProgress, 0);
+            shell.gestureUp();
+            tryCompare(shell, "launcherOpen", false, 2000);
         }
     }
 }

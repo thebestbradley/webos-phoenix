@@ -27,11 +27,20 @@ setupIonicReact({ mode: readStyle().mode, hardwareBackButton: true });
 
 // webOS's back gesture reaches a web app as the Escape key. Ionic's own
 // overlays close on Escape; otherwise it becomes Ionic's back button, which
-// closes the side menu, then goes back a page (the note, Settings).
+// closes the side menu, then goes back a page (the note, Settings). Taken,
+// the key's default is prevented; at the notes list with the menu closed
+// nothing takes it, and the system minimizes the card (webOS's Back at an
+// app's top level).
 const OVERLAYS = ["ion-modal", "ion-popover", "ion-alert", "ion-action-sheet", "ion-loading", "ion-picker"]
     .map((tag) => `${tag}:not(.overlay-hidden)`).join(", ");
 window.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape" || e.defaultPrevented || document.querySelector(OVERLAYS)) return;
+    if (e.key !== "Escape" || e.defaultPrevented) return;
+    if (document.querySelector(OVERLAYS)) {
+        e.preventDefault();
+        return;
+    }
+    const route = location.hash.replace(/^#/, "") || "/";
+    if (route === "/" && !document.querySelector("ion-menu.show-menu")) return;
     e.preventDefault();
     document.dispatchEvent(new Event("backbutton"));
 });

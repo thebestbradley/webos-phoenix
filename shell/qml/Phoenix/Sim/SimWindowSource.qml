@@ -184,6 +184,9 @@ Item {
 
     signal cardFocusRequested(string uid)
     signal cardCloseRequested(string uid)
+    // The page in the card did not take the back gesture (WebAppWindow
+    // backUnhandled; back() returned true while the page decided).
+    signal backUnhandled(string uid)
 
     // Quick launch slots for web apps: appinfo.json "phoenix.quickLaunch"
     // (Phone 1, Messaging 3), else by title for the original apps.
@@ -354,6 +357,14 @@ Item {
         case "running":
             r.running = running();
             break;
+        // The process id of an app a launch just started (its "launch"
+        // message came first): what launch and open reply, the id running
+        // lists and close takes; "" if it is not running.
+        case "processId": {
+            var target = _launchTarget(String(payload.appId || ""), payload.params || {});
+            r.processId = runningUid(target) !== "" || _headless[target] || _parkedUid(target) !== "" ? _pidOf(target) : "";
+            break;
+        }
         case "close":
             closeProcess(String(payload.processId || ""));
             break;
@@ -600,6 +611,8 @@ Item {
         win.windowRequested.connect(function(request) { source._openWindow(appId, request, uid); });
         if (win.linkRequested)
             win.linkRequested.connect(function(url) { source.openLink(appId, uid, url); });
+        if (win.backUnhandled && uid !== "" && !system)
+            win.backUnhandled.connect(function() { source.backUnhandled(uid); });
         if (system)
             win.closeRequested.connect(function() { source.closeSystemWindow(uid); });
         else if (uid !== "")
@@ -1561,6 +1574,11 @@ Item {
         _clearOngoingOf(appId);
         if (activeCallBanner !== null && activeCallBanner.appId === appId)
             activeCallBanner = null;
+        // The system UI's alerts for it (its location alert) close too.
+        var sysui = _headless["com.palm.systemui"];
+        if (sysui && sysui.runScript)
+            sysui.runScript("window.__phoenixRuntime && __phoenixRuntime.appClosed && __phoenixRuntime.appClosed("
+                            + JSON.stringify(appId) + ")");
     }
 
     // The apps running (applicationManager/running): with cards, headless,
@@ -2591,6 +2609,9 @@ Item {
                 notifications.remove(i);
     }
 
+    // The back gesture for the card's (or system window's) page: false if
+    // it is not taken (the shell minimizes the card); a web page answers
+    // later, backUnhandled(uid) if it did not take it.
     function back(uid) {
         var win = _windows[uid];
         return win ? win.back() : false;

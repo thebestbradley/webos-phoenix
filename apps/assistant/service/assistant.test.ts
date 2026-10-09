@@ -485,13 +485,73 @@ describe("the on-device model", () => {
         // A question about the world: no tools (a short prompt, no misfires).
         expect(mock.requests.at(-1)!.body.tools).toBeUndefined();
         const act = await ask(t, "it's dark, put the flashlight on for me");
-        // A request of the device: the one tool it chose (pickCommand), to call.
-        const offered = mock.requests.at(-1)!.body.tools.map((x: Reply) => x.function?.name ?? x.name);
-        expect(offered).toEqual(["toggle"]);
+        // A request of the device: the command it chose (pickCommand), its
+        // arguments held to that command's schema (callCommand).
+        const called = mock.requests.at(-1)!.body;
+        expect(called.response_format.json_schema.schema.properties.setting).toBeDefined();
+        expect(called.messages[1].content).toMatch(/asked the phone to do this: toggle: /);
         expect(last(act)).toMatchObject({ via: "on-device", status: "done", text: "The flashlight is on." });
         // Its times as said: "tomorrow at 6:30 am".
         const wake = await ask(t, "please could you wake me early tomorrow");
         expect(last(wake).text).toBe("Alarm set for 6:30 AM tomorrow.");
+    });
+
+    // One prompt, read once (assistant.js localPrefix): the choice and the
+    // call (or the answer in words) start with the same system prompt, the
+    // same for every request; llama-server keeps it (cache_prompt, its one slot).
+    // The choice shows examples only for the few commands the words come near.
+    it("shares one prompt between the choice and the call, and across requests", async () => {
+        const t = setup({ llm: llm() });
+        t.as("org.webosphoenix.settings");
+        await t.svc.selectModel({ id: MODEL });
+        t.as("com.palm.systemui");
+        const from = mock.requests.length;
+        await ask(t, "it's dark, put the flashlight on for me");
+        await ask(t, "why is the sky blue");
+        const sent = mock.requests.slice(from).map((r) => r.body);
+        const [pick, call, pick2, chat] = sent;
+        expect(pick.response_format).toBeDefined();
+        expect(call.tools).toBeUndefined();
+        expect(Object.keys(call.response_format.json_schema.schema.properties)).toContain("setting");
+        expect(pick2.response_format).toBeDefined();
+        expect(chat.tools).toBeUndefined();
+        const system = pick.messages[0];
+        expect(system.role).toBe("system");
+        for (const b of [call, pick2, chat]) expect(b.messages[0]).toEqual(system);
+        // Every command by name and the choice's examples, no command's own examples, no time.
+        expect(system.content).toMatch(/\ntoggle: /);
+        expect(system.content).toMatch(/\n"why is the sky blue": none/);
+        expect(system.content).not.toMatch(/e\.g\.|Today is/);
+        // What fits the words comes after it.
+        expect(pick.messages).toHaveLength(3);
+        const hint = pick.messages.at(-2).content as string;
+        expect(hint).toMatch(/^Pick the phone command/);
+        expect((hint.match(/\n[a-zA-Z]+: "/g) || []).length).toBeLessThanOrEqual(4);
+        expect(hint).toMatch(/\ntoggle: "/);
+        expect(pick.messages.at(-1)).toEqual({ role: "user", content: "it's dark, put the flashlight on for me" });
+        for (const b of sent) expect([b.cache_prompt, b.id_slot]).toEqual([true, undefined]);
+        // The time and the command to call come after the shared prompt.
+        expect(call.messages[1].role).toBe("system");
+        expect(call.messages[1].content).toMatch(/^Today is /);
+        expect(call.max_tokens).toBe(160);
+    });
+
+    // Its context is 4,096 tokens: the conversation it sees is the latest
+    // turns that fit (LOCAL_HISTORY_CHARS), the shared prompt whole.
+    it("sees the latest turns that fit in its context", async () => {
+        const t = setup({ llm: llm() });
+        t.as("org.webosphoenix.settings");
+        await t.svc.selectModel({ id: MODEL });
+        t.as("com.palm.systemui");
+        const long = (n: number) => "tell me about " + String(n).repeat(1500);
+        let r: Reply = {};
+        for (let i = 1; i <= 4; ++i) r = await ask(t, long(i), r.thread ? { threadId: r.thread.id } : {});
+        const sent = mock.requests.at(-1)!.body;
+        const turns = sent.messages.slice(2);
+        const chars = turns.reduce((n: number, m: Reply) => n + m.content.length, 0);
+        expect(chars).toBeLessThanOrEqual(5000);
+        expect(turns.at(-1)).toEqual({ role: "user", content: long(4) });
+        expect(turns.some((m: Reply) => m.content === long(1))).toBe(false);
     });
 
     it("reads back a choice the words did not ask for", async () => {
@@ -555,8 +615,10 @@ describe("the on-device model", () => {
             const [pick, call] = mock.requests.slice(-2).map((q) => q.body);
             expect(pick.response_format.json_schema.schema.properties.command.enum).toContain("toggle");
             expect(pick.temperature).toBe(0);
-            expect(call.tools.map((x: Reply) => x.function.name)).toEqual(["toggle"]);
-            expect(call.tool_choice).toBe("required");
+            // Its arguments as JSON held to toggle's schema: generation ends at its closing brace.
+            expect(call.response_format.json_schema.schema.properties.state).toBeDefined();
+            expect(call.temperature).toBe(0);
+            expect(call.tools).toBeUndefined();
             expect(call.chat_template_kwargs).toEqual({ enable_thinking: false });
             expect(last(act)).toMatchObject({ via: "on-device", status: "done", text: "The flashlight is on." });
         });

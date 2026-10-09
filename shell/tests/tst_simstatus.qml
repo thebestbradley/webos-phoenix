@@ -222,6 +222,20 @@ Item {
             app.destroy();
         }
 
+        // An app closed (nothing of it left): the system UI hears so, and
+        // closes the location alert it raised for it (runtime.appClosed).
+        function test_theSystemUiHearsAnAppClose() {
+            var ui = fakePage.createObject(root);
+            windows._headless["com.palm.systemui"] = ui;
+            var uid = windows.launch("org.webosphoenix.maps", "");
+            compare(ui.scripts.length, 0);
+            windows.close(uid);
+            var told = ui.scripts.filter(function (s) { return s.indexOf("appClosed(\"org.webosphoenix.maps\")") >= 0; });
+            compare(told.length, 1, ui.scripts.join("\n"));
+            delete windows._headless["com.palm.systemui"];
+            ui.destroy();
+        }
+
         function test_launchParamsPickTheLaunchPoint() {
             compare(windows._launchTarget("org.webosphoenix.settings", { page: "wifi" }), "org.webosphoenix.settings.wifi");
             compare(windows._launchTarget("org.webosphoenix.settings", { page: "sounds" }), "org.webosphoenix.settings");

@@ -183,6 +183,32 @@ async function main() {
         await Promise.all([page.waitForURL(/own=1/, { timeout: 10000 }).catch(() => null), page.click("#link-own")]);
         check(/own=1/.test(page.url()) && !host.some((m) => m.type === "launch"), "own pages: a link to the app's own page loads there");
 
+        // The text indexer (enyo.string.runTextIndexer -> PalmSystem.runTextIndexer,
+        // as Memos and Calendar show a note): addresses, e-mail addresses
+        // and phone numbers in the text become links; tags stay.
+        await page.goto(NOTES);
+        await page.waitForFunction(() => !!window.enyo && !!enyo.string && !!window.PalmSystem);
+        const indexed = await page.evaluate(() => enyo.string.runTextIndexer(
+            "Lunch at www.example.com/menu, mail ada@example.com or call (408) 555-1212. <b>http://palm.com/</b> on 2010-11-12"));
+        check(indexed === 'Lunch at <a href="http://www.example.com/menu">www.example.com/menu</a>, mail <a href="mailto:ada@example.com">ada@example.com</a>'
+              + ' or call <a href="tel:4085551212">(408) 555-1212</a>. <b><a href="http://palm.com/">http://palm.com/</a></b> on 2010-11-12',
+              "text indexer: web, mailto and tel links in the text, tags kept, dates left: " + indexed);
+        check(await page.evaluate(() => enyo.string.runTextIndexer('<a href="http://a.com">http://a.com</a> 555-0100', { phoneNumber: false }))
+              === '<a href="http://a.com">http://a.com</a> 555-0100', "text indexer: links stay as they are; {phoneNumber: false} leaves numbers");
+        check(await page.evaluate(() => enyo.string.runTextIndexer("&lt;http://a.com&gt;")) === '&lt;<a href="http://a.com">http://a.com</a>&gt;',
+              "text indexer: an escaped bracket ends an address");
+        await page.evaluate((html) => {
+            const d = document.createElement("div");
+            d.id = "indexed";
+            d.style.cssText = "position:fixed;left:8px;top:60px;right:8px;z-index:99999;background:#fff;padding:6px;font:14px sans-serif";
+            d.innerHTML = html;
+            document.body.appendChild(d);
+        }, indexed);
+        await shot("notes-indexed");
+        host.length = 0;
+        await page.click("#indexed a[href^='tel:']");
+        check(!!await launched("org.webosphoenix.phone", "tel:4085551212"), "text indexer: its phone link opens Phone");
+
         // Weather's Open-Meteo credit, a target=_blank link in a Phoenix app.
         await page.goto(appUrl("org.webosphoenix.weather"));
         await page.waitForSelector("[data-testid='attribution']", { timeout: 15000 });

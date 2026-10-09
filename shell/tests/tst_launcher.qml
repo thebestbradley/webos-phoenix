@@ -1300,6 +1300,23 @@ Item {
             compare(windows._pendingStatus.installerResult.ok, false);
         }
 
+        // applicationManager/launch replies the process id of the app it
+        // started: the one running lists and close takes.
+        function test_launchReplyIsTheRunningProcessId() {
+            windows._hostMessage("org.webosphoenix.calendar", "", "launch", { id: "org.webosphoenix.maps", params: {} });
+            windows._appManagerOp({ requestId: "p1", op: "processId", appId: "org.webosphoenix.maps", params: {} });
+            var pid = windows._pendingStatus.installerResult.processId;
+            verify(/^\d+$/.test(pid), "a process id: " + pid);
+            windows._appManagerOp({ requestId: "p2", op: "running" });
+            var maps = windows._pendingStatus.installerResult.running.filter(function (x) { return x.id === "org.webosphoenix.maps"; })[0];
+            compare(maps.processid, pid);
+            windows._appManagerOp({ requestId: "p3", op: "close", processId: pid });
+            compare(windows.runningUid("org.webosphoenix.maps"), "");
+            // Not running: no process id.
+            windows._appManagerOp({ requestId: "p4", op: "processId", appId: "org.webosphoenix.maps", params: {} });
+            compare(windows._pendingStatus.installerResult.processId, "");
+        }
+
         function test_closeProcess() {
             var uid = windows.launch("org.webosphoenix.maps");
             var pid = windows._pidOf("org.webosphoenix.maps");

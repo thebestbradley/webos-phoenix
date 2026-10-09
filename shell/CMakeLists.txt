@@ -57,6 +57,8 @@ if(PHOENIX_BUILD_SIM)
     # simulates the hardware), so a Mac build simply leaves it out.
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_subdirectory(../services/devices ${CMAKE_CURRENT_BINARY_DIR}/devices)
+        # The Assistant's llama-server ends with its service (build/pdeath/phoenix-pdeath).
+        add_subdirectory(../services/pdeath ${CMAKE_CURRENT_BINARY_DIR}/pdeath)
     endif()
     # Widgets: the window's menu bar (the global one on macOS) and toolbar
     # (SimChrome).

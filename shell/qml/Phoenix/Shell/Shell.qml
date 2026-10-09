@@ -921,6 +921,12 @@ FocusScope {
     Connections {
         target: launcher
         function onOpenChanged() {
+            // The launcher opened over a card still getting ready to rise
+            // (PreparingState, LoadingState): the card stays in card view
+            // rather than maximizing over it later
+            // (CardWindowManager::slotLauncherShown, CardWindowManager.cpp:3069-3078).
+            if (launcher.open && (cards.risingUid !== "" || cards.loadingUid !== ""))
+                cards.minimize();
             if (launcher.open)
                 shell._showDock();
             else if (cards.maximizeProgress > 0 && !cards.minimizing)
@@ -1168,8 +1174,31 @@ FocusScope {
             // The launcher's tab name dialog, open group or "+" went first.
         } else if (launcher.open)
             launcher.open = false;
-        else if (cards.maximized)
-            source.back(cards.currentUid);
+        else if (cards.maximized) {
+            _backUid = cards.currentUid;
+            _backMoves = _cardMoves;
+            if (!source.back(cards.currentUid))
+                _backUnhandled(cards.currentUid);
+        }
+    }
+    // The app did not take Back (nothing left to go back to): its card
+    // minimizes to card view (SystemUiController::slotKeyEventRejected,
+    // SystemUiController.cpp:941-954). Only if it is still the card in front.
+    function _backUnhandled(uid) {
+        if (cards.maximized && !cards.minimizing && cards.currentUid === uid && !launcher.open && !justType.open)
+            cards.minimize();
+    }
+    // A page's answer comes later (backUnhandled): it counts only for the
+    // last Back, and only if the cards have not moved since (the user
+    // switched away and back, maximized or minimized a card): the user has
+    // gone on, and a late answer must not pull the card from under them.
+    property int _cardMoves: 0
+    property string _backUid: ""
+    property int _backMoves: -1
+    function _lateBackUnhandled(uid) {
+        if (uid === _backUid && _backMoves === _cardMoves)
+            _backUnhandled(uid);
+        _backUid = "";
     }
 
     // The forward swipe (left to right; Key_CoreNavi_Menu, or Next turned
@@ -1251,6 +1280,7 @@ FocusScope {
         ignoreUnknownSignals: true
         function onCardFocusRequested(uid) { Qt.callLater(cards.focusLaunched, uid); }
         function onCardCloseRequested(uid) { cards.close(uid, true); }
+        function onBackUnhandled(uid) { shell._lateBackUnhandled(uid); }
         function onJustTypeDismissed() { justType.open = false; }
         function onBannerRequested(appId, text, icon, params, soundClass, soundFile, soundDuration, bannerId) {
             var a = null;
@@ -1351,7 +1381,23 @@ FocusScope {
     }
     Connections {
         target: cards
-        function onCardMaximized(uid) { shell.markNotificationsSeen(shell._appOf(uid)); }
+        function onCurrentUidChanged() { shell._cardMoves++; }
+        function onCardMinimized(uid) { shell._cardMoves++; }
+        function onCardMaximized(uid) {
+            shell._cardMoves++;
+            // A card about to maximize, whoever asked (an app or a service
+            // launching one, a window it opened): the launcher, Just Type
+            // and the dashboard give way, and dock mode ends, so the card is
+            // not left hidden under them
+            // (SystemUiController::setCardWindowAboutToMaximize,
+            // SystemUiController.cpp:692-708).
+            if (shell.dockMode)
+                shell.exitDockMode(true);
+            launcher.open = false;
+            justType.open = false;
+            notes.dashboardOpen = false;
+            shell.markNotificationsSeen(shell._appOf(uid));
+        }
     }
 
     // ---- System sounds -----------------------------------------------------------------

@@ -18,7 +18,10 @@ const { createAssistantService } = req("../assistant.js") as { createAssistantSe
 export const NOW = new Date(2026, 9, 7, 10, 0, 0).getTime();
 export const at = (d: number, h: number, m = 0) => new Date(2026, 9, d, h, m, 0).getTime();
 
-export function device(opts: { offline?: boolean; locationAllowed?: boolean | null; seed?: (put: (o: any) => string) => void } = {}) {
+// llm: the on-device model runner, llmRequest its HTTP (model-calls.test.ts:
+// a real llama-server); apps: more launch points.
+export function device(opts: { offline?: boolean; locationAllowed?: boolean | null; seed?: (put: (o: any) => string) => void; llm?: object;
+                               llmRequest?: (r: object) => Promise<any>; apps?: { id: string; title: string }[] } = {}) {
     let n = 0;
     const db = new Map<string, any>();
     const put = (o: any) => { const id = o._id || "db" + ++n; db.set(id, { ...o, _id: id }); return id; };
@@ -67,7 +70,7 @@ export function device(opts: { offline?: boolean; locationAllowed?: boolean | nu
             const m = uri.replace(/^luna:\/\//, "");
             if (m === "com.palm.applicationManager/listLaunchPoints")
                 return okr({ launchPoints: [{ id: "com.palm.app.calendar", title: "Calendar" },
-                                            { id: "org.webosphoenix.settings", title: "Sounds & Ringtones", params: { page: "sounds" } }] });
+                                            { id: "org.webosphoenix.settings", title: "Sounds & Ringtones", params: { page: "sounds" } }].concat(opts.apps || []) });
             if (m === "com.palm.db/find") {
                 const kind = p.query.from;
                 return okr({ results: [...db.values()].filter((o) => o._kind === kind || (kind === "com.palm.email:1" && /email:1$/.test(o._kind))) });
@@ -129,6 +132,7 @@ export function device(opts: { offline?: boolean; locationAllowed?: boolean | nu
     };
     const requests: string[] = [];
     const request = (r: { url: string }) => {
+        if (opts.llmRequest && /^http:\/\/127\.0\.0\.1[:/]/.test(r.url)) return opts.llmRequest(r);
         requests.push(r.url);
         if (opts.offline) return Promise.reject(new Error("offline"));
         if (r.url.includes("frankfurter")) return Promise.resolve({ status: 200, body: JSON.stringify({ amount: 20, base: "USD", date: "2026-10-07", rates: { EUR: 17.3 } }) });
@@ -151,7 +155,7 @@ export function device(opts: { offline?: boolean; locationAllowed?: boolean | nu
     let clock = NOW;
     // The commands alone: the questions after them have their own tests (followups.test.ts).
     data.set("assistant:settings", { followUps: false });
-    const svc = createAssistantService({ luna, storage, request, now: () => clock, caller: () => "com.palm.systemui",
+    const svc = createAssistantService({ luna, storage, request, now: () => clock, caller: () => "com.palm.systemui", llm: opts.llm, localDeadlineMs: opts.llm ? 600000 : undefined,
                                          secrets: { seal: () => Promise.resolve({}), unseal: () => Promise.resolve("") }, locale: () => "en-US" });
     let thread = "";
     async function ask(text: string): Promise<Msg> {
@@ -172,5 +176,5 @@ export function device(opts: { offline?: boolean; locationAllowed?: boolean | nu
     }
     const of = (kind: string) => [...db.values()].filter((o) => o._kind === kind);
     const called = (part: string) => calls.filter((c) => c.uri.includes(part));
-    return { svc, db, of, calls, called, state, ask, confirm, choose, requests, setNow: (t: number) => { clock = t; } };
+    return { svc, db, luna, of, calls, called, state, ask, confirm, choose, requests, setNow: (t: number) => { clock = t; } };
 }

@@ -15,7 +15,7 @@ import Popup from '@enact/agate/Popup';
 import PopupMenu from '@enact/agate/PopupMenu';
 import {Cell} from '@enact/ui/Layout';
 import {ALL_NOTES, DEFAULT_FOLDER, DEFAULT_SETTINGS, RECENTLY_DELETED, useNotesApp} from '@phoenix/notes-core';
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
 
 import {Row, TabbedPanels, ThemeDecorator} from '../enact';
 import {luna} from '../luna';
@@ -29,6 +29,11 @@ import css from './App.module.less';
 export const APP_ID = 'org.webosphoenix.enactnotes.agate';
 
 const SETTINGS_TAB = 'settings';
+
+// Below this width (a phone) the list and the note do not fit side by side:
+// the tabs go across the top and one pane shows at a time, the note over
+// the list while one is open; Back closes it.
+const NARROW = 720;
 
 type Dialog =
 	| {kind: 'newFolder'}
@@ -56,6 +61,24 @@ const Notes = ({onTheme}: {onTheme: (t: Theme) => void}) => {
 	const [name, setName] = useState('');
 	const [problem, setProblem] = useState<string | null>(null);
 	const close = () => { setDialog(null); setProblem(null); };
+	const [narrow, setNarrow] = useState(() => window.innerWidth < NARROW);
+	useEffect(() => {
+		const onResize = () => setNarrow(window.innerWidth < NARROW);
+		window.addEventListener('resize', onResize);
+		return () => window.removeEventListener('resize', onResize);
+	}, []);
+	const noteOpen = narrow && !!app.selected;
+	useEffect(() => {
+		if (!noteOpen) return;
+		// The back gesture (Escape): back to the list, taken so the card stays.
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key !== 'Escape' || e.defaultPrevented) return;
+			e.preventDefault();
+			app.select(null);
+		};
+		window.addEventListener('keydown', onKey);
+		return () => window.removeEventListener('keydown', onKey);
+	}, [noteOpen, app]);
 
 	const skin = SKINS.find((k) => k.id === app.settings.skin) ?? SKINS[0];
 	onTheme({
@@ -100,16 +123,18 @@ const Notes = ({onTheme}: {onTheme: (t: Theme) => void}) => {
 		<>
 			<TabbedPanels
 				className={css.panels}
-				orientation="horizontal"
+				orientation={narrow ? 'vertical' : 'horizontal'}
 				tabPosition="before"
-				tabs={tabs.map(({title, icon}) => ({title, icon}))}
+				// Across the top of a phone: the tabs' icons only.
+				tabs={tabs.map(({title, icon}) => (narrow ? {title: '', icon} : {title, icon}))}
 				index={index}
 				onSelect={onSelect}
 				noCloseButton
-				beforeTabs={<Heading size="large" className={css.appTitle}>Notes</Heading>}
+				beforeTabs={narrow ? null : <Heading size="large" className={css.appTitle}>Notes</Heading>}
 				afterTabs={
-					<Button icon="plus" size="small" className={css.newFolder} onClick={() => { setName(''); setDialog({kind: 'newFolder'}); }}>
-						New Folder
+					<Button icon="plus" size="small" className={css.newFolder} aria-label="New Folder"
+						onClick={() => { setName(''); setDialog({kind: 'newFolder'}); }}>
+						{narrow ? null : 'New Folder'}
 					</Button>
 				}
 			>
@@ -117,6 +142,18 @@ const Notes = ({onTheme}: {onTheme: (t: Theme) => void}) => {
 					<Panel key={t.id} className={css.panel}>
 						{t.id === SETTINGS_TAB ? (
 							<Settings app={app} />
+						) : narrow ? (
+							<Row className={css.columns}>
+								<Cell className={css.column}>
+									{noteOpen ? <NoteView app={app} /> : (
+										<NoteList
+											app={app}
+											onEmptyDeleted={() => setDialog({kind: 'emptyDeleted'})}
+											onFolderMenu={userFolder ? () => setDialog({kind: 'folderMenu', id: tab}) : undefined}
+										/>
+									)}
+								</Cell>
+							</Row>
 						) : (
 							<Row className={css.columns}>
 								<Cell size="40%" className={css.column}>
