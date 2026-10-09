@@ -1126,9 +1126,11 @@ Item {
             windows.dismissNotification(0);
         }
 
-        // G5: advanced gestures. A long swipe across the gesture area's
-        // centre shows the app beside this one, maximized; off, it is Back.
+        // G5: advanced gestures (on by default). A long swipe across the
+        // gesture area's centre shows the app beside this one, maximized;
+        // off, it is Back.
         function test_advancedGestures() {
+            verify(status.advancedGestures, "on by default");
             var a = windows.launch("org.webosphoenix.email", "");
             var b = windows.launch("org.webosphoenix.messaging", "");
             var c = windows.launch("org.webosphoenix.phone", "");
@@ -1170,7 +1172,7 @@ Item {
             shell.gestureSwitchApp(true);
             tryCompare(view, "currentUid", b, 2000);
             compare(view.maximizeProgress, 0);
-            status.advancedGestures = false;
+            status.advancedGestures = true;
         }
 
         // C7: in a stack of more than four, a tap on a card buried at the

@@ -1220,8 +1220,10 @@
         // getDisplayBrightness, :2065-2082).
         enableALS: true,
         // Screen & Lock > Advanced gestures: LunaSysMgr's key. A long swipe
-        // across the gesture area switches apps (phones).
-        sysUiEnableNextPrevGestures: false,
+        // across the gesture area switches apps (phones). On by default in
+        // Phoenix (the owner's choice; LunaSysMgr shipped it off): a choice
+        // the user saved is kept, only the default changed.
+        sysUiEnableNextPrevGestures: true,
         // Settings > Text Assist > Hardware keyboard: the shell's shortcut
         // scheme, "ipad" or "desktop" (Phoenix).
         keyboardShortcuts: "ipad",
@@ -1235,11 +1237,12 @@
         // webOS CE 3.1.0, AddToImage/LunaCE-Tweaks/*.json), off as there:
         // card view wraps from the last card to the first
         // (abh_features.json), a tap on a side card maximizes it
-        // (maximize-edges.json), the wave launcher (wave-launcher.json), the
-        // tap ripple (tap-ripple.json, on).
+        // (maximize-edges.json), the tap ripple (tap-ripple.json, on); the
+        // wave launcher (wave-launcher.json) is on by default in Phoenix
+        // (the owner's choice; LunaCE shipped it off).
         infiniteCardCyclingEnabled: false,
         sysUiEnableMaximizeEdges: false,
-        sysUiEnableWaveLauncher: false,
+        sysUiEnableWaveLauncher: true,
         showReticleAnimation: true,
         // Phoenix's: the shell's animations "normal" or "fast" (the Faster
         // Card Animations patches); how far a swipe goes before it counts,
@@ -1289,7 +1292,7 @@
         return {
             infiniteCardCycling: !!p.infiniteCardCyclingEnabled,
             maximizeEdges: !!p.sysUiEnableMaximizeEdges,
-            waveLauncher: !!p.sysUiEnableWaveLauncher,
+            waveLauncher: p.sysUiEnableWaveLauncher !== false,
             tapRipple: p.showReticleAnimation !== false,
             animationSpeed: pick(p.animationSpeed, ["normal", "fast"], "normal"),
             gestureSensitivity: pick(p.gestureSensitivity, ["low", "normal", "high"], "normal"),
@@ -4227,7 +4230,7 @@
                 // setProperty onWhenConnected).
                 automaticBrightness: p.enableALS !== false,
                 displayOnWhenConnected: runtime.devices ? runtime.devices.onWhenConnected() : false,
-                advancedGestures: !!p.sysUiEnableNextPrevGestures,
+                advancedGestures: p.sysUiEnableNextPrevGestures !== false,
                 keyboardShortcuts: p.keyboardShortcuts === "desktop" ? "desktop" : "ipad",
                 // Settings > Accessibility: the shell's animations.
                 reduceMotion: !!(p.accessibility && p.accessibility.reduceMotion),

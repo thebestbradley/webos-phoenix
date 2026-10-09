@@ -169,7 +169,7 @@ Item {
             mouseDrag(m, m.width * 0.4, m.height / 2, -240, 0);
             compare(backs.count, 1);
             compare(prev.count, 1);
-            sys.advancedGestures = false;
+            sys.advancedGestures = true;
         }
 
         function test_hardwareHomeButtonRemovesTheBar() {

@@ -16,11 +16,11 @@
 //                            maximize-edges.json; off)
 //   sysUiEnableWaveLauncher  a slide up from a side of the gesture area
 //                            raises the wave launcher (LunaCE
-//                            wave-launcher.json; off)
+//                            wave-launcher.json; off there, on in Phoenix)
 //   sysUiEnableNextPrevGestures  Screen & Lock's Advanced gestures (a long
 //                            swipe across the gesture area switches apps),
 //                            here too beside the wave launcher, where there
-//                            is a gesture area
+//                            is a gesture area (on in Phoenix)
 //   animationSpeed           the shell's animations: Normal or Fast (Faster
 //                            Card Animations)
 //   gestureSensitivity       how far a swipe or flick goes before it counts:
@@ -65,8 +65,8 @@ export function AdvancedPage() {
                 {toggle("sysUiEnableMaximizeEdges", "Open side cards", "A tap on a card at the edge opens it")}
             </Group>
             <Group label="Gestures">
-                {toggle("sysUiEnableWaveLauncher", "Wave launcher", "Slide up from a side of the gesture area for your dock's apps")}
-                {gestureArea && toggle("sysUiEnableNextPrevGestures", "Switch apps", "Swipe across the gesture area for the next app")}
+                {toggle("sysUiEnableWaveLauncher", "Wave launcher", "Slide up from a side of the gesture area for your dock's apps", true)}
+                {gestureArea && toggle("sysUiEnableNextPrevGestures", "Switch apps", "Swipe across the gesture area for the next app", true)}
                 <ListSelector title="Gesture sensitivity" value={prefs?.gestureSensitivity ?? "normal"} testId="adv-gestureSensitivity"
                               options={[{ label: "Low", value: "low" as const }, { label: "Normal", value: "normal" as const },
                                         { label: "High", value: "high" as const }]}

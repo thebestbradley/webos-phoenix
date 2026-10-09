@@ -95,7 +95,7 @@ FocusScope {
     // Settings > Advanced (docs/M6-PLAN.md F4; the system's tweaks, see
     // SimSystemStatus.tweaks): tweak(name) is the setting, or its default.
     readonly property var tweaks: shell.system && shell.system.tweaks ? shell.system.tweaks : ({})
-    readonly property var tweakDefaults: ({ infiniteCardCycling: false, maximizeEdges: false, waveLauncher: false, tapRipple: true,
+    readonly property var tweakDefaults: ({ infiniteCardCycling: false, maximizeEdges: false, waveLauncher: true, tapRipple: true,
                                             animationSpeed: "normal", gestureSensitivity: "normal", haptics: false,
                                             gridDensity: "normal", batteryPercent: false, numberRow: false,
                                             keyboardStyle: "auto" })
@@ -3416,7 +3416,7 @@ FocusScope {
             onForward: shell.gestureForward()
             onPrevious: shell.gestureSwitchApp(true)
             onNext: shell.gestureSwitchApp(false)
-            advancedGestures: !!(shell.system && shell.system.advancedGestures)
+            advancedGestures: !!shell.system && shell.system.advancedGestures !== false
             // The wave launcher (Settings > Advanced): not over the lock
             // screen, First Use, dock mode or the launcher.
             waveLauncher: shell.tweak("waveLauncher") && !shell.locked && !shell.firstUse && !shell.dockMode && !launcher.open

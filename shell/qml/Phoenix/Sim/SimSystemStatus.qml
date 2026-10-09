@@ -96,8 +96,9 @@ QtObject {
     property int screenTimeout: 60
     property int lockTimeout: 0
     // Screen & Lock > Advanced gestures (sysUiEnableNextPrevGestures): a
-    // long swipe across the gesture area switches apps.
-    property bool advancedGestures: false
+    // long swipe across the gesture area switches apps. On by default
+    // (Phoenix; the runtime's defaultPrefs).
+    property bool advancedGestures: true
     // Settings > Text Assist > Hardware keyboard: "ipad" or "desktop".
     property string keyboardShortcuts: "ipad"
     // Settings > Screen & Lock "Show notifications when locked"

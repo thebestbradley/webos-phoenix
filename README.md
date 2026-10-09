@@ -283,10 +283,11 @@ the notification list, and swiped sideways on a notification dismisses it
 bottom is the gesture bar, on phones and tablets alike; it moves to the
 bottom of the screen as you hold it. Press on it and drag (up: card view,
 or out of Just Type; left: back), or swipe two fingers on a trackpad with
-the pointer on it. With Settings > Advanced > Wave launcher on, drag up from
-the bar's left or right quarter, slide along the wave and let go on an app;
-with Switch apps on (also Screen & Lock > Advanced gestures), drag across the
-bar's centre about half a phone's width (160 px) for the app beside. `--home-button` simulates a device
+the pointer on it. Drag up from the bar's left or right quarter for the wave
+launcher, slide along the wave and let go on an app; drag across the bar's
+centre about half a phone's width (160 px) for the app beside (Switch apps).
+Both are on by default; Settings > Advanced turns them off (Switch apps also
+in Screen & Lock > Advanced gestures). `--home-button` simulates a device
 whose maker uses a hardware Home button instead (no gesture bar; tablets
 then take the bottom-edge flick). A big `--size` needs a matching
 `--scale` to look like a real device (2 for most tablets of 2560 px). The

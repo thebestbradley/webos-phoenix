@@ -126,7 +126,7 @@ export function ScreenPage() {
             {gestureArea && (
                 <Group label="Gestures">
                     <Row title="Advanced gestures" subtitle="Swipe across to switch apps" testId="advanced-gestures">
-                        <ToggleButton value={!!prefs.sysUiEnableNextPrevGestures} label="Advanced gestures"
+                        <ToggleButton value={prefs.sysUiEnableNextPrevGestures !== false} label="Advanced gestures"
                                       onChange={(v) => setPref({ sysUiEnableNextPrevGestures: v })} />
                     </Row>
                 </Group>

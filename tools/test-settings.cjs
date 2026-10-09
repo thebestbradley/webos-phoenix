@@ -194,9 +194,11 @@ async function main() {
         check(await page.locator("[data-testid='advanced-gestures']").count() === 0, "no Advanced gestures without a gesture area");
         await page.evaluate(() => window.__phoenixRuntime.applyHostStatus({ gestureArea: true }));
         await page.waitForSelector("[data-testid='advanced-gestures']", { timeout: 3000 });
+        // On by default (Phoenix); turning it off reaches the shell.
+        check(await page.getAttribute("[data-testid='advanced-gestures'] [role='switch']", "aria-checked") === "true", "Advanced gestures on by default");
         await page.click("[data-testid='advanced-gestures'] [role='switch']");
         await page.waitForTimeout(200);
-        check(last().advancedGestures === true, `Advanced gestures reaches the shell (${last().advancedGestures})`);
+        check(last().advancedGestures === false, `Advanced gestures reaches the shell (${last().advancedGestures})`);
         await page.click("[data-testid='wallpaper']");
         await page.click("[data-testid='wallpaper-Aurora']");
         await page.waitForTimeout(200);

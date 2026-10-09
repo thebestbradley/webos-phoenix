@@ -97,7 +97,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Empty-page hint. `Src/lunaui/launcher/elements/page/reorderablepage.cpp:64` *Phoenix: done (`Launcher.qml`, `tst_launcher.qml`).*
 - [x] App groups (folders), and tabs renamed, added and removed (community: LunaCE in webOS CE 3.1.0). *Phoenix: an icon held over another's centre groups them; the group's overlay launches, renames, and takes apps out (the icon menu's Remove from Folder); tabs renamed by holding, "+" for a new one (up to six), the trash can for one the user added; kept with the layout (`LauncherGroup.qml`, `LauncherNameDialog.qml`, `LauncherLayout.js`; `tst_launcher.qml`; M6-PLAN F4).*
 - [x] Launcher grid density (community: the icon grid patches). *Phoenix: Settings > Advanced > Icon grid, Normal or Dense (`Launcher.qml`; M6-PLAN F4).*
-- [x] Wave launcher (webOS 1.x's quick launch; community: LunaCE `wave-launcher.json`). *Phoenix: off by default; Settings > Advanced; a slide up from a side of the gesture area (`WaveLauncher.qml`, `tst_tweaks.qml`; M6-PLAN F4). The Pre's own was not released; drawn after descriptions.*
+- [x] Wave launcher (webOS 1.x's quick launch; community: LunaCE `wave-launcher.json`). *Phoenix: on by default (LunaCE: off); Settings > Advanced; a slide up from a side of the gesture area (`WaveLauncher.qml`, `tst_tweaks.qml`; M6-PLAN F4). The Pre's own was not released; drawn after descriptions.*
 
 ## 6. Lock screen and security [spec §6]
 
@@ -117,7 +117,7 @@ The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legac
 - [x] Back gesture. `SystemUiController.cpp:424-443`
 - [x] Up-swipe to card view / launcher toggle. `SystemUiController.cpp:445-497`
 - [x] Down-swipe to re-maximize the active card. `SystemUiController.cpp:499-526`
-- [x] Optional advanced gestures: previous/next app (full-width swipe). `SystemUiController.cpp:308-315,394-408`; `Src/base/settings/Preferences.cpp:66,598-604` *Phoenix: Settings > Screen & Lock > Advanced gestures (or Advanced > Switch apps), where there is a gesture area; a swipe across its centre over half its width, at most 160 px; a two-finger trackpad swipe too.*
+- [x] Optional advanced gestures: previous/next app (full-width swipe). `SystemUiController.cpp:308-315,394-408`; `Src/base/settings/Preferences.cpp:66,598-604` *Phoenix: on by default (LunaSysMgr: off); Settings > Screen & Lock > Advanced gestures (or Advanced > Switch apps), where there is a gesture area; a swipe across its centre over half its width, at most 160 px; a two-finger trackpad swipe too.*
 - [x] Meta key (gesture-area hold) for copy/cut/paste/select-all. `Src/base/MetaKeyManager.cpp`; `SystemUiController.cpp:180-184` *Phoenix: a finger resting on the gesture bar is the meta key (`GestureArea.metaHeld`); A, C, X, V typed on a keyboard or the virtual keyboard are Select All, Copy, Cut, Paste in the app in front or Just Type; the bar glows while held (`tst_gesturebar` test_metaKey).*
 - [x] Home button: minimize, launcher toggle, double-press. `SystemUiController.cpp:528-584`
 - [x] TouchPad bezel edge-flick. `SystemUiController.cpp:2041-2121`; `Src/base/gesture/ScreenEdgeFlickGestureRecognizer.cpp`
