@@ -1,0 +1,7 @@
+{
+    "//": "The driver catalog org.webosphoenix.hardware reads (docs/DRIVERS.md). Its key is pinned here, in the system image: a driver catalog is not trusted on first use, as drivers install as root. key is null until the project's driver catalog key is made (server/drivers, `drivers.php init`); until then the service lists the hardware and offers nothing. reportUrl: where the opt-in hardware report goes.",
+    "sources": [
+        { "id": "phoenix", "name": "Phoenix Drivers", "url": "https://drivers.webosphoenix.org/v1/", "key": null }
+    ],
+    "reportUrl": "https://drivers.webosphoenix.org/v1/report"
+}

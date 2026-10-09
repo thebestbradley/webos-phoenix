@@ -1,0 +1,12 @@
+{
+    "appId": "org.webosphoenix.hardware",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": ["org.webosphoenix.hardware"],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.hardware",
+            "outbound": ["com.palm.activitymanager", "com.webos.notification", "org.webosphoenix.ongoing"]
+        }
+    ]
+}
