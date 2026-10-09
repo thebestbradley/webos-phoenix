@@ -305,8 +305,18 @@ function createAssistantService(deps) {
     // layer: "commands", "on-device" or "cloud"; source: who chose it.
     // asked: the words a model chose this from (a model's choice they do not
     // ground is read back first: lang grounded()).
+    // The one item an answer showed ({kind, id, title}) is what "it" means next.
+    function keepFocus(thread, focus) {
+        var t = getThread(thread.id);
+        if (!t) return;
+        t.focus = focus;
+        thread.focus = focus;
+        putThread(t);
+    }
     function act(thread, cmd, args, layer, source, asked) {
         var e = env(), s = lang().say;
+        // "it": the item the conversation is about (lib/details.js).
+        e.focus = thread.focus || null;
         // Asked by voice over the lock screen: only what shows nothing
         // private and sends nothing; the rest waits for the unlock.
         if (lockedAsk[thread.id] && LOCKED_COMMANDS.indexOf(cmd.id) < 0)
@@ -322,6 +332,7 @@ function createAssistantService(deps) {
             if (confirm) return [say(thread, confirm, { via: layer, source: source, command: cmd.id, status: "pending",
                                                         confirm: { command: cmd.id, args: p.args } })];
             return commands.run(cmd, p.args, e).then(function (r) {
+                if (r.focus) keepFocus(thread, r.focus);
                 return withFollowUp(thread, cmd, p.args, r, [say(thread, r.text, outcome(r, layer, source, cmd))]);
             });
         }).catch(function (err) {

@@ -75,6 +75,18 @@ model was measured on (below) now reach the right command in the grammar, as do 
 (`casual.test.ts`), and words such as "let me know what you think", "drop
 it" or "tell me about palm" are left alone.
 
+**One thing about one item** (9 October 2026, the owner: retrieve
+specifics, not just lists). "What time is my meeting with Sam", "where is
+it", "who's invited", "how long is it", "what did I write in my grocery
+memo", "when is Sam's birthday", "when did Mom call", "what did Alex's last
+email say", "what's on my to-do list for today", "when is my next dentist
+appointment": the one field asked for, in a sentence, with the item's card
+(`detail`, `lib/details.js`; `contactInfo`, `callLog {who}`, `readEmail`,
+`taskList {day}`). The item an answer shows (the one thing it opens) is
+the conversation's **focus**, kept with the conversation
+(`assistant.js` `keepFocus`), and "it", "that" or no name at all
+("who's invited") means it. Tests: `details.test.ts`.
+
 | Command | Say, for example | Does | Asks first |
 | --- | --- | --- | --- |
 | `event` | "add a meeting with Sam tomorrow at 3", "create an event called dentist on Friday at 10am", "schedule lunch with Priya next Tuesday at noon at Bistro Verde", "put yoga on my calendar every Monday at 7pm for 90 minutes", "team offsite on the 20th all day" | A calendar event: title, day and time, end or length (an hour by default), place, invitees (contacts with an email), repeats; without a time it asks "When is it?" and the next words say it | |

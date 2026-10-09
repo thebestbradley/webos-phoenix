@@ -636,7 +636,7 @@ function alarmManage(t, now) {
              all: !c && (/\ball\b/.test(t) || /alarms$/.test(t)) };
 }
 function alarmList(t) {
-    if (/^(?:what|which) alarms?(?: do i have| are set| have i set| are on| is set)?$|^(?:show|list|check|open)(?: me)? (?:my |the |all (?:my )?)?alarms$|^do i have (?:an |any )?alarms?(?: set| on)?(?: for tomorrow| tomorrow)?$|^(?:what(?:'s| is)|when(?:'s| is)) my (?:next )?alarm(?: set for)?$|^(?:my )?alarms$/.test(t))
+    if (/^(?:what|which) alarms?(?: do i have| are set| have i set| are on| is set)?$|^(?:show|list|check|open)(?: me)? (?:my |the |all (?:my )?)?alarms$|^do i have (?:an |any )?alarms?(?: set| on)?(?: for tomorrow| tomorrow)?$|^(?:what(?:'s| is)|when(?:'s| is)) my (?:next )?alarm(?: set for)?$|^(?:my )?alarms$|^what time (?:is|'s) (?:my |the )?(?:next )?alarm(?: set)?(?: for)?$/.test(t))
         return {};
     return null;
 }
@@ -720,7 +720,7 @@ function agenda(t, ctx) {
     // When is my dentist appointment
     if ((m = /^when(?:'s| is| are) (?:my |the |our )?(.+?)(?: (?:appointment|meeting|event))?$/.exec(t)) && !/^(?:it|that|this)$/.test(m[1])
         && !/\b(?:sunset|sunrise|easter|christmas|thanksgiving|halloween)\b/.test(m[1]) && !/^(?:my )?next alarm/.test(m[1]))
-        return { range: "find", query: m[1] };
+        return { range: "find", query: m[1].replace(/^next /, "") };
     var dayish = /\b(?:today|tonight|tomorrow|yesterday|this week|next week|this weekend|next weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|\bon the \d/.test(timeWords(t));
     if (!(asks && (mentions || (dayish && /\b(?:have|got|on|busy|free|planned|happening)\b/.test(t)))) && !/^(?:my )?(?:calendar|schedule|agenda)(?: for)?(?: .+)?$/.test(t))
         return null;
@@ -1423,6 +1423,75 @@ function casual(t) {
     return out;
 }
 
+// ---- Details: one thing about one item ------------------------------------------------------
+// "what time is my meeting with Sam", "where is it", "who's invited",
+// "what did I write in my grocery memo", "when did Mom call", "what did
+// Alex's last email say", "what's on my to-do list for today". The answer
+// is that one thing, with the item's card; "it" is the item the
+// conversation is about (the last one shown: assistant.js focus).
+var IT_WORDS = /^(?:it|that|this|that one|this one|them|the (?:event|meeting|appointment)|that (?:event|meeting|appointment))$/;
+// Words that name an event: a kind of event, a get-together, or "with" someone.
+function eventish(q) {
+    return new RegExp("\\b" + EVENT_NOUN + "s?\\b").test(q) || / with /.test(" " + q + " ")
+        || /\b(?:lunch|dinner|breakfast|brunch|coffee|drinks|party|date|interview|class|lesson|game|practice|session|stand-?up|catch-?up|gym|workout|visit|checkup|check-up|dentist|doctor|haircut|flight|trip|concert|show|wedding|birthday party)\b/.test(q);
+}
+function detailEvent(q, field) {
+    q = q.replace(/^(?:my|the|our) /, "").trim();
+    if (IT_WORDS.test(q) || !q) return { kind: "event", query: "", field: field, it: true };
+    if (/\b(?:alarm|timer|reminder|task|memo|note|email|message|call from)\b/.test(q) || !eventish(q)) return null;
+    return { kind: "event", query: q, field: field, it: false };
+}
+function detail(t) {
+    var m;
+    if ((m = /^what time (?:is|'s|are) (.+?)(?: (?:at|on|starting|start|set for))?$/.exec(t)) || (m = /^when (?:does|do|will) (.+?) (?:start|begin)$/.exec(t))
+        || (m = /^what time (?:does|do|will) (.+?) (?:start|begin)$/.exec(t)))
+        return /^(?:it|it now|now)$/.test(m[1]) && /^what time/.test(t) ? null : detailEvent(m[1], "time");
+    if ((m = /^where(?:'s| is| are| will) (.+?)(?: be)?(?: (?:held|happening|taking place|at))?$/.exec(t)))
+        return detailEvent(m[1], "place");
+    if ((m = /^who(?:'s| is| are)?(?: else)? (?:invited|coming|going|attending|in|joining|on the invite)(?: (?:to|for|at|in) (.+))?$/.exec(t))
+        || (m = /^who(?:'s| is| am i) (?:meeting|seeing)(?: (?:at|in|for|on) (.+))?$/.exec(t))
+        || (m = /^who(?:'s| is) (?:at|in) (.+)$/.exec(t)))
+        return detailEvent(m[1] || "", "people");
+    if ((m = /^how long (?:is|'s|will) (.+?)(?: (?:take|last|be))?$/.exec(t)))
+        return detailEvent(m[1], "length");
+    // A memo's words.
+    if ((m = /^(?:what did i (?:write|put|say|jot down|note down|note|save) (?:in|on|about|to) |what(?:'s| is| was) (?:in|on) |what does |read(?: me)? |show(?: me)? |tell me what(?:'s| is) (?:in|on) )(?:my |the )?(.+?) (?:memo|note)(?: say)?$/.exec(t)))
+        return /^(?:last|latest|new|newest)$/.test(m[1]) ? null : { kind: "memo", query: m[1], field: "text", it: false };
+    if (/^(?:what did i (?:write|put)(?: in it| there)?|what(?:'s| is) in it|read it(?: to me| out)?|read me that one|what does it say)$/.test(t))
+        return { kind: "", query: "", field: "text", it: true };
+    return null;
+}
+// "when is Sam's birthday": the contact's (contactInfo); the calendar's if no contact has it.
+function birthday(t) {
+    var m = /^when(?:'s| is) (.+?)(?:'s|s') birthday$/.exec(t);
+    return m && !/^(?:my|your)$/.test(m[1]) ? { who: m[1], what: "birthday", label: "" } : null;
+}
+// "what did Alex's last email say", "what did the last email from Alex say"
+function emailSaid(t) {
+    var m = /^what did (.+?)(?:'s|s') (?:last |latest |most recent )?(?:e-?mail|mail|message to me) say$/.exec(t)
+        || /^what did (?:the |my )?(?:last |latest |most recent )?(?:e-?mail|mail) from (.+?) say$/.exec(t)
+        || /^what(?:'s| is| was) (?:in )?(.+?)(?:'s|s') (?:last |latest )(?:e-?mail|mail)(?: about)?$/.exec(t);
+    return m && !/^(?:i|me|my)$/.test(m[1]) ? { who: m[1] } : null;
+}
+// "when did Mom call", "did Sam call me today", "when was Sam's last call"
+function callFrom(t) {
+    var m = /^when did (.+?) (?:last )?(?:call|ring|phone)(?: me)?(?: last)?$/.exec(t)
+        || /^(?:did|has) (.+?) (?:called|call|rung|ring|phoned|phone)(?: me)?(?: today| yet| back)?$/.exec(t)
+        || /^when was (.+?)(?:'s|s') last call$/.exec(t);
+    if (!m || /^(?:i|we|anyone|anybody|someone|somebody)$/.test(m[1])) return null;
+    return { missed: false, who: m[1] };
+}
+// "what's on my to-do list for today", "what do I have to do tomorrow"
+function tasksDue(t) {
+    var m = /^(?:what(?:'s| is| are)|whats|show(?: me)?|read(?: me)?|list|check|tell me)(?: (?:on|in))? (?:everything on )?(?:my |the )?(?:(.+?) )?(list|tasks|to-?dos?(?: list)?|todo list)(?: (?:for|due))? (today|tomorrow|this week)$/.exec(t)
+        || /^what do i (?:need|have) to do (today|tomorrow|this week)$/.exec(t);
+    if (!m) return null;
+    var name = m.length > 2 ? (m[1] || "").trim() : "", day = m.length > 2 ? m[3] : m[1];
+    if (/\b(?:alarm|calendar|contact|email|message|call|play|reading)s?\b/.test(name)) return null;
+    if (/^(?:to-?do|task|my)$/.test(name)) name = "";
+    return { list: name, day: day };
+}
+
 var rules = [
     ["help", help],
     ["undo", undo],
@@ -1444,6 +1513,11 @@ var rules = [
     ["alarm", function (t, ctx) { return alarm(t, ctx.now, ctx); }],
     ["freeTime", freeTime],
     ["eventMove", eventMove],
+    ["contactInfo", birthday],
+    ["readEmail", emailSaid],
+    ["callLog", callFrom],
+    ["taskList", tasksDue],
+    ["detail", detail],
     ["agenda", agenda],
     ["app", appCommand(false)],
     ["noteAppend", noteAppend],
@@ -1932,6 +2006,34 @@ var say = {
     agendaNext: function (e, now) {
         if (!e) return "Nothing coming up on your calendar.";
         return "Next: " + quote(e.title) + " " + whenText(e.start, null, e.allDay, now) + (e.location ? ", at " + e.location : "") + ".";
+    },
+    // Details (one thing about one item)
+    eventTime: function (title, start, end, allDay, now) {
+        if (allDay) return quote(title) + " is all day, " + dayText(start, now) + ".";
+        return quote(title) + " is " + whenText(start, null, false, now) + (end > start ? ", until " + timeText(end) : "") + ".";
+    },
+    eventPlace: function (title, place) { return place ? quote(title) + " is at " + place + "." : quote(title) + " has no place set."; },
+    eventPeople: function (title, names) {
+        return names.length ? list(names) + (names.length === 1 ? " is" : " are") + " invited to " + quote(title) + "." : "No one else is invited to " + quote(title) + ".";
+    },
+    eventLength: function (title, minutes, allDay) {
+        if (allDay) return quote(title) + " is all day.";
+        var h = Math.floor(minutes / 60), m = minutes % 60;
+        return quote(title) + " is " + (h ? h + (h === 1 ? " hour" : " hours") : "") + (h && m ? " " : "") + (m || !h ? m + " minutes" : "") + ".";
+    },
+    memoSays: function (title, text) { return text ? "Your " + quote(excerpt(title, 40)) + " memo says: " + excerpt(text, 400) : "Your " + quote(excerpt(title, 40)) + " memo is empty."; },
+    nothingInFocus: function () { return "Which one? Ask about it by name, like “where is my meeting with Sam”."; },
+    callsFrom: function (name, c, now) {
+        if (!c) return "There's no call from " + name + " in your call log.";
+        var when = whenText(c.at, null, false, now);
+        if (c.type === "outgoing") return "You last called " + c.name + " " + when + "; there's no call from them since.";
+        return (c.type === "missed" ? "You missed a call from " : c.name + " last called ") + (c.type === "missed" ? c.name + " " : "") + when + ".";
+    },
+    tasksDue: function (name, day, items) {
+        var where = name ? "your " + name + " list" : "your tasks";
+        if (!items.length) return "There's nothing on " + where + " for " + day + ".";
+        var shown = items.slice(0, 8).map(quote);
+        return cap(day) + " on " + where + ": " + list(shown) + (items.length > 8 ? ", and " + (items.length - 8) + " more" : "") + ".";
     },
     agendaFound: function (q, e, now) {
         if (!e) return "I couldn't find " + quote(q) + " on your calendar.";

@@ -201,8 +201,8 @@ var BUILT_IN = [
       parameters: { type: "object", properties: { query: S }, required: ["query"] } },
     { id: "callBack", title: "Calling back and redialling", risk: "call", description: "Call back the last person who called, or redial the last number called.",
       parameters: { type: "object", properties: { which: { type: "string", enum: ["back", "redial"] } }, required: ["which"] } },
-    { id: "callLog", title: "Recent and missed calls", risk: "read", description: "Tell who called last, or the missed calls.",
-      parameters: { type: "object", properties: { missed: B } } },
+    { id: "callLog", title: "Recent and missed calls", risk: "read", description: "Tell who called last, or the missed calls, or when someone last called.",
+      parameters: { type: "object", properties: { missed: B, who: { type: "string", description: "Contact name: when they last called" } } } },
     { id: "voicemail", title: "Voicemail", risk: "call", description: "Tell whether there is new voicemail, or call voicemail.",
       parameters: { type: "object", properties: { action: { type: "string", enum: ["status", "call"] } }, required: ["action"] } },
     { id: "replyMessage", title: "Replying to messages", risk: "send", description: "Reply by text message to whoever sent the last message.",
@@ -215,8 +215,8 @@ var BUILT_IN = [
       parameters: { type: "object", properties: { day: { type: "string", description: "The day, as said or ISO 8601" }, at: { type: "string", description: "A time that day, if asked" } } } },
     { id: "noteAppend", title: "Adding to memos", risk: "change", description: "Add words to the end of an existing memo.",
       parameters: { type: "object", properties: { query: { type: "string", description: "Words of the memo" }, text: S }, required: ["query", "text"] } },
-    { id: "taskList", title: "Reading lists and tasks", risk: "read", description: "Tell what is on a list in Tasks (empty: the default list).",
-      parameters: { type: "object", properties: { list: S } } },
+    { id: "taskList", title: "Reading lists and tasks", risk: "read", description: "Tell what is on a list in Tasks (empty: the default list), or what is due on a day.",
+      parameters: { type: "object", properties: { list: S, day: { type: "string", enum: ["", "today", "tomorrow", "this week"] } } } },
     { id: "taskDone", title: "Completing tasks", risk: "change", description: "Mark a task as done.",
       parameters: { type: "object", properties: { text: { type: "string", description: "The task's words" } }, required: ["text"] } },
     { id: "nearby", title: "Places nearby", risk: "open", description: "Find places of a kind near the user in Maps (\"coffee\", \"pharmacy\").",
@@ -244,6 +244,10 @@ var BUILT_IN = [
     { id: "undo", title: "Undo", risk: "delete", internal: true, description: "Take back what the assistant just did.",
       parameters: { type: "object", properties: {} } }
 ];
+// One thing about one item, and the item a conversation is about (lib/details.js).
+var details = require("./details")({ D: D, lunaCall: lunaCall, dbFind: dbFind, findEvent: findEvent, matches: matches,
+                                     whenShown: whenShown, cards: cards });
+Array.prototype.push.apply(BUILT_IN, details.COMMANDS);
 
 // Every command: the built-in ones, then the apps' (lib/grammar.js compileAppCommands).
 function catalogue(appCommands) {
@@ -1212,6 +1216,8 @@ function helpNow(env) {
 
 function runInner(cmd, args, env) {
     var say = env.lang.say, now = env.now();
+    var detailed = details.run(cmd, args, env);
+    if (detailed) return detailed;
     switch (cmd.id) {
     case "call":
         return launch(env, "org.webosphoenix.phone", { number: args.number, dial: true })
@@ -1652,14 +1658,19 @@ function runInner(cmd, args, env) {
     case "callLog":
         return Promise.all([phoneCalls(env), people(env)]).then(function (got) {
             var all = got[0], ppl = got[1];
-            var list = args.missed ? all.filter(function (c) { return c.type === "missed" && now - (c.timestamp || 0) < 7 * 86400000; }) : all.slice(0, 1);
             var who = function (c) { var p = c.type === "outgoing" ? (c.to || [])[0] || {} : c.from || {}; return p.name || nameForPhone(ppl, p.addr) || p.addr || "Unknown"; };
+            // "when did Mom call": the last call with them (theirs, or one missed).
+            var asked = String(args.who || "").trim();
+            if (asked) all = all.filter(function (c) { return matches(who(c), asked) || (/\d/.test(asked) && samePhone(asked, (c.from || {}).addr || "")); });
+            var list = args.missed ? all.filter(function (c) { return c.type === "missed" && now - (c.timestamp || 0) < 7 * 86400000; })
+                : asked ? all.filter(function (c) { return c.type !== "outgoing"; }).slice(0, 1).concat(all.filter(function (c) { return c.type === "outgoing"; }).slice(0, 1)).slice(0, 1)
+                : all.slice(0, 1);
             var addr = function (c) { var p = c.type === "outgoing" ? (c.to || [])[0] || {} : c.from || {}; return p.addr || ""; };
             var phone = { appId: "org.webosphoenix.phone", params: {}, title: "Phone" };
             var shown = list.slice(0, 5).map(function (c) { return { name: who(c), type: c.type, at: c.timestamp || 0 }; });
             var first = list[0];
             var actions = first && addr(first) ? [{ label: say.callName(who(first)), run: { command: "call", args: { who: addr(first), number: addr(first) } } }] : [];
-            return { text: args.missed ? say.missedCalls(shown, now) : say.lastCall(shown[0] || null, now), open: phone, actions: actions,
+            return { text: args.missed ? say.missedCalls(shown, now) : asked ? say.callsFrom(shown[0] ? shown[0].name : asked.charAt(0).toUpperCase() + asked.slice(1), shown[0] || null, now) : say.lastCall(shown[0] || null, now), open: phone, actions: actions,
                      attachments: cards(shown.map(function (c) { return { title: c.name, subtitle: say.callKind(c.type) + " · " + whenShown(env, c.at, null, false), open: phone }; })) };
         });
     case "replyMessage":
@@ -1731,9 +1742,13 @@ function runInner(cmd, args, env) {
                          : lists.filter(function (x) { return x.isDefault; })[0];
             if (name && !l) return { text: say.noList(name), open: { appId: TASKS_APP, params: {}, title: "Tasks" } };
             return dbFind(env, "com.palm.task:1").then(function (tasks) {
-                var open = tasks.filter(function (x) { return !x.completed && !x._del && (!l || x.listId === l._id); })
+                // "for today": what is due by the end of that day (or of the week).
+                var by = args.day === "today" ? D.addDays(D.startOfDay(now), 1) : args.day === "tomorrow" ? D.addDays(D.startOfDay(now), 2)
+                    : args.day === "this week" ? D.weekRange(now).to : 0;
+                var open = tasks.filter(function (x) { return !x.completed && !x._del && (!l || x.listId === l._id) && (!by || (x.due && x.due < by)); })
                     .sort(function (a, b) { return (a.due || Infinity) - (b.due || Infinity) || (a.createdTime || 0) - (b.createdTime || 0); });
-                return { text: say.tasks(l && !l.isDefault ? l.name : "", open.map(function (x) { return x.summary; })), data: { count: open.length },
+                var named = l && !l.isDefault ? l.name : "", summaries = open.map(function (x) { return x.summary; });
+                return { text: by ? say.tasksDue(named, args.day, summaries) : say.tasks(named, summaries), data: { count: open.length },
                          open: { appId: TASKS_APP, params: {}, title: "Tasks" },
                          attachments: cards(open.map(function (x) {
                              return { title: x.summary, subtitle: x.due ? whenShown(env, x.due, null, !!x.allDay) : "", open: { appId: TASKS_APP, params: { taskId: x._id }, title: "Tasks" } };
@@ -1823,6 +1838,11 @@ function run(cmd, args, env) {
         });
     } });
     return runInner(cmd, args, Object.assign({}, env, { luna: spy })).then(function (out) {
+        // The one item the answer shows: what "it" means next (lib/details.js).
+        if (out && out.focus === undefined) {
+            var f = details.focusOf(out);
+            if (f) out.focus = f;
+        }
         if (!order.length) return out;
         return Promise.resolve(luna.call(DB + "get", { ids: order })).then(function (r) {
             // A db8 that cannot say (no results at all): nothing to check against.

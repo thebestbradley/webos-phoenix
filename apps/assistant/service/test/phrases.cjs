@@ -27,4 +27,5 @@ module.exports = {
     nearby: "coffee near me", website: "open example.com", storage: "how much storage do I have", appStore: "install doom",
     help: "how do I close an app", copyText: "", findFiles: "find my file called budget", readEmail: "read my latest email",
     emailReply: "reply to my last email saying thanks", travelTime: "how long will it take to drive to the airport", locationAccess: "",
+    detail: "what time is my dentist appointment",
 };
