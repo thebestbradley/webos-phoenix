@@ -15,7 +15,11 @@ export MARKETPLACE_BASE_URL="${MARKETPLACE_BASE_URL:-http://127.0.0.1:$PORT/v1/}
 if [ ! -f "${MARKETPLACE_DATA:-data}/signing.key" ]; then
     php bin/marketplace.php init
 else
-    # The index as this version of the catalog writes it (a new build).
+    # The curated web apps as this checkout lists them: a catalog set up
+    # with an older catalog/curated-pwas.json gets the ones added since
+    # (opted-out origins and apps an admin pulled stay out), then the index
+    # as this version of the catalog writes it (a new build).
+    php bin/marketplace.php seed >/dev/null
     php bin/marketplace.php publish >/dev/null
 fi
 echo "Phoenix Marketplace at http://127.0.0.1:$PORT/ (catalog: /v1/, admin: /admin)"
