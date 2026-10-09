@@ -341,6 +341,68 @@ Item {
         return true;
     }
 
+    // Back in an app another one opened (the window source's
+    // cardReturnRequested: Photos from the Assistant's thumbnails, Maps on a
+    // place): fromUid, maximized, goes back into card view, then the card
+    // that opened it maximizes again, as LunaSysMgr re-maximized the card
+    // that launched a child once card view settled (restoreCardToMaximized,
+    // CardWindowManager.cpp:2812-2821, from MinimizeState::animationsFinished,
+    // CardWindowManagerStates.cpp:158-165); the opened app slides off over
+    // it, as the cards in front of a maximizing card do. It stays open (the
+    // owner), and once the caller fills the screen it is moved behind it in
+    // the stack, out of sight: in card view it is the card behind the
+    // conversation, not in front of it.
+    property var _returning: null
+    function returnTo(uid, fromUid) {
+        var g = groupIndexOf(uid);
+        if (g < 0)
+            return;
+        _returning = null;
+        if (!maximized || currentUid !== fromUid) {
+            maximize(uid);
+            return;
+        }
+        cancelRise();
+        maximizeAnim.stop();
+        maximizeAnim.to = 0;
+        maximizeAnim.duration = Theme.cardMinimizeDuration;
+        maximizeAnim.start();
+        cardMinimized(fromUid);
+        _returning = { uid: uid, from: fromUid, step: "minimize" };
+    }
+    function _returnStep() {
+        var r = _returning;
+        if (!r)
+            return;
+        if (r.step === "minimize") {
+            // Touched meanwhile (another card maximized, a swipe): theirs.
+            if (maximizeProgress > 0 || groupIndexOf(r.uid) < 0) {
+                _returning = null;
+                return;
+            }
+            r.step = "maximize";
+            maximize(r.uid);
+            return;
+        }
+        _returning = null;
+        var g = groupIndexOf(r.uid);
+        if (g < 0 || g !== groupIndexOf(r.from) || currentUid !== r.uid || maximizeProgress < 0.999)
+            return;
+        var uids = groups[g].uids;
+        var ku = uids.indexOf(r.uid), kf = uids.indexOf(r.from);
+        if (kf > ku) {
+            layoutAnimationDuration = 0;
+            source.moveCard(groups[g].start + kf, groups[g].start + ku);
+        }
+    }
+    // Each step when the one before has run its course (not when stopped:
+    // another maximize or minimize took over, and the next step's checks
+    // drop the rest).
+    Connections {
+        target: maximizeAnim
+        function onFinished() { if (view._returning) view._returnStep(); }
+    }
+
     // Jump straight to card view on a stack, without animating.
     function jumpTo(groupIndex) {
         cancelRise();
@@ -1192,6 +1254,12 @@ Item {
                 var grp = view.groups[g];
                 var t = CardLayout.tapOnFan(grp.uids.indexOf(uid), grp.uids.length, currentFan());
                 if (t.maximize) {
+                    // CardWindowManager.cpp:2162-2165: setActiveCard, then
+                    // moveToActiveCard (the fan centred on the tapped card,
+                    // CardGroup::moveToActiveCard), then maximize; minimized
+                    // again, it comes back centred. (Four cards or fewer:
+                    // the fan cannot move, clampFanPosition.)
+                    setCurrentFan(grp.uids.indexOf(uid));
                     view.maximize(uid);
                 } else {
                     view.animateLayout(Theme.cardSlideDuration);

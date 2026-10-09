@@ -1293,6 +1293,15 @@ Item {
             compare(view.currentUid, uids[0]);
             view.minimize();
             tryCompare(view, "maximizeProgress", 0, 2000);
+            // A card that maximizes centres the fan on itself
+            // (moveToActiveCard): card 2 from position 1.
+            p = strip(2);
+            mouseClick(view, p.x, p.y);
+            tryCompare(view, "maximizeProgress", 1, 2000);
+            compare(view.currentUid, uids[2]);
+            compare(view.fanPositions[gid], 2);
+            view.minimize();
+            tryCompare(view, "maximizeProgress", 0, 2000);
             // Below the stack's cards, in its column: nothing changes.
             var col = view.layout.columns[0];
             mouseClick(view, (col.left + col.right) / 2, view.height - 5);

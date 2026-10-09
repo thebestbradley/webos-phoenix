@@ -86,7 +86,7 @@ durations and curves, never wall-clock time).
 
 | Animation | Original | Phoenix | Verdict |
 |---|---|---|---|
-| Maximize / minimize (min/max) | 300 ms OutQuart (`CardGroup.cpp:335-366`, minimize is a slide `CardWindowManager.cpp:2491-2685`; conf `:31-32`; conf's `cardMinimize*` is read by nothing) | `CardView.qml`, `Theme.cardMaximizeDuration` | matches |
+| Maximize / minimize (min/max) | 300 ms OutQuart (`CardGroup.cpp:335-366`, minimize is a slide `CardWindowManager.cpp:2491-2685`; conf `:31-32`; conf's `cardMinimize*` is read by nothing) | `CardView.qml`, `Theme.cardMaximizeDuration`; the stack keeps its z order throughout (GAPS C12) | matches |
 | Card throw (close) | 300 ms OutCubic (`CardWindowManager.cpp:687-688, 2872-2873`) | `CardView.qml` flick | matches |
 | Slide between cards, reorder, group reorder, dimming | 300 OutQuart / 350 OutCubic / 500 OutCubic / 300 OutCubic (conf `:25-66`) | `CardView.qml`, `Card.qml` | matches |
 | Loading card pulse and cross-fade | `CardLoading.cpp:141-142`; conf `:55-60` | `CardLoading.qml` | matches |

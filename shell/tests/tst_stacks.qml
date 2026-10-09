@@ -23,6 +23,13 @@ Item {
         system: SimSystemStatus {}
     }
 
+    // The lowest maximizeProgress since it was reset (test_returnToTheCaller).
+    property real lowestProgress: 1
+    Connections {
+        target: shell.cardView
+        function onMaximizeProgressChanged() { root.lowestProgress = Math.min(root.lowestProgress, shell.cardView.maximizeProgress); }
+    }
+
     TestCase {
         name: "Stacks"
         when: windowShown
@@ -283,6 +290,63 @@ Item {
             // The other cards of the stack fly off either side.
             verify(cv.layout.cards[s.msg].cx < 0);
             verify(cv.layout.cards[s.c2].cx > cv.width);
+        }
+
+        // A card from the back of a stack keeps its place in the stack's
+        // order while it maximizes and minimizes (z is CardGroup's list
+        // order, raiseCards; nothing in lunaui/cards changes z): the cards
+        // in front stay over it as they slide off and back. It was lifted
+        // above them while maximized and dropped behind as the minimize
+        // ended, which looked like it dissolved through the card in front.
+        function test_backCardKeepsItsPlaceInTheStack() {
+            var s = makeStacks();
+            var z = function (uid) { return cv.layout.cards[uid].z; };
+            var below = z(s.c1) < z(s.c2) && z(s.msg) < z(s.c1);
+            verify(below, "front to back: c2, c1, msg");
+            cv.maximize(s.c1);
+            var midway = false;
+            tryVerify(function () {
+                if (cv.maximizeProgress > 0.2 && cv.maximizeProgress < 0.8 && z(s.c1) < z(s.c2))
+                    midway = true;
+                return shell.maximized;
+            }, 2000);
+            verify(midway, "maximizing: still under the card in front");
+            verify(z(s.c1) < z(s.c2) && z(s.msg) < z(s.c1), "maximized: the same order");
+            // The card in front sits level, at the maximized card's height,
+            // off to the right (CardGroup.cpp:344-370).
+            compare(cv.layout.cards[s.c2].rot, 0);
+            fuzzyCompare(cv.layout.cards[s.c2].cy, cv.maximizedCenterY, 0.5);
+            var before = z(s.c1);
+            cv.minimize();
+            tryVerify(function () { return cv.maximizeProgress === 0; }, 2000);
+            compare(z(s.c1), before, "minimized: no change in z");
+            compare(uidsOf(1), [s.msg, s.c1, s.c2].join(","));
+        }
+
+        // Back in an app another one opened (the window source's
+        // cardReturnRequested): the app's card goes back into card view, the
+        // card that opened it maximizes again with the app sliding off over
+        // it, and then the app is behind it in the stack, still open.
+        function test_returnToTheCaller() {
+            var a = windows.launch("org.webosphoenix.messaging", "");
+            wait(0);
+            cv.maximize(a);
+            tryVerify(function () { return shell.maximized; }, 2000, "the caller maximized");
+            windows._hostMessage("org.webosphoenix.messaging", a, "launch", { id: "org.webosphoenix.photos" });
+            var ph = windows.runningUid("org.webosphoenix.photos");
+            verify(ph !== "");
+            tryVerify(function () { return shell.maximized && cv.currentUid === ph; }, 3000, "Photos maximized");
+            compare(cv.groups[0].uids.join(","), [a, ph].join(","), "Photos in front of the card that opened it");
+            root.lowestProgress = 1;
+            windows._hostMessage("org.webosphoenix.photos", ph, "launch", { id: "org.webosphoenix.messaging", params: {}, returnTo: true });
+            // Card view first...
+            // ...then the caller maximized, Photos sliding off over it. (Card
+            // view lasts a moment: the lowest progress on the way tells.)
+            tryVerify(function () { return shell.maximized && cv.currentUid === a; }, 2000, "the caller maximized again");
+            compare(root.lowestProgress, 0, "through card view");
+            verify(windows.cardIndex(ph) >= 0, "Photos still open");
+            tryCompare(cv, "_returning", null, 2000);
+            compare(cv.groups[0].uids.join(","), [ph, a].join(","), "and behind the caller in the stack");
         }
     }
 }

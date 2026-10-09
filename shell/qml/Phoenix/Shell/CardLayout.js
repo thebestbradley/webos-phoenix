@@ -190,16 +190,26 @@ function compute(groups, p) {
                 focused: g === current && k === f
             };
             if (g === current && m > 0) {
+                // CardGroup::maximizeActiveCard, CardGroup.cpp:325-373. The
+                // stack keeps its order all the way (z is the list order:
+                // CardGroup::raiseCards, :577-592, no z changes anywhere in
+                // lunaui/cards): a card from the back of the stack grows
+                // behind the cards in front of it while they slide off to
+                // the right, and when it minimizes they slide back over it.
+                // (It was lifted above them while maximized and dropped
+                // behind them as the minimize ended: it seemed to dissolve
+                // through the card in front.)
                 if (k === f) {
-                    // CardGroup::maximizeActiveCard, CardGroup.cpp:325-373
                     r.cx = mix(r.cx, p.viewWidth / 2, m);
                     r.cy = mix(r.cy, p.maximizedCenterY, m);
                     r.scale = mix(r.scale, 1, m);
                     r.rot = mix(r.rot, 0, m);
-                    r.z = 2000;
                 } else {
-                    // Cards below fly off left, cards above fly off right.
+                    // Cards below fly off left, cards above fly off right,
+                    // at the maximized card's height and level (:344-370).
                     r.cx = mix(r.cx, p.viewWidth / 2 + (k < f ? -1 : 1) * p.viewWidth, m);
+                    r.cy = mix(r.cy, p.maximizedCenterY, m);
+                    r.rot = mix(r.rot, 0, m);
                 }
             }
             result.cards[grp.uids[k]] = r;
