@@ -13,6 +13,7 @@
 
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -99,6 +100,51 @@ describe("the on-device model", () => {
         expect((await llm.status()).installed).toEqual([]);
         expect((await llm.status()).running).toBe(false);
     });
+
+    // The service gone, its llama-server goes too (lib/node-device.js):
+    // on SIGTERM; killed outright, through setpriv's parent-death signal,
+    // or else by the next service, from the pid it kept.
+    it("ends llama-server with the service, however the service ends", async () => {
+        const bin = join(dir, "llama-server");
+        writeFileSync(bin, `#!/bin/sh\nexec "${process.execPath}" "${resolve(__dirname, "test/mock-providers.cjs")}" "$@"\n`);
+        chmodSync(bin, 0o755);
+        const script = join(dir, "service-child.cjs");
+        writeFileSync(script, `const d = require(${JSON.stringify(resolve(__dirname, "lib/node-device.js"))});
+const [models, pidFile, pdeathsig] = process.argv.slice(2);
+const llm = d.llamaServer({ modelsDir: models, pidFile, server: ${JSON.stringify(bin)}, startTimeoutMs: 20000, pdeathsig: pdeathsig === "yes" });
+llm.ensure({ id: "test-model", name: "Test Model" }).then(() => { console.log("ready " + require("fs").readFileSync(pidFile, "utf8").split(" ")[0]); }, (e) => { console.log("failed " + e.message); });
+setInterval(() => {}, 1000);
+`);
+        const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+        const service = async (pidFile: string, pdeathsig: boolean) => {
+            const child = spawn(process.execPath, [script, join(dir, "models"), pidFile, pdeathsig ? "yes" : "no"], { stdio: ["ignore", "pipe", "inherit"] });
+            const line: string = await new Promise((r) => child.stdout.on("data", (d) => r(String(d).trim())));
+            expect(line).toMatch(/^ready \d+$/);
+            return { child, server: Number(line.split(" ")[1]) };
+        };
+        const gone = (pid: number) => vi.waitFor(() => expect(alive(pid)).toBe(false), { timeout: 5000 });
+        mkdirSync(join(dir, "models"), { recursive: true });
+        writeFileSync(join(dir, "models", "test-model.gguf"), FAKE_GGUF);
+        // SIGTERM (run-js-service stopping it).
+        let s = await service(join(dir, "a.pid"), false);
+        expect(alive(s.server)).toBe(true);
+        s.child.kill("SIGTERM");
+        await gone(s.server);
+        expect(existsSync(join(dir, "a.pid"))).toBe(false);
+        // Killed outright, without setpriv: left, until the next service starts.
+        s = await service(join(dir, "b.pid"), false);
+        s.child.kill("SIGKILL");
+        await new Promise((r) => setTimeout(r, 300));
+        expect(alive(s.server)).toBe(true);
+        device.llamaServer({ modelsDir: join(dir, "models"), pidFile: join(dir, "b.pid"), server: bin });
+        await gone(s.server);
+        // Killed outright, with setpriv (where there is one): ended by the kernel.
+        if (existsSync("/usr/bin/setpriv") || existsSync("/bin/setpriv")) {
+            s = await service(join(dir, "c.pid"), true);
+            s.child.kill("SIGKILL");
+            await gone(s.server);
+        }
+    }, 30000);
 
     it("ships the same built-in model everywhere: lib/models.js, ./phoenix's fetcher, meta-phoenix's recipe", () => {
         const models = req("./lib/models.js") as { BUILT_IN: string; find(id: string): { url: string; sha256: string; size: number; builtIn: boolean } };

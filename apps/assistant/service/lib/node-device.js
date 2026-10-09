@@ -126,7 +126,35 @@ function getOnce(url) {
 // options: {modelsDir, builtInDirs: where the image keeps the models it
 // ships (default /usr/share/phoenix/models: Qwen3 0.6B, meta-phoenix's
 // qwen3-0.6b-gguf; lib/models.js BUILT_IN), server: path or names to look
-// for, args: extra arguments, idleMs, ramBytes, log}
+// for, args: extra arguments, idleMs, ramBytes, log, pidFile: where the
+// running server's pid is kept (default beside the models), pdeathsig:
+// false not to use setpriv (the tests)}
+//
+// It ends with the service, however the service ends: on exit and on
+// SIGTERM, SIGINT or SIGHUP it is stopped; started through util-linux's
+// setpriv --pdeathsig where the image has it, the kernel ends it when the
+// service dies outright (SIGKILL, a crash); and its pid and start time are
+// kept in pidFile, so a server left by a service that died anyway is
+// stopped when the next one starts (as phoenix-sim's shell/native/
+// localmodels.cpp ends its own with PR_SET_PDEATHSIG).
+var reaping = null;
+function procStart(pid) {
+    try {
+        var stat = fs.readFileSync("/proc/" + pid + "/stat", "utf8");
+        return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19] || "";
+    } catch (e) { return ""; }
+}
+function reapLeftover(pidFile, log) {
+    var kept;
+    try { kept = fs.readFileSync(pidFile, "utf8").trim().split(/\s+/); } catch (e) { return; }
+    try { fs.unlinkSync(pidFile); } catch (e) { /* gone */ }
+    var pid = Number(kept[0]);
+    // The same process (its start time), not another that got its pid since.
+    if (pid > 1 && kept[1] && procStart(pid) === kept[1]) {
+        log("stopping llama-server " + pid + " left by an earlier service");
+        try { process.kill(pid, "SIGTERM"); } catch (e) { /* gone */ }
+    }
+}
 function llamaServer(options) {
     var dir = options.modelsDir;
     var builtInDirs = options.builtInDirs || ["/usr/share/phoenix/models"];
@@ -134,6 +162,25 @@ function llamaServer(options) {
     var log = options.log || function () {};
     var proc = null, current = "", baseUrl = "", starting = null, idleTimer = null, lastError = "";
     var download = null;   // {id, received, total, req, file}
+    var pidFile = options.pidFile || path.join(dir, "llama-server.pid");
+    reapLeftover(pidFile, log);
+    var running = [];
+    if (!reaping) {
+        reaping = [];
+        var end = function () { reaping.forEach(function (f) { f(); }); };
+        process.on("exit", end);
+        ["SIGTERM", "SIGINT", "SIGHUP"].forEach(function (sig) {
+            process.on(sig, function () { end(); process.exit(128 + os.constants.signals[sig]); });
+        });
+    }
+    reaping.push(function () {
+        running.forEach(function (c) { try { c.kill("SIGTERM"); } catch (e) { /* gone */ } });
+        if (running.length) try { fs.unlinkSync(pidFile); } catch (e) { /* none */ }
+    });
+    function keepPid(child) {
+        try { fs.mkdirSync(path.dirname(pidFile), { recursive: true }); fs.writeFileSync(pidFile, child.pid + " " + procStart(child.pid) + "\n"); }
+        catch (e) { log("llama-server pid: " + e.message); }
+    }
 
     function server() { return options.server ? findProgram([].concat(options.server)) : findProgram(["llama-server"]); }
     function ggufs(d, builtIn) {
@@ -195,7 +242,11 @@ function llamaServer(options) {
                 var args = ["-m", file, "--host", "127.0.0.1", "--port", String(port), "--jinja", "-c", "8192", "-np", "1",
                             "-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0", "-b", "512"].concat(options.args || []);
                 log("starting " + bin + " " + args.join(" "));
-                var child = childProcess.spawn(bin, args, { stdio: ["ignore", "ignore", "pipe"] });
+                var setpriv = process.platform === "linux" && options.pdeathsig !== false ? findProgram(["setpriv"]) : "";
+                var child = setpriv ? childProcess.spawn(setpriv, ["--pdeathsig", "TERM", "--", bin].concat(args), { stdio: ["ignore", "ignore", "pipe"] })
+                                    : childProcess.spawn(bin, args, { stdio: ["ignore", "ignore", "pipe"] });
+                running.push(child);
+                keepPid(child);
                 var errText = "";
                 child.stderr.on("data", function (d) { errText = (errText + d).slice(-2000); });
                 proc = child;
@@ -205,6 +256,8 @@ function llamaServer(options) {
                 var exited = false;
                 child.on("exit", function (code) {
                     exited = true;
+                    running = running.filter(function (c) { return c !== child; });
+                    try { if (fs.readFileSync(pidFile, "utf8").split(" ")[0] === String(child.pid)) fs.unlinkSync(pidFile); } catch (e) { /* none */ }
                     if (proc === child) { proc = null; current = ""; baseUrl = ""; }
                     lastError = "llama-server exited (" + code + "): " + errText.trim().split("\n").pop();
                 });
