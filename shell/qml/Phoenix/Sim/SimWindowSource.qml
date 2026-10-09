@@ -354,6 +354,14 @@ Item {
         case "running":
             r.running = running();
             break;
+        // The process id of an app a launch just started (its "launch"
+        // message came first): what launch and open reply, the id running
+        // lists and close takes; "" if it is not running.
+        case "processId": {
+            var target = _launchTarget(String(payload.appId || ""), payload.params || {});
+            r.processId = runningUid(target) !== "" || _headless[target] || _parkedUid(target) !== "" ? _pidOf(target) : "";
+            break;
+        }
         case "close":
             closeProcess(String(payload.processId || ""));
             break;

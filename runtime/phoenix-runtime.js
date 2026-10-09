@@ -1715,6 +1715,25 @@
     // exhibitions: an app removed since drops out there).
     runtime.exhibitionApps = exhibitionApps;
 
+    // The process id of the app a launch or open has just started (the
+    // host started it from the "launch" message before it reads this
+    // request): the one /running lists and /close takes
+    // (ApplicationManagerService.cpp's launch replies {processId} from
+    // WebAppMgr). "" when the host keeps no processes (no shell).
+    function launchedProcessId(id, params) {
+        if (!runtime.hostOp) return Promise.resolve("");
+        return runtime.hostOp("processId", { appId: id, params: params || {} }).then(function (r) {
+            return r && r.ok && typeof r.processId === "string" ? r.processId : "";
+        });
+    }
+    runtime.launchedProcessId = launchedProcessId;
+    function launchedReply(reply, id, params, extra) {
+        launchedProcessId(id, params).then(function (pid) {
+            reply(ok(Object.assign(pid ? { processId: pid } : {}, extra || {})));
+        });
+    }
+    runtime.launchedReply = launchedReply;
+
     register(["com.palm.applicationManager", "com.webos.applicationManager"], {
         // {newCard: true} (Phoenix): another card of the app in a stack of
         // its own, even while one runs (the shell's appRelaunch "new" for
@@ -1734,7 +1753,7 @@
             host.postToHost("launch", Object.assign({ id: appId(p.id), params: params },
                                                     p.newCard === true ? { newCard: true } : {},
                                                     p.behind === true ? { behind: true } : {}));
-            reply(ok({ processId: String(Date.now()) }));
+            launchedReply(reply, appId(p.id), params);
         },
         // As on webOS: {id, params} launches the app; {target} goes to the
         // app that handles it (command-resource-handlers.json: mailto: to
@@ -1748,8 +1767,9 @@
             var handler = appId(p.id) || (p.target && resourceHandler(p.target));
             var from = typeof p.$from === "string" ? { from: p.$from } : {};
             if (handler) {
-                host.postToHost("launch", Object.assign({ id: handler, params: p.id ? aliasParams(p.id, p.params) : { target: p.target } }, from));
-                return reply(ok({ processId: String(Date.now()) }));
+                var launchParams = p.id ? aliasParams(p.id, p.params) : { target: p.target };
+                host.postToHost("launch", Object.assign({ id: handler, params: launchParams }, from));
+                return launchedReply(reply, handler, launchParams);
             }
             host.postToHost("open", Object.assign({ target: p.target, params: p.params || {} }, from));
             reply({ returnValue: false, errorCode: -1, errorText: "No handler for " + (p.target || p.id || "") });
@@ -8625,7 +8645,7 @@
                 if (app) {
                     host.postToHost("launch", Object.assign({ id: app, params: { target: p.target } },
                                                             typeof p.$from === "string" ? { from: p.$from } : {}));
-                    return reply(ok({ processId: String(Date.now()), appId: app }));
+                    return runtime.launchedReply(reply, app, { target: p.target }, { appId: app });
                 }
                 baseOpen(p, reply, ctx);
             };
@@ -12125,8 +12145,9 @@
         if (am) {
             var baseOpen = am["/open"];
             am["/open"] = function (p, reply, ctx) {
+                // (No process runs for it: no processId.)
                 if (p.id === "com.palm.app.printmanager" && p.params && p.params.runHeadless)
-                    return reply(ok({ processId: String(Date.now()), appId: PRINT_MANAGER }));
+                    return reply(ok({ appId: PRINT_MANAGER }));
                 baseOpen(p, reply, ctx);
             };
         }

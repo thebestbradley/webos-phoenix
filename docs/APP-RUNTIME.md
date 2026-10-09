@@ -2480,7 +2480,7 @@ part through `runtime.hostOp`, phoenix-sim's `SimWindowSource` or
 | `getUserInstalledAppSizes` | `{apps: [{appName, size (KB)}], totalSize}` |
 | `revoke {item: '{"payload": {signature, appId: [...]}}'}` | removes the apps (cause REVOKED) when a trusted Marketplace catalog's Ed25519 key signed their ids; else `verify failed` |
 | `com.palm.applicationManager/addLaunchPoint`, `removeLaunchPoint` | above |
-| `running`, `close {processId}` | the apps with cards, headless or kept alive, with process ids; close ends one for good |
+| `running`, `close {processId}` | the apps with cards, headless or kept alive, with process ids; close ends one for good. `launch` and `open` reply the process id of the app they started (the same id; none without a shell) |
 | `install {target}`, `rescan` | install a package file; read the apps again |
 | `getSizeOfApps {appIds}` | `{<appId>: bytes}` |
 | `listPendingLaunchPoints` | the apps being installed |
