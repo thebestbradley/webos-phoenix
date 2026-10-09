@@ -85,6 +85,18 @@ lettering, not the brand's logo. Its start page is the
 manifest's `start_url` when that is on the site, else the site (as
 browsers do, so a manifest kept on a CDN still starts on the site).
 
+Devices get every icon from the catalog itself: the index names an icon on
+another site as the catalog's copy, `/v1/icons/copy/<id>-<hash of its
+address>`. The first request for it fetches it from the site and keeps it
+in the published files (a PNG, JPEG, GIF, WebP or ICO, by its own bytes,
+at most 2 MB); until it can be had (tried again after an hour) the app's
+initials stand in, so a list never shows an empty square
+(`Catalog::iconCopy`). So icons show wherever the catalog is reachable
+(phoenix-sim's local catalog included), a device browsing the catalog
+tells the sites nothing, and a site renaming its hashed icon file breaks
+no list. `bin/serve.sh` publishes the index again at each start, and runs
+PHP's server with several workers, since a first copy waits on its site.
+
 Today 135 of the 160 sites are listed, three of them (Ground News, NYT
 Games, Formula 1) with generated icons, as all the icons their manifests
 name are missing (probed again 9 October 2026). Of the rest, some show a

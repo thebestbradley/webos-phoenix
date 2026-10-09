@@ -114,6 +114,14 @@ async function main() {
         await page.click("[data-testid=back]");
         await page.waitForSelector("[data-testid='app-org.webosphoenix.pwa.tides']", { timeout: 15000 });
         check(await page.locator("[data-testid^='app-org.webosphoenix.pwa.']").count() >= 20, "Featured: the curated web apps");
+        // Their icons come from the catalog (its copy of the site's), and are drawn.
+        const tidesIcon = page.locator("[data-testid='app-org.webosphoenix.pwa.tides'] img");
+        await tidesIcon.waitFor({ timeout: 10000 });
+        await page.waitForFunction((sel) => { const i = document.querySelector(sel); return i && i.complete; },
+                                   "[data-testid='app-org.webosphoenix.pwa.tides'] img", { timeout: 10000 });
+        const drawn = await tidesIcon.evaluate((i) => ({ src: i.src, w: i.naturalWidth }));
+        check(drawn.src.startsWith(catalog.catalogUrl + "icons/copy/org.webosphoenix.pwa.tides-") && drawn.w > 0,
+              `a curated web app's icon is the catalog's copy, and shows (${drawn.src}, ${drawn.w} px)`);
         await shot("3-featured");
 
         // ---- A web app ----------------------------------------------------------------------------------

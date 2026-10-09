@@ -315,6 +315,112 @@ final class Catalog
         return $this->generatedIconUrl($id);
     }
 
+    // ---- Icons copied from the sites ----------------------------------------------------------
+
+    /** The images a copied icon may be, by their first bytes: extension => content type. */
+    private const ICON_TYPES = ['png' => 'image/png', 'jpg' => 'image/jpeg', 'gif' => 'image/gif',
+                                'webp' => 'image/webp', 'ico' => 'image/x-icon'];
+    private const ICON_MAX_BYTES = 2 * 1024 * 1024;
+
+    /**
+     * Where the catalog serves its copy of an app's icon that lives on another site (a curated web
+     * app's, as bin/probe-pwas.py found it). Devices then ask the catalog, not the site: an icon
+     * shows wherever the catalog is reachable (phoenix-sim's local catalog included), a device's
+     * browsing tells the sites nothing, and a site renaming its hashed icon file breaks no list.
+     * The name changes with the address, so a new icon is a new copy.
+     */
+    public function iconCopyUrl(string $id, string $src): string
+    {
+        return $this->config['base_url'] . 'icons/copy/' . self::iconCopyName($id, $src);
+    }
+
+    private static function iconCopyName(string $id, string $src): string
+    {
+        return preg_replace('/[^A-Za-z0-9._-]/', '_', $id) . '-' . substr(sha1($src), 0, 12);
+    }
+
+    /** An app's icon as the index gives it: a copy here for one on another site. */
+    private function publishedIcon(array $a): string
+    {
+        $src = (string) $a['icon'];
+        $own = str_starts_with($src, $this->config['base_url']);
+        return !$own && preg_match('#^https?://#i', $src) ? $this->iconCopyUrl($a['id'], $src) : $src;
+    }
+
+    /**
+     * The icon at icons/copy/$name: [content type, bytes, kept], or null for no such icon. The
+     * first request fetches it from the app's site and keeps it (a PNG, JPEG, GIF, WebP or ICO by
+     * its own bytes, at most 2 MB). One that cannot be had is tried again after an hour; meanwhile
+     * the app's initials stand in, not kept, so a list never shows an empty square.
+     */
+    public function iconCopy(string $name): ?array
+    {
+        if (!preg_match('/^([A-Za-z0-9._-]+)-([0-9a-f]{12})$/', $name, $m)) {
+            return null;
+        }
+        $a = $this->db->one('SELECT id, title, icon FROM apps WHERE id = ?', [$m[1]]);
+        if (!$a || self::iconCopyName($a['id'], (string) $a['icon']) !== $name) {
+            return null;
+        }
+        $dir = $this->publicDir() . '/icons/copy';
+        foreach (self::ICON_TYPES as $ext => $type) {
+            if (is_file("$dir/$name.$ext")) {
+                return [$type, (string) file_get_contents("$dir/$name.$ext"), true];
+            }
+        }
+        $failed = "$dir/$name.failed";
+        if (!is_file($failed) || filemtime($failed) < time() - 3600) {
+            $fetch = $this->config['icon_fetch'] ?? [self::class, 'fetchIcon'];
+            $bytes = $fetch((string) $a['icon']);
+            $ext = is_string($bytes) && strlen($bytes) <= self::ICON_MAX_BYTES ? self::iconType($bytes) : null;
+            @mkdir($dir, 0755, true);
+            if ($ext !== null) {
+                file_put_contents("$dir/$name.$ext", $bytes);
+                @unlink($failed);
+                return [self::ICON_TYPES[$ext], $bytes, true];
+            }
+            touch($failed);
+        }
+        return ['image/svg+xml', self::generatedIcon('', '', (string) $a['title']), false];
+    }
+
+    /** The image type of $bytes (an ICON_TYPES extension), or null for anything else. */
+    public static function iconType(string $bytes): ?string
+    {
+        return match (true) {
+            str_starts_with($bytes, "\x89PNG\r\n\x1a\n") => 'png',
+            str_starts_with($bytes, "\xff\xd8\xff") => 'jpg',
+            str_starts_with($bytes, 'GIF87a'), str_starts_with($bytes, 'GIF89a') => 'gif',
+            str_starts_with($bytes, 'RIFF') && substr($bytes, 8, 4) === 'WEBP' => 'webp',
+            str_starts_with($bytes, "\x00\x00\x01\x00") => 'ico',
+            default => null,
+        };
+    }
+
+    /** An icon's bytes from its site (http or https, a few redirects, 8 s), or null. */
+    public static function fetchIcon(string $url): ?string
+    {
+        if (!preg_match('#^https?://#i', $url)) {
+            return null;
+        }
+        if (function_exists('curl_init')) {
+            $c = curl_init($url);
+            curl_setopt_array($c, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 3,
+                CURLOPT_CONNECTTIMEOUT => 4, CURLOPT_TIMEOUT => 8, CURLOPT_USERAGENT => 'PhoenixMarketplace/1 (icon copy)',
+                CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS, CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+                CURLOPT_MAXFILESIZE => self::ICON_MAX_BYTES,
+                // Decoded as a browser would: some CDNs send an icon gzipped unasked (Duolingo's).
+                CURLOPT_ENCODING => '']);
+            $body = curl_exec($c);
+            $ok = is_string($body) && curl_getinfo($c, CURLINFO_RESPONSE_CODE) === 200;
+            return $ok ? $body : null;
+        }
+        $ctx = stream_context_create(['http' => ['timeout' => 8, 'max_redirects' => 3, 'ignore_errors' => false,
+                                                 'user_agent' => 'PhoenixMarketplace/1 (icon copy)']]);
+        $body = @file_get_contents($url, false, $ctx, 0, self::ICON_MAX_BYTES + 1);
+        return is_string($body) ? $body : null;
+    }
+
     // ---- Publishing ---------------------------------------------------------------------------
 
     public function publish(): array
@@ -327,7 +433,7 @@ final class Catalog
                 'id' => $a['id'], 'kind' => $a['kind'], 'title' => $a['title'],
                 'developer' => array_filter(['name' => $a['developer_name'], 'url' => $a['developer_url']]),
                 'summary' => $a['summary'], 'description' => (string) $a['description'], 'categories' => $a['categories'],
-                'icon' => $a['icon'], 'screenshots' => $a['screenshots'], 'license' => $a['license'], 'homepage' => $a['homepage'],
+                'icon' => $this->publishedIcon($a), 'screenshots' => $a['screenshots'], 'license' => $a['license'], 'homepage' => $a['homepage'],
                 'donation' => $a['donation'], 'featured' => $a['featured'], 'rating' => $a['rating'], 'version' => $a['version'],
             ];
             if ($a['kind'] === 'pwa') {

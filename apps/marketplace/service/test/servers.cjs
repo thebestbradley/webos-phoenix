@@ -102,7 +102,9 @@ async function startCatalog(opts) {
     } else {
         php(["init"]);
     }
-    const proc = spawn("php", ["-S", `127.0.0.1:${port}`, path.join(SERVER, "public/router.php")], { env, stdio: ["ignore", "ignore", "pipe"] });
+    // Several requests at once, as bin/serve.sh: an icon copied from its site waits on it.
+    const proc = spawn("php", ["-S", `127.0.0.1:${port}`, path.join(SERVER, "public/router.php")],
+                       { env: Object.assign({ PHP_CLI_SERVER_WORKERS: "4" }, env), stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "";
     proc.stderr.on("data", (d) => { stderr += d; });
     const url = `http://127.0.0.1:${port}`;

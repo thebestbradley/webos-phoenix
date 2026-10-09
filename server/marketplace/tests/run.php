@@ -32,7 +32,13 @@ mkdir($tmp);
 putenv("MARKETPLACE_DATA=$tmp/data");
 putenv('MARKETPLACE_DSN');
 putenv('MARKETPLACE_BASE_URL=http://127.0.0.1:9999/v1/');
-$app = new App(marketplace_config());
+// Icons copied from the sites (Catalog::iconCopy) come from here, not the network.
+$iconReply = null;
+$iconFetched = [];
+$app = new App(marketplace_config() + ['icon_fetch' => function (string $url) use (&$iconReply, &$iconFetched) {
+    $iconFetched[] = $url;
+    return $iconReply;
+}]);
 $api = $app->api;
 $call = function (string $method, string $path, $body = null, ?string $token = null) use ($api): array {
     return $api->handle($method, $path, is_string($body) ? $body : json_encode($body ?? []), $token ? "Bearer $token" : null);
@@ -98,7 +104,28 @@ check($idx['version'] === 1 && $idx['build'] === $pub['build'] && count($idx['ap
 $x = array_values(array_filter($idx['apps'], fn ($a) => $a['id'] === 'org.webosphoenix.pwa.x'))[0] ?? null;
 check($x && $x['kind'] === 'pwa' && str_starts_with($x['pwa']['manifest'], 'https://x.com/') && $x['pwa']['origin'] === 'https://x.com',
       'a curated web app: its manifest and origin');
-check(!isset($x['iconGenerated']) && str_starts_with($x['icon'], 'https://'), '... with its own icon');
+$xName = basename((string) $x['icon']);
+check(!isset($x['iconGenerated']) && str_starts_with($x['icon'], 'http://127.0.0.1:9999/v1/icons/copy/org.webosphoenix.pwa.x-'),
+      '... with its own icon, served by the catalog (a copy of the site\'s)');
+// The copy: fetched from the site the first time, kept; served as the image it is.
+$png = "\x89PNG\r\n\x1a\n" . str_repeat("\0", 24);
+$iconReply = $png;
+$c1 = $app->catalog->iconCopy($xName);
+$c2 = $app->catalog->iconCopy($xName);
+check($c1 === ['image/png', $png, true] && $c2 === $c1 && count($iconFetched) === 1
+      && $iconFetched[0] === $app->catalog->app('org.webosphoenix.pwa.x')['icon'] && is_file("$tmp/data/public/v1/icons/copy/$xName.png"),
+      'an icon copy is fetched from the site once and kept');
+// A site that answers with something else: the initials stand in, not kept, and the site is not asked again at once.
+$mName = basename((string) (array_values(array_filter($idx['apps'], fn ($a) => $a['id'] === 'org.webosphoenix.pwa.mastodon'))[0]['icon'] ?? ''));
+$iconReply = '<html>not an image</html>';
+$m1 = $app->catalog->iconCopy($mName);
+$m2 = $app->catalog->iconCopy($mName);
+check($m1[0] === 'image/svg+xml' && str_contains($m1[1], '>M</text>') && $m1[2] === false && $m2 === $m1 && count($iconFetched) === 2,
+      'an icon the site does not give: the initials meanwhile, tried again later');
+check($app->catalog->iconCopy('org.webosphoenix.pwa.x-000000000000') === null && $app->catalog->iconCopy('../index.json') === null
+      && $app->catalog->iconCopy('com.example.none-' . substr(sha1('x'), 0, 12)) === null, 'only the copies the index names');
+check(Phoenix\Marketplace\Catalog::iconType("GIF89a...") === 'gif' && Phoenix\Marketplace\Catalog::iconType('<svg onload="x">') === null,
+      'icons are images by their own bytes; no SVG from a site');
 // A good manifest whose icons are all broken (the probe's iconGenerated): listed, with an icon made here.
 foreach (['org.webosphoenix.pwa.groundnews' => 'GN', 'org.webosphoenix.pwa.nytgames' => 'NYT', 'org.webosphoenix.pwa.formula1' => 'F1'] as $gid => $letters) {
     $g = array_values(array_filter($idx['apps'], fn ($a) => $a['id'] === $gid))[0] ?? null;
