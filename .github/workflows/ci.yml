@@ -19,11 +19,6 @@ jobs:
         with:
           submodules: recursive
 
-      # ./phoenix, the one command, in its dry run on a pretend Linux and
-      # Mac (what it finds, would install and would run).
-      - name: The one command (./phoenix)
-        run: sh tools/test-phoenix-script.sh
-
       # Qt 6.8.1, the release a device's webOS OSE image ships (meta-qt6,
       # scarthgap), as scripts/linux-setup.sh installs it; Ubuntu's own Qt
       # packages stop at 6.4. The action also installs the system
@@ -306,19 +301,25 @@ jobs:
             screenshots
             app-tests
 
+      # ./phoenix, the one command, in its dry run on a pretend Linux and
+      # Mac (what it finds, would install and would run). Independent of the
+      # build: it runs even when a step before it failed, and last,
+      # so it hides no other test's result and none hides its own.
+      - name: The one command (./phoenix)
+        if: ${{ !cancelled() }}
+        run: sh tools/test-phoenix-script.sh
+
   # The simulator on a Mac (Apple silicon), built the way
   # docs/GETTING-STARTED.md and scripts/mac-setup.sh build it: Homebrew's Qt,
   # Apple's compiler and macOS's headers, with the apps built by CMake's npm
   # step. The Linux job above can't catch code that only builds on Linux.
+
   macos:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      - name: The one command (./phoenix) with macOS's own tools
-        run: sh tools/test-phoenix-script.sh
 
       - name: Qt 6, CMake and Ninja (Homebrew)
         run: brew install qt cmake ninja
@@ -395,3 +396,9 @@ jobs:
         with:
           name: screenshots-macos
           path: screenshots-macos
+
+      # ./phoenix's dry runs with macOS's own sh, sed and grep; last, as
+      # in the Linux job.
+      - name: The one command (./phoenix) with macOS's own tools
+        if: ${{ !cancelled() }}
+        run: sh tools/test-phoenix-script.sh
