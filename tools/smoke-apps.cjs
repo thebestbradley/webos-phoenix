@@ -182,6 +182,17 @@ const SCENARIOS = {
     },
 
     "com.palm.app.email": async (h, context) => {
+        // The inbox newest first (its sort keys, which Email's change
+        // processor writes once db8 finds its messages: _del = false).
+        await h.expect("the inbox is in date order, newest first", async () => {
+            for (let i = 0; i < 40; i++) {
+                const order = await h.page.evaluate(() => ["Alex Rivera", "Priya Natarajan", "Northwind Labs IT"]
+                    .map((n) => document.body.innerText.indexOf(n)));
+                if (order.every((x, j) => x >= 0 && (j === 0 || x > order[j - 1]))) return true;
+                await h.wait(250);
+            }
+            return false;
+        });
         await h.tapText("Launcher mock-ups for Thursday", 2000);
         await h.screenshot("message");
         await h.expectText("Larger touch targets in the quick launch bar");

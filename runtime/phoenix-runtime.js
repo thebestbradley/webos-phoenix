@@ -854,6 +854,10 @@
 
         function matchClause(obj, c) {
             var v = getPath(obj, c.prop);
+            // Every db8 object is deleted or not: _del is false until it is
+            // (Email's change processor asks for _del = false, and found
+            // nothing: its messages were never sorted).
+            if (c.prop === "_del" && v === undefined) v = false;
             var target = c.val;
             var vals = Array.isArray(v) ? v : [v];
             var targets = Array.isArray(target) ? target : [target];
