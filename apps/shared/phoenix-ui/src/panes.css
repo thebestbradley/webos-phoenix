@@ -28,10 +28,7 @@
 .pui-pane[hidden] { display: flex; visibility: hidden; }
 .pui-pane-detail { z-index: 1; will-change: transform; }
 /* The Animator's 700 ms slide, easing out (SlidingPane.js:47). */
-.pui-panes.moving .pui-pane-detail { transition: transform 700ms cubic-bezier(0.215, 0.61, 0.355, 1); }
-@media (prefers-reduced-motion: reduce) {
-    .pui-panes.moving .pui-pane-detail { transition: none; }
-}
+.pui-panes.moving .pui-pane-detail { transition: transform calc(700ms * var(--pui-motion, 1)) cubic-bezier(0.215, 0.61, 0.355, 1); }
 
 /* The shadow the detail casts on the list (sliding-shadow.png, 20 px). */
 .pui-pane-shadow {

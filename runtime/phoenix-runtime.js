@@ -1361,6 +1361,21 @@
         return out;
     }
 
+    // Settings > Accessibility > Reduce motion and Settings > Advanced >
+    // Animation speed, for the page's own animations: @phoenix/ui reads
+    // data-phoenix-motion on the root element ("reduce", "fast" or "normal";
+    // motion.ts), as the shell's Theme.motion() does the same settings.
+    function applyMotion() {
+        try {
+            var root = global.document && global.document.documentElement;
+            if (!root) return;
+            var p = prefs();
+            root.setAttribute("data-phoenix-motion", p.accessibility && p.accessibility.reduceMotion ? "reduce"
+                                                     : p.animationSpeed === "fast" ? "fast" : "normal");
+        } catch (e) { /* no document */ }
+    }
+    applyMotion();
+
     var prefWatchers = [];
     // Another page (another card, Settings) changed the preferences: this
     // page's getPreferences subscribers hear the keys that changed, as on
@@ -1375,6 +1390,7 @@
             for (k in after)
                 if (JSON.stringify(after[k]) !== JSON.stringify(before[k])) { changed[k] = after[k]; any = true; }
             if (any) prefWatchers.forEach(function (w) { w(changed); });
+            if ("accessibility" in changed || "animationSpeed" in changed) applyMotion();
         });
     } catch (e) { /* no window */ }
 
@@ -1447,6 +1463,7 @@
             store.set("prefs", saved);
             prefsSeen = JSON.stringify(saved);
             reply(ok());
+            if ("accessibility" in p || "animationSpeed" in p) applyMotion();
             prefWatchers.forEach(function (w) { w(p); });
             host.postToHost("preferences", p);
         },

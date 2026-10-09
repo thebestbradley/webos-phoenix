@@ -23,6 +23,7 @@ import {
     type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode,
 } from "react";
 import { cx } from "./layout";
+import { motion } from "./motion";
 import { Button } from "./controls";
 import { PopupMenu } from "./popups";
 import "./panes.css";
@@ -78,7 +79,7 @@ export function SlidingPanes({ multiView, selected, onSelect, list, detail, list
     const slide = useCallback(() => {
         window.clearTimeout(timer.current);
         setMoving(true);
-        timer.current = window.setTimeout(() => setMoving(false), SLIDE_MS);
+        timer.current = window.setTimeout(() => setMoving(false), motion(SLIDE_MS));
     }, []);
     useEffect(() => () => window.clearTimeout(timer.current), []);
     const last = useRef({ selected, multiView });

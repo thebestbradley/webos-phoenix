@@ -14,6 +14,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cx } from "./layout";
+import { Drawer } from "./popups";
 
 export interface AppMenuItem {
     label: ReactNode;
@@ -105,7 +106,11 @@ export function AppMenu({ items, edit = true }: AppMenuProps) {
                                 Edit
                                 <span className={cx("pui-appmenu-arrow", editOpen && "open")} aria-hidden="true" />
                             </div>
-                            {editOpen && EDIT_ITEMS.map((e, i) => {
+                            {/* Its items open below it as a MenuItem's drawer:
+                                enyo.BasicDrawer, 250 ms open, 100 ms closed
+                                (MenuItem.js:53-69; BasicDrawer.js:82-103). */}
+                            <Drawer open={editOpen} lazy>
+                            {EDIT_ITEMS.map((e, i) => {
                                 const disabled = !state[e.can];
                                 return (
                                     <div
@@ -124,6 +129,7 @@ export function AppMenu({ items, edit = true }: AppMenuProps) {
                                     </div>
                                 );
                             })}
+                            </Drawer>
                         </>
                     )}
                     {items.map((item, i) => (

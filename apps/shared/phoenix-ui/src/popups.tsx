@@ -6,6 +6,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Checkmark, cx, Divider, Row } from "./layout";
+import { motion } from "./motion";
 
 export interface Option<T> {
     label: ReactNode;
@@ -147,13 +148,29 @@ export function Picker<T>({ label, value, options, onChange, testId }: PickerPro
 export interface DrawerProps {
     open: boolean;
     children: ReactNode;
+    /** Its content made only while open or closing (a MenuItem's items). */
+    lazy?: boolean;
 }
 
-/** Content that slides open and closed (Enyo Drawer). */
-export function Drawer({ open, children }: DrawerProps) {
+/** Enyo BasicDrawer's times: 250 ms open, 100 ms closed, cubicOut (BasicDrawer.js:82-103; Animator's easing, Animation.js:90-96). */
+export const DRAWER_OPEN_MS = 250;
+export const DRAWER_CLOSE_MS = 100;
+
+/** Content that slides open and closed (Enyo Drawer): its height, 250 ms opening, 100 ms closing. */
+export function Drawer({ open, children, lazy }: DrawerProps) {
     const inner = useRef<HTMLDivElement>(null);
     const [height, setHeight] = useState<number | "auto">(open ? "auto" : 0);
     const first = useRef(true);
+    const ms = motion(open ? DRAWER_OPEN_MS : DRAWER_CLOSE_MS);
+    const [made, setMade] = useState(open);
+    if (open && !made)
+        setMade(true);
+    useEffect(() => {
+        if (open || !lazy) return;
+        const t = setTimeout(() => setMade(false), ms);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, lazy]);
 
     useLayoutEffect(() => {
         if (first.current) {
@@ -161,19 +178,24 @@ export function Drawer({ open, children }: DrawerProps) {
             return;
         }
         const h = inner.current?.scrollHeight ?? 0;
+        if (ms === 0) {
+            setHeight(open ? "auto" : 0);
+            return;
+        }
         if (open) {
             setHeight(h);
-            const t = setTimeout(() => setHeight("auto"), 220);
+            const t = setTimeout(() => setHeight("auto"), ms + 20);
             return () => clearTimeout(t);
         }
         setHeight(h);
         const r = requestAnimationFrame(() => setHeight(0));
         return () => cancelAnimationFrame(r);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
     return (
-        <div className="pui-drawer" style={{ height }} aria-hidden={!open}>
-            <div ref={inner}>{children}</div>
+        <div className="pui-drawer" style={{ height, transitionDuration: `${ms}ms` }} aria-hidden={!open}>
+            <div ref={inner}>{!lazy || made || open ? children : null}</div>
         </div>
     );
 }
@@ -203,8 +225,27 @@ export interface DialogProps {
     testId?: string;
 }
 
-/** A modal dialog that slides up from the bottom of the card, as in Mojo. */
+/** Enyo's Dialog is a Toaster: it slides up from below the card and back down over the Animator's 350 ms, cubicOut (Toaster.js:57-95, Animation.js:90-96). The scrim fades in over 0.5 s (Scrim.css:10-11) and goes at once (Scrim.js:84-90). */
+export const DIALOG_SLIDE_MS = 350;
+
+/** A modal dialog that slides up from the bottom of the card, as in Mojo (Enyo's Heritage Dialog), and back down when it closes. */
 export function Dialog({ open, title, message, children, onClose, testId }: DialogProps) {
+    // Still drawn while it slides away, with what it last showed: the same
+    // tree, so nothing in it is made again.
+    const [leaving, setLeaving] = useState(false);
+    const [wasOpen, setWasOpen] = useState(open);
+    const last = useRef<{ title?: ReactNode; message?: ReactNode; children?: ReactNode }>({});
+    if (open)
+        last.current = { title, message, children };
+    if (wasOpen !== open) {
+        setWasOpen(open);
+        setLeaving(!open && motion(DIALOG_SLIDE_MS) > 0);
+    }
+    useEffect(() => {
+        if (!leaving) return;
+        const t = setTimeout(() => setLeaving(false), motion(DIALOG_SLIDE_MS));
+        return () => clearTimeout(t);
+    }, [leaving]);
     useEffect(() => {
         if (!open || !onClose) return;
         const onKey = (e: KeyboardEvent) => {
@@ -217,14 +258,17 @@ export function Dialog({ open, title, message, children, onClose, testId }: Dial
         window.addEventListener("keydown", onKey, true);
         return () => window.removeEventListener("keydown", onKey, true);
     }, [open, onClose]);
-    if (!open) return null;
+    if (!open && !leaving) return null;
+    const c = open ? { title, message, children } : last.current;
     return createPortal(
-        <div className="pui-scrim" onClick={onClose}>
-            <div className="pui-dialog" role="dialog" aria-modal="true" data-testid={testId} onClick={(e) => e.stopPropagation()}>
+        <div className={cx("pui-scrim", !open && "leaving")} onClick={open ? onClose : undefined} aria-hidden={!open || undefined}>
+            <div className={cx("pui-dialog", !open && "leaving")} role={open ? "dialog" : undefined} aria-modal={open || undefined}
+                 data-testid={open ? testId : undefined} onClick={(e) => e.stopPropagation()}
+                 style={{ animationDuration: `${motion(DIALOG_SLIDE_MS)}ms` }}>
                 <div className="pui-dialog-inner">
-                    {title && <div className="pui-dialog-title">{title}</div>}
-                    {message && <div className="pui-dialog-message">{message}</div>}
-                    {children}
+                    {c.title && <div className="pui-dialog-title">{c.title}</div>}
+                    {c.message && <div className="pui-dialog-message">{c.message}</div>}
+                    {c.children}
                 </div>
             </div>
         </div>,
