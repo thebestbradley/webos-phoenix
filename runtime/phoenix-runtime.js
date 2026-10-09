@@ -5303,6 +5303,8 @@
                 watch(p, reply, ctx, function () {
                     var o = store.get("orientation", null) || {};
                     // gestureArea (Phoenix): the shell says whether there is one.
+                    // learnedWords (Phoenix): what the keyboard learned that
+                    // its word list lacks, as the shell last said.
                     return ok({ ime: { visible: !!store.get("imeVisible", false) }, orientation: { ui: o.ui || "up", device: o.device || "up" },
                                 gestureArea: !!store.get("gestureArea", false), learnedWords: store.get("learnedWords", []) });
                 });
@@ -5362,8 +5364,6 @@
                         l.numRetries = l.policy.retriesLeft;
                         wipe = l.numRetries === 0;
                     }
-                    // learnedWords (Phoenix): what the keyboard learned that
-                    // its word list lacks, as the shell last said.
                     l.lastFailure = now;
                 } else if (st.a && !st.pending) {
                     if (counted) l.policy.retriesLeft = st.a.maxRetries;
@@ -14021,6 +14021,12 @@
                     voice: voiceParts,
                     caller: function () { return PalmSystem.appIdentifier; },
                     locale: function () { return (global.navigator && global.navigator.language) || "en-US"; },
+                    // The device's units (Settings > Language & Region >
+                    // Units, the region when "auto"), as every app reads them.
+                    units: function () {
+                        var st = store.get("settings:state", null);
+                        return loadModule("lib/region.js").deviceUnits(st && st.settings && st.settings[""], global.navigator && global.navigator.language);
+                    },
                     // A follow-up question later (lib/followups.js): the
                     // Assistant's notification, with its answers as buttons
                     // ({actions}), or {tag, remove} to take it back.
@@ -14038,12 +14044,6 @@
         ["ask", "choose", "confirm", "threads", "thread", "newThread", "setCurrent", "deleteThread", "clearHistory",
          "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
          "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary",
-                    // The device's units (Settings > Language & Region >
-                    // Units, the region when "auto"), as every app reads them.
-                    units: function () {
-                        var st = store.get("settings:state", null);
-                        return loadModule("lib/region.js").deviceUnits(st && st.settings && st.settings[""], global.navigator && global.navigator.language);
-                    },
          "followUps", "answerFollowUp", "followUpOpen", "followUpLeave", "followUpWake", "resetFollowUps", "markRead",
          "connect", "retry", "voice"].forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
