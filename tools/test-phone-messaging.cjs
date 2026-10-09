@@ -96,6 +96,18 @@ async function main() {
         await phone.waitForFunction(() => /Lena Okafor/.test(document.querySelector("[data-testid='dialer-contact']").textContent));
         check(true, "the number is matched to a contact (com.palm.person:1)");
         await shot(phone, "phone-dialpad-number");
+        if (!tablet) {
+            // A card shorter than a Pre's (a dashboard showing under it): the
+            // dial pad gives up height, the dial button stays above the command menu.
+            await phone.setViewportSize({ width: 320, height: 400 });
+            await phone.waitForTimeout(100);
+            const [dialBottom, menuTop] = await phone.evaluate(() => [
+                document.querySelector("[data-testid='dial-button']").getBoundingClientRect().bottom,
+                document.querySelector(".phone-toolbar").getBoundingClientRect().top]);
+            check(dialBottom <= menuTop, `a short card keeps the dial button above the command menu (${dialBottom} <= ${menuTop})`);
+            await shot(phone, "phone-dialpad-short");
+            await phone.setViewportSize(viewport);
+        }
 
         // ---- Place, hold and end a call ----------------------------------------------------------
         await phone.click("[data-testid='dial-button']");
