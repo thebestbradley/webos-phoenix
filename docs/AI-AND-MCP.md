@@ -44,7 +44,7 @@ above was the plan's command layer; this is the whole 1.0 assistant.
 | Layer | What runs | Where |
 | --- | --- | --- |
 | 1. Speech to text | The shell's dictation: whisper.cpp through `org.webosphoenix.transcriber` | On the device (in phoenix-sim, the same service code on the computer) |
-| 2. Commands | A grammar per language (`apps/assistant/service/lib/lang/en.js`): the 40 commands in the table below, with the days and times people say; plus commands apps declare in `appinfo.json` (`"assistant": {"commands": [...]}`, Just Type's Quick Action shape with phrases per language; a Quick Action counts as `"<displayName> {text}"`, after the built-in commands) | In the service, no model, no network (weather, distances, currencies and unknown cities fetch Open-Meteo or Frankfurter) |
+| 2. Commands | A grammar per language (`apps/assistant/service/lib/lang/en.js`): the 54 commands in the table below (9 October 2026), with the days and times people say; plus commands apps declare in `appinfo.json` (`"assistant": {"commands": [...]}`, Just Type's Quick Action shape with phrases per language; a Quick Action counts as `"<displayName> {text}"`, after the built-in commands) | In the service, no model, no network (weather, distances, currencies and unknown cities fetch Open-Meteo or Frankfurter) |
 | 3. On-device model | llama.cpp's `llama-server` with a GGUF model the user downloads in Settings > Assistant, called with the same commands as tools (Chat Completions, `--jinja`) | On the device. phoenix-sim runs it from the shell (`LocalModels`, Phoenix.Native); the device service runs it itself (`lib/node-device.js`) |
 | 4. Cloud model or web | "Ask <provider (model)>" and "Search the web" as choices on the answer, and "Connect model" while no cloud model is set up; a thread taken to a cloud model goes on with it | The provider's servers; the browser |
 
@@ -73,19 +73,25 @@ bird plays done, asking (a read-back), confused (nothing here can) or oops
 | `call` | "call mom", "call Sam on his mobile", "dial 555 123 4567" | Phone dials | Yes (Call) |
 | `text`, `readMessages` | "text Sam I'm running late", "read my last message", "what did Priya say" | Sends an SMS (the words as typed); reads the last one received | Yes (Send) |
 | `email`, `searchEmail` | "send an email to Priya saying see you soon", "email Alex about the report", "search my email for invoice", "do I have any new emails" | Sends (with words) or opens a new email (without); finds email | Yes (Send) |
-| `toggle` | "turn on Wi-Fi", "turn off Bluetooth", "airplane mode on", "turn on the flashlight", "silence the phone", "turn on do not disturb" | The switch; Do Not Disturb is the ringer off | |
-| `media` | "pause", "resume the music", "next song", "previous track" | The media keys, for whichever player plays | |
+| `toggle` | "turn on Wi-Fi", "turn off Bluetooth", "airplane mode on", "turn on the flashlight", "silence the phone", "turn on do not disturb", "turn on location services", "turn on rotation lock" | The switch; Do Not Disturb is the ringer off; Location Services both handlers (`setState`); the rotation lock the system preference | |
+| `media` | "pause", "resume the music", "next song", "previous track", "what's playing" | The media keys, for whichever player plays; what is playing it cannot tell yet (no service says it) and offers Music | |
 | `volume` | "turn up the volume", "set the volume to 30%", "mute", "unmute" | The master volume | |
 | `brightness` | "set brightness to 50%", "turn the brightness up", "make the screen dimmer" | The screen's brightness | |
 | `screenshot`, `lock`, `battery` | "take a screenshot", "lock the screen", "what's my battery" | A screen capture (the assistant's view out of the way); the screen off and locked; the level and charging | |
 | `settings`, `open` | "open Wi-Fi settings", "open settings", "open Maps" | Settings at a pane (or its list); an app | |
 | `navigate`, `distance` | "navigate to the nearest coffee shop", "how far is Paris" | Directions in Maps; the distance as the crow flies | |
-| `play`, `photos` | "play some music by Miles Davis", "show my photos from yesterday / last week" | Music plays; Photos opens on the photos taken then | |
-| `weather` | "what's the weather tomorrow", "will it rain in London" | Open-Meteo, here or there | |
+| `play`, `photos` | "play some music by Miles Davis", "show my photos from yesterday / last week", "show my screenshots", "how many photos did I take yesterday" | Music plays; the photos shown in the conversation and in Photos (just those) behind it; how many, only said | |
+| `weather` | "what's the weather tomorrow", "will it rain in London", "what's the weather this week" | Open-Meteo, here (with the Assistant's location permission) or there; "will it rain" by the chance of rain; the week's highs, lows and rainy days | |
 | `convert` | "convert 10 miles to km", "how many cups in a liter", "100 fahrenheit in celsius", "what's 20 USD in EUR" | Units offline; currencies with the day's ECB rates (offline it says so and offers the web) | |
 | `worldTime`, `time` | "what time is it in Tokyo", "what time is it", "what's the date" | The time there (big cities offline), here, the date | |
 | `calculate` | "what's 15% of 80", "twelve times seven" | The sum | |
 | `search` | "search the web for palm pre", "look up webos history" | The browser | |
+| `callBack`, `callLog`, `voicemail` | "call back", "redial", "who called me", "did I miss any calls", "check my voicemail", "call voicemail" | The last caller or number called (the call log, `com.palm.phonecall:1`); the missed calls of the week; how many voicemails (`com.palm.telephony` voicemailQuery), Call Voicemail | Calling |
+| `replyMessage`, `readMessages {unread}` | "reply on my way", "any new texts", "read my new messages" | A text to whoever sent the last one; the unread ones counted and the newest read, with Reply | Yes (Send) |
+| `eventMove`, `eventCancel`, `freeTime` | "move my dentist appointment to 4pm", "reschedule lunch with Priya to Friday at noon", "cancel my 3pm meeting tomorrow", "am I free tomorrow at 3", "when am I free on Friday" | Moves an event (a time keeps the day, a day keeps the time; a repeating one: in Calendar), deletes one (undo puts it back), the free stretches between 8 AM and 8 PM | Cancelling |
+| `noteAppend`, `taskList`, `taskDone` | "add the guest code to my Wi-Fi note", "what's on my shopping list", "what are my tasks", "check off milk", "mark pay rent as done" | Adds a line to a memo; reads a list; completes a task (undo opens it again) | |
+| `nearby`, `website`, `storage`, `appStore` | "coffee near me", "where's the nearest pharmacy", "open example.com", "how much storage do I have", "find Doom in the Marketplace", "install Doom" | Maps searches; the browser opens the site; the free storage; the Marketplace's search (`org.webosphoenix.service.packages`), and its page to install from (it never installs unasked) | |
+| `help` | "help", "what can you do", "give me some tips", "how do I close an app", "how do I go back", "what is Just Type" | What it can do, by app, with examples (a tap puts one in the field) and what fits now; how to use Phoenix from the Help app's topics (`lib/lang/en-help.js`), with Open Help | |
 | `undo` | "undo", "cancel that", "never mind" | Cancels a read-back waiting; else takes back what was just made (deletes the event, task, memo, contact or alarm, cancels the timer, turns alarms back on) | Yes |
 | (models) | "translate hello into French", questions | Not a command: the on-device model, else "Ask <cloud model>" / "Search the web" (it says why) | |
 
@@ -117,6 +123,119 @@ picks the wrong switch or direction often enough that this check is
 needed; the 1.5B and 4B models are recommended where they fit. In
 phoenix-sim the model loaded and answered in about 18 s the first time
 and 2 s after, on four CPU cores.
+
+**Never a dead end** (9 October 2026, from the owner's "how do you make
+banana pudding": the commands said "I can't do that on the phone", and the
+model connected later copied it). What nothing here can do gets what can,
+as buttons: the app that does it ("I don't have the tools for that yet,
+but I can open Music for you", by its words: `lib/lang/en.js`
+`APP_WORDS`), a web search for a question ("I can't answer that on my own
+yet, but I can search the web for it"), a model; and the commands near the
+words. That reply is a message of kind `fallback`, never in what a model
+sees of the conversation. The system prompt asks a model to answer
+directly: facts, how-tos, recipes, advice, small talk; concise for voice
+but with every step when steps are needed. After a model's answer to a
+question: Search the web, and what to do with it (Save as Memo for a
+recipe, Show in Maps for a place: `say.related`). A model is offered the
+commands as tools only for words that may ask the device to do something
+(not a question about the world, not small talk) and only the ten nearest
+them: all 54 are some 5,000 tokens. Checked with Qwen3 0.6B in
+llama-server (9 October 2026): the banana pudding has steps and Save as
+Memo, small talk and jokes are answered, "where is the Eiffel Tower" offers
+Show in Maps, "I'd like the bluetooth off please" calls the toggle; at
+0.6B it sometimes talks about a tool rather than calling it ("can you put
+the torch on").
+
+**What it finds, in the conversation** (9 October 2026, from the owner:
+"Here are 2 photos" with nothing to see). An answer carries what it found
+(`data.attachments`): photos as thumbnails (the first twelve, "+N more"),
+events, emails, memos, tasks, calls, a contact, a message as cards, under
+the words in the shell's view (`AssistantAttachments.qml`) and the app
+(`Attachments.tsx`); a tap shows one in its app (choice `show:<n>`). The
+conversation stays in front (the owner: "the chat should stay in focus"):
+an app a command opens waits behind it, and the answer says so ("I've
+opened them in Photos too") and offers Open Photos, which brings it
+forward. Photos opened with several pictures shows just those, titled as
+asked ("Photos from Yesterday"). Only how many ("how many photos did I take
+yesterday") opens nothing. In the simulator the shell gets a small copy of
+a picture from the page (`com.webos.service.mediaindexer
+phoenix/thumbnail`: it cannot read IndexedDB); a device loads the file.
+
+**Location** (9 October 2026, the owner: "it doesn't have my location but
+weather has location services on"). The assistant asked OSE's
+`com.webos.service.location` for `getCurrentPosition`, which only the
+legacy `com.palm.location` had; the simulator's catch-all answered success
+without a position (a device: Unknown method). One fix is
+`getLocationUpdates` without subscribe, as `@phoenix/luna` location does,
+and the simulator now answers the old name as luna-service2 would. The
+position is the Assistant's to have: its row in Settings > Location
+Services (`org.webosphoenix.service.location`; the simulator's services
+run in a page call as their service, `nodeServiceLuna(id)`, not as that
+page's app), the same grant as Settings > Assistant > Permissions >
+Location. Not answered yet, the Assistant asks in the conversation (Allow,
+Don't Allow) rather than leave the request waiting on the system UI's
+alert; denied, or Location Services off, it says so with Allow Location or
+Turn On Location Services and Location Settings, then answers what was
+asked.
+
+**Permissions** (9 October 2026). On a device a command can only do what
+luna-service2 and db8 let the service do; `permissions.test.ts` runs every
+command through a recording stand-in and checks each Luna method against
+the service's client permissions (`sysbus/org.webosphoenix.assistant.perm.json`)
+by the called method's API group, and each db8 kind it reads, creates,
+changes or deletes against its grants
+(`public/configuration/db/permissions/org.webosphoenix.assistant`,
+installed to `/etc/palm/db/permissions`). The groups of OSE's services are
+from their own sysbus files (webosose: db8, activitymanager, sam,
+com.webos.service.location, audiod-pro, com.webos.service.bluetooth2,
+luna-sysservice); the ones for legacy names Phoenix answers on a device
+(`com.palm.applicationManager`, `com.palm.telephony`, `com.palm.power`, ...)
+and for Phoenix's own services are as listed in the test, to check on a
+device. Found and fixed: no db8 grants at all; `location.query` /
+`location.operation`, `audio.query`, `bluetooth.query`,
+`systemsettings.query` / `.management`, `application.launcher` /
+`.operation` missing; `vocabulary` not in the API file. In the simulator
+(`tools/test-assistant.cjs`) every command runs on the simulated services
+(none fails for want of a method) and each, turned off in Settings >
+Assistant's Commands, is refused. The user's switches: Settings > Assistant
+> Permissions (Location) and Commands (each command; what sends, calls or
+deletes is read back whatever chose it).
+
+**Help** (9 October 2026). "Help", "what can you do", "give me some
+tips", "what can I say": what it can do by app (Phone & Messages, Email,
+Calendar, Reminders, Tasks & Memos, Clock, Weather & Maps, Music & Photos,
+Settings & Device, Answers, Using Phoenix), each with examples a tap puts
+in the field, and first what fits now: the next event within three hours,
+an unread message or email, a missed call, the time of day. "How do I
+close an app / go back / switch apps / use Just Type / see my
+notifications / set a passcode / take a screenshot", "what is Just Type":
+an answer from the Help app's topic (`lib/lang/en-help.js`; a test checks
+each answer's words against its topic) and Open Help on it.
+
+**What it can do for each app** (9 October 2026): what a user would ask
+Siri or Google Assistant of each built-in app, and where Phoenix stands.
+
+| App | Done | Still missing (why) |
+| --- | --- | --- |
+| Phone | call a contact or number, call back, redial, who called, missed calls, voicemail count and call | answer or end a call by voice (a call in progress has its own screen; 2.0) |
+| Messaging | send (read back), compose, read the last or the new ones, reply | read a whole conversation aloud; group messages |
+| Email | send (read back), compose, find, unread count | reply to an email, read one's body aloud (not yet commands) |
+| Calendar | add (with place, invitees, repeats), what's on a day or week, next, find, move, cancel, free time | change one day of a repeating event (Calendar's own dialog asks which; it says so and offers Calendar) |
+| Contacts | add, a number, email, address or birthday | edit or delete a contact; "call my wife" (relations) |
+| Memos | new, find, add to one | delete one (undo covers a new one) |
+| Tasks | add (lists made as needed), reminders, read a list, complete | delete or move a task |
+| Clock | alarms (set, list, off, delete), timers, stopwatch, world time | (timers ring in the Assistant app, not the Clock) |
+| Weather | now, today, tomorrow, will it rain or snow, this week or weekend, anywhere | hour by hour ("at 5 pm") |
+| Maps | directions, distances, places nearby | traffic, travel time (not yet commands) |
+| Music | play an artist, album or song, pause, next, previous | what's playing (no now-playing service: it says so and offers Music) |
+| Photos | photos by day, screenshots, how many, shown in the conversation | by place or person (no index of either) |
+| Files | | find a file (the file manager service has no search): "I can open Files for you" |
+| Settings | Wi-Fi, Bluetooth, airplane mode, flashlight, ringer, Do Not Disturb, Location Services, rotation lock, volume, brightness, any pane | Hotspot and VPN on or off (not yet commands; "open VPN settings" opens the pane) |
+| Device | battery, storage, lock, screenshot | |
+| Browser | search, open a site | bookmarks, reading a page aloud |
+| Calculator, units | sums, percentages, units, currencies | |
+| Marketplace | find an app, show it to install | install unasked (deliberately not: it asks on the app's page) |
+| Help | what it can do, how-tos for Phoenix | |
 
 **Connect model** (8 October 2026, from the owner: "there is the local
 model option so I think the second button should just be connect model

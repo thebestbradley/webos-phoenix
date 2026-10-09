@@ -182,6 +182,14 @@ cloud provider API keys and can act on the device.
   simulator any page of the shared origin could in principle use the
   sealing key, as with the clipboard; on a device the service is a process
   of its own.
+- **What it may do on a device**: its luna-service2 client permissions
+  (the API groups of each method a command calls) and its db8 grants on
+  the apps' kinds, both checked command by command
+  (`apps/assistant/service/permissions.test.ts`); the device's position
+  only with its own row in Settings > Location Services (the Location
+  switch in Settings > Assistant > Permissions is the same). The app's
+  page loads pictures from `blob:` and `file:` (the photos an answer
+  shows), nothing from the network.
 - **Who may call**: `ask`, `choose` and `confirm` only the system UI, the
   Assistant app and Settings (a request can spend cloud tokens and run
   commands); provider changes, connection tests and model lists only

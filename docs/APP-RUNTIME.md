@@ -1902,7 +1902,7 @@ are the clients.
 | Method | Does |
 | --- | --- |
 | `ask {text, threadId?, newThread?, speak?}` | `{thread, messages}`: the user's words and the answers. In the thread in use unless told otherwise. System UI, Assistant and Settings only (error -3); error -4 while the assistant is off |
-| `choose {threadId, messageId, choice}` | a message's choice: `cloud:<provider id>` (the thread goes on with that provider), `web`, `open` (the app a command's answer offers: "Open Calendar" launches `data.open {appId, params}`), `connect` (as `connect` without a mode), `settings` (older messages: Settings > Assistant) |
+| `choose {threadId, messageId, choice}` | a message's choice: `cloud:<provider id>` (the thread goes on with that provider), `web`, `open` (the app a command's answer offers: "Open Calendar" launches `data.open {appId, params}`), `open:<n>` / `do:<n>` (the things to do next in `data.actions[n]`: `{label, open: {appId, params}}` launched, or `{label, run: {command, args, then?}}` run as if asked, then `then` when it went through: "Turn On Location Services", then the weather), `show:<n>` (an item of `data.attachments`, counted across them, opened in its app; nothing is chosen), `connect` (as `connect` without a mode), `settings` (older messages: Settings > Assistant) |
 | `connect {threadId?, messageId?, mode?}` | "Connect model": launches Settings `{page: "assistant", connect: "local" \| "cloud" \| "both" \| "choose", threadId}` and keeps the question before `messageId` on the thread (`thread.retry`); the choice stays until a model answers. System UI, Assistant and Settings only |
 | `retry {threadId}` | `{thread, messages}`: that question asked again, of the on-device model (unless `mode` was `cloud`) or the default cloud provider (the thread goes on with it); "No model is connected yet" while there is none; no messages when nothing waits |
 | `confirm {threadId, messageId, accept}` | a read-back (`status: "pending"`): run it, or not |
@@ -1926,9 +1926,14 @@ are the clients.
 A message is `{id, threadId, role, text, time, via: "commands" | "on-device"
 | "cloud", source (who answered), command, status: "pending" | "done" |
 "cancelled" | "failed", confirm: {command, args}, choices: [{id, label}],
-chosen, data}`. A command done may carry choices too (`open`: its app);
-its `data` holds `open {appId, params, title}`, `undo` (what takes it back)
-and, for a question the assistant asked ("When is it?"), `awaiting
+chosen, data, kind}` (`kind` `"fallback"`: "nothing here can", never sent
+to a model). A command done may carry choices too (`open`: its app);
+its `data` holds `open {appId, params, title}`, `undo` (what takes it back),
+`actions` (the choices `open:<n>`, `do:<n>`), `attachments` (what it found,
+shown under the words: `{type: "images", total, items: [{path, open}]}`,
+`{type: "cards", items: [{title, subtitle, detail, open}]}`, `{type:
+"examples", title, items: [{text}]}`), `webQuery` (what "Search the web"
+searches) and, for a question the assistant asked ("When is it?"), `awaiting
 {command, args}`: the next words fill it; for words nothing understood,
 `suggest`: up to two requests close to them ("Did you mean ...?"). A
 follow-up question is a message with `followUp {id, kind}` (`kind`
@@ -1972,7 +1977,7 @@ show the result at once:
 | `volume`, `brightness` | `com.webos.service.audio` `master/getVolume`, `setVolume`, `muteVolume`; `com.palm.display` `control/getProperty`, `control/setProperty {maximumBrightness}` |
 | `screenshot`, `lock`, `battery`, `settings` | `com.palm.systemmanager/takeScreenShot` (phoenix-sim closes the assistant's view first); `com.palm.display/control/setState {state: "off"}`; `com.palm.power` battery and charger queries; Settings `{page}` (Settings' list without one) |
 | `open`, `navigate`, `play`, `photos`, `search` | `applicationManager/launch` (a launch point's own params: Settings' panes); Maps `{target: "mapto:<place>"}`; Music `{play}`; Photos `{imageList}` of the `com.palm.media.image.file:1` taken those days; the browser with Just Type's default engine |
-| `weather`, `distance`, `worldTime`, `convert` | Open-Meteo (forecast, geocoder with time zones) and `com.webos.service.location`; `lib/places.js` for big cities offline; `lib/units.js` offline; currencies with Frankfurter's ECB rates (online; offline it says so and offers the web) |
+| `weather`, `distance`, `worldTime`, `convert` | Open-Meteo (forecast, geocoder with time zones) and `com.webos.service.location` (`getLocationUpdates` without subscribe, after `org.webosphoenix.service.location getPermissions` for the Assistant's own grant); `lib/places.js` for big cities offline; `lib/units.js` offline; currencies with Frankfurter's ECB rates (online; offline it says so and offers the web) |
 | `undo` | takes back what the last answer made (`data.undo`): deletes the record, cancels the activity, turns an alarm back on; read back first |
 
 **Apps' commands**: `appinfo.json` `"assistant": {"commands": [{"id",

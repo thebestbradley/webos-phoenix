@@ -127,6 +127,7 @@ Works like Paste on macOS, in the webOS style.
 2. **Commands**: a fixed grammar per language matched against the text. No language model; instant; works offline.
    - Commands: call, text, timer, alarm, reminder, toggles (Wi-Fi, Bluetooth, airplane, flashlight), open app, navigate, play music, weather, arithmetic.
    - Expanded 8 October 2026 to the everyday basics (40 commands: calendar events and agenda, alarms managed, tasks and lists, memos, contacts, email, media, volume, brightness, screenshots, conversions, undo, ...), each on the apps' own data; the table is in [AI-AND-MCP.md](AI-AND-MCP.md#10-as-built-7-october-2026-in-the-simulator).
+   - Expanded 9 October 2026 to 54 (call back, missed calls, voicemail, replies, moving and cancelling events, free time, lists read, tasks completed, memos added to, places nearby, websites, storage, the Marketplace, help and how-tos), with what each finds shown in the conversation and every command's permissions checked ([AI-AND-MCP.md](AI-AND-MCP.md), "What it can do for each app").
    - Apps add commands through `appinfo.json`.
 3. **On-device language model** (llama.cpp): optional.
    - Downloaded in Settings > Assistant (a small model, chosen by the device's memory).
