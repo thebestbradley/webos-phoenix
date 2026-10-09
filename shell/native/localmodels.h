@@ -21,6 +21,12 @@
 //   status() -> {available, server, running, model, error, ramBytes,
 //                installed: [{id, file, size, builtIn?}], downloading: {id, received, total} | null}
 //   download(id, url, sha256, size)   one at a time; changed() as it goes
+//   downloadFrom(id, sources)         sources: [{kind, files: [{url, sha256, size}]}],
+//                                     tried in order (the Qwen team's GGUF, then
+//                                     Phoenix's conversion of their weights:
+//                                     lib/models.js) until one comes whole; a
+//                                     model in parts is kept as id-00001-of-0000N.gguf
+//                                     (the names llama.cpp loads the rest by)
 //   cancel(id), remove(id)
 //   ensure(id, requestId)             ready(requestId, baseUrl) or failed(requestId, error)
 //
@@ -77,6 +83,7 @@ public:
 
     Q_INVOKABLE QVariantMap status() const;
     Q_INVOKABLE void download(const QString &id, const QString &url, const QString &sha256, qint64 size);
+    Q_INVOKABLE void downloadFrom(const QString &id, const QVariantList &sources);
     Q_INVOKABLE void cancel(const QString &id);
     Q_INVOKABLE void remove(const QString &id);
     Q_INVOKABLE void ensure(const QString &id, const QString &requestId);
@@ -93,7 +100,15 @@ signals:
 private:
     QString serverProgram() const;
     QString fileFor(const QString &id) const;
+    // The file llama-server opens for a model: id.gguf, or its first part
+    // when all its parts are here; "" when it is not.
+    QString modelFile(const QString &dir, const QString &id) const;
     QString builtInFile(const QString &id) const;
+    // Where a download's file n of count goes.
+    QString partFile(const QString &id, int n, int count) const;
+    void startFile();
+    void fileFailed(const QString &why);
+    void removeFiles(const QString &id);
     void setError(const QString &e);
     void pollHealth();
     void finishStart(bool ok, const QString &why);
@@ -111,6 +126,10 @@ private:
     QCryptographicHash m_hash{QCryptographicHash::Sha256};
     QString m_downloadId, m_downloadSha;
     qint64 m_received = 0, m_total = 0;
+    QVariantList m_sources;     // what downloadFrom() was given
+    int m_source = 0, m_file = 0;
+    qint64 m_doneBytes = 0;     // the source's files finished so far
+    QStringList m_failures;     // "kind: why", one a source
 
     QProcess *m_server = nullptr;
     QString m_model;            // the model the server runs

@@ -687,13 +687,48 @@ decision), one per size, the smallest quantization they publish:
 Settings shows each one's size and memory, marks what is too big for this
 device, and recommends the largest that fits (a device sold as 8 GB
 reports a little less, so 15% of room is allowed; a test checks the
-recommendation from 4 GB to 64 GB). Downloads stay optional. The newest
-official GGUFs are Qwen3's (May 2025): Qwen3.5 (0.8B to 397B, February
-2026), Qwen3.6 (27B, 35B-A3B), Qwen3.8 (27B and larger) and the Qwen3
-2507 instruct updates (4B, 30B-A3B) have no GGUF from the Qwen team, only
-safetensors (checked 9 October 2026); a GGUF of those would be a third
-party's or our own conversion with llama.cpp's `convert_hf_to_gguf.py`,
-the owner's call. Qwen3-Next-80B-A3B-Instruct has an official GGUF but is
+recommendation from 4 GB to 64 GB). Downloads stay optional.
+
+**Where a model comes from** (the owner's rule, October 2026): the Qwen
+team's own GGUF when they publish one; otherwise Phoenix's conversion of
+the Qwen team's own weights at a pinned revision. The newest official
+GGUFs are Qwen3's (May 2025); Qwen3.5 (2B, 4B, 9B), Qwen3.6 35B-A3B and
+Qwen3.8 27B (2026) have only safetensors from Qwen (checked 9 October
+2026), so `lib/models.js` lists them with their weights, and they are
+offered once a conversion is recorded:
+
+| Model | Replaces | Quant | Memory | Weights |
+|---|---|---|---|---|
+| Qwen3.5 2B | Qwen3 1.7B | Q8_0 | 6 GB | 4.5 GB |
+| Qwen3.5 4B | Qwen3 4B | Q4_K_M | 8 GB | 9.3 GB |
+| Qwen3.5 9B | Qwen3 8B | Q4_K_M | 12 GB | 19.3 GB |
+| Qwen3.8 27B (dense; offered, not recommended: slow) | - | Q4_K_M | 32 GB | 55.6 GB |
+| Qwen3.6 35B-A3B | Qwen3 30B-A3B | Q4_K_M | 32 GB | 71.9 GB |
+
+- `tools/convert-model.sh` converts one: llama.cpp at `./phoenix`'s
+  `LLAMA_COMMIT` (`convert_hf_to_gguf.py` to bf16, `llama-quantize`, text
+  only), then `llama-gguf-split` into parts under 2 GiB (a GitHub
+  release's limit). It writes the entry `tools/models-converted.py add`
+  records in `lib/models-converted.js` (files, sizes, SHA-256, the
+  weights' revision). Checked here on Qwen3.5 0.8B: converted, run by our
+  llama-server, a clean tool call.
+- `.github/workflows/models.yml` (Actions > models > Run workflow, convert)
+  does that on a runner for every model still wanted whose weights fit its
+  disk (up to 25 GB: the three Qwen3.5), publishes each as the release
+  `models-<id>` of this repository and opens a pull request recording
+  them. The 27B and 35B-A3B need some 150-200 GB free: the script on a
+  computer with that, the parts uploaded to the release by hand. Every
+  Monday it also looks for an official GGUF of each, and fails when one
+  appears so it can be added ahead of ours.
+- A download tries each source in order until one comes whole, every file
+  checked against its SHA-256 (`lib/node-device.js`; the simulator's
+  `shell/native/localmodels.cpp`); a model in parts is kept as
+  `<id>-00001-of-0000N.gguf`, the names llama.cpp loads the rest by.
+  Settings says "converted by Phoenix from Qwen's weights" for ours. A
+  newer model hides the one it replaces once it can be downloaded, unless
+  that one is installed.
+
+Qwen3-Next-80B-A3B-Instruct has an official GGUF but is
 48 GB, beyond these tiers. Llama 3.2 was left out (its licence is not
 permissive); Qwen2.5 3B too (Qwen Research License). `llama-server` is
 found on the PATH or given (`phoenix-sim --llama-server <path>`); the

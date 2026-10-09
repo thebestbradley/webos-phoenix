@@ -586,6 +586,40 @@ describe("the on-device model", () => {
             "qwen3-30b-a3b-q4_k_m", "qwen3-30b-a3b-q4_k_m"]);
     });
 
+    // The owner's rule: the Qwen team's GGUF first, Phoenix's conversion of
+    // their weights when there is none; a newer model hides the one it
+    // replaces once it can be downloaded (unless that one is installed).
+    it("offers a newer model once there is a file for it, official first", () => {
+        type Cat = { find(id: string): { sources: { kind: string; files: { url: string }[] }[]; size: number } | null;
+                     forDevice(r: number, keep?: string[]): { id: string; recommended: boolean }[] };
+        const models = req("./lib/models.js") as Cat & { catalog(c: object): Cat };
+        expect(models.find("qwen3.5-4b-q4_k_m")!.sources).toEqual([]);
+        expect(models.forDevice(0).map((m) => m.id)).not.toContain("qwen3.5-4b-q4_k_m");
+        expect(models.find("qwen3-4b-q4_k_m")!.sources.map((x) => x.kind)).toEqual(["official"]);
+        const four = { from: { repo: "Qwen/Qwen3.5-4B", revision: "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a" }, quant: "Q4_K_M",
+                       files: [{ name: "Qwen3.5-4B-Q4_K_M-00001-of-00002.gguf", size: 2e9, sha256: "a".repeat(64) },
+                               { name: "Qwen3.5-4B-Q4_K_M-00002-of-00002.gguf", size: 7e8, sha256: "b".repeat(64) }] };
+        const c = models.catalog({ "qwen3.5-4b-q4_k_m": four,
+                                   // made from other weights: not used
+                                   "qwen3.5-9b-q4_k_m": { ...four, from: { repo: "Qwen/Qwen3.5-9B", revision: "0".repeat(40) } } });
+        const m = c.find("qwen3.5-4b-q4_k_m")!;
+        expect(m.sources.map((x) => x.kind)).toEqual(["phoenix"]);
+        expect(m.sources[0].files[1].url).toBe(
+            "https://github.com/thebestbradley/webos-phoenix/releases/download/models-qwen3.5-4b-q4_k_m/Qwen3.5-4B-Q4_K_M-00002-of-00002.gguf");
+        expect(m.size).toBe(2.7e9);
+        const ids = c.forDevice(7.5 * 2 ** 30).map((x) => x.id);
+        expect(ids).toContain("qwen3.5-4b-q4_k_m");
+        expect(ids).not.toContain("qwen3-4b-q4_k_m");
+        expect(ids).not.toContain("qwen3.5-9b-q4_k_m");
+        expect(c.forDevice(7.5 * 2 ** 30).find((x) => x.recommended)!.id).toBe("qwen3.5-4b-q4_k_m");
+        // The one it replaces, installed: still listed.
+        expect(c.forDevice(7.5 * 2 ** 30, ["qwen3-4b-q4_k_m"]).map((x) => x.id)).toContain("qwen3-4b-q4_k_m");
+        // Qwen3.8 27B (dense, slow) is offered but never recommended over the MoE.
+        const big = models.catalog({ "qwen3.8-27b-q4_k_m": { ...four, from: { repo: "Qwen/Qwen3.8-27B", revision: "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0" },
+                                                             files: [{ name: "x.gguf", size: 1.7e10, sha256: "c".repeat(64) }] } });
+        expect(big.forDevice(62 * 2 ** 30).find((x) => x.recommended)!.id).toBe("qwen3-30b-a3b-q4_k_m");
+    });
+
     describe("built in: Qwen3 0.6B", () => {
         const BUILT_IN = "qwen3-0.6b-q8_0";
         const withBuiltIn = () => ({

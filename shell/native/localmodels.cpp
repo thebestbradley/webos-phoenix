@@ -101,15 +101,51 @@ QString LocalModels::fileFor(const QString &id) const
     return QDir(m_dir).filePath(safe + QStringLiteral(".gguf"));
 }
 
+QString LocalModels::partFile(const QString &id, int n, int count) const
+{
+    if (count <= 1)
+        return fileFor(id);
+    QString f = fileFor(id);
+    f.chop(5);   // ".gguf"
+    return f + QStringLiteral("-%1-of-%2.gguf").arg(n, 5, 10, QLatin1Char('0')).arg(count, 5, 10, QLatin1Char('0'));
+}
+
+QString LocalModels::modelFile(const QString &dir, const QString &id) const
+{
+    const QString name = QFileInfo(fileFor(id)).completeBaseName();
+    const QString whole = QDir(dir).filePath(name + QStringLiteral(".gguf"));
+    if (QFileInfo::exists(whole))
+        return whole;
+    // In parts: the first, when every one of them is here.
+    const QStringList firsts = QDir(dir).entryList({ name + QStringLiteral("-00001-of-*.gguf") }, QDir::Files);
+    for (const QString &first : firsts) {
+        const int count = first.mid(name.size() + 10, 5).toInt();
+        bool all = count > 1;
+        for (int n = 2; all && n <= count; ++n)
+            all = QFileInfo::exists(QDir(dir).filePath(name + QStringLiteral("-%1-of-%2.gguf").arg(n, 5, 10, QLatin1Char('0'))
+                                                       .arg(count, 5, 10, QLatin1Char('0'))));
+        if (all)
+            return QDir(dir).filePath(first);
+    }
+    return QString();
+}
+
 QString LocalModels::builtInFile(const QString &id) const
 {
-    const QString name = QFileInfo(fileFor(id)).fileName();
     for (const QString &d : m_builtInDirs) {
-        const QString f = QDir(d).filePath(name);
-        if (QFileInfo::exists(f))
+        const QString f = modelFile(d, id);
+        if (!f.isEmpty())
             return f;
     }
     return QString();
+}
+
+void LocalModels::removeFiles(const QString &id)
+{
+    const QString name = QFileInfo(fileFor(id)).completeBaseName();
+    QFile::remove(fileFor(id));
+    for (const QString &f : QDir(m_dir).entryList({ name + QStringLiteral("-0*-of-0*.gguf") }, QDir::Files))
+        QFile::remove(QDir(m_dir).filePath(f));
 }
 
 void LocalModels::setError(const QString &e)
@@ -141,26 +177,40 @@ qint64 LocalModels::totalMemory()
 
 QVariantMap LocalModels::status() const
 {
+    // A model is installed when its file, or every one of its parts, is
+    // here; listed once, its size all of them.
+    static const QRegularExpression part(QStringLiteral("^(.+)-(\\d{5})-of-(\\d{5})$"));
     QVariantList installed;
-    const QFileInfoList files = QDir(m_dir).entryInfoList({ QStringLiteral("*.gguf") }, QDir::Files, QDir::Name);
     QStringList ids;
-    for (const QFileInfo &fi : files) {
-        ids << fi.completeBaseName();
-        installed.append(QVariantMap{ { QStringLiteral("id"), fi.completeBaseName() },
-                                      { QStringLiteral("file"), fi.absoluteFilePath() },
-                                      { QStringLiteral("size"), double(fi.size()) } });
-    }
-    for (const QString &d : m_builtInDirs) {
-        for (const QFileInfo &fi : QDir(d).entryInfoList({ QStringLiteral("*.gguf") }, QDir::Files, QDir::Name)) {
-            if (ids.contains(fi.completeBaseName()))
+    auto scan = [&](const QString &dir, bool builtIn) {
+        for (const QFileInfo &fi : QDir(dir).entryInfoList({ QStringLiteral("*.gguf") }, QDir::Files, QDir::Name)) {
+            QString id = fi.completeBaseName();
+            const QRegularExpressionMatch m = part.match(id);
+            if (m.hasMatch()) {
+                if (m.captured(2).toInt() != 1)
+                    continue;
+                id = m.captured(1);
+            }
+            const QString file = modelFile(dir, id);
+            if (ids.contains(id) || file.isEmpty())
                 continue;
-            ids << fi.completeBaseName();
-            installed.append(QVariantMap{ { QStringLiteral("id"), fi.completeBaseName() },
-                                          { QStringLiteral("file"), fi.absoluteFilePath() },
-                                          { QStringLiteral("size"), double(fi.size()) },
-                                          { QStringLiteral("builtIn"), true } });
+            qint64 size = 0;
+            if (m.hasMatch()) {
+                for (const QFileInfo &p : QDir(dir).entryInfoList({ id + QStringLiteral("-0*-of-") + m.captured(3) + QStringLiteral(".gguf") }, QDir::Files))
+                    size += p.size();
+            } else {
+                size = fi.size();
+            }
+            ids << id;
+            QVariantMap e{ { QStringLiteral("id"), id }, { QStringLiteral("file"), file }, { QStringLiteral("size"), double(size) } };
+            if (builtIn)
+                e[QStringLiteral("builtIn")] = true;
+            installed.append(e);
         }
-    }
+    };
+    scan(m_dir, false);
+    for (const QString &d : m_builtInDirs)
+        scan(d, true);
     QVariantMap st{
         { QStringLiteral("available"), available() },
         { QStringLiteral("server"), serverProgram() },
@@ -183,29 +233,60 @@ QVariantMap LocalModels::status() const
 
 void LocalModels::download(const QString &id, const QString &url, const QString &sha256, qint64 size)
 {
+    downloadFrom(id, { QVariantMap{ { QStringLiteral("kind"), QStringLiteral("") },
+                                    { QStringLiteral("files"), QVariantList{ QVariantMap{ { QStringLiteral("url"), url },
+                                                                                          { QStringLiteral("sha256"), sha256 },
+                                                                                          { QStringLiteral("size"), double(size) } } } } } });
+}
+
+void LocalModels::downloadFrom(const QString &id, const QVariantList &sources)
+{
     if (!m_downloadId.isEmpty()) {
         setError(tr("Already downloading %1").arg(m_downloadId));
         return;
     }
-    const QUrl u(url);
-    if (!u.isValid() || (u.scheme() != QLatin1String("https") && u.scheme() != QLatin1String("http"))) {
-        setError(tr("Not a download address: %1").arg(url));
+    if (sources.isEmpty()) {
+        setError(tr("%1: nowhere to download it from").arg(id));
         return;
     }
     QDir().mkpath(m_dir);
-    m_part.setFileName(fileFor(id) + QStringLiteral(".part"));
-    if (!m_part.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        setError(tr("Cannot write %1").arg(m_part.fileName()));
-        return;
-    }
     if (!m_net)
         m_net = new QNetworkAccessManager(this);
-    m_hash.reset();
     m_downloadId = id;
-    m_downloadSha = sha256.toLower();
-    m_received = 0;
-    m_total = size;
+    m_sources = sources;
+    m_source = 0;
+    m_file = 0;
+    m_doneBytes = 0;
+    m_failures.clear();
     m_error.clear();
+    startFile();
+    emit changed();
+}
+
+void LocalModels::startFile()
+{
+    const QVariantMap src = m_sources.value(m_source).toMap();
+    const QVariantList files = src.value(QStringLiteral("files")).toList();
+    if (m_file == 0) {
+        m_total = 0;
+        for (const QVariant &f : files)
+            m_total += qint64(f.toMap().value(QStringLiteral("size")).toDouble());
+        m_doneBytes = 0;
+    }
+    m_received = m_doneBytes;
+    const QVariantMap file = files.value(m_file).toMap();
+    const QUrl u(file.value(QStringLiteral("url")).toString());
+    if (files.isEmpty() || !u.isValid() || (u.scheme() != QLatin1String("https") && u.scheme() != QLatin1String("http"))) {
+        fileFailed(tr("not a download address: %1").arg(u.toString()));
+        return;
+    }
+    m_part.setFileName(partFile(m_downloadId, m_file + 1, files.size()) + QStringLiteral(".part"));
+    if (!m_part.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        fileFailed(tr("cannot write %1").arg(m_part.fileName()));
+        return;
+    }
+    m_hash.reset();
+    m_downloadSha = file.value(QStringLiteral("sha256")).toString().toLower();
     QNetworkRequest req(u);
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     req.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("webOS-Phoenix-Assistant/0.1"));
@@ -221,8 +302,10 @@ void LocalModels::download(const QString &id, const QString &url, const QString 
         m_received += chunk.size();
     });
     connect(reply, &QNetworkReply::downloadProgress, this, [this, reply](qint64, qint64 total) {
-        if (reply == m_reply && total > 0)
-            m_total = total;
+        if (reply != m_reply)
+            return;
+        if (m_total <= 0 && total > 0)   // no size given: the server's
+            m_total = m_doneBytes + total;
         emit changed();
     });
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
@@ -230,30 +313,57 @@ void LocalModels::download(const QString &id, const QString &url, const QString 
         if (reply != m_reply)
             return;   // cancelled
         m_reply = nullptr;
-        const QString id = m_downloadId;
-        m_downloadId.clear();
         const QByteArray rest = reply->readAll();
         m_hash.addData(rest);
         m_part.write(rest);
+        m_received += rest.size();
         m_part.close();
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if (reply->error() != QNetworkReply::NoError || status != 200) {
             QFile::remove(m_part.fileName());
-            setError(tr("%1: %2").arg(id, reply->error() != QNetworkReply::NoError ? reply->errorString()
-                                                                                   : QStringLiteral("HTTP %1").arg(status)));
+            fileFailed(reply->error() != QNetworkReply::NoError ? reply->errorString() : QStringLiteral("HTTP %1").arg(status));
             return;
         }
         const QString sha = QString::fromLatin1(m_hash.result().toHex());
         if (!m_downloadSha.isEmpty() && sha != m_downloadSha) {
             QFile::remove(m_part.fileName());
-            setError(tr("%1: the download is damaged (SHA-256)").arg(id));
+            fileFailed(tr("the download is damaged (SHA-256)"));
             return;
         }
-        QFile::remove(fileFor(id));
-        QFile::rename(m_part.fileName(), fileFor(id));
+        const QString done = m_part.fileName().chopped(5);   // ".part"
+        QFile::remove(done);
+        QFile::rename(m_part.fileName(), done);
+        const int count = m_sources.value(m_source).toMap().value(QStringLiteral("files")).toList().size();
+        m_doneBytes = m_received;
+        if (++m_file < count) {
+            startFile();
+            return;
+        }
+        m_downloadId.clear();
+        m_sources.clear();
         setError(QString());
     });
-    emit changed();
+}
+
+// A file of this source did not come: its parts go, and the next source is
+// tried; when none is left, the error says what each one did.
+void LocalModels::fileFailed(const QString &why)
+{
+    const QVariantMap src = m_sources.value(m_source).toMap();
+    const QString kind = src.value(QStringLiteral("kind")).toString();
+    const int count = src.value(QStringLiteral("files")).toList().size();
+    for (int n = 1; n <= count; ++n)
+        QFile::remove(partFile(m_downloadId, n, count));
+    m_failures << (kind.isEmpty() ? why : kind + QStringLiteral(": ") + why);
+    if (++m_source < m_sources.size()) {
+        m_file = 0;
+        startFile();
+        return;
+    }
+    const QString id = m_downloadId;
+    m_downloadId.clear();
+    m_sources.clear();
+    setError(tr("%1: %2").arg(id, m_failures.join(QStringLiteral("; "))));
 }
 
 void LocalModels::cancel(const QString &id)
@@ -263,9 +373,13 @@ void LocalModels::cancel(const QString &id)
     QNetworkReply *r = m_reply;
     m_reply = nullptr;
     m_downloadId.clear();
+    const int count = m_sources.value(m_source).toMap().value(QStringLiteral("files")).toList().size();
+    m_sources.clear();
     r->abort();
     m_part.close();
     QFile::remove(m_part.fileName());
+    for (int n = 1; n <= count; ++n)
+        QFile::remove(partFile(id, n, count));
     emit changed();
 }
 
@@ -273,7 +387,7 @@ void LocalModels::remove(const QString &id)
 {
     if (m_model == id)
         stop();
-    QFile::remove(fileFor(id));
+    removeFiles(id);
     emit changed();
 }
 
@@ -291,7 +405,9 @@ void LocalModels::ensure(const QString &id, const QString &requestId)
         m_waiting.append(requestId);   // starting
         return;
     }
-    const QString file = QFileInfo::exists(fileFor(id)) ? fileFor(id) : builtInFile(id);
+    QString file = modelFile(m_dir, id);
+    if (file.isEmpty())
+        file = builtInFile(id);
     if (file.isEmpty()) {
         QTimer::singleShot(0, this, [this, requestId, id]() { emit failed(requestId, tr("%1 is not downloaded").arg(id)); });
         return;

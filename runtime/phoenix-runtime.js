@@ -14159,7 +14159,7 @@
             },
             download: function (m) {
                 if (!hostHas()) return Promise.reject(new Error("Models can only be downloaded in the Phoenix shell."));
-                return hostAsk("download", { id: m.id, url: m.url, sha256: m.sha256, size: m.size, file: m.file });
+                return hostAsk("download", { id: m.id, url: m.url, sha256: m.sha256, size: m.size, file: m.file, sources: m.sources });
             },
             cancel: function (id) { return hostHas() ? hostAsk("cancel", { id: id }) : Promise.resolve(); },
             remove: function (m) { return hostHas() ? hostAsk("remove", { id: m.id, file: m.file }) : Promise.resolve(); },

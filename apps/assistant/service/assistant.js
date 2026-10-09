@@ -1316,10 +1316,12 @@ function createAssistantService(deps) {
                 st = st || { available: false, installed: [], ramBytes: 0 };
                 var installed = {};
                 (st.installed || []).forEach(function (i) { installed[i.id] = i; });
-                var list = models.forDevice(st.ramBytes || 0).map(function (m) {
+                var list = models.forDevice(st.ramBytes || 0, Object.keys(installed)).map(function (m) {
                     var d = st.downloading && st.downloading.id === m.id ? st.downloading : null;
                     return { id: m.id, name: m.name, params: m.params, licence: m.licence, source: m.source, size: m.size, ram: m.ram,
                              note: m.note, fits: m.fits, recommended: m.recommended, installed: !!installed[m.id], builtIn: !!m.builtIn,
+                             // No GGUF from the Qwen team: Phoenix's conversion of their weights.
+                             converted: !!(m.sources[0] && m.sources[0].kind === "phoenix"),
                              downloading: d ? { received: d.received || 0, total: d.total || m.size } : null };
                 });
                 return ok({ models: list, selected: localChoice(),
@@ -1331,6 +1333,7 @@ function createAssistantService(deps) {
             var m = models.find(p.id);
             if (!m) return Promise.resolve(fail(ERRORS.NOT_FOUND, "No such model: " + p.id));
             if (m.builtIn) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, m.name + " comes with the system"));
+            if (!m.sources.length) return Promise.resolve(fail(ERRORS.NOT_FOUND, m.name + " cannot be downloaded yet"));
             if (!deps.llm) return Promise.resolve(fail(ERRORS.FAILED, "On-device models are not available here"));
             return Promise.resolve(deps.llm.download(m)).then(function () { changed("models"); return ok({}); },
                 function (e) { return fail(ERRORS.FAILED, e.message); });

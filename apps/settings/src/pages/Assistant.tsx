@@ -155,7 +155,7 @@ function LocalModels({ m, onDownload }: { m: Models; onDownload?: (id: string) =
                 {m.models.map((x) => (
                     <Row key={x.id} testId={`as-model-${x.id}`}
                          title={<>{x.name}{x.builtIn ? <span className="as-badge">Built in</span> : x.recommended && <span className="as-badge">Recommended</span>}</>}
-                         subtitle={`${formatBytes(x.size)} · needs ${gb(x.ram)} of memory · ${x.licence}${x.fits ? "" : " · too big for this device"}${x.builtIn && !x.installed ? " · not installed here" : ""}${x.downloading ? ` · ${Math.round(100 * x.downloading.received / Math.max(1, x.downloading.total))}%` : ""}`}>
+                         subtitle={`${formatBytes(x.size)} · needs ${gb(x.ram)} of memory · ${x.licence}${x.converted ? " · converted by Phoenix from Qwen's weights" : ""}${x.fits ? "" : " · too big for this device"}${x.builtIn && !x.installed ? " · not installed here" : ""}${x.downloading ? ` · ${Math.round(100 * x.downloading.received / Math.max(1, x.downloading.total))}%` : ""}`}>
                         {x.builtIn ? null : x.downloading ? <button type="button" className="as-small" data-testid={`as-cancel-${x.id}`} onClick={() => act(assistant.cancelDownload(x.id))}>Cancel</button>
                          : x.installed ? <button type="button" className="as-small negative" data-testid={`as-remove-${x.id}`} onClick={() => act(assistant.removeModel(x.id))}>Remove</button>
                          : <button type="button" className="as-small" disabled={!x.fits || !!m.models.some((y) => y.downloading)} data-testid={`as-download-${x.id}`}

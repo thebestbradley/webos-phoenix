@@ -54,11 +54,12 @@ static bool waitFor(const std::function<bool()> &cond, int ms)
     return cond();
 }
 
-// /redirect/m.gguf -> 302 -> /files/m.gguf (the body).
+// /redirect/m.gguf -> 302 -> /files/m.gguf (the body); /files/p1.gguf and
+// /files/p2.gguf, a model in two parts; anything else 404.
 class Files : public QTcpServer
 {
 public:
-    QByteArray body;
+    QByteArray body, part1, part2;
     Files() { listen(QHostAddress::LocalHost, 0); }
 protected:
     void incomingConnection(qintptr fd) override
@@ -70,8 +71,10 @@ protected:
             const QByteArray path = req.split(' ').value(1);
             if (path == "/redirect/m.gguf")
                 s->write("HTTP/1.1 302 Found\r\nLocation: /files/m.gguf\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
-            else if (path == "/files/m.gguf")
-                s->write("HTTP/1.1 200 OK\r\nContent-Length: " + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
+            else if (path == "/files/m.gguf" || path == "/files/p1.gguf" || path == "/files/p2.gguf") {
+                const QByteArray &b = path == "/files/m.gguf" ? body : path == "/files/p1.gguf" ? part1 : part2;
+                s->write("HTTP/1.1 200 OK\r\nContent-Length: " + QByteArray::number(b.size()) + "\r\nConnection: close\r\n\r\n" + b);
+            }
             else
                 s->write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
             s->disconnectFromHost();
@@ -124,6 +127,40 @@ int main(int argc, char **argv)
     check(inst.size() == 1 && inst.first().toMap().value(QStringLiteral("id")) == QStringLiteral("m")
           && inst.first().toMap().value(QStringLiteral("size")).toLongLong() == files.body.size(), "a model downloaded through a redirect");
     check(lm.error().isEmpty(), "without an error");
+
+    // The Qwen team's file first; when it does not come (404), Phoenix's
+    // conversion, in two parts, kept by the names llama.cpp loads.
+    {
+        files.part1 = QByteArray("GGUF part one\n").repeated(3000);
+        files.part2 = QByteArray("GGUF part two\n").repeated(2000);
+        auto shaOf = [](const QByteArray &b) { return QString::fromLatin1(QCryptographicHash::hash(b, QCryptographicHash::Sha256).toHex()); };
+        auto file = [](const QString &url, const QString &sha, qint64 size) {
+            return QVariantMap{ { QStringLiteral("url"), url }, { QStringLiteral("sha256"), sha }, { QStringLiteral("size"), double(size) } };
+        };
+        const QVariantList sources{
+            QVariantMap{ { QStringLiteral("kind"), QStringLiteral("official") },
+                         { QStringLiteral("files"), QVariantList{ file(base + QStringLiteral("/files/gone.gguf"), sha, 10) } } },
+            QVariantMap{ { QStringLiteral("kind"), QStringLiteral("phoenix") },
+                         { QStringLiteral("files"), QVariantList{ file(base + QStringLiteral("/files/p1.gguf"), shaOf(files.part1), files.part1.size()),
+                                                                  file(base + QStringLiteral("/files/p2.gguf"), shaOf(files.part2), files.part2.size()) } } }
+        };
+        lm.downloadFrom(QStringLiteral("s"), sources);
+        waitFor([&]() { return lm.status().value(QStringLiteral("downloading")).isNull(); }, 10000);
+        QVariantMap s;
+        for (const QVariant &v : lm.status().value(QStringLiteral("installed")).toList())
+            if (v.toMap().value(QStringLiteral("id")) == QStringLiteral("s"))
+                s = v.toMap();
+        check(lm.error().isEmpty(), "the second source when the first fails");
+        check(s.value(QStringLiteral("file")).toString().endsWith(QStringLiteral("/s-00001-of-00002.gguf"))
+              && s.value(QStringLiteral("size")).toLongLong() == files.part1.size() + files.part2.size(), "a model in parts, listed once");
+        lm.remove(QStringLiteral("s"));
+        check(QDir(lm.modelsDir()).entryList({ QStringLiteral("s-*") }, QDir::Files).isEmpty(), "removed: every part");
+
+        // Every source failing: the error names each.
+        lm.downloadFrom(QStringLiteral("t"), { sources.first(), sources.first() });
+        waitFor([&]() { return lm.status().value(QStringLiteral("downloading")).isNull(); }, 10000);
+        check(lm.error().count(QStringLiteral("official: ")) == 2, "every source failing: each one's error");
+    }
 
     // No server: says so.
     lm.setServerCommand({ dir.filePath(QStringLiteral("nowhere/llama-server")) });

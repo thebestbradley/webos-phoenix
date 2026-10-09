@@ -193,14 +193,37 @@ function llamaServer(options) {
     }
 
     function server() { return options.server ? findProgram([].concat(options.server)) : findProgram(["llama-server"]); }
+    // A model is here as id.gguf, or in parts, id-00001-of-0000N.gguf
+    // (the names llama.cpp loads the rest by), when every part is: listed
+    // once, its size all of them, its file the first.
+    var PART = /^(.+)-(\d{5})-of-(\d{5})\.gguf$/;
+    function partName(id, n, count) {
+        var pad = function (k) { return ("0000" + k).slice(-5); };
+        return count > 1 ? id + "-" + pad(n) + "-of-" + pad(count) + ".gguf" : id + ".gguf";
+    }
     function ggufs(d, builtIn) {
-        try {
-            return fs.readdirSync(d).filter(function (n) { return /\.gguf$/.test(n); }).map(function (n) {
-                var e = { id: n.replace(/\.gguf$/, ""), file: path.join(d, n), size: fs.statSync(path.join(d, n)).size };
-                if (builtIn) e.builtIn = true;
-                return e;
-            });
-        } catch (e) { return []; }
+        var names;
+        try { names = fs.readdirSync(d); } catch (e) { return []; }
+        var list = [];
+        names.forEach(function (n) {
+            var m = PART.exec(n), e = null;
+            if (m) {
+                if (Number(m[2]) !== 1) return;
+                var count = Number(m[3]), size = 0;
+                for (var k = 1; k <= count; ++k) {
+                    var f = path.join(d, partName(m[1], k, count));
+                    if (!fs.existsSync(f)) return;
+                    size += fs.statSync(f).size;
+                }
+                e = { id: m[1], file: path.join(d, n), size: size };
+            } else if (/\.gguf$/.test(n)) {
+                e = { id: n.replace(/\.gguf$/, ""), file: path.join(d, n), size: fs.statSync(path.join(d, n)).size };
+            }
+            if (!e) return;
+            if (builtIn) e.builtIn = true;
+            list.push(e);
+        });
+        return list;
     }
     function installed() {
         var list = ggufs(dir, false);
@@ -212,13 +235,21 @@ function llamaServer(options) {
     // Downloads go to modelsDir; a built-in model is read where it is.
     function fileFor(m) { return path.join(dir, m.id + ".gguf"); }
     function found(m) {
-        var own = fileFor(m);
-        if (fs.existsSync(own)) return own;
-        for (var i = 0; i < builtInDirs.length; ++i) {
-            var f = path.join(builtInDirs[i], m.id + ".gguf");
-            if (fs.existsSync(f)) return f;
+        var dirs = [dir].concat(builtInDirs);
+        for (var i = 0; i < dirs.length; ++i) {
+            var e = ggufs(dirs[i], false).filter(function (x) { return x.id === m.id; })[0];
+            if (e) return e.file;
         }
-        return own;
+        return fileFor(m);
+    }
+    function removeFiles(id) {
+        var names;
+        try { names = fs.readdirSync(dir); } catch (e) { return; }
+        names.forEach(function (n) {
+            var p = PART.exec(n);
+            if (n === id + ".gguf" || n === id + ".gguf.part" || (p && p[1] === id) || (/\.part$/.test(n) && PART.exec(n.slice(0, -5)) && PART.exec(n.slice(0, -5))[1] === id))
+                try { fs.unlinkSync(path.join(dir, n)); } catch (e) { /* gone */ }
+        });
     }
 
     function stop() {
@@ -316,31 +347,57 @@ function llamaServer(options) {
                 downloading: download ? { id: download.id, received: download.received, total: download.total } : null
             });
         },
+        // Its sources in order (lib/models.js: the Qwen team's GGUF, then
+        // Phoenix's conversion), each file checked; a source that does not
+        // come whole leaves nothing behind, and the next is tried.
         download: function (m) {
             if (download) return Promise.reject(new Error("Already downloading " + download.id));
             fs.mkdirSync(dir, { recursive: true });
-            var part = fileFor(m) + ".part";
-            download = { id: m.id, received: 0, total: m.size, req: null };
+            var sources = m.sources && m.sources.length ? m.sources
+                : [{ kind: "", files: [{ url: m.url, sha256: m.sha256, size: m.size }] }];
+            download = { id: m.id, received: 0, total: 0, req: null };
             var d = download;
-            var told = 0;
-            fetchTo(m.url, part, function (got, total) {
-                d.received = got;
-                if (total) d.total = total;
+            var told = 0, failures = [];
+            var progress = function () {
                 // Subscribers (Settings) see the progress, once a second.
                 if (options.onChange && Date.now() - told > 1000) { told = Date.now(); options.onChange(); }
-            }).then(function (sha) {
-                if (download !== d) return;
-                download = null;
-                if (m.sha256 && sha !== m.sha256) { fs.unlinkSync(part); lastError = m.name + ": the download is damaged (SHA-256)"; return; }
-                fs.renameSync(part, fileFor(m));
-                lastError = "";
-                if (options.onChange) options.onChange();
-            }, function (e) {
+            };
+            var finish = function (err) {
                 if (download === d) download = null;
-                try { fs.unlinkSync(part); } catch (x) { /* none */ }
-                lastError = m.name + ": " + e.message;
+                lastError = err;
                 if (options.onChange) options.onChange();
-            });
+            };
+            (function trySource(i) {
+                if (download !== d) return;
+                if (i >= sources.length) return finish(m.name + ": " + failures.join("; "));
+                var files = sources[i].files, count = files.length, done = 0;
+                d.total = files.reduce(function (n, f) { return n + (f.size || 0); }, 0);
+                d.received = 0;
+                var failed = function (why) {
+                    removeFiles(m.id);
+                    failures.push(sources[i].kind ? sources[i].kind + ": " + why : why);
+                    trySource(i + 1);
+                };
+                (function next(k) {
+                    if (download !== d) return;
+                    if (k >= count) return finish("");
+                    var out = path.join(dir, partName(m.id, k + 1, count)), part = out + ".part";
+                    fetchTo(files[k].url, part, function (got, total) {
+                        d.received = done + got;
+                        if (!d.total && total) d.total = total;
+                        progress();
+                    }).then(function (sha) {
+                        if (download !== d) return;
+                        if (files[k].sha256 && sha !== files[k].sha256) { try { fs.unlinkSync(part); } catch (e) { /* none */ } return failed("the download is damaged (SHA-256)"); }
+                        fs.renameSync(part, out);
+                        done += files[k].size || fs.statSync(out).size;
+                        next(k + 1);
+                    }, function (e) {
+                        try { fs.unlinkSync(part); } catch (x) { /* none */ }
+                        if (download === d) failed(e.message);
+                    });
+                })(0);
+            })(0);
             return Promise.resolve();
         },
         cancel: function (id) {
@@ -348,13 +405,13 @@ function llamaServer(options) {
                 var d = download;
                 download = null;
                 if (d.req) d.req.destroy();
-                try { fs.unlinkSync(path.join(dir, id + ".gguf.part")); } catch (e) { /* none */ }
+                removeFiles(id);
             }
             return Promise.resolve();
         },
         remove: function (m) {
             if (current === m.id) stop();
-            try { fs.unlinkSync(fileFor(m)); } catch (e) { /* none */ }
+            removeFiles(m.id);
             return Promise.resolve();
         },
         ensure: ensure,
