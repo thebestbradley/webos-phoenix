@@ -10,7 +10,8 @@
 // after a reload; a folder is made; search finds the note. In Agate (which
 // shares the notes): the note and the folder are there; a box checked here
 // shows in Limestone; the note moves to the folder, goes to Recently
-// Deleted and comes back.
+// Deleted and comes back. On a phone (320 px) each shows one pane at a
+// time, the note in the list's place, and Back closes the note.
 //
 //   node tools/test-enact-notes.cjs [--out DIR]
 //
@@ -185,6 +186,28 @@ async function main() {
         await pause(agate, 1000);
         check(!(await spot(agate, "Groceries").isVisible().catch(() => false)), "Agate: a recovered note leaves Recently Deleted");
         await agate.screenshot({ path: path.join(outDir, "agate-recovered.png") });
+
+        // ---- A phone (320 px): one pane at a time, Back closes the note -------
+        for (const [id, name] of [[AGATE, "Agate"], [LIMESTONE, "Limestone"]]) {
+            const page = await context.newPage();
+            await page.setViewportSize({ width: 320, height: 452 });
+            page.on("pageerror", (e) => errors.push(`${id} (phone): ${e.message}`));
+            await page.goto(appUrl(id));
+            await pause(page, 2500);
+            check(await page.locator("textarea").count() === 0 && await spot(page, "Groceries").isVisible(),
+                  `${name} on a phone: the notes alone, no note beside them`);
+            await spot(page, "Groceries").click();
+            await pause(page, 1000);
+            check(await page.locator("textarea").count() > 0 && !(await spot(page, "Groceries").isVisible().catch(() => false)),
+                  `${name} on a phone: a note opens in the list's place`);
+            await page.screenshot({ path: path.join(outDir, `${name.toLowerCase()}-phone-note.png`) });
+            check(await page.evaluate(() => __phoenixRuntime.back()) === true, `${name} on a phone: Back is the app's while a note is open`);
+            await pause(page, 1000);
+            check(await page.locator("textarea").count() === 0 && await spot(page, "Groceries").isVisible(),
+                  `${name} on a phone: and goes back to the notes`);
+            check(await page.evaluate(() => __phoenixRuntime.back()) === false, `${name} on a phone: then Back is the system's`);
+            await page.close();
+        }
 
         check(errors.length === 0, "no page errors" + (errors.length ? ":\n    " + errors.slice(0, 5).join("\n    ") : ""));
         await browser.close();

@@ -355,6 +355,10 @@ the same Apple Notes-style app in each theme, sharing their notes in db8
   So each demo is an npm project of its own with its own lock file, not a
   workspace of `apps/`, and takes shared code as a built package
   (`install-links`). CMake and CI build them after `apps/`.
+- **On a phone** (narrower than 720 px) one pane shows at a time: the notes,
+  the note over them while one is open (Agate's folder tabs go across the
+  top, as icons; Limestone's folders are a button away, over the notes),
+  and Back closes the note or the folders.
 - **Served like the other built apps**: `dist/` holds `appinfo.json` (from
   `webos-meta/`), the fonts and iLib's data.
 - **Luna calls** go through Enact's `@enact/webos/LS2Request`, on

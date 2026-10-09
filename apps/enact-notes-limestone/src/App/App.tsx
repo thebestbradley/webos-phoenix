@@ -26,6 +26,10 @@ export const APP_ID = 'org.webosphoenix.enactnotes.limestone';
 
 // Below this width the three columns do not fit Limestone's type sizes.
 const WIDE = 1280;
+// Below this one (a phone) one column shows at a time: the notes, the
+// folders over them while open, the note while one is open; Back closes
+// the folders or the note.
+const NARROW = 720;
 
 type Dialog =
 	| {kind: 'newFolder'}
@@ -46,9 +50,13 @@ const Notes = ({onSkin}: {onSkin: (skin: string) => void}) => {
 	// tablet they are a button away and take the note's place while open,
 	// as in Notes on an iPad; opening a note puts it back.
 	const [wide, setWide] = useState(() => window.innerWidth >= WIDE);
+	const [narrow, setNarrow] = useState(() => window.innerWidth < NARROW);
 	const [folders, setFolders] = useState(wide);
 	useEffect(() => {
-		const onResize = () => setWide(window.innerWidth >= WIDE);
+		const onResize = () => {
+			setWide(window.innerWidth >= WIDE);
+			setNarrow(window.innerWidth < NARROW);
+		};
 		window.addEventListener('resize', onResize);
 		return () => window.removeEventListener('resize', onResize);
 	}, []);
@@ -56,7 +64,26 @@ const Notes = ({onSkin}: {onSkin: (skin: string) => void}) => {
 	useEffect(() => {
 		if (selectedId && !wide) setFolders(false);
 	}, [selectedId, wide]);
-	const noteShown = wide || !folders;
+	// A folder picked on a phone: its notes, in the folders' place.
+	const folderId = app.folderId;
+	useEffect(() => {
+		if (narrow) setFolders(false);
+	}, [folderId, narrow]);
+	const noteShown = narrow ? !folders && !!app.selected : wide || !folders;
+	const listShown = !narrow || (!folders && !app.selected);
+	useEffect(() => {
+		if (!narrow || (!folders && !app.selected)) return;
+		// The back gesture (Escape): the folders or the note close, taken so
+		// the card stays.
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key !== 'Escape' || e.defaultPrevented) return;
+			e.preventDefault();
+			if (folders) setFolders(false);
+			else app.select(null);
+		};
+		window.addEventListener('keydown', onKey);
+		return () => window.removeEventListener('keydown', onKey);
+	}, [narrow, folders, app]);
 	const [dialog, setDialog] = useState<Dialog | null>(null);
 	const [problem, setProblem] = useState<string | null>(null);
 	const close = () => { setDialog(null); setProblem(null); };
@@ -69,7 +96,7 @@ const Notes = ({onSkin}: {onSkin: (skin: string) => void}) => {
 		<Row className={css.app}>
 			{fullscreen ? null : (
 				<>
-					{folders ? <Cell size={wide ? '24%' : '40%'} className={css.column}>
+					{folders ? <Cell size={narrow ? undefined : wide ? '24%' : '40%'} className={css.column}>
 						<Sidebar
 							app={app}
 							onSettings={() => setDialog({kind: 'settings'})}
@@ -78,14 +105,14 @@ const Notes = ({onSkin}: {onSkin: (skin: string) => void}) => {
 							onDeleteFolder={(id) => setDialog({kind: 'deleteFolder', id})}
 						/>
 					</Cell> : null}
-					<Cell size={noteShown ? (folders ? '30%' : '38%') : undefined} className={css.column}>
+					{listShown ? <Cell size={noteShown && !narrow ? (folders ? '30%' : '38%') : undefined} className={css.column}>
 						<NoteList
 							app={app}
 							foldersShown={folders}
 							onToggleFolders={() => setFolders(!folders)}
 							onEmptyDeleted={() => setDialog({kind: 'emptyDeleted'})}
 						/>
-					</Cell>
+					</Cell> : null}
 				</>
 			)}
 			{noteShown ? (
