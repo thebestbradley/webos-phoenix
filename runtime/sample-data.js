@@ -373,7 +373,14 @@ var phoenixSampleData = function (now) {
             parts: [{ type: "body", mimeType: "text/html", charset: "utf-8",
                       path: "/usr/share/phoenix/runtime/sample-mail/" + m.body + ".html" }],
             messageId: "<phoenix-sample-" + mailCount + "@example.com>",
-            uid: 1000 + mailCount
+            uid: 1000 + mailCount,
+            // Mail already on the device, not new mail to announce: the
+            // Email app marks a message in with its initialRev
+            // (EmailProcessor.js _setInitialRev), and its DashboardManager
+            // announces those with a later one than it found at start.
+            // Without it the app marked them as it started, sometimes after
+            // that look, and showed the unread ones as new mail.
+            initialRev: 1
         });
     }
 
