@@ -25,7 +25,8 @@ export function Results({ places, near, units, busy, note, onPick }: {
         <div className="mp-results" data-testid="results">
             {busy && <div className="mp-busy"><Spinner /></div>}
             {note && <div className="mp-note" data-testid="results-note">{note}</div>}
-            {!busy && places.length === 0 && <div className="mp-empty" data-testid="no-results">No places found.</div>}
+            {/* A failed search says so; "No places found" would say there are none. */}
+            {!busy && places.length === 0 && !note && <div className="mp-empty" data-testid="no-results">No places found.</div>}
             {places.map((p, i) => (
                 <div key={p.id + i} className="pui-row tappable mp-result" role="button" tabIndex={0} data-testid="result" data-index={i}
                      onClick={() => onPick(p)} onKeyDown={(e) => { if (e.key === "Enter") onPick(p); }}>

@@ -193,7 +193,7 @@ async function main() {
         const search = async (q) => {
             await page.fill(tid("search"), q);
             await page.press(tid("search"), "Enter");
-            await page.waitForSelector(`${tid("results")} ${tid("result")}, ${tid("no-results")}`);
+            await page.waitForSelector(`${tid("results")} ${tid("result")}, ${tid("no-results")}, ${tid("results-note")}`);
         };
         const closePanels = async () => {
             for (let i = 0; i < 4 && await page.locator(tid("panel")).count(); i++) await page.keyboard.press("Escape");
@@ -341,6 +341,10 @@ async function main() {
         const offlineNames = await page.$$eval(`${tid("results")} .pui-row-title`, (els) => els.map((e) => e.textContent));
         check(offlineNames[0] === "San Pedro Square", `offline search in the demo region: ${offlineNames.slice(0, 3).join(", ")}`);
         check(/offline maps/i.test(await page.textContent(tid("results-note"))), "says the results come from offline maps");
+        await closePanels();
+        await search("Ferry Building");     // outside the demo region: nothing offline either
+        check(/Search is not available/.test(await page.textContent(tid("results-note"))), "a failed search says search is not available");
+        check(await page.locator(tid("no-results")).count() === 0, "and not \"No places found\" as well");
         await closePanels();
 
         // ---- Preferences: offline directions ---------------------------------------------------
