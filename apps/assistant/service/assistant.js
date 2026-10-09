@@ -600,6 +600,54 @@ function createAssistantService(deps) {
         var c = s.context(asked);
         return !c.question && !c.smallTalk;
     }
+    // Between the grammar and the model's choice: the grammar knew the
+    // command but not all it needs ("add an event called dentist
+    // friday-ish": no time it could read), or a language file marks its
+    // parse {partial: true}. The on-device model, where there is one, fills
+    // in what the words say: its answer held to the command's own
+    // parameters (a JSON schema with nothing required), at temperature 0.
+    // What the grammar read stays; a value from the model is kept only when
+    // a word of it is in what was said (a small model left free invents
+    // times); what is still missing is asked for as before, and what the
+    // model filled is read back unless the words name it (act, grounded()).
+    function empty(v) { return v === undefined || v === null || v === "" || (Array.isArray(v) && !v.length); }
+    function missingArgs(cmd, args, parsed) {
+        if (!cmd.builtIn || !cmd.parameters) return false;
+        if (parsed.partial) return true;
+        return (cmd.parameters.required || []).some(function (k) { return empty(args[k]); });
+    }
+    function fillArgs(cmd, args, text) {
+        var said = " " + String(text).toLowerCase().replace(/[^a-z0-9']+/g, " ") + " ";
+        function inWords(v) {
+            return String(v).toLowerCase().split(/[^a-z0-9']+/).some(function (w) { return w.length > 1 && said.indexOf(" " + w + " ") >= 0; });
+        }
+        return localReady().then(function (m) {
+            if (!m) return null;
+            return deps.llm.ensure(m).then(function (srv) {
+                var p = { type: "local", baseUrl: srv.baseUrl, model: m.id };
+                var req = providers.chatRequest(p, {
+                    system: "Fill in the arguments of the phone command " + commands.toolName(cmd.id) + ": " + cmd.description +
+                        " Use only what the user said, in their words (times and dates as they said them, \"friday at 4 pm\"); " +
+                        "leave out what they did not say.",
+                    messages: [{ role: "user", text: text }],
+                    schema: Object.assign({}, cmd.parameters, { required: [] }),
+                    maxTokens: 200, temperature: 0
+                }, "");
+                return deps.request(req).then(function (r) {
+                    var got = {};
+                    try { got = JSON.parse(providers.parseChat(p.type, r.status, r.body).text) || {}; } catch (e) { return null; }
+                    var kept = {};
+                    Object.keys(got).forEach(function (k) { if (empty(args[k]) && !empty(got[k]) && inWords(got[k])) kept[k] = got[k]; });
+                    if (!Object.keys(kept).length) return null;
+                    var filled = commands.fromModel(cmd, kept, env());
+                    // The grammar's own values stay; what neither has keeps the grammar's default.
+                    Object.keys(args).forEach(function (k) { if ((!empty(args[k]) && !(k in kept)) || filled[k] === undefined) filled[k] = args[k]; });
+                    return { args: filled, model: m };
+                });
+            });
+        }).catch(function (e) { log("filling in arguments failed: " + (e && e.message)); return null; });
+    }
+
     // The on-device model in two steps where the words may ask the phone to
     // do something. A small model (Qwen3 0.6B) offered tools often says
     // what it would do instead of calling one ("I'll turn off the Wi-Fi"),
@@ -717,6 +765,11 @@ function createAssistantService(deps) {
                 var cmd = commands.find(cat.all, id);
                 var args = parsed.command === "app" ? { text: parsed.args.text } : parsed.args;
                 if (parsed.command === "open") args = { appId: parsed.args.appId, title: parsed.args.title, name: parsed.args.title, params: parsed.args.params };
+                if (cmd && missingArgs(cmd, args, parsed)) {
+                    return fillArgs(cmd, args, text).then(function (f) {
+                        return f ? act(thread, cmd, f.args, "on-device", f.model.name, text) : act(thread, cmd, args, "commands", "");
+                    });
+                }
                 if (cmd) return act(thread, cmd, args, "commands", "");
             }
             var cloud = thread.provider ? getProvider(thread.provider) : null;

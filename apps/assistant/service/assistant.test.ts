@@ -592,6 +592,43 @@ describe("the on-device model", () => {
     });
 });
 
+describe("the grammar knew the command, not all it needs: the model fills it in", () => {
+    const BUILT_IN = "qwen3-0.6b-q8_0";
+    const withModel = () => ({
+        status: () => Promise.resolve({ available: true, installed: [{ id: BUILT_IN, builtIn: true }], ramBytes: 2 * 2 ** 30 }),
+        ensure: () => Promise.resolve({ baseUrl: mock.url + "/v1" }),
+        download: () => Promise.resolve(), cancel: () => Promise.resolve(), remove: () => Promise.resolve(),
+    });
+
+    it("a time the grammar could not read, held to the command's parameters", async () => {
+        const t = setup({ llm: withModel() });
+        const before = mock.requests.length;
+        const r = await ask(t, "add an event called dentist friday-ish");
+        expect(mock.requests.length).toBe(before + 1);
+        const fill = mock.requests.at(-1)!.body;
+        expect(Object.keys(fill.response_format.json_schema.schema.properties)).toContain("start");
+        expect(fill.response_format.json_schema.schema.required).toEqual([]);
+        expect(fill.temperature).toBe(0);
+        // The model's Friday 9 AM is the start: the event is made (this test has
+        // no calendar to make it in), not asked "When is it?".
+        expect(last(r)).toMatchObject({ via: "on-device", source: "Qwen3 0.6B", command: "event" });
+        expect(last(r).data?.awaiting).toBeUndefined();
+        expect(last(r).text).toMatch(/no calendar/);
+    });
+
+    it("what the words never said is dropped, and asked for as before", async () => {
+        const t = setup({ llm: withModel() });
+        const r = await ask(t, "add an event called dentist");
+        expect(last(r)).toMatchObject({ via: "commands", command: "event", data: { awaiting: { command: "event" } } });
+    });
+
+    it("without an on-device model, the grammar asks as before", async () => {
+        const t = setup();
+        const r = await ask(t, "add an event called dentist friday-ish");
+        expect(last(r)).toMatchObject({ via: "commands", data: { awaiting: { command: "event" } } });
+    });
+});
+
 describe("the voice", () => {
     it("speaks with the chosen voice; Play Sample with the one asked for", async () => {
         const t = setup();

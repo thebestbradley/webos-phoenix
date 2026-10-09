@@ -15,6 +15,8 @@
 //   - asked for a command's name in a JSON schema (the on-device model's
 //     first step): {"command": "toggle" | "text" | "alarm" | "none"} by the
 //     same words
+//   - asked for a command's arguments in a JSON schema: {"start": "friday
+//     at 9 am"} for "friday-ish", else a time nobody said
 //   - otherwise words: "<shape> says: <the message>"
 // Keys: Anthropic "test-anthropic", OpenAI "test-openai", Gemini
 // "test-gemini"; Chat Completions takes any key or none. Every request is
@@ -57,6 +59,11 @@ function decide(shape, body) {
     if (schema && schema.properties && schema.properties.command) {
         const pick = /force a tool|flashlight|torch/i.test(said) ? "toggle" : /^text \w+ /i.test(said) ? "text" : /wake me/i.test(said) ? "alarm" : "none";
         return { text: JSON.stringify({ command: pick }) };
+    }
+    // Filling in a command's arguments (assistant.js fillArgs): a time for
+    // "friday-ish"; anything else gets one the words never said (to be dropped).
+    if (schema && schema.properties) {
+        return { text: JSON.stringify(/friday-ish/i.test(said) ? { title: "Dentist", start: "friday at 9 am" } : { start: "tomorrow at 10 am" }) };
     }
     const tools = hasTools(shape, body);
     if (/force a tool/i.test(said)) return { tool: { name: "toggle", args: { setting: "flashlight", state: "on" } } };
