@@ -325,6 +325,11 @@ void SimChrome::resizeScreen(int width, int height)
         resize(size() + delta);
 }
 
+void SimChrome::setScreenInfo(const QString &info)
+{
+    setWindowTitle(info.isEmpty() ? displayName() : displayName() + QStringLiteral(" \u2014 ") + info);
+}
+
 void SimChrome::setToolbarShown(bool shown)
 {
     const QSize screen = m_container->size();

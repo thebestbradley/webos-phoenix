@@ -14,7 +14,10 @@
 //    PalmSystem.screenOrientation, and Enyo's windowRotated event follows,
 //    also for a half turn where the size does not change;
 //  * com.palm.systemmanager/getSystemStatus reports how the UI and the
-//    device are turned, as the shell last said.
+//    device are turned, as the shell last said;
+//  * the adaptive simulator's window resized past the tablet threshold
+//    (applyHostStatus {screen, formFactor}): PalmSystem.deviceInfo and
+//    com.palm.systemservice/deviceInfo/query report the new screen.
 //
 //   node tools/test-orientation.cjs [--tablet] [--out DIR]
 
@@ -124,6 +127,20 @@ async function main() {
         await page.evaluate(() => __phoenixRuntime.applyHostStatus({ orientation: { ui: "up", device: "left" } }));
         s = await status();
         check(s.orientation.ui === "up" && s.orientation.device === "left", "getSystemStatus: the device turned, the UI held (" + JSON.stringify(s.orientation) + ")");
+
+        // ---- The screen resized (the adaptive simulator) ------------------------------------
+        const info = () => page.evaluate(() => JSON.parse(PalmSystem.deviceInfo));
+        await page.evaluate(() => __phoenixRuntime.applyHostStatus({ formFactor: "phone", screen: { width: 393, height: 852 } }));
+        let d = await info();
+        check(d.screenWidth === 393 && d.screenHeight === 852, "deviceInfo: the shell's screen (" + d.screenWidth + "x" + d.screenHeight + ")");
+        await page.evaluate(() => __phoenixRuntime.applyHostStatus({ formFactor: "tablet", screen: { width: 1180, height: 820 } }));
+        d = await info();
+        check(d.screenWidth === 1180 && d.screenHeight === 820, "deviceInfo follows a resize to a tablet (" + d.screenWidth + "x" + d.screenHeight + ")");
+        const q = await page.evaluate(() => new Promise((resolve) => {
+            __phoenixRuntime.dispatch("luna://com.palm.systemservice/deviceInfo/query", {}, resolve,
+                                      { cancelled: function () { return false; }, onCancel: null });
+        }));
+        check(q && q.screenWidth === 1180, "deviceInfo/query reports it too");
 
         check(errors.length === 0, "no page errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
         await browser.close();

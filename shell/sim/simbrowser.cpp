@@ -125,6 +125,17 @@ void SimBrowser::setUserAgent(const QString &mode)
     emit userAgentChanged();
 }
 
+void SimBrowser::setPhone(bool phone)
+{
+    if (phone == m_phone)
+        return;
+    m_phone = phone;
+    applyUserAgent(m_profile);
+    if (m_private)
+        applyUserAgent(m_private);
+    emit phoneChanged();
+}
+
 QString SimBrowser::httpUserAgent() const
 {
     return m_profile->httpUserAgent();

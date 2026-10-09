@@ -66,6 +66,86 @@ Item {
     // the shell lays itself out again.
     readonly property bool sideways: deviceAngle % 180 !== 0
 
+    // ---- Adaptive: a phone or a tablet by the window's size ---------------------------
+    // Without --phone or --tablet (--adaptive, ./phoenix run) the shell's
+    // formFactor is "auto": it is a tablet while the screen's shorter side
+    // is at least Theme.tabletMinSide legacy pixels, a phone below, and
+    // switches live as the window is resized (Shell.tablet is a binding;
+    // every surface follows Theme.tablet), the apps running on. The pages
+    // hear of it as of a turn: their window resizes, and the system status
+    // carries the screen and the form factor (PalmSystem.deviceInfo).
+    readonly property bool adaptive: shell.formFactor === "auto"
+    // The screen, upright, in legacy pixels.
+    readonly property int screenWidth: Math.round(device.width / shell.effectiveDensity)
+    readonly property int screenHeight: Math.round(device.height / shell.effectiveDensity)
+    // View > Device Size: legacy pixels, upright (the TouchPad is upright
+    // on its side, as --tablet starts it). The Pre 3 is 480x800 at 1.5.
+    readonly property var devicePresets: [
+        { id: "pre", text: qsTr("Pre, Pixi, Veer (320x480)"), width: 320, height: 480 },
+        { id: "pre3", text: qsTr("Pre 3 (320x533; 480x800 at 1.5x)"), width: 320, height: 533 },
+        { id: "phone", text: qsTr("Modern Phone (393x852)"), width: 393, height: 852 },
+        { id: "folded", text: qsTr("Foldable, Folded (344x882)"), width: 344, height: 882 },
+        { id: "unfolded", text: qsTr("Foldable, Open (690x829)"), width: 690, height: 829 },
+        { id: "touchpad", text: qsTr("TouchPad (1024x768)"), width: 1024, height: 768 },
+        { id: "tablet", text: qsTr("Modern Tablet (1180x820)"), width: 1180, height: 820 }
+    ]
+    // The window at a preset's size, as the device is held now.
+    function snapToPreset(id) {
+        var p = devicePresets.filter(function (d) { return d.id === id; })[0];
+        if (p)
+            resizeScreen(p.width, p.height);
+    }
+    // The screen (upright, legacy pixels) at this size; the window turns it
+    // as the device is held.
+    function resizeScreen(width, height) {
+        var w = Math.round(width * shell.effectiveDensity), h = Math.round(height * shell.effectiveDensity);
+        if (sideways) {
+            var t = w;
+            w = h;
+            h = t;
+        }
+        var win = root.Window.window;
+        if (typeof simChrome !== "undefined" && simChrome) {
+            simChrome.resizeScreen(w, h);
+        } else if (win) {
+            win.width = w;
+            win.height = h;
+        }
+    }
+    // The pages: the form factor and the screen as they change (resizing
+    // the window is a stream of sizes: the last one, a moment after).
+    function pushScreen() {
+        windows.pushSystemStatus({ formFactor: shell.tablet ? "tablet" : "phone",
+                                   screen: { width: screenWidth, height: screenHeight } });
+    }
+    Timer {
+        id: screenPush
+        interval: 150
+        onTriggered: root.pushScreen()
+    }
+    onScreenWidthChanged: screenPush.restart()
+    onScreenHeightChanged: screenPush.restart()
+    Connections {
+        target: shell
+        // After the size it switched at has reached everything.
+        function onTabletChanged() { Qt.callLater(root.layoutSwitched); }
+    }
+    function layoutSwitched() {
+        pushScreen();
+        console.info("phoenix-sim: " + (shell.tablet ? "tablet" : "phone") + " layout at " + screenWidth + "x" + screenHeight);
+    }
+    // The browser's pages ask for the phone's or the desktop's site by it.
+    Binding {
+        when: typeof simBrowser !== "undefined" && simBrowser !== null
+        target: typeof simBrowser !== "undefined" ? simBrowser : null
+        property: "phone"
+        value: !shell.tablet
+    }
+    // The window's title says what the screen is.
+    readonly property string screenInfo: "%1x%2, %3%4".arg(screenWidth).arg(screenHeight)
+        .arg(shell.tablet ? qsTr("tablet") : qsTr("phone")).arg(adaptive ? qsTr(" (adaptive)") : "")
+    onScreenInfoChanged: if (typeof simChrome !== "undefined" && simChrome) simChrome.setScreenInfo(screenInfo)
+
     Item {
         id: device
         anchors.centerIn: parent
@@ -871,23 +951,53 @@ Item {
               console.info("phoenix-sim: light " + status.lightLevel + " lux");
           } },
 
-        // View: the device phoenix-sim starts as (it restarts with it).
+        // View: the device. Adaptive (--adaptive, and without --phone or
+        // --tablet): the shell is a phone or a tablet by the window's size,
+        // live, and Phone and Tablet snap the window to the Pre's and the
+        // TouchPad's sizes; with --phone or --tablet the layout is fixed and
+        // they restart phoenix-sim as the other.
         { id: "phone", menu: "view", text: qsTr("Phone"), radio: "formFactor", icon: "phone",
-          tip: qsTr("Restart as a phone (the Pre, 320x480)"),
-          checked: function () { return !shell.tablet; },
-          run: function () { if (shell.tablet) root.restartSim(["tablet", "phone", "size", "scale"], []); } },
+          tip: qsTr("A phone: the Pre, 320x480 (adaptive: the window takes its size; else a restart)"),
+          checked: function () { return !root.adaptive && !shell.tablet; },
+          run: function () {
+              if (root.adaptive)
+                  root.snapToPreset("pre");
+              else if (shell.tablet)
+                  root.restartSim(["tablet", "phone", "adaptive", "size", "scale"], ["--phone"]);
+          } },
         { id: "tablet", menu: "view", text: qsTr("Tablet"), radio: "formFactor", icon: "tablet",
-          tip: qsTr("Restart as a tablet (the TouchPad, 1024x768)"),
-          checked: function () { return shell.tablet; },
-          run: function () { if (!shell.tablet) root.restartSim(["tablet", "phone", "size", "scale"], ["--tablet"]); } },
+          tip: qsTr("A tablet: the TouchPad, 1024x768 (adaptive: the window takes its size; else a restart)"),
+          checked: function () { return !root.adaptive && shell.tablet; },
+          run: function () {
+              if (root.adaptive)
+                  root.snapToPreset("touchpad");
+              else if (!shell.tablet)
+                  root.restartSim(["tablet", "phone", "adaptive", "size", "scale"], ["--tablet"]);
+          } },
+        { id: "adaptive", menu: "view", text: qsTr("Adaptive (Phone or Tablet by Size)"), radio: "formFactor",
+          tip: qsTr("Resize the window freely: the shell becomes a tablet once its shorter side reaches %1 pixels, "
+                    + "and a phone again below, without restarting the apps").arg(Theme.tabletMinSide),
+          checked: function () { return root.adaptive; },
+          run: function () {
+              if (!root.adaptive)
+                  root.restartSim(["tablet", "phone", "adaptive"], ["--adaptive"]);
+          } }
+    ].concat(devicePresets.map(function (p) {
+        return { id: "size-" + p.id, menu: "view", submenu: qsTr("Device Size"), text: p.text, radio: "deviceSize",
+                 tip: qsTr("The window at %1x%2, upright (%3 layout when adaptive)").arg(p.width).arg(p.height)
+                      .arg(Theme.tabletLayoutFor(p.width, p.height, 1) ? qsTr("tablet") : qsTr("phone")),
+                 checked: function () { return root.screenWidth === p.width && root.screenHeight === p.height; },
+                 run: function () { root.snapToPreset(p.id); } };
+    })).concat([
         { separator: true, menu: "view" }
-    ].concat([1, 1.5, 2].map(function (n) {
+    ]).concat([1, 1.5, 2].map(function (n) {
         return { id: "scale-" + n, menu: "view", submenu: qsTr("Scale"), text: qsTr("%1x").arg(n), radio: "scale",
                  tip: qsTr("Restart with --scale %1").arg(n),
                  checked: function () { return shell.density === n; },
                  run: function () {
-                     var w = shell.tablet ? 1024 : 320, h = shell.tablet ? 768 : 480;
-                     root.restartSim(["size", "scale"], ["--scale", String(n), "--size", Math.round(w * n) + "x" + Math.round(h * n)]);
+                     // The screen it has now, at the new density.
+                     root.restartSim(["size", "scale"], ["--scale", String(n), "--size",
+                                     Math.round(root.screenWidth * n) + "x" + Math.round(root.screenHeight * n)]);
                  } };
     })).concat([""].concat(scenes).map(function (name) {
         return { id: "scene-" + (name || "none"), menu: "view", submenu: qsTr("Scene"), text: name || qsTr("None (a normal start)"),
@@ -1297,7 +1407,10 @@ Item {
         windows.pushSystemStatus({ gestureArea: Theme.gestureAreaHeight > 0 });
         // The accessories (none at boot) and what the device is: Settings
         // offers tethering on phones.
-        windows.pushSystemStatus({ gamepads: [], usbDrives: [], formFactor: shell.tablet ? "tablet" : "phone" });
+        windows.pushSystemStatus({ gamepads: [], usbDrives: [] });
+        pushScreen();
+        if (typeof simChrome !== "undefined" && simChrome)
+            simChrome.setScreenInfo(screenInfo);
         if (typeof simSettings !== "undefined") {
             windows.launcherLayoutJson = simSettings.value("launcher/layout");
             windows.dockModePositionsJson = simSettings.value("dockmode/positions");

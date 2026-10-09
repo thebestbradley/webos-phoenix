@@ -1734,7 +1734,7 @@ Item {
     // are turned), which every page gets as it loads; unlike the rest it is
     // not the pages' to overrule.
     readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse", "launcherLayout", "gestureArea", "dockMode",
-                                        "debugOverlays", "usbHost", "gamepads", "usbDrives", "formFactor"]
+                                        "debugOverlays", "usbHost", "gamepads", "usbDrives", "formFactor", "screen"]
     property var _shellStatus: ({})
 
     function pushSystemStatus(changes) {

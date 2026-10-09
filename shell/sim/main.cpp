@@ -5,7 +5,7 @@
 // desktop window with mock apps, under menus (Device, Simulate, View, Help)
 // and beside a toolbar with every key below (SimChrome; sim.qml simActions).
 //
-//   phoenix-sim [--size WxH] [--scale N] [--tablet|--phone] [--scene NAME]
+//   phoenix-sim [--size WxH] [--scale N] [--adaptive|--tablet|--phone] [--scene NAME]
 //               [--orientation up|left|down|right] [--turn ORIENTATION]
 //               [--home-button] [--first-use] [--screenshot FILE [--delay MS]] [--stay-awake] [--low-memory] [--hardware-keyboard] [--touchstone] [--no-host-shell]
 //               [--host-shell PATH] [--security-policy SPEC] [--usb] [--usb-busy] [--touch-to-share]
@@ -153,6 +153,7 @@ int main(int argc, char *argv[])
     QCommandLineOption scaleOpt(QStringLiteral("scale"), QStringLiteral("Device pixels per legacy pixel, like a denser screen (default 1; the Pre 3 was 1.5 at 480x800)."), QStringLiteral("N"), QStringLiteral("1"));
     QCommandLineOption tabletOpt(QStringLiteral("tablet"), QStringLiteral("Use the tablet (TouchPad) layout."));
     QCommandLineOption phoneOpt(QStringLiteral("phone"), QStringLiteral("Force the phone layout."));
+    QCommandLineOption adaptiveOpt(QStringLiteral("adaptive"), QStringLiteral("A phone or a tablet by the window's size (the default without --phone or --tablet): resize the window, or pick View > Device Size, and the shell switches between the layouts live, the apps running on."));
     QCommandLineOption sceneOpt(QStringLiteral("scene"), QStringLiteral("Demo scene: locked, cards, stacks, reorder, maximized, heldcard, launcher, launcheredit, launchermenu, launchergroup, launchergroupopen, launchertabs, launcherinstall, wave, powermenu, pin, emergency, firstuse, lowbattery, banner, notified, dashboard, justtype, keyboard, clipstrip, assistant, systemmenu, empty."), QStringLiteral("name"));
     QCommandLineOption firstUseOpt(QStringLiteral("first-use"), QStringLiteral("Start with First Use, as on a new device (without it, First Use runs until it has been done once, unless --scene or --launch is given)."));
     QCommandLineOption shotOpt(QStringLiteral("screenshot"), QStringLiteral("Save a screenshot to FILE and exit."), QStringLiteral("file"));
@@ -191,7 +192,7 @@ int main(int argc, char *argv[])
     QCommandLineOption eraseOpt(QStringLiteral("erase-data"), QStringLiteral("Internal: once process PID is gone, erase the simulator's data and start into First Use."), QStringLiteral("pid"));
     updatingOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     eraseOpt.setFlags(QCommandLineOption::HiddenFromHelp);
-    parser.addOptions({ hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
+    parser.addOptions({ hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, adaptiveOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
                         noHostShellOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, updatingOpt, eraseOpt, microphoneFileOpt,
                         llamaServerOpt, speechCommandOpt, marketplaceOpt, wakeModelOpt, voskLibraryOpt, wakeFileOpt });
     parser.process(app);
@@ -246,6 +247,10 @@ int main(int argc, char *argv[])
         return 2;
     }
 
+    if (int(parser.isSet(tabletOpt)) + int(parser.isSet(phoneOpt)) + int(parser.isSet(adaptiveOpt)) > 1) {
+        qCritical("--adaptive, --phone and --tablet: one of them");
+        return 2;
+    }
     const bool tablet = parser.isSet(tabletOpt);
     QSize size = tablet ? QSize(1024, 768) : QSize(320, 480);
     if (parser.isSet(sizeOpt)) {
@@ -419,8 +424,8 @@ int main(int argc, char *argv[])
         // What the assistant's voice and model have on this computer, for
         // Settings > Assistant (the runtime's voice reads host.json's
         // "voice") and for this log, each missing one with a line on how to
-        // get it (scripts/mac-setup.sh and scripts/linux-setup.sh install
-        // them all; docs/AI-AND-MCP.md, "What's installed where").
+        // get it (./phoenix installs them all; docs/AI-AND-MCP.md, "What's
+        // installed where").
         QJsonObject voice;
         // hint: what is missing and how to get it, after the part's name
         // ("speech recognition: its model is missing; run ...").
@@ -430,11 +435,9 @@ int main(int argc, char *argv[])
             if (!available)
                 qInfo("phoenix-sim: %s: %s", what, qPrintable(hint));
         };
-#ifdef Q_OS_MACOS
-        const QString setup = QStringLiteral("scripts/mac-setup.sh");
-#else
-        const QString setup = QStringLiteral("scripts/linux-setup.sh");
-#endif
+        // The one command installs what is missing (./phoenix at the top
+        // of the checkout).
+        const QString setup = QStringLiteral("./phoenix");
         // Dictation runs the transcriber (apps/voicememos/service/
         // transcribe-cli.js) with Node.js, which finds whisper-cli and its
         // model as on a device: PHOENIX_WHISPER_CLI or the PATH, and
@@ -484,9 +487,9 @@ int main(int argc, char *argv[])
         hostInfo.insert(QStringLiteral("voice"), voice);
         if (!parser.isSet(llamaServerOpt) && QStandardPaths::findExecutable(QStringLiteral("llama-server")).isEmpty())
 #ifdef Q_OS_MACOS
-            qInfo("phoenix-sim: on-device models: llama.cpp's llama-server is missing; brew install llama.cpp (scripts/mac-setup.sh does it), or --llama-server");
+            qInfo("phoenix-sim: on-device models: llama.cpp's llama-server is missing; brew install llama.cpp (./phoenix does it), or --llama-server");
 #else
-            qInfo("phoenix-sim: on-device models: llama.cpp's llama-server is missing; scripts/linux-setup.sh builds it, or --llama-server");
+            qInfo("phoenix-sim: on-device models: llama.cpp's llama-server is missing; ./phoenix builds it, or --llama-server");
 #endif
     }
     rootfs.setHostInfo(QJsonDocument(hostInfo).toJson(QJsonDocument::Compact));

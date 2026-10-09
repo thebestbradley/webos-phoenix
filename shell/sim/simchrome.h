@@ -44,6 +44,9 @@ public:
     // The window resized around a screen of this size (sim.qml, as the
     // device turns on its side).
     Q_INVOKABLE void resizeScreen(int width, int height);
+    // What the screen is ("393x852, phone (adaptive)"), after the name in
+    // the window's title (sim.qml, as the window is resized).
+    Q_INVOKABLE void setScreenInfo(const QString &info);
 
     // How a key sequence reads on this computer: Qt's portable text ("Ctrl+F5")
     // in the platform's way ("⌘F5"), and on a Mac F1 to F12 with fn.

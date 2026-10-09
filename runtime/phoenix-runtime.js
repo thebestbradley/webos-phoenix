@@ -315,30 +315,37 @@
         windowOrientation: "up",
         specifiedWindowOrientation: "free",
         videoOrientation: "up",
-        deviceInfo: toJson({
-            modelName: "Phoenix Simulator",
-            modelNameAscii: "Phoenix Simulator",
-            platformVersion: "3.0.5",
-            platformVersionMajor: 3,
-            platformVersionMinor: 0,
-            platformVersionDot: 5,
-            carrierName: "Phoenix",
-            serialNumber: "PHOENIX0001",
-            screenWidth: global.screen ? global.screen.width : 320,
-            screenHeight: global.screen ? global.screen.height : 480,
-            minimumCardWidth: 320,
-            minimumCardHeight: 188,
-            maximumCardWidth: 320,
-            maximumCardHeight: 452,
-            keyboardAvailable: true,
-            keyboardSlider: false,
-            keyboardType: "QWERTY",
-            wifiAvailable: true,
-            bluetoothAvailable: true,
-            coreNaviButton: false,
-            // Exhibitions on the Touchstone (DeviceInfo.cpp:315).
-            dockModeEnabled: true
-        }),
+        // Read again on each use: the screen is the shell's (applyHostStatus
+        // {screen}), which the adaptive simulator changes as its window is
+        // resized, as a turn changes the window (the page's own screen is
+        // the computer's monitor).
+        get deviceInfo() {
+            var shellScreen = store.get("screen", null);
+            return toJson({
+                modelName: "Phoenix Simulator",
+                modelNameAscii: "Phoenix Simulator",
+                platformVersion: "3.0.5",
+                platformVersionMajor: 3,
+                platformVersionMinor: 0,
+                platformVersionDot: 5,
+                carrierName: "Phoenix",
+                serialNumber: "PHOENIX0001",
+                screenWidth: shellScreen ? shellScreen.width : global.screen ? global.screen.width : 320,
+                screenHeight: shellScreen ? shellScreen.height : global.screen ? global.screen.height : 480,
+                minimumCardWidth: 320,
+                minimumCardHeight: 188,
+                maximumCardWidth: 320,
+                maximumCardHeight: 452,
+                keyboardAvailable: true,
+                keyboardSlider: false,
+                keyboardType: "QWERTY",
+                wifiAvailable: true,
+                bluetoothAvailable: true,
+                coreNaviButton: false,
+                // Exhibitions on the Touchstone (DeviceInfo.cpp:315).
+                dockModeEnabled: true
+            });
+        },
         isActivated: function () { return activated; },
         get isMinimal() { return false; },
 
@@ -5865,6 +5872,12 @@
             // How the UI and the device are turned (getSystemStatus).
             if (st.orientation && toJson(st.orientation) !== toJson(store.get("orientation", null))) {
                 store.set("orientation", { ui: st.orientation.ui, device: st.orientation.device });
+                changed();
+            }
+            // The screen, upright, in legacy pixels (PalmSystem.deviceInfo):
+            // the adaptive simulator's window resized.
+            if (st.screen && toJson(st.screen) !== toJson(store.get("screen", null))) {
+                store.set("screen", { width: st.screen.width, height: st.screen.height });
                 changed();
             }
             // The device has a gesture area (getSystemStatus gestureArea).
