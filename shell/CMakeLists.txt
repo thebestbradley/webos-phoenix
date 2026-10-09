@@ -100,7 +100,8 @@ if(PHOENIX_BUILD_SIM)
 endif()
 
 # Phoenix web apps (React + TypeScript in ../apps): `npm ci` when the lock
-# file changes or node_modules is missing, then `npm run build` on every build, writing apps/<name>/dist/
+# file changes or node_modules is missing, then `npm run build` when a file
+# in apps/ changed since it last ran (cmake/run-if-changed.sh), writing apps/<name>/dist/
 # where phoenix-sim and tools/serve-rootfs.py pick them up. Needs Node.js 22
 # or 24 (LTS); 20.19+ also works.
 # Off by default for device builds (meta-phoenix sets PHOENIX_BUILD_SIM=OFF).
@@ -121,8 +122,10 @@ if(PHOENIX_BUILD_APPS)
             WORKING_DIRECTORY "${PHOENIX_APPS_DIR}"
             COMMENT "Installing web app dependencies (npm ci in apps/)"
             USES_TERMINAL VERBATIM)
+        set(_if_changed sh "${CMAKE_CURRENT_SOURCE_DIR}/cmake/run-if-changed.sh")
         add_custom_target(phoenix-apps ALL
-            COMMAND "${PHOENIX_NPM}" run build
+            COMMAND ${_if_changed} "${CMAKE_CURRENT_BINARY_DIR}/apps-built.stamp" "${PHOENIX_APPS_DIR}"
+                    "${PHOENIX_NPM}" run build
             DEPENDS "${_npm_stamp}"
             WORKING_DIRECTORY "${PHOENIX_APPS_DIR}"
             COMMENT "Building the web apps (npm run build in apps/)"
@@ -172,7 +175,8 @@ if(PHOENIX_BUILD_APPS)
                 COMMENT "Installing ${_enact_app} dependencies (npm ci)"
                 USES_TERMINAL VERBATIM)
             add_custom_target(phoenix-${_enact_app} ALL
-                COMMAND "${PHOENIX_NPM}" run build
+                COMMAND ${_if_changed} "${CMAKE_CURRENT_BINARY_DIR}/${_enact_app}-built.stamp" "${_dir}"
+                        "${PHOENIX_NPM}" run build
                 DEPENDS "${_stamp}"
                 WORKING_DIRECTORY "${_dir}"
                 COMMENT "Building ${_enact_app} (enact pack)"
