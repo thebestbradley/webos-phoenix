@@ -12,6 +12,7 @@
 #include <QDesktopServices>
 #include <QDialogButtonBox>
 #include <QFile>
+#include <QGuiApplication>
 #include <QHeaderView>
 #include <QImageReader>
 #include <QJSValue>
@@ -34,7 +35,12 @@
 #include <QVBoxLayout>
 #include <QWindow>
 
+#include <cstdio>
 #include <memory>
+
+#ifdef Q_OS_MACOS
+#include "simmac.h"
+#endif
 
 namespace {
 
@@ -64,10 +70,31 @@ QString SimChrome::displayName()
 SimChrome::SimChrome(QQuickView *view, bool toolbar)
     : m_view(view)
     , m_container(QWidget::createWindowContainer(view, this))
+    , m_menuBar(nullptr)
     , m_toolbar(new QToolBar(tr("Simulator"), this))
     , m_refresh(new QTimer(this))
 {
     setWindowTitle(displayName());
+#ifdef Q_OS_MACOS
+    // The menu bar at the top of the screen shows a window's own menu bar
+    // only while that window is Qt's focus window, else the one made
+    // without a window, if any (QCocoaMenuBar::updateMenuBarImmediately,
+    // on every focus window change: qcocoanativeinterface.mm
+    // onAppFocusWindowChanged). The focus window is nearly always the
+    // device's screen, the QQuickView inside this window (a child window
+    // with no menu bar: QNSView's topLevelWindow climbs to the top only
+    // from a widget's window), so QMainWindow's own menu bar showed only
+    // in the moments this window itself had the focus, and otherwise the
+    // menu bar kept just the application menu. Made without a window, the
+    // menu bar is the application's: there whichever window has the focus
+    // (Qt's QMenuBar documentation, "QMenuBar as a Global Menu Bar").
+    m_menuBar = new QMenuBar(nullptr);
+    m_ownsMenuBar = m_menuBar->isNativeMenuBar();
+    if (!m_ownsMenuBar)
+        setMenuBar(m_menuBar);   // Qt::AA_DontUseNativeMenuBar: in the window
+#else
+    m_menuBar = menuBar();
+#endif
     // The screen takes the keyboard: clicked, and from the start.
     m_container->setFocusPolicy(Qt::StrongFocus);
     m_container->setMinimumSize(64, 64);
@@ -94,6 +121,12 @@ SimChrome::SimChrome(QQuickView *view, bool toolbar)
     // What the check boxes show changes with the keys too.
     m_refresh->setInterval(500);
     connect(m_refresh, &QTimer::timeout, this, &SimChrome::refreshChecks);
+}
+
+SimChrome::~SimChrome()
+{
+    if (m_ownsMenuBar)
+        delete m_menuBar;
 }
 
 void SimChrome::build()
@@ -169,7 +202,7 @@ void SimChrome::build()
     view->addSeparator();
     view->addAction(m_toolbarAction);
 
-    QMenu *help = menuBar()->addMenu(tr("Help"));
+    QMenu *help = m_menuBar->addMenu(tr("Help"));
     QAction *sheet = help->addAction(tr("Keyboard Shortcuts…"));
     connect(sheet, &QAction::triggered, this, &SimChrome::showShortcuts);
     QAction *about = help->addAction(tr("About %1").arg(displayName()));
@@ -205,13 +238,54 @@ QMenu *SimChrome::menuFor(const QString &menu, const QString &submenu)
                             : menu == QLatin1String("simulate") ? tr("Simulate")
                             : menu == QLatin1String("view") ? tr("View")
                             : menu == QLatin1String("services") ? tr("Services") : menu;
-        m = menuBar()->addMenu(title);
+        m = m_menuBar->addMenu(title);
     } else {
         m = menuFor(menu, QString())->addMenu(submenu);
     }
     connect(m, &QMenu::aboutToShow, this, &SimChrome::refreshChecks);
     m_menus.insert(key, m);
     return m;
+}
+
+bool SimChrome::checkMenuBar()
+{
+    // The keyboard focus on the screen, as after a start or a click on it.
+    m_view->requestActivate();
+    m_container->setFocus();
+    QCoreApplication::processEvents();
+    const QStringList expected = { tr("Device"), tr("Simulate"), tr("View"), tr("Services"), tr("Help") };
+    QWindow *focus = QGuiApplication::focusWindow();
+    const QString focusName = !focus ? QStringLiteral("none")
+                            : focus == m_view ? QStringLiteral("the device's screen")
+                            : focus == windowHandle() ? QStringLiteral("the simulator's window")
+                            : QString::fromLatin1(focus->metaObject()->className());
+    std::printf("phoenix-sim: focus window: %s\n", qPrintable(focusName));
+    std::printf("phoenix-sim: native menu bar: %s\n", m_menuBar->isNativeMenuBar() ? "yes" : "no");
+    std::printf("phoenix-sim: menu bar without a window (the application's): %s\n", m_ownsMenuBar ? "yes" : "no");
+    bool ok = true;
+    QStringList shown;
+#ifdef Q_OS_MACOS
+    shown = SimMac::mainMenuTitles();
+    const bool foreground = SimMac::isForegroundApp();
+    std::printf("phoenix-sim: foreground app (Dock icon, own menu bar): %s\n", foreground ? "yes" : "no");
+    std::printf("phoenix-sim: active app: %s\n", SimMac::isActive() ? "yes" : "no (another app has the menu bar until the simulator's window is clicked)");
+    ok = foreground && m_menuBar->isNativeMenuBar() && m_ownsMenuBar;
+#else
+    for (QAction *a : m_menuBar->actions())
+        if (a->isVisible())
+            shown << a->text();
+    ok = m_menuBar->isNativeMenuBar() || m_menuBar->isVisible();
+#endif
+    std::printf("phoenix-sim: menu bar: %s\n", qPrintable(shown.join(QStringLiteral(", "))));
+    for (const QString &title : expected) {
+        if (!shown.contains(title)) {
+            std::printf("phoenix-sim: the menu bar has no %s menu\n", qPrintable(title));
+            ok = false;
+        }
+    }
+    std::printf("phoenix-sim: menu bar check %s\n", ok ? "passed" : "FAILED");
+    std::fflush(stdout);
+    return ok;
 }
 
 QString SimChrome::keyLabel(const QString &portable)
@@ -315,7 +389,7 @@ void SimChrome::refreshChecks()
 void SimChrome::showWithScreen(const QSize &screen)
 {
     // A first guess from the bars' sizes, then exact once laid out.
-    const int bar = menuBar()->isNativeMenuBar() ? 0 : menuBar()->sizeHint().height();
+    const int bar = m_menuBar->isNativeMenuBar() ? 0 : m_menuBar->sizeHint().height();
     const QSize tools = m_toolbar->isVisibleTo(this) ? m_toolbar->sizeHint() : QSize(0, 0);
     if (screen.height() >= screen.width())
         resize(screen.width() + tools.width(), screen.height() + bar);

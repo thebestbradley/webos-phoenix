@@ -72,6 +72,10 @@ if(PHOENIX_BUILD_SIM)
         # Its name in the menu bar's application menu and About box: an
         # Info.plist in the program itself (it is not an .app bundle).
         target_link_options(phoenix-sim PRIVATE "LINKER:-sectcreate,__TEXT,__info_plist,${CMAKE_CURRENT_SOURCE_DIR}/sim/Info.plist")
+        # What AppKit says of the menu bar, for --check-menu-bar (CI).
+        enable_language(OBJCXX)
+        target_sources(phoenix-sim PRIVATE sim/simmac.mm sim/simmac.h)
+        target_link_libraries(phoenix-sim PRIVATE "-framework AppKit")
     endif()
     if(TARGET Qt6::WebEngineQuick)
         # Network: the pages' HTTP proxy (RootfsSchemeHandler, /__phoenix/proxy).

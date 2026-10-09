@@ -9,7 +9,7 @@
 //               [--orientation up|left|down|right] [--turn ORIENTATION]
 //               [--home-button] [--first-use] [--screenshot FILE [--delay MS]] [--stay-awake] [--low-memory] [--hardware-keyboard] [--touchstone] [--no-host-shell]
 //               [--host-shell PATH] [--security-policy SPEC] [--usb] [--usb-busy] [--touch-to-share]
-//               [--boot-animation | --no-boot-animation] [--no-toolbar] [--marketplace]
+//               [--boot-animation | --no-boot-animation] [--no-toolbar] [--marketplace] [--check-menu-bar]
 //
 // Keys: Esc = back gesture, Home/F1 = up gesture, F2 = demo notification,
 //       F3 = Power (screen off and locked / on), F4 = incoming call, F5 = incoming text message
@@ -186,6 +186,7 @@ int main(int argc, char *argv[])
     QCommandLineOption usbBusyOpt(QStringLiteral("usb-busy"), QStringLiteral("An app keeps a file open on the USB drive: entering USB drive mode fails (\"USB Drive connection failed\")."));
     QCommandLineOption bootAnimOpt(QStringLiteral("boot-animation"), QStringLiteral("Show the boot animation at start-up (it shows anyway unless --screenshot or an offscreen platform)."));
     QCommandLineOption noBootAnimOpt(QStringLiteral("no-boot-animation"), QStringLiteral("Start without the boot animation."));
+    QCommandLineOption checkMenuBarOpt(QStringLiteral("check-menu-bar"), QStringLiteral("Check that the menu bar shows its menus with the keyboard focus on the screen (on a Mac: the menu bar at the top of the screen), print what it found, and exit: 0 if it does (CI)."));
     QCommandLineOption noToolbarOpt(QStringLiteral("no-toolbar"), QStringLiteral("Start without the toolbar beside the screen (View > Show Toolbar shows it again)."));
     // Set by phoenix-sim itself when it restarts (SimProcess).
     QCommandLineOption updatingOpt(QStringLiteral("updating"), QStringLiteral("Boot as after a system update: \"Updating the system\" first."));
@@ -193,7 +194,7 @@ int main(int argc, char *argv[])
     updatingOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     eraseOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     parser.addOptions({ hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, adaptiveOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
-                        noHostShellOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, updatingOpt, eraseOpt, microphoneFileOpt,
+                        noHostShellOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, checkMenuBarOpt, updatingOpt, eraseOpt, microphoneFileOpt,
                         llamaServerOpt, speechCommandOpt, marketplaceOpt, wakeModelOpt, voskLibraryOpt, wakeFileOpt });
     parser.process(app);
 
@@ -578,6 +579,15 @@ int main(int argc, char *argv[])
         chrome->showWithScreen(size);
     } else {
         view.show();
+    }
+
+    if (parser.isSet(checkMenuBarOpt)) {
+        if (!chrome) {
+            std::fprintf(stderr, "phoenix-sim: --check-menu-bar: no menu bar on the %s platform\n", qPrintable(platform));
+            return 1;
+        }
+        // Once the window is up and the app activated.
+        QTimer::singleShot(3000, chrome, [chrome]() { QCoreApplication::exit(chrome->checkMenuBar() ? 0 : 1); });
     }
 
     if (parser.isSet(shotOpt)) {
