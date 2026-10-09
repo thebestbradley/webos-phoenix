@@ -471,6 +471,10 @@ contributors, available under the **Open Database License (ODbL) 1.0**
   it keep the attribution above, which the app shows and this file records.
   Tests (`tools/test-maps.cjs`, `apps/maps/src/lib/offline.test.ts`) use
   the same tiles.
+- `tools/fixtures/maps` holds replies recorded from Photon, Valhalla's
+  FOSSGIS server and Overpass on 9 October 2026 for
+  `tools/test-assistant-maps.cjs`: OpenStreetMap data (© OpenStreetMap
+  contributors, ODbL), a test fixture, not shipped in the image.
 - The label glyphs (`apps/maps/public/fonts`) are **Noto Sans**, SIL Open
   Font License 1.1, rendered to MapLibre's glyph format by OpenFreeMap.
 - Attribution on screen: the map always shows "© OpenStreetMap

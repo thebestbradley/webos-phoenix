@@ -473,6 +473,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-keyboard.cjs` | Web fields and the virtual keyboard |
 | `node tools/test-voicememos.cjs` | Voice Memos |
 | `node tools/test-maps.cjs` | Maps (no live map servers) |
+| `node tools/test-assistant-maps.cjs` | The Assistant and Maps end to end: coffee near me, a place, directions, navigation, Back (recorded replies in `tools/fixtures/maps`) |
 | `node tools/test-passwords.cjs` | Passwords (KeePass) |
 | `node tools/test-authenticator.cjs` | Authenticator (TOTP/HOTP) |
 | `node tools/test-clipboard.cjs` | Clipboard history: the Clipboard app and Settings > Clipboard |

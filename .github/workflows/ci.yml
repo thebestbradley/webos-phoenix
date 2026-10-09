@@ -261,6 +261,8 @@ jobs:
           t node tools/test-weather.cjs --tablet --out app-tests/weather-tablet
           t node tools/test-maps.cjs --out app-tests/maps-phone
           t node tools/test-maps.cjs --tablet --out app-tests/maps-tablet
+          t node tools/test-assistant-maps.cjs --out app-tests/assistant-maps-phone
+          t node tools/test-assistant-maps.cjs --tablet --out app-tests/assistant-maps-tablet
           t node tools/test-passwords.cjs --out app-tests/passwords-phone
           t node tools/test-passwords.cjs --tablet --out app-tests/passwords-tablet
           t node tools/test-authenticator.cjs --out app-tests/authenticator-phone
