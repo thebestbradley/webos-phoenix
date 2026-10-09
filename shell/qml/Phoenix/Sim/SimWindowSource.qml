@@ -883,7 +883,8 @@ Item {
                 launcherLayoutRestored(payload.json);
         } else if (type === "systemStatus") {
             // The pages are in step with the shell again.
-            _pendingStatus = null;
+            if (_pendingStatus || _pendingChanges.length > 0)
+                _clearPending();
             var st = {};
             for (var k in payload)
                 st[k] = payload[k];
@@ -1696,8 +1697,63 @@ Item {
     }
 
     // What the user changed while no web page was running, for the next
-    // page that loads (pages share their state through the runtime's store).
+    // page that loads (pages share their state through the runtime's store):
+    // _pendingStatus all of it merged, _pendingChanges the pushes in order
+    // (merged while their keys do not clash, so an event such as
+    // dictionaryWordAdded twice keeps both words). The queue is kept in
+    // pendingStore as well (phoenix-sim's settings), but for the shell's own
+    // state, which it pushes afresh: quit before any page loaded, the next
+    // start hands it on, so nothing the user did is lost.
     property var _pendingStatus: null
+    property var _pendingChanges: []
+    property var pendingStore: typeof simSettings !== "undefined" && simSettings ? simSettings : null
+    readonly property string pendingStoreKey: "runtime/pendingStatus"
+    property bool _pendingRestored: false
+    function _restorePending() {
+        if (_pendingRestored)
+            return;
+        _pendingRestored = true;
+        if (!pendingStore)
+            return;
+        var saved = [];
+        try {
+            saved = JSON.parse(pendingStore.value(pendingStoreKey) || "[]");
+        } catch (e) {
+            saved = [];
+        }
+        if (!Array.isArray(saved) || saved.length === 0)
+            return;
+        // Before what was pushed in this run.
+        var queue = saved.concat(_pendingChanges);
+        var merged = {};
+        for (var i = 0; i < queue.length; ++i)
+            for (var k in queue[i])
+                merged[k] = queue[i][k];
+        _pendingChanges = queue;
+        _pendingStatus = merged;
+    }
+    function _savePending() {
+        if (!pendingStore)
+            return;
+        var keep = [];
+        for (var i = 0; i < _pendingChanges.length; ++i) {
+            var c = {}, any = false;
+            for (var k in _pendingChanges[i]) {
+                if (_shellOwned.indexOf(k) < 0) {
+                    c[k] = _pendingChanges[i][k];
+                    any = true;
+                }
+            }
+            if (any)
+                keep.push(c);
+        }
+        pendingStore.setValue(pendingStoreKey, keep.length > 0 ? JSON.stringify(keep) : "");
+    }
+    function _clearPending() {
+        _pendingStatus = null;
+        _pendingChanges = [];
+        _savePending();
+    }
 
     // writer: whether this page stores the change (runtime applyHostStatus):
     // one page does, so pages do not write their copies of the shared state
@@ -1776,10 +1832,28 @@ Item {
                 _shellStatus[s] = changes[s];
         var pages = _webPages();
         if (pages.length === 0) {
+            _restorePending();
             var p = _pendingStatus || {};
             for (var k in changes)
                 p[k] = changes[k];
             _pendingStatus = p;
+            var queue = _pendingChanges.slice();
+            var last = queue.length > 0 ? queue[queue.length - 1] : null;
+            var clash = !last;
+            for (k in changes)
+                if (last && (k in last) && JSON.stringify(last[k]) !== JSON.stringify(changes[k]))
+                    clash = true;
+            if (clash) {
+                var c = {};
+                for (k in changes)
+                    c[k] = changes[k];
+                queue.push(c);
+            } else {
+                for (k in changes)
+                    last[k] = changes[k];
+            }
+            _pendingChanges = queue;
+            _savePending();
             return;
         }
         var writer = _writerPage();
@@ -1834,11 +1908,15 @@ Item {
         }
         var writer = _writerPage();
         var writes = !writer || win === writer;
-        if (_pendingStatus) {
-            // Kept until the page that stores it has it.
-            win.runScript(_statusScript(_pendingStatus, writes));
+        _restorePending();
+        if (_pendingChanges.length > 0) {
+            // In order; kept until the page that stores it has it.
+            var js = [];
+            for (var q = 0; q < _pendingChanges.length; ++q)
+                js.push(_statusScript(_pendingChanges[q], writes));
+            win.runScript(js.join(";\n"));
             if (writes)
-                _pendingStatus = null;
+                _clearPending();
         }
         if (Object.keys(_shellStatus).length > 0)
             win.runScript(_statusScript(_shellStatus, writes));

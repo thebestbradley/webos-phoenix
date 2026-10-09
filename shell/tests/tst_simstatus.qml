@@ -19,6 +19,20 @@ Item {
 
     SignalSpy { id: reported; target: windows; signalName: "systemStatusReported" }
 
+    // Stands in for phoenix-sim's settings (simSettings).
+    Component {
+        id: fakeStore
+        QtObject {
+            property var values: ({})
+            function value(key) { return values[key] || ""; }
+            function setValue(key, v) { var o = Object.assign({}, values); o[key] = v; values = o; }
+        }
+    }
+    Component {
+        id: sourceComponent
+        SimWindowSource {}
+    }
+
     // Stands in for a WebAppWindow: records the scripts the shell runs in it.
     Component {
         id: fakePage
@@ -47,6 +61,7 @@ Item {
         function init() {
             reported.clear();
             windows._pendingStatus = null;
+            windows._pendingChanges = [];
         }
 
         function test_webAppReplacesPlaceholderInSettingsTab() {
@@ -114,6 +129,41 @@ Item {
             windows._hostMessage("a", "w1", "systemStatus", { bluetoothOn: true });
             compare(windows._pendingStatus, null);
             page.destroy();
+        }
+
+        // Pushed while no page runs, then the simulator quits before one
+        // loads: the next start hands it on, in order, an event pushed
+        // twice (two words added to the dictionary) both times; the
+        // shell's own state (pushed afresh at each start) is not kept.
+        function test_pendingPushesOutliveAQuit() {
+            var store = fakeStore.createObject(root);
+            var first = sourceComponent.createObject(root, { pendingStore: store });
+            first.pushSystemStatus({ dictionaryWordAdded: "Phoenix" });
+            first.pushSystemStatus({ keyboard: "de" });
+            first.pushSystemStatus({ dictionaryWordAdded: "Lunasys", deviceLocked: true });
+            verify(store.value(first.pendingStoreKey) !== "", "kept in the settings");
+            first.destroy();
+
+            var next = sourceComponent.createObject(root, { pendingStore: store });
+            var page = fakePage.createObject(root);
+            next._pageLoaded(page);
+            var js = page.scripts.join("\n");
+            var a = js.indexOf("{\"dictionaryWordAdded\":\"Phoenix\",\"keyboard\":\"de\"}");
+            var b = js.indexOf("{\"dictionaryWordAdded\":\"Lunasys\"}");
+            verify(a > 0 && b > a, "both words, in order: " + js);
+            verify(js.indexOf("deviceLocked") < 0, "not the shell's own state");
+            compare(store.value(next.pendingStoreKey), "", "handed on: gone from the settings");
+            next.destroy();
+
+            // A third start has nothing to hand on.
+            var third = sourceComponent.createObject(root, { pendingStore: store });
+            var page2 = fakePage.createObject(root);
+            third._pageLoaded(page2);
+            compare(page2.scripts.length, 0);
+            third.destroy();
+            page.destroy();
+            page2.destroy();
+            store.destroy();
         }
 
         function test_pushGoesToRunningPages() {
