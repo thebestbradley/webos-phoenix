@@ -105,6 +105,12 @@ body.pui-app { overflow: hidden; }
 .mp-card-detail { margin-top: 2px; font-size: 14px; color: var(--pui-text-dim); }
 .mp-card-dist { margin-top: 2px; font-size: 13px; color: var(--pui-label); }
 .mp-card-coords { margin-top: 2px; font-size: 13px; color: var(--pui-text-dim); font-variant-numeric: tabular-nums; }
+.mp-card-hours { margin-top: 4px; font-size: 13px; color: var(--pui-text-dim); }
+.mp-open { margin-right: 6px; font-weight: bold; }
+.mp-open.yes { color: #1b7a2f; }
+.mp-open.no { color: #b0281c; }
+.mp-card-contact { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; font-size: 13px; }
+.mp-card-contact a { color: #1f75bf; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .mp-card-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .mp-card-close {
     position: absolute;
@@ -138,6 +144,7 @@ body.pui-app { overflow: hidden; }
 }
 .mp-action:active { background: linear-gradient(#cfcfcd, #e6e6e4); }
 .mp-action.primary { color: #fff; background: linear-gradient(#4f9be0, #1f67b5); border-color: #174f8c; text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.35); }
+.mp-action.go { color: #fff; background: linear-gradient(#55b866, #2e8a3e); border-color: #1d6a2c; text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.35); }
 .mp-action.negative { color: #fff; background: linear-gradient(#e0574b, #b22a1f); border-color: #861d15; }
 .mp-action.on { color: #8a6100; }
 .mp-icon-button {
@@ -190,6 +197,7 @@ button.mp-dir-end { cursor: pointer; }
 .mp-dir-head .mp-card-close { top: 6px; right: 0; }
 .mp-modes { display: flex; justify-content: center; margin: 4px 0 6px; }
 .mp-modes .pui-grouped-toolbutton { display: flex; align-items: center; gap: 4px; padding: 0 12px; font-size: 14px; }
+.mp-modes .pui-grouped-toolbutton .mp-mode-time { white-space: nowrap; }
 .mp-summary {
     display: flex;
     align-items: center;
@@ -218,6 +226,11 @@ button.mp-dir-end { cursor: pointer; }
 .mp-step-arrow { flex: none; width: 30px; display: flex; justify-content: center; color: #3b5f86; }
 .mp-step-text { flex: 1; min-width: 0; }
 .mp-step-dist { flex: none; font-size: 13px; color: var(--pui-text-dim); }
+/* Navigating: the turn coming up, and the ones done. */
+.mp-step.current { background: rgba(46, 138, 62, 0.16); font-weight: bold; box-shadow: inset 4px 0 0 #2e8a3e; }
+.mp-step.done { opacity: 0.5; }
+.mp-panel.nav-steps.side { top: 84px; bottom: auto; max-height: calc(100% - 160px); width: 420px; padding-top: 0; border-radius: 0 10px 10px 0; }
+.mp-panel.nav-steps.sheet { bottom: 64px; max-height: 32%; }
 
 /* ---- Markers ----------------------------------------------------------------------------- */
 

@@ -134,7 +134,9 @@ export function searchUrl(p: Providers, q: string, near?: LngLat): string | null
 export async function searchOnline(p: Providers, q: string, near?: LngLat, signal?: AbortSignal): Promise<Place[]> {
     const url = searchUrl(p, q, near);
     if (!url) return [];
-    const key = `${url}`.replace(/&lat=[^&]*&lon=[^&]*/, "");
+    // The same words near somewhere else are another search (the bias
+    // changes the answer); a few hundred metres apart are the same.
+    const key = `${url}`.replace(/&lat=[^&]*&lon=[^&]*/, "") + (near ? `@${near[0].toFixed(2)},${near[1].toFixed(2)}` : "");
     const hit = cache.get(key);
     if (hit) return hit;
     const json = await getJson(url, p.search.kind, signal);

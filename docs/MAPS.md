@@ -21,10 +21,33 @@ works, and how to host every piece yourself.
 - **Search**: when the user submits (never as-you-type), with Photon or
   Nominatim, cached; coordinates typed in are understood. When the server
   fails or search is set to offline, the offline index answers.
+- **Places nearby** (`src/lib/nearby.ts`): "coffee", "pharmacy near me",
+  "the nearest gas station", typed or from the Assistant's `{nearby}`: the
+  places of that kind around the user, closest first, as a list with a pin
+  each, the map fitted around the user and the closest five. A kind of
+  place is asked for by its OpenStreetMap tag inside a box around the user
+  (Photon `include=osm.amenity.cafe&bbox=...`, Nominatim's `[cafe]`
+  special phrase with a bounded `viewbox`), the box growing (2, 8, 30 km)
+  until three are found; a name ("Starbucks near me") by its words inside
+  the same boxes. Asking Photon for the words "coffee shops" instead finds
+  places *named* like them anywhere (from San Jose: a Peet's in Berkeley;
+  with no location: Iraq and Kenya), which was the owner's "foreign map".
+- **A place's card**: name, kind and address, how far it is, and, when the
+  OSM element is known, its opening hours ("Open now" from `opening_hours`
+  in its common forms, `src/lib/details.ts`), phone and website from the
+  [Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API) (one
+  request for the place shown, never for a list; `details` in
+  `providers.json`, `"kind": "none"` turns it off). Directions, and Start
+  (directions and the guidance at once). A tap on a point of interest the
+  map draws (a café's dot or name) opens its card too: MapLibre's
+  features, or what the canvas renderer's tiles drew.
 - **Directions**: drive, walk or cycle, with a turn list, time and distance,
-  from Valhalla or OSRM; offline routing when the server fails or routing
-  is set to offline.
-- **Turn by turn**: the next turn in a banner, the arrival time, the map
+  from Valhalla or OSRM; once the route is there, each other mode's time on
+  its button (one small request each, online routing only); offline
+  routing when the server fails or routing is set to offline.
+- **Turn by turn**: the next turn in a banner, the turn list with the
+  coming turn highlighted and the ones done dimmed (beside the map on a
+  tablet; Steps on a phone), the arrival time, the map
   following the user and turned to their heading, announcements ahead of
   each turn, rerouting when the user leaves the route.
   **Voice** goes to OSE's `com.webos.service.tts` (`speak`); if that does
@@ -52,6 +75,15 @@ works, and how to host every piece yourself.
     `com.palm.app.maps` that relaunches Maps).
   - `{query}`, `{location: {lat, lon}}`, `{placeId}`, and openstreetmap.org
     or Google Maps links.
+  - The Assistant's (`apps/assistant/service/lib/commands.js`): `{nearby:
+    "coffee shops"}` (the list), `{place: {id, name, lat, lon, detail,
+    category}}` (one place's card), `{destination: place | "words",
+    travelMode, navigate}` (directions; with `navigate`, the guidance
+    started). Opened with `returnToCaller` (`$caller` in the params), Back
+    on the view the caller opened goes back to it (the runtime closes the
+    card); Back on anything the user went to from there stays in Maps.
+- **Labels in the device's language** where the tiles have it
+  (OpenMapTiles' `name:xx`), else in Latin letters, else as written there.
 - **Offline maps**: "Save Area" stores every tile of the area on screen,
   zooms 0-14, in IndexedDB (at most 2,500 tiles per area). A **PMTiles**
   file in the OpenMapTiles schema, on the device or on a web server, can be
@@ -183,7 +215,8 @@ devices of an image:
     "tiles":   { "kind": "openmaptiles", "url": "pmtiles://https://maps.example.org/region.pmtiles",
                  "glyphsUrl": "https://maps.example.org/fonts/{fontstack}/{range}.pbf" },
     "search":  { "kind": "nominatim", "url": "https://maps.example.org/nominatim" },
-    "routing": { "kind": "valhalla", "url": "https://maps.example.org/valhalla", "clientId": "" }
+    "routing": { "kind": "valhalla", "url": "https://maps.example.org/valhalla", "clientId": "" },
+    "details": { "kind": "overpass", "url": "https://maps.example.org/overpass/api/interpreter" }
 }
 ```
 
@@ -244,11 +277,18 @@ Preferences.
 - `tools/test-maps.cjs [--tablet]`: the app in headless Chromium, without
   live servers (the demo region's tiles; Photon, Valhalla and the tile
   server answered by the script; any other request fails the test).
+- `tools/test-assistant-maps.cjs [--tablet]`: the Assistant and Maps end
+  to end ("find coffee shops near me": the cards, Maps' list, a card
+  tapped, the place, Directions, Start, the turn list following the
+  device, Back to the Assistant; "directions to the nearest coffee shop":
+  Start Navigation), against replies recorded from Photon, Valhalla and
+  Overpass (`tools/fixtures/maps`).
 
 ## Not done yet
 
 - Voice on a stock OSE device (see above); lane guidance; speed limits.
-- Public transit directions.
+- Public transit directions (no keyless public router has them).
+- Ratings and reviews of places (OpenStreetMap has none).
 - Contact and calendar addresses searched from inside Maps (they open Maps,
   but Maps does not list them).
 - Downloading the demo region's missing zoom levels 1-9 (it jumps from the

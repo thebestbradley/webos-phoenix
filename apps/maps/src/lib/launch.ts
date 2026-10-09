@@ -12,12 +12,24 @@
 // - {address: "..."}: Contacts' and Calendar's launch of com.palm.app.maps,
 //   and {route: {startAddress?, endAddress}}: Calendar's "Directions".
 // - {query: "..."}: Just Type's "Search Maps"; {location: {lat, lon}}.
+// - The Assistant's (apps/assistant/service/lib/commands.js):
+//   {nearby: "coffee"}: places of that kind around the user, closest first
+//   (lib/nearby.ts); {place: {name, lat, lon, detail?, category?, id?}}: one
+//   place it found, shown with its card; {destination: "..." | {name, lat,
+//   lon, detail?}, travelMode?: "drive" | "walk" | "cycle", navigate?: true}:
+//   directions there, and with navigate the turn-by-turn guidance started.
+//   {$caller} (the runtime's returnToCaller): Back on what was opened goes
+//   back to the caller.
 // - An openstreetmap.org or Google Maps link, e.g. from the browser.
 
+export interface LaunchPlace { id?: string; name: string; lat: number; lon: number; detail?: string; category?: string }
+export type LaunchMode = "drive" | "walk" | "cycle";
+
 export type Intent =
-    | { kind: "show"; lat: number; lon: number; zoom?: number; label?: string }
+    | { kind: "show"; lat: number; lon: number; zoom?: number; label?: string; place?: LaunchPlace }
     | { kind: "search"; query: string }
-    | { kind: "directions"; to: string | { lat: number; lon: number; label?: string }; from?: string }
+    | { kind: "nearby"; query: string }
+    | { kind: "directions"; to: string | { lat: number; lon: number; label?: string; place?: LaunchPlace }; from?: string; mode?: LaunchMode; start?: boolean }
     | { kind: "place"; placeId: string }
     | { kind: "none" };
 
@@ -28,6 +40,12 @@ export interface MapsLaunchParams {
     route?: { startAddress?: string; endAddress?: string };
     location?: { lat?: number; lon?: number; latitude?: number; longitude?: number; label?: string };
     placeId?: string;
+    nearby?: string | boolean;
+    place?: Partial<LaunchPlace>;
+    destination?: string | Partial<LaunchPlace>;
+    travelMode?: string;
+    navigate?: boolean;
+    $caller?: string;
 }
 
 const num = (s: string | null | undefined) => (s === null || s === undefined || s.trim() === "" ? NaN : Number(s));
@@ -78,9 +96,29 @@ export function parseMapLink(url: string): Intent {
 
 const oneLine = (s: string) => s.replace(/[\r\n]+/g, ", ").replace(/\s+/g, " ").replace(/(, )+/g, ", ").trim();
 
+function asPlace(x: Partial<LaunchPlace> | undefined): LaunchPlace | null {
+    if (!x || typeof x !== "object") return null;
+    const lat = Number(x.lat), lon = Number(x.lon);
+    if (x.lat === undefined || x.lon === undefined || !valid(lat, lon)) return null;
+    return { id: typeof x.id === "string" ? x.id : undefined, name: typeof x.name === "string" && x.name.trim() ? x.name.trim() : "Place",
+             lat, lon, detail: typeof x.detail === "string" ? x.detail : undefined, category: typeof x.category === "string" ? x.category : undefined };
+}
+
 export function parseLaunch(p: MapsLaunchParams | null | undefined): Intent {
     if (!p || typeof p !== "object") return { kind: "none" };
     if (p.placeId) return { kind: "place", placeId: p.placeId };
+    const pl = asPlace(p.place);
+    if (pl) return { kind: "show", lat: pl.lat, lon: pl.lon, label: pl.name, place: pl };
+    if (p.destination !== undefined) {
+        const mode = p.travelMode === "walk" || p.travelMode === "cycle" || p.travelMode === "drive" ? p.travelMode
+            : p.travelMode === "bike" ? "cycle" : undefined;
+        const start = p.navigate === true || undefined;
+        const d = asPlace(typeof p.destination === "object" ? p.destination : undefined);
+        if (d) return { kind: "directions", to: { lat: d.lat, lon: d.lon, label: d.name, place: d }, mode, start };
+        if (typeof p.destination === "string" && p.destination.trim()) return { kind: "directions", to: oneLine(p.destination), mode, start };
+    }
+    if (typeof p.nearby === "string" && p.nearby.trim()) return { kind: "nearby", query: oneLine(p.nearby) };
+    if (p.nearby === true && typeof p.query === "string" && p.query.trim()) return { kind: "nearby", query: oneLine(p.query) };
     if (p.route?.endAddress) {
         return { kind: "directions", to: oneLine(p.route.endAddress), from: p.route.startAddress ? oneLine(p.route.startAddress) : undefined };
     }

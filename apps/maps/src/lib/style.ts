@@ -57,7 +57,12 @@ const POI_FILTER = ["all",
     ["any", [">=", ["zoom"], 18], ["!=", ["get", "class"], "bus"]],
 ] as ExpressionSpecification;
 
-const name: ExpressionSpecification = ["coalesce", ["get", "name:latin"], ["get", "name"]] as ExpressionSpecification;
+/** Labels in the device's language where the map has it (OpenMapTiles' name:xx), else in Latin letters, else as written there. */
+export function labelField(lang: string): ExpressionSpecification {
+    const code = (lang || "en").slice(0, 2).toLowerCase();
+    return ["coalesce", ["get", `name:${code}`], ["get", "name:latin"], ["get", "name"]] as ExpressionSpecification;
+}
+const name: ExpressionSpecification = labelField(typeof navigator !== "undefined" ? navigator.language : "en");
 
 function roads(): LayerSpecification[] {
     const layers: LayerSpecification[] = [];

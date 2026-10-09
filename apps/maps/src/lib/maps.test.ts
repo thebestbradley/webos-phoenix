@@ -12,6 +12,9 @@ import { cleanUrl, DEFAULT_PROVIDERS, isValidUrl, mergeProviders } from "./provi
 import { instructionFor, modifierFromAngle, osrmUrl, parseOsrm, parseValhalla, valhallaUrl, type Route } from "./route";
 import { parseCoords, parseNominatim, parsePhoton, searchUrl } from "./search";
 import { findSaved, fromSaved, toSaved } from "./places";
+import { createRequire } from "node:module";
+import { CATEGORIES, categoryOf, cleanNearby, isNearbyQuery, nearbyUrl, RADII, searchNearby } from "./nearby";
+import { detailsFromTags, hoursText, openAt, osmElement, overpassQuery } from "./details";
 
 describe("geometry", () => {
     it("measures distances and bearings", () => {
@@ -256,5 +259,89 @@ describe("saved places", () => {
         expect(fromSaved(s)).toMatchObject({ id: "saved:abc", name: "Home", kind: "saved", lon: 1, lat: 2 });
         expect(findSaved([s], { lon: 1.000001, lat: 2, name: "x" })).toBe(s);
         expect(findSaved([s], { lon: 1.1, lat: 2, name: "x" })).toBeUndefined();
+    });
+});
+
+describe("places nearby (the Assistant's \"coffee near me\")", () => {
+    const sj: LngLat = [-121.8907, 37.3337];
+
+    it("asks for a kind of place by its tag inside a box around the user, a name by its words", () => {
+        expect(categoryOf("find coffee shops near me")?.id).toBe("cafe");
+        expect(categoryOf("the nearest pharmacy")?.id).toBe("pharmacy");
+        expect(categoryOf("Starbucks")).toBeNull();
+        expect(cleanNearby("Find the nearest coffee shop near me?")).toBe("coffee shop");
+        expect(isNearbyQuery("coffee")).toBe(true);
+        expect(isNearbyQuery("Starbucks near me")).toBe(true);
+        expect(isNearbyQuery("1 Infinite Loop")).toBe(false);
+        const u = new URL(nearbyUrl(DEFAULT_PROVIDERS, "coffee shops", sj, 2)!);
+        expect(u.searchParams.getAll("include")).toEqual(["osm.amenity.cafe"]);
+        expect(u.searchParams.get("q")).toBeNull();
+        const [w, s, e, n] = u.searchParams.get("bbox")!.split(",").map(Number);
+        expect(distance([w, sj[1]], [e, sj[1]])).toBeCloseTo(4000, -2);
+        expect(distance([sj[0], s], [sj[0], n])).toBeCloseTo(4000, -2);
+        expect(new URL(nearbyUrl(DEFAULT_PROVIDERS, "starbucks near me", sj, 2)!).searchParams.get("q")).toBe("starbucks");
+        const nom = mergeProviders(DEFAULT_PROVIDERS, { search: { kind: "nominatim", url: "https://nominatim.openstreetmap.org" } });
+        expect(new URL(nearbyUrl(nom, "pharmacy", sj, 2)!).searchParams.get("q")).toBe("[pharmacy]");
+    });
+
+    it("lists them closest first, the same place once, a bigger box only when too few", async () => {
+        const f = (name: string, id: number, lon: number, lat: number, value = "cafe") =>
+            ({ geometry: { coordinates: [lon, lat] }, properties: { osm_type: "N", osm_id: id, osm_value: value, name } });
+        const asked: string[] = [];
+        const replies = [
+            { features: [f("Far Café", 1, -121.88, 37.34)] },
+            { features: [f("Far Café", 1, -121.88, 37.34), f("Near Café", 2, -121.8905, 37.3338), f("Near Café", 3, -121.8906, 37.3338),
+                         f("Gone Café", 4, -121.8907, 37.3337, "vacant"), f("Mid Café", 5, -121.885, 37.336)] },
+        ];
+        const r = await searchNearby(DEFAULT_PROVIDERS, "coffee", sj, undefined, async (u) => { asked.push(u); return replies[asked.length - 1]; });
+        expect(asked).toHaveLength(2);
+        expect(asked[1]).toMatch(/bbox=/);
+        expect(r.places.map((p) => p.name)).toEqual(["Near Café", "Mid Café", "Far Café"]);
+        expect(r.radiusKm).toBe(RADII[1]);
+    });
+
+    it("agrees with the Assistant's table (apps/assistant/service/lib/nearby.js)", () => {
+        const assistant = createRequire(import.meta.url)("../../../assistant/service/lib/nearby.js") as {
+            CATEGORIES: { id: string; tags: string[]; words: RegExp }[]; clean(q: string): string;
+        };
+        expect(assistant.CATEGORIES.map((c) => [c.id, c.tags, String(c.words)])).toEqual(CATEGORIES.map((c) => [c.id, c.tags, String(c.words)]));
+        for (const q of ["Find the nearest coffee shop near me?", "a pharmacy", "closest gas station"]) expect(assistant.clean(q)).toBe(cleanNearby(q));
+    });
+});
+
+describe("a place's details (opening hours)", () => {
+    it("finds the OSM element a result came from", () => {
+        expect(osmElement({ id: "photon:N123" })).toEqual({ type: "node", id: 123 });
+        expect(osmElement({ id: "nominatim:way456" })).toEqual({ type: "way", id: 456 });
+        expect(osmElement({ id: "pt:1,2" })).toBeNull();
+        expect(overpassQuery({ type: "node", id: 123 })).toBe("[out:json][timeout:10];node(123);out tags;");
+    });
+
+    it("reads opening_hours for open now, as the specification has it", () => {
+        const wed10 = new Date(2026, 9, 7, 10, 0), sun10 = new Date(2026, 9, 11, 10, 0), sat1am = new Date(2026, 9, 10, 1, 0);
+        expect(openAt("24/7", wed10)).toBe(true);
+        expect(openAt("Mo-Fr 07:00-19:00; Sa,Su 08:00-17:00", wed10)).toBe(true);
+        expect(openAt("Mo-Fr 11:00-19:00", wed10)).toBe(false);
+        expect(openAt("Mo-Su 06:00-22:00; We off", wed10)).toBe(false);
+        expect(openAt("Mo-Fr 07:00-19:00", sun10)).toBe(false);
+        expect(openAt("Fr 18:00-02:00", sat1am)).toBe(true);
+        expect(openAt("Mo-Fr 07:00-19:00; PH off", wed10)).toBe(true);
+        expect(openAt("Mo-Fr 07:00-19:00 open \"by appointment\"", wed10)).toBeNull();
+        expect(hoursText("Mo-Fr 07:00-19:00; Sa 08:00-17:00")).toBe("Mon–Fri 7:00–19:00 · Sat 8:00–17:00");
+        expect(detailsFromTags({ opening_hours: "Mo-Su 06:00-22:00", phone: "+1 408 555 0100;+1 408 555 0101", website: "https://philz.example/", cuisine: "coffee_shop" }, wed10))
+            .toEqual({ hours: "Mo-Su 06:00-22:00", openNow: true, phone: "+1 408 555 0100", website: "https://philz.example/", cuisine: "coffee shop" });
+    });
+});
+
+describe("the Assistant's launches", () => {
+    it("reads {nearby}, {place} and {destination, travelMode, navigate}", () => {
+        expect(parseLaunch({ nearby: "coffee shops" })).toEqual({ kind: "nearby", query: "coffee shops" });
+        expect(parseLaunch({ query: "coffee", nearby: true })).toEqual({ kind: "nearby", query: "coffee" });
+        expect(parseLaunch({ place: { id: "photon:N1", name: "Philz Coffee", lat: 37.33, lon: -121.88, detail: "S 1st St" } }))
+            .toMatchObject({ kind: "show", lat: 37.33, lon: -121.88, label: "Philz Coffee", place: { id: "photon:N1", detail: "S 1st St" } });
+        expect(parseLaunch({ destination: { name: "Philz", lat: 37.33, lon: -121.88 }, travelMode: "walk", navigate: true }))
+            .toMatchObject({ kind: "directions", to: { lat: 37.33, lon: -121.88, label: "Philz" }, mode: "walk", start: true });
+        expect(parseLaunch({ destination: "nearest coffee shop", travelMode: "bike" })).toEqual({ kind: "directions", to: "nearest coffee shop", mode: "cycle", start: undefined });
+        expect(parseLaunch({ place: { name: "Nowhere", lat: 120, lon: 0 } })).toEqual({ kind: "none" });
     });
 });

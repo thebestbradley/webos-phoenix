@@ -15,6 +15,9 @@
 // - Directions: Valhalla on the FOSSGIS server (fair use; apps identify
 //   themselves with an X-Client-Id header). OSRM's demo server is for
 //   non-commercial use only, so it is not the default.
+// - A place's opening hours, phone and website: the Overpass API (fair
+//   use; one small request when the user opens a place, never for a
+//   list). https://wiki.openstreetmap.org/wiki/Overpass_API
 //
 // Defaults come from public/providers.json (an image or an organisation
 // can replace that file), then the user's changes in Settings (local
@@ -43,6 +46,8 @@ export interface Providers {
     };
     search: { kind: SearchKind; url: string };
     routing: { kind: RoutingKind; url: string; clientId: string };
+    /** Opening hours and the like for the place shown (lib/details.ts); "none" asks nobody. */
+    details: { kind: "overpass" | "none"; url: string };
     renderer: RendererKind;
 }
 
@@ -57,6 +62,7 @@ export const DEFAULT_PROVIDERS: Providers = {
     },
     search: { kind: "photon", url: "https://photon.komoot.io" },
     routing: { kind: "valhalla", url: "https://valhalla1.openstreetmap.de", clientId: "webos-phoenix-maps" },
+    details: { kind: "overpass", url: "https://overpass-api.de/api/interpreter" },
     renderer: "auto",
 };
 
@@ -82,6 +88,7 @@ export function mergeProviders(base: Providers, over: DeepPartial<Providers> | n
         tiles: { ...base.tiles, ...(over.tiles ?? {}) },
         search: { ...base.search, ...(over.search ?? {}) },
         routing: { ...base.routing, ...(over.routing ?? {}) },
+        details: { ...base.details, ...(over.details ?? {}) },
         renderer: over.renderer ?? base.renderer,
     } as Providers;
 }

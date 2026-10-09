@@ -7,14 +7,16 @@
 // runtime/phoenix-runtime.js. No live servers: the map draws the demo
 // region shipped with the app (apps/maps/public/regions/sample), and the
 // online services are answered by this script (Photon search, Valhalla
-// directions, the OpenFreeMap tile server for saving an area; the tiles
+// directions, Overpass for a place's hours, the OpenFreeMap tile server
+// for saving an area; the tiles
 // served are the demo region's). Every other request off this machine
 // fails the test.
 //
 // It checks: the vector map and "you are here" from the location service;
 // search (online, then offline when the search server is down); a place
-// card; saving a place and Saved Places; sharing to Messaging; directions
-// with a turn list (Valhalla, with its X-Client-Id), travel modes;
+// card with its opening hours, phone and website; saving a place and Saved Places; sharing to Messaging; directions
+// with a turn list (Valhalla, with its X-Client-Id), travel modes, each
+// mode's time on its button;
 // turn-by-turn navigation as the simulated device moves, with spoken
 // directions; offline directions; geo:, maploc:, mapto: and address
 // launches, and Contacts/Calendar's com.palm.app.maps launch reaching
@@ -92,6 +94,10 @@ const VALHALLA = { trip: {
     }],
 } };
 
+// Overpass: the museum's opening hours, phone and website (its OSM tags).
+const OVERPASS = { elements: [{ type: "node", id: 101, tags: { name: "San José Museum of Art", opening_hours: "Tu-Su 11:00-17:00; Mo off",
+                                                              phone: "+1 408 271 6840", website: "https://sjmusart.org/" } }] };
+
 function sampleTile(z, x, y) {
     const f = path.join(SAMPLE, String(z), String(x), `${y}.pbf`);
     return fs.existsSync(f) ? fs.readFileSync(f) : null;
@@ -113,7 +119,7 @@ async function main() {
         const errors = [];
         const host = [];
         const external = [];
-        const net = { photon: "ok", photonQueries: [], valhalla: [], tiles: 0, served: 0 };
+        const net = { photon: "ok", photonQueries: [], valhalla: [], overpass: [], tiles: 0, served: 0 };
 
         await context.route(/^https?:\/\/(?!127\.0\.0\.1)/, async (route) => {
             const req = route.request();
@@ -125,6 +131,10 @@ async function main() {
                 const q = (u.searchParams.get("q") || "").toLowerCase();
                 const hits = PHOTON.features.filter((f) => q.split(/\s+/).every((w) => JSON.stringify(f.properties).toLowerCase().includes(w)));
                 return route.fulfill({ contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify({ type: "FeatureCollection", features: hits }) });
+            }
+            if (u.hostname === "overpass-api.de") {
+                net.overpass.push(decodeURIComponent((req.postData() || "").replace(/^data=/, "")));
+                return route.fulfill({ contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify(OVERPASS) });
             }
             if (u.hostname === "valhalla1.openstreetmap.de") {
                 if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "X-Client-Id" } });
@@ -234,6 +244,10 @@ async function main() {
         await page.waitForSelector(tid("place-card"));
         check((await page.textContent(tid("place-name"))) === "San José Museum of Art", "a result opens its place card");
         check(/110 South Market Street/.test(await page.textContent(tid("place-detail"))), "with its address");
+        await page.waitForSelector(tid("place-hours"));
+        check(/Tue–Sun 11:00–17:00 · Mon off/.test(await page.textContent(tid("place-hours"))) && net.overpass[0] === "[out:json][timeout:10];node(101);out tags;",
+              `its opening hours from its OSM tags (Overpass): ${await page.textContent(tid("place-hours"))}`);
+        check((await page.textContent(tid("place-phone"))) === "+1 408 271 6840" && /sjmusart\.org/.test(await page.textContent(tid("place-website"))), "its phone and website");
         await page.waitForTimeout(800);
         await shot("place");
 
@@ -259,8 +273,13 @@ async function main() {
         await page.waitForSelector(tid("steps"));
         let steps = await page.$$eval(`${tid("steps")} .mp-step-text`, (els) => els.map((e) => e.textContent));
         check(steps.length === 4 && steps[0] === "Drive northwest on South Market Street", `a turn list: ${steps.join(" / ")}`);
-        check(net.valhalla.length === 1 && net.valhalla[0].json.costing === "auto" && net.valhalla[0].clientId === "webos-phoenix-maps",
+        check(net.valhalla.length >= 1 && net.valhalla[0].json.costing === "auto" && net.valhalla[0].clientId === "webos-phoenix-maps",
               "asked Valhalla for a drive, with the app's X-Client-Id");
+        // Then each other mode's time, for its button.
+        await page.waitForSelector(`${tid("mode-time-walk")}, ${tid("mode-time-cycle")}`);
+        await page.waitForFunction(() => document.querySelector("[data-testid='mode-time-walk']") && document.querySelector("[data-testid='mode-time-cycle']"));
+        check(net.valhalla.slice(1, 3).map((v) => v.json.costing).sort().join() === "bicycle,pedestrian",
+              `every mode's time on its button: ${await page.textContent(".mp-modes")}`);
         check(/min/.test(await page.textContent(tid("route-summary"))), "with the time and distance");
         await page.waitForTimeout(900);
         await shot("directions");

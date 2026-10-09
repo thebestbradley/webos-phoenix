@@ -23,21 +23,32 @@
 // tiles, search and routing from the servers in Preferences
 // (lib/providers.ts), or offline from saved areas (lib/offline.ts).
 //
+// - "Coffee", "pharmacy near me" (typed, or the Assistant's {nearby}):
+//   places of that kind around the user, closest first, as a list and pins
+//   (lib/nearby.ts); a tap on one, or on a café the map draws, opens its
+//   card (address, distance, opening hours: lib/details.ts) with Directions
+//   and Start.
+//
 // Launch params (lib/launch.ts): {target: "geo:..." | "maploc:..." |
 // "mapto:..." | map link}, {address}, {route: {endAddress}}, {query},
-// {location: {lat, lon}}, {placeId}.
+// {location: {lat, lon}}, {placeId}; the Assistant's {nearby}, {place},
+// {destination, travelMode, navigate}. Opened by another app ({$caller}),
+// Back on the view it opened goes back to that app (the runtime closes
+// the card; apps/photos does the same).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apps } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import { AppMenu, BackProvider, Dialog, Button, IconToolButton, PopupMenu, Toolbar, ToolSpacer, cx, useBack, type Option } from "@phoenix/ui";
-import { MapView, prepareMapWorker, type Camera, type MapHandle, type MapMarker } from "./MapView";
+import { MapView, prepareMapWorker, type Camera, type MapHandle, type MapMarker, type MapPoi } from "./MapView";
 import { AboutPage, RegionsPage, SavedPage, SettingsPage } from "./pages";
-import { Directions, NavBanner, PlaceCard, Results } from "./panels";
+import { Directions, NavBanner, NavSteps, PlaceCard, Results } from "./panels";
 import { MapGlyph } from "./icons";
-import { bounds as boundsOf, type LngLat } from "./lib/geo";
+import { bounds as boundsOf, distance, type LngLat } from "./lib/geo";
+import { cleanNearby, isNearbyQuery, searchNearby } from "./lib/nearby";
+import { placeDetails, type PlaceDetails } from "./lib/details";
 import { directions as getDirections, findPlaces, whatIsHere } from "./lib/engine";
-import { geoUri, osmLink, parseLaunch, shareText, type Intent, type MapsLaunchParams } from "./lib/launch";
+import { geoUri, osmLink, parseLaunch, shareText, type Intent, type LaunchPlace, type MapsLaunchParams } from "./lib/launch";
 import { watchLocation, type Fix } from "./lib/location";
 import { dueAnnouncement, progress as navProgress, stepOffsets, type Progress } from "./lib/nav";
 import { findSaved, fromSaved, places as placesDb, type SavedPlace } from "./lib/places";
@@ -57,7 +68,19 @@ type DirState = {
     busy: boolean;
     error?: string;
     note?: string;
+    /** Start navigating as soon as the route comes (Start on a place, the Assistant's navigate). */
+    autoStart?: boolean;
+    /** Every mode's time, for the mode buttons. */
+    times?: Partial<Record<TravelMode, number>>;
 };
+
+const MODES: TravelMode[] = ["drive", "walk", "cycle"];
+
+/** A place another app handed over (the Assistant's cards). */
+function launchedPlace(p: LaunchPlace): Place {
+    return { id: p.id || `pt:${p.lon.toFixed(6)},${p.lat.toFixed(6)}`, name: p.name, detail: p.detail ?? "", lon: p.lon, lat: p.lat,
+             kind: "poi", category: p.category };
+}
 
 const errorText = (e: unknown) => (e as { errorText?: string }).errorText ?? (e instanceof Error ? e.message : String(e));
 
@@ -92,7 +115,13 @@ function MapsApp() {
     const [fix, setFix] = useState<Fix | null>(null);
     const [locError, setLocError] = useState("");
     const [query, setQuery] = useState("");
-    const [results, setResults] = useState<{ places: Place[]; busy: boolean; note?: string } | null>(null);
+    const [results, setResults] = useState<{ places: Place[]; busy: boolean; note?: string; nearby?: boolean } | null>(null);
+    const [details, setDetails] = useState<{ id: string; d: PlaceDetails } | null>(null);
+    const [stepsShown, setStepsShown] = useState(false);
+    /** The view a launch opened, by viewKey: Back there belongs to the caller ({$caller}). */
+    const [opened, setOpened] = useState<string | null>(null);
+    const fixRef = useRef<Fix | null>(null);
+    const centred = useRef(false);
     const [selected, setSelected] = useState<Place | null>(null);
     const [dir, setDir] = useState<DirState | null>(null);
     const [nav, setNav] = useState<{ route: Route; progress: Progress } | null>(null);
@@ -133,7 +162,7 @@ function MapsApp() {
     }, []);
 
     useEffect(() => {
-        const sub = watchLocation((f) => { setFix(f); setLocError(""); }, setLocError);
+        const sub = watchLocation((f) => { fixRef.current = f; setFix(f); setLocError(""); }, setLocError);
         return () => sub.cancel();
     }, []);
 
@@ -158,6 +187,38 @@ function MapsApp() {
 
     const near = (): LngLat => me ?? map.current?.camera().center ?? initial.center;
 
+    /** The device's position, waiting up to ms for the first fix (a launch comes before it). */
+    const waitForFix = async (ms: number): Promise<LngLat | null> => {
+        for (let t = 0; !fixRef.current && t < ms; t += 100) await new Promise((r) => setTimeout(r, 100));
+        const f = fixRef.current;
+        return f ? [f.lon, f.lat] : null;
+    };
+
+    // "Coffee", "pharmacy near me": that kind of place around the user,
+    // closest first (lib/nearby.ts), not places named like the words anywhere.
+    const runNearby = async (text: string, ac: AbortController, pickFirst: boolean): Promise<Place | undefined> => {
+        const at = (await waitForFix(4000)) ?? map.current?.camera().center ?? initial.center;
+        if (ac.signal.aborted) return undefined;
+        let places: Place[] = [], note: string | undefined;
+        try {
+            places = (await searchNearby(providers, text, at, ac.signal)).places;
+        } catch (e) {
+            if (ac.signal.aborted) return undefined;
+            // No search server: the saved regions' index, by the words.
+            const r = await findPlaces({ ...providers, search: { ...providers.search, kind: "offline" } }, cleanNearby(text), at).catch(() => null);
+            places = r ? [...r.places].sort((a, b) => distance(at, [a.lon, a.lat]) - distance(at, [b.lon, b.lat])) : [];
+            note = places.length ? "Results from offline maps." : `Search is not available (${errorText(e)}).`;
+        }
+        if (ac.signal.aborted) return undefined;
+        setResults({ places, busy: false, note, nearby: true });
+        if (pickFirst && places.length) { choose(places[0]); return places[0]; }
+        if (places.length) {
+            const pts: LngLat[] = [at, ...places.slice(0, 5).map((p) => [p.lon, p.lat] as LngLat)];
+            map.current?.fitBounds(boundsOf(pts), wide ? 70 : 50);
+        }
+        return undefined;
+    };
+
     const runSearch = useCallback(async (q: string, pickFirst = false) => {
         const text = q.trim();
         if (!text) return;
@@ -167,6 +228,7 @@ function MapsApp() {
         setSelected(null);
         setDir(null);
         setResults({ places: [], busy: true });
+        if (isNearbyQuery(text)) return runNearby(text, ac, pickFirst);
         try {
             const r = await findPlaces(providers, text, map.current?.camera().center ?? near(), ac.signal);
             if (ac.signal.aborted) return;
@@ -190,6 +252,29 @@ function MapsApp() {
         map.current?.flyTo([p.lon, p.lat], 16);
     };
 
+    // The place shown: its opening hours, phone and website, when its OSM element is known.
+    useEffect(() => {
+        if (!selected || details?.id === selected.id) return;
+        const ac = new AbortController();
+        const id = selected.id;
+        void placeDetails(providers, selected, ac.signal).then((d) => { if (!ac.signal.aborted) setDetails({ id, d }); }, () => {});
+        return () => ac.abort();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selected, providers]);
+
+    // A café the map draws, tapped: its card, with the address and OSM
+    // element from the search server when it knows the place there.
+    const onPoiTap = (poi: MapPoi) => {
+        if (nav) return;
+        const p: Place = { id: poi.id, name: poi.name, detail: "", lon: poi.lon, lat: poi.lat, kind: "poi", category: poi.category || undefined };
+        setDir(null);
+        setSelected(p);
+        void searchNearby(providers, poi.name, [poi.lon, poi.lat]).then((r) => {
+            const hit = r.places.find((x) => x.name === poi.name && distance([x.lon, x.lat], [poi.lon, poi.lat]) < 150);
+            if (hit) setSelected((s) => (s?.id === p.id ? { ...hit, category: hit.category ?? p.category } : s));
+        }, () => {});
+    };
+
     // ---- Directions -----------------------------------------------------------------------------
 
     const routeFor = useCallback(async (d: DirState, mode: TravelMode) => {
@@ -205,20 +290,30 @@ function MapsApp() {
         try {
             const r = await getDirections(providers, from, [d.to.lon, d.to.lat], mode);
             if (request !== routeRequest.current) return;
-            setDir({ ...d, busy: false, route: r.route, note: r.note, error: undefined });
-            map.current?.fitBounds(boundsOf(r.route.geometry), wide ? 60 : 50);
+            const times = { ...(d.times ?? {}), [mode]: r.route.duration };
+            setDir({ ...d, busy: false, route: r.route, note: r.note, error: undefined, autoStart: false, times });
+            if (d.autoStart) beginNav(r.route);
+            else map.current?.fitBounds(boundsOf(r.route.geometry), wide ? 60 : 50);
+            // The other modes' times, for their buttons (online routing only:
+            // one small request each).
+            if (providers.routing.kind !== "offline" && !r.note) {
+                for (const m of MODES.filter((x) => times[x] === undefined)) {
+                    void getDirections(providers, from, [d.to.lon, d.to.lat], m).then((o) => {
+                        if (request !== routeRequest.current || o.note) return;
+                        setDir((cur) => (cur && cur.to.id === d.to.id ? { ...cur, times: { ...(cur.times ?? {}), [m]: o.route.duration } } : cur));
+                    }, () => {});
+                }
+            }
         } catch (e) {
             if (request !== routeRequest.current) return;
             setDir({ ...d, busy: false, route: null, error: errorText(e) });
         }
     }, [me, providers, locError, wide]);
 
-    const startDirections = (to: Place, from: Place | "me" = "me") => {
-        setResults(null);
-        setSelected(null);
-        const d: DirState = { from, to, route: null, busy: true };
+    const startDirections = (to: Place, from: Place | "me" = "me", autoStart = false, mode: TravelMode = prefs.mode) => {
+        const d: DirState = { from, to, route: null, busy: true, autoStart };
         setDir(d);
-        void routeFor(d, prefs.mode);
+        void routeFor(d, mode);
     };
 
     // Waiting for a fix to route from "My Location": route when it comes.
@@ -228,9 +323,9 @@ function MapsApp() {
 
     // ---- Navigation -----------------------------------------------------------------------------
 
-    const startNav = () => {
-        if (!dir?.route) return;
-        const route = dir.route;
+    const startNav = () => { if (dir?.route) beginNav(dir.route); };
+
+    const beginNav = (route: Route) => {
         offsets.current = stepOffsets(route);
         said.current = new Set();
         const at = me ?? route.geometry[0];
@@ -269,6 +364,16 @@ function MapsApp() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fix]);
 
+    // The first fix of a session: the map comes to the user (unless a
+    // launch or the user already put something on it).
+    useEffect(() => {
+        if (!fix || centred.current || !ready) return;
+        centred.current = true;
+        if (!results && !selected && !dir && !nav && handled.current && parseLaunch(handled.current as MapsLaunchParams).kind === "none")
+            map.current?.flyTo([fix.lon, fix.lat], 15);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fix, ready]);
+
     // ---- Launches from other apps -----------------------------------------------------------------
 
     useEffect(() => {
@@ -277,28 +382,46 @@ function MapsApp() {
         const intent: Intent = parseLaunch(launch);
         void (async () => {
             if (intent.kind === "show") {
-                const p = coordsPlace([intent.lon, intent.lat], intent.label ?? "Shared location");
+                const p = intent.place ? launchedPlace(intent.place) : coordsPlace([intent.lon, intent.lat], intent.label ?? "Shared location");
                 setResults(null);
+                setDir(null);
                 setSelected(p);
+                setOpened(`place:${p.id}`);
                 map.current?.flyTo([p.lon, p.lat], intent.zoom ?? 16);
                 if (!intent.label) void whatIsHere(providers, [p.lon, p.lat]).then((w) => {
                     if (w) setSelected((s) => (s?.id === p.id ? { ...p, detail: `Near ${w.name}${w.detail ? `, ${w.detail}` : ""}` } : s));
                 });
             } else if (intent.kind === "search") {
                 setQuery(intent.query);
-                await runSearch(intent.query, true);
+                const first = await runSearch(intent.query, true);
+                setOpened(first ? `place:${first.id}` : "results");
+            } else if (intent.kind === "nearby") {
+                // The field shows what is looked for ("coffee"), not the sentence asked.
+                setQuery(cleanNearby(intent.query));
+                setOpened("results");
+                searchAbort.current?.abort();
+                const ac = new AbortController();
+                searchAbort.current = ac;
+                setSelected(null);
+                setDir(null);
+                setResults({ places: [], busy: true, nearby: true });
+                await runNearby(intent.query, ac, false);
             } else if (intent.kind === "directions") {
                 let to: Place | undefined;
                 if (typeof intent.to === "string") {
-                    setQuery(intent.to);
+                    setQuery(isNearbyQuery(intent.to) ? cleanNearby(intent.to) : intent.to);
                     to = await runSearch(intent.to, true);
                 } else {
-                    to = coordsPlace([intent.to.lon, intent.to.lat], intent.to.label ?? "Destination");
+                    to = intent.to.place ? launchedPlace(intent.to.place) : coordsPlace([intent.to.lon, intent.to.lat], intent.to.label ?? "Destination");
                 }
-                if (to) startDirections(to);
+                if (intent.mode) setPrefs({ mode: intent.mode });
+                if (to) {
+                    setOpened(intent.start ? "nav" : `dir:${to.id}`);
+                    startDirections(to, "me", !!intent.start, intent.mode ?? prefs.mode);
+                }
             } else if (intent.kind === "place") {
                 const s = await placesDb.get(intent.placeId).catch(() => undefined);
-                if (s) { setResults(null); choose(fromSaved(s)); } else say("That place was deleted.");
+                if (s) { setResults(null); const p = fromSaved(s); choose(p); setOpened(`place:${p.id}`); } else say("That place was deleted.");
             }
         })();
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -306,6 +429,11 @@ function MapsApp() {
 
     // ---- Back gesture -----------------------------------------------------------------------------
 
+    // What is on screen, for Back: opened by another app, Back on the view
+    // that app opened is the runtime's (the card closes and the caller
+    // comes back); Back on anything the user went to from there is Maps'.
+    const viewKey = page ? "page" : nav ? "nav" : dir ? `dir:${dir.to.id}` : selected ? `place:${selected.id}` : results ? "results" : "map";
+    const caller = !!(launch as MapsLaunchParams | null)?.$caller;
     useBack(() => {
         if (page) setPage(null);
         else if (nav) endNav();
@@ -313,7 +441,7 @@ function MapsApp() {
         else if (selected) setSelected(null);
         else if (results) setResults(null);
         return true;
-    }, !!(page || nav || dir || selected || results));
+    }, !!(page || nav || dir || selected || results) && !(caller && viewKey === opened));
 
     // ---- Share ------------------------------------------------------------------------------------
 
@@ -411,9 +539,13 @@ function MapsApp() {
     // ---- Layout ---------------------------------------------------------------------------------
 
     const fromLabel = dir ? (dir.from === "me" ? "My Location" : dir.from.name) : "";
+    const navSteps = nav && (wide || stepsShown) ? (
+        <NavSteps route={nav.route} progress={nav.progress} units={prefs.units}
+                  onStep={(i) => { const s = nav.route.steps[i]; if (s) map.current?.flyTo(s.location, 17); }} />
+    ) : null;
     const panel = nav ? null : dir ? (
         <Directions fromLabel={fromLabel} toLabel={dir.to.name} mode={prefs.mode} route={dir.route} busy={dir.busy} error={dir.error}
-                    note={dir.note} units={prefs.units}
+                    note={dir.note} units={prefs.units} times={dir.times}
                     onMode={(m) => { setPrefs({ mode: m }); void routeFor(dir, m); }}
                     onSwap={() => {
                         const from = dir.from === "me" ? (me ? coordsPlace(me, "My Location") : null) : dir.from;
@@ -429,8 +561,8 @@ function MapsApp() {
                     onStep={(i) => { const s = dir.route?.steps[i]; if (s) map.current?.flyTo(s.location, 17); }}
                     onClose={() => setDir(null)} />
     ) : selected ? (
-        <PlaceCard place={selected} saved={!!findSaved(saved, selected)} near={me} units={prefs.units}
-                   onDirections={() => startDirections(selected)} onSave={() => void toggleSave(selected)}
+        <PlaceCard place={selected} details={details?.id === selected.id ? details.d : undefined} saved={!!findSaved(saved, selected)} near={me} units={prefs.units}
+                   onDirections={() => startDirections(selected)} onStart={() => startDirections(selected, "me", true)} onSave={() => void toggleSave(selected)}
                    onShare={(anchor) => setMenu({ kind: "share", anchor, place: selected })} onClose={() => setSelected(null)} />
     ) : results ? (
         <Results places={results.places} busy={results.busy} note={results.note} near={me ?? null} units={prefs.units} onPick={choose} />
@@ -480,7 +612,7 @@ function MapsApp() {
         <div className={cx("mp-app", wide && "wide", nav && "navigating", panel && (wide ? "has-side" : "has-sheet"))}>
             {ready && (
                 <MapView ref={map} providers={providers} initial={initial} markers={markers} route={routeLine} me={fix}
-                         onMarkerTap={onMarkerTap} onLongPress={onLongPress} onMove={onMove} onRenderer={setRenderer} />
+                         onMarkerTap={onMarkerTap} onLongPress={onLongPress} onPoiTap={onPoiTap} onMove={onMove} onRenderer={setRenderer} />
             )}
             <div className="mp-attribution" data-testid="attribution" onClick={() => setPage("about")}>{attribution}</div>
 
@@ -499,8 +631,10 @@ function MapsApp() {
             {nav && (
                 <NavBanner route={nav.route} progress={nav.progress} units={prefs.units} voice={prefs.voice}
                            onVoice={() => { if (prefs.voice) stopSpeaking(); setPrefs({ voice: !prefs.voice }); }}
-                           onEnd={endNav} onOverview={() => map.current?.fitBounds(boundsOf(nav.route.geometry), 60)} />
+                           onEnd={endNav} onOverview={() => map.current?.fitBounds(boundsOf(nav.route.geometry), 60)}
+                           onSteps={wide ? undefined : () => setStepsShown((v) => !v)} stepsShown={stepsShown} />
             )}
+            {navSteps && <div className={cx("mp-panel", "nav-steps", wide ? "side" : "sheet")} data-testid="nav-steps-panel">{navSteps}</div>}
 
             {!nav && renderer === "vector" && Math.abs(bearing) > 1 && (
                 <button type="button" className="mp-compass" aria-label="North up" data-testid="compass" onClick={() => map.current?.resetNorth()}>

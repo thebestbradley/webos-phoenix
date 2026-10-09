@@ -137,7 +137,18 @@ function device(opts: { offline?: boolean; locationAllowed?: boolean | null } = 
         if (r.url.includes("api.open-meteo.com/v1/forecast") && !r.url.includes("hourly="))
             return Promise.resolve({ status: 200, body: JSON.stringify({ current: { temperature_2m: 64.4, weather_code: 2 },
                 daily: { weather_code: [2, 61], temperature_2m_max: [70.2, 61.1], temperature_2m_min: [52.3, 50], precipitation_probability_max: [10, 80] } }) });
-        if (r.url.includes("photon.komoot.io")) return Promise.resolve({ status: 200, body: JSON.stringify({ features: [{ geometry: { coordinates: [-121.93, 37.36] }, properties: { name: "San Jose Airport" } }] }) });
+        if (r.url.includes("photon.komoot.io")) {
+            // Cafés by their tag around Sunnyvale, Starbucks by name, else the airport.
+            const u = new URL(r.url);
+            const cafe = (name: string, id: number, lon: number, lat: number, street: string) =>
+                ({ geometry: { coordinates: [lon, lat] }, properties: { osm_type: "N", osm_id: id, osm_key: "amenity", osm_value: "cafe", name, street, city: "Sunnyvale" } });
+            const cafes = [cafe("Peet's Coffee", 3, -122.06, 37.36, "El Camino Real"), cafe("Philz Coffee", 1, -122.035, 37.372, "South Murphy Avenue"),
+                           cafe("Starbucks", 2, -122.03, 37.38, "East El Camino Real"), cafe("Starbucks", 4, -122.0, 37.39, "Lawrence Expressway")];
+            const features = u.searchParams.getAll("include").includes("osm.amenity.cafe") ? cafes
+                : u.searchParams.get("q") === "starbucks" ? cafes.filter((f) => f.properties.name === "Starbucks")
+                : [{ geometry: { coordinates: [-121.93, 37.36] }, properties: { name: "San Jose Airport" } }];
+            return Promise.resolve({ status: 200, body: JSON.stringify({ features }) });
+        }
         if (r.url.includes("valhalla1.openstreetmap.de/route")) {
             const q = JSON.parse(decodeURIComponent(r.url.split("json=")[1]));
             return Promise.resolve({ status: 200, body: JSON.stringify({ trip: { summary: { time: q.costing === "auto" ? 1080 : 5400, length: 12.4 } } }) });
@@ -513,8 +524,8 @@ describe("more for each app (docs/AI-AND-MCP.md, what it can do for each app)", 
     });
     it("maps, the web, storage, the Marketplace, what's playing", async () => {
         const d = device();
-        expect((await d.ask("coffee near me")).text).toBe("Here's coffee near you, in Maps.");
-        expect(launched(d)).toEqual({ id: "org.webosphoenix.maps", params: { query: "coffee" } });
+        expect((await d.ask("coffee near me")).text).toBe("Here are coffee shops near you, closest first. The closest is Philz Coffee, 0.3 mi away.");
+        expect(launched(d)).toEqual({ id: "org.webosphoenix.maps", params: { nearby: "coffee" } });
         expect((await d.ask("open example.com")).text).toBe("Opening example.com.");
         expect(d.called("applicationManager/open").pop()!.params).toEqual({ target: "https://example.com" });
         expect((await d.ask("how much storage do I have")).text).toBe("You have 5.8 GB free of 8 GB.");
@@ -583,7 +594,7 @@ describe("the gaps closed (9 October 2026, second round)", () => {
         expect((await d.ask("how long to walk to the airport")).text).toBe("San Jose Airport is about 1 hour and 30 minutes away on foot (7.7 miles).");
         const t = await d.ask("what's the traffic like to the airport");
         expect(t.text).toBe("I can't see live traffic, but without it San Jose Airport is about 18 minutes away by car (7.7 miles).");
-        expect(t.choices).toEqual([{ id: "open", label: "Open Maps" }]);
+        expect(t.choices).toEqual([{ id: "open:0", label: "Start Navigation" }, { id: "open", label: "Open Maps" }]);
         expect((await d.ask("how's the traffic")).text).toMatch(/^I can't see live traffic\. Say where you're going/);
     });
     it("the weather at an hour", async () => {
@@ -604,6 +615,55 @@ describe("the gaps closed (9 October 2026, second round)", () => {
         expect((await d.ask("turn on vpn")).text).toBe("Connecting to “Work”.");
         expect(d.state.vpn).toBe("Work");
         expect((await d.ask("turn off vpn")).text).toBe("The VPN is off.");
+    });
+});
+
+describe("places and the way there (the owner's coffee shops)", () => {
+    it("coffee near me: the closest as cards, each opening Maps on itself; Maps behind on the list", async () => {
+        const d = device();
+        const m = await d.ask("find coffee shops near me");
+        expect(m.text).toBe("Here are coffee shops near you, closest first. The closest is Philz Coffee, 0.3 mi away.");
+        // Asked by the kind's tag inside a box around the device, not as words anywhere.
+        const asked = new URL(d.requests.find((u) => u.includes("photon"))!);
+        expect(asked.searchParams.getAll("include")).toEqual(["osm.amenity.cafe"]);
+        expect(asked.searchParams.get("q")).toBeNull();
+        expect(asked.searchParams.get("bbox")).toMatch(/^-122\.0\d+,37\.3\d+,-122\.0\d+,37\.3\d+$/);
+        const items = m.data.attachments[0].items;
+        expect(items.map((i: { title: string }) => i.title)).toEqual(["Philz Coffee", "Starbucks", "Peet's Coffee", "Starbucks"]);
+        expect(items[0]).toMatchObject({ subtitle: "0.3 mi · cafe", detail: "South Murphy Avenue, Sunnyvale",
+            open: { appId: "org.webosphoenix.maps", params: { place: { id: "photon:N1", name: "Philz Coffee", lat: 37.372, lon: -122.035 } } } });
+        expect(d.called("applicationManager/launch").at(-1)!.params).toMatchObject({ id: "org.webosphoenix.maps", params: { nearby: "coffee shops" }, behind: true });
+        // A card tapped: Maps comes forward on that place, Back returns here.
+        await d.choose(m, "show:0");
+        expect(d.called("applicationManager/launch").at(-1)!.params).toEqual({ id: "org.webosphoenix.maps", params: items[0].open.params, returnToCaller: true });
+    });
+    it("directions to the nearest coffee shop: the time there, Start Navigation, Open Maps", async () => {
+        const d = device();
+        const m = await d.ask("directions to the nearest coffee shop");
+        expect(m.text).toBe("Philz Coffee (South Murphy Avenue, Sunnyvale) is 18 min away by car, 7.7 mi. There are others nearby too.");
+        expect(m.data.attachments[0].items[0]).toMatchObject({ title: "Philz Coffee", subtitle: "18 min by car · 7.7 mi · cafe" });
+        expect(m.choices).toEqual([{ id: "open:0", label: "Start Navigation" }, { id: "open", label: "Open Maps" }]);
+        const dest = { id: "photon:N1", name: "Philz Coffee", lat: 37.372, lon: -122.035, detail: "South Murphy Avenue, Sunnyvale", category: "cafe" };
+        expect(launched(d)).toEqual({ id: "org.webosphoenix.maps", params: { destination: dest, travelMode: "drive" } });
+        await d.choose(m, "open:0");
+        expect(launched(d)).toEqual({ id: "org.webosphoenix.maps", params: { destination: dest, travelMode: "drive", navigate: true } });
+    });
+    it("a name: the closest of that name, the others offered; walking when said", async () => {
+        const d = device();
+        const m = await d.ask("how do I get to Starbucks on foot");
+        expect(m.text).toMatch(/^Starbucks \(East El Camino Real, Sunnyvale\) is 1 h 30 min away on foot, 7\.7 mi\. There are others nearby too\.$/);
+        expect(m.data.attachments[0].items.map((i: { detail: string }) => i.detail)).toEqual(["East El Camino Real, Sunnyvale", "Lawrence Expressway, Sunnyvale"]);
+        const route = d.requests.find((u) => u.includes("valhalla"))!;
+        expect(JSON.parse(decodeURIComponent(route.split("json=")[1])).costing).toBe("pedestrian");
+        expect(launched(d).params).toMatchObject({ travelMode: "walk" });
+    });
+    it("asks for the location once; offline, Maps finds them itself", async () => {
+        const d = device({ locationAllowed: null });
+        expect((await d.ask("coffee near me")).text).toMatch(/I need your location/);
+        const off = device({ offline: true });
+        expect((await off.ask("coffee near me")).text).toBe("Here's coffee near you, in Maps.");
+        expect(launched(off)).toEqual({ id: "org.webosphoenix.maps", params: { nearby: "coffee" } });
+        expect((await off.ask("directions to the nearest coffee shop")).text).toBe("Getting directions to nearest coffee shop.");
     });
 });
 

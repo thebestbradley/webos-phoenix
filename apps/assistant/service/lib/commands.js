@@ -60,7 +60,13 @@
 //   battery      com.palm.power batteryStatusQuery, chargerStatusQuery
 //   settings     Settings {page}
 //   open         applicationManager launch
-//   navigate     Maps {target: "mapto:<place>"} (webOS's "directions to")
+//   navigate     the place (the closest of a kind: "the nearest pharmacy";
+//                a name, nearest first: "Starbucks") and the time there by
+//                Valhalla, as a card; Maps behind on {destination}
+//                (Start Navigation: {destination, navigate: true})
+//   nearby       the closest places of a kind (lib/nearby.js, as Maps
+//                finds them) as cards, each opening Maps on itself; Maps
+//                behind on {nearby}
 //   distance     Open-Meteo's geocoder and where the device is
 //   photos       com.palm.media.image.file:1 taken on those days, opened in
 //                Photos {imageList}
@@ -96,6 +102,7 @@ var arith = require("./arith");
 var D = require("./dates");
 var units = require("./units");
 var places = require("./places");
+var nearbyLib = require("./nearby");
 
 var CLOCK_APP = "com.palm.app.clock";
 var CALENDAR_APP = "com.palm.app.calendar";
@@ -180,8 +187,8 @@ var BUILT_IN = [
         "updates", "certificates", "devmode", "advanced"], description: "\"\" for the list of all" } } } },
     { id: "open", title: "Opening apps", risk: "open", description: "Open an app by its name.",
       parameters: { type: "object", properties: { name: { type: "string", description: "The app's name, e.g. Maps" } }, required: ["name"] } },
-    { id: "navigate", title: "Directions", risk: "open", description: "Get directions to a place in Maps.",
-      parameters: { type: "object", properties: { destination: S }, required: ["destination"] } },
+    { id: "navigate", title: "Directions", risk: "open", description: "Get directions to a place in Maps (\"the nearest coffee shop\", \"Starbucks\", an address).",
+      parameters: { type: "object", properties: { destination: S, mode: { type: "string", enum: ["", "drive", "walk", "bike"] } }, required: ["destination"] } },
     { id: "distance", title: "Distances", risk: "read", description: "Tell how far away a place is.", parameters: { type: "object", properties: { place: S }, required: ["place"] } },
     { id: "photos", title: "Photos by day", risk: "open", description: "Show the photos taken on a day or in a week.",
       parameters: { type: "object", properties: { day: { type: "string", description: "\"yesterday\", \"last Friday\", \"last week\" or an ISO 8601 date" } } } },
@@ -219,7 +226,7 @@ var BUILT_IN = [
       parameters: { type: "object", properties: { list: S, day: { type: "string", enum: ["", "today", "tomorrow", "this week"] } } } },
     { id: "taskDone", title: "Completing tasks", risk: "change", description: "Mark a task as done.",
       parameters: { type: "object", properties: { text: { type: "string", description: "The task's words" } }, required: ["text"] } },
-    { id: "nearby", title: "Places nearby", risk: "open", description: "Find places of a kind near the user in Maps (\"coffee\", \"pharmacy\").",
+    { id: "nearby", title: "Places nearby", risk: "open", description: "Find places of a kind near the user, closest first (\"coffee\", \"pharmacy\"; just the kind, not the whole sentence).",
       parameters: { type: "object", properties: { query: S }, required: ["query"] } },
     { id: "website", title: "Opening websites", risk: "open", description: "Open a website in the browser.",
       parameters: { type: "object", properties: { url: S }, required: ["url"] } },
@@ -877,34 +884,125 @@ function weather(args, env) {
     });
 }
 
-// How long it takes to get somewhere from here: Valhalla's route (the
-// FOSSGIS server Maps uses, apps/maps lib/providers.ts, no key), its time
-// without traffic; no free source has live traffic, so it says so.
-// Places by Photon (as Maps searches), near where the device is.
+// Places, routes and travel times: Photon finds places as Maps does
+// (lib/nearby.js: the closest of a kind, or a name nearest first) around
+// where the device is; Valhalla (the FOSSGIS server Maps uses, apps/maps
+// lib/providers.ts, no key) gives the time there, without traffic (no
+// free source has live traffic, so it says so when asked). What it finds
+// is shown as cards in the conversation, each opening Maps on itself
+// (apps/maps lib/launch.ts: {place}, {destination, travelMode, navigate},
+// {nearby}); Maps also opens behind the conversation on the same.
 var VALHALLA = "https://valhalla1.openstreetmap.de", PHOTON = "https://photon.komoot.io";
 var COSTING = { drive: "auto", walk: "pedestrian", bike: "bicycle" };
+var MAPS_MODE = { drive: "drive", walk: "walk", bike: "cycle" };
+function mapsPlace(p) { return { id: p.id, name: p.name, lat: p.lat, lon: p.lon, detail: p.address || "", category: p.category || "" }; }
+function findPlaces(env, query, me) {
+    return nearbyLib.find(function (u) { return getJson(env, u); }, PHOTON, query, me, env.lang.id);
+}
+function routeSummary(env, me, to, mode) {
+    var q = { locations: [{ lat: me.lat, lon: me.lon }, { lat: to.lat, lon: to.lon }], costing: COSTING[mode], units: "kilometers" };
+    return env.request({ method: "GET", url: VALHALLA + "/route?json=" + encodeURIComponent(JSON.stringify(q)),
+                         headers: { Accept: "application/json", "X-Client-Id": "webos-phoenix-assistant" } }).then(function (r) {
+        var j = r.status === 200 ? JSON.parse(r.body) : null, sum = j && j.trip && j.trip.summary;
+        return sum ? { seconds: sum.time, km: sum.length } : null;
+    }, function () { return null; });
+}
+// A place as a card: name; distance (and time there) and kind; address.
+function placeCard(env, p, open, sum, mode) {
+    var say = env.lang.say, imperial = env.units === "imperial";
+    var sub = [sum ? say.shortTime(sum.seconds) + " " + say.byMode(mode) : "", say.shortDistance(sum ? sum.km * 1000 : p.meters, imperial), p.category]
+        .filter(Boolean).join(" · ");
+    return { title: p.name, subtitle: sub, detail: p.address || "", open: open };
+}
+function mapsOpen(params) { return { appId: MAPS_APP, params: params, title: "Maps" }; }
+// The place the words name, and others like it (closest first).
+function resolvePlace(env, words, me) {
+    return findPlaces(env, words, me).then(function (list) {
+        if (!list.length) throw Object.assign(new Error("no place"), { said: nearbyLib.isNearby(words) ? env.lang.say.noneNearby(nearbyLib.clean(words)) : env.lang.say.noPlace(words) });
+        return list;
+    });
+}
+
+// "coffee near me": the closest ones as cards; Maps behind with them all.
+function nearby(args, env) {
+    var say = env.lang.say, query = nearbyLib.clean(args.query) || String(args.query);
+    var maps = mapsOpen({ nearby: query });
+    return here(env, "places").then(function (me) {
+        return findPlaces(env, query, me).then(function (list) {
+            return launch(env, MAPS_APP, { nearby: query }).catch(function () {}).then(function () {
+                if (!list.length) return { text: say.noneNearby(query), open: maps };
+                var cat = nearbyLib.category(query);
+                return { text: say.nearbyFound(cat ? cat.label : query, list[0].name, list[0].meters, env.units === "imperial", list.length), open: maps,
+                         attachments: cards(list.slice(0, 5).map(function (p) { return placeCard(env, p, mapsOpen({ place: mapsPlace(p) })); })),
+                         data: { places: list.slice(0, 5).map(mapsPlace) } };
+            });
+        });
+    }).catch(function (e) {
+        // The Assistant not yet allowed the position: asked once. Otherwise
+        // (no fix, offline, no search server) Maps finds them itself, with
+        // its own permission and its offline maps.
+        if (e && e.location === "ask") return blockedReply(e, { command: "nearby", args: args });
+        return launch(env, MAPS_APP, { nearby: query }).then(function () { return { text: say.nearby(query), open: maps }; });
+    });
+}
+
+// "directions to the nearest coffee shop", "how do I get to Starbucks":
+// the place (the closest), how long it takes, Start Navigation; others
+// like it as cards too.
+function directions(args, env) {
+    var say = env.lang.say, dest = String(args.destination || "").trim(), mode = COSTING[args.mode] ? args.mode : "drive";
+    var legacy = function () {
+        return launch(env, MAPS_APP, { target: "mapto:" + dest }).then(function () {
+            return { text: say.navigating(dest), open: mapsOpen({ target: "mapto:" + dest }) };
+        });
+    };
+    // "Home" and the like are the user's own: Maps' saved places know them.
+    if (/^(?:home|work)$/i.test(dest)) return legacy();
+    return here(env, "places").then(function (me) {
+        return resolvePlace(env, dest, me).then(function (list) {
+            var to = list[0], target = { destination: mapsPlace(to), travelMode: MAPS_MODE[mode] };
+            return routeSummary(env, me, to, mode).then(function (sum) {
+                return launch(env, MAPS_APP, target).catch(function () {}).then(function () {
+                    var others = list.slice(1, 4).map(function (p) {
+                        return placeCard(env, p, mapsOpen({ destination: mapsPlace(p), travelMode: MAPS_MODE[mode] }));
+                    });
+                    return {
+                        text: say.directionsTo(to.name, to.address, sum, mode, env.units === "imperial", others.length > 0),
+                        attachments: cards([placeCard(env, to, mapsOpen(target), sum, mode)].concat(others)),
+                        actions: [{ label: say.startNavigation(), open: mapsOpen(Object.assign({ navigate: true }, target)) }],
+                        open: mapsOpen(target),
+                        data: sum ? { seconds: sum.seconds, km: sum.km } : undefined
+                    };
+                });
+            });
+        });
+    }).catch(function (e) {
+        if (e && e.location === "ask") return blockedReply(e, { command: "navigate", args: args });
+        if (e && e.said && !e.location) return { text: e.said, open: mapsOpen({ target: "mapto:" + dest }) };
+        return legacy();
+    });
+}
+
+// How long it takes to get somewhere from here.
 function travel(args, env) {
     var say = env.lang.say, mode = COSTING[args.mode] ? args.mode : "drive";
-    var maps = function (place) { return { appId: MAPS_APP, params: place ? { target: "mapto:" + place } : {}, title: "Maps" }; };
-    if (!args.place) return Promise.resolve({ text: say.noTraffic(), open: maps("") });
-    return here(env, "distance").then(function (me) {
-        return getJson(env, PHOTON + "/api/?limit=1&lat=" + me.lat + "&lon=" + me.lon + "&q=" + encodeURIComponent(args.place)).then(function (g) {
-            var f = g.features && g.features[0];
-            if (!f) throw Object.assign(new Error("no place"), { said: say.noPlace(args.place) });
-            var to = { lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], name: f.properties.name || args.place };
-            var q = { locations: [{ lat: me.lat, lon: me.lon }, { lat: to.lat, lon: to.lon }], costing: COSTING[mode], units: "kilometers" };
-            return env.request({ method: "GET", url: VALHALLA + "/route?json=" + encodeURIComponent(JSON.stringify(q)),
-                                 headers: { Accept: "application/json", "X-Client-Id": "webos-phoenix-assistant" } }).then(function (r) {
-                var j = r.status === 200 ? JSON.parse(r.body) : null, sum = j && j.trip && j.trip.summary;
+    var maps = function (target) { return mapsOpen(target || {}); };
+    if (!args.place) return Promise.resolve({ text: say.noTraffic(), open: maps() });
+    return here(env, "places").then(function (me) {
+        return resolvePlace(env, args.place, me).then(function (list) {
+            var to = list[0], target = { destination: mapsPlace(to), travelMode: MAPS_MODE[mode] };
+            return routeSummary(env, me, to, mode).then(function (sum) {
                 if (!sum) throw Object.assign(new Error("no route"), { said: say.noRoute(to.name) });
-                return { text: say.travelTime(to.name, sum.time, sum.length, mode, args.traffic, env.units === "imperial"), open: maps(args.place),
-                         data: { seconds: sum.time, km: sum.length } };
+                return { text: say.travelTime(to.name, sum.seconds, sum.km, mode, args.traffic, env.units === "imperial"), open: maps(target),
+                         attachments: cards([placeCard(env, to, maps(target), sum, mode)]),
+                         actions: [{ label: say.startNavigation(), open: maps(Object.assign({ navigate: true }, target)) }],
+                         data: { seconds: sum.seconds, km: sum.km } };
             });
         });
     }).catch(function (e) {
         if (e && e.location) return blockedReply(e, { command: "travelTime", args: args });
-        if (e && e.said) return { text: e.said, open: maps(args.place) };
-        return { text: say.noLookup(args.place), open: maps(args.place) };
+        if (e && e.said) return { text: e.said, open: maps({ destination: args.place }) };
+        return { text: say.noLookup(args.place), open: maps({ destination: args.place }) };
     });
 }
 
@@ -1530,9 +1628,20 @@ function runInner(cmd, args, env) {
             return { text: say.opening(args.title || args.appId), open: { appId: args.appId, params: args.params || {}, title: args.title || args.appId } };
         });
     case "navigate":
-        return launch(env, MAPS_APP, { target: "mapto:" + args.destination })
-            .then(function () { return { text: say.navigating(args.destination), open: { appId: MAPS_APP, params: { target: "mapto:" + args.destination }, title: "Maps" } }; });
+        return directions(args, env);
     case "distance":
+        // "How far is the nearest pharmacy": the closest one, found as Maps finds it.
+        if (nearbyLib.isNearby(args.place)) {
+            return here(env, "distance").then(function (me) {
+                return resolvePlace(env, args.place, me).then(function (list) {
+                    var p = list[0], open = mapsOpen({ place: mapsPlace(p) });
+                    return { text: say.distance(p.name, p.meters / 1000, env.units === "imperial"), open: open, attachments: cards([placeCard(env, p, open)]) };
+                });
+            }).catch(function (e) {
+                if (e && e.location) return blockedReply(e, { command: "distance", args: args });
+                return { text: e && e.said ? e.said : say.noLookup(args.place) };
+            });
+        }
         return Promise.all([geocode(env, args.place).catch(function (e) { throw e.said ? e : Object.assign(e, { said: say.noLookup(args.place) }); }),
                             here(env, "distance")]).then(function (r) {
             var a = r[0], b = r[1], rad = Math.PI / 180;
@@ -1766,9 +1875,7 @@ function runInner(cmd, args, env) {
                      undo: { kind: "merge", objects: [{ _id: args.id, completed: false, completedTime: null }], what: say.undoWhat.taskBack(args.summary) } };
         });
     case "nearby":
-        return launch(env, MAPS_APP, { query: String(args.query) }).then(function () {
-            return { text: say.nearby(args.query), open: { appId: MAPS_APP, params: { query: String(args.query) }, title: "Maps" } };
-        });
+        return nearby(args, env);
     case "website": {
         var url = /^https?:\/\//i.test(args.url) ? String(args.url) : "https://" + String(args.url);
         return lunaCall(env, "luna://com.palm.applicationManager/open", { target: url }).then(function () { return { text: say.openingSite(String(args.url).replace(/^https?:\/\//i, "")) }; });

@@ -446,20 +446,6 @@ function arithmetic(text) {
 
 // ---- Cleaning ------------------------------------------------------------------------------
 
-function clean(text) {
-    var t = String(text || "").toLowerCase().replace(/[“”]/g, "\"").replace(/[‘’]/g, "'").replace(/\s+/g, " ").trim();
-    var before;
-    do {
-        before = t;
-        t = t.replace(/^(?:hey |ok |okay )?(?:phoenix|assistant)[,!.]?\s+/, "")
-             .replace(/^(?:please|kindly|just)\s+/, "")
-             .replace(/^(?:can|could|would|will) you(?: please)?\s+/, "")
-             .replace(/^(?:i want to|i'd like to|i would like to|i need to|let's|lets)\s+/, "")
-             .replace(/[\s,]+please$/, "").replace(/[.!?]+$/, "").trim();
-    } while (t !== before);
-    return t;
-}
-
 // ---- Cleaning ------------------------------------------------------------------------------
 
 function clean(text) {
@@ -1056,11 +1042,26 @@ function time(t) {
     return null;
 }
 
+// "directions to the nearest coffee shop", "how do I get to Starbucks",
+// "walk to the park", "get me directions to 1 Infinite Loop by bike":
+// the place as said (commands.js finds it: the closest of a kind, or a
+// name nearest first) and how, when said.
 function navigate(t) {
-    var m = /^(?:navigate|directions|get directions|give me directions|take me|drive me|drive|route me|guide me|show me the way|how do i get|how do i go|get me|find a route|show me how to get) (?:to |home)?(.*)$/.exec(t);
+    var m = /^(?:(?:get|give|show) me |find |get )?(?:the )?(?:directions|a route|the way|route|navigation)(?: to| for)? (.+)$/.exec(t)
+        || /^(?:navigate|take me|drive me|walk me|route me|guide me|bring me|show me the way|show me how to get|how do i get|how can i get|how do i go|how would i get|get me|find a route|find the way|drive|walk|cycle|bike|ride) (?:to |over to |home)(.*)$/.exec(t)
+        || /^(?:navigate|take me|drive me|walk me|route me|guide me|show me the way|how do i get|how do i go|get me|find a route|show me how to get) (home)$/.exec(t)
+        || /^(?:navigate|directions) (.+)$/.exec(t);
     if (!m) return null;
-    var dest = (/home$/.test(m[0]) && !m[1] ? "home" : m[1]).replace(/^the /, "").trim();
-    return dest ? { destination: dest } : null;
+    var dest = (m[1] || (/home$/.test(m[0]) ? "home" : "")).trim(), mode = "";
+    var how = /\s+(?:by (car|foot|bike|bicycle)|on (foot|a bike|my bike)|(walking|driving|cycling|biking))$/.exec(dest);
+    if (how) { dest = dest.slice(0, how.index); mode = /foot|walking/.test(how[0]) ? "walk" : /bike|bicycle|cycling|biking/.test(how[0]) ? "bike" : "drive"; }
+    if (!mode && /^(?:walk|walk me)\b/.test(t)) mode = "walk";
+    if (!mode && /^(?:cycle|bike|ride)\b/.test(t)) mode = "bike";
+    dest = dest.replace(/^(?:to|the way to)\s+/, "").replace(/^the /, "").replace(/\s+(?:from here|please|now)$/, "").trim();
+    if (!dest || /^(?:it|there|that)$/.test(dest)) return null;
+    var r = { destination: dest };
+    if (mode) r.mode = mode;
+    return r;
 }
 
 function play(t) {
@@ -1235,13 +1236,27 @@ function taskDone(t, ctx) {
 
 // ---- Maps, the web, the device, Marketplace ------------------------------------------------------
 
-// "coffee near me", "find a pharmacy nearby", "where's the nearest gas station"
+// "coffee near me", "find me a pharmacy nearby", "where's the nearest gas
+// station", "what coffee shops are near me", "I need a pharmacy", "coffee
+// shops": just what is looked for ("coffee shops"), never the sentence
+// (Maps searches those words, and showed the owner his whole question).
+var ASK_FOR = /^(?:(?:find|show|get|give|search for|look for|look up|locate|list)(?: me)?|are there(?: any)?|is there(?: an?| any)?|any|what(?: are)?(?: the| some)?|which|where can i (?:get|find|buy)(?: some| an?)?|where(?: are| is|'s)?(?: there)?(?: an?| some| any)?|i(?:'m| am) looking for|i (?:need|want))\s+/;
 function nearby(t) {
-    var m = /^(?:find|show(?: me)?|search for|look for|are there any|is there an?|any)? ?(?:an? |the |some )?(?:nearest |closest |nearby |good )?(.+?) (?:near me|nearby|near here|around here|close by|close to me|in the area|around me)$/.exec(t)
+    var m = /^(.+?)(?: (?:that )?(?:are|is))? (?:near me|nearby|near here|around here|close by|close to me|in the area|around me|near my location)$/.exec(t)
         || /^where(?:'s| is| are) the (?:nearest|closest) (.+)$/.exec(t)
-        || /^(?:find|show(?: me)?) (?:the |a )?(?:nearest|closest) (.+)$/.exec(t);
-    if (!m || /^(?:it|me|you)$/.test(m[1])) return null;
-    return { query: m[1] };
+        || /^(?:find|show(?: me)?|get me|search for) (?:the |a |an )?(?:nearest|closest) (.+)$/.exec(t);
+    var what = m ? m[1] : "";
+    if (!m) {
+        // Nothing says "near": only a kind of place the words are all about
+        // ("coffee shops", "the nearest pharmacy", "I need a pharmacy").
+        var rest = t.replace(ASK_FOR, "");
+        if (!nearbyLib.category(rest) || !(rest !== t || nearbyLib.category(t) || /^(?:the |an? )?(?:nearest|closest) /.test(t))) return null;
+        what = rest;
+    }
+    what = what.replace(ASK_FOR, "").replace(/^(?:an?|the|some|any)\s+/, "").replace(/^(?:nearest|closest|nearby|good|best|local)\s+/, "")
+        .replace(/\s+(?:that are open|open now|for me)$/, "").trim();
+    if (!what || /^(?:it|me|you|anything|something|places?|stuff)$/.test(what)) return null;
+    return { query: what };
 }
 // "open example.com", "go to wikipedia.org"
 function website(t) {
@@ -1269,6 +1284,7 @@ function nowPlaying(t) {
 // ---- Help (lib/lang/en-help.js) ---------------------------------------------------------------------
 
 var HELP = require("./en-help").HOWTO;
+var nearbyLib = require("../nearby");
 // "help", "what can you do", "give me suggestions"; "how do I close an app"
 function help(t) {
     if (/^(?:help|help me|i need help|can you help(?: me)?|what can (?:you|i) (?:do|say|ask)(?: (?:here|with you|you))?|what (?:can|do|else can) you do|what are you able to do|how (?:do|can|should) i use (?:you|this|the assistant)|how does this work|how do you work|give me (?:some )?(?:suggestions|ideas|tips|examples)|(?:any )?suggestions|(?:some )?tips|examples|show me what you can do|what should i (?:say|ask)|(?:list )?(?:your |the )?commands|what are (?:the |your )?commands|what do you know)$/.test(t))
@@ -1437,6 +1453,8 @@ function eventish(q) {
 }
 function detailEvent(q, field) {
     q = q.replace(/^(?:my|the|our) /, "").trim();
+    // "Where's the nearest coffee shop" is a place nearby (nearby), not an event.
+    if (/^(?:nearest|closest)\b/.test(q)) return null;
     if (IT_WORDS.test(q) || !q) return { kind: "event", query: "", field: field, it: true };
     if (/\b(?:alarm|timer|reminder|task|memo|note|email|message|call from)\b/.test(q) || !eventish(q)) return null;
     return { kind: "event", query: q, field: field, it: false };
@@ -1964,6 +1982,23 @@ var say = {
     },
     noTraffic: function () { return "I can't see live traffic. Say where you're going, like \u201chow long to drive to the airport\u201d, or open Maps."; },
     noRoute: function (place) { return "I couldn't find a way to " + place + "."; },
+    // Places and directions (commands.js nearby, directions)
+    shortDistance: function (m, imperial) {
+        if (imperial) { var mi = m / 1609.344; return mi < 0.1 ? Math.round(m * 3.28084 / 10) * 10 + " ft" : (mi < 10 ? Math.round(mi * 10) / 10 : Math.round(mi)) + " mi"; }
+        return m < 1000 ? Math.round(m / 10) * 10 + " m" : (m < 10000 ? Math.round(m / 100) / 10 : Math.round(m / 1000)) + " km";
+    },
+    shortTime: function (s) { var m = Math.max(1, Math.round(s / 60)); return m < 60 ? m + " min" : Math.floor(m / 60) + " h" + (m % 60 ? " " + (m % 60) + " min" : ""); },
+    byMode: function (mode) { return { drive: "by car", walk: "on foot", bike: "by bike" }[mode] || ""; },
+    nearbyFound: function (what, name, m, imperial, n) {
+        return (n > 1 ? "Here are " + what + " near you, closest first. " : "") + "The closest is " + name + ", " + say.shortDistance(m, imperial) + " away.";
+    },
+    noneNearby: function (what) { return "I couldn't find " + what + " near you."; },
+    directionsTo: function (name, address, sum, mode, imperial, others) {
+        var where = name + (address ? " (" + address + ")" : "");
+        return (sum ? where + " is " + say.shortTime(sum.seconds) + " away " + say.byMode(mode) + ", " + say.shortDistance(sum.km * 1000, imperial) + "."
+                    : "Here's the way to " + where + ".") + (others ? " There are others nearby too." : "");
+    },
+    startNavigation: function () { return "Start Navigation"; },
     weatherAt: function (place, at, temp, unit, desc, rain, about, now) {
         var when = whenText(at, null, false, now).replace(/^today at /, "at ").replace(/^on /, ""), where = place ? " in " + place : "";
         if (about === "rain" || about === "snow")
@@ -2258,8 +2293,8 @@ var say = {
     // answered yet), "denied", "off", "unavailable"; purpose "weather" or
     // "distance".
     location: function (why, purpose) {
-        var need = purpose === "distance" ? "work out how far that is" : "check the weather where you are";
-        var instead = purpose === "distance" ? "" : " Or say a city, like \u201cweather in Paris\u201d.";
+        var need = purpose === "distance" ? "work out how far that is" : purpose === "places" ? "find places near you and the way there" : "check the weather where you are";
+        var instead = purpose === "distance" || purpose === "places" ? "" : " Or say a city, like \u201cweather in Paris\u201d.";
         if (why === "ask") return "To " + need + ", I need your location. Is it OK if I use it?";
         if (why === "denied") return "I'm not allowed to use your location. Allow it, here or in Settings > Location Services, and I'll " + need + "." + instead;
         if (why === "off") return "Location Services are off. Turn them on and I'll " + need + "." + instead;
