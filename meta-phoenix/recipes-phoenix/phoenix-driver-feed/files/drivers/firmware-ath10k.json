@@ -1,0 +1,39 @@
+{
+    "id": "firmware-ath10k",
+    "kind": "firmware",
+    "title": "Qualcomm Atheros Wi-Fi firmware (ath10k)",
+    "category": "wifi",
+    "summary": "Lets Qualcomm Atheros 802.11ac Wi-Fi cards (QCA6174, QCA9377, QCA988x) connect.",
+    "match": [
+        "pci:v0000168Cd0000003Esv*",
+        "pci:v0000168Cd00000041sv*",
+        "pci:v0000168Cd00000042sv*",
+        "pci:v0000168Cd0000003Csv*",
+        "pci:v0000168Cd00000040sv*",
+        "pci:v0000168Cd00000046sv*"
+    ],
+    "firmware": [
+        "ath10k/*"
+    ],
+    "modules": [
+        "ath10k_pci"
+    ],
+    "after": "reload",
+    "license": {
+        "id": "LicenseRef-QualcommAtheros-ath10k",
+        "name": "Qualcomm Atheros firmware licence (ath10k)",
+        "textInPackage": "lib/firmware/LICENSE.QualcommAtheros_ath10k",
+        "url": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/LICENSE.QualcommAtheros_ath10k",
+        "free": false,
+        "redistributable": true
+    },
+    "packages": [
+        "linux-firmware-ath10k",
+        "linux-firmware-ath10k-license"
+    ],
+    "source": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git",
+    "maintainer": {
+        "name": "webOS Phoenix",
+        "email": "drivers@webosphoenix.org"
+    }
+}

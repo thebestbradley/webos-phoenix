@@ -1,0 +1,48 @@
+{
+    "id": "firmware-rtw88",
+    "kind": "firmware",
+    "title": "Realtek Wi-Fi firmware (rtw88)",
+    "category": "wifi",
+    "summary": "Lets Realtek 802.11ac Wi-Fi adapters (RTL8821C, RTL8822B, RTL8822C, USB and PCIe) connect.",
+    "match": [
+        "usb:v0BDApC811d*",
+        "usb:v0BDApC820d*",
+        "usb:v0BDApB82Cd*",
+        "usb:v0BDApC82Cd*",
+        "usb:v0BDApC82Ed*",
+        "pci:v000010ECd0000C821sv*",
+        "pci:v000010ECd0000C822sv*",
+        "pci:v000010ECd0000B822sv*"
+    ],
+    "firmware": [
+        "rtw88/rtw8821*.bin",
+        "rtw88/rtw8822*.bin"
+    ],
+    "modules": [
+        "rtw88_8821cu",
+        "rtw88_8822bu",
+        "rtw88_8822cu",
+        "rtw88_8821ce",
+        "rtw88_8822be",
+        "rtw88_8822ce"
+    ],
+    "after": "reload",
+    "license": {
+        "id": "LicenseRef-rtlwifi-firmware",
+        "name": "Realtek firmware licence",
+        "textInPackage": "lib/firmware/LICENCE.rtlwifi_firmware.txt",
+        "url": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/LICENCE.rtlwifi_firmware.txt",
+        "free": false,
+        "redistributable": true
+    },
+    "packages": [
+        "linux-firmware-rtl8821",
+        "linux-firmware-rtl8822",
+        "linux-firmware-rtl-license"
+    ],
+    "source": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git",
+    "maintainer": {
+        "name": "webOS Phoenix",
+        "email": "drivers@webosphoenix.org"
+    }
+}

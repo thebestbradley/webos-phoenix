@@ -1,0 +1,35 @@
+{
+    "id": "firmware-i915",
+    "kind": "firmware",
+    "title": "Intel graphics firmware (GuC, HuC, DMC)",
+    "category": "graphics",
+    "optional": true,
+    "summary": "Better power saving and video decoding for Intel graphics with the built-in i915 driver.",
+    "match": [
+        "pci:v00008086d*sv*sd*bc03sc*i*"
+    ],
+    "firmware": [
+        "i915/*"
+    ],
+    "modules": [
+        "i915"
+    ],
+    "after": "reboot",
+    "license": {
+        "id": "LicenseRef-i915-firmware",
+        "name": "Intel graphics firmware licence",
+        "textInPackage": "lib/firmware/LICENSE.i915",
+        "url": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/LICENSE.i915",
+        "free": false,
+        "redistributable": true
+    },
+    "packages": [
+        "linux-firmware-i915",
+        "linux-firmware-i915-license"
+    ],
+    "source": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git",
+    "maintainer": {
+        "name": "webOS Phoenix",
+        "email": "drivers@webosphoenix.org"
+    }
+}
