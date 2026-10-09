@@ -6030,6 +6030,12 @@
                 store.set("imeVisible", !!st.ime.visible);
                 changed();
             }
+            // The words the keyboard learned that its list lacks (Settings >
+            // Text Assist > Personal Dictionary; getSystemStatus learnedWords).
+            if (Array.isArray(st.learnedWords) && toJson(st.learnedWords) !== toJson(store.get("learnedWords", []))) {
+                store.set("learnedWords", st.learnedWords.filter(function (w) { return typeof w === "string"; }));
+                changed();
+            }
             if (!writer) {
                 changed();
                 return;
@@ -6040,6 +6046,18 @@
                 if (st.keyboard && keyboardCombo(st.keyboard))
                     sys["/setPreferences"]({ x_palm_virtualkeyboard_settings: JSON.stringify(keyboardCombo(st.keyboard)) },
                                            function () {}, { cancelled: function () { return false; } });
+                // The keyboard's "Add" (after backspace put back a corrected
+                // word): into the personal dictionary.
+                if (typeof st.dictionaryWordAdded === "string" && DICTIONARY_WORD.test(st.dictionaryWordAdded)) {
+                    var ti = prefs().x_palm_textinput && typeof prefs().x_palm_textinput === "object" ? prefs().x_palm_textinput : {};
+                    var w = st.dictionaryWordAdded, words = dictionaryWords(ti);
+                    if (!words.some(function (x) { return x.toLowerCase() === w.toLowerCase(); })) {
+                        var next = {};
+                        Object.keys(ti).forEach(function (k) { next[k] = ti[k]; });
+                        next.userWords = words.concat([w]);
+                        sys["/setPreferences"]({ x_palm_textinput: next }, function () {}, { cancelled: function () { return false; } });
+                    }
+                }
                 if ("rotationLocked" in st && !!st.rotationLocked !== !!prefs().rotationLock)
                     sys["/setPreferences"]({ rotationLock: !!st.rotationLocked }, function () {}, { cancelled: function () { return false; } });
                 if (toJson(s) !== before) save(s);
@@ -6093,12 +6111,6 @@
                 event("webOSRelaunch", params || {});
             if (refresh)
                 event("phoenixRefresh", params || {});
-            // The words the keyboard learned that its list lacks (Settings >
-            // Text Assist > Personal Dictionary; getSystemStatus learnedWords).
-            if (Array.isArray(st.learnedWords) && toJson(st.learnedWords) !== toJson(store.get("learnedWords", []))) {
-                store.set("learnedWords", st.learnedWords.filter(function (w) { return typeof w === "string"; }));
-                changed();
-            }
             return true;
         };
 
@@ -6109,18 +6121,6 @@
 
     // ================================================================================
     // Phone and Messaging services (simulated legacy webOS APIs used by apps/phone
-                // The keyboard's "Add" (after backspace put back a corrected
-                // word): into the personal dictionary.
-                if (typeof st.dictionaryWordAdded === "string" && DICTIONARY_WORD.test(st.dictionaryWordAdded)) {
-                    var ti = prefs().x_palm_textinput && typeof prefs().x_palm_textinput === "object" ? prefs().x_palm_textinput : {};
-                    var w = st.dictionaryWordAdded, words = dictionaryWords(ti);
-                    if (!words.some(function (x) { return x.toLowerCase() === w.toLowerCase(); })) {
-                        var next = {};
-                        Object.keys(ti).forEach(function (k) { next[k] = ti[k]; });
-                        next.userWords = words.concat([w]);
-                        sys["/setPreferences"]({ x_palm_textinput: next }, function () {}, { cancelled: function () { return false; } });
-                    }
-                }
     // and apps/messaging)
     // ================================================================================
     //
