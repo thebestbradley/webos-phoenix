@@ -1279,6 +1279,9 @@ FocusScope {
         target: shell.source
         ignoreUnknownSignals: true
         function onCardFocusRequested(uid) { Qt.callLater(cards.focusLaunched, uid); }
+        // Back in an app another opened ({returnToCaller}): its caller's card
+        // comes back to the front; the app stays open behind it.
+        function onCardReturnRequested(uid, fromUid) { Qt.callLater(cards.focusLaunched, uid); }
         function onCardCloseRequested(uid) { cards.close(uid, true); }
         function onBackUnhandled(uid) { shell._lateBackUnhandled(uid); }
         function onJustTypeDismissed() { justType.open = false; }

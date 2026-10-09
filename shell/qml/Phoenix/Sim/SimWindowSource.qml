@@ -183,6 +183,10 @@ Item {
     property ListModel notifications: ListModel {}
 
     signal cardFocusRequested(string uid)
+    // Back in an app another one opened ({returnToCaller}; the runtime's
+    // back, a "launch" {returnTo}): the caller's card uid comes back to the
+    // front, and fromUid, still open, goes behind it.
+    signal cardReturnRequested(string uid, string fromUid)
     signal cardCloseRequested(string uid)
     // The page in the card did not take the back gesture (WebAppWindow
     // backUnhandled; back() returned true while the page decided).
@@ -707,7 +711,14 @@ Item {
             // card opens, or hears its params, without coming to the front
             // (the Assistant's "I've opened them in Photos too").
             var behind = payload.behind === true;
-            var how = newCard ? "new" : background || appId === target ? "front" : appRelaunch;
+            // {returnTo: true} (the runtime's back): the caller's card as it
+            // is, whatever appRelaunch says; the card asking goes behind it.
+            var returnTo = payload.returnTo === true && !newCard && !background;
+            var how = newCard ? "new" : background || appId === target || returnTo ? "front" : appRelaunch;
+            if (returnTo && running !== "") {
+                cardReturnRequested(running, uid);
+                return;
+            }
             if (running !== "" && !_opensNewCard(target, how)) {
                 var refresh = how === "refresh";
                 if ((refresh || (target === payload.id && Object.keys(params).length > 0)) && _windows[running] && _windows[running].relaunch)

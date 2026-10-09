@@ -246,17 +246,22 @@ async function main() {
         if (calWin) await shot(calWin, "calendar-event");
         if (calWin) {
             // Back: the Event Details dialog closes, then (the calendar view
-            // at the top) the card closes, back to the Assistant that opened
-            // it; its $caller came with the launch of the page that opened
-            // the card (compat phoenix-back.js; runtime.back).
+            // at the top) the Assistant that opened it comes back to the
+            // front, Calendar staying open behind it; its $caller came with
+            // the launch of the page that opened the card (compat
+            // phoenix-back.js; runtime.back).
+            watch(calWin, "calendar");
             const dialogOpen = () => calWin.evaluate(() => !!enyo.$.appView_detailPopup && enyo.$.appView_detailPopup.isOpen);
             check(await dialogOpen(), "Calendar shows the event in its Event Details dialog");
             await calWin.evaluate(() => __phoenixRuntime.back());
             await app.waitForTimeout(300);
             check(!calWin.isClosed() && !(await dialogOpen()), "Back closes the Event Details dialog");
-            const closed = calWin.waitForEvent("close", { timeout: 3000 }).then(() => true, () => false);
-            await calWin.evaluate(() => __phoenixRuntime.back()).catch(() => {});
-            check(await closed, "Back again closes Calendar's card, back to the Assistant that opened it");
+            launches.length = 0;
+            const tookIt = await calWin.evaluate(() => __phoenixRuntime.back()).catch(() => false);
+            await app.waitForTimeout(300);
+            const ret = launches.find((l) => l.id === "org.webosphoenix.assistant");
+            check(tookIt === true && !!ret && ret.returnTo === true && !calWin.isClosed(),
+                  "Back again brings the Assistant back to the front, Calendar staying open: " + JSON.stringify(ret));
         }
         for (const p of context.pages()) if (p !== app) await p.close();
         await app.bringToFront();
@@ -404,27 +409,31 @@ async function main() {
         await ph.waitForSelector("[data-testid='thumb-1']");
         check(await ph.locator(".ph-cell").count() === 2 && /Photos from Today/.test(await ph.textContent(".ph-header")), "Photos: a grid of just those two");
         await shot(ph, "photos-picked");
-        // Back where it was opened (the grid it was given) closes its card,
-        // so the Assistant is in front again; Back from a picture opened
-        // from there is Photos' own (back to that grid).
+        // Back where it was opened (the grid it was given) brings the
+        // Assistant back to the front, Photos staying open behind it (a
+        // "launch" {returnTo}); Back from a picture opened from there is
+        // Photos' own (back to that grid).
+        const returned = () => launches.some((l) => l.id === "org.webosphoenix.assistant" && l.returnTo === true);
         const closed = () => ph.evaluate(() => window.__closedByBack === true);
         const stubClose = () => ph.evaluate(() => { window.__closedByBack = false; window.close = () => { window.__closedByBack = true; }; });
         await stubClose();
+        launches.length = 0;
         await ph.click("[data-testid='thumb-0']");
         await ph.waitForSelector(".ph-viewer, [data-testid='viewer']");
         await ph.evaluate(() => window.__phoenixRuntime.back());
         await ph.waitForTimeout(300);
-        check(!(await closed()) && await ph.locator("[data-testid='viewer']").count() === 0, "Back from a picture opened in Photos: its grid");
+        check(!(await closed()) && !returned() && await ph.locator("[data-testid='viewer']").count() === 0, "Back from a picture opened in Photos: its grid");
         await ph.evaluate(() => window.__phoenixRuntime.back());
         await ph.waitForTimeout(300);
-        check(await closed(), "Back at the grid it was opened on: the card closes, back to the Assistant");
+        check(returned() && !(await closed()), "Back at the grid it was opened on: the Assistant comes back, Photos staying open");
         // Opened on one picture (a thumbnail tapped): Back closes it.
         await ph.goto(`${root}/org.webosphoenix.photos/index.html?launchParams=` + encodeURIComponent(JSON.stringify(thumbLaunch.params)));
         await ph.waitForSelector(".ph-viewer, [data-testid='viewer']");
         await stubClose();
+        launches.length = 0;
         await ph.evaluate(() => window.__phoenixRuntime.back());
         await ph.waitForTimeout(300);
-        check(await closed(), "Back at the picture it was opened on: back to the Assistant");
+        check(returned() && !(await closed()), "Back at the picture it was opened on: back to the Assistant, Photos staying open");
         await ph.close();
         // One event by its name, not the day's agenda (there is no dentist
         // in the simulator's calendar).

@@ -3958,9 +3958,11 @@
     // An app opened by another one to show something ({returnToCaller}:
     // launch params $caller, e.g. Photos from the Assistant's thumbnail): a
     // Back it does not handle itself (no preventDefault, as webOS apps said
-    // they took the gesture) closes its card, and the caller's card, the one
-    // beside it in the stack it joined, comes back. As LunaSysMgr's back at
-    // an app's root went to card view, this goes back to where the user was.
+    // they took the gesture) brings the caller's card, the one beside it in
+    // the stack it joined, back to the front, and this card goes behind it,
+    // still open (the owner: the opened app stays, as a card in the stack,
+    // to come back to). As LunaSysMgr's back at an app's root went to card
+    // view, this goes back to where the user was.
     // Returns whether the app took it: false (nothing stopped the key, no
     // caller to go back to) and the shell minimizes the card to card view,
     // as WebAppMgr handed an unhandled Back back to LunaSysMgr
@@ -3992,7 +3994,9 @@
                 } catch (x) { /* another origin, or closed */ }
             }
             if (lp && typeof lp.$caller === "string" && lp.$caller) {
-                try { global.close(); } catch (x) { /* ignore */ }
+                // {returnTo: true}: the caller's card as it is, in front, this
+                // one going behind it (the shell's cardReturnRequested).
+                host.postToHost("launch", { id: lp.$caller, params: {}, returnTo: true });
                 return true;
             }
         }
